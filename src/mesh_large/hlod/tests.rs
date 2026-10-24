@@ -1310,9 +1310,7 @@ fn long_collinear_runs_are_crack_free() {
 /// come near them. The slivers are long against every region they cross; testing them
 /// against every ribbon point (as an aggregate once did) locked all 16,512 ribbon vertices
 /// and refused the parent at the cap. The exact join locks nothing here.
-#[test]
-fn distant_long_slivers_lock_nothing_and_never_refuse() {
-    let n = 128usize;
+fn ribbons(n: usize) -> Mesh {
     let mut ribbons = Mesh {
         positions: vec![],
         indices: vec![],
@@ -1334,6 +1332,12 @@ fn distant_long_slivers_lock_nothing_and_never_refuse() {
             ribbons.indices.extend([a, a + 1, b, b, a + 1, b + 1]);
         }
     }
+    ribbons
+}
+
+#[test]
+fn distant_long_slivers_lock_nothing_and_never_refuse() {
+    let ribbons = ribbons(128);
     let mut slivers = Mesh {
         positions: vec![],
         indices: vec![],
@@ -1366,7 +1370,81 @@ fn distant_long_slivers_lock_nothing_and_never_refuse() {
         incidence["matchedGuests"].as_u64().unwrap() < 100,
         "{incidence}"
     );
+    assert_eq!(incidence["fallbackRegions"], 0, "{incidence}");
     let census = census(&dir);
+    assert_eq!(
+        census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
+        0,
+        "{census:?}"
+    );
+}
+
+/// The owner's fallback case: 2,048 random chord slivers spanning two ribbon blocks on either
+/// side of the root's split. Their long edges cross every region, so the join's exact tests
+/// pass the budget and it matches those regions by a superset, locking every ribbon point
+/// against chords of the other side; the side's parent those locks keep from its cap resolves
+/// them exactly and builds. Never refused, crack-free, and identical (counters included) at
+/// one and four jobs.
+#[test]
+fn random_chords_fall_back_resolve_and_never_refuse() {
+    let mut state = 0x9e37_79b9_7f4a_7c15u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state >> 11) as f32 / (1u64 << 53) as f32
+    };
+    let mut chords = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.8, 0.3, 0.3, 1.],
+    };
+    for _ in 0..2048 {
+        let mut p = || [-90. + 180. * next(), -2. + 4. * next(), 10. + 80. * next()];
+        let (a, b) = (p(), p());
+        let base = chords.positions.len() as u32;
+        chords.positions.extend([a, b, [b[0], b[1], b[2] + 0.005]]);
+        chords.indices.extend([base, base + 1, base + 2]);
+    }
+    let work = tempfile::tempdir().unwrap();
+    let left = ribbons(128);
+    let mut right = left.clone();
+    for p in &mut right.positions {
+        p[0] += 100.;
+    }
+    let input = write_gltf(&work.path().join("src"), &[left, right, chords]);
+    let run = |jobs: usize, name: &str| {
+        let run = Run {
+            leaf_triangles: crate::mesh_large::config::CONSUMER_TABLE_ROWS,
+            cap: super::TRIANGLE_CAP,
+            jobs,
+            ..Run::default()
+        };
+        stage(&input, &work.path().join(name), &run).unwrap_or_else(|f| panic!("{}", f.error))
+    };
+    let one = run(1, "one");
+    let four = run(4, "four");
+    let manifest = |dir: &Path| -> Value {
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap()
+    };
+    let (m1, m4) = (manifest(&one), manifest(&four));
+    let incidence = &m1["hlod"]["incidence"];
+    eprintln!(
+        "FALLBACK {incidence} resolved {}",
+        m1["hlod"]["resolvedTiles"]
+    );
+    assert!(
+        incidence["fallbackRegions"].as_u64().unwrap() > 0,
+        "{incidence}"
+    );
+    assert!(
+        m1["hlod"]["resolvedTiles"].as_u64().unwrap() > 0,
+        "{}",
+        m1["hlod"]
+    );
+    assert_eq!(m1["hlod"], m4["hlod"]);
+    assert_eq!(published(&one), published(&four));
+    let census = census(&one);
     assert_eq!(
         census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
         0,
@@ -1398,12 +1476,14 @@ fn parent_jobs_allocate_within_their_charge() {
         leaf_begin: 1,
         leaf_end: 9,
     };
-    let outer = |slot: usize, a: [f32; 3], b: [f32; 3]| InterfaceRow {
-        leaf: slot as u32 + 1,
-        a: key(a).min(key(b)),
-        b: key(a).max(key(b)),
-        lo: 0,
-        hi: slot as u32 + 1,
+    let outer = |slot: usize, a: [f32; 3], b: [f32; 3]| {
+        InterfaceRow::certain(
+            slot as u32 + 1,
+            key(a).min(key(b)),
+            key(a).max(key(b)),
+            0,
+            slot as u32 + 1,
+        )
     };
     let primitive = |t: usize| SourcePrimitive {
         node: 0,
@@ -1503,8 +1583,14 @@ fn parent_jobs_allocate_within_their_charge() {
     let mut grid = None;
     for kind in [0u8, 1, 3, 2] {
         let children: Vec<TileGeometry> = (0..8).map(|slot| child(slot, kind)).collect();
-        let (built, peak) =
-            crate::test_alloc::peak(|| geometry::build_parent(parent, &children, cap));
+        let (built, peak) = crate::test_alloc::peak(|| {
+            let fallback = super::interfaces::Fallback::default();
+            let resolve = geometry::Resolve {
+                fallback: &fallback,
+                check: &|| Ok(()),
+            };
+            geometry::build_parent(parent, &children, cap, &resolve)
+        });
         eprintln!(
             "JOB kind {kind}: peak {peak} bytes = {:.0} per merged triangle (charge {})",
             peak as f64 / merged as f64,
@@ -1560,13 +1646,7 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
         .unwrap();
     assert_eq!(snapped.decoded[2][0], 50., "probe must be sensitive");
     let key = super::interfaces::key;
-    let row = |p: [f32; 3]| InterfaceRow {
-        leaf: 0,
-        a: key(p),
-        b: key(p),
-        lo: 0,
-        hi: 1,
-    };
+    let row = |p: [f32; 3]| InterfaceRow::certain(0, key(p), key(p), 0, 1);
     let tile = TileGeometry {
         key: TileKey {
             first: 0,
@@ -1851,7 +1931,7 @@ fn adversarial_interfaces_stay_within_a_small_budget() {
             &Run {
                 leaf_triangles,
                 cap: super::TRIANGLE_CAP,
-                budget: Some(1 << 30),
+                budget: Some(2 << 30),
                 ..Run::default()
             },
         )
@@ -2031,13 +2111,7 @@ fn adversarial_held_tile_fits_its_admitted_charge() {
         for i in 0..3 {
             let (p, q) = (k[i], k[(i + 1) % 3]);
             for (a, b) in [(p, p), (p.min(q), p.max(q))] {
-                tile.interface.push(InterfaceRow {
-                    leaf: 0,
-                    a,
-                    b,
-                    lo: 0,
-                    hi: 1,
-                });
+                tile.interface.push(InterfaceRow::certain(0, a, b, 0, 1));
             }
         }
     }

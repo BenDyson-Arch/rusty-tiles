@@ -84,7 +84,7 @@ const STAGE_RESERVE: u64 = 256 << 20;
 /// of `k` entries of `T` bytes holds at most `16k/7` buckets of `T + 1` bytes:
 /// - merged vertices (key 12, depth 1, position 12; grown by doubling, at most twice) and
 ///   triangles (12), representatives (24): `2 * 3 * 25 + 36 = 186`;
-/// - the parent's interface rows, at most six (leaf, item) rows of 36 bytes: 216;
+/// - the parent's interface rows, at most six (leaf, item) rows of 44 bytes: 264;
 /// - required segment and point sets (at most `3m` each): `171.4 + 89.1`;
 /// - the lock and protection flags: 4;
 /// - the retry's keep and rest lists (doubling: 24), kept vertices (`3m` u32: 34.3), the lost
@@ -97,11 +97,13 @@ const STAGE_RESERVE: u64 = 256 << 20;
 ///   quadric (44), collapse remap and lock), per index 24 (adjacency edge, collapse, order),
 ///   so 372.
 ///
-/// The sum is under 1,560; earlier phases (the weld index while merging, the interface rows
-/// while merging them, the representative tables) peak lower. Measured on adversarial jobs by
+/// The sum is under 1,610. Earlier phases (the weld index while merging, the interface rows
+/// while merging them, the representative tables) peak lower, and so does an exact
+/// resolution of provisional rows (`Fallback::resolve`: its row maps and the tile's kept
+/// candidates beside the merged data and rows, under 1,550, between two builds). Measured on adversarial jobs by
 /// `parent_jobs_allocate_within_their_charge` (a counting allocator, meshoptimizer routed
 /// through it).
-const JOB_BYTES_PER_TRIANGLE: u64 = 1600;
+const JOB_BYTES_PER_TRIANGLE: u64 = 1700;
 /// Finished coarse rows held while an earlier tile is still being built (`walk`); each is a
 /// few hundred bytes, charged within `STAGE_RESERVE`.
 const ROW_WINDOW: usize = 1024;
@@ -257,6 +259,9 @@ pub(crate) struct HlodReport {
     pub tiles_with_protected_faces: u64,
     pub protected_faces: u64,
     pub retries: u64,
+    /// Tiles whose provisional interface rows were resolved exactly, and those rows.
+    pub resolved_tiles: u64,
+    pub resolved_rows: u64,
     pub interface_segments: u64,
     pub interface_vertices: u64,
     pub quantized_tiles: u64,
@@ -392,7 +397,7 @@ pub(crate) fn produce(
     input.phases.progress(Phase::HlodIncidence, 0, Some(1))?;
     let incidence_started = std::time::Instant::now();
     captured.scratch.begin_stage();
-    let (rows, stats) = interfaces::build(
+    let (rows, stats, fallback) = interfaces::build(
         &captured.scratch,
         input.config.sorter(1),
         &captured.tree.nodes,
@@ -411,7 +416,7 @@ pub(crate) fn produce(
         incidence_started.elapsed().as_secs_f64(),
     )?;
     let walk_started = std::time::Instant::now();
-    let result = walk(&input, rows, &rows_path, &mut report, check);
+    let result = walk(&input, rows, &rows_path, &mut report, &fallback, check);
     diagnostics.incidence_scratch_peak_bytes = captured.scratch.stage_peak_bytes();
     let bound = captured.report.scratch.stages.lod_prepass;
     let lease_peak = result?;
@@ -565,8 +570,7 @@ fn read_leaf(
     while let Some(row) = rows.next_if(|r| matches!(r, Ok(r) if r.leaf == leaf)) {
         let row = row?;
         if let Some(last) = tile.interface.last_mut().filter(|l| l.item() == row.item()) {
-            last.lo = last.lo.min(row.lo);
-            last.hi = last.hi.max(row.hi);
+            last.absorb(&row);
         } else if tile.interface.len() == items {
             return Err(state(
                 "more interface items than the leaf has points and segments",
@@ -602,8 +606,9 @@ fn keep_open_edges(tile: &mut TileGeometry, leaf: u32, items: usize) -> Result<(
     if tile.interface.is_empty() {
         return Ok(());
     }
+    // Per kept point: its rows' lock and certain intervals (each channel derived alike).
     let capacity = (2 * tile.interface.len()).min(3 * tile.triangles.len());
-    let mut points: HashMap<interfaces::Key, (u32, u32)> = HashMap::with_capacity(capacity);
+    let mut points: HashMap<interfaces::Key, InterfaceRow> = HashMap::with_capacity(capacity);
     for r in &tile.interface {
         let ends = if r.is_vertex() {
             [r.a, r.a]
@@ -611,31 +616,23 @@ fn keep_open_edges(tile: &mut TileGeometry, leaf: u32, items: usize) -> Result<(
             [r.a, r.b]
         };
         for p in ends {
-            let e = points.entry(p).or_insert((r.lo, r.hi));
-            e.0 = e.0.min(r.lo);
-            e.1 = e.1.max(r.hi);
+            let as_point = InterfaceRow { a: p, b: p, ..*r };
+            points
+                .entry(p)
+                .and_modify(|e| e.absorb(&as_point))
+                .or_insert(as_point);
         }
     }
     let merged = tile.interface.len();
-    for (&p, &(lo, hi)) in &points {
+    for (&p, point) in &points {
         match tile.interface[..merged].binary_search_by_key(&(p, p), InterfaceRow::item) {
-            Ok(at) => {
-                let row = &mut tile.interface[at];
-                row.lo = row.lo.min(lo);
-                row.hi = row.hi.max(hi);
-            }
+            Ok(at) => tile.interface[at].absorb(point),
             Err(_) if tile.interface.len() == items => {
                 return Err(state(
                     "more interface items than the leaf has points and segments",
                 ));
             }
-            Err(_) => tile.interface.push(InterfaceRow {
-                leaf,
-                a: p,
-                b: p,
-                lo,
-                hi,
-            }),
+            Err(_) => tile.interface.push(InterfaceRow { leaf, ..*point }),
         }
     }
     let key = |v: u32| interfaces::key(tile.positions[v as usize]);
@@ -667,19 +664,27 @@ fn keep_open_edges(tile: &mut TileGeometry, leaf: u32, items: usize) -> Result<(
         if faces == 2 {
             continue;
         }
-        let (lo, hi) = (pa.0.max(pb.0), pa.1.min(pb.1));
+        // Each channel: the narrower of the endpoints' (empty where either is).
+        let mut edge = InterfaceRow {
+            leaf,
+            a,
+            b,
+            lo: pa.lo.max(pb.lo),
+            hi: pa.hi.min(pb.hi),
+            clo: pa.clo.max(pb.clo),
+            chi: pa.chi.min(pb.chi),
+        };
+        if edge.clo > edge.chi {
+            (edge.clo, edge.chi) = interfaces::NO_LEAF;
+        }
         match tile.interface[..merged].binary_search_by_key(&(a, b), InterfaceRow::item) {
-            Ok(at) => {
-                let row = &mut tile.interface[at];
-                row.lo = row.lo.min(lo);
-                row.hi = row.hi.max(hi);
-            }
+            Ok(at) => tile.interface[at].absorb(&edge),
             Err(_) if tile.interface.len() == items => {
                 return Err(state(
                     "more interface items than the leaf has points and segments",
                 ));
             }
-            Err(_) => tile.interface.push(InterfaceRow { leaf, a, b, lo, hi }),
+            Err(_) => tile.interface.push(edge),
         }
     }
     tile.interface.sort_unstable_by_key(InterfaceRow::item);
@@ -697,6 +702,7 @@ fn shrink(tile: &mut TileGeometry) {
 }
 
 /// One parent: geometry, encoding, the pre-publication check, error and its member.
+#[allow(clippy::too_many_arguments)]
 fn build_tile(
     closed: &Closed,
     children: Vec<TileGeometry>,
@@ -704,18 +710,21 @@ fn build_tile(
     materials: &[Value],
     stage: &Path,
     settings: Settings,
+    fallback: &interfaces::Fallback,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Done {
+    let resolve = geometry::Resolve { fallback, check };
     let mut built = if closed.single_leaf {
         let half = children[0].triangles.len().div_ceil(2).min(settings.cap);
-        match geometry::build_parent(closed.key, &children, half) {
+        match geometry::build_parent(closed.key, &children, half, &resolve) {
             // Its interface cannot be halved: the copy within the cap.
             Err(e) if e.kind() == JobErrorKind::Unsupported => {
-                geometry::build_parent(closed.key, &children, settings.cap)?
+                geometry::build_parent(closed.key, &children, settings.cap, &resolve)?
             }
             built => built?,
         }
     } else {
-        geometry::build_parent(closed.key, &children, settings.cap)?
+        geometry::build_parent(closed.key, &children, settings.cap, &resolve)?
     };
     drop(children);
     if settings.mutation == Mutation::DropSegment {
@@ -793,6 +802,7 @@ fn build_tile(
         retries: built.retries,
         interface_vertices: built.interface_vertices,
         interface_segments: built.interface_segments,
+        resolved_rows: built.resolved,
         quantized: encoded.quantized,
         bounds: encoded.bounds.into(),
     };
@@ -813,6 +823,8 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     report.tiles_with_protected_faces += u64::from(row.protected_faces > 0);
     report.protected_faces += u64::from(row.protected_faces);
     report.retries += u64::from(row.retries);
+    report.resolved_tiles += u64::from(row.resolved_rows > 0);
+    report.resolved_rows += u64::from(row.resolved_rows);
     report.interface_segments += u64::from(row.interface_segments);
     report.interface_vertices += u64::from(row.interface_vertices);
     if row.quantized {
@@ -834,6 +846,7 @@ fn walk(
     rows: crate::spill::SortedStream<'_, InterfaceRow>,
     rows_path: &Path,
     report: &mut HlodReport,
+    fallback: &interfaces::Fallback,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<u64, JobError> {
     let captured = input.captured;
@@ -906,8 +919,10 @@ fn walk(
                 scope.spawn(move |_| {
                     let (id, seq) = (closed.id, closed.seq);
                     let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        let mut built =
-                            build_tile(&closed, children, captured, materials, stage, settings)?;
+                        let mut built = build_tile(
+                            &closed, children, captured, materials, stage, settings, fallback,
+                            check,
+                        )?;
                         // The job's admission includes its output: keep that part while the
                         // tile is held for its parent, release the workspace.
                         let mut lease = job_lease;

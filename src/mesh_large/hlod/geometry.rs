@@ -34,6 +34,8 @@ pub(crate) struct Built {
     pub retries: u32,
     pub interface_vertices: u32,
     pub interface_segments: u32,
+    /// Provisional rows resolved exactly for this parent (zero unless it needed it).
+    pub resolved: u32,
 }
 
 /// Children merged into one vertex space welded by canonical decoded position, in child
@@ -234,11 +236,23 @@ fn representatives(merged: &Merged, output: &[[u32; 3]]) -> Vec<SourcePrimitive>
         .collect()
 }
 
+/// Exact resolution of provisional rows for a parent that needs it.
+pub(crate) struct Resolve<'a> {
+    pub fallback: &'a super::interfaces::Fallback,
+    pub check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
+}
+
 /// Build `key`'s parent from its children (in slot order) under a `cap`-triangle limit.
+///
+/// An outer interface holding provisional rows (an over-budget join region's superset) that
+/// keeps the parent from the cap is resolved exactly (`Fallback::resolve`, dropping the false
+/// locks) and the parent rebuilt once with its certain locks only; a parent that still
+/// cannot fit is a genuine interface limit (D1), never one from over-locking.
 pub(crate) fn build_parent(
     tile: TileKey,
     children: &[TileGeometry],
     cap: usize,
+    resolve: &Resolve<'_>,
 ) -> Result<Built, JobError> {
     let merged = merge(children);
     if merged.triangles.is_empty() {
@@ -259,6 +273,31 @@ pub(crate) fn build_parent(
         .copied()
         .collect();
     super::interfaces::merge_rows(&mut interface);
+    match attempt(tile, &merged, &interface, cap, children_error) {
+        Err(e)
+            if e.kind() == JobErrorKind::Unsupported
+                && !resolve.fallback.is_empty()
+                && interface.iter().any(InterfaceRow::provisional) =>
+        {
+            let resolved = resolve.fallback.resolve(&mut interface, resolve.check)?;
+            interface.retain(|r| r.outer(tile.leaf_begin, tile.leaf_end));
+            super::interfaces::merge_rows(&mut interface);
+            let mut built = attempt(tile, &merged, &interface, cap, children_error)?;
+            built.resolved = resolved as u32;
+            Ok(built)
+        }
+        built => built,
+    }
+}
+
+/// One build of the parent from `merged` children under `interface`.
+fn attempt(
+    tile: TileKey,
+    merged: &Merged,
+    interface: &[InterfaceRow],
+    cap: usize,
+    children_error: f64,
+) -> Result<Built, JobError> {
     let segments: HashSet<(Key, Key)> = interface
         .iter()
         .filter(|r| !r.is_vertex())
@@ -298,7 +337,7 @@ pub(crate) fn build_parent(
         )
     } else {
         let (mut output, mut error) =
-            simplify(&merged, &merged.triangles, &|v| locked[v as usize], cap);
+            simplify(merged, &merged.triangles, &|v| locked[v as usize], cap);
         loop {
             let (edges, points) = missing(&output, &merged.keys, &segments, &vertices);
             if edges.is_empty() && points.is_empty() {
@@ -349,7 +388,7 @@ pub(crate) fn build_parent(
                 (Vec::new(), 0.)
             } else {
                 simplify(
-                    &merged,
+                    merged,
                     &rest,
                     &|v| locked[v as usize] || kept.contains(&v),
                     cap.saturating_sub(keep.len()),
@@ -389,7 +428,7 @@ pub(crate) fn build_parent(
     if !simplifier_error.is_finite() {
         return Err(state("meshopt reported a nonfinite error"));
     }
-    let reps = representatives(&merged, &output);
+    let reps = representatives(merged, &output);
     // Compact to the vertices the output uses, in first-use order.
     let mut remap = vec![u32::MAX; merged.keys.len()];
     let mut geometry = TileGeometry {
@@ -399,7 +438,7 @@ pub(crate) fn build_parent(
         triangles: Vec::with_capacity(output.len()),
         representative: Vec::with_capacity(output.len()),
         primitives: Vec::new(),
-        interface,
+        interface: interface.to_vec(),
         geometric_error: 0.,
         lease: None,
     };
@@ -440,6 +479,7 @@ pub(crate) fn build_parent(
         retries,
         interface_vertices: vertices.len() as u32,
         interface_segments: segments.len() as u32,
+        resolved: 0,
         geometry,
     })
 }
