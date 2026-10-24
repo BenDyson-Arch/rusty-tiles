@@ -14,6 +14,7 @@ Run with ``python tests/t1_terrain_oracle.py DIRECTORY``. Fixture creation uses
 GDAL only to write explicitly described source values, never to sample them.
 """
 import argparse
+from collections import Counter
 import json
 import math
 import pathlib
@@ -407,7 +408,16 @@ def check_directory(directory, samples=4):
                     assert node['box'][axis] - node['box'][half] <= child['box'][axis] - child['box'][half], 'child box below parent minimum'
                     assert node['box'][axis] + node['box'][half] >= child['box'][axis] + child['box'][half], 'child box above parent maximum'
         contains_box(node['box'], patch.local + [p[0] for p in patch.skirt_points])
-        assert len(patch.surface_triangles) == 2 * (len(patch.xs) - 1) * (len(patch.ys) - 1), 'complete tile lattice'
+        # A count and outward winding alone permit a duplicated face plus a
+        # hole. Census the exact oriented two-triangle stencil of every cell,
+        # including clipped coarse cells, for all source-height fixtures.
+        rotate = lambda t: min(t[k:]+t[:k] for k in range(3))
+        expected = Counter()
+        for y0, y1 in zip(patch.ys, patch.ys[1:]):
+            for x0, x1 in zip(patch.xs, patch.xs[1:]):
+                expected[rotate(((x0,y0),(x1,y0),(x0,y1)))] += 1
+                expected[rotate(((x1,y0),(x1,y1),(x0,y1)))] += 1
+        assert Counter(rotate(t) for t in patch.surface_triangles) == expected, 'missing/duplicated/reversed terrain cells'
     # Certified error: dense parametric distance from each tile to the leaf mesh.
     for node in tiles:
         if not node['children']:
@@ -608,7 +618,7 @@ def corruption_controls(directory, plane=True, **plane_spec):
     _,_,tiles=tree(directory)
     report=json.loads((directory/'conversion.json').read_text())
     leaves=[n for n in tiles if not n['children']]
-    faults=['position','winding','bounds']+(['frame'] if plane else [])+['row','missing-triangle','report-inventory']
+    faults=['position','winding','bounds']+(['frame'] if plane else [])+['row','missing-triangle','duplicate-triangle','report-inventory']
     if len(leaves)>1: faults.append('seam')
     # Pyramid controls need a coarse tile below the root.
     middle=[n for n in tiles if n['children'] and n['parent'] is not None and 'row' in n]
@@ -621,6 +631,7 @@ def corruption_controls(directory, plane=True, **plane_spec):
               'winding':('missing/duplicated/reversed terrain cells','reversed or collapsed surface triangle'),
               'row':('missing/duplicated/reversed terrain cells','surface vertices form one lattice'),
               'missing-triangle':('surface vertices form one lattice',),
+              'duplicate-triangle':('missing/duplicated/reversed terrain cells',),
               'seam':('shared seam changed stored coordinates','shared node changed stored coordinates')}
     def patch_of(node,manifest):
         return Patch(directory,node,report,manifest['root']['transform'])
@@ -702,7 +713,8 @@ def corruption_controls(directory, plane=True, **plane_spec):
                     else:
                         width=document['bufferViews'][index['bufferView']]['extensions'][MESHOPT]['byteStride']
                         values=meshopt.unpack_indices(bytes(views[index['bufferView']]),width)
-                        if fault=='missing-triangle': values[1]=values[0]
+                        if fault=='duplicate-triangle': values[6:9]=values[9:12]
+                        elif fault=='missing-triangle': values[1]=values[0]
                         else: values[1],values[2]=values[2],values[1]
                         views[index['bufferView']][:]=meshopt.pack_indices(values,width)
                     # Keep the declared range consistent, so only the geometry is wrong.
@@ -710,10 +722,12 @@ def corruption_controls(directory, plane=True, **plane_spec):
                     values=[struct.unpack_from(fmt,vertices,i*stride) for i in range(position['count'])]
                     position['min'],position['max']=[min(v[a] for v in values) for a in range(3)],[max(v[a] for v in values) for a in range(3)]
                 rewrite_tile(copy/leaf['uri'],corrupt)
-            if fault in ['identity','missing-skirt','position','winding','row','missing-triangle','seam']:
+            if fault in ['identity','missing-skirt','position','winding','row','missing-triangle','duplicate-triangle','seam']:
                 restamp_bytes(copy)
             try:
-                if plane: check_plane(copy,**plane_spec)
+                # The duplicate-face control must exercise the generic topology
+                # census even on plane fixtures, without the source-plane oracle.
+                if plane and fault != 'duplicate-triangle': check_plane(copy,**plane_spec)
                 check_directory(copy)
             except (AssertionError,KeyError) as error:
                 assert fault!='identity', f'oracle rejected an identity re-store: {error}'

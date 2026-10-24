@@ -1617,52 +1617,56 @@ mod tests {
     fn scattered_atlas_islands_are_identical_across_jobs_and_shrink_pages() {
         let work = tempfile::tempdir().unwrap();
         let input = scattered_fixture(&work.path().join("source"), 20_000, 9729);
-        let mut previous = None;
-        for jobs in [1, 3] {
-            let output = work.path().join(format!("balanced{jobs}"));
-            let result = mesh_to_leaf_payloads(
-                LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
-                    .with_jobs(NonZeroUsize::new(jobs).unwrap()),
-                &RunControl::default(),
-            )
-            .unwrap();
-            assert_eq!(result.report.triangles, 20_000);
-            assert!(result.report.leaves >= 2);
-            let files = output_files(&output);
-            for row in fs::read_to_string(output.join("leaves.jsonl"))
-                .unwrap()
-                .lines()
-            {
-                let row: serde_json::Value = serde_json::from_str(row).unwrap();
-                let bindings: Vec<_> = row["appearance"]
-                    .as_array()
+        for profile in [LeafProfile::Fast, LeafProfile::Balanced] {
+            let mut previous = None;
+            for jobs in [1, 3] {
+                let output = work.path().join(format!("{profile:?}{jobs}"));
+                let result = mesh_to_leaf_payloads(
+                    LeafOutputRequest::new(&input, &output, profile)
+                        .with_jobs(NonZeroUsize::new(jobs).unwrap()),
+                    &RunControl::default(),
+                )
+                .unwrap();
+                assert_eq!(result.report.triangles, 20_000);
+                assert!(result.report.leaves >= 2);
+                let files = output_files(&output);
+                for row in fs::read_to_string(output.join("leaves.jsonl"))
                     .unwrap()
-                    .iter()
-                    .filter(|r| r.get("islands").is_some())
-                    .collect();
-                assert!(!bindings.is_empty());
-                for binding in bindings {
-                    // Scattered footprints become many small islands whose
-                    // real texels are a small part of the 256x256 hull.
-                    assert!(binding["islands"].as_array().unwrap().len() > 1);
-                    assert!(binding["islandInteriorTexels"].as_u64().unwrap() < 1024 * 1024 / 5);
-                }
-                for page in row["appearance"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .filter(|r| r.get("levels").is_some())
+                    .lines()
                 {
-                    assert!(
-                        page["width"].as_u64().unwrap() * page["height"].as_u64().unwrap()
-                            <= 1024 * 1024 / 4
-                    );
+                    let row: serde_json::Value = serde_json::from_str(row).unwrap();
+                    let bindings: Vec<_> = row["appearance"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter(|r| r.get("islands").is_some())
+                        .collect();
+                    assert!(!bindings.is_empty());
+                    for binding in bindings {
+                        // Scattered footprints become many small islands whose
+                        // real texels are a small part of the 256x256 hull.
+                        assert!(binding["islands"].as_array().unwrap().len() > 1);
+                        assert!(
+                            binding["islandInteriorTexels"].as_u64().unwrap() < 1024 * 1024 / 5
+                        );
+                    }
+                    for page in row["appearance"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter(|r| r.get("levels").is_some())
+                    {
+                        assert!(
+                            page["width"].as_u64().unwrap() * page["height"].as_u64().unwrap()
+                                <= 1024 * 1024 / 4
+                        );
+                    }
                 }
-            }
-            if let Some(ref prior) = previous {
-                assert_eq!(prior, &files, "jobs {jobs} changed published bytes");
-            } else {
-                previous = Some(files);
+                if let Some(ref prior) = previous {
+                    assert_eq!(prior, &files, "jobs {jobs} changed published bytes");
+                } else {
+                    previous = Some(files);
+                }
             }
         }
     }

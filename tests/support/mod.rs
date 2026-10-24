@@ -80,6 +80,20 @@ pub fn recipes() -> Vec<Recipe> {
             ],
             false,
         ),
+        // Pin the default lossy profile too; omitting --profile exercises the
+        // CLI default. Every platform checks repeatability, and the recorded
+        // platform additionally pins the encoder's concrete output digests.
+        recipe(
+            "mesh-balanced",
+            "mesh",
+            "mesh-balanced.3tz",
+            &[
+                &["-i", "{in}/mesh-balanced.glb"],
+                &MODEL_ANCHOR,
+                &["--jobs", "1"],
+            ],
+            false,
+        ),
         recipe(
             "glb-to-3tz",
             "glb-to-3tz",
@@ -230,6 +244,22 @@ pub fn write_inputs(dir: &Path) {
     let glb = textured_grid_glb(24);
     fs::write(dir.join("mesh.glb"), &glb).unwrap();
     fs::write(dir.join("tileset/mesh.glb"), &glb).unwrap();
+    // A nonconstant low-contrast colour control exercises ETC1S itself. The
+    // existing XOR-gradient input is retained literally for the older recipes;
+    // its default lossy delivery legitimately escalates on an appearance gate.
+    let balanced = image::RgbaImage::from_fn(64, 64, |x, y| {
+        image::Rgba([
+            96 + (x / 8) as u8,
+            144 + (y / 8) as u8,
+            192 + ((x + y) / 16) as u8,
+            255,
+        ])
+    });
+    fs::write(
+        dir.join("mesh-balanced.glb"),
+        grid_with_texture(8, balanced),
+    )
+    .unwrap();
     fs::write(
         dir.join("tileset/tileset.json"),
         r#"{"asset":{"version":"1.1"},"geometricError":10,"root":{"boundingVolume":{"box":[10,10,0,10,0,0,0,10,0,0,0,1]},"geometricError":0,"refine":"REPLACE","content":{"uri":"mesh.glb"}}}"#,
@@ -256,6 +286,10 @@ pub fn textured_grid_glb(n: usize) -> Vec<u8> {
     let texture = image::RgbaImage::from_fn(64, 64, |x, y| {
         image::Rgba([(x * 4) as u8, (y * 4) as u8, ((x ^ y) * 4) as u8, 255])
     });
+    grid_with_texture(n, texture)
+}
+
+fn grid_with_texture(n: usize, texture: image::RgbaImage) -> Vec<u8> {
     let mut png = Vec::new();
     image::DynamicImage::ImageRgba8(texture)
         .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)

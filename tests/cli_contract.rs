@@ -69,12 +69,15 @@ fn every_converter_prints_wrote_reports_and_next_lines() {
             }
             "vector" => assert!(first.ends_with(" (4 features, 3 tiles)"), "{first}"),
             "terrain" => assert!(first.ends_with(" (1 tile)"), "{first}"),
-            "mesh" => assert!(
-                first.ends_with(
+            "mesh" => {
+                // The default-profile recipe pins the ETC1S `balanced` output; the other is lossless.
+                let expected = if recipe.name == "mesh-balanced" {
+                    " (1 tile, 128 triangles, 1 leaf, balanced profile, workers: capture 1, leaves 1)"
+                } else {
                     " (1 tile, 1152 triangles, 1 leaf, lossless profile, workers: capture 1, leaves 1)"
-                ),
-                "{first}"
-            ),
+                };
+                assert!(first.ends_with(expected), "{first}")
+            }
             "glb-to-3tz" | "createTilesetJson" => {
                 assert!(first.ends_with(" (1152 triangles)"), "{first}")
             }

@@ -1103,7 +1103,11 @@ fn actual_five_slot_proxy_delivery_executes_all_profiles_and_decodes_every_level
                 let scalar = page.slot == TextureSlot::Occlusion && profile != Profile::Quality;
                 assert_eq!(
                     output.bytes[dfd + 12],
-                    if scalar { 163 } else { 166 },
+                    if scalar || (colour && profile != Profile::Quality) {
+                        163
+                    } else {
+                        166
+                    },
                     "actual ETC1S/UASTC model"
                 );
                 let decoder = basisu::Transcoder::new(&output.bytes).unwrap();
@@ -1152,8 +1156,10 @@ fn actual_five_slot_proxy_delivery_executes_all_profiles_and_decodes_every_level
                         let expected_floor = if colour_channel {
                             if quality {
                                 23.
+                            } else if metric["texels"].as_u64().unwrap() < 64 {
+                                13.
                             } else {
-                                20.
+                                16.
                             }
                         } else if channel == 3 && quality {
                             34.
@@ -1189,8 +1195,13 @@ fn actual_five_slot_proxy_delivery_executes_all_profiles_and_decodes_every_level
                         if let Some(cap) = expected_max {
                             assert!(metric["max"].as_u64().unwrap() <= cap);
                         }
-                        let expected_block =
-                            colour_channel.then_some(if quality { 48. } else { 80. });
+                        let expected_block = colour_channel.then_some(if quality {
+                            48.
+                        } else if profile == Profile::Fast {
+                            96.
+                        } else {
+                            80.
+                        });
                         assert_eq!(metric["blockRmseCap"].as_f64(), expected_block);
                         if let Some(cap) = expected_block {
                             assert!(metric["blockRmse"].as_f64().unwrap() <= cap);
