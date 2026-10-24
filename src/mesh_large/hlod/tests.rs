@@ -2105,12 +2105,12 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
     }
 }
 
-/// Review regression (S3 donor reuse): two parallel sheets 0.01 m apart baked at 0.1 m
-/// spacing. A point exactly on sheet B must never keep sheet A's donor from the previous
-/// point, and every reused donor must equal the exact nearest search's hit.
+/// Review regression (S3 donor choice): two parallel sheets 0.01 m apart baked at 0.1 m
+/// spacing, points alternating between them. Every point takes its own sheet's nearest
+/// triangle, and the resident local surface returns exactly S2's paged search hits.
 #[test]
-fn bake_donor_reuse_is_exact_across_close_parallel_sheets() {
-    use super::bake::{resolve, Queries};
+fn bake_donors_are_exact_across_close_parallel_sheets() {
+    use super::bake::{resolve, Queries, Searcher};
     use super::source_index::SourceIndex;
     use crate::mesh_large::{
         config::{Profile, TreeConfig},
@@ -2136,7 +2136,6 @@ fn bake_donor_reuse_is_exact_across_close_parallel_sheets() {
         leaf_begin: 0,
         leaf_end: 1,
     };
-    // Raster rows alternating between the sheets, 0.1 m apart along each row.
     let mut points = Vec::new();
     for row in 0..10 {
         for col in 0..10 {
@@ -2145,19 +2144,21 @@ fn bake_donor_reuse_is_exact_across_close_parallel_sheets() {
             points.push([x, y, z]);
         }
     }
-    let run = |reach: f64| {
+    let run = |local: bool| {
         let mut query = index.query(&captured, key).unwrap();
-        let mut q = [Queries::new(0, points.clone(), reach, false)];
-        let (searches, _) = resolve(&mut query, &mut q, &|| Ok(())).unwrap();
+        let mut searcher = if local {
+            Searcher::new(&mut query).unwrap()
+        } else {
+            Searcher::paged(&mut query)
+        };
+        let mut q = [Queries::new(0, points.clone(), false)];
+        resolve(&mut searcher, &mut q, &|| Ok(())).unwrap();
         let [q] = q;
-        (q.hits, searches)
+        q.hits
     };
-    let (exact, all) = run(0.);
-    let (reused, searches) = run(0.2);
-    assert_eq!(all, points.len() as u64);
-    assert!(searches <= all);
-    for (i, (a, b)) in exact.iter().zip(&reused).enumerate() {
-        assert_eq!((a.rank, a.material, a.d2.to_bits()), (b.rank, b.material, b.d2.to_bits()), "point {i}");
+    let (paged, local) = (run(false), run(true));
+    for (i, (a, b)) in paged.iter().zip(&local).enumerate() {
+        assert_eq!((a.rank, a.material, a.d2.to_bits(), a.uv), (b.rank, b.material, b.d2.to_bits(), b.uv), "point {i}");
         let on_b = points[i][1] > 0.;
         assert_eq!(b.material, u32::from(on_b), "point {i} took the other sheet's donor");
         assert!(b.d2 < 1e-12, "point {i} lies on its donor");

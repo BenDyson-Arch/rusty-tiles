@@ -252,6 +252,7 @@ pub(crate) fn plan(
         .saturating_add(JOB_ENCODE_BYTES)
         .saturating_add(source_index::QUERY_BYTES + error::WORK_BYTES)
         .saturating_add(bake::RESOLVE_BYTES)
+        .saturating_add(bake::LOCAL_BYTES)
         .saturating_add(TileGeometry::charge(cap as u64));
     let appearance = appearance_plan(captured, config.profile, cap)?;
     let job = geometry_job
@@ -1253,6 +1254,7 @@ fn walk(
                 .map_err(|_| state("HLOD worker ended without a result"))?;
             *inflight -= 1;
             let (geometry, row, timing) = done?;
+            timings.surface += timing.surface;
             timings.charts += timing.charts;
             timings.query += timing.query;
             timings.sample += timing.sample;

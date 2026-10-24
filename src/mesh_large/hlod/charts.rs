@@ -16,8 +16,14 @@ type P2 = [f64; 2];
 
 /// Least cosine between a chart face's normal and its seed's: bounds a face's texel-area
 /// stretch on the chart plane at `1 / 0.8²` (about 1.56×).
-const CONE_COS: f64 = 0.8;
-/// Most faces one chart may grow to (bounds the overlap test, as the prototype).
+const CONE_COS: f64 = 0.5;
+/// Charts of at most this many faces offer their faces to an adjacent larger chart.
+const SMALL_CHART: usize = 16;
+/// Least cosine between a merged face's normal and the receiving chart's normal (its
+/// texel-area stretch stays below 1 / 0.2 on that one face).
+const MERGE_COS: f64 = 0.2;
+/// Most faces one chart may grow to (bounds the overlap test; a 2D box prefilter keeps
+/// its quadratic part cheap).
 const CHART_FACES: usize = 192;
 /// Texels of gutter on every side of a chart; the sparse-mip encoder fills them from the
 /// nearest covered texel at every level.
@@ -51,6 +57,8 @@ pub(crate) struct Chart {
     pub x: V3,
     pub y: V3,
     points: Vec<[P2; 3]>,
+    /// Per face: its projected 2D box (overlap prefilter during growth).
+    boxes: Vec<(P2, P2)>,
     lo: P2,
     hi: P2,
     origin: [u32; 2],
@@ -168,6 +176,8 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
     order.sort_by(|&a, &b| areas[b].total_cmp(&areas[a]).then(a.cmp(&b)));
     let mut chart_of = vec![u32::MAX; n];
     let mut charts: Vec<Chart> = Vec::new();
+    // Per chart: its plane origin and normal (the seed's).
+    let mut frames: Vec<(V3, V3)> = Vec::new();
     let mut queue = Vec::new();
     for seed in order {
         if chart_of[seed] != u32::MAX {
@@ -181,11 +191,13 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
                 x: [1., 0., 0.],
                 y: [0., 0., 1.],
                 points: vec![[[0.; 2]; 3]],
+                boxes: vec![([0.; 2], [0.; 2])],
                 lo: [0.; 2],
                 hi: [0.; 2],
                 origin: [0; 2],
                 size: [0; 2],
             });
+            frames.push((p(faces[seed][0]), [0., 1., 0.]));
             continue;
         };
         let axis = if normal[0].abs() < 0.8 {
@@ -201,6 +213,7 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
             x,
             y,
             points: Vec::new(),
+            boxes: Vec::new(),
             lo: [f64::MAX; 2],
             hi: [f64::MIN; 2],
             origin: [0; 2],
@@ -219,7 +232,15 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
                 let v = sub(p(faces[f][k]), origin);
                 [dot(v, x), dot(v, y)]
             });
-            if chart.points.iter().any(|t| overlap(&projected, t)) {
+            let boxed = |t: &[P2; 3]| {
+                let lo = [0, 1].map(|a| t[0][a].min(t[1][a]).min(t[2][a]));
+                let hi = [0, 1].map(|a| t[0][a].max(t[1][a]).max(t[2][a]));
+                (lo, hi)
+            };
+            let (plo, phi) = boxed(&projected);
+            if chart.points.iter().zip(&chart.boxes).any(|(t, (lo, hi))| {
+                lo[0] < phi[0] && plo[0] < hi[0] && lo[1] < phi[1] && plo[1] < hi[1] && overlap(&projected, t)
+            }) {
                 continue;
             }
             chart_of[f] = id;
@@ -229,6 +250,7 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
             }
             chart.faces.push(f);
             chart.points.push(projected);
+            chart.boxes.push((plo, phi));
             for k in start[f]..start[f + 1] {
                 let next = pairs[k as usize].1 as usize;
                 if chart_of[next] == u32::MAX {
@@ -236,10 +258,102 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
                 }
             }
         }
-        orient(&mut chart);
         charts.push(chart);
+        frames.push((origin, normal));
+    }
+    merge_small(&mut charts, &mut chart_of, &frames, (&start, &pairs), &normals, &p, faces);
+    for chart in &mut charts {
+        orient(chart);
     }
     (charts, chart_of)
+}
+
+/// Offer each face of a small chart (at most [`SMALL_CHART`] faces) to an adjacent chart
+/// with more faces whose plane it faces within [`MERGE_COS`] and whose projection it does
+/// not overlap; drop charts left empty and renumber. Fewer, larger charts spend fewer
+/// page texels on gutters.
+#[allow(clippy::too_many_arguments)]
+fn merge_small(
+    charts: &mut Vec<Chart>,
+    chart_of: &mut [u32],
+    frames: &[(V3, V3)],
+    (start, pairs): (&[u32], &[(u32, u32)]),
+    normals: &[Option<V3>],
+    p: &dyn Fn(u32) -> V3,
+    faces: &[[u32; 3]],
+) {
+    for small in 0..charts.len() {
+        if charts[small].faces.len() > SMALL_CHART || charts[small].faces.is_empty() {
+            continue;
+        }
+        let members = charts[small].faces.clone();
+        for f in members {
+            let Some(m) = normals[f] else { continue };
+            let target = (start[f]..start[f + 1])
+                .map(|k| chart_of[pairs[k as usize].1 as usize] as usize)
+                .filter(|&c| c != small && charts[c].faces.len() > charts[small].faces.len())
+                .find(|&c| {
+                    let (origin, normal) = frames[c];
+                    if dot(m, normal) < MERGE_COS {
+                        return false;
+                    }
+                    let (x, y) = (charts[c].x, charts[c].y);
+                    let projected: [P2; 3] = std::array::from_fn(|k| {
+                        let v = sub(p(faces[f][k]), origin);
+                        [dot(v, x), dot(v, y)]
+                    });
+                    let lo = [0, 1].map(|a| projected[0][a].min(projected[1][a]).min(projected[2][a]));
+                    let hi = [0, 1].map(|a| projected[0][a].max(projected[1][a]).max(projected[2][a]));
+                    !charts[c].points.iter().zip(&charts[c].boxes).any(|(t, (blo, bhi))| {
+                        blo[0] < hi[0] && lo[0] < bhi[0] && blo[1] < hi[1] && lo[1] < bhi[1] && overlap(&projected, t)
+                    })
+                });
+            let Some(c) = target else { continue };
+            let (origin, _) = frames[c];
+            let (x, y) = (charts[c].x, charts[c].y);
+            let projected: [P2; 3] = std::array::from_fn(|k| {
+                let v = sub(p(faces[f][k]), origin);
+                [dot(v, x), dot(v, y)]
+            });
+            let lo = [0, 1].map(|a| projected[0][a].min(projected[1][a]).min(projected[2][a]));
+            let hi = [0, 1].map(|a| projected[0][a].max(projected[1][a]).max(projected[2][a]));
+            let s = &mut charts[small];
+            let at = s.faces.iter().position(|&g| g == f).expect("member face");
+            s.faces.remove(at);
+            s.points.remove(at);
+            s.boxes.remove(at);
+            let d = &mut charts[c];
+            d.faces.push(f);
+            d.points.push(projected);
+            d.boxes.push((lo, hi));
+            d.lo = std::array::from_fn(|a| d.lo[a].min(lo[a]));
+            d.hi = std::array::from_fn(|a| d.hi[a].max(hi[a]));
+            chart_of[f] = c as u32;
+        }
+    }
+    // Drop emptied charts; recompute the bounds of shrunk ones and renumber.
+    let mut renumber = vec![u32::MAX; charts.len()];
+    let mut kept = 0u32;
+    for (i, c) in charts.iter().enumerate() {
+        if !c.faces.is_empty() {
+            renumber[i] = kept;
+            kept += 1;
+        }
+    }
+    charts.retain(|c| !c.faces.is_empty());
+    for c in charts.iter_mut() {
+        c.lo = [f64::MAX; 2];
+        c.hi = [f64::MIN; 2];
+        for t in &c.points {
+            for q in t {
+                c.lo = std::array::from_fn(|a| c.lo[a].min(q[a]));
+                c.hi = std::array::from_fn(|a| c.hi[a].max(q[a]));
+            }
+        }
+    }
+    for c in chart_of.iter_mut() {
+        *c = renumber[*c as usize];
+    }
 }
 
 /// Andrew's monotone chain: the convex hull of `points`, counter-clockwise.
@@ -351,7 +465,7 @@ fn sizes(charts: &mut [Chart], scale: f64) -> Option<()> {
         if !(w.is_finite() && h.is_finite()) || w > 1e6 || h > 1e6 {
             return None;
         }
-        c.size = [w as u32 + 1 + 2 * GUTTER, h as u32 + 1 + 2 * GUTTER];
+        c.size = [w.max(1.) as u32 + 2 * GUTTER, h.max(1.) as u32 + 2 * GUTTER];
     }
     Some(())
 }
@@ -440,7 +554,7 @@ pub(crate) fn layout(
         for (k, &f) in c.faces.iter().enumerate() {
             pixels[f] = c.points[k].map(|q| {
                 std::array::from_fn(|a| {
-                    f64::from(c.origin[a]) + f64::from(GUTTER) + 0.5 + (q[a] - c.lo[a]) * scale
+                    f64::from(c.origin[a]) + f64::from(GUTTER) + (q[a] - c.lo[a]) * scale
                 })
             });
         }
@@ -522,8 +636,8 @@ mod tests {
         assert_ne!(l.chart_of[0], l.chart_of[2]);
         assert!(!l.capped);
         assert!((l.scale - 10.).abs() < 1e-12);
-        // Content sized, block aligned: two 105-texel charts stacked, the point chart beside.
-        assert_eq!(l.size, [108, 216]);
+        // Content sized, block aligned: two 104-texel charts stacked, the point chart beside.
+        assert_eq!(l.size, [104, 216]);
         assert!(l.size.iter().all(|e| e % 4 == 0));
         let r = rects(&l);
         for (i, a) in r.iter().enumerate() {

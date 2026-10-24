@@ -7,7 +7,7 @@
 //! Hits record the donor's interpolants; images are then sampled grouped by image through
 //! a bounded, shared cache of decoded colour-correct mip chains ([`ImageCache`]), so a
 //! tile decodes each image at most once and the run never holds every image.
-use super::source_index::SourceQuery;
+use super::source_index::{Hit as SourceHit, SourceQuery, Surface};
 use crate::{
     gltf_source::source::{self as gsource, TextureSlot},
     mesh_large::{
@@ -73,13 +73,6 @@ pub(crate) struct Frame {
 pub(crate) struct Queries {
     pub class: u32,
     pub points: Vec<[f32; 3]>,
-    /// Search reach (metres) of each exact query's second-nearest margin, which lets later
-    /// nearby points reuse its donor provably ([`resolve`]); about two texels. Zero always
-    /// searches.
-    pub accept: f64,
-    /// Per point: its segment (chart). Donor reuse never crosses a segment change; empty
-    /// means one segment.
-    pub segments: Vec<u32>,
     /// Consecutive points likely share a nearest triangle (one coarse face's texels).
     pub hits: Vec<Hit>,
     pub frames: Vec<Frame>,
@@ -87,13 +80,11 @@ pub(crate) struct Queries {
 }
 
 impl Queries {
-    pub(crate) fn new(class: u32, points: Vec<[f32; 3]>, accept: f64, want_frames: bool) -> Self {
+    pub(crate) fn new(class: u32, points: Vec<[f32; 3]>, want_frames: bool) -> Self {
         let n = points.len();
         Self {
             class,
             points,
-            accept,
-            segments: Vec::new(),
             hits: vec![Hit::NONE; n],
             frames: if want_frames { vec![Frame::default(); n] } else { Vec::new() },
             want_frames,
@@ -129,8 +120,6 @@ pub(crate) const CHUNK: usize = 1 << 16;
 /// Ranks closer than this share one positioned read of at most `RUN_SPAN` records.
 const RUN_GAP: u64 = 32;
 const RUN_SPAN: u64 = 512;
-/// Recent anchors tried, most recent first, before an exact search.
-const RECENT: usize = 4;
 
 /// What every texel a donor serves needs, derived once per donor.
 struct Donor {
@@ -163,82 +152,80 @@ pub(crate) const RESOLVE_BYTES: u64 = (CHUNK as u64)
     + RUN_SPAN * 2 * std::mem::size_of::<FullTriangle>() as u64
     + (1 << 20);
 
+/// Tiles whose descendant source range has at most this many triangles answer the bake's
+/// nearest searches from one in-memory surface of that range ([`Searcher::local`]).
+pub(crate) const LOCAL_TRIANGLES: u64 = 1 << 17;
+/// Bytes of the largest local surface: compact records and their hierarchy.
+pub(crate) const LOCAL_BYTES: u64 = LOCAL_TRIANGLES * 160 + (1 << 20);
+
+/// The bake's exact nearest-surface search over a tile's descendant source range: S2's
+/// paged [`SourceQuery`], or, for a small range, the same triangles in one resident
+/// [`Surface`] (built once per tile) searched with the same distance and tie rule.
+pub(crate) struct Searcher<'q, 'a> {
+    query: &'q mut SourceQuery<'a>,
+    local: Option<(Surface, Option<usize>)>,
+}
+
+impl<'q, 'a> Searcher<'q, 'a> {
+    /// A searcher of `query`'s range; resident when the range is small enough.
+    pub(crate) fn new(query: &'q mut SourceQuery<'a>) -> Result<Self, JobError> {
+        let key = query.key;
+        let local = if key.end - key.first <= LOCAL_TRIANGLES {
+            let triangles = query.surface()?.collect::<Result<Vec<_>, _>>()?;
+            let surface = Surface::new(triangles)?;
+            if surface.charge() as u64 > LOCAL_BYTES {
+                return Err(resource("coarse bake local surface exceeds its charge"));
+            }
+            Some((surface, None))
+        } else {
+            None
+        };
+        Ok(Self { query, local })
+    }
+    /// Always S2's paged query (tests compare the two paths).
+    #[cfg(test)]
+    pub(crate) fn paged(query: &'q mut SourceQuery<'a>) -> Self {
+        Self { query, local: None }
+    }
+    pub(crate) fn query(&mut self) -> &mut SourceQuery<'a> {
+        self.query
+    }
+    fn nearest(&mut self, p: [f64; 3]) -> Result<SourceHit, JobError> {
+        let key = self.query.key;
+        match &mut self.local {
+            Some((surface, hint)) => Ok(surface.nearest_hint(p, key, hint)),
+            None => self.query.nearest(p),
+        }
+    }
+}
+
 /// Resolve every query point of the tile against the captured source surface of its
-/// descendant range through S2's bounded [`SourceQuery`] (nearest point, distance then
-/// source-rank ties). Every exact search also returns a lower bound `m` on the distance
-/// of every OTHER in-range triangle from its point `p0`; because distance is 1-Lipschitz,
-/// a later point `p` of the same segment whose distance to that donor is below
-/// `m - |p - p0|` provably has the donor as its unique nearest triangle, so reusing it
-/// (with the closest point recomputed at `p`) gives exactly the exact search's hit. No
-/// facing, material or donor-distance heuristic. Returns (exact searches, donor reads).
+/// descendant range: every point gets its exact nearest triangle (distance, then source
+/// order and rank on ties; no reuse, facing, material or donor-distance heuristic),
+/// on a resident surface for small ranges ([`Searcher`]). Donor records are read
+/// per chunk in rank order. Returns (points searched, donor reads).
 pub(crate) fn resolve(
-    query: &mut SourceQuery<'_>,
+    searcher: &mut Searcher<'_, '_>,
     queries: &mut [Queries],
     check: &dyn Fn() -> Result<(), JobError>,
 ) -> Result<(u64, u64), JobError> {
-    use super::source_index::{bary, closest, distance2};
-    struct Anchor {
-        rank: u64,
-        positions: [[f64; 3]; 3],
-        point: [f64; 3],
-        margin: f64,
-    }
-    // Most recent first.
-    let mut recent: Vec<Anchor> = Vec::with_capacity(RECENT + 1);
     let (mut searches, mut reads) = (0u64, 0u64);
     let mut witnesses: Vec<(u64, [f32; 3], f32)> = Vec::with_capacity(CHUNK);
     let mut ranks: Vec<u64> = Vec::with_capacity(CHUNK);
     let mut donors: Vec<(u64, Donor)> = Vec::with_capacity(CHUNK);
     let (mut encoded, mut run) = (Vec::new(), Vec::new());
     for q in queries.iter_mut() {
-        recent.clear();
-        let mut segment = u32::MAX;
         let mut start = 0;
         while start < q.points.len() {
             check()?;
             let end = (start + CHUNK).min(q.points.len());
             witnesses.clear();
-            for i in start..end {
-                if q.segments.get(i).is_some_and(|&s| s != segment) {
-                    segment = q.segments[i];
-                    recent.clear();
-                }
-                let p = q.points[i].map(f64::from);
-                let kept = (q.accept > 0.)
-                    .then(|| {
-                        recent.iter().enumerate().find_map(|(k, a)| {
-                            let w = closest(p, a.positions);
-                            let d = distance2(p, bary(a.positions, w)).sqrt();
-                            (d < a.margin - distance2(p, a.point).sqrt()).then_some((k, w, d * d))
-                        })
-                    })
-                    .flatten();
-                let (w, d2) = match kept {
-                    Some((k, w, d2)) => {
-                        recent[..=k].rotate_right(1);
-                        (w, d2)
-                    }
-                    None => {
-                        searches += 1;
-                        let (hit, margin) = query.nearest_margin(p, q.accept)?;
-                        let positions = query
-                            .witness_positions()
-                            .ok_or_else(|| state("coarse bake witness"))?;
-                        recent.insert(
-                            0,
-                            Anchor {
-                                rank: hit.rank,
-                                positions,
-                                point: p,
-                                margin: margin.distance(hit.distance2),
-                            },
-                        );
-                        recent.truncate(RECENT);
-                        (hit.bary, hit.distance2)
-                    }
-                };
-                witnesses.push((recent[0].rank, w.map(|v| v as f32), d2 as f32));
+            for point in &q.points[start..end] {
+                searches += 1;
+                let hit = searcher.nearest(point.map(f64::from))?;
+                witnesses.push((hit.rank, hit.bary.map(|v| v as f32), hit.distance2 as f32));
             }
+            let query = searcher.query();
             // The chunk's donors, read in rank order as merged runs.
             ranks.clear();
             ranks.extend(witnesses.iter().map(|w| w.0));

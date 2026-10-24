@@ -131,6 +131,8 @@ pub(crate) struct TileAppearance {
 #[derive(Clone, Copy, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Timing {
+    /// Building the tile's resident source surface (small ranges).
+    pub surface: f64,
     pub charts: f64,
     pub query: f64,
     pub sample: f64,
@@ -277,7 +279,10 @@ pub(crate) fn build(
     let normals = (services.normals || any_normal_map)
         .then(|| smooth_normals(tile.decoded, tile.triangles));
     let started = clock();
-    let source = source_spacing(services, query, tile, &by_class, target)?;
+    let mut searcher = bake::Searcher::new(query)?;
+    timing.surface = clock() - started;
+    let started = clock();
+    let source = source_spacing(services, &mut searcher, tile, &by_class)?;
     timing.query += clock() - started;
     let mut groups = Vec::with_capacity(by_class.len());
     for (class, faces) in by_class {
@@ -301,7 +306,7 @@ pub(crate) fn build(
             let floor = source.get(&class).copied().unwrap_or(0.);
             textured(
                 services,
-                query,
+                &mut searcher,
                 tile,
                 &mut group,
                 slots,
@@ -313,7 +318,7 @@ pub(crate) fn build(
             group.material = flat(captured, class);
             if services.colors {
                 let started = clock();
-                vertex_colours(query, tile, &mut group, target, check, &mut facts)?;
+                vertex_colours(&mut searcher, tile, &mut group, check, &mut facts)?;
                 timing.query += clock() - started;
             }
         }
@@ -332,7 +337,7 @@ pub(crate) fn build(
 #[allow(clippy::too_many_arguments)]
 fn textured(
     services: &Services<'_>,
-    query: &mut super::source_index::SourceQuery<'_>,
+    searcher: &mut bake::Searcher<'_, '_>,
     tile: &TileView<'_>,
     group: &mut Group,
     slots: Vec<TextureSlot>,
@@ -397,7 +402,7 @@ fn textured(
         texels,
         tangents,
     };
-    let pages = bake_pages(services, query, &p, group.class, normals, tile, (timing, facts))?;
+    let pages = bake_pages(services, searcher, &p, group.class, normals, tile, (timing, facts))?;
     let started = clock();
     let mask = captured
         .materials
@@ -540,10 +545,9 @@ fn mask_samples(
 /// Per-vertex `COLOR_0` of an untextured group from the nearest source surface (the
 /// small vertex-colour path); kept only when some donor carries `COLOR_0`.
 fn vertex_colours(
-    query: &mut super::source_index::SourceQuery<'_>,
+    searcher: &mut bake::Searcher<'_, '_>,
     tile: &TileView<'_>,
     group: &mut Group,
-    target: f64,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
     facts: &mut TileAppearance,
 ) -> Result<(), JobError> {
@@ -551,8 +555,8 @@ fn vertex_colours(
     vertices.sort_unstable();
     vertices.dedup();
     let points = vertices.iter().map(|&v| tile.decoded[v as usize]).collect();
-    let mut q = [Queries::new(group.class, points, 2. * target, false)];
-    let (searches, reads) = bake::resolve(query, &mut q, check)?;
+    let mut q = [Queries::new(group.class, points, false)];
+    let (searches, reads) = bake::resolve(searcher, &mut q, check)?;
     facts.searches += searches;
     facts.donor_reads += reads;
     let [q] = q;
@@ -581,10 +585,9 @@ const DENSITY_FACES: usize = 2048;
 /// Requesting finer spacing adds no information.
 fn source_spacing(
     services: &Services<'_>,
-    query: &mut super::source_index::SourceQuery<'_>,
+    searcher: &mut bake::Searcher<'_, '_>,
     tile: &TileView<'_>,
     by_class: &BTreeMap<u32, Vec<usize>>,
-    target: f64,
 ) -> Result<BTreeMap<u32, f64>, JobError> {
     let captured = services.captured;
     let mut queries = Vec::new();
@@ -607,10 +610,10 @@ fn source_spacing(
             let e2: [f64; 3] = std::array::from_fn(|a| p[2][a] - p[0][a]);
             area.push(0.5 * dot3(cross3(e1, e2), cross3(e1, e2)).sqrt());
         }
-        queries.push(Queries::new(class, points, target, false));
+        queries.push(Queries::new(class, points, false));
         areas.push(area);
     }
-    bake::resolve(query, &mut queries, services.check)?;
+    bake::resolve(searcher, &mut queries, services.check)?;
     let mut out = BTreeMap::new();
     for (q, area) in queries.iter().zip(&areas) {
         let (mut total, mut texels) = (0f64, 0f64);
@@ -666,7 +669,7 @@ type Binding = Option<(usize, crate::mesh_large::leaves::crops::SourceSampler, u
 /// grouped by image at the texel's source level of detail.
 fn bake_pages(
     services: &Services<'_>,
-    query: &mut super::source_index::SourceQuery<'_>,
+    searcher: &mut bake::Searcher<'_, '_>,
     p: &Pending,
     class: u32,
     normals: Option<&[[f32; 3]]>,
@@ -702,11 +705,8 @@ fn bake_pages(
                 })
             })
             .collect();
-        let mut query_chunk = Queries::new(class, points, 2. * spacing, normal_map);
-        // Donor reuse never crosses a chart.
-        query_chunk.segments = chunk.iter().map(|&(_, gf, _)| p.layout.chart_of[gf as usize]).collect();
-        let mut chunk_queries = [query_chunk];
-        let (searches, reads) = bake::resolve(query, &mut chunk_queries, check)?;
+        let mut chunk_queries = [Queries::new(class, points, normal_map)];
+        let (searches, reads) = bake::resolve(searcher, &mut chunk_queries, check)?;
         facts.searches += searches;
         facts.donor_reads += reads;
         let [q] = chunk_queries;
