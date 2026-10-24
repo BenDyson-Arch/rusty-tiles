@@ -210,6 +210,15 @@ penalty and preserve spatial streaming. **Evidence:** E2, E3, C/H28 and mesh gui
 
 ### D7 — KTX2/mips and presets
 
+**Owner amendment, 2026-10-24:** bring the colour default forward independently
+of S8: fast uses ETC1S quality 50 (lean), balanced uses quality 90 (good), both
+at effort 0 after the processing-cost sweep (initially 3), for leaf and coarse
+colour pages. Quality keeps UASTC and lossless keeps PNG. Recalibrate ETC1S RGB appearance floors from fixture/tex3 decoded
+measurements while retaining alpha, MASK, source-sampler and escalation checks.
+See [the mesh profile contract](../MESH.md#profiles-and-resources). The integrated
+2048/GPU/viewer campaign below remains a later acceptance obligation; this
+amendment authorizes the default change without claiming that campaign passed.
+
 Recommend in-process **KTX2 ETC1S for fast/balanced coarse colour pages**, and
 for leaf colour pages if the same quality gate passes; **UASTC + Zstd for quality**
 and for normal/data/MASK cases where ETC1S misses class-specific floors. Keep
