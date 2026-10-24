@@ -1081,6 +1081,15 @@ fn archive(dir: &Path, output: &Path) {
 /// tile, leaves byte-identical to the H17 run, the cap, valid representatives, and a
 /// validated archive.
 fn accept(name: &str, source: &[Mesh], run: Run) -> Census {
+    accept_with(name, source, run, false).0
+}
+
+/// `accept` for a fixture with or without source T-junctions or unwelded seams. Exact seams
+/// lock only shared points and segments, so where the source has such defects the census
+/// may find gaps along them: they are reported (the census's overlap and perpendicular
+/// counts beside the manifest's source-defect counts), not asserted away. Returns the census
+/// and the manifest's incidence report.
+fn accept_with(name: &str, source: &[Mesh], run: Run, defects: bool) -> (Census, Value) {
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), source);
     let dir = stage(&input, &work.path().join("hlod"), &run).unwrap();
@@ -1093,10 +1102,12 @@ fn accept(name: &str, source: &[Mesh], run: Run) -> Census {
     assert_eq!(census.missing_segments, 0, "{name}: {census:?}");
     assert_eq!(census.missing_vertices, 0, "{name}: {census:?}");
     assert_eq!(census.invalid_features, 0, "{name}: {census:?}");
-    assert_eq!(census.missing_overlap_items, 0, "{name}: {census:?}");
     assert_eq!(census.moved_border_vertices, 0, "{name}: {census:?}");
     assert!(census.perpendicular_checked > 0, "{name}: {census:?}");
-    assert_eq!(census.perpendicular_displaced, 0, "{name}: {census:?}");
+    if !defects {
+        assert_eq!(census.missing_overlap_items, 0, "{name}: {census:?}");
+        assert_eq!(census.perpendicular_displaced, 0, "{name}: {census:?}");
+    }
     assert_eq!(census.duplicate_chain_tiles, 0, "{name}: {census:?}");
     assert_eq!(census.reversed_coarse_faces, 0, "{name}: {census:?}");
     assert!(census.max_coarse_triangles <= run.cap, "{name}: {census:?}");
@@ -1136,7 +1147,32 @@ fn accept(name: &str, source: &[Mesh], run: Run) -> Census {
     b.extend(files(&h17, "leaves.jsonl"));
     assert!(a == b, "{name}: HLOD leaves differ from H17's");
     archive(&dir, &work.path().join("out.3tz"));
-    census
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    (census, manifest["hlod"]["incidence"].clone())
+}
+
+/// A fixture's source defects: reported by the producer (combinatorially) and the census
+/// (geometrically), with the largest gap the census measured.
+fn reported(name: &str, census: &Census, incidence: &Value) {
+    eprintln!(
+        "{name}: source open edges {} (with shared endpoints {}); census overlaps {}, \
+         unkept overlap items {}, perpendicular displaced {} (max {} m)",
+        incidence["sourceOpenEdges"],
+        incidence["sourceOpenEdgesWithSharedEndpoints"],
+        census.overlaps,
+        census.missing_overlap_items,
+        census.perpendicular_displaced,
+        census.max_perpendicular_excess_m
+    );
+    assert!(census.overlaps > 0, "{name}: {census:?}");
+    assert!(
+        incidence["sourceOpenEdgesWithSharedEndpoints"]
+            .as_u64()
+            .unwrap()
+            > 0,
+        "{name}: {incidence}"
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1199,93 +1235,14 @@ fn sheet_is_crack_free_at_every_depth_mix_with_exact_leaves() {
     assert!(census.shared_edges > 100, "{census:?}");
 }
 
-/// T-junction interfaces are not shared source edges: along x = 50 the right side has
-/// extra vertices on the left side's edges. Every tile on one side must still cover
-/// exactly the decoded line extent its own leaves cover (no gap opens along the line).
+/// Owner decision (exact seams): a source T-junction is not a shared edge. Along the line the
+/// right side has extra vertices on the left side's edges; only the coinciding vertices are
+/// locked. The defect is reported by the producer (open source edges whose endpoints meet
+/// other geometry) and its gap measured by the census, not hidden.
 #[test]
-fn t_junctions_keep_their_shared_vertices_and_segments() {
-    let census = accept("t-junction", &t_junction(), Run::default());
-    assert!(census.overlaps > 0, "{census:?}");
-    let work = tempfile::tempdir().unwrap();
-    let input = write_gltf(&work.path().join("src"), &t_junction());
-    let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
-    let tiles = load(&dir);
-    let line = T_LINE.to_bits();
-    let displaced = std::cell::Cell::new(0f32);
-    let coverage = |faces: &[[Point; 3]]| -> Vec<(u32, u32)> {
-        let mut spans: Vec<(f32, f32)> = Vec::new();
-        for f in faces.iter().filter(|f| !degenerate(f)) {
-            for k in 0..3 {
-                let (a, b) = (f[k], f[(k + 1) % 3]);
-                // Perpendicular displacement: any edge within 5 mm of the line counts, and
-                // must lie exactly on it.
-                let (xa, xb) = (f32::from_bits(a[0]), f32::from_bits(b[0]));
-                if (xa - T_LINE).abs() < 0.005 && (xb - T_LINE).abs() < 0.005 {
-                    let worst = (xa - T_LINE).abs().max((xb - T_LINE).abs());
-                    displaced.set(displaced.get().max(worst));
-                }
-                if a[0] == line && b[0] == line {
-                    let (za, zb) = (f32::from_bits(a[2]), f32::from_bits(b[2]));
-                    spans.push((za.min(zb), za.max(zb)));
-                }
-            }
-        }
-        spans.sort_by(|x, y| x.partial_cmp(y).unwrap());
-        let mut union: Vec<(f32, f32)> = Vec::new();
-        for (lo, hi) in spans {
-            match union.last_mut() {
-                Some(last) if lo <= last.1 => last.1 = last.1.max(hi),
-                _ => union.push((lo, hi)),
-            }
-        }
-        union
-            .iter()
-            .map(|(a, b)| (a.to_bits(), b.to_bits()))
-            .collect()
-    };
-    let side = |t: &Tile| -> Option<bool> {
-        let xs: Vec<f32> = t
-            .faces
-            .iter()
-            .filter(|f| !degenerate(f))
-            .map(|f| {
-                (f32::from_bits(f[0][0]) + f32::from_bits(f[1][0]) + f32::from_bits(f[2][0])) / 3.
-            })
-            .collect();
-        if xs.iter().all(|x| *x < T_LINE) {
-            Some(false)
-        } else if xs.iter().all(|x| *x > T_LINE) {
-            Some(true)
-        } else {
-            None
-        }
-    };
-    let leaves: Vec<&Tile> = tiles.iter().filter(|t| t.leaf).collect();
-    let mut checked = 0;
-    for t in tiles.iter().filter(|t| !t.leaf) {
-        let mine = &leaves[t.begin..t.end];
-        let Some(s) = side(t) else { continue };
-        if mine.iter().any(|l| side(l) != Some(s)) {
-            continue;
-        }
-        let from_leaves: Vec<[Point; 3]> =
-            mine.iter().flat_map(|l| l.faces.iter().copied()).collect();
-        let expected = coverage(&from_leaves);
-        if expected.is_empty() {
-            continue;
-        }
-        assert_eq!(coverage(&t.faces), expected, "{}", t.uri);
-        checked += 1;
-    }
-    assert!(
-        checked >= 4,
-        "{checked} one-sided coarse tiles touch the T-junction line"
-    );
-    assert_eq!(
-        displaced.get(),
-        0.,
-        "a decoded edge near the T-junction line left it"
-    );
+fn t_junction_cracks_are_reported_not_hidden() {
+    let (census, incidence) = accept_with("t-junction", &t_junction(), Run::default(), true);
+    reported("t-junction", &census, &incidence);
 }
 
 /// Three- and four-cell corners: sheets of different, non-nested resolutions meet along two
@@ -1316,10 +1273,10 @@ fn corners(four: bool) -> Vec<Mesh> {
 }
 
 #[test]
-fn three_and_four_cell_corners_are_crack_free() {
+fn three_and_four_cell_corners_report_their_t_junctions() {
     for (name, four) in [("three-cell corner", false), ("four-cell corner", true)] {
-        let census = accept(name, &corners(four), Run::default());
-        assert!(census.overlaps > 0, "{name}: {census:?}");
+        let (census, incidence) = accept_with(name, &corners(four), Run::default(), true);
+        reported(name, &census, &incidence);
     }
 }
 
@@ -1327,15 +1284,15 @@ fn three_and_four_cell_corners_are_crack_free() {
 /// one long border segment of a neighbouring sheet along the same line, and the run's
 /// joints all T-junctions on it.
 #[test]
-fn long_collinear_runs_are_crack_free() {
+fn long_collinear_runs_report_their_t_junctions() {
     let c = T_LINE;
     let flat = |_: f32, _: f32| 2.;
     let source = vec![
         grid((1, 40), (0., c), (0., 100.), &flat, [0.6, 0.5, 0.4, 1.]),
         grid((30, 400), (c, 100.), (0., 100.), &flat, [0.3, 0.6, 0.3, 1.]),
     ];
-    let census = accept("collinear run", &source, Run::default());
-    assert!(census.overlaps > 0, "{census:?}");
+    let (census, incidence) = accept_with("collinear run", &source, Run::default(), true);
+    reported("collinear run", &census, &incidence);
 }
 
 /// Round 4: 64 separate ribbons (16,384 triangles) and 65 long diagonal slivers that never
@@ -1398,11 +1355,11 @@ fn distant_long_slivers_lock_nothing_and_never_refuse() {
     let manifest: Value =
         serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
     let incidence = &manifest["hlod"]["incidence"];
+    // Exact seams: rows only for coincident items, at most one per item.
     assert!(
-        incidence["matchedGuests"].as_u64().unwrap() < 100,
+        incidence["rows"].as_u64().unwrap() <= incidence["items"].as_u64().unwrap(),
         "{incidence}"
     );
-    assert_eq!(incidence["fallbackRegions"], 0, "{incidence}");
     let census = census(&dir);
     assert_eq!(
         census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
@@ -1411,14 +1368,12 @@ fn distant_long_slivers_lock_nothing_and_never_refuse() {
     );
 }
 
-/// The owner's fallback case: 2,048 random chord slivers spanning two ribbon blocks on either
-/// side of the root's split. Their long edges cross every region, so the join's exact tests
-/// pass the budget and it matches those regions by a superset, locking every ribbon point
-/// against chords of the other side; the side's parent those locks keep from its cap resolves
-/// them exactly and builds. Never refused, crack-free, and identical (counters included) at
-/// one and four jobs.
+/// The owner's former fallback case: 2,048 random chord slivers spanning two ribbon blocks.
+/// Exact seams do no geometric matching, so the chords cost the pass only their items (at
+/// most six per triangle) and lock nothing they do not share. Never refused, crack-free, and
+/// identical (counters included) at one and four jobs.
 #[test]
-fn random_chords_fall_back_resolve_and_never_refuse() {
+fn random_chords_cost_linear_work_and_never_refuse() {
     let mut state = 0x9e37_79b9_7f4a_7c15u64;
     let mut next = move || {
         state ^= state << 13;
@@ -1461,36 +1416,15 @@ fn random_chords_fall_back_resolve_and_never_refuse() {
     };
     let (m1, m4) = (manifest(&one), manifest(&four));
     let incidence = &m1["hlod"]["incidence"];
-    eprintln!(
-        "FALLBACK {incidence} resolved tiles {} rows {} visits {} tests {} over budget {}",
-        m1["hlod"]["resolvedTiles"],
-        m1["hlod"]["resolvedRows"],
-        m1["hlod"]["resolveVisits"],
-        m1["hlod"]["resolveTests"],
-        m1["hlod"]["resolveOverBudget"]
-    );
+    eprintln!("CHORDS {incidence}");
+    let triangles = 2 * 128 * 64 * 2 + 2048;
     assert!(
-        incidence["fallbackRegions"].as_u64().unwrap() > 0,
+        incidence["items"].as_u64().unwrap() <= 6 * triangles,
         "{incidence}"
     );
     assert!(
-        m1["hlod"]["resolvedTiles"].as_u64().unwrap() > 0,
-        "{}",
-        m1["hlod"]
-    );
-    // A row is final once resolved, so ancestors resolving what their children left provisional
-    // never resolve it again: at most every provisional leaf row once, each with one index
-    // query (node levels plus the groups near it).
-    let hlod = &m1["hlod"];
-    let (resolved, provisional) = (
-        hlod["resolvedRows"].as_u64().unwrap(),
-        incidence["provisionalRows"].as_u64().unwrap(),
-    );
-    assert!(resolved <= provisional, "{hlod}");
-    let groups = incidence["fallbackGroups"].as_u64().unwrap();
-    assert!(
-        hlod["resolveTests"].as_u64().unwrap() <= resolved * groups / 4,
-        "{hlod}"
+        incidence["rows"].as_u64().unwrap() <= incidence["items"].as_u64().unwrap(),
+        "{incidence}"
     );
     assert_eq!(m1["hlod"], m4["hlod"]);
     assert_eq!(published(&one), published(&four));
@@ -1527,7 +1461,7 @@ fn parent_jobs_allocate_within_their_charge() {
         leaf_end: 9,
     };
     let outer = |slot: usize, a: [f32; 3], b: [f32; 3]| {
-        InterfaceRow::certain(
+        InterfaceRow::new(
             slot as u32 + 1,
             key(a).min(key(b)),
             key(a).max(key(b)),
@@ -1630,16 +1564,11 @@ fn parent_jobs_allocate_within_their_charge() {
     };
     let merged = (8 * n) as u64;
     let charge = merged * super::JOB_BYTES_PER_TRIANGLE;
-    let mut grid = None;
+    let (mut grid, mut over) = (None, None);
     for kind in [0u8, 1, 3, 2] {
         let children: Vec<TileGeometry> = (0..8).map(|slot| child(slot, kind)).collect();
         let (built, peak) = crate::test_alloc::peak(|| {
-            let fallback = super::interfaces::Fallback::default();
-            let resolve = geometry::Resolve {
-                fallback: &fallback,
-                check: &|| Ok(()),
-            };
-            geometry::build_parent(parent, &children, &[cap], &resolve)
+            geometry::build_parent(parent, &children, &[cap], &|| Ok(()))
         });
         eprintln!(
             "JOB kind {kind}: peak {peak} bytes = {:.0} per merged triangle (charge {})",
@@ -1648,13 +1577,43 @@ fn parent_jobs_allocate_within_their_charge() {
         );
         assert!(peak as u64 <= charge, "kind {kind}: {peak} > {charge}");
         match (kind, built) {
-            (0, built) => assert!(built.is_err()),
+            // Its whole interface cannot fit the cap: kept above it, never refused.
+            (0, built) => {
+                let built = built.unwrap();
+                assert_eq!(built.stopping, StoppingBound::AboveCap);
+                assert!(built.geometry.triangles.len() > cap);
+                assert!(built.geometry.triangles.len() as u64 <= merged);
+                over = Some(built);
+            }
             (2, built) => grid = Some(built.unwrap()),
-            // The retries ran (and fitted, or ran out and refused).
-            (_, Ok(b)) => assert!(b.retries > 0, "kind {kind}"),
-            (_, Err(e)) => assert!(e.to_string().contains("protected"), "{e}"),
+            // The retries ran (and fitted, or ran out and kept the interface above the cap).
+            (_, Ok(b)) => assert!(
+                b.retries > 0 || b.stopping == StoppingBound::AboveCap,
+                "kind {kind}"
+            ),
+            (_, Err(e)) => panic!("kind {kind}: {e}"),
         }
     }
+    // A tile kept above the cap encodes within 1,024 bytes per triangle (`job_charge`).
+    let built = over.unwrap();
+    let triangles = built.geometry.triangles.len() as u64;
+    let (checked, peak) = crate::test_alloc::peak(|| {
+        let encoded = encode::encode(
+            &built.geometry,
+            &built.locked,
+            &lattice,
+            &[],
+            &crate::mesh_large::batching::MaterialClasses::EMPTY,
+            Mutation::None,
+        )?;
+        encode::check(&built.geometry, &built.locked, &encoded.glb)
+    });
+    checked.unwrap();
+    eprintln!(
+        "JOB over-cap encode+check peak {peak} for {triangles} triangles = {:.0} per triangle",
+        peak as f64 / triangles as f64
+    );
+    assert!(peak as u64 <= 1024 * triangles, "{peak}");
     let built = grid.unwrap();
     let (checked, peak) = crate::test_alloc::peak(|| {
         let encoded = encode::encode(
@@ -1696,7 +1655,7 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
         .unwrap();
     assert_eq!(snapped.decoded[2][0], 50., "probe must be sensitive");
     let key = super::interfaces::key;
-    let row = |p: [f32; 3]| InterfaceRow::certain(0, key(p), key(p), 0, 1);
+    let row = |p: [f32; 3]| InterfaceRow::new(0, key(p), key(p), 0, 1);
     let tile = TileGeometry {
         key: TileKey {
             first: 0,
@@ -1998,14 +1957,9 @@ fn adversarial_interfaces_stay_within_a_small_budget() {
         let manifest: Value =
             serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
         let inc = &manifest["hlod"]["incidence"];
-        let (segments, points) = (
-            inc["openSegments"].as_u64().unwrap(),
-            inc["openPoints"].as_u64().unwrap(),
-        );
         eprintln!("ADVERSARIAL {name}: {inc}");
         assert!(
-            inc["matchedHosts"].as_u64().unwrap() <= segments
-                && inc["matchedGuests"].as_u64().unwrap() <= points,
+            inc["rows"].as_u64().unwrap() <= inc["items"].as_u64().unwrap(),
             "{name}: {inc}"
         );
         let census = census(&dir);
@@ -2021,7 +1975,7 @@ fn adversarial_interfaces_stay_within_a_small_budget() {
 /// grid (9,300 triangles, two leaves). Their long open edges crowd one region far past the
 /// exact leaf size; the join splits them apart instead of refusing.
 #[test]
-fn dense_sliver_borders_are_joined_not_refused() {
+fn dense_sliver_borders_are_not_refused() {
     let mut slivers = Mesh {
         positions: vec![],
         indices: vec![],
@@ -2051,7 +2005,10 @@ fn dense_sliver_borders_are_joined_not_refused() {
     let manifest: Value =
         serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
     let incidence = &manifest["hlod"]["incidence"];
-    assert!(incidence["kdSplits"].as_u64().unwrap() >= 1, "{incidence}");
+    assert!(
+        incidence["rows"].as_u64().unwrap() <= incidence["items"].as_u64().unwrap(),
+        "{incidence}"
+    );
     let census = census(&dir);
     assert!(census.leaves >= 2, "{census:?}");
     assert_eq!(
@@ -2163,7 +2120,7 @@ fn adversarial_held_tile_fits_its_admitted_charge() {
         for i in 0..3 {
             let (p, q) = (k[i], k[(i + 1) % 3]);
             for (a, b) in [(p, p), (p.min(q), p.max(q))] {
-                tile.interface.push(InterfaceRow::certain(0, a, b, 0, 1));
+                tile.interface.push(InterfaceRow::new(0, a, b, 0, 1));
             }
         }
     }
@@ -2218,13 +2175,23 @@ fn duplicated_soup_is_admitted_and_crack_free() {
         "{census:?}"
     );
     // Plain simplification cannot reduce disconnected single-triangle components (no
-    // pruning, D3): below the cap that topology is refused, never published over the cap.
-    let failure = stage(&input, &work.path().join("capped"), &Run::default()).unwrap_err();
+    // pruning, D3): below the cap that topology is kept above it (`above_cap`), at most its
+    // merged children, crack-free, never refused.
+    let dir = stage(&input, &work.path().join("capped"), &Run::default()).unwrap();
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    assert!(manifest["hlod"]["stoppedAboveCap"].as_u64().unwrap() > 0);
+    for row in rows(&dir.join("proxies.jsonl")) {
+        assert!(
+            row["triangles"].as_u64() <= row["inputTriangles"].as_u64(),
+            "{row}"
+        );
+    }
+    let capped = super::tests::census(&dir);
     assert_eq!(
-        failure.error.kind(),
-        JobErrorKind::Unsupported,
-        "{}",
-        failure.error
+        capped.missing_segments + capped.missing_vertices + capped.reversed_coarse_faces,
+        0,
+        "{capped:?}"
     );
 }
 
@@ -2402,13 +2369,14 @@ fn moved_or_dropped_segments_fail() {
     assert!(!work.path().join("dropped").exists());
 }
 
-/// An interface that cannot fit the cap is `unsupported` with tile/count/constraint
-/// diagnostics, never an over-cap or interface-breaking tile.
+/// An exact interface that cannot fit the cap is a genuine D1 limit: the parent is kept above
+/// the cap (the least simplification holding its interface, at most its merged children),
+/// reported as `interface`-stopped, crack-free, never refused.
 #[test]
-fn interface_that_cannot_fit_the_cap_is_unsupported() {
+fn interface_that_cannot_fit_the_cap_is_kept_above_it() {
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &sheet());
-    let failure = stage(
+    let dir = stage(
         &input,
         &work.path().join("capped"),
         &Run {
@@ -2416,19 +2384,31 @@ fn interface_that_cannot_fit_the_cap_is_unsupported() {
             ..Run::default()
         },
     )
-    .unwrap_err();
-    assert_eq!(
-        failure.error.kind(),
-        JobErrorKind::Unsupported,
-        "{}",
-        failure.error
-    );
-    let message = failure.error.to_string();
+    .unwrap_or_else(|f| panic!("{}", f.error));
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let hlod = &manifest["hlod"];
+    assert!(hlod["stoppedAboveCap"].as_u64().unwrap() > 0, "{hlod}");
     assert!(
-        message.contains("coarse tile f") && message.contains("cap"),
-        "{message}"
+        hlod["maxAboveCapTriangles"].as_u64().unwrap() > 12,
+        "{hlod}"
     );
-    assert!(!work.path().join("capped").exists());
+    for row in rows(&dir.join("proxies.jsonl")) {
+        let (t, input) = (
+            row["triangles"].as_u64().unwrap(),
+            row["inputTriangles"].as_u64().unwrap(),
+        );
+        assert!(t <= input, "{row}");
+        if t > 12 {
+            assert_eq!(row["stoppingBound"], "above_cap", "{row}");
+        }
+    }
+    let census = census(&dir);
+    assert_eq!(
+        census.missing_segments + census.missing_vertices + census.reversed_coarse_faces,
+        0,
+        "{census:?}"
+    );
 }
 
 /// Output is identical for any job count, any admitted budget and spilled sorts.
@@ -2660,12 +2640,12 @@ fn evidence_census() {
     assert_eq!(
         census.missing_segments
             + census.missing_vertices
-            + census.missing_overlap_items
             + census.moved_border_vertices
-            + census.perpendicular_displaced
             + census.duplicate_chain_tiles
             + census.reversed_coarse_faces,
         0
     );
-    assert!(census.max_coarse_triangles <= super::TRIANGLE_CAP);
+    // Exact seams: source T-junctions and unwelded seams are reported (the census's
+    // overlap and perpendicular counts above, the manifest's source-defect counts), not
+    // asserted; tiles above the cap are reported by `stoppedAboveCap`.
 }

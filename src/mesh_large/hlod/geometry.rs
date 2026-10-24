@@ -34,11 +34,6 @@ pub(crate) struct Built {
     pub retries: u32,
     pub interface_vertices: u32,
     pub interface_segments: u32,
-    /// Provisional rows resolved exactly for this parent and the work it took (zero unless
-    /// it needed it).
-    pub resolved: super::interfaces::Resolved,
-    /// Builds of the parent (`attempt`): one per cap tried, plus one after a resolution.
-    pub attempts: u32,
     /// Output faces turned to (or dropped beside) their source orientation (`orient`).
     pub reoriented: u32,
 }
@@ -275,26 +270,21 @@ fn representatives(merged: &Merged, output: &[[u32; 3]]) -> Vec<SourcePrimitive>
         .collect()
 }
 
-/// Exact resolution of provisional rows for a parent that needs it.
-pub(crate) struct Resolve<'a> {
-    pub fallback: &'a super::interfaces::Fallback,
-    pub check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
-}
-
 /// Build `key`'s parent from its children (in slot order) under the first of `caps` (each a
 /// triangle limit, tried in order) it can keep its interface within.
 ///
-/// An outer interface holding provisional rows (an over-budget join region's superset) that
-/// keeps the parent from a cap is resolved exactly (`Fallback::resolve`, dropping the false
-/// locks) once, and that cap tried again with the certain locks only: a parent resolves and
-/// rebuilds at most once whatever its caps. A parent that still cannot fit is a genuine
-/// interface limit (D1), never one from over-locking.
+/// The interface is exact (shared points and segments only), so a parent that cannot keep
+/// it within its last cap has a genuine interface limit (D1). It is never refused: the
+/// parent keeps the least simplification that holds the interface (meshopt's result, or its
+/// merged children where protected retries still lose an item), at most its merged input,
+/// and reports `StoppingBound::AboveCap`.
 pub(crate) fn build_parent(
     tile: TileKey,
     children: &[TileGeometry],
     caps: &[usize],
-    resolve: &Resolve<'_>,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<Built, JobError> {
+    check()?;
     let merged = merge(children);
     if merged.triangles.is_empty() {
         return Err(state(format!(
@@ -314,50 +304,28 @@ pub(crate) fn build_parent(
         .copied()
         .collect();
     super::interfaces::merge_rows(&mut interface);
-    let mut resolved = None;
-    let mut attempts = 0;
-    let mut refusal = None;
-    for &cap in caps {
-        loop {
-            attempts += 1;
-            match attempt(tile, &merged, &interface, cap, children_error) {
-                Err(e)
-                    if e.kind() == JobErrorKind::Unsupported
-                        && resolved.is_none()
-                        && !resolve.fallback.is_empty()
-                        && interface.iter().any(InterfaceRow::provisional) =>
-                {
-                    resolved = Some(resolve.fallback.resolve(
-                        &mut interface,
-                        tile.leaf_begin,
-                        tile.leaf_end,
-                        resolve.check,
-                    )?);
-                    interface.retain(|r| r.outer(tile.leaf_begin, tile.leaf_end));
-                }
-                Err(e) if e.kind() == JobErrorKind::Unsupported => {
-                    refusal = Some(e);
-                    break;
-                }
-                built => {
-                    let mut built = built?;
-                    built.resolved = resolved.unwrap_or_default();
-                    built.attempts = attempts;
-                    return Ok(built);
-                }
-            }
+    let Some((&last, earlier)) = caps.split_last() else {
+        return Err(state("a parent build needs at least one cap"));
+    };
+    for &cap in earlier {
+        match attempt(tile, &merged, &interface, cap, children_error, false) {
+            Err(e) if e.kind() == JobErrorKind::Unsupported => continue,
+            built => return built,
         }
     }
-    Err(refusal.unwrap_or_else(|| state("a parent build needs at least one cap")))
+    attempt(tile, &merged, &interface, last, children_error, true)
 }
 
-/// One build of the parent from `merged` children under `interface`.
+/// One build of the parent from `merged` children under `interface`; `over` keeps a parent
+/// whose interface cannot fit `cap` above it (`StoppingBound::AboveCap`) instead of
+/// refusing.
 fn attempt(
     tile: TileKey,
     merged: &Merged,
     interface: &[InterfaceRow],
     cap: usize,
     children_error: f64,
+    over: bool,
 ) -> Result<Built, JobError> {
     let segments: HashSet<(Key, Key)> = interface
         .iter()
@@ -404,6 +372,12 @@ fn attempt(
         loop {
             let (edges, points) = missing(&output, &merged.keys, &segments, &vertices);
             if edges.is_empty() && points.is_empty() {
+                break;
+            }
+            if retries == RETRIES && over {
+                // The merged children hold the interface (by induction): keep them whole.
+                output = merged.triangles.clone();
+                reoriented = 0;
                 break;
             }
             if retries == RETRIES {
@@ -462,7 +436,9 @@ fn attempt(
             reoriented = orient(merged, &mut output);
             error = e;
         }
-        if output.len() > cap {
+        if output.len() > cap && over {
+            (output, error, StoppingBound::AboveCap)
+        } else if output.len() > cap {
             return Err(JobError::new(
                 JobErrorKind::Unsupported,
                 format!(
@@ -477,8 +453,9 @@ fn attempt(
                     output.len()
                 ),
             ));
+        } else {
+            (output, error, StoppingBound::TriangleBudget)
         }
-        (output, error, StoppingBound::TriangleBudget)
     };
     if output.is_empty() {
         return Err(JobError::new(
@@ -543,8 +520,6 @@ fn attempt(
         retries,
         interface_vertices: vertices.len() as u32,
         interface_segments: segments.len() as u32,
-        resolved: Default::default(),
-        attempts: 0,
         reoriented,
         geometry,
     })

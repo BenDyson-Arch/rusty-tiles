@@ -84,7 +84,7 @@ const STAGE_RESERVE: u64 = 256 << 20;
 /// of `k` entries of `T` bytes holds at most `16k/7` buckets of `T + 1` bytes:
 /// - merged vertices (key 12, depth 1, position 12; grown by doubling, at most twice) and
 ///   triangles (12), representatives (24): `2 * 3 * 25 + 36 = 186`;
-/// - the parent's interface rows, at most six (leaf, item) rows of 48 bytes: 288;
+/// - the parent's interface rows, at most six (leaf, item) rows of 36 bytes: 216;
 /// - required segment and point sets (at most `3m` each): `171.4 + 89.1`;
 /// - the lock and protection flags: 4;
 /// - the retry's keep and rest lists (doubling: 24), kept vertices (`3m` u32: 34.3), the lost
@@ -97,14 +97,12 @@ const STAGE_RESERVE: u64 = 256 << 20;
 ///   quadric (44), collapse remap and lock), per index 24 (adjacency edge, collapse, order),
 ///   so 372.
 ///
-/// The sum is under 1,640. After meshopt returns (its temporaries and `simplify`'s arrays
+/// The sum is under 1,570. After meshopt returns (its temporaries and `simplify`'s arrays
 /// freed), keeping faces on their source orientation (`geometry::orient`) holds two face
-/// sets (12-byte entries, under 30 bytes each per merged triangle). Earlier phases (the weld index while merging, the interface rows
-/// while merging them, the representative tables) peak lower, and so does an exact
-/// resolution of provisional rows between two builds (`Fallback::resolve`: beside the merged
-/// data and rows, the rows' previous locks (8 bytes each) and item map (a 24-byte key and an
-/// index, under 76 bytes each), at most six per merged triangle, and one index query's node
-/// stack and page). Measured on adversarial jobs by
+/// sets (12-byte entries, under 30 bytes each per merged triangle); a parent kept above the
+/// cap holds and encodes at most its merged triangles in what that freed (`job_charge`).
+/// Earlier phases (the weld index while merging, the interface rows while merging them,
+/// the representative tables) peak lower. Measured on adversarial jobs by
 /// `parent_jobs_allocate_within_their_charge` (a counting allocator, meshoptimizer routed
 /// through it).
 const JOB_BYTES_PER_TRIANGLE: u64 = 1700;
@@ -113,6 +111,19 @@ const JOB_BYTES_PER_TRIANGLE: u64 = 1700;
 const ROW_WINDOW: usize = 1024;
 /// Encoded GLB, compression scratch and decoded check copy of one coarse tile.
 const JOB_ENCODE_BYTES: u64 = 16 << 20;
+
+/// One parent job's admission for `merged` input triangles: its workspace, encode allowance
+/// and a cap-sized output. A parent kept above the cap by its exact interface
+/// (`StoppingBound::AboveCap`) holds at most its merged triangles, whose held footprint
+/// (`HELD_BYTES_PER_TRIANGLE`, under 300 bytes) and encoding (under 1,024 bytes per
+/// triangle, measured by `parent_jobs_allocate_within_their_charge`) fit in the workspace its
+/// simplification has released, so its output never needs more than this admission.
+fn job_charge(merged: u64, cap: usize) -> u64 {
+    merged
+        .saturating_mul(JOB_BYTES_PER_TRIANGLE)
+        .saturating_add(JOB_ENCODE_BYTES)
+        .saturating_add(TileGeometry::charge(cap as u64))
+}
 
 fn state(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message.into())
@@ -180,11 +191,7 @@ pub(crate) fn plan(
         .saturating_mul(8)
         .saturating_mul(height + 1)
         .saturating_add(read.saturating_sub(held));
-    let merged = leaf_cap.max(cap as u64).saturating_mul(8);
-    let job = merged
-        .saturating_mul(JOB_BYTES_PER_TRIANGLE)
-        .saturating_add(JOB_ENCODE_BYTES)
-        .saturating_add(TileGeometry::charge(cap as u64));
+    let job = job_charge(leaf_cap.max(cap as u64).saturating_mul(8), cap);
     let sorter = config.sorter(1);
     let incidence = interfaces::memory_need(sorter, leaf_cap, captured.tree.stats.leaves);
     let buffer = config.sort.buffer_bytes as u64;
@@ -263,15 +270,10 @@ pub(crate) struct HlodReport {
     pub tiles_with_protected_faces: u64,
     pub protected_faces: u64,
     pub retries: u64,
-    /// Tiles whose provisional interface rows were resolved exactly, those rows, the index
-    /// records read and exact tests it took, and the tiles whose comparisons (records read
-    /// and tests) passed `BUDGET_TESTS_PER_RECORD` per resolved row: counted, never refused
-    /// (exact incidence has no such bound in general; `Fallback::resolve`).
-    pub resolved_tiles: u64,
-    pub resolved_rows: u64,
-    pub resolve_visits: u64,
-    pub resolve_tests: u64,
-    pub resolve_over_budget: u64,
+    /// Tiles kept above the cap because their exact outer interface (or unprunable topology)
+    /// needs more triangles (`StoppingBound::AboveCap`), and the most triangles any kept.
+    pub stopped_above_cap: u64,
+    pub max_above_cap_triangles: u64,
     /// Simplified faces kept on their source orientation (`geometry::orient`).
     pub reoriented_faces: u64,
     pub interface_segments: u64,
@@ -286,6 +288,18 @@ pub(crate) struct HlodReport {
     pub incidence: IncidenceStats,
 }
 
+impl HlodDiagnostics {
+    /// The stage's declared scratch bound: the incidence pass's own (checked as it returns),
+    /// or during the walk its row stream beside every declared component, whichever is
+    /// larger.
+    pub fn stage_scratch_bound(&self) -> u64 {
+        let components: u64 = self.scratch_components.values().sum();
+        self.incidence_scratch
+            .declared()
+            .max(self.incidence_scratch.walk.saturating_add(components))
+    }
+}
+
 /// Run facts of the stage outside the deterministic manifest.
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct HlodDiagnostics {
@@ -297,8 +311,16 @@ pub struct HlodDiagnostics {
     pub wall_seconds: f64,
     pub incidence_scratch_peak_bytes: u64,
     /// The incidence pass's staged scratch declarations (its declared bound is their
-    /// largest) against which that peak is checked.
+    /// largest) against which that peak is checked as the pass returns.
     pub incidence_scratch: interfaces::ScratchPhases,
+    /// The scratch ledger contract for the walk: each downstream slice (S2 samples, S3
+    /// pages and charts, ...) declares the most scratch it holds at once as a named component
+    /// and checks its own bytes against it; the stage's peak over the walk is checked against
+    /// the incidence row stream's walk phase plus the sum of the components (see
+    /// `stage_scratch_bound`), so no slice can trip another's bound.
+    pub scratch_components: std::collections::BTreeMap<&'static str, u64>,
+    /// The stage's scratch peak from the incidence pass's start to the walk's end.
+    pub stage_scratch_peak_bytes: u64,
     /// Highest simultaneously leased bytes of the walk's ledger.
     pub lease_peak_bytes: u64,
     pub ledger_bytes: u64,
@@ -413,7 +435,7 @@ pub(crate) fn produce(
     let incidence_started = std::time::Instant::now();
     captured.scratch.begin_stage();
     let admit = |bound: u64| admit_scratch(captured, input.config, bound);
-    let (rows, stats, fallback) = interfaces::build(
+    let (rows, stats) = interfaces::build(
         &captured.scratch,
         input.config.sorter(1),
         &captured.tree.nodes,
@@ -423,7 +445,17 @@ pub(crate) fn produce(
         &admit,
         check,
     )?;
+    // The pass checks its own bytes as it returns, before any downstream stage writes: its
+    // phases are over, only its row stream remains (consumed by the walk).
     diagnostics.incidence_scratch = stats.scratch;
+    diagnostics.incidence_scratch_peak_bytes = captured.scratch.stage_peak_bytes();
+    let bound = stats.scratch.declared();
+    if diagnostics.incidence_scratch_peak_bytes > bound {
+        return Err(resource(format!(
+            "HLOD incidence scratch {} bytes exceeded its declared bound {bound}",
+            diagnostics.incidence_scratch_peak_bytes
+        )));
+    }
     report.incidence = stats;
     diagnostics.incidence_cpu_seconds = resources::process_cpu_seconds()
         .zip(cpu_started)
@@ -434,14 +466,19 @@ pub(crate) fn produce(
         incidence_started.elapsed().as_secs_f64(),
     )?;
     let walk_started = std::time::Instant::now();
-    let result = walk(&input, rows, &rows_path, &mut report, &fallback, check);
-    diagnostics.incidence_scratch_peak_bytes = captured.scratch.stage_peak_bytes();
-    let bound = diagnostics.incidence_scratch.declared();
+    let result = walk(&input, rows, &rows_path, &mut report, check);
     let lease_peak = result?;
-    if diagnostics.incidence_scratch_peak_bytes > bound {
+    // The walk's scratch: the incidence row stream (at most its walk phase) beside every
+    // downstream component declared in `scratch_components` (none in S1).
+    diagnostics.stage_scratch_peak_bytes = captured.scratch.stage_peak_bytes();
+    let stage_bound = diagnostics.stage_scratch_bound();
+    if diagnostics.stage_scratch_peak_bytes > stage_bound {
         return Err(resource(format!(
-            "HLOD scratch {} bytes exceeded its declared stage bound {bound}",
-            diagnostics.incidence_scratch_peak_bytes
+            "HLOD stage scratch {} bytes exceeded its declared bound {stage_bound} \
+             (incidence {:?}, components {:?})",
+            diagnostics.stage_scratch_peak_bytes,
+            diagnostics.incidence_scratch,
+            diagnostics.scratch_components
         )));
     }
     input
@@ -605,120 +642,8 @@ fn read_leaf(
             return Err(state("interface rows out of leaf order"));
         }
     }
-    keep_open_edges(&mut tile, leaf, items)?;
     shrink(&mut tile);
     Ok(tile)
-}
-
-/// Close the leaf's rows over what keeping them implies, conservatively (never a crack):
-/// - a kept segment keeps its endpoints (the overlap join records only the segment): each
-///   endpoint is a kept point with at least the segment's interval;
-/// - an open edge of the leaf between two kept points is kept too (a T-junction side's
-///   subdivided border, a hole chord ending on interfaces). Such an edge is outer only where
-///   both its endpoints are, so it takes the narrower interval (an existing row for the
-///   same segment widens to the union).
-///
-/// The rows stay merged and sorted by item within the `items` reserved: every row is a point
-/// or segment of the leaf's own surface.
-fn keep_open_edges(tile: &mut TileGeometry, leaf: u32, items: usize) -> Result<(), JobError> {
-    if tile.interface.is_empty() {
-        return Ok(());
-    }
-    // Per kept point: its rows' lock and certain intervals (each channel derived alike).
-    let capacity = (2 * tile.interface.len()).min(3 * tile.triangles.len());
-    let mut points: HashMap<interfaces::Key, InterfaceRow> = HashMap::with_capacity(capacity);
-    for r in &tile.interface {
-        let ends = if r.is_vertex() {
-            [r.a, r.a]
-        } else {
-            [r.a, r.b]
-        };
-        for p in ends {
-            // A segment's tolerance is its own candidate's, not its endpoints'.
-            let tol = if r.is_vertex() {
-                r.tol
-            } else {
-                interfaces::NO_TOL
-            };
-            let as_point = InterfaceRow {
-                a: p,
-                b: p,
-                tol,
-                ..*r
-            };
-            points
-                .entry(p)
-                .and_modify(|e| e.absorb(&as_point))
-                .or_insert(as_point);
-        }
-    }
-    let merged = tile.interface.len();
-    for (&p, point) in &points {
-        match tile.interface[..merged].binary_search_by_key(&(p, p), InterfaceRow::item) {
-            Ok(at) => tile.interface[at].absorb(point),
-            Err(_) if tile.interface.len() == items => {
-                return Err(state(
-                    "more interface items than the leaf has points and segments",
-                ));
-            }
-            Err(_) => tile.interface.push(InterfaceRow { leaf, ..*point }),
-        }
-    }
-    let key = |v: u32| interfaces::key(tile.positions[v as usize]);
-    let mut edges: Vec<(interfaces::Key, interfaces::Key)> =
-        Vec::with_capacity(3 * tile.triangles.len());
-    for t in tile
-        .triangles
-        .iter()
-        .filter(|t| t[0] != t[1] && t[1] != t[2] && t[0] != t[2])
-    {
-        for k in 0..3 {
-            let (a, b) = (key(t[k]), key(t[(k + 1) % 3]));
-            edges.push((a.min(b), a.max(b)));
-        }
-    }
-    edges.sort_unstable();
-    let mut i = 0;
-    while i < edges.len() {
-        let mut j = i + 1;
-        while j < edges.len() && edges[j] == edges[i] {
-            j += 1;
-        }
-        let (a, b) = edges[i];
-        let faces = j - i;
-        i = j;
-        let (Some(pa), Some(pb)) = (points.get(&a), points.get(&b)) else {
-            continue;
-        };
-        if faces == 2 {
-            continue;
-        }
-        // Each channel: the narrower of the endpoints' (empty where either is).
-        let mut edge = InterfaceRow {
-            leaf,
-            a,
-            b,
-            lo: pa.lo.max(pb.lo),
-            hi: pa.hi.min(pb.hi),
-            clo: pa.clo.max(pb.clo),
-            chi: pa.chi.min(pb.chi),
-            tol: interfaces::NO_TOL,
-        };
-        if edge.clo > edge.chi {
-            (edge.clo, edge.chi) = interfaces::NO_LEAF;
-        }
-        match tile.interface[..merged].binary_search_by_key(&(a, b), InterfaceRow::item) {
-            Ok(at) => tile.interface[at].absorb(&edge),
-            Err(_) if tile.interface.len() == items => {
-                return Err(state(
-                    "more interface items than the leaf has points and segments",
-                ));
-            }
-            Err(_) => tile.interface.push(edge),
-        }
-    }
-    tile.interface.sort_unstable_by_key(InterfaceRow::item);
-    Ok(())
 }
 
 /// Release spare capacity so the held charge is the tile's true footprint.
@@ -782,16 +707,14 @@ fn build_tile(
     materials: &[Value],
     stage: &Path,
     settings: Settings,
-    fallback: &interfaces::Fallback,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Done {
-    let resolve = geometry::Resolve { fallback, check };
     let mut built = if closed.single_leaf {
         // Halved, or where its interface cannot be halved, the copy within the cap.
         let half = children[0].triangles.len().div_ceil(2).min(settings.cap);
-        geometry::build_parent(closed.key, &children, &[half, settings.cap], &resolve)?
+        geometry::build_parent(closed.key, &children, &[half, settings.cap], check)?
     } else {
-        geometry::build_parent(closed.key, &children, &[settings.cap], &resolve)?
+        geometry::build_parent(closed.key, &children, &[settings.cap], check)?
     };
     drop(children);
     if settings.mutation == Mutation::DropSegment {
@@ -869,9 +792,6 @@ fn build_tile(
         retries: built.retries,
         interface_vertices: built.interface_vertices,
         interface_segments: built.interface_segments,
-        resolved_rows: built.resolved.tested as u32,
-        resolve_visits: built.resolved.visits,
-        resolve_tests: built.resolved.tests,
         reoriented_faces: built.reoriented,
         quantized: encoded.quantized,
         bounds: encoded.bounds.into(),
@@ -889,19 +809,17 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     match row.stopping_bound {
         StoppingBound::Input => report.stopped_by_input += 1,
         StoppingBound::TriangleBudget => report.stopped_by_triangle_budget += 1,
+        StoppingBound::AboveCap => {
+            report.stopped_above_cap += 1;
+            report.max_above_cap_triangles =
+                report.max_above_cap_triangles.max(u64::from(row.triangles));
+        }
     }
     report.tiles_with_protected_faces += u64::from(row.protected_faces > 0);
     report.protected_faces += u64::from(row.protected_faces);
     report.retries += u64::from(row.retries);
-    report.resolved_tiles += u64::from(row.resolved_rows > 0);
-    report.resolved_rows += u64::from(row.resolved_rows);
-    report.resolve_visits += row.resolve_visits;
     report.reoriented_faces += u64::from(row.reoriented_faces);
-    report.resolve_tests += row.resolve_tests;
-    report.resolve_over_budget += u64::from(
-        row.resolve_visits + row.resolve_tests
-            > interfaces::BUDGET_TESTS_PER_RECORD * u64::from(row.resolved_rows),
-    );
+
     report.interface_segments += u64::from(row.interface_segments);
     report.interface_vertices += u64::from(row.interface_vertices);
     if row.quantized {
@@ -923,7 +841,6 @@ fn walk(
     rows: crate::spill::SortedStream<'_, InterfaceRow>,
     rows_path: &Path,
     report: &mut HlodReport,
-    fallback: &interfaces::Fallback,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<u64, JobError> {
     let captured = input.captured;
@@ -932,7 +849,6 @@ fn walk(
     let materials = encode::flat_materials(&captured.materials);
     let ledger = Ledger::new(plan.ledger_bytes);
     let job_bytes = plan.job_bytes;
-    let out_bytes = TileGeometry::charge(settings.cap as u64);
     let jobs = usize::try_from(plan.jobs.max(1)).map_err(|_| resource("jobs overflow"))?;
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(jobs)
@@ -982,7 +898,14 @@ fn walk(
                     i += 1;
                     continue;
                 }
-                let Some(job_lease) = ledger.try_lease(job_bytes, 0) else {
+                // Children kept above the cap merge into a larger job, admitted at its size.
+                let merged: u64 = pending[i]
+                    .children
+                    .iter()
+                    .map(|c| ready[c].triangles.len() as u64)
+                    .sum();
+                let job = job_bytes.max(job_charge(merged, settings.cap));
+                let Some(job_lease) = ledger.try_lease(job, 0) else {
                     break;
                 };
                 let closed = pending.remove(i);
@@ -997,15 +920,14 @@ fn walk(
                     let (id, seq) = (closed.id, closed.seq);
                     let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         let mut built = build_tile(
-                            &closed, children, captured, materials, stage, settings, fallback,
-                            check,
+                            &closed, children, captured, materials, stage, settings, check,
                         )?;
                         // The job's admission includes its output: keep that part while the
                         // tile is held for its parent, release the workspace.
                         let mut lease = job_lease;
                         let held = built.0.check_charge()?;
-                        if held > out_bytes {
-                            return Err(state("a coarse tile exceeds its admitted output"));
+                        if held > job {
+                            return Err(state("a coarse tile exceeds its admitted job"));
                         }
                         lease.shrink(held);
                         built.0.lease = Some(lease);
