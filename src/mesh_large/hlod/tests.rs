@@ -1514,6 +1514,7 @@ fn parent_jobs_allocate_within_their_charge() {
             interface: Vec::new(),
             geometric_error: 0.,
             lease: None,
+            measurement: None,
         };
         let at = |x: f32, z: f32, y: f32| {
             lattice
@@ -1607,15 +1608,33 @@ fn parent_jobs_allocate_within_their_charge() {
     }
     let built = grid.unwrap();
     let (checked, peak) = crate::test_alloc::peak(|| {
-        let encoded = encode::encode(
+        let positions = encode::positions(
             &built.geometry,
             &built.locked,
             &lattice,
-            &[],
-            &crate::mesh_large::batching::MaterialClasses::EMPTY,
             Mutation::None,
         )?;
-        encode::check(&built.geometry, &built.locked, &encoded.glb)
+        let appearance = super::appearance::Appearance {
+            groups: vec![super::appearance::Group {
+                class: 0,
+                faces: (0..built.geometry.triangles.len()).collect(),
+                material: json!({"pbrMetallicRoughness":{"metallicFactor":0.0,"roughnessFactor":1.0}}),
+                uvs: None,
+                tangents: None,
+                colors: None,
+                pages: Vec::new(),
+            }],
+            normals: None,
+            facts: Default::default(),
+            timing: Default::default(),
+        };
+        let encoded = encode::encode(
+            &built.geometry,
+            positions,
+            &appearance,
+            Mutation::None,
+        )?;
+        encode::check(&built.geometry, &built.locked, &encoded)
     });
     checked.unwrap();
     eprintln!(
