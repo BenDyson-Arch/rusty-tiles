@@ -43,14 +43,13 @@ pub use mesh_archive::{
     ModelManifestResult, ModelReport, ModelWrapRequest, ModelWrapResult,
 };
 pub use mesh_large::{
-    mesh_to_tileset, MeshSourceCrs, MeshSourceCrsReport, TilerDiagnostics, TilerJobs, TilerProfile,
-    TilerReport, TilerRequest, TilerResult,
+    mesh_to_tileset, parse_memory_budget, validate_memory_budget, BudgetSource, MemoryBudget,
+    MemoryDiagnostics, MeshSourceCrs, MeshSourceCrsReport, TilerDiagnostics, TilerJobs,
+    TilerProfile, TilerReport, TilerRequest, TilerResult,
 };
+// The HLOD coarse-tile method stays hidden until it replaces H17 as the default.
 #[doc(hidden)]
-pub use mesh_large::{
-    parse_memory_budget, BudgetSource, HlodDiagnostics, HlodMemoryPlan, MemoryBudget,
-    MemoryDiagnostics, TilerLod,
-};
+pub use mesh_large::{HlodDiagnostics, HlodMemoryPlan, TilerLod};
 pub use pack::{validate_3tz, TZ_INDEX_NAME};
 pub use raster_directory::{
     raster_to_directory, RasterDirectoryReport, RasterDirectoryRequest, RasterDirectoryResult,

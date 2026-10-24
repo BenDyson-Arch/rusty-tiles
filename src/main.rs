@@ -148,9 +148,11 @@ struct TilerArgs {
     /// Coarse-tile method: h17 (default) or hlod (0.4 octree HLOD, in development)
     #[arg(long, default_value = "h17", hide = true)]
     lod: rusty_tiles::TilerLod,
-    /// Declared memory budget for an hlod run: bytes, or with a KiB/MiB/GiB/TiB suffix
+    /// Memory ceiling, never raised: bytes, or with a KiB/MiB/GiB/TiB suffix (2GiB). Default:
+    /// the lesser of 4 GiB and half the detected host/cgroup headroom (2 GiB if undetected).
+    /// Not yet accepted by the current default coarse-tile method, which refuses it
     #[arg(long = "memory-budget", visible_alias = "memoryBudget", value_name = "BYTES",
-          value_parser = parse_memory_budget, hide = true)]
+          value_parser = parse_memory_budget)]
     memory_budget: Option<u64>,
     #[command(flatten)]
     placement: RigidPlacementArgs,

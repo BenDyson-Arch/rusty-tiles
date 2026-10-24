@@ -16,7 +16,7 @@ use tiles_core::{
     vector::{VectorLodOptions, VectorOptions},
     Error, JobError, JobErrorKind, JobFailure, MeshPlacement, MeshSourceCrs, ModelManifestRequest,
     ModelWrapRequest, Observer, OutputPolicy, RunControl, RunEvent, SourceAxes, TilerJobs,
-    TilerProfile, TilerRequest,
+    TilerLod, TilerProfile, TilerRequest,
 };
 
 create_exception!(rusty_tiles, TilesError, PyException);
@@ -343,11 +343,33 @@ fn tiler_jobs(py: Python<'_>, jobs: Option<Bound<'_, PyAny>>) -> PyResult<TilerJ
     Ok(TilerJobs::Maximum(count))
 }
 
+/// A declared memory budget: an integer byte count (not a bool), refused as an invalid request
+/// when zero, negative or beyond 2^64 - 1. The conversion to decimal text lets the shared
+/// core parser own every rule, so the CLI and Python refuse identically.
+fn tiler_memory_budget(py: Python<'_>, budget: Option<Bound<'_, PyAny>>) -> PyResult<Option<u64>> {
+    let Some(budget) = budget else {
+        return Ok(None);
+    };
+    if budget.is_instance_of::<PyBool>() || !budget.is_instance_of::<PyInt>() {
+        return Err(PyTypeError::new_err(
+            "memory_budget_bytes must be an integer byte count or None",
+        ));
+    }
+    let text = budget
+        .str()
+        .and_then(|text| text.extract::<String>())
+        .unwrap_or_else(|_| "9".repeat(64));
+    tiles_core::parse_memory_budget(&text)
+        .map(Some)
+        .map_err(|error| tiler_request_error(py, error))
+}
+
 /// Stream an admitted static mesh into one Tiles 1.1 .3tz: local metre/Y-up, or a declared
 /// source CRS mapped at capture. Profiles are provisional; jobs is a resource-capped
-/// maximum, and None means auto.
+/// maximum, and None means auto. memory_budget_bytes is a positive integer ceiling for the
+/// run (default: the lesser of 4 GiB and half the detected headroom, 2 GiB if undetected).
 #[pyfunction]
-#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None))]
+#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, memory_budget_bytes=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None, _lod=None))]
 #[allow(clippy::too_many_arguments)]
 fn mesh_to_tileset(
     py: Python<'_>,
@@ -355,6 +377,7 @@ fn mesh_to_tileset(
     output: PathBuf,
     profile: &str,
     jobs: Option<Bound<'_, PyAny>>,
+    memory_budget_bytes: Option<Bound<'_, PyAny>>,
     scratch_dir: Option<PathBuf>,
     anchor: Option<(f64, f64, f64)>,
     orientation_xyzw: Option<(f64, f64, f64, f64)>,
@@ -366,11 +389,19 @@ fn mesh_to_tileset(
     height_offset: Option<f64>,
     force: bool,
     callback: Option<Py<PyAny>>,
+    // Private coarse-tile selector ("h17" or "hlod"), the CLI's hidden `--lod`. Undocumented
+    // and unsupported; it goes when HLOD becomes the only method.
+    _lod: Option<&str>,
 ) -> PyResult<TilerResult> {
     let profile = profile
         .parse::<TilerProfile>()
         .map_err(|error| tiler_request_error(py, error))?;
     let jobs = tiler_jobs(py, jobs)?;
+    let memory_budget = tiler_memory_budget(py, memory_budget_bytes)?;
+    let lod = _lod
+        .map(str::parse::<TilerLod>)
+        .transpose()
+        .map_err(|error| tiler_request_error(py, error))?;
     let source_axes = source_axes
         .map(|axes| match axes {
             "xyz" => Ok(SourceAxes::Xyz),
@@ -406,6 +437,12 @@ fn mesh_to_tileset(
     }
     if let Some(path) = scratch_dir {
         request = request.with_scratch_dir(path);
+    }
+    if let Some(bytes) = memory_budget {
+        request = request.with_memory_budget(bytes);
+    }
+    if let Some(lod) = lod {
+        request = request.with_lod(lod);
     }
     let result = run_job(py, callback, |run| {
         tiles_core::mesh_to_tileset(request, run)
