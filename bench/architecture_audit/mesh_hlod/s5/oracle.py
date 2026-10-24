@@ -27,7 +27,14 @@ def require(ok, check, detail):
 def decode(path):
     r = subprocess.run(['node', str(ROOT / 'decode.mjs'), str(path)], capture_output=True, text=True)
     require(r.returncode == 0, 'codecStructure' if 'featureIdentity' not in r.stderr and 'metadataIntegrity' not in r.stderr else 'featureIdentity', r.stderr[-1500:])
-    return json.loads(r.stdout)
+    decoded = json.loads(r.stdout)
+    # UINT64 columns cross JSON as decimal strings; Python integers retain every bit.
+    for face in decoded['faces']:
+        for row in face['ids'].values():
+            for key, value in row.items():
+                if isinstance(value, str):
+                    row[key] = int(value)
+    return decoded
 
 def edges(faces):
     return {tuple(sorted((tuple(f['xyz'][k]), tuple(f['xyz'][(k+1)%3]))))

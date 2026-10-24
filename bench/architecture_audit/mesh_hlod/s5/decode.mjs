@@ -1,5 +1,6 @@
 // Independent published-byte decoder. No Rust/producer decoder, facts or locks.
 import fs from 'node:fs';
+import {spawnSync} from 'node:child_process';
 const I=[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
 const mul=(a,b)=>I.map((_,i)=>[0,1,2,3].reduce((s,k)=>s+a[i%4+k*4]*b[k+Math.floor(i/4)*4],0));
 function matrix(n) {
@@ -10,12 +11,11 @@ function matrix(n) {
  (2*x*z+2*y*w)*s[2],(2*y*z-2*x*w)*s[2],(1-2*x*x-2*y*y)*s[2],0,...t,1];
 }
 const point=(m,p)=>[0,1,2].map(a=>m[a]*p[0]+m[a+4]*p[1]+m[a+8]*p[2]+m[a+12]);
-let meshopt;
 export async function decode(file) {
  const b=fs.readFileSync(file);
  if(b.length<28||b.toString('ascii',0,4)!=='glTF'||b.readUInt32LE(4)!==2||b.readUInt32LE(8)!==b.length||b.toString('ascii',16,20)!=='JSON')throw Error('codecStructure: GLB');
  const jl=b.readUInt32LE(12),j=JSON.parse(b.subarray(20,20+jl)),cache=new Map();
- if(j.buffers?.length!==1||j.buffers[0].uri!==undefined||!b.subarray(24+jl,28+jl).equals(Buffer.from('BIN\0'))||j.buffers[0].byteLength>b.readUInt32LE(20+jl)||28+jl+b.readUInt32LE(20+jl)>b.length)throw Error('codecStructure: URI-free embedded BIN buffer required');
+ if(!j.buffers?.length||j.buffers.some(v=>v.uri!==undefined)||j.buffers.slice(1).some(v=>v.extensions?.EXT_meshopt_compression?.fallback!==true||!j.extensionsRequired?.includes('EXT_meshopt_compression'))||!b.subarray(24+jl,28+jl).equals(Buffer.from('BIN\0'))||j.buffers[0].byteLength>b.readUInt32LE(20+jl)||28+jl+b.readUInt32LE(20+jl)>b.length)throw Error('codecStructure: URI-free embedded BIN buffer required');
  const bin=b.subarray(28+jl,28+jl+j.buffers[0].byteLength);
  for(const [owner,allowed] of [[j,['EXT_structural_metadata']],...(j.nodes??[]).map(n=>[n,[]]),...(j.meshes??[]).map(m=>[m,[]]),...(j.meshes??[]).flatMap(m=>m.primitives.map(p=>[p,['EXT_mesh_features']]))])if(Object.keys(owner.extensions??{}).some(k=>!allowed.includes(k)))throw Error('unsupported oracle scene extension');
  if(j.animations||j.skins||j.meshes?.some(m=>m.weights||m.primitives.some(p=>p.targets))||j.nodes?.some(n=>n.weights))throw Error('unsupported oracle animation, skin or morph scene');
@@ -23,10 +23,10 @@ export async function decode(file) {
   if(cache.has(id))return cache.get(id);
   const v=j.bufferViews[id],e=v.extensions?.EXT_meshopt_compression;let data;
   if(e){
-   if(!meshopt){const root=process.env.MESHOPT_JS??'/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules';meshopt=(await import(`${root}/meshoptimizer/index.js`)).MeshoptDecoder;await meshopt.ready;}
    if(e.buffer!==0)throw Error('external meshopt buffer');
-   data=new Uint8Array(e.count*e.byteStride);
-   meshopt.decodeGltfBuffer(data,e.count,e.byteStride,bin.subarray(e.byteOffset??0,(e.byteOffset??0)+e.byteLength),e.mode,e.filter??'NONE');
+   if((e.filter??'NONE')!=='NONE')throw Error('unsupported oracle meshopt filter');
+   const r=spawnSync('python3',[new URL('meshopt.py',import.meta.url).pathname,e.mode,String(e.count),String(e.byteStride)],{input:bin.subarray(e.byteOffset??0,(e.byteOffset??0)+e.byteLength),maxBuffer:64*1024*1024});
+   if(r.status!==0)throw Error('codecStructure: '+r.stderr);data=r.stdout;
   }else {if(v.buffer!==0)throw Error('external oracle buffer');data=bin.subarray(v.byteOffset??0,(v.byteOffset??0)+v.byteLength);}
   cache.set(id,data);return data;
  }
@@ -39,7 +39,7 @@ export async function decode(file) {
  for(const t of meta?.propertyTables??[]){const props={};if(!meta.schema.classes[t.class])throw Error('metadataIntegrity');
   for(const [key,p] of Object.entries(t.properties)){const schema=meta.schema.classes[t.class].properties[key];if(!schema||schema.type!=='SCALAR'||('normalized' in schema&&schema.normalized!==false)||('array' in schema&&schema.array!==false)||['count','offset','scale','noData','default'].some(k=>k in schema||k in p))throw Error('metadataIntegrity');if(!j.bufferViews[p.values])throw Error('metadataIntegrity');const raw=await view(p.values),d=new DataView(raw.buffer,raw.byteOffset,raw.byteLength),wide=schema.componentType==='UINT64',width=wide?8:schema.componentType==='UINT8'?1:4;
    if(!['UINT8','UINT32','UINT64'].includes(schema.componentType)||raw.length<t.count*width)throw Error('metadataIntegrity');
-   props[key]=Array.from({length:t.count},(_,i)=>Number(wide?d.getBigUint64(i*8,true):width===1?d.getUint8(i):d.getUint32(i*4,true)));
+   props[key]=Array.from({length:t.count},(_,i)=>wide?d.getBigUint64(i*8,true).toString():width===1?d.getUint8(i):d.getUint32(i*4,true));
   }tables.push({class:t.class,count:t.count,props});
  }
  const faces=[];

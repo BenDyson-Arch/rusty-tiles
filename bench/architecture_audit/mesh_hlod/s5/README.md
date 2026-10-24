@@ -17,7 +17,7 @@ checks in archive validation to remove; do not invent a certificate-shaped HLOD
 record. Source-distance sampling stays in `../s2/`, separately invoked and timed.
 
 Supported oracle input: unpacked explicit archives; embedded GLB buffers,
-meshoptimizer JS decode, scalar/vector accessors including normalization and
+Khronos-spec meshopt decode (ATTRIBUTES/TRIANGLES, filter NONE), scalar/vector accessors including normalization and
 stride, selected-scene nested matrix/TRS transforms, material classes and source
 primitive/triangle property tables. Implicit availability remains I1's archive
 check and controls, rather than treating producer availability as evidence.
@@ -30,8 +30,9 @@ Run `cargo test --test hlod_acceptance` (under the mandated 10 GiB scope). It
 regenerates literal fixtures, verifies every member against
 `controls-sha256.json`, runs the independent oracle and compares Rust/CLI archive
 verdicts. Python 3 and Node are required; the analytic controls need no npm
-packages. For compressed GLBs, `MESHOPT_JS` points to a node_modules containing
-meshoptimizer (the default is the existing audit cache).
+packages. Compressed controls use `tests/ext_meshopt_spec.py`, the retained
+independent specification encoder/decoder, through `meshopt.py`. They exercise
+real compressed metadata, positions and indices and the virtual fallback buffer.
 
 `python3 controls.py SCRATCH` runs the small source-aware census and controls.
 `python3 continuity.py OUTPUT.3tz` independently checks the real explicit archive
@@ -81,8 +82,12 @@ and retain key/value/observed/derivation. Coarse materials are checked against
 independent source alpha/MASK, double-sided and lit/unlit classes; baked colour
 and texture quality remain the separate appearance audit's responsibility.
 
-The source identity profile requires one URI-free buffer backed by an actual BIN
-chunk. Both archive identity admission and the independent decoder refuse URI
+The source identity profile requires a URI-free primary buffer backed by an actual BIN
+chunk; additional URI-free virtual meshopt fallback buffers are admitted only
+when meshopt is required. An uncompressed view cannot read those placeholders. Both archive identity admission and the independent decoder refuse URI
 buffers with shadow BIN data; missing BIN chunks fail resource/container checks.
 All metadata and geometry reads use the declared logical buffer extent. This is
 an explicit format boundary, not a second interpretation of URI-resolved bytes.
+UINT64 columns cross decoder JSON as decimal strings and become exact Python
+integers before comparisons. The adjacent-integer leaf and representative
+controls distinguish 9007199254740992 from 9007199254740993.

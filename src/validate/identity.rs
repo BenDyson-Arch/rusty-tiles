@@ -94,7 +94,10 @@ fn project(raw: &RawValue, kind: &str) -> Result<Value, Error> {
             ("doc", "buffers") => Some("buffers"),
             ("buffer", "byteLength") => Some("number"),
             ("buffer", "uri") => Some("present"),
-            (_, "extensions") if matches!(kind, "doc" | "primitive" | "view") => Some("extensions"),
+            ("doc", "extensionsRequired") => Some("leaf"),
+            (_, "extensions") if matches!(kind, "doc" | "primitive" | "view" | "buffer") => {
+                Some("extensions")
+            }
             ("mesh", "primitives") => Some("primitives"),
             ("primitive", "attributes") => Some("attributes"),
             ("primitive", "indices" | "mode") => Some("number"),
@@ -110,7 +113,7 @@ fn project(raw: &RawValue, kind: &str) -> Result<Value, Error> {
             ("codec", "buffer" | "byteOffset" | "byteLength" | "byteStride" | "count") => {
                 Some("number")
             }
-            ("codec", "mode" | "filter") => Some("leaf"),
+            ("codec", "mode" | "filter" | "fallback") => Some("leaf"),
             ("metadata", "schema") => Some("schema"),
             ("metadata", "propertyTables") => Some("tables"),
             ("schema", "classes") => Some("classes"),
@@ -313,9 +316,17 @@ pub(super) fn inspect(
         return Err(fail());
     }
     let buffers = doc["buffers"].as_array().ok_or_else(fail)?;
-    if buffers.len() != 1 || buffers[0].get("uri").is_some() {
+    if buffers.is_empty()
+        || buffers.iter().any(|b| b.get("uri").is_some())
+        || buffers.iter().skip(1).any(|b| {
+            b["extensions"]["EXT_meshopt_compression"]["fallback"] != true
+                || !doc["extensionsRequired"]
+                    .as_array()
+                    .is_some_and(|xs| xs.iter().any(|x| x == "EXT_meshopt_compression"))
+        })
+    {
         return Err(Error::unsupported(
-            "hlodFeatureIds: source identity requires one URI-free embedded BIN buffer",
+            "hlodFeatureIds: source identity requires a URI-free embedded BIN buffer and only virtual meshopt fallback buffers",
         ));
     }
     let header = slice(bytes, 20 + length, 8)?;

@@ -64,7 +64,14 @@ fn sampled_hlod_archives_and_named_mutants() {
             );
         } else if matches!(
             name,
-            "valid" | "quantized" | "normalized" | "trs" | "numeric-lexemes" | "opaque-extras"
+            "valid"
+                | "quantized"
+                | "normalized"
+                | "trs"
+                | "numeric-lexemes"
+                | "opaque-extras"
+                | "wide-identity"
+                | "meshopt-fallback"
         ) {
             if name == "valid" {
                 let error = inspect(

@@ -5,6 +5,7 @@ import base64
 import hashlib
 import json
 from pathlib import Path
+import runpy
 import struct
 import sys
 from oracle import audit, Failure
@@ -27,7 +28,7 @@ def transformed(p, trs=False):
     x,y,z=p
     return [8+2*x,4-4*y,2+z] if trs else [8-4*y,4-2*x,2+z]
 
-def glb(face_ids, quantized=False, wrong_id=False, moved=False, bad_metadata=False, trs=False, normalized=False, leaf=True):
+def glb(face_ids, quantized=False, wrong_id=False, moved=False, bad_metadata=False, trs=False, normalized=False, leaf=True, compressed=False):
     binary=bytearray(); views=[]; accessors=[]
     def view(data):
         while len(binary)%8: binary.append(0)
@@ -59,8 +60,9 @@ def glb(face_ids, quantized=False, wrong_id=False, moved=False, bad_metadata=Fal
         if si:
             columns.update(triangle_index=[0]*len(face_ids),vertex_0=[0]*len(face_ids),vertex_1=[1]*len(face_ids),vertex_2=[2]*len(face_ids))
         for key,values in columns.items():
-            data=struct.pack('<'+'I'*len(values),*values)
-            schema[key]=dict(type='SCALAR',componentType='UINT32',required=True)
+            wide=key in ('expanded_ordinal','triangle_index','vertex_0','vertex_1','vertex_2')
+            data=struct.pack('<'+('Q' if wide else 'I')*len(values),*values)
+            schema[key]=dict(type='SCALAR',componentType='UINT64' if wide else 'UINT32',required=True)
             props[key]=dict(values=view(data))
         if bad_metadata: props['node_index']['values']=999
         classes[label]=dict(properties=schema)
@@ -79,6 +81,20 @@ def glb(face_ids, quantized=False, wrong_id=False, moved=False, bad_metadata=Fal
     if normalized:
         doc['nodes'][1].pop('mesh');doc['nodes'][1]['children']=[2];doc['nodes'].append({'scale':[32767]*3,'mesh':0})
     if quantized or normalized: doc['extensionsUsed'].append('KHR_mesh_quantization');doc['extensionsRequired']=['KHR_mesh_quantization']
+    if compressed:
+        # Reuse the retained independent Khronos-spec encoder, never meshopt's
+        # producer encoder. Every delivered view uses the virtual fallback.
+        encode=runpy.run_path(str(Path(__file__).resolve().parents[4]/'tests/ext_meshopt_spec.py'))['encode_attributes']
+        encoded=bytearray();fallback=0
+        for v in views:
+            raw=binary[v['byteOffset']:v['byteOffset']+v['byteLength']]
+            stride=v.get('byteStride',4);stream=encode(raw,len(raw)//stride,stride)
+            while len(encoded)%4:encoded.append(0)
+            v['extensions']={'EXT_meshopt_compression':dict(buffer=0,byteOffset=len(encoded),byteLength=len(stream),count=len(raw)//stride,byteStride=stride,mode='ATTRIBUTES',filter='NONE')}
+            v['buffer']=1;v['byteOffset']=fallback;fallback+=len(raw);encoded.extend(stream)
+        binary=encoded
+        doc['buffers']=[{'byteLength':len(binary)},{'byteLength':fallback,'extensions':{'EXT_meshopt_compression':{'fallback':True}}}]
+        doc['extensionsUsed'].append('EXT_meshopt_compression');doc['extensionsRequired']=['EXT_meshopt_compression']
     data=json.dumps(doc,separators=(',',':')).encode();data+=b' '*(-len(data)%4);binary+=b'\0'*(-len(binary)%4)
     return b'glTF'+struct.pack('<III',2,28+len(data)+len(binary),len(data))+b'JSON'+data+struct.pack('<I',len(binary))+b'BIN\0'+binary
 
@@ -88,6 +104,8 @@ def generate(root):
     expected_trs=copy.deepcopy(expected)
     for i,face in enumerate(POINTS):expected_trs['triangles'][f'0,0,{i},0']['xyz']=[transformed(p,True) for p in face]
     (root/'source-trs.json').write_text(json.dumps(expected_trs,sort_keys=True,indent=2)+'\n')
+    expected_wide=copy.deepcopy(expected);expected_wide['triangles']['0,0,0,0']['expanded_ordinal']=2**53
+    (root/'source-wide.json').write_text(json.dumps(expected_wide,sort_keys=True,indent=2)+'\n')
     (root/'source.json').write_text(json.dumps(expected,sort_keys=True,indent=2)+'\n')
     def tile(uri,g,children=None):
         d=dict(boundingVolume={'box':[0,0,0,32,0,0,0,32,0,0,0,32]},geometricError=g,refine='REPLACE',content={'uri':uri})
@@ -97,7 +115,7 @@ def generate(root):
     right=tile('right.glb',2,[tile('middle.glb',1,[tile('leaf2.glb',0),tile('leaf3.glb',0)])])
     doc=dict(asset={'version':'1.1'},geometricError=4,root=tile('root.glb',4,[left,right]))
     groups={'root.glb':[0,1,2,3],'left.glb':[0,1],'right.glb':[2,3],'middle.glb':[2,3],**{f'leaf{i}.glb':[i] for i in range(4)}}
-    cases=[('valid',None,None),('quantized',None,None),('normalized',None,None),('trs',None,None),('numeric-lexemes',None,None),('opaque-extras',None,None),('wrong-feature','featureIdentity','hlodFeatureIds'),
+    cases=[('valid',None,None),('quantized',None,None),('normalized',None,None),('trs',None,None),('numeric-lexemes',None,None),('opaque-extras',None,None),('wide-identity',None,None),('meshopt-fallback',None,None),('adjacent-uint64-leaf','sourceIdentity',None),('adjacent-uint64-representative','representativeIdentity',None),('wrong-feature','featureIdentity','hlodFeatureIds'),
            ('wrong-source','sourceIdentity',None),('wrong-representative','representativeIdentity',None),('wrong-representative-contents','representativeIdentity',None),('missing-leaf','leafCoverage',None),('duplicate-leaf','leafCoverage',None),
            ('moved-interface','interfaceSegments',None),('moved-corner','interfacePoints',None),('empty-intermediate','replaceContentContinuity',None),
            ('negative-g','geometricErrorFinite','tileset schema'),('nan-g','geometricErrorFinite','JSON'),
@@ -107,9 +125,9 @@ def generate(root):
     for name,oracle_check,archive_check in cases:
         out=root/name;out.mkdir(exist_ok=True);d=copy.deepcopy(doc)
         for uri,ids in groups.items():
-            data=glb(ids,quantized=name=='quantized',wrong_id=name=='wrong-feature' and uri=='root.glb',moved=(name=='moved-interface' and uri=='left.glb') or (name=='moved-corner' and uri=='right.glb'),bad_metadata=name=='bad-metadata' and uri=='root.glb',trs=name=='trs',normalized=name=='normalized',leaf=uri.startswith('leaf'))
+            data=glb(ids,quantized=name=='quantized',wrong_id=name=='wrong-feature' and uri=='root.glb',moved=(name=='moved-interface' and uri=='left.glb') or (name=='moved-corner' and uri=='right.glb'),bad_metadata=name=='bad-metadata' and uri=='root.glb',trs=name=='trs',normalized=name=='normalized',leaf=uri.startswith('leaf'),compressed=name=='meshopt-fallback')
             (out/uri).write_bytes(data)
-        if name in ('numeric-lexemes','opaque-extras','optional-property','correlated-metadata','active-morph','bad-property-type','wrong-table-class','missing-feature-set','normalized-identity','array-identity','offset-identity','null-identity','gpu-instancing','source-triangle-only','coarse-material-class','uri-buffer-shadow'):
+        if name in ('wide-identity','adjacent-uint64-leaf','adjacent-uint64-representative','numeric-lexemes','opaque-extras','optional-property','correlated-metadata','active-morph','bad-property-type','wrong-table-class','missing-feature-set','normalized-identity','array-identity','offset-identity','null-identity','gpu-instancing','source-triangle-only','coarse-material-class','uri-buffer-shadow'):
             for uri in groups:
                 p=out/uri;b=p.read_bytes();jl=int.from_bytes(b[12:16],'little');j=json.loads(b[20:20+jl]);binary=bytearray(b[28+jl:])
                 if name=='numeric-lexemes':
@@ -126,11 +144,20 @@ def generate(root):
                 if name=='wrong-table-class':j['extensions']['EXT_structural_metadata']['propertyTables'][0]['class']='bogus'
                 if name=='missing-feature-set' and uri.startswith('leaf'):
                     for primitive in j['meshes'][0]['primitives']:primitive['extensions']['EXT_mesh_features']['featureIds'].pop()
+                if name in ('wide-identity','adjacent-uint64-leaf','adjacent-uint64-representative'):
+                    meta=j['extensions']['EXT_structural_metadata']
+                    for table in meta['propertyTables']:
+                        v=j['bufferViews'][table['properties']['expanded_ordinal']['values']]
+                        for i,source_id in enumerate(groups[uri]):
+                            if source_id==0:
+                                corrupt=(name=='adjacent-uint64-leaf' and uri=='leaf0.glb') or (name=='adjacent-uint64-representative' and uri=='root.glb')
+                                struct.pack_into('<Q',binary,v['byteOffset']+i*8,2**53+int(corrupt))
                 if name=='correlated-metadata':
                     for table in j['extensions']['EXT_structural_metadata']['propertyTables']:
                         for key in ('expanded_ordinal','material_index'):
                             v=j['bufferViews'][table['properties'][key]['values']]
-                            for i in range(table['count']):struct.pack_into('<I',binary,v['byteOffset']+i*4,12345)
+                            for i in range(table['count']):
+                                wide=key=='expanded_ordinal';struct.pack_into('<Q' if wide else '<I',binary,v['byteOffset']+i*(8 if wide else 4),12345)
                 if name in ('normalized-identity','array-identity','offset-identity'):
                     schema=j['extensions']['EXT_structural_metadata']['schema']['classes']['source_primitive']['properties']['primitive_index']
                     if name=='normalized-identity':schema['normalized']=True
@@ -190,7 +217,7 @@ def generate(root):
             # Add a malformed EXT_meshopt stream to a POSITION buffer view.
             p=out/'root.glb';b=p.read_bytes();jl=int.from_bytes(b[12:16],'little');j=json.loads(b[20:20+jl]);j['bufferViews'][0]['extensions']={'EXT_meshopt_compression':dict(buffer=0,byteOffset=0,byteLength=1,count=12,byteStride=12,mode='ATTRIBUTES')};j['extensionsUsed'].append('EXT_meshopt_compression');j['extensionsRequired']=['EXT_meshopt_compression'];data=json.dumps(j).encode();data+=b' '*(-len(data)%4);binary=b[28+jl:];p.write_bytes(b'glTF'+struct.pack('<III',2,28+len(data)+len(binary),len(data))+b'JSON'+data+struct.pack('<I',len(binary))+b'BIN\0'+binary)
         (out/'tileset.json').write_text(json.dumps(d))
-        manifest.append(dict(name=name,oracleCheck=oracle_check,archiveCheck=archive_check,source='source-trs.json' if name=='trs' else 'source.json'))
+        manifest.append(dict(name=name,oracleCheck=oracle_check,archiveCheck=archive_check,source='source-trs.json' if name=='trs' else 'source-wide.json' if name in ('wide-identity','adjacent-uint64-leaf','adjacent-uint64-representative') else 'source.json'))
     (root/'cases.json').write_text(json.dumps(manifest,indent=2)+'\n')
     return manifest
 
@@ -204,7 +231,7 @@ if __name__=='__main__':
     external=copy.deepcopy(tree);external['root']['children']=[{'content':{'uri':'external.json'}}]
     assert continuity(external,lambda _:tree)['ok']
     for c in cases:
-        if not c['oracleCheck'] and c['name'] not in ('valid','quantized','normalized','trs','numeric-lexemes','opaque-extras'):continue
+        if not c['oracleCheck'] and c['name'] not in ('valid','quantized','normalized','trs','numeric-lexemes','opaque-extras','wide-identity','meshopt-fallback'):continue
         try:
             result=audit(root/c['name'],root/c['source'])
             assert c['oracleCheck'] is None, c
