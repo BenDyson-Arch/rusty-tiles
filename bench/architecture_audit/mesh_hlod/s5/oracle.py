@@ -11,6 +11,7 @@ import json
 import math
 from pathlib import Path
 import subprocess
+from continuity import inspect as inspect_continuity
 
 ROOT = Path(__file__).parent
 
@@ -87,7 +88,7 @@ def census(tiles):
             chain.append(t)
             t = t['parent']
         ancestors[i] = chain
-    for _, owners in items + [(None, owners) for _,owners in points]:
+    for _, owners in items + [(None, owners) for _,owners in points] + [(None,owners|other) for _,_,_,owners,other in contacts]:
         for a,b in itertools.combinations(owners,2):
             for x,y in itertools.product(ancestors[a],ancestors[b]):
                 if descendant_ids(x).isdisjoint(descendant_ids(y)):
@@ -121,6 +122,8 @@ def audit(root, expected):
     root = Path(root)
     manifest = json.loads(Path(expected).read_text())
     doc = json.loads((root/'tileset.json').read_text())
+    barrier = inspect_continuity(root)
+    require(barrier['ok'], 'replaceContentContinuity', str(barrier['violations']))
     tiles, observed = [], collections.Counter()
     def visit(node, parent=None, depth=0, refine='REPLACE', renderable_above=False, empty_between=False):
         require(parent is None or 'transform' not in node, 'oracleDomain', 'nested tile transforms require archive C2')

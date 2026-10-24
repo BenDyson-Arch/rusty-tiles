@@ -7,6 +7,7 @@ from pathlib import Path
 import struct
 import sys
 from oracle import audit, Failure
+from continuity import check as continuity
 
 POINTS = [
     [(0,0,0),(2,0,0),(0,2,0)],
@@ -97,7 +98,7 @@ def generate(root):
     groups={'root.glb':[0,1,2,3],'left.glb':[0,1],'right.glb':[2,3],'middle.glb':[2,3],**{f'leaf{i}.glb':[i] for i in range(4)}}
     cases=[('valid',None,None),('quantized',None,None),('normalized',None,None),('trs',None,None),('wrong-feature','featureIdentity','hlodFeatureIds'),
            ('wrong-source','sourceIdentity',None),('wrong-representative','representativeIdentity',None),('missing-leaf','leafCoverage',None),('duplicate-leaf','leafCoverage',None),
-           ('moved-interface','interfaceSegments',None),('empty-intermediate','replaceContentContinuity',None),
+           ('moved-interface','interfaceSegments',None),('moved-corner','interfacePoints',None),('empty-intermediate','replaceContentContinuity',None),
            ('negative-g','geometricErrorFinite','tileset schema'),('nan-g','geometricErrorFinite','JSON'),
            ('nonmonotone-g','geometricErrorOrder','geometricError increases'),('bad-bounds',None,'decoded content'),
            ('stale-hash',None,'content checksum mismatch'),('malformed-codec',None,'meshopt'),('bad-metadata','featureIdentity','hlodFeatureIds')]
@@ -105,7 +106,7 @@ def generate(root):
     for name,oracle_check,archive_check in cases:
         out=root/name;out.mkdir(exist_ok=True);d=copy.deepcopy(doc)
         for uri,ids in groups.items():
-            data=glb(ids,quantized=name=='quantized',wrong_id=name=='wrong-feature' and uri=='root.glb',moved=name=='moved-interface' and uri=='left.glb',bad_metadata=name=='bad-metadata' and uri=='root.glb',trs=name=='trs',normalized=name=='normalized')
+            data=glb(ids,quantized=name=='quantized',wrong_id=name=='wrong-feature' and uri=='root.glb',moved=(name=='moved-interface' and uri=='left.glb') or (name=='moved-corner' and uri=='right.glb'),bad_metadata=name=='bad-metadata' and uri=='root.glb',trs=name=='trs',normalized=name=='normalized')
             (out/uri).write_bytes(data)
         if name in ('wrong-source','wrong-representative'):
             # In-range feature ID mutation only: same coordinates, wrong row.
@@ -136,6 +137,13 @@ def generate(root):
 
 if __name__=='__main__':
     root=Path(sys.argv[1]);cases=generate(root);results=[]
+    tree=json.loads((root/'valid'/'tileset.json').read_text())
+    leading=copy.deepcopy(tree);leading['root'].pop('content')
+    assert continuity(leading,lambda _:None)['ok']
+    additive=copy.deepcopy(tree);additive['root']['refine']='ADD';additive['root']['children'][0].pop('content')
+    assert continuity(additive,lambda _:None)['ok']
+    external=copy.deepcopy(tree);external['root']['children']=[{'content':{'uri':'external.json'}}]
+    assert continuity(external,lambda _:tree)['ok']
     for c in cases:
         if not c['oracleCheck'] and c['name'] not in ('valid','quantized','normalized','trs'):continue
         try:

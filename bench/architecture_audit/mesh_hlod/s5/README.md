@@ -25,3 +25,29 @@ Unsupported oracle codecs/scene constructs fail closed. This small oracle is not
 a scale gate. Full 2048, appearance quality and consumer acceptance belong to S8.
 
 Implementation and execution receipts follow below.
+
+Run `cargo test --test hlod_acceptance` (under the mandated 10 GiB scope). It
+regenerates literal fixtures, verifies every member against
+`controls-sha256.json`, runs the independent oracle and compares Rust/CLI archive
+verdicts. Python 3 and Node are required; the analytic controls need no npm
+packages. For compressed GLBs, `MESHOPT_JS` points to a node_modules containing
+meshoptimizer (the default is the existing audit cache).
+
+`python3 controls.py SCRATCH` runs the small source-aware census and controls.
+`python3 continuity.py OUTPUT.3tz` independently checks the real explicit archive
+for `replaceContentContinuity`, without decoding geometry or requiring source.
+Leading empty roots, ADD ancestors and external-link placeholders have positive
+controls. The source-aware oracle refuses implicit roots and nested tile
+transforms; C2/I1 retain those archive checks. Selected-scene glTF matrix/TRS,
+normalized signed-short positions, nonuniform/reflected scale and PBR/MASK/unlit
+material delivery have analytic positive controls. Sparse/animated/skinned input
+is outside this small oracle's domain and fails closed.
+
+The small census reports complete source-shared segment/point and T-contact
+retention and enumerates all disjoint ancestor pairs, including T contacts.
+Coarse representative centroids are queried against independent source triangles
+in their decoded leaves' verified source set. Exact original leaf corner order,
+source rows and leaf material values are compared with literal analytic truth.
+These are separate from archive-only `hlodFeatureIds`, which checks integrity,
+not nearest-source truth. `geometricErrorAccuracy` stays uninspected in archive
+reports; no producer fact, certificate or sampled maximum is promoted to proof.
