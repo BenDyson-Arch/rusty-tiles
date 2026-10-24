@@ -2164,3 +2164,43 @@ fn bake_donors_are_exact_across_close_parallel_sheets() {
         assert!(b.d2 < 1e-12, "point {i} lies on its donor");
     }
 }
+
+/// Review round 3 probe 3: 32,768 distinct oblique parallel triangles whose boxes all
+/// contain every query (exact search is Θ(R) per query, warm hints included). The bake's
+/// budgeted best-first search stays within its fixed per-texel budget, deterministically.
+#[test]
+fn donor_search_is_bounded_on_oblique_adversaries() {
+    use super::source_index::{Budget, Frontier, Hit, Surface, Triangle};
+    let r = 32_768u64;
+    let triangles: Vec<Triangle> = (0..r)
+        .map(|i| {
+            let d = i as f32 / 100_000.;
+            Triangle::new([[3. + d, -1., -1.], [-1., 3. + d, -1.], [-1., -1., 3. + d]], i)
+        })
+        .collect();
+    let surface = Surface::new(triangles).unwrap();
+    let key = super::store::TileKey {
+        first: 0,
+        end: r,
+        depth: 0,
+        leaf_begin: 0,
+        leaf_end: 1,
+    };
+    let budget_steps = 256;
+    let mut frontier = Frontier::new();
+    let run = |frontier: &mut Frontier| {
+        let mut hint = None;
+        (0..32)
+            .map(|j| {
+                let mut budget = Budget::new(budget_steps);
+                let hit: Hit = surface.nearest_budget_hint([j as f64 / 1000., 0., 0.], key, &mut hint, &mut budget, frontier);
+                assert!(budget.steps <= budget_steps, "query {j}: {} steps", budget.steps);
+                assert!(hit.distance2.is_finite());
+                (hit.rank, budget.exhausted)
+            })
+            .collect::<Vec<_>>()
+    };
+    let first = run(&mut frontier);
+    assert!(first.iter().all(|q| q.1), "the adversary exhausts the budget");
+    assert_eq!(first, run(&mut frontier), "deterministic");
+}

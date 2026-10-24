@@ -403,6 +403,10 @@ pub struct DepthAppearance {
     pub escalated_pages: u64,
     /// Pages delivered as the exact level-0 PNG.
     pub png_pages: u64,
+    /// Donor searches that ran out of budget (best candidate so far used).
+    pub donor_budget_exhausted: u64,
+    /// Most steps one donor search took.
+    pub donor_search_steps_max: u64,
     pub requested_spacing_min: f64,
     pub requested_spacing_max: f64,
     pub achieved_spacing_min: f64,
@@ -1115,6 +1119,8 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     d.donor_reads += a.donor_reads;
     d.escalated_pages += u64::from(a.escalated_pages);
     d.png_pages += u64::from(a.png_pages);
+    d.donor_budget_exhausted += a.donor_budget_exhausted;
+    d.donor_search_steps_max = d.donor_search_steps_max.max(a.donor_search_steps_max);
     if first {
         d.requested_spacing_min = a.requested_spacing;
         d.requested_spacing_max = a.requested_spacing;

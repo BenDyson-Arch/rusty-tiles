@@ -151,6 +151,10 @@ pub(crate) struct TileAppearance {
     pub png_pages: u32,
     /// Least mip levels through which a page of the tile keeps its charts isolated.
     pub isolated_levels: u32,
+    /// Donor searches that ran out of budget (best candidate so far used).
+    pub donor_budget_exhausted: u64,
+    /// Most steps one donor search of the tile took.
+    pub donor_search_steps_max: u64,
 }
 
 /// Thread CPU seconds of one tile's appearance work (wall seconds where the platform
@@ -389,6 +393,8 @@ pub(crate) fn build(
         }
         groups.push(group);
     }
+    facts.donor_budget_exhausted = searcher.exhausted;
+    facts.donor_search_steps_max = searcher.max_steps;
     Ok(Appearance {
         groups,
         normals,
@@ -743,6 +749,11 @@ type Binding = Option<(usize, crate::mesh_large::leaves::crops::SourceSampler, u
 /// Bake every slot page of one textured group: per chunk of covered texels, resolve the
 /// texel points against the source (bounded state), then sample each slot's source images
 /// grouped by image at the texel's source level of detail.
+///
+/// Decode bound: each chunk requests each of its distinct images once per slot, and chunks
+/// restart per group, so a tile decodes at most `Σ_g S_g · ⌈T_g / 65536⌉ · I_g` images
+/// (group `g`: `S_g` slots, `T_g` covered texels, `I_g` distinct images); the LRU cache
+/// serves repeats when they fit.
 fn bake_pages(
     services: &Services<'_>,
     searcher: &mut bake::Searcher<'_, '_>,

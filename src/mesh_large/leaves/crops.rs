@@ -921,12 +921,8 @@ mod tests {
         let start = [crop.origin[0] - i64::from(a), crop.origin[1] - i64::from(a)];
         let page = copy_crop(&source, n, n, crop, sampler, 1 << 26).unwrap();
         let (w, h) = (crop.width, crop.height);
-        let mut support = vec![0u32; (w * h) as usize];
-        for y in a..a + crop.interior_height {
-            for x in a..a + crop.interior_width {
-                support[(y * w + x) as usize] = 1;
-            }
-        }
+        // The whole allocation is real wrapped source (as the atlas publishes it).
+        let support = vec![1u32; (w * h) as usize];
         let chain = sparse_mips::build_islands(w, h, &page, &support, Some(&vec![1; (w * h) as usize]), k, Class::Data, 1 << 26).unwrap();
         // Complete chain: dimensions halve to 1x1.
         let last = chain.levels.last().unwrap();
@@ -949,23 +945,89 @@ mod tests {
                 }
             }
         }
-        // Below K: the support-weighted box filter of the level above.
+        // Below K: the support-weighted box filter of the level above, over the whole
+        // footprint (area overlap where a dimension halves an odd size).
+        let overlap = |d: u32, src: u32, dst: u32, t: u32| -> f64 {
+            let (lo, hi) = (f64::from(d) * f64::from(src) / f64::from(dst), f64::from(d + 1) * f64::from(src) / f64::from(dst));
+            (hi.min(f64::from(t + 1)) - lo.max(f64::from(t))).max(0.)
+        };
         for level in k as usize + 1..chain.levels.len() {
             let (up, l) = (&chain.levels[level - 1], &chain.levels[level]);
             for y in 0..l.height {
                 for x in 0..l.width {
-                    let (mut sum, mut weight) = (0f64, 0u64);
-                    for cy in 2 * y..(2 * y + 2).min(up.height) {
-                        for cx in 2 * x..(2 * x + 2).min(up.width) {
+                    let (mut sum, mut weight) = (0f64, 0f64);
+                    for cy in 0..up.height {
+                        for cx in 0..up.width {
+                            let w = overlap(x, up.width, l.width, cx) * overlap(y, up.height, l.height, cy);
+                            if w == 0. {
+                                continue;
+                            }
                             let i = (cy * up.width + cx) as usize;
-                            sum += f64::from(up.rgba[i * 4]) * f64::from(up.support[i]);
-                            weight += u64::from(up.support[i]);
+                            sum += f64::from(up.rgba[i * 4]) * f64::from(up.support[i]) * w;
+                            weight += f64::from(up.support[i]) * w;
                         }
                     }
-                    if weight > 0 {
-                        let want = (sum / weight as f64).round();
+                    if weight > 0. {
+                        let want = (sum / weight).round();
                         let got = f64::from(l.rgba[((y * l.width + x) * 4) as usize]);
                         assert!((got - want).abs() <= 1., "level {level} ({x},{y}): {got} vs {want}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// Review round 3 probe 2: 128² and 129² two-texel stripe sources cropped across
+    /// the u = 1 edge under REPEAT, MIRRORED_REPEAT and CLAMP. Reference (coordinator
+    /// decision): an island's level-L texel is the area-weighted average of SOURCE
+    /// level-0 texels over its footprint, the sampler's wrap applied beyond the source
+    /// edges (stored mips of odd sources are not the reference). Exact through K, over
+    /// the whole allocation (gutters by the same rule).
+    #[test]
+    fn island_levels_are_area_weighted_wrapped_source_footprints() {
+        use super::super::{mips::Class, sparse_mips};
+        let k = sparse_mips::LEAF_ISLAND_ISOLATED_LEVELS;
+        let a = 1u32 << k;
+        for n in [128u32, 129] {
+            let source: Vec<u8> = (0..n * n)
+                .flat_map(|i| {
+                    let v = if ((i % n) / 2) % 2 == 0 { 255 } else { 0 };
+                    [v, v, v, 255]
+                })
+                .collect();
+            for wrap in [10497, 33648, 33071] {
+                let sampler = SourceSampler { wrap_s: wrap, wrap_t: wrap, min_filter: 9987, mag_filter: 9729 };
+                let uvs = [[0.95, 0.30], [1.15, 0.30], [1.05, 0.60]];
+                let block = plan_islands_aligned(&uvs, n, n, 1024, a, a, true).unwrap();
+                let crop = &block.islands[0].crop;
+                let page = copy_crop(&source, n, n, crop, sampler, 1 << 26).unwrap();
+                let (w, h) = (crop.width, crop.height);
+                let chain = sparse_mips::build_islands(
+                    w, h, &page, &vec![1; (w * h) as usize], Some(&vec![1; (w * h) as usize]), k, Class::Data, 1 << 26,
+                )
+                .unwrap();
+                let start = [crop.origin[0] - i64::from(a), crop.origin[1] - i64::from(a)];
+                for level in 0..=k {
+                    let l = &chain.levels[level as usize];
+                    let f = 1i64 << level;
+                    for py in 0..l.height {
+                        for px in 0..l.width {
+                            let mut sum = 0f64;
+                            for dy in 0..f {
+                                for dx in 0..f {
+                                    let sx = tap(start[0] + i64::from(px) * f + dx, n, wrap).unwrap();
+                                    let sy = tap(start[1] + i64::from(py) * f + dy, n, wrap).unwrap();
+                                    sum += f64::from(source[((sy * n + sx) * 4) as usize]);
+                                }
+                            }
+                            let want = sum / (f * f) as f64;
+                            let got = f64::from(l.rgba[((py * l.width + px) * 4) as usize]);
+                            // Each reduced level rounds once: at most half a step per level.
+                            assert!(
+                                (got - want).abs() <= 0.5 * f64::from(level) + 0.5,
+                                "n {n} wrap {wrap} level {level} ({px},{py}): {got} vs {want}"
+                            );
+                        }
                     }
                 }
             }

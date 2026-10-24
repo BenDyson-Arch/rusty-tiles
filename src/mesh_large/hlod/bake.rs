@@ -7,7 +7,7 @@
 //! Hits record the donor's interpolants; images are then sampled grouped by image through
 //! a bounded, shared cache of decoded colour-correct mip chains ([`ImageCache`]), so a
 //! tile decodes each image at most once and the run never holds every image.
-use super::source_index::{Hit as SourceHit, SourceQuery, Surface};
+use super::source_index::{Budget, Frontier, Hit as SourceHit, SourceQuery, Surface};
 use crate::{
     gltf_source::source::{self as gsource, TextureSlot},
     mesh_large::{
@@ -164,7 +164,21 @@ pub(crate) const LOCAL_BYTES: u64 = LOCAL_TRIANGLES * 160 + (1 << 20);
 pub(crate) struct Searcher<'q, 'a> {
     query: &'q mut SourceQuery<'a>,
     local: Option<(Surface, Option<usize>)>,
+    steps: u64,
+    frontier: Frontier,
+    inner: Frontier,
+    /// Searches that ran out of budget (their best candidate so far was used).
+    pub exhausted: u64,
+    /// Most steps one search took.
+    pub max_steps: u64,
 }
+
+/// Per-texel work budget of the donor search (node visits plus triangle tests): the
+/// search is best-first by box distance and exact unless the budget runs out, when the
+/// best candidate so far is used (counted). Bounds the bake at O(B) per texel against
+/// adversarial sources (a texel near thousands of overlapping oblique triangles). The
+/// default leaves tex3 and crop3 identical to exact search. A scale-gate tuning constant.
+pub(crate) const DONOR_SEARCH_STEPS: u64 = 4096;
 
 impl<'q, 'a> Searcher<'q, 'a> {
     /// A searcher of `query`'s range; resident when the range is small enough.
@@ -180,29 +194,59 @@ impl<'q, 'a> Searcher<'q, 'a> {
         } else {
             None
         };
-        Ok(Self { query, local })
+        Ok(Self::with(query, local, DONOR_SEARCH_STEPS))
+    }
+    fn with(query: &'q mut SourceQuery<'a>, local: Option<(Surface, Option<usize>)>, steps: u64) -> Self {
+        Self {
+            query,
+            local,
+            steps,
+            frontier: Frontier::new(),
+            inner: Frontier::new(),
+            exhausted: 0,
+            max_steps: 0,
+        }
+    }
+    /// A resident searcher with an explicit budget (tests).
+    #[cfg(test)]
+    pub(crate) fn with_budget(query: &'q mut SourceQuery<'a>, steps: u64) -> Result<Self, JobError> {
+        let mut s = Self::new(query)?;
+        s.steps = steps;
+        Ok(s)
     }
     /// Always S2's paged query (tests compare the two paths).
     #[cfg(test)]
     pub(crate) fn paged(query: &'q mut SourceQuery<'a>) -> Self {
-        Self { query, local: None }
+        Self::with(query, None, DONOR_SEARCH_STEPS)
     }
     pub(crate) fn query(&mut self) -> &mut SourceQuery<'a> {
         self.query
     }
     fn nearest(&mut self, p: [f64; 3]) -> Result<SourceHit, JobError> {
         let key = self.query.key;
-        match &mut self.local {
-            Some((surface, hint)) => Ok(surface.nearest_hint(p, key, hint)),
-            None => self.query.nearest(p),
+        let mut budget = Budget::new(self.steps);
+        let hit = match &mut self.local {
+            Some((surface, hint)) => {
+                surface.nearest_budget_hint(p, key, hint, &mut budget, &mut self.frontier)
+            }
+            None => self
+                .query
+                .nearest_budget(p, &mut budget, &mut self.frontier, &mut self.inner)?,
+        };
+        if !hit.distance2.is_finite() {
+            return Err(state("coarse bake donor search found no candidate"));
         }
+        self.exhausted += u64::from(budget.exhausted);
+        self.max_steps = self.max_steps.max(budget.steps);
+        Ok(hit)
     }
 }
 
 /// Resolve every query point of the tile against the captured source surface of its
-/// descendant range: every point gets its exact nearest triangle (distance, then source
-/// order and rank on ties; no reuse, facing, material or donor-distance heuristic),
-/// on a resident surface for small ranges ([`Searcher`]). Donor records are read
+/// descendant range: every point gets its nearest triangle (distance, then source order
+/// and rank on ties; no reuse, facing, material or donor-distance heuristic) by a
+/// budgeted best-first search ([`DONOR_SEARCH_STEPS`]), on a resident surface for small
+/// ranges ([`Searcher`]). Donor records are read
 /// per chunk in rank order. Returns (points searched, donor reads).
 pub(crate) fn resolve(
     searcher: &mut Searcher<'_, '_>,

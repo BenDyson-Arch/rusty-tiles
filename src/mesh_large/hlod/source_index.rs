@@ -304,6 +304,95 @@ impl Surface {
         *hint = Some(hit.index);
         hit
     }
+    /// Budgeted best-first [`Surface::nearest`]: nodes in order of box distance, stopping
+    /// when the nearest unexplored box is farther than `best` (then exact: the same winner
+    /// and tie rule) or when `budget` runs out (then the best candidate so far). Continues
+    /// `best`; true when it changed (`best.index` then names a triangle of this surface).
+    pub(crate) fn nearest_budget(
+        &self,
+        p: V3,
+        key: TileKey,
+        best: &mut Hit,
+        budget: &mut Budget,
+        frontier: &mut Frontier,
+    ) -> bool {
+        use std::cmp::Reverse;
+        let mut changed = false;
+        frontier.clear();
+        frontier.push(Reverse((self.nodes[0].distance(p).to_bits(), 0)));
+        while let Some(Reverse((d, i))) = frontier.pop() {
+            if f64::from_bits(d) > best.distance2 || !budget.spend() {
+                break;
+            }
+            let n = &self.nodes[i as usize];
+            if !n.intersects(key) {
+                continue;
+            }
+            if n.count > 0 {
+                for (offset, t) in self.triangles[n.start as usize..(n.start + n.count) as usize]
+                    .iter()
+                    .enumerate()
+                {
+                    if t.rank < key.first || t.rank >= key.end {
+                        continue;
+                    }
+                    if !budget.spend() {
+                        return changed;
+                    }
+                    let points = t.positions();
+                    let weights = closest(p, points);
+                    let d = distance2(p, bary(points, weights));
+                    if d < best.distance2
+                        || (d == best.distance2 && (t.order, t.rank) < (best.order, best.rank))
+                    {
+                        *best = Hit {
+                            rank: t.rank,
+                            index: n.start as usize + offset,
+                            order: t.order,
+                            bary: weights,
+                            distance2: d,
+                            material: t.material,
+                        };
+                        changed = true;
+                    }
+                }
+            } else {
+                for c in [n.left, n.right] {
+                    let child = &self.nodes[c as usize];
+                    if child.intersects(key) {
+                        frontier.push(Reverse((child.distance(p).to_bits(), c)));
+                    }
+                }
+            }
+        }
+        changed
+    }
+    /// [`Surface::nearest_budget`] seeded by the previous winner `hint` (one step).
+    pub(crate) fn nearest_budget_hint(
+        &self,
+        p: V3,
+        key: TileKey,
+        hint: &mut Option<usize>,
+        budget: &mut Budget,
+        frontier: &mut Frontier,
+    ) -> Hit {
+        let mut best = hint
+            .and_then(|i| {
+                self.triangles
+                    .get(i)
+                    .filter(|t| t.rank >= key.first && t.rank < key.end)
+                    .map(|&t| make_hit(p, t, i))
+            })
+            .unwrap_or_else(Hit::empty);
+        if best.distance2.is_finite() {
+            budget.spend();
+        }
+        self.nearest_budget(p, key, &mut best, budget, frontier);
+        if best.distance2.is_finite() {
+            *hint = Some(best.index);
+        }
+        best
+    }
     pub(crate) fn nearest(&self, p: V3, key: TileKey, best: &mut Hit) {
         let mut stack = [0usize; 64];
         let mut len = 1;
@@ -351,6 +440,37 @@ impl Surface {
         }
     }
 }
+
+/// Work budget of one budgeted nearest search (the bake's donor search): one step per
+/// node visit and per triangle test. Exhaustion returns the best candidate found so far.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Budget {
+    left: u64,
+    pub steps: u64,
+    pub exhausted: bool,
+}
+impl Budget {
+    pub(crate) fn new(steps: u64) -> Self {
+        Self {
+            left: steps,
+            steps: 0,
+            exhausted: false,
+        }
+    }
+    fn spend(&mut self) -> bool {
+        if self.left == 0 {
+            self.exhausted = true;
+            return false;
+        }
+        self.left -= 1;
+        self.steps += 1;
+        true
+    }
+}
+
+/// Best-first frontier: (squared box distance bits, node or entry index); ties in index
+/// order, so the search order is a pure function of the query point.
+pub(crate) type Frontier = std::collections::BinaryHeap<std::cmp::Reverse<(u64, u64)>>;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Hit {
@@ -778,6 +898,91 @@ impl SourceQuery<'_> {
         out: &mut Vec<FullTriangle>,
     ) -> Result<(), JobError> {
         Ok(self.full.read(first, count, encoded, out)?)
+    }
+    /// Make the fine block below leaf node `n` resident (the bounded FIFO of
+    /// [`SourceQuery::nearest`]).
+    fn load_block(&mut self, n: &Node) -> Result<(), JobError> {
+        if self.blocks.contains_key(&n.first) {
+            return Ok(());
+        }
+        self.nodes
+            .read(n.left, n.right as usize, &mut self.encoded, &mut self.node_buf)?;
+        self.triangles
+            .read(n.first, n.count as usize, &mut self.encoded, &mut self.tri_buf)?;
+        let surface = Surface {
+            nodes: self.node_buf.clone(),
+            triangles: self.tri_buf.clone(),
+        };
+        if self.blocks.len() == self.block_limit {
+            let old = self
+                .blocks
+                .remove(&self.block_fifo.pop_front().unwrap())
+                .unwrap();
+            self.block_bytes -= old.charge();
+        }
+        self.block_fifo.push_back(n.first);
+        self.block_bytes += surface.charge();
+        self.blocks.insert(n.first, surface);
+        self.check_charge()
+    }
+    /// Budgeted best-first [`SourceQuery::nearest`] over the paged hierarchy and its fine
+    /// blocks (see [`Surface::nearest_budget`]): exact unless `budget` runs out, then the
+    /// best candidate so far; deterministic per query point and hint.
+    pub(crate) fn nearest_budget(
+        &mut self,
+        p: V3,
+        budget: &mut Budget,
+        frontier: &mut Frontier,
+        inner: &mut Frontier,
+    ) -> Result<Hit, JobError> {
+        use std::cmp::Reverse;
+        let mut winning = self
+            .last
+            .filter(|t| t.rank >= self.key.first && t.rank < self.key.end);
+        let mut best = winning
+            .map(|t| make_hit(p, t, usize::MAX))
+            .unwrap_or_else(Hit::empty);
+        if best.distance2.is_finite() {
+            budget.spend();
+        }
+        let mut entries: Vec<(Node, Option<[Visit; 2]>)> = Vec::new();
+        entries.push(self.visit(Visit::Resident(self.region_root))?);
+        frontier.clear();
+        frontier.push(Reverse((entries[0].0.distance(p).to_bits(), 0)));
+        while let Some(Reverse((d, e))) = frontier.pop() {
+            if f64::from_bits(d) > best.distance2 || !budget.spend() {
+                break;
+            }
+            let (n, children) = entries[e as usize];
+            if !n.intersects(self.key) {
+                continue;
+            }
+            if n.count > 0 {
+                self.load_block(&n)?;
+                let surface = &self.blocks[&n.first];
+                if surface.nearest_budget(p, self.key, &mut best, budget, inner) {
+                    winning = Some(surface.triangles[best.index]);
+                }
+                if budget.exhausted {
+                    break;
+                }
+            } else {
+                let [left, right] =
+                    children.ok_or_else(|| state("source branch without children"))?;
+                for v in [left, right] {
+                    let child = self.visit(v)?;
+                    if child.0.intersects(self.key) {
+                        frontier.push(Reverse((child.0.distance(p).to_bits(), entries.len() as u64)));
+                        entries.push(child);
+                    }
+                }
+            }
+        }
+        if !best.distance2.is_finite() {
+            return Err(state("source nearest query has no finite witness"));
+        }
+        self.last = winning;
+        Ok(best)
     }
     pub(crate) fn triangle(&mut self, hit: Hit) -> Result<FullTriangle, JobError> {
         self.full

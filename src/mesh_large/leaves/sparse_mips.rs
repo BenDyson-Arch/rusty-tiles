@@ -169,6 +169,34 @@ fn fill_gutters(
     }
 }
 
+/// Source taps of destination index `d` along one axis (`src` texels reduced to `dst`):
+/// exact halving takes texels `2d, 2d+1` at weight 1 (unit 1); a floor-halved odd axis
+/// takes every source texel the destination footprint `[d·src/dst, (d+1)·src/dst)`
+/// overlaps, weighted by the overlap in units of `1/dst` (unit `dst`), so no trailing
+/// row or column is ever dropped. At most three taps.
+fn taps(d: usize, src: usize, dst: usize) -> ([(usize, u64); 3], usize, u64) {
+    let mut out = [(0usize, 0u64); 3];
+    if src == dst {
+        out[0] = (d, 1);
+        return (out, 1, 1);
+    }
+    if src == 2 * dst {
+        out[0] = (2 * d, 1);
+        out[1] = (2 * d + 1, 1);
+        return (out, 2, 1);
+    }
+    let (lo, hi) = (d * src, (d + 1) * src);
+    let mut n = 0;
+    for t in lo / dst..hi.div_ceil(dst) {
+        let w = hi.min((t + 1) * dst) - lo.max(t * dst);
+        if w > 0 && n < 3 {
+            out[n] = (t, w as u64);
+            n += 1;
+        }
+    }
+    (out, n, dst as u64)
+}
+
 /// Refill zero-support gutters after a caller re-expresses normal values.
 /// The caller already owns the level; memory_limit charges only this helper's
 /// transient nearest-owner scratch plus the returned owner map, with build's tie rules.
@@ -390,30 +418,34 @@ pub(in crate::mesh_large) fn build_islands(
         dst.rgba.resize(n * 4, 0);
         dst.support.resize(n, 0);
         for y in 0..dh as usize {
+            let (ty, ny, uy) = taps(y, src.height as usize, dh as usize);
             for x in 0..dw as usize {
+                let (tx, nx, ux) = taps(x, sw, dw as usize);
                 if class == Class::Id {
                     let i = y * dw as usize + x;
-                    let mut tally = [([0u8; 4], 0u64); 4];
                     let mut len = 0;
-                    let mut weight = 0u32;
-                    for sy in y * 2..(y * 2 + 2).min(src.height as usize) {
-                        for sx in x * 2..(x * 2 + 2).min(sw) {
+                    let mut tally = [([0u8; 4], 0u64); 9];
+                    let mut area = 0u64;
+                    for &(sy, wy) in &ty[..ny] {
+                        for &(sx, wx) in &tx[..nx] {
                             let j = sy * sw + sx;
                             let s = src.support[j];
                             if s == 0 {
                                 continue;
                             }
                             let p: [u8; 4] = src.rgba[j * 4..j * 4 + 4].try_into().expect("RGBA8");
+                            let w = u64::from(s) * wx * wy;
                             match tally[..len].iter_mut().find(|(v, _)| *v == p) {
-                                Some((_, w)) => *w += u64::from(s),
+                                Some((_, t)) => *t += w,
                                 None => {
-                                    tally[len] = (p, u64::from(s));
+                                    tally[len] = (p, w);
                                     len += 1;
                                 }
                             }
-                            weight = weight.checked_add(s).ok_or_else(resource)?;
+                            area += w;
                         }
                     }
+                    let weight = u32::try_from(area.div_ceil(ux * uy)).map_err(|_| resource())?;
                     dst.support[i] = weight;
                     // Strictly greater keeps the first row-major value on ties.
                     let mut best = (empty_pixel(class), 0u64);
@@ -426,16 +458,19 @@ pub(in crate::mesh_large) fn build_islands(
                     continue;
                 }
                 let mut sum = [0.0; 4];
-                let mut weight = 0u32;
+                let mut weight = 0f64;
+                let mut area = 0u64;
                 let mut dominant = [0.0, 0.0, 1.0];
-                let mut dominant_weight = 0u32;
-                for sy in y * 2..(y * 2 + 2).min(src.height as usize) {
-                    for sx in x * 2..(x * 2 + 2).min(sw) {
+                let mut dominant_weight = 0u64;
+                for &(sy, wy) in &ty[..ny] {
+                    for &(sx, wx) in &tx[..nx] {
                         let i = sy * sw + sx;
                         let s = src.support[i];
                         if s == 0 {
                             continue;
                         }
+                        // Exact halving weighs each child by its support alone (wx = wy = 1).
+                        let w = u64::from(s) * wx * wy;
                         let p = &src.rgba[i * 4..i * 4 + 4];
                         let rgb = match class {
                             Class::Colour => std::array::from_fn(|a| decode_colour(p[a])),
@@ -443,20 +478,21 @@ pub(in crate::mesh_large) fn build_islands(
                             Class::Normal => unit(normal(p))?,
                             Class::Id => unreachable!("ID footprints take the mode above"),
                         };
-                        if s > dominant_weight {
+                        if w > dominant_weight {
                             dominant = rgb;
-                            dominant_weight = s;
+                            dominant_weight = w;
                         }
                         for (a, &v) in rgb.iter().enumerate() {
-                            sum[a] += v * f64::from(s);
+                            sum[a] += v * w as f64;
                         }
-                        sum[3] += f64::from(p[3]) / 255.0 * f64::from(s);
-                        weight = weight.checked_add(s).ok_or_else(resource)?;
+                        sum[3] += f64::from(p[3]) / 255.0 * w as f64;
+                        weight += w as f64;
+                        area += w;
                     }
                 }
                 let i = y * dw as usize + x;
-                dst.support[i] = weight;
-                if weight == 0 {
+                dst.support[i] = u32::try_from(area.div_ceil(ux * uy)).map_err(|_| resource())?;
+                if area == 0 {
                     dst.rgba[i * 4..i * 4 + 4].copy_from_slice(&empty_pixel(class));
                     continue;
                 }
@@ -467,7 +503,7 @@ pub(in crate::mesh_large) fn build_islands(
                         unit([sum[0], sum[1], sum[2]])?
                     }
                 } else {
-                    std::array::from_fn(|a| sum[a] / f64::from(weight))
+                    std::array::from_fn(|a| sum[a] / weight)
                 };
                 for (a, &v) in rgb.iter().enumerate() {
                     dst.rgba[i * 4 + a] = match class {
@@ -477,7 +513,7 @@ pub(in crate::mesh_large) fn build_islands(
                         Class::Id => unreachable!("ID footprints take the mode above"),
                     };
                 }
-                dst.rgba[i * 4 + 3] = quant(sum[3] / f64::from(weight));
+                dst.rgba[i * 4 + 3] = quant(sum[3] / weight);
             }
         }
         fill_gutters(&mut dst, class, &mut nearest, level_labels.as_deref());
@@ -680,5 +716,42 @@ mod tests {
                 .kind(),
             JobErrorKind::ResourceLimit
         );
+    }
+
+    /// Review round 3 probe 1: an 88x24 page whose only island (one white 8x8 signal
+    /// block at x 72..80) sits at the right edge, grid 8, gutters 8. Floor-halved odd
+    /// levels (11 -> 5 -> 2 -> 1 columns) reduce by area overlap, so the island never
+    /// vanishes: every level keeps support and its white signal.
+    #[test]
+    fn odd_reductions_never_drop_an_island() {
+        let (w, h) = (88u32, 24u32);
+        let mut pixels = vec![0; (w * h * 4) as usize];
+        let mut support = vec![0; (w * h) as usize];
+        let mut labels = vec![0; (w * h) as usize];
+        for y in 0..h {
+            for x in 64..w {
+                labels[(y * w + x) as usize] = 1;
+            }
+        }
+        for y in 8..16 {
+            for x in 72..80 {
+                let i = (y * w + x) as usize;
+                support[i] = 1;
+                pixels[i * 4..i * 4 + 4].copy_from_slice(&[255; 4]);
+            }
+        }
+        let c = build_islands(w, h, &pixels, &support, Some(&labels), 3, Class::Data, 1 << 24).unwrap();
+        let last = c.levels.last().unwrap();
+        assert_eq!([last.width, last.height], [1, 1]);
+        for (k, l) in c.levels.iter().enumerate() {
+            let best = (0..l.support.len())
+                .filter(|&i| l.support[i] > 0)
+                .map(|i| l.rgba[i * 4])
+                .max();
+            assert_eq!(best, Some(255), "level {k} ({}x{}) lost the island", l.width, l.height);
+        }
+        // Odd taps cover the whole footprint: three columns 2:2:1 for 5 -> 2.
+        assert_eq!(taps(1, 5, 2).1, 3);
+        assert_eq!(taps(1, 5, 2).0[..3].iter().map(|t| t.1).sum::<u64>(), 5);
     }
 }

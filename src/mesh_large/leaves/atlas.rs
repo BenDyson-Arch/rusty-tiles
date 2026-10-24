@@ -1027,9 +1027,17 @@ fn encode_page(
                         let src = y as usize * row;
                         rgba[dst..dst + row].copy_from_slice(&copied[src..src + row]);
                     }
-                    for y in crop.gutter..crop.gutter + crop.interior_height {
-                        let first = ((oy + y) * page.width + ox + crop.gutter) as usize;
-                        support[first..first + crop.interior_width as usize].fill(1);
+                    // Mipmapped islands: the whole allocation is real source under the
+                    // sampler's wrap (copy_crop), so every level through K is the
+                    // area-weighted source average over its footprint, gutters included.
+                    let (from, rows, cols) = if mipmapped {
+                        (0, crop.height, crop.width)
+                    } else {
+                        (crop.gutter, crop.interior_height, crop.interior_width)
+                    };
+                    for y in from..from + rows {
+                        let first = ((oy + y) * page.width + ox + from) as usize;
+                        support[first..first + cols as usize].fill(1);
                     }
                     if mipmapped {
                         next_label += 1;
