@@ -1091,6 +1091,15 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
     let json = cli.json;
     Ok(match cli.command {
         Command::Mesh(a) => {
+            // The whole request is checked before any file (offset file, source) is read.
+            rusty_tiles::check_memory_budget_request(a.lod, a.memory_budget).map_err(|error| {
+                rusty_tiles::JobFailure {
+                    error,
+                    secondary: Vec::new(),
+                    retained_paths: Vec::new(),
+                    recovery: None,
+                }
+            })?;
             let mut request = TilerRequest::new(a.io.input, a.io.output)
                 .with_profile(a.profile)
                 .with_jobs(a.jobs)

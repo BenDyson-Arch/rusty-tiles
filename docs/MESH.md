@@ -218,7 +218,9 @@ they are an appearance approximation of the surface, with no appearance
 certificate.
 
 Coarse pages go through the same delivery encoder, gates and escalation ladder as
-leaf pages, so a profile chooses one colour codec for both:
+leaf pages, so a profile chooses one colour codec for both. The ETC1S defaults
+below come from the separate default-codec change (#277); a build without it keeps
+its previous `fast`/`balanced` colour codec, and this table is correct once it lands.
 
 | Profile | Colour pages (leaves and coarse) |
 | --- | --- |

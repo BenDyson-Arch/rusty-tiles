@@ -1,6 +1,8 @@
 """Exercise the installed native extension using only the Python standard library."""
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+import contextlib
+import io
 import importlib.metadata
 import hashlib
 import json
@@ -302,6 +304,51 @@ class WheelAPI(unittest.TestCase):
         with self.assertRaises(rusty_tiles.InvalidRequestError):
             rusty_tiles.mesh_to_tileset(source, output, _lod="octree")
 
+    def test_tiler_budget_ignores_overridable_int_methods_and_checks_before_any_file(self):
+        class Liar(int):
+            """An int whose Python-level conversions all claim a valid budget."""
+            def __str__(self):
+                return "2147483648"
+            __repr__ = __str__
+            def __index__(self):
+                return 2147483648
+            def __int__(self):
+                return 2147483648
+            def __format__(self, spec):
+                return "2147483648"
+
+        source = self.root / "missing.glb"
+        output = self.root / "liar.3tz"
+        for value in (-1, 0, 2**64, 2**200):
+            with self.subTest(value=value):
+                with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+                    rusty_tiles.mesh_to_tileset(source, output, _lod="hlod",
+                                                _memory_budget_bytes=Liar(value))
+                self.assertIn("memory budget", str(caught.exception))
+        # A genuine value in a subclass is still accepted and reaches the (missing) source.
+        with self.assertRaises(rusty_tiles.TilesIOError):
+            rusty_tiles.mesh_to_tileset(source, output, _lod="hlod",
+                                        _memory_budget_bytes=Liar(2 << 30))
+        # The request is refused before the offset file is read: the budget is invalid for the
+        # default method, and the missing offset file would otherwise be an I/O error.
+        missing_offset = self.root / "no-such-offset.txt"
+        for options in ({}, {"_lod": "h17"}):
+            with self.subTest(options=options):
+                with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+                    rusty_tiles.mesh_to_tileset(
+                        source, output, source_crs="EPSG:3857",
+                        source_offset_file=missing_offset, _memory_budget_bytes=2 << 30,
+                        **options)
+                self.assertEqual(caught.exception.kind, "invalid_request")
+                self.assertIn("memory budget", str(caught.exception))
+        # With a compatible request the offset file is read, so the same call is an I/O error.
+        with self.assertRaises(rusty_tiles.TilesError) as caught:
+            rusty_tiles.mesh_to_tileset(
+                source, output, source_crs="EPSG:3857", source_offset_file=missing_offset,
+                _lod="hlod", _memory_budget_bytes=2 << 30)
+        self.assertNotIsInstance(caught.exception, rusty_tiles.InvalidRequestError)
+        self.assertFalse(output.exists())
+
     def test_tiler_hlod_installed_run_reports_budget_and_keeps_callback_semantics(self):
         source = self.root / "grid.glb"
         write_grid_mesh(source)
@@ -397,9 +444,18 @@ class WheelAPI(unittest.TestCase):
         documented = {"input", "output", "profile", "jobs", "scratch_dir",
                       "anchor", "orientation_xyzw", "scene_offset", "source_crs", "source_axes",
                       "source_offset", "source_offset_file", "height_offset", "force", "callback"}
-        # The private selector and budget are installed but never documented as options.
-        self.assertEqual(installed - documented, {"_lod", "_memory_budget_bytes"})
+        # The private selector and budget travel through **kwargs: no signature or help() names
+        # them, and any other keyword is still a TypeError.
+        self.assertEqual(installed - documented, {"kwargs"})
         self.assertLessEqual(documented, installed)
+        shown = io.StringIO()
+        with contextlib.redirect_stdout(shown):
+            help(rusty_tiles.mesh_to_tileset)
+        for hidden in ("_lod", "memory_budget", "hlod"):
+            self.assertNotIn(hidden, shown.getvalue() + str(inspect.signature(rusty_tiles.mesh_to_tileset))
+                             + (rusty_tiles.mesh_to_tileset.__doc__ or ""))
+        with self.assertRaises(TypeError):
+            rusty_tiles.mesh_to_tileset(self.root / "x.glb", self.root / "x.3tz", _lod_typo="hlod")
         for name in ("docs/MESH.md", "bindings/python/README.md"):
             text = (ROOT / name).read_text()
             self.assertNotIn("_lod", text, name)

@@ -344,8 +344,9 @@ fn tiler_jobs(py: Python<'_>, jobs: Option<Bound<'_, PyAny>>) -> PyResult<TilerJ
 }
 
 /// The private memory budget: an integer byte count (not a bool), refused as an invalid request
-/// when zero, negative or beyond 2^64 - 1. The conversion to decimal text lets the shared
-/// core parser own every rule, so the CLI and Python refuse identically.
+/// when zero, negative or beyond 2^64 - 1. The value is rendered with the base `int.__repr__`
+/// (never the object's own `__str__`, which an `int` subclass may override) and parsed by the
+/// shared core parser, so the CLI and Python refuse identically.
 fn tiler_memory_budget(py: Python<'_>, budget: Option<Bound<'_, PyAny>>) -> PyResult<Option<u64>> {
     let Some(budget) = budget else {
         return Ok(None);
@@ -355,20 +356,50 @@ fn tiler_memory_budget(py: Python<'_>, budget: Option<Bound<'_, PyAny>>) -> PyRe
             "_memory_budget_bytes must be an integer byte count or None",
         ));
     }
-    let text = budget
-        .str()
+    let text = py
+        .get_type::<PyInt>()
+        .getattr("__repr__")
+        .and_then(|repr| repr.call1((&budget,)))
         .and_then(|text| text.extract::<String>())
+        // An integer too long for Python's own decimal conversion limit is far past 2^64.
         .unwrap_or_else(|_| "9".repeat(64));
     tiles_core::parse_memory_budget(&text)
         .map(Some)
         .map_err(|error| tiler_request_error(py, error))
 }
 
+/// The private options of `mesh_to_tileset`, taken through `**kwargs` so that they appear in
+/// neither `help()` nor `inspect.signature()`: `_lod` (the coarse-tile method) and
+/// `_memory_budget_bytes`. Any other keyword is the usual `TypeError`.
+fn private_options<'py>(
+    kwargs: Option<&Bound<'py, PyDict>>,
+) -> PyResult<(Option<String>, Option<Bound<'py, PyAny>>)> {
+    let (mut lod, mut budget) = (None, None);
+    for (key, value) in kwargs.into_iter().flat_map(|kwargs| kwargs.iter()) {
+        match key.extract::<String>()?.as_str() {
+            "_lod" if value.is_none() => {}
+            "_lod" => {
+                lod = Some(value.extract::<String>().map_err(|_| {
+                    PyTypeError::new_err("_lod must be a string or None")
+                })?)
+            }
+            "_memory_budget_bytes" if value.is_none() => {}
+            "_memory_budget_bytes" => budget = Some(value),
+            other => {
+                return Err(PyTypeError::new_err(format!(
+                    "mesh_to_tileset() got an unexpected keyword argument '{other}'"
+                )))
+            }
+        }
+    }
+    Ok((lod, budget))
+}
+
 /// Stream an admitted static mesh into one Tiles 1.1 .3tz: local metre/Y-up, or a declared
 /// source CRS mapped at capture. Profiles are provisional; jobs is a resource-capped
 /// maximum, and None means auto.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None, _lod=None, _memory_budget_bytes=None))]
+#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None, **kwargs))]
 #[allow(clippy::too_many_arguments)]
 fn mesh_to_tileset(
     py: Python<'_>,
@@ -387,20 +418,20 @@ fn mesh_to_tileset(
     height_offset: Option<f64>,
     force: bool,
     callback: Option<Py<PyAny>>,
-    // Private coarse-tile selector ("h17" or "hlod"), the CLI's hidden `--lod`. Undocumented
-    // and unsupported; it goes when HLOD becomes the only method.
-    _lod: Option<&str>,
-    // Private memory budget in bytes, hidden like `_lod` until HLOD is the default.
-    _memory_budget_bytes: Option<Bound<'_, PyAny>>,
+    kwargs: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<TilerResult> {
     let profile = profile
         .parse::<TilerProfile>()
         .map_err(|error| tiler_request_error(py, error))?;
     let jobs = tiler_jobs(py, jobs)?;
-    let memory_budget = tiler_memory_budget(py, _memory_budget_bytes)?;
-    let lod = _lod
-        .map(str::parse::<TilerLod>)
+    let (lod, budget) = private_options(kwargs)?;
+    let memory_budget = tiler_memory_budget(py, budget)?;
+    let lod = lod
+        .map(|lod| lod.parse::<TilerLod>())
         .transpose()
+        .map_err(|error| tiler_request_error(py, error))?;
+    // The whole request is checked before any file (an offset file, then the source) is read.
+    tiles_core::check_memory_budget_request(lod.unwrap_or_default(), memory_budget)
         .map_err(|error| tiler_request_error(py, error))?;
     let source_axes = source_axes
         .map(|axes| match axes {

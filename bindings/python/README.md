@@ -90,9 +90,9 @@ with the CLI's rules; it excludes the rigid placement keywords and `None` or
 texture-format selector, explicit mode or coarse-tile tuning.
 All four profile names (`fast`, default `balanced`, `quality`, `lossless`) are
 provisional; constants will be calibrated together as HLOD acceptance
-progresses. Base-colour and emissive pages, leaf and coarse, are KTX2 ETC1S
-(quality 50 in `fast`, 90 in `balanced`), UASTC in `quality` and PNG in
-`lossless`; KTX2/Basis and meshopt are in-process, and JPEG source decoding
+progresses. Once the separate default-codec change (#277) lands, base-colour and
+emissive pages, leaf and coarse, are KTX2 ETC1S (quality 50 in `fast`, 90 in
+`balanced`), UASTC in `quality` and PNG in `lossless`; KTX2/Basis and meshopt are in-process, and JPEG source decoding
 remains supported.
 
 A lossy texture page that misses a decoded-image gate is re-encoded at UASTC

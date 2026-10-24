@@ -341,11 +341,19 @@ fn invalid(message: &str) -> JobError {
 /// Budget request rules, before any filesystem access: positive, and only for a coarse-tile
 /// method that enforces one.
 fn check_memory_budget(request: &TilerRequest) -> Result<(), JobError> {
-    let Some(bytes) = request.memory_budget else {
+    check_memory_budget_request(request.lod, request.memory_budget)
+}
+
+/// The budget rules of one request, for frontends that resolve files (an offset file, say)
+/// before they build a [`TilerRequest`]: they call this first, so no file is read for a
+/// request that is already invalid.
+#[doc(hidden)]
+pub fn check_memory_budget_request(lod: TilerLod, budget: Option<u64>) -> Result<(), JobError> {
+    let Some(bytes) = budget else {
         return Ok(());
     };
     super::resources::validate_memory_budget(bytes)?;
-    match request.lod {
+    match lod {
         TilerLod::Hlod => Ok(()),
         TilerLod::H17 => Err(invalid(
             "a memory budget is not yet accepted by the current default coarse-tile method, \

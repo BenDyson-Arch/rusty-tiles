@@ -50,7 +50,7 @@ pub use mesh_large::{
 // the default.
 #[doc(hidden)]
 pub use mesh_large::{
-    parse_memory_budget, validate_memory_budget, BudgetSource, HlodDiagnostics, HlodMemoryPlan,
+    check_memory_budget_request, parse_memory_budget, validate_memory_budget, BudgetSource, HlodDiagnostics, HlodMemoryPlan,
     MemoryBudget, MemoryDiagnostics, TilerLod,
 };
 pub use pack::{validate_3tz, TZ_INDEX_NAME};

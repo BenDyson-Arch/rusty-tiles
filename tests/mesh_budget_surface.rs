@@ -152,6 +152,44 @@ fn rust_request_refuses_zero_and_the_default_method_before_any_path_check() {
 }
 
 #[test]
+fn budget_is_refused_before_the_offset_file_or_source_is_read() {
+    // The default method cannot take a budget; the missing offset file would be an `io` error
+    // if it were read first, and the missing source would fail after it.
+    let work = tempfile::tempdir().unwrap();
+    let missing = work.path().join("missing.glb");
+    let offset = work.path().join("no-such-offset.txt");
+    let output = work.path().join("out.3tz");
+    let offset = offset.to_str().unwrap();
+    let options = |lod: &[&'static str]| {
+        let mut args = vec![
+            "--source-crs",
+            "EPSG:3857",
+            "--source-offset-file",
+            offset,
+            "--memory-budget",
+            "2GiB",
+        ];
+        args.extend(lod);
+        args
+    };
+    let result = cli(&missing, &output, &options(&[]));
+    assert_eq!(result.status.code(), Some(2));
+    let error = error_of(&result);
+    assert_eq!(error["kind"], "invalid_request", "{error}");
+    assert!(error["message"].as_str().unwrap().contains("memory budget"));
+    assert!(!output.exists());
+    // A compatible request does read the offset file, which proves the order is deliberate.
+    let result = cli(&missing, &output, &options(&["--lod", "hlod"]));
+    let error = error_of(&result);
+    assert_ne!(error["code"], "usage");
+    assert!(
+        !error["message"].as_str().unwrap().contains("memory budget"),
+        "{error}"
+    );
+    assert!(!output.exists());
+}
+
+#[test]
 fn default_method_refuses_a_budget_on_the_cli_and_writes_nothing() {
     let work = tempfile::tempdir().unwrap();
     let input = work.path().join("grid.glb");
