@@ -26,11 +26,11 @@
       "tileset.json": "503a7e4ed586249e9ed9cb77cda6efd3729a03a9afbdcfe523788b4af35c520d"
     },
     "mesh-balanced": {
-      "#archive": "46d8c2503b57a30ad8d02e2956b182bc8a08f342e7375bbddd650ede0dad597c",
+      "#archive": "3682d6f9112a742b42ceec80b0b17a40a9a263242a58b7d125d664273796f9db",
       "#order": "b4a31f26344da2d224b707fa34c3666cae34c1fed5951021a25c9bf4b8050879",
-      "@3dtilesIndex1@": "e6750e1be4945e40df76846b75494e940222f263a57a8a0f6a99c766e25b30f2",
-      "content/f0-d0.glb": "72d6c8ac1718dcef44bff40211bc26e99fa4387944a6c82679ec27cadfe47c36",
-      "conversion.json": "32948d426bbb85b94b55ec98fd3c64cc91eacfe147a2cfab045bba202e118625",
+      "@3dtilesIndex1@": "da7112269e2851792468918ddd2725f450684dc86e54ed03bb04db5d6791acd3",
+      "content/f0-d0.glb": "4667c90866d35c301290a049e6b9fe6083e8d47f15de419a47305a241aa8fa15",
+      "conversion.json": "40b9d7e022dacacc9e185da6ec5dff20742816ec87c8e7422445aab2e6b63393",
       "tileset.json": "06ed1a350bc433c4ef1ed6e19147cecf56b740d2457ef972ca6687617ca80fe0"
     }
   }
