@@ -150,6 +150,8 @@ pub(crate) const RESOLVE_BYTES: u64 = (CHUNK as u64)
     * (std::mem::size_of::<(u64, [f32; 3], f32)>() + 8 + std::mem::size_of::<(u64, Donor)>())
         as u64
     + RUN_SPAN * 2 * std::mem::size_of::<FullTriangle>() as u64
+    // Donor-search frontiers: at most two entries pushed per budgeted step.
+    + DONOR_SEARCH_STEPS * 2 * 128
     + (1 << 20);
 
 /// Tiles whose descendant source range has at most this many triangles answer the bake's

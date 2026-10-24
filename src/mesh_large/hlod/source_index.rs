@@ -359,8 +359,10 @@ impl Surface {
             } else {
                 for c in [n.left, n.right] {
                     let child = &self.nodes[c as usize];
-                    if child.intersects(key) {
-                        frontier.push(Reverse((child.distance(p).to_bits(), c)));
+                    // A box farther than the best so far could never be explored.
+                    let d = child.distance(p);
+                    if child.intersects(key) && d <= best.distance2 {
+                        frontier.push(Reverse((d.to_bits(), c)));
                     }
                 }
             }
@@ -648,6 +650,7 @@ impl SourceIndex {
             tri_buf: Vec::new(),
             full_buf: Vec::new(),
             block_bytes: 0,
+            frontier_entries: Vec::new(),
             region: Vec::new(),
             region_root: 0,
             block_limit: CACHE_BLOCKS,
@@ -698,6 +701,8 @@ pub(crate) struct SourceQuery<'a> {
     tri_buf: Vec<Triangle>,
     full_buf: Vec<FullTriangle>,
     block_bytes: usize,
+    /// Reused frontier entries of [`SourceQuery::nearest_budget`].
+    frontier_entries: Vec<(Node, Option<[Visit; 2]>)>,
     region: Vec<Region>,
     region_root: u32,
     block_limit: usize,
@@ -945,7 +950,8 @@ impl SourceQuery<'_> {
         if best.distance2.is_finite() {
             budget.spend();
         }
-        let mut entries: Vec<(Node, Option<[Visit; 2]>)> = Vec::new();
+        let mut entries = std::mem::take(&mut self.frontier_entries);
+        entries.clear();
         entries.push(self.visit(Visit::Resident(self.region_root))?);
         frontier.clear();
         frontier.push(Reverse((entries[0].0.distance(p).to_bits(), 0)));
@@ -971,13 +977,15 @@ impl SourceQuery<'_> {
                     children.ok_or_else(|| state("source branch without children"))?;
                 for v in [left, right] {
                     let child = self.visit(v)?;
-                    if child.0.intersects(self.key) {
-                        frontier.push(Reverse((child.0.distance(p).to_bits(), entries.len() as u64)));
+                    let d = child.0.distance(p);
+                    if child.0.intersects(self.key) && d <= best.distance2 {
+                        frontier.push(Reverse((d.to_bits(), entries.len() as u64)));
                         entries.push(child);
                     }
                 }
             }
         }
+        self.frontier_entries = entries;
         if !best.distance2.is_finite() {
             return Err(state("source nearest query has no finite witness"));
         }
