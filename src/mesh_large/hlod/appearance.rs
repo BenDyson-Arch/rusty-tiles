@@ -47,9 +47,22 @@ pub(crate) const TILE_TEXELS: u64 = 1 << 20;
 /// Least allowance per group face, so any group fits at zero scale (one gutter-wrapped
 /// chart per face, packed).
 const FACE_TEXELS: u64 = 64;
-/// Encoded page bytes one coarse tile may publish over every slot and group (well under
-/// D5's 96 MiB complete tile); more is a typed refusal, never a silent drop.
-pub(crate) const TILE_PAGE_BYTES: u64 = 48 << 20;
+/// Encoded bytes per page texel bounding every delivery form: PNG RGBA (4 B plus row
+/// filter and zlib framing) and KTX2 with its mips (UASTC 4/3 B, ETC1S less).
+const PAGE_BYTES_PER_TEXEL: f64 = 4.5;
+/// Container bytes per page beyond its texels (KTX2 header, level index, DFD; PNG chunks).
+const PAGE_OVERHEAD: u64 = 2048;
+
+/// Encoded page bytes one coarse tile can publish over every slot and group: each slot's
+/// page texels are within the tile budget plus the per-face floor, and a tile has at most
+/// `min(cap, classes)` groups. Exceeding it is a typed refusal, never a silent drop.
+pub(crate) fn tile_page_bytes(slots: u64, classes: u64, cap: u64) -> u64 {
+    let texels = TILE_TEXELS + FACE_TEXELS * cap;
+    slots.saturating_mul(
+        ((texels as f64 * PAGE_BYTES_PER_TEXEL) as u64)
+            .saturating_add(classes.min(cap).saturating_mul(PAGE_OVERHEAD)),
+    )
+}
 /// Finest requested spacing (D5's `1e-5 m` floor).
 const MIN_SPACING: f64 = 1e-5;
 
@@ -66,6 +79,8 @@ pub(crate) struct Services<'a> {
     pub max_edge: u32,
     /// Per-page encoder workspace ceiling (the job's admitted page charge).
     pub page_memory: u64,
+    /// Encoded page bytes a tile may publish ([`tile_page_bytes`], admitted twice).
+    pub tile_page_bytes: u64,
     /// The run carries COLOR_0 / NORMAL somewhere.
     pub colors: bool,
     pub normals: bool,
@@ -353,10 +368,13 @@ pub(crate) fn build(
                 (&mut timing, &mut facts),
             )?;
             page_bytes += group.pages.iter().map(|p| p.bytes.len() as u64).sum::<u64>();
-            if page_bytes > TILE_PAGE_BYTES {
+            if page_bytes > services.tile_page_bytes {
                 return Err(JobError::new(
-                    JobErrorKind::Unsupported,
-                    format!("coarse tile pages exceed {TILE_PAGE_BYTES} encoded bytes"),
+                    JobErrorKind::InvalidState,
+                    format!(
+                        "coarse tile pages exceed their admitted {} encoded bytes",
+                        services.tile_page_bytes
+                    ),
                 ));
             }
         } else {

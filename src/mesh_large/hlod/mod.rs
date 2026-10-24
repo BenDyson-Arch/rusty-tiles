@@ -145,6 +145,8 @@ pub struct HlodMemoryPlan {
     pub image_cache_bytes: u64,
     /// Encoder workspace ceiling of one coarse page.
     pub page_bytes: u64,
+    /// Encoded page bytes one coarse tile may publish (admitted twice: pages and GLB).
+    pub tile_page_bytes: u64,
     pub jobs: u64,
     pub jobs_limited_by: &'static str,
 }
@@ -154,6 +156,7 @@ struct AppearancePlan {
     texture: u64,
     color: u64,
     page: u64,
+    tile_pages: u64,
     cache_floor: u64,
     cache_total: u64,
 }
@@ -183,6 +186,7 @@ fn appearance_plan(
             texture: 0,
             color,
             page: 0,
+            tile_pages: 0,
             cache_floor: 0,
             cache_total: 0,
         });
@@ -211,11 +215,12 @@ fn appearance_plan(
         .saturating_add(32 << 20)
         .saturating_add(largest_chain);
     // One group's page workspace at a time, plus the tile's delivered pages and the GLB
-    // being assembled from them (each at most TILE_PAGE_BYTES).
+    // being assembled from them (each at most `tile_pages`).
+    let tile_pages = appearance::tile_page_bytes(slots, captured.materials.len() as u64, cap as u64);
     let texture = texels
         .saturating_mul(QUERY_BYTES_PER_TEXEL)
         .saturating_add(CHUNK_BYTES)
-        .saturating_add(2 * appearance::TILE_PAGE_BYTES)
+        .saturating_add(tile_pages.saturating_mul(2))
         .saturating_add(page)
         .saturating_add(decode);
     let cache_total = captured.image_info.iter().fold(0u64, |n, i| {
@@ -225,6 +230,7 @@ fn appearance_plan(
         texture,
         color,
         page,
+        tile_pages,
         cache_floor: largest_chain.min(cache_total),
         cache_total,
     })
@@ -332,6 +338,7 @@ pub(crate) fn plan(
         color_workspace_bytes: appearance.color,
         image_cache_bytes: image_cache,
         page_bytes: appearance.page,
+        tile_page_bytes: appearance.tile_pages,
         jobs,
         jobs_limited_by: limited_by,
     })
@@ -1154,6 +1161,7 @@ fn walk(
         profile: input.config.profile,
         max_edge: appearance::MAX_PAGE_EDGE,
         page_memory: plan.page_bytes,
+        tile_page_bytes: plan.tile_page_bytes,
         colors: layout & super::attributes::COLOR != 0,
         normals: layout & super::attributes::NORMAL != 0,
         check,
