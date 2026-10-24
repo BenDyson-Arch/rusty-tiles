@@ -131,6 +131,11 @@ fn prepare_with_close(
         }
         standalone(path)?;
         native::init().map_err(native_error)?;
+        // SAFETY: init registered the process-lifetime drivers; lookup only reads
+        // the registry. A missing reader is a capability failure, not bad DEM data.
+        if unsafe { gdal_sys::GDALGetDriverByName(c"GTiff".as_ptr()) }.is_null() {
+            return Err(unsupported("linked GDAL lacks the GTiff driver"));
+        }
         let filename = native::c_path(path).map_err(native_error)?;
         let sibling = CString::new(
             path.file_name()

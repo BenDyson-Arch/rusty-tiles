@@ -16,7 +16,8 @@
 mod support;
 
 use serde_json::{json, Value};
-use std::{collections::BTreeMap, fs, path::Path};
+use sha2::{Digest, Sha256};
+use std::{collections::BTreeMap, fs, io::Read, path::Path};
 use support::{digests, enabled_recipes, recipes, run, write_inputs};
 
 type Digests = BTreeMap<String, BTreeMap<String, String>>;
@@ -50,6 +51,31 @@ fn committed_path() -> std::path::PathBuf {
     support::repo_root().join("tests/fixtures/output_digests.json")
 }
 
+fn assert_etc1s_colour(path: &Path) {
+    let mut archive = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
+    let mut pages = 0;
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).unwrap();
+        if !entry.name().ends_with(".glb") {
+            continue;
+        }
+        let mut glb = Vec::new();
+        entry.read_to_end(&mut glb).unwrap();
+        let json_len = u32::from_le_bytes(glb[12..16].try_into().unwrap()) as usize;
+        let document: Value = serde_json::from_slice(&glb[20..20 + json_len]).unwrap();
+        for image in document["images"].as_array().into_iter().flatten() {
+            assert_eq!(image["mimeType"], "image/ktx2");
+            let view = &document["bufferViews"][image["bufferView"].as_u64().unwrap() as usize];
+            let start = 28 + json_len + view["byteOffset"].as_u64().unwrap_or(0) as usize;
+            let ktx = &glb[start..];
+            let dfd = u32::from_le_bytes(ktx[48..52].try_into().unwrap()) as usize;
+            assert_eq!(ktx[dfd + 12], 163, "balanced golden must exercise ETC1S");
+            pages += 1;
+        }
+    }
+    assert!(pages > 0, "balanced golden must contain lossy colour pages");
+}
+
 fn produce(inputs: &Path, outputs: &Path) -> Digests {
     fs::create_dir_all(outputs).unwrap();
     let mut all = Digests::new();
@@ -61,10 +87,18 @@ fn produce(inputs: &Path, outputs: &Path) -> Digests {
             recipe.name,
             String::from_utf8_lossy(&result.stderr)
         );
-        all.insert(
-            recipe.name.into(),
-            digests(&outputs.join(recipe.output), recipe.vector),
-        );
+        let path = outputs.join(recipe.output);
+        let mut entries = digests(&path, recipe.vector);
+        if recipe.name == "mesh-balanced" {
+            assert_etc1s_colour(&path);
+            // One complete default-lossy archive is pinned in addition to its
+            // entry digests/order. The recipe deliberately omits --profile.
+            entries.insert(
+                "#archive".into(),
+                format!("{:x}", Sha256::digest(fs::read(path).unwrap())),
+            );
+        }
+        all.insert(recipe.name.into(), entries);
     }
     all
 }
@@ -119,7 +153,7 @@ fn outputs_match_committed_digests() {
     let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
     if std::env::var_os("UPDATE_OUTPUT_DIGESTS").is_some_and(|v| v == "1") {
         let file = json!({
-            "about": "sha256 per output entry of the GDAL-independent recipes in tests/support/mod.rs ('#order' hashes the archive entry order). Regenerate with UPDATE_OUTPUT_DIGESTS=1 cargo test --test output_digests.",
+            "about": "sha256 per output entry of the GDAL-independent recipes in tests/support/mod.rs ('#order' hashes entry order; '#archive' pins the complete default balanced mesh archive). Regenerate with UPDATE_OUTPUT_DIGESTS=1 cargo test --test output_digests.",
             "platform": platform,
             "recipes": produced,
         });

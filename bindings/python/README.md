@@ -347,7 +347,9 @@ output.
 the bounded raster directory request/error boundary. The standard wheel has no GDAL raster capability
 and raises `UnsupportedError` without creating output or invoking callbacks;
 invalid XYZ requests raise `InvalidRequestError` first. No native wheel or pip
-extra is introduced. The native Rust/CLI profile and filesystem guarantees are
+extra is introduced. R2 imagery pyramid conversion is a native Rust/CLI capability.
+Python exports none of `raster_to_pyramid`, `RasterRequest` or `RasterDisplay`.
+The native Rust/CLI profile and filesystem guarantees are
 specified in `docs/architecture/d1-raster-contract.md` and
 `docs/architecture/d1-directory-contract.md`.
 

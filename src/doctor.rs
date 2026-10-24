@@ -508,12 +508,10 @@ impl Resolver<'_> {
         }
     }
 
-    /// Terrain and D1 open sources only through the GDAL GTiff driver. Their
-    /// producers export no capability check: they run `native::init` and then
-    /// fail to open the source. Doctor therefore composes the GTiff driver from
-    /// the raster driver inventory and refuses it as unsupported, while those
-    /// producers currently report the failed open as invalid_input
-    /// (`terrain/raster.rs`, `raster_directory/native.rs`); see the T1 contract.
+    /// Terrain and D1 open sources only through the GDAL GTiff driver. Doctor
+    /// composes that capability from the raster driver inventory. Terrain also
+    /// checks it before source open; D1 currently classifies the failed open as
+    /// invalid_input (`raster_directory/native.rs`).
     fn gtiff_product(
         &mut self,
         backend: &'static str,
