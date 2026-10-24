@@ -54,10 +54,14 @@ class Store:
           CREATE TABLE points(id INTEGER PRIMARY KEY, xyz BLOB UNIQUE, rendered BLOB,
             tx REAL DEFAULT 0,ty REAL DEFAULT 0,tz REAL DEFAULT 0,
             x0 REAL,x1 REAL,y0 REAL,y1 REAL,z0 REAL,z1 REAL,conflict INTEGER DEFAULT 0);
+          CREATE INDEX points_rendered ON points(rendered);
           CREATE TABLE owners(point INTEGER, leaf INTEGER, PRIMARY KEY(point,leaf)) WITHOUT ROWID;
           CREATE VIRTUAL TABLE point_box USING rtree(id,x0,x1,y0,y1,z0,z1);
-          CREATE TABLE edges(a INTEGER,b INTEGER,leaf INTEGER,PRIMARY KEY(a,b,leaf)) WITHOUT ROWID;
+          CREATE TABLE edges(a INTEGER,b INTEGER,leaf INTEGER,nf INTEGER,nr INTEGER,
+            PRIMARY KEY(a,b,leaf)) WITHOUT ROWID;
           CREATE INDEX edges_b ON edges(b,a,leaf);
+          CREATE TABLE source_shapes(shape BLOB,leaf INTEGER,sign INTEGER,
+            PRIMARY KEY(shape,leaf,sign)) WITHOUT ROWID;
           CREATE TABLE requirements(tile INTEGER,kind INTEGER,a INTEGER,b INTEGER,
             PRIMARY KEY(tile,kind,a,b)) WITHOUT ROWID;
           CREATE TABLE pairs(a INTEGER,b INTEGER,PRIMARY KEY(a,b)) WITHOUT ROWID;
@@ -139,8 +143,14 @@ class Store:
             for p,xyz in zip(ids,actual['xyz']):
                 self.observe_point(p,xyz,tolerance)
         self.db.executemany('INSERT OR IGNORE INTO owners VALUES (?,?)', ((p,leaf) for p in ids))
-        self.db.executemany('INSERT OR IGNORE INTO edges VALUES (?,?,?)',
-                            ((*sorted((ids[k],ids[(k+1)%3])),leaf) for k in range(3)))
+        self.db.executemany('INSERT INTO edges(a,b,leaf,nf,nr) VALUES (?,?,?,?,?) '
+                            'ON CONFLICT(a,b,leaf) DO UPDATE SET nf=nf+excluded.nf,nr=nr+excluded.nr',
+                            ((*sorted((ids[k],ids[(k+1)%3])),leaf,
+                              int(ids[k]<ids[(k+1)%3]),int(ids[k]>ids[(k+1)%3])) for k in range(3)))
+        from winding import shape
+        key,sign=shape(actual['xyz'] if actual is not None else want['xyz'])
+        if key is not None:
+            self.db.execute('INSERT OR IGNORE INTO source_shapes VALUES (?,?,?)',(key,leaf,sign))
         return True
 
     def leaf_bounds(self, leaf):

@@ -41,10 +41,18 @@ A disk R-tree joins leaf contacts. Ancestor checks require consecutive border
 subsegments, corner/T points and matching interface incidences; root exterior
 incidences also have descendant orientation witnesses. Keeping just a T vertex
 cannot conceal a detour. Every candidate/interval visit and SQLite VM work is
-charged; dense queries refuse rather than truncate. Decoded quantization spacing
-and transforms supply tolerances, never producer error summaries. Native winding
+charged; dense queries refuse rather than truncate. Shared points and consecutive
+edge endpoints use exact decoded coordinates, with negative zero canonicalized.
+Encoding half-steps never excuse a delivered crack. Native winding
 checks cover interfaces/coincident exterior witnesses, not every isolated interior.
 Fresh coarse UV/source-pixel correspondence cannot be inferred from leaf UVs.
+
+One shared invertible root placement is removed before coordinate arithmetic.
+Relative tile transforms are conjugated by the mandatory glTF Y-up conversion;
+original-vertex joins use actual leaf references after placement. Raw scene
+admission refuses uncovered deformation, scene selection and moving extensions
+before advertising interface coverage. Geometry-neutral material extensions are
+admitted explicitly. Continuity still runs before a traversal-owned scene refusal.
 
 ## Independent real-archive oracle
 
@@ -78,6 +86,14 @@ check exact UVs/materials. Real textured leaves may legitimately crop/repack UVs
 and texture bindings: their material class/PBR constants/slot presence and
 rendered UV structure are checked, while UV/source-pixel correspondence is
 explicitly counted as uninspected. No large epsilon substitutes for image proof.
+
+Source position fidelity uses independently decoded accessor grids. Canonical
+leaf snapping may use the coarsest grid incident to an authoritative source
+point, so bounds are joined by source XYZ after all leaves are ingested. An
+unrelated coarse leaf cannot enlarge a point's bound. Shared delivered points
+must agree exactly, and ancestor matching has no encoding tolerance. The six
+permanent `lattice_controls.py` cases exercise order independence, incident-only
+bounds, decoded disagreement and a coarse gap smaller than half a codec step.
 
 `spatial.py` keeps archive-sized geometry/indexes on disk. R-tree candidate rows,
 leaf-box broadphase visits, descendant interval tests, segment-chain candidates

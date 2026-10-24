@@ -23,16 +23,19 @@ fn sampled_hlod_archives_and_named_mutants() {
         "{}",
         String::from_utf8_lossy(&generated.stderr)
     );
-    let lattice = Command::new("python3")
-        .arg(oracle.join("lattice_controls.py"))
-        .arg(tempfile::tempdir().unwrap().path())
-        .output()
-        .unwrap();
-    assert!(
-        lattice.status.success(),
-        "{}",
-        String::from_utf8_lossy(&lattice.stderr)
-    );
+    for name in ["lattice_controls.py", "winding_controls.py"] {
+        let probes = tempfile::tempdir().unwrap();
+        let result = Command::new("python3")
+            .arg(oracle.join(name))
+            .arg(probes.path())
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{name}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
     let hashes: Value =
         serde_json::from_slice(&fs::read(oracle.join("controls-sha256.json")).unwrap()).unwrap();
     for (name, expected) in hashes.as_object().unwrap() {

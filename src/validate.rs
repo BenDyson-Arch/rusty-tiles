@@ -3501,6 +3501,7 @@ fn inspect_run(
         .chain(contained.then_some("decodedContentContainment"))
         .chain(check.hlod_identity.then_some("hlodFeatureIds"))
         .chain(check.hlod_identity.then_some("interfaceSegments"))
+        .chain(check.hlod_identity.then_some("interfacePoints"))
         .chain(check.hlod_identity.then_some("interfaceWinding"))
         .map(String::from)
         .collect(),

@@ -284,6 +284,8 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
             require(leaf_count==len(manifest['triangles']),'leafCoverage',f'{leaf_count} != {len(manifest["triangles"])}')
             source_points=store.validate_leaf_points(require)
             result=store.census(tiles,leaves,require)
+            from winding import inspect as inspect_winding
+            result['winding']=inspect_winding(store,tiles,require)
             for t in tiles:
                 if not t['children']: continue
                 for f in store.faces(int(t['id'])):
@@ -296,10 +298,6 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                         representatives+=1
                     else: legacy+=1
                     require(material_class(f['material'])==material_class(want['material']),'representativeMaterialClass',t['id'])
-                    a,b=area_vector(f['xyz']),area_vector(want['xyz'])
-                    # Degenerate source faces have no defined winding.
-                    if sum(x*x for x in b)>1e-28:
-                        require(sum(x*y for x,y in zip(a,b))>0,'interfaceWinding',t['id'])
             result.update(ok=True,leafTriangles=leaf_count,tiles=len(tiles),representatives=representatives,
                           legacyCoarseTriangles=legacy,coordinateFrame=coordinate_frame,profile=profile,
                           leafSourcePointsChecked=source_points,
@@ -307,6 +305,7 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
             result['attributes']=dict(attributes)
             result['uninspected']=(['textured leaf UV/source-pixel correspondence: crop/repack transforms require independent image-content proof']
                                    if attributes['leafTexcoordCorrespondenceUninspected'] else [])
+            result['uninspected'].append('isolated interior coarse orientation without a coincident source face or directed retained-border witness; no continuous source-surface mapping is certified')
             return result
         finally:
             store.close()
