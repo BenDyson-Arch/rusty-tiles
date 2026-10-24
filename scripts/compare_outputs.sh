@@ -8,8 +8,8 @@
 # converter subcommand, generated inputs, PATH="", --reproducible where the
 # subcommand has it) with both binaries, and compares the sha256 of every
 # .3tz entry and every file of directory outputs. Only the vector encoder
-# fingerprints (encoder, signature, vectorBuildStateSha256 in tileset.json and
-# vector-build.json) are ignored. Without HEAD_REF the working tree is used.
+# fingerprints (encoder, signature, survey, vectorBuildStateSha256 in
+# tileset.json and vector-build.json) are ignored. Without HEAD_REF the working tree is used.
 #
 # Environment:
 #   FEATURES             cargo features (default native-geospatial; set empty
@@ -29,6 +29,9 @@ fi
 BASE_REF=$1
 HEAD_REF=${2:-}
 FEATURES=${FEATURES-native-geospatial}
+if [[ ${FEATURES//,/ } =~ (^|[[:space:]])native-geospatial($|[[:space:]]) ]]; then
+  export LIBSQLITE3_SYS_USE_PKG_CONFIG=1
+fi
 REPO=$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)
 WORK=${COMPARE_WORK:-$(mktemp -d "${TMPDIR:-/tmp}/rusty-tiles-compare.XXXXXX")}
 TARGET_ROOT=${COMPARE_TARGET_ROOT:-$REPO/target/compare}
@@ -81,7 +84,7 @@ path, vector = sys.argv[1], sys.argv[2] == "1"
 def strip(v):
     for obj, key in [(v.get("asset", {}).get("extras", {}), "vectorBuildStateSha256"),
                      (v.get("config", {}), "encoder"),
-                     *((r, "signature") for r in v.get("records", {}).values())]:
+                     *((r, key) for r in v.get("records", {}).values() for key in ("signature", "survey"))]:
         if key in obj:
             obj[key] = "<fingerprint>"
     return v
@@ -110,10 +113,24 @@ while IFS=$'\t' read -r -a fields; do
   args=("${fields[@]:4}")
   args=("${args[@]//\{in\}/$INPUTS}")
   for side in base head; do
+    side_args=("${args[@]}")
+    # Releases before implicit tiling have no --explicit flag. Their default
+    # hierarchy is the byte-identity baseline selected by this recipe.
+    if [[ " ${args[*]} " == *" --explicit "* ]] && ! "$WORK/bin-$side" "$command" --help | grep -q -- '--explicit'; then
+      side_args=()
+      for arg in "${args[@]}"; do [[ $arg == --explicit ]] || side_args+=("$arg"); done
+    fi
     out=$WORK/out-$side
     mkdir -p "$out"
     rm -rf "${out:?}/$output"
-    if env PATH="" "$WORK/bin-$side" "$command" "${args[@]}" -o "$out/$output" \
+    output_args=(-o "$out/$output")
+    if [[ $command == createTilesetJson ]]; then
+      # W1 publishes a fixed sibling manifest and has no arbitrary -o product.
+      cp "$INPUTS/mesh.glb" "$out/mesh.glb"
+      side_args[1]="$out/mesh.glb"
+      output_args=()
+    fi
+    if env PATH="" "$WORK/bin-$side" "$command" "${side_args[@]}" "${output_args[@]}" \
       >"$out/$name.log" 2>&1; then
       python3 -c "$DIGEST_PY" "$out/$output" "$vector" >"$out/$name.sha256"
     else

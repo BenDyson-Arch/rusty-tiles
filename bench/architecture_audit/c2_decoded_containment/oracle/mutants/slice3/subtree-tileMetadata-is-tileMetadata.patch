@@ -1,0 +1,11 @@
+--- a/oracle/c2o/implicit.py
++++ b/oracle/c2o/implicit.py
+@@ -275,6 +275,8 @@
+             del stack[level:]
+             twhere = "%s.implicit[%d/%d/%d/%d]" % (where, level, rec["x"], rec["y"], rec["z"])
+             vol = effective_volume(rec, root_frame.volume, twhere)
++            if rec["volume"].startswith("row:"):
++                self.exclude("tileMetadata", twhere)
+             if rec["volume"].startswith("derived:"):
+                 root_hex = rec["volume"][len("derived:"):].split(";")[0]
+                 root_box = (root_frame.volume.raw or {}).get("box") or []

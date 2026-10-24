@@ -1,0 +1,10 @@
+{
+  "status": "Coordinator supplied pre-correction target identities; not execution or corrected-source acceptance",
+  "binary": "/tmp/rusty-tiles-payload-final-evidence/final-build/portable-cli-2ebfb74-104a60c7ac278f6cc6932b560136be0f63aa6b7cc8464e6cf64d9b4f122a07f2",
+  "binarySha256": "104a60c7ac278f6cc6932b560136be0f63aa6b7cc8464e6cf64d9b4f122a07f2",
+  "binaryBytes": 21195480,
+  "sourceCommit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "sourcePin": "/tmp/rusty-tiles-payload-final-evidence/final-build/source-pin.json",
+  "sourcePinSha256": "da9cfaeb8c576b492f66ec6c396c68a80c7a5a8851d88dee9db437be2ec7b12e",
+  "sensitivityPrediction": "unused-packed-scalar and unused-packed-scalar-offset expected admitted but old effective-stride equality should reject; all target execution remains coordinator owned"
+}

@@ -1,0 +1,14 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 88ee84a..0997541 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -1697,6 +1697,9 @@ impl Check<'_> {
+                     "geometricError increases at depth {depth}"
+                 )));
+             }
++            if matches!(tile.volume, EffectiveVolume::Derived(_)) {
++                self.c2.exclude(Reason::DerivedImplicitVolume);
++            }
+             // C2 facts: rows exactly (FLOAT32 already widened by I1), V_R for
+             // a rowless I_0, and no volume for a derived cell (I5).
+             let index = self.c2.tile(TileFact {

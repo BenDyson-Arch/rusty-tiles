@@ -1,0 +1,65 @@
+{
+  "record": "Validator-caps amendment of the C2-amended C1 payload-control expectations (additive; inputs unchanged).",
+  "raised": {
+    "archiveEntries": {
+      "old": 65536,
+      "new": 524288
+    },
+    "hierarchyVisits": {
+      "old": 65536,
+      "new": 262144
+    },
+    "references": {
+      "old": 262144,
+      "new": 1048576
+    },
+    "centralDirectoryBytes": {
+      "old": 16777216,
+      "new": 33554432
+    },
+    "documentItems": {
+      "old": 65536,
+      "new": 131072
+    },
+    "memberBytes": {
+      "old": 67108864,
+      "new": 134217728
+    },
+    "documentDecodedBytes": {
+      "old": 67108864,
+      "new": 134217728
+    }
+  },
+  "bundles": [
+    {
+      "input": "corrected-205-c2-fixtures.tar.gz",
+      "inputSha256": "ebf8437f1fc0711688fdef74f7b076939dd55f177bc663159a3527049e5b8481",
+      "inputManifestSha256": "fd6004a4cd4074553d5ff08542fdd9b355d2db86c6035c695dc4513be5e3408c",
+      "amended": "corrected-205-caps-fixtures.tar.gz",
+      "amendedSha256": "b8b0499e456dbc48af4d071d95b12a9765c88add3231c6a73b3fbd07a03035c3",
+      "amendedManifestSha256": "55057d9df744d977044d909875f1cbed6c981867ff2d30e7e22085796a4c039e",
+      "cases": 205,
+      "admittedAmended": 77
+    },
+    {
+      "input": "polygon-sensitive-5-c2-fixtures.tar.gz",
+      "inputSha256": "94ae2cefc6214ac4ecf1ef972187ecbcd2275f2d44526152be13c46719e50189",
+      "inputManifestSha256": "61237a250af51352098dbabeb282859aa38a0528aa9048c19f8aee82aaccca00",
+      "amended": "polygon-sensitive-5-caps-fixtures.tar.gz",
+      "amendedSha256": "7f5488810f3bc69dbdcc49df8e2c420315af7b24b6b0c8f44d4ee5d6c5e95ef4",
+      "amendedManifestSha256": "3f956fb18f8a7e3e9a42070706a8a105ad197242c5d82f6d13fef5826bcbe9bc",
+      "cases": 5,
+      "admittedAmended": 1
+    }
+  ],
+  "strideLane": {
+    "input": "c2_amendment/2026-10-11/stride_controls",
+    "inputManifestSha256": "8516d51342c559d983e9f7fa83adeb3dc320078a21bf7ff9438c2fb9783e3557",
+    "inputIntegritySha256": "dea02a0bd364b2e0f19629fc0e9ce42812ba3a78d027e409b901d3f3687a36f6",
+    "amended": "validator_caps_amendment/2026-10-11/stride_controls",
+    "amendedManifestSha256": "a934bc207fe17670cb095f0b4023842dd4241ef1b65c9556bbd65aff4bde7040",
+    "cases": 6,
+    "admittedAmended": 4
+  },
+  "behaviourChanges": []
+}

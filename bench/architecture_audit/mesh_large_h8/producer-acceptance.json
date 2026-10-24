@@ -1,0 +1,233 @@
+{
+  "checkpoint": "H8 full-detail leaf producer",
+  "evidence": {
+    "actual-10m-before-mip-fix-oracle.json": {
+      "bytes": 1108,
+      "sha256": "24c9fc3852682b32993c3ef7f66a564b398a0426cf17c37b94e9fd8d7a7f1a18"
+    },
+    "actual-10m-before-mip-fix-resource.json": {
+      "bytes": 5621,
+      "sha256": "173904fd15fd139e70e57f2ae5d6f2d4517b15b4a77e176d394e657a2fa4ffab"
+    },
+    "b81dd94-root-producer-integration-nonauthor-review.json": {
+      "bytes": 16756,
+      "sha256": "338722726f93830252c580d62b432df38f6b0e1c77cf3cf64483710d0f64455e"
+    },
+    "constant-source-generator-nonauthor-review.json": {
+      "bytes": 1505,
+      "sha256": "6ab3cb75710f2ccc4a6dd5ad9696c5551ff6e9e3462feedb94c6bc99e9d5adce"
+    },
+    "explicit-mip-gpu-independent-review.json": {
+      "bytes": 35666,
+      "sha256": "28732476de8f335d7900427fb03cedf2c473d8902c00fbb293cabd369a8cb2b9"
+    },
+    "explicit-mip-gpu-srgb-target-independent-review.json": {
+      "bytes": 4326,
+      "sha256": "14082303368c57473230fb900109fd97c589bd1970a38c727a3a69a31af3bd27"
+    },
+    "final-10m-geometry-rebind.json": {
+      "bytes": 2195793,
+      "sha256": "9cdda3a506607e89e173ba162e7633ed612ea90faecd3f8e5359938b94be1a95"
+    },
+    "final-10m-resource.json": {
+      "bytes": 161480,
+      "sha256": "8afa19471fb88fbd8855c04a99032589cae237fadbe1e732eb791f03c65c2c1b"
+    },
+    "final-10m-texture-oracle.json": {
+      "bytes": 18659,
+      "sha256": "dac67dd42f36f0b1c32c198be6a5522e6d6df84dc66a9c01de683998b3bccbc0"
+    },
+    "final-artifact-decoder-binary.json": {
+      "bytes": 381,
+      "sha256": "5961737f801109c336a99a6c020693c21e628d2f5051df0b038e148900723d5c"
+    },
+    "final-b81dd94-source-nonauthor-review.json": {
+      "bytes": 5331,
+      "sha256": "7be9bbea55cf8485fbe984a0c836cd96b9cf1aecd37cb9f99587be65346aa9ee"
+    },
+    "final-big-constant-resource.json": {
+      "bytes": 10667,
+      "sha256": "680b217d92e4c61d17d77f03e8a7a72f5b2a9b9a36ccd3fa27e2d035a3dc72e2"
+    },
+    "final-big-constant-texture-oracle.json": {
+      "bytes": 55692,
+      "sha256": "3088694f307e5d6b43fe2d5f5dffc1420d9a8c6a3834e5d855c66b55885add0a"
+    },
+    "final-blender-distribution.json": {
+      "bytes": 587,
+      "sha256": "fa936c2e0aa50c9bdba002bb330b9adf4cee9eed21a2823795f5c0bc9f56e33e"
+    },
+    "final-blender-wheel.json": {
+      "bytes": 1236,
+      "sha256": "3a5438038c9882ae5dd6d06042040a6243ee3b07d76443e2d699265105e4d729"
+    },
+    "final-decoder-wheel-nonauthor-review.json": {
+      "bytes": 5374,
+      "sha256": "138c76c58439dd17cc2edc1b3b510c52d0352057a18136be2d65790c2c93766f"
+    },
+    "final-leaf-producer-nonauthor-evidence-review.json": {
+      "bytes": 4838,
+      "sha256": "b06d5cfe7887dc0ccb56c055834e2907d009b22d71b593661009493071e1adb1"
+    },
+    "final-native-clippy.log": {
+      "bytes": 200,
+      "sha256": "7a571559700db2193008bd486c978cfda4b7f6b497ef866ac52d7349997b2d26"
+    },
+    "final-native-tests.log": {
+      "bytes": 79076,
+      "sha256": "b1508177dd725bba7c32267e6213abbe332910b824bd1046c293f97d9a8e0b60"
+    },
+    "final-png-lossless-oracle.json": {
+      "bytes": 1003,
+      "sha256": "2e52b3e6caa484c1e30511a923b15e1c5248dc41ff42ca6549fa513919d23974"
+    },
+    "final-portable-clippy.log": {
+      "bytes": 133,
+      "sha256": "d05a32f6b3050827b31a5f3ddb960f2d4c361d96e29b4ca44a9fea7a67d2af48"
+    },
+    "final-portable-tests.log": {
+      "bytes": 73091,
+      "sha256": "955b33a95ff66fa730699d5074bf8297b95d97e6f11dd3c2f42ead2e55f69499"
+    },
+    "final-producer-controls.json": {
+      "bytes": 1148,
+      "sha256": "2ef9e3c97f1103a8ba4ef102968a2e129424244f5f40567ba8a20d376b48ed72"
+    },
+    "final-producer-source.json": {
+      "bytes": 16236,
+      "sha256": "18e71e26d5bf8d211dafb461557ce413d654dc791b6c9aac990f074fbbcb3f2b"
+    },
+    "final-python-wheel.json": {
+      "bytes": 491,
+      "sha256": "527cdf07b270e94a22ac1ad6d3b30c793ae4280cb08e7cb5ad3c22014df825fc"
+    },
+    "final-release-build.log": {
+      "bytes": 1279,
+      "sha256": "1dfa5d491c62214970a221ad865e36bc03f6e582af04f9a3b32f1841ad52a49a"
+    },
+    "final-resource-small-artifact-nonauthor-review.json": {
+      "bytes": 4488,
+      "sha256": "2c078852a422ae855da54db008e9d3787dc1b4a765ba44616e26a5f1091a5c0f"
+    },
+    "final-small-artifact-identities.json": {
+      "bytes": 9086,
+      "sha256": "d6a3ab846f1c3a1f24da0b85253ffb977bd0f7d29ada3e15ce93be1771ef700a"
+    },
+    "final-wheel-notices.log": {
+      "bytes": 94,
+      "sha256": "c4e73d3734ea9a01754b7816e797154f3ea46ac117810ce63e17e9539b8b0086"
+    },
+    "geometry-rebind-pathfix-nonauthor-review.json": {
+      "bytes": 639,
+      "sha256": "75eae3ce4441289b75c8df48fa3a1eced557e86e5c3a398210ac7af279518024"
+    },
+    "normalized-source-gpu-independent-review.json": {
+      "bytes": 15898,
+      "sha256": "b0797fab24b21aa0a810517424dd37df44bdba1f8af00b46efae5aa867b8a70b"
+    },
+    "sampler-seam-constant-nonauthor-source-review.json": {
+      "bytes": 3306,
+      "sha256": "f3e0586599159cc9f9652a88384c00765b4265a9974d324e533f47ea6c4df940"
+    },
+    "seam-balanced-oracle.json": {
+      "bytes": 816,
+      "sha256": "9ff22285e6be9d4e69a200085fa5c119450ba3331e406db8c708d652b5bb2bcb"
+    },
+    "seam-fast-oracle.json": {
+      "bytes": 812,
+      "sha256": "ba936cd435ba8ce91c0f8d69d1b1e86c0ce83834d1984afebfc053194f9348ef"
+    },
+    "seam-lossless-oracle.json": {
+      "bytes": 816,
+      "sha256": "a4a376e14ec45995c408702e2670706d4732eae46257a1619c5e5103c3385a72"
+    },
+    "seam-quality-oracle.json": {
+      "bytes": 815,
+      "sha256": "83ed2433c7dce3216f067cc4bc7d8509b0c8252e78e4c14272158c6676d546f4"
+    },
+    "source-sampler-exact-15-artifacts/summary.json": {
+      "bytes": 12942,
+      "sha256": "dfeb205df08dd8c10f02556b2c976c9dde7f588182c5486a9f7513efaa5eaf42"
+    }
+  },
+  "evidenceCache": "~/.cache/rusty-tiles-evidence/h8-leaves-20261013/",
+  "executions": {
+    "clippy": "portable/native all targets; warnings denied",
+    "largePage": {
+      "RSSbytes": 558587904,
+      "maximumPhysicalPageEdge": 4096,
+      "pages": 10,
+      "plannedDensityDrop": 2,
+      "signalScope": "constant five-slot resource/codec witness",
+      "sourceImageEdge": 2048,
+      "storedMipLevels": 124,
+      "wallSeconds": 8.120754756004317
+    },
+    "nativeTests": {
+      "failed": 0,
+      "ignored": 16,
+      "passed": 799
+    },
+    "packaging": {
+      "CPythonTests": 45,
+      "emptyPATH": true,
+      "officialBlenderTests": 45,
+      "officialBlenderVersion": "4.5.14"
+    },
+    "portableTests": {
+      "failed": 0,
+      "ignored": 16,
+      "passed": 732
+    },
+    "scale": {
+      "GLBbytes": 1334467104,
+      "KTXpages": 5120,
+      "RSSbytes": 219254784,
+      "leaves": 1024,
+      "maximumGLBbytes": 1313348,
+      "sampledPhysicalScratchBytes": 6555504640,
+      "signalScope": "constant five-slot source textures; every triangle geometry/provenance bound through byte-identical complete GLBs",
+      "storedMipLevels": 20480,
+      "triangles": 10000000,
+      "wallSeconds": 71.13325670000631
+    },
+    "seams": {
+      "mixedDepth": true,
+      "packed": true,
+      "profiles": [
+        "fast",
+        "balanced",
+        "quality",
+        "lossless"
+      ],
+      "syntheticDepth": true
+    },
+    "sourceSampler": {
+      "artifacts": 15,
+      "controlsPerArtifact": 7,
+      "pages": 150,
+      "publishedMipFilters": [
+        9984,
+        9985,
+        9986,
+        9987
+      ],
+      "sampleEvaluations": 707520,
+      "storedMipChecks": 1080
+    }
+  },
+  "limits": [
+    "Leaf GLBs and diagnostics only; no hierarchy/archive or H12/H13 implementation acceptance",
+    "PNG lossless guarantees decoded source RGBA8 at level zero; viewer-generated mips excluded",
+    "Finite geometric sampler/coverage witnesses, not continuous surfaces/all camera/GPU precision certification",
+    "Native workspace charges provisional; measured RSS/sampled scratch do not prove universal allocator/worst-case bounds",
+    "Normative sRGB GPU target passes; pinned Cesium ignores colour DFD transfer in ASTC selection and its UNORM high-contrast filtering fails",
+    "Normalized reflected-source model comparison and numeric picks separate from retained original-source front-face discrepancy",
+    "No general geographic RTC, effective normal shader, release or CI acceptance claim"
+  ],
+  "preservedFailures": "Original codec, rich-input fidelity, resource wrapper, sampler-reference, Cesium GPU and receipt-construction failures remain in evidence cache",
+  "producerBinarySha256": "22383db2eb69c4d72e57eea693c5fa391866252eb92166664c601769899a2aa2",
+  "producerCommit": "b81dd9430039f00a5595ddb65e11cb688dbad10e",
+  "schemaVersion": 1,
+  "status": "GO within recorded bounded producer domains; user owns CI and merging"
+}

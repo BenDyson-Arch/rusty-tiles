@@ -1,0 +1,11 @@
+--- a/oracle/c2o/scene.py
++++ b/oracle/c2o/scene.py
+@@ -181,7 +181,7 @@
+     L = mat_identity()
+     for r in range(3):
+         for c in range(3):
+-            L[r][c] = H[r][c] / n * s[c]
++            L[r][c] = H[r][c] * s[c]
+         L[r][3] = t[r]
+     return L
+ 

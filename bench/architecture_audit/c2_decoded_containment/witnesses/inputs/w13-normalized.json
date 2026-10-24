@@ -1,0 +1,11 @@
+{
+ "id": "W13-valid-local-TRS-cumulative-shear",
+ "meaning": "normalized H(q)/|q|^2 (contract v2 D2)",
+ "own_tile_local_exact": [
+  "-1421391265023909044575248920262734/81129638414606685298668707040461",
+  "-3",
+  "460816346194966035618890633214690/81129638414606685298668707040461"
+ ],
+ "quaternion_norm_sq_minus_one": "3602879701896397/81129638414606681695789005144064",
+ "source": "verify/witness_check.py run(case,\"normalized\") over prior witnesses.json"
+}

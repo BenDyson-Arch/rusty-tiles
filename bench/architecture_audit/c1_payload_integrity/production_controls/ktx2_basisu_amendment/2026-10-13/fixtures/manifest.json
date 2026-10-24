@@ -1,0 +1,3150 @@
+{
+  "schemaVersion": 1,
+  "status": "Predictions frozen before target execution; not execution evidence",
+  "rule": "C1 KHR_texture_basisu / KTX2 container amendment (2026-10-13)",
+  "generatorSha256": "dd15678267c730208e33fa67a2174d3e16cd3464088a8b6d0d8a136c7610255f",
+  "oracleSha256": "767113e56e3e24e96798da02791bb2140394e3ef69e307bf6c45687759884b44",
+  "runnerSha256": "f24e93891571822dac3980ae175b16593053fee29b6d4ed61463357e1aaf4fda",
+  "referencePins": {
+    "files": [
+      {
+        "file": "KHR_texture_basisu.README.md",
+        "source": "github.com/KhronosGroup/glTF extensions/2.0/Khronos/KHR_texture_basisu/README.md @ 1bde276f7a173876e24c0f403a14dd827dc7912b (ML0 pin 2026-10-12)",
+        "bytes": 12510,
+        "sha256": "6f6d0767b95a8ac4f197c9394a28e8d4c71a2ff3ced2c4fd9357ed1c869b83a6"
+      },
+      {
+        "file": "texture.KHR_texture_basisu.schema.json",
+        "source": "github.com/KhronosGroup/glTF extensions/2.0/Khronos/KHR_texture_basisu/schema/ @ 1bde276f7a173876e24c0f403a14dd827dc7912b (ML0 pin 2026-10-12)",
+        "bytes": 604,
+        "sha256": "cc1d31267bb69991807ff5e73a9a3e6029ad3b3b4a76dd2d48f44061abe1c013"
+      },
+      {
+        "file": "basislz-gdata.adoc",
+        "source": "github.com/KhronosGroup/KTX-Specification appendices/basislz-gdata.adoc @ v2.0.4 30cb4530a1120ddaf883fd98787edbee0e53270b (included by ktxspec.adoc; fetched 2026-10-13)",
+        "bytes": 5649,
+        "sha256": "162ceee529a978a411040d644e5d21c1b241b5b2abdb6e8b24147fb9cd72d45c"
+      },
+      {
+        "file": "alpha_simple_basis.ktx2",
+        "source": "github.com/KhronosGroup/KTX-Software tests/testimages @ v4.4.0 beef80159525d9fb7abb8645ea85f4c4f6842e8f (Git LFS oid = sha256)",
+        "bytes": 431,
+        "sha256": "fc21f2c39480383c7943733a18c5a543e89ecb7f035e9f97d501982a4948c8dd"
+      },
+      {
+        "file": "rgba-mipmap-reference-basis.ktx2",
+        "source": "KTX-Software tests/testimages @ beef8015 (Git LFS oid = sha256)",
+        "bytes": 719,
+        "sha256": "267b18c4badb42fb9739ef42b5e5cd9c2d95872e55ae298a82000fb402c33958"
+      },
+      {
+        "file": "rg_reference_basis.ktx2",
+        "source": "KTX-Software tests/testimages @ beef8015 (Git LFS oid = sha256)",
+        "bytes": 531,
+        "sha256": "4c772d8db01425f0ba95ed72d0d8b1fe41cdd437456eb61acb27beb229333392"
+      },
+      {
+        "file": "cyan_rgb_reference_uastc.ktx2",
+        "source": "KTX-Software tests/testimages @ beef8015 (Git LFS oid = sha256)",
+        "bytes": 4368,
+        "sha256": "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      },
+      {
+        "file": "ktx_document_uastc_rdo4_zstd5.ktx2",
+        "source": "KTX-Software tests/testimages @ beef8015 (Git LFS oid = sha256)",
+        "bytes": 63166,
+        "sha256": "e8dc335cc59f1ef969808f3394aab3bc945833b4e32e3781baa4e7e8e0d987f5"
+      },
+      {
+        "file": "h8-quality-leaf4-uastc-zstd.ktx2",
+        "source": "image 0 of leaves/000000000004.glb (sha256 528a203a6fad61d63f69318291b848d017139d3025d02075bae2d0d608b0be80) from rt-v8 (ml/h8-throughput 1eff758, sha256 63b21a0cb91a715809800d91819865da4c768c15ff564336eafc2c16ea1cc4d6) mesh-leaf-payloads --profile quality on crop15m-2048.glb; in-repo vendored Basis Universal encoder",
+        "bytes": 33883,
+        "sha256": "d33fbcbb6676acc4d59c23ae28bfd4651d69d911a514f63a3bbb4e273d3c020b"
+      }
+    ],
+    "untracked": [
+      {
+        "file": "ktxspec-v2.0.4.adoc",
+        "source": "github.com/KhronosGroup/KTX-Specification ktxspec.adoc @ v2.0.4 30cb4530a1120ddaf883fd98787edbee0e53270b",
+        "bytes": 106109,
+        "sha256": "900cfd73fa8db623807f1c43dfe7631a89e02d48b153eef26eb9008fcc361ebb",
+        "retained": "~/.cache/rusty-tiles-evidence/ml0-spec-pins-20261012/raw/ (not tracked: size)"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "etc1s-rgba-upstream",
+      "path": "etc1s-rgba-upstream/input.3tz",
+      "source": "KTX-Software alpha_simple_basis",
+      "intendedRule": null,
+      "oracleViolations": [],
+      "oracleCategory": "admitted",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "KTX2 level data and transcoding",
+          "geometricErrorAccuracy",
+          "image decoding",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 3
+          }
+        ],
+        "storedBytes": 1441,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "imageSha256": [
+        "fc21f2c39480383c7943733a18c5a543e89ecb7f035e9f97d501982a4948c8dd"
+      ],
+      "sha256": "e443de0f85fc14da9113aac7c9b24505ab1b8c0b904fdc2e9ffc2a66194777b2",
+      "bytes": 1761,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "766212f69cd530ef2ea0e34d36f0f84b957807c2a0392c00c7db8e83cdca8627"
+      }
+    },
+    {
+      "name": "etc1s-mips-upstream",
+      "path": "etc1s-mips-upstream/input.3tz",
+      "source": "KTX-Software rgba-mipmap-reference-basis",
+      "intendedRule": null,
+      "oracleViolations": [],
+      "oracleCategory": "admitted",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "KTX2 level data and transcoding",
+          "geometricErrorAccuracy",
+          "image decoding",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 3
+          }
+        ],
+        "storedBytes": 1729,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "imageSha256": [
+        "267b18c4badb42fb9739ef42b5e5cd9c2d95872e55ae298a82000fb402c33958"
+      ],
+      "sha256": "92f1784f609d2c02a81f12e7922e681bb4c10e6f81351d55d58a597b6b300e53",
+      "bytes": 2049,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "bba7fcb9965cab915e8707bdaaa2f569fc692b71d81459b6e060a3cc3e16d1c5"
+      }
+    },
+    {
+      "name": "uastc-none-upstream",
+      "path": "uastc-none-upstream/input.3tz",
+      "source": "KTX-Software cyan_rgb_reference_uastc",
+      "intendedRule": null,
+      "oracleViolations": [],
+      "oracleCategory": "admitted",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "KTX2 level data and transcoding",
+          "geometricErrorAccuracy",
+          "image decoding",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 3
+          }
+        ],
+        "storedBytes": 5377,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "imageSha256": [
+        "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      ],
+      "sha256": "79596cb05c618529e413cf4a7d5bb3de0df228a1cf3ba132b16195084e9c19ac",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "ed1f22458695aefb7453d34cdf541bac4ac914ded552ddb995feacd86af99bcc"
+      }
+    },
+    {
+      "name": "uastc-zstd-mips-upstream",
+      "path": "uastc-zstd-mips-upstream/input.3tz",
+      "source": "KTX-Software ktx_document_uastc_rdo4_zstd5",
+      "intendedRule": null,
+      "oracleViolations": [],
+      "oracleCategory": "admitted",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "KTX2 level data and transcoding",
+          "geometricErrorAccuracy",
+          "image decoding",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 3
+          }
+        ],
+        "storedBytes": 64181,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "imageSha256": [
+        "e8dc335cc59f1ef969808f3394aab3bc945833b4e32e3781baa4e7e8e0d987f5"
+      ],
+      "sha256": "ff208816dcfb69456bf280cf33039f5ff35bc9ecb816d6fa99486434f8a5b7c4",
+      "bytes": 64501,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "09826d816923d42b8f9b652763cbd6f1509199c177437d49b45de952bdeffc3a"
+      }
+    },
+    {
+      "name": "uastc-zstd-h8-encoder",
+      "path": "uastc-zstd-h8-encoder/input.3tz",
+      "source": "H8 quality leaf (in-repo encoder)",
+      "intendedRule": null,
+      "oracleViolations": [],
+      "oracleCategory": "admitted",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "KTX2 level data and transcoding",
+          "geometricErrorAccuracy",
+          "image decoding",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 3
+          }
+        ],
+        "storedBytes": 34897,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "imageSha256": [
+        "d33fbcbb6676acc4d59c23ae28bfd4651d69d911a514f63a3bbb4e273d3c020b"
+      ],
+      "sha256": "1efb8c50ff7d9d76a8c834fed5dbb0754705606fe66e34ba9baf0b6a9f056bf4",
+      "bytes": 35217,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "a7d61a1dbbbaed2615ec51433e7903d578e29f42fc627628b5e71e76c14cf6f0"
+      }
+    },
+    {
+      "name": "uastc-none-packed-mips",
+      "path": "uastc-none-packed-mips/input.3tz",
+      "source": "packed 12x8, 4 levels",
+      "intendedRule": null,
+      "oracleViolations": [],
+      "oracleCategory": "admitted",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "KTX2 level data and transcoding",
+          "geometricErrorAccuracy",
+          "image decoding",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 3
+          }
+        ],
+        "storedBytes": 1425,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "imageSha256": [
+        "a474412a267bd9ab8c3558fb2a6b7bce4367ea09026bc3cbcf3aa50ab5a26c94"
+      ],
+      "sha256": "c55148fdd8dbce9a3305b4156689aa78cfba920e6cc5dde4a183800dc8cd2466",
+      "bytes": 1745,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "93ff55ff9393727659dd764f20326eda238da458f2ef76cfb34442850be4ae82"
+      }
+    },
+    {
+      "name": "fallback-png-not-required",
+      "path": "fallback-png-not-required/input.3tz",
+      "source": "alpha_simple + PNG fallback",
+      "intendedRule": null,
+      "oracleViolations": [],
+      "oracleCategory": "admitted",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "KTX2 level data and transcoding",
+          "geometricErrorAccuracy",
+          "image decoding",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 3
+          }
+        ],
+        "storedBytes": 1557,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "imageSha256": [
+        "fc21f2c39480383c7943733a18c5a543e89ecb7f035e9f97d501982a4948c8dd",
+        "7f1aa52cc14cf135e1c75b1ae96c6bac3f1a21cfd0534845171a21dccddf95ec"
+      ],
+      "sha256": "b14a4f6406dd13674d8b223aeb9e90efa2ff7b896fc4add65cb9e832145179a3",
+      "bytes": 1877,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "57ff31efa8e9d05cb527e9493d6a8509b1b1a8c43cee9205e089b16a14249620"
+      }
+    },
+    {
+      "name": "external-ktx2-uri",
+      "path": "external-ktx2-uri/input.3tz",
+      "source": "cyan as tex.ktx2 member, no mimeType",
+      "intendedRule": null,
+      "oracleViolations": [],
+      "oracleCategory": "admitted",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 4,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "KTX2 level data and transcoding",
+          "geometricErrorAccuracy",
+          "image decoding",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 3
+          }
+        ],
+        "storedBytes": 5329,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "imageSha256": [
+        "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      ],
+      "sha256": "027ab945a1ba2448c6705e70d63aa5fc0f5e86676b74932273c3ccc50195ae94",
+      "bytes": 5741,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "040b3db4c107baa2d31fa7537bc0a5a5b6d6992e9d6feffa125b8d97a564b750",
+        "tex.ktx2": "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      }
+    },
+    {
+      "name": "external-uri-no-suffix",
+      "path": "external-uri-no-suffix/input.3tz",
+      "source": "cyan as tex_0 member, no mimeType",
+      "intendedRule": null,
+      "oracleViolations": [],
+      "oracleCategory": "admitted",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 4,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "KTX2 level data and transcoding",
+          "geometricErrorAccuracy",
+          "image decoding",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 3
+          }
+        ],
+        "storedBytes": 5329,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "imageSha256": [
+        "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      ],
+      "sha256": "def25b3c758d5d716af346cc469371ecb643e4f1aae1ef4b0f1e47e1294ed642",
+      "bytes": 5735,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "df034a723baf856eeed2d0071a8a5c53aae79ea119fefb6813e317e5f3ba41a1",
+        "tex_0": "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      }
+    },
+    {
+      "name": "red-linear",
+      "path": "red-linear/input.3tz",
+      "source": "packed UASTC_RRR, linear",
+      "intendedRule": null,
+      "oracleViolations": [],
+      "oracleCategory": "admitted",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "KTX2 level data and transcoding",
+          "geometricErrorAccuracy",
+          "image decoding",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 3
+          }
+        ],
+        "storedBytes": 1249,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "imageSha256": [
+        "ef5cdf97044a8e8ffe8e56ac21b7d4732ff7b563805c82a2ac38f34f3398a9f9"
+      ],
+      "sha256": "358e1c07e3d7b203437eccc25ae2d14f14e5002cef099f6e4a58f72e0708ac14",
+      "bytes": 1569,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "b35c15620e5c450b355fbd630dde5964a29343e16492f34e18dd005142e0711b"
+      }
+    },
+    {
+      "name": "premultiplied-no-material",
+      "path": "premultiplied-no-material/input.3tz",
+      "source": "cyan premultiplied, texture unused by the material",
+      "intendedRule": null,
+      "oracleViolations": [],
+      "oracleCategory": "admitted",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "KTX2 level data and transcoding",
+          "geometricErrorAccuracy",
+          "image decoding",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 3
+          }
+        ],
+        "storedBytes": 5321,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "imageSha256": [
+        "61bf2f0d1bf6a28c5191fc275859a6c460d25a655b867e42d2a7f3637a4a8e1d"
+      ],
+      "sha256": "76ecc339305e90fc21f20f5a4f73508886282628498635ad60da6791e22c8b4f",
+      "bytes": 5641,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "65e543f7855ae43ccf89df643d5921d8583e7e2cd349fdd9c7efa097a7769f7d"
+      }
+    },
+    {
+      "name": "shared-view-heavy-kvd",
+      "path": "shared-view-heavy-kvd/input.3tz",
+      "source": "4000 images sharing one view; 8 MiB key/value pair",
+      "intendedRule": null,
+      "oracleViolations": [],
+      "oracleCategory": "admitted",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "KTX2 level data and transcoding",
+          "geometricErrorAccuracy",
+          "image decoding",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 1096073,
+          "hierarchyDepth": 128,
+          "references": 1096073,
+          "totalPayloadElements": 140297360,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 1122378880,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 3
+          }
+        ],
+        "storedBytes": 8768585,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "scaled"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "scaled"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "scaled"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "scaled"
+            }
+          }
+        }
+      },
+      "imageSha256": [
+        "effc0d8523ce4511113c22ab471361dd1565bcac8bc3820ae601fbf2085b0967"
+      ],
+      "sha256": "ee151d14621334311b36d986b6cb55dfe0a3ceac1d5252a6f12c31919cb3e4b6",
+      "bytes": 8768905,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "0ad118d004d1445308b48909e58e65f42b4cefa90abe8f10655ebada202ef8d2"
+      }
+    },
+    {
+      "name": "non-material-2d",
+      "path": "non-material-2d/input.3tz",
+      "source": "cyan, texture unused by the material",
+      "intendedRule": null,
+      "oracleViolations": [],
+      "oracleCategory": "admitted",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "KTX2 level data and transcoding",
+          "geometricErrorAccuracy",
+          "image decoding",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 3
+          }
+        ],
+        "storedBytes": 5321,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "imageSha256": [
+        "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      ],
+      "sha256": "4dc78a30d13f40abc2f486cc76fb05c44ee95c8f8f546f546c190a17b34b2708",
+      "bytes": 5641,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "e48dd7e3ef14d6980ab1249e862a3bd62e928dcb4b33622c68bc23aba15b3390"
+      }
+    },
+    {
+      "name": "truncated-header",
+      "path": "truncated-header/input.3tz",
+      "source": "alpha_simple[:60]",
+      "intendedRule": "header-truncated",
+      "oracleViolations": [
+        "header-truncated"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "f0141ed3c6890cfee6d791f0db06b595826980d10d9387aa74fa4019bf30eacb"
+      ],
+      "sha256": "991ba62a76332ffb50e1054c79a97c0de86a50a594f6b215cf77ae88d02434f3",
+      "bytes": 1385,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "d9d4fbe1b2247cfe25ebc3a84da8e208bb4fd40ac4770f248bb00d410d8ed0bf"
+      }
+    },
+    {
+      "name": "truncated-base-level",
+      "path": "truncated-base-level/input.3tz",
+      "source": "cyan minus its last byte",
+      "intendedRule": "level-range",
+      "oracleViolations": [
+        "level-range"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "8ba4a4619107d111b802ac4966bad80896ed5ccac4330e68d93dee8e96d31eab"
+      ],
+      "sha256": "f8dbe10427e3ed3a128176cc4b646a132ced1515d31a2b0eadca9fa10495e592",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "76d3b1409d3cd7bac9cbde8da646ff01c5fa878ce6951d57b08d85d6b8a8d988"
+      }
+    },
+    {
+      "name": "truncated-encoder-output",
+      "path": "truncated-encoder-output/input.3tz",
+      "source": "H8 leaf minus 1000 bytes",
+      "intendedRule": "level-range",
+      "oracleViolations": [
+        "level-range"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "c023dbaf8ce10422f706e80908d58f497a172663680446736eaf7ac0a9462d07"
+      ],
+      "sha256": "b43e8ab88776fc2c47d64b2611701ebfb5815fe83c2f06a0830f4b1353fb976f",
+      "bytes": 34217,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "2ecb2d9ca3c3e128b967b9c8c4a791db0a2cdc3f207244419a619ab85eb21f7c"
+      }
+    },
+    {
+      "name": "bad-identifier",
+      "path": "bad-identifier/input.3tz",
+      "source": "alpha_simple with \"KTX 10\"",
+      "intendedRule": "identifier",
+      "oracleViolations": [
+        "identifier"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "c6e7886315ae8ec2c55492a5720fbb2c54cf9afc6cddf8c97f245bf330dd9328"
+      ],
+      "sha256": "9e0cf2e42fd14a9d6358113ce6770423663b5532dcdaec19c42733219086031b",
+      "bytes": 1761,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "70076678fb1846d93bf0dc6b22277de2c57b0c67c800e9cb82e773f45f639e77"
+      }
+    },
+    {
+      "name": "level-past-eof",
+      "path": "level-past-eof/input.3tz",
+      "source": "cyan level 0 byteLength + 16",
+      "intendedRule": "level-range",
+      "oracleViolations": [
+        "level-range"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "0fe6df9b26ca2ca49b80f55be1b0e1fa42d4ebabd410371913c4eed6dc2363d8"
+      ],
+      "sha256": "15ad74c561e51c5c9365b6c1cdce69949cd054a34be64a08ab703ff1f06bbbdf",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "ddc846a6d5a1be3beea65ec054ee246e34d19fe903fa8e2adf3512a4ffbe2086"
+      }
+    },
+    {
+      "name": "hostile-level-offset",
+      "path": "hostile-level-offset/input.3tz",
+      "source": "cyan level 0 byteOffset 2^63",
+      "intendedRule": "level-range",
+      "oracleViolations": [
+        "level-offset",
+        "level-range"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "1b3d87ce09aed15970bfe60e908b09f8666d1af76f31cb4df73036b65538a1ae"
+      ],
+      "sha256": "3ce6e4ca90d1c73bd9872bcc52fc1e4df999bd98938a521df98f69e6a9c03021",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "7a9472b112704a7b03e937d8a15f93a74ab4465b039d7946c4e5a62a0cf8b4c7"
+      }
+    },
+    {
+      "name": "hostile-level-count",
+      "path": "hostile-level-count/input.3tz",
+      "source": "cyan levelCount 0xffffffff",
+      "intendedRule": "level-count",
+      "oracleViolations": [
+        "level-count"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "20ea6739e5ccfab2d741cc403d9fc7a5413f582e0a374e0fed1452ab2e5e27af"
+      ],
+      "sha256": "3dbe0eaf2ad0a6ea4a52ea20bbff37c2681c843f6d9496f355faf33c130cbfd8",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "dea174b9525c84b9a56c370f9c5ee428a323cd0eec8c818cb227c96659ca5ea3"
+      }
+    },
+    {
+      "name": "overlapping-levels",
+      "path": "overlapping-levels/input.3tz",
+      "source": "ktx_document level 1 at level 2 offset",
+      "intendedRule": "level-offset",
+      "oracleViolations": [
+        "level-offset"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "48d49fd32a654eb1035a9a1945c25b935b10e54b8482602920eaca257cba01f6"
+      ],
+      "sha256": "e52db7f493f7c95f9745ee35b5e47fe9b6cc65513a09f97151629dabb5f30be3",
+      "bytes": 64501,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "b159837e06722d60868ea1060c90f5640eb32613c60e5827fc2bc08c11794ced"
+      }
+    },
+    {
+      "name": "level-count-zero",
+      "path": "level-count-zero/input.3tz",
+      "source": "cyan levelCount 0",
+      "intendedRule": "level-count",
+      "oracleViolations": [
+        "level-count"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "83bc41094a82327c777aee85dd8a0ed90f160045607c616eb2b3543dc1021e80"
+      ],
+      "sha256": "da456890ebba098a67ed8875fdb65cec88fc3021d07b4711128cc4f6c1a43453",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "5e0f64b685e7249218dc637638fa601d30da70cdd960b48ca397839ae09d3d6e"
+      }
+    },
+    {
+      "name": "level-count-over-dimensions",
+      "path": "level-count-over-dimensions/input.3tz",
+      "source": "rgba-mipmap at 32x32 with 7 levels",
+      "intendedRule": "level-count",
+      "oracleViolations": [
+        "level-count"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "259828ab4d68a97ef360a0d80ee42d04f914f571e854c92f37a968c38a184d6c"
+      ],
+      "sha256": "cb760b7129626653494df420ee0623ced1230d7c7cc98bcf71138d0928c02f9b",
+      "bytes": 2049,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "2b1c10f4c3358e7679c61b89013f3db69fc49e52d5a559466c75be4ec846f1f4"
+      }
+    },
+    {
+      "name": "not-multiple-of-4",
+      "path": "not-multiple-of-4/input.3tz",
+      "source": "packed 6x8, 1 level",
+      "intendedRule": "multiple-of-4",
+      "oracleViolations": [
+        "multiple-of-4"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "b847fcb3a900c469dbb57223a042f3060a373a48281d5b7dc351900d24586363"
+      ],
+      "sha256": "4f12146fd0b3d946bda4c1fd674bfcf22b9af5d7ce4a7c331a905480f0f18a74",
+      "bytes": 1569,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "0e20c5eed21da62fe1bf83454aeaf56acf38b4f397937723e9192c671dc0ad80"
+      }
+    },
+    {
+      "name": "uastc-zlib-scheme",
+      "path": "uastc-zlib-scheme/input.3tz",
+      "source": "H8 leaf scheme 3",
+      "intendedRule": "scheme",
+      "oracleViolations": [
+        "scheme"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "2b5654b21b97ca77ab3928ca8ce63306c498b73a94a5a9148042e6d946140cea"
+      ],
+      "sha256": "047597c0794c543c22ed7084730d8166d6faef8e111b85dcbac9903c27861964",
+      "bytes": 35217,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "c57bef1ebef466136af55c3be2461efcbb70c7805d598503498ae8e91705d48d"
+      }
+    },
+    {
+      "name": "uastc-vendor-scheme",
+      "path": "uastc-vendor-scheme/input.3tz",
+      "source": "H8 leaf scheme 0x10000",
+      "intendedRule": "scheme",
+      "oracleViolations": [
+        "scheme"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "535ce719df09fe37399c3a02d53421d4bca363f7b7281c41147e777deab57aa0"
+      ],
+      "sha256": "36597503a9683db9c61e8701298fc51e4f6b6464aeaa855e07bb0ecd76bef424",
+      "bytes": 35217,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "22d8d64e410b7e6d555c90a6075b440c811b073860d2f4c84a07547145dfe8f8"
+      }
+    },
+    {
+      "name": "etc1s-zstd-scheme",
+      "path": "etc1s-zstd-scheme/input.3tz",
+      "source": "alpha_simple scheme 2",
+      "intendedRule": "model-scheme",
+      "oracleViolations": [
+        "global-data",
+        "level-lengths",
+        "model-scheme"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "4f53c9e8539da2469b512c8392604fbf20db2d71be9deb46dd534163f1b42f7f"
+      ],
+      "sha256": "f10fbf3255df12344dc2d68393682cbde3b8170b050aa109caa8848941b417ed",
+      "bytes": 1761,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "e26d10b328cb4c205a1d93182d607aec0677897f671c911862470b304ba81aa1"
+      }
+    },
+    {
+      "name": "uastc-basislz-scheme",
+      "path": "uastc-basislz-scheme/input.3tz",
+      "source": "H8 leaf scheme 1",
+      "intendedRule": "model-scheme",
+      "oracleViolations": [
+        "global-data",
+        "level-lengths",
+        "model-scheme"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "da2ca8520f89fee2612c760bf4343b5164df8142d3b99a2647083151569ab18f"
+      ],
+      "sha256": "c50b04c93ed32038125445ac1557dc3cd6db0003fb6e4b251b4087c4059b5d4f",
+      "bytes": 35217,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "83fcbee0e22d803f6c55e9456c1af0cb35030d5efa67069bc91eaecc9f666874"
+      }
+    },
+    {
+      "name": "not-basis-color-model",
+      "path": "not-basis-color-model/input.3tz",
+      "source": "cyan DFD colorModel RGBSDA",
+      "intendedRule": "color-model",
+      "oracleViolations": [
+        "color-model"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "72bd47a27947c72b9ea958a195906ad3b3b99fb6c6c4b78f9def05fda062a02b"
+      ],
+      "sha256": "01bab14ebe0e31026522bfc53966efc77a235566c38e4920217f774f2fbe2b78",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "4853d8415859c936c4fc92b47eae36a8220bef0932b503722589469d57bc580c"
+      }
+    },
+    {
+      "name": "texel-block-6x4",
+      "path": "texel-block-6x4/input.3tz",
+      "source": "cyan DFD texelBlockDimension0 5",
+      "intendedRule": "texel-block",
+      "oracleViolations": [
+        "texel-block"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "c36eb82450fcd98bd4d4b0a4778686e2eddc48d5739b18d935966c17b1056249"
+      ],
+      "sha256": "b2041d6c61a7d9a796dc9f6eeb96c84010a1cdccf118f35186d27b2cbe6ceb14",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "cb6381a3c0f37316eb79351da52017ef79506a6827318b5a2fb72a95df45b4f7"
+      }
+    },
+    {
+      "name": "vk-format-defined",
+      "path": "vk-format-defined/input.3tz",
+      "source": "cyan vkFormat 43",
+      "intendedRule": "vkformat",
+      "oracleViolations": [
+        "vkformat"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "c3d523e6231370f56c9f26dccb81fff4d9d07ce86788cc10dd70313512dbff9d"
+      ],
+      "sha256": "5491d08f154abba34980e74e194720b3463af0ab63d9f6fe43f5a2d37ed2ee47",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "3e805a3e40ce4236064f5e8c9ec245832a0132b4931b07d74987bbdfb2965328"
+      }
+    },
+    {
+      "name": "uastc-rrrg-channel",
+      "path": "uastc-rrrg-channel/input.3tz",
+      "source": "cyan channel UASTC_RRRG",
+      "intendedRule": "channels",
+      "oracleViolations": [
+        "channels"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "d9801169541691d344cca2be530e3ebe81f79e6ba6125683b1710d25026b0dde"
+      ],
+      "sha256": "079c6ccddf205ea490a65c63a1b0129ecb628733e7a16ecd2f57bcaf4aae82d3",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "9756a8ab0f901bc90c0541eca02fe2106b37698e1b524fffe467456b33b652f4"
+      }
+    },
+    {
+      "name": "etc1s-swizzle-upstream",
+      "path": "etc1s-swizzle-upstream/input.3tz",
+      "source": "KTX-Software rg_reference_basis (KTXswizzle ra01)",
+      "intendedRule": "kvd-metadata",
+      "oracleViolations": [
+        "kvd-metadata"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "4c772d8db01425f0ba95ed72d0d8b1fe41cdd437456eb61acb27beb229333392"
+      ],
+      "sha256": "91e729a6eb244cc987b81c4494cd9a37955e119b3f671a6afb2595b5dbf3cce0",
+      "bytes": 1861,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "e4507e2202a8a6c6d035ee728a0497af94316b19be36ba82135a52d915fdbdb3"
+      }
+    },
+    {
+      "name": "orientation-ru",
+      "path": "orientation-ru/input.3tz",
+      "source": "alpha_simple KTXorientation ru",
+      "intendedRule": "kvd-metadata",
+      "oracleViolations": [
+        "kvd-metadata"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "5f49a327d8598543eadb1906b51c861fec3d9c86dc65a57e5e6ef76ff66d1c2d"
+      ],
+      "sha256": "1601bafc8e13101d344d48568dd16b72b4734b90a6c7adbf7e287e917cec9ee3",
+      "bytes": 1761,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "8205459aaacdaa3fb1f3de83c15f4dfe98ff9625f6e59f8b0c021b3883d5cc76"
+      }
+    },
+    {
+      "name": "kvd-pair-length",
+      "path": "kvd-pair-length/input.3tz",
+      "source": "cyan first keyAndValueByteLength 1",
+      "intendedRule": "kvd-pairs",
+      "oracleViolations": [
+        "kvd-pairs"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "b43d57c19ae1536e32f6a16e0300e36c18b8531d92bd2e7f2fb195fc41f48810"
+      ],
+      "sha256": "fd8a63d78a2a425ea967e241563f41391694221eb8f538851b42e4228e185c15",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "5deeefed8c83e0e72bfb536ba49da5e2a3ae7b856274e3d8fe55a9b8faf69577"
+      }
+    },
+    {
+      "name": "dfd-total-size",
+      "path": "dfd-total-size/input.3tz",
+      "source": "cyan dfdTotalSize + 4",
+      "intendedRule": "dfd-size",
+      "oracleViolations": [
+        "dfd-size"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "69e17eb4fe49b90f661a1e9d6756bd846b7bcec40522cccf40379b03b8f38965"
+      ],
+      "sha256": "cda06e27ebe67de7e31b87ddb893e1a16957b72396ad460e02df1453de96461b",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "aee3f6d6dcf651f8af81d9644c48ab9bd21fb342794846bfef6c9efc225e1463"
+      }
+    },
+    {
+      "name": "dfd-misplaced",
+      "path": "dfd-misplaced/input.3tz",
+      "source": "cyan dfdByteOffset + 4",
+      "intendedRule": "dfd-position",
+      "oracleViolations": [
+        "dfd-block",
+        "dfd-position",
+        "dfd-size"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "2b188f7ecea126c439b5fbe29fccd6caeccb2536e66253ed9064863f377347a8"
+      ],
+      "sha256": "728edd4368db2bdd3bb74b9b45799b9e82947f97dc0124b700d923881bf96051",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "20a7d8181d344beff11eff3b4174a227e07b5ccaa33d4fcafb708d45bd3769f5"
+      }
+    },
+    {
+      "name": "uncompressed-length",
+      "path": "uncompressed-length/input.3tz",
+      "source": "H8 leaf level 0 uncompressedByteLength + 16",
+      "intendedRule": "level-lengths",
+      "oracleViolations": [
+        "level-lengths"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "18737699ec26a1b0231e3733f6495b46870b2020e32970c55d7a3394e25591c9"
+      ],
+      "sha256": "bc1f0978cadf0d52bcdcfe7248d266d93827f2f1e1e08d7bc5a2cb53c515228c",
+      "bytes": 35217,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "805fb764808f9d4887683b46787632b01ce3a4e163c9f952b1e168259af05570"
+      }
+    },
+    {
+      "name": "trailing-bytes",
+      "path": "trailing-bytes/input.3tz",
+      "source": "cyan + 16 zero bytes",
+      "intendedRule": "trailing-bytes",
+      "oracleViolations": [
+        "trailing-bytes"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "3eb89aad2e94698ff3af99d2483eeb883c957e7a7be6e05baabdab03a41f87c0"
+      ],
+      "sha256": "a8792405a35b4256028903708459235596e7412829fa00b0e0463583f6904692",
+      "bytes": 5713,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "91cdcf0c11f5068623c9467847b799b42a4c331b3eee0735b550c936cddc256e"
+      }
+    },
+    {
+      "name": "basislz-slice-past-level",
+      "path": "basislz-slice-past-level/input.3tz",
+      "source": "alpha_simple rgbSliceByteLength over its level",
+      "intendedRule": "image-descriptor",
+      "oracleViolations": [
+        "image-descriptor"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "fa47f358c0097eeea3346d6de02c1be9747177a9a374abb4f3d4dbb8c6fadb68"
+      ],
+      "sha256": "60e8888c40747c979d227a13b30da4b1a3ed9f15b954753792a127a258b6e7ff",
+      "bytes": 1761,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "43a7b7ba70ea3776475c850a7b368acb9ec32abe19a30f8502b4a48f99cdf903"
+      }
+    },
+    {
+      "name": "basislz-global-length",
+      "path": "basislz-global-length/input.3tz",
+      "source": "alpha_simple tablesByteLength + 1",
+      "intendedRule": "basislz-length",
+      "oracleViolations": [
+        "basislz-length"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "1adbf6eabbcb884e19e334a96dc6ea44e617e447653061d4882d05220a8fade8"
+      ],
+      "sha256": "08f4e7b254d5c2b2ef5d25b2f2cb2986f473532567ad3ea37abf29b814ad232f",
+      "bytes": 1761,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "e283c2ebe13b6bb21395564be3d269ddeb0e5e67f4197da8bb74a48ec5f58499"
+      }
+    },
+    {
+      "name": "global-data-for-uastc",
+      "path": "global-data-for-uastc/input.3tz",
+      "source": "cyan sgdByteOffset 8 without global data",
+      "intendedRule": "global-data",
+      "oracleViolations": [
+        "global-data"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "664ad4f805019f23d44cc6c5e7b341710bef81a48ae41aec9321dc6c3a4682f6"
+      ],
+      "sha256": "a15daa4fb4596de8c0d3ea2738ed8e4260f4b2e8df70b42a2255faf867c3f5fd",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "574331fd57462713085ad295041f89f329a20a26bdad826ba6f1d3426f364e0b"
+      }
+    },
+    {
+      "name": "red-srgb",
+      "path": "red-srgb/input.3tz",
+      "source": "packed UASTC_RRR with sRGB",
+      "intendedRule": "red-srgb",
+      "oracleViolations": [
+        "red-srgb"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "369c918e57fb9e9f4c3f82d4a990765f1a5f0b558640462571a122bc2e372a40"
+      ],
+      "sha256": "1a8c38713aa099f4f9a53813097a4aa77fd803b694230624e5be5bdae05d1932",
+      "bytes": 1569,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "78a62cc3581a6dde9954973e2e927f91601f5d84d9d1854c0b1a509d18dbfd6b"
+      }
+    },
+    {
+      "name": "rg-srgb-upstream-patched",
+      "path": "rg-srgb-upstream-patched/input.3tz",
+      "source": "rg_reference_basis without swizzle check: RRR+GGG sRGB",
+      "intendedRule": "red-srgb",
+      "oracleViolations": [
+        "red-srgb"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "e2743da9798a6b331cd4620eb48ebcba9b2ec3f668e41f87b7abc341b3a38252"
+      ],
+      "sha256": "27e39f1d674ac579516768d9988e3f32621cd954624bfb07bfa30a89a68ffdb7",
+      "bytes": 1861,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "b8ec4885f6139363a83117568258a086298a78d057eb195f6eed8e545f9b8460"
+      }
+    },
+    {
+      "name": "premultiplied-material",
+      "path": "premultiplied-material/input.3tz",
+      "source": "cyan premultiplied, material map",
+      "intendedRule": "premultiplied",
+      "oracleViolations": [
+        "premultiplied"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "61bf2f0d1bf6a28c5191fc275859a6c460d25a655b867e42d2a7f3637a4a8e1d"
+      ],
+      "sha256": "b6ae48698bcdc78735b6146fa4f060ef88b02e0398a1b28a8c1e8dc783089b8b",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "9064e5d229f861fbdb71b81ab5bc36d6ac3df6842e1abb02f3ea94829fd59b4f"
+      }
+    },
+    {
+      "name": "global-data-8-late",
+      "path": "global-data-8-late/input.3tz",
+      "source": "alpha_simple global data and level moved 8 bytes later",
+      "intendedRule": "global-data",
+      "oracleViolations": [
+        "global-data"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "c290a69cacb32468e6cd34732a6a63e24983762c4e7c4d56a7880ba02a06d123"
+      ],
+      "sha256": "387c6c13aa5852da4ac0bbd1a7f3131cdb3a39122157947fec297a60ec2c2ea7",
+      "bytes": 1769,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "945d4050c64b96897aa5e7772a8efb16f9917a2ec5432d43eb27bd1fc2106fbd"
+      }
+    },
+    {
+      "name": "kvd-misplaced",
+      "path": "kvd-misplaced/input.3tz",
+      "source": "cyan key/value data and level moved 16 bytes later",
+      "intendedRule": "kvd-position",
+      "oracleViolations": [
+        "kvd-position"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "8eae14f73a5befe9982c954e040bbc34228c26f96699e3f6d7a5f109d6e95e42"
+      ],
+      "sha256": "4911184a0f4ffd933fdcdd4d29654640097ce698e487b0eb21af5809d9143682",
+      "bytes": 5713,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "5bd350a762cddc65a118d3d89394b534d872cfdeb6604eb94705df9957d6a5d7"
+      }
+    },
+    {
+      "name": "kvd-empty-key",
+      "path": "kvd-empty-key/input.3tz",
+      "source": "cyan first key starts with NUL",
+      "intendedRule": "kvd-pairs",
+      "oracleViolations": [
+        "kvd-pairs"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "e23ea8875b5af1134913444269906b1f4a7af8dad2c4b87fe1e0d3871f7bfb35"
+      ],
+      "sha256": "f80d6feb361f03abf016fc1d9222fc9d8264ffedc164971115e84cc3943d8464",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "61d68c862932fe7e9a43eec935ffbef65b892425ea919dd1bd7b63f2554bcf96"
+      }
+    },
+    {
+      "name": "basislz-pframe-flag",
+      "path": "basislz-pframe-flag/input.3tz",
+      "source": "alpha_simple ImageDesc flags isPFrame",
+      "intendedRule": "image-descriptor",
+      "oracleViolations": [
+        "image-descriptor"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "c9597fe58a9f3e5d656bd4e234b30818dc80785c94a4fbfd895c77fb5867809a"
+      ],
+      "sha256": "54a939338873fc6c959ef1894969ed999f0f51293bb4932442e40e818c09c888",
+      "bytes": 1761,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "35a2b5e5f6855aae2fa0046f4385ccc76c9b54fcb2986834c5488e3ce9f8d5ff"
+      }
+    },
+    {
+      "name": "basislz-extended",
+      "path": "basislz-extended/input.3tz",
+      "source": "alpha_simple extendedByteLength 4, tables - 4",
+      "intendedRule": "basislz-length",
+      "oracleViolations": [
+        "basislz-length"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "51204420cef969283098f629457521f92b7df4dae4875673292062b34c35ba9d"
+      ],
+      "sha256": "fa7f0d7fad1308053dae08e9cab1609c5b39a0e4cd023931bf585c5ac5678e70",
+      "bytes": 1761,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "7811fc3805f901ee99543d6acc24a2d7c5005e464778d7a1aede79b0bf35ab0c"
+      }
+    },
+    {
+      "name": "basislz-alpha-missing",
+      "path": "basislz-alpha-missing/input.3tz",
+      "source": "alpha_simple alphaSliceByteLength 0",
+      "intendedRule": "image-descriptor",
+      "oracleViolations": [
+        "image-descriptor"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "3df8090be34984b65dfa700a336ddc86aacc7982748820a588c3925fcb1fa30a"
+      ],
+      "sha256": "2a1444bc76b6716f4acde3d3020785cfff9ac347b6a3b2ee0b4e14ce7aa390a4",
+      "bytes": 1761,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "782061c0f6d5bf4df61fb8ad80ddb29483da2d5290663dfbb315859d97d148b5"
+      }
+    },
+    {
+      "name": "etc1s-rgb-ggg",
+      "path": "etc1s-rgb-ggg/input.3tz",
+      "source": "alpha_simple channels RGB+GGG",
+      "intendedRule": "channels",
+      "oracleViolations": [
+        "channels"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "ebab38ce3006514c67c2a3b42904d96c1a1cadf71d293059171d16e966873c4b"
+      ],
+      "sha256": "3471798fd389547c6fe108e58877858dafd0700d104d11673e8cb32f57053e9f",
+      "bytes": 1761,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "2fe84a2455023ca8868bc04f05121b0691323256e58743c8ace0d0bd37a722c3"
+      }
+    },
+    {
+      "name": "dfd-vendor",
+      "path": "dfd-vendor/input.3tz",
+      "source": "cyan DFD vendorId 1",
+      "intendedRule": "dfd-block",
+      "oracleViolations": [
+        "dfd-block"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "a6048890182d63fc0c647b2ba63d3b35f8c3aa334e06c8f3a977c42d953be88e"
+      ],
+      "sha256": "99944eac82e144d9949430fc2122fc63363fe63db2afdd27a85d67f97e2b9c58",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "6fbde60e1631e506d10f3b8145d75b271d688b2c39403863bbace869d23600b1"
+      }
+    },
+    {
+      "name": "dfd-version",
+      "path": "dfd-version/input.3tz",
+      "source": "cyan DFD versionNumber 3",
+      "intendedRule": "dfd-block",
+      "oracleViolations": [
+        "dfd-block"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "38150385f58ca75f3a5fe8ff30605ce38e1b464ab360125eb263b868bdf23a2b"
+      ],
+      "sha256": "8888171bdf7ed1a68ef9dcb9e7afde0ead10179496ec85903b1718b86933f870",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "5081b2883b16d0e0f67e1319ad0a275134e2cf7a2f1dc770149adca4b449599b"
+      }
+    },
+    {
+      "name": "cubemap-not-square-no-material",
+      "path": "cubemap-not-square-no-material/input.3tz",
+      "source": "cyan faceCount 6, height 32, no material use",
+      "intendedRule": "texture-type",
+      "oracleViolations": [
+        "texture-type"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "e1eabe46ec9ff5770f289a1d215542f68ce96c699472237d2a652ad29a434a71"
+      ],
+      "sha256": "2d4d4ffa5bff461c87a0d2ecbd2788a0a000dcfff4933f59701ab80f3e66fa5a",
+      "bytes": 5641,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "02d021afb5daa87014f0b1462c403486b61d8de910c302e025afe772222b51de"
+      }
+    },
+    {
+      "name": "non-2d-material",
+      "path": "non-2d-material/input.3tz",
+      "source": "cyan layerCount 1, material map",
+      "intendedRule": "not-2d",
+      "oracleViolations": [
+        "not-2d"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "2de723d432bc0a3bc84b9e8adba9b407069edfa9141dc5ff7e447779ec2f710c"
+      ],
+      "sha256": "879db5833a3c3be7d6a69e4a6323c7de7615472e2063300287d3697f7570114b",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "50c7b30c2d17d5e014543cc8d7cb7539a87edfd280fbcdf6fb0e0f04d1d0aaf3"
+      }
+    },
+    {
+      "name": "non-2d-no-material",
+      "path": "non-2d-no-material/input.3tz",
+      "source": "cyan layerCount 1, no material use",
+      "intendedRule": "not-2d",
+      "oracleViolations": [
+        "not-2d"
+      ],
+      "oracleCategory": "unsupported",
+      "expectedCategory": "unsupported",
+      "expectedExitCode": 2,
+      "expectedReport": null,
+      "imageSha256": [
+        "2de723d432bc0a3bc84b9e8adba9b407069edfa9141dc5ff7e447779ec2f710c"
+      ],
+      "sha256": "720616e888452c41a3a921b55bf826411df4f790f12712e6de3bfab7caec3d18",
+      "bytes": 5641,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "380cb27cf852e71a4ee0ffa56b12c24700c407a5ea0f73bc0676fce4748d5126"
+      }
+    },
+    {
+      "name": "mime-png",
+      "path": "mime-png/input.3tz",
+      "source": "cyan declared image/png",
+      "intendedRule": "mime-type",
+      "oracleViolations": [
+        "mime-type"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      ],
+      "sha256": "bb7a508719d48f09b82202e6656659b9139aacaa0b728542f65f13127baffa76",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "9be3f740355222c624c5dd6c478293165a07bbf3e028c74fd7fd968cb885743d"
+      }
+    },
+    {
+      "name": "mime-missing-buffer-view",
+      "path": "mime-missing-buffer-view/input.3tz",
+      "source": "cyan in a bufferView without mimeType",
+      "intendedRule": "mime-type",
+      "oracleViolations": [
+        "mime-type"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      ],
+      "sha256": "d250f6c48c20e3e6087e71d13b1155c545e1eaa5643e28199fe219f7e4e9360f",
+      "bytes": 5673,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "857159c68ad56264c86f3992ceb8b87beff6c48e3c19abcfbb453ca0d613b3b0"
+      }
+    },
+    {
+      "name": "uri-png-bytes",
+      "path": "uri-png-bytes/input.3tz",
+      "source": "PNG bytes as tex.png member, no mimeType",
+      "intendedRule": "identifier",
+      "oracleViolations": [
+        "identifier"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "7f1aa52cc14cf135e1c75b1ae96c6bac3f1a21cfd0534845171a21dccddf95ec"
+      ],
+      "sha256": "2deb7b9a4990bfec500048472978820e5952a0bd84328fb0fc3085b72c6aed33",
+      "bytes": 1446,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "77d0d48d9c7f003687a412a76d05336d5e6a4a5f53903e56c400b8bf38577ffb",
+        "tex.png": "7f1aa52cc14cf135e1c75b1ae96c6bac3f1a21cfd0534845171a21dccddf95ec"
+      }
+    },
+    {
+      "name": "data-uri-no-mime",
+      "path": "data-uri-no-mime/input.3tz",
+      "source": "data:image/ktx2 URI, no mimeType",
+      "intendedRule": "data-uri",
+      "oracleViolations": [
+        "data-uri"
+      ],
+      "oracleCategory": "unsupported",
+      "expectedCategory": "unsupported",
+      "expectedExitCode": 2,
+      "expectedReport": null,
+      "imageSha256": [
+        "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      ],
+      "sha256": "977ae822644106a76037a87956490d507c73d1db820c98c50753becf6e166f93",
+      "bytes": 1277,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "4210bc8c17d366496015ead9a3671de63d30b55bc265fa0f296262286660c038"
+      }
+    },
+    {
+      "name": "data-uri-ktx2-mime",
+      "path": "data-uri-ktx2-mime/input.3tz",
+      "source": "data:image/ktx2 URI with image/ktx2",
+      "intendedRule": "data-uri",
+      "oracleViolations": [
+        "data-uri"
+      ],
+      "oracleCategory": "unsupported",
+      "expectedCategory": "unsupported",
+      "expectedExitCode": 2,
+      "expectedReport": null,
+      "imageSha256": [
+        "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      ],
+      "sha256": "20e5513d5c101ede1aab9247294dc72ccbef38dfc70129b2a37fcbbc10713d39",
+      "bytes": 1301,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "5871b849fb34e9b66d1c89b07fc76155ed4f2dc0bb4f0076fb8bb81cdb1de83d"
+      }
+    },
+    {
+      "name": "data-uri-png-mime",
+      "path": "data-uri-png-mime/input.3tz",
+      "source": "data: URI declared image/png (data URI decided first)",
+      "intendedRule": "data-uri",
+      "oracleViolations": [
+        "data-uri"
+      ],
+      "oracleCategory": "unsupported",
+      "expectedCategory": "unsupported",
+      "expectedExitCode": 2,
+      "expectedReport": null,
+      "imageSha256": [
+        "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      ],
+      "sha256": "5f2d3b730ca86d3752a0dcbffd668dd8d73730c7c58863cd6898c35df4adddba",
+      "bytes": 1301,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "0ab457e7b83230bbe3dca6fe40148285e3798b888d0009fe78130e4dd84025f9"
+      }
+    },
+    {
+      "name": "fallback-ktx2-by-identifier",
+      "path": "fallback-ktx2-by-identifier/input.3tz",
+      "source": "fallback fallback.bin without mimeType holding KTX2",
+      "intendedRule": "fallback-is-ktx2",
+      "oracleViolations": [
+        "fallback-is-ktx2"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      ],
+      "sha256": "3e26d1aff64880b7b5d34cff07c1a2bccbf1d894ca9fe7e00167e7d2acc643cb",
+      "bytes": 10169,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "f79c42e743b113272618e0495a3b6cfcbd2b820bfd6b13a2440cf87f0f63c6db",
+        "fallback.bin": "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      }
+    },
+    {
+      "name": "fallback-is-ktx2",
+      "path": "fallback-is-ktx2/input.3tz",
+      "source": "core source and extension source both the KTX2 image",
+      "intendedRule": "fallback-is-ktx2",
+      "oracleViolations": [
+        "fallback-is-ktx2"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      ],
+      "sha256": "7fd41a31220331547cd293c4118fd81145f997b06b318ec5431fa4cb73cb6e15",
+      "bytes": 5653,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "55285184e2adad7199c4c3b3c8dedf67ebd74101429db66d51336de5560bd135"
+      }
+    },
+    {
+      "name": "no-fallback-not-required",
+      "path": "no-fallback-not-required/input.3tz",
+      "source": "no fallback, extension only in extensionsUsed",
+      "intendedRule": "fallback-required",
+      "oracleViolations": [
+        "fallback-required"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      ],
+      "sha256": "24ff3afa6342da19b8843b6b8da403f6edc8a4b9160d5dab275385abf249b3b8",
+      "bytes": 5653,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "d4ff29dbe6d5d6c28b7d7203d8ad93df404865aa3d7227f1870c515002b30245"
+      }
+    },
+    {
+      "name": "undeclared-extension",
+      "path": "undeclared-extension/input.3tz",
+      "source": "extension object, PNG fallback, no extensionsUsed",
+      "intendedRule": "undeclared-extension",
+      "oracleViolations": [
+        "undeclared-extension"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "imageSha256": [
+        "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94",
+        "7f1aa52cc14cf135e1c75b1ae96c6bac3f1a21cfd0534845171a21dccddf95ec"
+      ],
+      "sha256": "38f32416064f6660ea8b4ea57a66ea64d12b07eeb70df90bcee7e9144db11f13",
+      "bytes": 5777,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "d2bfeac9ea73e36bf26b45686dfc9413c45e19bc293a3e0ed80d09852a8bc681"
+      }
+    }
+  ]
+}

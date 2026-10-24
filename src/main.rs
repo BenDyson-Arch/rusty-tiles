@@ -1,18 +1,56 @@
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::Arc;
+
+// Rust ignores SIGPIPE, so `println!`/`eprintln!` panic (exit 101) when the
+// reader of stdout or stderr has gone away. The conversion's status must not
+// depend on either pipe: stderr write errors are ignored, and a broken stdout
+// is ignored too. Any other stdout error (ENOSPC, EIO, ...) is reported on
+// stderr and turns a successful run into the I/O failure status in `main`.
+macro_rules! errln {
+    ($($arg:tt)*) => {{
+        let _ = std::io::Write::write_fmt(
+            &mut std::io::stderr().lock(),
+            format_args!("{}\n", format_args!($($arg)*)),
+        );
+    }};
+}
+macro_rules! outln {
+    ($($arg:tt)*) => {{
+        if let Err(error) = std::io::Write::write_fmt(
+            &mut std::io::stdout().lock(),
+            format_args!("{}\n", format_args!($($arg)*)),
+        ) {
+            stdout_error(&error);
+        }
+    }};
+}
+
+static STDOUT_FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn stdout_error(error: &io::Error) {
+    if error.kind() != io::ErrorKind::BrokenPipe {
+        errln!("error: writing to stdout: {error}");
+        STDOUT_FAILED.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+mod interrupt;
 
 use clap::builder::{PossibleValue, PossibleValuesParser};
 use clap::{Args, Parser, Subcommand};
 use serde_json::{json, Value};
 
 use rusty_tiles::error::Error;
-use rusty_tiles::georef::{
-    parse_metashape_offset, Cartographic, RotationDegrees, SourceCrs, SourceOffset,
+use rusty_tiles::georef::SourceAxes;
+use rusty_tiles::package::{package, PackageRequest, PackageResult};
+use rusty_tiles::{
+    doctor, terrain, vector, JobError, JobErrorKind, MeshPlacement, MeshSourceCrs,
+    ModelManifestRequest, ModelManifestResult, ModelWrapRequest, ModelWrapResult, Observer,
+    OutputPolicy, RasterDirectoryRequest, RasterDirectoryResult, RasterLimits, RasterRequest,
+    RasterResult, RunEvent, TilerJobs, TilerProfile, TilerRequest, TilerResult,
 };
-use rusty_tiles::pack::{convert_to_3tz_reported, PackOptions};
-use rusty_tiles::tile::{mesh_to_3tz_reported, MeshTo3tzOptions};
-use rusty_tiles::tileset::{create_tileset_json, glb_to_3tz_reported, CreateTilesetOptions};
-use rusty_tiles::{doctor, terrain, vector, ConversionResult, Reporter};
 
 // Option spelling: multi-word options keep their camelCase name as the primary
 // spelling (3d-tiles-tools compatibility, scripts and machine contracts) and
@@ -23,7 +61,7 @@ use rusty_tiles::{doctor, terrain, vector, ConversionResult, Reporter};
 #[derive(Parser)]
 #[command(
     name = "rusty-tiles",
-    about = "Transform geospatial sources into 3D Tiles (.3tz). createTilesetJson and convert match 3d-tiles-tools@0.5.4 argv.",
+    about = "Transform admitted geospatial sources into 3D Tiles packages.",
     version,
     arg_required_else_help = true
 )]
@@ -40,15 +78,30 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Check a self-contained, explicit 3TZ archive before publishing
+    /// Stream a static glTF/GLB mesh (local metres Y-up, or a declared --source-crs) into a Tiles 1.1 implicit .3tz
+    Mesh(TilerArgs),
+    /// Inspect a self-contained 3TZ archive against the bounded C1 payload profile
     Validate {
         /// .3tz archive to check (raster/terrain directories are not validated yet)
         input: PathBuf,
-        /// Run a locally installed official 3d-tiles-validator executable
-        #[arg(long)]
-        external_validator: Option<PathBuf>,
+        /// Set an opt-in volume cap or replace an amplification budget; repeatable. KEY is one
+        /// of sourceArchiveBytes, archiveEntries, centralDirectoryBytes, archiveStoredBytes,
+        /// hierarchyVisits, references, totalBytesRead, totalPayloadElements,
+        /// containmentWorkUnits, containmentBytesRead, containmentDecodedBytes; N is a decimal
+        /// integer. Values may be below the defaults (stricter); per-item format limits are fixed
+        #[arg(
+            long = "maxVolume",
+            visible_alias = "max-volume",
+            value_name = "KEY=N",
+            value_parser = parse_max_volume
+        )]
+        max_volume: Vec<(rusty_tiles::validate::LimitKey, u64)>,
+        /// Put validation scratch files inside this existing directory (default: TMPDIR, then
+        /// the user cache directory, then the system temporary directory, disk-backed first)
+        #[arg(long = "scratchDir", visible_alias = "scratch-dir", value_name = "DIR")]
+        scratch_dir: Option<PathBuf>,
     },
-    /// Check linked native capabilities and local PROJ database/grids
+    /// Check converter capabilities and local CRS resources
     Doctor(DoctorArgs),
     /// Serve selected output directories with an installed Cesium IIFE runtime
     Preview(PreviewArgs),
@@ -57,30 +110,30 @@ enum Command {
         #[arg(short, long)]
         input: PathBuf,
     },
-    /// GLB/glTF file or directory → tileset.json (3d-tiles-tools createTilesetJson)
+    /// Admitted static GLB/glTF → sibling tileset.json without copying source resources
     #[command(name = "createTilesetJson", visible_alias = "create-tileset-json")]
-    CreateTilesetJson(TilesetArgs),
+    CreateTilesetJson(ModelManifestArgs),
     /// Tileset directory or tileset.json → .3tz (3d-tiles-tools convert)
     Convert(IoArgs),
-    /// GLB/glTF → .3tz (createTilesetJson + convert)
+    /// Admitted static GLB/glTF → exact-byte .3tz with optional rigid placement
     #[command(name = "glb-to-3tz", visible_alias = "glbTo3tz")]
-    GlbTo3tz(TilesetArgs),
-    /// GLB/glTF → spatially split .3tz (split only when over leaf budget)
-    #[command(name = "mesh-to-3tz", visible_alias = "meshTo3tz")]
-    MeshTo3tz(MeshArgs),
-    /// Vector sources → glTF .3tz (requires native GDAL/GEOS)
+    GlbTo3tz(ModelArchiveArgs),
+    /// GeoJSON/GeoPackage → glTF .3tz; other OGR inputs require native-geospatial
     Vector(VectorArgs),
     /// LAS/LAZ → point-cloud 3D Tiles with native disk-backed spatial LOD
     PointCloud(PointCloudArgs),
-    /// DEM → native quantized-mesh directory (requires native-geospatial)
+    /// DEM → bounded 3D Tiles 1.1 mesh directory (requires native-geospatial)
     Terrain(TerrainArgs),
     /// GeoTIFF imagery → lossless COG and PNG XYZ pyramid (requires GDAL)
     Raster(RasterArgs),
+    /// Copy one aligned RGB GeoTIFF tile into a new directory (native-geospatial)
+    RasterTileToDirectory(RasterTileArgs),
 }
 
 impl Command {
     fn name(&self) -> &'static str {
         match self {
+            Self::Mesh(_) => "mesh",
             Self::Validate { .. } => "validate",
             Self::Doctor(_) => "doctor",
             Self::Preview(_) => "preview",
@@ -88,11 +141,11 @@ impl Command {
             Self::CreateTilesetJson(_) => "createTilesetJson",
             Self::Convert(_) => "convert",
             Self::GlbTo3tz(_) => "glb-to-3tz",
-            Self::MeshTo3tz(_) => "mesh-to-3tz",
             Self::Vector(_) => "vector",
             Self::PointCloud(_) => "point-cloud",
             Self::Terrain(_) => "terrain",
             Self::Raster(_) => "raster",
+            Self::RasterTileToDirectory(_) => "raster-tile-to-directory",
         }
     }
 }
@@ -112,61 +165,143 @@ struct IoArgs {
     force: bool,
 }
 
-/// 3d-tiles-tools placement of the generated root tile.
 #[derive(Args)]
-struct PlacementArgs {
-    /// lon lat [height_m] — 3d-tiles-tools --cartographicPositionDegrees
+struct TilerArgs {
+    #[command(flatten)]
+    io: IoArgs,
+    /// Output policy: fast, balanced, quality or lossless; constants remain provisional
+    #[arg(long, default_value = "balanced")]
+    profile: TilerProfile,
+    /// Maximum workers or auto; actual workers are capped by cores and available memory
+    #[arg(long, default_value = "auto")]
+    jobs: TilerJobs,
+    /// Owned working-data parent; publication staging remains beside the output
+    #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
+    scratch_dir: Option<PathBuf>,
+    #[command(flatten)]
+    placement: RigidPlacementArgs,
+    #[command(flatten)]
+    source: SourceCrsArgs,
+}
+
+#[derive(Args)]
+struct SourceCrsArgs {
+    /// Source CRS: local (metres, glTF Y up) or a 2D horizontal EPSG/WKT/PROJ definition
     #[arg(
-        long = "cartographicPositionDegrees",
-        visible_alias = "cartographic-position-degrees",
+        long = "sourceCrs",
+        visible_alias = "source-crs",
+        default_value = "local"
+    )]
+    source_crs: String,
+    /// Source CRS axes after node transforms: y-up (E,height,-N; default) or xyz (E,N,height)
+    #[arg(long = "sourceAxes", visible_alias = "source-axes", value_enum)]
+    source_axes: Option<SourceAxes>,
+    /// Source CRS shift E N [A], added in f64: E/N in horizontal CRS units, A metres
+    #[arg(
+        long = "sourceOffset",
+        visible_alias = "source-offset",
         num_args = 2..=3,
         allow_hyphen_values = true
     )]
-    cartographic_position_degrees: Vec<f64>,
-    /// heading pitch roll (degrees) — 3d-tiles-tools --rotationDegrees
+    source_offset: Vec<f64>,
+    /// Metashape offset file with exactly the lines "E: <n>", "N: <n>", "A: <n>"
+    #[arg(long = "sourceOffsetFile", visible_alias = "source-offset-file")]
+    source_offset_file: Option<PathBuf>,
+    /// Metres added to source height plus A to give ellipsoidal height (default 0 with a source CRS)
     #[arg(
-        long = "rotationDegrees",
-        visible_alias = "rotation-degrees",
-        num_args = 3,
+        long = "heightOffset",
+        visible_alias = "height-offset",
         allow_hyphen_values = true
     )]
-    rotation_degrees: Vec<f64>,
+    height_offset: Option<f64>,
+}
+impl SourceCrsArgs {
+    fn resolve(self) -> Result<Option<MeshSourceCrs>, Error> {
+        Ok(MeshSourceCrs::from_parameters(
+            Some(&self.source_crs),
+            self.source_axes,
+            (!self.source_offset.is_empty()).then_some(&self.source_offset[..]),
+            self.source_offset_file.as_deref(),
+            self.height_offset,
+        )
+        .map_err(|error| rusty_tiles::JobFailure {
+            error,
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        })?)
+    }
 }
 
 #[derive(Args)]
-struct TilesetArgs {
+struct RasterTileArgs {
+    #[arg(short = 'i', long)]
+    input: PathBuf,
+    /// Directory in an existing supported local parent
+    #[arg(short = 'o', long)]
+    output: PathBuf,
+    /// Replace the current output entry after conversion finishes
+    #[arg(short = 'f', long)]
+    force: bool,
+    #[arg(long)]
+    zoom: u8,
+    #[arg(long)]
+    x: u32,
+    #[arg(long)]
+    y: u32,
+}
+
+#[derive(Args)]
+struct ModelArchiveArgs {
     #[command(flatten)]
     io: IoArgs,
     #[command(flatten)]
-    placement: PlacementArgs,
+    placement: RigidPlacementArgs,
 }
 
-fn doctor_commands() -> PossibleValuesParser {
+#[derive(Args)]
+struct ModelManifestArgs {
+    #[arg(short, long)]
+    input: PathBuf,
+    /// Replace the sibling tileset.json through completed-file publication
+    #[arg(long)]
+    force: bool,
+    #[command(flatten)]
+    placement: RigidPlacementArgs,
+}
+
+fn doctor_commands() -> impl clap::builder::TypedValueParser<Value = doctor::Command> {
+    use clap::builder::TypedValueParser;
     PossibleValuesParser::new(
-        doctor::COMMANDS
-            .iter()
-            .map(|(name, aliases)| PossibleValue::new(*name).aliases(aliases.iter().copied())),
+        doctor::Command::ALL
+            .map(|command| PossibleValue::new(command.name()).aliases(command.aliases())),
     )
+    .map(|name| doctor::Command::from_name(&name).expect("clap admits only doctor commands"))
 }
 
 #[derive(Args)]
 struct DoctorArgs {
     /// Check only these converters; repeat to select several
     #[arg(long = "command", value_parser = doctor_commands())]
-    commands: Vec<String>,
+    commands: Vec<doctor::Command>,
     /// Cesium Build/Cesium directory to look for (informational preview check;
-    /// defaults to the README install location)
-    #[arg(long)]
-    cesium: Option<PathBuf>,
+    /// the default is the README install location relative to the working directory)
+    #[arg(
+        long,
+        default_value = "target/preview-runtime/node_modules/cesium/Build/Cesium"
+    )]
+    cesium: PathBuf,
 }
 
 #[derive(Args)]
 struct PreviewArgs {
-    /// Cesium 1.143.0 Build/Cesium directory containing Cesium.js (IIFE)
+    /// Cesium 1.146.0 Build/Cesium directory containing Cesium.js (IIFE)
     #[arg(long)]
     cesium: PathBuf,
+    /// Listen IP address. Any non-loopback address serves every host that
+    /// can reach it; names are not resolved.
     #[arg(long, default_value = "127.0.0.1")]
-    host: String,
+    host: std::net::IpAddr,
     #[arg(long, default_value_t = 9227)]
     port: u16,
     #[arg(long)]
@@ -185,34 +320,15 @@ struct PreviewArgs {
 struct TerrainArgs {
     #[command(flatten)]
     io: IoArgs,
-    /// Finest zoom level (0..24)
-    #[arg(long = "maxZoom", visible_alias = "max-zoom")]
-    max_zoom: u8,
-    /// Samples per tile edge: 17, 33, 65 or 129
-    #[arg(long, default_value_t = 65)]
-    grid: u16,
-    /// Add to DEM metre heights to obtain ellipsoidal heights; never inferred
-    #[arg(
-        long = "heightOffset",
-        visible_alias = "height-offset",
-        allow_hyphen_values = true
-    )]
+    /// Source-pixel cells per GLB leaf edge: 16, 32, 64 or 128
+    #[arg(long, default_value_t = 64)]
+    cells_per_leaf: u16,
+    /// Add to raw DEM metre heights to obtain ellipsoidal heights; never inferred
+    #[arg(long, allow_hyphen_values = true)]
     height_offset: f64,
-    /// Ellipsoidal height used outside coverage and for NoData
-    #[arg(
-        long = "fillHeight",
-        visible_alias = "fill-height",
-        allow_hyphen_values = true
-    )]
+    /// Ellipsoidal height used for missing samples inside the source footprint
+    #[arg(long, allow_hyphen_values = true)]
     fill_height: f64,
-    /// Maximum added terrain simplification error in metres; 0 keeps the full grid
-    #[arg(
-        long = "maxError",
-        visible_alias = "max-error",
-        default_value_t = 1.,
-        allow_hyphen_values = true
-    )]
-    max_error: f64,
 }
 
 #[derive(Args)]
@@ -228,9 +344,10 @@ struct RasterArgs {
     /// image (RGB/RGBA bands) or gray (one band stretched by displayMin/displayMax)
     #[arg(long, default_value = "image")]
     display: String,
-    #[arg(long, default_value_t = 1)]
-    band: u16,
-    /// Alpha band for image display; 0 uses the source mask/NoData
+    /// Selected gray band; defaults to 1 for gray display
+    #[arg(long)]
+    band: Option<u16>,
+    /// Explicit opacity band; 0 selects the declared alpha, otherwise opaque
     #[arg(long = "alphaBand", visible_alias = "alpha-band", default_value_t = 0)]
     alpha_band: u16,
     /// Value mapped to black for gray display
@@ -247,12 +364,33 @@ struct RasterArgs {
         allow_hyphen_values = true
     )]
     display_max: Option<f64>,
+    /// Operation worker cap (1..4)
+    #[arg(long, default_value_t = RasterLimits::default().workers)]
+    jobs: u8,
+    /// Aggregate admitted source bytes
+    #[arg(long, default_value_t = RasterLimits::default().max_source_bytes)]
+    max_source_bytes: u64,
+    #[arg(long, default_value_t = RasterLimits::default().max_source_pixels)]
+    max_source_pixels: u64,
+    #[arg(long, default_value_t = RasterLimits::default().max_decoded_bytes)]
+    max_decoded_bytes: u64,
+    #[arg(long, default_value_t = RasterLimits::default().max_tiles)]
+    max_tiles: u64,
+    /// Completed output bytes; checked after artifact close
+    #[arg(long, default_value_t = RasterLimits::default().max_output_bytes)]
+    max_output_bytes: u64,
+    /// Logical work and completed workspace allowance; not an RSS quota
+    #[arg(long, default_value_t = RasterLimits::default().max_working_bytes)]
+    max_working_bytes: u64,
 }
 
 #[derive(Args)]
 struct PointCloudArgs {
     #[command(flatten)]
     io: IoArgs,
+    /// Expose classification, intensity and return number as vertex property attributes
+    #[arg(long = "metadataAttributes", visible_alias = "metadata-attributes")]
+    metadata_attributes: bool,
     /// local XYZ metres, header CRS, or explicit 2D horizontal CRS (e.g. EPSG:32632)
     #[arg(long = "sourceCrs", visible_alias = "source-crs")]
     source_crs: String,
@@ -263,11 +401,11 @@ struct PointCloudArgs {
         allow_hyphen_values = true
     )]
     height_offset: Option<f64>,
-    /// Maximum points per tile
+    /// Maximum points per tile, at most 8192
     #[arg(
         long = "maxPoints",
         visible_alias = "max-points",
-        default_value_t = 50000
+        default_value_t = rusty_tiles::point_cloud::MAX_POINTS_PER_TILE
     )]
     max_points: usize,
     /// Points read per source chunk
@@ -286,10 +424,10 @@ struct VectorArgs {
     /// Omit volatile performance diagnostics for byte-identical archives
     #[arg(long)]
     reproducible: bool,
-    /// Maximum encoding worker processes (defaults to available cores)
+    /// Maximum encoding worker threads (defaults to available cores)
     #[arg(long, default_value_t = std::thread::available_parallelism().map_or(1, usize::from))]
     jobs: usize,
-    /// OGR attribute filter applied to every selected layer
+    /// Attribute filter applied to every selected layer (SQLite in the portable build)
     #[arg(long = "where")]
     where_clause: Option<String>,
     /// Encode list-valued properties as JSON strings, or reject them
@@ -410,93 +548,91 @@ struct VectorArgs {
 }
 
 #[derive(Args)]
-struct MeshArgs {
-    #[command(flatten)]
-    io: IoArgs,
-    #[command(flatten)]
-    placement: PlacementArgs,
-    /// Texture output: fast full-chroma JPEG, smaller WebP, GPU UASTC, or exact PNG.
+struct RigidPlacementArgs {
+    /// WGS84 longitude/latitude degrees and ellipsoidal height metres
+    #[arg(long, num_args = 3, allow_hyphen_values = true)]
+    anchor: Vec<f64>,
+    /// Active ENU unit quaternion XYZW; requires --anchor
     #[arg(
-        long = "textureFormat",
-        visible_alias = "texture-format",
-        value_enum,
-        default_value = "jpeg"
-    )]
-    texture_format: rusty_tiles::tile::TextureFormat,
-    /// Basis Universal encoder executable (required for UASTC output).
-    #[arg(long = "basisu", default_value = "basisu")]
-    basisu: PathBuf,
-    /// Stop splitting a node at this many triangles (default 20000).
-    #[arg(
-        long = "maxTriangles",
-        visible_alias = "max-triangles",
-        default_value_t = rusty_tiles::DEFAULT_MAX_TRIANGLES
-    )]
-    max_triangles: usize,
-    /// Source-file wrap threshold in bytes (default 204800). Split stop is
-    /// `--maxTriangles`; written tiles are meshopt-compressed unless `--noMeshopt`.
-    #[arg(
-        long = "maxBytes",
-        visible_alias = "max-bytes",
-        default_value_t = rusty_tiles::DEFAULT_MAX_BYTES
-    )]
-    max_bytes: u64,
-    /// Leaf atlas edge (default 2048). Oversized individual triangles retain
-    /// their texels in larger atlases. Parent atlases are capped at 1024.
-    #[arg(
-        long = "tileSize",
-        visible_alias = "tile-size",
-        default_value_t = rusty_tiles::DEFAULT_TILE_SIZE
-    )]
-    tile_size: u32,
-    /// Must be 0: leaf texels are preserved at source resolution.
-    #[arg(
-        long = "maxTexelDensity",
-        visible_alias = "max-texel-density",
-        default_value_t = rusty_tiles::DEFAULT_MAX_TEXEL_DENSITY
-    )]
-    max_texel_density: f64,
-    /// POSITION CRS: auto (detect), geographic (lon°/height/−lat°), or epsg:3857.
-    #[arg(
-        long = "sourceCrs",
-        visible_alias = "source-crs",
-        default_value = "auto"
-    )]
-    source_crs: String,
-    /// Metashape Shift E N [A] in metres (Pseudo-Mercator). Added in f64, not f32.
-    #[arg(
-        long = "sourceOffset",
-        visible_alias = "source-offset",
-        num_args = 2..=3,
+        long = "orientationXyzw",
+        visible_alias = "orientation-xyzw",
+        num_args = 4,
         allow_hyphen_values = true
     )]
-    source_offset: Vec<f64>,
-    /// Metashape offset.txt (`E: …` / `N: …` / `A: …`).
-    #[arg(long = "sourceOffsetFile", visible_alias = "source-offset-file")]
-    source_offset_file: Option<PathBuf>,
-    /// Disable lossless meshopt compression. Both modes retain float32 geometry.
-    #[arg(long = "noMeshopt", visible_alias = "no-meshopt")]
-    no_meshopt: bool,
+    orientation_xyzw: Vec<f64>,
+    /// Post-node source Y-up translation metres; requires --anchor
+    #[arg(
+        long = "sceneOffset",
+        visible_alias = "scene-offset",
+        num_args = 3,
+        allow_hyphen_values = true
+    )]
+    scene_offset: Vec<f64>,
+}
+impl RigidPlacementArgs {
+    fn resolve(self) -> Result<MeshPlacement, Error> {
+        Ok(MeshPlacement::from_parameters(
+            optional_components(self.anchor),
+            optional_components(self.orientation_xyzw),
+            optional_components(self.scene_offset),
+        )
+        .map_err(|error| rusty_tiles::JobFailure {
+            error,
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        })?)
+    }
+}
+
+fn optional_components<const N: usize>(values: Vec<f64>) -> Option<[f64; N]> {
+    if values.is_empty() {
+        None
+    } else {
+        Some(values.try_into().expect("clap enforces component count"))
+    }
 }
 
 /// What a successful command produced.
 enum Outcome {
     /// A command with its own single machine result (validate, doctor).
     Report(Value),
-    /// A published conversion.
-    Converted(ConversionResult),
-    /// A plain output file without a conversion report (createTilesetJson).
-    Wrote(PathBuf),
+    /// A validation report, written streamed: its payload rows are never materialized.
+    Validation(Box<rusty_tiles::validate::ValidationReport>),
+    /// Installed package with a typed receipt separate from source reports.
+    Pack(PackageResult),
+    Tiler(Box<TilerResult>),
+    ModelArchive(Box<ModelWrapResult>),
+    ModelManifest(Box<ModelManifestResult>),
+    RasterDirectory(RasterDirectoryResult),
+    Raster(Box<RasterResult>),
+    Vector(vector::VectorResult),
+    Terrain(Box<terrain::TerrainResult>),
+    PointCloud(Box<rusty_tiles::point_cloud::PointCloudResult>),
     Done,
 }
 
 fn main() -> ExitCode {
+    let code = run_cli();
+    // The line-buffered stdout may still hold a result when the process ends.
+    if let Err(error) = io::Write::flush(&mut io::stdout().lock()) {
+        stdout_error(&error);
+    }
+    // The conversion's own failure status wins; a lost result on a stdout that
+    // is not a closed pipe must not look like success.
+    if code == ExitCode::SUCCESS && STDOUT_FAILED.load(std::sync::atomic::Ordering::SeqCst) {
+        return ExitCode::from(1);
+    }
+    code
+}
+
+fn run_cli() -> ExitCode {
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(error) => {
             let code = error.exit_code();
             if code != 0 && std::env::args().any(|arg| arg == "--json") {
-                println!(
+                outln!(
                     "{}",
                     json!({"ok":false,"error":{"code":"usage","message":error.to_string()},"exitCode":code})
                 );
@@ -511,57 +647,108 @@ fn main() -> ExitCode {
     let json = cli.json && !internal;
     let events = cli.progress.is_some() && !internal;
     let name = cli.command.name();
+    // SIGINT/SIGTERM cancel the run so its scratch is cleaned before exit.
+    interrupt::install();
     // NDJSON progress mode keeps stderr machine-readable.
-    let reporter = if events {
-        Reporter::ndjson_stderr()
-    } else {
-        Reporter::human_stderr()
+    let progress = |done: u64| {
+        if events {
+            errln!(
+                "{}",
+                json!({"event":"progress","phase":"conversion","done":done,"total":1})
+            );
+        }
     };
-    reporter.progress("conversion", 0, 1);
-    match run(cli, &reporter) {
+    progress(0);
+    match run(cli) {
         Ok(Outcome::Report(report)) if report["ok"] == false => {
-            println!("{report}");
-            ExitCode::from(4)
+            outln!("{report}");
+            let code = report["exitCode"]
+                .as_u64()
+                .and_then(|c| u8::try_from(c).ok());
+            ExitCode::from(code.unwrap_or(4))
         }
         Ok(outcome) => {
-            reporter.progress("conversion", 1, 1);
+            progress(1);
             let summary = match outcome {
                 Outcome::Report(report) => {
                     if json {
-                        println!("{report}");
+                        outln!("{report}");
                     }
                     None
                 }
-                Outcome::Converted(result) => Some((
-                    output_summary(&result.output, result.report.as_ref(), result.archive),
+                Outcome::Validation(report) => {
+                    if json {
+                        let mut out = std::io::BufWriter::new(std::io::stdout().lock());
+                        let written = report
+                            .write_json(&mut out)
+                            .and_then(|()| std::io::Write::write_all(&mut out, b"\n"))
+                            .and_then(|()| std::io::Write::flush(&mut out));
+                        // A closed stdout reader does not change the validation result.
+                        if let Err(error) = written {
+                            if error.kind() != io::ErrorKind::BrokenPipe {
+                                errln!("error: writing the validation report: {error}");
+                                return ExitCode::from(1);
+                            }
+                        }
+                    }
+                    None
+                }
+                Outcome::Pack(result) => Some((package_summary(&result), result.output)),
+                Outcome::Tiler(result) => Some((tiler_summary(&result), result.output)),
+                Outcome::ModelArchive(result) => Some((
+                    model_summary(
+                        &result.output,
+                        &result.report,
+                        &result.cleanup_diagnostics,
+                        true,
+                    ),
                     result.output,
                 )),
-                Outcome::Wrote(output) => Some((output_summary(&output, None, false), output)),
+                Outcome::ModelManifest(result) => Some((
+                    model_summary(
+                        &result.output,
+                        &result.report,
+                        &result.cleanup_diagnostics,
+                        false,
+                    ),
+                    result.output,
+                )),
+                Outcome::Vector(result) => Some((vector_summary(&result), result.output)),
+                Outcome::Terrain(result) => Some((terrain_summary(&result), result.output)),
+                Outcome::PointCloud(result) => Some((point_cloud_summary(&result), result.output)),
+                Outcome::RasterDirectory(result) => {
+                    Some((raster_directory_summary(&result), result.output))
+                }
+                Outcome::Raster(result) => Some((raster_summary(&result), result.output)),
                 Outcome::Done => None,
             };
             if let Some((summary, output)) = summary {
                 if json {
-                    println!("{summary}");
+                    outln!("{summary}");
                 } else if !events {
                     for line in human_summary(name, &output, &summary) {
-                        eprintln!("{line}");
+                        errln!("{line}");
                     }
                 }
             }
             ExitCode::SUCCESS
         }
         Err(error) => {
-            let (category, code) = error.category();
+            let (category, mut code) = match &error {
+                Error::Job(failure) => job_category(failure.error.kind()),
+                _ => error.category(),
+            };
+            if let Some(signal) = interrupt::signal().filter(|_| is_cancellation(&error)) {
+                code = interrupt::exit_status(signal);
+            }
             if json {
-                println!(
-                    "{}",
-                    json!({"ok":false,"error":{"code":category,"message":error.to_string()},"exitCode":code})
-                );
+                let failure = error_summary(&error, category, code);
+                outln!("{failure}");
             } else {
-                eprintln!("{error}");
+                errln!("{error}");
             }
             if events {
-                eprintln!(
+                errln!(
                     "{}",
                     json!({"event":"failed","phase":"conversion","code":category})
                 );
@@ -571,13 +758,211 @@ fn main() -> ExitCode {
     }
 }
 
+/// Cancellation surfaces as a job failure from every producer except the validator, which
+/// reports its own `ValidationFailure::Cancelled`.
+fn is_cancellation(error: &Error) -> bool {
+    match error {
+        Error::Job(failure) => failure.error.kind() == JobErrorKind::Cancelled,
+        Error::Validation(failure) => {
+            matches!(failure, rusty_tiles::validate::ValidationFailure::Cancelled)
+        }
+        _ => false,
+    }
+}
+
+/// Transport categories and process statuses belong to this CLI adapter.
+fn job_category(kind: JobErrorKind) -> (&'static str, u8) {
+    match kind {
+        JobErrorKind::InvalidRequest => ("invalid_request", 2),
+        JobErrorKind::InvalidInput => ("invalid_input", 3),
+        JobErrorKind::Unsupported => ("unsupported", 2),
+        JobErrorKind::ResourceLimit => ("resource_limit", 1),
+        JobErrorKind::Io => ("io", 1),
+        JobErrorKind::Conflict => ("output_conflict", 5),
+        JobErrorKind::Cancelled => ("cancelled", 1),
+        JobErrorKind::ObserverFailure => ("observer_failure", 1),
+        JobErrorKind::InvalidState => ("invalid_state", 1),
+    }
+}
+
+struct CliRunObserver;
+
+impl Observer for CliRunObserver {
+    fn observe(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
+        let value = match event {
+            RunEvent::Progress { phase, done, total } => {
+                json!({"event":"progress","phase":phase,"done":done,"total":total})
+            }
+            RunEvent::Warning { code, message } => {
+                json!({"event":"warning","code":code,"message":message})
+            }
+            RunEvent::Note { message } => json!({"event":"log","message":message}),
+        };
+        // A closed or broken stderr must not fail the conversion.
+        errln!("{value}");
+        Ok(())
+    }
+}
+
+struct VectorCliObserver {
+    progress_json: bool,
+}
+impl Observer for VectorCliObserver {
+    fn observe(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
+        if self.progress_json {
+            return CliRunObserver.observe(event);
+        }
+        if let RunEvent::Warning { message, .. } = event {
+            errln!("warning: {message}");
+        }
+        Ok(())
+    }
+}
+
+// Display paths remain convenient, while recovery also preserves exact native
+// filename units for tools operating on names that are not Unicode strings.
+#[cfg(unix)]
+fn native_recovery_paths(recovery: &rusty_tiles::DirectoryRecovery) -> Value {
+    use std::os::unix::ffi::OsStrExt;
+    json!({"encoding":"unix-bytes", "output":recovery.output.as_os_str().as_bytes(),
+        "previousOutput":recovery.previous_output.as_os_str().as_bytes()})
+}
+#[cfg(windows)]
+fn native_recovery_paths(recovery: &rusty_tiles::DirectoryRecovery) -> Value {
+    use std::os::windows::ffi::OsStrExt;
+    json!({"encoding":"windows-utf16", "output":recovery.output.as_os_str().encode_wide().collect::<Vec<_>>(),
+        "previousOutput":recovery.previous_output.as_os_str().encode_wide().collect::<Vec<_>>()})
+}
+#[cfg(not(any(unix, windows)))]
+fn native_recovery_paths(_: &rusty_tiles::DirectoryRecovery) -> Value {
+    Value::Null // Directory publication is unsupported on these platforms.
+}
+
+fn error_summary(error: &Error, category: &str, code: u8) -> Value {
+    let mut failure =
+        json!({"ok":false,"error":{"code":category,"message":error.to_string()},"exitCode":code});
+    if let Some(limit) = match error {
+        Error::Validation(failure) => failure.exceeded(),
+        _ => None,
+    } {
+        failure["error"]["limit"] = json!(limit);
+    }
+    if let Error::Job(job) = error {
+        failure["error"]["kind"] = json!(category);
+        failure["error"]["recovery"] = job.recovery.as_ref().map_or(Value::Null, |recovery| json!({"output":recovery.output.to_string_lossy(),"previousOutput":recovery.previous_output.to_string_lossy(),"nativePaths":native_recovery_paths(recovery)}));
+        failure["error"]["secondaryDiagnostics"] = json!(job
+            .secondary
+            .iter()
+            .map(|cause| cause.to_string())
+            .collect::<Vec<_>>());
+        failure["error"]["retainedPaths"] = json!(job
+            .retained_paths
+            .iter()
+            .map(|path| path.to_string_lossy())
+            .collect::<Vec<_>>());
+    }
+    failure
+}
+
+fn cleanup_diagnostics_summary(diagnostics: &[rusty_tiles::CleanupDiagnostic]) -> Value {
+    json!(diagnostics.iter().map(|diagnostic| {
+        json!({"path":diagnostic.path.to_string_lossy(),"kind":job_category(diagnostic.error.kind()).0,"message":diagnostic.error.to_string()})
+    }).collect::<Vec<_>>())
+}
+
+fn raster_directory_summary(result: &RasterDirectoryResult) -> Value {
+    let mut summary = output_summary(&result.output, None, false);
+    summary["rasterReport"] = json!(result.report);
+    summary["counts"] = json!({"tiles":1});
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
+    summary
+}
+
+fn raster_summary(result: &RasterResult) -> Value {
+    let mut summary = output_summary(&result.output, None, false);
+    summary["rasterReport"] = json!(&result.report);
+    summary["counts"] = json!({"tiles":result.report.tiles,
+        "sourceBands":result.report.source.bands.as_slice().len()});
+    summary["settings"] = json!({"minZoom":result.report.grid.min_zoom,
+        "maxZoom":result.report.grid.max_zoom,"workers":result.report.resolved_workers});
+    summary["conversionReport"] =
+        json!({"path":result.output.join("report.json").to_string_lossy()});
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
+    summary
+}
+
+fn terrain_summary(result: &terrain::TerrainResult) -> Value {
+    let report = json!(&result.report);
+    let mut summary = output_summary(&result.output, Some(&report), false);
+    summary["terrainReport"] = report;
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
+    summary
+}
+
+fn vector_summary(result: &vector::VectorResult) -> Value {
+    let mut summary = output_summary(&result.output, Some(&result.report), true);
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
+    summary
+}
+
+fn point_cloud_summary(result: &rusty_tiles::point_cloud::PointCloudResult) -> Value {
+    let report = json!(&result.report);
+    let mut summary = output_summary(&result.output, Some(&report), true);
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
+    summary
+}
+
+fn tiler_summary(result: &TilerResult) -> Value {
+    json!({
+        "ok":true,
+        "output":result.output.to_string_lossy(),
+        "tilerReport":result.report,
+        "diagnostics":result.diagnostics,
+        "counts":{"triangles":result.report.triangles,"tiles":result.report.tiles,"leaf_tiles":result.report.leaves},
+        "conversionReport":{"archive":result.output.to_string_lossy(),"entry":"conversion.json"},
+        "cleanupDiagnostics":cleanup_diagnostics_summary(&result.cleanup_diagnostics),
+    })
+}
+
+fn model_summary(
+    output: &Path,
+    report: &rusty_tiles::ModelReport,
+    diagnostics: &[rusty_tiles::CleanupDiagnostic],
+    archive: bool,
+) -> Value {
+    let report = json!(report);
+    let mut summary = output_summary(output, Some(&report), archive);
+    if !archive {
+        // A sibling manifest returns its report inline; it publishes no report file.
+        summary["conversionReport"] = Value::Null;
+    }
+    summary["modelReport"] = report;
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(diagnostics);
+    summary
+}
+
+fn package_summary(result: &PackageResult) -> Value {
+    let mut summary = output_summary(&result.output, None, true);
+    summary["packageReceipt"] = json!({
+        "memberCount": result.receipt.member_count,
+        "sourceBytes": result.receipt.source_bytes,
+        "archiveBytes": result.receipt.archive_bytes,
+    });
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
+    summary
+}
+
 /// Top-level numeric conversion.json fields that count produced or skipped
 /// things. Every other numeric field is a setting or a derived measurement and
 /// is reported under `settings`.
 const COUNT_KEYS: &[&str] = &[
+    // F1a local mesh
+    "triangles",
+    "leaf_tiles",
     // point-cloud, terrain and vector
     "points",
     "tiles",
+    "vertices",
     // vector
     "features",
     "fragments",
@@ -599,8 +984,8 @@ const COUNT_KEYS: &[&str] = &[
 fn output_summary(output: &Path, report: Option<&Value>, archive: bool) -> Value {
     let location = match report {
         None => Value::Null,
-        Some(_) if archive => json!({"archive":output,"entry":"conversion.json"}),
-        Some(_) => json!({"path":output.join("conversion.json")}),
+        Some(_) if archive => json!({"archive":output.to_string_lossy(),"entry":"conversion.json"}),
+        Some(_) => json!({"path":output.join("conversion.json").to_string_lossy()}),
     };
     let report = report.unwrap_or(&Value::Null);
     let mut counts = serde_json::Map::new();
@@ -615,7 +1000,7 @@ fn output_summary(output: &Path, report: Option<&Value>, archive: bool) -> Value
             target.insert(key.clone(), value.clone());
         }
     }
-    json!({"ok":true,"output":output,"counts":counts,"settings":settings,
+    json!({"ok":true,"output":output.to_string_lossy(),"counts":counts,"settings":settings,
         "skippedFeatures":report["skippedFeatures"],"reuse":report["reuse"],"conversionReport":location})
 }
 
@@ -645,10 +1030,22 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
         ("features", "feature"),
         ("points", "point"),
         ("tiles", "tile"),
+        ("triangles", "triangle"),
+        ("leaf_tiles", "leaf"),
     ]
     .into_iter()
     .filter_map(|(key, noun)| counts[key].as_u64().map(|n| plural(n, noun)))
     .collect();
+    if command == "mesh" {
+        if let (Some(profile), Some(capture), Some(leaves)) = (
+            summary["tilerReport"]["profile"].as_str(),
+            summary["diagnostics"]["capture"]["jobs"].as_u64(),
+            summary["diagnostics"]["leaf_delivery"]["jobs"].as_u64(),
+        ) {
+            parts.push(format!("{profile} profile"));
+            parts.push(format!("workers: capture {capture}, leaves {leaves}"));
+        }
+    }
     if parts.is_empty() && output.is_file() {
         if let Ok(metadata) = output.metadata() {
             parts.push(format!("{:.1} MiB", metadata.len() as f64 / 1048576.));
@@ -682,8 +1079,24 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
             ));
         }
     }
+    for diagnostic in summary["cleanupDiagnostics"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    {
+        if let (Some(path), Some(message)) =
+            (diagnostic["path"].as_str(), diagnostic["message"].as_str())
+        {
+            lines.push(format!(
+                "cleanup warning: {message}; retained work at {path}"
+            ));
+        }
+    }
     let path = shell_path(output);
     let next = match command {
+        "raster-tile-to-directory" => {
+            format!("serve {path}/tilejson.json with its tiles directory")
+        }
         "raster" => format!("rusty-tiles preview --cesium <Build/Cesium> --imagery {path}"),
         "terrain" => format!("rusty-tiles preview --cesium <Build/Cesium> --terrain {path}"),
         "createTilesetJson" => format!("rusty-tiles convert -i {path} -o <archive>.3tz"),
@@ -693,43 +1106,126 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
     lines
 }
 
-fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
+/// `KEY=N` of `validate --maxVolume`: a configurable limit key and a decimal u64 with no sign,
+/// separator or suffix.
+fn parse_max_volume(value: &str) -> Result<(rusty_tiles::validate::LimitKey, u64), String> {
+    let (key, number) = value
+        .split_once('=')
+        .ok_or_else(|| format!("expected KEY=N, got {value:?}"))?;
+    let key = key
+        .parse::<rusty_tiles::validate::LimitKey>()
+        .map_err(|error| error.to_string())?;
+    if number.is_empty() || !number.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(format!("{key}: expected a decimal integer, got {number:?}"));
+    }
+    let number = number
+        .parse::<u64>()
+        .map_err(|_| format!("{key}: {number} exceeds the largest value 18446744073709551615"))?;
+    Ok((key, number))
+}
+
+fn run(cli: Cli) -> Result<Outcome, Error> {
+    let pack_events = cli.progress.is_some();
     let json = cli.json;
     Ok(match cli.command {
+        Command::Mesh(a) => {
+            let mut request = TilerRequest::new(a.io.input, a.io.output)
+                .with_profile(a.profile)
+                .with_jobs(a.jobs)
+                .with_output_policy(if a.io.force {
+                    OutputPolicy::Replace
+                } else {
+                    OutputPolicy::CreateNew
+                })
+                .with_placement(a.placement.resolve()?);
+            if let Some(source_crs) = a.source.resolve()? {
+                request = request.with_source_crs(source_crs);
+            }
+            if let Some(path) = a.scratch_dir {
+                request = request.with_scratch_dir(path);
+            }
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            Outcome::Tiler(Box::new(rusty_tiles::mesh_to_tileset(
+                request,
+                &interrupt::run_control(observer),
+            )?))
+        }
         Command::Validate {
             input,
-            external_validator,
+            max_volume,
+            scratch_dir,
         } => {
-            let report = rusty_tiles::validate::archive(&input, external_validator.as_deref())?;
-            if !json {
-                println!(
-                    "Validated {}: {} tiles, {} content references",
-                    input.display(),
-                    report["tiles"],
-                    report["contentReferences"]
-                );
+            let mut request = rusty_tiles::validate::ValidationRequest::new(&input);
+            let mut seen = std::collections::BTreeSet::new();
+            for (key, value) in max_volume {
+                if !seen.insert(key) {
+                    return Err(
+                        rusty_tiles::validate::ValidationFailure::InvalidRequest(format!(
+                            "--maxVolume {key} is given more than once"
+                        ))
+                        .into(),
+                    );
+                }
+                request = request.max_volume(key, value);
             }
-            Outcome::Report(report)
+            if let Some(dir) = scratch_dir {
+                request = request.scratch_dir(dir);
+            }
+            let observer = pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let report =
+                rusty_tiles::validate::inspect_with(request, &interrupt::run_control(observer))?;
+            if !json {
+                outln!(
+                    "Inspected {}: {} tiles, {} content references",
+                    input.display(),
+                    report.tiles,
+                    report.content_references
+                );
+                if !report.not_inspected.is_empty() {
+                    outln!("Not inspected: {}", report.not_inspected.join(", "));
+                }
+            }
+            Outcome::Validation(Box::new(report))
         }
         Command::Doctor(a) => {
-            let report = doctor::report(&a.commands, a.cesium.as_deref())?;
+            let report = doctor::report(&a.commands, Some(&a.cesium));
+            // Each not-ready command carries the failure kind its own execution
+            // check returns; present it with execution's category and status.
+            // The first not-ready command in name order decides the process exit.
+            let refused = |(name, capability): (&str, &doctor::Capability)| {
+                let kind = capability.refusal.unwrap_or(JobErrorKind::Unsupported);
+                let reason = capability.reason.as_deref().unwrap_or("not ready");
+                (kind, format!("{name}: {reason}"))
+            };
+            let failure = report.refusal().map(refused);
             if json {
-                let mut report = report;
-                report["ok"] = report["ready"].clone();
-                if report["ready"] != true {
-                    // Include the inventory in the single error result.
-                    report["error"] = json!({"code":"environment","message":"selected converters have missing dependencies"});
-                    report["exitCode"] = 4.into();
+                let mut value = serde_json::to_value(&report)?;
+                value["ok"] = report.ready.into();
+                for (name, readiness) in &report.commands {
+                    if let Some(kind) = readiness.capability.refusal {
+                        let (code, exit) = job_category(kind);
+                        value["commands"][*name]["refusal"] = json!({"code":code,"exitCode":exit});
+                    }
                 }
-                return Ok(Outcome::Report(report));
+                if let Some((kind, message)) = failure {
+                    // Include the inventory in the single error result.
+                    let (code, exit) = job_category(kind);
+                    value["error"] = json!({"code":code,"message":message});
+                    value["exitCode"] = exit.into();
+                }
+                return Ok(Outcome::Report(value));
             }
-            doctor::display(&report, false);
-            if report["ready"] != true {
-                return Err(Error::Environment(
-                    "selected converters have missing dependencies; see doctor report".into(),
-                ));
-            }
-            Outcome::Done
+            outln!("{report}");
+            return match failure {
+                None => Ok(Outcome::Done),
+                Some((kind, message)) => Err(Error::Job(rusty_tiles::JobFailure {
+                    error: JobError::new(kind, format!("{message}; see doctor report")),
+                    secondary: Vec::new(),
+                    retained_paths: Vec::new(),
+                    recovery: None,
+                })),
+            };
         }
         Command::Preview(a) => {
             let layers: Vec<_> = [
@@ -742,67 +1238,136 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             .into_iter()
             .filter_map(|(name, path)| path.map(|path| (name.to_owned(), path)))
             .collect();
-            rusty_tiles::preview::Preview::new(&a.cesium, &layers)?.serve(&a.host, a.port, json)?;
+            rusty_tiles::preview::Preview::new(&a.cesium, &layers)?
+                .serve(std::net::SocketAddr::new(a.host, a.port), json)?;
             Outcome::Done
         }
         Command::EncodeVectorContent { input } => {
-            println!("{}", rusty_tiles::vector_encoding::compress_file(&input)?);
+            let result = rusty_tiles::compress_vector_file(
+                rusty_tiles::VectorCompressionRequest::new(input),
+                &interrupt::run_control(None),
+            )?;
+            outln!("{}", result.report_json());
             Outcome::Done
         }
         Command::CreateTilesetJson(a) => {
-            let opts = tileset_opts(&a.io, &a.placement)?;
-            create_tileset_json(&a.io.input, &a.io.output, &opts)?;
-            Outcome::Wrote(a.io.output)
+            let request = ModelManifestRequest::local_gltf(a.input)
+                .with_policy(if a.force {
+                    OutputPolicy::Replace
+                } else {
+                    OutputPolicy::CreateNew
+                })
+                .with_placement(a.placement.resolve()?);
+            let observer = pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            Outcome::ModelManifest(Box::new(rusty_tiles::model_to_manifest(
+                request,
+                &interrupt::run_control(observer),
+            )?))
         }
         Command::PointCloud(a) => {
-            Outcome::Converted(rusty_tiles::point_cloud::point_cloud_to_3tz_reported(
-                &a.io.input,
-                &a.io.output,
-                &rusty_tiles::point_cloud::PointCloudOptions {
-                    force: a.io.force,
-                    source_crs: a.source_crs,
-                    height_offset: a.height_offset,
-                    max_points: a.max_points,
-                    chunk_points: a.chunk_points,
-                },
-                reporter,
-            )?)
+            use rusty_tiles::point_cloud::{
+                PointCloudCoordinates, PointCloudCrs, PointCloudOptions, PointCloudRequest,
+            };
+            let invalid = |message: &'static str| {
+                Error::Job(rusty_tiles::JobFailure {
+                    error: JobError::new(JobErrorKind::InvalidRequest, message),
+                    secondary: Vec::new(),
+                    retained_paths: Vec::new(),
+                    recovery: None,
+                })
+            };
+            let coordinates = if a.source_crs == "local" {
+                if a.height_offset.is_some() {
+                    return Err(invalid(
+                        "heightOffset applies only to geospatial CRS; local XYZ is in metres",
+                    ));
+                }
+                PointCloudCoordinates::LocalMetres
+            } else {
+                PointCloudCoordinates::Horizontal {
+                    source: if a.source_crs == "header" { PointCloudCrs::Header } else { PointCloudCrs::Definition(a.source_crs) },
+                    height_offset_metres: a.height_offset.ok_or_else(|| invalid("geospatial input requires explicit --heightOffset to ellipsoidal metres"))?,
+                }
+            };
+            let options = PointCloudOptions {
+                metadata_attributes: a.metadata_attributes,
+                max_points: a.max_points,
+                chunk_points: a.chunk_points,
+            };
+            let policy = if a.io.force {
+                OutputPolicy::Replace
+            } else {
+                OutputPolicy::CreateNew
+            };
+            let request = PointCloudRequest::new(a.io.input, a.io.output, coordinates, options)
+                .with_policy(policy);
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let run = interrupt::run_control(observer);
+            Outcome::PointCloud(Box::new(rusty_tiles::point_cloud::point_cloud_to_archive(
+                request, &run,
+            )?))
         }
-        Command::Convert(a) => Outcome::Converted(convert_to_3tz_reported(
-            &a.input,
-            &a.output,
-            &PackOptions { force: a.force },
-        )?),
+        Command::Convert(a) => {
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let run = interrupt::run_control(observer);
+            let policy = if a.force {
+                OutputPolicy::Replace
+            } else {
+                OutputPolicy::CreateNew
+            };
+            let request = PackageRequest::directory(a.input, a.output).with_policy(policy);
+            Outcome::Pack(package(request, &run)?)
+        }
         Command::GlbTo3tz(a) => {
-            let opts = tileset_opts(&a.io, &a.placement)?;
-            Outcome::Converted(glb_to_3tz_reported(&a.io.input, &a.io.output, &opts)?)
+            let request = ModelWrapRequest::local_gltf(a.io.input, a.io.output)
+                .with_policy(if a.io.force {
+                    OutputPolicy::Replace
+                } else {
+                    OutputPolicy::CreateNew
+                })
+                .with_placement(a.placement.resolve()?);
+            let observer = pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            Outcome::ModelArchive(Box::new(rusty_tiles::model_to_archive(
+                request,
+                &interrupt::run_control(observer),
+            )?))
         }
-        Command::MeshTo3tz(a) => {
-            let opts = mesh_opts(&a)?;
-            Outcome::Converted(mesh_to_3tz_reported(
-                &a.io.input,
-                &a.io.output,
-                &opts,
-                reporter,
-            )?)
+        Command::RasterTileToDirectory(a) => {
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let run = interrupt::run_control(observer);
+            let request =
+                RasterDirectoryRequest::web_mercator_rgb(a.input, a.output, a.zoom, a.x, a.y)
+                    .with_policy(if a.force {
+                        OutputPolicy::Replace
+                    } else {
+                        OutputPolicy::CreateNew
+                    });
+            Outcome::RasterDirectory(rusty_tiles::raster_to_directory(request, &run)?)
         }
-        Command::Vector(a) => Outcome::Converted(vector::vector_to_3tz_reported(
-            &a.io.input,
-            &a.io.output,
-            a.max_features,
-            a.repair,
-            a.ambiguous_outlines,
-            &vector::VectorOptions {
+        Command::Vector(a) => {
+            let run = interrupt::run_control(Some(Arc::new(VectorCliObserver {
+                progress_json: pack_events,
+            })));
+            let policy = if a.io.force {
+                OutputPolicy::Replace
+            } else {
+                OutputPolicy::CreateNew
+            };
+            let options = vector::VectorOptions {
                 reproducible: a.reproducible,
                 jobs: a.jobs,
                 quantize: a.quantize,
                 meshopt: a.meshopt,
-                meshopt_encoder: None,
                 parent_repair: a.parent_repair,
                 aggregate_points: a.aggregate_points,
                 max_parent_features: a.max_parent_features,
                 where_clause: a.where_clause,
-                force: a.io.force,
+                max_features: a.max_features,
+                repair: a.repair,
+                ambiguous_outlines: a.ambiguous_outlines,
                 list_fields: a.list_fields,
                 fields: a.fields,
                 drop_fields: a.drop_fields,
@@ -820,117 +1385,195 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 max_bytes: a.max_bytes,
                 max_tiles: a.max_tiles,
                 max_source_vertices: a.max_source_vertices,
-            },
-            reporter,
-        )?),
-        Command::Terrain(a) => Outcome::Converted(terrain::dem_to_terrain_reported(
-            &a.io.input,
-            &a.io.output,
-            &terrain::TerrainOptions {
-                force: a.io.force,
-                max_zoom: a.max_zoom,
-                grid: a.grid,
-                height_offset: a.height_offset,
-                fill_height: a.fill_height,
-                max_error: a.max_error,
-            },
-            reporter,
-        )?),
-        Command::Raster(a) => Outcome::Converted(rusty_tiles::raster::raster_reported(
-            &a.io.input,
-            &a.io.output,
-            &rusty_tiles::raster::RasterOptions {
-                force: a.io.force,
-                min_zoom: a.min_zoom,
-                max_zoom: a.max_zoom,
-                display: a.display,
-                band: a.band,
-                alpha_band: a.alpha_band,
-                display_min: a.display_min,
-                display_max: a.display_max,
-            },
-            reporter,
-        )?),
+            };
+            let request =
+                vector::VectorRequest::new(a.io.input, a.io.output, options).with_policy(policy);
+            Outcome::Vector(vector::vector_to_archive(request, &run)?)
+        }
+        Command::Terrain(a) => {
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let run = interrupt::run_control(observer);
+            let policy = if a.io.force {
+                OutputPolicy::Replace
+            } else {
+                OutputPolicy::CreateNew
+            };
+            let request = terrain::TerrainRequest::new(
+                a.io.input,
+                a.io.output,
+                terrain::TerrainHeights::RawMetres {
+                    height_offset_metres: a.height_offset,
+                    fill_height_metres: a.fill_height,
+                },
+                terrain::TerrainOptions::new(a.cells_per_leaf),
+            )
+            .with_policy(policy);
+            Outcome::Terrain(Box::new(terrain::terrain_to_directory(request, &run)?))
+        }
+        Command::Raster(a) => {
+            let observer = pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let control = interrupt::run_control(observer);
+            Outcome::Raster(Box::new(rusty_tiles::raster_to_pyramid(
+                raster_request(a)?,
+                &control,
+            )?))
+        }
     })
 }
 
-fn tileset_opts(io: &IoArgs, a: &PlacementArgs) -> Result<CreateTilesetOptions, Error> {
-    let cartographic = if a.cartographic_position_degrees.is_empty() {
-        None
-    } else {
-        let v = &a.cartographic_position_degrees;
-        Some(Cartographic::new(
-            v[0],
-            v[1],
-            v.get(2).copied().unwrap_or(0.0),
-        ))
-    };
-    let rotation = if a.rotation_degrees.is_empty() {
-        None
-    } else {
-        Some(RotationDegrees {
-            heading: a.rotation_degrees[0],
-            pitch: a.rotation_degrees[1],
-            roll: a.rotation_degrees[2],
+fn raster_request(args: RasterArgs) -> Result<RasterRequest, Error> {
+    let invalid = |message: &'static str| {
+        Error::Job(rusty_tiles::JobFailure {
+            error: JobError::new(JobErrorKind::InvalidRequest, message),
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
         })
     };
-    if rotation.is_some() && cartographic.is_none() {
-        return Err(Error::msg(
-            "--rotationDegrees requires --cartographicPositionDegrees",
-        ));
-    }
-    Ok(CreateTilesetOptions {
-        cartographic,
-        rotation,
-        force: io.force,
-    })
-}
-
-fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
-    let ts = tileset_opts(&a.io, &a.placement)?;
-    let source_crs = SourceCrs::parse_cli(&a.source_crs)?;
-    if !a.source_offset.is_empty() && a.source_offset_file.is_some() {
-        return Err(Error::msg(
-            "pass only one of --sourceOffset and --sourceOffsetFile",
-        ));
-    }
-    let source_offset = if !a.source_offset.is_empty() {
-        let v = &a.source_offset;
-        Some(SourceOffset {
-            easting: v[0],
-            northing: v[1],
-            height: v.get(2).copied().unwrap_or(0.0),
-        })
-    } else if let Some(path) = &a.source_offset_file {
-        let text = std::fs::read_to_string(path)?;
-        Some(parse_metashape_offset(&text)?)
-    } else {
-        None
+    let request = match args.display.as_str() {
+        "image" => {
+            if args.band.is_some() || args.display_min.is_some() || args.display_max.is_some() {
+                return Err(invalid(
+                    "--band/--displayMin/--displayMax require --display gray",
+                ));
+            }
+            RasterRequest::image(args.io.input, args.io.output, args.min_zoom, args.max_zoom)
+        }
+        "gray" => {
+            let (Some(low), Some(high)) = (args.display_min, args.display_max) else {
+                return Err(invalid(
+                    "--display gray requires --displayMin and --displayMax",
+                ));
+            };
+            RasterRequest::gray(
+                args.io.input,
+                args.io.output,
+                args.min_zoom,
+                args.max_zoom,
+                args.band.unwrap_or(1),
+                low,
+                high,
+            )
+        }
+        _ => return Err(invalid("--display must be image or gray")),
     };
-    if source_offset.is_some() && source_crs == SourceCrs::Geographic {
-        return Err(Error::msg(
-            "--sourceOffset requires --sourceCrs auto or epsg:3857",
-        ));
-    }
-    Ok(MeshTo3tzOptions {
-        texture_format: a.texture_format,
-        basisu: a.basisu.clone(),
-        cartographic: ts.cartographic,
-        rotation: ts.rotation,
-        force: ts.force,
-        max_triangles: a.max_triangles,
-        max_bytes: a.max_bytes,
-        tile_size: a.tile_size,
-        max_texel_density: a.max_texel_density,
-        source_crs,
-        source_offset,
-        meshopt: !a.no_meshopt,
-    })
+    let request = if args.alpha_band == 0 {
+        request
+    } else {
+        request.with_alpha_band(args.alpha_band)
+    };
+    Ok(request
+        .with_policy(if args.io.force {
+            OutputPolicy::Replace
+        } else {
+            OutputPolicy::CreateNew
+        })
+        .with_limits(RasterLimits {
+            max_source_bytes: args.max_source_bytes,
+            max_source_pixels: args.max_source_pixels,
+            max_decoded_bytes: args.max_decoded_bytes,
+            max_tiles: args.max_tiles,
+            max_output_bytes: args.max_output_bytes,
+            max_working_bytes: args.max_working_bytes,
+            workers: args.jobs,
+        }))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resource_refusal_is_operational_status_one_with_explicit_kind() {
+        assert_eq!(
+            job_category(JobErrorKind::ResourceLimit),
+            ("resource_limit", 1)
+        );
+        let failure = rusty_tiles::JobFailure {
+            error: JobError::new(JobErrorKind::ResourceLimit, "codec work refused"),
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        };
+        let error = Error::Job(failure);
+        assert_eq!(error.category(), ("resource_limit", 1));
+        let value = error_summary(&error, "resource_limit", 1);
+        assert_eq!(value["error"]["kind"], "resource_limit");
+    }
+
+    #[test]
+    fn recovery_json_distinguishes_previous_output_from_scratch() {
+        let failure = rusty_tiles::JobFailure {
+            error: rusty_tiles::JobError::new(
+                rusty_tiles::JobErrorKind::Conflict,
+                "install blocked",
+            ),
+            secondary: vec![rusty_tiles::JobError::new(
+                rusty_tiles::JobErrorKind::Io,
+                "restore blocked",
+            )],
+            retained_paths: vec![PathBuf::from("/work/candidate")],
+            recovery: Some(rusty_tiles::DirectoryRecovery {
+                output: PathBuf::from("/work/output"),
+                previous_output: PathBuf::from("/work/holder/previous"),
+            }),
+        };
+        let value = error_summary(&Error::Job(failure), "output_conflict", 5);
+        assert_eq!(value["error"]["kind"], "output_conflict");
+        assert_eq!(
+            json!({"output":value["error"]["recovery"]["output"], "previousOutput":value["error"]["recovery"]["previousOutput"]}),
+            json!({
+                "output": "/work/output", "previousOutput": "/work/holder/previous"
+            })
+        );
+        assert_eq!(value["error"]["retainedPaths"], json!(["/work/candidate"]));
+        assert_eq!(
+            value["error"]["secondaryDiagnostics"],
+            json!(["restore blocked"])
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recovery_json_preserves_non_utf8_filename_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+        let output = PathBuf::from(std::ffi::OsString::from_vec(b"/work/output-\xff".to_vec()));
+        let previous_output = output.join("previous");
+        let failure = rusty_tiles::JobFailure {
+            error: rusty_tiles::JobError::new(rusty_tiles::JobErrorKind::Io, "install failed"),
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: Some(rusty_tiles::DirectoryRecovery {
+                output,
+                previous_output,
+            }),
+        };
+        let value = error_summary(&Error::Job(failure), "io", 1);
+        let native = &value["error"]["recovery"]["nativePaths"];
+        assert_eq!(native["encoding"], "unix-bytes");
+        assert_eq!(native["output"], json!(b"/work/output-\xff".as_slice()));
+        assert_eq!(
+            native["previousOutput"],
+            json!(b"/work/output-\xff/previous".as_slice())
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn recovery_json_preserves_native_utf16_units() {
+        use std::os::windows::ffi::OsStringExt;
+        let units = [b'C' as u16, b':' as u16, b'/' as u16, 0xd800];
+        let path = PathBuf::from(std::ffi::OsString::from_wide(&units));
+        let native = native_recovery_paths(&rusty_tiles::DirectoryRecovery {
+            output: path.clone(),
+            previous_output: path,
+        });
+        assert_eq!(native["encoding"], "windows-utf16");
+        assert_eq!(native["output"], json!(units));
+        assert_eq!(native["previousOutput"], json!(units));
+    }
+
     use clap::CommandFactory;
 
     fn kebab(name: &str) -> String {
@@ -943,6 +1586,66 @@ mod tests {
                     .chain([lower])
             })
             .collect()
+    }
+
+    #[test]
+    fn removed_legacy_mesh_commands_are_unknown_subcommands() {
+        for name in ["mesh-to-3tz", "meshTo3tz", "mesh-local-to-3tz"] {
+            let error = Cli::try_parse_from(["rusty-tiles", name, "-i", "in.glb", "-o", "o.3tz"])
+                .err()
+                .unwrap_or_else(|| panic!("{name} still parses"));
+            assert_eq!(
+                error.kind(),
+                clap::error::ErrorKind::InvalidSubcommand,
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn mesh_jobs_default_to_auto_and_accept_maximums() {
+        let parse = |extra: &[&str]| {
+            let mut args = vec!["rusty-tiles", "mesh", "-i", "a.glb", "-o", "out"];
+            args.extend_from_slice(extra);
+            match Cli::try_parse_from(args).map(|cli| cli.command) {
+                Ok(Command::Mesh(args)) => Ok(args.jobs),
+                Ok(_) => panic!("wrong command"),
+                Err(error) => Err(error),
+            }
+        };
+        assert_eq!(parse(&[]).unwrap(), TilerJobs::Auto);
+        assert_eq!(parse(&["--jobs", "auto"]).unwrap(), TilerJobs::Auto);
+        assert_eq!(
+            parse(&["--jobs", "3"]).unwrap(),
+            TilerJobs::Maximum(std::num::NonZeroUsize::new(3).unwrap())
+        );
+        assert!(parse(&["--jobs", "0"]).is_err());
+        assert!(parse(&["--jobs", "many"]).is_err());
+    }
+
+    #[test]
+    fn raster_directory_requires_address_and_supports_explicit_replace() {
+        let args = [
+            "rusty-tiles",
+            "raster-tile-to-directory",
+            "-i",
+            "source.tif",
+            "-o",
+            "output",
+            "--zoom",
+            "3",
+            "--x",
+            "5",
+            "--y",
+            "2",
+        ];
+        assert!(Cli::try_parse_from(args).is_ok());
+        assert!(Cli::try_parse_from(&args[..6]).is_err());
+        let parsed = Cli::try_parse_from(args.into_iter().chain(["--force"])).unwrap();
+        let Command::RasterTileToDirectory(parsed) = parsed.command else {
+            panic!("wrong command");
+        };
+        assert!(parsed.force);
     }
 
     #[test]
@@ -968,7 +1671,10 @@ mod tests {
                     .take(3)
                     .map(|arg| arg.get_id().as_str().to_owned())
                     .collect();
-                assert_eq!(first, ["input", "output", "force"], "{name}");
+                assert_eq!(&first[..2], ["input", "output"], "{name}");
+                if command.get_arguments().any(|arg| arg.get_id() == "force") {
+                    assert_eq!(first[2], "force", "{name}");
+                }
             }
         }
     }
@@ -982,26 +1688,25 @@ mod tests {
             if name == "doctor" {
                 continue;
             }
-            let (_, aliases) = doctor::COMMANDS
-                .iter()
-                .find(|(canonical, _)| *canonical == name)
-                .unwrap_or_else(|| panic!("doctor::COMMANDS lacks {name}"));
+            let readiness = doctor::Command::from_name(name)
+                .unwrap_or_else(|| panic!("doctor::Command lacks {name}"));
+            assert_eq!(readiness.name(), name);
             let mut expected: Vec<_> = command.get_all_aliases().collect();
-            let mut actual = aliases.to_vec();
+            let mut actual = readiness.aliases().to_vec();
             expected.sort_unstable();
             actual.sort_unstable();
             assert_eq!(actual, expected, "{name}");
-            for alias in aliases.iter() {
-                assert_eq!(doctor::canonical(alias), Some(name));
+            for alias in readiness.aliases() {
+                assert_eq!(doctor::Command::from_name(alias), Some(readiness));
             }
             seen.push(name);
         }
-        assert_eq!(seen.len(), doctor::COMMANDS.len());
+        assert_eq!(seen.len(), doctor::Command::ALL.len());
         let parsed = Cli::try_parse_from([
             "rusty-tiles",
             "doctor",
             "--command",
-            "meshTo3tz",
+            "glbTo3tz",
             "--command",
             "create-tileset-json",
         ])
@@ -1009,7 +1714,13 @@ mod tests {
         let Command::Doctor(args) = parsed.command else {
             panic!("doctor")
         };
-        assert_eq!(args.commands, ["meshTo3tz", "create-tileset-json"]);
+        assert_eq!(
+            args.commands,
+            [
+                doctor::Command::GlbTo3tz,
+                doctor::Command::CreateTilesetJson
+            ]
+        );
     }
 
     #[test]
@@ -1039,7 +1750,7 @@ mod tests {
     #[test]
     fn summary_separates_counts_from_settings() {
         let root = tempfile::tempdir().unwrap();
-        let report = json!({"tiles":5,"heightOffset":2.5,"fillHeight":0,"grid":65,"heightQuantizationStep":0.1,
+        let report = json!({"tiles":5,"heightOffset":2.5,"fillHeight":0,"cellsPerLeaf":64,"positionErrorMetres":0.01,
                "lodLevels":3,"lodToleranceMetres":0.1,"skippedFeatures":2,"features":9,"sourceCrs":"x"});
         let summary = output_summary(root.path(), Some(&report), false);
         assert_eq!(
@@ -1052,7 +1763,7 @@ mod tests {
         );
         assert_eq!(
             summary["settings"],
-            json!({"heightOffset":2.5,"fillHeight":0,"grid":65,"heightQuantizationStep":0.1,
+            json!({"heightOffset":2.5,"fillHeight":0,"cellsPerLeaf":64,"positionErrorMetres":0.01,
                 "lodLevels":3,"lodToleranceMetres":0.1})
         );
         assert_eq!(summary["skippedFeatures"], 2);

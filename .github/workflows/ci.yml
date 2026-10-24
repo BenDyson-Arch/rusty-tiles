@@ -1,51 +1,244 @@
 name: CI
 
+# Two tiers (see "CI tiers" in CONTRIBUTING.md). Pull requests run the fast Linux tier:
+# Change scope, Rust, Python and native geospatial for the newest GDAL. Pushes to main and
+# develop, nightly runs (dispatched by nightly.yml) and manual runs also run every other job.
 on:
   push:
     branches: [main, develop]
   pull_request:
   workflow_dispatch:
+    inputs:
+      nightly:
+        description: Report this run to the "Full CI matrix failing on develop" tracking issue
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+# Dispatched runs have their own group so a push cannot cancel the nightly run (or the reverse).
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
-  rust:
-    name: Rust
+  changes:
+    name: Change scope
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+    steps:
+      # Docs-only means every changed path is Markdown under docs/ or changelog.d/
+      # or at the repository root. Markdown under bench/ and tests/ is hashed by oracles,
+      # so it counts as code, and so does any removal or rename (a missing
+      # README.md breaks cargo package). Any doubt (manual runs, new branches, API errors,
+      # truncated file lists) runs the full workflow.
+      - name: Classify changed paths
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          docs_only=false
+          if [ "$EVENT" != workflow_dispatch ] && [ -n "$BASE" ] && [ "${BASE#0000000}" = "$BASE" ]; then
+            if files=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BASE}...${HEAD}" --jq '.files[] | if (.status == "added" or .status == "modified") then .filename else "!" + .filename end') \
+              && [ -n "$files" ] && [ "$(printf '%s\n' "$files" | wc -l)" -lt 300 ] \
+              && ! printf '%s\n' "$files" | grep -qvE '^(docs/.*|changelog\.d/[^/]+|[^/]+)\.md$'; then
+              docs_only=true
+            fi
+          fi
+          printf '%s\n' "${files:-}"
+          echo "docs_only=$docs_only" | tee -a "$GITHUB_OUTPUT"
+
+  docs:
+    name: Docs-only checks
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - name: Check tracked size budget
+        run: python3 scripts/check_tree_budget.py
+      - name: Check changelog fragments
+        run: python3 scripts/changelog.py check
+
+  rust:
+    name: Rust
+    needs: changes
+    # Skipped jobs satisfy required checks; a failed classifier runs everything.
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Check tracked size budget
+        run: python3 scripts/check_tree_budget.py
+      - name: Check changelog fragments
+        run: |
+          python3 -I scripts/test_changelog.py
+          python3 scripts/changelog.py check
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libturbojpeg0-dev
+          sudo apt-get install -y build-essential pkg-config
       - name: Select stable Rust
         run: |
           rustup update stable --no-self-update
           rustup default stable
           rustup component add rustfmt
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Check Rust third-party licence files and allow-list
+        # Seconds: cargo tree and metadata only, nothing is compiled.
+        run: |
+          python3 -I scripts/test_third_party_licenses.py
+          python3 scripts/third_party_licenses.py check
+      - name: Check foundation lifecycle model and independent monitor
+        run: |
+          python3 bench/architecture_audit/foundation/model.py --results "${{ runner.temp }}/foundation-model.json"
+          python3 -m unittest discover -s bench/architecture_audit/foundation -p test_monitor.py -v
       - name: Check formatting
-        run: cargo fmt --check
-      - name: Test native build
-        run: cargo test --locked
+        run: cargo fmt --all --check
+      - name: Test performance-lane controls
+        run: |
+          node --version
+          python3 -I bench/perf_lane/test_report.py
+          python3 -I bench/perf_lane/test_cesium.py
+          python3 -I bench/perf_lane/test_flythrough.py
+      - name: Check the crate package size and third-party notices
+        run: |
+          cargo package --locked --no-verify
+          python3 scripts/third_party_notices.py check --rust-licenses all --max-bytes 10000000 target/package/rusty-tiles-*.crate
+      - name: Test default build
+        shell: bash
+        run: |
+          # Library unit tests run in parallel, except two that run serially below: the C1
+          # context controls, whose stderr receipt lines must not interleave, and a test that
+          # changes the process working directory. Bins, integration tests (several change the
+          # working directory) and doctests stay serial.
+          serial_lib=(payload_context_acceptance:: vector_compression::tests::callback_cwd_change_cannot_redirect_relative_source_or_publication)
+          skips=(); for name in "${serial_lib[@]}"; do skips+=(--skip "$name"); done
+          cargo test --locked --lib -- "${skips[@]}"
+          cargo test --locked --lib -- --nocapture --test-threads=1 "${serial_lib[@]}" 2>&1 | tee "${{ runner.temp }}/c1-library.log"
+          cargo test --locked --bins --test '*' -- --nocapture --test-threads=1 2>&1 | tee -a "${{ runner.temp }}/c1-library.log"
+          cargo test --locked --doc -- --test-threads=1 2>&1 | tee -a "${{ runner.temp }}/c1-library.log"
+          python3 -B tests/payload_context_receipt.py --log "${{ runner.temp }}/c1-library.log" --output "${{ runner.temp }}/c1-payload-contexts.json"
+      - name: Check streamed forest memory alone
+        run: cargo test --locked --lib -- --ignored --exact --nocapture implicit::tileset::records_tests::streamed_forest_memory_is_bounded_by_one_document
+      - name: Independently check streamed mesh capture and tree records
+        shell: bash
+        run: |
+          cargo test --locked --lib --no-run --message-format=json > "${{ runner.temp }}/h1-artifacts.jsonl"
+          binary=$(python3 -c 'import json,sys; records=[json.loads(line) for line in open(sys.argv[1])]; print(next(r["executable"] for r in records if r.get("reason")=="compiler-artifact" and r.get("target",{}).get("name")=="rusty_tiles" and r.get("profile",{}).get("test") and r.get("executable")))' "${{ runner.temp }}/h1-artifacts.jsonl")
+          python3 -B tests/h1_tree_oracle.py self-test
+          python3 -B tests/h1_tree_oracle.py run-corpus "$binary" "${{ runner.temp }}/h1-corpus" --label ci-default
+          python3 -B tests/h1_tree_oracle.py run-refusals "$binary" "${{ runner.temp }}/h1-refusals" --label ci-default
+          python3 -B bench/architecture_audit/mesh_large_h1/physical_scratch_probe.py --binary "$binary" --work "${{ runner.temp }}/h1-physical" --label ci-default
+      - name: Retain streamed mesh acceptance receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: h1-capture-tree-evidence
+          path: |
+            ${{ runner.temp }}/h1-corpus/receipt.json
+            ${{ runner.temp }}/h1-refusals/receipt.json
+            ${{ runner.temp }}/h1-physical/receipt.json
+          if-no-files-found: error
+      - name: Re-run validator parity with the catalog on scratch (VS-A forced spill)
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/vsa-scratch"
+          TMPDIR="${{ runner.temp }}/vsa-scratch" RUSTY_TILES_FORCED_SPILL=1 \
+            cargo test --locked --lib -- --test-threads=2 \
+            validate:: archive3tz:: c2_oracle_parity i1_oracle_parity
+      - name: Independently check validation controls and finite work
+        run: |
+          python3 -B tests/c1_validation_oracle.py --generate "${{ runner.temp }}/c1-fixtures" --binary target/debug/rusty-tiles --output "${{ runner.temp }}/c1-validation.json"
+          python3 -B bench/architecture_audit/c1/resource_probe.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/c1-resources" --output "${{ runner.temp }}/c1-resources.json"
+          python3 -B tests/c1_producer_alignment.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/c1-producer" --output "${{ runner.temp }}/c1-producer.json"
+          python3 -B tests/archive_read_oracle.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/archive-read-corpus" --output "${{ runner.temp }}/c1-archive-read.json"
+          python3 -B tests/payload_integrity_oracle.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/payload-integrity-corpus" --output "${{ runner.temp }}/c1-payload-integrity.json"
+          python3 -B tests/payload_meshopt_stride_oracle.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/payload-stride-corpus" --output "${{ runner.temp }}/c1-payload-stride.json"
+      - name: Retain validation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: c1-validation-evidence
+          path: |
+            ${{ runner.temp }}/c1-*.json
+            ${{ runner.temp }}/c1-library.log
+          if-no-files-found: error
+      - name: Independently verify exact model bytes and original-node bounds
+        run: python3 -B tests/model_wrapping_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1c2-wrapping.json"
+      - name: Retain model wrapping evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: f1c2-identity-evidence
+          path: ${{ runner.temp }}/f1c2-*.json
+          if-no-files-found: error
+      - name: Independently verify vector acceptance and archive inventory
+        run: python3 -B tests/vector_acceptance_oracle.py --binary target/debug/rusty-tiles --evidence "${{ runner.temp }}/vector-acceptance"
+      - name: Independently verify point records, rendered placement and hierarchy
+        run: python3 -B tests/p1_point_oracle.py --binary target/debug/rusty-tiles --output-dir "${{ runner.temp }}/point-acceptance" --json-output "${{ runner.temp }}/point-acceptance.json"
       - name: Check source packaging
         run: cargo package --locked --no-verify
-      - name: Test portable JPEG
-        env:
-          RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
-        run: cargo test --locked --lib jpeg::tests
+
+  python-wheel:
+    name: Python wheel (CPython ${{ matrix.python }})
+    needs: changes
+    # Skipped jobs satisfy required checks; a failed classifier runs everything.
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.14']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Check wheel acceptance failure handling
+        run: python -m unittest discover -s tests -p test_wheel_runners.py -v
+      - name: Select stable Rust
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add clippy
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: python-wheel-${{ matrix.python }}
+      - name: Check Python bindings
+        run: cargo clippy --locked -p rusty-tiles-python -- -D warnings
+      - name: Test Python error and recovery mappings
+        run: cargo test --locked -p rusty-tiles-python
+      - name: Build wheel
+        run: |
+          python -m pip install 'maturin==1.15.0'
+          maturin build --release --locked --out target/wheels
+      - name: Test the installed wheel with an empty PATH
+        run: python scripts/test_python_wheel.py target/wheels/*.whl
 
   portable:
     name: Portable CLI (${{ matrix.target }})
+    needs: changes
+    # Skipped jobs satisfy required checks; a failed classifier runs everything.
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -64,7 +257,6 @@ jobs:
       run:
         shell: bash
     env:
-      RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
       RELEASE_TARGET: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -75,17 +267,77 @@ jobs:
           rustup update stable --no-self-update
           rustup default stable
           rustup target add "$RELEASE_TARGET"
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: portable-${{ matrix.target }}
       - name: Test the portable release CLI
         run: cargo test --locked --target "$RELEASE_TARGET"
+      - name: Report vendored KTX2 encoder digests and round trips
+        run: cargo test --locked --target "$RELEASE_TARGET" --lib basisu_ktx2 -- --nocapture --test-threads=1
+
+  encoder-link:
+    name: KTX2 encoder link (${{ matrix.target }})
+    # Full tier only; see "CI tiers" in CONTRIBUTING.md.
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+    defaults:
+      run:
+        shell: bash
+    env:
+      RELEASE_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Select stable Rust
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add "$RELEASE_TARGET"
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: encoder-link-${{ matrix.target }}
+      - name: Check stdio isolation and measure encoder link size
+        run: |
+          mkdir -p "$RUNNER_TEMP/encoder-link"
+          scripts/basisu_link_check.sh "$RELEASE_TARGET" "$RUNNER_TEMP/encoder-link/$RELEASE_TARGET.json"
+          { echo '```json'; cat "$RUNNER_TEMP/encoder-link/$RELEASE_TARGET.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain encoder link evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: encoder-link-${{ matrix.target }}
+          path: ${{ runner.temp }}/encoder-link/*.json
+          if-no-files-found: error
 
   native-geospatial:
     name: Native geospatial (GDAL ${{ matrix.gdal }})
+    needs: changes
+    # Skipped jobs satisfy required checks; a failed classifier runs everything.
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        gdal: ['3.12', '3.13']
+        # Pull requests run the newest GDAL only; the full tier runs both.
+        gdal: ${{ fromJSON(github.event_name == 'pull_request' && '["3.13"]' || '["3.12", "3.13"]') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -102,13 +354,39 @@ jobs:
             proj>=9.2
             -c conda-forge
           init-shell: bash
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: gdal-${{ matrix.gdal }}
       - name: Test native geospatial build
+        env:
+          LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'
+          EVENT: ${{ github.event_name }}
         shell: bash -el {0}
         run: |
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          cargo test --locked --features native-geospatial
+          if [ "$EVENT" = pull_request ]; then
+            # PR tier: only what compiles differently with GDAL (the modules gated by
+            # `native-geospatial` and every integration suite with GDAL-specific cases).
+            # The Rust job already runs everything else; the full tier runs it all with GDAL.
+            cargo test --locked --features native-geospatial --lib -- \
+              crs dir_sync doctor raster runtime terrain vec3 vector source_crs
+            cargo test --locked --features native-geospatial --bins \
+              --test 'native_*' --test 'raster_*' --test 'point_*' --test '*vector*' --test '*terrain*' \
+              --test cli_contract --test demodata_suite --test golden --test machine_results --test h26_mesh_frontends
+          else
+            cargo test --locked --features native-geospatial
+          fi
+      - name: Independently verify native vector and point acceptance
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          python3 -B tests/vector_acceptance_oracle.py --binary target/debug/rusty-tiles --evidence "${{ runner.temp }}/vector-acceptance-native" --native
+          python3 -B tests/p1_point_oracle.py --binary target/debug/rusty-tiles --output-dir "${{ runner.temp }}/point-acceptance-native" --json-output "${{ runner.temp }}/point-acceptance-native.json"
       - name: Check native geospatial lint
+        env:
+          LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'
         shell: bash -el {0}
         run: |
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
@@ -118,6 +396,9 @@ jobs:
 
   python:
     name: Python
+    needs: changes
+    # Skipped jobs satisfy required checks; a failed classifier runs everything.
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -142,39 +423,130 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libclang-dev libsqlite3-dev
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: python-gdal-3.12
       - name: Build CLI for derivative acceptance
+        env:
+          LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'
         shell: bash -el {0}
         run: |
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           cargo build --locked --features native-geospatial
+      - name: Independently prove D1 raster pixels and directory closure
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          python3 -B tests/d1_raster_oracle.py target/debug/rusty-tiles
+          python3 -B tests/d2_directory_oracle.py target/debug/rusty-tiles
       - name: Test derivative encoding and preview isolation
         shell: bash -el {0}
         run: |
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           python -c "from osgeo import gdal; print(gdal.VersionInfo('--version'))"
           RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_*.py'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Install pinned terrain consumer
+        run: |
+          npm install --prefix target/terrain-browser --no-save --package-lock=false cesium@1.146.0 three@0.180.0 playwright@1.63.0 gltf-validator@2.0.0-dev.3.10
+          # The runner image already carries Chromium's libraries; apt only adds fonts and minor
+          # upgrades, and the Azure Ubuntu mirror has stalled for minutes per package. Bound it.
+          timeout 180 target/terrain-browser/node_modules/.bin/playwright install-deps chromium \
+            || echo "::warning::playwright install-deps did not finish; using the runner image's libraries"
+          target/terrain-browser/node_modules/.bin/playwright install chromium
+      - name: Independently verify validator positive geometry controls
+        run: python3 -B tests/c1_khronos_oracle.py --node-modules target/terrain-browser/node_modules --output "${{ runner.temp }}/c1-official-positive.json"
+      - name: Prove terrain rendering, queries, clamping and imagery draping
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
+          python3 -B tests/t1_terrain_viewer.py --binary target/debug/rusty-tiles \
+            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
+            --node-modules target/terrain-browser/node_modules \
+            --json-output "${{ runner.temp }}/terrain-browser.json"
+      - name: Prove unchanged model traversal, resources and placement
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
+          python3 -B bench/architecture_audit/f1c2/review_probes/unchanged_model_browser.py \
+            --binary target/debug/rusty-tiles --node-modules target/terrain-browser/node_modules \
+            --chromium "$CHROMIUM" --output "${{ runner.temp }}/f1c2-wrapping-browser.json"
+      - name: Retain model consumer evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: f1c2-browser-evidence
+          path: ${{ runner.temp }}/f1c2-*.json
+          if-no-files-found: error
+      - name: Independently verify native LAZ delivery
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          python -B tests/p1_laz_adapter.py --binary "$PWD/target/debug/rusty-tiles" --json-output "${{ runner.temp }}/point-laz-native.json"
+      - name: Upload terrain consumer evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: terrain-browser-evidence
+          path: ${{ runner.temp }}/terrain-browser.json
+          if-no-files-found: error
+      - name: Test portable vectors against independent fixtures and Python oracle
+        shell: bash -el {0}
+        run: |
+          cargo build --locked
+          RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_vector_*.py'
+          RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_native_vector.py'
+          python -B tests/p1_laz_adapter.py --binary "$PWD/target/debug/rusty-tiles" --json-output "${{ runner.temp }}/point-laz-portable.json"
+      - name: Pair point CLI and installed Python results
+        shell: bash -el {0}
+        run: |
+          python -m pip install maturin==1.15.0
+          maturin build --locked --profile dev --out "${{ runner.temp }}/point-wheel"
+          python -m pip install --no-deps "${{ runner.temp }}"/point-wheel/*.whl
+          python -B tests/p1_point_frontends.py --binary "$PWD/target/debug/rusty-tiles" --json-output "${{ runner.temp }}/point-frontends.json"
 
   python-free-runtime:
     name: Python-free runtime
+    needs: changes
+    # Skipped jobs satisfy required checks; a failed classifier runs everything.
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: Test installed native suite in a runtime image without Python
-        run: docker build --target acceptance -t rusty-tiles:native-acceptance .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - name: Build and check packaged runtime
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          target: runtime
+          load: true
+          tags: rusty-tiles:native
+          cache-from: type=gha,scope=python-free-acceptance
+          cache-to: type=gha,scope=python-free-acceptance,mode=max
+      - name: Test packaged conversions without Python or network access
         run: |
-          docker build --target runtime -t rusty-tiles:native .
-          docker run --rm --network none rusty-tiles:native doctor --json
+          docker run --rm --network none \
+            --tmpfs /tmp:rw,nosuid,nodev,size=256m \
+            --mount type=bind,src="$PWD/tests/fixtures",dst=/fixtures,readonly \
+            --mount type=bind,src="$PWD/scripts/test-packaged-runtime.sh",dst=/test-packaged-runtime.sh,readonly \
+            --entrypoint /bin/sh rusty-tiles:native /test-packaged-runtime.sh /fixtures
 
   release-acceptance:
     name: Release acceptance
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      ACCEPTANCE_REQUIRE_BROWSER: '1'
+      ACCEPTANCE_WORK: ${{ github.workspace }}/target/release-acceptance
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -195,9 +567,134 @@ jobs:
             pyproj>=3.7,<4
             -c conda-forge
           init-shell: bash
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser acceptance runtime
+        run: |
+          npm install --prefix target/release-browser --no-save --package-lock=false cesium@1.146.0 playwright@1.63.0
+          # The runner image already carries Chromium's libraries; apt only adds fonts and minor
+          # upgrades, and the Azure Ubuntu mirror has stalled for minutes per package. Bound it.
+          timeout 180 target/release-browser/node_modules/.bin/playwright install-deps chromium \
+            || echo "::warning::playwright install-deps did not finish; using the runner image's libraries"
+          target/release-browser/node_modules/.bin/playwright install chromium
+          echo "NODE_PATH=$PWD/target/release-browser/node_modules" >> "$GITHUB_ENV"
+          echo "CESIUM_DIR=$PWD/target/release-browser/node_modules/cesium/Build/Cesium" >> "$GITHUB_ENV"
+          acceptance_chromium=$(node -e "console.log(require('./target/release-browser/node_modules/playwright').chromium.executablePath())")
+          echo "CHROMIUM=$acceptance_chromium" >> "$GITHUB_ENV"
+      - name: Check release acceptance failure handling
+        run: python3 -m unittest discover -s tests -p test_release_acceptance.py -v
       - name: Check the release CLI route
         shell: bash -el {0}
         run: |
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           scripts/release_acceptance.sh
+      - name: Retain release acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-acceptance
+          path: target/release-acceptance
+          if-no-files-found: warn
+
+  # Installed wheels on five platforms and the official Blender check. It is a reusable
+  # workflow so release.yml can run the same jobs, and so one CI run covers the whole matrix.
+  wheel-acceptance:
+    name: Wheel acceptance
+    needs: changes
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
+    uses: ./.github/workflows/wheel-acceptance.yml
+    with:
+      # The separate distribution Blender check runs for nightly and manual runs only.
+      test-blender: ${{ github.event_name != 'push' }}
+
+  # One verdict for the full tier. release.yml requires this job (and Rust) to have succeeded
+  # in a push, nightly or manual run for the tagged commit, so a pull-request run, which skips
+  # most of the matrix, can never satisfy the release gate.
+  full-matrix:
+    name: Full matrix
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+    needs:
+      - changes
+      - docs
+      - rust
+      - python-wheel
+      - portable
+      - encoder-link
+      - native-geospatial
+      - python
+      - python-free-runtime
+      - wheel-acceptance
+      - release-acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every job to have passed or been skipped on purpose
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+        run: |
+          set -eu
+          printf '%s\n' "$NEEDS" | jq -r 'to_entries[] | "\(.key)\t\(.value.result)"'
+          if printf '%s\n' "$NEEDS" | jq -e '[.[].result] | any(. == "failure" or . == "cancelled")' >/dev/null; then
+            echo "::error::at least one full-tier job did not pass"
+            exit 1
+          fi
+          # Docs-only changes skip the matrix by design; anything else must have run it.
+          if [ "$DOCS_ONLY" != true ]; then
+            printf '%s\n' "$NEEDS" | jq -e '.rust.result == "success" and .python.result == "success" and .portable.result == "success" and .["native-geospatial"].result == "success" and .["wheel-acceptance"].result == "success"' >/dev/null \
+              || { echo "::error::a required full-tier job was skipped"; exit 1; }
+          fi
+
+  # Keeps one open issue while the full tier fails on develop (pushes and nightly runs) and
+  # closes it on the next fully green run. Only this job can write issues.
+  tracking-issue:
+    name: Full CI tracking issue
+    needs: [full-matrix, rust]
+    if: >-
+      ${{ !cancelled() && github.ref == 'refs/heads/develop' &&
+      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.nightly)) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_EVENT: ${{ github.event_name }}
+          RUN_SHA: ${{ github.sha }}
+          VERDICT: ${{ needs.full-matrix.result }}
+          RUST: ${{ needs.rust.result }}
+        run: |
+          set -eu
+          title='Full CI matrix failing on develop'
+          number=$(gh issue list --state open --limit 100 --json number,title \
+            --jq "[.[] | select(.title == \"$title\")] | sort_by(.number) | .[0].number // empty")
+          case "$VERDICT" in
+            failure)
+              failed=$(gh api --paginate "repos/${GH_REPO}/actions/runs/${RUN_ID}/jobs" \
+                --jq '.jobs[] | select(.conclusion == "failure" and .name != "Full matrix") | "- " + .name' | sort -u)
+              body=$(printf 'Run: %s\nEvent: %s\nCommit: %s\n\nFailed jobs:\n\n%s\n' "$RUN_URL" "$RUN_EVENT" "$RUN_SHA" "$failed")
+              if [ -n "$number" ]; then
+                gh issue comment "$number" --body "$body"
+              else
+                gh issue create --title "$title" --body "$body"
+              fi
+              ;;
+            success)
+              # A docs-only run skips the matrix, so only a run that built and tested the code closes it.
+              if [ -n "$number" ] && [ "$RUST" = success ]; then
+                gh issue close "$number" --comment "The full matrix passed in $RUN_URL ($RUN_SHA)."
+              fi
+              ;;
+            *)
+              echo "Run was cancelled or skipped; leaving the tracking issue as it is."
+              ;;
+          esac

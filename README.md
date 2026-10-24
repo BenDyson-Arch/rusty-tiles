@@ -2,28 +2,54 @@
 
 **Turn geospatial files into tiles you can view, share and update.**
 
-rusty-tiles is a local command-line tool and Rust library. It converts textured meshes, point clouds, vector features, imagery and elevation rasters into 3D Tiles, XYZ imagery and quantized-mesh terrain. It runs offline, checks its own readiness, and includes a local Cesium preview. This page is for anyone installing it for the first time.
+rusty-tiles converts textured meshes, LAS/LAZ point clouds and GeoJSON/GeoPackage vectors into 3D Tiles. The **standard package needs no GDAL, PROJ or GEOS installation**. It is available as a command-line tool, Rust library and Python wheel for scripts and Blender addons.
+
+The optional **`native-geospatial` build** adds imagery, terrain, other OGR vector formats and native CRS operations. It needs GDAL/PROJ/GEOS, supplied by the native container or installed alongside a source build. Conversion runs offline in both builds; the CLI includes archive validation and a local Cesium preview.
 
 ![Meshes, point clouds and vectors become 3D Tiles archives. Imagery becomes COG and XYZ tiles. Elevation rasters become terrain.](docs/assets/readme-overview.svg)
 
-**MIT licensed** · **Runs locally** · **Version 0.3.0, in development** · [Release notes](CHANGELOG.md) · [Build status](https://github.com/BenDyson-Arch/rusty-tiles/actions/workflows/ci.yml) · [Report an issue](https://github.com/BenDyson-Arch/rusty-tiles/issues)
+**Licence `MIT AND Apache-2.0 AND BSD-3-Clause`** ([details](#licence)) · **Runs locally** · **0.4.0 development documentation** · [Release notes](CHANGELOG.md) · [Build status](https://github.com/BenDyson-Arch/rusty-tiles/actions/workflows/ci.yml) · [Report an issue](https://github.com/BenDyson-Arch/rusty-tiles/issues)
+
+This branch describes the upcoming 0.4.0 release. Build `develop` to use its new capabilities; published 0.3.0 downloads have the feature set documented at that tag.
+
+## Choose a build
+
+Start with the **standard package** unless your input needs one of the native capabilities below. “Default” and “portable” in build instructions refer to this standard build.
+
+| Capability | Standard package | `native-geospatial` build |
+| --- | --- | --- |
+| Mesh tiling, local LAS/LAZ, GeoJSON and GeoPackage | Included | Included |
+| Georeferenced mesh, point-cloud and vector conversion | Verified grid-free CRS operations | Also supports eligible native GDAL/PROJ operations using local resources |
+| Shapefile, PostGIS, GeoParquet and other OGR inputs | Not included | Available through installed GDAL drivers |
+| Imagery and terrain conversion | Not included | Included |
+| CLI packaging, validation and preview | Included | Included |
+| How to install | Standard CLI downloads, Python wheels, or default Cargo build | Native container, or Cargo with `--features native-geospatial` and system libraries |
+
+Python wheels contain the standard conversion APIs; there is no native-geospatial wheel or pip extra. Installing GDAL does not add capabilities to an existing standard binary or wheel. Use the native CLI/container or build the Rust library with the feature enabled. See the [installation guide](docs/INSTALL.md).
 
 ## Choose a command
 
 | Your data | Command | Output | Needs `native-geospatial` |
 | --- | --- | --- | --- |
-| Textured GLB or glTF meshes | `mesh-to-3tz` | 3D Tiles with mesh level of detail, as `.3tz` | No |
-| LAS or LAZ point clouds | `point-cloud` | 3D Tiles with sampled parents and full-detail leaves, as `.3tz` | Only for globe placement |
-| GeoPackage, GeoJSON or Shapefile | `vector` | Experimental glTF vector tiles, as `.3tz` | Yes |
-| GeoTIFF or other GDAL imagery | `raster` | Source COG, PNG XYZ tiles and TileJSON | Yes |
-| Elevation rasters | `terrain` | Prototype quantized-mesh terrain with height sidecars | Yes |
+| Static textured GLB or glTF meshes, in local metres or a declared source CRS | `mesh` | Streamed 3D Tiles 1.1 implicit tileset with certified coarse levels, as `.3tz` | Only for CRS operations outside the grid-free tier |
+| LAS or LAZ point clouds | `point-cloud` | 3D Tiles with sampled parents and full-detail leaves, as `.3tz` | Only for CRS operations outside the grid-free tier |
+| GeoPackage or GeoJSON | `vector` | Experimental glTF vector tiles, as `.3tz` | Only for CRS operations outside the grid-free tier |
+| Shapefile or other OGR vector formats | `vector` | Experimental glTF vector tiles, as `.3tz` | Yes |
+| Local GTiff, PNG, JPEG or AAIGrid imagery | `raster` | Source COG, PNG XYZ tiles and TileJSON | Yes |
+| Elevation rasters | `terrain` | Bounded 3D Tiles terrain meshes | Yes |
 | An existing model or tileset | `glb-to-3tz`, `createTilesetJson`, `convert` | `.3tz` or `tileset.json`, without new level of detail | No |
 
-Every option for every command is in the [command reference](docs/CLI.md).
+`mesh` is the one public mesh entry point; see the [mesh guide](docs/MESH.md). The older `mesh-to-3tz` and `mesh-local-to-3tz` commands were removed in 0.4.0. Existing scripts can follow the [migration notes](docs/MESH.md#migration-from-older-mesh-converters).
+
+Use the [converter guide](docs/CONVERTERS.md) to choose an input path and build. Every option for every command is in the [command reference](docs/CLI.md).
+
+`mesh`, `point-cloud` and `vector` write 3D Tiles 1.1 implicit tiling. Explicit point-cloud, vector and legacy mesh output was removed in 0.4.0. Vector archives from earlier encoder versions, including explicit ones, need a fresh conversion after the 0.4 geometry fixes.
 
 ## Install
 
-The downloads support mesh tiling, local point clouds, packaging, validation and preview. For georeferenced point clouds, vector, imagery and terrain, use the [container](#run-the-full-toolset-in-a-container) or [build with Cargo](#build-with-cargo).
+The [installation guide](docs/INSTALL.md) compares the released downloads, current source builds and Python wheels, and explains how to check the installed build.
+
+The macOS/Linux installer and Windows ZIP below install the **standard CLI**, not the native-geospatial build. Standard vector conversion includes polygons with holes, repair, level of detail, metadata, compression and archive reuse. See the [vector input limits](docs/VECTOR.md#requirements) and [CRS limits](docs/FORMATS.md#point-clouds). For native capabilities, use the [native container](#run-the-native-geospatial-container) or the native Cargo command below.
 
 ### macOS / Linux
 
@@ -51,9 +77,9 @@ Supports Intel/AMD and ARM64. Requires macOS 15+, or Linux with glibc 2.35+ and 
 
 To run `rusty-tiles` from any folder, add the extracted folder to your user `PATH` and reopen PowerShell. The Windows download is for x64.
 
-### Run the full toolset in a container
+### Run the native-geospatial container
 
-The published image bundles GDAL and PROJ. No host geospatial libraries are needed. It is a Linux amd64 image; other architectures need Docker's amd64 emulation.
+The published image contains the **native-geospatial CLI** and its GDAL/PROJ/GEOS/SQLite libraries. No host geospatial libraries are needed. It is a Linux amd64 image; other architectures need Docker's amd64 emulation.
 
 ```sh
 docker run --rm --platform linux/amd64 --network none \
@@ -61,7 +87,7 @@ docker run --rm --platform linux/amd64 --network none \
 
 docker run --rm --platform linux/amd64 --network none \
   -v "$PWD:/data" -w /data ghcr.io/bendyson-arch/rusty-tiles:latest \
-  vector -i mapping.gpkg -o mapping.3tz --layer roads
+  raster -i orthophoto.tif -o imagery --max-zoom 14
 ```
 
 Replace the example input with a file in the mounted directory. Pin the image to `:v0.3.0` for a repeatable setup. The image contains no datasets, Cesium runtime, Basis Universal encoder or extra datum grids. Mount required grids and set `PROJ_DATA` to include them and `proj.db`.
@@ -70,7 +96,7 @@ With a rootful Docker daemon, add `--user "$(id -u):$(id -g)"` so new outputs be
 
 ### Build with Cargo
 
-You need current stable Rust with Cargo and a C++ compiler. For a default build:
+You need current stable Rust with Cargo and a C++ compiler. For the **standard CLI**, with no system geospatial libraries:
 
 ```sh
 git clone --branch develop https://github.com/BenDyson-Arch/rusty-tiles.git
@@ -78,11 +104,16 @@ cd rusty-tiles
 cargo install --path . --locked
 ```
 
-Add `--features native-geospatial` to enable every converter. This build needs GDAL 3.12+, PROJ 9.2+, GEOS 3.10+ for vector, SQLite, development headers, `pkg-config` and libclang. The same library versions must be present at run time. CI tests GDAL 3.12 and 3.13. PROJ's database and any datum grids must be installed locally; conversion never downloads them.
+For the **native-geospatial CLI**, first install GDAL 3.12+, PROJ 9.2+, GEOS 3.10+, SQLite, development headers, `pkg-config` and libclang. Then, from the checkout:
+
+```sh
+LIBSQLITE3_SYS_USE_PKG_CONFIG=1 cargo install --path . --locked --features native-geospatial
+rusty-tiles doctor --command raster --command terrain --command vector
+```
+
+The SQLite override makes Rust, GDAL and PROJ use the same system library. Leave it unset for standard builds and wheels, which bundle SQLite. Both CLI builds install the same `rusty-tiles` executable name; the native command replaces the standard installation at the same Cargo install root. Matching native libraries must also be present at runtime. CI tests GDAL 3.12 and 3.13. PROJ's database and required datum grids must be installed locally; conversion never downloads them. See [native setup](docs/INSTALL.md#native-geospatial-cli) for details.
 
 `develop` holds the development version. For a stable version, use a source archive from [Releases](https://github.com/BenDyson-Arch/rusty-tiles/releases). To build without installing, use `cargo build --release` and run `target/release/rusty-tiles`.
-
-If `pkg-config` finds libjpeg-turbo at build time, it is also needed at run time. Set `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` while building to use the portable Rust encoder, as the release binaries do.
 
 If you already have `cargo-binstall`, run `cargo binstall --manifest-path Cargo.toml rusty-tiles` from a source checkout to download the prebuilt binary instead.
 
@@ -97,25 +128,24 @@ The `Dockerfile` builds a Python-free image with GDAL 3.12.4 and PROJ 9.8.1.
 
 ## Quick start
 
-This example works with the prebuilt binary or either Cargo build. It converts a tiny invented pyramid, places it near Brisbane, checks the archive and opens the local viewer. You need `curl`, `unzip` and Node.js with npm for the viewer setup.
+This example needs a 0.4 build: the published 0.3 download has no `mesh` command, so install from `develop` with either Cargo build. It converts a tiny invented pyramid, places it near Brisbane, checks the archive and opens the local viewer. You need `curl`, `unzip` and Node.js with npm for the viewer setup.
 
 ### 1. Check readiness
 
 ```sh
-rusty-tiles doctor --command mesh-to-3tz
+rusty-tiles doctor --command mesh
 ```
 
-Look for `mesh-to-3tz: ready`. The default build can run this command without GDAL. `doctor` exits with code 4 if a selected command is missing a dependency.
+Look for `mesh: ready`. The standard build can run this command without GDAL. `doctor` exits with code 2 if a selected command is not ready.
 
 ### 2. Make tiles
 
-Download the example (or copy `tests/fixtures/example.gltf` from a source checkout):
+Download the example (or copy `tests/fixtures/example.glb` from a source checkout):
 
 ```sh
-curl -fsSLo example.gltf https://raw.githubusercontent.com/BenDyson-Arch/rusty-tiles/v0.3.0/tests/fixtures/example.gltf
+curl -fsSLo example.glb https://raw.githubusercontent.com/BenDyson-Arch/rusty-tiles/develop/tests/fixtures/example.glb
 mkdir -p output
-rusty-tiles mesh-to-3tz -i example.gltf -o output/example.3tz \
-  --cartographic-position-degrees 153.02 -27.47 0
+rusty-tiles mesh -i example.glb -o output/example.3tz --anchor 153.02 -27.47 0
 ```
 
 The converter prints what it wrote and the next command. Outputs are not overwritten; choose a new path or add `--force` to repeat the conversion.
@@ -126,22 +156,22 @@ The converter prints what it wrote and the next command. Outputs are not overwri
 rusty-tiles validate output/example.3tz
 ```
 
-A successful check prints `Validated output/example.3tz: 1 tiles, 1 content references`.
+A successful check prints `Inspected output/example.3tz: N tiles, M content references` with the archive's counts, followed by a `Not inspected:` line naming any checks the profile does not cover.
 
 ### 4. Preview
 
 Install Cesium once, extract the archive and serve the mesh:
 
 ```sh
-npm install --prefix target/preview-runtime --no-save --package-lock=false cesium@1.143.0
+npm install --prefix target/preview-runtime --no-save --package-lock=false cesium@1.146.0
 unzip output/example.3tz -d output/example
 rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Cesium \
   --mesh output/example
 ```
 
-Open [http://127.0.0.1:9227/](http://127.0.0.1:9227/). Use **3D mesh extent** to frame the pyramid; press Ctrl+C to stop the server. After the one-time Cesium install, the viewer works offline and needs no ion token.
+Open [http://127.0.0.1:9227/](http://127.0.0.1:9227/). Use **3D mesh extent** to frame the model; press Ctrl+C to stop the server. After the one-time Cesium install, the viewer works offline and needs no ion token.
 
-With the full toolset, try the [invented vector fixture](tests/fixtures/vector.geojson) too:
+From a 0.4 source checkout, try the [invented vector fixture](tests/fixtures/vector.geojson) with the standard build too. This example needs 0.4; the published 0.3 standard binary does not include vector conversion:
 
 ```sh
 rusty-tiles vector -i tests/fixtures/vector.geojson -o output/vector.3tz --max-features 2
@@ -152,24 +182,26 @@ rusty-tiles validate output/vector.3tz
 
 Every converter takes `-i` for input and `-o` for output. The file names below are placeholders for your own data.
 
-| Data | Example | Details |
+| Data | Example | Build and details |
 | --- | --- | --- |
-| Mesh | `rusty-tiles mesh-to-3tz -i model.glb -o output/model.3tz` | [Mesh guide](docs/FORMATS.md#meshes) |
-| Local point cloud | `rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs local` | [Point-cloud guide](docs/FORMATS.md#point-clouds) |
-| Georeferenced point cloud | `rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs header --height-offset 0` | [Point-cloud guide](docs/FORMATS.md#point-clouds) |
-| Vector layer | `rusty-tiles vector -i mapping.gpkg -o output/mapping.3tz --layer roads` | [Vector guide](docs/VECTOR.md) |
-| Imagery | `rusty-tiles raster -i orthophoto.tif -o output/imagery --min-zoom 10 --max-zoom 18` | [Imagery guide](docs/FORMATS.md#imagery) |
-| Terrain | `rusty-tiles terrain -i elevation.tif -o output/terrain --max-zoom 14 --height-offset 0 --fill-height 0` | [Terrain guide](docs/TERRAIN.md) |
+| Mesh | `rusty-tiles mesh -i model.glb -o output/model.3tz` | Standard; local metres/Y-up, optional `--anchor`; a declared `--source-crs` outside the grid-free tier needs native; [mesh guide](docs/MESH.md) |
+| Local point cloud | `rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs local` | Standard; [point-cloud guide](docs/FORMATS.md#point-clouds) |
+| Georeferenced point cloud | `rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs header --height-offset 0` | Standard for grid-free CRS; otherwise native; [CRS limits](docs/FORMATS.md#point-clouds) |
+| Vector layer | `rusty-tiles vector -i mapping.gpkg -o output/mapping.3tz --layer roads` | Standard for grid-free CRS; otherwise native; [vector guide](docs/VECTOR.md) |
+| Imagery | `rusty-tiles raster -i orthophoto.tif -o output/imagery --min-zoom 10 --max-zoom 18` | **Native-geospatial only**; [imagery guide](docs/FORMATS.md#imagery) |
+| Terrain | `rusty-tiles terrain -i elevation.tif -o output/terrain --cells-per-leaf 64 --height-offset 0 --fill-height 0` | **Native-geospatial only**; [terrain guide](docs/TERRAIN.md) |
 
 A height offset of 0 is correct only when source heights are already ellipsoidal metres. Read [Coordinates and height](#coordinates-and-height) before you choose one.
 
 Outputs are never overwritten by default. Add `--force` to replace an existing output after a successful conversion.
 
-To update a vector archive after editing its source, add `--reuse-tileset` with the earlier archive. Unchanged content keeps its bytes and URLs. See [Reuse after edits](docs/VECTOR.md#reuse-after-edits).
+To update a vector archive after editing its source, add `--reuse-tileset` with the earlier archive. Unchanged payloads are recovered byte for byte from the earlier archive's published tiles instead of being re-encoded. The earlier archive must come from the same converter build and settings; archives from earlier releases need one fresh conversion first. See [Reuse after edits](docs/VECTOR.md#reuse-after-edits).
 
 ## Preview
 
 `preview` serves your outputs and a Cesium runtime on `127.0.0.1:9227`. It needs no Cesium ion token and no external basemap. It offers layer toggles, extent buttons and feature picking.
+
+Preview is included in both CLI builds. The standard CLI can serve imagery and terrain already produced by a native build; only their **conversion** requires native-geospatial. The Python wheel does not expose the preview server.
 
 ```sh
 unzip output/model.3tz -d output/model
@@ -187,7 +219,7 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 
 The server never lists directories and never downloads a runtime or data. It serves only the directories you select, so point it at generated output.
 
-To use another viewer, serve the extracted `tileset.json` and its files. Raster output uses `tilejson.json`, and terrain output uses `layer.json`.
+To use another viewer, serve the extracted `tileset.json` and its files. Raster output uses `tilejson.json`, and terrain output uses `tileset.json`.
 
 ## Validate and publish
 
@@ -197,7 +229,7 @@ Run `validate` on every `.3tz` before you publish it:
 rusty-tiles validate output/example.3tz
 ```
 
-It is read-only. It checks the ZIP and 3TZ index, the tileset schema, bounds, geometric error, references, content hashes and recorded budgets. Add `--external-validator` to also run a locally installed official `3d-tiles-validator`. Details are in the [command reference](docs/CLI.md#validate).
+It is read-only. The [validation profile](docs/VALIDATION.md) checks archive integrity, actual payload ranges and values, primitive indices, declared hierarchy bounds, references and recorded budgets under fixed limits. The report names completed checks and uninspected semantics; decoded world-space containment is certified only when the report lists `decodedContentContainment`, and source fidelity is not certified. Run external validators separately. Details are in the [command reference](docs/CLI.md#validate).
 
 `validate` checks `.3tz` archives only. Raster and terrain directories are not validated yet.
 
@@ -214,32 +246,63 @@ A file's CRS and height reference decide where its content lands. rusty-tiles ne
 
 | Input | Rule |
 | --- | --- |
-| Mesh | Local model coordinates are placed with `--cartographic-position-degrees lon lat height`. Metashape-style geographic and EPSG:3857 exports are also read. See [mesh placement](docs/FORMATS.md#mesh-placement). |
+| Mesh | `mesh` takes local source metres/Y-up. Omit `--anchor` for unplaced output, or give `--anchor lon lat ellipsoidal_height`, optional `--orientation-xyzw x y z w` and `--scene-offset x y z`. For a projected or geographic source, declare `--source-crs` (with `--source-axes`, `--source-offset` or `--source-offset-file`, and `--height-offset`) instead; it excludes the anchor options. See [placement](docs/MESH.md#source-and-placement) and [source CRS](docs/MESH.md#source-crs). |
 | Point cloud | `--source-crs local` means metre XYZ with Z up and no globe placement. Geospatial input needs a 2D horizontal CRS and `--height-offset`. |
 | Vector | The layer's CRS is used unless `--source-crs` overrides it. 3D data with only a horizontal CRS needs `--height-offset`. 2D data sits at ellipsoidal height zero. |
 | Terrain | Heights must be metres. `--height-offset` and `--fill-height` are required. |
 
-A constant height offset is not a geoid transformation. Transformations use only local PROJ operations. A missing grid fails the job, and ballpark operations are refused.
+A constant height offset is not a geoid transformation. Mesh, point-cloud and vector CRS routes use the bounded grid-free/native policies described in their guides. Switching builds does not remove converter-specific source, axis or height limits. Native operations use local PROJ resources only; missing required grids and ballpark operations are refused.
+
+Rigid placement (`mesh`, `glb-to-3tz` and `createTilesetJson`) uses the independently checked F1c1 placement contract. Its anchor is WGS84 ellipsoidal height; its quaternion rotates ENU vectors in the cartographic frame, with supplied longitude defining the pole meridian. The scene offset is a post-node glTF Y-up metre translation before orientation. It is not a projected E/N/A shift or vertical datum correction. Placement uses an f64 root transform and keeps local GLB geometry and companions. `glb-to-3tz` preserves admitted static source bytes through [typed F0 publication](docs/architecture/model-wrapping-contract.md). This does not imply release acceptance.
 
 ## Library use
 
-Each converter has a `*_reported` function. It takes a `Reporter` for events and returns a `ConversionResult`.
+Python and Blender addons can call the standard converters directly. After the first PyPI publication, install a released wheel with:
 
-```rust
-use rusty_tiles::{tile::mesh_to_3tz_reported, MeshTo3tzOptions, Reporter};
-
-let result = mesh_to_3tz_reported("model.glb".as_ref(), "model.3tz".as_ref(), &MeshTo3tzOptions::default(), &Reporter::silent())?;
-println!("wrote {} (archive: {})", result.output.display(), result.archive);
+```sh
+python -m pip install rusty-tiles
 ```
 
-`ConversionResult` carries `output`, `archive` and the published `conversion.json` as `report`. `Reporter` can be silent, human text on stderr, NDJSON on stderr, or a custom `EventSink`. The library's `MeshTo3tzOptions::default()` writes lossless PNG textures, while the CLI defaults to JPEG.
+For the current development API, [build and install a wheel from `develop`](docs/INSTALL.md#python-and-blender).
+
+```python
+import rusty_tiles
+
+result = rusty_tiles.mesh_to_tileset(
+    "example.glb", "example.3tz", anchor=(153.02, -27.47, 0.0)
+)
+assert rusty_tiles.validate(result.output)["ok"]
+```
+
+The wheels need CPython 3.10+ and contain the **standard conversion APIs**, with no GDAL, CLI subprocess or extra Python packages. They do not provide raster/terrain conversion, OGR-only inputs, native CRS fallback, `doctor` or `preview`. For those native conversion capabilities, use the native CLI/container or Rust library. See the [Python API and source build guide](bindings/python/README.md) for available functions and CRS limits, and the [mesh guide](docs/MESH.md#python) for `mesh_to_tileset`.
+
+The Rust mesh entry point is `mesh_to_tileset`. It takes a `TilerRequest` (with `with_profile`, `with_jobs`, `with_placement` and `with_source_crs` builders) and a `RunControl` for observation and cancellation, and returns a `TilerResult`:
+
+```rust
+use rusty_tiles::{mesh_to_tileset, RunControl, TilerRequest};
+
+let result = mesh_to_tileset(TilerRequest::new("model.glb", "model.3tz"), &RunControl::new(None))?;
+println!("wrote {}", result.output.display());
+```
+
+The other Rust converters follow the same request, `RunControl` and typed-result pattern: `vector_to_archive`, `point_cloud_to_archive`, `raster_to_pyramid` and `model_to_archive`.
+
+The public [`metadata` module](src/metadata.rs) provides serde types for `EXT_mesh_features`, `EXT_structural_metadata` and implicit tile semantics. `MetadataGlb` appends aligned buffers, `encode_property_table` preserves scalar/string/boolean values, and `StructuralMetadata::attach_gltf` attaches tables to a `gltf_json::Root`.
+
+Observe a run with a `RunControl` and an `Observer`.
 
 ## Where to go next
 
+- [Installation guide](docs/INSTALL.md): released downloads, development builds and Python wheels.
+- [Converter guide](docs/CONVERTERS.md): choose a command, build and placement policy.
+- [Mesh tiling guide](docs/MESH.md): `mesh` sources, placement, source CRS, profiles, resources and migration.
 - [Command reference](docs/CLI.md): every option, exit codes, JSON output and progress events.
 - [Mesh, point cloud and imagery guide](docs/FORMATS.md): fidelity, limits and advanced options.
 - [Vector guide](docs/VECTOR.md): layers, budgets, reuse, styling and picking.
-- [Terrain guide](docs/TERRAIN.md): height decisions, sidecars and viewer setup.
+- [Terrain guide](docs/TERRAIN.md): height decisions, mesh queries and viewer setup.
 - [Contributing](CONTRIBUTING.md): build, test and release.
+- [Demo-data suite](CONTRIBUTING.md#demo-data-acceptance-and-benchmarks): opt-in native acceptance and benchmarks against the pinned public corpus.
 
-Licensed under [MIT](LICENSE).
+## Licence
+
+The Cargo licence expression is `MIT AND Apache-2.0 AND BSD-3-Clause`. The project's own code is [MIT](LICENSE). The Apache-2.0 and BSD-3-Clause terms cover the vendored [Basis Universal](vendor/README.md) texture encoder (Apache-2.0) and the Zstandard code it bundles (BSD-3-Clause), which the in-process KTX2 encoder compiles in; their licence texts are in `vendor/basis_universal/`. Basis Universal also bundles a few MIT and BSD-3-Clause headers, noted in `vendor/README.md`. Rust crates that Cargo resolves keep their own licences, all permissive (mostly MIT and Apache-2.0). Their texts are generated into [`licenses/`](licenses/) and shipped in every artefact: `THIRD_PARTY_LICENSES.md` in the release archives, `/usr/share/doc/rusty-tiles/` in the container image (which also lists its GDAL, PROJ, GEOS, SQLite and libtiff libraries; GEOS is LGPL-2.1-or-later, dynamically linked) and the wheel's `.dist-info/licenses`. See `vendor/README.md`.
