@@ -118,4 +118,8 @@ pinned separately. Owned campaign scratch is deleted only after preserving both
 archives. Tests use the requested Cargo target/jobs/debug settings, test opt-level
 2, two test threads and actual two-CPU affinity; the jobs control uses four CPUs.
 Full-model, appearance, transfer and integrated S8 performance remain outstanding.
-The final independent source/evidence review is recorded separately in the cache.
+R8 independently reviewed clean receipt HEAD `58063fc4` and found no additional
+actionable correctness findings. It verified all 312 production hashes, four
+oracle helpers, binary/inputs, all 54 execution artifacts and both archives.
+`review-r8.json` pins that read-only review; its addition is the 55th artifact.
+This final receipt update changes only documentation and the hash manifest.
