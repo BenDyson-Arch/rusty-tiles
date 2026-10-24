@@ -72,3 +72,11 @@ bounded by the document decode limit; decode, schema, scalar, range and corner
 visits consume the remaining payload-element budget before work. Shared-accessor
 amplification has a preflight control. Facts and replay retain these work charges;
 no persistent producer record supplies validation facts.
+
+Either owned identity marker (`source_primitive` or `source_triangle`) triggers
+admission; incomplete pairs cannot hide a corrupt triangle set. Declared source
+identity in local `.gltf` is an explicit Unsupported profile refusal, rather than
+a skipped check. Configurable identity work refusals use the shared budget owner
+and retain key/value/observed/derivation. Coarse materials are checked against
+independent source alpha/MASK, double-sided and lit/unlit classes; baked colour
+and texture quality remain the separate appearance audit's responsibility.

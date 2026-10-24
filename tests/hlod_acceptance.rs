@@ -1,7 +1,7 @@
 //! S5: named archive checks plus a separate source-aware acceptance oracle.
 use rusty_tiles::{
     package::{package, PackageRequest},
-    validate::{inspect, ValidationRequest},
+    validate::{inspect, LimitKey, ValidationRequest},
     RunControl,
 };
 use serde_json::Value;
@@ -66,6 +66,18 @@ fn sampled_hlod_archives_and_named_mutants() {
             name,
             "valid" | "quantized" | "normalized" | "trs" | "numeric-lexemes" | "opaque-extras"
         ) {
+            if name == "valid" {
+                let error = inspect(
+                    ValidationRequest::new(&archive)
+                        .max_volume(LimitKey::TotalPayloadElements, 100),
+                )
+                .unwrap_err();
+                assert!(error.to_string().contains("hlodFeatureIds"), "{error}");
+                let refusal = error.exceeded().unwrap();
+                assert_eq!(refusal.limit, LimitKey::TotalPayloadElements);
+                assert_eq!(refusal.value, 100);
+                assert!(refusal.observed > 100);
+            }
             let report = result.unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(cli.status.success(), "{name}: {cli_report}");
             assert!(report

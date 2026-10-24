@@ -101,14 +101,14 @@ def generate(root):
            ('moved-interface','interfaceSegments',None),('moved-corner','interfacePoints',None),('empty-intermediate','replaceContentContinuity',None),
            ('negative-g','geometricErrorFinite','tileset schema'),('nan-g','geometricErrorFinite','JSON'),
            ('nonmonotone-g','geometricErrorOrder','geometricError increases'),('bad-bounds',None,'decoded content'),
-           ('stale-hash',None,'content checksum mismatch'),('malformed-codec',None,'meshopt'),('bad-metadata','featureIdentity','hlodFeatureIds'),('optional-property','featureIdentity','hlodFeatureIds'),('bad-property-type','featureIdentity','hlodFeatureIds'),('wrong-table-class','featureIdentity','hlodFeatureIds'),('missing-feature-set','sourceIdentity','hlodFeatureIds'),('correlated-metadata','sourceIdentity',None),('active-morph','codecStructure',None),('infinite-root-g','geometricErrorFinite','JSON'),('normalized-identity','featureIdentity','hlodFeatureIds'),('array-identity','featureIdentity','hlodFeatureIds'),('offset-identity','featureIdentity','hlodFeatureIds'),('null-identity','featureIdentity','hlodFeatureIds'),('gpu-instancing','codecStructure',None)]
+           ('stale-hash',None,'content checksum mismatch'),('malformed-codec',None,'meshopt'),('bad-metadata','featureIdentity','hlodFeatureIds'),('optional-property','featureIdentity','hlodFeatureIds'),('bad-property-type','featureIdentity','hlodFeatureIds'),('wrong-table-class','featureIdentity','hlodFeatureIds'),('missing-feature-set','sourceIdentity','hlodFeatureIds'),('correlated-metadata','sourceIdentity',None),('active-morph','codecStructure',None),('infinite-root-g','geometricErrorFinite','JSON'),('normalized-identity','featureIdentity','hlodFeatureIds'),('array-identity','featureIdentity','hlodFeatureIds'),('offset-identity','featureIdentity','hlodFeatureIds'),('null-identity','featureIdentity','hlodFeatureIds'),('gpu-instancing','codecStructure',None),('source-triangle-only','featureIdentity','hlodFeatureIds'),('local-gltf-identity',None,'hlodFeatureIds'),('coarse-material-class','representativeMaterialClass',None)]
     manifest=[]
     for name,oracle_check,archive_check in cases:
         out=root/name;out.mkdir(exist_ok=True);d=copy.deepcopy(doc)
         for uri,ids in groups.items():
             data=glb(ids,quantized=name=='quantized',wrong_id=name=='wrong-feature' and uri=='root.glb',moved=(name=='moved-interface' and uri=='left.glb') or (name=='moved-corner' and uri=='right.glb'),bad_metadata=name=='bad-metadata' and uri=='root.glb',trs=name=='trs',normalized=name=='normalized',leaf=uri.startswith('leaf'))
             (out/uri).write_bytes(data)
-        if name in ('numeric-lexemes','opaque-extras','optional-property','correlated-metadata','active-morph','bad-property-type','wrong-table-class','missing-feature-set','normalized-identity','array-identity','offset-identity','null-identity','gpu-instancing'):
+        if name in ('numeric-lexemes','opaque-extras','optional-property','correlated-metadata','active-morph','bad-property-type','wrong-table-class','missing-feature-set','normalized-identity','array-identity','offset-identity','null-identity','gpu-instancing','source-triangle-only','coarse-material-class'):
             for uri in groups:
                 p=out/uri;b=p.read_bytes();jl=int.from_bytes(b[12:16],'little');j=json.loads(b[20:20+jl]);binary=bytearray(b[28+jl:])
                 if name=='numeric-lexemes':
@@ -138,6 +138,13 @@ def generate(root):
                 if name=='null-identity':
                     for primitive in j['meshes'][0]['primitives']:
                         for feature in primitive['extensions']['EXT_mesh_features']['featureIds']:feature['nullFeatureId']=0
+                if name=='source-triangle-only' and uri=='leaf0.glb':
+                    meta=j['extensions']['EXT_structural_metadata'];meta['schema']['classes']['renamed']=meta['schema']['classes'].pop('source_primitive');meta['propertyTables'][0]['class']='renamed'
+                    for primitive in j['meshes'][0]['primitives']:primitive['extensions']['EXT_mesh_features']['featureIds'][0]['label']='renamed'
+                    a=j['accessors'][j['meshes'][0]['primitives'][0]['attributes']['_FEATURE_ID_1']];v=j['bufferViews'][a['bufferView']]
+                    for i in range(a['count']):struct.pack_into('<f',binary,v['byteOffset']+i*4,999)
+                if name=='coarse-material-class' and not uri.startswith('leaf'):
+                    for primitive in j['meshes'][0]['primitives']:primitive['material']=1-primitive['material']
                 if name=='gpu-instancing':
                     j['nodes'][0]['extensions']={'EXT_mesh_gpu_instancing':{'attributes':{'TRANSLATION':0}}}
                     j['extensionsUsed'].append('EXT_mesh_gpu_instancing')
@@ -150,6 +157,8 @@ def generate(root):
         if name in ('wrong-source','wrong-representative','wrong-representative-contents'):
             # In-range feature ID mutation only: same coordinates, wrong row.
             p=out/('leaf0.glb' if name=='wrong-source' else 'root.glb');data=p.read_bytes();jl=int.from_bytes(data[12:16],'little');j=json.loads(data[20:20+jl]);t=j['extensions']['EXT_structural_metadata']['propertyTables'][0];v=j['bufferViews'][t['properties']['primitive_index']['values']];b=bytearray(data);struct.pack_into('<I',b,28+jl+v['byteOffset'],1);p.write_bytes(b)
+        if name=='local-gltf-identity':
+            p=out/'root.glb';b=p.read_bytes();jl=int.from_bytes(b[12:16],'little');j=json.loads(b[20:20+jl]);j['buffers'][0]['uri']='root.bin';(out/'root.bin').write_bytes(b[28+jl:]);(out/'root.gltf').write_text(json.dumps(j));p.unlink();d['root']['content']['uri']='root.gltf'
         if name=='wrong-representative-contents':d['root']['contents']=[d['root'].pop('content')]
         if name=='missing-leaf':d['root']['children'][0]['children'].pop()
         if name=='duplicate-leaf':

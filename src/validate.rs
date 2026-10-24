@@ -1572,7 +1572,8 @@ impl Check<'_> {
         })?;
         let (identity_checked, identity_work) = identity::inspect(
             &bytes,
-            remaining.saturating_sub(facts.elements_checked),
+            self.resources.budget(LimitKey::TotalPayloadElements),
+            self.elements.saturating_add(facts.elements_checked),
             self.resources.content_limits.decoded_bytes,
         )?;
         self.hlod_identity |= identity_checked;

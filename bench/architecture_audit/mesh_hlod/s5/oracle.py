@@ -118,6 +118,12 @@ def distance2(p, face):
         best=min(best,sum((w[k]-t*d[k])**2 for k in range(3)))
     return best
 
+def material_class(m):
+    m=m or {}
+    mode=m.get('alphaMode','OPAQUE')
+    return (mode,m.get('alphaCutoff',.5) if mode=='MASK' else None,
+            m.get('doubleSided',False),'KHR_materials_unlit' in m.get('extensions',{}))
+
 def audit(root, expected):
     root = Path(root)
     manifest = json.loads(Path(expected).read_text())
@@ -181,6 +187,7 @@ def audit(root, expected):
             want=manifest['triangles'][','.join(map(str,nearest))]
             require(all(actual.get(k)==want[k] for k in ('expanded_ordinal','material_index')), 'representativeIdentity',t['id'])
             require(tuple(actual.get(k) for k in ('node_index','mesh_index','primitive_index'))==nearest[:3], 'representativeIdentity',t['id'])
+            require(material_class(f['material'])==material_class(want['material']),'representativeMaterialClass',t['id'])
             representatives+=1
     result['representatives']=representatives
     result.update(ok=True,leafTriangles=sum(observed.values()),tiles=len(tiles),sourceManifestSha256=hashlib.sha256(Path(expected).read_bytes()).hexdigest())

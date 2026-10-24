@@ -3,7 +3,7 @@
 //! Called after C1 admission, so codec/range/JSON budgets already hold. Decode
 //! bounded identity views per payload; repeated scalar/corner work is charged
 //! to the remaining payload-element budget before scanning. No archive inventory.
-use super::{invalid, Error};
+use super::{invalid, Budget, Error};
 use crate::content_integrity::meshopt::{self, Mode};
 use crate::content_integrity::numbers::{exact, Unsigned};
 use serde_json::{value::RawValue, Value};
@@ -30,7 +30,7 @@ fn declares(raw: &RawValue) -> bool {
     let label = |r: &RawValue, key| {
         field(r, key)
             .and_then(|v| serde_json::from_str::<String>(v.get()).ok())
-            .is_some_and(|s| s == "source_primitive")
+            .is_some_and(|s| matches!(s.as_str(), "source_primitive" | "source_triangle"))
     };
     let tables = field(raw, "extensions")
         .and_then(|e| field(e, "EXT_structural_metadata"))
@@ -138,23 +138,32 @@ fn project(raw: &RawValue, kind: &str) -> Result<Value, Error> {
     Ok(Value::Object(out))
 }
 
-#[derive(Default)]
 struct Work {
     used: u64,
-    limit: u64,
+    base: u64,
+    budget: Budget,
     bytes: usize,
     cap: usize,
     views: BTreeMap<usize, Rc<Vec<u8>>>,
 }
 impl Work {
+    fn new(budget: Budget, base: u64, cap: usize) -> Self {
+        Self {
+            used: 0,
+            base,
+            budget,
+            bytes: 0,
+            cap,
+            views: BTreeMap::new(),
+        }
+    }
     fn charge(&mut self, count: usize) -> Result<(), Error> {
-        self.used = self
-            .used
-            .checked_add(count as u64)
-            .filter(|n| *n <= self.limit)
-            .ok_or_else(|| {
-                Error::limit("hlodFeatureIds: identity work exceeds payload element budget")
-            })?;
+        let total =
+            self.budget
+                .charge(self.base.saturating_add(self.used), count as u64, || {
+                    "hlodFeatureIds: identity work exceeds payload element budget".into()
+                })?;
+        self.used = total - self.base;
         Ok(())
     }
 }
@@ -269,39 +278,32 @@ fn scalars(doc: &Value, bin: &[u8], id: usize, work: &mut Work) -> Result<Vec<u3
 
 pub(super) fn inspect(
     bytes: &[u8],
-    remaining: u64,
+    budget: Budget,
+    already: u64,
     decoded_limit: usize,
 ) -> Result<(bool, u64), Error> {
-    if bytes.get(..4) != Some(b"glTF") {
-        return Ok((false, 0));
-    }
-    let length =
-        u32::from_le_bytes(bytes.get(12..16).ok_or_else(fail)?.try_into().unwrap()) as usize;
-    let raw: &RawValue = serde_json::from_slice(slice(bytes, 20, length)?)?;
+    let embedded = bytes.get(..4) == Some(b"glTF");
+    let length = if embedded {
+        u32::from_le_bytes(bytes.get(12..16).ok_or_else(fail)?.try_into().unwrap()) as usize
+    } else {
+        0
+    };
+    let raw: &RawValue = serde_json::from_slice(if embedded {
+        slice(bytes, 20, length)?
+    } else {
+        bytes
+    })?;
     if !declares(raw) {
         return Ok((false, 0));
     }
+    if !embedded {
+        return Err(Error::unsupported("hlodFeatureIds: declared source identity requires embedded GLB; local glTF identity is outside this profile"));
+    }
     let doc = project(raw, "doc")?;
-    let mut work = Work {
-        limit: remaining,
-        cap: decoded_limit,
-        ..Work::default()
-    };
+    let mut work = Work::new(budget, already, decoded_limit);
     let metadata = &doc["extensions"]["EXT_structural_metadata"];
-    let declared = doc["meshes"].as_array().into_iter().flatten().any(|m| {
-        m["primitives"].as_array().into_iter().flatten().any(|p| {
-            p["extensions"]["EXT_mesh_features"]["featureIds"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .any(|f| f["label"] == "source_primitive")
-        })
-    });
     let tables = metadata["propertyTables"].as_array();
     let has_table = tables.is_some_and(|ts| ts.iter().any(|t| t["class"] == "source_primitive"));
-    if !declared && !has_table {
-        return Ok((false, 0));
-    }
     let tables = tables.ok_or_else(fail)?;
     if !has_table {
         return Err(fail());
@@ -478,23 +480,30 @@ mod tests {
         let doc = json!({"bufferViews":[{"buffer":0,"byteLength":12}],
             "accessors":[{"bufferView":0,"componentType":5126,"type":"SCALAR","count":3}]});
         let bin = [0; 12];
-        let mut work = Work {
-            limit: 9,
-            cap: 12,
-            ..Work::default()
+        let budget = Budget {
+            key: super::super::LimitKey::TotalPayloadElements,
+            value: 9,
+            source: super::super::limits::Derivation::Explicit,
         };
+        let mut work = Work::new(budget, 0, 12);
         assert_eq!(scalars(&doc, &bin, 0, &mut work).unwrap(), [0, 0, 0]);
         assert_eq!(work.used, 6); // 3 scalars + one 3-word view decode.
         assert_eq!(scalars(&doc, &bin, 0, &mut work).unwrap(), [0, 0, 0]);
         assert_eq!(work.used, 9);
         let error = scalars(&doc, &bin, 0, &mut work).unwrap_err();
         assert!(error.to_string().contains("identity work exceeds"));
+        let limit = error.exceeded().unwrap();
+        assert_eq!(limit.value, 9);
+        assert_eq!(limit.observed, 12);
         assert_eq!(work.views.len(), 1);
-        let mut small = Work {
-            limit: 100,
-            cap: 11,
-            ..Work::default()
-        };
+        let mut small = Work::new(
+            Budget {
+                value: 100,
+                ..budget
+            },
+            0,
+            11,
+        );
         assert!(view(&doc, &bin, 0, &mut small)
             .unwrap_err()
             .to_string()
