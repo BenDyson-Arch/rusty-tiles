@@ -520,6 +520,9 @@ impl<'s, S: Sink> Builder<'s, S> {
                 {
                     chain_error = Some(row.geometric_error);
                     chain = Some(Box::new(row.clone()));
+                    // Where it cannot be spliced the cell repeats that payload, so its box
+                    // holds the payload's bounds too (as a coarse tile's own box does).
+                    extent = extent.union(bounds);
                     self.lookahead = Some((row, bounds));
                     None
                 }
