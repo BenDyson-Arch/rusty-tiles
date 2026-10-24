@@ -124,6 +124,7 @@ def audit(root, expected):
     doc = json.loads((root/'tileset.json').read_text())
     barrier = inspect_continuity(root)
     require(barrier['ok'], 'replaceContentContinuity', str(barrier['violations']))
+    require(type(doc.get('geometricError')) in (int,float) and math.isfinite(doc['geometricError']) and doc['geometricError']>=0,'geometricErrorFinite','tileset G')
     tiles, observed = [], collections.Counter()
     def visit(node, parent=None, depth=0, refine='REPLACE', renderable_above=False, empty_between=False):
         require(parent is None or 'transform' not in node, 'oracleDomain', 'nested tile transforms require archive C2')
@@ -150,6 +151,7 @@ def audit(root, expected):
                 require(want is not None,'sourceIdentity',str(key))
                 primitive=f['ids'].get('source_primitive',{})
                 require(all(primitive.get(k)==row.get(k) for k in ('node_index','mesh_index','primitive_index','expanded_ordinal','material_index')),'sourceIdentity',str(key))
+                require(all(row.get(k)==want[k] for k in ('expanded_ordinal','material_index')),'sourceIdentity',str(key))
                 require(f['xyz']==want['xyz'],'leafGeometry',str(key))
                 require(f['material']==want['material'],'leafMaterial',str(key))
                 require([row.get(f'vertex_{k}') for k in range(3)]==want['vertices'],'sourceIdentity',str(key))
@@ -171,6 +173,8 @@ def audit(root, expected):
             distances=[(distance2(p,manifest['triangles'][','.join(map(str,key))]['xyz']),key) for key in candidates]
             nearest=min(distances)[1]
             actual=f['ids'].get('source_primitive',{})
+            want=manifest['triangles'][','.join(map(str,nearest))]
+            require(all(actual.get(k)==want[k] for k in ('expanded_ordinal','material_index')), 'representativeIdentity',t['id'])
             require(tuple(actual.get(k) for k in ('node_index','mesh_index','primitive_index'))==nearest[:3], 'representativeIdentity',t['id'])
             representatives+=1
     result['representatives']=representatives

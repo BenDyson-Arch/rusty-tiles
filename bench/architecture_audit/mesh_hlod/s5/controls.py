@@ -26,7 +26,7 @@ def transformed(p, trs=False):
     x,y,z=p
     return [8+2*x,4-4*y,2+z] if trs else [8-4*y,4-2*x,2+z]
 
-def glb(face_ids, quantized=False, wrong_id=False, moved=False, bad_metadata=False, trs=False, normalized=False):
+def glb(face_ids, quantized=False, wrong_id=False, moved=False, bad_metadata=False, trs=False, normalized=False, leaf=True):
     binary=bytearray(); views=[]; accessors=[]
     def view(data):
         while len(binary)%8: binary.append(0)
@@ -48,7 +48,7 @@ def glb(face_ids, quantized=False, wrong_id=False, moved=False, bad_metadata=Fal
         pos=accessor(struct.pack('<'+'f'*len(flat),*flat),5126,'VEC3',len(vertices),min=[min(p[k] for p in vertices) for k in range(3)],max=[max(p[k] for p in vertices) for k in range(3)])
     sets=[];attrs={'POSITION':pos}
     classes={};tables=[]
-    for si,label in enumerate(['source_primitive','source_triangle']):
+    for si,label in enumerate(['source_primitive','source_triangle'] if leaf else ['source_primitive']):
         ids=[j for j,_ in enumerate(face_ids) for _ in range(3)]
         if wrong_id: ids[0]=999
         attrs[f'_FEATURE_ID_{si}']=accessor(struct.pack('<'+'f'*len(ids),*ids),5126,'SCALAR',len(ids))
@@ -83,7 +83,7 @@ def glb(face_ids, quantized=False, wrong_id=False, moved=False, bad_metadata=Fal
 
 def generate(root):
     root=Path(root);root.mkdir(parents=True,exist_ok=True)
-    expected={'triangles':{f'0,0,{i},0':dict(xyz=[transformed(p) for p in face],vertices=[0,1,2],material=MATERIALS[i%2]) for i,face in enumerate(POINTS)}}
+    expected={'triangles':{f'0,0,{i},0':dict(xyz=[transformed(p) for p in face],vertices=[0,1,2],material=MATERIALS[i%2],expanded_ordinal=i,material_index=i%2) for i,face in enumerate(POINTS)}}
     expected_trs=copy.deepcopy(expected)
     for i,face in enumerate(POINTS):expected_trs['triangles'][f'0,0,{i},0']['xyz']=[transformed(p,True) for p in face]
     (root/'source-trs.json').write_text(json.dumps(expected_trs,sort_keys=True,indent=2)+'\n')
@@ -96,18 +96,46 @@ def generate(root):
     right=tile('right.glb',2,[tile('middle.glb',1,[tile('leaf2.glb',0),tile('leaf3.glb',0)])])
     doc=dict(asset={'version':'1.1'},geometricError=4,root=tile('root.glb',4,[left,right]))
     groups={'root.glb':[0,1,2,3],'left.glb':[0,1],'right.glb':[2,3],'middle.glb':[2,3],**{f'leaf{i}.glb':[i] for i in range(4)}}
-    cases=[('valid',None,None),('quantized',None,None),('normalized',None,None),('trs',None,None),('wrong-feature','featureIdentity','hlodFeatureIds'),
+    cases=[('valid',None,None),('quantized',None,None),('normalized',None,None),('trs',None,None),('numeric-lexemes',None,None),('opaque-extras',None,None),('wrong-feature','featureIdentity','hlodFeatureIds'),
            ('wrong-source','sourceIdentity',None),('wrong-representative','representativeIdentity',None),('missing-leaf','leafCoverage',None),('duplicate-leaf','leafCoverage',None),
            ('moved-interface','interfaceSegments',None),('moved-corner','interfacePoints',None),('empty-intermediate','replaceContentContinuity',None),
            ('negative-g','geometricErrorFinite','tileset schema'),('nan-g','geometricErrorFinite','JSON'),
            ('nonmonotone-g','geometricErrorOrder','geometricError increases'),('bad-bounds',None,'decoded content'),
-           ('stale-hash',None,'content checksum mismatch'),('malformed-codec',None,'meshopt'),('bad-metadata','featureIdentity','hlodFeatureIds')]
+           ('stale-hash',None,'content checksum mismatch'),('malformed-codec',None,'meshopt'),('bad-metadata','featureIdentity','hlodFeatureIds'),('optional-property','featureIdentity','hlodFeatureIds'),('bad-property-type','featureIdentity','hlodFeatureIds'),('wrong-table-class','featureIdentity','hlodFeatureIds'),('missing-feature-set','sourceIdentity','hlodFeatureIds'),('correlated-metadata','sourceIdentity',None),('active-morph','codecStructure',None),('infinite-root-g','geometricErrorFinite','JSON')]
     manifest=[]
     for name,oracle_check,archive_check in cases:
         out=root/name;out.mkdir(exist_ok=True);d=copy.deepcopy(doc)
         for uri,ids in groups.items():
-            data=glb(ids,quantized=name=='quantized',wrong_id=name=='wrong-feature' and uri=='root.glb',moved=(name=='moved-interface' and uri=='left.glb') or (name=='moved-corner' and uri=='right.glb'),bad_metadata=name=='bad-metadata' and uri=='root.glb',trs=name=='trs',normalized=name=='normalized')
+            data=glb(ids,quantized=name=='quantized',wrong_id=name=='wrong-feature' and uri=='root.glb',moved=(name=='moved-interface' and uri=='left.glb') or (name=='moved-corner' and uri=='right.glb'),bad_metadata=name=='bad-metadata' and uri=='root.glb',trs=name=='trs',normalized=name=='normalized',leaf=uri.startswith('leaf'))
             (out/uri).write_bytes(data)
+        if name in ('numeric-lexemes','opaque-extras','optional-property','correlated-metadata','active-morph','bad-property-type','wrong-table-class','missing-feature-set'):
+            for uri in groups:
+                p=out/uri;b=p.read_bytes();jl=int.from_bytes(b[12:16],'little');j=json.loads(b[20:20+jl]);binary=bytearray(b[28+jl:])
+                if name=='numeric-lexemes':
+                    def numeric(v):
+                        if type(v) is int:return float(v)
+                        if isinstance(v,list):return [numeric(x) for x in v]
+                        if isinstance(v,dict):return {k:numeric(x) for k,x in v.items()}
+                        return v
+                    j=numeric(j)
+                if name=='opaque-extras':j['extras']={'opaque':'BIG_NUMBER'}
+                if name=='optional-property':
+                    meta=j['extensions']['EXT_structural_metadata'];meta['schema']['classes']['source_primitive']['properties']['optional']={'type':'SCALAR','componentType':'UINT32','required':False};meta['propertyTables'][0]['properties']['optional']={'values':999}
+                if name=='bad-property-type':j['extensions']['EXT_structural_metadata']['schema']['classes']['source_primitive']['properties']['node_index']['type']='VEC2'
+                if name=='wrong-table-class':j['extensions']['EXT_structural_metadata']['propertyTables'][0]['class']='bogus'
+                if name=='missing-feature-set' and uri.startswith('leaf'):
+                    for primitive in j['meshes'][0]['primitives']:primitive['extensions']['EXT_mesh_features']['featureIds'].pop()
+                if name=='correlated-metadata':
+                    for table in j['extensions']['EXT_structural_metadata']['propertyTables']:
+                        for key in ('expanded_ordinal','material_index'):
+                            v=j['bufferViews'][table['properties'][key]['values']]
+                            for i in range(table['count']):struct.pack_into('<I',binary,v['byteOffset']+i*4,12345)
+                if name=='active-morph':
+                    for mesh in j['meshes']:
+                        mesh['weights']=[1]
+                        for primitive in mesh['primitives']:primitive['targets']=[{'POSITION':0}]
+                data=json.dumps(j).replace('"BIG_NUMBER"','1e400').encode();data+=b' '*(-len(data)%4)
+                p.write_bytes(b'glTF'+struct.pack('<III',2,28+len(data)+len(binary),len(data))+b'JSON'+data+struct.pack('<I',len(binary))+b'BIN\0'+binary)
         if name in ('wrong-source','wrong-representative'):
             # In-range feature ID mutation only: same coordinates, wrong row.
             p=out/('leaf0.glb' if name=='wrong-source' else 'root.glb');data=p.read_bytes();jl=int.from_bytes(data[12:16],'little');j=json.loads(data[20:20+jl]);t=j['extensions']['EXT_structural_metadata']['propertyTables'][0];v=j['bufferViews'][t['properties']['primitive_index']['values']];b=bytearray(data);struct.pack_into('<I',b,28+jl+v['byteOffset'],1);p.write_bytes(b)
@@ -117,6 +145,7 @@ def generate(root):
         if name=='empty-intermediate':
             d['root']['children'][1].pop('content')
             (out/'right.glb').unlink()
+        if name=='infinite-root-g':d['geometricError']=float('inf')
         if name=='negative-g':d['root']['geometricError']=-1
         if name=='nan-g':d['root']['geometricError']=float('nan')
         if name=='nonmonotone-g':d['root']['children'][0]['geometricError']=5
@@ -145,7 +174,7 @@ if __name__=='__main__':
     external=copy.deepcopy(tree);external['root']['children']=[{'content':{'uri':'external.json'}}]
     assert continuity(external,lambda _:tree)['ok']
     for c in cases:
-        if not c['oracleCheck'] and c['name'] not in ('valid','quantized','normalized','trs'):continue
+        if not c['oracleCheck'] and c['name'] not in ('valid','quantized','normalized','trs','numeric-lexemes','opaque-extras'):continue
         try:
             result=audit(root/c['name'],root/c['source'])
             assert c['oracleCheck'] is None, c

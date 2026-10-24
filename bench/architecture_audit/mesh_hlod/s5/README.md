@@ -51,3 +51,9 @@ source rows and leaf material values are compared with literal analytic truth.
 These are separate from archive-only `hlodFeatureIds`, which checks integrity,
 not nearest-source truth. `geometricErrorAccuracy` stays uninspected in archive
 reports; no producer fact, certificate or sampled maximum is promoted to proof.
+
+The retained S3 tex3 archive independently fails `replaceContentContinuity` at
+all eight depth-4 descendants below `root/1/0/0`. This reproduces today's loading
+barrier lesson on the real bytes, without a browser. S5 owns detection; collapsing
+or republishing the hierarchy is S1's producer change. Until the revised base is
+published, archive integrity success must not be called integrated acceptance.

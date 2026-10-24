@@ -62,7 +62,10 @@ fn sampled_hlod_archives_and_named_mutants() {
                     .contains(check),
                 "{name}: {cli_report}"
             );
-        } else if matches!(name, "valid" | "quantized" | "normalized" | "trs") {
+        } else if matches!(
+            name,
+            "valid" | "quantized" | "normalized" | "trs" | "numeric-lexemes" | "opaque-extras"
+        ) {
             let report = result.unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(cli.status.success(), "{name}: {cli_report}");
             assert!(report

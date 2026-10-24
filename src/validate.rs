@@ -1570,7 +1570,16 @@ impl Check<'_> {
                 .refuse(self.elements.saturating_add(planned), message),
             (error, _) => scene_error(error),
         })?;
-        self.hlod_identity |= identity::inspect(&bytes)?;
+        let (identity_checked, identity_work) = identity::inspect(
+            &bytes,
+            remaining.saturating_sub(facts.elements_checked),
+            self.resources.content_limits.decoded_bytes,
+        )?;
+        self.hlod_identity |= identity_checked;
+        let elements_checked = facts
+            .elements_checked
+            .checked_add(identity_work)
+            .ok_or_else(|| Error::limit("hlodFeatureIds: payload element count overflow"))?;
         drop(bytes);
         let mut exclusions = content_reasons(&facts.exclusions);
         if consumer.quaternion_window {
@@ -1586,7 +1595,7 @@ impl Check<'_> {
             t: consumer.t,
             nodes: consumer.nodes,
             idx: consumer.idx,
-            e: facts.elements_checked,
+            e: elements_checked,
             per_reference: ReferenceFacts {
                 b: self.resources.bytes_read - bytes_before,
                 dec: facts.materialized_bytes,
@@ -1610,7 +1619,7 @@ impl Check<'_> {
         self.elements = self
             .resources
             .budget(LimitKey::TotalPayloadElements)
-            .charge(self.elements, facts.elements_checked, || {
+            .charge(self.elements, elements_checked, || {
                 "payload elements exceed archive budget".into()
             })?;
         if let Some(value) = facts.schema_uri.as_deref() {
