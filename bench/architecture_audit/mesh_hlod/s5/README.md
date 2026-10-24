@@ -1,5 +1,10 @@
 # S5 validator and independent HLOD acceptance
 
+**Checkpoint:** runtime `9bc1760d` predates the owner's exact-seam D1 revision.
+The revised canonical source/open-edge contract, exemption counts/widths and
+reworked S1 campaign remain pending. The strict T-contact implementation below
+describes this reviewed snapshot, not acceptance of the forthcoming contract.
+
 Sampled G is finite, nonnegative and ordered; it is not a certified maximum.
 C1 still owns resources, hashes, codecs and accessor admission, C2 owns decoded
 bounds, and I1 owns implicit availability. No H17 certificate is required for
@@ -149,3 +154,32 @@ manifest `afd9e6fa265fc9c2e1659186304a9f22bce41d6a6436b77196435a9f77a3cb72`
 and review manifest `6f94c1c7f748799bcc273f8fddc1a178f2b6e0670ee3596882e0c19247034b13`.
 The old retained tex3's eight continuity failures remain reproducible; fresh
 latest-S1 output is measured separately. No browser or 2048 bake runs in S5.
+
+### Reviewed checkpoint at `9bc1760d`
+
+The R9 closed-leaf identity correction is committed at `0f5b85fe`: conservative
+full-width original-ID intervals select exact alias replay independently of
+decoded bounds. R10 separately approved that identity/resource correction at
+`9bc1760de300bbdfd04de627f67696d917220086`; it did not approve producer output,
+final cost or the pending D1 revision.
+
+The validator suite passes 174 tests with two helper tests intentionally ignored.
+The permanent acceptance test passes 89 cases and 613 fixture hashes, including
+closed/nonmanifold retained and lost edges, separated shared originals and
+disjoint boxes. Those identity mutants fail native `sourceIdentity` and the
+source oracle's `leafGeometry`. Scoped all-target lint passes with the inherited
+producer `too_many_arguments` exception; S2 owns its removal during rebase.
+
+S1 `644fc407` was merged without changing producer logic beyond conflict
+integration. The fresh tex3 bake refused before publication: 314,783,887 scratch
+bytes exceeded the declared 230,338,145-byte stage bound (1.60 GiB RSS, 60 CPU-s).
+The coordinator stopped this superseded campaign; crop3 never started and no
+new archive/oracle verdict exists. S1 owns separate component declarations in
+the rework. The 10 GB cap is unchanged. Historical dc9085f8 tex3/crop3 oracles
+both found the independently confirmed tile-28 exact-coincident reversal;
+their predicate remains strict. Final bake/oracle/cost follow the stack freeze.
+
+Review, commands, test logs, pinned artifacts and refusal receipts are retained
+in `/home/bend/.cache/rusty-tiles-evidence/hlod-s5-review-20261024/`.
+Immutable checkpoint manifest `sha256-9bc1760d.json` has SHA256
+`0617b2f4cec6f3c44b03275a4379a82b95de0d42a657c265499055da60720d51`.
