@@ -6,7 +6,10 @@
 //! contacts; each contact is checked along depth-bounded ancestor paths. No
 //! archive-sized triangle/point vector or ancestor cross-product is retained.
 //! SQLite pages are capped; its temporary sorts are disk backed. Candidate and
-//! corner work uses the remaining payload-element budget (including one unit
+//! Decoded endpoints use exact canonical f64 keys (negative zero normalized),
+//! after mandatory Y-up conversion in a common root-relative content frame.
+//! Source encoding error never relaxes delivered D1 membership or adjacency.
+//! Corner work uses the remaining payload-element budget (including one unit
 //! per 10,000 SQLite VM operations). Dense/pathological spatial joins therefore
 //! refuse with a resource limit rather than silently truncating the census.
 //!
@@ -19,7 +22,7 @@ use crate::spill::{Scratch, SlotFile};
 use rusqlite::{params, Connection};
 use serde_json::{value::RawValue, Value};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     rc::Rc,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -33,6 +36,16 @@ type Source = [u64; 5];
 const IDENTITY: Matrix = [
     1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.,
 ];
+// glTF Y-up -> 3D Tiles Z-up; compare in the common root's glTF frame.
+const Y_UP: Matrix = [
+    1., 0., 0., 0., 0., 0., 1., 0., 0., -1., 0., 0., 0., 0., 0., 1.,
+];
+const INVERSE_Y_UP: Matrix = [
+    1., 0., 0., 0., 0., 0., -1., 0., 0., 1., 0., 0., 0., 0., 0., 1.,
+];
+fn delivery_frame(relative: Matrix) -> Matrix {
+    multiply(multiply(INVERSE_Y_UP, relative), Y_UP)
+}
 const SOURCE_COLUMNS: [&str; 5] = [
     "node_index",
     "mesh_index",
@@ -98,8 +111,46 @@ fn normal(m: Matrix, n: Point) -> Point {
     std::array::from_fn(|i| a[i] * n[0] + b[i] * n[1] + c[i] * n[2])
 }
 fn roundoff(p: Point) -> f64 {
-    p.into_iter().map(f64::abs).fold(1., f64::max) * f64::EPSILON * 64.
+    p.into_iter().map(f64::abs).fold(0., f64::max) * f64::EPSILON * 64.
 }
+// Numerical padding is for broad-phase bounds/line evaluation only. It is
+// never permission to identify distinct decoded endpoint keys or bridge a gap.
+fn evaluation_roundoff(m: Matrix, p: Point) -> f64 {
+    (0..3)
+        .map(|r| m[12 + r].abs() + (0..3).map(|c| (m[c * 4 + r] * p[c]).abs()).sum::<f64>())
+        .fold(0., f64::max)
+        * f64::EPSILON
+        * 32.
+}
+fn nonsingular(m: Matrix) -> bool {
+    let mut rows: [[f64; 3]; 3] = std::array::from_fn(|r| std::array::from_fn(|c| m[c * 4 + r]));
+    for row in &mut rows {
+        let max = row.iter().copied().map(f64::abs).fold(0., f64::max);
+        if max == 0. {
+            return false;
+        }
+        for v in row {
+            *v /= max;
+        }
+    }
+    for c in 0..3 {
+        let pivot = (c..3)
+            .max_by(|&a, &b| rows[a][c].abs().total_cmp(&rows[b][c].abs()))
+            .unwrap();
+        rows.swap(c, pivot);
+        if rows[c][c] == 0. {
+            return false;
+        }
+        for r in c + 1..3 {
+            let f = rows[r][c] / rows[c][c];
+            for k in c + 1..3 {
+                rows[r][k] -= f * rows[c][k];
+            }
+        }
+    }
+    true
+}
+
 fn finite(p: &[f64]) -> Result<(), Error> {
     if p.iter().all(|v| v.is_finite()) {
         Ok(())
@@ -153,6 +204,102 @@ fn node_matrix(node: &Value) -> Result<Matrix, Error> {
         t[2],
         1.,
     ])
+}
+
+/// Inspect raw ownership before projecting fields. Opaque metadata/extension
+/// values never pass through serde_json::Value or acquire floating-point meaning.
+fn admit_scene_profile(raw: &RawValue, work: &mut identity::Work) -> Result<(), Error> {
+    fn array(raw: Option<&RawValue>) -> Result<Vec<&RawValue>, Error> {
+        raw.map(|r| serde_json::from_str(r.get()).map_err(Into::into))
+            .unwrap_or_else(|| Ok(Vec::new()))
+    }
+    fn known(name: &str) -> bool {
+        matches!(
+            name,
+            "KHR_mesh_quantization"
+                | "EXT_meshopt_compression"
+                | "EXT_mesh_features"
+                | "EXT_structural_metadata"
+                | "KHR_materials_unlit"
+                | "KHR_materials_ior"
+                | "KHR_materials_clearcoat"
+                | "KHR_materials_transmission"
+                | "KHR_materials_volume"
+                | "KHR_materials_sheen"
+                | "KHR_materials_specular"
+                | "KHR_materials_emissive_strength"
+                | "KHR_materials_iridescence"
+                | "KHR_materials_anisotropy"
+                | "KHR_materials_dispersion"
+                | "KHR_materials_pbrSpecularGlossiness"
+                | "KHR_materials_variants"
+                | "KHR_texture_transform"
+                | "KHR_texture_basisu"
+                | "EXT_texture_webp"
+                | "EXT_texture_avif"
+                | "MSFT_texture_dds"
+                | "KHR_lights_punctual"
+        )
+    }
+    fn container(raw: &RawValue, work: &mut identity::Work) -> Result<(), Error> {
+        work.charge(1)?;
+        if let Some(extensions) = identity::field(raw, "extensions") {
+            let fields: BTreeMap<String, &RawValue> = serde_json::from_str(extensions.get())?;
+            work.charge(fields.len())?;
+            for name in fields.keys() {
+                if !known(name) {
+                    return Err(Error::unsupported(format!(
+                        "interfaceSegments: unsupported rendered scene extension {name}"
+                    )));
+                }
+            }
+        }
+        if ["skin", "weights", "targets"]
+            .iter()
+            .any(|k| identity::field(raw, k).is_some())
+        {
+            return Err(Error::unsupported("interfaceSegments: skin or morph deformation is outside the rendered scene profile"));
+        }
+        Ok(())
+    }
+    container(raw, work)?;
+    for field in ["extensionsUsed", "extensionsRequired"] {
+        if let Some(names) = identity::field(raw, field) {
+            for name in serde_json::from_str::<Vec<String>>(names.get())? {
+                work.charge(1)?;
+                if !known(&name) {
+                    return Err(Error::unsupported(format!(
+                        "interfaceSegments: unsupported rendered scene extension {name}"
+                    )));
+                }
+            }
+        }
+    }
+    if !array(identity::field(raw, "animations"))?.is_empty() {
+        return Err(Error::unsupported(
+            "interfaceSegments: animation is outside the rendered scene profile",
+        ));
+    }
+    let scenes = array(identity::field(raw, "scenes"))?;
+    if scenes.is_empty() || (identity::field(raw, "scene").is_none() && scenes.len() != 1) {
+        return Err(Error::unsupported(
+            "interfaceSegments: a unique selected glTF scene is required",
+        ));
+    }
+    for scene in scenes {
+        container(scene, work)?;
+    }
+    for name in ["nodes", "meshes", "materials", "textures"] {
+        for object in array(identity::field(raw, name))? {
+            container(object, work)?;
+            if name == "meshes" {
+                for primitive in array(identity::field(object, "primitives"))? {
+                    container(primitive, work)?;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Streaming accessor: decoded views are shared by `identity::Work`; no expanded
@@ -263,25 +410,13 @@ impl Accessor {
         if self.components != 3 {
             return Err(bad("interfaceSegments", "POSITION must be VEC3"));
         }
-        let p = [self.at(i, 0)?, self.at(i, 1)?, self.at(i, 2)?];
-        let p = point(m, p);
+        let raw = [self.at(i, 0)?, self.at(i, 1)?, self.at(i, 2)?];
+        let p = point(m, raw);
         finite(&p)?;
-        // Half a source lattice step propagated through the scene's linear map.
-        // Float32 uses its actual exponent, rather than the producer's reported error.
-        let step = match self.component {
-            5126 => {
-                (0..3)
-                    .map(|c| self.at(i, c).unwrap_or(0.).abs())
-                    .fold(f32::MIN_POSITIVE as f64, f64::max)
-                    * f32::EPSILON as f64
-            }
-            5120 if self.normalized => 1. / 127.,
-            5121 if self.normalized => 1. / 255.,
-            5122 if self.normalized => 1. / 32767.,
-            5123 if self.normalized => 1. / 65535.,
-            _ => 1.,
-        };
-        Ok((p, step * scale(m) * 0.5 + roundoff(p)))
+        // Decoded-to-decoded D1 has no source quantization allowance. Integer
+        // and FLOAT storage are already decoded values; only evaluation padding
+        // goes into spatial bounds. Endpoint agreement uses exact canonical keys.
+        Ok((p, roundoff(raw) * scale(m) + evaluation_roundoff(m, raw)))
     }
 }
 
@@ -416,13 +551,14 @@ impl Edge {
     }
     fn placed(&self, m: Matrix) -> Result<Self, Error> {
         let mut e = self.clone();
+        let arithmetic = evaluation_roundoff(m, e.a).max(evaluation_roundoff(m, e.b));
         e.a = point(m, e.a);
         e.b = point(m, e.b);
         e.n = normal(m, e.n);
         finite(&e.a)?;
         finite(&e.b)?;
         finite(&e.n)?;
-        e.tolerance = e.tolerance * scale(m) + roundoff(e.a).max(roundoff(e.b));
+        e.tolerance = e.tolerance * scale(m) + arithmetic;
         Ok(e)
     }
     fn bounds(&self) -> [f64; 6] {
@@ -497,6 +633,8 @@ pub(super) struct Store {
     _anchor: SlotFile,
     _scratch: Arc<Scratch>,
     pub(super) checked: bool,
+    common_root: Option<Matrix>,
+    profile_exclusion: Option<&'static str>,
 }
 impl Store {
     pub(super) fn new(scratch: Arc<Scratch>) -> Result<Self, Error> {
@@ -524,6 +662,8 @@ impl Store {
             _anchor: anchor,
             _scratch: scratch,
             checked: false,
+            common_root: None,
+            profile_exclusion: None,
         })
     }
     pub(super) fn tile(
@@ -533,6 +673,9 @@ impl Store {
         local: Matrix,
     ) -> Result<(), Error> {
         finite(&local)?;
+        if !nonsingular(local) {
+            self.exclude_scene("singular tile placement is outside the decoded interface profile");
+        }
         let world = if let Some(p) = parent {
             let bytes: Vec<u8> = self
                 .connection
@@ -542,7 +685,15 @@ impl Store {
                 .map_err(sql)?;
             multiply(decode::<16>(&bytes)?, local)
         } else {
-            local
+            if self.common_root.is_some_and(|m| m != local) {
+                self.exclude_scene(
+                    "distinct root placements have no common decoded interface frame",
+                );
+            }
+            self.common_root = Some(local);
+            // Drop one shared invertible placement before any arithmetic. This
+            // avoids ECEF translation erasing a small decoded gap by cancellation.
+            IDENTITY
         };
         finite(&world)?;
         self.connection
@@ -622,6 +773,8 @@ impl Store {
                 "hlodFeatureIds: native delivery identity requires embedded GLB",
             ));
         }
+        let mut work = identity::Work::new(budget, already, decoded_limit);
+        admit_scene_profile(raw, &mut work)?;
         let doc = identity::project(raw, "doc")?;
         let has_triangles = doc["extensions"]["EXT_structural_metadata"]["propertyTables"]
             .as_array()
@@ -633,7 +786,6 @@ impl Store {
             u32::from_le_bytes(identity::slice(bytes, 20 + length, 4)?.try_into().unwrap())
                 as usize,
         )?;
-        let mut work = identity::Work::new(budget, already, decoded_limit);
         let mut edges = BTreeMap::<([u64; 3], [u64; 3]), Edge>::new();
         let mut originals = BTreeMap::<(Source, u64), (Point, f64)>::new();
         let tables = doc["extensions"]["EXT_structural_metadata"]["propertyTables"]
@@ -752,8 +904,8 @@ impl Store {
                             for j in 0..3 {
                                 vertices[j] = triangle.columns[6 + j].at(row)?;
                                 let key = (source, vertices[j]);
-                                if let Some((p, t)) = originals.get(&key) {
-                                    if norm(sub(*p, xyz[j])) > *t + tolerance {
+                                if let Some((p, _)) = originals.get(&key) {
+                                    if point_key(*p) != point_key(xyz[j]) {
                                         return Err(bad("sourceIdentity","original vertex maps to inconsistent decoded leaf positions"));
                                     }
                                 } else {
@@ -866,6 +1018,12 @@ impl Store {
             .map_or(0, |metadata| metadata.len())
     }
 
+    /// A traversal-owned placement semantic (for example an up-axis override)
+    /// can exclude interface coverage while ordinary archive checks still run.
+    pub(super) fn exclude_scene(&mut self, reason: &'static str) {
+        self.profile_exclusion.get_or_insert(reason);
+    }
+
     /// An owned archive/report label can establish expectation even when every
     /// payload's identity was stripped. Call before finish; traversal order is immaterial.
     pub(super) fn expect_identity(&mut self) {
@@ -912,6 +1070,9 @@ impl Store {
         self.checked |= declared;
         if !self.checked {
             return Ok(());
+        }
+        if let Some(reason) = self.profile_exclusion {
+            return Err(Error::unsupported(format!("interfaceSegments: {reason}")));
         }
         let stripped:bool=self.connection.query_row("SELECT EXISTS(SELECT 1 FROM refs r LEFT JOIN payloads p ON p.rank=r.rank WHERE p.identity_present IS NOT 1)",[],|r|r.get(0)).map_err(sql)?;
         if stripped {
@@ -1007,29 +1168,34 @@ impl Store {
         Ok(())
     }
     fn originals(&self, effort: &Effort) -> Result<(), Error> {
-        // Only boundary source vertices reach this disk join. Interior original-row
-        // correspondence was checked inside the bounded ingest workspace.
+        // Original rows are compared after each actual leaf reference's placement,
+        // in exactly the same common content frame as the spatial contact index.
         let mut query = self
             .connection
-            .prepare("SELECT key,point,tol FROM original_vertices ORDER BY key,rank")
+            .prepare(
+                "SELECT v.key,v.point,t.world FROM original_vertices v JOIN refs r ON r.rank=v.rank
+                JOIN tiles t ON t.id=r.tile WHERE t.leaf=1 ORDER BY v.key",
+            )
             .map_err(sql)?;
         let mut rows = query.query([]).map_err(sql)?;
-        let mut previous: Option<(Vec<u8>, Point, f64)> = None;
+        let mut canonical: Option<(Vec<u8>, [u64; 3])> = None;
         while let Some(row) = rows.next().map_err(sql)? {
             effort.charge(1)?;
             let key: Vec<u8> = row.get(0).map_err(sql)?;
             let bytes: Vec<u8> = row.get(1).map_err(sql)?;
-            let p = decode::<3>(&bytes)?;
-            let tolerance: f64 = row.get(2).map_err(sql)?;
-            if let Some((k, q, t)) = &previous {
-                if *k == key && norm(sub(p, *q)) > tolerance + *t {
-                    return Err(bad(
-                        "sourceIdentity",
-                        "same original boundary vertex disagrees between decoded descendant leaves",
-                    ));
+            let world: Vec<u8> = row.get(2).map_err(sql)?;
+            let p = point(delivery_frame(decode::<16>(&world)?), decode::<3>(&bytes)?);
+            finite(&p)?;
+            let exact = point_key(p);
+            if let Some((k, reference)) = &canonical {
+                if *k == key {
+                    if *reference != exact {
+                        return Err(bad("sourceIdentity","same original boundary vertex has distinct exact decoded placed positions"));
+                    }
+                    continue;
                 }
             }
-            previous = Some((key, p, tolerance));
+            canonical = Some((key, exact));
         }
         Ok(())
     }
@@ -1050,7 +1216,7 @@ impl Store {
             let m: Vec<u8> = row.get(1).map_err(sql)?;
             let leaf: bool = row.get(2).map_err(sql)?;
             let bytes: Vec<u8> = row.get(3).map_err(sql)?;
-            let e = Edge::from_bytes(&bytes)?.placed(decode::<16>(&m)?)?;
+            let e = Edge::from_bytes(&bytes)?.placed(delivery_frame(decode::<16>(&m)?))?;
             edge.execute(params![tile, e.bytes(), leaf]).map_err(sql)?;
             let id = self.connection.last_insert_rowid();
             let b = e.bounds();
@@ -1103,20 +1269,28 @@ impl Store {
                 let tol = a.tolerance + b.tolerance;
                 for p in [a.a, a.b] {
                     if let Some(u) = on_segment(p, b.a, b.b, tol) {
+                        let endpoint =
+                            point_key(p) == point_key(b.a) || point_key(p) == point_key(b.b);
+                        if !endpoint && !(u > 0. && u < 1.) {
+                            continue;
+                        }
                         self.ancestors(a_tile, b_tile, None, Some((p, a.tolerance)), effort)?;
                         // An endpoint contact locks the point, not every edge
                         // incident there. Only a strict T contact locks its long side.
-                        let margin = tol / norm(sub(b.b, b.a));
-                        if u > margin && u < 1. - margin {
+                        if !endpoint {
                             self.ancestors(b_tile, a_tile, Some(&b), None, effort)?;
                         }
                     }
                 }
                 for p in [b.a, b.b] {
                     if let Some(u) = on_segment(p, a.a, a.b, tol) {
+                        let endpoint =
+                            point_key(p) == point_key(a.a) || point_key(p) == point_key(a.b);
+                        if !endpoint && !(u > 0. && u < 1.) {
+                            continue;
+                        }
                         self.ancestors(b_tile, a_tile, None, Some((p, b.tolerance)), effort)?;
-                        let margin = tol / norm(sub(a.b, a.a));
-                        if u > margin && u < 1. - margin {
+                        if !endpoint {
                             self.ancestors(a_tile, b_tile, Some(&a), None, effort)?;
                         }
                     }
@@ -1182,9 +1356,7 @@ impl Store {
             effort.charge(1)?;
             let bytes: Vec<u8> = row.get(0).map_err(sql)?;
             let e = Edge::from_bytes(&bytes)?;
-            if norm(sub(p, e.a)) <= tolerance + e.tolerance
-                || norm(sub(p, e.b)) <= tolerance + e.tolerance
-            {
+            if point_key(p) == point_key(e.a) || point_key(p) == point_key(e.b) {
                 return Ok(());
             }
         }
@@ -1194,62 +1366,72 @@ impl Store {
         ))
     }
     fn require_segment(&self, tile: i64, want: &Edge, effort: &Effort) -> Result<(), Error> {
+        type Key = [u64; 3];
+        let start = point_key(want.a);
+        let end = point_key(want.b);
+        if start == end {
+            return self.require_point(tile, want.a, want.tolerance, effort);
+        }
         let mut query=self.connection.prepare_cached("SELECT e.data FROM spatial s JOIN edges e ON e.id=s.id
             WHERE e.tile=?1 AND s.x0<=?2 AND s.x1>=?3 AND s.y0<=?4 AND s.y1>=?5 AND s.z0<=?6 AND s.z1>=?7").map_err(sql)?;
         let b = want.bounds();
         let mut rows = query
             .query(params![tile, b[1], b[0], b[3], b[2], b[5], b[4]])
             .map_err(sql)?;
-        let mut intervals = Vec::<(f64, f64, bool, f64)>::new();
+        let mut adjacency = BTreeMap::<Key, Vec<(Key, bool)>>::new();
+        let mut count = 0usize;
+        let mut reversed_witness = None;
         while let Some(row) = rows.next().map_err(sql)? {
             effort.charge(1)?;
             let bytes: Vec<u8> = row.get(0).map_err(sql)?;
             let e = Edge::from_bytes(&bytes)?;
-            if let Some((lo, hi)) = overlap(want, &e) {
-                if intervals.len() >= 65_536 {
-                    return Err(Error::limit(
-                        "interfaceSegments: one interface exceeds bounded interval workspace",
-                    ));
-                }
-                let winding = dot(want.n, e.n) >= -1e-12 * norm(want.n) * norm(e.n);
-                intervals.push((
-                    lo,
-                    hi,
-                    winding,
-                    (want.tolerance + e.tolerance) / norm(sub(want.b, want.a)),
+            let tolerance = want.tolerance + e.tolerance;
+            if overlap(want, &e).is_none()
+                || on_segment(e.a, want.a, want.b, tolerance).is_none()
+                || on_segment(e.b, want.a, want.b, tolerance).is_none()
+            {
+                continue;
+            }
+            if count >= 65_536 {
+                return Err(Error::limit(
+                    "interfaceSegments: one interface exceeds bounded adjacency workspace",
                 ));
             }
+            count += 1;
+            let a = point_key(e.a);
+            let b = point_key(e.b);
+            let winding = dot(sub(want.b, want.a), sub(e.b, e.a)) > 0.;
+            if !winding && reversed_witness.is_none() {
+                reversed_witness = Some(e.clone());
+            }
+            // Numerical line membership cannot connect distinct endpoint keys.
+            // Reaching the target requires consecutive actual decoded edges.
+            adjacency.entry(a).or_default().push((b, winding));
+            adjacency.entry(b).or_default().push((a, false));
         }
-        intervals.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let covered = |oriented: bool| {
-            let mut end: f64 = 0.;
-            let mut tolerance: f64 = 0.;
-            for &(lo, hi, winding, t) in &intervals {
-                if oriented && !winding {
-                    continue;
+        let connected = |oriented: bool| -> Result<bool, Error> {
+            let mut reached = BTreeSet::from([start]);
+            let mut pending = vec![start];
+            while let Some(p) = pending.pop() {
+                effort.charge(1)?;
+                if p == end {
+                    return Ok(true);
                 }
-                if lo > end + t {
-                    return false;
-                }
-                end = end.max(hi);
-                tolerance = tolerance.max(t);
-                if end >= 1. - tolerance {
-                    return true;
+                for &(q, winding) in adjacency.get(&p).into_iter().flatten() {
+                    effort.charge(1)?;
+                    if (!oriented || winding) && reached.insert(q) {
+                        pending.push(q);
+                    }
                 }
             }
-            false
+            Ok(false)
         };
-        if !covered(false) {
-            return Err(bad(
-                "interfaceSegments",
-                "decoded ancestor lacks consecutive subsegment edges of a leaf interface",
-            ));
+        if !connected(false)? {
+            return Err(bad("interfaceSegments",&format!("decoded ancestor lacks exact consecutive subsegment edges of a leaf interface: tile={tile}, leaf_edge={:?}->{:?}",want.a,want.b)));
         }
-        if !covered(true) {
-            return Err(bad(
-                "interfaceWinding",
-                "decoded ancestor reverses a leaf interface incidence",
-            ));
+        if !connected(true)? {
+            let witness=reversed_witness.map_or_else(||"no directed edge".into(),|e|format!("ancestor_edge={:?}->{:?}, ancestor_normal={:?}, normal_dot={}, directed_segment_dot={}",e.a,e.b,e.n,dot(want.n,e.n),dot(sub(want.b,want.a),sub(e.b,e.a))));
+            return Err(bad("interfaceWinding",&format!("decoded ancestor reverses a leaf interface incidence: tile={tile}, leaf_edge={:?}->{:?}, leaf_normal={:?}, {witness}",want.a,want.b,want.n)));
         }
         Ok(())
     }
@@ -1280,23 +1462,24 @@ impl Store {
                 ])
                 .map_err(sql)?;
             let mut positive = false;
-            let mut negative = false;
+            let mut reversed = None;
             while let Some(other) = candidates.next().map_err(sql)? {
                 effort.charge(1)?;
                 let bytes: Vec<u8> = other.get(0).map_err(sql)?;
                 let b = Edge::from_bytes(&bytes)?;
                 if overlap(&a, &b).is_some() {
-                    if dot(a.n, b.n) < -1e-12 * norm(a.n) * norm(b.n) {
-                        negative = true;
-                    } else {
+                    if dot(sub(a.b, a.a), sub(b.b, b.a)) > 0. {
                         positive = true;
+                    } else if reversed.is_none() {
+                        reversed = Some(b);
                     }
                 }
             }
-            if negative && !positive {
+            if let Some(b) = reversed.filter(|_| !positive) {
                 return Err(bad(
                     "interfaceWinding",
-                    "coarse exterior incidence reverses decoded descendant leaf geometry",
+                    &format!("coarse exterior incidence reverses decoded descendant leaf geometry: tile={tile}, coarse_edge={:?}->{:?}, leaf_edge={:?}->{:?}, directed_segment_dot={}, normal_dot={}",
+                        a.a,a.b,b.a,b.b,dot(sub(a.b,a.a),sub(b.b,b.a)),dot(a.n,b.n)),
                 ));
             }
         }
@@ -1377,12 +1560,42 @@ mod tests {
         placed(&s, 0, &edge([1., 0., 0.], [2., 0., 0.]), false);
         s.require_segment(0, &required, &effort()).unwrap();
         let mut reversed = required.clone();
+        std::mem::swap(&mut reversed.a, &mut reversed.b);
         reversed.n = [0., 0., -1.];
         assert!(s
             .require_segment(0, &reversed, &effort())
             .unwrap_err()
             .to_string()
             .contains("interfaceWinding"));
+    }
+    #[test]
+    fn opposite_face_normals_do_not_reverse_a_directed_interface() {
+        let mut s = store();
+        s.tile(0, None, IDENTITY).unwrap();
+        s.tile(1, Some(0), IDENTITY).unwrap();
+        s.hierarchy(&effort()).unwrap();
+        // The real tex3 diagnostic at tile 4 had identical source/proxy
+        // endpoints, normal_dot=-8.065e-9, but directed_segment_dot=6.136e-4.
+        let mut leaf = edge(
+            [-4255286.547561122, 4552920.632420377, -1353752.8258885767],
+            [-4255286.536590422, 4552920.62264651, -1353752.8059446565],
+        );
+        leaf.n = [
+            -0.00013637008948975398,
+            0.0005005155369466061,
+            0.00032030051731701337,
+        ];
+        let mut coarse = leaf.clone();
+        coarse.n = [
+            -0.00013011281906581416,
+            -7.41212416066763e-5,
+            3.5247719030880887e-5,
+        ];
+        assert!(dot(leaf.n, coarse.n) < 0.);
+        placed(&s, 0, &coarse, false);
+        placed(&s, 1, &leaf, true);
+        s.require_segment(0, &leaf, &effort()).unwrap();
+        s.exterior_winding(&effort()).unwrap();
     }
     #[test]
     fn reflected_scene_changes_position_and_oriented_area_together() {
@@ -1478,6 +1691,7 @@ mod tests {
         s.hierarchy(&effort()).unwrap();
         let good = edge([0., 0., 0.], [2., 0., 0.]);
         let mut flipped = good.clone();
+        std::mem::swap(&mut flipped.a, &mut flipped.b);
         flipped.n = [0., 0., -1.];
         placed(&s, 0, &flipped, false);
         placed(&s, 1, &good, true);
@@ -1526,6 +1740,150 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("replaceContentContinuity"));
+    }
+    #[test]
+    fn one_ulp_gap_cannot_use_spatial_padding_as_endpoint_or_adjacency_slack() {
+        let s = store();
+        let next = f64::from_bits(1f64.to_bits() + 1);
+        let mut a = edge([0., 0., 0.], [1., 0., 0.]);
+        a.tolerance = 1e-12;
+        let mut b = edge([next, 0., 0.], [2., 0., 0.]);
+        b.tolerance = 1e-12;
+        // Deliberately enormous broad-phase padding must not identify the
+        // distinct decoded endpoint keys or connect these two actual edges.
+        placed(&s, 0, &a, false);
+        placed(&s, 0, &b, false);
+        let mut want = edge([0., 0., 0.], [2., 0., 0.]);
+        want.tolerance = 1e-12;
+        assert!(s
+            .require_segment(0, &want, &effort())
+            .unwrap_err()
+            .to_string()
+            .contains("interfaceSegments"));
+        let absent = [f64::from_bits(1f64.to_bits() + 2), 0., 0.];
+        assert!(s
+            .require_point(0, absent, 1e-12, &effort())
+            .unwrap_err()
+            .to_string()
+            .contains("interfacePoints"));
+    }
+    #[test]
+    fn mandatory_y_up_and_common_root_placement_are_applied_at_the_owner() {
+        let mut s = store();
+        let mut root = IDENTITY;
+        root[12] = 6_000_000.;
+        root[13] = -4_000_000.;
+        s.tile(0, None, root).unwrap();
+        let mut local = IDENTITY;
+        local[14] = -10.;
+        s.tile(1, Some(0), local).unwrap();
+        s.reference(1, 1).unwrap();
+        let e = edge([0., 10., 0.], [1., 10., 0.]);
+        s.connection
+            .execute("INSERT INTO raw_edges VALUES(?,?)", params![1, e.bytes()])
+            .unwrap();
+        s.hierarchy(&effort()).unwrap();
+        s.place_edges(&effort()).unwrap();
+        let bytes: Vec<u8> = s
+            .connection
+            .query_row("SELECT data FROM edges", [], |r| r.get(0))
+            .unwrap();
+        let placed = Edge::from_bytes(&bytes).unwrap();
+        assert_eq!(point_key(placed.a), point_key([0., 0., 0.]));
+        assert_eq!(point_key(placed.b), point_key([1., 0., 0.]));
+        assert_ne!(point(local, e.a), placed.a);
+    }
+    #[test]
+    fn original_vertices_accept_compensated_rebase_but_reject_a_decoded_code_gap() {
+        let mut s = store();
+        let mut root = IDENTITY;
+        root[12] = 6_000_000.;
+        s.tile(0, None, root).unwrap();
+        s.tile(1, Some(0), IDENTITY).unwrap();
+        let mut local = IDENTITY;
+        local[12] = 10.;
+        s.tile(2, Some(0), local).unwrap();
+        s.reference(1, 1).unwrap();
+        s.reference(2, 2).unwrap();
+        let key = vec![0u8; 48];
+        s.connection
+            .execute(
+                "INSERT INTO original_vertices VALUES(?,?,?,?)",
+                params![1, key, encode(&[0., 0., 0.]), 1.],
+            )
+            .unwrap();
+        s.connection
+            .execute(
+                "INSERT INTO original_vertices VALUES(?,?,?,?)",
+                params![2, key, encode(&[-10., 0., 0.]), 1.],
+            )
+            .unwrap();
+        s.hierarchy(&effort()).unwrap();
+        s.originals(&effort()).unwrap();
+        s.connection
+            .execute(
+                "UPDATE original_vertices SET point=? WHERE rank=2",
+                [encode(&[-10. + 0.015625, 0., 0.])],
+            )
+            .unwrap();
+        assert!(s
+            .originals(&effort())
+            .unwrap_err()
+            .to_string()
+            .contains("sourceIdentity"));
+    }
+    #[test]
+    fn raw_scene_profile_refuses_uncovered_motion_and_admits_neutral_materials() {
+        use serde_json::json;
+        let base =
+            json!({"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],"meshes":[{"primitives":[{}]}]});
+        let check = |value: &Value| {
+            let text = serde_json::to_string(value).unwrap();
+            let raw: &RawValue = serde_json::from_str(&text).unwrap();
+            admit_scene_profile(raw, &mut identity::Work::new(budget(), 0, 1 << 20))
+        };
+        check(&base).unwrap();
+        let mut neutral = base.clone();
+        neutral["extensionsUsed"] = json!(["KHR_materials_ior"]);
+        neutral["materials"] = json!([{"extensions":{"KHR_materials_ior":{"ior":1.4}}}]);
+        check(&neutral).unwrap();
+        let mut animation = base.clone();
+        animation["animations"] = json!([{}]);
+        let mut ambiguous = base.clone();
+        ambiguous["scenes"] = json!([{"nodes":[0]},{"nodes":[0]}]);
+        let mut rtc = base.clone();
+        rtc["extensions"] = json!({"CESIUM_RTC":{"center":[1,0,0]}});
+        let mut node = base.clone();
+        node["nodes"][0]["extensions"] = json!({"EXT_mesh_gpu_instancing":{}});
+        let mut mesh = base.clone();
+        mesh["meshes"][0]["extensions"] = json!({"UNKNOWN_motion":{}});
+        let mut primitive = base.clone();
+        primitive["meshes"][0]["primitives"][0]["extensions"] = json!({"UNKNOWN_motion":{}});
+        for value in [animation, ambiguous, rtc, node, mesh, primitive] {
+            assert!(matches!(check(&value), Err(Error::Unsupported(_))));
+        }
+        ambiguous = base.clone();
+        ambiguous["scenes"] = json!([{"nodes":[0]},{"nodes":[0]}]);
+        ambiguous["scene"] = json!(0);
+        check(&ambiguous).unwrap();
+        let opaque:&RawValue=serde_json::from_str(r#"{"scenes":[{"nodes":[]}],"extras":{"opaque":1e400},"materials":[{"extensions":{"KHR_materials_ior":{"opaque":1e400}}}]}"#).unwrap();
+        admit_scene_profile(opaque, &mut identity::Work::new(budget(), 0, 1 << 20)).unwrap();
+    }
+    #[test]
+    fn traversal_scene_exclusion_cannot_advertise_identity_interface_coverage() {
+        for identity in [false, true] {
+            let mut s = store();
+            s.tile(0, None, IDENTITY).unwrap();
+            s.reference(0, 0).unwrap();
+            s.payload(0, identity, identity).unwrap();
+            s.exclude_scene("tileset glTF up-axis override is outside the Y-up profile");
+            let result = s.finish(budget(), 0);
+            if identity {
+                assert!(matches!(result, Err(Error::Unsupported(_))));
+            } else {
+                result.unwrap();
+            }
+        }
     }
     #[test]
     fn final_work_has_a_structured_budget_refusal() {

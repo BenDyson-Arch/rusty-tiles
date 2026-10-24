@@ -17,7 +17,7 @@ pub(super) fn uint(v: &Value) -> Result<usize, Error> {
         .and_then(|n| usize::try_from(n).ok())
         .ok_or_else(fail)
 }
-fn field<'a>(raw: &'a RawValue, key: &str) -> Option<&'a RawValue> {
+pub(super) fn field<'a>(raw: &'a RawValue, key: &str) -> Option<&'a RawValue> {
     serde_json::from_str::<BTreeMap<String, &'a RawValue>>(raw.get())
         .ok()?
         .remove(key)

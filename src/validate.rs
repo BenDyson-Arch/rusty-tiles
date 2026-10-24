@@ -2322,6 +2322,12 @@ impl Check<'_> {
         let error = number(&doc["geometricError"], "tileset.geometricError")?;
         let schema_uri = self.metadata_schema(name, &doc)?;
         self.tileset_exclusions(&doc);
+        if doc["asset"]
+            .get("gltfUpAxis")
+            .is_some_and(|v| v.as_str() != Some("Y"))
+        {
+            self.delivery.exclude_scene("tileset glTF up-axis override");
+        }
         // One ImplicitSchema per preparation, kept only for documents that hold an
         // implicit root and only while their tiles are pending (§5, DC-4, VS-B-8).
         // `schema` and `schemaUri` are mutually exclusive in the tileset schema.
