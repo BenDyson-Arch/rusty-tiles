@@ -54,7 +54,7 @@ required reports and cleanup diagnostics, as described below.
 
 | Function | Keyword arguments |
 | --- | --- |
-| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
+| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `memory_budget_bytes=None`, `scratch_dir=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
 | `model_to_manifest(input, ...)` | Same rigid placement/policy/callback keywords; returns `ModelManifestResult` with fixed sibling output |
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=8192` (at most 8192), `chunk_points=100000`, `metadata_attributes=False`, `callback=None` |
@@ -65,15 +65,19 @@ required reports and cleanup diagnostics, as described below.
 ### Streamed local mesh tiler
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
-scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
+memory_budget_bytes=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
 source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
 height_offset=None, force=False, callback=None)` is the single new public
 source-mesh operation.
-It runs capture, leaf payloads and implicit hierarchy delivery through one core
-run and publication; leaf directories/manifests are internal. Output has
-full-detail leaves under certified coarse parent tiles (simplified proxies whose
-geometric error bounds their distance to the source), with proxy textures baked
-from the source appearance as an approximation that carries no certificate.
+It runs capture, leaf payloads, coarse levels and implicit hierarchy delivery through
+one core run and publication; leaf directories/manifests are internal. Output has
+exact full-detail leaves under coarse parent tiles built as a classic octree level
+of detail (HLOD). A coarse tile's geometric error is a sampled, measured distance to
+the source, not a certificate; its triangles carry one representative
+`source_primitive` ID while leaves keep exact provenance; and its textures are fresh
+charts sampled from the source, an approximation with no appearance certificate. See
+the [mesh guide](../../docs/MESH.md#coarse-levels-hlod), which also marks the legacy
+certified-proxy path a plain call still builds until it is removed.
 
 It accepts the local static metre/Y-up/core PBR domain in the [mesh guide](../../docs/MESH.md),
 with optional rigid WGS84 ellipsoidal anchor, active ENU quaternion and source
@@ -83,11 +87,13 @@ added in double precision or a strict Metashape `source_offset_file`, and
 `height_offset` metres defaulting to 0) is mapped at capture,
 with the CLI's rules; it excludes the rigid placement keywords and `None` or
 `"local"` keeps local input. There is no CRS inference, geoid height adjustment,
-texture-format selector, explicit mode or leaf/proxy tuning.
+texture-format selector, explicit mode or coarse-tile tuning.
 All four profile names (`fast`, default `balanced`, `quality`, `lossless`) are
-provisional; constants will be calibrated together after coarse levels and
-baking exist. KTX2/Basis and meshopt are in-process. PNG is the lossless leaf
-texture exception; JPEG source decoding remains supported.
+provisional; constants will be calibrated together as HLOD acceptance
+progresses. Base-colour and emissive pages, leaf and coarse, are KTX2 ETC1S
+(quality 50 in `fast`, 90 in `balanced`), UASTC in `quality` and PNG in
+`lossless`; KTX2/Basis and meshopt are in-process, and JPEG source decoding
+remains supported.
 
 A lossy texture page that misses a decoded-image gate is re-encoded at UASTC
 level 2, then level 3, and, for pages sampled at level 0 only, delivered as an
@@ -103,7 +109,15 @@ callback is polled before every re-encode step. See the
 `jobs=None` means memory-aware auto. A positive integer is a maximum capped by
 cores and the stage's memory admission. Unknown memory uses one worker; a
 mandatory item that cannot fit is still refused. Booleans/nonintegers are
-rejected. `scratch_dir` selects owned working data, while final archive staging
+rejected. `memory_budget_bytes=None` takes the default [memory
+budget](../../docs/MESH.md#memory-budget), the lesser of 4 GiB and half the detected
+host/cgroup headroom (2 GiB when undetected); an `int` byte count declares a ceiling
+that is never raised. A bool or non-integer raises `TypeError`; zero, a negative or a
+value above 2⁶⁴−1 raises `InvalidRequestError` before any source I/O; a run that
+cannot fit is a `ResourceLimitError` before it allocates. The current default
+coarse-tile method does not enforce a budget, so it refuses one instead of ignoring
+it. `result.diagnostics["memory"]["budget"]` reports the requested and resolved
+budget. `scratch_dir` selects owned working data, while final archive staging
 stays beside output. Output must be `.3tz`. `force=True` allows completed-file
 replacement while preserving the original on precommit failure.
 

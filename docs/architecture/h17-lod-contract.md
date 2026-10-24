@@ -1,5 +1,13 @@
 # H17 certified geometry LOD (coarse tiles)
 
+> **Superseded direction (draft, effective when the legacy path is removed).** The
+> 0.4 owner decision replaces H17's certified geometry and H27's per-texel proxy
+> bake with classic octree HLOD (`docs/architecture/hlod-040-decision.md`). Until
+> HLOD slice S6 deletes the code, this document describes the shipped default;
+> afterwards it is historical. Certified bounds, `proxy_source` and the bake ledger
+> are not successor requirements; see the [mesh guide](../MESH.md#coarse-levels-hlod).
+
+
 Status: implemented on `ml/h17-lod`, light process (tests with controls, one
 nonauthor review, perf/memory evidence, consumer proof, CI). Design:
 `~/.cache/rusty-tiles-evidence/tiler-lod-design-20261013/design.md` Revision 2

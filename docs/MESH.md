@@ -254,45 +254,6 @@ because one triangle samples it.
   never overlap, so a coarse page is editable, but editing it changes only that
   coarse tile, not its leaves or other levels, and does not make its provenance exact.
 
-### Memory budget
-
-One declared ceiling governs the whole run, with one rule on every surface: CLI
-`--memory-budget BYTES` (`--memoryBudget`), Rust `TilerRequest::with_memory_budget`
-and Python `memory_budget_bytes=`.
-
-- **Values.** A positive integer number of bytes. The CLI also takes the binary
-  suffixes `B`, `KiB`, `MiB`, `GiB` and `TiB` (`--memory-budget 2GiB`); Python takes
-  an `int`. Zero, signs, fractions, exponents, decimal-unit (`GB`) or lowercase
-  suffixes, booleans (Python: `TypeError`) and values above 2⁶⁴−1 are
-  `invalid_request`, refused before any source or output is touched (a CLI usage
-  error carries exit 2 and `error.code="usage"`, like `--jobs`).
-- **Default.** Without one, the lesser of **4 GiB** and half the detected
-  host/cgroup headroom; 2 GiB when headroom cannot be detected. An explicit budget,
-  2 GiB for example, is a ceiling that is never silently raised: every stage plans
-  against the lesser of the budget and the detected headroom.
-- **What it covers.** Capture, the leaf stage and the coarse stage admit their
-  indivisible work against it before allocating: source and JSON metadata, sort
-  buffers, interface incidence, the child tiles held for their parents and the
-  active parents, decoded source images, chart/page/codec workspace, memory-backed
-  scratch and archive staging. A source without images reserves no texture, chart,
-  mip or codec workspace.
-- **Pressure never changes output.** It serializes work (`--jobs` stays a maximum
-  under the same budget), and what cannot fit even alone is a `resource_limit`
-  refusal naming the stage and the bytes it needs, before that stage allocates and
-  before anything is published. Archives are identical for every budget that
-  admits the run.
-- **Reporting.** `diagnostics.memory` holds the `budget` (`requested_bytes`,
-  `resolved_bytes`, `source`: `explicit`, `default_ceiling`, `default_headroom` or
-  `default_undetected`, and the detected headroom), the least budget that admits each
-  stage (`minimum_bytes`, `capture_minimum_bytes`, `leaf_minimum_bytes`,
-  `archive_minimum_bytes`) and the coarse stage's plan (`hlod`);
-  `diagnostics.hlod.lease_peak_bytes` is its highest simultaneous lease.
-- **What it is not.** It is an admission and planning ceiling, not an operating
-  system limit or a measured peak-RSS guarantee; measured peaks come from the
-  acceptance campaign.
-- **Today.** The legacy path a plain run still takes does not enforce a budget, so it
-  refuses one (`invalid_request`) instead of ignoring it.
-
 ## Profiles and resources
 
 `--profile` accepts `fast`, `balanced` (the default), `quality` or `lossless`.
@@ -364,8 +325,8 @@ Each capture stage rechecks free space for its own working set on entry and
 fails closed if its measured peak exceeds its declared bound; the diagnostics
 report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). The H17
 pre-pass is measured the same way, and the whole-run spill peak
-(`run_scratch_peak_bytes`) must stay within the declared need. LOD proxy
-sidecars and bake handoff files are budgeted by their own stages and are not in
+(`run_scratch_peak_bytes`) must stay within the declared need. Coarse-tile
+sidecar files and the legacy bake handoff files are budgeted by their own stages and are not in
 these spill figures. A preflight is
 not a reservation against unrelated writers. Owned intermediate files are
 cleaned on success and failure. Any cleanup failure carries actionable paths
@@ -375,9 +336,48 @@ There is no total source-byte or triangle-size refusal. JSON, hierarchy,
 individual-item and format limits still apply. The 3TZ member ceiling is
 178,956,970, including the root document, reports and index; exceeding it returns
 `unsupported`. Per-tile budgets are derived from policy. There is no
-`--leaf-triangles`, proxy triangle/error flag, explicit/full-detail selector,
+`--leaf-triangles`, coarse-tile triangle/error flag, explicit/full-detail selector,
 texture-format option, external encoder fallback or compression bypass on
 `mesh`.
+
+### Memory budget
+
+One declared ceiling governs the whole run, with one rule on every surface: CLI
+`--memory-budget BYTES` (`--memoryBudget`), Rust `TilerRequest::with_memory_budget`
+and Python `memory_budget_bytes=`.
+
+- **Values.** A positive integer number of bytes. The CLI also takes the binary
+  suffixes `B`, `KiB`, `MiB`, `GiB` and `TiB` (`--memory-budget 2GiB`); Python takes
+  an `int`. Zero, signs, fractions, exponents, decimal-unit (`GB`) or lowercase
+  suffixes, booleans (Python: `TypeError`) and values above 2⁶⁴−1 are
+  `invalid_request`, refused before any source or output is touched (a CLI usage
+  error carries exit 2 and `error.code="usage"`, like `--jobs`).
+- **Default.** Without one, the lesser of **4 GiB** and half the detected
+  host/cgroup headroom; 2 GiB when headroom cannot be detected. An explicit budget,
+  2 GiB for example, is a ceiling that is never silently raised: every stage plans
+  against the lesser of the budget and the detected headroom.
+- **What it covers.** Capture, the leaf stage and the coarse stage admit their
+  indivisible work against it before allocating: source and JSON metadata, sort
+  buffers, interface incidence, the child tiles held for their parents and the
+  active parents, decoded source images, chart/page/codec workspace, memory-backed
+  scratch and archive staging. A source without images reserves no texture, chart,
+  mip or codec workspace.
+- **Pressure never changes output.** It serializes work (`--jobs` stays a maximum
+  under the same budget), and what cannot fit even alone is a `resource_limit`
+  refusal naming the stage and the bytes it needs, before that stage allocates and
+  before anything is published. Archives are identical for every budget that
+  admits the run.
+- **Reporting.** `diagnostics.memory` holds the `budget` (`requested_bytes`,
+  `resolved_bytes`, `source`: `explicit`, `default_ceiling`, `default_headroom` or
+  `default_undetected`, and the detected headroom), the least budget that admits each
+  stage (`minimum_bytes`, `capture_minimum_bytes`, `leaf_minimum_bytes`,
+  `archive_minimum_bytes`) and the coarse stage's plan (`hlod`);
+  `diagnostics.hlod.lease_peak_bytes` is its highest simultaneous lease.
+- **What it is not.** It is an admission and planning ceiling, not an operating
+  system limit or a measured peak-RSS guarantee; measured peaks come from the
+  acceptance campaign.
+- **Today.** The legacy path a plain run still takes does not enforce a budget, so it
+  refuses one (`invalid_request`) instead of ignoring it.
 
 ### Primitives, atlases and editability
 
@@ -513,7 +513,7 @@ import rusty_tiles
 
 result = rusty_tiles.mesh_to_tileset(
     Path("local.glb"), Path("placed.3tz"),
-    profile="balanced", jobs=None, scratch_dir=None,
+    profile="balanced", jobs=None, memory_budget_bytes=2 * 1024**3, scratch_dir=None,
     anchor=(153.02, -27.47, 25.0),
     orientation_xyzw=(0.0, 0.0, 0.0, 1.0),
     scene_offset=(10.0, 2.0, -5.0),
@@ -527,7 +527,7 @@ print(result.report["triangles"], result.diagnostics["leaf_delivery"]["jobs"])
 ```
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
-scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
+memory_budget_bytes=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
 source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
 height_offset=None, force=False, callback=None)` accepts `str` or `os.PathLike`
 paths. `source_crs=None` or `"local"` keeps local input; `source_axes` is
@@ -535,7 +535,11 @@ paths. `source_crs=None` or `"local"` keeps local input; `source_axes` is
 sequence, `source_offset_file` a path, and `height_offset` defaults to 0, with
 the CLI's rules. `jobs=None`
 means auto; a positive integer is a maximum. Booleans and noninteger worker
-counts are rejected. Unknown legacy keywords raise `TypeError`. Python calls
+counts are rejected. `memory_budget_bytes=None` takes the default
+[memory budget](#memory-budget); an `int` byte count declares it. A bool or
+non-integer raises `TypeError`; zero, a negative or a value above 2⁶⁴−1 raises
+`InvalidRequestError` before any source I/O, exactly as the CLI refuses them. Unknown
+legacy keywords raise `TypeError`. Python calls
 the same core operation without launching the CLI or an encoder, and releases
 the GIL during native work.
 
@@ -586,7 +590,7 @@ for placed output. A coarse tile's geometric error is its sampled, measured erro
 ([geometric error](#geometric-error-sampled-not-certified)); coarse textures are
 an appearance approximation with no appearance certificate
 ([coarse appearance](#coarse-appearance)), and charting never changes a position or
-the error. The legacy path's certified errors are described under
+the error. The legacy path's error semantics are described under
 [Legacy H17 coarse tiles](#legacy-h17-coarse-tiles).
 
 Runtime diagnostics stay **outside the archive** so worker/scratch choices do
@@ -597,7 +601,7 @@ facts (tiles, workers, CPU seconds, lease peak, `error_measurement` and the
 per-depth appearance summary: page texels, covered texels, cap hits and the
 requested and achieved spacing). `phase_seconds` holds the wall seconds of
 `capture`, `leaf_build`, `hlod_incidence`, `hlod_geometry` and `archive`; the
-legacy path's phases and `proxy_bake` are described under
+legacy path's phases and bake diagnostics are described under
 [Legacy H17 coarse tiles](#legacy-h17-coarse-tiles). Stage objects describe
 worker admission and owned memory/scratch resources; their declared accounting
 is not an automatically measured RSS guarantee. Absolute scratch paths and
@@ -607,8 +611,7 @@ resource observations are diagnostics, not semantic profile constants.
 nullable totals: `conversion`, `capture`, then inside the leaf stage
 `leaf_build` (leaves), `hlod_incidence` and `hlod_geometry` (coarse stage), then
 `leaf_payloads`, `archive` and `ready_to_publish`. The legacy path's phases
-(`lod_prepass`, `lod_simplify`, `seam_resolution`, `lod_finish`, `proxy_bake`) are
-listed under [Legacy H17 coarse tiles](#legacy-h17-coarse-tiles). Each finished
+are listed under [Legacy H17 coarse tiles](#legacy-h17-coarse-tiles). Each finished
 phase also logs its wall seconds and the run's elapsed seconds as a `log` event.
 Required events finish before publication; the returned
 successful result establishes installation. A post-install cleanup problem
@@ -667,6 +670,23 @@ contain an explicit skeleton and link documents without offering an explicit
 output mode. `glb-to-3tz` / `glb_to_3tz` and `createTilesetJson` /
 `model_to_manifest` remain the separate exact-byte wrapping/sibling-manifest
 products.
+
+### Migrating from the legacy coarse tiles to HLOD
+
+These changes take effect for a plain `mesh` run when HLOD replaces the legacy path
+(see the [status note](#mesh-tiling)); until then they describe what to expect.
+
+| Legacy path | HLOD |
+| --- | --- |
+| A parent's geometric error is a certified bound on its two-way distance to the source | A sampled, measured error ([not a certificate](#geometric-error-sampled-not-certified)); do not rely on it as a guarantee against unsampled outliers |
+| Coarse tiles carry `proxy_source` rows naming a source triangle (or a fill) | One representative `source_primitive` ID per coarse triangle; no `proxy_source`, no coarse source-triangle table. Read leaves for exact provenance and annotation |
+| Coarse textures are baked per texel against a certified proxy and a bake ledger | Fresh content-sized charts, nearest-source bake, no ledger or drift gate |
+| Phases `lod_prepass`, `lod_simplify`, `seam_resolution`, `lod_finish`, `proxy_bake` and the `proxy_bake` diagnostics | Phases `hlod_incidence` and `hlod_geometry`; diagnostics `hlod` and `memory` |
+| No memory budget; capture and leaves size themselves to detected headroom | `--memory-budget` / `memory_budget_bytes`, default the lesser of 4 GiB and half the headroom |
+| Crack-freedom by certified seam thinning | Crack-free by construction with locked outer interfaces |
+
+Scripts that read `proxy_source`, the legacy phase names or `proxy_bake` need
+updating; there is no shipping mode that keeps both.
 
 ## Known Cesium colour limitation
 

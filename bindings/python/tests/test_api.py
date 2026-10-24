@@ -377,7 +377,14 @@ class WheelAPI(unittest.TestCase):
         self.assertTrue(any(name.endswith(".glb") for name in members))
         # Diagnostics are runtime facts (times, scratch paths); the budget and the stage plan
         # they report are not.
-        for key in ("budget", "minimum_bytes", "capture_minimum_bytes", "leaf_minimum_bytes",
+        # (detected headroom moves between two processes, so only the declared parts compare.)
+        budget = {key: python.diagnostics["memory"]["budget"][key]
+                  for key in ("requested_bytes", "resolved_bytes", "source")}
+        self.assertEqual(budget, {key: envelope["diagnostics"]["memory"]["budget"][key]
+                                  for key in budget})
+        self.assertEqual(budget, {"requested_bytes": 2 << 30, "resolved_bytes": 2 << 30,
+                                  "source": "explicit"})
+        for key in ("minimum_bytes", "capture_minimum_bytes", "leaf_minimum_bytes",
                     "archive_minimum_bytes"):
             self.assertEqual(python.diagnostics["memory"][key], envelope["diagnostics"]["memory"][key], key)
         self.assertEqual(python.diagnostics["memory"]["hlod"]["minimum_bytes"],

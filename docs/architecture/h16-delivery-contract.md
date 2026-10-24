@@ -1,5 +1,16 @@
 # H16 streamed hierarchy and 3TZ delivery
 
+> **HLOD amendment (draft, effective when the legacy path is removed).** With HLOD
+> coarse levels a parent's `geometricError` is a sampled, measured value (the
+> maximum of its children's and 1.05 times the sampled two-way distance to the
+> source), not an H17 certified bound, and coarse tiles reach delivery through the
+> HLOD stage's `proxies.jsonl` rows (`HlodRow`) rather than H17 certificates. The
+> declared memory budget bounds archive preparation too: a budgeted run caps member
+> GLB JSON at 1 MiB and reserves H16's resident bound before leaves are built
+> ([memory budget](../MESH.md#memory-budget)). References below to certified H17
+> content describe the legacy path.
+
+
 Status: implemented on `ml/h16-delivery` (PR #192), light process (tests, one
 nonauthor review, perf/memory evidence, consumer proof, CI). This slice publishes
 H1's tile tree ([H1 contract](h1-capture-tree-contract.md)) and H8's full-detail

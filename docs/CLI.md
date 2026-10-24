@@ -49,9 +49,10 @@ The shared layout is a bounded implicit forest. Producer naming/partition detail
 ### mesh
 
 Streams one static glTF/GLB scene, local metre/Y-up or in a declared source CRS,
-through capture, leaf encoding, certified coarse levels and Tiles 1.1 implicit `.3tz` delivery. Every parent
-tile carries a simplified proxy whose geometric error bounds its two-way distance to the source, with proxy
-textures baked from the source appearance. See the [mesh guide](MESH.md)
+through capture, leaf encoding, HLOD coarse levels and Tiles 1.1 implicit `.3tz` delivery. Leaves are exact;
+every parent tile is built from its children with locked outer interfaces (crack-free by construction), a sampled,
+measured geometric error rather than a certificate, a representative source-primitive identity and freshly
+baked textures. A legacy certified-proxy path still builds the coarse tiles until it is removed. See the [mesh guide](MESH.md)
 for admitted sources, placement, resources, migration and the known Cesium
 KTX2 colour-filtering limitation. The preparatory leaf/delivery commands and
 Rust exports are now internal.
@@ -60,6 +61,7 @@ Rust exports are now internal.
 | --- | --- | --- | --- |
 | `--profile` | | `balanced` | `fast`, `balanced`, `quality` or `lossless`; policies/constants are provisional |
 | `--jobs` | | `auto` | Positive maximum workers or memory-aware auto; actual workers are capped per stage by cores and memory; unknown memory uses one worker |
+| `--memory-budget BYTES` | `--memoryBudget` | lesser of 4 GiB and half the detected headroom (2 GiB if undetected) | Declared memory ceiling, never raised: a positive byte count, or with a `KiB`/`MiB`/`GiB`/`TiB` suffix (`2GiB`); zero, signs, fractions and overflow are usage errors before any source I/O. The current default coarse-tile method does not enforce one and refuses it |
 | `--scratchDir` | `--scratch-dir` | platform scratch parent | Owned working-data parent; final archive staging stays beside output |
 | `--anchor LON LAT HEIGHT` | | none | WGS84 longitude/latitude degrees and ellipsoidal height metres; omission keeps local output |
 | `--orientationXyzw X Y Z W` | `--orientation-xyzw` | identity with anchor | Active ENU near-unit quaternion, scalar W last; requires anchor |
@@ -77,7 +79,7 @@ only. `--json` returns `tilerReport` (snake_case, identical to `conversion.json`
 rigid placement, or in a declared [source CRS](MESH.md#source-crs) whose
 per-vertex map (positions, normals and tangents) is applied at capture and whose
 ENU frame becomes the root transform. There is no CRS inference, geoid
-conversion, leaf/proxy tuning, explicit/full-detail mode or texture-format flag. Profiles do not freeze numerical settings and
+conversion, coarse-tile tuning, explicit/full-detail mode or texture-format flag. Profiles do not freeze numerical settings and
 `lossless` is not a source-GLB byte-preservation promise.
 
 ### point-cloud

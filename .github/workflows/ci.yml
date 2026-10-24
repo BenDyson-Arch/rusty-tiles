@@ -229,8 +229,12 @@ jobs:
         run: |
           python -m pip install 'maturin==1.15.0'
           maturin build --release --locked --out target/wheels
+      - name: Build the CLI for CLI/Python parity
+        run: cargo build --locked
       - name: Test the installed wheel with an empty PATH
         run: python scripts/test_python_wheel.py target/wheels/*.whl
+        env:
+          RUSTY_TILES_BIN: ${{ github.workspace }}/target/debug/rusty-tiles
 
   portable:
     name: Portable CLI (${{ matrix.target }})

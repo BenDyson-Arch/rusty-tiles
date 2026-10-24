@@ -1,5 +1,17 @@
 # H28 per-tile primitive batching
 
+> **HLOD amendment (draft, effective when the legacy path is removed).** Coarse
+> identity and position assumptions change: a coarse triangle carries one
+> representative `source_primitive` ID (the nearest source primitive at its decoded
+> centroid) duplicated at all three corners, with no `proxy_source` and no per-triangle
+> source table; leaves keep exact `source_primitive`/`source_triangle`. Coarse
+> positions are final decoded positions with fresh charts rather than a frozen H17
+> glTF with per-texel provenance. Semantic material-class batching, one property
+> table per ID set and appendable feature-ID sets are unchanged. References below to
+> `proxy_source` and frozen H17 proxies describe the legacy path.
+> See [identity and annotation](../MESH.md#identity-annotation-and-editability).
+
+
 Status: contract for `ml/h28-tile-batching`, light process (tests, one nonauthor
 review, real-data correctness run; the coordinator owns the viewer and
 performance lanes). Approved by the owner on 2026-10-21. Evidence:
