@@ -206,8 +206,9 @@ pub(crate) struct ProxyRow {
     pub depth: u32,
     pub geometric_error: f64,
     pub primitives: u32,
-    /// S2's area samples per direction and its depth schedule's source triangles.
-    pub sampling: Option<(u64, u64)>,
+    /// S2's area samples per direction, its depth schedule's source triangles and the
+    /// sampling schedule.
+    pub sampling: Option<(u64, u64, crate::mesh_large::hlod::error::Schedule)>,
     pub encoded_depth: u32,
 }
 
@@ -290,10 +291,13 @@ impl ProxyRow {
             geometric_error: w.geometric_error,
             primitives: w.primitives,
             encoded_depth,
-            sampling: w
-                .measurement
-                .as_ref()
-                .map(|s| (s.area_samples_per_direction, s.depth_source_triangles)),
+            sampling: w.measurement.as_ref().map(|s| {
+                (
+                    s.area_samples_per_direction,
+                    s.depth_source_triangles,
+                    s.schedule,
+                )
+            }),
         })
     }
 }
@@ -305,16 +309,24 @@ struct DepthSampling {
     samples: u64,
     range: u64,
     total: u64,
+    schedule: crate::mesh_large::hlod::error::Schedule,
 }
 
 impl DepthSampling {
-    fn add(&mut self, samples: u64, range: u64, total: u64) -> Result<(), JobError> {
-        if self.total != 0 && self.total != total {
+    fn add(
+        &mut self,
+        samples: u64,
+        range: u64,
+        total: u64,
+        schedule: crate::mesh_large::hlod::error::Schedule,
+    ) -> Result<(), JobError> {
+        if self.total != 0 && (self.total != total || self.schedule != schedule) {
             return Err(input(
                 "HLOD rows of one depth differ in their sampling schedule",
             ));
         }
         self.total = total;
+        self.schedule = schedule;
         self.samples = self
             .samples
             .checked_add(samples)
@@ -339,7 +351,7 @@ impl DepthSampling {
                 self.range, self.total
             )));
         }
-        let need = crate::mesh_large::hlod::error::required(self.range, self.total)?;
+        let need = self.schedule.required(self.range, self.total)?;
         if self.samples < need {
             return Err(input(format!(
                 "incomplete HLOD depth {depth} sampling: {}/{need} per direction",
@@ -647,11 +659,12 @@ impl LeafDirectory {
                 line.map_err(|e| JobError::io("read proxy rows", &path, e))
                     .and_then(|line| ProxyRow::parse(&line, row, self.sparse_proxies))
                     .and_then(|proxy| {
-                        if let Some((samples, total)) = proxy.sampling {
+                        if let Some((samples, total, schedule)) = proxy.sampling {
                             depths[proxy.encoded_depth as usize].add(
                                 samples,
                                 proxy.end - proxy.first,
                                 total,
+                                schedule,
                             )?;
                         }
                         let bounds = payload_bounds(

@@ -45,8 +45,8 @@ the 5% sampled-distance inflation and has no additive area-spacing allowance.
 ## Bounded nearest search
 
 Every production nearest query (representatives, source→proxy, proxy→source) is a
-best-first search with a per-query budget `B = NEAREST_STEPS = 4096` node visits plus
-triangle tests (`source_index::Budget`, shared with S3's donor search). A search
+best-first search with a per-query budget `B = NEAREST_STEPS = 1024` node visits plus
+triangle tests (`source_index::Budget`, the pattern of S3's donor search). A search
 without a candidate first takes a greedy root-to-leaf seed outside the budget, so it
 always has a finite witness: one fine block (at most 256 triangles) on the paged
 index, one leaf (at most 4) on a resident surface. Hints from the previous winner
@@ -64,7 +64,16 @@ every query, all distances positive) took Θ(Q·R) exact work: 1,048,607 `closes
 calls for 32 queries at R = 32,768. The committed test
 `nearest_searches_are_bounded_on_oblique_adversaries` reproduces that count and
 bounds the budgeted search at `Q(B+1)` calls on both paths, independent of R.
-B is a tuning constant: raising it narrows exhaustion overestimates.
+B is a tuning constant, chosen by measurement. The tex3/crop3 searches take at most 501
+steps, so none exhausts at 1024. On the adversarial chords input (2,048 random chord
+slivers across two ribbon blocks, every box overlapping almost every query) a release bake
+spends 28.0/17.6/9.6/5.0 S2 CPU-s at B = 4096/1024/512/256. G is unchanged down to 512 and
+grows 30% at 256. The worst case per bake is about `B × (2 × samples + controls)` steps,
+independent of the source's spatial structure.
+
+Library tests that do not exercise S2's measurement run a reduced schedule (4,096 per
+depth, 64 per tile) and B = 64 through `Settings`. Delivery outside library tests admits
+only the production schedule (`Schedule::admitted`), and each row records its schedule.
 
 ## Decoded bytes and S3 handoff
 

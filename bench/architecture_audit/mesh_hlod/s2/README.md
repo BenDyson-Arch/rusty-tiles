@@ -86,3 +86,34 @@ Every budgeted distance is finite and at least the exact one.
   measured once, monotone G, floored content-less cells, valid archive), admitted
   index scratch refusal, budgeted vs exhaustive nearest, delivery refusal of an
   inflated depth schedule.
+
+## Nearest budget and test time (2026-10-25)
+
+Evidence: `~/.cache/rusty-tiles-evidence/hlod-s2-ci-time-20261025/` (`SHA256SUMS`
+SHA-256 `8f0a9e5092eb3fe122e582d1a137709662bc91f5256d78b06dda59affa85738c`; release
+binary `d0f1e42a745b4b800e3e4f83a68fb48ff956b57cfd88130dcaba39fea957d238`).
+
+The adversarial chords input from `random_chords_cost_linear_work_and_never_refuse`
+(34,816 triangles, 3 encoded parents) was baked in release with one job and the
+production schedule (`evidence_chords_s2_cost`):
+
+| B | S2 CPU-s | steps | exhausted / searches | G d0 / d1 (m) |
+| ---: | ---: | ---: | ---: | --- |
+| 4096 | 28.0 | 1,406,381,292 | 0 / 992,177 | 10.186 / 10.186 |
+| 1024 | 17.6 | 883,802,524 | 670,446 / 992,177 | 10.186 / 10.186 |
+| 512 | 9.6 | 484,276,188 | 876,512 / 992,177 | 10.186 / 10.186 |
+| 256 | 5.0 | 250,574,334 | 951,041 / 992,177 | 13.248 / 13.248 |
+
+Controls, not samples, dominate here: about 88k source sliver vertices, 104k proxy
+vertices and edges, and 24k representatives. The production budget is now **B = 1024**:
+2× above the 501-step maximum on real crops, with G unchanged on the adversary. The
+tex3/crop3 re-bakes at B = 1024 match the receipt above exactly: same archive SHA-256,
+G by depth, census and members, 0 exhausted, 263,322,570 steps. S2 CPU-s/Mtri was
+9.09/9.29 and coarse 11.31/11.65 (slot 2).
+
+Library tests that do not exercise S2's measurement use a reduced schedule (4,096 per
+depth, 64 per tile) and B = 64 via `Settings`. Tests of S2 itself keep production.
+Delivery outside library tests admits only the production schedule. In debug,
+same-env `cargo test --lib` (CI skips, two test threads) took 456 s on develop
+`c71c4dcf` and 494–509 s here. Capture's up-front preflight declares the index's
+`160n + 1 MiB` again (tex3 need 391,773,807 → 437,781,313 bytes).

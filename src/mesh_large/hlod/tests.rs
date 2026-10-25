@@ -1,7 +1,7 @@
 //! HLOD S1 acceptance: real runs on small analytic fixtures, checked on DECODED published
 //! bytes by an independent census (its own GLB decoder; interfaces derived from the decoded
 //! leaves alone, never from producer records), plus the controls that must fail.
-use super::{Mutation, Settings, TilerLod};
+use super::{error::Schedule, Mutation, Settings, TilerLod};
 use crate::{
     content_integrity::meshopt::{self as codec, Mode},
     mesh_large::{
@@ -995,6 +995,40 @@ struct Run {
     mutation: Mutation,
     budget: Option<u64>,
     profile: LeafProfile,
+    /// S2's schedule: reduced unless a test exercises S2's measurement itself.
+    sampling: Schedule,
+    nearest_steps: u64,
+}
+
+/// S2's reduced sampling for tests that do not exercise its measurement. Production (and
+/// every delivery outside library tests) uses `Schedule::PRODUCTION`: 200,000 per depth,
+/// 2,048 per tile.
+const TEST_SAMPLING: Schedule = Schedule {
+    per_depth: 4096,
+    per_tile: 64,
+};
+/// S2's nearest-search budget for those tests (production: `error::NEAREST_STEPS`). Its
+/// controls (every source sliver vertex, every proxy vertex and edge) do not scale with the
+/// schedule; a small budget keeps adversarial geometry cheap and only raises G.
+const TEST_NEAREST_STEPS: u64 = 64;
+
+/// Stage settings of the public-pipeline tests (reduced S2 work, see `TEST_SAMPLING`).
+fn test_settings(cap: usize) -> Settings {
+    Settings {
+        cap,
+        sampling: TEST_SAMPLING,
+        nearest_steps: TEST_NEAREST_STEPS,
+        ..Settings::default()
+    }
+}
+
+/// A run with S2's production schedule and budget, for tests of its measurement.
+fn s2_run() -> Run {
+    Run {
+        sampling: Schedule::PRODUCTION,
+        nearest_steps: super::error::NEAREST_STEPS,
+        ..Run::default()
+    }
 }
 
 impl Default for Run {
@@ -1007,6 +1041,8 @@ impl Default for Run {
             mutation: Mutation::None,
             budget: None,
             profile: LeafProfile::Balanced,
+            sampling: TEST_SAMPLING,
+            nearest_steps: TEST_NEAREST_STEPS,
         }
     }
 }
@@ -1022,6 +1058,8 @@ fn stage(input: &Path, out: &Path, run: &Run) -> Result<PathBuf, crate::JobFailu
         .with_hlod_settings(Settings {
             cap: run.cap,
             mutation: run.mutation,
+            nearest_steps: run.nearest_steps,
+            sampling: run.sampling,
         });
     if run.lod == TilerLod::H17 {
         request = request.with_lod_target(run.cap);
@@ -1373,8 +1411,8 @@ fn distant_long_slivers_lock_nothing_and_never_refuse() {
 /// Exact seams do no geometric matching, so the chords cost the pass only their items (at
 /// most six per triangle) and lock nothing they do not share. Never refused, crack-free, and
 /// identical (counters included) at one and four jobs.
-#[test]
-fn random_chords_cost_linear_work_and_never_refuse() {
+/// 2,048 random chord slivers spanning two ribbon blocks, written under `dir`.
+fn chords_input(dir: &Path) -> PathBuf {
     let mut state = 0x9e37_79b9_7f4a_7c15u64;
     let mut next = move || {
         state ^= state << 13;
@@ -1394,13 +1432,18 @@ fn random_chords_cost_linear_work_and_never_refuse() {
         chords.positions.extend([a, b, [b[0], b[1], b[2] + 0.005]]);
         chords.indices.extend([base, base + 1, base + 2]);
     }
-    let work = tempfile::tempdir().unwrap();
     let left = ribbons(128);
     let mut right = left.clone();
     for p in &mut right.positions {
         p[0] += 100.;
     }
-    let input = write_gltf(&work.path().join("src"), &[left, right, chords]);
+    write_gltf(dir, &[left, right, chords])
+}
+
+#[test]
+fn random_chords_cost_linear_work_and_never_refuse() {
+    let work = tempfile::tempdir().unwrap();
+    let input = chords_input(&work.path().join("src"));
     let run = |jobs: usize, name: &str| {
         let run = Run {
             leaf_triangles: crate::mesh_large::config::CONSUMER_TABLE_ROWS,
@@ -1713,7 +1756,8 @@ fn single_child_chains_publish_their_content_once() {
     ];
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &source);
-    let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+    let run = s2_run();
+    let dir = stage(&input, &work.path().join("hlod"), &run).unwrap();
     let census = census(&dir);
     assert_eq!(census.duplicate_chain_tiles, 0, "{census:?}");
     assert_eq!(census.reversed_coarse_faces, 0, "{census:?}");
@@ -2820,10 +2864,7 @@ fn public(
         .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(jobs).unwrap()))
         .with_lod(TilerLod::Hlod)
         .with_test_leaf_triangles(256)
-        .with_hlod_settings(Settings {
-            cap: 300,
-            mutation: Mutation::None,
-        })
+        .with_hlod_settings(test_settings(300))
         .with_test_spill(
             crate::spill::SortConfig {
                 run_bytes: 1 << 16,
@@ -2925,10 +2966,7 @@ fn cancellation_during_hlod_cleans_up() {
         TilerRequest::new(&input, &output)
             .with_lod(TilerLod::Hlod)
             .with_test_leaf_triangles(256)
-            .with_hlod_settings(Settings {
-                cap: 300,
-                mutation: Mutation::None,
-            })
+            .with_hlod_settings(test_settings(300))
             .with_scratch_dir(&scratch),
         &control,
     )
@@ -2962,6 +3000,8 @@ fn evidence_census() {
             leaf_triangles: crate::mesh_large::config::CONSUMER_TABLE_ROWS,
             cap: super::TRIANGLE_CAP,
             jobs: 4,
+            sampling: Schedule::PRODUCTION,
+            nearest_steps: super::error::NEAREST_STEPS,
             budget: std::env::var("RT_HLOD_EVIDENCE_BUDGET")
                 .ok()
                 .map(|b| crate::mesh_large::resources::parse_memory_budget(&b).unwrap()),
@@ -3403,7 +3443,7 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
         &Run {
             leaf_triangles: 1024,
             cap: 1500,
-            ..Run::default()
+            ..s2_run()
         },
     )
     .unwrap();
@@ -3477,4 +3517,129 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
         }
         assert!(!output.exists());
     }
+}
+
+/// Evidence lane, not CI: S2's cost on the adversarial chords input (every box overlaps
+/// almost every query) at production settings (8,192-triangle leaves and cap, one job),
+/// for each budget in `RT_HLOD_EVIDENCE_STEPS` (comma-separated, default `4096,1024,256`)
+/// and both schedules. Writes `chords-s2.json` under `RT_HLOD_EVIDENCE_DIR`: S2 CPU,
+/// searches, steps and exhaustions by encoded depth, and G by depth.
+#[test]
+#[ignore = "evidence lane: needs RT_HLOD_EVIDENCE_DIR"]
+fn evidence_chords_s2_cost() {
+    let out = PathBuf::from(std::env::var("RT_HLOD_EVIDENCE_DIR").unwrap());
+    fs::create_dir_all(&out).unwrap();
+    let input = chords_input(&out.join("src"));
+    let budgets: Vec<u64> = std::env::var("RT_HLOD_EVIDENCE_STEPS")
+        .unwrap_or_else(|_| "4096,1024,256".into())
+        .split(',')
+        .map(|b| b.parse().unwrap())
+        .collect();
+    let mut records = Vec::new();
+    for (label, sampling) in [
+        ("production", Schedule::PRODUCTION),
+        ("test", TEST_SAMPLING),
+    ] {
+        for &steps in &budgets {
+            let output = out.join(format!("chords-{label}-{steps}.3tz"));
+            let started = std::time::Instant::now();
+            let result = crate::mesh_large::mesh_to_tileset(
+                TilerRequest::new(&input, &output)
+                    .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(1).unwrap()))
+                    .with_lod(TilerLod::Hlod)
+                    .with_test_leaf_triangles(crate::mesh_large::config::CONSUMER_TABLE_ROWS)
+                    .with_hlod_settings(Settings {
+                        nearest_steps: steps,
+                        sampling,
+                        ..Settings::default()
+                    }),
+                &RunControl::default(),
+            )
+            .unwrap_or_else(|f| panic!("{}", f.error));
+            let wall = started.elapsed().as_secs_f64();
+            let h = result.diagnostics.hlod.unwrap();
+            let m = &h.error_measurement;
+            let depths: Vec<Value> = m
+                .by_depth
+                .iter()
+                .enumerate()
+                .filter(|(_, d)| d.tiles > 0)
+                .map(|(i, d)| {
+                    json!({
+                        "encodedDepth": i, "tiles": d.tiles, "g": d.geometric_error,
+                        "sampledMax": d.sampled_max,
+                        "s2CpuSeconds": h.error_cpu_by_depth.get(i).copied().unwrap_or(0.),
+                        "searches": d.nearest.searches, "steps": d.nearest.steps,
+                        "exhausted": d.nearest.exhausted, "maxSteps": d.nearest.max_steps,
+                        "sourceAreaSamples": d.source_area_samples,
+                        "sourceControls": d.source_controls, "proxyControls": d.proxy_controls,
+                    })
+                })
+                .collect();
+            let record = json!({
+                "schedule": label, "nearestSteps": steps, "wallSeconds": wall,
+                "stageCpuSeconds": h.cpu_seconds, "s2CpuSeconds": h.error_cpu_seconds,
+                "s2Cpu": h.error_cpu, "nearest": m.nearest, "byDepth": depths,
+            });
+            eprintln!("CHORDS-S2 {record}");
+            records.push(record);
+            fs::remove_file(&output).ok();
+        }
+    }
+    fs::write(
+        out.join("chords-s2.json"),
+        serde_json::to_vec_pretty(&records).unwrap(),
+    )
+    .unwrap();
+}
+
+/// S2's whole measurement (representatives, both directed passes and their controls) on
+/// an adversarial source through the real stage, at production's nearest budget: every
+/// search stays within its budget plus one seed, some exhaust, and G still covers the
+/// sampled error and the children's.
+#[test]
+fn s2_measurement_is_bounded_on_an_oblique_source() {
+    use super::{error::NEAREST_STEPS, source_index::BLOCK};
+    let r = 1024u32;
+    let mesh = Mesh {
+        positions: (0..r)
+            .flat_map(|i| {
+                let d = i as f32 / 10_000.;
+                [[3. + d, -1., -1.], [-1., 3. + d, -1.], [-1., -1., 3. + d]]
+            })
+            .collect(),
+        indices: (0..3 * r).collect(),
+        color: [0.5, 0.5, 0.5, 1.],
+    };
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &[mesh]);
+    let dir = stage(
+        &input,
+        &work.path().join("oblique"),
+        // Disjoint triangles do not simplify: a cap above the whole source keeps parents.
+        &Run {
+            cap: 2048,
+            nearest_steps: NEAREST_STEPS,
+            ..Run::default()
+        },
+    )
+    .unwrap_or_else(|f| panic!("{}", f.error));
+    let proxies = rows(&dir.join("proxies.jsonl"));
+    assert!(!proxies.is_empty());
+    let bound = NEAREST_STEPS + BLOCK as u64 + 64;
+    let mut exhausted = 0;
+    for row in &proxies {
+        let s = &row["nearestSearch"];
+        let (searches, steps) = (
+            s["searches"].as_u64().unwrap(),
+            s["steps"].as_u64().unwrap(),
+        );
+        assert!(s["maxSteps"].as_u64().unwrap() <= bound, "{s}");
+        assert!(steps <= searches * bound, "{s}");
+        exhausted += s["exhausted"].as_u64().unwrap();
+        let g = row["geometricError"].as_f64().unwrap();
+        assert!(g >= 1.05 * row["measurement"]["sampledMax"].as_f64().unwrap());
+        assert!(g >= row["childrenError"].as_f64().unwrap());
+    }
+    assert!(exhausted > 0, "the adversary exhausts some searches");
 }

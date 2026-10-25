@@ -118,14 +118,14 @@ const JOB_ENCODE_BYTES: u64 = 16 << 20;
 
 /// One parent job's admission for `merged` input triangles: its workspace, encode allowance,
 /// S2's source query, measurement and nearest-search workspace, and a cap-sized output.
-fn job_charge(merged: u64, cap: usize) -> u64 {
+fn job_charge(merged: u64, settings: &Settings) -> u64 {
     merged
         .saturating_mul(JOB_BYTES_PER_TRIANGLE)
         .saturating_add(JOB_ENCODE_BYTES)
         .saturating_add(source_index::QUERY_BYTES)
         .saturating_add(error::WORK_BYTES)
-        .saturating_add(error::SEARCH_BYTES)
-        .saturating_add(TileGeometry::charge(cap as u64))
+        .saturating_add(error::search_bytes(settings.nearest_steps))
+        .saturating_add(TileGeometry::charge(settings.cap as u64))
 }
 
 fn state(message: impl Into<String>) -> JobError {
@@ -140,6 +140,10 @@ fn resource(message: impl Into<String>) -> JobError {
 pub(crate) struct Settings {
     pub cap: usize,
     pub mutation: Mutation,
+    /// S2's per-query nearest-search budget (`error::NEAREST_STEPS`).
+    pub nearest_steps: u64,
+    /// S2's sampling schedule; delivery admits only production's outside library tests.
+    pub sampling: error::Schedule,
 }
 
 impl Default for Settings {
@@ -147,6 +151,8 @@ impl Default for Settings {
         Self {
             cap: TRIANGLE_CAP,
             mutation: Mutation::None,
+            nearest_steps: error::NEAREST_STEPS,
+            sampling: error::Schedule::PRODUCTION,
         }
     }
 }
@@ -180,8 +186,9 @@ pub(crate) fn plan(
     captured: &FullCaptured,
     config: &TreeConfig,
     budget: &MemoryBudget,
-    cap: usize,
+    settings: &Settings,
 ) -> Result<HlodMemoryPlan, JobError> {
+    let cap = settings.cap;
     let leaf_cap = config.leaf_triangles();
     let held = TileGeometry::charge(leaf_cap.max(cap as u64));
     let height = u64::from(captured.tree.stats.height);
@@ -194,7 +201,7 @@ pub(crate) fn plan(
         .saturating_mul(8)
         .saturating_mul(height + 1)
         .saturating_add(read.saturating_sub(held));
-    let job = job_charge(leaf_cap.max(cap as u64).saturating_mul(8), cap);
+    let job = job_charge(leaf_cap.max(cap as u64).saturating_mul(8), settings);
     let sorter = config.sorter(1);
     let incidence = interfaces::memory_need(sorter, leaf_cap, captured.tree.stats.leaves);
     let buffer = config.sort.buffer_bytes as u64;
@@ -302,6 +309,8 @@ pub(crate) struct HlodReport {
     pub error_cpu_seconds: f64,
     #[serde(skip)]
     pub error_cpu: error::CpuReport,
+    #[serde(skip)]
+    pub error_cpu_by_depth: Vec<f64>,
 }
 
 /// Run facts of the stage outside the deterministic manifest.
@@ -315,6 +324,8 @@ pub struct HlodDiagnostics {
     /// Source-index construction plus summed worker-thread measurement/identity CPU.
     pub error_cpu_seconds: Option<f64>,
     pub error_cpu: error::CpuReport,
+    /// Summed worker S2 CPU seconds by encoded depth (index construction excluded).
+    pub error_cpu_by_depth: Vec<f64>,
     pub error_measurement: error::ErrorReport,
     pub wall_seconds: f64,
     pub incidence_scratch_peak_bytes: u64,
@@ -437,7 +448,7 @@ pub(crate) fn produce(
         error_policy: error::POLICY,
         appearance: "untextured: flat material-class factors and smooth normals until S3",
         triangle_cap: settings.cap as u64,
-        error_measurement: error::ErrorReport::new(),
+        error_measurement: error::ErrorReport::new(settings.nearest_steps, settings.sampling),
         ..Default::default()
     };
     let mut diagnostics = HlodDiagnostics {
@@ -505,7 +516,7 @@ pub(crate) fn produce(
             .ok_or_else(|| resource("source index scratch overflows"))?,
     )?;
     let source = source_index::SourceIndex::build(captured, &index_lease, check)?;
-    let sampling = error::SamplingPlan::new(captured)?;
+    let sampling = error::SamplingPlan::new(captured, settings.sampling)?;
     let index_cpu = resources::process_cpu_seconds()
         .zip(index_start)
         .map(|(b, a)| b - a);
@@ -520,6 +531,7 @@ pub(crate) fn produce(
     let result = walk(&job, rows, &rows_path, &mut report);
     diagnostics.error_cpu_seconds = index_cpu.map(|s| s + report.error_cpu_seconds);
     diagnostics.error_cpu = report.error_cpu;
+    diagnostics.error_cpu_by_depth = report.error_cpu_by_depth.clone();
     diagnostics.error_cpu.index = index_cpu.unwrap_or(0.);
     let lease_peak = result?;
     ledger.check()?;
@@ -807,7 +819,7 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
     }
     let cpu_start = error::thread_cpu();
     let mut query = job.source.query(captured, built.geometry.key)?;
-    let mut nearest = error::Nearest::new();
+    let mut nearest = error::Nearest::with_steps(settings.nearest_steps);
     // Keep S1's open-border vertices at their leaf-canonical decode. Prepare the final
     // positions once: representatives and measurement both consume this publication.
     let border = encode::open_border(&built.geometry.triangles, built.geometry.positions.len());
@@ -976,7 +988,12 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     if by_depth.len() <= encoded {
         by_depth.resize_with(encoded + 1, Default::default);
     }
-    by_depth[encoded].add(row.measurement, row.geometric_error);
+    by_depth[encoded].add(row.measurement, row.geometric_error, row.nearest_search);
+    let cpu = &mut report.error_cpu_by_depth;
+    if cpu.len() <= encoded {
+        cpu.resize(encoded + 1, 0.);
+    }
+    cpu[encoded] += row.error_cpu_seconds;
     if row.depth == 0 {
         report.error_measurement.root = Some(row.measurement);
     }
