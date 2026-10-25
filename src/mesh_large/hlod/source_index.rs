@@ -976,6 +976,17 @@ impl SourceQuery<'_> {
         self.last = winning;
         Ok(best)
     }
+    /// Full records `first..first + count` into caller-owned (and caller-charged)
+    /// buffers, with one positioned read (the S3 bake's rank-ordered donor reads).
+    pub(crate) fn triangles(
+        &self,
+        first: u64,
+        count: usize,
+        encoded: &mut Vec<u8>,
+        out: &mut Vec<FullTriangle>,
+    ) -> Result<(), JobError> {
+        Ok(self.full.read(first, count, encoded, out)?)
+    }
     /// Make the fine block below leaf node `n` resident (the bounded FIFO of
     /// [`SourceQuery::nearest`]).
     fn load_block(&mut self, n: &Node) -> Result<(), JobError> {

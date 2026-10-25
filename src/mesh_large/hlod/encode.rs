@@ -1,20 +1,25 @@
-//! Coarse tile GLB: one node and glTF primitive per material class, non-indexed triangles
+//! Coarse tile GLB: one node and glTF primitive per material group, non-indexed triangles
 //! (one `source_primitive` feature ID per triangle at all three corners, D4), smooth
-//! normals, flat class materials (S1 appearance; S3 replaces it with fresh charts), meshopt
-//! compression. Positions keep every outer-interface vertex at its leaf-canonical decode.
-//! The bytes are decoded again and checked before they are published (D1).
-use super::store::{SourcePrimitive, TileGeometry};
+//! normals when the source carries them, and the S3 appearance: fresh-chart TEXCOORD_0 and
+//! embedded pages for textured classes (tangents with a baked normal map), per-vertex
+//! COLOR_0 or flat class factors otherwise; meshopt compression. Positions keep every
+//! outer-interface vertex at its leaf-canonical decode. The bytes are decoded again and
+//! checked before they are published (D1).
+use super::{
+    appearance::Appearance,
+    store::{SourcePrimitive, TileGeometry},
+};
 use crate::{
     glb::{self, MeshoptLayout, MeshoptStream},
     mesh_large::{
-        batching::{material_key, MaterialClasses},
+        batching::material_key,
         leaves::geometry::{CoarsePositions, PositionStorage},
         records::Bounds,
     },
     JobError, JobErrorKind,
 };
 use serde_json::{json, Map, Value};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 
 fn invalid(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message.into())
@@ -43,20 +48,6 @@ pub(crate) struct Encoded {
     pub quantized: bool,
 }
 
-/// The tile's flat material per class: the class representative's literal factors.
-pub(crate) fn flat_materials(materials: &[crate::gltf_source::source::Material]) -> Vec<Value> {
-    materials
-        .iter()
-        .map(|m| {
-            let mut value = m.flat_proxy();
-            if let Some(object) = value.as_object_mut() {
-                object.remove("name");
-            }
-            value
-        })
-        .collect()
-}
-
 /// Per vertex: whether it lies on an open-border edge (held by other than two faces) of
 /// the nondegenerate triangles.
 pub(crate) fn open_border(triangles: &[[u32; 3]], vertices: usize) -> Vec<bool> {
@@ -80,36 +71,6 @@ pub(crate) fn open_border(triangles: &[[u32; 3]], vertices: usize) -> Vec<bool> 
         i = j;
     }
     border
-}
-
-/// Area-weighted smooth normal per vertex over decoded positions.
-fn normals(decoded: &[[f32; 3]], faces: &[[u32; 3]]) -> Vec<[f32; 3]> {
-    let mut sum = vec![[0f64; 3]; decoded.len()];
-    for f in faces {
-        let p = f.map(|i| decoded[i as usize].map(f64::from));
-        let e1 = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]];
-        let e2 = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]];
-        let n = [
-            e1[1] * e2[2] - e1[2] * e2[1],
-            e1[2] * e2[0] - e1[0] * e2[2],
-            e1[0] * e2[1] - e1[1] * e2[0],
-        ];
-        for &i in f {
-            for a in 0..3 {
-                sum[i as usize][a] += n[a];
-            }
-        }
-    }
-    sum.iter()
-        .map(|n| {
-            let length = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-            if length > 0. && length.is_finite() {
-                n.map(|v| (v / length) as f32)
-            } else {
-                [0., 1., 0.]
-            }
-        })
-        .collect()
 }
 
 struct Wire {
@@ -201,13 +162,20 @@ fn table(wire: &mut Wire, rows: &[SourcePrimitive]) -> (Value, Value) {
     )
 }
 
-/// Encode `tile` (its `locked` vertices on the outer interface) at its tile depth.
+fn unorm16(v: f32) -> [u8; 2] {
+    ((v.clamp(0., 1.) * 65535.).round() as u16).to_le_bytes()
+}
+fn snorm8(v: f32) -> u8 {
+    ((v.clamp(-1., 1.) * 127.).round() as i8) as u8
+}
+
+/// Encode `tile` (its `locked` vertices on the outer interface) at its tile depth, at
+/// `positions` with `appearance`.
 pub(crate) fn encode(
     tile: &TileGeometry,
     locked: &[bool],
     mut positions: CoarsePositions,
-    materials: &[Value],
-    classes: &MaterialClasses,
+    appearance: &Appearance,
     mutation: Mutation,
 ) -> Result<Encoded, JobError> {
     let rows = tile.primitives.len();
@@ -227,7 +195,6 @@ pub(crate) fn encode(
             }
         }
     }
-    let smooth = normals(&positions.decoded, &tile.triangles);
     let mut wire = Wire {
         binary: Vec::new(),
         views: Vec::new(),
@@ -235,36 +202,69 @@ pub(crate) fn encode(
         accessors: Vec::new(),
     };
     let (classes_json, table_json) = table(&mut wire, &tile.primitives);
-    // Group triangles by the material class of their representative; equal flat materials
-    // (H28 material classes, numbers by value) share one glTF primitive.
-    let default = json!({"pbrMetallicRoughness":{"metallicFactor":0.0,"roughnessFactor":1.0}});
-    let mut groups: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
-    for (t, r) in tile.representative.iter().enumerate() {
-        let material = tile.primitives[*r as usize].material;
-        groups.entry(classes.of(material)).or_default().push(t);
+    // Untextured, uncoloured groups with equal flat materials (H28 classes, numbers by
+    // value) share one glTF primitive, as in S1; textured or coloured groups stand alone.
+    struct Out<'g> {
+        key: Option<Value>,
+        material: Value,
+        groups: Vec<&'g super::appearance::Group>,
     }
-    let mut keyed: Vec<(Value, Value, Vec<usize>)> = Vec::new();
-    for (class, faces) in groups {
-        let material = materials
-            .get(class as usize)
-            .cloned()
-            .unwrap_or_else(|| default.clone());
-        let key = material_key(&material, false);
-        match keyed.iter_mut().find(|(k, _, _)| *k == key) {
-            Some((_, _, all)) => all.extend(faces),
-            None => keyed.push((key, material, faces)),
+    let mut outs: Vec<Out<'_>> = Vec::new();
+    for g in &appearance.groups {
+        let plain = g.uvs.is_none() && g.colors.is_none();
+        let key = plain.then(|| material_key(&g.material, false));
+        match outs.iter_mut().find(|o| key.is_some() && o.key == key) {
+            Some(o) => o.groups.push(g),
+            None => outs.push(Out {
+                key,
+                material: g.material.clone(),
+                groups: vec![g],
+            }),
         }
     }
+    let mut images = Vec::new();
+    let mut textures = Vec::new();
+    let mut basis = false;
     let mut face_order = Vec::with_capacity(tile.triangles.len());
     let mut nodes = Vec::new();
     let mut meshes = Vec::new();
     let mut materials_json = Vec::new();
-    for (index, (_, material, mut faces)) in keyed.into_iter().enumerate() {
+    for (index, out) in outs.into_iter().enumerate() {
+        // (tile face, group, group face) in tile face order.
+        let mut faces: Vec<(usize, usize, usize)> = out
+            .groups
+            .iter()
+            .enumerate()
+            .flat_map(|(g, group)| {
+                group
+                    .faces
+                    .iter()
+                    .enumerate()
+                    .map(move |(gf, &f)| (f, g, gf))
+            })
+            .collect();
         faces.sort_unstable();
-        face_order.extend_from_slice(&faces);
+        face_order.extend(faces.iter().map(|f| f.0));
+        let mut material = out.material;
+        let lead = out.groups[0];
+        if !lead.pages.is_empty() {
+            let base = textures.len();
+            for page in &lead.pages {
+                let image = images.len();
+                images
+                    .push(json!({"bufferView":wire.view(&page.bytes, None),"mimeType":page.mime}));
+                if page.mime == "image/ktx2" {
+                    basis = true;
+                    textures.push(json!({"sampler":u32::from(!page.mipmapped),"extensions":{"KHR_texture_basisu":{"source":image}}}));
+                } else {
+                    textures.push(json!({"sampler":u32::from(!page.mipmapped),"source":image}));
+                }
+            }
+            offset_textures(&mut material, base);
+        }
         materials_json.push(material);
         let count = faces.len() * 3;
-        let corners = || faces.iter().flat_map(|&t| tile.triangles[t]);
+        let corners = || faces.iter().flat_map(|&(t, _, _)| tile.triangles[t]);
         let position = match &positions.storage {
             PositionStorage::Quantized { codes, .. } => {
                 let mut bytes = Vec::with_capacity(count * 8);
@@ -294,21 +294,79 @@ pub(crate) fn encode(
                 wire.attribute(&bytes, count, 12, json!({"componentType":5126,"type":"VEC3","min":min.map(f64::from),"max":max.map(f64::from)}))
             }
         };
-        let mut bytes = Vec::with_capacity(count * 4);
-        for v in corners() {
-            for c in smooth[v as usize] {
-                bytes.push(((c.clamp(-1., 1.) * 127.).round() as i8) as u8);
+        let mut attributes = serde_json::Map::new();
+        attributes.insert("POSITION".into(), json!(position));
+        if let Some(smooth) = &appearance.normals {
+            let mut bytes = Vec::with_capacity(count * 4);
+            for v in corners() {
+                for c in smooth[v as usize] {
+                    bytes.push(snorm8(c));
+                }
+                bytes.push(0);
             }
-            bytes.push(0);
+            let normal = wire.attribute(
+                &bytes,
+                count,
+                4,
+                json!({"componentType":5120,"type":"VEC3","normalized":true}),
+            );
+            attributes.insert("NORMAL".into(), json!(normal));
         }
-        let normal = wire.attribute(
-            &bytes,
-            count,
-            4,
-            json!({"componentType":5120,"type":"VEC3","normalized":true}),
-        );
+        let groups = &out.groups;
+        if let Some(uvs) = &lead.uvs {
+            let mut bytes = Vec::with_capacity(count * 4);
+            for &(_, _, gf) in &faces {
+                for uv in uvs[gf] {
+                    bytes.extend(unorm16(uv[0]));
+                    bytes.extend(unorm16(uv[1]));
+                }
+            }
+            let id = wire.attribute(
+                &bytes,
+                count,
+                4,
+                json!({"componentType":5123,"type":"VEC2","normalized":true}),
+            );
+            attributes.insert("TEXCOORD_0".into(), json!(id));
+        }
+        if let Some(tangents) = &lead.tangents {
+            let mut bytes = Vec::with_capacity(count * 4);
+            for &(_, _, gf) in &faces {
+                for t in tangents[gf] {
+                    bytes.extend(t.map(snorm8));
+                }
+            }
+            let id = wire.attribute(
+                &bytes,
+                count,
+                4,
+                json!({"componentType":5120,"type":"VEC4","normalized":true}),
+            );
+            attributes.insert("TANGENT".into(), json!(id));
+        }
+        if lead.colors.is_some() {
+            let mut bytes = Vec::with_capacity(count * 8);
+            for &(_, g, gf) in &faces {
+                let colors = groups[g]
+                    .colors
+                    .as_ref()
+                    .ok_or_else(|| invalid("mixed colour group"))?;
+                for c in colors[gf] {
+                    for v in c {
+                        bytes.extend(unorm16(v));
+                    }
+                }
+            }
+            let id = wire.attribute(
+                &bytes,
+                count,
+                8,
+                json!({"componentType":5123,"type":"VEC4","normalized":true}),
+            );
+            attributes.insert("COLOR_0".into(), json!(id));
+        }
         let mut bytes = Vec::with_capacity(count * 4);
-        for &t in &faces {
+        for &(t, _, _) in &faces {
             let id = tile.representative[t] as f32;
             for _ in 0..3 {
                 bytes.extend_from_slice(&id.to_le_bytes());
@@ -329,8 +387,9 @@ pub(crate) fn encode(
             node["scale"] = json!([f64::from(*scale), f64::from(*scale), f64::from(*scale)]);
         }
         nodes.push(node);
+        attributes.insert("_FEATURE_ID_0".into(), json!(feature));
         meshes.push(json!({"primitives":[{
-            "attributes":{"POSITION":position,"NORMAL":normal,"_FEATURE_ID_0":feature},
+            "attributes":attributes,
             "mode":4,"material":index,
             "extensions":{"EXT_mesh_features":{"featureIds":[
                 {"featureCount":rows,"attribute":0,"propertyTable":0,"label":"source_primitive"}]}}}]}));
@@ -344,13 +403,28 @@ pub(crate) fn encode(
     } = wire;
     let mut document = json!({"asset":{"version":"2.0","generator":"rusty-tiles HLOD"},"scene":0,
         "scenes":[{"nodes":(0..nodes.len()).collect::<Vec<_>>()}],"nodes":nodes,"meshes":meshes,
-        "materials":materials_json,"buffers":[{"byteLength":binary.len()}],"bufferViews":views,
+        "materials":materials_json,"images":images,"textures":textures,
+        // Complete KTX2 chains are mip-sampled; a PNG fallback page is level 0 only.
+        "samplers":[{"magFilter":9729,"minFilter":9987,"wrapS":33071,"wrapT":33071},
+            {"magFilter":9729,"minFilter":9729,"wrapS":33071,"wrapT":33071}],
+        "buffers":[{"byteLength":binary.len()}],"bufferViews":views,
         "accessors":accessors,"extensionsUsed":["EXT_mesh_features","EXT_structural_metadata"],
         "extensions":{"EXT_structural_metadata":{"schema":{"id":"rusty_tiles_large_hlod_v1",
         "classes":classes_json},"propertyTables":[table_json]}}});
-    // Byte normals need KHR_mesh_quantization even for float positions.
+    if images.is_empty() {
+        for field in ["images", "textures", "samplers"] {
+            if let Some(o) = document.as_object_mut() {
+                o.remove(field);
+            }
+        }
+    }
+    // Byte normals and normalized UVs need KHR_mesh_quantization even for float positions.
     glb::add_extension(&mut document, "KHR_mesh_quantization", true)
         .map_err(|e| invalid(e.to_string()))?;
+    if basis {
+        glb::add_extension(&mut document, "KHR_texture_basisu", true)
+            .map_err(|e| invalid(e.to_string()))?;
+    }
     let compressed = glb::meshopt_compress(
         &mut document,
         &binary,
@@ -379,14 +453,34 @@ pub(crate) fn encode(
     Ok(result)
 }
 
+/// Shift every texture index of a coarse material by `base` (group-local → document).
+fn offset_textures(material: &mut Value, base: usize) {
+    for pointer in [
+        "/pbrMetallicRoughness/baseColorTexture/index",
+        "/pbrMetallicRoughness/metallicRoughnessTexture/index",
+        "/normalTexture/index",
+        "/occlusionTexture/index",
+        "/emissiveTexture/index",
+    ] {
+        if let Some(v) = material.pointer_mut(pointer) {
+            *v = json!(v.as_u64().unwrap_or(0) as usize + base);
+        }
+    }
+}
+
 /// D1's pre-publication check on the encoded bytes, decoded as a client does: the triangle
 /// count, every required segment and interface vertex at its exact leaf-canonical decode,
-/// every decoded open-border vertex at a leaf-canonical position, and every triangle's representative row.
+/// every decoded open-border vertex at a leaf-canonical position of the tile (no border
+/// vertex is displaced, perpendicular or otherwise), and every triangle's representative
+/// row. Every decoded corner must carry the measured position bits; returns the
+/// published positions.
 pub(crate) fn check(
     tile: &TileGeometry,
     locked: &[bool],
     encoded: &Encoded,
 ) -> Result<Vec<[f32; 3]>, JobError> {
+    // TODO(S6): this borrows H17's client-order decoder; move it under `hlod/` (or the S5
+    // validator's decoder) before `lod/` is deleted.
     let decoded = crate::mesh_large::lod::codec::decode(&encoded.glb)?;
     let mut published = vec![[0.; 3]; tile.positions.len()];
     let what = || format!("coarse tile f{}-d{}", tile.key.first, tile.key.depth);

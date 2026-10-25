@@ -218,6 +218,7 @@ pub(crate) struct HlodRow {
     pub reoriented_faces: u32,
     pub quantized: bool,
     pub bounds: BoundsRow,
+    pub appearance: super::appearance::TileAppearance,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]

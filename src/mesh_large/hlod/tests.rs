@@ -1013,7 +1013,7 @@ const TEST_SAMPLING: Schedule = Schedule {
 const TEST_NEAREST_STEPS: u64 = 64;
 
 /// Stage settings of the public-pipeline tests (reduced S2 work, see `TEST_SAMPLING`).
-fn test_settings(cap: usize) -> Settings {
+pub(super) fn test_settings(cap: usize) -> Settings {
     Settings {
         cap,
         sampling: TEST_SAMPLING,
@@ -1644,8 +1644,7 @@ fn parent_jobs_allocate_within_their_charge() {
             g,
             &built.locked,
             positions,
-            &[],
-            &crate::mesh_large::batching::MaterialClasses::EMPTY,
+            &plain_appearance(g),
             Mutation::None,
         )?;
         encode::check(g, &built.locked, &encoded)
@@ -1704,22 +1703,16 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
         lease: None,
     };
     let locked = [true, true, false, false];
+    let appearance = plain_appearance(&tile);
     let fixed: Vec<bool> = encode::open_border(&tile.triangles, tile.positions.len())
         .iter()
         .zip(&locked)
         .map(|(b, l)| *b || *l)
         .collect();
-    let encoded = encode::encode(
-        &tile,
-        &locked,
-        lattice
-            .encode_coarse(&tile.positions, &tile.ells, &fixed, tile.key.depth)
-            .unwrap(),
-        &[],
-        &crate::mesh_large::batching::MaterialClasses::EMPTY,
-        Mutation::None,
-    )
-    .unwrap();
+    let positions = lattice
+        .encode_coarse(&tile.positions, &tile.ells, &fixed, tile.key.depth)
+        .unwrap();
+    let encoded = encode::encode(&tile, &locked, positions, &appearance, Mutation::None).unwrap();
     encode::check(&tile, &locked, &encoded).unwrap();
     let decoded = decode(&encoded.glb);
     let mut seen = 0;
@@ -3062,6 +3055,24 @@ fn evidence_census() {
     // asserted; omitted coarse tiles are reported by `omittedProxies`.
 }
 
+/// One flat untextured group holding every face of `tile` (S1's default material).
+fn plain_appearance(tile: &super::store::TileGeometry) -> super::appearance::Appearance {
+    super::appearance::Appearance {
+        groups: vec![super::appearance::Group {
+            class: 0,
+            faces: (0..tile.triangles.len()).collect(),
+            material: json!({"pbrMetallicRoughness":{"metallicFactor":0.0,"roughnessFactor":1.0}}),
+            uvs: None,
+            tangents: None,
+            colors: None,
+            pages: Vec::new(),
+        }],
+        normals: None,
+        facts: Default::default(),
+        timing: Default::default(),
+    }
+}
+
 // ---------------------------------------------------------------------------------------
 // S2: sampled two-sided source error.
 
@@ -3516,6 +3527,236 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
             _ => {}
         }
         assert!(!output.exists());
+    }
+}
+
+/// Review regression (S3 donor choice): two parallel sheets 0.01 m apart baked at 0.1 m
+/// spacing, points alternating between them. Every point takes its own sheet's nearest
+/// triangle, and the resident local surface returns exactly S2's paged search hits.
+#[test]
+fn bake_donors_are_exact_across_close_parallel_sheets() {
+    use super::bake::{resolve, Queries, Searcher};
+    use super::source_index::SourceIndex;
+    use crate::mesh_large::{
+        config::{Profile, TreeConfig},
+        full,
+    };
+    let work = tempfile::tempdir().unwrap();
+    let flat = |_: f32, _: f32| 0.;
+    let lifted = |_: f32, _: f32| 0.01;
+    let sheets = vec![
+        grid((10, 10), (0., 1.), (0., 1.), &flat, [0.9, 0.1, 0.1, 1.]),
+        grid((10, 10), (0., 1.), (0., 1.), &lifted, [0.1, 0.1, 0.9, 1.]),
+    ];
+    let input = write_gltf(&work.path().join("src"), &sheets);
+    let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(256);
+    config.lod = TilerLod::Hlod;
+    config.jobs = crate::mesh_large::config::Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+    let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+    let key = super::store::TileKey {
+        first: 0,
+        end: captured.scan.triangles,
+        depth: 0,
+        leaf_begin: 0,
+        leaf_end: 1,
+    };
+    let mut points = Vec::new();
+    for row in 0..10 {
+        for col in 0..10 {
+            let (x, z) = (0.05 + 0.1 * col as f32, 0.05 + 0.1 * row as f32);
+            let y = if (row + col) % 2 == 0 { 0. } else { 0.01 };
+            points.push([x, y, z]);
+        }
+    }
+    let run = |index: &SourceIndex, local: bool| {
+        let mut query = index.query(&captured, key).unwrap();
+        let mut searcher = if local {
+            Searcher::new(&mut query).unwrap()
+        } else {
+            Searcher::paged(&mut query)
+        };
+        let mut q = [Queries::new(0, points.clone(), false)];
+        resolve(&mut searcher, &mut q, &|| Ok(())).unwrap();
+        let [q] = q;
+        q.hits
+    };
+    let (paged, local) =
+        with_source_index(&captured, |index| (run(index, false), run(index, true)));
+    for (i, (a, b)) in paged.iter().zip(&local).enumerate() {
+        assert_eq!(
+            (a.rank, a.material, a.d2.to_bits(), a.uv),
+            (b.rank, b.material, b.d2.to_bits(), b.uv),
+            "point {i}"
+        );
+        let on_b = points[i][1] > 0.;
+        assert_eq!(
+            b.material,
+            u32::from(on_b),
+            "point {i} took the other sheet's donor"
+        );
+        assert!(b.d2 < 1e-12, "point {i} lies on its donor");
+    }
+}
+
+/// Review round 3 probe 3: 32,768 distinct oblique parallel triangles whose boxes all
+/// contain every query (exact search is Θ(R) per query, warm hints included). The bake's
+/// budgeted best-first search stays within its fixed per-texel budget, deterministically.
+#[test]
+fn donor_search_is_bounded_on_oblique_adversaries() {
+    use super::source_index::{Budget, Frontier, Hit, Surface, Triangle};
+    let r = 32_768u64;
+    let triangles: Vec<Triangle> = (0..r)
+        .map(|i| {
+            let d = i as f32 / 100_000.;
+            Triangle::new(
+                [[3. + d, -1., -1.], [-1., 3. + d, -1.], [-1., -1., 3. + d]],
+                i,
+            )
+        })
+        .collect();
+    let surface = Surface::new(triangles).unwrap();
+    let key = super::store::TileKey {
+        first: 0,
+        end: r,
+        depth: 0,
+        leaf_begin: 0,
+        leaf_end: 1,
+    };
+    let budget_steps = 256;
+    let mut frontier = Frontier::new();
+    let run = |frontier: &mut Frontier| {
+        let mut hint = None;
+        (0..32)
+            .map(|j| {
+                let mut budget = Budget::new(budget_steps);
+                let hit: Hit = surface.nearest_budget_hint(
+                    [j as f64 / 1000., 0., 0.],
+                    key,
+                    &mut hint,
+                    &mut budget,
+                    frontier,
+                );
+                // The budget, plus a cold search's greedy seed (depth + one leaf).
+                assert!(
+                    budget.steps <= budget_steps + 64,
+                    "query {j}: {} steps",
+                    budget.steps
+                );
+                assert!(hit.distance2.is_finite());
+                (hit.rank, budget.exhausted)
+            })
+            .collect::<Vec<_>>()
+    };
+    let first = run(&mut frontier);
+    assert!(
+        first.iter().all(|q| q.1),
+        "the adversary exhausts the budget"
+    );
+    assert_eq!(first, run(&mut frontier), "deterministic");
+}
+
+/// Review round 4 defect 2: a cold search (no candidate yet) whose budget runs out before
+/// it reaches any triangle (here B = 2 against a paged hierarchy many levels deep; the
+/// review's adversary was 4,096 overlapping 256-triangle blocks against B = 4096) still
+/// returns a finite donor: its greedy seed. Budgets bound improvement, never existence;
+/// seeded and exhausted searches are counted, and an ample budget stays exact.
+#[test]
+fn cold_donor_search_always_has_a_finite_witness() {
+    use super::source_index::{Budget, Frontier, Hit, Surface, Triangle};
+    use crate::mesh_large::{
+        config::{Profile, TreeConfig},
+        full,
+    };
+    let work = tempfile::tempdir().unwrap();
+    let wave = |x: f32, z: f32| 0.05 * (7. * x).sin() * (5. * z).cos();
+    let input = write_gltf(
+        &work.path().join("src"),
+        &[grid(
+            (64, 64),
+            (0., 1.),
+            (0., 1.),
+            &wave,
+            [0.5, 0.5, 0.5, 1.],
+        )],
+    );
+    let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(256);
+    config.lod = TilerLod::Hlod;
+    config.jobs = crate::mesh_large::config::Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+    let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+    let key = super::store::TileKey {
+        first: 0,
+        end: captured.scan.triangles,
+        depth: 0,
+        leaf_begin: 0,
+        leaf_end: 1,
+    };
+    with_source_index(&captured, |index| {
+        cold_witness_checks(index, &captured, key)
+    });
+    // The resident surface: a budget of one step still yields the seed.
+    let r = 4096u64;
+    let triangles: Vec<Triangle> = (0..r)
+        .map(|i| {
+            let d = i as f32 / 100_000.;
+            Triangle::new(
+                [[3. + d, -1., -1.], [-1., 3. + d, -1.], [-1., -1., 3. + d]],
+                i,
+            )
+        })
+        .collect();
+    let surface = Surface::new(triangles).unwrap();
+    let key = super::store::TileKey {
+        first: 0,
+        end: r,
+        depth: 0,
+        leaf_begin: 0,
+        leaf_end: 1,
+    };
+    let mut budget = Budget::new(1);
+    let hit: Hit = surface.nearest_budget_hint(
+        [0.5, 0., 0.],
+        key,
+        &mut None,
+        &mut budget,
+        &mut Frontier::new(),
+    );
+    assert!(hit.distance2.is_finite());
+    assert!(budget.seeded && budget.exhausted);
+}
+
+fn cold_witness_checks(
+    index: &super::source_index::SourceIndex,
+    captured: &crate::mesh_large::full::FullCaptured,
+    key: super::store::TileKey,
+) {
+    use super::bake::Searcher;
+    let points: Vec<[f64; 3]> = (0..16)
+        .map(|i| [0.03 + 0.06 * i as f64, 0.2, 0.97 - 0.05 * i as f64])
+        .collect();
+    for p in &points {
+        let exact = index.query(captured, key).unwrap().nearest(*p).unwrap();
+        let cold = |steps: u64| {
+            let mut query = index.query(captured, key).unwrap();
+            let mut searcher = Searcher::paged_with_budget(&mut query, steps);
+            let hit = searcher.search(*p).unwrap();
+            (hit, searcher.exhausted, searcher.seeded)
+        };
+        let (starved, exhausted, seeded) = cold(2);
+        assert!(starved.distance2.is_finite(), "{p:?}: no finite witness");
+        assert_eq!((exhausted, seeded), (1, 1));
+        assert!(starved.distance2 >= exact.distance2);
+        let again = cold(2).0;
+        assert_eq!(
+            (again.rank, again.distance2.to_bits()),
+            (starved.rank, starved.distance2.to_bits()),
+            "deterministic"
+        );
+        let (ample, exhausted, seeded) = cold(1 << 20);
+        assert_eq!(
+            (ample.rank, ample.distance2.to_bits()),
+            (exact.rank, exact.distance2.to_bits())
+        );
+        assert_eq!((exhausted, seeded), (0, 1));
     }
 }
 

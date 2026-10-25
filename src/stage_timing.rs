@@ -21,8 +21,6 @@ pub(crate) enum Stage {
     PageCut,
     DensityMips,
     SparseMips,
-    SamplerChainBuild,
-    SamplerCheckPlanned,
     SamplerCheckDecoded,
     Mask,
     BasisEncode,
@@ -37,7 +35,7 @@ pub(crate) enum Stage {
     Lod,
 }
 
-const STAGES: [(Stage, &str); 21] = [
+const STAGES: [(Stage, &str); 19] = [
     (Stage::SourceReconstruct, "source_reconstruct"),
     (Stage::SourceDecode, "source_decode"),
     (Stage::SourceCacheHit, "source_cache_hit"),
@@ -45,8 +43,6 @@ const STAGES: [(Stage, &str); 21] = [
     (Stage::PageCut, "page_cut"),
     (Stage::DensityMips, "density_mips"),
     (Stage::SparseMips, "sparse_mips"),
-    (Stage::SamplerChainBuild, "sampler_chain_build"),
-    (Stage::SamplerCheckPlanned, "sampler_check_planned"),
     (Stage::SamplerCheckDecoded, "sampler_check_decoded"),
     (Stage::Mask, "mask"),
     (Stage::BasisEncode, "basis_encode"),
@@ -88,6 +84,12 @@ const COUNTERS: [(Counter, &str); 7] = [
 
 /// Basis encode time bucketed by log2 of the base-level texel count.
 const ENCODE_BUCKETS: usize = 32;
+/// Per-mip-level work of the delivery chain: codec decode, codec floors, delivery gates.
+pub(crate) const LEVEL_DECODE: usize = 0;
+pub(crate) const LEVEL_FLOORS: usize = 1;
+pub(crate) const LEVEL_GATES: usize = 2;
+const LEVEL_KINDS: [&str; 3] = ["codec_decode", "codec_floors", "delivery_gates"];
+const LEVELS: usize = 16;
 
 struct Totals {
     cpu_nanos: [AtomicU64; STAGES.len()],
@@ -97,6 +99,8 @@ struct Totals {
     encode_nanos: [AtomicU64; ENCODE_BUCKETS],
     encode_texels: [AtomicU64; ENCODE_BUCKETS],
     encode_calls: [AtomicU64; ENCODE_BUCKETS],
+    level_cpu_nanos: [[AtomicU64; LEVELS]; 3],
+    level_texels: [[AtomicU64; LEVELS]; 3],
 }
 
 fn totals() -> Option<&'static Totals> {
@@ -111,6 +115,10 @@ fn totals() -> Option<&'static Totals> {
                 encode_nanos: std::array::from_fn(|_| AtomicU64::new(0)),
                 encode_texels: std::array::from_fn(|_| AtomicU64::new(0)),
                 encode_calls: std::array::from_fn(|_| AtomicU64::new(0)),
+                level_cpu_nanos: std::array::from_fn(|_| {
+                    std::array::from_fn(|_| AtomicU64::new(0))
+                }),
+                level_texels: std::array::from_fn(|_| std::array::from_fn(|_| AtomicU64::new(0))),
             })
         })
         .as_ref()
@@ -161,6 +169,22 @@ pub(crate) fn time<T>(stage: Stage, f: impl FnOnce() -> T) -> T {
     out
 }
 
+/// Runs `f`, the `kind` work of mip `level` over `texels`, charging thread CPU when enabled.
+pub(crate) fn level<T>(kind: usize, level: usize, texels: u64, f: impl FnOnce() -> T) -> T {
+    let Some(totals) = totals() else {
+        return f();
+    };
+    let cpu_start = thread_cpu_nanos();
+    let out = f();
+    let l = level.min(LEVELS - 1);
+    totals.level_cpu_nanos[kind][l].fetch_add(
+        thread_cpu_nanos().saturating_sub(cpu_start),
+        Ordering::Relaxed,
+    );
+    totals.level_texels[kind][l].fetch_add(texels, Ordering::Relaxed);
+    out
+}
+
 pub(crate) fn count(counter: Counter, n: u64) {
     if let Some(totals) = totals() {
         let i = COUNTERS
@@ -194,12 +218,26 @@ pub(crate) fn encode<T>(base_texels: u64, chain_texels: u64, f: impl FnOnce() ->
     out
 }
 
+/// The accumulated document so far (stages, counters, encode buckets and per-level work),
+/// when enabled: lets a caller separate the leaf stage from the HLOD stage.
+pub(crate) fn snapshot() -> Option<Value> {
+    totals().map(|totals| document(totals, Value::Null))
+}
+
 /// Writes the accumulated document to the configured path, when enabled.
 pub(crate) fn finish(extra: Value) {
     let (Some(totals), Some(path)) = (totals(), std::env::var_os("RUSTY_TILES_STAGE_TIMING"))
     else {
         return;
     };
+    let document = document(totals, extra);
+    let _ = std::fs::write(
+        path,
+        serde_json::to_vec_pretty(&document).unwrap_or_default(),
+    );
+}
+
+fn document(totals: &Totals, extra: Value) -> Value {
     let mut stages = Map::new();
     for (i, (_, name)) in STAGES.iter().enumerate() {
         let calls = totals.calls[i].load(Ordering::Relaxed);
@@ -228,9 +266,15 @@ pub(crate) fn finish(extra: Value) {
         let texels = totals.encode_texels[bucket].load(Ordering::Relaxed);
         encode.push(json!({"base_texels_log2": bucket, "calls": calls, "seconds": seconds, "chain_texels": texels, "seconds_per_megapixel": seconds / (texels as f64 / 1e6)}));
     }
-    let document = json!({"schema": "rusty_tiles_stage_timing_v1", "note": "summed per-thread wall time; parallel stages overlap", "stages": stages, "counters": counters, "basis_encode_by_base_size": encode, "run": extra});
-    let _ = std::fs::write(
-        path,
-        serde_json::to_vec_pretty(&document).unwrap_or_default(),
-    );
+    let mut levels = Map::new();
+    for (kind, name) in LEVEL_KINDS.iter().enumerate() {
+        let rows: Vec<Value> = (0..LEVELS)
+            .filter(|&l| totals.level_texels[kind][l].load(Ordering::Relaxed) > 0)
+            .map(|l| {
+                json!({"level": l, "cpu_seconds": totals.level_cpu_nanos[kind][l].load(Ordering::Relaxed) as f64 / 1e9, "texels": totals.level_texels[kind][l].load(Ordering::Relaxed)})
+            })
+            .collect();
+        levels.insert((*name).into(), json!(rows));
+    }
+    json!({"schema": "rusty_tiles_stage_timing_v1", "note": "summed per-thread wall time; parallel stages overlap", "stages": stages, "counters": counters, "basis_encode_by_base_size": encode, "levels": levels, "run": extra})
 }

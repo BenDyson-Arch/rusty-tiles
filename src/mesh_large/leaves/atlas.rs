@@ -12,7 +12,7 @@ use super::{
     mask::SurfaceSample,
     mips::{self, Class},
     prepared::{PreparedAtlas, PreparedPage, PreparedPrimitive},
-    source_sampler_mips::{self, SamplerCheck, SamplerSample},
+    sparse_mips::LEAF_ISLAND_ISOLATED_LEVELS,
 };
 use crate::stage_timing::{self as timing, Counter, Stage};
 use crate::{
@@ -61,7 +61,6 @@ struct Binding {
     output_uv: usize,
     image: usize,
     sampler: SourceSampler,
-    source_mips: bool,
     block: Block,
     source_size: [u32; 2],
     offset: [u32; 2],
@@ -71,7 +70,6 @@ struct PagePlan {
     bindings: Vec<usize>,
     slot: TextureSlot,
     sampler: SourceSampler,
-    source_mips: bool,
     width: u32,
     height: u32,
 }
@@ -99,16 +97,13 @@ fn shelf_extent(bindings: &[Binding], ids: &[usize], limit: u32) -> Option<(u32,
 /// Packs every island of one bucket's bindings directly into a single page,
 /// when they fit, choosing the power-of-two shelf width that minimises the
 /// page area. Bindings then sit at page offset zero and each island carries
-/// its page position. Dedicated MIP-binding pages keep their aligned crop.
+/// its page position.
 fn pack_islands(
     bindings: &mut [Binding],
     ids: &[usize],
     max_edge: u32,
     page_index: usize,
 ) -> Result<Option<PagePlan>, JobError> {
-    if ids.iter().any(|&i| bindings[i].source_mips) {
-        return Ok(None);
-    }
     let mut items = Vec::new();
     for &b in ids {
         for (k, island) in bindings[b].block.islands.iter().enumerate() {
@@ -163,7 +158,6 @@ fn pack_islands(
         bindings: ids.to_vec(),
         slot: first.slot,
         sampler: first.sampler,
-        source_mips: false,
         width,
         height,
     };
@@ -181,7 +175,8 @@ fn pack_islands(
 /// When a bucket fits one page, the shelf width is the power of two that
 /// minimises the page area; otherwise shelves span the maximum page edge.
 ///
-/// A source-mip binding keeps a dedicated page (its original-source chain). MASK
+/// Mipmapped bindings share pages like any other: their islands carry aligned
+/// source context, never a whole-image dedicated page (D6). MASK
 /// base-colour bindings share pages per material class (H28): one class has one alpha
 /// factor and cutoff, so its coverage guard is the same for every binding on the page.
 fn pack(
@@ -189,21 +184,18 @@ fn pack(
     max_edge: u32,
     mask_classes: &[Option<u32>],
 ) -> Result<Vec<PagePlan>, JobError> {
-    let mut buckets = BTreeMap::<(u8, u32, u32, Option<usize>, Option<u32>), Vec<usize>>::new();
+    let mut buckets = BTreeMap::<(u8, u32, u32, Option<u32>), Vec<usize>>::new();
     for (i, b) in bindings.iter().enumerate() {
-        let (mips, mask) = if b.source_mips {
-            (Some(i), None)
-        } else if b.slot == TextureSlot::BaseColor {
-            (None, mask_classes[b.primitive])
+        let mask = if b.slot == TextureSlot::BaseColor {
+            mask_classes[b.primitive]
         } else {
-            (None, None)
+            None
         };
         buckets
             .entry((
                 role(b.slot),
                 b.sampler.min_filter,
                 b.sampler.mag_filter,
-                mips,
                 mask,
             ))
             .or_default()
@@ -246,7 +238,6 @@ fn pack(
             bindings: Vec::new(),
             slot: first.slot,
             sampler: first.sampler,
-            source_mips: first.source_mips,
             width: 0,
             height: 0,
         };
@@ -266,7 +257,6 @@ fn pack(
                     bindings: Vec::new(),
                     slot: b.slot,
                     sampler: b.sampler,
-                    source_mips: b.source_mips,
                     width: 0,
                     height: 0,
                 };
@@ -291,20 +281,27 @@ fn pack(
     Ok(pages)
 }
 
-/// Gutter and allocation alignment of non-mip-page island crops. Lossy pages
-/// align islands to the 4x4 codec block so no block mixes two islands. PNG
-/// pages filtered with viewer-generated mips carry eight texels of real source
-/// context around every island, aligned to eight texels, so the first three
-/// box-filtered levels of an island never read a neighbouring island.
-/// ID pages (lossless PNG, NEAREST, no runtime mips) keep a two-texel
-/// no-feature gutter and align islands to eight texels, so the first three
-/// authored mode levels used by coarse proxies never merge two islands.
+/// Gutter and allocation alignment of island crops. Lossy pages align islands
+/// to the 4x4 codec block so no block mixes two islands. Lossy mipmapped bindings
+/// (complete authored KTX2 chains) put every island's real-source interior on the
+/// `2^K` source grid with gutters of `2^K` ([`LEAF_ISLAND_ISOLATED_LEVELS`]): islands are
+/// isolated through level K and match the source's own reduction there; deeper levels
+/// are a page-wide box filter (bleed accepted, as standard; the HLOD parent replaces the
+/// leaf before deep levels dominate). PNG pages filtered with viewer-generated mips carry
+/// eight texels of real source context around every island, aligned to eight texels.
+/// ID pages (lossless PNG, NEAREST, no runtime mips) keep a two-texel no-feature gutter
+/// and align islands to eight texels, so the first three authored mode levels used by
+/// coarse proxies never merge two islands.
 fn crop_padding(class: Class, profile: Profile, sampler: SourceSampler) -> (u32, u32) {
     if class == Class::Id {
         return (2, 8);
     }
     match profile {
         Profile::Lossless if matches!(sampler.min_filter, 9984..=9987) => (8, 8),
+        _ if matches!(sampler.min_filter, 9984..=9987) => {
+            let a = 1 << LEAF_ISLAND_ISOLATED_LEVELS;
+            (a, a)
+        }
         Profile::Lossless => (2, 1),
         _ => (2, 4),
     }
@@ -537,111 +534,6 @@ fn samples(
     Ok(samples)
 }
 
-/// Finite isotropic surface-footprint reference in the actual decoded triangle frame.
-fn sampler_samples(
-    primitive: &PreparedPrimitive,
-    binding: &Binding,
-    lattice: &LatticePlan,
-    depth: u8,
-    source_size: [u32; 2],
-    page_size: [u32; 2],
-) -> Result<Vec<SamplerSample>, JobError> {
-    let points: Vec<_> = primitive
-        .triangles
-        .iter()
-        .flat_map(|t| t.triangle.positions)
-        .collect();
-    let depths: Vec<_> = primitive.corner_depths.iter().flatten().copied().collect();
-    let geometry = lattice.encode(&points, &depths, u32::from(depth))?;
-    let mut locations = barycentrics();
-    locations.extend([
-        [1., 0., 0.],
-        [0., 1., 0.],
-        [0., 0., 1.],
-        [0.5, 0.5, 0.],
-        [0., 0.5, 0.5],
-        [0.5, 0., 0.5],
-    ]);
-    let mut result = Vec::new();
-    result
-        .try_reserve_exact(
-            primitive
-                .triangles
-                .len()
-                .checked_mul(locations.len())
-                .ok_or_else(resource)?,
-        )
-        .map_err(|_| resource())?;
-    for (index, triangle) in primitive.triangles.iter().enumerate() {
-        let p = &geometry.decoded[index * 3..index * 3 + 3];
-        let edge1: [f64; 3] = std::array::from_fn(|a| f64::from(p[1][a]) - f64::from(p[0][a]));
-        let edge2: [f64; 3] = std::array::from_fn(|a| f64::from(p[2][a]) - f64::from(p[0][a]));
-        let first_length = edge1.iter().map(|v| v * v).sum::<f64>().sqrt();
-        if first_length == 0. {
-            continue;
-        }
-        let projection = edge1.iter().zip(edge2).map(|(a, b)| a * b).sum::<f64>() / first_length;
-        let cross = [
-            edge1[1] * edge2[2] - edge1[2] * edge2[1],
-            edge1[2] * edge2[0] - edge1[0] * edge2[2],
-            edge1[0] * edge2[1] - edge1[1] * edge2[0],
-        ];
-        let cross_length = cross.iter().map(|v| v * v).sum::<f64>().sqrt();
-        if cross_length == 0. {
-            continue;
-        }
-        let height = cross_length / first_length;
-        let source_uv: [[f64; 2]; 3] = std::array::from_fn(|c| {
-            triangle.corners[c].texcoords[binding.source_uv].map(f64::from)
-        });
-        let page_uv: [[f64; 2]; 3] =
-            std::array::from_fn(|c| primitive.uvs[binding.output_uv][index * 3 + c].map(f64::from));
-        let rho = |uv: [[f64; 2]; 3], size: [u32; 2]| {
-            let du: [f64; 2] = std::array::from_fn(|a| (uv[1][a] - uv[0][a]) / first_length);
-            let dv: [f64; 2] =
-                std::array::from_fn(|a| (uv[2][a] - uv[0][a] - projection * du[a]) / height);
-            du.iter()
-                .zip(size)
-                .map(|(v, n)| (v * f64::from(n)).powi(2))
-                .sum::<f64>()
-                .sqrt()
-                .max(
-                    dv.iter()
-                        .zip(size)
-                        .map(|(v, n)| (v * f64::from(n)).powi(2))
-                        .sum::<f64>()
-                        .sqrt(),
-                )
-        };
-        let original_rho = rho(source_uv, source_size);
-        let page_rho = rho(page_uv, page_size);
-        let bias = if original_rho == 0. && page_rho == 0. {
-            0.
-        } else if original_rho == 0. || page_rho == 0. {
-            return Err(error(
-                JobErrorKind::Unsupported,
-                "atlas changed zero UV Jacobian",
-            ));
-        } else {
-            (original_rho / page_rho).log2()
-        };
-        if !bias.is_finite() {
-            return Err(invariant());
-        }
-        for weights in &locations {
-            result.push(SamplerSample {
-                source_uv: std::array::from_fn(|a| {
-                    (0..3).map(|c| weights[c] * source_uv[c][a]).sum()
-                }),
-                page_uv: std::array::from_fn(|a| (0..3).map(|c| weights[c] * page_uv[c][a]).sum()),
-                weight: cross_length * 0.5 / locations.len() as f64,
-                source_lod_bias: bias,
-            });
-        }
-    }
-    Ok(result)
-}
-
 #[derive(Clone, Copy)]
 pub(in crate::mesh_large) struct AtlasResources<'a> {
     pub materials: &'a [source::Material],
@@ -653,6 +545,9 @@ pub(in crate::mesh_large) struct AtlasResources<'a> {
 }
 pub(super) struct LeafProjection {
     pub pages: u64,
+    /// The largest page workspace lease of this leaf ([`page_charge`]) at its density
+    /// drop or any later byte-budget retry (smaller pages; decode charged as a retry).
+    pub page_bytes: u64,
     pub base_texels: u64,
     pub chain_texels: u64,
     pub geometry_bytes: u64,
@@ -698,7 +593,17 @@ pub(super) fn project(
     let mut receipt_owners = (layout.bindings.len() as u64)
         .checked_mul((64 << 10) + max_levels * (32 << 10))
         .ok_or_else(resource)?;
+    let mut page_bytes = 0u64;
     for page in &layout.pages {
+        // A later byte-budget retry only shrinks pages, but a density drop charges the
+        // larger decode transient: lease as if dropped.
+        page_bytes = page_bytes.max(page_charge(
+            page,
+            &layout.bindings,
+            resources.image_info,
+            profile,
+            drop.max(1),
+        )?);
         let (mut w, mut h) = (u64::from(page.width), u64::from(page.height));
         base = base
             .checked_add(w.checked_mul(h).ok_or_else(resource)?)
@@ -727,11 +632,6 @@ pub(super) fn project(
             + 8 * primitive.uvs.len() as u64
             + 8;
         let count = primitive.triangles.len() as u64;
-        let samples = count
-            .checked_mul(primitive.uvs.len() as u64)
-            .and_then(|n| n.checked_mul(22 * std::mem::size_of::<SamplerSample>() as u64))
-            .ok_or_else(resource)?;
-        receipt_owners = receipt_owners.checked_add(samples).ok_or_else(resource)?;
         let bytes = count
             .checked_mul(3 * stride + 58)
             .and_then(|n| n.checked_add(24))
@@ -767,6 +667,7 @@ pub(super) fn project(
         .ok_or_else(resource)?;
     Ok(LeafProjection {
         pages: layout.pages.len() as u64,
+        page_bytes,
         base_texels: base,
         chain_texels: chain,
         geometry_bytes: geometry,
@@ -826,17 +727,13 @@ fn layout(
                 .iter()
                 .flat_map(|t| t.corners.iter().map(|c| c.texcoords[b.texcoord]))
                 .collect();
-            let source_mips =
+            let (gutter, align) = crop_padding(class(b.slot), profile, sampler);
+            // Mipmapped lossy bindings: interiors on the alignment grid (D6).
+            let mipmapped =
                 profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
-            let block = if source_mips {
-                Block::single(
-                    crops::plan_mip_aligned(&uvs, size[0], size[1], max_edge)?,
-                    p.triangles.len(),
-                )
-            } else {
-                let (gutter, align) = crop_padding(class(b.slot), profile, sampler);
-                crops::plan_islands(&uvs, size[0], size[1], max_edge, gutter, align)?
-            };
+            let block = crops::plan_islands_aligned(
+                &uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
+            )?;
             p.uvs.push(uvs);
             bindings.push(Binding {
                 primitive: pi,
@@ -845,7 +742,6 @@ fn layout(
                 output_uv,
                 image,
                 sampler,
-                source_mips,
                 block,
                 source_size: size,
                 offset: [0; 2],
@@ -921,7 +817,7 @@ pub(super) struct Services<'a> {
 fn page_charge(
     page: &PagePlan,
     bindings: &[Binding],
-    captured: &FullCaptured,
+    image_info: &[source::ImageInfo],
     profile: Profile,
     drop: u32,
 ) -> Result<u64, JobError> {
@@ -929,21 +825,14 @@ fn page_charge(
         .checked_mul(u64::from(page.height))
         .ok_or_else(resource)?;
     let codec = delivery::workspace_charge([page.width, page.height], profile)?;
-    let assembly = pixels.checked_mul(8).ok_or_else(resource)?;
-    let sampler = if page.source_mips {
-        // Original-source class chain, decoded levels and sampler references.
-        (128u64 << 20)
-            .checked_add(pixels.checked_mul(6).ok_or_else(resource)?)
-            .ok_or_else(resource)?
-    } else {
-        0
-    };
+    // RGBA and support, plus island labels and their reduced chain on mipmapped pages.
+    let mipmapped = profile != Profile::Lossless && matches!(page.sampler.min_filter, 9984..=9987);
+    let assembly = pixels
+        .checked_mul(if mipmapped { 18 } else { 8 })
+        .ok_or_else(resource)?;
     let mut decode = 0u64;
     for &bi in &page.bindings {
-        let info = captured
-            .image_info
-            .get(bindings[bi].image)
-            .ok_or_else(invariant)?;
+        let info = image_info.get(bindings[bi].image).ok_or_else(invariant)?;
         let texels = u64::from(info.width) * u64::from(info.height);
         // Encoded bytes (<=4/texel), decoder RGB(A) output and RGBA8 copy;
         // a density drop also builds the full-resolution class chain.
@@ -952,7 +841,6 @@ fn page_charge(
     }
     codec
         .checked_add(assembly)
-        .and_then(|n| n.checked_add(sampler))
         .and_then(|n| n.checked_add(decode))
         .ok_or_else(resource)
 }
@@ -1093,7 +981,7 @@ fn encode_page(
     let _permit = services.gate.acquire(page_charge(
         page,
         &layout.bindings,
-        captured,
+        &captured.image_info,
         profile,
         drop,
     )?)?;
@@ -1102,125 +990,7 @@ fn encode_page(
     let masked = &layout.masked;
     let mut receipts = Vec::new();
     let mut preencode = None;
-    let delivered = if page.source_mips {
-        if page.bindings.len() != 1 {
-            return Err(invariant());
-        }
-        let b = &bindings[page.bindings[0]];
-        timing::count(Counter::CropInteriorTexels, b.block.interior_texels());
-        if b.offset != [0, 0] || b.block.islands.len() != 1 {
-            return Err(invariant());
-        }
-        let source = source_image(services, b.image, check)?;
-        let original_size = source.size;
-        let class = class(b.slot);
-        let chain = timing::time(Stage::SamplerChainBuild, || {
-            source_sampler_mips::build(
-                (&source.rgba, original_size),
-                &b.block.islands[0].crop,
-                drop,
-                class,
-                b.sampler,
-                memory,
-            )
-        })?;
-        let source_samples = sampler_samples(
-            &primitives[b.primitive],
-            b,
-            &captured.lattice,
-            depth,
-            original_size,
-            [page.width, page.height],
-        )?;
-        let material = primitives[b.primitive].triangles[0].material;
-        let mask_context = if b.slot == TextureSlot::BaseColor && masked[b.primitive] {
-            Some(
-                captured.materials[material as usize]
-                    .mask()
-                    .ok_or_else(invariant)?,
-            )
-        } else {
-            None
-        };
-        let surface = if let Some((factor, cutoff)) = mask_context {
-            samples(
-                &primitives[b.primitive],
-                b,
-                &captured.lattice,
-                depth,
-                &source.rgba,
-                original_size,
-                (factor, cutoff),
-            )?
-        } else {
-            Vec::new()
-        };
-        std::mem::drop(source);
-        let mask = mask_context.map(|(factor, cutoff)| MaskDelivery {
-            samples: &surface,
-            factor,
-            cutoff,
-            linear: b.sampler.mag_filter == 9729,
-            min_linear: matches!(b.sampler.min_filter, 9729 | 9985 | 9987),
-        });
-        let context = SamplerCheck {
-            samples: &source_samples,
-            sampler: b.sampler,
-            slot: b.slot,
-            profile,
-            density_drop: drop,
-            mask: mask.is_some(),
-        };
-        let planned = timing::time(Stage::SamplerCheckPlanned, || {
-            source_sampler_mips::check_authored(&chain, &context)
-        })?;
-        receipts.push(json!({"page":page_id,"primitive":b.primitive,"slot":role(b.slot),"sourceImage":b.image,"sourceUV":b.source_uv,"outputUV":b.output_uv,"densityDrop":drop,"cropOrigin":b.block.islands[0].crop.origin,"cropSize":[b.block.width,b.block.height],"islands":island_receipts(b),"islandGutter":b.block.islands[0].crop.gutter,"pageOffset":b.offset,"sourceSampler":{"wrapS":b.sampler.wrap_s,"wrapT":b.sampler.wrap_t,"minFilter":b.sampler.min_filter,"magFilter":b.sampler.mag_filter},"mipConstruction":"dedicated original-source class levels","samplerCheckBeforeEncode":planned,"samplerCheckScope":"22 locations per nondegenerate decoded triangle; finite isotropic surface-footprint integer/quarter LODs plus magnification; MASK alpha separate"}));
-        let delivered = delivery::encode_authored(
-            &chain.page,
-            b.slot,
-            profile,
-            memory,
-            mask,
-            ladder,
-            |decoded| {
-                let result = source_sampler_mips::check_samples(&chain, decoded, &context)?;
-                Ok(
-                    json!({"sourceSamplerCheckAfterEncode":result,"sourceChainChargedBytes":chain.charged_bytes,"sourceLODClampedSeparately":true}),
-                )
-            },
-        )?;
-        if let Some(store) = services.preencode {
-            preencode = Some(
-                store.write_page(
-                    leaf,
-                    drop,
-                    &super::prepared::PreencodePage {
-                        page: page_id as u32,
-                        slot: slot_name(b.slot).to_owned(),
-                        class: class_name(class).to_owned(),
-                        width: page.width,
-                        height: page.height,
-                        levels: chain
-                            .page
-                            .levels
-                            .into_iter()
-                            .map(|l| super::prepared::PreencodeLevel {
-                                width: l.width,
-                                height: l.height,
-                                rgba: l.rgba,
-                            })
-                            .collect(),
-                        support: None,
-                        min_filter: b.sampler.min_filter,
-                        mag_filter: b.sampler.mag_filter,
-                        density_drop: drop,
-                        source_mips: true,
-                    },
-                )?,
-            );
-        }
-        delivered
-    } else {
+    let delivered = {
         let pixels = (page.width as usize)
             .checked_mul(page.height as usize)
             .ok_or_else(resource)?;
@@ -1233,6 +1003,15 @@ fn encode_page(
         let mut support = Vec::new();
         support.try_reserve_exact(pixels).map_err(|_| resource())?;
         support.resize(pixels, 0u32);
+        // Mipmapped lossy pages keep their islands apart in every reduced level.
+        let mipmapped =
+            profile != Profile::Lossless && matches!(page.sampler.min_filter, 9984..=9987);
+        let mut labels = if mipmapped {
+            vec![0u32; pixels]
+        } else {
+            Vec::new()
+        };
+        let mut next_label = 0u32;
         let mut surface = Vec::new();
         let mut mask_context = None;
         for &bi in &page.bindings {
@@ -1258,9 +1037,24 @@ fn encode_page(
                         let src = y as usize * row;
                         rgba[dst..dst + row].copy_from_slice(&copied[src..src + row]);
                     }
-                    for y in crop.gutter..crop.gutter + crop.interior_height {
-                        let first = ((oy + y) * page.width + ox + crop.gutter) as usize;
-                        support[first..first + crop.interior_width as usize].fill(1);
+                    // Mipmapped islands: the whole allocation is real source under the
+                    // sampler's wrap (copy_crop), so every level through K is the
+                    // area-weighted source average over its footprint, gutters included.
+                    let (from, rows, cols) = if mipmapped {
+                        (0, crop.height, crop.width)
+                    } else {
+                        (crop.gutter, crop.interior_height, crop.interior_width)
+                    };
+                    for y in from..from + rows {
+                        let first = ((oy + y) * page.width + ox + from) as usize;
+                        support[first..first + cols as usize].fill(1);
+                    }
+                    if mipmapped {
+                        next_label += 1;
+                        for y in 0..crop.height {
+                            let first = ((oy + y) * page.width + ox) as usize;
+                            labels[first..first + crop.width as usize].fill(next_label);
+                        }
                     }
                 }
                 Ok(())
@@ -1297,10 +1091,16 @@ fn encode_page(
             linear,
             min_linear,
         });
-        let delivered = delivery::encode(
+        let delivered = delivery::encode_islands(
             [page.width, page.height],
             &rgba,
             &support,
+            mipmapped.then_some(labels.as_slice()),
+            if mipmapped {
+                LEAF_ISLAND_ISOLATED_LEVELS
+            } else {
+                0
+            },
             page.slot,
             profile,
             memory,

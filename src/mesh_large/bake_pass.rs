@@ -2575,8 +2575,7 @@ mod tests {
                         if p["attributes"].get("TEXCOORD_0").is_some()
                             && !textured.insert(classes[k].first().copied())
                         {
-                            // Only dedicated mipmapped leaf pages may split a class.
-                            assert!(mipmapped && dir == "leaves", "{path:?}: class split");
+                            // Mipmapped leaf bindings share cropped pages too (D6).
                             split_leaves += 1;
                         }
                         let sets = p["extensions"]["EXT_mesh_features"]["featureIds"]
@@ -2588,11 +2587,7 @@ mod tests {
             }
             assert!(merged > 0, "some primitive merges source materials");
             assert_eq!(texture_sets > 0, id_textures, "baked feature-ID textures");
-            assert_eq!(
-                split_leaves > 0,
-                mipmapped,
-                "dedicated mip pages split leaves"
-            );
+            assert_eq!(split_leaves, 0, "{mipmapped}: a class split across pages");
         }
     }
 
