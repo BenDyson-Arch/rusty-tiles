@@ -202,7 +202,10 @@ def run(root, binary=None):
             assert e.check == c['check'], (c['name'], e.check, e.detail)
         for key, ok in (('producer', True), ('mismatch', False)):
             if key in c:
-                manifest = root / f'{c["name"]}-{key}.json'
+                # Run inputs live beside the generated family, outside its digest.
+                reports = root.parent / (root.name + '-reports')
+                reports.mkdir(exist_ok=True)
+                manifest = reports / f'{c["name"]}-{key}.json'
                 manifest.write_text(json.dumps(c[key], sort_keys=True) + '\n')
                 compared = omission.audit(folder, manifest)
                 assert compared['ok'] is ok and compared['producerReport']['ok'] is ok, (c['name'], compared)

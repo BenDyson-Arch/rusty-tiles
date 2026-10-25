@@ -6,7 +6,59 @@ use rusty_tiles::{
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::{fs, path::PathBuf, process::Command};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
+
+/// Work-root directories outside the `base` family: the other digested families
+/// and run outputs (winding probes, omission producer-report inputs).
+const OTHER: [&str; 7] = [
+    "lattice",
+    "native",
+    "nonmanifold",
+    "exact",
+    "omission",
+    "winding",
+    "omission-reports",
+];
+
+/// Sorted `relative-path\tsha256\n` lines of a family's generated members.
+fn family_lines(work: &Path, family: &str) -> Vec<String> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    let root = if family == "base" {
+        work.to_path_buf()
+    } else {
+        work.join(family)
+    };
+    let mut files = Vec::new();
+    walk(&root, &mut files);
+    let mut lines: Vec<String> = files
+        .into_iter()
+        .filter_map(|path| {
+            let relative = path.strip_prefix(work).unwrap().to_str().unwrap().to_owned();
+            let first = relative.split('/').next().unwrap();
+            let member = matches!(
+                path.extension().and_then(|e| e.to_str()),
+                Some("json" | "glb" | "bin" | "subtree")
+            );
+            (member && (family != "base" || !OTHER.contains(&first)))
+            .then(|| format!("{relative}\t{:x}\n", Sha256::digest(fs::read(&path).unwrap())))
+        })
+        .collect();
+    lines.sort();
+    lines
+}
 
 #[test]
 fn sampled_hlod_archives_and_named_mutants() {
@@ -61,25 +113,22 @@ fn sampled_hlod_archives_and_named_mutants() {
             String::from_utf8_lossy(&result.stderr)
         );
     }
-    let revision_hashes: Value =
-        serde_json::from_slice(&fs::read(oracle.join("revision-controls-sha256.json")).unwrap())
-            .unwrap();
-    for (name, expected) in revision_hashes.as_object().unwrap() {
-        let bytes = fs::read(work.path().join(name)).unwrap();
+    // One digest per generated family over its sorted `path\tsha256` lines;
+    // per-file manifests live in the evidence cache (bench/MOVED_EVIDENCE.md).
+    let digests: Value =
+        serde_json::from_slice(&fs::read(oracle.join("controls-digest.json")).unwrap()).unwrap();
+    for (family, expected) in digests.as_object().unwrap() {
+        let lines = family_lines(work.path(), family);
         assert_eq!(
-            format!("{:x}", Sha256::digest(bytes)),
-            expected.as_str().unwrap(),
-            "{name}"
+            lines.len() as u64,
+            expected["files"].as_u64().unwrap(),
+            "{family}"
         );
-    }
-    let hashes: Value =
-        serde_json::from_slice(&fs::read(oracle.join("controls-sha256.json")).unwrap()).unwrap();
-    for (name, expected) in hashes.as_object().unwrap() {
-        let bytes = fs::read(work.path().join(name)).unwrap();
+        let joined: String = lines.concat();
         assert_eq!(
-            format!("{:x}", Sha256::digest(bytes)),
-            expected.as_str().unwrap(),
-            "{name}"
+            format!("{:x}", Sha256::digest(joined.as_bytes())),
+            expected["sha256"].as_str().unwrap(),
+            "{family} members:\n{joined}"
         );
     }
     let cases: Value =

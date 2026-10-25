@@ -1,0 +1,26 @@
+{
+ "base": {
+  "files": 504,
+  "sha256": "d5961c5defe2a8d8c1600ca263e3ebb6ce9475c62eac7dcff049f47ff483df16"
+ },
+ "lattice": {
+  "files": 40,
+  "sha256": "6e8e7940ca3aa499eee46ee661df777d874956edb47e40c060a7e814c0ad6021"
+ },
+ "native": {
+  "files": 51,
+  "sha256": "f6f35eb315093d53f2bba109d64905e1802f7b4bdbf62405a3c562924154a72e"
+ },
+ "nonmanifold": {
+  "files": 44,
+  "sha256": "c6a2fc17c61bdfb1046fd70579c61d5472d02f1e09c70ed9bbebcc4a46516a64"
+ },
+ "exact": {
+  "files": 51,
+  "sha256": "c84eca91060f4891cf0fbcf679f493632cea2a74a8f127c1743c4177c937da36"
+ },
+ "omission": {
+  "files": 83,
+  "sha256": "f1e4cb8fad9ada6e8123cff9bd813240e58a12509acaad2c9bffba849c2d0c74"
+ }
+}

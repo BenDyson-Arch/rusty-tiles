@@ -178,7 +178,7 @@ systemd-run --user --scope -q -p MemoryMax=10G -p MemorySwapMax=0 -- chrt -i 0 n
 Set `CARGO_TARGET_DIR=/home/bend/.cache/rt-wt/target-hlod-s5`,
 `CARGO_BUILD_JOBS=3`, and both dev/test debug settings to zero for Cargo.
 `cargo test --test hlod_acceptance` regenerates the permanent corpus and checks
-all generated members against `controls-sha256.json`; positives assert that
+every generated family against its digest in `controls-digest.json`; positives assert that
 `hlodFeatureIds` and continuity actually ran. Rust/CLI verdicts must agree.
 Python 3 and Node are needed. `python3 controls.py SCRATCH` runs the independent
 named controls without Rust. The final native and real-archive receipts follow
@@ -197,78 +197,10 @@ backward compatibility. Historical H17 diagnostic results remain evidence of
 legacy depth-mix gaps; no legacy admission path or interface exemption makes
 them pass. Common C1/C2, identity and continuity checks still apply to archives.
 
-The earlier S5 receipts at `33ce60c5` are historical and superseded by this
-review revision. Their cache remains
-`/home/bend/.cache/rusty-tiles-evidence/hlod-s5-20261024/`, bound by execution
-manifest `afd9e6fa265fc9c2e1659186304a9f22bce41d6a6436b77196435a9f77a3cb72`
-and review manifest `6f94c1c7f748799bcc273f8fddc1a178f2b6e0670ee3596882e0c19247034b13`.
-The old retained tex3's eight continuity failures remain reproducible; fresh
-latest-S1 output is measured separately. No browser or 2048 bake runs in S5.
+Superseded checkpoint receipts (`33ce60c5`, `9bc1760d`, the exact-seam and R11
+records) moved to `~/.cache/rusty-tiles-evidence/tree-trim-s5-20261025/README-history-f1e841c0.md`
+with their immutable manifests unchanged.
 
-### Reviewed checkpoint at `9bc1760d`
-
-The R9 closed-leaf identity correction is committed at `0f5b85fe`: conservative
-full-width original-ID intervals select exact alias replay independently of
-decoded bounds. R10 separately approved that identity/resource correction at
-`9bc1760de300bbdfd04de627f67696d917220086`; it did not approve producer output,
-final cost or the pending D1 revision.
-
-The validator suite passes 174 tests with two helper tests intentionally ignored.
-The permanent acceptance test passes 89 cases and 613 fixture hashes, including
-closed/nonmanifold retained and lost edges, separated shared originals and
-disjoint boxes. Those identity mutants fail native `sourceIdentity` and the
-source oracle's `leafGeometry`. Scoped all-target lint passes with the inherited
-producer `too_many_arguments` exception; S2 owns its removal during rebase.
-
-S1 `644fc407` was merged without changing producer logic beyond conflict
-integration. The fresh tex3 bake refused before publication: 314,783,887 scratch
-bytes exceeded the declared 230,338,145-byte stage bound (1.60 GiB RSS, 60 CPU-s).
-The coordinator stopped this superseded campaign; crop3 never started and no
-new archive/oracle verdict exists. S1 owns separate component declarations in
-the rework. The 10 GB cap is unchanged. Historical dc9085f8 tex3/crop3 oracles
-both found the independently confirmed tile-28 exact-coincident reversal;
-their predicate remains strict. Final bake/oracle/cost follow the stack freeze.
-
-Review, commands, test logs, pinned artifacts and refusal receipts are retained
-in `/home/bend/.cache/rusty-tiles-evidence/hlod-s5-review-20261024/`.
-Immutable checkpoint manifest `sha256-9bc1760d.json` has SHA256
-`0617b2f4cec6f3c44b03275a4379a82b95de0d42a657c265499055da60720d51`.
-
-### Exact-seam implementation checkpoint
-
-The permanent integration passes 107 archive/profile cases and 679 fixture
-hashes: 56 base, nine lattice, nine winding, 15 native scene/frame, ten
-nonmanifold/original-alias and eight exact-key cases. The separate width suite
-passes 12 controls and 112 exact rational comparisons. The 8,193-face positive
-checks above-cap reporting without rejection. The welded detour has opposite
-source incidences so its missing exact edge reaches `interfaceSegments` in both
-validators; the former T-only detours are counted source-open positives.
-
-The broader validator run passes 173 tests with two helpers ignored; the final
-23 native tests include three additional direction-mask cases. C1/C2/I1's 20
-external tests and scoped all-target lint pass, retaining only the inherited
-producer argument-count exception. These executions establish the recorded
-control domain, not real-output acceptance. A fresh full R11 review precedes
-the S1 `055be853` integration and own tex3/crop3 campaign; final cost waits for
-the stack freeze. Source-original census and width measurements require that
-source-aware campaign, not producer reports.
-
-Receipts are retained under the same evidence cache's `exact-d1/` directory;
-its `sha256.json` has SHA256
-`43aae428cd257339d266fb27b0a4ed4d61d29de9ba31ac262ee2ceeef6705350`.
-
-R11 reviewed `284c6391` and reproduced one P2: the surviving H17 profile could
-bypass representative identity. The relaxation is removed; HLOD checks are
-unconditional and unsupported API/CLI profiles refuse. The 52 applicable base
-cases pass, including the wrong representative, plus H17/unknown API and CLI
-refusals. All 503 base fixture hashes remain unchanged. The exact R11 witness
-now fails `representativeIdentity` in HLOD mode and cannot return acceptance
-under either unsupported profile. This correction has no fresh nonauthor review
-yet; the owner requested handoff without another Codex review.
-
-R11's source/resource/width findings and correction receipts are cached under
-`r11-profile-fix/`, with immutable manifest `sha256-r11-profile-fix.json`, SHA256
-`ae5e81bcd67fcf4a1314f89ef1f14e3e1bcec32157943decee5ab7ad6fcd6b2f`.
 ### Upward-omission revision (S1 `98a1bec5`)
 
 S1 `756283e2` then `98a1bec5` are merged; S2 sampling and S3 appearance are
