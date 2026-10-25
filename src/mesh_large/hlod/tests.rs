@@ -1075,6 +1075,7 @@ fn archive(dir: &Path, output: &Path) {
         "{:?}",
         checked.not_inspected
     );
+    check_errors(&expand_archive(output).0);
 }
 
 /// The full acceptance on one fixture: zero missing decoded segments/points at every
@@ -1779,6 +1780,7 @@ fn chain_cells_repeat_coarse_content_where_they_cannot_be_spliced() {
             .checks
             .iter()
             .any(|c| c == "decodedContentContainment"));
+        check_errors(&expand_archive(&output).0);
         (output, report)
     };
     let (spliced, report) = publish("spliced.3tz", delivery::plan::LIMITS);
@@ -2461,6 +2463,284 @@ fn a_parent_whose_interface_cannot_fit_is_omitted_not_refused() {
         "OMITTED {omitted} ({sources} sources) by depth {by_depth:?}; the first view loads \
          {tiles} capped tiles ({bytes} bytes), each leaf covered once"
     );
+}
+
+/// One tile of an archive expanded into one explicit hierarchy (`implicit::expand_tileset`:
+/// external documents followed, implicit subtrees with their tile metadata), in the
+/// archive's frame.
+struct Sim {
+    center: [f64; 3],
+    half: [f64; 3],
+    error: f64,
+    content: bool,
+    parent: Option<usize>,
+    children: Vec<usize>,
+    /// The leaf tiles (no children) at or below it.
+    leaves: Vec<usize>,
+}
+
+/// The expanded tiles of `archive` (index 0 the root) and the tileset's geometric error.
+fn expand_archive(archive: &Path) -> (Vec<Sim>, f64) {
+    let mut zip = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
+    let mut members: HashMap<String, Vec<u8>> = HashMap::new();
+    for i in 0..zip.len() {
+        let mut member = zip.by_index(i).unwrap();
+        let mut bytes = Vec::new();
+        member.read_to_end(&mut bytes).unwrap();
+        members.insert(member.name().to_owned(), bytes);
+    }
+    let manifest: Value = serde_json::from_slice(&members["tileset.json"]).unwrap();
+    let expanded = crate::implicit::expand_tileset(&manifest, |name| {
+        members
+            .get(name)
+            .cloned()
+            .ok_or_else(|| crate::Error::Message(format!("missing member {name}")))
+    })
+    .unwrap();
+    fn build(v: &Value, parent: Option<usize>, offset: [f64; 3], out: &mut Vec<Sim>) -> usize {
+        let mut offset = offset;
+        if let Some(t) = v["transform"].as_array() {
+            let t: Vec<f64> = t.iter().map(|x| x.as_f64().unwrap()).collect();
+            if parent.is_some() {
+                // Below the root, transforms are translations only.
+                for (i, want) in [1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0.]
+                    .iter()
+                    .enumerate()
+                {
+                    assert_eq!(t[i], *want, "{t:?}");
+                }
+            }
+            for a in 0..3 {
+                offset[a] += t[12 + a];
+            }
+        }
+        let b: Vec<f64> = v["boundingVolume"]["box"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_f64().unwrap())
+            .collect();
+        let center = std::array::from_fn(|a| b[a] + offset[a]);
+        let half = std::array::from_fn(|a| b[3 + a].abs() + b[6 + a].abs() + b[9 + a].abs());
+        let content =
+            v.get("content").is_some() || v["contents"].as_array().is_some_and(|c| !c.is_empty());
+        let id = out.len();
+        out.push(Sim {
+            center,
+            half,
+            error: v["geometricError"].as_f64().unwrap(),
+            content,
+            parent,
+            children: Vec::new(),
+            leaves: Vec::new(),
+        });
+        for c in v["children"].as_array().into_iter().flatten() {
+            let child = build(c, Some(id), offset, out);
+            out[id].children.push(child);
+        }
+        id
+    }
+    let mut tiles = Vec::new();
+    build(&expanded["root"], None, [0.; 3], &mut tiles);
+    for i in (0..tiles.len()).rev() {
+        if tiles[i].children.is_empty() {
+            assert!(tiles[i].content, "an empty leaf tile");
+            tiles[i].leaves = vec![i];
+        } else {
+            let leaves: Vec<usize> = tiles[i]
+                .children
+                .iter()
+                .flat_map(|&c| tiles[c].leaves.clone())
+                .collect();
+            tiles[i].leaves = leaves;
+        }
+    }
+    (tiles, manifest["geometricError"].as_f64().unwrap())
+}
+
+/// Round 9 invariant over a written tileset: every content-less tile's geometric error is at
+/// least `EMPTY_PARENT_SCALE` times its box diagonal (it refines whenever it is visible),
+/// and no tile's error exceeds its parent's. Returns the content-less tiles.
+fn check_errors(tiles: &[Sim]) -> usize {
+    let scale = crate::mesh_large::delivery::plan::EMPTY_PARENT_SCALE;
+    let mut empty = 0;
+    for t in tiles {
+        if !t.content {
+            empty += 1;
+            let diagonal = 2. * t.half.iter().map(|h| h * h).sum::<f64>().sqrt();
+            assert!(
+                t.error >= scale * diagonal * (1. - 1e-9),
+                "content-less tile error {} below {scale} x diagonal {diagonal}",
+                t.error
+            );
+        }
+        if let Some(p) = t.parent {
+            assert!(tiles[p].error >= t.error, "error above its parent's");
+        }
+    }
+    empty
+}
+
+/// A camera sweep over `tiles`, as CesiumJS 1.146's base traversal selects them with every
+/// tile loaded and visible (`Cesium3DTilesetBaseTraversal`): the root is skipped unless the
+/// tileset's error projects past the maximum screen-space error (16 px at 1080 px, 60°
+/// vertical field of view); a tile refines (its children are traversed) iff it has children,
+/// its parent refines and its own error projects past the maximum; a tile that stops refining
+/// is drawn iff it has content (an empty tile that stops draws nothing). Returns (frames in
+/// which the tileset is drawn, of them frames with a leaf drawn by no selected tile, frames
+/// with a leaf drawn twice).
+fn traverse(tiles: &[Sim], tileset_error: f64) -> (usize, usize, usize) {
+    let sse = |t: &Sim, error: f64, cam: [f64; 3]| {
+        if error == 0. {
+            return 0.;
+        }
+        let d = (0..3)
+            .map(|a| ((cam[a] - t.center[a]).abs() - t.half[a]).max(0.).powi(2))
+            .sum::<f64>()
+            .sqrt()
+            .max(1e-7);
+        error * 1080. / (d * 2. * (std::f64::consts::PI / 6.).tan())
+    };
+    let root = &tiles[0];
+    let extent = 2. * root.half.iter().copied().fold(0., f64::max);
+    let leaves: Vec<usize> = root.leaves.clone();
+    let (mut drawn, mut holes, mut doubles) = (0, 0, 0);
+    for lateral in [-0.5, -0.25, 0., 0.25, 0.5] {
+        for k in 0..=60 {
+            let d = extent * 0.05 * 1.15f64.powi(k);
+            let cam = [
+                root.center[0] + lateral * extent,
+                root.center[1],
+                root.center[2] + root.half[2] + d,
+            ];
+            if sse(root, tileset_error, cam) <= 16. {
+                continue;
+            }
+            drawn += 1;
+            let mut covered: HashMap<usize, usize> = HashMap::new();
+            let mut stack = vec![0usize];
+            while let Some(i) = stack.pop() {
+                let t = &tiles[i];
+                if !t.children.is_empty() && sse(t, t.error, cam) > 16. {
+                    stack.extend(&t.children);
+                } else if t.content {
+                    for &l in &t.leaves {
+                        *covered.entry(l).or_default() += 1;
+                    }
+                }
+            }
+            holes += usize::from(leaves.iter().any(|l| !covered.contains_key(l)));
+            doubles += usize::from(covered.values().any(|n| *n > 1));
+        }
+    }
+    (drawn, holes, doubles)
+}
+
+/// Content-less tiles inside implicit subtrees of `archive` (available tiles without
+/// content), read from the subtree files themselves.
+fn implicit_empty_tiles(archive: &Path) -> usize {
+    let mut zip = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
+    let mut members: HashMap<String, Vec<u8>> = HashMap::new();
+    for i in 0..zip.len() {
+        let mut member = zip.by_index(i).unwrap();
+        let mut bytes = Vec::new();
+        member.read_to_end(&mut bytes).unwrap();
+        members.insert(member.name().to_owned(), bytes);
+    }
+    let mut empty = 0;
+    for (name, bytes) in &members {
+        if !name.ends_with(".json") {
+            continue;
+        }
+        let Ok(doc) = serde_json::from_slice::<Value>(bytes) else {
+            continue;
+        };
+        let mut stack = vec![doc["root"].clone()];
+        while let Some(tile) = stack.pop() {
+            if let Some(tiling) = tile.get("implicitTiling") {
+                let uri = tiling["subtrees"]["uri"]
+                    .as_str()
+                    .unwrap()
+                    .replace("{level}", "0")
+                    .replace("{x}", "0")
+                    .replace("{y}", "0")
+                    .replace("{z}", "0");
+                let levels = tiling["subtreeLevels"].as_u64().unwrap() as u32;
+                let (available, contents) =
+                    crate::mesh_large::delivery::tests::subtree_availability(
+                        &members[&uri],
+                        levels,
+                    );
+                empty += available.len() - contents.len();
+            }
+            stack.extend(tile["children"].as_array().into_iter().flatten().cloned());
+        }
+    }
+    empty
+}
+
+/// Round 9 (P1): omitted cells are content-less and have no content ancestor, so they must
+/// refine whenever they are visible; with their children's (sub-millimetre) error Cesium
+/// stopped at them and drew nothing (the cap-12 sheet was invisible at every distance, the
+/// cap-30 sheet had holes). Every content-less tile now takes the empty-parent error, in
+/// explicit output, inside implicit subtrees and as a document's root: over a camera sweep
+/// the traversal draws every leaf exactly once in every frame, and the published content-less
+/// tiles are exactly the omitted cells reported.
+#[test]
+fn omitted_cells_refine_whenever_they_are_visible() {
+    use crate::mesh_large::delivery::{self, plan::Limits};
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &sheet());
+    let tight = Limits {
+        objects: 3,
+        records: 6,
+        levels: 2,
+    };
+    let mut implicit_empty = 0;
+    for cap in [12, 30] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("cap{cap}")),
+            &Run {
+                cap,
+                ..Run::default()
+            },
+        )
+        .unwrap_or_else(|f| panic!("{}", f.error));
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let omitted = manifest["hlod"]["omittedProxies"].as_u64().unwrap() as usize;
+        assert!(omitted > 0, "cap {cap}: {}", manifest["hlod"]);
+        for (name, limits) in [("default", delivery::plan::LIMITS), ("tight", tight)] {
+            let output = work.path().join(format!("cap{cap}-{name}.3tz"));
+            let mut file = fs::File::create(&output).unwrap();
+            let (report, _) = delivery::publish_with_limits(
+                &MeshTilesetRequest::new(&dir, &output),
+                limits,
+                &mut file,
+                work.path(),
+            )
+            .unwrap();
+            drop(file);
+            inspect(ValidationRequest::new(&output)).unwrap();
+            let (tiles, tileset_error) = expand_archive(&output);
+            let empty = check_errors(&tiles);
+            assert_eq!(empty, omitted, "cap {cap} {name}: {report:?}");
+            let (drawn, holes, doubles) = traverse(&tiles, tileset_error);
+            eprintln!(
+                "TRAVERSAL cap {cap} {name}: {} tiles, {empty} content-less, {drawn} frames \
+                 drawn, {holes} with holes, {doubles} with double draws; {report:?}",
+                tiles.len()
+            );
+            assert!(drawn > 0);
+            assert_eq!((holes, doubles), (0, 0), "cap {cap} {name}");
+            if name == "tight" {
+                implicit_empty += implicit_empty_tiles(&output);
+            }
+        }
+    }
+    // The tight caps put omitted cells inside implicit subtrees, where the same rule applies.
+    assert!(implicit_empty > 0);
 }
 
 /// Output is identical for any job count, any admitted budget and spilled sorts.

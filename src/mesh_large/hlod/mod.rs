@@ -267,11 +267,12 @@ pub(crate) struct HlodReport {
     pub tiles_with_protected_faces: u64,
     pub protected_faces: u64,
     pub retries: u64,
-    /// Cells whose coarse tile was omitted, by cell depth, and of them the sources: cells
-    /// whose exact interface (or topology plain simplification cannot reduce) needs more
-    /// triangles than the cap. Omission propagates to every ancestor (no content above a
-    /// content-less cell), so the rest are those ancestors; the capped tiles below are the
-    /// refinement frontier.
+    /// Content-less cells (omitted coarse tiles), by cell depth, and of them the sources:
+    /// cells whose exact interface (or topology plain simplification cannot reduce) needs
+    /// more triangles than the cap. Omission propagates to every ancestor (no content above a
+    /// content-less cell), so the rest are those ancestors, pass-through chain cells above an
+    /// omitted cell included; the capped tiles below are the refinement frontier. Equal to
+    /// the content-less tiles of the published tileset.
     pub omitted_proxies: u64,
     pub omission_sources: u64,
     pub omitted_by_depth: Vec<u64>,
@@ -348,10 +349,12 @@ enum Child {
 
 /// A coarse row's published depth: its own cell's, or the top of the pass-through chain
 /// above it (final once its parent cell has a second child or the walk ends).
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct Publish {
     depth: u32,
     done: bool,
+    /// Depths of the pass-through cells above it (content-less too if it is omitted).
+    chain: Vec<u32>,
 }
 
 /// Push the completed child `id` into `frame`. A cell that has begun a second child is no
@@ -1027,17 +1030,20 @@ fn walk(
                 && finished_rows.contains_key(written)
             {
                 let finished = finished_rows.remove(written).unwrap();
-                let depth = publish.remove(written).unwrap().depth;
+                let Publish { depth, chain, .. } = publish.remove(written).unwrap();
                 let mut row = match finished {
                     Finished::Row(row) => *row,
                     Finished::Omitted { depth, source } => {
-                        report.omitted_proxies += 1;
+                        // The cell and every pass-through cell above it publish no content.
                         report.omission_sources += u64::from(source);
-                        let d = depth as usize;
-                        if report.omitted_by_depth.len() <= d {
-                            report.omitted_by_depth.resize(d + 1, 0);
+                        for d in std::iter::once(depth).chain(chain) {
+                            report.omitted_proxies += 1;
+                            let d = d as usize;
+                            if report.omitted_by_depth.len() <= d {
+                                report.omitted_by_depth.resize(d + 1, 0);
+                            }
+                            report.omitted_by_depth[d] += 1;
                         }
-                        report.omitted_by_depth[d] += 1;
                         *written += 1;
                         continue;
                     }
@@ -1096,6 +1102,7 @@ fn walk(
                         .get_mut(&seq)
                         .ok_or_else(|| state("a coarse child without its row"))?;
                     p.depth = frame.node.depth();
+                    p.chain.push(p.depth);
                     match stack.last_mut() {
                         Some(parent) => adopt(parent, only, kinds, publish),
                         None => p.done = true,
@@ -1131,6 +1138,7 @@ fn walk(
                 Publish {
                     depth: closed.key.depth,
                     done: stack.is_empty(),
+                    chain: Vec::new(),
                 },
             );
             if let Some(parent) = stack.last_mut() {

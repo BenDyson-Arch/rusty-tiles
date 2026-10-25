@@ -251,7 +251,10 @@ fn members(path: &Path) -> BTreeMap<String, Vec<u8>> {
 
 /// An independent subtree reader: the available tiles and contents of a one-subtree,
 /// `availableLevels == subtreeLevels` OCTREE subtree, from its bitstreams.
-fn subtree_availability(bytes: &[u8], levels: u32) -> (BTreeSet<[u32; 4]>, BTreeSet<[u32; 4]>) {
+pub(crate) fn subtree_availability(
+    bytes: &[u8],
+    levels: u32,
+) -> (BTreeSet<[u32; 4]>, BTreeSet<[u32; 4]>) {
     assert_eq!(&bytes[..4], b"subt");
     let json_len = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
     let bin_len = u64::from_le_bytes(bytes[16..24].try_into().unwrap()) as usize;
