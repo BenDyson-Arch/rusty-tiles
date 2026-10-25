@@ -252,7 +252,12 @@ fn weighted(class: Class, p: &[u8], s: u32) -> Result<[f64; 4], JobError> {
         Class::Id => unreachable!("ID levels take the mode"),
     };
     let s = f64::from(s);
-    Ok([rgb[0] * s, rgb[1] * s, rgb[2] * s, f64::from(p[3]) / 255.0 * s])
+    Ok([
+        rgb[0] * s,
+        rgb[1] * s,
+        rgb[2] * s,
+        f64::from(p[3]) / 255.0 * s,
+    ])
 }
 
 /// One destination level of [`direct_levels`] and its two accumulating rows.
@@ -333,7 +338,11 @@ fn direct_levels(
         let row = &base.support[y0 * w0..(y0 + 1) * w0];
         for (t, &s) in row.iter().enumerate() {
             value[t] = if s > 0 {
-                weighted(class, &base.rgba[(y0 * w0 + t) * 4..(y0 * w0 + t) * 4 + 4], s)?
+                weighted(
+                    class,
+                    &base.rgba[(y0 * w0 + t) * 4..(y0 * w0 + t) * 4 + 4],
+                    s,
+                )?
             } else {
                 [0.0; 4]
             };
@@ -375,7 +384,9 @@ fn direct_levels(
                             let (a, b) = (x * w0, (x + 1) * w0);
                             let (mut v, mut s) = ([0.0; 4], 0u128);
                             for k in a / dw / block..=(b - 1) / dw / block {
-                                if labels.expect("isolated levels have labels")[y0 * w0 + k * block] != island {
+                                if labels.expect("isolated levels have labels")[y0 * w0 + k * block]
+                                    != island
+                                {
                                     continue;
                                 }
                                 let from = integral(a.max(k * block * dw), dw);
@@ -426,7 +437,10 @@ fn finish_row(
         let rgb = if class == Class::Normal {
             let length = sum[..3].iter().map(|v| v * v).sum::<f64>().sqrt();
             if length <= 1e-12 * weight {
-                let own = d.labels.as_ref().map(|l| (labels.expect("labelled level"), l[i]));
+                let own = d
+                    .labels
+                    .as_ref()
+                    .map(|l| (labels.expect("labelled level"), l[i]));
                 dominant_normal(base, own, x, y, dw, dh)?
             } else {
                 unit([sum[0], sum[1], sum[2]])?
@@ -544,7 +558,10 @@ pub(in crate::mesh_large) fn build_islands(
             for bx in (0..w).step_by(a) {
                 let first = l[by * w + bx];
                 for y in by..(by + a).min(h) {
-                    if l[y * w + bx..y * w + (bx + a).min(w)].iter().any(|&v| v != first) {
+                    if l[y * w + bx..y * w + (bx + a).min(w)]
+                        .iter()
+                        .any(|&v| v != first)
+                    {
                         return Err(error(
                             JobErrorKind::InvalidState,
                             "island page block mixes two islands below its isolated levels",
@@ -576,7 +593,11 @@ pub(in crate::mesh_large) fn build_islands(
         dimensions[count] = (w, h);
         count += 1;
         let n = u64::from(w) * u64::from(h);
-        let label_bytes = if labels.is_some() { size_of::<u32>() as u64 } else { 0 };
+        let label_bytes = if labels.is_some() {
+            size_of::<u32>() as u64
+        } else {
+            0
+        };
         charged = charged
             .checked_add(
                 n.checked_mul(4 + size_of::<u32>() as u64 + label_bytes)
@@ -652,17 +673,31 @@ pub(in crate::mesh_large) fn build_islands(
     fill_gutters(&mut base, class, &mut nearest, labels);
     chain.levels.push(base);
     if class != Class::Id {
-        for mut d in direct_levels(&chain.levels[0], labels, isolated, class, &dimensions[1..count])? {
+        for mut d in direct_levels(
+            &chain.levels[0],
+            labels,
+            isolated,
+            class,
+            &dimensions[1..count],
+        )? {
             fill_gutters(&mut d.level, class, &mut nearest, d.labels.as_deref());
             chain.levels.push(d.level);
         }
         return Ok(chain);
     }
     // ID pages are never averaged: each level takes the mode of its previous level's
-    // footprint taps (decision (a)'s area average does not apply to identifiers).
-    for &(dw, dh) in &dimensions[1..count] {
+    // footprint taps (decision (a)'s area average does not apply to identifiers). Through
+    // the isolated levels a texel counts only taps of its own island (the island of its
+    // level-0 footprint's first texel, as for averaged classes), so a page whose sides are
+    // not multiples of `2^isolated` (where a footprint straddles two islands' blocks) never
+    // takes a neighbour island's ID.
+    let (w0, h0) = (width as usize, height as usize);
+    let island =
+        |w: usize, h: usize, x: usize, y: usize| labels.map(|l| l[(y * h0 / h) * w0 + x * w0 / w]);
+    for (index, &(dw, dh)) in dimensions[1..count].iter().enumerate() {
+        let isolating = labels.is_some() && (index as u32) < isolated;
         let src = chain.levels.last().expect("base exists");
-        let sw = src.width as usize;
+        let (sw, sh) = (src.width as usize, src.height as usize);
         let n = (dw as usize)
             .checked_mul(dh as usize)
             .ok_or_else(resource)?;
@@ -679,6 +714,7 @@ pub(in crate::mesh_large) fn build_islands(
             for x in 0..dw as usize {
                 let (tx, nx, ux) = taps(x, sw, dw as usize);
                 let i = y * dw as usize + x;
+                let own = island(dw as usize, dh as usize, x, y).filter(|_| isolating);
                 let mut len = 0;
                 let mut tally = [([0u8; 4], 0u64); 9];
                 let mut area = 0u64;
@@ -686,7 +722,7 @@ pub(in crate::mesh_large) fn build_islands(
                     for &(sx, wx) in &tx[..nx] {
                         let j = sy * sw + sx;
                         let s = src.support[j];
-                        if s == 0 {
+                        if s == 0 || own.is_some_and(|o| island(sw, sh, sx, sy) != Some(o)) {
                             continue;
                         }
                         let p: [u8; 4] = src.rgba[j * 4..j * 4 + 4].try_into().expect("RGBA8");
@@ -777,7 +813,11 @@ mod tests {
                             .map(|&j| u64::from(pixels[j * 4 + a]) * u64::from(weights[j]))
                             .sum();
                         let want = (2 * numerator + u64::from(weight)) / (2 * u64::from(weight));
-                        assert_eq!(u64::from(actual.rgba[i * 4 + a]), want, "level {level} texel {i}");
+                        assert_eq!(
+                            u64::from(actual.rgba[i * 4 + a]),
+                            want,
+                            "level {level} texel {i}"
+                        );
                     }
                 }
             }
@@ -796,9 +836,13 @@ mod tests {
     ) -> Option<f64> {
         let (mut sum, mut weight) = (0f64, 0u128);
         for ty in y * height / h..((y + 1) * height).div_ceil(h) {
-            let oy = ((y + 1) * height).min((ty + 1) * h).saturating_sub((y * height).max(ty * h));
+            let oy = ((y + 1) * height)
+                .min((ty + 1) * h)
+                .saturating_sub((y * height).max(ty * h));
             for tx in x * width / w..((x + 1) * width).div_ceil(w) {
-                let ox = ((x + 1) * width).min((tx + 1) * w).saturating_sub((x * width).max(tx * w));
+                let ox = ((x + 1) * width)
+                    .min((tx + 1) * w)
+                    .saturating_sub((x * width).max(tx * w));
                 let j = ty * width + tx;
                 if ox == 0 || oy == 0 || !keep(j) {
                     continue;
@@ -816,29 +860,83 @@ mod tests {
     /// 104x216.
     #[test]
     fn every_level_is_the_direct_level0_footprint_average() {
-        for (w, h) in [(88usize, 24usize), (104, 216), (72, 40), (132, 128), (20, 28), (100, 60), (4, 4)] {
+        for (w, h) in [
+            (88usize, 24usize),
+            (104, 216),
+            (72, 40),
+            (132, 128),
+            (20, 28),
+            (100, 60),
+            (4, 4),
+        ] {
             for pattern in 0..3 {
                 let value = |x: usize, y: usize| -> u8 {
                     match pattern {
-                        0 => if x < w / 2 { 0 } else { 255 },
-                        1 => if x + 8 >= w { 255 } else { 0 },
-                        _ => if (x / 3 + y / 5).is_multiple_of(2) { 255 } else { (x * 7 + y * 3) as u8 },
+                        0 => {
+                            if x < w / 2 {
+                                0
+                            } else {
+                                255
+                            }
+                        }
+                        1 => {
+                            if x + 8 >= w {
+                                255
+                            } else {
+                                0
+                            }
+                        }
+                        _ => {
+                            if (x / 3 + y / 5).is_multiple_of(2) {
+                                255
+                            } else {
+                                (x * 7 + y * 3) as u8
+                            }
+                        }
                     }
                 };
                 let pixels: Vec<u8> = (0..w * h).flat_map(|i| [value(i % w, i / w); 4]).collect();
                 let support: Vec<u32> = (0..w * h)
-                    .map(|i| if pattern < 2 { 1 } else { u32::from(i % w + 16 >= w || i / w + 4 >= h) * (1 + (i % 3) as u32) })
+                    .map(|i| {
+                        if pattern < 2 {
+                            1
+                        } else {
+                            u32::from(i % w + 16 >= w || i / w + 4 >= h) * (1 + (i % 3) as u32)
+                        }
+                    })
                     .collect();
                 let one = vec![1; w * h];
                 for labels in [None, Some(&one[..])] {
-                    let chain =
-                        build_islands(w as u32, h as u32, &pixels, &support, labels, 3, Class::Data, 1 << 26).unwrap();
-                    assert_eq!((chain.levels.last().unwrap().width, chain.levels.last().unwrap().height), (1, 1));
+                    let chain = build_islands(
+                        w as u32,
+                        h as u32,
+                        &pixels,
+                        &support,
+                        labels,
+                        3,
+                        Class::Data,
+                        1 << 26,
+                    )
+                    .unwrap();
+                    assert_eq!(
+                        (
+                            chain.levels.last().unwrap().width,
+                            chain.levels.last().unwrap().height
+                        ),
+                        (1, 1)
+                    );
                     for (k, l) in chain.levels.iter().enumerate() {
                         let (lw, lh) = (l.width as usize, l.height as usize);
                         for y in 0..lh {
                             for x in 0..lw {
-                                let Some(want) = footprint_mean(&pixels, &support, (w, h), (lw, lh), (x, y), &|_| true) else {
+                                let Some(want) = footprint_mean(
+                                    &pixels,
+                                    &support,
+                                    (w, h),
+                                    (lw, lh),
+                                    (x, y),
+                                    &|_| true,
+                                ) else {
                                     assert_eq!(l.support[y * lw + x], 0);
                                     continue;
                                 };
@@ -851,9 +949,20 @@ mod tests {
             }
         }
         let step = |w: usize, h: usize, level: usize, x: usize| {
-            let pixels: Vec<u8> = (0..w * h).flat_map(|i| [if i % w < w / 2 { 0 } else { 255 }; 4]).collect();
-            let chain =
-                build_islands(w as u32, h as u32, &pixels, &vec![1; w * h], None, 0, Class::Data, 1 << 26).unwrap();
+            let pixels: Vec<u8> = (0..w * h)
+                .flat_map(|i| [if i % w < w / 2 { 0 } else { 255 }; 4])
+                .collect();
+            let chain = build_islands(
+                w as u32,
+                h as u32,
+                &pixels,
+                &vec![1; w * h],
+                None,
+                0,
+                Class::Data,
+                1 << 26,
+            )
+            .unwrap();
             chain.levels[level].rgba[x * 4]
         };
         assert_eq!(step(88, 24, 5, 0), 0);
@@ -867,23 +976,48 @@ mod tests {
     fn isolated_levels_integrate_only_their_own_island() {
         let (w, h) = (100usize, 24usize);
         let labels: Vec<u32> = (0..w * h).map(|i| if i % w < 48 { 1 } else { 2 }).collect();
-        let pixels: Vec<u8> = (0..w * h).flat_map(|i| [if labels[i] == 1 { 255 } else { 0 }; 4]).collect();
+        let pixels: Vec<u8> = (0..w * h)
+            .flat_map(|i| [if labels[i] == 1 { 255 } else { 0 }; 4])
+            .collect();
         let support = vec![1; w * h];
         for class in [Class::Data, Class::Colour] {
-            let chain = build_islands(w as u32, h as u32, &pixels, &support, Some(&labels), 3, class, 1 << 24).unwrap();
+            let chain = build_islands(
+                w as u32,
+                h as u32,
+                &pixels,
+                &support,
+                Some(&labels),
+                3,
+                class,
+                1 << 24,
+            )
+            .unwrap();
             for (k, l) in chain.levels.iter().enumerate().take(4) {
                 let (lw, lh) = (l.width as usize, l.height as usize);
                 for y in 0..lh {
                     for x in 0..lw {
                         let island = labels[(y * h / lh) * w + x * w / lw];
-                        let want = footprint_mean(&pixels, &support, (w, h), (lw, lh), (x, y), &|j| labels[j] == island).unwrap();
-                        assert_eq!(f64::from(l.rgba[(y * lw + x) * 4]), want, "{class:?} level {k} ({x},{y})");
+                        let want =
+                            footprint_mean(&pixels, &support, (w, h), (lw, lh), (x, y), &|j| {
+                                labels[j] == island
+                            })
+                            .unwrap();
+                        assert_eq!(
+                            f64::from(l.rgba[(y * lw + x) * 4]),
+                            want,
+                            "{class:?} level {k} ({x},{y})"
+                        );
                     }
                 }
             }
             // Below the isolated levels the page-wide integral blends them.
             let level = &chain.levels[4];
-            assert!(level.rgba.as_chunks::<4>().0.iter().any(|p| p[0] != 0 && p[0] != 255));
+            assert!(level
+                .rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|p| p[0] != 0 && p[0] != 255));
         }
     }
     #[test]
@@ -999,6 +1133,52 @@ mod tests {
         );
     }
 
+    /// Review round 5 P3-1: an 84x44 ID page (width not a multiple of 8) whose isolated
+    /// level-3 footprints straddle two islands' 8-blocks. Island 1 (columns 0..40) has
+    /// support only left of column 34, island 2 (40..84) everywhere, so a page-wide mode
+    /// would hand island 1's straddling texels island 2's ID. Each texel of the isolated
+    /// levels keeps its own island's ID (or no feature).
+    #[test]
+    fn isolated_id_levels_never_take_a_neighbour_islands_id() {
+        let (w, h) = (84usize, 44usize);
+        let labels: Vec<u32> = (0..w * h).map(|i| if i % w < 40 { 1 } else { 2 }).collect();
+        let support: Vec<u32> = (0..w * h)
+            .map(|i| u32::from(i % w < 34 || i % w >= 40))
+            .collect();
+        let pixels: Vec<u8> = (0..w * h)
+            .flat_map(|i| [labels[i] as u8, 0, 0, 0])
+            .collect();
+        let chain = build_islands(
+            w as u32,
+            h as u32,
+            &pixels,
+            &support,
+            Some(&labels),
+            3,
+            Class::Id,
+            1 << 24,
+        )
+        .unwrap();
+        let mut straddling = 0;
+        for (k, l) in chain.levels.iter().enumerate().take(4).skip(1) {
+            let (lw, lh) = (l.width as usize, l.height as usize);
+            for y in 0..lh {
+                for x in 0..lw {
+                    let island = labels[(y * h / lh) * w + x * w / lw] as u8;
+                    let p = &l.rgba[(y * lw + x) * 4..(y * lw + x) * 4 + 4];
+                    assert!(
+                        p == [island, 0, 0, 0] || p == ID_NO_FEATURE,
+                        "level {k} ({x},{y}) {p:?} in island {island}"
+                    );
+                    straddling += usize::from(island == 1 && ((x + 1) * w).div_ceil(lw) > 40);
+                }
+            }
+        }
+        assert!(
+            straddling > 0,
+            "the page has footprints straddling the islands"
+        );
+    }
     /// Review round 3 probe 1: an 88x24 page whose only island (one white 8x8 signal
     /// block at x 72..80) sits at the right edge, grid 8, gutters 8. Floor-halved odd
     /// levels (11 -> 5 -> 2 -> 1 columns) reduce by area overlap, so the island never
@@ -1021,7 +1201,17 @@ mod tests {
                 pixels[i * 4..i * 4 + 4].copy_from_slice(&[255; 4]);
             }
         }
-        let c = build_islands(w, h, &pixels, &support, Some(&labels), 3, Class::Data, 1 << 24).unwrap();
+        let c = build_islands(
+            w,
+            h,
+            &pixels,
+            &support,
+            Some(&labels),
+            3,
+            Class::Data,
+            1 << 24,
+        )
+        .unwrap();
         let last = c.levels.last().unwrap();
         assert_eq!([last.width, last.height], [1, 1]);
         for (k, l) in c.levels.iter().enumerate() {
@@ -1029,7 +1219,13 @@ mod tests {
                 .filter(|&i| l.support[i] > 0)
                 .map(|i| l.rgba[i * 4])
                 .max();
-            assert_eq!(best, Some(255), "level {k} ({}x{}) lost the island", l.width, l.height);
+            assert_eq!(
+                best,
+                Some(255),
+                "level {k} ({}x{}) lost the island",
+                l.width,
+                l.height
+            );
         }
         // Odd taps cover the whole footprint: three columns 2:2:1 for 5 -> 2.
         assert_eq!(taps(1, 5, 2).1, 3);

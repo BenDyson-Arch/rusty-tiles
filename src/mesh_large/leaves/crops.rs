@@ -193,7 +193,15 @@ pub(crate) fn plan_islands(
     gutter: u32,
     align: u32,
 ) -> Result<Block, JobError> {
-    plan_islands_aligned(uvs, image_width, image_height, max_edge, gutter, align, false)
+    plan_islands_aligned(
+        uvs,
+        image_width,
+        image_height,
+        max_edge,
+        gutter,
+        align,
+        false,
+    )
 }
 
 /// [`plan_islands`]; with `align_origin` every island's real-source interior also
@@ -905,9 +913,21 @@ mod tests {
                 [v, v, v, 255]
             })
             .collect();
-        let full = sparse_mips::build(n, n, &source, &vec![1; (n * n) as usize], Class::Data, 1 << 26).unwrap();
+        let full = sparse_mips::build(
+            n,
+            n,
+            &source,
+            &vec![1; (n * n) as usize],
+            Class::Data,
+            1 << 26,
+        )
+        .unwrap();
         let texel = |t: f32| (t + 0.5) / n as f32;
-        let uvs = [[texel(17.), texel(17.)], [texel(70.), texel(17.)], [texel(17.), texel(70.)]];
+        let uvs = [
+            [texel(17.), texel(17.)],
+            [texel(70.), texel(17.)],
+            [texel(17.), texel(70.)],
+        ];
         let sampler = SourceSampler {
             wrap_s: 10497,
             wrap_t: 10497,
@@ -916,19 +936,36 @@ mod tests {
         };
         let block = plan_islands_aligned(&uvs, n, n, 4096, a, a, true).unwrap();
         let crop = &block.islands[0].crop;
-        assert_eq!(crop.origin.map(|o| o.rem_euclid(i64::from(a))), [0, 0], "{crop:?}");
+        assert_eq!(
+            crop.origin.map(|o| o.rem_euclid(i64::from(a))),
+            [0, 0],
+            "{crop:?}"
+        );
         assert_eq!([crop.interior_width % a, crop.interior_height % a], [0, 0]);
         let start = [crop.origin[0] - i64::from(a), crop.origin[1] - i64::from(a)];
         let page = copy_crop(&source, n, n, crop, sampler, 1 << 26).unwrap();
         let (w, h) = (crop.width, crop.height);
         // The whole allocation is real wrapped source (as the atlas publishes it).
         let support = vec![1u32; (w * h) as usize];
-        let chain = sparse_mips::build_islands(w, h, &page, &support, Some(&vec![1; (w * h) as usize]), k, Class::Data, 1 << 26).unwrap();
+        let chain = sparse_mips::build_islands(
+            w,
+            h,
+            &page,
+            &support,
+            Some(&vec![1; (w * h) as usize]),
+            k,
+            Class::Data,
+            1 << 26,
+        )
+        .unwrap();
         // Complete chain: dimensions halve to 1x1.
         let last = chain.levels.last().unwrap();
         assert_eq!([last.width, last.height], [1, 1]);
         for pair in chain.levels.windows(2) {
-            assert_eq!([pair[1].width, pair[1].height], [(pair[0].width / 2).max(1), (pair[0].height / 2).max(1)]);
+            assert_eq!(
+                [pair[1].width, pair[1].height],
+                [(pair[0].width / 2).max(1), (pair[0].height / 2).max(1)]
+            );
         }
         // Levels 0..=K: every interior texel is the source's own level.
         for level in 0..=k as usize {
@@ -936,7 +973,10 @@ mod tests {
             let s = 1i64 << level;
             for py in (a >> level)..((a + crop.interior_height) >> level) {
                 for px in (a >> level)..((a + crop.interior_width) >> level) {
-                    let (sx, sy) = ((start[0] / s + i64::from(px)) as u32, (start[1] / s + i64::from(py)) as u32);
+                    let (sx, sy) = (
+                        (start[0] / s + i64::from(px)) as u32,
+                        (start[1] / s + i64::from(py)) as u32,
+                    );
                     assert_eq!(
                         pl.rgba[((py * pl.width + px) * 4) as usize],
                         sl.rgba[((sy * sl.width + sx) * 4) as usize],
@@ -948,7 +988,10 @@ mod tests {
         // Below K: the support-weighted box filter of the level above, over the whole
         // footprint (area overlap where a dimension halves an odd size).
         let overlap = |d: u32, src: u32, dst: u32, t: u32| -> f64 {
-            let (lo, hi) = (f64::from(d) * f64::from(src) / f64::from(dst), f64::from(d + 1) * f64::from(src) / f64::from(dst));
+            let (lo, hi) = (
+                f64::from(d) * f64::from(src) / f64::from(dst),
+                f64::from(d + 1) * f64::from(src) / f64::from(dst),
+            );
             (hi.min(f64::from(t + 1)) - lo.max(f64::from(t))).max(0.)
         };
         for level in k as usize + 1..chain.levels.len() {
@@ -958,7 +1001,8 @@ mod tests {
                     let (mut sum, mut weight) = (0f64, 0f64);
                     for cy in 0..up.height {
                         for cx in 0..up.width {
-                            let w = overlap(x, up.width, l.width, cx) * overlap(y, up.height, l.height, cy);
+                            let w = overlap(x, up.width, l.width, cx)
+                                * overlap(y, up.height, l.height, cy);
                             if w == 0. {
                                 continue;
                             }
@@ -970,7 +1014,10 @@ mod tests {
                     if weight > 0. {
                         let want = (sum / weight).round();
                         let got = f64::from(l.rgba[((y * l.width + x) * 4) as usize]);
-                        assert!((got - want).abs() <= 1., "level {level} ({x},{y}): {got} vs {want}");
+                        assert!(
+                            (got - want).abs() <= 1.,
+                            "level {level} ({x},{y}): {got} vs {want}"
+                        );
                     }
                 }
             }
@@ -996,14 +1043,26 @@ mod tests {
                 })
                 .collect();
             for wrap in [10497, 33648, 33071] {
-                let sampler = SourceSampler { wrap_s: wrap, wrap_t: wrap, min_filter: 9987, mag_filter: 9729 };
+                let sampler = SourceSampler {
+                    wrap_s: wrap,
+                    wrap_t: wrap,
+                    min_filter: 9987,
+                    mag_filter: 9729,
+                };
                 let uvs = [[0.95, 0.30], [1.15, 0.30], [1.05, 0.60]];
                 let block = plan_islands_aligned(&uvs, n, n, 1024, a, a, true).unwrap();
                 let crop = &block.islands[0].crop;
                 let page = copy_crop(&source, n, n, crop, sampler, 1 << 26).unwrap();
                 let (w, h) = (crop.width, crop.height);
                 let chain = sparse_mips::build_islands(
-                    w, h, &page, &vec![1; (w * h) as usize], Some(&vec![1; (w * h) as usize]), k, Class::Data, 1 << 26,
+                    w,
+                    h,
+                    &page,
+                    &vec![1; (w * h) as usize],
+                    Some(&vec![1; (w * h) as usize]),
+                    k,
+                    Class::Data,
+                    1 << 26,
                 )
                 .unwrap();
                 let start = [crop.origin[0] - i64::from(a), crop.origin[1] - i64::from(a)];
@@ -1015,8 +1074,10 @@ mod tests {
                             let mut sum = 0f64;
                             for dy in 0..f {
                                 for dx in 0..f {
-                                    let sx = tap(start[0] + i64::from(px) * f + dx, n, wrap).unwrap();
-                                    let sy = tap(start[1] + i64::from(py) * f + dy, n, wrap).unwrap();
+                                    let sx =
+                                        tap(start[0] + i64::from(px) * f + dx, n, wrap).unwrap();
+                                    let sy =
+                                        tap(start[1] + i64::from(py) * f + dy, n, wrap).unwrap();
                                     sum += f64::from(source[((sy * n + sx) * 4) as usize]);
                                 }
                             }

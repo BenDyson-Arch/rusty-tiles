@@ -1249,7 +1249,7 @@ pub fn mesh_to_leaf_payloads(
     };
     let hlod_plan = match &config.memory_budget {
         Some(budget) if config.lod == super::super::hlod::TilerLod::Hlod => {
-            match super::super::hlod::plan(&captured, &config, budget, request.hlod.cap) {
+            match super::super::hlod::plan(&captured, &config, budget, &request.hlod) {
                 Ok(plan) => Some(plan),
                 Err(error) => {
                     let mut failed = attempt.fail(error);
@@ -1478,7 +1478,11 @@ mod tests {
         ];
         let (lo, hi) = (16.5f32 / 128., 47.5 / 128.);
         let uvs: [f32; 12] = [lo, lo, hi, lo, lo, hi, hi, lo, hi, hi, lo, hi];
-        let bytes: Vec<u8> = positions.iter().chain(&uvs).flat_map(|v| v.to_le_bytes()).collect();
+        let bytes: Vec<u8> = positions
+            .iter()
+            .chain(&uvs)
+            .flat_map(|v| v.to_le_bytes())
+            .collect();
         fs::write(source.join("quad.bin"), &bytes).unwrap();
         image::RgbaImage::from_fn(128, 128, |x, _| {
             let v = if (x / 16) % 2 == 0 { 0 } else { 255 };
@@ -1509,18 +1513,30 @@ mod tests {
         let document: serde_json::Value = serde_json::from_slice(&leaf[20..20 + json_len]).unwrap();
         assert_eq!(document["samplers"][0]["minFilter"], 9987);
         let bin = &leaf[20 + json_len + 8..];
-        let view = &document["bufferViews"][document["images"][0]["bufferView"].as_u64().unwrap() as usize];
+        let view = &document["bufferViews"]
+            [document["images"][0]["bufferView"].as_u64().unwrap() as usize];
         let start = view["byteOffset"].as_u64().unwrap_or(0) as usize;
         let ktx2 = &bin[start..start + view["byteLength"].as_u64().unwrap() as usize];
         let field = |o: usize| u32::from_le_bytes(ktx2[o..o + 4].try_into().unwrap());
         let (w, h) = (field(20), field(24));
-        assert_eq!(field(40), 32 - w.max(h).leading_zeros(), "KTX2 levelCount: complete to 1x1");
+        assert_eq!(
+            field(40),
+            32 - w.max(h).leading_zeros(),
+            "KTX2 levelCount: complete to 1x1"
+        );
         let decoder = basisu::Transcoder::new(ktx2).unwrap();
         let level = decoder
             .transcode(0, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE)
             .unwrap();
-        let blended = level.chunks(4).filter(|p| (48..208).contains(&p[0])).count();
-        assert!(blended * 50 < level.len() / 4, "{blended} blended texels of {}", level.len() / 4);
+        let blended = level
+            .chunks(4)
+            .filter(|p| (48..208).contains(&p[0]))
+            .count();
+        assert!(
+            blended * 50 < level.len() / 4,
+            "{blended} blended texels of {}",
+            level.len() / 4
+        );
     }
     #[test]
     fn synthetic_depth_payloads_are_identical_across_jobs_and_paths() {

@@ -486,7 +486,7 @@ pub fn mesh_to_tileset(
         let settings = super::hlod::Settings::default();
         let (hlod_plan, memory) = match &config.memory_budget {
             Some(budget) => {
-                let hlod = super::hlod::plan(&captured, &config, budget, settings.cap)?;
+                let hlod = super::hlod::plan(&captured, &config, budget, &settings)?;
                 let c = &captured.report;
                 let capture_minimum = c
                     .jobs

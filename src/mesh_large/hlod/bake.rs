@@ -86,7 +86,11 @@ impl Queries {
             class,
             points,
             hits: vec![Hit::NONE; n],
-            frames: if want_frames { vec![Frame::default(); n] } else { Vec::new() },
+            frames: if want_frames {
+                vec![Frame::default(); n]
+            } else {
+                Vec::new()
+            },
             want_frames,
         }
     }
@@ -106,7 +110,8 @@ fn gradient(t: &FullTriangle, set: usize) -> f32 {
     ];
     let area = (c[0] * c[0] + c[1] * c[1] + c[2] * c[2]).sqrt();
     let uv = t.corners.map(|c| c.texcoords[set].map(f64::from));
-    let a = (uv[1][0] - uv[0][0]) * (uv[2][1] - uv[0][1]) - (uv[2][0] - uv[0][0]) * (uv[1][1] - uv[0][1]);
+    let a = (uv[1][0] - uv[0][0]) * (uv[2][1] - uv[0][1])
+        - (uv[2][0] - uv[0][0]) * (uv[1][1] - uv[0][1]);
     if area > 0. && area.is_finite() {
         (a.abs() / area).sqrt() as f32
     } else {
@@ -200,7 +205,11 @@ impl<'q, 'a> Searcher<'q, 'a> {
         };
         Ok(Self::with(query, local, DONOR_SEARCH_STEPS))
     }
-    fn with(query: &'q mut SourceQuery<'a>, local: Option<(Surface, Option<usize>)>, steps: u64) -> Self {
+    fn with(
+        query: &'q mut SourceQuery<'a>,
+        local: Option<(Surface, Option<usize>)>,
+        steps: u64,
+    ) -> Self {
         Self {
             query,
             local,
@@ -214,7 +223,10 @@ impl<'q, 'a> Searcher<'q, 'a> {
     }
     /// A resident searcher with an explicit budget (tests).
     #[cfg(test)]
-    pub(crate) fn with_budget(query: &'q mut SourceQuery<'a>, steps: u64) -> Result<Self, JobError> {
+    pub(crate) fn with_budget(
+        query: &'q mut SourceQuery<'a>,
+        steps: u64,
+    ) -> Result<Self, JobError> {
         let mut s = Self::new(query)?;
         s.steps = steps;
         Ok(s)
@@ -244,9 +256,10 @@ impl<'q, 'a> Searcher<'q, 'a> {
             Some((surface, hint)) => {
                 surface.nearest_budget_hint(p, key, hint, &mut budget, &mut self.frontier)
             }
-            None => self
-                .query
-                .nearest_budget(p, &mut budget, &mut self.frontier, &mut self.inner)?,
+            None => {
+                self.query
+                    .nearest_budget(p, &mut budget, &mut self.frontier, &mut self.inner)?
+            }
         };
         if !hit.distance2.is_finite() {
             return Err(state("coarse bake donor search found no candidate"));
@@ -335,7 +348,9 @@ pub(crate) fn resolve(
                 };
                 if q.want_frames {
                     q.frames[i] = Frame {
-                        normal: std::array::from_fn(|a| (0..3).map(|c| t.normals[c][a] * w[c]).sum()),
+                        normal: std::array::from_fn(|a| {
+                            (0..3).map(|c| t.normals[c][a] * w[c]).sum()
+                        }),
                         tangent: {
                             let mut v: [f32; 4] = std::array::from_fn(|a| {
                                 (0..3).map(|c| t.tangents[c][a] * w[c]).sum()
@@ -455,7 +470,11 @@ impl ImageCache {
             let mut s = lock(&self.state);
             s.clock += 1;
             let clock = s.clock;
-            let cached = s.entries.get(&key).filter(|e| e.base <= need).map(|e| e.cell.clone());
+            let cached = s
+                .entries
+                .get(&key)
+                .filter(|e| e.base <= need)
+                .map(|e| e.cell.clone());
             match cached {
                 Some(cell) => {
                     s.hits += 1;
@@ -494,13 +513,18 @@ impl ImageCache {
             .get_or_init(|| {
                 let started = super::error::thread_cpu();
                 let chain = load(base).map(Arc::new);
-                seconds = super::error::thread_cpu().zip(started).map_or(0., |(b, a)| b - a);
+                seconds = super::error::thread_cpu()
+                    .zip(started)
+                    .map_or(0., |(b, a)| b - a);
                 chain
             })
             .clone();
         let mut s = lock(&self.state);
         s.load_seconds += seconds;
-        let current = s.entries.get(&key).is_some_and(|e| Arc::ptr_eq(&e.cell, &cell));
+        let current = s
+            .entries
+            .get(&key)
+            .is_some_and(|e| Arc::ptr_eq(&e.cell, &cell));
         match &result {
             Err(_) => {
                 if current {
@@ -735,7 +759,12 @@ pub(crate) fn sample(
         let (x0, y0) = (x.floor(), y.floor());
         let (fx, fy) = (x - x0, y - y0);
         let (x0, y0) = (x0 as i64, y0 as i64);
-        let p = [get(x0, y0), get(x0 + 1, y0), get(x0, y0 + 1), get(x0 + 1, y0 + 1)];
+        let p = [
+            get(x0, y0),
+            get(x0 + 1, y0),
+            get(x0, y0 + 1),
+            get(x0 + 1, y0 + 1),
+        ];
         std::array::from_fn(|c| {
             let top = p[0][c] + (p[1][c] - p[0][c]) * fx;
             let bottom = p[2][c] + (p[3][c] - p[2][c]) * fx;
@@ -809,16 +838,31 @@ mod tests {
             for image in 0..1000 {
                 cache.get_with((image, 0), 0, &load).unwrap();
                 let s = lock(&cache.state);
-                assert!(s.resident <= 300, "round {round} image {image}: {}", s.resident);
-                assert_eq!(s.order.len(), s.entries.values().filter(|e| e.bytes > 0).count());
+                assert!(
+                    s.resident <= 300,
+                    "round {round} image {image}: {}",
+                    s.resident
+                );
+                assert_eq!(
+                    s.order.len(),
+                    s.entries.values().filter(|e| e.bytes > 0).count()
+                );
             }
         }
-        assert_eq!(loads.get(), 3000, "a cyclic scan larger than the cache always misses");
+        assert_eq!(
+            loads.get(),
+            3000,
+            "a cyclic scan larger than the cache always misses"
+        );
         // The three most recent survive; a coarser request is a hit on the finer chain.
         cache.get_with((999, 0), 2, &load).unwrap();
         assert_eq!(loads.get(), 3000);
         cache.get_with((996, 0), 0, &load).unwrap();
-        assert_eq!(loads.get(), 3001, "the least recently used chain was evicted");
+        assert_eq!(
+            loads.get(),
+            3001,
+            "the least recently used chain was evicted"
+        );
         // Peak: the budget plus the one chain being served before eviction.
         assert!(cache.stats().peak_resident_bytes <= 400);
     }
@@ -826,7 +870,10 @@ mod tests {
     #[test]
     fn trilinear_sampling_wraps_and_minifies_in_linear_light() {
         // A 2x2 black/white checker: level 1 is the linear-light mean, not sRGB 0.5.
-        let rgba = [0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 255].to_vec();
+        let rgba = [
+            0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 255,
+        ]
+        .to_vec();
         let base = mips::Level {
             width: 2,
             height: 2,

@@ -4,7 +4,9 @@
 //! material restrictions. Disk sequences use capture's scratch owner. Each query owns
 //! a fixed cache; no allocation scales with the source or with the tile's source range.
 use super::{
-    resource, state,
+    resource,
+    scratch::ComponentLease,
+    state,
     store::{SourcePrimitive, TileKey},
 };
 use crate::{
@@ -285,12 +287,14 @@ impl Surface {
         build(&mut triangles, 0, &mut nodes);
         Ok(Self { triangles, nodes })
     }
-    /// Reuse the previous witness only as an initial upper distance. The exact
-    /// nearest search/tie rule still runs; spatially coherent samples prune earlier.
     pub(crate) fn charge(&self) -> usize {
         self.triangles.capacity() * std::mem::size_of::<Triangle>()
             + self.nodes.capacity() * std::mem::size_of::<Node>()
     }
+    /// Exact nearest (the test oracle of [`Surface::nearest_budget_hint`]): reuse the
+    /// previous witness only as an initial upper distance. Θ(R) per query when every box
+    /// contains the query, so production searches are budgeted.
+    #[cfg(test)]
     pub(crate) fn nearest_hint(&self, p: V3, key: TileKey, hint: &mut Option<usize>) -> Hit {
         let mut hit = hint
             .and_then(|i| {
@@ -435,6 +439,8 @@ impl Surface {
             }
         }
     }
+    /// Exact nearest, continuing `best`. Production calls it only on one fine block of at
+    /// most [`BLOCK`] triangles (the paged seed), where it is bounded by the block.
     pub(crate) fn nearest(&self, p: V3, key: TileKey, best: &mut Hit) {
         let mut stack = [0usize; 64];
         let mut len = 1;
@@ -568,13 +574,41 @@ pub(crate) struct SourceIndex {
     triangles: Sequence<Triangle>,
     root: u64,
 }
+/// The index's two sequences while they are written, each write charged to the walk's
+/// scratch admission before it happens.
+struct IndexWriter<'l, 'w, 'a> {
+    nodes: SequenceWriter<Node>,
+    triangles: SequenceWriter<Triangle>,
+    lease: &'l ComponentLease<'w, 'a>,
+}
+impl IndexWriter<'_, '_, '_> {
+    /// Charge the bytes written so far plus `nodes` and `triangles` records about to be.
+    fn admit(&self, nodes: u64, triangles: u64) -> Result<(), JobError> {
+        let bytes = (self.nodes.len() + nodes)
+            .checked_mul(Node::SIZE as u64)
+            .zip((self.triangles.len() + triangles).checked_mul(Triangle::SIZE as u64))
+            .and_then(|(a, b)| a.checked_add(b))
+            .ok_or_else(|| resource("source index size overflows"))?;
+        self.lease.charge(bytes)
+    }
+}
 impl SourceIndex {
+    /// The scratch component the index is admitted under (`scratch::ScratchLedger`).
+    pub(crate) const COMPONENT: &'static str = "s2-source-index";
+
+    /// Build the index for `captured` within `lease`, admitted for at least
+    /// [`scratch_need`] before this is called; every write is charged to it first, and a
+    /// write past it is refused.
     pub(crate) fn build(
         captured: &FullCaptured,
+        lease: &ComponentLease<'_, '_>,
         check: &(dyn Fn() -> Result<(), JobError> + Sync),
     ) -> Result<Self, JobError> {
-        let mut nw = SequenceWriter::new(&captured.scratch, "hlod-source-nodes", 65536)?;
-        let mut tw = SequenceWriter::new(&captured.scratch, "hlod-source-triangles", 65536)?;
+        let mut out = IndexWriter {
+            nodes: SequenceWriter::new(&captured.scratch, "hlod-source-nodes", 65536)?,
+            triangles: SequenceWriter::new(&captured.scratch, "hlod-source-triangles", 65536)?,
+            lease,
+        };
         let mut reader = captured
             .triangles
             .range(0, captured.triangles.len(), 65536)?;
@@ -582,8 +616,7 @@ impl SourceIndex {
             count: u64,
             rank: &mut u64,
             reader: &mut impl Iterator<Item = Result<FullTriangle, crate::spill::SpillError>>,
-            nw: &mut SequenceWriter<Node>,
-            tw: &mut SequenceWriter<Triangle>,
+            out: &mut IndexWriter<'_, '_, '_>,
             check: &(dyn Fn() -> Result<(), JobError> + Sync),
         ) -> Result<(u64, Node), JobError> {
             if count <= BLOCK as u64 {
@@ -603,12 +636,13 @@ impl SourceIndex {
                 }
                 mark_controls(&mut tris);
                 let s = Surface::new(tris)?;
-                let offset = nw.len();
+                out.admit(s.nodes.len() as u64 + 1, s.triangles.len() as u64)?;
+                let offset = out.nodes.len();
                 for n in &s.nodes {
-                    nw.push(n)?;
+                    out.nodes.push(n)?;
                 }
                 for t in &s.triangles {
-                    tw.push(t)?;
+                    out.triangles.push(t)?;
                 }
                 let mut node = s.nodes[0];
                 node.first = first;
@@ -617,14 +651,14 @@ impl SourceIndex {
                 node.right = s.nodes.len() as u64;
                 node.start = 0;
                 node.count = count as u32;
-                let id = nw.len();
-                nw.push(&node)?;
+                let id = out.nodes.len();
+                out.nodes.push(&node)?;
                 return Ok((id, node));
             }
             // Split on a whole-block boundary; leaves have 256 entries except the last.
             let left_count = (count.div_ceil(BLOCK as u64) / 2) * BLOCK as u64;
-            let (a, na) = build(left_count, rank, reader, nw, tw, check)?;
-            let (b, nb) = build(count - left_count, rank, reader, nw, tw, check)?;
+            let (a, na) = build(left_count, rank, reader, out, check)?;
+            let (b, nb) = build(count - left_count, rank, reader, out, check)?;
             let mut bounds = na.bounds();
             bounds.union(&nb.bounds());
             let n = Node {
@@ -638,21 +672,21 @@ impl SourceIndex {
                 count: 0,
                 area_bits: (na.area() + nb.area()).to_bits(),
             };
-            let id = nw.len();
-            nw.push(&n)?;
+            out.admit(1, 0)?;
+            let id = out.nodes.len();
+            out.nodes.push(&n)?;
             Ok((id, n))
         }
         let (root, _) = build(
             captured.triangles.len(),
             &mut 0,
             &mut reader,
-            &mut nw,
-            &mut tw,
+            &mut out,
             check,
         )?;
         Ok(Self {
-            nodes: nw.finish()?,
-            triangles: tw.finish()?,
+            nodes: out.nodes.finish()?,
+            triangles: out.triangles.finish()?,
             root,
         })
     }
@@ -866,6 +900,9 @@ impl SourceQuery<'_> {
             }
         }
     }
+    /// Exact paged nearest: the test oracle of [`SourceQuery::nearest_budget`]. Unbounded
+    /// against adversarial sources, so production searches are budgeted.
+    #[cfg(test)]
     pub(crate) fn nearest(&mut self, p: V3) -> Result<Hit, JobError> {
         let mut winning = self
             .last
@@ -940,7 +977,7 @@ impl SourceQuery<'_> {
         Ok(best)
     }
     /// Full records `first..first + count` into caller-owned (and caller-charged)
-    /// buffers, with one positioned read.
+    /// buffers, with one positioned read (the S3 bake's rank-ordered donor reads).
     pub(crate) fn triangles(
         &self,
         first: u64,
@@ -956,10 +993,18 @@ impl SourceQuery<'_> {
         if self.blocks.contains_key(&n.first) {
             return Ok(());
         }
-        self.nodes
-            .read(n.left, n.right as usize, &mut self.encoded, &mut self.node_buf)?;
-        self.triangles
-            .read(n.first, n.count as usize, &mut self.encoded, &mut self.tri_buf)?;
+        self.nodes.read(
+            n.left,
+            n.right as usize,
+            &mut self.encoded,
+            &mut self.node_buf,
+        )?;
+        self.triangles.read(
+            n.first,
+            n.count as usize,
+            &mut self.encoded,
+            &mut self.tri_buf,
+        )?;
         let surface = Surface {
             nodes: self.node_buf.clone(),
             triangles: self.tri_buf.clone(),
@@ -991,7 +1036,8 @@ impl SourceQuery<'_> {
         let mut at = self.visit(Visit::Resident(self.region_root))?;
         while at.0.count == 0 {
             budget.steps += 1;
-            let [left, right] = at.1.ok_or_else(|| state("source branch without children"))?;
+            let [left, right] =
+                at.1.ok_or_else(|| state("source branch without children"))?;
             let (a, b) = (self.visit(left)?, self.visit(right)?);
             at = match (a.0.intersects(self.key), b.0.intersects(self.key)) {
                 (true, true) if b.0.distance(p) < a.0.distance(p) => b,
@@ -1121,6 +1167,11 @@ impl SourceQuery<'_> {
 }
 
 pub(crate) type V3 = [f64; 3];
+#[cfg(test)]
+thread_local! {
+    /// Calls of [`closest`] on this thread: the work counter of the bounded-search tests.
+    pub(crate) static CLOSEST_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
 pub(crate) fn add(a: V3, b: V3) -> V3 {
     std::array::from_fn(|i| a[i] + b[i])
 }
@@ -1169,6 +1220,8 @@ fn segment(q: V3, a: V3, b: V3) -> (V3, f64) {
 /// Returns an actual barycentric source-surface witness, including degenerates.
 /// Its distance is appearance correspondence, never a geometric certificate.
 pub(crate) fn closest(q: V3, p: [V3; 3]) -> V3 {
+    #[cfg(test)]
+    CLOSEST_CALLS.with(|c| c.set(c.get() + 1));
     let ab = sub(p[1], p[0]);
     let ac = sub(p[2], p[0]);
     let ap = sub(q, p[0]);

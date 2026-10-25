@@ -618,7 +618,18 @@ pub(in crate::mesh_large) fn encode(
     mask: Option<MaskDelivery<'_>>,
     ladder: Ladder<'_>,
 ) -> Result<Delivery, JobError> {
-    encode_islands(dimensions, rgba, support, None, 0, slot, profile, memory_limit, mask, ladder)
+    encode_islands(
+        dimensions,
+        rgba,
+        support,
+        None,
+        0,
+        slot,
+        profile,
+        memory_limit,
+        mask,
+        ladder,
+    )
 }
 
 /// [`encode`] for a packed island page: a complete chain whose islands (`labels`, one
@@ -651,7 +662,11 @@ pub(in crate::mesh_large) fn encode_islands(
             "delivery RGBA/support shape",
         ));
     }
-    let label_bytes = if labels.is_some() { base.checked_mul(6).ok_or_else(resource)? } else { 0 };
+    let label_bytes = if labels.is_some() {
+        base.checked_mul(6).ok_or_else(resource)?
+    } else {
+        0
+    };
     let charge = workspace_charge(dimensions, profile)?
         .checked_add(label_bytes)
         .ok_or_else(resource)?;

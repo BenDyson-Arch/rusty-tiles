@@ -4,7 +4,7 @@
 //! coarse tangent frame, geometry and IDs are untouched by charting, image-free colourless
 //! input bypasses appearance, and vertex colours follow the source. Also the evidence
 //! lane measuring cut PSNR against the source in both directions.
-use super::{source_index, store::TileKey, Mutation, Settings, TilerLod};
+use super::{source_index, store::TileKey, TilerLod};
 use crate::{
     content_integrity::meshopt::{self as codec, Filter, Mode},
     mesh_large::leaves::producer::{mesh_to_leaf_payloads, LeafOutputRequest, LeafProfile},
@@ -120,16 +120,49 @@ fn write_fixture(dir: &Path, f: &Fixture) -> PathBuf {
                 idx.extend([v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
             }
         }
-        let mut attributes = json!({"POSITION": push(&mut bin, &mut views, &mut accessors, pos, "VEC3", n, true)});
+        let mut attributes =
+            json!({"POSITION": push(&mut bin, &mut views, &mut accessors, pos, "VEC3", n, true)});
         if f.uv {
-            attributes["TEXCOORD_0"] = json!(push(&mut bin, &mut views, &mut accessors, uv, "VEC2", n, false));
+            attributes["TEXCOORD_0"] = json!(push(
+                &mut bin,
+                &mut views,
+                &mut accessors,
+                uv,
+                "VEC2",
+                n,
+                false
+            ));
         }
         if f.color {
-            attributes["COLOR_0"] = json!(push(&mut bin, &mut views, &mut accessors, col, "VEC4", n, false));
+            attributes["COLOR_0"] = json!(push(
+                &mut bin,
+                &mut views,
+                &mut accessors,
+                col,
+                "VEC4",
+                n,
+                false
+            ));
         }
         if f.frame {
-            attributes["NORMAL"] = json!(push(&mut bin, &mut views, &mut accessors, nrm, "VEC3", n, false));
-            attributes["TANGENT"] = json!(push(&mut bin, &mut views, &mut accessors, tan, "VEC4", n, false));
+            attributes["NORMAL"] = json!(push(
+                &mut bin,
+                &mut views,
+                &mut accessors,
+                nrm,
+                "VEC3",
+                n,
+                false
+            ));
+            attributes["TANGENT"] = json!(push(
+                &mut bin,
+                &mut views,
+                &mut accessors,
+                tan,
+                "VEC4",
+                n,
+                false
+            ));
         }
         let start = bin.len();
         for v in &idx {
@@ -171,10 +204,7 @@ fn stage(input: &Path, out: &Path) -> PathBuf {
         .with_scratch_dir(&scratch)
         .with_leaf_triangles(256)
         .with_lod(TilerLod::Hlod)
-        .with_hlod_settings(Settings {
-            cap: 300,
-            mutation: Mutation::None,
-        });
+        .with_hlod_settings(super::tests::test_settings(300));
     let dir = mesh_to_leaf_payloads(request, &RunControl::default())
         .unwrap()
         .output;
@@ -228,7 +258,10 @@ impl Glb {
                     "TRIANGLES" => Mode::Triangles,
                     _ => Mode::Indices,
                 };
-                let filter = e["filter"].as_str().and_then(Filter::parse).unwrap_or(Filter::None);
+                let filter = e["filter"]
+                    .as_str()
+                    .and_then(Filter::parse)
+                    .unwrap_or(Filter::None);
                 codec::decode_filtered(
                     &self.bin[s..s + e["byteLength"].as_u64().unwrap() as usize],
                     e["count"].as_u64().unwrap() as usize,
@@ -274,15 +307,24 @@ impl Glb {
                         match ct {
                             5120 => {
                                 let v = f64::from(b[0] as i8);
-                                if norm { (v / 127.).max(-1.) } else { v }
+                                if norm {
+                                    (v / 127.).max(-1.)
+                                } else {
+                                    v
+                                }
                             }
                             5121 => f64::from(b[0]) / if norm { 255. } else { 1. },
                             5122 => {
                                 let v = f64::from(i16::from_le_bytes([b[0], b[1]]));
-                                if norm { (v / 32767.).max(-1.) } else { v }
+                                if norm {
+                                    (v / 32767.).max(-1.)
+                                } else {
+                                    v
+                                }
                             }
                             5123 => {
-                                f64::from(u16::from_le_bytes([b[0], b[1]])) / if norm { 65535. } else { 1. }
+                                f64::from(u16::from_le_bytes([b[0], b[1]]))
+                                    / if norm { 65535. } else { 1. }
                             }
                             5125 => f64::from(u32::from_le_bytes(b[..4].try_into().unwrap())),
                             _ => f64::from(f32::from_le_bytes(b[..4].try_into().unwrap())),
@@ -298,7 +340,11 @@ impl Glb {
             let node = &self.doc["nodes"][root.as_u64().unwrap() as usize];
             let read = |key: &str, default: f64| -> Vec<f64> {
                 node.get(key).map_or(vec![default; 3], |v| {
-                    v.as_array().unwrap().iter().map(|x| x.as_f64().unwrap()).collect()
+                    v.as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|x| x.as_f64().unwrap())
+                        .collect()
                 })
             };
             let (t, s) = (read("translation", 0.), read("scale", 1.));
@@ -306,9 +352,16 @@ impl Glb {
                 .as_array()
                 .unwrap()
             {
-                let at = |k: &str| prim["attributes"].get(k).map(|a| self.accessor(a.as_u64().unwrap() as usize));
+                let at = |k: &str| {
+                    prim["attributes"]
+                        .get(k)
+                        .map(|a| self.accessor(a.as_u64().unwrap() as usize))
+                };
                 let index: Option<Vec<usize>> = prim.get("indices").map(|i| {
-                    self.accessor(i.as_u64().unwrap() as usize).iter().map(|v| v[0] as usize).collect()
+                    self.accessor(i.as_u64().unwrap() as usize)
+                        .iter()
+                        .map(|v| v[0] as usize)
+                        .collect()
                 });
                 let expand = |v: Vec<Vec<f64>>| -> Vec<Vec<f64>> {
                     match &index {
@@ -324,14 +377,21 @@ impl Glb {
                     positions,
                     uv: at("TEXCOORD_0").map(|v| expand(v).iter().map(|x| [x[0], x[1]]).collect()),
                     color: at("COLOR_0").map(|v| {
-                        expand(v).iter().map(|x| [x[0], x[1], x[2], *x.get(3).unwrap_or(&1.)]).collect()
+                        expand(v)
+                            .iter()
+                            .map(|x| [x[0], x[1], x[2], *x.get(3).unwrap_or(&1.)])
+                            .collect()
                     }),
-                    normal: at("NORMAL").map(|v| expand(v).iter().map(|x| [x[0], x[1], x[2]]).collect()),
-                    tangent: at("TANGENT").map(|v| expand(v).iter().map(|x| [x[0], x[1], x[2], x[3]]).collect()),
+                    normal: at("NORMAL")
+                        .map(|v| expand(v).iter().map(|x| [x[0], x[1], x[2]]).collect()),
+                    tangent: at("TANGENT")
+                        .map(|v| expand(v).iter().map(|x| [x[0], x[1], x[2], x[3]]).collect()),
                     features: at("_FEATURE_ID_0")
                         .map(|v| expand(v).iter().map(|x| x[0] as u32).collect())
                         .unwrap_or_default(),
-                    material: self.doc["materials"][prim["material"].as_u64().unwrap_or(0) as usize].clone(),
+                    material: self.doc["materials"]
+                        [prim["material"].as_u64().unwrap_or(0) as usize]
+                        .clone(),
                 });
             }
         }
@@ -351,7 +411,11 @@ impl Glb {
         if image["mimeType"] == "image/ktx2" {
             let w = u32::from_le_bytes(bytes[20..24].try_into().unwrap());
             let h = u32::from_le_bytes(bytes[24..28].try_into().unwrap());
-            (w, h, crate::basisu_ktx2::decode_level_rgba(&bytes, 0, w, h).unwrap())
+            (
+                w,
+                h,
+                crate::basisu_ktx2::decode_level_rgba(&bytes, 0, w, h).unwrap(),
+            )
         } else {
             let img = image::load_from_memory(&bytes).unwrap().into_rgba8();
             (img.width(), img.height(), img.into_raw())
@@ -376,7 +440,10 @@ fn bilinear(img: &(u32, u32, Vec<u8>), uv: [f64; 2]) -> [f64; 4] {
 }
 
 fn texture_index(material: &Value, pointer: &str) -> Option<usize> {
-    material.pointer(pointer).and_then(Value::as_u64).map(|v| v as usize)
+    material
+        .pointer(pointer)
+        .and_then(Value::as_u64)
+        .map(|v| v as usize)
 }
 
 /// Every coarse tile of a stage, decoded.
@@ -421,31 +488,52 @@ fn coarse_pages_rebake_the_source_ramp_with_content_sized_pages() {
         assert!((src - 100. / 64.).abs() < 0.05, "{a}");
         let req = a["requestedSpacing"].as_f64().unwrap().max(src);
         let ach = a["achievedSpacing"].as_f64().unwrap();
-        assert_eq!(a["sourceLimited"].as_bool().unwrap(), src > a["requestedSpacing"].as_f64().unwrap());
+        assert_eq!(
+            a["sourceLimited"].as_bool().unwrap(),
+            src > a["requestedSpacing"].as_f64().unwrap()
+        );
         assert!(ach >= req * (1. - 1e-12), "{a}");
-        assert_eq!(a["capped"].as_bool().unwrap(), ach > req * (1. + 1e-9), "{a}");
+        assert_eq!(
+            a["capped"].as_bool().unwrap(),
+            ach > req * (1. + 1e-9),
+            "{a}"
+        );
         let [w, h] = [0, 1].map(|i| a["pageSize"][i].as_u64().unwrap());
-        assert!(w % 4 == 0 && h % 4 == 0 && (32..=1024).contains(&w) && (32..=1024).contains(&h), "{w}x{h}");
-        assert!(glb.doc["extensionsUsed"].as_array().unwrap().contains(&json!("KHR_texture_basisu")));
+        assert!(
+            w % 4 == 0 && h % 4 == 0 && (32..=1024).contains(&w) && (32..=1024).contains(&h),
+            "{w}x{h}"
+        );
+        assert!(glb.doc["extensionsUsed"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("KHR_texture_basisu")));
         for p in glb.prims() {
             assert_eq!(p.material["pbrMetallicRoughness"]["roughnessFactor"], 0.75);
-            let tex = glb.texture(texture_index(&p.material, "/pbrMetallicRoughness/baseColorTexture/index").unwrap());
+            let tex = glb.texture(
+                texture_index(&p.material, "/pbrMetallicRoughness/baseColorTexture/index").unwrap(),
+            );
             assert_eq!([u64::from(tex.0), u64::from(tex.1)], [w, h]);
             let uv = p.uv.as_ref().unwrap();
             for f in 0..p.positions.len() / 3 {
-                let c: [f64; 3] = std::array::from_fn(|a| (0..3).map(|k| p.positions[3 * f + k][a]).sum::<f64>() / 3.);
-                let t: [f64; 2] = std::array::from_fn(|a| (0..3).map(|k| uv[3 * f + k][a]).sum::<f64>() / 3.);
+                let c: [f64; 3] = std::array::from_fn(|a| {
+                    (0..3).map(|k| p.positions[3 * f + k][a]).sum::<f64>() / 3.
+                });
+                let t: [f64; 2] =
+                    std::array::from_fn(|a| (0..3).map(|k| uv[3 * f + k][a]).sum::<f64>() / 3.);
                 let got = bilinear(&tex, t);
                 // The source ramp at the face centroid, in stored sRGB units.
                 let want = [c[0] / 100., c[2] / 100.];
-                sum += (got[0] - want[0]).abs() + (got[1] - want[1]).abs() + (got[2] - 96. / 255.).abs();
+                sum += (got[0] - want[0]).abs()
+                    + (got[1] - want[1]).abs()
+                    + (got[2] - 96. / 255.).abs();
                 n += 3;
             }
         }
     }
     let mean = sum / n as f64;
     assert!(mean < 0.02, "mean absolute sRGB error {mean}");
-    let manifest: Value = serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
     let depths = manifest["hlod"]["appearanceByDepth"].as_array().unwrap();
     let pages: u64 = depths.iter().map(|d| d["pages"].as_u64().unwrap()).sum();
     assert_eq!(pages as usize, tiles.len());
@@ -460,10 +548,14 @@ fn many_material_classes_and_images_per_parent_share_one_tile_budget() {
     let dir = work.path().join("in");
     fs::create_dir_all(&dir).unwrap();
     const STRIPS: usize = 32;
-    let (mut bin, mut views, mut accessors, mut meshes, mut nodes) = (vec![], vec![], vec![], vec![], vec![]);
+    let (mut bin, mut views, mut accessors, mut meshes, mut nodes) =
+        (vec![], vec![], vec![], vec![], vec![]);
     let (mut materials, mut images, mut textures) = (vec![], vec![], vec![]);
     for k in 0..STRIPS {
-        let (x0, x1) = (100. * k as f32 / STRIPS as f32, 100. * (k + 1) as f32 / STRIPS as f32);
+        let (x0, x1) = (
+            100. * k as f32 / STRIPS as f32,
+            100. * (k + 1) as f32 / STRIPS as f32,
+        );
         let (nx, nz) = (3usize, 60usize);
         let (mut pos, mut uv) = (vec![], vec![]);
         for i in 0..=nx {
@@ -479,7 +571,14 @@ fn many_material_classes_and_images_per_parent_share_one_tile_budget() {
         for i in 0..nx {
             for j in 0..nz {
                 let v = |a: usize, c: usize| (a * (nz + 1) + c) as u32;
-                idx.extend([v(i, j), v(i, j + 1), v(i + 1, j), v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
+                idx.extend([
+                    v(i, j),
+                    v(i, j + 1),
+                    v(i + 1, j),
+                    v(i + 1, j),
+                    v(i, j + 1),
+                    v(i + 1, j + 1),
+                ]);
             }
         }
         let mut push = |data: Vec<u8>, count: usize, kind: &str, component: u32| {
@@ -497,21 +596,40 @@ fn many_material_classes_and_images_per_parent_share_one_tile_budget() {
                 hi[a] = hi[a].max(p[a]);
             }
         }
-        let p = push(pos.iter().flat_map(|v| v.to_le_bytes()).collect(), n, "VEC3", 5126);
-        let t = push(uv.iter().flat_map(|v| v.to_le_bytes()).collect(), n, "VEC2", 5126);
-        let ix = push(idx.iter().flat_map(|v| v.to_le_bytes()).collect(), idx.len(), "SCALAR", 5125);
+        let p = push(
+            pos.iter().flat_map(|v| v.to_le_bytes()).collect(),
+            n,
+            "VEC3",
+            5126,
+        );
+        let t = push(
+            uv.iter().flat_map(|v| v.to_le_bytes()).collect(),
+            n,
+            "VEC2",
+            5126,
+        );
+        let ix = push(
+            idx.iter().flat_map(|v| v.to_le_bytes()).collect(),
+            idx.len(),
+            "SCALAR",
+            5125,
+        );
         accessors[p]["min"] = json!(lo);
         accessors[p]["max"] = json!(hi);
         meshes.push(json!({"primitives":[{"attributes":{"POSITION":p,"TEXCOORD_0":t},"indices":ix,"material":k}]}));
         nodes.push(json!({"mesh":k}));
         let shade = (k * 7 % 32) as u8 * 8;
-        image::RgbaImage::from_fn(16, 16, |x, y| image::Rgba([shade, (x * 16) as u8, (y * 16) as u8, 255]))
-            .save(dir.join(format!("strip{k}.png")))
-            .unwrap();
+        image::RgbaImage::from_fn(16, 16, |x, y| {
+            image::Rgba([shade, (x * 16) as u8, (y * 16) as u8, 255])
+        })
+        .save(dir.join(format!("strip{k}.png")))
+        .unwrap();
         images.push(json!({"uri":format!("strip{k}.png")}));
         textures.push(json!({"source":k,"sampler":0}));
-        materials.push(json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":k},
-            "baseColorFactor":[1.0, 1.0 - k as f64 / 64.0, 1.0, 1.0],"metallicFactor":0.0}}));
+        materials.push(
+            json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":k},
+            "baseColorFactor":[1.0, 1.0 - k as f64 / 64.0, 1.0, 1.0],"metallicFactor":0.0}}),
+        );
     }
     fs::write(dir.join("scene.bin"), &bin).unwrap();
     let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":(0..STRIPS).collect::<Vec<_>>()}],
@@ -526,7 +644,11 @@ fn many_material_classes_and_images_per_parent_share_one_tile_budget() {
         let a = &row["appearance"];
         let groups = a["texturedGroups"].as_u64().unwrap();
         most = most.max(groups);
-        assert_eq!(a["pages"].as_u64().unwrap(), groups, "one base colour page per group");
+        assert_eq!(
+            a["pages"].as_u64().unwrap(),
+            groups,
+            "one base colour page per group"
+        );
         let triangles = row["triangles"].as_u64().unwrap();
         let budget = super::appearance::TILE_TEXELS + 64 * triangles;
         assert!(a["layoutTexels"].as_u64().unwrap() <= budget, "{a}");
@@ -572,18 +694,29 @@ fn charting_keeps_geometry_and_ids_and_image_free_input_bypasses_appearance() {
         material: json!({"pbrMetallicRoughness":{"baseColorFactor":[0.5,0.4,0.3,1.0],"metallicFactor":0.0}}),
         ..base_fixture()
     };
-    let flat = stage(&write_fixture(&work.path().join("b"), &plain), &work.path().join("bo"));
-    assert_eq!(geometry(&textured), geometry(&flat), "charting changed geometry or IDs");
+    let flat = stage(
+        &write_fixture(&work.path().join("b"), &plain),
+        &work.path().join("bo"),
+    );
+    assert_eq!(
+        geometry(&textured),
+        geometry(&flat),
+        "charting changed geometry or IDs"
+    );
     for (row, glb) in coarse(&flat) {
         assert_eq!(row["appearance"]["texturedGroups"], 0);
         assert_eq!(row["appearance"]["vertexColorGroups"], 0);
         assert!(glb.doc.get("images").is_none());
         for p in glb.prims() {
             assert!(p.uv.is_none() && p.color.is_none() && p.normal.is_none());
-            assert_eq!(p.material["pbrMetallicRoughness"]["baseColorFactor"], json!([0.5, 0.4, 0.3, 1.0]));
+            assert_eq!(
+                p.material["pbrMetallicRoughness"]["baseColorFactor"],
+                json!([0.5, 0.4, 0.3, 1.0])
+            );
         }
     }
-    let resources: Value = serde_json::from_slice(&fs::read(flat.join("resources.json")).unwrap()).unwrap();
+    let resources: Value =
+        serde_json::from_slice(&fs::read(flat.join("resources.json")).unwrap()).unwrap();
     let plan = &resources["hlod"]["plan"];
     assert_eq!(plan["texture_workspace_bytes"], 0, "{plan}");
     assert_eq!(plan["color_workspace_bytes"], 0, "{plan}");
@@ -600,7 +733,10 @@ fn vertex_colours_follow_the_source_without_images() {
         material: json!({"pbrMetallicRoughness":{"metallicFactor":0.0}}),
         ..base_fixture()
     };
-    let dir = stage(&write_fixture(&work.path().join("in"), &f), &work.path().join("out"));
+    let dir = stage(
+        &write_fixture(&work.path().join("in"), &f),
+        &work.path().join("out"),
+    );
     let (mut worst, mut n) = (0f64, 0);
     for (row, glb) in coarse(&dir) {
         assert_eq!(row["appearance"]["vertexColorGroups"], 1);
@@ -609,7 +745,9 @@ fn vertex_colours_follow_the_source_without_images() {
             let c = p.color.as_ref().unwrap();
             for (q, col) in p.positions.iter().zip(c) {
                 // Nearest source point of a coarse vertex lies near it in x/z.
-                worst = worst.max((col[0] - q[0] / 100.).abs()).max((col[1] - q[2] / 100.).abs());
+                worst = worst
+                    .max((col[0] - q[0] / 100.).abs())
+                    .max((col[1] - q[2] / 100.).abs());
                 assert!((col[2] - 0.25).abs() < 1e-3);
                 n += 1;
             }
@@ -648,7 +786,10 @@ fn all_slots_mask_factors_and_the_normal_frame_survive() {
             "alphaMode":"MASK","alphaCutoff":0.4,"doubleSided":true}),
         images: vec![masked, data, bumpy, ramp],
     };
-    let dir = stage(&write_fixture(&work.path().join("in"), &f), &work.path().join("out"));
+    let dir = stage(
+        &write_fixture(&work.path().join("in"), &f),
+        &work.path().join("out"),
+    );
     let want_world = {
         // T x + B y + N z with B = cross(N, T) * w = (0, 0, -1).
         let n = [0.3f64, 0.1, 0.95];
@@ -665,10 +806,16 @@ fn all_slots_mask_factors_and_the_normal_frame_survive() {
             assert_eq!(m["alphaCutoff"], 0.4);
             assert_eq!(m["doubleSided"], true);
             assert_eq!(m["emissiveFactor"], json!([0.2, 0.1, 0.0]));
-            assert_eq!(m["pbrMetallicRoughness"]["baseColorFactor"], json!([1.0, 0.9, 0.8, 1.0]));
+            assert_eq!(
+                m["pbrMetallicRoughness"]["baseColorFactor"],
+                json!([1.0, 0.9, 0.8, 1.0])
+            );
             assert_eq!(m["pbrMetallicRoughness"]["metallicFactor"], 0.5);
             assert_eq!(m["occlusionTexture"]["strength"], 0.6);
-            assert!(m["normalTexture"].get("scale").is_none(), "source scale absorbed");
+            assert!(
+                m["normalTexture"].get("scale").is_none(),
+                "source scale absorbed"
+            );
             for ptr in [
                 "/pbrMetallicRoughness/baseColorTexture/index",
                 "/pbrMetallicRoughness/metallicRoughnessTexture/index",
@@ -679,21 +826,38 @@ fn all_slots_mask_factors_and_the_normal_frame_survive() {
                 assert!(texture_index(m, ptr).is_some(), "{ptr}");
             }
             let normal_page = glb.texture(texture_index(m, "/normalTexture/index").unwrap());
-            let base = glb.texture(texture_index(m, "/pbrMetallicRoughness/baseColorTexture/index").unwrap());
-            let (uv, nrm, tan) = (p.uv.as_ref().unwrap(), p.normal.as_ref().unwrap(), p.tangent.as_ref().unwrap());
+            let base = glb
+                .texture(texture_index(m, "/pbrMetallicRoughness/baseColorTexture/index").unwrap());
+            let (uv, nrm, tan) = (
+                p.uv.as_ref().unwrap(),
+                p.normal.as_ref().unwrap(),
+                p.tangent.as_ref().unwrap(),
+            );
             for f in 0..p.positions.len() / 3 {
-                let c: [f64; 3] = std::array::from_fn(|a| (0..3).map(|k| p.positions[3 * f + k][a]).sum::<f64>() / 3.);
-                let t: [f64; 2] = std::array::from_fn(|a| (0..3).map(|k| uv[3 * f + k][a]).sum::<f64>() / 3.);
+                let c: [f64; 3] = std::array::from_fn(|a| {
+                    (0..3).map(|k| p.positions[3 * f + k][a]).sum::<f64>() / 3.
+                });
+                let t: [f64; 2] =
+                    std::array::from_fn(|a| (0..3).map(|k| uv[3 * f + k][a]).sum::<f64>() / 3.);
                 // MASK alpha follows the source's x < 32 texel split (away from the edge).
                 if (c[0] - 50.).abs() > 6. {
                     let a = bilinear(&base, t)[3];
-                    assert!(if c[0] < 50. { a < 0.2 } else { a > 0.8 }, "alpha {a} at {c:?}");
+                    assert!(
+                        if c[0] < 50. { a < 0.2 } else { a > 0.8 },
+                        "alpha {a} at {c:?}"
+                    );
                 }
                 let v = bilinear(&normal_page, t).map(|x| 2. * x - 1.);
-                let n: [f64; 3] = std::array::from_fn(|a| (0..3).map(|k| nrm[3 * f + k][a]).sum::<f64>() / 3.);
-                let tt: [f64; 4] = std::array::from_fn(|a| (0..3).map(|k| tan[3 * f + k][a]).sum::<f64>() / 3.);
-                let b = [n[1] * tt[2] - n[2] * tt[1], n[2] * tt[0] - n[0] * tt[2], n[0] * tt[1] - n[1] * tt[0]]
-                    .map(|x| x * tt[3].signum());
+                let n: [f64; 3] =
+                    std::array::from_fn(|a| (0..3).map(|k| nrm[3 * f + k][a]).sum::<f64>() / 3.);
+                let tt: [f64; 4] =
+                    std::array::from_fn(|a| (0..3).map(|k| tan[3 * f + k][a]).sum::<f64>() / 3.);
+                let b = [
+                    n[1] * tt[2] - n[2] * tt[1],
+                    n[2] * tt[0] - n[0] * tt[2],
+                    n[0] * tt[1] - n[1] * tt[0],
+                ]
+                .map(|x| x * tt[3].signum());
                 let w: [f64; 3] = std::array::from_fn(|a| tt[a] * v[0] + b[a] * v[1] + n[a] * v[2]);
                 let l = (w[0] * w[0] + w[1] * w[1] + w[2] * w[2]).sqrt();
                 let cos = (w[0] * want_world[0] + w[1] * want_world[1] + w[2] * want_world[2]) / l;
@@ -702,7 +866,10 @@ fn all_slots_mask_factors_and_the_normal_frame_survive() {
             }
         }
     }
-    assert!(checked > 0 && worst < 4., "worst world-normal angle {worst} deg");
+    assert!(
+        checked > 0 && worst < 4.,
+        "worst world-normal angle {worst} deg"
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -741,14 +908,20 @@ impl Eval {
         for t in &self.triangles {
             let e1: [f64; 3] = std::array::from_fn(|a| t[1][a] - t[0][a]);
             let e2: [f64; 3] = std::array::from_fn(|a| t[2][a] - t[0][a]);
-            let c = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+            let c = [
+                e1[1] * e2[2] - e1[2] * e2[1],
+                e1[2] * e2[0] - e1[0] * e2[2],
+                e1[0] * e2[1] - e1[1] * e2[0],
+            ];
             total += (c[0] * c[0] + c[1] * c[1] + c[2] * c[2]).sqrt();
             cumulative.push(total);
         }
         (0..n)
             .map(|_| {
                 let r = next() * total;
-                let i = cumulative.partition_point(|c| *c <= r).min(self.triangles.len() - 1);
+                let i = cumulative
+                    .partition_point(|c| *c <= r)
+                    .min(self.triangles.len() - 1);
                 let (a, b) = (next().sqrt(), next());
                 (i, [1. - a, a * (1. - b), a * b])
             })
@@ -787,7 +960,8 @@ struct CutColour {
 
 impl CutColour {
     fn at(&self, t: usize, w: [f64; 3]) -> [f64; 3] {
-        let col: [f64; 3] = std::array::from_fn(|a| (0..3).map(|k| self.color[t][k][a] * w[k]).sum());
+        let col: [f64; 3] =
+            std::array::from_fn(|a| (0..3).map(|k| self.color[t][k][a] * w[k]).sum());
         let tex = match (self.uv[t], self.page[t]) {
             (Some(uv), Some(p)) => {
                 let q: [f64; 2] = std::array::from_fn(|a| (0..3).map(|k| uv[k][a] * w[k]).sum());
@@ -816,16 +990,24 @@ fn load_cut(dir: &Path, uris: &[String]) -> (Vec<[[f64; 3]; 3]>, CutColour) {
             let factor = p.material["pbrMetallicRoughness"]["baseColorFactor"]
                 .as_array()
                 .map_or([1.; 4], |a| std::array::from_fn(|i| a[i].as_f64().unwrap()));
-            let page = texture_index(&p.material, "/pbrMetallicRoughness/baseColorTexture/index").map(|t| {
-                *cache.entry(t).or_insert_with(|| {
-                    c.pages.push(glb.texture(t));
-                    c.pages.len() - 1
-                })
-            });
+            let page = texture_index(&p.material, "/pbrMetallicRoughness/baseColorTexture/index")
+                .map(|t| {
+                    *cache.entry(t).or_insert_with(|| {
+                        c.pages.push(glb.texture(t));
+                        c.pages.len() - 1
+                    })
+                });
             for f in 0..p.positions.len() / 3 {
                 tris.push(std::array::from_fn(|k| p.positions[3 * f + k]));
-                c.uv.push(p.uv.as_ref().map(|uv| std::array::from_fn(|k| uv[3 * f + k])));
-                c.color.push(p.color.as_ref().map_or([[1.; 4]; 3], |col| std::array::from_fn(|k| col[3 * f + k])));
+                c.uv.push(
+                    p.uv.as_ref()
+                        .map(|uv| std::array::from_fn(|k| uv[3 * f + k])),
+                );
+                c.color.push(
+                    p.color
+                        .as_ref()
+                        .map_or([[1.; 4]; 3], |col| std::array::from_fn(|k| col[3 * f + k])),
+                );
                 c.factor.push(factor);
                 c.page.push(page);
             }
@@ -855,30 +1037,72 @@ fn evidence_appearance() {
     config.scratch_dir = Some(scratch.clone());
     let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
     let cache = super::bake::ImageCache::new(u64::MAX);
-    let source: Vec<crate::mesh_large::attributes::FullTriangle> =
-        captured.triangles.reader().unwrap().map(|t| t.unwrap()).collect();
-    let src = Eval::new(source.iter().map(|t| t.triangle.positions.map(|p| p.map(f64::from))).collect());
+    let source: Vec<crate::mesh_large::attributes::FullTriangle> = captured
+        .triangles
+        .reader()
+        .unwrap()
+        .map(|t| t.unwrap())
+        .collect();
+    let src = Eval::new(
+        source
+            .iter()
+            .map(|t| t.triangle.positions.map(|p| p.map(f64::from)))
+            .collect(),
+    );
     let check = || Ok(());
     let source_colour = |i: usize, w: [f64; 3]| -> [f64; 3] {
         let t = &source[i];
         let factor = captured
             .materials
             .get(t.material as usize)
-            .and_then(|m| m.literal().pointer("/pbrMetallicRoughness/baseColorFactor").cloned())
-            .and_then(|v| v.as_array().map(|a| std::array::from_fn::<f64, 4, _>(|i| a[i].as_f64().unwrap())))
+            .and_then(|m| {
+                m.literal()
+                    .pointer("/pbrMetallicRoughness/baseColorFactor")
+                    .cloned()
+            })
+            .and_then(|v| {
+                v.as_array()
+                    .map(|a| std::array::from_fn::<f64, 4, _>(|i| a[i].as_f64().unwrap()))
+            })
             .unwrap_or([1.; 4]);
         let col: [f64; 3] = if t.flags & crate::mesh_large::attributes::COLOR != 0 {
-            std::array::from_fn(|a| (0..3).map(|k| f64::from(t.corners[k].color[a]) * w[k]).sum())
+            std::array::from_fn(|a| {
+                (0..3)
+                    .map(|k| f64::from(t.corners[k].color[a]) * w[k])
+                    .sum()
+            })
         } else {
             [1.; 3]
         };
-        let tex = match super::bake::binding(&captured, t.material, crate::gltf_source::source::TextureSlot::BaseColor).unwrap() {
+        let tex = match super::bake::binding(
+            &captured,
+            t.material,
+            crate::gltf_source::source::TextureSlot::BaseColor,
+        )
+        .unwrap()
+        {
             Some((image, sampler, set)) => {
-                let chain = cache.get(&captured, image, crate::mesh_large::leaves::mips::Class::Colour, 0, &check).unwrap();
+                let chain = cache
+                    .get(
+                        &captured,
+                        image,
+                        crate::mesh_large::leaves::mips::Class::Colour,
+                        0,
+                        &check,
+                    )
+                    .unwrap();
                 let uv: [f32; 2] = std::array::from_fn(|a| {
-                    (0..3).map(|k| f64::from(t.corners[k].texcoords[set][a]) * w[k]).sum::<f64>() as f32
+                    (0..3)
+                        .map(|k| f64::from(t.corners[k].texcoords[set][a]) * w[k])
+                        .sum::<f64>() as f32
                 });
-                let s = super::bake::sample(&chain, crate::mesh_large::leaves::mips::Class::Colour, sampler, uv, 0.);
+                let s = super::bake::sample(
+                    &chain,
+                    crate::mesh_large::leaves::mips::Class::Colour,
+                    sampler,
+                    uv,
+                    0.,
+                );
                 [s[0], s[1], s[2]]
             }
             None => [1.; 3],
@@ -889,21 +1113,44 @@ fn evidence_appearance() {
     let mut tiles: Vec<(u64, u64, u32, String, bool)> = vec![];
     for (file, leaf) in [("leaves.jsonl", true), ("proxies.jsonl", false)] {
         for r in rows(&dir.join(file)) {
-            tiles.push((r["first"].as_u64().unwrap(), r["end"].as_u64().unwrap(), r["depth"].as_u64().unwrap() as u32, r["uri"].as_str().unwrap().to_owned(), leaf));
+            tiles.push((
+                r["first"].as_u64().unwrap(),
+                r["end"].as_u64().unwrap(),
+                r["depth"].as_u64().unwrap() as u32,
+                r["uri"].as_str().unwrap().to_owned(),
+                leaf,
+            ));
         }
     }
     tiles.sort_by_key(|t| (t.0, t.2));
-    let root = tiles.iter().position(|t| t.0 == 0 && t.1 == source.len() as u64).unwrap();
+    let root = tiles
+        .iter()
+        .position(|t| t.0 == 0 && t.1 == source.len() as u64)
+        .unwrap();
     let children = |i: usize| -> Vec<usize> {
         let (f, e, d) = (tiles[i].0, tiles[i].1, tiles[i].2);
-        let inside: Vec<usize> = (0..tiles.len()).filter(|&j| j != i && tiles[j].0 >= f && tiles[j].1 <= e && tiles[j].2 > d).collect();
+        let inside: Vec<usize> = (0..tiles.len())
+            .filter(|&j| j != i && tiles[j].0 >= f && tiles[j].1 <= e && tiles[j].2 > d)
+            .collect();
         inside
             .iter()
             .copied()
-            .filter(|&j| !inside.iter().any(|&k| k != j && tiles[k].0 <= tiles[j].0 && tiles[k].1 >= tiles[j].1 && tiles[k].2 < tiles[j].2))
+            .filter(|&j| {
+                !inside.iter().any(|&k| {
+                    k != j
+                        && tiles[k].0 <= tiles[j].0
+                        && tiles[k].1 >= tiles[j].1
+                        && tiles[k].2 < tiles[j].2
+                })
+            })
             .collect()
     };
-    let max_depth = tiles.iter().filter(|t| !t.4).map(|t| t.2).max().unwrap_or(0);
+    let max_depth = tiles
+        .iter()
+        .filter(|t| !t.4)
+        .map(|t| t.2)
+        .max()
+        .unwrap_or(0);
     let mut cuts: Vec<u32> = (0..=max_depth).collect();
     cuts.dedup();
     let mut results = vec![];
@@ -922,7 +1169,11 @@ fn evidence_appearance() {
         let lod = Eval::new(tris);
         let mut directions = serde_json::Map::new();
         for (label, from_source) in [("source_to_lod", true), ("lod_to_source", false)] {
-            let (a, b) = if from_source { (&src, &lod) } else { (&lod, &src) };
+            let (a, b) = if from_source {
+                (&src, &lod)
+            } else {
+                (&lod, &src)
+            };
             let samples = a.samples(200_000, 20261024 + u64::from(from_source));
             let (mut mse, mut hint) = (0., None);
             let mut distances = vec![];

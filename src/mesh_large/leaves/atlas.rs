@@ -11,8 +11,8 @@ use super::{
     geometry::LatticePlan,
     mask::SurfaceSample,
     mips::{self, Class},
-    sparse_mips::LEAF_ISLAND_ISOLATED_LEVELS,
     prepared::{PreparedAtlas, PreparedPage, PreparedPrimitive},
+    sparse_mips::LEAF_ISLAND_ISOLATED_LEVELS,
 };
 use crate::stage_timing::{self as timing, Counter, Stage};
 use crate::{
@@ -192,7 +192,12 @@ fn pack(
             None
         };
         buckets
-            .entry((role(b.slot), b.sampler.min_filter, b.sampler.mag_filter, mask))
+            .entry((
+                role(b.slot),
+                b.sampler.min_filter,
+                b.sampler.mag_filter,
+                mask,
+            ))
             .or_default()
             .push(i);
     }
@@ -724,7 +729,8 @@ fn layout(
                 .collect();
             let (gutter, align) = crop_padding(class(b.slot), profile, sampler);
             // Mipmapped lossy bindings: interiors on the alignment grid (D6).
-            let mipmapped = profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
+            let mipmapped =
+                profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
             let block = crops::plan_islands_aligned(
                 &uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
             )?;
@@ -1000,7 +1006,11 @@ fn encode_page(
         // Mipmapped lossy pages keep their islands apart in every reduced level.
         let mipmapped =
             profile != Profile::Lossless && matches!(page.sampler.min_filter, 9984..=9987);
-        let mut labels = if mipmapped { vec![0u32; pixels] } else { Vec::new() };
+        let mut labels = if mipmapped {
+            vec![0u32; pixels]
+        } else {
+            Vec::new()
+        };
         let mut next_label = 0u32;
         let mut surface = Vec::new();
         let mut mask_context = None;
@@ -1086,7 +1096,11 @@ fn encode_page(
             &rgba,
             &support,
             mipmapped.then_some(labels.as_slice()),
-            if mipmapped { LEAF_ISLAND_ISOLATED_LEVELS } else { 0 },
+            if mipmapped {
+                LEAF_ISLAND_ISOLATED_LEVELS
+            } else {
+                0
+            },
             page.slot,
             profile,
             memory,

@@ -115,7 +115,9 @@ fn totals() -> Option<&'static Totals> {
                 encode_nanos: std::array::from_fn(|_| AtomicU64::new(0)),
                 encode_texels: std::array::from_fn(|_| AtomicU64::new(0)),
                 encode_calls: std::array::from_fn(|_| AtomicU64::new(0)),
-                level_cpu_nanos: std::array::from_fn(|_| std::array::from_fn(|_| AtomicU64::new(0))),
+                level_cpu_nanos: std::array::from_fn(|_| {
+                    std::array::from_fn(|_| AtomicU64::new(0))
+                }),
                 level_texels: std::array::from_fn(|_| std::array::from_fn(|_| AtomicU64::new(0))),
             })
         })
@@ -175,8 +177,10 @@ pub(crate) fn level<T>(kind: usize, level: usize, texels: u64, f: impl FnOnce() 
     let cpu_start = thread_cpu_nanos();
     let out = f();
     let l = level.min(LEVELS - 1);
-    totals.level_cpu_nanos[kind][l]
-        .fetch_add(thread_cpu_nanos().saturating_sub(cpu_start), Ordering::Relaxed);
+    totals.level_cpu_nanos[kind][l].fetch_add(
+        thread_cpu_nanos().saturating_sub(cpu_start),
+        Ordering::Relaxed,
+    );
     totals.level_texels[kind][l].fetch_add(texels, Ordering::Relaxed);
     out
 }
