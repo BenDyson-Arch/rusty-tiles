@@ -30,6 +30,20 @@ WELDED_POINTS[0][1]=(1,0,0)
 # missing exact edge without an unrelated equal-direction winding defect.
 WELDED_POINTS[3]=[(1,0,0),(0,0,0),(0,-1,0)]
 
+def refinable(doc):
+    """Give every content-less explicit cell a box and the empty-cell floor
+    G >= 16 x box diagonal, keeping G ordered; returns doc. Since the upward-
+    omission contract, a content-less root is an omitted cell and must refine."""
+    def walk(node):
+        g=max([node.get('geometricError',0)]+[walk(c) for c in node.get('children',[])])
+        if not node.get('content') and not node.get('contents'):
+            box=node.setdefault('boundingVolume',{'box':[0,0,0,256,0,0,0,256,0,0,0,256]})['box']
+            g=max(g,16*2*sum(v*v for v in box[3:12])**.5)
+        node['geometricError']=g
+        return g
+    doc['geometricError']=max(doc.get('geometricError',0),walk(doc['root']))
+    return doc
+
 def transformed(p, trs=False):
     # outer translation [8,4,2], inner column-major matrix: rotate 90 deg
     # about Z, with nonuniform/reflected scale [-2,4,1].

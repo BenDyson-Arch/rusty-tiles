@@ -40,6 +40,13 @@ def require(condition, check, detail):
         raise Failure(check, detail)
 
 
+def _index(value, uri):
+    """A glTF index or count; integral numeric lexemes such as 1.0 are exact."""
+    require(type(value) in (int, float) and value >= 0 and float(value).is_integer(), 'triangleCap',
+            f'{uri}: non-integral glTF index {value!r}')
+    return int(value)
+
+
 def triangles(data, uri):
     """Published triangles of one GLB, over every scene instance of each mesh."""
     require(data[:4] == b'glTF' and len(data) >= 20, 'triangleCap', f'{uri}: not a GLB')
@@ -47,8 +54,8 @@ def triangles(data, uri):
     require(kind == 0x4E4F534A and 20 + length <= len(data), 'triangleCap', f'{uri}: no JSON chunk')
     doc = json.loads(data[20:20 + length])
     nodes, meshes, accessors = doc.get('nodes', []), doc.get('meshes', []), doc.get('accessors', [])
-    scene = doc.get('scenes', [{}])[doc.get('scene', 0)]
-    total, stack, visits = 0, list(scene.get('nodes', [])), 0
+    scene = doc.get('scenes', [{}])[_index(doc.get('scene', 0), uri)]
+    total, stack, visits = 0, [_index(n, uri) for n in scene.get('nodes', [])], 0
     while stack:
         visits += 1
         require(visits <= 1_000_000, 'triangleCap', f'{uri}: scene walk limit')
@@ -56,11 +63,11 @@ def triangles(data, uri):
         require('EXT_mesh_gpu_instancing' not in node.get('extensions', {}), 'triangleCap',
                 f'{uri}: instanced geometry unsupported')
         if 'mesh' in node:
-            for p in meshes[node['mesh']]['primitives']:
-                require(p.get('mode', 4) == 4, 'triangleCap', f'{uri}: non-triangle primitive')
+            for p in meshes[_index(node['mesh'], uri)]['primitives']:
+                require(_index(p.get('mode', 4), uri) == 4, 'triangleCap', f'{uri}: non-triangle primitive')
                 accessor = p['indices'] if 'indices' in p else p['attributes']['POSITION']
-                total += accessors[accessor]['count'] // 3
-        stack.extend(node.get('children', []))
+                total += _index(accessors[_index(accessor, uri)]['count'], uri) // 3
+        stack.extend(_index(c, uri) for c in node.get('children', []))
     return total
 
 

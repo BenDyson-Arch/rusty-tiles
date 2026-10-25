@@ -269,9 +269,22 @@ yet; the owner requested handoff without another Codex review.
 R11's source/resource/width findings and correction receipts are cached under
 `r11-profile-fix/`, with immutable manifest `sha256-r11-profile-fix.json`, SHA256
 `ae5e81bcd67fcf4a1314f89ef1f14e3e1bcec32157943decee5ab7ad6fcd6b2f`.
-The hard 8,192 limit and upward-omission/frontier checks remain pending. The
-above-cap positive described above is superseded, not current-contract evidence.
-Neither `055be853` nor the withdrawn `8074b7db` clone-frontier head was merged.
-The next S1 head must publish the top-connected empty cap before integration.
+### Upward-omission revision (S1 `98a1bec5`)
+
+S1 `756283e2` then `98a1bec5` are merged; S2 sampling and S3 appearance are
+kept, with two test-initializer seams. The above-cap positive is replaced by an
+8,192 positive and 8,193 coarse/leaf `triangleCap` negatives. Analytic controls
+whose root is content-less now give it the empty-cell floor (`refinable`);
+only those `tileset.json` hashes changed. `omission_controls.py` adds 12
+explicit/external/implicit cases with oracle/native parity, including R9's
+children-error omitted cells, and producer-report agreement/mismatch.
+Integration passes 121 cases and 772 hashes. Round 9's S1 `756283e2` cap12/cap30
+archives fail `emptyCellRefinement`; their corrected variants pass, with derived
+omission counts equal to S1's (21/16/[1,4,16], 17/12/[1,4,12]).
+
+Own tex3/crop3 bakes at this integration refuse before publication: S1's walk
+ledger finds S2's unadmitted scratch (314,783,887 > 216,795,519 and
+264,788,907 > 166,800,539 bytes). No archive, oracle or native verdict exists
+for them; S2/S3 must admit their scratch.
 D11 border certificates, E/G inequalities, terminal locks, appearance continuity
 and topology-loss audits remain deferred to S1b's implementation.

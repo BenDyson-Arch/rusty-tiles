@@ -121,7 +121,7 @@ def run(root, binary):
     digest = hashlib.sha256(binary.read_bytes()).hexdigest()
     results = []
     for name, (doc, files), code, label in generate():
-        files = {**files, 'tileset.json': json.dumps(doc).encode()}
+        files = {**files, 'tileset.json': json.dumps(controls.refinable(doc)).encode()}
         folder = root / name
         folder.mkdir(exist_ok=True)
         for member, data in files.items():

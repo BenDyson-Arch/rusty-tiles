@@ -71,7 +71,7 @@ def generate(root):
             tile = native_controls.tile
             doc = dict(asset={'version': '1.1'}, geometricError=0,
                 root=tile(children=[tile('coarse.glb', [tile('left.glb')]), tile('right.glb')]))
-            files['tileset.json'] = json.dumps(doc).encode()
+            files['tileset.json'] = json.dumps(controls.refinable(doc)).encode()
             for member, data in files.items():
                 (folder / member).write_bytes(data)
             cases.append((name, folder, source_path, lost))
@@ -111,9 +111,9 @@ def generate(root):
                  'left.glb': shared(list(range(4)), True),
                  'right.glb': shared(list(range(4, 8)), True, gap)}
         tile = native_controls.tile
-        files['tileset.json'] = json.dumps(dict(asset={'version': '1.1'},
+        files['tileset.json'] = json.dumps(controls.refinable(dict(asset={'version': '1.1'},
             geometricError=0, root=tile(children=[
-                tile('coarse.glb', [tile('left.glb')]), tile('right.glb')]))).encode()
+                tile('coarse.glb', [tile('left.glb')]), tile('right.glb')])))).encode()
         for member, data in files.items():
             (folder / member).write_bytes(data)
         cases.append((name, folder, source_path, bool(gap)))

@@ -82,7 +82,7 @@ def run(root):
             (out/f'{i}.glb').write_bytes(payload(i,step,code if i==0 else 0,float_storage=i in float_ids,source_exact=source_exact,
                 unshared_code=int(i==0 and name=='one-code-beyond-incident')))
         doc=hierarchy(order)
-        (out/'tileset.json').write_text(json.dumps(doc))
+        (out/'tileset.json').write_text(json.dumps(controls.refinable(doc)))
         try:
             result=audit(out,unshared_path if name=='one-code-beyond-incident' else source_path)
             assert want is None,(name,result)
@@ -99,7 +99,7 @@ def run(root):
             (out/f'{i}.glb').write_bytes(payload(i,step))
         (out/'parent.glb').write_bytes(payload(0,.0625,leaf=False,shift=shift))
         doc=hierarchy([0,1,2],parent=True)
-        (out/'tileset.json').write_text(json.dumps(doc))
+        (out/'tileset.json').write_text(json.dumps(controls.refinable(doc)))
         try:
             result=audit(out,source_path)
             assert want is None,(name,result)

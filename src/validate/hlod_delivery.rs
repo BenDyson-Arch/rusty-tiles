@@ -2721,10 +2721,11 @@ mod tests {
             }
         }
     }
-    /// One delivered hierarchy in preorder: (parent, placeholder, refine, payload ranks).
+    /// One delivered tile in preorder: (parent, placeholder, refine, payload ranks).
     /// Ranks on childless tiles are leaf payloads (with original triangle rows).
+    type Row<'a> = (Option<u64>, bool, Option<bool>, &'a [u64]);
     fn omission_case(
-        tiles: &[(Option<u64>, bool, Option<bool>, &[u64])],
+        tiles: &[Row<'_>],
         digests: &[(u64, u64)],
     ) -> Result<Omission, Error> {
         omission_errors(tiles, digests, &[])
@@ -2732,7 +2733,7 @@ mod tests {
     /// `errors` overrides a tile's (geometricError, box diagonal); the default is the
     /// refinable floor 16 over a unit diagonal.
     fn omission_errors(
-        tiles: &[(Option<u64>, bool, Option<bool>, &[u64])],
+        tiles: &[Row<'_>],
         digests: &[(u64, u64)],
         errors: &[(u64, f64, Option<f64>)],
     ) -> Result<Omission, Error> {

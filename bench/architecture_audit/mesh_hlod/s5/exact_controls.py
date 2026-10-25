@@ -118,7 +118,7 @@ def generate(root):
                'left.glb':payload(left,leaf=True),'right.glb':payload(right,leaf=True,first=len(left))}
         document=dict(asset={'version':'1.1'},geometricError=0,
             root=tile(children=[tile('coarse.glb',[tile('left.glb')]),tile('right.glb')]))
-        files['tileset.json']=json.dumps(document,separators=(',',':')).encode()
+        files['tileset.json']=json.dumps(controls.refinable(document),separators=(',',':')).encode()
         for member,data in files.items():(folder/member).write_bytes(data)
         source=root/(name+'-source.json')
         source.write_text(json.dumps({'triangles':{f'0,0,0,{i}':dict(xyz=triangle,
