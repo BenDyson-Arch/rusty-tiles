@@ -197,6 +197,10 @@ fn write_fixture(dir: &Path, f: &Fixture) -> PathBuf {
 }
 
 fn stage(input: &Path, out: &Path) -> PathBuf {
+    stage_capped(input, out, 300)
+}
+
+fn stage_capped(input: &Path, out: &Path, cap: usize) -> PathBuf {
     let scratch = out.with_extension("scratch");
     fs::create_dir_all(&scratch).unwrap();
     let request = LeafOutputRequest::new(input, out, LeafProfile::Balanced)
@@ -204,7 +208,7 @@ fn stage(input: &Path, out: &Path) -> PathBuf {
         .with_scratch_dir(&scratch)
         .with_leaf_triangles(256)
         .with_lod(TilerLod::Hlod)
-        .with_hlod_settings(super::tests::test_settings(300));
+        .with_hlod_settings(super::tests::test_settings(cap));
     let dir = mesh_to_leaf_payloads(request, &RunControl::default())
         .unwrap()
         .output;
@@ -537,6 +541,42 @@ fn coarse_pages_rebake_the_source_ramp_with_content_sized_pages() {
     let depths = manifest["hlod"]["appearanceByDepth"].as_array().unwrap();
     let pages: u64 = depths.iter().map(|d| d["pages"].as_u64().unwrap()).sum();
     assert_eq!(pages as usize, tiles.len());
+}
+
+/// D1 omission with a textured source: an omitted cell holds no content, so S3 charts,
+/// bakes and textures nothing for it. At caps small enough to omit cells, every published
+/// row is textured, the per-depth appearance (tiles, pages, donor searches) sums exactly
+/// the published rows, and the stage holds one tile file per row (none for omitted cells).
+#[test]
+fn omitted_cells_get_no_pages_textures_or_donor_work() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_fixture(&work.path().join("in"), &base_fixture());
+    let mut omitted_any = false;
+    for cap in [12, 40, 120] {
+        let dir = stage_capped(&input, &work.path().join(format!("cap{cap}")), cap);
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let hlod = &manifest["hlod"];
+        omitted_any |= hlod["omittedProxies"].as_u64().unwrap() > 0;
+        let proxies = rows(&dir.join("proxies.jsonl"));
+        let files = fs::read_dir(dir.join("proxies")).unwrap().count();
+        assert_eq!(files, proxies.len(), "cap {cap}: a tile file without a row");
+        let depths = hlod["appearanceByDepth"].as_array().unwrap();
+        let sum = |key: &str| -> u64 { depths.iter().map(|d| d[key].as_u64().unwrap()).sum() };
+        let rows_sum = |key: &str| -> u64 {
+            proxies
+                .iter()
+                .map(|r| r["appearance"][key].as_u64().unwrap())
+                .sum()
+        };
+        assert_eq!(sum("tiles"), proxies.len() as u64, "cap {cap}: {hlod}");
+        assert_eq!(sum("pages"), rows_sum("pages"), "cap {cap}");
+        assert_eq!(sum("searches"), rows_sum("searches"), "cap {cap}");
+        for row in &proxies {
+            assert_eq!(row["appearance"]["texturedGroups"], 1, "cap {cap}: {row}");
+        }
+    }
+    assert!(omitted_any, "some cap omits cells");
 }
 
 /// Adversarial: 32 strips, each its own textured material class and source image, so
