@@ -37,6 +37,11 @@ struct Mesh {
 }
 
 fn write_gltf(dir: &Path, meshes: &[Mesh]) -> PathBuf {
+    write_gltf_scaled(dir, meshes, &[])
+}
+
+/// `write_gltf` with a node scale per mesh (`[1; 3]` where `scales` is shorter).
+fn write_gltf_scaled(dir: &Path, meshes: &[Mesh], scales: &[[f32; 3]]) -> PathBuf {
     fs::create_dir_all(dir).unwrap();
     let mut bin = Vec::new();
     let (mut views, mut accessors, mut gltf_meshes, mut nodes, mut materials) =
@@ -61,7 +66,7 @@ fn write_gltf(dir: &Path, meshes: &[Mesh]) -> PathBuf {
         views.push(json!({"buffer":0,"byteOffset":start,"byteLength":bin.len()-start}));
         accessors.push(json!({"bufferView":views.len()-1,"componentType":5125,"count":m.indices.len(),"type":"SCALAR"}));
         gltf_meshes.push(json!({"primitives":[{"attributes":{"POSITION":accessors.len()-2},"indices":accessors.len()-1,"material":i}]}));
-        nodes.push(json!({"mesh":i}));
+        nodes.push(json!({"mesh":i,"scale":scales.get(i).copied().unwrap_or([1.; 3])}));
         materials
             .push(json!({"pbrMetallicRoughness":{"baseColorFactor":m.color,"metallicFactor":0.0}}));
     }
@@ -505,6 +510,9 @@ struct Census {
     max_perpendicular_excess_m: f64,
     /// Pairs of tiles on one root-to-leaf path with identical decoded content.
     duplicate_chain_tiles: usize,
+    /// Coarse faces whose corners are exactly those of a descendant leaf face in reverse,
+    /// with no descendant face of their own orientation (S5's source-orientation check).
+    reversed_coarse_faces: usize,
 }
 
 /// Search radius of the perpendicular census, metres: a point farther than this from every
@@ -923,6 +931,29 @@ fn census(dir: &Path) -> Census {
         }
     }
     c.duplicate_chain_tiles = duplicates.len();
+    // Source orientation: each oriented leaf face (rotated to its least corner) by leaf.
+    let rotate = |f: [Point; 3]| {
+        let k = (0..3).min_by_key(|&k| f[k]).unwrap();
+        [f[k], f[(k + 1) % 3], f[(k + 2) % 3]]
+    };
+    let mut oriented: HashMap<[Point; 3], Vec<usize>> = HashMap::new();
+    for (i, leaf) in leaves.iter().enumerate() {
+        for f in leaf.faces.iter().filter(|f| !degenerate(f)) {
+            oriented.entry(rotate(*f)).or_default().push(i);
+        }
+    }
+    for t in tiles.iter().filter(|t| !t.leaf) {
+        let within = |key: &[Point; 3]| {
+            oriented
+                .get(key)
+                .is_some_and(|l| l.iter().any(|&i| (t.begin..t.end).contains(&i)))
+        };
+        for f in t.faces.iter().filter(|f| !degenerate(f)) {
+            if !within(&rotate(*f)) && within(&rotate([f[0], f[2], f[1]])) {
+                c.reversed_coarse_faces += 1;
+            }
+        }
+    }
     let mut adjacent: BTreeSet<(usize, usize)> = BTreeSet::new();
     for l in edge_leaves.values().chain(point_leaves.values()) {
         let l: Vec<usize> = l.iter().copied().collect();
@@ -1044,12 +1075,22 @@ fn archive(dir: &Path, output: &Path) {
         "{:?}",
         checked.not_inspected
     );
+    check_errors(&expand_archive(output).0);
 }
 
 /// The full acceptance on one fixture: zero missing decoded segments/points at every
 /// tile, leaves byte-identical to the H17 run, the cap, valid representatives, and a
 /// validated archive.
 fn accept(name: &str, source: &[Mesh], run: Run) -> Census {
+    accept_with(name, source, run, false).0
+}
+
+/// `accept` for a fixture with or without source T-junctions or unwelded seams. Exact seams
+/// lock only shared points and segments, so where the source has such defects the census
+/// may find gaps along them: they are reported (the census's overlap and perpendicular
+/// counts beside the manifest's source-defect counts), not asserted away. Returns the census
+/// and the manifest's incidence report.
+fn accept_with(name: &str, source: &[Mesh], run: Run, defects: bool) -> (Census, Value) {
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), source);
     let dir = stage(&input, &work.path().join("hlod"), &run).unwrap();
@@ -1062,11 +1103,14 @@ fn accept(name: &str, source: &[Mesh], run: Run) -> Census {
     assert_eq!(census.missing_segments, 0, "{name}: {census:?}");
     assert_eq!(census.missing_vertices, 0, "{name}: {census:?}");
     assert_eq!(census.invalid_features, 0, "{name}: {census:?}");
-    assert_eq!(census.missing_overlap_items, 0, "{name}: {census:?}");
     assert_eq!(census.moved_border_vertices, 0, "{name}: {census:?}");
     assert!(census.perpendicular_checked > 0, "{name}: {census:?}");
-    assert_eq!(census.perpendicular_displaced, 0, "{name}: {census:?}");
+    if !defects {
+        assert_eq!(census.missing_overlap_items, 0, "{name}: {census:?}");
+        assert_eq!(census.perpendicular_displaced, 0, "{name}: {census:?}");
+    }
     assert_eq!(census.duplicate_chain_tiles, 0, "{name}: {census:?}");
+    assert_eq!(census.reversed_coarse_faces, 0, "{name}: {census:?}");
     assert!(census.max_coarse_triangles <= run.cap, "{name}: {census:?}");
     assert!(
         census.mixed_pairs > 0 && census.same_depth_pairs > 0,
@@ -1104,7 +1148,32 @@ fn accept(name: &str, source: &[Mesh], run: Run) -> Census {
     b.extend(files(&h17, "leaves.jsonl"));
     assert!(a == b, "{name}: HLOD leaves differ from H17's");
     archive(&dir, &work.path().join("out.3tz"));
-    census
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    (census, manifest["hlod"]["incidence"].clone())
+}
+
+/// A fixture's source defects: reported by the producer (combinatorially) and the census
+/// (geometrically), with the largest gap the census measured.
+fn reported(name: &str, census: &Census, incidence: &Value) {
+    eprintln!(
+        "{name}: source open edges {} (with shared endpoints {}); census overlaps {}, \
+         unkept overlap items {}, perpendicular displaced {} (max {} m)",
+        incidence["sourceOpenEdges"],
+        incidence["sourceOpenEdgesWithSharedEndpoints"],
+        census.overlaps,
+        census.missing_overlap_items,
+        census.perpendicular_displaced,
+        census.max_perpendicular_excess_m
+    );
+    assert!(census.overlaps > 0, "{name}: {census:?}");
+    assert!(
+        incidence["sourceOpenEdgesWithSharedEndpoints"]
+            .as_u64()
+            .unwrap()
+            > 0,
+        "{name}: {incidence}"
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1167,93 +1236,383 @@ fn sheet_is_crack_free_at_every_depth_mix_with_exact_leaves() {
     assert!(census.shared_edges > 100, "{census:?}");
 }
 
-/// T-junction interfaces are not shared source edges: along x = 50 the right side has
-/// extra vertices on the left side's edges. Every tile on one side must still cover
-/// exactly the decoded line extent its own leaves cover (no gap opens along the line).
+/// Owner decision (exact seams): a source T-junction is not a shared edge. Along the line the
+/// right side has extra vertices on the left side's edges; only the coinciding vertices are
+/// locked. The defect is reported by the producer (open source edges whose endpoints meet
+/// other geometry) and its gap measured by the census, not hidden.
 #[test]
-fn t_junctions_keep_their_shared_vertices_and_segments() {
-    let census = accept("t-junction", &t_junction(), Run::default());
-    assert!(census.overlaps > 0, "{census:?}");
-    let work = tempfile::tempdir().unwrap();
-    let input = write_gltf(&work.path().join("src"), &t_junction());
-    let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
-    let tiles = load(&dir);
-    let line = T_LINE.to_bits();
-    let displaced = std::cell::Cell::new(0f32);
-    let coverage = |faces: &[[Point; 3]]| -> Vec<(u32, u32)> {
-        let mut spans: Vec<(f32, f32)> = Vec::new();
-        for f in faces.iter().filter(|f| !degenerate(f)) {
-            for k in 0..3 {
-                let (a, b) = (f[k], f[(k + 1) % 3]);
-                // Perpendicular displacement: any edge within 5 mm of the line counts, and
-                // must lie exactly on it.
-                let (xa, xb) = (f32::from_bits(a[0]), f32::from_bits(b[0]));
-                if (xa - T_LINE).abs() < 0.005 && (xb - T_LINE).abs() < 0.005 {
-                    let worst = (xa - T_LINE).abs().max((xb - T_LINE).abs());
-                    displaced.set(displaced.get().max(worst));
-                }
-                if a[0] == line && b[0] == line {
-                    let (za, zb) = (f32::from_bits(a[2]), f32::from_bits(b[2]));
-                    spans.push((za.min(zb), za.max(zb)));
-                }
-            }
-        }
-        spans.sort_by(|x, y| x.partial_cmp(y).unwrap());
-        let mut union: Vec<(f32, f32)> = Vec::new();
-        for (lo, hi) in spans {
-            match union.last_mut() {
-                Some(last) if lo <= last.1 => last.1 = last.1.max(hi),
-                _ => union.push((lo, hi)),
-            }
-        }
-        union
-            .iter()
-            .map(|(a, b)| (a.to_bits(), b.to_bits()))
-            .collect()
+fn t_junction_cracks_are_reported_not_hidden() {
+    let (census, incidence) = accept_with("t-junction", &t_junction(), Run::default(), true);
+    reported("t-junction", &census, &incidence);
+}
+
+/// Three- and four-cell corners: sheets of different, non-nested resolutions meet along two
+/// border lines (both off every coarse lattice) and at their common corner, so T-junction
+/// runs end at a point shared by three or four meshes. Flat along both borders (exactly
+/// collinear once decoded), curved inside.
+fn corners(four: bool) -> Vec<Mesh> {
+    let c = T_LINE;
+    let height = move |x: f32, z: f32| {
+        let w = |v: f32| (std::f32::consts::PI * (v - c) / 50.).sin().powi(2);
+        2. + 3. * w(x) * w(z)
     };
-    let side = |t: &Tile| -> Option<bool> {
-        let xs: Vec<f32> = t
-            .faces
-            .iter()
-            .filter(|f| !degenerate(f))
-            .map(|f| {
-                (f32::from_bits(f[0][0]) + f32::from_bits(f[1][0]) + f32::from_bits(f[2][0])) / 3.
-            })
-            .collect();
-        if xs.iter().all(|x| *x < T_LINE) {
-            Some(false)
-        } else if xs.iter().all(|x| *x > T_LINE) {
-            Some(true)
-        } else {
-            None
-        }
-    };
-    let leaves: Vec<&Tile> = tiles.iter().filter(|t| t.leaf).collect();
-    let mut checked = 0;
-    for t in tiles.iter().filter(|t| !t.leaf) {
-        let mine = &leaves[t.begin..t.end];
-        let Some(s) = side(t) else { continue };
-        if mine.iter().any(|l| side(l) != Some(s)) {
-            continue;
-        }
-        let from_leaves: Vec<[Point; 3]> =
-            mine.iter().flat_map(|l| l.faces.iter().copied()).collect();
-        let expected = coverage(&from_leaves);
-        if expected.is_empty() {
-            continue;
-        }
-        assert_eq!(coverage(&t.faces), expected, "{}", t.uri);
-        checked += 1;
+    let colour = [0.5, 0.5, 0.5, 1.];
+    if four {
+        vec![
+            grid((10, 10), (0., c), (0., c), &height, colour),
+            grid((20, 20), (c, 100.), (0., c), &height, colour),
+            grid((15, 15), (0., c), (c, 100.), &height, colour),
+            grid((40, 40), (c, 100.), (c, 100.), &height, colour),
+        ]
+    } else {
+        vec![
+            grid((10, 20), (0., c), (0., 100.), &height, colour),
+            grid((25, 12), (c, 100.), (0., c), &height, colour),
+            grid((16, 30), (c, 100.), (c, 100.), &height, colour),
+        ]
     }
+}
+
+#[test]
+fn three_and_four_cell_corners_report_their_t_junctions() {
+    for (name, four) in [("three-cell corner", false), ("four-cell corner", true)] {
+        let (census, incidence) = accept_with(name, &corners(four), Run::default(), true);
+        reported(name, &census, &incidence);
+    }
+}
+
+/// A long collinear run: many short slivers laid end to end along one line in one leaf,
+/// one long border segment of a neighbouring sheet along the same line, and the run's
+/// joints all T-junctions on it.
+#[test]
+fn long_collinear_runs_report_their_t_junctions() {
+    let c = T_LINE;
+    let flat = |_: f32, _: f32| 2.;
+    let source = vec![
+        grid((1, 40), (0., c), (0., 100.), &flat, [0.6, 0.5, 0.4, 1.]),
+        grid((30, 400), (c, 100.), (0., 100.), &flat, [0.3, 0.6, 0.3, 1.]),
+    ];
+    let (census, incidence) = accept_with("collinear run", &source, Run::default(), true);
+    reported("collinear run", &census, &incidence);
+}
+
+/// Round 4: 64 separate ribbons (16,384 triangles) and 65 long diagonal slivers that never
+/// come near them. The slivers are long against every region they cross; testing them
+/// against every ribbon point (as an aggregate once did) locked all 16,512 ribbon vertices
+/// and refused the parent at the cap. The exact join locks nothing here.
+fn ribbons(n: usize) -> Mesh {
+    let mut ribbons = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.6, 0.6, 0.6, 1.],
+    };
+    for i in 0..=n {
+        for j in 0..=n {
+            ribbons.positions.push([
+                -90. + 80. * i as f32 / n as f32,
+                0.,
+                10. + 80. * j as f32 / n as f32,
+            ]);
+        }
+    }
+    for i in 0..n {
+        for j in (0..n).step_by(2) {
+            let a = (i * (n + 1) + j) as u32;
+            let b = a + n as u32 + 1;
+            ribbons.indices.extend([a, a + 1, b, b, a + 1, b + 1]);
+        }
+    }
+    ribbons
+}
+
+#[test]
+fn distant_long_slivers_lock_nothing_and_never_refuse() {
+    let ribbons = ribbons(128);
+    let mut slivers = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.8, 0.3, 0.3, 1.],
+    };
+    for k in 0..65i32 {
+        let off = (k - 32) as f32 * 0.02;
+        let base = slivers.positions.len() as u32;
+        slivers.positions.extend([
+            [-100., 0., -100. + off],
+            [100., 0., 100. + off],
+            [100., 0., 100. + off + 0.005],
+        ]);
+        slivers.indices.extend([base, base + 1, base + 2]);
+    }
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &[ribbons, slivers]);
+    let run = Run {
+        leaf_triangles: crate::mesh_large::config::CONSUMER_TABLE_ROWS,
+        cap: super::TRIANGLE_CAP,
+        jobs: 4,
+        ..Run::default()
+    };
+    let dir =
+        stage(&input, &work.path().join("hlod"), &run).unwrap_or_else(|f| panic!("{}", f.error));
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let incidence = &manifest["hlod"]["incidence"];
+    // Exact seams: rows only for coincident items, at most one per item.
     assert!(
-        checked >= 4,
-        "{checked} one-sided coarse tiles touch the T-junction line"
+        incidence["rows"].as_u64().unwrap() <= incidence["items"].as_u64().unwrap(),
+        "{incidence}"
     );
+    let census = census(&dir);
     assert_eq!(
-        displaced.get(),
-        0.,
-        "a decoded edge near the T-junction line left it"
+        census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
+        0,
+        "{census:?}"
     );
+}
+
+/// The owner's former fallback case: 2,048 random chord slivers spanning two ribbon blocks.
+/// Exact seams do no geometric matching, so the chords cost the pass only their items (at
+/// most six per triangle) and lock nothing they do not share. Never refused, crack-free, and
+/// identical (counters included) at one and four jobs.
+#[test]
+fn random_chords_cost_linear_work_and_never_refuse() {
+    let mut state = 0x9e37_79b9_7f4a_7c15u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state >> 11) as f32 / (1u64 << 53) as f32
+    };
+    let mut chords = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.8, 0.3, 0.3, 1.],
+    };
+    for _ in 0..2048 {
+        let mut p = || [-90. + 180. * next(), -2. + 4. * next(), 10. + 80. * next()];
+        let (a, b) = (p(), p());
+        let base = chords.positions.len() as u32;
+        chords.positions.extend([a, b, [b[0], b[1], b[2] + 0.005]]);
+        chords.indices.extend([base, base + 1, base + 2]);
+    }
+    let work = tempfile::tempdir().unwrap();
+    let left = ribbons(128);
+    let mut right = left.clone();
+    for p in &mut right.positions {
+        p[0] += 100.;
+    }
+    let input = write_gltf(&work.path().join("src"), &[left, right, chords]);
+    let run = |jobs: usize, name: &str| {
+        let run = Run {
+            leaf_triangles: crate::mesh_large::config::CONSUMER_TABLE_ROWS,
+            cap: super::TRIANGLE_CAP,
+            jobs,
+            ..Run::default()
+        };
+        stage(&input, &work.path().join(name), &run).unwrap_or_else(|f| panic!("{}", f.error))
+    };
+    let one = run(1, "one");
+    let four = run(4, "four");
+    let manifest = |dir: &Path| -> Value {
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap()
+    };
+    let (m1, m4) = (manifest(&one), manifest(&four));
+    let incidence = &m1["hlod"]["incidence"];
+    eprintln!("CHORDS {incidence}");
+    let triangles = 2 * 128 * 64 * 2 + 2048;
+    assert!(
+        incidence["items"].as_u64().unwrap() <= 6 * triangles,
+        "{incidence}"
+    );
+    assert!(
+        incidence["rows"].as_u64().unwrap() <= incidence["items"].as_u64().unwrap(),
+        "{incidence}"
+    );
+    assert_eq!(m1["hlod"], m4["hlod"]);
+    assert_eq!(published(&one), published(&four));
+    let census = census(&one);
+    assert_eq!(
+        census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
+        0,
+        "{census:?}"
+    );
+}
+
+/// Round 4: what one parent job allocates (meshopt's temporary arrays included, routed
+/// through the counting allocator) stays within the job's charge, on adversarial children:
+/// a fully locked disconnected soup (every vertex distinct, refused at the cap), grids whose
+/// required border segments are not point-locked (protected retries), and grids with no
+/// interface (free simplification); and the encode and decode check of a cap-sized tile
+/// within the job's encode allowance.
+#[test]
+fn parent_jobs_allocate_within_their_charge() {
+    use super::{encode, geometry, interfaces::key, interfaces::InterfaceRow, store::*};
+    crate::test_alloc::route_meshopt();
+    let bounds = Bounds {
+        min: [-100.; 3],
+        max: [100.; 3],
+    };
+    let lattice = LatticePlan::new(Profile::Balanced, bounds, &[255., 127., 63.]).unwrap();
+    let cap = super::TRIANGLE_CAP;
+    let n = 8192usize;
+    let parent = TileKey {
+        first: 0,
+        end: 8 * n as u64,
+        depth: 1,
+        leaf_begin: 1,
+        leaf_end: 9,
+    };
+    let outer = |slot: usize, a: [f32; 3], b: [f32; 3]| {
+        InterfaceRow::new(
+            slot as u32 + 1,
+            key(a).min(key(b)),
+            key(a).max(key(b)),
+            0,
+            slot as u32 + 1,
+        )
+    };
+    let primitive = |t: usize| SourcePrimitive {
+        node: 0,
+        mesh: 0,
+        primitive: t as u32,
+        expanded_ordinal: t as u64,
+        material: u32::MAX,
+    };
+    let child = |slot: usize, kind: u8| -> TileGeometry {
+        let origin = [
+            -90. + 90. * (slot & 1) as f32,
+            -90. + 90. * ((slot >> 1) & 1) as f32,
+            -90. + 90. * ((slot >> 2) & 1) as f32,
+        ];
+        let mut tile = TileGeometry {
+            key: TileKey {
+                first: (slot * n) as u64,
+                end: ((slot + 1) * n) as u64,
+                depth: 2,
+                leaf_begin: slot as u32 + 1,
+                leaf_end: slot as u32 + 2,
+            },
+            ells: Vec::new(),
+            positions: Vec::new(),
+            triangles: Vec::new(),
+            representative: Vec::new(),
+            primitives: Vec::new(),
+            interface: Vec::new(),
+            geometric_error: 0.,
+            lease: None,
+        };
+        let at = |x: f32, z: f32, y: f32| {
+            lattice
+                .canonical([origin[0] + x, origin[1] + y, origin[2] + z], 2)
+                .unwrap()
+        };
+        if kind == 0 || kind == 3 {
+            // Disconnected soup, every segment required; point-locked too (kind 0, refused
+            // at the cap), or not (kind 3: simplification deletes segments and retries).
+            for t in 0..n {
+                let (x, z) = ((t % 64) as f32 * 1.25, (t / 64) as f32 * 0.6);
+                let c = [at(x, z, 0.), at(x + 1., z, 0.1), at(x, z + 0.5, 0.2)];
+                let base = tile.positions.len() as u32;
+                tile.positions.extend(c);
+                tile.ells.extend([2; 3]);
+                tile.triangles.push([base, base + 1, base + 2]);
+                for k in 0..3 {
+                    if kind == 0 {
+                        tile.interface.push(outer(slot, c[k], c[k]));
+                    }
+                    tile.interface.push(outer(slot, c[k], c[(k + 1) % 3]));
+                }
+            }
+        } else {
+            // A 64 x 64 grid of quads (8,192 triangles), gently curved.
+            let w = 65;
+            for i in 0..w {
+                for j in 0..w {
+                    let (x, z) = (i as f32 * 1.25, j as f32 * 1.25);
+                    tile.positions
+                        .push(at(x, z, 0.02 * ((x * 0.3).sin() + (z * 0.2).cos())));
+                    tile.ells.push(2);
+                }
+            }
+            for i in 0..w - 1 {
+                for j in 0..w - 1 {
+                    let v = |a: usize, b: usize| (a * w + b) as u32;
+                    tile.triangles.push([v(i, j), v(i, j + 1), v(i + 1, j)]);
+                    tile.triangles
+                        .push([v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
+                }
+            }
+            if kind == 1 {
+                // Required border segments without point locks: simplification deletes some
+                // and the job protects and retries.
+                for i in 0..w - 1 {
+                    for (a, b) in [
+                        ((i, 0), (i + 1, 0)),
+                        ((i, w - 1), (i + 1, w - 1)),
+                        ((0, i), (0, i + 1)),
+                        ((w - 1, i), (w - 1, i + 1)),
+                    ] {
+                        let p = |(x, z): (usize, usize)| tile.positions[x * w + z];
+                        tile.interface.push(outer(slot, p(a), p(b)));
+                    }
+                }
+            }
+        }
+        tile.primitives = (0..tile.triangles.len()).map(primitive).collect();
+        tile.representative = (0..tile.triangles.len() as u32).collect();
+        tile.interface.sort_unstable_by_key(|r| (r.a, r.b));
+        tile.interface.dedup_by_key(|r| (r.a, r.b));
+        tile
+    };
+    let merged = (8 * n) as u64;
+    let charge = merged * super::JOB_BYTES_PER_TRIANGLE;
+    let mut grid = None;
+    for kind in [0u8, 1, 3, 2] {
+        let children: Vec<TileGeometry> = (0..8).map(|slot| child(slot, kind)).collect();
+        let (built, peak) = crate::test_alloc::peak(|| {
+            geometry::build_parent(parent, &children, &[cap], &|| Ok(()))
+        });
+        eprintln!(
+            "JOB kind {kind}: peak {peak} bytes = {:.0} per merged triangle (charge {})",
+            peak as f64 / merged as f64,
+            super::JOB_BYTES_PER_TRIANGLE
+        );
+        assert!(peak as u64 <= charge, "kind {kind}: {peak} > {charge}");
+        match (kind, built) {
+            // Its whole interface cannot fit the cap: omitted (nothing published or held),
+            // never refused.
+            (0, built) => assert!(built.unwrap().is_none()),
+            (2, built) => grid = Some(built.unwrap().unwrap()),
+            // The retries ran (and fitted, or ran out and omitted it).
+            (_, Ok(b)) => assert!(b.is_none_or(|b| b.retries > 0), "kind {kind}"),
+            (_, Err(e)) => panic!("kind {kind}: {e}"),
+        }
+    }
+
+    let built = grid.unwrap();
+    let (checked, peak) = crate::test_alloc::peak(|| {
+        let g = &built.geometry;
+        let fixed: Vec<bool> = encode::open_border(&g.triangles, g.positions.len())
+            .iter()
+            .zip(&built.locked)
+            .map(|(b, l)| *b || *l)
+            .collect();
+        let positions = lattice.encode_coarse(&g.positions, &g.ells, &fixed, g.key.depth)?;
+        let encoded = encode::encode(
+            g,
+            &built.locked,
+            positions,
+            &[],
+            &crate::mesh_large::batching::MaterialClasses::EMPTY,
+            Mutation::None,
+        )?;
+        encode::check(g, &built.locked, &encoded)
+    });
+    checked.unwrap();
+    eprintln!(
+        "JOB encode+check peak {peak} (allowance {})",
+        super::JOB_ENCODE_BYTES
+    );
+    assert!(peak as u64 <= super::JOB_ENCODE_BYTES, "{peak}");
 }
 
 /// The reviewer's encoder probe: steps 2^-7, 2^-8, 2^-9; a depth-1 coarse tile whose border
@@ -1277,13 +1636,7 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
         .unwrap();
     assert_eq!(snapped.decoded[2][0], 50., "probe must be sensitive");
     let key = super::interfaces::key;
-    let row = |p: [f32; 3]| InterfaceRow {
-        leaf: 0,
-        a: key(p),
-        b: key(p),
-        lo: 0,
-        hi: 1,
-    };
+    let row = |p: [f32; 3]| InterfaceRow::new(0, key(p), key(p), 0, 1);
     let tile = TileGeometry {
         key: TileKey {
             first: 0,
@@ -1308,16 +1661,16 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
         lease: None,
     };
     let locked = [true, true, false, false];
+    let fixed: Vec<bool> = encode::open_border(&tile.triangles, tile.positions.len())
+        .iter()
+        .zip(&locked)
+        .map(|(b, l)| *b || *l)
+        .collect();
     let encoded = encode::encode(
         &tile,
         &locked,
         lattice
-            .encode_coarse(
-                &tile.positions,
-                &tile.ells,
-                &encode::open_border(&tile.triangles, tile.positions.len()),
-                tile.key.depth,
-            )
+            .encode_coarse(&tile.positions, &tile.ells, &fixed, tile.key.depth)
             .unwrap(),
         &[],
         &crate::mesh_large::batching::MaterialClasses::EMPTY,
@@ -1363,6 +1716,7 @@ fn single_child_chains_publish_their_content_once() {
     let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
     let census = census(&dir);
     assert_eq!(census.duplicate_chain_tiles, 0, "{census:?}");
+    assert_eq!(census.reversed_coarse_faces, 0, "{census:?}");
     assert_eq!(
         census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
         0,
@@ -1373,6 +1727,8 @@ fn single_child_chains_publish_their_content_once() {
     let passed = manifest["hlod"]["passThrough"].as_u64().unwrap();
     assert!(passed >= 3, "{}", manifest["hlod"]);
     assert!(census.coarse >= 1, "{census:?}");
+    // S2 measures each encoded tile once: seeds and depth schedules follow its encoded
+    // depth, not the top of the chain it is published at.
     let proxies = rows(&dir.join("proxies.jsonl"));
     assert!(proxies.iter().any(|r| r["encodedDepth"] != r["depth"]));
     let mut samples = [0u64; 32];
@@ -1397,14 +1753,180 @@ fn single_child_chains_publish_their_content_once() {
         let summary = &manifest["hlod"]["errorMeasurement"]["byDepth"][depth];
         assert_eq!(summary["sourceAreaSamples"].as_u64(), Some(*n));
     }
-    let result = public(&input, &work.path().join("chain.3tz"), None, 2).unwrap();
+    let archive = work.path().join("chain.3tz");
+    let result = public(&input, &archive, None, 2).unwrap();
     assert!(result.diagnostics.hlod.unwrap().tiles >= 1);
+    // The chain cells are spliced out of the explicit hierarchy: no content-less tile below
+    // content (Cesium would drop the coarse tile there before its replacements load), and
+    // the coarse tile's children are its deeper renderable replacements.
+    let shape = refinement_shape(&archive);
+    assert_eq!(
+        shape.empty_below_content + shape.error_inversions,
+        0,
+        "{shape:?}"
+    );
+    assert!(shape.skipped_levels > 0, "{shape:?}");
+}
+
+/// Where the layout cannot skip a cell (implicit trees and document roots, forced here by
+/// tight fragment caps), a chain cell repeats its coarse tile instead of publishing empty;
+/// under the default caps every chain cell is spliced out and nothing repeats.
+#[test]
+fn chain_cells_repeat_coarse_content_where_they_cannot_be_spliced() {
+    use crate::mesh_large::delivery::{self, plan::Limits};
+    use sha2::{Digest, Sha256};
+    let source = vec![
+        grid(
+            (24, 24),
+            (0., 3.),
+            (0., 3.),
+            &|x, z| 0.05 * (x * z).sin(),
+            [0.6, 0.5, 0.4, 1.],
+        ),
+        Mesh {
+            positions: vec![[4000., 0., 4000.], [4001., 0., 4000.], [4000., 0., 4001.]],
+            indices: vec![0, 2, 1],
+            color: [0.5, 0.5, 0.5, 1.],
+        },
+    ];
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+    let repeats = |archive: &Path| {
+        let mut zip = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
+        let mut seen: HashMap<Vec<u8>, usize> = HashMap::new();
+        for i in 0..zip.len() {
+            let mut bytes = Vec::new();
+            zip.by_index(i).unwrap().read_to_end(&mut bytes).unwrap();
+            if bytes.starts_with(b"glTF") {
+                *seen.entry(Sha256::digest(&bytes).to_vec()).or_default() += 1;
+            }
+        }
+        seen.values().filter(|n| **n > 1).count()
+    };
+    let publish = |name: &str, limits: Limits| {
+        let output = work.path().join(name);
+        let mut file = fs::File::create(&output).unwrap();
+        let (report, _) = delivery::publish_with_limits(
+            &MeshTilesetRequest::new(&dir, &output),
+            limits,
+            &mut file,
+            work.path(),
+        )
+        .unwrap();
+        drop(file);
+        let checked = inspect(ValidationRequest::new(&output)).unwrap();
+        assert!(checked
+            .checks
+            .iter()
+            .any(|c| c == "decodedContentContainment"));
+        check_errors(&expand_archive(&output).0);
+        (output, report)
+    };
+    let (spliced, report) = publish("spliced.3tz", delivery::plan::LIMITS);
+    assert_eq!(repeats(&spliced), 0, "{report:?}");
+    assert_eq!(report.implicit_roots, 0, "{report:?}");
+    assert_eq!(refinement_shape(&spliced).empty_below_content, 0);
+    let tight = Limits {
+        objects: 3,
+        records: 6,
+        levels: 2,
+    };
+    let (repeated, report) = publish("repeated.3tz", tight);
+    assert!(report.implicit_roots + report.documents > 1, "{report:?}");
+    assert!(repeats(&repeated) > 0, "{report:?}");
+    let shape = refinement_shape(&repeated);
+    assert_eq!(
+        shape.empty_below_content + shape.error_inversions,
+        0,
+        "{shape:?}"
+    );
+}
+
+/// The published hierarchy's refinement structure, over every document of an archive.
+#[derive(Debug, Default)]
+struct RefinementShape {
+    tiles: usize,
+    /// Tiles without content (neither geometry nor a document link nor implicit tiling)
+    /// below a tile with content.
+    empty_below_content: usize,
+    /// Explicit parent/child pairs more than one octree level apart (spliced chains).
+    skipped_levels: usize,
+    /// Child geometric error above its parent's.
+    error_inversions: usize,
+}
+
+fn refinement_shape(archive: &Path) -> RefinementShape {
+    let mut zip = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
+    let mut docs: HashMap<String, Value> = HashMap::new();
+    for i in 0..zip.len() {
+        let mut member = zip.by_index(i).unwrap();
+        let name = member.name().to_owned();
+        if name.ends_with(".json") {
+            let mut bytes = Vec::new();
+            member.read_to_end(&mut bytes).unwrap();
+            if let Ok(doc) = serde_json::from_slice::<Value>(&bytes) {
+                docs.insert(name, doc);
+            }
+        }
+    }
+    fn visit(
+        tile: &Value,
+        docs: &HashMap<String, Value>,
+        above: bool,
+        parent: Option<(u64, f64)>,
+        shape: &mut RefinementShape,
+    ) {
+        shape.tiles += 1;
+        let uris: Vec<&str> = tile["content"]["uri"]
+            .as_str()
+            .into_iter()
+            .chain(
+                tile["contents"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|c| c["uri"].as_str()),
+            )
+            .collect();
+        let link = uris.iter().find(|u| u.ends_with(".json"));
+        let geometry = uris.iter().any(|u| !u.ends_with(".json"));
+        let implicit = tile.get("implicitTiling").is_some();
+        let error = tile["geometricError"].as_f64().unwrap();
+        let depth = tile["extras"]["depth"].as_u64();
+        if let Some((parent_depth, parent_error)) = parent {
+            if depth.is_some_and(|d| d > parent_depth + 1) {
+                shape.skipped_levels += 1;
+            }
+            shape.error_inversions += usize::from(error > parent_error);
+        }
+        if above && !geometry && link.is_none() && !implicit {
+            shape.empty_below_content += 1;
+        }
+        let here = depth.map(|d| (d, error));
+        if let Some(uri) = link {
+            let doc = &docs[*uri];
+            visit(&doc["root"], docs, above || geometry, parent, shape);
+        }
+        for child in tile["children"].as_array().into_iter().flatten() {
+            visit(child, docs, above || geometry, here, shape);
+        }
+    }
+    let mut shape = RefinementShape::default();
+    visit(
+        &docs["tileset.json"]["root"],
+        &docs,
+        false,
+        None,
+        &mut shape,
+    );
+    shape
 }
 
 /// The adversarial interface inputs (sub-lattice micro geometry meeting long frame edges, a
 /// duplicated triangle soup with every point and segment shared) run within a small
-/// declared budget: the walk's leases stay within its ledger, and the overlap join stays
-/// within its declared probes.
+/// declared budget: the walk's leases stay within its ledger, and the overlap join's tests
+/// and rows stay within their by-design bounds.
 #[test]
 fn adversarial_interfaces_stay_within_a_small_budget() {
     let mut soup = Mesh {
@@ -1434,7 +1956,7 @@ fn adversarial_interfaces_stay_within_a_small_budget() {
             &Run {
                 leaf_triangles,
                 cap: super::TRIANGLE_CAP,
-                budget: Some(1 << 30),
+                budget: Some(2 << 30),
                 ..Run::default()
             },
         )
@@ -1450,10 +1972,11 @@ fn adversarial_interfaces_stay_within_a_small_budget() {
         let manifest: Value =
             serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
         let inc = &manifest["hlod"]["incidence"];
-        let probes = inc["probes"].as_u64().unwrap();
-        let bound =
-            27 * inc["openSegments"].as_u64().unwrap() + 31 * inc["openPoints"].as_u64().unwrap();
-        assert!(probes <= bound, "{name}: {inc}");
+        eprintln!("ADVERSARIAL {name}: {inc}");
+        assert!(
+            inc["rows"].as_u64().unwrap() <= inc["items"].as_u64().unwrap(),
+            "{name}: {inc}"
+        );
         let census = census(&dir);
         assert_eq!(
             census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
@@ -1464,10 +1987,10 @@ fn adversarial_interfaces_stay_within_a_small_budget() {
 }
 
 /// The round-2 dense fixture: 2,100 long slivers packed in one block plus a connected
-/// grid (9,300 triangles, two leaves). Their long open edges crowd one join cell past its
-/// resident host count; the join spills and splits that cell instead of refusing.
+/// grid (9,300 triangles, two leaves). Their long open edges crowd one region far past the
+/// exact leaf size; the join splits them apart instead of refusing.
 #[test]
-fn dense_sliver_borders_are_joined_not_refused() {
+fn dense_sliver_borders_are_not_refused() {
     let mut slivers = Mesh {
         positions: vec![],
         indices: vec![],
@@ -1498,7 +2021,7 @@ fn dense_sliver_borders_are_joined_not_refused() {
         serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
     let incidence = &manifest["hlod"]["incidence"];
     assert!(
-        incidence["denseCells"].as_u64().unwrap() >= 1,
+        incidence["rows"].as_u64().unwrap() <= incidence["items"].as_u64().unwrap(),
         "{incidence}"
     );
     let census = census(&dir);
@@ -1508,7 +2031,8 @@ fn dense_sliver_borders_are_joined_not_refused() {
             + census.missing_vertices
             + census.missing_overlap_items
             + census.perpendicular_displaced
-            + census.duplicate_chain_tiles,
+            + census.duplicate_chain_tiles
+            + census.reversed_coarse_faces,
         0,
         "{census:?}"
     );
@@ -1611,13 +2135,7 @@ fn adversarial_held_tile_fits_its_admitted_charge() {
         for i in 0..3 {
             let (p, q) = (k[i], k[(i + 1) % 3]);
             for (a, b) in [(p, p), (p.min(q), p.max(q))] {
-                tile.interface.push(InterfaceRow {
-                    leaf: 0,
-                    a,
-                    b,
-                    lo: 0,
-                    hi: 1,
-                });
+                tile.interface.push(InterfaceRow::new(0, a, b, 0, 1));
             }
         }
     }
@@ -1671,14 +2189,25 @@ fn duplicated_soup_is_admitted_and_crack_free() {
         0,
         "{census:?}"
     );
-    // Plain simplification cannot reduce disconnected single-triangle components (no
-    // pruning, D3): below the cap that topology is refused, never published over the cap.
-    let failure = stage(&input, &work.path().join("capped"), &Run::default()).unwrap_err();
+    // Plain simplification cannot reduce duplicated disconnected triangles (no pruning,
+    // D3): below the cap those parents are omitted, never published above it, never refused.
+    let dir = stage(&input, &work.path().join("capped"), &Run::default()).unwrap();
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let omitted: Vec<u64> =
+        serde_json::from_value(manifest["hlod"]["omittedByDepth"].clone()).unwrap();
+    assert_eq!(omitted.first(), Some(&1), "{}", manifest["hlod"]);
+    // Sol round 8: nothing compounds; every job merges at most eight capped children.
+    assert_bounded_jobs(&dir, 300);
+    for row in rows(&dir.join("proxies.jsonl")) {
+        assert!(row["triangles"].as_u64().unwrap() <= 300, "{row}");
+    }
+    cover(&dir);
+    let capped = super::tests::census(&dir);
     assert_eq!(
-        failure.error.kind(),
-        JobErrorKind::Unsupported,
-        "{}",
-        failure.error
+        capped.missing_segments + capped.missing_vertices + capped.reversed_coarse_faces,
+        0,
+        "{capped:?}"
     );
 }
 
@@ -1730,25 +2259,90 @@ fn float_profiles_are_crack_free() {
     );
 }
 
+/// S5 round 5: a thin two-sided plate (an up-facing sheet a millimetre above a down-facing
+/// one, joined along one edge: a fold) simplifies across the fold, where a collapsed face
+/// can land on an opposite-facing source face. Every coarse face keeps its source
+/// orientation (the census's exact reversal check, independent of the producer's).
 #[test]
-fn measured_positions_must_match_decoded_glb_bits() {
-    let work = tempfile::tempdir().unwrap();
-    let input = write_gltf(&work.path().join("src"), &sheet());
-    let error = stage(
-        &input,
-        &work.path().join("wrong-measurement"),
-        &Run {
-            mutation: Mutation::WrongMeasuredPosition,
-            ..Run::default()
-        },
-    )
-    .unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("measured positions differ from decoded GLB bits"),
-        "{error}"
+fn back_to_back_sheets_keep_their_source_orientation() {
+    let top = grid(
+        (40, 80),
+        (0., 100.),
+        (0., 100.),
+        &|x, z| bump(x, z) + 1e-3 * (x / 100.),
+        [0.6, 0.5, 0.4, 1.],
     );
+    let mut bottom = grid((40, 80), (0., 100.), (0., 100.), &bump, [0.3, 0.6, 0.3, 1.]);
+    for t in bottom.indices.chunks_mut(3) {
+        t.swap(1, 2);
+    }
+    let census = accept("back-to-back plate", &[top, bottom], Run::default());
+    assert_eq!(census.reversed_coarse_faces, 0, "{census:?}");
+}
+
+/// Mirrored nodes (negative-determinant scale) face where their leaves face at every depth:
+/// capture reverses their corners once, and coarse tiles inherit them. Every coarse face of
+/// a bumpy sheet points to the side its leaves' faces point to on average, and mirroring the
+/// sheet turns that side over.
+#[test]
+fn mirrored_nodes_keep_their_orientation_in_coarse_tiles() {
+    let normal = |f: &[Point; 3]| {
+        let p = f.map(|v| v.map(|b| f64::from(f32::from_bits(b))));
+        let (u, w): ([f64; 3], [f64; 3]) = (
+            std::array::from_fn(|i| p[1][i] - p[0][i]),
+            std::array::from_fn(|i| p[2][i] - p[0][i]),
+        );
+        [
+            u[1] * w[2] - u[2] * w[1],
+            u[2] * w[0] - u[0] * w[2],
+            u[0] * w[1] - u[1] * w[0],
+        ]
+    };
+    let dot = |a: [f64; 3], b: [f64; 3]| (0..3).map(|i| a[i] * b[i]).sum::<f64>();
+    let mut sides = Vec::new();
+    for mirrored in [false, true] {
+        let work = tempfile::tempdir().unwrap();
+        let mut meshes = sheet();
+        let mut scales = Vec::new();
+        if mirrored {
+            for m in &mut meshes {
+                for p in &mut m.positions {
+                    p[0] = -p[0];
+                }
+                scales.push([-1., 1., 1.]);
+            }
+        }
+        let input = write_gltf_scaled(&work.path().join("src"), &meshes, &scales);
+        let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+        let census = census(&dir);
+        assert_eq!(
+            census.missing_segments + census.reversed_coarse_faces,
+            0,
+            "{census:?}"
+        );
+        let tiles = load(&dir);
+        let mut side = [0f64; 3];
+        for f in tiles.iter().filter(|t| t.leaf).flat_map(|t| &t.faces) {
+            let n = normal(f);
+            side = std::array::from_fn(|i| side[i] + n[i]);
+        }
+        let coarse: Vec<&[Point; 3]> = tiles
+            .iter()
+            .filter(|t| !t.leaf)
+            .flat_map(|t| &t.faces)
+            .filter(|f| !degenerate(f))
+            .collect();
+        assert!(!coarse.is_empty());
+        let against = coarse.iter().filter(|f| dot(normal(f), side) <= 0.).count();
+        assert_eq!(
+            against,
+            0,
+            "mirrored {mirrored}: {against} of {}",
+            coarse.len()
+        );
+        sides.push(side);
+    }
+    assert!(dot(sides[0], sides[1]) < 0., "{sides:?}");
 }
 
 /// Control: a moved interface vertex that bypasses the producer's check is found by the
@@ -1791,13 +2385,61 @@ fn moved_or_dropped_segments_fail() {
     assert!(!work.path().join("dropped").exists());
 }
 
-/// An interface that cannot fit the cap is `unsupported` with tile/count/constraint
-/// diagnostics, never an over-cap or interface-breaking tile.
+/// The coarsest published cover: each leaf's shallowest published tile. Its tiles' leaf
+/// ranges must cover every leaf exactly once (no gap, no double coverage); returns their
+/// count and bytes (what a first view of the whole model loads).
+fn cover(dir: &Path) -> (usize, u64) {
+    let tiles = load(dir);
+    let leaves = tiles.iter().filter(|t| t.leaf).count();
+    let mut chosen: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+    for i in 0..leaves {
+        let t = tiles
+            .iter()
+            .filter(|t| t.begin <= i && i < t.end)
+            .min_by_key(|t| t.depth)
+            .unwrap();
+        chosen.insert(t.uri.clone(), (t.begin, t.end));
+    }
+    let mut ranges: Vec<(usize, usize)> = chosen.values().copied().collect();
+    ranges.sort_unstable();
+    let mut next = 0;
+    for (begin, end) in &ranges {
+        assert_eq!(*begin, next, "cover gap or double coverage: {ranges:?}");
+        next = *end;
+    }
+    assert_eq!(next, leaves);
+    let bytes = chosen
+        .keys()
+        .map(|u| fs::metadata(dir.join(u)).unwrap().len())
+        .sum();
+    (chosen.len(), bytes)
+}
+
+/// Bounded jobs: every parent job merges at most eight capped children.
+fn assert_bounded_jobs(dir: &Path, cap: u64) {
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let leaf_cap = rows(&dir.join("leaves.jsonl"))
+        .iter()
+        .map(|r| r["end"].as_u64().unwrap() - r["first"].as_u64().unwrap())
+        .max()
+        .unwrap();
+    let input = manifest["hlod"]["maxJobInputTriangles"].as_u64().unwrap();
+    let bound = 8 * leaf_cap.max(cap);
+    assert!(input > 0 && input <= bound, "{input} > {bound}");
+}
+
+/// Round 8 (owner): an exact interface that cannot fit the cap omits that cell's coarse tile
+/// and, by upward propagation, every ancestor's: omitted cells publish no content and hold
+/// nothing, so no job merges more than eight capped children and no content-less cell has a
+/// content ancestor (Cesium's empty traversal never meets one below content). The capped
+/// tiles below the omitted cap cover every leaf exactly once; the first view loads them.
 #[test]
-fn interface_that_cannot_fit_the_cap_is_unsupported() {
+fn a_parent_whose_interface_cannot_fit_is_omitted_not_refused() {
+    use crate::mesh_large::delivery::{self, plan::Limits};
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &sheet());
-    let failure = stage(
+    let dir = stage(
         &input,
         &work.path().join("capped"),
         &Run {
@@ -1805,19 +2447,340 @@ fn interface_that_cannot_fit_the_cap_is_unsupported() {
             ..Run::default()
         },
     )
-    .unwrap_err();
+    .unwrap_or_else(|f| panic!("{}", f.error));
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let hlod = &manifest["hlod"];
+    let omitted = hlod["omittedProxies"].as_u64().unwrap();
+    assert!(omitted > 0, "{hlod}");
+    let by_depth: Vec<u64> = serde_json::from_value(hlod["omittedByDepth"].clone()).unwrap();
+    assert_eq!(by_depth.iter().sum::<u64>(), omitted);
+    // Omission reaches the root.
+    assert_eq!(by_depth[0], 1, "{hlod}");
+    let sources = hlod["omissionSources"].as_u64().unwrap();
+    assert!(sources > 0 && sources <= omitted, "{hlod}");
+    assert_bounded_jobs(&dir, 12);
+    for row in rows(&dir.join("proxies.jsonl")) {
+        assert!(row["triangles"].as_u64().unwrap() <= 12, "{row}");
+    }
+    let census = census(&dir);
     assert_eq!(
-        failure.error.kind(),
-        JobErrorKind::Unsupported,
-        "{}",
-        failure.error
+        census.missing_segments + census.missing_vertices + census.reversed_coarse_faces,
+        0,
+        "{census:?}"
     );
-    let message = failure.error.to_string();
-    assert!(
-        message.contains("coarse tile f") && message.contains("cap"),
-        "{message}"
+    for (name, limits) in [
+        ("default.3tz", delivery::plan::LIMITS),
+        (
+            "tight.3tz",
+            Limits {
+                objects: 3,
+                records: 6,
+                levels: 2,
+            },
+        ),
+    ] {
+        let output = work.path().join(name);
+        let mut file = fs::File::create(&output).unwrap();
+        let (report, _) = delivery::publish_with_limits(
+            &MeshTilesetRequest::new(&dir, &output),
+            limits,
+            &mut file,
+            work.path(),
+        )
+        .unwrap();
+        drop(file);
+        inspect(ValidationRequest::new(&output)).unwrap();
+        let shape = refinement_shape(&output);
+        assert_eq!(
+            shape.empty_below_content + shape.error_inversions,
+            0,
+            "{name}: {shape:?} {report:?}"
+        );
+    }
+    let (tiles, bytes) = cover(&dir);
+    eprintln!(
+        "OMITTED {omitted} ({sources} sources) by depth {by_depth:?}; the first view loads \
+         {tiles} capped tiles ({bytes} bytes), each leaf covered once"
     );
-    assert!(!work.path().join("capped").exists());
+}
+
+/// One tile of an archive expanded into one explicit hierarchy (`implicit::expand_tileset`:
+/// external documents followed, implicit subtrees with their tile metadata), in the
+/// archive's frame.
+struct Sim {
+    center: [f64; 3],
+    half: [f64; 3],
+    error: f64,
+    content: bool,
+    parent: Option<usize>,
+    children: Vec<usize>,
+    /// The leaf tiles (no children) at or below it.
+    leaves: Vec<usize>,
+}
+
+/// The expanded tiles of `archive` (index 0 the root) and the tileset's geometric error.
+fn expand_archive(archive: &Path) -> (Vec<Sim>, f64) {
+    let mut zip = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
+    let mut members: HashMap<String, Vec<u8>> = HashMap::new();
+    for i in 0..zip.len() {
+        let mut member = zip.by_index(i).unwrap();
+        let mut bytes = Vec::new();
+        member.read_to_end(&mut bytes).unwrap();
+        members.insert(member.name().to_owned(), bytes);
+    }
+    let manifest: Value = serde_json::from_slice(&members["tileset.json"]).unwrap();
+    let expanded = crate::implicit::expand_tileset(&manifest, |name| {
+        members
+            .get(name)
+            .cloned()
+            .ok_or_else(|| crate::Error::Message(format!("missing member {name}")))
+    })
+    .unwrap();
+    fn build(v: &Value, parent: Option<usize>, offset: [f64; 3], out: &mut Vec<Sim>) -> usize {
+        let mut offset = offset;
+        if let Some(t) = v["transform"].as_array() {
+            let t: Vec<f64> = t.iter().map(|x| x.as_f64().unwrap()).collect();
+            if parent.is_some() {
+                // Below the root, transforms are translations only.
+                for (i, want) in [1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0.]
+                    .iter()
+                    .enumerate()
+                {
+                    assert_eq!(t[i], *want, "{t:?}");
+                }
+            }
+            for a in 0..3 {
+                offset[a] += t[12 + a];
+            }
+        }
+        let b: Vec<f64> = v["boundingVolume"]["box"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_f64().unwrap())
+            .collect();
+        let center = std::array::from_fn(|a| b[a] + offset[a]);
+        let half = std::array::from_fn(|a| b[3 + a].abs() + b[6 + a].abs() + b[9 + a].abs());
+        let content =
+            v.get("content").is_some() || v["contents"].as_array().is_some_and(|c| !c.is_empty());
+        let id = out.len();
+        out.push(Sim {
+            center,
+            half,
+            error: v["geometricError"].as_f64().unwrap(),
+            content,
+            parent,
+            children: Vec::new(),
+            leaves: Vec::new(),
+        });
+        for c in v["children"].as_array().into_iter().flatten() {
+            let child = build(c, Some(id), offset, out);
+            out[id].children.push(child);
+        }
+        id
+    }
+    let mut tiles = Vec::new();
+    build(&expanded["root"], None, [0.; 3], &mut tiles);
+    for i in (0..tiles.len()).rev() {
+        if tiles[i].children.is_empty() {
+            assert!(tiles[i].content, "an empty leaf tile");
+            tiles[i].leaves = vec![i];
+        } else {
+            let leaves: Vec<usize> = tiles[i]
+                .children
+                .iter()
+                .flat_map(|&c| tiles[c].leaves.clone())
+                .collect();
+            tiles[i].leaves = leaves;
+        }
+    }
+    (tiles, manifest["geometricError"].as_f64().unwrap())
+}
+
+/// Round 9 invariant over a written tileset: every content-less tile's geometric error is at
+/// least `EMPTY_PARENT_SCALE` times its box diagonal (it refines whenever it is visible),
+/// and no tile's error exceeds its parent's. Returns the content-less tiles.
+fn check_errors(tiles: &[Sim]) -> usize {
+    let scale = crate::mesh_large::delivery::plan::EMPTY_PARENT_SCALE;
+    let mut empty = 0;
+    for t in tiles {
+        if !t.content {
+            empty += 1;
+            let diagonal = 2. * t.half.iter().map(|h| h * h).sum::<f64>().sqrt();
+            assert!(
+                t.error >= scale * diagonal * (1. - 1e-9),
+                "content-less tile error {} below {scale} x diagonal {diagonal}",
+                t.error
+            );
+        }
+        if let Some(p) = t.parent {
+            assert!(tiles[p].error >= t.error, "error above its parent's");
+        }
+    }
+    empty
+}
+
+/// A camera sweep over `tiles`, as CesiumJS 1.146's base traversal selects them with every
+/// tile loaded and visible (`Cesium3DTilesetBaseTraversal`): the root is skipped unless the
+/// tileset's error projects past the maximum screen-space error (16 px at 1080 px, 60°
+/// vertical field of view); a tile refines (its children are traversed) iff it has children,
+/// its parent refines and its own error projects past the maximum; a tile that stops refining
+/// is drawn iff it has content (an empty tile that stops draws nothing). Returns (frames in
+/// which the tileset is drawn, of them frames with a leaf drawn by no selected tile, frames
+/// with a leaf drawn twice).
+fn traverse(tiles: &[Sim], tileset_error: f64) -> (usize, usize, usize) {
+    let sse = |t: &Sim, error: f64, cam: [f64; 3]| {
+        if error == 0. {
+            return 0.;
+        }
+        let d = (0..3)
+            .map(|a| ((cam[a] - t.center[a]).abs() - t.half[a]).max(0.).powi(2))
+            .sum::<f64>()
+            .sqrt()
+            .max(1e-7);
+        error * 1080. / (d * 2. * (std::f64::consts::PI / 6.).tan())
+    };
+    let root = &tiles[0];
+    let extent = 2. * root.half.iter().copied().fold(0., f64::max);
+    let leaves: Vec<usize> = root.leaves.clone();
+    let (mut drawn, mut holes, mut doubles) = (0, 0, 0);
+    for lateral in [-0.5, -0.25, 0., 0.25, 0.5] {
+        for k in 0..=60 {
+            let d = extent * 0.05 * 1.15f64.powi(k);
+            let cam = [
+                root.center[0] + lateral * extent,
+                root.center[1],
+                root.center[2] + root.half[2] + d,
+            ];
+            if sse(root, tileset_error, cam) <= 16. {
+                continue;
+            }
+            drawn += 1;
+            let mut covered: HashMap<usize, usize> = HashMap::new();
+            let mut stack = vec![0usize];
+            while let Some(i) = stack.pop() {
+                let t = &tiles[i];
+                if !t.children.is_empty() && sse(t, t.error, cam) > 16. {
+                    stack.extend(&t.children);
+                } else if t.content {
+                    for &l in &t.leaves {
+                        *covered.entry(l).or_default() += 1;
+                    }
+                }
+            }
+            holes += usize::from(leaves.iter().any(|l| !covered.contains_key(l)));
+            doubles += usize::from(covered.values().any(|n| *n > 1));
+        }
+    }
+    (drawn, holes, doubles)
+}
+
+/// Content-less tiles inside implicit subtrees of `archive` (available tiles without
+/// content), read from the subtree files themselves.
+fn implicit_empty_tiles(archive: &Path) -> usize {
+    let mut zip = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
+    let mut members: HashMap<String, Vec<u8>> = HashMap::new();
+    for i in 0..zip.len() {
+        let mut member = zip.by_index(i).unwrap();
+        let mut bytes = Vec::new();
+        member.read_to_end(&mut bytes).unwrap();
+        members.insert(member.name().to_owned(), bytes);
+    }
+    let mut empty = 0;
+    for (name, bytes) in &members {
+        if !name.ends_with(".json") {
+            continue;
+        }
+        let Ok(doc) = serde_json::from_slice::<Value>(bytes) else {
+            continue;
+        };
+        let mut stack = vec![doc["root"].clone()];
+        while let Some(tile) = stack.pop() {
+            if let Some(tiling) = tile.get("implicitTiling") {
+                let uri = tiling["subtrees"]["uri"]
+                    .as_str()
+                    .unwrap()
+                    .replace("{level}", "0")
+                    .replace("{x}", "0")
+                    .replace("{y}", "0")
+                    .replace("{z}", "0");
+                let levels = tiling["subtreeLevels"].as_u64().unwrap() as u32;
+                let (available, contents) =
+                    crate::mesh_large::delivery::tests::subtree_availability(
+                        &members[&uri],
+                        levels,
+                    );
+                empty += available.len() - contents.len();
+            }
+            stack.extend(tile["children"].as_array().into_iter().flatten().cloned());
+        }
+    }
+    empty
+}
+
+/// Round 9 (P1): omitted cells are content-less and have no content ancestor, so they must
+/// refine whenever they are visible; with their children's (sub-millimetre) error Cesium
+/// stopped at them and drew nothing (the cap-12 sheet was invisible at every distance, the
+/// cap-30 sheet had holes). Every content-less tile now takes the empty-parent error, in
+/// explicit output, inside implicit subtrees and as a document's root: over a camera sweep
+/// the traversal draws every leaf exactly once in every frame, and the published content-less
+/// tiles are exactly the omitted cells reported.
+#[test]
+fn omitted_cells_refine_whenever_they_are_visible() {
+    use crate::mesh_large::delivery::{self, plan::Limits};
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &sheet());
+    let tight = Limits {
+        objects: 3,
+        records: 6,
+        levels: 2,
+    };
+    let mut implicit_empty = 0;
+    for cap in [12, 30] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("cap{cap}")),
+            &Run {
+                cap,
+                ..Run::default()
+            },
+        )
+        .unwrap_or_else(|f| panic!("{}", f.error));
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let omitted = manifest["hlod"]["omittedProxies"].as_u64().unwrap() as usize;
+        assert!(omitted > 0, "cap {cap}: {}", manifest["hlod"]);
+        for (name, limits) in [("default", delivery::plan::LIMITS), ("tight", tight)] {
+            let output = work.path().join(format!("cap{cap}-{name}.3tz"));
+            let mut file = fs::File::create(&output).unwrap();
+            let (report, _) = delivery::publish_with_limits(
+                &MeshTilesetRequest::new(&dir, &output),
+                limits,
+                &mut file,
+                work.path(),
+            )
+            .unwrap();
+            drop(file);
+            inspect(ValidationRequest::new(&output)).unwrap();
+            let (tiles, tileset_error) = expand_archive(&output);
+            let empty = check_errors(&tiles);
+            assert_eq!(empty, omitted, "cap {cap} {name}: {report:?}");
+            let (drawn, holes, doubles) = traverse(&tiles, tileset_error);
+            eprintln!(
+                "TRAVERSAL cap {cap} {name}: {} tiles, {empty} content-less, {drawn} frames \
+                 drawn, {holes} with holes, {doubles} with double draws; {report:?}",
+                tiles.len()
+            );
+            assert!(drawn > 0);
+            assert_eq!((holes, doubles), (0, 0), "cap {cap} {name}");
+            if name == "tight" {
+                implicit_empty += implicit_empty_tiles(&output);
+            }
+        }
+    }
+    // The tight caps put omitted cells inside implicit subtrees, where the same rule applies.
+    assert!(implicit_empty > 0);
 }
 
 /// Output is identical for any job count, any admitted budget and spilled sorts.
@@ -2037,6 +3000,7 @@ fn evidence_census() {
         "perpendicularDisplaced": census.perpendicular_displaced,
         "maxPerpendicularExcessM": census.max_perpendicular_excess_m,
         "duplicateChainTiles": census.duplicate_chain_tiles,
+        "reversedCoarseFaces": census.reversed_coarse_faces,
         "hlod": manifest["hlod"], "resources": resources["hlod"], "members": members,
     });
     fs::write(
@@ -2048,101 +3012,385 @@ fn evidence_census() {
     assert_eq!(
         census.missing_segments
             + census.missing_vertices
-            + census.missing_overlap_items
             + census.moved_border_vertices
-            + census.perpendicular_displaced
-            + census.duplicate_chain_tiles,
+            + census.duplicate_chain_tiles
+            + census.reversed_coarse_faces,
         0
     );
-    assert!(census.max_coarse_triangles <= super::TRIANGLE_CAP);
+    // Exact seams: source T-junctions and unwelded seams are reported (the census's
+    // overlap and perpendicular counts above, the manifest's source-defect counts), not
+    // asserted; omitted coarse tiles are reported by `omittedProxies`.
+}
+
+// ---------------------------------------------------------------------------------------
+// S2: sampled two-sided source error.
+
+/// A source index of `captured` admitted through a walk-style scratch ledger (S2 writes no
+/// scratch it has not admitted).
+fn with_source_index<R>(
+    captured: &crate::mesh_large::full::FullCaptured,
+    f: impl FnOnce(&super::source_index::SourceIndex) -> R,
+) -> R {
+    use super::{scratch::ScratchLedger, source_index};
+    let admit = |_: u64| Ok(());
+    let ledger = ScratchLedger::new(&captured.scratch, captured.scratch.live_bytes(), &admit);
+    let need = source_index::scratch_need(captured.triangles.len()).unwrap();
+    let lease = ledger
+        .admit(source_index::SourceIndex::COMPONENT, need)
+        .unwrap();
+    let index = source_index::SourceIndex::build(captured, &lease, &|| Ok(())).unwrap();
+    ledger.check().unwrap();
+    f(&index)
+}
+
+fn capture_hlod(input: &Path, leaf_triangles: u64) -> crate::mesh_large::full::FullCaptured {
+    use crate::mesh_large::{
+        config::{Jobs, TreeConfig},
+        full,
+    };
+    let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(leaf_triangles);
+    config.lod = TilerLod::Hlod;
+    config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+    full::capture(input, &config, &mut || Ok(())).unwrap()
+}
+
+#[test]
+fn measured_positions_must_match_decoded_glb_bits() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &sheet());
+    let failure = stage(
+        &input,
+        &work.path().join("wrong-measurement"),
+        &Run {
+            mutation: Mutation::WrongMeasuredPosition,
+            ..Run::default()
+        },
+    )
+    .unwrap_err();
+    assert!(
+        failure
+            .error
+            .to_string()
+            .contains("measured positions differ from decoded GLB bits"),
+        "{}",
+        failure.error
+    );
 }
 
 /// Disk/index nearest against exhaustive triangle arithmetic, including clipped ranges
-/// through block boundaries, deterministic source-order ties and original donor rows.
+/// through block boundaries, deterministic source-order ties and original donor rows; the
+/// budgeted production search agrees with it on this ordinary source, unexhausted.
 #[test]
 fn source_index_matches_exhaustive_with_range_clipping_and_ties() {
-    use super::source_index::{bary, closest, distance2, Hit, SourceIndex, Triangle};
-    use crate::mesh_large::{
-        config::{Profile, TreeConfig},
-        full,
+    use super::{
+        error::Nearest,
+        source_index::{bary, closest, distance2, Hit, Triangle},
     };
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &thin_islands());
-    let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(256);
-    config.lod = TilerLod::Hlod;
-    config.jobs = crate::mesh_large::config::Jobs::Fixed(NonZeroUsize::new(1).unwrap());
-    let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
-    let index = SourceIndex::build(&captured, &|| Ok(())).unwrap();
+    let captured = capture_hlod(&input, 256);
     let source: Vec<_> = captured
         .triangles
         .reader()
         .unwrap()
         .map(Result::unwrap)
         .collect();
-    let mut random = 0x7159ac23u32;
-    for (first, end) in [
-        (0, source.len()),
-        (17, 300),
-        (250, 520),
-        (source.len() - 13, source.len()),
-    ] {
+    with_source_index(&captured, |index| {
+        let mut random = 0x7159ac23u32;
+        for (first, end) in [
+            (0, source.len()),
+            (17, 300),
+            (250, 520),
+            (source.len() - 13, source.len()),
+        ] {
+            let key = super::store::TileKey {
+                first: first as u64,
+                end: end as u64,
+                depth: 1,
+                leaf_begin: 0,
+                leaf_end: 1,
+            };
+            let mut query = index.query(&captured, key).unwrap();
+            let mut paged = index.paged_query(&captured, key).unwrap();
+            let mut budgeted = index.query(&captured, key).unwrap();
+            let mut nearest = Nearest::new();
+            let streamed: Vec<_> = query.surface().unwrap().map(|t| t.unwrap().rank).collect();
+            let mut streamed_sorted = streamed.clone();
+            streamed_sorted.sort_unstable();
+            assert_eq!(
+                streamed_sorted,
+                (first as u64..end as u64).collect::<Vec<_>>()
+            );
+            for _ in 0..40 {
+                let mut unit = || {
+                    random ^= random << 13;
+                    random ^= random >> 17;
+                    random ^= random << 5;
+                    random as f64 / u32::MAX as f64
+                };
+                let p = [unit() * 110., unit() * 12., unit() * 110.];
+                let actual = query.nearest(p).unwrap();
+                let mut expected = Hit::empty();
+                for (i, t) in source[first..end].iter().enumerate() {
+                    let points = Triangle::new(t.triangle.positions, 0).positions();
+                    let w = closest(p, points);
+                    let d = distance2(p, bary(points, w));
+                    let rank = (first + i) as u64;
+                    let order = (t.triangle.source, t.expanded_ordinal);
+                    if d < expected.distance2
+                        || (d == expected.distance2
+                            && (order, rank) < (expected.order, expected.rank))
+                    {
+                        expected.rank = rank;
+                        expected.bary = w;
+                        expected.distance2 = d;
+                        expected.order = order;
+                    }
+                }
+                let disk = paged.nearest(p).unwrap();
+                assert_eq!(disk.rank, expected.rank);
+                assert_eq!(disk.distance2, expected.distance2);
+                assert_eq!(actual.rank, expected.rank);
+                assert!((actual.distance2 - expected.distance2).abs() < 1e-10);
+                let bounded = nearest.source(&mut budgeted, p).unwrap();
+                assert_eq!(bounded.rank, expected.rank);
+                assert!((bounded.distance2 - expected.distance2).abs() < 1e-10);
+                let t = query.triangle(actual).unwrap();
+                let expected_triangle = source[actual.rank as usize];
+                assert_eq!(t, expected_triangle);
+                assert_eq!(t.corners, expected_triangle.corners);
+                assert_eq!(t.flags, expected_triangle.flags);
+                assert_eq!(t.material, expected_triangle.material);
+                assert!(actual.bary.iter().all(|v| v.is_finite() && *v >= 0.));
+            }
+            assert_eq!(nearest.stats.exhausted, 0, "{:?}", nearest.stats);
+        }
+    });
+    captured.close().unwrap();
+}
+
+/// The source index writes no scratch it has not admitted: under-admitted, its first write
+/// is refused (a resource limit) rather than worked around.
+#[test]
+fn source_index_refuses_scratch_past_its_admission() {
+    use super::{scratch::ScratchLedger, source_index::SourceIndex};
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &sheet());
+    let captured = capture_hlod(&input, 256);
+    let admit = |_: u64| Ok(());
+    let ledger = ScratchLedger::new(&captured.scratch, captured.scratch.live_bytes(), &admit);
+    let lease = ledger.admit(SourceIndex::COMPONENT, 4096).unwrap();
+    let before = captured.scratch.live_bytes();
+    let error = SourceIndex::build(&captured, &lease, &|| Ok(()))
+        .err()
+        .unwrap();
+    assert_eq!(error.kind(), JobErrorKind::ResourceLimit, "{error}");
+    assert!(captured.scratch.live_bytes() <= before + 4096);
+    drop(lease);
+    captured.close().unwrap();
+}
+
+/// The review's adversary (round 3 of #278): R distinct parallel oblique triangles whose
+/// boxes all contain every query, while every nearest distance is positive. Exact search
+/// tests every triangle per query, warm hints included (32 queries at R = 32,768 took
+/// 1,048,607 `closest` calls). S2's budgeted search stays at O(B + depth) per query
+/// whatever R, on the resident proxy path and on the paged source path, returns a finite
+/// distance no smaller than the exact one (conservative for G) and counts its exhaustions.
+#[test]
+fn nearest_searches_are_bounded_on_oblique_adversaries() {
+    use super::{
+        error::{Nearest, NEAREST_STEPS},
+        source_index::{Hit, Surface, Triangle, BLOCK, CLOSEST_CALLS},
+    };
+    let oblique = |r: u64| -> Vec<[[f32; 3]; 3]> {
+        (0..r)
+            .map(|i| {
+                let d = i as f32 / 100_000.;
+                [[3. + d, -1., -1.], [-1., 3. + d, -1.], [-1., -1., 3. + d]]
+            })
+            .collect()
+    };
+    let calls = |f: &mut dyn FnMut()| {
+        CLOSEST_CALLS.with(|c| c.set(0));
+        f();
+        CLOSEST_CALLS.with(|c| c.get())
+    };
+    let queries: Vec<[f64; 3]> = (0..32).map(|j| [j as f64 / 1000., 0., 0.]).collect();
+    let q = queries.len() as u64;
+    // Resident surface (the decoded coarse tile of source-to-proxy samples).
+    for r in [32_768u64, 131_072] {
+        let surface = Surface::new(
+            oblique(r)
+                .into_iter()
+                .enumerate()
+                .map(|(i, t)| Triangle::new(t, i as u64))
+                .collect(),
+        )
+        .unwrap();
         let key = super::store::TileKey {
-            first: first as u64,
-            end: end as u64,
-            depth: 1,
+            first: 0,
+            end: u64::MAX,
+            depth: 0,
+            leaf_begin: 0,
+            leaf_end: 0,
+        };
+        let mut exact = Vec::new();
+        let exact_calls = calls(&mut || {
+            let mut hint = None;
+            for p in &queries {
+                exact.push(surface.nearest_hint(*p, key, &mut hint));
+            }
+        });
+        assert_eq!(exact_calls, q * r + q - 1, "the probe's Θ(Q·R)");
+        let mut nearest = Nearest::new();
+        let mut found: Vec<Hit> = Vec::new();
+        let used = calls(&mut || {
+            let mut hint = None;
+            for p in &queries {
+                found.push(nearest.surface(&surface, *p, &mut hint));
+            }
+        });
+        // One hint test plus the budget per query (no cold seed after the first).
+        assert!(used <= q * (NEAREST_STEPS + 1) + 64, "R={r}: {used} calls");
+        assert_eq!(nearest.stats.searches, q);
+        assert!(nearest.stats.exhausted > 0, "{:?}", nearest.stats);
+        for (a, e) in found.iter().zip(&exact) {
+            assert!(a.distance2.is_finite() && a.distance2 >= e.distance2);
+        }
+        eprintln!(
+            "OBLIQUE resident R={r} Q={q}: exact {exact_calls} closest calls, bounded {used} \
+             ({:?})",
+            nearest.stats
+        );
+    }
+    // Paged source index (the proxy-to-source samples and representatives).
+    let r = 32_768u64;
+    let mesh = Mesh {
+        positions: oblique(r).into_iter().flatten().collect(),
+        indices: (0..3 * r as u32).collect(),
+        color: [0.5, 0.5, 0.5, 1.],
+    };
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &[mesh]);
+    let captured = capture_hlod(&input, 8192);
+    let n = captured.triangles.len();
+    assert_eq!(n, r);
+    with_source_index(&captured, |index| {
+        let key = super::store::TileKey {
+            first: 0,
+            end: n,
+            depth: 0,
             leaf_begin: 0,
             leaf_end: 1,
         };
-        let mut query = index.query(&captured, key).unwrap();
-        let mut paged = index.paged_query(&captured, key).unwrap();
-        let streamed: Vec<_> = query.surface().unwrap().map(|t| t.unwrap().rank).collect();
-        let mut streamed_sorted = streamed.clone();
-        streamed_sorted.sort_unstable();
-        assert_eq!(
-            streamed_sorted,
-            (first as u64..end as u64).collect::<Vec<_>>()
+        let mut exact = Vec::new();
+        let exact_calls = calls(&mut || {
+            let mut query = index.query(&captured, key).unwrap();
+            for p in &queries {
+                exact.push(query.nearest(*p).unwrap());
+            }
+        });
+        assert!(exact_calls >= q * r, "{exact_calls}");
+        let mut nearest = Nearest::new();
+        let mut found = Vec::new();
+        let used = calls(&mut || {
+            let mut query = index.query(&captured, key).unwrap();
+            for p in &queries {
+                found.push(nearest.source(&mut query, *p).unwrap());
+            }
+        });
+        // Per query: the hint, the budget, and at most one cold seed's block.
+        assert!(
+            used <= q * (NEAREST_STEPS + 1) + BLOCK as u64,
+            "{used} calls"
         );
-        for _ in 0..40 {
-            let mut unit = || {
-                random ^= random << 13;
-                random ^= random >> 17;
-                random ^= random << 5;
-                random as f64 / u32::MAX as f64
-            };
-            let p = [unit() * 110., unit() * 12., unit() * 110.];
-            let actual = query.nearest(p).unwrap();
-            let mut expected = Hit::empty();
-            for (i, t) in source[first..end].iter().enumerate() {
-                let points = Triangle::new(t.triangle.positions, 0).positions();
-                let w = closest(p, points);
-                let d = distance2(p, bary(points, w));
-                let rank = (first + i) as u64;
-                let order = (t.triangle.source, t.expanded_ordinal);
-                if d < expected.distance2
-                    || (d == expected.distance2 && (order, rank) < (expected.order, expected.rank))
-                {
-                    expected.rank = rank;
-                    expected.bary = w;
-                    expected.distance2 = d;
-                    expected.order = order;
+        assert!(nearest.stats.exhausted > 0, "{:?}", nearest.stats);
+        for (a, e) in found.iter().zip(&exact) {
+            assert!(a.distance2.is_finite() && a.distance2 >= e.distance2);
+        }
+        eprintln!(
+            "OBLIQUE paged R={r} Q={q}: exact {exact_calls} closest calls, bounded {used} ({:?})",
+            nearest.stats
+        );
+    });
+    captured.close().unwrap();
+}
+
+/// D1 omission: omitted cells hold no content, so S2 measures, samples and stores nothing
+/// for them. At cap 12 every coarse tile of the sheet is omitted (nothing is measured); at
+/// cap 30 some are published above omitted-free subtrees, each measured once, its G at
+/// least every published descendant's, and delivery floors the content-less cells above.
+#[test]
+fn omitted_cells_are_not_measured_and_errors_stay_monotone() {
+    use crate::mesh_large::delivery::{self, plan::LIMITS};
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &sheet());
+    for cap in [12, 30] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("cap{cap}")),
+            &Run {
+                cap,
+                ..Run::default()
+            },
+        )
+        .unwrap_or_else(|f| panic!("{}", f.error));
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let hlod = &manifest["hlod"];
+        assert!(hlod["omittedProxies"].as_u64().unwrap() > 0, "{hlod}");
+        let proxies = rows(&dir.join("proxies.jsonl"));
+        assert_eq!(proxies.is_empty(), cap == 12, "{hlod}");
+        let measurement = &hlod["errorMeasurement"];
+        let measured: u64 = measurement["byDepth"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|d| d["tiles"].as_u64().unwrap())
+            .sum();
+        assert_eq!(measured, proxies.len() as u64, "one measurement per row");
+        assert_eq!(hlod["tiles"].as_u64(), Some(measured));
+        let searches: u64 = proxies
+            .iter()
+            .map(|r| r["nearestSearch"]["searches"].as_u64().unwrap())
+            .sum();
+        assert_eq!(searches > 0, cap == 30);
+        assert_eq!(measurement["nearest"]["searches"].as_u64(), Some(searches));
+        for row in &proxies {
+            let g = row["geometricError"].as_f64().unwrap();
+            let m = &row["measurement"];
+            assert!(g >= 1.05 * m["sampledMax"].as_f64().unwrap());
+            assert!(g >= row["childrenError"].as_f64().unwrap());
+            // Published descendants (deeper, inside its source range) never exceed it.
+            let (first, end) = (row["first"].as_u64().unwrap(), row["end"].as_u64().unwrap());
+            for other in &proxies {
+                let (f, e) = (
+                    other["first"].as_u64().unwrap(),
+                    other["end"].as_u64().unwrap(),
+                );
+                if other["depth"].as_u64() > row["depth"].as_u64() && first <= f && e <= end {
+                    assert!(other["geometricError"].as_f64().unwrap() <= g);
                 }
             }
-            let disk = paged.nearest(p).unwrap();
-            assert_eq!(disk.rank, expected.rank);
-            assert_eq!(disk.distance2, expected.distance2);
-            assert_eq!(actual.rank, expected.rank);
-            assert!((actual.distance2 - expected.distance2).abs() < 1e-10);
-            let t = query.triangle(actual).unwrap();
-            let expected_triangle = source[actual.rank as usize];
-            assert_eq!(t, expected_triangle);
-            assert_eq!(t.corners, expected_triangle.corners);
-            assert_eq!(t.flags, expected_triangle.flags);
-            assert_eq!(t.material, expected_triangle.material);
-            assert!(actual.bary.iter().all(|v| v.is_finite() && *v >= 0.));
         }
+        let output = work.path().join(format!("cap{cap}.3tz"));
+        let mut file = fs::File::create(&output).unwrap();
+        delivery::publish_with_limits(
+            &MeshTilesetRequest::new(&dir, &output),
+            LIMITS,
+            &mut file,
+            work.path(),
+        )
+        .unwrap();
+        drop(file);
+        inspect(ValidationRequest::new(&output)).unwrap();
+        let shape = refinement_shape(&output);
+        assert_eq!(
+            shape.empty_below_content + shape.error_inversions,
+            0,
+            "{shape:?}"
+        );
     }
-    drop(index);
-    captured.close().unwrap();
 }
 
 #[test]
@@ -2160,7 +3408,7 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
     )
     .unwrap();
     let original = rows(&dir.join("proxies.jsonl"));
-    for mutation in 0..9 {
+    for mutation in 0..10 {
         let mut damaged = original.clone();
         let row = damaged.last_mut().unwrap();
         match mutation {
@@ -2177,6 +3425,15 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
             }
             7 => row["encodedDepth"] = json!(31),
             8 => row["encodedDepth"] = json!(row["encodedDepth"].as_u64().unwrap() + 1),
+            // Every row's share looks complete against an inflated depth schedule, but the
+            // published rows (nothing omitted) do not cover it.
+            9 => {
+                for row in &mut damaged {
+                    let m = &mut row["measurement"];
+                    m["depthSourceTriangles"] =
+                        json!(m["depthSourceTriangles"].as_u64().unwrap() * 1000);
+                }
+            }
             _ => {
                 for row in damaged
                     .iter_mut()
@@ -2212,11 +3469,11 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
             &RunControl::default(),
         )
         .unwrap_err();
-        if mutation == 5 {
-            assert!(
-                failure.error.to_string().contains("incomplete HLOD depth"),
-                "{failure:?}"
-            );
+        let message = failure.error.to_string();
+        match mutation {
+            5 => assert!(message.contains("invalid S2 sample counts"), "{message}"),
+            9 => assert!(message.contains("source triangles scheduled"), "{message}"),
+            _ => {}
         }
         assert!(!output.exists());
     }

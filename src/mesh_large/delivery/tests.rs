@@ -251,7 +251,10 @@ fn members(path: &Path) -> BTreeMap<String, Vec<u8>> {
 
 /// An independent subtree reader: the available tiles and contents of a one-subtree,
 /// `availableLevels == subtreeLevels` OCTREE subtree, from its bitstreams.
-fn subtree_availability(bytes: &[u8], levels: u32) -> (BTreeSet<[u32; 4]>, BTreeSet<[u32; 4]>) {
+pub(crate) fn subtree_availability(
+    bytes: &[u8],
+    levels: u32,
+) -> (BTreeSet<[u32; 4]>, BTreeSet<[u32; 4]>) {
     assert_eq!(&bytes[..4], b"subt");
     let json_len = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
     let bin_len = u64::from_le_bytes(bytes[16..24].try_into().unwrap()) as usize;
@@ -1505,4 +1508,77 @@ fn reviewer_tiler_conversion_member_is_in_early_and_exact_ceiling() {
     .unwrap();
     assert_eq!(admitted.facts().members, exact + 1);
     assert!(!output.exists());
+}
+
+/// Round 4: a chain cell that repeats its coarse payload (here inside an implicit root,
+/// forced by tight caps) holds that payload's bounds, which reach past its children's.
+#[test]
+fn repeated_chain_content_stays_inside_its_tile() {
+    struct Capture(Option<Node>);
+    impl Sink for Capture {
+        fn external(&mut self, _: Node) -> Result<Linked, JobError> {
+            panic!("no external document expected")
+        }
+        fn root(&mut self, node: Node) -> Result<(), JobError> {
+            self.0 = Some(node);
+            Ok(())
+        }
+    }
+    let (fine, coarse) = (3. / 4096., 4. / 4096.);
+    let row = super::source::ProxyRow {
+        uri: "proxies/f0-d0.glb".into(),
+        sha256: [0; 32],
+        bytes: 64,
+        first: 0,
+        end: 2,
+        depth: 0,
+        geometric_error: 1.,
+        primitives: 1,
+        sampling: None,
+        encoded_depth: 0,
+    };
+    let payload = Aabb {
+        lo: [-1., -coarse, -1.],
+        hi: [1., coarse, 1.],
+    };
+    let proxies: super::plan::Proxies<'_> = Box::new(std::iter::once(Ok((row, payload))));
+    let mut sink = Capture(None);
+    let tight = Limits {
+        objects: 3,
+        records: 6,
+        levels: 2,
+    };
+    let mut builder =
+        Builder::with_proxies(&mut sink, tight, Some(proxies)).with_sparse_proxies(true);
+    for i in 0..2u64 {
+        let mut digits = Digits::ROOT;
+        for d in [0, 0, i as u8] {
+            digits.push(d);
+        }
+        let leaf = LeafRow {
+            uri: format!("leaves/{i:012}.glb"),
+            sha256: [0; 32],
+            bytes: 64,
+            first: i,
+            end: i + 1,
+            digits,
+            last_octant: i as u8,
+            packed: false,
+            synthetic: 0,
+            geometry_error: 0.,
+        };
+        let bounds = Aabb {
+            lo: [-1., -fine, -1.],
+            hi: [1., fine, 1.],
+        };
+        builder.push(leaf, bounds).unwrap();
+    }
+    builder.finish().unwrap();
+    let root = sink.0.unwrap();
+    assert!(root.is_implicit_root());
+    let chain = &root.children[0];
+    assert!(chain.is_chain_cell());
+    for i in 0..3 {
+        assert!(chain.extent.lo[i] <= payload.lo[i] && chain.extent.hi[i] >= payload.hi[i]);
+    }
 }

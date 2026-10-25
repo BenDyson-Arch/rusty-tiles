@@ -1,141 +1,104 @@
 # HLOD S2 sampled source error
 
-Implementation contract for `hlod/{error,source_index}.rs`, based on D2/D4/S2
-in `hlod-040-decision.md` on origin/develop. Policy v2 follows the coordinator's
-client-speed decision: retain the 5% sampled-distance inflation and remove the
-additive area-spacing allowance. Historical v1 receipts remain in the evidence
-cache and git history; they do not describe this producer.
+Implementation contract for `hlod/{error,source_index}.rs`, following D2/D4/S2 and
+the D1 exact-seams and omission amendments in `hlod-040-decision.md`. Policy v2 keeps
+the 5% sampled-distance inflation and has no additive area-spacing allowance.
 
-## Invariants and supported domain
+## Measurement
 
-- Measure captured source triangles in `[TileKey.first, TileKey.end)`, in the same
-  local metre frame as the final decoded proxy. Child G and leaf encoding errors
-  are floors, rather than recursively accumulated source estimates.
-- Each direction requires `max(2048, ceil(200000 * tile_source_count /
-  depth_source_count))` area samples. Each occupied encoded depth therefore has
-  at least 200,000 samples per direction. Scheduling is independent of jobs,
-  cache eviction, sort spill and the admitted memory budget. Empty/unsupported
-  depths, including depth >=32, return a typed resource refusal before indexing.
-- SplitMix64 jitter chooses equal cumulative-area strata, then uniform square-root
-  barycentric samples. Source controls cover boundary vertices, at least one
-  representative per component, and sliver vertices/longest-edge midpoints.
-  Connectivity is computed on bounded 256-triangle patches. Every true source
-  boundary is also a patch boundary; every global edge-connected component has
-  at least one patch component. Artificial patch boundaries/components add
-  conservative checks without a resident global connectivity graph. For either
-  partially clipped endpoint block, all corners are conservatively retained.
-  Degenerate/sliver vertices survive regardless of their area.
-- Indexed proxy vertices and undirected edges are checked once per tile. Already
-  computed source-nearest centroid distances used for representative IDs are
-  included as additional proxy controls without repeating their queries.
-- Both directed area/control distributions record count, mean, p95, p99 and max.
-  Quantiles are upper endpoints of log2 bins (32/octave, <=2.19% relative slack).
-  Counts, means and maxima are actual samples. q is the maximum p99 across all
-  four distributions and remains diagnostic; D10 refinement calibration is off.
-- With M the maximum of both directions including controls, publish
-  `G = max(children G, 1.05*M)`. The recorded margin is `0.05*M`. The prototype's
-  ~1% independent exceedance (2.8369 versus 2.8106 m) motivates 5% inflation.
-  This is a heuristic sampling margin, **not** a covering radius, confidence
-  interval or Hausdorff certificate. Narrow unsampled extrema may still exceed G.
-- S1 collapses single-coarse-child chains before building: only the deepest
-  encoded tile is measured; it is published at the top cell of the chain. There is
-  no duplicate measurement cache. `encodedDepth` keys the seed, schedule and depth
-  G summaries, while `depth` keys publication. Sampling totals omit pass-through
-  cells, preserving 200,000 samples at every occupied encoded depth. Content-less
-  cells below the publication retain that tile's G through delivery.
-- Cached-area endpoint roundoff is corrected only within 1,024 machine epsilons
-  of the total area; a larger incomplete schedule returns a typed refusal. This
-  numerical selection guard adds no geometric-error margin.
-- Incomplete/nonfinite sampling is a typed refusal. Delivery requires v2 policy
-  and summaries for HLOD manifests and validates counts, occupied encoded-depth
-  totals, encoded-tile seed, distributions, margin, q and parent ordering. Historical H17 rows remain readable
-  until S6 removes that producer. No simplifier estimate is a fallback.
+- Measure captured source triangles in `[TileKey.first, TileKey.end)`, in the local
+  metre frame of the final decoded proxy. Child G and leaf encoding errors are floors,
+  not recursively accumulated source estimates.
+- Each direction takes `max(2048, ceil(200000 * tile_source / depth_source))` area
+  samples, where `depth_source` sums the source ranges of every encoded tile at that
+  depth. A depth whose tiles are all published therefore has at least 200,000 samples
+  per direction. Scheduling is independent of jobs, cache eviction, spill and budget.
+  Depth >=32 or an empty schedule is a typed resource refusal.
+- SplitMix64 jitter chooses equal cumulative-area strata, then square-root
+  barycentric samples. Source controls cover boundary vertices, one vertex per
+  component and sliver vertices/longest-edge midpoints, computed on bounded
+  256-triangle patches (a conservative superset of true boundaries/components). Both
+  clipped endpoint blocks keep every corner. Indexed proxy vertices and edges are
+  checked once; centroid distances from representative selection are added controls.
+- Each directed area/control distribution records count, mean, p95, p99 and max.
+  Quantiles are upper log2-bin endpoints (32/octave). q, the maximum p99, is
+  diagnostic only; D10 calibration is off.
+- With M the maximum of both directions, controls included, publish
+  `G = max(children G, 1.05*M)`. The 5% margin is motivated by the prototype's ~1%
+  independent exceedance. It is **not** a covering radius, confidence interval or
+  Hausdorff certificate: narrow unsampled extrema may still exceed G.
+- S1 collapses single-coarse-child chains: only the encoded tile is measured, and
+  `encodedDepth` keys its seed, schedule and depth summaries while `depth` keys
+  publication.
+- **Omitted cells (D1):** a parent whose exact interface cannot fit the cap, and every
+  ancestor, publishes no content. Its job returns before any S2 work, so nothing is
+  sampled, stored or allocated for it. A published parent's children are all
+  published, so its G is at least theirs. Delivery gives each content-less cell
+  `max(children G, 16 × diagonal)`. At a depth with omissions, the published tiles
+  keep the depth's sampling density over the source they cover; delivery checks
+  `samples >= required(sum of published ranges, depth_source)`. Without omissions it
+  requires the published ranges to cover the whole schedule (200,000 samples).
+- Incomplete or nonfinite sampling is a typed refusal, never zero error. Delivery
+  validates the policy, per-row share, depth totals, encoded-tile seed, distributions,
+  margin, q and parent ordering. H17 rows stay readable until S6.
+
+## Bounded nearest search
+
+Every production nearest query (representatives, source→proxy, proxy→source) is a
+best-first search with a per-query budget `B = NEAREST_STEPS = 4096` node visits plus
+triangle tests (`source_index::Budget`, shared with S3's donor search). A search
+without a candidate first takes a greedy root-to-leaf seed outside the budget, so it
+always has a finite witness: one fine block (at most 256 triangles) on the paged
+index, one leaf (at most 4) on a resident surface. Hints from the previous winner
+seed the next query. A query therefore costs O(B + depth + block) whatever the
+source. Queries per tile are bounded by its controls (at most three per source
+triangle in range, and per proxy vertex/edge) plus its samples, so the walk's nearest
+work is O((n·h + P·C)·B) for n source triangles, height h, P tiles and cap C. On exhaustion the best distance
+found is used. It is never below the exact distance, so M and G only grow
+(conservative); a representative may then be a near, not the nearest, primitive.
+Each row records `nearestSearch` (searches, exhausted, seeded, max steps), summed in
+`hlod.errorMeasurement.nearest`. The exact searches remain as test oracles only.
+
+The round-3 review adversary (R parallel oblique triangles whose boxes all contain
+every query, all distances positive) took Θ(Q·R) exact work: 1,048,607 `closest`
+calls for 32 queries at R = 32,768. The committed test
+`nearest_searches_are_bounded_on_oblique_adversaries` reproduces that count and
+bounds the budgeted search at `Q(B+1)` calls on both paths, independent of R.
+B is a tuning constant: raising it narrows exhaustion overestimates.
 
 ## Decoded bytes and S3 handoff
 
-Prepare the lattice once for centroid identity and encoding. The encoder carries
-its actual face order through material grouping. Its existing GLB readback checks
-that every published corner is bit-identical to the position prepared for that
-indexed vertex and that every representative matches. Measurement consumes the
-indexed positions reconstructed from that GLB readback, not the pre-encode
-position array. A sensitive control changes only the expected measured position
-while preserving valid GLB bytes and must fail before publication.
+The lattice is prepared once for centroid identity and encoding. The encoder carries
+its face order through material grouping; GLB readback checks every corner bit for
+bit against the prepared position and every representative row, and measurement
+consumes the positions read back. A control that only changes the expected position
+must fail before publication.
 
-`SourceIndex::build(captured, check)` streams compact source triangles and fine
-BVHs into capture-owned disk sequences. Compact records contain original f32
-positions, rank, source provenance, expanded ordinal, material, patch control
-mask and cached area. BVH nodes sum those areas once at construction. A tile's
-area sums whole subtrees and scans at most two clipped endpoint blocks.
+`SourceIndex` holds compact source triangles (original f32 positions, rank,
+provenance, expanded ordinal, material, control mask, cached area) and fine BVHs in
+two disk sequences; a tile's area sums whole subtrees and scans at most two clipped
+blocks. `SourceIndex::query(captured, TileKey)` keeps at most 8,191 trimmed upper
+nodes resident, plus a bounded FIFO node cache and fine-block cache (FxHash, never
+iterated for results). All candidates clip to the descendant source range; ties use
+provenance, expanded ordinal, then rank. S3 consumes `nearest_budget`, `surface`,
+`area`, `primitive` and `triangle` (the original `FullTriangle` for donors), the
+decoded `CoarseTile`, its representatives and G; chart spacing is
+`max(G/16, 1e-5 m)` and must keep decoded positions and representatives.
 
-Each admitted job calls `SourceIndex::query(captured, TileKey)`. At most 8,191
-trimmed upper nodes are resident. A complete hierarchy releases its disk-node
-cache and admits up to 192 fine blocks; a deeper hierarchy retains a bounded
-16,384-entry node cache and 64 fine blocks. Caches use FxHash and FIFO eviction;
-nearest arithmetic never relies on hash iteration order. Traversal carries each
-already-read child node on its stack, rather than visiting it again on pop.
-All bounds and triangle candidates clip to the descendant source range.
+## Resources
 
-Queries return source rank, barycentrics and squared distance. Ties use source
-provenance (node/mesh/primitive/triangle), expanded ordinal, then rank. Prior
-actual witnesses only seed an upper distance; full nearest search still runs.
-`primitive(hit)` uses the compact witness directly, avoiding a full-row disk read
-per centroid. `triangle(hit)` reads the original `FullTriangle` when S3 actually
-needs UVs, colours, normals, flags, material or provenance. The captured owner is
-available through the query. S3 separately charges its image cache.
+- **Scratch:** the index is the walk scratch component `s2-source-index`, admitted
+  through `ScratchLedger::admit` for `160 * source_triangles + 1 MiB` before its first
+  write. Every block and node write is charged to the lease first; a write past the
+  admission is refused. Memory-backed scratch charges it to memory in the plan. S2
+  writes no other scratch. Files are capture-owned and removed on success, refusal
+  and cancellation.
+- **Memory:** each parent job is charged 8 MiB query caches, 4 MiB measurement
+  workspace and the search frontiers (`SEARCH_BYTES`, at most `2B+1` entries each);
+  2 MiB fixed construction. Query caches check actual capacities and refuse past
+  their allowance.
+- **CPU:** index construction uses process CPU; representatives and each directed
+  pass sum worker-thread CPU. CPU stays out of deterministic metadata.
 
-Coarse IDs use the nearest source primitive at the final decoded centroid and
-are duplicated across each face's corners. S3 can consume `CoarseTile`'s indexed
-decoded positions, triangles, locked mask and representatives, plus versioned
-G/q summaries. Chart spacing is `max(G/16, 1e-5 m)`; charts must preserve decoded
-positions and representatives. No facing/material/donor-distance gate or
-certificate is part of this nearest-surface API.
-
-## Resource ownership and acceptance
-
-The HLOD plan charges 8 MiB query workspace and 4 MiB measurement workspace per
-worker, plus 2 MiB fixed construction workspace. Histograms, bounded patch
-connectivity, source/proxy buffers, coarse BVH, unique edge/vertex controls and
-centroid checks fit these allowances. Held tiles use S1’s exact vector-capacity accounting; no summary cache remains.
-Query checks use a running total of retained fine-block capacities,
-actual vector capacities and conservative hash capacities plus replacement slack;
-a change that exceeds the allowance refuses instead of allocating silently.
-Disk allowance is `160 * source_triangles + 1 MiB`, including larger compact
-records/area nodes, added to S1's incidence envelope. Memory-backed scratch is
-charged through the same S1 budget. Source index files have capture ownership
-and disappear on success, refusal and cancellation.
-
-Revised-S1 incidence is admitted before S2. Exact groups hold at most one item
-per leaf; the stage charges three times that count for vector capacity and
-reallocation. Hosts use the largest guest tolerance and the cube rounding floor;
-double padding covers the predicate’s independent axial and perpendicular
-extensions. Dense cells spill and split before bounded chunked scans, without a
-density refusal. Their allowance is 256 bytes/source triangle with a 64 MiB floor.
-A shared prospective charge additionally covers retained candidate bytes, full
-probe and row-sort spill generations, and actual live dense spills. Every output
-burst and dense write must fit the declared interface-stage envelope first.
-Both recursive partition scans check cancellation every 256 records, even when
-every candidate is pruned. The final stream envelope includes candidates and
-the overlap allowance too.
-
-Known analytic maxima cover tilted/offset planes and a polygonal cone against
-its flat disc base. A triangular hole in a proxy ring has its maximum strictly
-inside one source triangle; only area samples discover it. A closed tetrahedron
-checks the actual source control path and unique proxy edges/vertices. Additional
-controls cover tiny distant components, degenerates, extreme 1e8:1 slivers,
-unsupported scheduling depth, collapsed-chain scheduling, encoded tile identity
-and child floors. Resident and forced-paged nearest queries compare with exhaustive arithmetic through clipped
-block ranges and preserve original donor rows. Cancellation checks occur within
-256-sample batches, including zero-area surfaces. Compensated means remain finite.
-
-Final crop receipts pin input/binary/production source, independent decoder and
-oracle hashes. Independent seed 20261025 uses 200,000 samples/direction at cuts
-0/2/4/6 with terminal leaves. These compare each cut's sampled maximum with its
-maximum G; they do not independently certify every tile's own source range.
-Full-model, appearance and integrated speed gates remain S8/S3 obligations.
-CPU diagnostics use process CPU for index construction and summed worker CPU for
-representatives and each directed pass. Collapsed cells incur no measurement CPU. CPU counters stay outside
-deterministic publication metadata.
-
-All local builds/tests/bakes run under a user systemd scope with `MemoryMax=10G`
-and `MemorySwapMax=0`, at idle priority. HLOD crop bakes additionally use the
-required measured slot 2 and explicit `--memory-budget 8GiB`.
+Builds, tests and bakes run in a user systemd scope with `MemoryMax=10G`,
+`MemorySwapMax=0`, at idle priority; crop bakes use `--memory-budget 8GiB --jobs 2`.

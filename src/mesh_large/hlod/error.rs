@@ -5,7 +5,7 @@
 //! and sliver vertices/midpoints. Indexed proxy vertices/edges are checked once.
 use super::{
     resource,
-    source_index::{self, SourceQuery, Surface, Triangle, V3},
+    source_index::{self, Budget, Frontier, Hit, SourceQuery, Surface, Triangle, V3},
     state,
     store::{CoarseTile, TileError, TileKey},
 };
@@ -21,6 +21,80 @@ pub(crate) const MIN_DEPTH: u64 = 200_000;
 /// Histograms, vertex controls, stream buffers, coarse BVH, summaries and slack.
 pub(crate) const WORK_BYTES: u64 = 4 << 20;
 const BINS: usize = 16384;
+/// Per-query work budget of every S2 nearest search (node visits plus triangle tests; see
+/// `source_index::Budget`). Exact search is Θ(R) per query against R source triangles whose
+/// boxes all contain it; budgeted, a query costs O(B + depth + block). On exhaustion the
+/// best distance found is used: an overestimate, so M and G stay conservative. Exhaustions
+/// are counted in the report. A scale-gate tuning constant (S3's donor search uses the same).
+pub(crate) const NEAREST_STEPS: u64 = 4096;
+/// The searches' two frontiers and the paged entries, each at most `2B + 1` entries (two
+/// pushes per budgeted step), at up to twice that capacity after doubling.
+pub(crate) const SEARCH_BYTES: u64 = (2 * NEAREST_STEPS + 1) * 2 * (16 + 16 + 128);
+
+/// Counts of a tile's budgeted nearest searches (deterministic: a pure function of the tile).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchStats {
+    pub searches: u64,
+    /// Searches whose budget ran out (their best distance so far was used).
+    pub exhausted: u64,
+    /// Searches that began from their greedy seed (no candidate yet).
+    pub seeded: u64,
+    /// Most steps one search took (its seed included).
+    pub max_steps: u64,
+}
+impl SearchStats {
+    pub(crate) fn add(&mut self, o: Self) {
+        self.searches += o.searches;
+        self.exhausted += o.exhausted;
+        self.seeded += o.seeded;
+        self.max_steps = self.max_steps.max(o.max_steps);
+    }
+}
+
+/// S2's budgeted nearest searches (representatives and both directed distances) with their
+/// reused frontiers, charged within [`SEARCH_BYTES`].
+pub(crate) struct Nearest {
+    steps: u64,
+    frontier: Frontier,
+    inner: Frontier,
+    pub stats: SearchStats,
+}
+impl Nearest {
+    pub(crate) fn new() -> Self {
+        Self::with_steps(NEAREST_STEPS)
+    }
+    pub(crate) fn with_steps(steps: u64) -> Self {
+        Self {
+            steps,
+            frontier: Frontier::new(),
+            inner: Frontier::new(),
+            stats: SearchStats::default(),
+        }
+    }
+    fn record(&mut self, budget: Budget) {
+        self.stats.add(SearchStats {
+            searches: 1,
+            exhausted: u64::from(budget.exhausted),
+            seeded: u64::from(budget.seeded),
+            max_steps: budget.steps,
+        });
+    }
+    /// Nearest source triangle of the query's descendant range.
+    pub(crate) fn source(&mut self, query: &mut SourceQuery<'_>, p: V3) -> Result<Hit, JobError> {
+        let mut budget = Budget::new(self.steps);
+        let hit = query.nearest_budget(p, &mut budget, &mut self.frontier, &mut self.inner)?;
+        self.record(budget);
+        Ok(hit)
+    }
+    /// Nearest triangle of a resident surface (the decoded coarse tile), from `hint`.
+    pub(crate) fn surface(&mut self, surface: &Surface, p: V3, hint: &mut Option<usize>) -> Hit {
+        let mut budget = Budget::new(self.steps);
+        let hit = surface.nearest_budget_hint(p, all_key(), hint, &mut budget, &mut self.frontier);
+        self.record(budget);
+        hit
+    }
+}
 
 /// Fixed-size scheduling by encoded depth, excluding collapsed single-coarse-child
 /// cells. Each occupied encoded depth receives >=200k samples per direction.
@@ -83,22 +157,45 @@ impl SamplingPlan {
             .ok_or_else(|| resource("sampling schedule overflow"))?;
         Ok(())
     }
-    pub(crate) fn count(&self, key: TileKey) -> Result<u64, JobError> {
+    pub(crate) fn count(&self, key: TileKey) -> Result<Count, JobError> {
         let total = *self
             .totals
             .get(key.depth as usize)
             .filter(|n| **n > 0)
             .ok_or_else(|| resource("sampling depth outside populated schedule"))?;
-        let count = key
+        let range = key
             .end
             .checked_sub(key.first)
             .filter(|n| *n > 0)
             .ok_or_else(|| resource("empty sampling source range"))?;
-        let count = (u128::from(MIN_DEPTH) * u128::from(count)).div_ceil(u128::from(total));
-        Ok(u64::try_from(count)
-            .map_err(|_| resource("sampling count overflow"))?
-            .max(MIN_TILE))
+        Ok(Count {
+            samples: required(range, total)?,
+            depth_source_triangles: total,
+        })
     }
+}
+
+/// One tile's schedule: its area samples per direction and the source triangles of every
+/// encoded tile at its depth that the schedule shares out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Count {
+    pub samples: u64,
+    pub depth_source_triangles: u64,
+}
+
+/// Samples per direction owed to `range` source triangles of a depth scheduled over `total`:
+/// its share of [`MIN_DEPTH`], at least [`MIN_TILE`]. A depth whose tiles are all published
+/// gets at least `MIN_DEPTH` in total. Omitted cells (D1) are not measured, so a depth with
+/// omissions keeps the same density over the source it publishes (`required` of the
+/// published ranges' sum), which delivery checks.
+pub(crate) fn required(range: u64, total: u64) -> Result<u64, JobError> {
+    if total == 0 || range > total {
+        return Err(resource("sampling range outside its depth's schedule"));
+    }
+    let count = (u128::from(MIN_DEPTH) * u128::from(range)).div_ceil(u128::from(total));
+    Ok(u64::try_from(count)
+        .map_err(|_| resource("sampling count overflow"))?
+        .max(MIN_TILE))
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -198,6 +295,8 @@ pub struct Summary {
     pub version: u32,
     pub seed: u64,
     pub area_samples_per_direction: u64,
+    /// The schedule's source triangles at this tile's encoded depth (see [`required`]).
+    pub depth_source_triangles: u64,
     pub source_to_proxy: Direction,
     pub proxy_to_source: Direction,
     pub sampled_max: f64,
@@ -255,8 +354,22 @@ impl DepthReport {
 pub struct ErrorReport {
     pub policy: &'static str,
     pub seed_rule: &'static str,
+    /// Per-query budget of the nearest searches ([`NEAREST_STEPS`]).
+    pub nearest_steps: u64,
+    pub nearest: SearchStats,
     pub by_depth: Vec<DepthReport>,
     pub root: Option<Summary>,
+}
+impl ErrorReport {
+    pub(crate) fn new() -> Self {
+        Self {
+            policy: POLICY,
+            seed_rule: "SplitMix64; 0x5332202610240001 xor first*0x9e3779b97f4a7c15 xor \
+                        rotl(end,23) xor depth; P-to-S xor 0xa5a5a5a5a5a5a5a5",
+            nearest_steps: NEAREST_STEPS,
+            ..Default::default()
+        }
+    }
 }
 
 /// Diagnostic CPU shares: index uses the process clock before workers start; each
@@ -453,7 +566,8 @@ where
 pub(crate) fn measure(
     tile: &CoarseTile<'_>,
     query: &mut SourceQuery<'_>,
-    count: u64,
+    nearest: &mut Nearest,
+    count: Count,
     centroid_checks: &[f64],
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<(TileError, Summary, CpuReport), JobError> {
@@ -473,15 +587,14 @@ pub(crate) fn measure(
     let source_area = query.area()?;
     cpu.source_scan = elapsed(started);
     let started = thread_cpu();
-    let source = query.surface()?;
     let mut hint = None;
     let source_to_proxy = directed(
-        source,
+        query.surface()?,
         source_area,
-        count,
+        count.samples,
         seed,
         Controls::SOURCE,
-        |p| Ok(proxy.nearest_hint(p, all_key(), &mut hint).distance2.sqrt()),
+        |p| Ok(nearest.surface(&proxy, p, &mut hint).distance2.sqrt()),
         check,
     )?;
     cpu.source_to_proxy = elapsed(started);
@@ -489,13 +602,13 @@ pub(crate) fn measure(
     let proxy_to_source = directed(
         proxy.triangles.iter().copied().map(Ok),
         proxy_area,
-        count,
+        count.samples,
         seed ^ 0xa5a5a5a5a5a5a5a5,
         Controls {
             proxy: true,
             initial: centroid_checks,
         },
-        |p| Ok(query.nearest(p)?.distance2.sqrt()),
+        |p| Ok(nearest.source(query, p)?.distance2.sqrt()),
         check,
     )?;
     cpu.proxy_to_source = elapsed(started);
@@ -510,7 +623,7 @@ pub(crate) fn measure(
 }
 fn publish(
     children_error: f64,
-    count: u64,
+    count: Count,
     seed: u64,
     source_to_proxy: Direction,
     proxy_to_source: Direction,
@@ -529,7 +642,8 @@ fn publish(
         Summary {
             version: 2,
             seed,
-            area_samples_per_direction: count,
+            area_samples_per_direction: count.samples,
+            depth_source_triangles: count.depth_source_triangles,
             source_to_proxy,
             proxy_to_source,
             sampled_max,
@@ -543,7 +657,8 @@ impl Summary {
     /// Validate persisted facts at the delivery boundary, before G is copied into
     /// explicit/implicit/external metadata. Quantiles are upper logarithmic-bin
     /// endpoints (<=2^(1/32) relative slack); maxima/means/counts are exact samples.
-    pub(crate) fn validate(&self, g: f64, children: f64) -> Result<(), JobError> {
+    /// `range` is the row's source range: its samples must cover its scheduled share.
+    pub(crate) fn validate(&self, g: f64, children: f64, range: u64) -> Result<(), JobError> {
         let distribution = |d: Distribution| {
             d.samples > 0
                 && [d.mean, d.p95, d.p99, d.max]
@@ -561,7 +676,7 @@ impl Summary {
                 && d.area.samples == self.area_samples_per_direction
         };
         if self.version != 2
-            || self.area_samples_per_direction < MIN_TILE
+            || self.area_samples_per_direction < required(range, self.depth_source_triangles)?
             || !direction(self.source_to_proxy)
             || !direction(self.proxy_to_source)
         {
@@ -569,7 +684,10 @@ impl Summary {
         }
         let (expected, summary) = publish(
             children,
-            self.area_samples_per_direction,
+            Count {
+                samples: self.area_samples_per_direction,
+                depth_source_triangles: self.depth_source_triangles,
+            },
             self.seed,
             self.source_to_proxy,
             self.proxy_to_source,
@@ -650,7 +768,10 @@ mod tests {
         };
         publish(
             0.,
-            count,
+            Count {
+                samples: count,
+                depth_source_triangles: 1,
+            },
             seed,
             direction(a, &bb, seed, Controls::SOURCE),
             direction(b, &ba, seed + 1, Controls::PROXY),
@@ -743,11 +864,15 @@ mod tests {
     #[test]
     fn child_and_leaf_floor_and_depth_counts() {
         let (_, s) = pair(&quad(|_, _| 0.), &quad(|_, _| 0.), 73);
-        let (g, _) = publish(3., MIN_TILE, s.seed, s.source_to_proxy, s.proxy_to_source).unwrap();
+        let count = Count {
+            samples: MIN_TILE,
+            depth_source_triangles: 1,
+        };
+        let (g, _) = publish(3., count, s.seed, s.source_to_proxy, s.proxy_to_source).unwrap();
         assert_eq!(g.geometric_error, 3.);
         assert!(publish(
             f64::NAN,
-            MIN_TILE,
+            count,
             s.seed,
             s.source_to_proxy,
             s.proxy_to_source
@@ -764,7 +889,8 @@ mod tests {
                     leaf_begin: 0,
                     leaf_end: 1,
                 })
-                .unwrap();
+                .unwrap()
+                .samples;
         }
         sum += plan
             .count(TileKey {
@@ -774,8 +900,13 @@ mod tests {
                 leaf_begin: 0,
                 leaf_end: 1,
             })
-            .unwrap();
+            .unwrap()
+            .samples;
         assert!(sum >= MIN_DEPTH);
+        // An omitted cell's share is not measured; the rest keep the depth's density.
+        assert_eq!(required(500, 1000).unwrap(), MIN_DEPTH / 2);
+        assert_eq!(required(1, 1000).unwrap(), MIN_TILE);
+        assert!(required(1001, 1000).is_err() && required(0, 0).is_err());
         let bad = TileKey {
             first: 0,
             end: 1,
@@ -834,7 +965,10 @@ mod tests {
                     leaf_end: 1
                 })
                 .unwrap(),
-                MIN_DEPTH
+                Count {
+                    samples: MIN_DEPTH,
+                    depth_source_triangles: plan.totals[depth as usize]
+                }
             );
         }
         assert!(SamplingPlan::from_nodes([node(32, 0, 1, NodeKind::Internal)]).is_err());

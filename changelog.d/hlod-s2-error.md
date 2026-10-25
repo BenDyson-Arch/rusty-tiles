@@ -5,10 +5,9 @@
   sampling margin, monotone child floors and versioned distance summaries. Select coarse
   primitive representatives from the nearest source surface and provide bounded
   source queries for subsequent appearance baking. Exact leaves are unchanged.
-- Deduplicate indexed controls, cache source areas/materials, and restrict source
-  controls to patch boundaries, components and slivers. Verify measured positions
-  against decoded GLB bits and refuse unsupported sampling depths.
-- Integrate S1 chain collapse: measure, seed and aggregate by encoded depth, omit
-  collapsed cells from density scheduling, and preserve open-border decode and exact
-  held-memory accounting. Bound exact incidence groups and overlap spill growth;
-  conservatively match mixed-tolerance interfaces across grid boundaries.
+- Bound every source/proxy nearest query with a per-query work budget and a guaranteed
+  greedy witness; exhausted searches keep their best (overestimated) distance and are
+  counted in `hlod.errorMeasurement.nearest`.
+- Admit the source index as walk scratch before writing it, skip omitted cells (they
+  hold no content), and keep the sampling density over published source at depths
+  with omissions.

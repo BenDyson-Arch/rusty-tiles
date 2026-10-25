@@ -3,7 +3,11 @@
 `terrain` converts a bounded elevation GeoTIFF to a **3D Tiles 1.1 directory**
 containing glTF 2.0 GLB meshes. This replaces the prototype quantized-mesh format;
 there is no compatibility mode. Conversion requires the `native-geospatial`
-CLI or Rust build. Standard binaries can preview existing output.
+CLI or Rust build. The Python package exposes no terrain conversion API.
+Standard binaries can preview existing output. If the native GTiff reader is
+unavailable, both `doctor --command terrain` and conversion report `Unsupported`
+before opening the DEM; malformed DEM data with the reader available remains
+`InvalidInput`.
 
 ```sh
 rusty-tiles terrain -i elevation.tif -o output/terrain \

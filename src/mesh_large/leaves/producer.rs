@@ -1638,52 +1638,56 @@ mod tests {
     fn scattered_atlas_islands_are_identical_across_jobs_and_shrink_pages() {
         let work = tempfile::tempdir().unwrap();
         let input = scattered_fixture(&work.path().join("source"), 20_000, 9729);
-        let mut previous = None;
-        for jobs in [1, 3] {
-            let output = work.path().join(format!("balanced{jobs}"));
-            let result = mesh_to_leaf_payloads(
-                LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
-                    .with_jobs(NonZeroUsize::new(jobs).unwrap()),
-                &RunControl::default(),
-            )
-            .unwrap();
-            assert_eq!(result.report.triangles, 20_000);
-            assert!(result.report.leaves >= 2);
-            let files = output_files(&output);
-            for row in fs::read_to_string(output.join("leaves.jsonl"))
-                .unwrap()
-                .lines()
-            {
-                let row: serde_json::Value = serde_json::from_str(row).unwrap();
-                let bindings: Vec<_> = row["appearance"]
-                    .as_array()
+        for profile in [LeafProfile::Fast, LeafProfile::Balanced] {
+            let mut previous = None;
+            for jobs in [1, 3] {
+                let output = work.path().join(format!("{profile:?}{jobs}"));
+                let result = mesh_to_leaf_payloads(
+                    LeafOutputRequest::new(&input, &output, profile)
+                        .with_jobs(NonZeroUsize::new(jobs).unwrap()),
+                    &RunControl::default(),
+                )
+                .unwrap();
+                assert_eq!(result.report.triangles, 20_000);
+                assert!(result.report.leaves >= 2);
+                let files = output_files(&output);
+                for row in fs::read_to_string(output.join("leaves.jsonl"))
                     .unwrap()
-                    .iter()
-                    .filter(|r| r.get("islands").is_some())
-                    .collect();
-                assert!(!bindings.is_empty());
-                for binding in bindings {
-                    // Scattered footprints become many small islands whose
-                    // real texels are a small part of the 256x256 hull.
-                    assert!(binding["islands"].as_array().unwrap().len() > 1);
-                    assert!(binding["islandInteriorTexels"].as_u64().unwrap() < 1024 * 1024 / 5);
-                }
-                for page in row["appearance"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .filter(|r| r.get("levels").is_some())
+                    .lines()
                 {
-                    assert!(
-                        page["width"].as_u64().unwrap() * page["height"].as_u64().unwrap()
-                            <= 1024 * 1024 / 4
-                    );
+                    let row: serde_json::Value = serde_json::from_str(row).unwrap();
+                    let bindings: Vec<_> = row["appearance"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter(|r| r.get("islands").is_some())
+                        .collect();
+                    assert!(!bindings.is_empty());
+                    for binding in bindings {
+                        // Scattered footprints become many small islands whose
+                        // real texels are a small part of the 256x256 hull.
+                        assert!(binding["islands"].as_array().unwrap().len() > 1);
+                        assert!(
+                            binding["islandInteriorTexels"].as_u64().unwrap() < 1024 * 1024 / 5
+                        );
+                    }
+                    for page in row["appearance"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter(|r| r.get("levels").is_some())
+                    {
+                        assert!(
+                            page["width"].as_u64().unwrap() * page["height"].as_u64().unwrap()
+                                <= 1024 * 1024 / 4
+                        );
+                    }
                 }
-            }
-            if let Some(ref prior) = previous {
-                assert_eq!(prior, &files, "jobs {jobs} changed published bytes");
-            } else {
-                previous = Some(files);
+                if let Some(ref prior) = previous {
+                    assert_eq!(prior, &files, "jobs {jobs} changed published bytes");
+                } else {
+                    previous = Some(files);
+                }
             }
         }
     }
@@ -1864,11 +1868,11 @@ mod tests {
         }
     }
 
-    /// Several dedicated mip-sampled pages that miss the codec's verification floor at
-    /// the profile setting: the escalation reasons, diagnostics and published bytes
+    /// Several dedicated mip-sampled pages that miss ETC1S colour floors at
+    /// the profile setting (formerly UASTC codec floors): reasons and published bytes
     /// are the same for one worker and for many (#234).
     #[test]
-    fn codec_verification_escalation_reasons_are_identical_across_jobs() {
+    fn colour_gate_escalation_reasons_are_identical_across_jobs() {
         const QUADS: usize = 8;
         let work = tempfile::tempdir().unwrap();
         let source = work.path().join("source");
@@ -1956,7 +1960,7 @@ mod tests {
                 + report.escalated_pages.uastc_level3
                 + report.lossless_fallback_pages;
             println!("jobs {jobs}: {:?} total {total}", report.escalation_reasons);
-            assert!(report.escalation_reasons.codec_verify > 0, "{report:?}");
+            assert!(report.escalation_reasons.gate > 0, "{report:?}");
             assert_eq!(
                 report.escalation_reasons.gate + report.escalation_reasons.codec_verify,
                 total
@@ -2044,7 +2048,7 @@ mod tests {
             "codec-verify escalation {:?} {:?} png {}",
             report.escalation_reasons, report.escalated_pages, report.lossless_fallback_pages
         );
-        assert!(report.escalation_reasons.codec_verify > 0, "{report:?}");
+        assert!(report.escalation_reasons.gate > 0, "{report:?}");
         assert_eq!(
             report.escalation_reasons.gate + report.escalation_reasons.codec_verify,
             total

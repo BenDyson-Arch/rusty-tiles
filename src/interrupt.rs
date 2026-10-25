@@ -44,10 +44,12 @@ fn on_signal(signal: i32) {
     let registered = RUN.lock().unwrap_or_else(|e| e.into_inner()).clone();
     match registered {
         Some(handle) if handle.cancel() => {
-            eprintln!("interrupted: cancelling and cleaning up (signal again to force exit)");
+            errln!("interrupted: cancelling and cleaning up (signal again to force exit)");
         }
         // Past the point where cancellation is possible, the run publishes its result.
-        Some(_) => eprintln!("publishing; signal again to force exit"),
+        Some(_) => {
+            errln!("publishing; signal again to force exit");
+        }
         // Nothing to unwind yet, or a command with no cancellation point (such as
         // `preview`): terminate by the signal itself, as without a handler.
         None => die_by(signal),

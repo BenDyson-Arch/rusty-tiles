@@ -32,6 +32,8 @@ mod runtime;
 mod spill;
 mod stage_timing;
 pub mod terrain;
+#[cfg(test)]
+mod test_alloc;
 mod tileset_node;
 mod vec3;
 pub mod vector;

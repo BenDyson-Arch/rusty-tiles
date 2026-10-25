@@ -251,19 +251,56 @@ impl ChannelGate {
             && self.max.is_none_or(|cap| stats.max <= cap)
     }
 }
-/// Below this many supported texels (a 32x32 level) a 99.9th percentile is
+/// Below this many positive-support texels a 99.9th percentile is
 /// the maximum of a few hundred samples, and mips this small are sampled only
 /// at extreme minification. Small colour levels of packed island pages mix
-/// neighbouring islands inside codec blocks; they keep the block corruption
-/// guard and a PSNR floor 4 dB lower, without a percentile cap.
+/// neighbouring islands inside codec blocks; they retain the block corruption
+/// guard and a size-banded PSNR floor without a percentile cap.
 pub(in crate::mesh_large) const SMALL_LEVEL_TEXELS: u64 = 1024;
+/// Colour reconstruction floor shared by decoded texels and source sampling.
+/// ETC1S's shared palette is least accurate on tiny/coarse levels; these bands
+/// are calibrated on photo, alpha, odd-sized, flat and high-contrast controls.
+/// Delivery passes the positive-support count; source sampling passes selected
+/// level area, since its finite sample set does not carry the support ledger.
+pub(super) fn colour_psnr(profile: Profile, texels: u64) -> f64 {
+    if profile == Profile::Quality {
+        if texels < SMALL_LEVEL_TEXELS {
+            23.
+        } else {
+            27.
+        }
+    } else if profile == Profile::Lossless {
+        // PNG exactness is checked separately; preserve the historical helper
+        // limits for callers that inspect a lossless receipt.
+        if texels < SMALL_LEVEL_TEXELS {
+            20.
+        } else {
+            24.
+        }
+    } else if texels < 64 {
+        13.
+    } else if texels < SMALL_LEVEL_TEXELS {
+        16.
+    } else {
+        20.
+    }
+}
+
+/// Tiny ETC1S levels need a joint RGB guard as well as a channel floor: a
+/// shared palette can shift one channel more than all three together. Both
+/// delivery (positive support) and decoded sampling (level area) use this.
+pub(super) fn tiny_colour_rgb_floor(profile: Profile, texels: u64) -> Option<f64> {
+    (matches!(profile, Profile::Fast | Profile::Balanced) && texels < 64).then_some(16.)
+}
+
 /// Colour channels: PSNR bounds mean quality, the 99.9th percentile bounds
 /// the error tail without being decided by one outlier texel, and the worst
 /// 4x4 codec-block RMSE catches one localized corrupted block that neither
 /// can see on a large page. They are calibrated on every level of the real
-/// 10M-triangle photogrammetry mesh (bench/architecture_audit/mesh_large_h8/
-/// throughput.md). Alpha, data and normal channels have no real-data
-/// calibration yet and keep their previous PSNR floors and maximum caps.
+/// original 10M-triangle mesh and the ETC1S fixture/tex3 campaign
+/// (bench/architecture_audit/etc1s_default/README.md). Alpha, data and normal
+/// channels have no real-data calibration yet and retain their previous
+/// PSNR floors and maximum caps.
 pub(in crate::mesh_large) fn channel_gate(
     slot: TextureSlot,
     profile: Profile,
@@ -292,16 +329,26 @@ pub(in crate::mesh_large) fn channel_gate(
     }
     match class(slot) {
         Class::Colour => {
-            // Worst levels of >=1024 texels on the real mesh: fast and balanced
-            // (UASTC pack level 0) PSNR 27.2 dB, p99.9 67, block RMSE 63.4;
-            // quality (pack level 1, smaller leaves) PSNR 30.3 dB, p99.9 45,
-            // block RMSE 26.6. Floors keep about 3 dB and 13 levels of margin.
-            let psnr = if quality { 27. } else { 24. };
+            // Measured ETC1S photo families require separate palette/mip size
+            // bands. Strong local caps still reject gross damage. Quality keeps
+            // its UASTC floors. Derivation and controls: docs/MESH.md.
             let small = texels < SMALL_LEVEL_TEXELS;
             ChannelGate {
-                psnr: if small { psnr - 4. } else { psnr },
-                p999: (!small).then_some(if quality { 64 } else { 80 }),
-                block_rmse: Some(if quality { 48. } else { 80. }),
+                psnr: colour_psnr(profile, texels),
+                p999: (!small).then_some(if quality {
+                    64
+                } else if fast {
+                    112
+                } else {
+                    80
+                }),
+                block_rmse: Some(if quality {
+                    48.
+                } else if fast {
+                    96.
+                } else {
+                    80.
+                }),
                 max: None,
             }
         }
@@ -336,6 +383,8 @@ pub(in crate::mesh_large) fn check_level(
     let quality = profile == Profile::Quality;
     let fast = profile == Profile::Fast;
     let mut metrics = Vec::new();
+    let mut rgb_inverse_snr = 0.;
+    let mut rgb_texels = 0;
     let channels: &[usize] = match slot {
         TextureSlot::Normal => &[0, 1, 2, 3],
         TextureSlot::Occlusion => &[0, 3],
@@ -345,11 +394,30 @@ pub(in crate::mesh_large) fn check_level(
     for &channel in channels {
         let stats = channel_stats(expected, decoded, support, width as usize, channel);
         let gate = channel_gate(slot, profile, channel, stats.texels);
+        if channel < 3 {
+            rgb_inverse_snr += 10f64.powf(-stats.psnr / 10.);
+            rgb_texels = stats.texels;
+        }
         metrics.push(json!({"channel":channel,"psnr":if stats.psnr.is_finite(){Some(stats.psnr)}else{None},"exact":stats.psnr.is_infinite(),"p999":stats.p999,"max":stats.max,"blockRmse":stats.block_rmse,"texels":stats.texels,"floor":gate.psnr,"p999Cap":gate.p999,"blockRmseCap":gate.block_rmse,"maxCap":gate.max}));
         if !gate.accepts(&stats) {
             return Err(fidelity(format!(
                 "texture {slot:?} {profile:?} mip{mip} channel{channel} PSNR{} p99.9 {} blockRMSE{} max{} over {} texels (gate {gate:?})",
                 stats.psnr, stats.p999, stats.block_rmse, stats.max, stats.texels
+            )));
+        }
+    }
+    let rgb = if class(slot) == Class::Colour {
+        tiny_colour_rgb_floor(profile, rgb_texels).map(|floor| {
+            let psnr = -10. * (rgb_inverse_snr / 3.).log10();
+            (psnr, floor)
+        })
+    } else {
+        None
+    };
+    if let Some((psnr, floor)) = rgb {
+        if psnr < floor {
+            return Err(fidelity(format!(
+                "texture {slot:?} {profile:?} mip{mip} combined RGB PSNR{psnr} below {floor} over {rgb_texels} texels"
             )));
         }
     }
@@ -426,11 +494,15 @@ pub(in crate::mesh_large) fn check_level(
             )));
         }
     }
-    Ok(json!({"mip":mip,"channels":metrics,"normal":normals}))
+    let mut receipt = json!({"mip":mip,"channels":metrics,"normal":normals});
+    if let Some((psnr, floor)) = rgb {
+        receipt["rgb"] = json!({"psnr":if psnr.is_finite(){Some(psnr)}else{None},"exact":psnr.is_infinite(),"floor":floor});
+    }
+    Ok(receipt)
 }
 
 /// Whether a slot/profile stores occlusion as scalar ETC1S (R replicated).
-/// Quality is excluded on purpose: its occlusion gate (p99.9 <= 8, against 80
+/// Quality is excluded on purpose: its occlusion gate (max <= 8, against 80
 /// elsewhere) is far tighter than ETC1S can meet, so Quality keeps UASTC.
 pub(in crate::mesh_large) fn scalar_occlusion(slot: TextureSlot, profile: Profile) -> bool {
     slot == TextureSlot::Occlusion && profile != Profile::Quality
@@ -450,7 +522,13 @@ pub(in crate::mesh_large) fn codec_settings(
         Profile::Balanced => 1,
         _ => 2,
     };
-    let mode = if scalar {
+    let colour =
+        class(slot) == Class::Colour && matches!(profile, Profile::Fast | Profile::Balanced);
+    let mode = if colour {
+        codec::Mode::Etc1s {
+            quality: if profile == Profile::Fast { 50 } else { 90 },
+        }
+    } else if scalar {
         codec::Mode::Etc1s { quality: 90 }
     } else {
         codec::Mode::Uastc { zstd: true }
@@ -458,7 +536,9 @@ pub(in crate::mesh_large) fn codec_settings(
     (
         mode,
         codec::Params {
-            effort: if scalar { 0 } else { effort },
+            // Native ETC1S level 0 retains the measured byte saving while
+            // avoiding the costly refinement/selector ordering of level 2.
+            effort: if colour || scalar { 0 } else { effort },
             transfer: if class(slot) == Class::Colour {
                 codec::Transfer::Srgb
             } else {
@@ -1303,18 +1383,29 @@ mod tests {
             }
         }
     }
-    /// Occlusion is scalar ETC1S in fast/balanced and UASTC in quality; every
-    /// other slot is UASTC. Read from the KTX2 DFD colour model of the output
-    /// itself (basic block word 2, byte 0): 163 is ETC1S, 166 is UASTC.
+    /// Colour and scalar occlusion use ETC1S in fast/balanced; quality,
+    /// normal and metallic-roughness use UASTC. Read from the output KTX2 DFD
+    /// colour model itself (basic block word 2, byte 0): 163 is ETC1S, 166 is UASTC.
     #[test]
     fn occlusion_is_scalar_etc1s_except_in_quality() {
         const ETC1S: u8 = 163;
         const UASTC: u8 = 166;
         for profile in [Profile::Fast, Profile::Balanced, Profile::Quality] {
-            for slot in [TextureSlot::Occlusion, TextureSlot::MetallicRoughness] {
+            for slot in [
+                TextureSlot::BaseColor,
+                TextureSlot::Emissive,
+                TextureSlot::Normal,
+                TextureSlot::Occlusion,
+                TextureSlot::MetallicRoughness,
+            ] {
                 let out = encode(
                     [8, 8],
-                    &[90, 90, 90, 255].repeat(64),
+                    &if slot == TextureSlot::Normal {
+                        [128, 128, 255, 255]
+                    } else {
+                        [90, 90, 90, 255]
+                    }
+                    .repeat(64),
                     &[1; 64],
                     slot,
                     profile,
@@ -1330,7 +1421,14 @@ mod tests {
                 );
                 assert_eq!(
                     out.bytes[dfd + 12],
-                    if scalar { ETC1S } else { UASTC },
+                    if scalar
+                        || (matches!(slot, TextureSlot::BaseColor | TextureSlot::Emissive)
+                            && profile != Profile::Quality)
+                    {
+                        ETC1S
+                    } else {
+                        UASTC
+                    },
                     "{slot:?}/{profile:?} codec"
                 );
                 assert_eq!(
@@ -1718,15 +1816,286 @@ mod tests {
         }
     }
     #[test]
+    #[ignore = "measurement: class-correct smooth photo mip distributions"]
+    fn measure_etc1s_smooth_photo_floors() {
+        for edge in [32, 64, 128, 256] {
+            let rgba = photo_page(edge);
+            let authored = chain(&rgba, edge);
+            let levels: Vec<_> = authored
+                .levels
+                .iter()
+                .map(|l| codec::MipLevel {
+                    rgba: &l.rgba,
+                    width: l.width,
+                    height: l.height,
+                })
+                .collect();
+            for profile in [Profile::Fast, Profile::Balanced] {
+                let (mode, params) = codec_settings(TextureSlot::BaseColor, profile);
+                let (_, decoded) = codec::encode_ktx2_mips_decoded(&levels, mode, params).unwrap();
+                for (mip, (level, decoded)) in authored.levels.iter().zip(&decoded).enumerate() {
+                    for channel in 0..4 {
+                        let stats = channel_stats(
+                            &level.rgba,
+                            decoded,
+                            &level.support,
+                            level.width as usize,
+                            channel,
+                        );
+                        println!(
+                            "etc1s-photo-measure {}",
+                            json!({"fixture":format!("smooth-photo-{edge}"),"profile":format!("{profile:?}"),"mip":mip,"channel":channel,"texels":stats.texels,"psnr":stats.psnr,"p999":stats.p999,"max":stats.max,"blockRmse":stats.block_rmse})
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn etc1s_colour_policy_and_sensitive_controls() {
+        for (profile, quality) in [(Profile::Fast, 50), (Profile::Balanced, 90)] {
+            for slot in [TextureSlot::BaseColor, TextureSlot::Emissive] {
+                let (mode, params) = codec_settings(slot, profile);
+                assert_eq!(mode, codec::Mode::Etc1s { quality });
+                assert_eq!(params.effort, 0);
+                assert_eq!(params.transfer, codec::Transfer::Srgb);
+                let edge = 64;
+                let rgba = photo_page(edge);
+                let out = encode(
+                    [edge as u32; 2],
+                    &rgba,
+                    &vec![1; edge * edge],
+                    slot,
+                    profile,
+                    MEMORY,
+                    None,
+                    LADDER,
+                )
+                .unwrap();
+                assert!(out.escalation.is_none(), "{slot:?}/{profile:?}");
+                let check = |expected: &[u8], actual: &[u8]| {
+                    check_level(
+                        expected,
+                        actual,
+                        &vec![1; edge * edge],
+                        edge as u32,
+                        slot,
+                        profile,
+                        0,
+                    )
+                };
+                let decoded = decoded_levels(&out, edge).remove(0);
+                let mut wrong_transfer = decoded.clone();
+                for pixel in wrong_transfer.as_chunks_mut::<4>().0 {
+                    for value in &mut pixel[..3] {
+                        let s = f64::from(*value) / 255.;
+                        *value = ((if s <= 0.04045 {
+                            s / 12.92
+                        } else {
+                            ((s + 0.055) / 1.055).powf(2.4)
+                        }) * 255.)
+                            .round() as u8;
+                    }
+                }
+                assert!(check(&rgba, &wrong_transfer).is_err(), "wrong colour space");
+                let mut broken_alpha = decoded;
+                for pixel in broken_alpha.as_chunks_mut::<4>().0 {
+                    pixel[3] = 0;
+                }
+                assert!(check(&rgba, &broken_alpha).is_err(), "broken alpha");
+                let flat = [32, 96, 208, 255].repeat(edge * edge);
+                let mut block = flat.clone();
+                for y in 16..20 {
+                    for x in 16..20 {
+                        block[(y * edge + x) * 4] += 100;
+                    }
+                }
+                assert!(check(&flat, &block).is_err(), "damaged flat block");
+                // The relaxed tiny and middle bands retain sensitive controls.
+                for side in [4u32, 8, 32] {
+                    let count = (side * side) as usize;
+                    let flat = [32, 96, 208, 255].repeat(count);
+                    let check_small = |actual: &[u8]| {
+                        check_level(&flat, actual, &vec![1; count], side, slot, profile, 6)
+                    };
+                    assert!(
+                        check_small(&[208, 96, 32, 255].repeat(count)).is_err(),
+                        "small swapped channels"
+                    );
+                    assert!(
+                        check_small(&[4, 30, 161, 255].repeat(count)).is_err(),
+                        "small wrong transfer"
+                    );
+                    assert!(
+                        check_small(&[32, 96, 208, 0].repeat(count)).is_err(),
+                        "small broken alpha"
+                    );
+                    let contrast: Vec<u8> = (0..count)
+                        .flat_map(|i| {
+                            if (i % side as usize + i / side as usize).is_multiple_of(2) {
+                                [0, 255, 0, 255]
+                            } else {
+                                [255, 0, 255, 255]
+                            }
+                        })
+                        .collect();
+                    assert!(
+                        check_level(
+                            &contrast,
+                            &[128, 128, 128, 255].repeat(count),
+                            &vec![1; count],
+                            side,
+                            slot,
+                            profile,
+                            6
+                        )
+                        .is_err(),
+                        "small lost detail"
+                    );
+                }
+                let checker: Vec<u8> = (0..edge * edge)
+                    .flat_map(|i| {
+                        if (i % edge + i / edge) % 2 == 0 {
+                            [0, 255, 0, 255]
+                        } else {
+                            [255, 0, 255, 255]
+                        }
+                    })
+                    .collect();
+                assert!(
+                    check(&checker, &[128, 128, 128, 255].repeat(edge * edge)).is_err(),
+                    "lost high contrast detail"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn blank_inversion_wrong_mip_and_light_flat_transfer_controls() {
+        for profile in [Profile::Fast, Profile::Balanced] {
+            for side in [4u32, 8, 32, 64] {
+                let count = (side * side) as usize;
+                let support = vec![1; count];
+                let flat = [32, 96, 208, 255].repeat(count);
+                let gate = |expected: &[u8], actual: &[u8]| {
+                    check_level(
+                        expected,
+                        actual,
+                        &support,
+                        side,
+                        TextureSlot::BaseColor,
+                        profile,
+                        0,
+                    )
+                };
+                assert!(
+                    gate(&flat, &[0, 0, 0, 255].repeat(count)).is_err(),
+                    "black page {side}"
+                );
+                assert!(
+                    gate(&flat, &[223, 96, 208, 255].repeat(count)).is_err(),
+                    "inverted red {side}"
+                );
+                let light = [200, 200, 200, 255].repeat(count);
+                // Literal independent sRGB decoding of 200 rounds to147. The
+                // former tiny 12dB floor admitted this wrong-transfer page.
+                assert!(
+                    gate(&light, &[147, 147, 147, 255].repeat(count)).is_err(),
+                    "light flat wrong transfer {side}"
+                );
+                if side == 4 {
+                    let error = gate(&light, &[147, 147, 147, 255].repeat(count)).unwrap_err();
+                    assert!(error.message().contains("combined RGB"));
+                    // Shared-palette one-channel tails remain acceptable:
+                    // R13.65/G20.53/B21.69dB combine to17.07dB, unlike the
+                    // wrong transfer's13.65dB in every channel.
+                    let witness = gate(
+                        &[180, 180, 180, 255].repeat(count),
+                        &[127, 204, 201, 255].repeat(count),
+                    )
+                    .unwrap();
+                    assert_eq!(witness["rgb"]["floor"], 16.);
+                    assert_eq!(witness["channels"][0]["floor"], 13.);
+                }
+                let checker: Vec<u8> = (0..count)
+                    .flat_map(|i| {
+                        if (i % side as usize + i / side as usize).is_multiple_of(2) {
+                            [0, 255, 0, 255]
+                        } else {
+                            [255, 0, 255, 255]
+                        }
+                    })
+                    .collect();
+                let mips = chain(&checker, side as usize);
+                let coarse = &mips.levels[1];
+                let wrong: Vec<u8> = (0..count)
+                    .flat_map(|i| {
+                        let x = i % side as usize / 2;
+                        let y = i / side as usize / 2;
+                        let offset = (y * coarse.width as usize + x) * 4;
+                        coarse.rgba[offset..offset + 4].iter().copied()
+                    })
+                    .collect();
+                assert_eq!(wrong.len(), checker.len());
+                assert!(
+                    gate(&checker, &wrong).is_err(),
+                    "wrong mip at right size {side}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn smooth_wrong_mip_is_a_documented_psnr_blind_spot() {
+        let side = 64usize;
+        let rgba: Vec<u8> = (0..side * side)
+            .flat_map(|i| {
+                let x = (i % side) as u8;
+                [96 + x, 96 + x, 96 + x, 255]
+            })
+            .collect();
+        let mips = chain(&rgba, side);
+        let coarse = &mips.levels[1];
+        let wrong: Vec<u8> = (0..side * side)
+            .flat_map(|i| {
+                let offset = (i / side / 2 * coarse.width as usize + i % side / 2) * 4;
+                coarse.rgba[offset..offset + 4].iter().copied()
+            })
+            .collect();
+        let stats = channel_stats(&rgba, &wrong, &vec![1; side * side], side, 0);
+        assert!(stats.psnr > 40., "{stats:?}");
+        assert_ne!(rgba, wrong);
+        for profile in [Profile::Fast, Profile::Balanced] {
+            assert!(check_level(
+                &rgba,
+                &wrong,
+                &vec![1; side * side],
+                side as u32,
+                TextureSlot::BaseColor,
+                profile,
+                0
+            )
+            .is_ok());
+        }
+        // A detail-sensitive witness sees the changed spatial derivatives:
+        // the source's adjacent x differences are all1, the shifted mip's
+        // nearest-upsampled differences alternate0/2. A calibrated spatial
+        // detail/gradient check is needed to enforce this additional contract.
+        assert!((0..side - 1).all(|x| rgba[(x + 1) * 4] - rgba[x * 4] == 1));
+        assert!((0..side - 1).any(|x| wrong[(x + 1) * 4] == wrong[x * 4]));
+    }
+
+    #[test]
     fn small_level_relaxation_is_colour_only_and_keeps_the_block_guard() {
         // 16x16 = 256 supported texels: a small level.
         let expected = [100u8, 120, 140, 255].repeat(256);
         let mut offset = expected.clone();
         for px in offset.as_chunks_mut::<4>().0 {
-            px[2] += 17;
+            px[2] += 30;
         }
-        // Uniform 17-level error: PSNR 23.5 dB, above the relaxed colour floor
-        // (24 - 4) but below every full-size floor.
+        // Uniform 30-level error: PSNR 18.59 dB passes the middle ETC1S
+        // band (16) but misses the large-level floor (20).
         assert!(check_level(
             &expected,
             &offset,
@@ -1740,7 +2109,7 @@ mod tests {
         let big = [100u8, 120, 140, 255].repeat(1024);
         let mut big_offset = big.clone();
         for px in big_offset.as_chunks_mut::<4>().0 {
-            px[2] += 17;
+            px[2] += 30;
         }
         assert!(check_level(
             &big,
@@ -1971,8 +2340,8 @@ mod tests {
             (
                 128,
                 hard_block_page(128, 3),
-                UastcLevel3,
-                vec![Step::Profile, UastcLevel2],
+                UastcLevel2,
+                vec![Step::Profile],
             ),
             (
                 64,
@@ -2166,7 +2535,7 @@ mod tests {
             .collect()
     }
     #[test]
-    fn codec_verification_floor_miss_escalates_and_every_step_is_still_verified() {
+    fn codec_and_class_verification_misses_follow_the_selected_codec() {
         let profile = Profile::Balanced;
         let edge = 64;
         let rgba = sharp_page(edge);
@@ -2181,13 +2550,20 @@ mod tests {
                 height: l.height,
             })
             .collect();
-        let (mode, params) = codec_settings(TextureSlot::BaseColor, profile);
+        // The former UASTC profile still refuses this exact detail witness.
+        let mode = codec::Mode::Uastc { zstd: true };
+        let params = codec::Params {
+            effort: 1,
+            transfer: codec::Transfer::Srgb,
+            mipmaps: false,
+        };
         let refused = codec::encode_ktx2_mips_decoded(&levels, mode, params).unwrap_err();
         assert_eq!(refused.kind(), JobErrorKind::InvalidState);
         assert!(refused
             .message()
             .contains("detail does not follow the input"));
-        // The page escalates on that refusal and is delivered at UASTC level 2.
+        // ETC1S retains its own corruption floor; this witness instead misses
+        // the colour-class gate and is delivered at UASTC level 2.
         let out = encode(
             [edge as u32; 2],
             &rgba,
@@ -2205,9 +2581,9 @@ mod tests {
         let miss = &escalation.misses[0];
         assert_eq!(
             (miss.step, miss.mip, miss.reason),
-            (Step::Profile, Some(0), MissReason::CodecVerify)
+            (Step::Profile, Some(0), MissReason::Gate)
         );
-        assert!(miss.gate.contains("KTX2 verification failed"), "{miss:?}");
+        assert!(miss.gate.contains("PSNR"), "{miss:?}");
         // The delivered step passes the codec's own verification and the run gates.
         let (mode, params) =
             step_settings(TextureSlot::BaseColor, profile, Step::UastcLevel2).unwrap();
@@ -2238,7 +2614,7 @@ mod tests {
         let error = run(false).unwrap_err();
         assert_eq!(error.kind(), JobErrorKind::Unsupported);
         for text in [
-            "profile mip0 (codec_verify): KTX2 verification failed",
+            "profile mip0 (gate)",
             "uastc_level2 mip0 (gate)",
             "uastc_level3 mip0 (gate)",
             "no lossless PNG step",
@@ -2255,7 +2631,7 @@ mod tests {
                 .iter()
                 .map(|m| m.reason)
                 .collect::<Vec<_>>(),
-            [MissReason::CodecVerify, MissReason::Gate, MissReason::Gate]
+            [MissReason::Gate, MissReason::Gate, MissReason::Gate]
         );
     }
 }

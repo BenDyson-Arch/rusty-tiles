@@ -1,19 +1,33 @@
 # 0.4.0 foundation and streaming; 0.6.0 format transition
 
-Status: **development direction and ordered roadmap, 2026-10-12**. This document
+Status: **development direction and ordered roadmap, amended 2026-10-24**. This document
 consolidates the proposed ML0–ML10 sequence and records the accepted release
 split. It authorizes planning and bounded implementation slices; it records no
 new implementation acceptance or release authorization.
 
 **0.4.0 ships real 3D Tiles 1.1/glTF 2.0 and implicit tiling, with the shared
-foundation and the streaming, certified, textured large-mesh tiler. 0.6.0 makes
+foundation and the streaming, textured classic octree HLOD mesh tiler. 0.6.0 makes
 the official 3D Tiles 2.0/glTF 2.1 transition against finalized specifications
 and supported viewers.** Version strings must describe the encoding actually
 implemented. Draft experiments are optional design checks, never 0.4.0 blockers.
 
-The tiler's fidelity, topology, source identity and resource requirements below
-remain required for 0.4.0. The foundation work remains replacement-first:
-retain code only for the domain independently established by its evidence.
+The [2026-10-24 HLOD decision](hlod-040-decision.md) supersedes the H17/H27
+coarse-mesh requirements. Leaves retain exact provenance; coarse error is
+sampled, not certified, and all independently refined outer interfaces must
+agree on decoded bytes. The detailed codec, calibration and acceptance budgets
+are proposals for review; this amendment is not an implementation pass.
+
+**Non-mesh amendment proposed for owner approval in this review:** adopt
+[#267](https://github.com/BenDyson-Arch/rusty-tiles/pull/267)'s finite 0.4 bar,
+summarized in the [decision](hlod-040-decision.md#proposed-non-mesh-04-bar--owner-approval-in-this-review).
+Retain accepted point/vector/native imagery/terrain foundations within their
+established domains; close small decoded-output, placement/bounds, realistic
+resource, lifecycle and frontend gaps with existing suites green. Deeper
+oracle/component audits and worst-case resource proofs move to 0.4.x, with
+limits explicit. Known wrong output or destructive publication still blocks
+release. This proposed exception replaces blanket non-mesh rewrite requirements
+only after approval; it is not a waiver of mesh scale gates or terrain's existing
+numerical guarantees.
 
 ## Scope and migration policy
 
@@ -116,8 +130,9 @@ contract; no new delivery naming or speculative 0.6.0 abstraction is required.
 
 Build the large-mesh pipeline on the shared contract in bounded dependency order:
 in-process texture codec gate; streamed capture/sort and tree construction;
-streamed hierarchy/delivery output; full-detail leaves; certified geometry LOD;
-proxy texture re-parameterisation and baking; validator scale support. These
+streamed hierarchy/delivery output; full-detail leaves; classic octree HLOD
+with preserved outer interfaces; fresh coarse charts and cheap source-surface
+baking; validator scale support. These
 tiler slices are successive and dependency-ordered among themselves. The tiler
 becomes the long-term caller of the shared serializer; mesh-specific fixtures,
 including a small static local mesh with WGS84 anchor/orientation/offset
@@ -143,41 +158,56 @@ Preserve the following agreed large-mesh requirements:
   fan-in and scratch location. Retain explicit hierarchy/individual-item and
   current container-specific limits; do not add a total input-size refusal. The
   3TZ boundary keeps its early typed refusal at the 178,956,970-member ceiling.
-- Full-detail leaves preserve exact per-triangle source provenance. Proxies
-  preserve identity for every present primitive; removed geometry remains
-  accounted for. The current metadata representation must prove these identities
-  and picking semantics; a later encoding must reprove them before replacement.
-- Seam agreement is checked on decoded published bytes, including mixed-depth
-  leaves, packed leaves, corners, f32 profiles and quantized/meshopt payloads.
-  Retain exact shallowest-leaf incidence computation, final-position bounds,
-  topology validation and explicit repair/refusal behavior.
-- Certify after quantization and snapping. Published geometric error bounds
-  both directions against source geometry, including removed regions and added
-  faces. Keep sound composed and direct bounds, outward rounding and bounded
-  certificate work; exhaustion must leave a sound bound.
-- Small primitives and islands may vanish at coarse levels; small interior holes
-  may be filled, with deeper tiles reopening them. Preserve the certified rules,
-  border-hole restrictions and published vanished/filled records. A crack must
-  never be relabelled as an intentional hole. These choices are fidelity policy,
-  not permission to silently drop source geometry or provenance at leaves.
-- Atlas and encode every present PBR slot. Bake proxies from pre-encode data,
-  re-express normal maps in the proxy tangent frame, and verify container, mip,
-  colour/data class and transcode semantics after encoding. Use in-process
-  KTX2/Basis with meshopt; PNG is the agreed `lossless` texture exception. There
-  is one encoder path, without an external-tool fallback ladder.
-- Keep `fast`, default `balanced`, `quality` and `lossless` profiles, measured
-  per-class appearance floors, the per-tile byte budget and reported lossy mip
-  drops. `lossless` preserves its agreed texel-exact leaf requirement and typed
-  refusal where a page cannot fit. Profile constants remain provisional until
-  the final acceptance milestone.
-- The profiles are provisional until LOD (H17) and texture baking (H13, delivered as H27) exist.
-  That covers texture resolution caps, encoder effort and leaf size, including
-  the current 8192-triangle cap that Cesium per-triangle picking needs. They get
-  one unified design during milestone-4 acceptance, using real-mesh
-  measurements. Data point: the full-resolution 10M-triangle photogrammetry mesh
-  took 35.5 min with `balanced`, peaked at 12.4 GiB and produced an 8.1 GB
-  archive. Basis encoding dominates and scales with texel count. The leaf-size
-  comparison is settled; see the leaf size decision below.
+- Full-detail leaves retain today's ownership, at most 8,192 triangles, exact
+  per-triangle source provenance and IDs, and current per-profile encoding
+  fidelity. No source triangle is lost or duplicated. Coarse triangles carry
+  one representative source primitive feature ID; remove `proxy_source` and
+  any claim of exact coarse triangle ancestry.
+- Build each parent from its children with meshopt, locking only its outer
+  interface to other subtrees; release interior/UV/attribute seams. Preserve
+  complete segments and junctions, including nonmanifold interfaces, through
+  decoded encoding. No blanket source-hole border lock. The target is at most
+  8,192 triangles or an error stop, with a hard published 8,192 cap; refuse an
+  unsatisfiable protected-interface constraint explicitly. Keep the permanent
+  all-pair mixed-depth/same-depth crack census; no skirts or seam consensus.
+- Publish a sampled two-sided maximum against captured source, made monotonic
+  up the tree and measured on final decoded geometry. It is **not certified**.
+  Archive validation checks finite/nonnegative ordered errors, availability,
+  resource/codec/metadata integrity and decoded containment; independent
+  source-aware acceptance checks exact leaves, cracks, error and appearance.
+  Do not claim the archive-only validator proves source-distance bounds.
+- Plain simplification has no separate hole-fill or island-vanish policy. Remove
+  published vanished/filled/reopening records. Coarse topology changes are
+  checked by quality fixtures; leaves recover source geometry. A missing tile
+  interface is always a defect, never an intentional hole.
+- Give coarse tiles fresh nonoverlapping charts, cheap bounded source-surface
+  baking and content-sized atlases. Balanced targets GE/16 spacing with a
+  provisional 1024-side page cap; report actual spacing/cap hits. Keep all
+  admitted material/PBR, MASK, normal-frame and lit/unlit semantics. Remove
+  H27's per-texel ledger, drift gates and facing/donor search. Child pre-encode
+  sampling is an optimization requiring separate quality evidence.
+- Leaves use cropped atlases with correct wrap/filter/mip alignment, never
+  unneeded whole source images. Audit the old dedicated mipmapped-binding
+  exception as part of the crop work. Retain exact leaf picking and the
+  `lossless` texel policy.
+- Retain in-process KTX2/Basis and meshopt, PNG for `lossless`, class-correct
+  mips and per-page quality checks. Recommend ETC1S for fast/balanced coarse
+  colour (and leaves if accepted), UASTC for quality and class-specific needs.
+  Freeze that choice only after one 2048 campaign measures bytes, CPU, all
+  three first views and visual/client behavior. No JPEG production path.
+- Keep `fast`, default `balanced`, `quality`, `lossless`, the complete per-tile
+  byte budget and reported lossy mip drops. The leaf cap is settled at 8,192;
+  density, page caps and codec effort remain provisional. HLOD's sampled maximum
+  is the initial refinement error; a guarded half-error/p99 calibration can
+  ship only after the separate view/approach gate in the decision, without
+  changing bake density or claiming certification.
+- One declared whole-job memory budget must cover capture, source indexes,
+  active children/parent, images/codecs and delivery. Add CLI `--memory-budget`
+  and Rust/Python `memory_budget_bytes`; these are planned, not available APIs.
+  Process subtrees postorder and release consumed children; spill inventories
+  and admit work before allocation. Image-free inputs reserve zero texture
+  workspace. The proposed 2048 cap is 4 GiB; untextured scale gate (a) stays
+  2 GiB. Report simultaneous scratch/staging, not capture-only spill.
 
 Recorded decisions for the tiler:
 
@@ -207,31 +237,29 @@ Recorded decisions for the tiler:
   ([#202](https://github.com/BenDyson-Arch/rusty-tiles/pull/202)), so the
   tiler's own default output validates. VS-A
   ([#206](https://github.com/BenDyson-Arch/rusty-tiles/pull/206)) handles the
-  catalog at scale; VS-B and VS-C follow. Large real archives (8.1 GB) still
-  exceed the default 1 GiB / 2^18-visit validator limits until VS-B and VS-C
-  land.
+  catalog at scale. VS-B traversal/containment (#217) and VS-C derived limits
+  with opt-in caps (#214) are merged; the old default 1 GiB / 2^18-visit
+  refusal is historical. VS-D final HLOD output/scale acceptance remains open.
 
-Annotation readiness. Leaves keep exact per-triangle source provenance so that a
-future, post-0.4 lightweight "annotate" pass can add attributes to parts of 3D
-polygons and regions on an existing tileset without re-tiling. Triangle-aligned
-annotations become an extra `EXT_mesh_features` feature-ID set plus a property
-table. Boundaries that cut through triangles become feature ID textures,
-following Cesium's photogrammetry-classification pattern. 0.4 keeps this
-possible by requiring:
-
-- an extensible number of feature-ID sets;
-- provenance kept in leaves and proxies;
-- an ID/class texture class in texture baking: nearest sampling, mips that never
-  blend IDs, ID-safe or lossless encoding, and a defined no-feature value in
-  gutters.
+Annotation readiness. Leaves keep exact per-triangle source provenance for a
+future, post-0.4 annotate pass. Triangle-aligned annotations can add an
+`EXT_mesh_features` feature-ID set/property table; boundaries through triangles
+need ID textures with nearest/nonblending sampling, lossless IDs and no-feature
+gutters. Feature-ID sets remain extensible. Coarse tiles retain only a
+representative primitive label: source-triangle or regional annotations cannot
+be propagated exactly through it. Such propagation needs a later explicit
+aggregation/rebake policy. Keep reusable leaf ID-texture semantics without
+retaining the obsolete H27 baker. Coarse nonoverlapping UV charts establish
+texture editability, not exact source ancestry.
 
 CesiumJS 1.146 support: feature ID textures and property tables have mature
 picking and styling. Property textures work in custom shaders since 1.92.
 Property-texture picking via `scene.pickMetadata` is experimental since 1.122.
 
 The earlier v6.1 design supplies the detailed algorithms, constants and tests as
-planning inputs. Preserve its requirements unless a recorded decision explicitly
-changes them; use the real Tiles 1.1/glTF 2.0 semantics for 0.4.0. Rederive
+planning inputs. The HLOD decision explicitly replaces its certified LOD, coarse
+provenance, hole/island and per-texel bake requirements; retain unrelated
+requirements and use the real Tiles 1.1/glTF 2.0 semantics for 0.4.0. Rederive
 extension names, JSON shapes and new wire encodings at the official 0.6.0
 transition. A successful codec prototype does not accept the tiler, and
 untextured temporary proxies do not accept textured output.
@@ -241,12 +269,14 @@ untextured temporary proxies do not accept textured output.
 Run the final production output auditor and independent validator on every
 profile and scale gate, with the real glTF/meshopt/KTX2 bytes and the proven
 Tiles 1.1/glTF 2.0 consumer route. Include coordinate and picking controls, seams, topology,
-holes/islands, appearance and geometric-error checks. Freeze constants only
-after those checks pass.
+source holes/components as simplification-quality cases, appearance and sampled
+geometric-error checks. No H17 fill/vanish accounting or certification remains.
+Freeze constants only after those checks pass.
 
 Retain the v6.1 pass/fail scale obligations: the spilled 5.26×10^8-triangle
-production octree case, the 10^4-primitives and 10^4-holes/islands-per-root
-feature-density case, the procedural-texture bake case, and the large hierarchy
+production octree case, the 10^4-primitives and 10^4-source-holes/islands-per-root
+feature-density input (no special fill/vanish/reopening rules), the procedural
+texture bake case with all admitted slot/mip semantics, and the large hierarchy
 and delivery cases (at least 2^22 tiles and over 4 GiB of output). Carry forward
 the 3TZ format-specific probes and independently check the proven viewer delivery
 route. A replacement container at 0.6.0 needs its own delivery checks. Measure
@@ -272,6 +302,13 @@ the final acceptance evidence; document consolidation alone does not close
 
 #### Status at 2026-10-23
 
+The merged entries below record history, not acceptance of the replacement.
+**2026-10-24 correction:** H17/H27 are superseded by classic HLOD; replacement
+slices S1–S8 in the [decision](hlod-040-decision.md#ordered-implementation-slices)
+remain open. Proposed non-mesh rescope credits existing foundations and replaces
+blanket audit completion with the five finite checks below **if the owner
+approves it in review**. Nothing is newly marked passed by this amendment.
+
 An item is marked done only where a merged PR delivered it. Merged work shows
 that a slice exists; it does not close the acceptance item it feeds. Milestone
 4 waits for milestone 3, so the tiler slices are listed first. PR numbers are
@@ -282,8 +319,8 @@ Tiler prerequisites (milestone 3):
 - [x] Streamed capture, sort and tree: [#180](https://github.com/BenDyson-Arch/rusty-tiles/pull/180), with the external sort in [#166](https://github.com/BenDyson-Arch/rusty-tiles/pull/166).
 - [x] Full-detail leaves with the in-process KTX2/Basis encoder: [#187](https://github.com/BenDyson-Arch/rusty-tiles/pull/187), [#199](https://github.com/BenDyson-Arch/rusty-tiles/pull/199) (the encoder draft #163 was closed unmerged).
 - [x] Streamed Tiles 1.1 forest in `.3tz`: [#192](https://github.com/BenDyson-Arch/rusty-tiles/pull/192).
-- [x] Certified geometry LOD: [#209](https://github.com/BenDyson-Arch/rusty-tiles/pull/209); seam overlap fix [#236](https://github.com/BenDyson-Arch/rusty-tiles/pull/236).
-- [x] Proxy texture baking in `mesh`: [#215](https://github.com/BenDyson-Arch/rusty-tiles/pull/215), [#216](https://github.com/BenDyson-Arch/rusty-tiles/pull/216), [#231](https://github.com/BenDyson-Arch/rusty-tiles/pull/231), [#233](https://github.com/BenDyson-Arch/rusty-tiles/pull/233), [#237](https://github.com/BenDyson-Arch/rusty-tiles/pull/237); chart growth [#242](https://github.com/BenDyson-Arch/rusty-tiles/pull/242) and facing fallback [#246](https://github.com/BenDyson-Arch/rusty-tiles/pull/246).
+- [x] Historical H17 certified geometry LOD (superseded; replacement pending): [#209](https://github.com/BenDyson-Arch/rusty-tiles/pull/209); seam overlap fix [#236](https://github.com/BenDyson-Arch/rusty-tiles/pull/236).
+- [x] Historical H27 proxy texture baking in `mesh` (superseded; replacement pending): [#215](https://github.com/BenDyson-Arch/rusty-tiles/pull/215), [#216](https://github.com/BenDyson-Arch/rusty-tiles/pull/216), [#231](https://github.com/BenDyson-Arch/rusty-tiles/pull/231), [#233](https://github.com/BenDyson-Arch/rusty-tiles/pull/233), [#237](https://github.com/BenDyson-Arch/rusty-tiles/pull/237); chart growth [#242](https://github.com/BenDyson-Arch/rusty-tiles/pull/242) and facing fallback [#246](https://github.com/BenDyson-Arch/rusty-tiles/pull/246).
 - [x] One public entry point, `mesh` / `mesh_to_tileset`: [#213](https://github.com/BenDyson-Arch/rusty-tiles/pull/213); source CRS [#218](https://github.com/BenDyson-Arch/rusty-tiles/pull/218); docs lead with it [#238](https://github.com/BenDyson-Arch/rusty-tiles/pull/238).
 - [x] Per-tile primitive batching (H28): [#244](https://github.com/BenDyson-Arch/rusty-tiles/pull/244).
 - [x] Page escalation, archive size and scratch admission: [#229](https://github.com/BenDyson-Arch/rusty-tiles/pull/229), [#234](https://github.com/BenDyson-Arch/rusty-tiles/pull/234), [#226](https://github.com/BenDyson-Arch/rusty-tiles/pull/226), [#228](https://github.com/BenDyson-Arch/rusty-tiles/pull/228), [#230](https://github.com/BenDyson-Arch/rusty-tiles/pull/230).
@@ -298,18 +335,73 @@ Milestone-4 items:
 
 Remaining before 0.4.0:
 
-- [ ] VS-D: independent validator acceptance on the final tiler output (full audit tier), including every profile.
-- [ ] Scale gate (a): the spilled 5.26x10^8-triangle (526,174,760) production octree run through `mesh`, with peak memory, scratch, wall time and consumer load against budgets.
-- [ ] Scale gates (b) and (c): the 10^4-primitives and 10^4-holes density case, and the procedural-texture bake case, run through `mesh`.
-- [ ] Scale gate (d): the combined archive (at least 2^22 tiles and over 4 GiB) run against the final `validate` and a Cesium load. #193 provides the fixture only.
-- [ ] Preset finalisation: freeze profile constants (texture caps, encoder effort, leaf size, octahedral bit count, per-tile budgets) from real-mesh measurements.
-- [ ] Retire `mesh-to-3tz` and `mesh-local-to-3tz` (Rust, CLI and Python), with migration notes, help, defaults and reuse-identity guidance updated together. This is a 0.4.0 gate (owner decision 2026-10-21; recorded in #243).
-- [ ] Final retained-public-surface review, and removal of the superseded exporters, codecs and helpers that the retired commands used.
-- [ ] Platform CI, installed-wheel and official-Blender checks on the accepted final sources and artifacts.
-- [ ] Coordinate, picking, seam, topology, hole/island, appearance and geometric-error controls on the final production output across profiles (only the controls inside merged slices exist today).
-- [ ] The release itself: [#110](https://github.com/BenDyson-Arch/rusty-tiles/pull/110) (develop to main) is open.
+- [ ] HLOD S1–S4: bounded subtree geometry, exact decoded interfaces/leaves,
+  sampled source error, fresh charts/cropped leaves, KTX2/mips and H16 forest
+  integration. No certificate or per-texel ledger requirement survives.
+- [ ] HLOD S5 / VS-D: full-audit independent acceptance of final **mesh** output
+  across profiles: format/resources/availability, decoded bounds, feature IDs,
+  error ordering, all-pair cracks, source-aware leaf and sampled-quality checks.
+  Keep C1/I1/C2 and VS-A/B/C; remove only superseded H17 certificate expectations.
+  Non-mesh full-profile VS-D expansion is proposed for 0.4.x; small final producer
+  fixtures, existing corruption suites and truthful unsupported claims stay now.
+- [ ] HLOD S6/S7: delete H17/H27 code and normative requirements, obsolete coarse
+  records and reports; finish the memory CLI/API and annotation/error/codec
+  migration docs. Do not preserve an H17 compatibility mode.
+- [ ] HLOD S8: one integrated 2048 campaign at the three pinned views. Proposed
+  balanced gates: ≤50 whole / ≤30 coarse CPU-s/Mtri; ≤6.0/63.366/197.521 MB at
+  1600×1000/range 3, 2560×1600/range 3, 2560×1600/range 0.75; declared/measured
+  ≤4 GiB RSS; 0 cracks/leaf identity errors, with the decision's appearance gates.
+  Measurements include source capture/partition and all image dependencies.
+- [ ] Scale gate (a): spilled 526,174,760-triangle production octree through
+  `mesh`, explicit 2 GiB cap, no untextured texture reserve and postorder releases.
+  Harvest #262's diagnosis/run ladder; rederive scratch for HLOD including
+  indexes/handoffs/staging. Existing 4× input scratch, 7,200 s producer,
+  2 GiB/3,600 s validator and 30/300 s loaded/refined consumer targets remain
+  unresolved gates; do not silently replace them with its old 400 GB estimate.
+  Resolve any budget amendment before the 100M/526M runs.
+- [ ] Scale gate (b): 10^4 primitives and 10^4 source holes/islands per root;
+  exact leaf recovery, representative coarse IDs, hard tile cap, decoded seams
+  and quality/resource controls. No vanish/fill/reopening policy or records.
+- [ ] Scale gate (c): procedural textures through the new chart/bake/codec path,
+  cropped leaves, mips/normal/MASK/material classes, measured CPU/memory/scratch.
+- [ ] Scale gate (d): combined ≥2^22 tiles and >4 GiB archive against final
+  `validate` and the proven Cesium delivery route; #193 is only a fixture.
+- [ ] Preset finalisation: hold leaves at 8,192; freeze chart/page caps, density,
+  ETC1S/UASTC choices/effort, octahedral bits and per-tile budgets from S8.
+  Keep PNG lossless and class gates. Publish G initially; smaller refinement R
+  needs its own quality/streaming pass, not #264's H17 forecasts.
+- [ ] Proposed non-mesh bar, owner approval pending — point P1/current forest:
+  finite decoded fidelity, placement/bounds, lifecycle, paired CLI/Python and
+  10M-point resource receipt (≤1 GiB RSS / ≤10 GiB scratch).
+- [ ] Proposed non-mesh bar — vector: direct analytic published-forest geometry,
+  hole/line coverage, metadata/identity, placement/reuse/seams, lifecycle,
+  CLI/Python and 100k-feature receipt (≤1 GiB RSS / ≤4 GiB scratch).
+- [ ] Proposed non-mesh bar — native imagery R2: literal display/COG/phase/bounds,
+  lifecycle/capabilities and 8192² RGBA receipt (≤768 MiB RSS / ≤3 GiB scratch).
+- [ ] Proposed non-mesh bar — native terrain T1/packed LOD: existing discrete
+  lattice/height/bounds/LOD/skirt guarantees, lifecycle/capabilities, missing-GTiff
+  classification and 2048² DEM receipt (≤512 MiB RSS / ≤2 GiB scratch).
+- [ ] Proposed non-mesh shared closeout: existing applicable Rust/Python/native/
+  format/platform/package/consumer suites on final candidate, supported domains
+  and deferred audits recorded; reconcile #113/#120–#126 and blanket architecture/
+  AGENTS wording after approval. No new bindings or tiler rewrites required.
+  Combined proposed non-mesh effort is 8–14 agent-days, not 45–75.
+- [x] Legacy `mesh-to-3tz` / `mesh-local-to-3tz`, superseded exporters/codecs/
+  helpers removed by owner decision on 2026-10-23; this corrects the stale open
+  checkbox, not an acceptance waiver for the HLOD successor.
+- [ ] Final retained-public-surface review, platform CI, installed-wheel and
+  official-Blender checks on accepted final sources/artifacts. Documented
+  capability exclusions and known consumer limits stay explicit.
+- [ ] Coordinate, picking, exact interfaces/leaves, coarse appearance/topology
+  and sampled-error controls on final production output across profiles.
+- [ ] The release itself: [#110](https://github.com/BenDyson-Arch/rusty-tiles/pull/110)
+  (develop to main) remains open; #113/#121 acceptance is not closed here.
 
 ## Immediate queue and first new implementation slice
+
+**Historical 2026-10-12 queue; sequencing superseded.** The current mesh queue
+is HLOD S1–S8 above. The following records the original
+M1 planning context; merged serializer/forest work is retained, not restarted.
 
 The C1 meshopt correction (#176), GLB vector fills (#185), outline runs
 (#186), point outward bounds (#183) and C2 slice 3 (#179) are merged.
@@ -388,8 +480,11 @@ Decided 2026-10-14. The official format transition moves from 0.5 to 0.6 so that
 each version line has one meaning:
 
 - **0.4.x: completion and fixes, no new public capability.**
-  - H27 proxy-bake leftovers.
-  - Finalizing the provisional profile presets from flythrough evidence.
+  - HLOD fixes and further measured refinement tuning; no revival of H27
+    per-texel ledgers. Initial preset freeze remains a 0.4.0 acceptance gate.
+  - Deferred non-mesh foundation audits/hardening, if the proposed finite bar
+    above is approved. #82/#221/#222 investigation may proceed; portable/projected
+    terrain capability delivery remains 0.5.
   - Documentation of known consumer limitations, and follow-ups from the
     large-mesh scale runs.
   - Indexed mesh capture (compact sort records with in-place or deduplicated
@@ -463,9 +558,10 @@ approval ceremony for every ordinary edit. One coordinator owns shared builds
 and sustained scale runs.
 
 Prior P0 and p0b results are prototype evidence. They do not establish production
-streaming, interval certificates, texture baking at scale, packed implicit
-output, or the full vanished/filled policy. Record those limits alongside their
-positive results. Earlier accepted foundation slices retain only their stated
+streaming, new HLOD texture baking at scale, packed implicit output or all-depth
+interface preservation. Interval certificates and vanished/filled policy are
+retired mesh requirements, not unfinished HLOD gates. Record those limits
+alongside their positive results. Earlier accepted foundation slices retain only their stated
 domains; they do not accept the full 0.4.0 tiler or the 0.6.0 format transition
 by inheritance.
 

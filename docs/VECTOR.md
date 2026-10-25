@@ -415,3 +415,13 @@ function integerOrNull(value, schemaNoData) {
 `--list-fields json` values are JSON text strings. Parse them if you need arrays. Repeat this check when you change runtime version, because the INT64 behaviour is specific to 1.143.
 
 Browser probes that check these behaviours are described in [CONTRIBUTING.md](../CONTRIBUTING.md#browser-probes).
+
+## Finite 0.4 acceptance evidence
+
+The [vector acceptance record](../bench/architecture_audit/vector_fidelity/README.md)
+links the analytic published-forest geometry/metadata/identity, placement/bounds,
+fresh/reuse and paired CLI/Python checks, plus the realistic local-data and
+100k mixed-feature resource receipts. These finite fixtures supplement the
+existing transactional admission, seam, LOD and lifecycle suites. They do not
+establish universal topology/repair/CRS correctness or a source-independent RAM
+bound; the experimental consumer and aggregation identity limits above remain.
