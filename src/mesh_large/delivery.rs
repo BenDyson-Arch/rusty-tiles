@@ -11,7 +11,7 @@ mod archive;
 pub(crate) mod plan;
 pub(crate) mod source;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use self::{
     plan::{document_members, state, Builder, Limits, Linked, Node, Shape, Sink, LIMITS},

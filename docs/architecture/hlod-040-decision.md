@@ -94,7 +94,9 @@ follows industry practice (Nanite, Simplygon) and locks only exactly shared item
     between content levels (the Cesium vanishing lesson). Delivery refuses a coarse tile above
     an omitted cell.
   - **Delivery:** the omitted region is a top-connected cap of plain availability (explicit or
-    implicit, an omitted root included), partitioned under the existing document caps.
+    implicit, an omitted root included), partitioned under the existing document caps. Each
+    omitted cell takes the empty-parent error (at least 16 × its box diagonal), so it refines
+    whenever it is visible; it has no content ancestor to fall back on.
   - **Jobs:** omission is decided before merging, so every job merges at most eight capped
     children.
   - **Reported:** `hlod.omittedProxies`, `omissionSources` (cells that could not fit) and

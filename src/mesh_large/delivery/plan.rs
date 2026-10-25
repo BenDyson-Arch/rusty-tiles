@@ -590,8 +590,11 @@ impl<'s, S: Sink> Builder<'s, S> {
                     ),
                 ))
             }
-            // An omitted cell (spliced) refines exactly where its children do.
-            (None, None) if omitted => children_error,
+            // Content-less (an H17 empty parent, or an omitted HLOD cell): it must refine
+            // whenever it is visible, or Cesium stops at it and draws nothing there (an empty
+            // tile traverses only while its own screen-space error passes the maximum, and an
+            // omitted cell has no content ancestor to fall back on). Written the same way
+            // whether it ends up explicit, inside an implicit tree or as a document's root.
             (None, None) => children_error.max(EMPTY_PARENT_SCALE * diagonal),
         };
         if !error.is_finite() {
@@ -699,6 +702,9 @@ impl<'s, S: Sink> Builder<'s, S> {
     fn externalize(&mut self, node: Node) -> Result<Node, JobError> {
         tally(&mut self.shape, &node);
         self.shape.documents += 1;
+        // The link keeps its document root's omission, so the content-above-omitted rule
+        // holds across documents too.
+        let omitted = node.omitted;
         let (first, depth, slot, axes, tile, extent, error, height) = (
             node.first,
             node.depth,
@@ -724,7 +730,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             // The proxy is the external document's root content, not the link's.
             proxy: None,
             chain: None,
-            omitted: false,
+            omitted,
             children: Vec::new(),
             link: Some(link),
             objects: 1,
@@ -765,21 +771,51 @@ mod omission_tests {
     struct Collect {
         /// (objects, records, levels) of each document, the root last.
         docs: Vec<(u64, u64, u32)>,
+        /// Omitted cells written (document roots included) and those whose error is below
+        /// the empty-parent floor.
+        omitted: u64,
+        below_floor: u64,
+    }
+
+    impl Collect {
+        fn errors(&mut self, node: &Node) {
+            if node.omitted {
+                self.omitted += 1;
+                if node.error < EMPTY_PARENT_SCALE * node.tile.diagonal() {
+                    self.below_floor += 1;
+                }
+            }
+            for c in &node.children {
+                if c.link.is_none() {
+                    self.errors(c);
+                }
+            }
+        }
     }
 
     impl Sink for Collect {
         fn external(&mut self, node: Node) -> Result<Linked, JobError> {
             self.docs.push((node.objects, node.records, node.levels));
+            self.errors(&node);
             Ok(None)
         }
         fn root(&mut self, node: Node) -> Result<(), JobError> {
             self.docs.push((node.objects, node.records, node.levels));
+            self.errors(&node);
             Ok(())
         }
     }
 
     /// A complete octree of `depth` levels of capped leaves, planned against `proxies`.
     fn plan(depth: u32, proxies: Vec<ProxyRow>) -> (Result<Shape, JobError>, Collect) {
+        plan_with(depth, proxies, LIMITS)
+    }
+
+    fn plan_with(
+        depth: u32,
+        proxies: Vec<ProxyRow>,
+        limits: Limits,
+    ) -> (Result<Shape, JobError>, Collect) {
         let mut sink = Collect::default();
         let rows = proxies.into_iter().map(|r| {
             Ok((
@@ -790,7 +826,7 @@ mod omission_tests {
                 },
             ))
         });
-        let mut builder = Builder::with_proxies(&mut sink, LIMITS, Some(Box::new(rows)))
+        let mut builder = Builder::with_proxies(&mut sink, limits, Some(Box::new(rows)))
             .with_sparse_proxies(true);
         let leaves = 8u64.pow(depth);
         let result = (|| {
@@ -838,6 +874,9 @@ mod omission_tests {
                 shape.implicit_roots + shape.documents > 1,
                 "partitioned: {shape:?}"
             );
+            // Round 9: every omitted cell, document roots included, refines while visible.
+            assert_eq!(sink.omitted, internal, "{shape:?}");
+            assert_eq!(sink.below_floor, 0, "{shape:?}");
             // Objects (the JSON cost) and levels within the caps in every document; records
             // within the documented `1 + 8 · 585` exception (see `Limits`).
             for &(objects, records, levels) in &sink.docs {
@@ -860,11 +899,39 @@ mod omission_tests {
             first: 0,
             end: 64 * 8192,
             depth: 0,
-            geometric_error: 1.,
+            geometric_error: 1e9,
             primitives: 1,
             sample_count: None,
         };
         let (shape, _) = plan(2, vec![root]);
+        let err = shape.unwrap_err();
+        assert!(err.to_string().contains("above an omitted cell"), "{err}");
+    }
+
+    /// Round 9: the rule holds across documents. Tight caps write omitted skeleton cells
+    /// below the root as external documents; a coarse root above those links is refused (a
+    /// link keeps its document root's omission).
+    #[test]
+    fn a_coarse_tile_above_an_omitted_document_root_is_refused() {
+        let depth = 5;
+        let root = ProxyRow {
+            uri: "proxies/f0-d0.glb".into(),
+            sha256: [0; 32],
+            bytes: 100,
+            first: 0,
+            end: 8u64.pow(depth) * 8192,
+            depth: 0,
+            geometric_error: 1e9,
+            primitives: 1,
+            sample_count: None,
+        };
+        let tight = Limits {
+            objects: 4,
+            records: 24,
+            levels: 3,
+        };
+        let (shape, sink) = plan_with(depth, vec![root], tight);
+        assert!(!sink.docs.is_empty(), "external documents were written");
         let err = shape.unwrap_err();
         assert!(err.to_string().contains("above an omitted cell"), "{err}");
     }
