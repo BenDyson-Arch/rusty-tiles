@@ -32,6 +32,8 @@ mod runtime;
 mod spill;
 mod stage_timing;
 pub mod terrain;
+#[cfg(test)]
+mod test_alloc;
 mod tileset_node;
 mod vec3;
 pub mod vector;
@@ -45,6 +47,11 @@ pub use mesh_archive::{
 pub use mesh_large::{
     mesh_to_tileset, MeshSourceCrs, MeshSourceCrsReport, TilerDiagnostics, TilerJobs, TilerProfile,
     TilerReport, TilerRequest, TilerResult,
+};
+#[doc(hidden)]
+pub use mesh_large::{
+    parse_memory_budget, BudgetSource, HlodDiagnostics, HlodMemoryPlan, MemoryBudget,
+    MemoryDiagnostics, TilerLod,
 };
 pub use pack::{validate_3tz, TZ_INDEX_NAME};
 pub use raster_directory::{

@@ -86,6 +86,10 @@ pub(crate) struct TreeConfig {
     pub output_parents: Option<(PathBuf, PathBuf)>,
     /// Declared source CRS applied at capture; `None` is local metres/Y-up.
     pub source_crs: Option<super::MeshSourceCrs>,
+    /// Coarse-tile method; it also selects the incidence pass capture declares scratch for.
+    pub lod: super::hlod::TilerLod,
+    /// D8's resolved run budget (HLOD runs): every stage plans against it as a ceiling.
+    pub memory_budget: Option<super::resources::MemoryBudget>,
     /// Test seam: largest spill chunk of the capture scratch.
     #[cfg(test)]
     pub test_chunk_bytes: Option<usize>,
@@ -129,6 +133,8 @@ impl TreeConfig {
             member_ceiling: MEMBER_CEILING_3TZ,
             output_parents: None,
             source_crs: None,
+            lod: super::hlod::TilerLod::H17,
+            memory_budget: None,
             #[cfg(test)]
             test_chunk_bytes: None,
             #[cfg(test)]
@@ -142,6 +148,16 @@ impl TreeConfig {
 
     pub(crate) fn tile_bytes(&self) -> u64 {
         self.tile_bytes
+    }
+
+    /// Memory a stage may plan against: the detected headroom, capped by the declared
+    /// budget when the run has one (D8).
+    pub(crate) fn available_memory(&self) -> Option<u64> {
+        let detected = available_memory();
+        match &self.memory_budget {
+            Some(budget) => Some(budget.ceiling(detected)),
+            None => detected,
+        }
     }
 
     /// One sorter's configuration with `jobs` workers.
