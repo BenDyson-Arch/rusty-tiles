@@ -3,8 +3,9 @@
 
 Only f32/+0 point keys and actual unordered triangle edges enter expectations.
 Source-open edges are counted, never inferred as chords or T subsegments.
-The above-cap witness has 8,193 coarse/source faces, two leaves (8,192 + 1),
-and one source_primitive row; it does not exercise producer simplification.
+The hard-cap witnesses publish exactly 8,192 (admitted) or 8,193 triangles in
+one coarse or one leaf payload (refused as triangleCap by both validators);
+they do not exercise producer simplification.
 """
 import argparse
 import collections
@@ -126,23 +127,27 @@ def generate(root):
             for i,triangle in enumerate(original)}},separators=(',',':'))+'\n')
         cases.append(dict(name=name,oracleCheck=check,archiveCheck=check,
             source=source.name,incidence=source_incidence([left,right])))
-    # The admission limit concerns primitive-table rows, not triangle count.
-    # Distinct separated triangles keep nearest-reference work bounded by the
-    # R-tree rather than creating an 8,193-by-8,193 coincident query product.
-    name='above-8192-positive';folder=root/name;folder.mkdir(exist_ok=True)
-    original=[[[i*4,0,0],[i*4+1,0,0],[i*4,1,0]] for i in range(8193)]
-    (folder/'coarse.glb').write_bytes(payload(original,leaf=False))
-    (folder/'left.glb').write_bytes(payload(original[:8192],leaf=True))
-    (folder/'right.glb').write_bytes(payload(original[8192:],leaf=True,first=8192))
-    (folder/'tileset.json').write_text(json.dumps(dict(asset={'version':'1.1'},geometricError=0,
-        root=tile('coarse.glb',[tile('left.glb'),tile('right.glb')])),separators=(',',':')))
-    source=root/(name+'-source.json')
-    source.write_text(json.dumps({'triangles':{f'0,0,0,{i}':dict(xyz=triangle,
-        vertices=[i*3+k for k in range(3)],expanded_ordinal=0,material_index=0,
-        material=controls.MATERIALS[0],normals=controls.NORMALS,uvs=controls.UVS)
-        for i,triangle in enumerate(original)}},separators=(',',':'))+'\n')
-    cases.append(dict(name=name,oracleCheck=None,archiveCheck=None,source=source.name,
-        incidence=source_incidence([original[:8192],original[8192:]]),coarseTriangles=8193))
+    # D1's hard cap is per payload, leaf or coarse: 8,192 is admitted, 8,193
+    # refused. Distinct separated triangles keep nearest-reference work bounded
+    # by the R-tree rather than an 8,193-by-8,193 coincident query product.
+    for name,total,split,coarse,check in (('cap-8192-positive',8192,8191,8192,None),
+            ('above-8192-coarse',8193,8192,8193,'triangleCap'),('above-8192-leaf',8194,8193,8192,'triangleCap')):
+        folder=root/name;folder.mkdir(exist_ok=True)
+        original=[[[i*4,0,0],[i*4+1,0,0],[i*4,1,0]] for i in range(total)]
+        (folder/'coarse.glb').write_bytes(payload(original[:coarse],leaf=False))
+        (folder/'left.glb').write_bytes(payload(original[:split],leaf=True))
+        (folder/'right.glb').write_bytes(payload(original[split:],leaf=True,first=split))
+        (folder/'tileset.json').write_text(json.dumps(dict(asset={'version':'1.1'},geometricError=0,
+            root=tile('coarse.glb',[tile('left.glb'),tile('right.glb')])),separators=(',',':')))
+        source=root/(name+'-source.json')
+        source.write_text(json.dumps({'triangles':{f'0,0,0,{i}':dict(xyz=triangle,
+            vertices=[i*3+k for k in range(3)],expanded_ordinal=0,material_index=0,
+            material=controls.MATERIALS[0],normals=controls.NORMALS,uvs=controls.UVS)
+            for i,triangle in enumerate(original)}},separators=(',',':'))+'\n')
+        case=dict(name=name,oracleCheck=check,archiveCheck=check,source=source.name,
+            incidence=source_incidence([original[:split],original[split:]]))
+        if check is None:case['coarseTriangles']=coarse
+        cases.append(case)
     (root/'cases.json').write_text(json.dumps(cases,indent=2)+'\n')
     return cases
 
@@ -161,7 +166,8 @@ def run(root,binary=None):
             for key,value in case['incidence'].items():assert result[key]==value,(case['name'],key,result[key],value)
             if 'coarseTriangles' in case:
                 assert result['representatives']==case['coarseTriangles'],result
-                assert result['aboveCapCoarseTiles']==1 and result['maxCoarseTriangles']==8193,result
+                assert result['maxCoarseTriangles']==case['coarseTriangles']<=8192,result
+                assert result['omission']['maxPayloadTriangles']==8192,result
             verdict='pass'
         except Failure as error:
             assert error.check==case['oracleCheck'],(case,error)
@@ -179,7 +185,7 @@ def run(root,binary=None):
                 census=report['interfaceCensus']
                 for key,value in case['incidence'].items():assert census[key]==value,(case['name'],key,census[key],value)
                 if 'coarseTriangles' in case:
-                    assert census['stoppedAboveCap']==1 and census['maxAboveCapTriangles']==8193,(case['name'],census)
+                    assert census['maxPayloadTriangles']==case['coarseTriangles'],(case['name'],census)
         results.append(dict(name=case['name'],oracle=verdict,sourceIncidence=case['incidence'],
             native=('pass' if case['archiveCheck'] is None else case['archiveCheck']) if binary else 'not run'))
     if binary:assert hashlib.sha256(binary.read_bytes()).hexdigest()==digest,'binary changed'

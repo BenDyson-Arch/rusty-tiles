@@ -246,8 +246,8 @@ pub struct ValidationReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scratch: Option<ScratchReport>,
 }
-/// Archive-only incidence and above-cap observations; no producer counters are used.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+/// Archive-only incidence, cap and omission observations; no producer counters are used.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InterfaceCensus {
     pub basis: &'static str,
@@ -255,9 +255,18 @@ pub struct InterfaceCensus {
     pub shared_segments: u64,
     pub source_open_edges: u64,
     pub source_open_edges_with_shared_endpoints: u64,
-    /// Nonleaf content references above 8,192 decoded triangles, including reuse.
-    pub stopped_above_cap: u64,
-    pub max_above_cap_triangles: u64,
+    /// The largest payload, counted over all its scene instances; every payload is at
+    /// most the hard 8,192 (`triangleCap` refuses otherwise).
+    pub max_payload_triangles: u64,
+    /// Content-less delivered cells (placeholders excluded), by cell depth, and those
+    /// whose cell children all render. Derived from the hierarchy, compared with
+    /// producer reports only by the source-aware audit.
+    pub omitted_cells: u64,
+    pub omission_sources: u64,
+    pub omitted_by_depth: Vec<u64>,
+    /// Tiles of the first renderable cover and the renderable leaves it covers once.
+    pub frontier_tiles: u64,
+    pub frontier_leaves: u64,
 }
 /// The validation's scratch use, reported whenever any spill file was written.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -287,7 +296,7 @@ impl ValidationReport {
         value["storedBytes"] = self.stored_bytes.into();
         value["limits"] = serde_json::to_value(&self.limits)?;
         value["limitDerivation"] = serde_json::to_value(&self.limit_derivation)?;
-        if let Some(census) = self.interface_census {
+        if let Some(census) = &self.interface_census {
             value["interfaceCensus"] = serde_json::to_value(census)?;
         }
         if let Some(scratch) = self.scratch {

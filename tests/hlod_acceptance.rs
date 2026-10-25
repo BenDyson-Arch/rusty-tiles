@@ -29,6 +29,7 @@ fn sampled_hlod_archives_and_named_mutants() {
         "native_controls.py",
         "nonmanifold_controls.py",
         "exact_controls.py",
+        "omission_controls.py",
         "seam_diagnostic_controls.py",
     ] {
         let probes = work.path().join(name.trim_end_matches("_controls.py"));
@@ -42,7 +43,10 @@ fn sampled_hlod_archives_and_named_mutants() {
             .args(
                 if matches!(
                     name,
-                    "native_controls.py" | "nonmanifold_controls.py" | "exact_controls.py"
+                    "native_controls.py"
+                        | "nonmanifold_controls.py"
+                        | "exact_controls.py"
+                        | "omission_controls.py"
                 ) {
                     vec!["--binary", env!("CARGO_BIN_EXE_rusty-tiles")]
                 } else {
@@ -124,7 +128,19 @@ fn sampled_hlod_archives_and_named_mutants() {
             assert!(cli.status.success(), "{name}: {cli_report}");
             let census = report
                 .interface_census
+                .as_ref()
                 .expect("identity-bearing positive must run the decoded incidence census");
+            assert!(census.max_payload_triangles <= 8192, "{name}: hard cap");
+            assert!(
+                census.frontier_tiles > 0 && census.frontier_leaves > 0,
+                "{name}: the first renderable cover must be derived"
+            );
+            assert_eq!(
+                census.omitted_by_depth.iter().sum::<u64>(),
+                census.omitted_cells,
+                "{name}: omission by depth"
+            );
+            assert!(census.omission_sources <= census.omitted_cells, "{name}");
             assert_eq!(census.basis, "decoded leaf canonical f32 keys", "{name}");
             assert!(
                 census.source_open_edges_with_shared_endpoints <= census.source_open_edges,

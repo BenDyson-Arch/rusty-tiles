@@ -206,7 +206,7 @@ def check_leaf(f,manifest,stats=None,*,geometry=True):
     return ','.join(map(str,key)),want
 
 
-def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='root',profile='hlod'):
+def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='root',profile='hlod',producer_manifest=None):
     """Check every published cell. Only one payload/tile is decoded at a time.
 
     root frame removes the archive's common placement, conjugating relative tile
@@ -275,6 +275,8 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                     decoded=decode(archive.read(uri))
                     faces=decoded['faces']
                     require(len(faces)<=1_000_000,'oracleWorkLimit','one payload exceeds 1,000,000 faces')
+                    # D1's hard cap, per payload, from this decoder's own faces.
+                    require(len(faces)<=8192,'triangleCap',f'{uri} publishes {len(faces)} triangles, above the hard 8192')
                     for f in faces:
                         structural_face(f)
                         transform_face(f,matrix)
@@ -315,6 +317,19 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                     require(tuple(actual.get(k) for k in KEYS[:3])==nearest[:3],'representativeIdentity',t['id'])
                     representatives+=1
                     require(material_class(f['material'])==material_class(want['material']),'representativeMaterialClass',t['id'])
+            # Upward omission, single first-renderable cover and empty-cell
+            # refinement, from the same independent expansion (omission.py).
+            from omission import inspect as inspect_omission, Failure as OmissionFailure
+            try:
+                result['omission']=inspect_omission(tiles,archive)
+            except OmissionFailure as e:
+                raise Failure(e.check,e.detail) from e
+            if producer_manifest is not None:
+                from omission import compare
+                with open(producer_manifest) as f:
+                    result['omission']['producerReport']=compare(result['omission'],json.load(f))
+                require(result['omission']['producerReport']['ok'],'omissionReport',
+                        json.dumps(result['omission']['producerReport']['differences'],sort_keys=True))
             result.update(ok=True,leafTriangles=leaf_count,tiles=len(tiles),representatives=representatives,
                           coordinateFrame=coordinate_frame,profile=profile,
                           leafSourcePointsChecked=source_points,
@@ -341,10 +356,11 @@ if __name__=='__main__':
     p.add_argument('--scratch');p.add_argument('--work-limit',type=int,default=300_000_000)
     p.add_argument('--coordinate-frame',choices=('root','world'),default='root')
     p.add_argument('--profile',choices=('hlod',),default='hlod')
+    p.add_argument('--producer-manifest',help='S1 stage manifest.json; compared only after independent derivation')
     a=p.parse_args()
     try:
         print(json.dumps(audit(a.root,a.expected,scratch=a.scratch,work_limit=a.work_limit,
-                              coordinate_frame=a.coordinate_frame,profile=a.profile),sort_keys=True))
+                              coordinate_frame=a.coordinate_frame,profile=a.profile,producer_manifest=a.producer_manifest),sort_keys=True))
     except Failure as e:
         print(json.dumps(dict(ok=False,check=e.check,detail=e.detail)))
         raise SystemExit(1)

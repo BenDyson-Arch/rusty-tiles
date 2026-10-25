@@ -20,7 +20,7 @@
 //! outside required interfaces/local contradictory pairs remain uninspected.
 use super::{identity, invalid, spill_failure, Budget, Error, ScratchRefusal};
 use crate::spill::{Scratch, SlotFile};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{value::RawValue, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -748,15 +748,36 @@ impl Surface {
 }
 /// Counts use decoded leaf canonical f32 keys, not unavailable source positions.
 /// Each distinct shared key is counted once globally; face incidence is never
-/// cancelled. Above-cap counts are decoded nonleaf content references.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// cancelled. Omission and frontier counts are derived from the delivered
+/// hierarchy alone (never from producer reports); every payload is within the
+/// hard triangle cap, so only the largest is reported.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct DecodedInterfaceCensus {
     pub(super) shared_points: u64,
     pub(super) shared_segments: u64,
     pub(super) source_open_edges: u64,
     pub(super) source_open_edges_with_shared_endpoints: u64,
-    pub(super) stopped_above_cap: u64,
-    pub(super) max_above_cap_triangles: u64,
+    pub(super) max_payload_triangles: u64,
+    pub(super) omission: Omission,
+}
+/// Hard published triangle cap of every HLOD payload (D1), leaf or coarse.
+pub(super) const TRIANGLE_CAP: u64 = 8192;
+/// A content-less cell's geometric error is at least this multiple of its box
+/// diagonal, so CesiumJS (maximum SSE 16) refines it while it covers a pixel.
+pub(super) const EMPTY_PARENT_SCALE: f64 = 16.;
+/// Content-less cells of the delivered octree. External-link and implicit-root
+/// placeholders are transparent: they are not cells and add no cell depth. A
+/// source is an omitted cell whose cell children all render; the rest are
+/// omitted only because a cell child is. The first renderable cover holds every
+/// content tile without a content ancestor; each renderable leaf lies below
+/// exactly one of them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) struct Omission {
+    pub(super) omitted_cells: u64,
+    pub(super) omission_sources: u64,
+    pub(super) omitted_by_depth: Vec<u64>,
+    pub(super) frontier_tiles: u64,
+    pub(super) frontier_leaves: u64,
 }
 fn replay_surface(
     bytes: &[u8],
@@ -864,10 +885,10 @@ impl Store {
             .map_err(|e| Error::Scratch(ScratchRefusal::Io(e)))?;
         let connection = Connection::open(file.path()).map_err(sql)?;
         connection.execute_batch("PRAGMA cache_size=-8192; PRAGMA temp_store=FILE; PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;
-            CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER);
+            CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL);
             CREATE INDEX tile_parent ON tiles(parent);
             CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL); CREATE INDEX refs_tile ON refs(tile); CREATE INDEX refs_rank ON refs(rank);
-            CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL);
             CREATE TABLE placements(id INTEGER PRIMARY KEY,tile INTEGER NOT NULL,rank INTEGER NOT NULL,frame BLOB NOT NULL,leaf INTEGER NOT NULL);
             CREATE INDEX placement_rank ON placements(rank,leaf,id);
             CREATE TABLE original_domains(rank INTEGER NOT NULL,source BLOB NOT NULL,lo BLOB NOT NULL,hi BLOB NOT NULL,PRIMARY KEY(rank,source));
@@ -937,11 +958,13 @@ impl Store {
         id: u64,
         refine: Option<bool>,
         placeholder: bool,
+        error: f64,
+        diagonal: Option<f64>,
     ) -> Result<(), Error> {
         self.connection
             .execute(
-                "UPDATE tiles SET refine=?,placeholder=? WHERE id=?",
-                params![refine, placeholder, integer(id)?],
+                "UPDATE tiles SET refine=?,placeholder=?,error=?,diagonal=? WHERE id=?",
+                params![refine, placeholder, error, diagonal, integer(id)?],
             )
             .map_err(sql)?;
         Ok(())
@@ -964,6 +987,12 @@ impl Store {
         decoded_limit: usize,
     ) -> Result<u64, Error> {
         self.decoded_limit = self.decoded_limit.max(decoded_limit);
+        // Byte identity: a payload copied under another member name is the same
+        // payload for the single-cover check.
+        let digest = {
+            use sha2::Digest;
+            sha2::Sha256::digest(bytes).to_vec()
+        };
         let embedded = bytes.get(..4) == Some(b"glTF");
         let length = if embedded {
             u32::from_le_bytes(identity::slice(bytes, 12, 4)?.try_into().unwrap()) as usize
@@ -981,16 +1010,16 @@ impl Store {
             match serde_json::from_slice::<&RawValue>(bytes) {
                 Ok(r) => r,
                 Err(_) => {
-                    self.payload(rank, false, false)?;
+                    self.payload_bytes(rank, false, false, &digest)?;
                     return Ok(0);
                 }
             }
         } else {
-            self.payload(rank, false, false)?;
+            self.payload_bytes(rank, false, false, &digest)?;
             return Ok(0);
         };
         if !identity::declares(raw) {
-            self.payload(rank, false, false)?;
+            self.payload_bytes(rank, false, false, &digest)?;
             return Ok(0);
         }
         if !embedded {
@@ -1004,7 +1033,7 @@ impl Store {
         let has_triangles = doc["extensions"]["EXT_structural_metadata"]["propertyTables"]
             .as_array()
             .is_some_and(|ts| ts.iter().any(|t| t["class"] == "source_triangle"));
-        self.payload(rank, true, has_triangles)?;
+        self.payload_bytes(rank, true, has_triangles, &digest)?;
         let bin = identity::slice(
             bytes,
             28 + length,
@@ -1017,6 +1046,7 @@ impl Store {
             .ok_or_else(|| bad("hlodFeatureIds", "missing tables"))?;
         let mut used: Vec<Vec<bool>> = Vec::with_capacity(tables.len());
         let mut primitive_rows = 0usize;
+        let mut triangles = 0u64;
         for t in tables {
             work.charge(1)?;
             if t["class"] == "source_primitive" {
@@ -1099,6 +1129,8 @@ impl Store {
                     if count % 3 != 0 || p["mode"].as_u64().unwrap_or(4) != 4 {
                         return Err(bad("hlodFeatureIds", "identity primitive is not triangles"));
                     }
+                    // Every scene instance of the primitive is published geometry.
+                    add_count(&mut triangles, (count / 3) as u64)?;
                     for corner in (0..count).step_by(3) {
                         work.charge(12)?;
                         let mut ids = [0usize; 3];
@@ -1154,6 +1186,12 @@ impl Store {
                 stack.push((children.as_slice(), 0, m));
             }
         }
+        self.connection
+            .execute(
+                "UPDATE payloads SET triangles=? WHERE rank=?",
+                params![integer(triangles)?, integer(rank)?],
+            )
+            .map_err(sql)?;
         if used.iter().any(|v| v.iter().any(|used| !*used)) {
             return Err(bad(
                 "sourceIdentity",
@@ -1194,11 +1232,22 @@ impl Store {
         }
         Ok(work.used)
     }
+    /// Analytic payload rows: distinct ranks have distinct bytes.
+    #[cfg(test)]
     fn payload(&self, rank: u64, identity: bool, triangle: bool) -> Result<(), Error> {
+        self.payload_bytes(rank, identity, triangle, &rank.to_be_bytes())
+    }
+    fn payload_bytes(
+        &self,
+        rank: u64,
+        identity: bool,
+        triangle: bool,
+        digest: &[u8],
+    ) -> Result<(), Error> {
         self.connection
             .execute(
-                "INSERT INTO payloads(rank,identity_present,triangle_present) VALUES(?,?,?)",
-                params![integer(rank)?, identity, triangle],
+                "INSERT INTO payloads(rank,identity_present,triangle_present,digest) VALUES(?,?,?,?)",
+                params![integer(rank)?, identity, triangle, digest],
             )
             .map_err(sql)?;
         Ok(())
@@ -1318,13 +1367,16 @@ impl Store {
                 "D4 coarse source_primitive table exceeds 8192 rows",
             ));
         }
+        let mut census = DecodedInterfaceCensus::default();
+        self.triangle_cap(&mut census)?;
+        census.omission = self.omission(effort)?;
+        self.single_cover(effort)?;
         self.place_references(effort)?;
         self.replay_original_aliases(effort, read)?;
-        let mut census = DecodedInterfaceCensus::default();
         self.collect_leaves(effort, read)?;
         self.point_requirements(&mut census, effort)?;
         self.segment_requirements(&mut census, effort)?;
-        self.check_coarse(&mut census, effort, read)?;
+        self.check_coarse(effort, read)?;
         Ok(Some(census))
     }
     fn hierarchy(&self, effort: &Effort) -> Result<(), Error> {
@@ -1459,7 +1511,201 @@ impl Store {
     }
 
     pub(super) fn census(&self) -> Option<DecodedInterfaceCensus> {
-        self.census
+        self.census.clone()
+    }
+    /// D1's hard cap applies to every referenced payload, counted per payload
+    /// over all its scene instances, never per reference.
+    fn triangle_cap(&self, census: &mut DecodedInterfaceCensus) -> Result<(), Error> {
+        let (rank, most): (Option<i64>, i64) = self
+            .connection
+            .query_row(
+                "SELECT p.rank,max(p.triangles) FROM payloads p WHERE EXISTS(SELECT 1 FROM refs r WHERE r.rank=p.rank)",
+                [],
+                |r| Ok((r.get(0)?, r.get::<_, Option<i64>>(1)?.unwrap_or(0))),
+            )
+            .map_err(sql)?;
+        let most = u64::try_from(most).map_err(|_| super::refused())?;
+        if most > TRIANGLE_CAP {
+            return Err(bad(
+                "triangleCap",
+                &format!(
+                    "payload rank {} publishes {most} triangles, above the hard {TRIANGLE_CAP}",
+                    rank.unwrap_or(-1)
+                ),
+            ));
+        }
+        census.max_payload_triangles = most;
+        Ok(())
+    }
+    /// Upward omission and the first renderable cover, from the delivered
+    /// hierarchy alone. A content-less cell never has a content ancestor, never
+    /// ends a branch, and ADD content never stays drawn over its refinement.
+    fn omission(&self, effort: &Effort) -> Result<Omission, Error> {
+        struct Frame {
+            id: i64,
+            placeholder: bool,
+            empty: bool,
+            depth: usize,
+            replace: bool,
+            content_above: bool,
+            empty_child: bool,
+        }
+        let mut omission = Omission::default();
+        let mut stack = Vec::<Frame>::new();
+        let mut query=self.connection.prepare("SELECT t.id,t.parent,t.refine,t.placeholder,t.leaf,EXISTS(SELECT 1 FROM refs r WHERE r.tile=t.id),EXISTS(SELECT 1 FROM tiles c WHERE c.parent=t.id),t.error,t.diagonal FROM tiles t ORDER BY t.id").map_err(sql)?;
+        let mut rows = query.query([]).map_err(sql)?;
+        let close = |frame: Frame, omission: &mut Omission| {
+            if frame.empty && !frame.empty_child {
+                omission.omission_sources += 1;
+            }
+        };
+        while let Some(row) = rows.next().map_err(sql)? {
+            effort.charge(1)?;
+            let id: i64 = row.get(0).map_err(sql)?;
+            let parent: Option<i64> = row.get(1).map_err(sql)?;
+            while stack.last().map(|f| f.id) != parent {
+                let frame = stack.pop().ok_or_else(|| {
+                    Error::InvalidState("HLOD hierarchy is not in preorder".into())
+                })?;
+                close(frame, &mut omission);
+            }
+            let refine: Option<bool> = row.get(2).map_err(sql)?;
+            let placeholder: bool = row.get(3).map_err(sql)?;
+            let leaf: bool = row.get(4).map_err(sql)?;
+            let content: bool = row.get(5).map_err(sql)?;
+            let children: bool = row.get(6).map_err(sql)?;
+            let error: Option<f64> = row.get(7).map_err(sql)?;
+            let diagonal: Option<f64> = row.get(8).map_err(sql)?;
+            let inherited = stack.last();
+            let replace = refine.unwrap_or_else(|| inherited.is_none_or(|p| p.replace));
+            let content_above = inherited.is_some_and(|p| p.content_above);
+            let depth = inherited.map_or(0, |p| p.depth + usize::from(!p.placeholder));
+            let empty = !placeholder && !content;
+            if empty && content_above {
+                return Err(bad(
+                    "omissionPropagation",
+                    &format!("content-less cell {id} has a content ancestor: omission must reach the root"),
+                ));
+            }
+            if !children && !content {
+                return Err(bad(
+                    "frontierCoverage",
+                    &format!("terminal tile {id} publishes no content: the cover is incomplete"),
+                ));
+            }
+            if empty {
+                // Cesium's base traversal descends an empty tile only while its SSE
+                // exceeds the maximum (default 16): with G >= 16 x box diagonal that
+                // holds until the whole box projects below about one pixel. Children's
+                // G alone (a leaf's sub-millimetre error) stops it at once, drawing
+                // nothing, since an omitted cell has no content ancestor to hold.
+                // Links and implicit roots always traverse and are exempt.
+                let floor = diagonal.map(|d| EMPTY_PARENT_SCALE * d);
+                match (error, floor) {
+                    (Some(g), Some(floor)) if g >= floor * (1. - 1e-12) => {}
+                    _ => {
+                        return Err(bad(
+                            "emptyCellRefinement",
+                            &format!(
+                                "content-less cell {id} has geometricError {error:?} below \
+                                 {EMPTY_PARENT_SCALE} x its box diagonal {diagonal:?}: \
+                                 a viewer never refines it"
+                            ),
+                        ))
+                    }
+                }
+                omission.omitted_cells += 1;
+                if omission.omitted_by_depth.len() <= depth {
+                    omission.omitted_by_depth.resize(depth + 1, 0);
+                }
+                omission.omitted_by_depth[depth] += 1;
+            }
+            if content {
+                if !content_above {
+                    omission.frontier_tiles += 1;
+                }
+                if leaf {
+                    omission.frontier_leaves += 1;
+                } else if !replace {
+                    return Err(bad(
+                        "frontierCoverage",
+                        &format!("ADD content of tile {id} stays drawn over its renderable descendants"),
+                    ));
+                }
+            }
+            if !placeholder {
+                // The cell parent is the nearest non-placeholder ancestor.
+                if let Some(cell) = stack.iter_mut().rev().find(|f| !f.placeholder) {
+                    cell.empty_child |= empty;
+                }
+            }
+            stack.push(Frame {
+                id,
+                placeholder,
+                empty,
+                depth,
+                replace,
+                content_above: content_above || content,
+                empty_child: false,
+            });
+        }
+        while let Some(frame) = stack.pop() {
+            close(frame, &mut omission);
+        }
+        Ok(omission)
+    }
+    /// The first renderable cover renders every leaf once: the same payload
+    /// bytes may repeat only down a single-child chain (a cell standing for its
+    /// only child), never twice in one tile and never across branches.
+    fn single_cover(&self, effort: &Effort) -> Result<(), Error> {
+        let twice: Option<i64> = self
+            .connection
+            .query_row(
+                "SELECT r.tile FROM refs r JOIN payloads p ON p.rank=r.rank GROUP BY r.tile,p.digest HAVING count(*)>1 LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(sql)?;
+        if let Some(tile) = twice {
+            return Err(bad(
+                "frontierCoverage",
+                &format!("tile {tile} references the same payload bytes twice"),
+            ));
+        }
+        let mut query = self
+            .connection
+            .prepare("SELECT p.digest,r.tile,t.last FROM refs r JOIN payloads p ON p.rank=r.rank JOIN tiles t ON t.id=r.tile ORDER BY p.digest,r.tile")
+            .map_err(sql)?;
+        let mut path = self
+            .connection
+            .prepare_cached("SELECT count(*) FROM tiles WHERE id>? AND id<=? AND parent=id-1")
+            .map_err(sql)?;
+        let mut rows = query.query([]).map_err(sql)?;
+        let mut previous: Option<(Vec<u8>, i64, i64)> = None;
+        while let Some(row) = rows.next().map_err(sql)? {
+            effort.charge(1)?;
+            let digest: Vec<u8> = row.get(0).map_err(sql)?;
+            let tile: i64 = row.get(1).map_err(sql)?;
+            let last: i64 = row.get(2).map_err(sql)?;
+            if let Some((d, above, above_last)) = &previous {
+                if *d == digest {
+                    let span = tile - above;
+                    effort.charge(usize::try_from(span).map_err(|_| super::refused())?)?;
+                    let chained: i64 = path
+                        .query_row(params![above, tile], |r| r.get(0))
+                        .map_err(sql)?;
+                    if *above_last != last || chained != span {
+                        return Err(bad(
+                            "frontierCoverage",
+                            &format!("payload bytes of tile {above} repeat at tile {tile} outside a single-child chain"),
+                        ));
+                    }
+                }
+            }
+            previous = Some((digest, tile, last));
+        }
+        Ok(())
     }
     fn place_references(&self, effort: &Effort) -> Result<(), Error> {
         let mut query = self
@@ -1745,7 +1991,6 @@ impl Store {
     }
     fn check_coarse(
         &self,
-        census: &mut DecodedInterfaceCensus,
         effort: &Effort,
         read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
     ) -> Result<(), Error> {
@@ -1760,11 +2005,6 @@ impl Store {
                 effort,
                 read,
             )?;
-            if surface.triangles > 8192 {
-                add_count(&mut census.stopped_above_cap, 1)?;
-                census.max_above_cap_triangles =
-                    census.max_above_cap_triangles.max(surface.triangles);
-            }
             if !row.get::<_, bool>(3).map_err(sql)? {
                 for e in surface.edges.values() {
                     effort.charge(1)?;
@@ -1843,7 +2083,7 @@ mod tests {
             s.tile(0, None, IDENTITY).unwrap();
             s.tile(1, Some(0), IDENTITY).unwrap();
             s.tile(2, Some(1), IDENTITY).unwrap();
-            s.kind(1, None, placeholder).unwrap();
+            s.kind(1, None, placeholder, 0., None).unwrap();
             s.reference(0, 0).unwrap();
             s.reference(2, 2).unwrap();
             s.payload(0, false, false).unwrap();
@@ -1917,8 +2157,8 @@ mod tests {
         s.tile(0, None, IDENTITY).unwrap();
         s.tile(1, Some(0), IDENTITY).unwrap();
         s.tile(2, Some(1), IDENTITY).unwrap();
-        s.kind(0, Some(true), false).unwrap();
-        s.kind(1, Some(false), false).unwrap();
+        s.kind(0, Some(true), false, 0., None).unwrap();
+        s.kind(1, Some(false), false, 0., None).unwrap();
         s.reference(0, 0).unwrap();
         s.reference(2, 2).unwrap();
         s.payload(0, false, false).unwrap();
@@ -2200,13 +2440,27 @@ mod tests {
         for (id, parent) in [(0, None), (1, Some(0)), (2, Some(1)), (3, Some(0))] {
             s.tile(id, parent, IDENTITY)?;
         }
+        // The omitted root refines (G = 16 x its unit diagonal).
+        s.kind(0, None, false, 16., Some(1.))?;
         for (tile, rank) in [(1, 0), (2, 1), (3, 2)] {
             s.reference(tile, rank)?;
             s.payload(rank, true, rank != 0)?;
         }
         assert!(s.census().is_none());
         s.finish(budget(), 0, &mut |rank| Ok(payloads[rank as usize].clone()))?;
-        Ok(s.census().unwrap())
+        let mut census = s.census().unwrap();
+        // The fixed hierarchy: an omitted root above two rendered cells.
+        assert_eq!(
+            std::mem::take(&mut census.omission),
+            Omission {
+                omitted_cells: 1,
+                omission_sources: 1,
+                omitted_by_depth: vec![1],
+                frontier_tiles: 2,
+                frontier_leaves: 2,
+            }
+        );
+        Ok(census)
     }
     #[test]
     fn exact_shared_edge_census_and_direction_are_literal() {
@@ -2420,12 +2674,31 @@ mod tests {
         assert!(s.census().is_none());
     }
     #[test]
-    fn above_cap_is_counted_while_d4_property_rows_remain_bounded() {
-        let triangle = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
-        let above = vec![triangle; 8193];
-        let census = delivery_case(&above, &[triangle], &[]).unwrap();
-        assert_eq!(census.stopped_above_cap, 1);
-        assert_eq!(census.max_above_cap_triangles, 8193);
+    fn hard_cap_refuses_any_payload_above_8192_while_d4_property_rows_remain_bounded() {
+        // Leaf or coarse, the cap is per payload; 8,192 exactly is admitted.
+        for (tile, triangles, ok) in [(0, 8192, true), (0, 8193, false), (1, 8193, false)] {
+            let mut s = store();
+            s.tile(0, None, IDENTITY).unwrap();
+            s.tile(1, Some(0), IDENTITY).unwrap();
+            for rank in [0, 1] {
+                s.reference(rank, rank).unwrap();
+                s.payload(rank, true, rank == 1).unwrap();
+            }
+            s.connection
+                .execute(
+                    "UPDATE payloads SET triangles=? WHERE rank=?",
+                    params![triangles, tile],
+                )
+                .unwrap();
+            let result = s.finish(budget(), 0, &mut |_| Ok(replay_fixture(&[])));
+            if ok {
+                result.unwrap();
+                assert_eq!(s.census().unwrap().max_payload_triangles, 8192);
+            } else {
+                let error = result.unwrap_err().to_string();
+                assert!(error.contains("triangleCap") && error.contains("8193"), "{error}");
+            }
+        }
         for same in [false, true] {
             let mut s = store();
             s.decoded_limit = 1 << 20;
@@ -2447,6 +2720,252 @@ mod tests {
                 assert!(result.unwrap_err().to_string().contains("hlodFeatureIds"));
             }
         }
+    }
+    /// One delivered hierarchy in preorder: (parent, placeholder, refine, payload ranks).
+    /// Ranks on childless tiles are leaf payloads (with original triangle rows).
+    fn omission_case(
+        tiles: &[(Option<u64>, bool, Option<bool>, &[u64])],
+        digests: &[(u64, u64)],
+    ) -> Result<Omission, Error> {
+        omission_errors(tiles, digests, &[])
+    }
+    /// `errors` overrides a tile's (geometricError, box diagonal); the default is the
+    /// refinable floor 16 over a unit diagonal.
+    fn omission_errors(
+        tiles: &[(Option<u64>, bool, Option<bool>, &[u64])],
+        digests: &[(u64, u64)],
+        errors: &[(u64, f64, Option<f64>)],
+    ) -> Result<Omission, Error> {
+        let mut s = store();
+        s.decoded_limit = 1 << 20;
+        let mut seen = BTreeSet::new();
+        for (id, &(parent, placeholder, refine, ranks)) in tiles.iter().enumerate() {
+            let id = id as u64;
+            s.tile(id, parent, IDENTITY)?;
+            let (_, error, diagonal) = errors
+                .iter()
+                .copied()
+                .find(|e| e.0 == id)
+                .unwrap_or((id, 16., Some(1.)));
+            s.kind(id, refine, placeholder, error, diagonal)?;
+            let leaf = !tiles.iter().any(|t| t.0 == Some(id));
+            for &rank in ranks {
+                s.reference(id, rank)?;
+                if seen.insert(rank) {
+                    let digest = digests
+                        .iter()
+                        .find(|d| d.0 == rank)
+                        .map_or(rank, |d| d.1);
+                    s.payload_bytes(rank, true, leaf, &digest.to_be_bytes())?;
+                }
+            }
+        }
+        s.finish(budget(), 0, &mut |_| Ok(replay_fixture(&[])))?;
+        Ok(s.census().unwrap().omission)
+    }
+    fn refusal(result: Result<Omission, Error>, check: &str) {
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains(check), "{check}: {error}");
+    }
+    /// Either barrier owner: REPLACE continuity (all archives) runs first.
+    fn below_content(result: Result<Omission, Error>) {
+        let error = result.unwrap_err().to_string();
+        assert!(
+            error.contains("omissionPropagation") || error.contains("replaceContentContinuity"),
+            "{error}"
+        );
+    }
+    #[test]
+    fn omission_is_counted_by_cell_depth_through_placeholders() {
+        const N: &[u64] = &[];
+        // 0 omitted root; 1 an external link to 2 (the same cell's document root,
+        // omitted); 3 a leaf; 4 an omission source over leaves 5 and 6; 7 a coarse
+        // frontier tile over leaf 8.
+        let tiles = [
+            (None, false, None, N),
+            (Some(0), true, None, N),
+            (Some(1), false, None, N),
+            (Some(2), false, None, &[3][..]),
+            (Some(2), false, None, N),
+            (Some(4), false, None, &[5][..]),
+            (Some(4), false, None, &[6][..]),
+            (Some(0), false, None, &[7][..]),
+            (Some(7), false, None, &[8][..]),
+        ];
+        assert_eq!(
+            omission_case(&tiles, &[]).unwrap(),
+            Omission {
+                omitted_cells: 3,
+                omission_sources: 1,
+                omitted_by_depth: vec![1, 1, 1],
+                frontier_tiles: 4,
+                frontier_leaves: 4,
+            }
+        );
+        // Sensitivity: a non-placeholder link adds a cell (depth 2 holds two).
+        let mut deeper = tiles;
+        deeper[1].1 = false;
+        assert_eq!(
+            omission_case(&deeper, &[]).unwrap().omitted_by_depth,
+            vec![1, 1, 1, 1]
+        );
+        // All-omitted chain to the root above one source.
+        let chain = [
+            (None, false, None, N),
+            (Some(0), false, None, N),
+            (Some(1), false, None, &[1][..]),
+            (Some(1), false, None, &[2][..]),
+        ];
+        let omission = omission_case(&chain, &[]).unwrap();
+        assert_eq!(
+            (omission.omitted_cells, omission.omission_sources, omission.omitted_by_depth),
+            (2, 1, vec![1, 1])
+        );
+    }
+    #[test]
+    fn content_above_an_omitted_cell_is_refused_in_every_subtree_form() {
+        const N: &[u64] = &[];
+        // Root content over an omitted cell over two leaves.
+        let mut tiles = vec![
+            (None, false, None, &[9][..]),
+            (Some(0), false, None, N),
+            (Some(1), false, None, &[1][..]),
+            (Some(1), false, None, &[2][..]),
+        ];
+        below_content(omission_case(&tiles, &[]));
+        // Control: the same tree with the root omitted too is admitted.
+        tiles[0].3 = N;
+        omission_case(&tiles, &[]).unwrap();
+        // External or implicit placeholder between the content and the omitted root.
+        let linked = [
+            (None, false, None, &[9][..]),
+            (Some(0), true, None, N),
+            (Some(1), false, None, N),
+            (Some(2), false, None, &[1][..]),
+            (Some(2), false, None, &[2][..]),
+        ];
+        below_content(omission_case(&linked, &[]));
+        // Content below an omitted cell's empty sibling path: deep descendant.
+        let deep = [
+            (None, false, None, N),
+            (Some(0), false, None, &[9][..]),
+            (Some(1), false, None, &[8][..]),
+            (Some(2), false, None, N),
+            (Some(3), false, None, &[1][..]),
+        ];
+        below_content(omission_case(&deep, &[]));
+        // Only the omission owner sees an empty branch end below content (no
+        // renderable descendant, so no REPLACE barrier), even past a placeholder.
+        for placeholder in [false, true] {
+            let mut ends = vec![
+                (None, false, None, &[9][..]),
+                (Some(0), false, None, &[1][..]),
+                (Some(0), placeholder, None, N),
+            ];
+            if placeholder {
+                ends.push((Some(2), false, None, N));
+            }
+            refusal(omission_case(&ends, &[]), "omissionPropagation");
+        }
+    }
+    /// R9 (S1 756283e2): an omitted cell carrying its children's error is never
+    /// refined by CesiumJS, so nothing below it draws.
+    #[test]
+    fn content_less_cells_must_refine_under_cesium_sse() {
+        const N: &[u64] = &[];
+        let tiles = [
+            (None, false, None, N),
+            (Some(0), true, None, N),
+            (Some(1), false, None, N),
+            (Some(2), false, None, &[1][..]),
+            (Some(2), false, None, &[2][..]),
+            (Some(0), false, None, &[3][..]),
+        ];
+        omission_errors(&tiles, &[], &[]).unwrap();
+        // Exactly the floor passes; children's leaf error at the root, or one ulp
+        // below the floor at the external document's root, is refused.
+        omission_errors(&tiles, &[], &[(0, 160., Some(10.))]).unwrap();
+        for errors in [
+            [(0, 0.000671, Some(141.5 / 16.))],
+            [(2, 16. * (1. - 1e-9), Some(1.))],
+            [(2, 16., None)],
+        ] {
+            refusal(omission_errors(&tiles, &[], &errors), "emptyCellRefinement");
+        }
+        // A link placeholder always traverses: its own error is not a cell's.
+        omission_errors(&tiles, &[], &[(1, 0., Some(1.))]).unwrap();
+    }
+    #[test]
+    fn the_first_renderable_cover_is_complete_and_single() {
+        const N: &[u64] = &[];
+        // A terminal content-less cell leaves its branch uncovered.
+        let open = [
+            (None, false, None, N),
+            (Some(0), false, None, &[1][..]),
+            (Some(0), false, None, N),
+        ];
+        refusal(omission_case(&open, &[]), "frontierCoverage");
+        let dangling = [(None, false, None, N), (Some(0), false, None, &[1][..]), (Some(0), true, None, N)];
+        refusal(omission_case(&dangling, &[]), "frontierCoverage");
+        // ADD content stays drawn over its leaves.
+        let add = [
+            (None, false, Some(false), &[9][..]),
+            (Some(0), false, None, &[1][..]),
+            (Some(0), false, None, &[2][..]),
+        ];
+        refusal(omission_case(&add, &[]), "frontierCoverage");
+        let mut replace = add;
+        replace[0].2 = Some(true);
+        omission_case(&replace, &[]).unwrap();
+        // A coarse payload standing for its only child down a chain is one cover.
+        let chain = [
+            (None, false, None, N),
+            (Some(0), false, None, &[9][..]),
+            (Some(1), false, None, &[9][..]),
+            (Some(2), false, None, &[1][..]),
+            (Some(2), false, None, &[2][..]),
+        ];
+        let omission = omission_case(&chain, &[]).unwrap();
+        assert_eq!((omission.frontier_tiles, omission.frontier_leaves), (1, 2));
+        // The same coarse payload in two branches, by reference or by copied bytes.
+        let across = [
+            (None, false, None, N),
+            (Some(0), false, None, &[9][..]),
+            (Some(1), false, None, &[1][..]),
+            (Some(1), false, None, &[2][..]),
+            (Some(0), false, None, &[10][..]),
+            (Some(4), false, None, &[3][..]),
+            (Some(4), false, None, &[4][..]),
+        ];
+        omission_case(&across, &[]).unwrap();
+        refusal(omission_case(&across, &[(10, 9)]), "frontierCoverage");
+        let mut shared = across;
+        shared[4].3 = &[9];
+        refusal(omission_case(&shared, &[]), "frontierCoverage");
+        // A repeat that skips a branching cell is not a chain.
+        let skip = [
+            (None, false, None, N),
+            (Some(0), false, None, &[9][..]),
+            (Some(1), false, None, &[1][..]),
+            (Some(1), false, None, &[10][..]),
+            (Some(3), false, None, &[2][..]),
+        ];
+        omission_case(&skip, &[]).unwrap();
+        refusal(omission_case(&skip, &[(10, 9)]), "frontierCoverage");
+        // The same payload twice in one tile renders it twice.
+        let twice = [
+            (None, false, None, N),
+            (Some(0), false, None, &[1, 1][..]),
+            (Some(0), false, None, &[2][..]),
+        ];
+        refusal(omission_case(&twice, &[]), "frontierCoverage");
+        let copied = [
+            (None, false, None, N),
+            (Some(0), false, None, &[1, 3][..]),
+            (Some(0), false, None, &[2][..]),
+        ];
+        omission_case(&copied, &[]).unwrap();
+        refusal(omission_case(&copied, &[(3, 1)]), "frontierCoverage");
     }
     #[test]
     fn common_root_and_y_up_frame_are_applied_before_canonicalization() {

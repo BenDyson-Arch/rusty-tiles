@@ -373,7 +373,7 @@ class Store:
                         if t['rendered'] and (low_a<t['lo'] or high_a>=t['hi']) and (low_b<t['lo'] or high_b>=t['hi']):
                             self.db.execute('INSERT OR IGNORE INTO requirements VALUES (?,?,?,?)',(int(t['id']),2,a,b))
         self.db.execute('CREATE TABLE rendered_borders(tile INTEGER,a BLOB,b BLOB,PRIMARY KEY(tile,a,b)) WITHOUT ROWID')
-        segments=points=exempt=above_cap=max_triangles=0
+        segments=points=exempt=max_triangles=0
         for t in tiles:
             if not t['rendered']:
                 continue
@@ -393,7 +393,6 @@ class Store:
                     adjacency[a].add(b);adjacency[b].add(a)
                     edge_counts[tuple(sorted((a,b)))]+=1
             if t['children']:
-                above_cap+=int(triangles>8192)
                 max_triangles=max(max_triangles,triangles)
             self.db.executemany('INSERT INTO rendered_borders VALUES (?,?,?)',
                 ((int(t['id']),packed_point(a),packed_point(b)) for (a,b),n in edge_counts.items() if n==1))
@@ -425,6 +424,6 @@ class Store:
                     sourceOpenEdges=open_edges,sourceOpenEdgesWithSharedEndpoints=open_shared,
                     exemptOpenEdgeChanges=exempt,exemptCrackEvents=0,
                     mixedPairs=mixed,sameDepthPairs=same,
-                    aboveCapCoarseTiles=above_cap,maxCoarseTriangles=max_triangles,
-                    coarseTriangleCountBasis='expanded tile instances, summed across each tile contents; repeated payload URIs counted per tile',
+                    maxCoarseTriangles=max_triangles,
+                    coarseTriangleCountBasis='expanded tile instances, summed across each tile contents; every payload is separately within the hard 8,192 (triangleCap)',
                     canonical=self.canonical_stats,candidateWork=self.work.used,workLimit=self.work.limit)

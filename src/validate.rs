@@ -512,6 +512,15 @@ fn volume(value: &Value) -> Result<Volume, Error> {
     Ok(Volume::Region(r))
 }
 /// A finite box with orthogonal half axes, as every explicit tile box is checked.
+/// The corner-to-corner length of an orthogonal box (`2·|half axes|`) or a sphere's
+/// diameter. A region has no metric diagonal here.
+fn volume_diagonal(volume: &Volume) -> Option<f64> {
+    match volume {
+        Volume::Box(b) => Some(2. * b[3..12].iter().map(|v| v * v).sum::<f64>().sqrt()),
+        Volume::Sphere(s) => Some(2. * s[3]),
+        Volume::Region(_) => None,
+    }
+}
 fn checked_box(b: Vec<f64>) -> Result<Volume, Error> {
     for i in 0..3 {
         for j in i + 1..3 {
@@ -1377,6 +1386,8 @@ enum Event {
         tile: usize,
         refine: Option<bool>,
         placeholder: bool,
+        error: f64,
+        diagonal: Option<f64>,
     },
     Place(Box<Placement>),
 }
@@ -2050,11 +2061,15 @@ impl Check<'_> {
                     tile,
                     refine,
                     placeholder,
+                    error,
+                    diagonal,
                 } => {
                     self.delivery.kind(
                         self.delivery_path[frame.locals[*tile]],
                         *refine,
                         *placeholder,
+                        *error,
+                        *diagonal,
                     )?;
                     None
                 }
@@ -2283,15 +2298,18 @@ impl Check<'_> {
         tile: usize,
         refine: Option<bool>,
         placeholder: bool,
+        (error, diagonal): (f64, Option<f64>),
     ) -> Result<(), Error> {
         self.delivery
-            .kind(self.delivery_path[tile], refine, placeholder)?;
+            .kind(self.delivery_path[tile], refine, placeholder, error, diagonal)?;
         if self.recording.last().is_some_and(|r| !r.opaque) {
             match self.local(Some(tile)) {
                 Some(tile) => self.record(Event::Delivery {
                     tile,
                     refine,
                     placeholder,
+                    error,
+                    diagonal,
                 })?,
                 None => self.make_opaque(),
             }
@@ -2504,7 +2522,12 @@ impl Check<'_> {
         }
         self.tiles += 1;
         if let Some(root) = implicit {
-            self.delivery_kind(tile, node["refine"].as_str().map(|v| v == "REPLACE"), true)?;
+            self.delivery_kind(
+                tile,
+                node["refine"].as_str().map(|v| v == "REPLACE"),
+                true,
+                (error, volume_diagonal(&bounds)),
+            )?;
             // R's content entries are templates: never explicit references.
             // A header `metadata` entity is copied to every emitted content, so
             // it is "content has `metadata`" (slice 3 I6, §4 step 7).
@@ -2622,6 +2645,7 @@ impl Check<'_> {
                     .get("children")
                     .and_then(Value::as_array)
                     .is_none_or(Vec::is_empty),
+            (error, volume_diagonal(&bounds)),
         )?;
         // Amendment D-1: a link tile (external tileset content only) is
         // reported but not compared against the recorded tile budget.
@@ -2786,6 +2810,15 @@ impl Check<'_> {
                 chain: 0,
                 owner: None,
             })?;
+            // Implicit cells inherit the root's refinement; their own error and
+            // effective box decide whether an empty cell refines.
+            self.delivery.kind(
+                self.delivery_path[index],
+                None,
+                false,
+                error,
+                volume_diagonal(&volume),
+            )?;
             path.truncate(level);
             try_push(&mut path, (volume, error, index))?;
             // R and I_0 are one tile for counting.
@@ -3498,8 +3531,12 @@ fn inspect_run(
             shared_segments: c.shared_segments,
             source_open_edges: c.source_open_edges,
             source_open_edges_with_shared_endpoints: c.source_open_edges_with_shared_endpoints,
-            stopped_above_cap: c.stopped_above_cap,
-            max_above_cap_triangles: c.max_above_cap_triangles,
+            max_payload_triangles: c.max_payload_triangles,
+            omitted_cells: c.omission.omitted_cells,
+            omission_sources: c.omission.omission_sources,
+            omitted_by_depth: c.omission.omitted_by_depth,
+            frontier_tiles: c.omission.frontier_tiles,
+            frontier_leaves: c.omission.frontier_leaves,
         }),
         scratch: scratch.is_created().then(|| ScratchReport {
             memory_backed: scratch.memory_backed(),

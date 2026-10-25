@@ -154,7 +154,7 @@ def generate(root):
     doc=dict(asset={'version':'1.1'},geometricError=4,root=tile('root.glb',4,[left,right]))
     groups={'root.glb':[0,1,2,3],'left.glb':[0,1],'right.glb':[2,3],'middle.glb':[2,3],**{f'leaf{i}.glb':[i] for i in range(4)}}
     cases=[('valid',None,None),('quantized',None,None),('normalized',None,None),('trs',None,None),('numeric-lexemes',None,None),('opaque-extras',None,None),('wide-identity',None,None),('meshopt-fallback',None,None),('adjacent-uint64-leaf','sourceIdentity',None),('adjacent-uint64-representative','representativeIdentity',None),('wrong-feature','featureIdentity','hlodFeatureIds'),
-           ('wrong-source','sourceIdentity',None),('wrong-representative','representativeIdentity',None),('wrong-representative-contents','representativeIdentity',None),('missing-leaf','leafCoverage',None),('duplicate-leaf','leafCoverage',None),
+           ('wrong-source','sourceIdentity',None),('wrong-representative','representativeIdentity',None),('wrong-representative-contents','representativeIdentity',None),('missing-leaf','leafCoverage',None),('duplicate-leaf','leafCoverage','frontierCoverage'),
            ('moved-interface',None,None),('moved-corner','interfacePoints',None),('empty-intermediate','replaceContentContinuity','replaceContentContinuity'),
            ('negative-g','geometricErrorFinite','tileset schema'),('nan-g','geometricErrorFinite','JSON'),
            ('nonmonotone-g','geometricErrorOrder','geometricError increases'),('bad-bounds',None,'decoded content'),

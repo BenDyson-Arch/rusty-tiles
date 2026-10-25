@@ -37,8 +37,25 @@ The native hierarchy includes the explicit walk, external-document placements,
 I1's expanded availability walk and memo replays. `replaceContentContinuity`
 rejects ordinary contentless cells between a REPLACE renderable ancestor and its
 renderable descendants. Leading empty roots and external-link placeholders are
-valid, as are S1's repeated coarse-content cells. An empty ADD override cannot
-clear a barrier owned by a renderable REPLACE ancestor.
+valid. An empty ADD override cannot clear a barrier owned by a renderable
+REPLACE ancestor.
+
+Upward omission (S1 `756283e2` amendment) is checked once identity is expected,
+from the delivered hierarchy alone. `triangleCap` refuses any payload, leaf or
+coarse, above 8,192 triangles over all its scene instances. `omissionPropagation`
+refuses a content-less cell with a content ancestor in explicit, implicit or
+external subtrees; link and implicit-root placeholders are transparent and add
+no cell depth. `frontierCoverage` refuses a branch that ends content-less, ADD
+content left drawn over renderable descendants, and the same payload bytes
+(by SHA-256, so copies under new member names count) twice in one tile or
+anywhere but down a single-child chain. Together these make the first
+renderable cover complete and single: every renderable leaf lies below exactly
+one cover tile. `emptyCellRefinement` (R9) requires every content-less cell's
+geometricError to be at least 16 x its box diagonal (sphere: diameter). Under
+CesiumJS base traversal an empty tile refines only while its SSE exceeds the
+maximum (default 16); at that floor it refines until the whole box projects
+below about one pixel, while children's error alone (S1 `756283e2`) stops at
+once and, with no content ancestor by design, draws nothing.
 
 The native census externally groups canonical point keys (12 bytes) and
 unordered endpoint-pair edge keys (24 bytes), retaining actual per-leaf face
@@ -63,8 +80,10 @@ exactly one incident surface face globally; its two endpoints are shared when
 each occurs in a different leaf. Incidence counts faces, never net orientation
 or owner count. The report names its decoded-leaf basis; authenticating source
 canonical positions and measuring exempt crack widths require the source oracle.
-It also reports nonleaf content references above 8,192 triangles and their maximum
-triangle count, without rejecting them. The coarse primitive metadata row limit
+It reports the largest payload's triangles and the derived omission census:
+`omittedCells`, `omissionSources` (omitted cells whose cell children all
+render), `omittedByDepth`, `frontierTiles` and `frontierLeaves`. These are
+never read from producer reports. The coarse primitive metadata row limit
 remains 8,192. Other coarse interior/exterior orientation is uninspected by native
 validation; the oracle retains the stronger coincident-face guard everywhere.
 
@@ -102,6 +121,14 @@ frame and an identity postcapture source transform; world and other postcapture
 frames are explicitly refused as `oracleDomain`/`sourceCanonical`. Source
 manifests can also pin a separately accepted baseline, but the
 real campaign uses the original input GLBs.
+
+`omission.py` independently re-derives the cap, upward omission, single cover,
+empty-cell refinement and omission census from `archive.expand` and payload
+bytes (its own GLB accessor count, not `decode.mjs` or native code), and only
+then compares with an S1 stage `manifest.json` (`--producer-manifest`):
+`omittedProxies`, `omissionSources` and `omittedByDepth` must equal the derived
+values, else `omissionReport`. `oracle.py` runs the same owner after its source
+checks and also refuses a decoded payload above 8,192 faces (`triangleCap`).
 
 `oracle.py` checks source leaf multiplicity/IDs/geometry/normals, materials and
 nearest coarse representatives, with D4 ties in source order. Analytic manifests
