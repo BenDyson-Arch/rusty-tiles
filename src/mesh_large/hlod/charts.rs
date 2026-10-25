@@ -28,6 +28,18 @@ const CHART_FACES: usize = 192;
 /// Texels of gutter on every side of a chart; the sparse-mip encoder fills them from the
 /// nearest covered texel at every level.
 pub(crate) const GUTTER: u32 = 2;
+/// Mip levels through which a coarse page keeps its charts isolated: chart rectangles sit
+/// on the `2^K` grid with gutters of `2^K` (at least [`GUTTER`]). A scale-gate tuning
+/// constant. One level suffices in normal traversal: a coarse texel is at least `G/16`
+/// (the requested spacing; the source-density floor and the page cap only coarsen it), so
+/// when Cesium refines at SSE 16 the tile's `G` spans 16 px and a texel at least 1 px.
+/// The tile stays shown only until its parent's SSE drops below 16; with the parent's
+/// error about `2G` the tile's `G` then spans 8 px, a texel at least 0.5 px, so the tile is
+/// minified at most about 2x (one level) before its parent replaces it. The exceptions
+/// (the root, which nothing replaces; a parent whose error is well above `2G`; parents
+/// shown while children load) are seen from distances where bleed below level 1 is
+/// invisible.
+pub(crate) const COARSE_ISLAND_ISOLATED_LEVELS: u32 = 1;
 pub(crate) const MIN_PAGE: u32 = 32;
 /// Page dimensions are whole codec blocks.
 const BLOCK: u32 = 4;
@@ -75,6 +87,10 @@ pub(crate) struct Layout {
     pub size: [u32; 2],
     /// Page texels per metre on every chart plane.
     pub scale: f64,
+    /// Mip levels through which the charts stay isolated (`2^isolated` alignment and
+    /// gutters): [`COARSE_ISLAND_ISOLATED_LEVELS`], lower only when the charts cannot fit the
+    /// page at that alignment even at zero scale.
+    pub isolated: u32,
     /// The requested spacing could not fit `max_edge²`: `scale < 1 / spacing`.
     pub capped: bool,
 }
@@ -88,7 +104,10 @@ impl Layout {
         for (i, c) in self.charts.iter().enumerate() {
             for y in c.origin[1]..(c.origin[1] + c.size[1]).min(h) {
                 let row = (y * w) as usize;
-                let (a, b) = (c.origin[0] as usize, ((c.origin[0] + c.size[0]).min(w)) as usize);
+                let (a, b) = (
+                    c.origin[0] as usize,
+                    ((c.origin[0] + c.size[0]).min(w)) as usize,
+                );
                 labels[row + a..row + b].fill(i as u32 + 1);
             }
         }
@@ -127,39 +146,30 @@ fn overlap(a: &[P2; 3], b: &[P2; 3]) -> bool {
     true
 }
 
-/// Grow charts over `faces` (corner indices into `positions`): seeds by descending area
-/// (then face order), breadth-first over shared edges within the normal cone, rejecting a
-/// face whose projection overlaps the chart's interior. Zero-area faces get a point chart.
-pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, Vec<u32>) {
-    let p = |v: u32| positions[v as usize].map(f64::from);
+/// Face adjacency over manifold (welded, exactly two distinct faces) edges in CSR form:
+/// at most two directed pairs per edge, so at most `6 F` pairs and O(F log F) time.
+/// Charts never grow across a non-manifold edge (a fan of F faces on one edge stays
+/// linear instead of creating every face pair).
+fn adjacency(faces: &[[u32; 3]]) -> (Vec<u32>, Vec<(u32, u32)>) {
     let n = faces.len();
-    let mut normals = Vec::with_capacity(n);
-    let mut areas = Vec::with_capacity(n);
     let mut edges: Vec<(u32, u32, u32)> = Vec::with_capacity(n * 3);
     for (i, f) in faces.iter().enumerate() {
-        let c = cross(sub(p(f[1]), p(f[0])), sub(p(f[2]), p(f[0])));
-        areas.push(dot(c, c).sqrt());
-        normals.push(unit(c));
         for k in 0..3 {
             let (a, b) = (f[k], f[(k + 1) % 3]);
             edges.push((a.min(b), a.max(b), i as u32));
         }
     }
     edges.sort_unstable();
-    // Adjacency over shared (welded) edges, in CSR form.
-    let mut pairs: Vec<(u32, u32)> = Vec::new();
+    let mut pairs: Vec<(u32, u32)> = Vec::with_capacity(edges.len());
     let mut s = 0;
     while s < edges.len() {
         let mut e = s + 1;
         while e < edges.len() && edges[e].0 == edges[s].0 && edges[e].1 == edges[s].1 {
             e += 1;
         }
-        for a in s..e {
-            for b in s..e {
-                if edges[a].2 != edges[b].2 {
-                    pairs.push((edges[a].2, edges[b].2));
-                }
-            }
+        if e - s == 2 && edges[s].2 != edges[s + 1].2 {
+            pairs.push((edges[s].2, edges[s + 1].2));
+            pairs.push((edges[s + 1].2, edges[s].2));
         }
         s = e;
     }
@@ -172,6 +182,23 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
     for i in 0..n {
         start[i + 1] += start[i];
     }
+    (start, pairs)
+}
+
+/// Grow charts over `faces` (corner indices into `positions`): seeds by descending area
+/// (then face order), breadth-first over shared edges within the normal cone, rejecting a
+/// face whose projection overlaps the chart's interior. Zero-area faces get a point chart.
+pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, Vec<u32>) {
+    let p = |v: u32| positions[v as usize].map(f64::from);
+    let n = faces.len();
+    let mut normals = Vec::with_capacity(n);
+    let mut areas = Vec::with_capacity(n);
+    for f in faces {
+        let c = cross(sub(p(f[1]), p(f[0])), sub(p(f[2]), p(f[0])));
+        areas.push(dot(c, c).sqrt());
+        normals.push(unit(c));
+    }
+    let (start, pairs) = adjacency(faces);
     let mut order: Vec<usize> = (0..n).collect();
     order.sort_by(|&a, &b| areas[b].total_cmp(&areas[a]).then(a.cmp(&b)));
     let mut chart_of = vec![u32::MAX; n];
@@ -239,7 +266,11 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
             };
             let (plo, phi) = boxed(&projected);
             if chart.points.iter().zip(&chart.boxes).any(|(t, (lo, hi))| {
-                lo[0] < phi[0] && plo[0] < hi[0] && lo[1] < phi[1] && plo[1] < hi[1] && overlap(&projected, t)
+                lo[0] < phi[0]
+                    && plo[0] < hi[0]
+                    && lo[1] < phi[1]
+                    && plo[1] < hi[1]
+                    && overlap(&projected, t)
             }) {
                 continue;
             }
@@ -261,7 +292,15 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
         charts.push(chart);
         frames.push((origin, normal));
     }
-    merge_small(&mut charts, &mut chart_of, &frames, (&start, &pairs), &normals, &p, faces);
+    merge_small(
+        &mut charts,
+        &mut chart_of,
+        &frames,
+        (&start, &pairs),
+        &normals,
+        &p,
+        faces,
+    );
     for chart in &mut charts {
         orient(chart);
     }
@@ -308,11 +347,21 @@ fn merge_small(
                         let v = sub(p(faces[f][k]), origin);
                         [dot(v, x), dot(v, y)]
                     });
-                    let lo = [0, 1].map(|a| projected[0][a].min(projected[1][a]).min(projected[2][a]));
-                    let hi = [0, 1].map(|a| projected[0][a].max(projected[1][a]).max(projected[2][a]));
-                    !charts[c].points.iter().zip(&charts[c].boxes).any(|(t, (blo, bhi))| {
-                        blo[0] < hi[0] && lo[0] < bhi[0] && blo[1] < hi[1] && lo[1] < bhi[1] && overlap(&projected, t)
-                    })
+                    let lo =
+                        [0, 1].map(|a| projected[0][a].min(projected[1][a]).min(projected[2][a]));
+                    let hi =
+                        [0, 1].map(|a| projected[0][a].max(projected[1][a]).max(projected[2][a]));
+                    !charts[c]
+                        .points
+                        .iter()
+                        .zip(&charts[c].boxes)
+                        .any(|(t, (blo, bhi))| {
+                            blo[0] < hi[0]
+                                && lo[0] < bhi[0]
+                                && blo[1] < hi[1]
+                                && lo[1] < bhi[1]
+                                && overlap(&projected, t)
+                        })
                 });
             let Some(c) = target else { continue };
             let (origin, _) = frames[c];
@@ -417,7 +466,11 @@ fn orient(chart: &mut Chart) {
         }
         let area = (hi[0] - lo[0]) * (hi[1] - lo[1]);
         if area < best.0 * (1. - 1e-9) {
-            let d = if hi[1] - lo[1] > hi[0] - lo[0] { [-d[1], d[0]] } else { d };
+            let d = if hi[1] - lo[1] > hi[0] - lo[0] {
+                [-d[1], d[0]]
+            } else {
+                d
+            };
             best = (area, d);
         }
     }
@@ -464,14 +517,16 @@ fn shelf(charts: &mut [Chart], order: &[usize], width: u32, max_height: u32) -> 
     Some((used, y + row))
 }
 
-fn sizes(charts: &mut [Chart], scale: f64) -> Option<()> {
+fn sizes(charts: &mut [Chart], scale: f64, a: u32) -> Option<()> {
     for c in charts.iter_mut() {
         let extent = |a: usize| ((c.hi[a] - c.lo[a]).max(0.) * scale).ceil();
         let (w, h) = (extent(0), extent(1));
         if !(w.is_finite() && h.is_finite()) || w > 1e6 || h > 1e6 {
             return None;
         }
-        c.size = [w.max(1.) as u32 + 2 * GUTTER, h.max(1.) as u32 + 2 * GUTTER];
+        // Gutters of `a` and rectangles on the `a` grid (isolation through log2 a).
+        let g = a.max(GUTTER);
+        c.size = [w.max(1.) as u32, h.max(1.) as u32].map(|e| (e + 2 * g).div_ceil(a) * a);
     }
     Some(())
 }
@@ -479,14 +534,25 @@ fn sizes(charts: &mut [Chart], scale: f64) -> Option<()> {
 /// The least-area block-aligned page in `MIN_PAGE..=max_edge` per side holding every
 /// chart at `scale` (shelves by descending height at a few widths around the square
 /// root of the chart area; ties to the narrower); packs the charts into it.
-fn fit(charts: &mut [Chart], scale: f64, max_edge: u32, max_texels: u64) -> Option<[u32; 2]> {
-    sizes(charts, scale)?;
+fn fit(
+    charts: &mut [Chart],
+    scale: f64,
+    max_edge: u32,
+    max_texels: u64,
+    a: u32,
+) -> Option<[u32; 2]> {
+    sizes(charts, scale, a)?;
+    let unit = a.max(BLOCK);
     // Small allowances may use pages below MIN_PAGE (whole blocks).
-    let min_edge = ((max_texels as f64).sqrt() as u32 / BLOCK * BLOCK).clamp(BLOCK, MIN_PAGE);
+    let min_edge =
+        ((max_texels as f64).sqrt() as u32 / unit * unit).clamp(unit, MIN_PAGE.max(unit));
     let mut order: Vec<usize> = (0..charts.len()).collect();
     order.sort_by(|&a, &b| charts[b].size[1].cmp(&charts[a].size[1]).then(a.cmp(&b)));
-    let round = |v: f64| ((v.ceil() as u64).div_ceil(u64::from(BLOCK)) * u64::from(BLOCK)) as u32;
-    let area: f64 = charts.iter().map(|c| f64::from(c.size[0]) * f64::from(c.size[1])).sum();
+    let round = |v: f64| ((v.ceil() as u64).div_ceil(u64::from(unit)) * u64::from(unit)) as u32;
+    let area: f64 = charts
+        .iter()
+        .map(|c| f64::from(c.size[0]) * f64::from(c.size[1]))
+        .sum();
     let widest = charts.iter().map(|c| c.size[0]).max().unwrap_or(1);
     let mut widths: Vec<u32> = [1., 1.1, 1.25, 1.4, 1.6, 2., 2.5, 3.2]
         .iter()
@@ -502,11 +568,17 @@ fn fit(charts: &mut [Chart], scale: f64, max_edge: u32, max_texels: u64) -> Opti
         let Some((used, h)) = shelf(charts, &order, w, max_edge) else {
             continue;
         };
-        let page = [round(f64::from(used)).max(min_edge), round(f64::from(h)).max(min_edge)];
+        let page = [
+            round(f64::from(used)).max(min_edge),
+            round(f64::from(h)).max(min_edge),
+        ];
         if page[1] > max_edge || u64::from(page[0]) * u64::from(page[1]) > max_texels {
             continue;
         }
-        let key = (u64::from(page[0]) * u64::from(page[1]), page[0].max(page[1]));
+        let key = (
+            u64::from(page[0]) * u64::from(page[1]),
+            page[0].max(page[1]),
+        );
         if best.is_none_or(|(a, m, _)| key < (a, m)) {
             best = Some((key.0, key.1, page));
         }
@@ -534,37 +606,45 @@ pub(crate) fn layout(
     }
     let (mut charts, chart_of) = grow(positions, faces);
     let target = 1. / spacing;
-    let (scale, size, capped) = if let Some(size) = fit(&mut charts, target, max_edge, max_texels) {
-        (target, size, false)
-    } else {
-        // The finest scale that fits the cap: bisection on a monotone shelf fit.
-        let (mut lo, mut hi) = (0., target);
-        if fit(&mut charts, lo, max_edge, max_texels).is_none() {
-            return Err(JobError::new(
-                JobErrorKind::Unsupported,
-                format!(
-                    "{} coarse charts cannot fit one {max_edge}² page of {max_texels} texels even at zero scale",
-                    charts.len()
-                ),
-            ));
-        }
-        for _ in 0..40 {
-            let mid = 0.5 * (lo + hi);
-            if fit(&mut charts, mid, max_edge, max_texels).is_some() {
-                lo = mid;
-            } else {
-                hi = mid;
-            }
-        }
-        let size = fit(&mut charts, lo, max_edge, max_texels).expect("bisection keeps a fitting scale");
-        (lo, size, true)
+    // The deepest isolation whose alignment and gutters still fit at zero scale.
+    let Some(isolated) = (1..=COARSE_ISLAND_ISOLATED_LEVELS.max(1))
+        .rev()
+        .find(|&k| fit(&mut charts, 0., max_edge, max_texels, 1 << k).is_some())
+    else {
+        return Err(JobError::new(
+            JobErrorKind::Unsupported,
+            format!(
+                "{} coarse charts cannot fit one {max_edge}² page of {max_texels} texels even at zero scale",
+                charts.len()
+            ),
+        ));
     };
+    let a = 1u32 << isolated;
+    let gutter = a.max(GUTTER);
+    let (scale, size, capped) =
+        if let Some(size) = fit(&mut charts, target, max_edge, max_texels, a) {
+            (target, size, false)
+        } else {
+            // The finest scale that fits the cap: bisection on a monotone shelf fit.
+            let (mut lo, mut hi) = (0., target);
+            for _ in 0..40 {
+                let mid = 0.5 * (lo + hi);
+                if fit(&mut charts, mid, max_edge, max_texels, a).is_some() {
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
+            }
+            let size = fit(&mut charts, lo, max_edge, max_texels, a)
+                .expect("bisection keeps a fitting scale");
+            (lo, size, true)
+        };
     let mut pixels = vec![[[0.; 2]; 3]; faces.len()];
     for c in &charts {
         for (k, &f) in c.faces.iter().enumerate() {
             pixels[f] = c.points[k].map(|q| {
                 std::array::from_fn(|a| {
-                    f64::from(c.origin[a]) + f64::from(GUTTER) + (q[a] - c.lo[a]) * scale
+                    f64::from(c.origin[a]) + f64::from(gutter) + (q[a] - c.lo[a]) * scale
                 })
             });
         }
@@ -575,6 +655,7 @@ pub(crate) fn layout(
         pixels,
         size,
         scale,
+        isolated,
         capped,
     })
 }
@@ -592,8 +673,10 @@ pub(crate) fn raster(pixels: &[[f64; 2]; 3], size: [u32; 2], out: &mut Vec<(u32,
         let yhi = ((p[0][1].max(p[1][1]).max(p[2][1]) - 0.5).floor().max(-1.) as i64)
             .min(i64::from(size[1]) - 1);
         let bary = |cx: f64, cy: f64| {
-            let u = ((p[1][1] - p[2][1]) * (cx - p[2][0]) + (p[2][0] - p[1][0]) * (cy - p[2][1])) / den;
-            let v = ((p[2][1] - p[0][1]) * (cx - p[2][0]) + (p[0][0] - p[2][0]) * (cy - p[2][1])) / den;
+            let u =
+                ((p[1][1] - p[2][1]) * (cx - p[2][0]) + (p[2][0] - p[1][0]) * (cy - p[2][1])) / den;
+            let v =
+                ((p[2][1] - p[0][1]) * (cx - p[2][0]) + (p[0][0] - p[2][0]) * (cy - p[2][1])) / den;
             [u, v, 1. - u - v]
         };
         for y in i64::from(ylo)..=yhi {
@@ -673,14 +756,24 @@ mod tests {
         assert_ne!(l.chart_of[0], l.chart_of[2]);
         assert!(!l.capped);
         assert!((l.scale - 10.).abs() < 1e-12);
-        // Content sized, block aligned: two 104-texel charts stacked, the point chart beside.
+        // Content sized on the 2^K grid with 2^K gutters (K = 1: 2-texel grid and gutters):
+        // two 104-texel charts stacked, the point chart beside, block-aligned page.
+        assert_eq!(l.isolated, COARSE_ISLAND_ISOLATED_LEVELS);
+        let a = 1u32 << l.isolated;
         assert_eq!(l.size, [104, 216]);
         assert!(l.size.iter().all(|e| e % 4 == 0));
+        assert!(l
+            .charts
+            .iter()
+            .all(|c| c.origin.iter().chain(&c.size).all(|v| v % a == 0)));
         let r = rects(&l);
         for (i, a) in r.iter().enumerate() {
             assert!(a[0] + a[2] <= l.size[0] && a[1] + a[3] <= l.size[1]);
             for b in &r[i + 1..] {
-                let apart = a[0] + a[2] <= b[0] || b[0] + b[2] <= a[0] || a[1] + a[3] <= b[1] || b[1] + b[3] <= a[1];
+                let apart = a[0] + a[2] <= b[0]
+                    || b[0] + b[2] <= a[0]
+                    || a[1] + a[3] <= b[1]
+                    || b[1] + b[3] <= a[1];
                 assert!(apart, "chart rectangles overlap");
             }
         }
@@ -701,12 +794,18 @@ mod tests {
             raster(&l.pixels[face], l.size, &mut out);
             for (t, _) in &out {
                 let c = l.chart_of[face] as usize;
-                assert!(owner[*t as usize] == usize::MAX || l.chart_of[owner[*t as usize]] as usize == c);
+                assert!(
+                    owner[*t as usize] == usize::MAX
+                        || l.chart_of[owner[*t as usize]] as usize == c
+                );
                 owner[*t as usize] = face;
             }
         }
         let covered = owner.iter().filter(|o| **o != usize::MAX).count();
-        assert!((2 * 100 * 100..=2 * 101 * 101).contains(&covered), "{covered}");
+        assert!(
+            (2 * 100 * 100..=2 * 101 * 101).contains(&covered),
+            "{covered}"
+        );
         raster(&l.pixels[4], l.size, &mut out);
         assert_eq!(out.len(), 1, "a degenerate face still gets one texel");
     }
@@ -720,7 +819,11 @@ mod tests {
         assert!(l.scale < 1000. && l.scale > 40.);
         // Smallest page at the minimum edge for tiny content.
         let l = layout(&p, &f, 10., 1024, 1 << 20).unwrap();
-        assert_eq!(l.size, [MIN_PAGE, MIN_PAGE]);
+        assert_eq!(
+            l.size,
+            [MIN_PAGE, MIN_PAGE],
+            "tiny content: the minimum page"
+        );
         assert!(!l.capped);
     }
 
@@ -741,9 +844,19 @@ mod tests {
             .collect();
         let l = layout(&positions, &faces, 0.1, 1024, 1 << 20).unwrap();
         assert_eq!(l.charts.len(), 1);
-        let area: u64 = l.charts.iter().map(|c| u64::from(c.size[0]) * u64::from(c.size[1])).sum();
-        assert!(area < 160 * 20, "the rotated strip stays thin: {area} texels, unrotated ~111^2");
-        assert!(l.charts.iter().all(|c| c.size[0] >= c.size[1]), "long side along u");
+        let area: u64 = l
+            .charts
+            .iter()
+            .map(|c| u64::from(c.size[0]) * u64::from(c.size[1]))
+            .sum();
+        assert!(
+            area < 160 * 20,
+            "the rotated strip stays thin: {area} texels, unrotated ~111^2"
+        );
+        assert!(
+            l.charts.iter().all(|c| c.size[0] >= c.size[1]),
+            "long side along u"
+        );
     }
 
     /// A long sliver across a 1024² page rasterises by row spans (exactly the texel
@@ -762,8 +875,12 @@ mod tests {
             for x in 0..1024u32 {
                 let (cx, cy) = (f64::from(x) + 0.5, f64::from(y) + 0.5);
                 let p = sliver;
-                let u = ((p[1][1] - p[2][1]) * (cx - p[2][0]) + (p[2][0] - p[1][0]) * (cy - p[2][1])) / den;
-                let v = ((p[2][1] - p[0][1]) * (cx - p[2][0]) + (p[0][0] - p[2][0]) * (cy - p[2][1])) / den;
+                let u = ((p[1][1] - p[2][1]) * (cx - p[2][0])
+                    + (p[2][0] - p[1][0]) * (cy - p[2][1]))
+                    / den;
+                let v = ((p[2][1] - p[0][1]) * (cx - p[2][0])
+                    + (p[0][0] - p[2][0]) * (cy - p[2][1]))
+                    / den;
                 if u >= -1e-9 && v >= -1e-9 && 1. - u - v >= -1e-9 {
                     boxed.push(y * 1024 + x);
                 }
@@ -774,21 +891,63 @@ mod tests {
         // Bumpy grid: alternating tilts keep charts small, so merging is exercised.
         let n = 160u32;
         let positions: Vec<[f32; 3]> = (0..=n)
-            .flat_map(|i| (0..=n).map(move |j| [i as f32, ((i * 7 + j * 13) % 5) as f32 * 0.4, j as f32]))
+            .flat_map(|i| {
+                (0..=n).map(move |j| [i as f32, ((i * 7 + j * 13) % 5) as f32 * 0.4, j as f32])
+            })
             .collect();
         let faces: Vec<[u32; 3]> = (0..n)
             .flat_map(|i| {
                 (0..n).flat_map(move |j| {
                     let v = |a: u32, b: u32| a * (n + 1) + b;
-                    [[v(i, j), v(i, j + 1), v(i + 1, j)], [v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]]
+                    [
+                        [v(i, j), v(i, j + 1), v(i + 1, j)],
+                        [v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)],
+                    ]
                 })
             })
             .collect();
         let (charts, chart_of) = grow(&positions, &faces);
         assert!(charts.iter().all(|c| c.faces.len() <= CHART_FACES));
-        assert_eq!(charts.iter().map(|c| c.faces.len()).sum::<usize>(), faces.len());
+        assert_eq!(
+            charts.iter().map(|c| c.faces.len()).sum::<usize>(),
+            faces.len()
+        );
         for (i, c) in charts.iter().enumerate() {
             assert!(c.faces.iter().all(|&f| chart_of[f] as usize == i));
         }
+    }
+
+    /// Review adversarial (round 2): a fan of 8,192 faces on one non-manifold edge.
+    /// Adjacency stays linear (no face pairs across the edge), charting and packing
+    /// finish quickly, and every face keeps a chart.
+    #[test]
+    fn non_manifold_fans_stay_linear() {
+        let n = 8192u32;
+        let mut positions = vec![[0f32, 0., 0.], [1., 0., 0.]];
+        let faces: Vec<[u32; 3]> = (0..n)
+            .map(|k| {
+                let a = std::f32::consts::TAU * k as f32 / n as f32;
+                positions.push([0.5, a.cos(), a.sin()]);
+                [0, 1, 2 + k]
+            })
+            .collect();
+        let started = std::time::Instant::now();
+        let (_, pairs) = adjacency(&faces);
+        assert!(
+            pairs.len() <= 6 * faces.len(),
+            "adjacency memory is O(F): {}",
+            pairs.len()
+        );
+        let l = layout(&positions, &faces, 0.05, 1024, 1 << 20).unwrap();
+        assert!(
+            started.elapsed().as_secs_f64() < 20.,
+            "{:?}",
+            started.elapsed()
+        );
+        assert_eq!(l.chart_of.len(), faces.len());
+        assert!(
+            l.charts.iter().all(|c| c.faces.len() == 1),
+            "no growth across the fan's edge"
+        );
     }
 }

@@ -478,7 +478,6 @@ fn attempt(
         interface: interface.to_vec(),
         geometric_error: 0.,
         lease: None,
-        measurement: None,
     };
     let mut out_locked = Vec::new();
     for t in &output {

@@ -618,11 +618,22 @@ pub(in crate::mesh_large) fn encode(
     mask: Option<MaskDelivery<'_>>,
     ladder: Ladder<'_>,
 ) -> Result<Delivery, JobError> {
-    encode_islands(dimensions, rgba, support, None, slot, profile, memory_limit, mask, ladder)
+    encode_islands(
+        dimensions,
+        rgba,
+        support,
+        None,
+        0,
+        slot,
+        profile,
+        memory_limit,
+        mask,
+        ladder,
+    )
 }
 
-/// [`encode`] for a packed island page: `labels` (one per texel, 0 outside every
-/// island allocation) keeps islands apart in every reduced level and gutter fill
+/// [`encode`] for a packed island page: a complete chain whose islands (`labels`, one
+/// per texel, 0 outside every allocation) stay isolated through level `isolated`
 /// ([`sparse_mips::build_islands`]); dimensions may be any multiple of four.
 #[allow(clippy::too_many_arguments)]
 pub(in crate::mesh_large) fn encode_islands(
@@ -630,6 +641,7 @@ pub(in crate::mesh_large) fn encode_islands(
     rgba: &[u8],
     support: &[u32],
     labels: Option<&[u32]>,
+    isolated: u32,
     slot: TextureSlot,
     profile: Profile,
     memory_limit: u64,
@@ -650,7 +662,11 @@ pub(in crate::mesh_large) fn encode_islands(
             "delivery RGBA/support shape",
         ));
     }
-    let label_bytes = if labels.is_some() { base.checked_mul(6).ok_or_else(resource)? } else { 0 };
+    let label_bytes = if labels.is_some() {
+        base.checked_mul(6).ok_or_else(resource)?
+    } else {
+        0
+    };
     let charge = workspace_charge(dimensions, profile)?
         .checked_add(label_bytes)
         .ok_or_else(resource)?;
@@ -676,7 +692,16 @@ pub(in crate::mesh_large) fn encode_islands(
         });
     }
     let chain = timing::time(Stage::SparseMips, || {
-        sparse_mips::build_islands(width, height, rgba, support, labels, class(slot), memory_limit)
+        sparse_mips::build_islands(
+            width,
+            height,
+            rgba,
+            support,
+            labels,
+            isolated,
+            class(slot),
+            memory_limit,
+        )
     })?;
     encode_authored(&chain, slot, profile, memory_limit, mask, ladder, |_| {
         Ok(Value::Null)
@@ -1073,16 +1098,19 @@ fn lossy_step(
             return Err(error(JobErrorKind::InvalidState, "decoded level shape"));
         }
         tamper(step, index, &mut decoded);
+        let texels = u64::from(level.width) * u64::from(level.height);
         match timing::time(Stage::FidelityCheck, || {
-            check_level(
-                &prepared.expected[index],
-                &decoded,
-                &level.support,
-                level.width,
-                slot,
-                profile,
-                index,
-            )
+            timing::level(timing::LEVEL_GATES, index, texels, || {
+                check_level(
+                    &prepared.expected[index],
+                    &decoded,
+                    &level.support,
+                    level.width,
+                    slot,
+                    profile,
+                    index,
+                )
+            })
         }) {
             Ok(receipt) => receipts.push(receipt),
             Err(e) => return missed(e, step, Some(index)).map(Err),

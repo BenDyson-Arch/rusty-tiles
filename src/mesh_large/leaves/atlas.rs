@@ -12,6 +12,7 @@ use super::{
     mask::SurfaceSample,
     mips::{self, Class},
     prepared::{PreparedAtlas, PreparedPage, PreparedPrimitive},
+    sparse_mips::LEAF_ISLAND_ISOLATED_LEVELS,
 };
 use crate::stage_timing::{self as timing, Counter, Stage};
 use crate::{
@@ -191,7 +192,12 @@ fn pack(
             None
         };
         buckets
-            .entry((role(b.slot), b.sampler.min_filter, b.sampler.mag_filter, mask))
+            .entry((
+                role(b.slot),
+                b.sampler.min_filter,
+                b.sampler.mag_filter,
+                mask,
+            ))
             .or_default()
             .push(i);
     }
@@ -276,21 +282,26 @@ fn pack(
 }
 
 /// Gutter and allocation alignment of island crops. Lossy pages align islands
-/// to the 4x4 codec block so no block mixes two islands. Mipmapped bindings
-/// (authored KTX2 chains, or PNG with viewer-generated mips) carry eight texels
-/// of real source context around every island, aligned to eight texels, so the
-/// first three levels of an island are phase-aligned with the source's and never
-/// read a neighbouring island; coarser levels are support-weighted page
-/// reductions, never a whole-source dependency (D6).
-/// ID pages (lossless PNG, NEAREST, no runtime mips) keep a two-texel
-/// no-feature gutter and align islands to eight texels, so the first three
-/// authored mode levels used by coarse proxies never merge two islands.
+/// to the 4x4 codec block so no block mixes two islands. Lossy mipmapped bindings
+/// (complete authored KTX2 chains) put every island's real-source interior on the
+/// `2^K` source grid with gutters of `2^K` ([`LEAF_ISLAND_ISOLATED_LEVELS`]): islands are
+/// isolated through level K and match the source's own reduction there; deeper levels
+/// are a page-wide box filter (bleed accepted, as standard; the HLOD parent replaces the
+/// leaf before deep levels dominate). PNG pages filtered with viewer-generated mips carry
+/// eight texels of real source context around every island, aligned to eight texels.
+/// ID pages (lossless PNG, NEAREST, no runtime mips) keep a two-texel no-feature gutter
+/// and align islands to eight texels, so the first three authored mode levels used by
+/// coarse proxies never merge two islands.
 fn crop_padding(class: Class, profile: Profile, sampler: SourceSampler) -> (u32, u32) {
     if class == Class::Id {
         return (2, 8);
     }
     match profile {
-        _ if matches!(sampler.min_filter, 9984..=9987) => (8, 8),
+        Profile::Lossless if matches!(sampler.min_filter, 9984..=9987) => (8, 8),
+        _ if matches!(sampler.min_filter, 9984..=9987) => {
+            let a = 1 << LEAF_ISLAND_ISOLATED_LEVELS;
+            (a, a)
+        }
         Profile::Lossless => (2, 1),
         _ => (2, 4),
     }
@@ -718,7 +729,8 @@ fn layout(
                 .collect();
             let (gutter, align) = crop_padding(class(b.slot), profile, sampler);
             // Mipmapped lossy bindings: interiors on the alignment grid (D6).
-            let mipmapped = profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
+            let mipmapped =
+                profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
             let block = crops::plan_islands_aligned(
                 &uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
             )?;
@@ -994,7 +1006,11 @@ fn encode_page(
         // Mipmapped lossy pages keep their islands apart in every reduced level.
         let mipmapped =
             profile != Profile::Lossless && matches!(page.sampler.min_filter, 9984..=9987);
-        let mut labels = if mipmapped { vec![0u32; pixels] } else { Vec::new() };
+        let mut labels = if mipmapped {
+            vec![0u32; pixels]
+        } else {
+            Vec::new()
+        };
         let mut next_label = 0u32;
         let mut surface = Vec::new();
         let mut mask_context = None;
@@ -1021,9 +1037,17 @@ fn encode_page(
                         let src = y as usize * row;
                         rgba[dst..dst + row].copy_from_slice(&copied[src..src + row]);
                     }
-                    for y in crop.gutter..crop.gutter + crop.interior_height {
-                        let first = ((oy + y) * page.width + ox + crop.gutter) as usize;
-                        support[first..first + crop.interior_width as usize].fill(1);
+                    // Mipmapped islands: the whole allocation is real source under the
+                    // sampler's wrap (copy_crop), so every level through K is the
+                    // area-weighted source average over its footprint, gutters included.
+                    let (from, rows, cols) = if mipmapped {
+                        (0, crop.height, crop.width)
+                    } else {
+                        (crop.gutter, crop.interior_height, crop.interior_width)
+                    };
+                    for y in from..from + rows {
+                        let first = ((oy + y) * page.width + ox + from) as usize;
+                        support[first..first + cols as usize].fill(1);
                     }
                     if mipmapped {
                         next_label += 1;
@@ -1072,6 +1096,11 @@ fn encode_page(
             &rgba,
             &support,
             mipmapped.then_some(labels.as_slice()),
+            if mipmapped {
+                LEAF_ISLAND_ISOLATED_LEVELS
+            } else {
+                0
+            },
             page.slot,
             profile,
             memory,

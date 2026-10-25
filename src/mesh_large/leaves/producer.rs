@@ -892,6 +892,8 @@ pub(crate) fn produce(
     phases.progress(Phase::LeafBuild, total_leaves, Some(total_leaves))?;
     phases.finished(Phase::LeafBuild, leaf_started.elapsed().as_secs_f64())?;
     if let Coarse::Hlod { plan, settings } = coarse {
+        // Opt-in stage timing: the leaf stage's share, before HLOD adds its own.
+        let leaf_timing = timing::snapshot();
         // HLOD needs no decoded image or leaf worker: record the cache and page-gate
         // observations, then release the decoded images and the pool before its own
         // admission takes effect (the gate and services own no memory).
@@ -925,6 +927,7 @@ pub(crate) fn produce(
             &path.join("resources.json"),
             &serde_json::to_vec_pretty(&resources).map_err(|e| invariant(&e.to_string()))?,
         )?;
+        timing::finish(json!({"lod":"hlod","leafStageTiming":leaf_timing}));
         return Ok(LeafStageOutput {
             report,
             diagnostics: LeafStageDiagnostics {
@@ -1246,7 +1249,7 @@ pub fn mesh_to_leaf_payloads(
     };
     let hlod_plan = match &config.memory_budget {
         Some(budget) if config.lod == super::super::hlod::TilerLod::Hlod => {
-            match super::super::hlod::plan(&captured, &config, budget, request.hlod.cap) {
+            match super::super::hlod::plan(&captured, &config, budget, &request.hlod) {
                 Ok(plan) => Some(plan),
                 Err(error) => {
                     let mut failed = attempt.fail(error);
@@ -1460,6 +1463,80 @@ mod tests {
                 );
             }
         }
+    }
+    /// Review round 2 (coordinator decision): a mipmapped source striped in 16-texel
+    /// bands, cropped from texel 16. The cropped island page keeps a COMPLETE authored
+    /// chain to 1x1 and its mipmapped sampler (so the consumer treats it as complete),
+    /// and level 0 is the source's own bands.
+    #[test]
+    fn cropped_mipmapped_leaf_pages_publish_complete_chains() {
+        let work = tempfile::tempdir().unwrap();
+        let source = work.path().join("source");
+        fs::create_dir_all(&source).unwrap();
+        let positions: [f32; 18] = [
+            0., 0., 0., 4., 0., 0., 0., 4., 0., 4., 0., 0., 4., 4., 0., 0., 4., 0.,
+        ];
+        let (lo, hi) = (16.5f32 / 128., 47.5 / 128.);
+        let uvs: [f32; 12] = [lo, lo, hi, lo, lo, hi, hi, lo, hi, hi, lo, hi];
+        let bytes: Vec<u8> = positions
+            .iter()
+            .chain(&uvs)
+            .flat_map(|v| v.to_le_bytes())
+            .collect();
+        fs::write(source.join("quad.bin"), &bytes).unwrap();
+        image::RgbaImage::from_fn(128, 128, |x, _| {
+            let v = if (x / 16) % 2 == 0 { 0 } else { 255 };
+            image::Rgba([v, v, v, 255])
+        })
+        .save(source.join("bands.png"))
+        .unwrap();
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"material":0}]}],
+            "buffers":[{"uri":"quad.bin","byteLength":bytes.len()}],
+            "bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":72},{"buffer":0,"byteOffset":72,"byteLength":48}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":6,"type":"VEC3","min":[0,0,0],"max":[4,4,0]},
+                         {"bufferView":1,"componentType":5126,"count":6,"type":"VEC2"}],
+            "images":[{"uri":"bands.png"}],"textures":[{"source":0,"sampler":0}],
+            "samplers":[{"minFilter":9987,"magFilter":9729}],
+            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
+        let input = source.join("quad.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let output = work.path().join("out");
+        mesh_to_leaf_payloads(
+            LeafOutputRequest::new(&input, &output, LeafProfile::Quality)
+                .with_jobs(NonZeroUsize::new(1).unwrap()),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let leaf = fs::read(output.join("leaves/000000000000.glb")).unwrap();
+        let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
+        let document: serde_json::Value = serde_json::from_slice(&leaf[20..20 + json_len]).unwrap();
+        assert_eq!(document["samplers"][0]["minFilter"], 9987);
+        let bin = &leaf[20 + json_len + 8..];
+        let view = &document["bufferViews"]
+            [document["images"][0]["bufferView"].as_u64().unwrap() as usize];
+        let start = view["byteOffset"].as_u64().unwrap_or(0) as usize;
+        let ktx2 = &bin[start..start + view["byteLength"].as_u64().unwrap() as usize];
+        let field = |o: usize| u32::from_le_bytes(ktx2[o..o + 4].try_into().unwrap());
+        let (w, h) = (field(20), field(24));
+        assert_eq!(
+            field(40),
+            32 - w.max(h).leading_zeros(),
+            "KTX2 levelCount: complete to 1x1"
+        );
+        let decoder = basisu::Transcoder::new(ktx2).unwrap();
+        let level = decoder
+            .transcode(0, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE)
+            .unwrap();
+        let blended = level
+            .chunks(4)
+            .filter(|p| (48..208).contains(&p[0]))
+            .count();
+        assert!(
+            blended * 50 < level.len() / 4,
+            "{blended} blended texels of {}",
+            level.len() / 4
+        );
     }
     #[test]
     fn synthetic_depth_payloads_are_identical_across_jobs_and_paths() {
@@ -1847,11 +1924,11 @@ mod tests {
         }
     }
 
-    /// Several dedicated mip-sampled pages that miss ETC1S colour floors at
-    /// the profile setting (formerly UASTC codec floors): reasons and published bytes
-    /// are the same for one worker and for many (#234).
+    /// Several cropped mip-sampled noise pages (one per distinct sampler) that miss a
+    /// decoded floor at the profile setting: the escalation reasons, diagnostics and
+    /// published bytes are the same for one worker and for many (#234).
     #[test]
-    fn colour_gate_escalation_reasons_are_identical_across_jobs() {
+    fn escalation_reasons_are_identical_across_jobs() {
         const QUADS: usize = 8;
         let work = tempfile::tempdir().unwrap();
         let source = work.path().join("source");
@@ -1943,7 +2020,7 @@ mod tests {
                 + report.escalated_pages.uastc_level3
                 + report.lossless_fallback_pages;
             println!("jobs {jobs}: {:?} total {total}", report.escalation_reasons);
-            assert!(report.escalation_reasons.gate > 0, "{report:?}");
+            assert!(total > 1, "{report:?}");
             assert_eq!(
                 report.escalation_reasons.gate + report.escalation_reasons.codec_verify,
                 total
@@ -2035,7 +2112,7 @@ mod tests {
             "codec-verify escalation {:?} {:?} png {}",
             report.escalation_reasons, report.escalated_pages, report.lossless_fallback_pages
         );
-        assert!(report.escalation_reasons.gate > 0, "{report:?}");
+        assert!(total > 0, "{report:?}");
         assert_eq!(
             report.escalation_reasons.gate + report.escalation_reasons.codec_verify,
             total

@@ -13,7 +13,7 @@ use crate::{
     glb::{self, MeshoptLayout, MeshoptStream},
     mesh_large::{
         batching::material_key,
-        leaves::geometry::{CoarsePositions, LatticePlan, PositionStorage},
+        leaves::geometry::{CoarsePositions, PositionStorage},
         records::Bounds,
     },
     JobError, JobErrorKind,
@@ -162,26 +162,27 @@ fn table(wire: &mut Wire, rows: &[SourcePrimitive]) -> (Value, Value) {
     )
 }
 
-/// The tile's published positions at its tile depth (its `locked` vertices on the outer
-/// interface keep their leaf-canonical decode), with the test mutation applied.
-pub(crate) fn positions(
+fn unorm16(v: f32) -> [u8; 2] {
+    ((v.clamp(0., 1.) * 65535.).round() as u16).to_le_bytes()
+}
+fn snorm8(v: f32) -> u8 {
+    ((v.clamp(-1., 1.) * 127.).round() as i8) as u8
+}
+
+/// Encode `tile` (its `locked` vertices on the outer interface) at its tile depth, at
+/// `positions` with `appearance`.
+pub(crate) fn encode(
     tile: &TileGeometry,
     locked: &[bool],
-    lattice: &LatticePlan,
+    mut positions: CoarsePositions,
+    appearance: &Appearance,
     mutation: Mutation,
-) -> Result<CoarsePositions, JobError> {
+) -> Result<Encoded, JobError> {
     let rows = tile.primitives.len();
     let limit = crate::mesh_large::config::CONSUMER_TABLE_ROWS as usize;
     if rows == 0 || rows > limit || tile.triangles.is_empty() || tile.triangles.len() > limit {
         return Err(invalid("coarse tile rows or triangles outside 1..=8192"));
     }
-    // Outer-interface vertices and every vertex on the tile's open border keep their
-    // leaf-canonical decode: snapping a border vertex to the coarser tile lattice would
-    // open a gap against a neighbour (e.g. a T-junction subdivision of its edge).
-    let border = open_border(&tile.triangles, tile.positions.len());
-    let fixed: Vec<bool> = locked.iter().zip(&border).map(|(l, b)| *l || *b).collect();
-    let mut positions =
-        lattice.encode_coarse(&tile.positions, &tile.ells, &fixed, tile.key.depth)?;
     if mutation == Mutation::MoveVertexUnchecked {
         if let Some(v) = locked.iter().position(|l| *l) {
             match &mut positions.storage {
@@ -194,24 +195,6 @@ pub(crate) fn positions(
             }
         }
     }
-    Ok(positions)
-}
-
-fn unorm16(v: f32) -> [u8; 2] {
-    ((v.clamp(0., 1.) * 65535.).round() as u16).to_le_bytes()
-}
-fn snorm8(v: f32) -> u8 {
-    ((v.clamp(-1., 1.) * 127.).round() as i8) as u8
-}
-
-/// Write the GLB of `tile` at `positions` with `appearance`.
-pub(crate) fn encode(
-    tile: &TileGeometry,
-    positions: CoarsePositions,
-    appearance: &Appearance,
-    mutation: Mutation,
-) -> Result<Encoded, JobError> {
-    let rows = tile.primitives.len();
     let mut wire = Wire {
         binary: Vec::new(),
         views: Vec::new(),
@@ -252,7 +235,13 @@ pub(crate) fn encode(
             .groups
             .iter()
             .enumerate()
-            .flat_map(|(g, group)| group.faces.iter().enumerate().map(move |(gf, &f)| (f, g, gf)))
+            .flat_map(|(g, group)| {
+                group
+                    .faces
+                    .iter()
+                    .enumerate()
+                    .map(move |(gf, &f)| (f, g, gf))
+            })
             .collect();
         faces.sort_unstable();
         face_order.extend(faces.iter().map(|f| f.0));
@@ -262,7 +251,8 @@ pub(crate) fn encode(
             let base = textures.len();
             for page in &lead.pages {
                 let image = images.len();
-                images.push(json!({"bufferView":wire.view(&page.bytes, None),"mimeType":page.mime}));
+                images
+                    .push(json!({"bufferView":wire.view(&page.bytes, None),"mimeType":page.mime}));
                 if page.mime == "image/ktx2" {
                     basis = true;
                     textures.push(json!({"sampler":u32::from(!page.mipmapped),"extensions":{"KHR_texture_basisu":{"source":image}}}));
@@ -357,7 +347,10 @@ pub(crate) fn encode(
         if lead.colors.is_some() {
             let mut bytes = Vec::with_capacity(count * 8);
             for &(_, g, gf) in &faces {
-                let colors = groups[g].colors.as_ref().ok_or_else(|| invalid("mixed colour group"))?;
+                let colors = groups[g]
+                    .colors
+                    .as_ref()
+                    .ok_or_else(|| invalid("mixed colour group"))?;
                 for c in colors[gf] {
                     for v in c {
                         bytes.extend(unorm16(v));
@@ -411,6 +404,7 @@ pub(crate) fn encode(
     let mut document = json!({"asset":{"version":"2.0","generator":"rusty-tiles HLOD"},"scene":0,
         "scenes":[{"nodes":(0..nodes.len()).collect::<Vec<_>>()}],"nodes":nodes,"meshes":meshes,
         "materials":materials_json,"images":images,"textures":textures,
+        // Complete KTX2 chains are mip-sampled; a PNG fallback page is level 0 only.
         "samplers":[{"magFilter":9729,"minFilter":9987,"wrapS":33071,"wrapT":33071},
             {"magFilter":9729,"minFilter":9729,"wrapS":33071,"wrapT":33071}],
         "buffers":[{"byteLength":binary.len()}],"bufferViews":views,

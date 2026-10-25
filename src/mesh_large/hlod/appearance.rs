@@ -16,6 +16,13 @@
 //! flat shaded, and the coarse tiles must match). Pages are handed to the shared leaf
 //! delivery encoder ([`deliver`], S4 owns codec and mip delivery); [`CoarsePage`] is the
 //! pre-encode page. Geometry, triangle order and representative IDs are never changed.
+//!
+//! S3 holds no walk scratch (`scratch::ScratchLedger`): charts, page rasters, bake chunks,
+//! donor frontiers, mip chains and codec workspace are memory, charged in the parent job's
+//! admission (`HlodMemoryPlan::texture_workspace_bytes`, `page_bytes`, `tile_page_bytes`,
+//! `bake::RESOLVE_BYTES`, `bake::LOCAL_BYTES`), and decoded source chains live in the
+//! bounded [`ImageCache`] (`image_cache_bytes`). Its source reads go through S2's admitted
+//! index. The walk's stage-wide scratch check refuses any byte S3 might write unadmitted.
 use super::{
     bake::{self, Hit, ImageCache, Queries},
     charts,
@@ -102,8 +109,8 @@ pub(crate) struct DeliveredPage {
     pub bytes: Vec<u8>,
     pub mime: &'static str,
     pub escalated: bool,
-    /// A KTX2 chain whose every level passed its gates (mipmapped sampler); otherwise
-    /// the ladder's exact level-0 PNG, sampled without mips.
+    /// The complete KTX2 chain (mipmapped sampler); otherwise the exact level-0 PNG,
+    /// sampled without mips.
     pub mipmapped: bool,
 }
 
@@ -147,8 +154,16 @@ pub(crate) struct TileAppearance {
     /// The source's own texel spacing, not `G/16`, set some page's density.
     pub source_limited: bool,
     pub escalated_pages: u32,
-    /// Pages delivered as exact level-0 PNG without mips (no codec step met every gate).
-    pub unmipped_pages: u32,
+    /// Pages delivered as the exact level-0 PNG (no codec step met its gates).
+    pub png_pages: u32,
+    /// Least mip levels through which a page of the tile keeps its charts isolated.
+    pub isolated_levels: u32,
+    /// Donor searches that ran out of budget (best candidate so far used).
+    pub donor_budget_exhausted: u64,
+    /// Donor searches that began from their greedy seed (no candidate yet).
+    pub donor_seeded: u64,
+    /// Most steps one donor search of the tile took.
+    pub donor_search_steps_max: u64,
 }
 
 /// Thread CPU seconds of one tile's appearance work (wall seconds where the platform
@@ -174,8 +189,12 @@ pub(crate) struct Appearance {
 
 fn clock() -> f64 {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-    super::error::thread_cpu()
-        .unwrap_or_else(|| START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64())
+    super::error::thread_cpu().unwrap_or_else(|| {
+        START
+            .get_or_init(std::time::Instant::now)
+            .elapsed()
+            .as_secs_f64()
+    })
 }
 
 /// The tile as S1 publishes it.
@@ -301,8 +320,8 @@ pub(crate) fn build(
             .get(*c as usize)
             .is_some_and(|m| m.has_normal_texture())
     });
-    let normals = (services.normals || any_normal_map)
-        .then(|| smooth_normals(tile.decoded, tile.triangles));
+    let normals =
+        (services.normals || any_normal_map).then(|| smooth_normals(tile.decoded, tile.triangles));
     let started = clock();
     let mut searcher = bake::Searcher::new(query)?;
     timing.surface = clock() - started;
@@ -367,7 +386,11 @@ pub(crate) fn build(
                 normals.as_deref(),
                 (&mut timing, &mut facts),
             )?;
-            page_bytes += group.pages.iter().map(|p| p.bytes.len() as u64).sum::<u64>();
+            page_bytes += group
+                .pages
+                .iter()
+                .map(|p| p.bytes.len() as u64)
+                .sum::<u64>();
             if page_bytes > services.tile_page_bytes {
                 return Err(JobError::new(
                     JobErrorKind::InvalidState,
@@ -387,6 +410,9 @@ pub(crate) fn build(
         }
         groups.push(group);
     }
+    facts.donor_budget_exhausted = searcher.exhausted;
+    facts.donor_seeded = searcher.seeded;
+    facts.donor_search_steps_max = searcher.max_steps;
     Ok(Appearance {
         groups,
         normals,
@@ -471,7 +497,15 @@ fn textured(
         texels,
         tangents,
     };
-    let pages = bake_pages(services, searcher, &p, group.class, normals, tile, (timing, facts))?;
+    let pages = bake_pages(
+        services,
+        searcher,
+        &p,
+        group.class,
+        normals,
+        tile,
+        (timing, facts),
+    )?;
     let started = clock();
     let mask = captured
         .materials
@@ -495,11 +529,16 @@ fn textured(
         let d = deliver(
             (services.profile, services.page_memory, services.check),
             page,
-            &labels,
+            (&labels, p.layout.isolated),
             mask,
         )?;
         facts.escalated_pages += u32::from(d.escalated);
-        facts.unmipped_pages += u32::from(!d.mipmapped);
+        facts.isolated_levels = if facts.textured_groups == 0 {
+            p.layout.isolated
+        } else {
+            facts.isolated_levels.min(p.layout.isolated)
+        };
+        facts.png_pages += u32::from(d.mime == "image/png");
         delivered.push(d);
     }
     timing.encode += clock() - started;
@@ -520,8 +559,12 @@ fn textured(
         .materials
         .get(group.class as usize)
         .ok_or_else(|| state("coarse class material"))?;
-    let patches: Vec<(TextureSlot, usize, usize)> =
-        p.slots.iter().enumerate().map(|(i, s)| (*s, i, 0)).collect();
+    let patches: Vec<(TextureSlot, usize, usize)> = p
+        .slots
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (*s, i, 0))
+        .collect();
     let mut value = material.remap_slots(&patches)?;
     if let Some(object) = value.as_object_mut() {
         object.remove("name");
@@ -576,7 +619,10 @@ fn mask_samples(
         let (mut sum, mut weight) = (0., 0.);
         for (dx, wx) in [(0., 1. - tx), (1., tx)] {
             for (dy, wy) in [(0., 1. - ty), (1., ty)] {
-                let (cx, cy) = ((x0 + dx).clamp(0., f64::from(w - 1)), (y0 + dy).clamp(0., f64::from(h - 1)));
+                let (cx, cy) = (
+                    (x0 + dx).clamp(0., f64::from(w - 1)),
+                    (y0 + dy).clamp(0., f64::from(h - 1)),
+                );
                 let i = cy as usize * w as usize + cx as usize;
                 if page.support[i] > 0 && wx * wy > 0. {
                     sum += wx * wy * f64::from(page.rgba[i * 4 + 3]) / 255.;
@@ -620,7 +666,11 @@ fn vertex_colours(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
     facts: &mut TileAppearance,
 ) -> Result<(), JobError> {
-    let mut vertices: Vec<u32> = group.faces.iter().flat_map(|&f| tile.triangles[f]).collect();
+    let mut vertices: Vec<u32> = group
+        .faces
+        .iter()
+        .flat_map(|&f| tile.triangles[f])
+        .collect();
     vertices.sort_unstable();
     vertices.dedup();
     let points = vertices.iter().map(|&v| tile.decoded[v as usize]).collect();
@@ -630,8 +680,11 @@ fn vertex_colours(
     facts.donor_reads += reads;
     let [q] = q;
     if q.hits.iter().any(|h| h.flags & COLOR != 0) {
-        let colors: HashMap<u32, [f32; 4]> =
-            vertices.iter().zip(&q.hits).map(|(v, h)| (*v, h.color)).collect();
+        let colors: HashMap<u32, [f32; 4]> = vertices
+            .iter()
+            .zip(&q.hits)
+            .map(|(v, h)| (*v, h.color))
+            .collect();
         facts.vertex_color_groups += 1;
         group.colors = Some(
             group
@@ -674,7 +727,9 @@ fn source_spacing(
         let mut area = Vec::with_capacity(DENSITY_FACES);
         for &f in faces.iter().step_by(stride) {
             let p = tile.triangles[f].map(|v| tile.decoded[v as usize].map(f64::from));
-            points.push(std::array::from_fn(|a| ((p[0][a] + p[1][a] + p[2][a]) / 3.) as f32));
+            points.push(std::array::from_fn(|a| {
+                ((p[0][a] + p[1][a] + p[2][a]) / 3.) as f32
+            }));
             let e1: [f64; 3] = std::array::from_fn(|a| p[1][a] - p[0][a]);
             let e2: [f64; 3] = std::array::from_fn(|a| p[2][a] - p[0][a]);
             area.push(0.5 * dot3(cross3(e1, e2), cross3(e1, e2)).sqrt());
@@ -702,7 +757,10 @@ fn source_spacing(
             let mut density = 0f64;
             for &slot in &slots {
                 if let Some((image, _, set)) = bake::binding(captured, hit.material, slot)? {
-                    let info = captured.image_info.get(image).ok_or_else(|| state("image info"))?;
+                    let info = captured
+                        .image_info
+                        .get(image)
+                        .ok_or_else(|| state("image info"))?;
                     let per_metre = f64::from(hit.gradient[set])
                         * (f64::from(info.width) * f64::from(info.height)).sqrt();
                     density = density.max(per_metre * per_metre);
@@ -731,11 +789,20 @@ pub(crate) fn flat(captured: &FullCaptured, class: u32) -> Value {
     }
 }
 
-type Binding = Option<(usize, crate::mesh_large::leaves::crops::SourceSampler, usize)>;
+type Binding = Option<(
+    usize,
+    crate::mesh_large::leaves::crops::SourceSampler,
+    usize,
+)>;
 
 /// Bake every slot page of one textured group: per chunk of covered texels, resolve the
 /// texel points against the source (bounded state), then sample each slot's source images
 /// grouped by image at the texel's source level of detail.
+///
+/// Decode bound: each chunk requests each of its distinct images once per slot, and chunks
+/// restart per group, so a tile decodes at most `Σ_g S_g · ⌈T_g / 65536⌉ · I_g` images
+/// (group `g`: `S_g` slots, `T_g` covered texels, `I_g` distinct images); the LRU cache
+/// serves repeats when they fit.
 fn bake_pages(
     services: &Services<'_>,
     searcher: &mut bake::Searcher<'_, '_>,
@@ -807,7 +874,10 @@ fn bake_pages(
                     end += 1;
                 }
                 let size = {
-                    let info = captured.image_info.get(image).ok_or_else(|| state("image info"))?;
+                    let info = captured
+                        .image_info
+                        .get(image)
+                        .ok_or_else(|| state("image info"))?;
                     (f64::from(info.width) * f64::from(info.height)).sqrt()
                 };
                 // Source level of detail per texel: its footprint in source texels.
@@ -822,7 +892,12 @@ fn bake_pages(
                         0.
                     }
                 }));
-                let need = lods.iter().copied().fold(f64::INFINITY, f64::min).floor().max(0.) as u32;
+                let need = lods
+                    .iter()
+                    .copied()
+                    .fold(f64::INFINITY, f64::min)
+                    .floor()
+                    .max(0.) as u32;
                 let chain = services
                     .cache
                     .get(captured, image, source_class(slot), need, check)?;
@@ -834,8 +909,14 @@ fn bake_pages(
                     let frame = (slot == TextureSlot::Normal).then(|| {
                         let (_, gf, w) = chunk[i];
                         let face = tile.triangles[p.layout_face(gf)];
-                        let n = normals.map(|n| face.map(|v| n[v as usize])).unwrap_or([[0., 1., 0.]; 3]);
-                        let t = p.tangents.as_ref().map(|t| t[gf as usize]).unwrap_or([[1., 0., 0., 1.]; 3]);
+                        let n = normals
+                            .map(|n| face.map(|v| n[v as usize]))
+                            .unwrap_or([[0., 1., 0.]; 3]);
+                        let t = p
+                            .tangents
+                            .as_ref()
+                            .map(|t| t[gf as usize])
+                            .unwrap_or([[1., 0., 0., 1.]; 3]);
                         let lerp = |c: [[f32; 3]; 3]| -> [f64; 3] {
                             std::array::from_fn(|a| {
                                 (0..3).map(|k| f64::from(c[k][a]) * f64::from(w[k])).sum()
@@ -855,8 +936,7 @@ fn bake_pages(
         }
         timing.sample += clock() - started;
     }
-    Ok(p
-        .slots
+    Ok(p.slots
         .iter()
         .zip(pages)
         .map(|(&slot, rgba)| CoarsePage {
@@ -888,7 +968,14 @@ type NormalFrame = ([f64; 3], [f64; 3], bake::Frame, f64);
 
 /// Write one baked texel. Colour slots receive linear values and are sRGB-encoded here;
 /// base colour carries the source COLOR_0 (linear) multiplied in.
-fn write(rgba: &mut [u8], texel: u32, slot: TextureSlot, v: [f64; 4], hit: &Hit, frame: Option<NormalFrame>) {
+fn write(
+    rgba: &mut [u8],
+    texel: u32,
+    slot: TextureSlot,
+    v: [f64; 4],
+    hit: &Hit,
+    frame: Option<NormalFrame>,
+) {
     let q = |x: f64| (x.clamp(0., 1.) * 255.).round() as u8;
     let i = texel as usize * 4;
     let out: [u8; 4] = match slot {
@@ -925,7 +1012,12 @@ fn write(rgba: &mut [u8], texel: u32, slot: TextureSlot, v: [f64; 4], hit: &Hit,
                 normalize([dot3(w, t_c), dot3(w, b_c), dot3(w, n_c)])
             })();
             match world {
-                Some(n) => [q((n[0] + 1.) * 0.5), q((n[1] + 1.) * 0.5), q((n[2] + 1.) * 0.5), 255],
+                Some(n) => [
+                    q((n[0] + 1.) * 0.5),
+                    q((n[1] + 1.) * 0.5),
+                    q((n[2] + 1.) * 0.5),
+                    255,
+                ],
                 None => flat,
             }
         }
@@ -935,26 +1027,28 @@ fn write(rgba: &mut [u8], texel: u32, slot: TextureSlot, v: [f64; 4], hit: &Hit,
 }
 
 /// Encode one pre-encode page through the shared leaf delivery path (the profile's
-/// codec, sparse colour-correct mips kept apart per chart (`labels`) with gutters filled
-/// per level, MASK coverage for MASK base colour, decoded gates).
+/// codec, a complete colour-correct chain with charts isolated through the layout's
+/// levels (`labels`), MASK coverage for MASK base colour, decoded gates).
 pub(crate) fn deliver(
     (profile, page_memory, check): (Profile, u64, &dyn Fn() -> Result<(), JobError>),
     page: &CoarsePage,
-    labels: &[u32],
+    (labels, isolated): (&[u32], u32),
     mask: Option<delivery::MaskDelivery<'_>>,
 ) -> Result<DeliveredPage, JobError> {
     let delivered = delivery::encode_islands(
         page.size,
         &page.rgba,
         &page.support,
+        // A complete chain: charts isolated through `isolated` (their layout's 2^K grid
+        // and gutters), a page-wide box filter below (bleed accepted, as standard).
         Some(labels),
+        isolated,
         page.slot,
         profile,
         page_memory,
         mask,
-        // A chain that misses its gates on every codec step (small levels of a page
-        // mixing charts inside codec blocks) is delivered as the exact level-0 PNG and
-        // sampled without mips, rather than refusing the run or loosening a gate.
+        // A chain that misses its gates on every codec step is delivered as the exact
+        // level-0 PNG and sampled without mips, rather than refusing the run.
         delivery::Ladder {
             level0_sampled: true,
             check,
@@ -986,18 +1080,27 @@ pub(crate) fn page_charge(size: [u32; 2], slots: u64, profile: Profile) -> Resul
 mod tests {
     use super::*;
 
-    /// Review probe: a MASK base-colour coarse page (cutoff 0.75) whose level-1 alphas
-    /// box-filter to 64 and 191. Unadjusted, 191 < 191.25 drops every texel of level 1
-    /// (coverage 25% -> 0%); the shared coverage-preserving delivery scales alpha so
-    /// level 1 keeps passing texels.
+    /// Review probe (round 1): a MASK base-colour coarse page (cutoff 0.75) whose texels
+    /// alternate around the cutoff. The shared coverage-preserving delivery keeps every
+    /// sample's classification on the published (level-0) page.
     #[test]
-    fn coarse_mask_pages_keep_coverage_through_their_mips() {
+    fn coarse_mask_pages_keep_coverage() {
         let (w, h) = (8u32, 8u32);
         let mut rgba = vec![0u8; (w * h * 4) as usize];
         for y in 0..h {
             for x in 0..w {
                 let i = ((y * w + x) * 4) as usize;
-                let a = if x < 4 { if y % 2 == 0 { 0 } else { 128 } } else if y % 2 == 0 { 255 } else { 127 };
+                let a = if x < 4 {
+                    if y % 2 == 0 {
+                        0
+                    } else {
+                        128
+                    }
+                } else if y % 2 == 0 {
+                    255
+                } else {
+                    127
+                };
                 rgba[i..i + 4].copy_from_slice(&[180, 120, 60, a]);
             }
         }
@@ -1013,30 +1116,112 @@ mod tests {
             .map(|i| {
                 let (x, y) = (i % w, i / w);
                 delivery_mask::SurfaceSample {
-                    uv: [(f64::from(x) + 0.5) / f64::from(w), (f64::from(y) + 0.5) / f64::from(h)],
+                    uv: [
+                        (f64::from(x) + 0.5) / f64::from(w),
+                        (f64::from(y) + 0.5) / f64::from(h),
+                    ],
                     alpha: 1.,
                     weight: 1.,
-                    source_pass: f64::from(page.rgba[(i * 4 + 3) as usize]) / 255. * factor >= cutoff,
+                    source_pass: f64::from(page.rgba[(i * 4 + 3) as usize]) / 255. * factor
+                        >= cutoff,
                 }
             })
             .collect();
         let check = || Ok(());
-        let level1_passing = |mask: Option<delivery::MaskDelivery<'_>>| {
-            let d = deliver((Profile::Balanced, 1 << 28, &check), &page, &labels, mask).unwrap();
-            let decoder = basisu::Transcoder::new(&d.bytes).unwrap();
-            let level = decoder
-                .transcode(1, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE)
-                .unwrap();
-            level.chunks(4).filter(|p| f64::from(p[3]) / 255. * factor >= cutoff).count()
-        };
-        assert_eq!(level1_passing(None), 0, "control: the unadjusted level 1 loses MASK coverage");
-        let kept = level1_passing(Some(delivery::MaskDelivery {
+        let mask = delivery::MaskDelivery {
             samples: &samples,
             factor,
             cutoff,
             linear: true,
             min_linear: true,
-        }));
-        assert!(kept > 0, "coverage-preserving delivery keeps level-1 MASK texels");
+        };
+        let d = deliver(
+            (Profile::Balanced, 1 << 28, &check),
+            &page,
+            (&labels, 3),
+            Some(mask),
+        )
+        .unwrap();
+        let decoder = basisu::Transcoder::new(&d.bytes).unwrap();
+        let level = decoder
+            .transcode(0, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE)
+            .unwrap();
+        for (i, s) in samples.iter().enumerate() {
+            assert_eq!(
+                f64::from(level[i * 4 + 3]) / 255. * factor >= cutoff,
+                s.source_pass,
+                "texel {i}"
+            );
+        }
+    }
+
+    /// Review probe (round 2, item 2): two constant islands, black and white, each on a
+    /// 32-texel aligned rectangle with 8-texel (2^K) gutters. The chain is complete to
+    /// 1x1; levels 0..=K keep each island its own value; the 1x1 level is the page-wide
+    /// box filter, so the islands blend to grey (never one island's value).
+    #[test]
+    fn islands_isolated_through_k_and_box_filtered_below() {
+        let k = crate::mesh_large::leaves::sparse_mips::LEAF_ISLAND_ISOLATED_LEVELS;
+        let (w, h) = (64u32, 32u32);
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        let mut support = vec![0u32; (w * h) as usize];
+        let mut labels = vec![0u32; (w * h) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let i = (y * w + x) as usize;
+                let island = if x < 32 { 1 } else { 2 };
+                labels[i] = island;
+                if (8..24).contains(&(x % 32)) && (8..24).contains(&y) {
+                    support[i] = 1;
+                    let v = if island == 1 { 0 } else { 255 };
+                    rgba[i * 4..i * 4 + 4].copy_from_slice(&[v, v, v, 255]);
+                }
+            }
+        }
+        let page = CoarsePage {
+            slot: TextureSlot::BaseColor,
+            size: [w, h],
+            rgba,
+            support,
+        };
+        let check = || Ok(());
+        let d = deliver(
+            (Profile::Quality, 1 << 28, &check),
+            &page,
+            (&labels, k),
+            None,
+        )
+        .unwrap();
+        assert!(d.mipmapped);
+        let decoder = basisu::Transcoder::new(&d.bytes).unwrap();
+        assert_eq!(decoder.level_count(), 7, "complete chain 64x32 .. 1x1");
+        for level in 0..=k {
+            let (lw, lh) = (w >> level, h >> level);
+            let texels = decoder
+                .transcode(
+                    level,
+                    basisu::TargetFormat::Rgba32,
+                    basisu::DecodeFlags::NONE,
+                )
+                .unwrap();
+            for y in 0..lh {
+                for x in 0..lw {
+                    let v = texels[((y * lw + x) * 4) as usize];
+                    if x < lw / 2 {
+                        assert!(v < 24, "level {level} black island ({x},{y}) = {v}");
+                    } else {
+                        assert!(v > 231, "level {level} white island ({x},{y}) = {v}");
+                    }
+                }
+            }
+        }
+        let last = decoder
+            .transcode(6, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE)
+            .unwrap();
+        assert!(
+            (40..216).contains(&last[0]),
+            "1x1 is the page-wide blend, got {}",
+            last[0]
+        );
     }
 }

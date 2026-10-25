@@ -741,8 +741,12 @@ fn verify_levels(
                 ))));
             }
         }
-        let decoded = decode_level_rgba(ktx2, level, w, h)?;
-        {
+        let texels = u64::from(w) * u64::from(h);
+        let decoded =
+            crate::stage_timing::level(crate::stage_timing::LEVEL_DECODE, index, texels, || {
+                decode_level_rgba(ktx2, level, w, h)
+            })?;
+        crate::stage_timing::level(crate::stage_timing::LEVEL_FLOORS, index, texels, || {
             let input = mips[index].rgba;
             let level_sse = sse(input, &decoded);
             let level_block_mean = if level == 0 {
@@ -792,7 +796,8 @@ fn verify_levels(
                     ),
                 ));
             }
-        }
+            Ok(())
+        })?;
         if keep {
             kept.push(decoded);
         }

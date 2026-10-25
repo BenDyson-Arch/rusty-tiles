@@ -575,9 +575,6 @@ impl<'s, S: Sink> Builder<'s, S> {
         let (tile, extent) = tile_box(extent)?;
         let height = 1 + frame.children.iter().map(|c| c.height).max().unwrap();
         let diagonal = tile.diagonal();
-        // A content-bearing HLOD tile publishes S2's G verbatim. This node (and
-        // the external-link clone below) is also the single source of the implicit
-        // metadata error. The diagonal policy applies only to empty traversal nodes.
         let error = match (&proxy, chain_error) {
             (Some(row), _) => row.geometric_error,
             (None, Some(error)) if error >= children_error => error,
@@ -901,7 +898,8 @@ mod omission_tests {
             depth: 0,
             geometric_error: 1e9,
             primitives: 1,
-            sample_count: None,
+            sampling: None,
+            encoded_depth: 0,
         };
         let (shape, _) = plan(2, vec![root]);
         let err = shape.unwrap_err();
@@ -923,7 +921,8 @@ mod omission_tests {
             depth: 0,
             geometric_error: 1e9,
             primitives: 1,
-            sample_count: None,
+            sampling: None,
+            encoded_depth: 0,
         };
         let tight = Limits {
             objects: 4,

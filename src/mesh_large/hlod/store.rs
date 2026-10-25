@@ -70,14 +70,6 @@ pub(crate) struct TileGeometry {
     pub geometric_error: f64,
     /// Admission of this resident record against the stage ledger.
     pub lease: Option<Lease>,
-    pub measurement: Option<CachedMeasurement>,
-}
-
-/// Fixed-size held evidence for exact publication/source-range reuse.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct CachedMeasurement {
-    pub sha256: [u8; 32],
-    pub summary: super::error::Summary,
 }
 
 /// Proven resident bound per triangle of a held tile (capacities equal lengths after
@@ -202,6 +194,8 @@ pub(crate) struct HlodRow {
     pub geometric_error: f64,
     pub error_policy: &'static str,
     pub measurement: super::error::Summary,
+    /// The tile's budgeted nearest searches (`error::NEAREST_STEPS`), exhaustions included.
+    pub nearest_search: super::error::SearchStats,
     #[serde(skip)]
     pub error_cpu_seconds: f64,
     #[serde(skip)]

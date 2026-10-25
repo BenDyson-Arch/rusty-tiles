@@ -396,6 +396,77 @@ acceptance numbers.
 **Rationale:** a bounded metadata-only trial can improve client streaming cheaply,
 while keeping the measured geometry/appearance baseline reviewable. **Evidence:** E2, E5, E7.
 
+### D11 — scalable borders (owner decision, 2026-10-24)
+
+Adopt **corrected A** from `E/astra-hlod-scalable-borders-20261024/DESIGN.md`.
+This governs S1b and supersedes conflicting D1–D3, D10 and numeric/slice seam
+requirements below. Retain the exact-incidence and representative-identity
+semantics of the unmerged [D1–D4 amendment, PR #275](https://github.com/BenDyson-Arch/rusty-tiles/pull/275)
+(`feat/hlod-s1-geometry`, `055be853`); its AboveCap policy is rejected here.
+
+**Problem:** leaf-resolution borders exceed the cap even on regular sheets.
+Sol's `E/hlod-s1-review7-20261024/REVIEW.txt` estimates a 500M-triangle sheet's
+interior depth-2 tile at 31.25M triangles and about 15,811 border edges/faces,
+nearly twice the cap. This is arithmetic, not a bake. AboveCap compounds:
+duplicated-soup probes grew 16,384 → 32,768 → 65,536 faces without border locks;
+source-sized ancestors defeat bounded jobs and client payloads.
+
+**Owner-approved policy:**
+
+1. **Corrected A.** Shared level-wise border chains from one disk-backed interface graph: exact source incidence, all owners, stable chain IDs and source-subarc correspondence. Each chain is certified against the common leaf-decoded source arc:
+   - `sup|Q_d − C| ≤ ε_d ≤ E_d/16` per side, with a predetermined nonincreasing scale ladder E_d;
+   - `G ≥ max(E_d, sampled error, child G)`;
+   - same-depth shared gaps are 0, and mixed-depth gaps are ≤ GE/8 for every depth difference k ≥ 1;
+   - the terminal-leaf exception keeps exact arcs wherever a terminal leaf can abut a proxy;
+   - source defects (unwelded seams, T-junctions) stay reported, outside the guarantee.
+2. **Topology simplification at coarse levels is ALLOWED within the measured error:**
+   - drop interior components smaller than the tile's G;
+   - close small holes;
+   - never remove anything touching a border chain;
+   - S2's measured two-sided error must reflect the loss.
+3. **The omit-proxy safety net,** where capped descendants become the frontier and no content-less cells sit between content levels, is the last resort only. It's used only when cap fit is still impossible, never refuses, and every use is reported in the receipt and summary.
+4. **AboveCap publication is rejected,** and the 8,192 hard cap stays.
+
+**Correctness:** depth increases toward leaves. With common source parameter s,
+`|Q_d(s)−Q_(d+k)(s)| ≤ ε_d+ε_(d+k) ≤ E_d/8 ≤ G_coarse/8` for every k≥1.
+GE here is the coarse proxy's published G; D10 cannot lower it without retaining
+this bound against published GE. Include codec displacement; check all combined
+piecewise-linear parameter breakpoints, not nearest-curve samples. All owners
+consume identical decoded segments and shared live junctions at each level.
+Exact terminal arcs cover zero-error leaves too. S2 remains sampled surface
+error; this is a border certificate, not a Hausdorff surface guarantee.
+
+**Cap/domain:** a 64×64 quad sheet has 8,192 triangles and 256 border edges,
+independent of source density. For a connected manifold patch,
+`T=2V_i+B+2b+4g−4`; a disk with B≤1,024 and V_i≤3,585 fits. These are feasible
+budgets, not consequences of ε or a meshopt convergence proof. Bounded border
+complexity/topology after the permitted simplifications is the cap-fit domain;
+oscillations, many surviving loops, mandatory junctions and terminal locks can
+still defeat it. Remesh stalled interiors before the last-resort frontier;
+cap infeasibility never refuses. D8 resource admission remains applicable.
+No skirts or extra seam requests; safety-net frontiers may increase ordinary
+requests/bytes, as may a larger G. Client non-regression must be measured.
+
+**Work/memory (conditional):** with n source triangles, height h, P parents,
+cap C=8,192, admitted cache/sort memory M and j workers, ordered chains and
+feasible patches permit `O(n log n + nh + P·F(8C))` geometry work. Balanced
+shortcut certificates and streaming levels avoid quadratic rescans/owner pairs.
+For h=O(log n), P=O(n), fixed C this is O(n log n); it excludes unproved arbitrary
+graph extraction/remeshing and nearest-source query costs. The 8C input bound
+requires capped eight-child jobs, not an unbounded promoted-frontier merge.
+Spill siblings for `O(M+jC+Ch)` resident geometry, stack payloads too for a fixed
+budget. Precharge O(n) incidence and up to O(nh) certificate/interface scratch,
+plus source/output staging and tmpfs. At 1,700 B/merged triangle, 8C alone costs
+111.4 MB/job before encode, texture and shared reserves.
+
+**S3/S5:** chart after border construction, cut at delivery borders and share
+source-side donor/filter conventions with compatible gutters/mips. Validate
+decoded edge colour, normal and MASK continuity, including mixed LOD. S5 must
+independently decode cap/rows, all-owner edge/junction equality, complete subarc
+coverage, displacement certificates, E/G inequalities, terminal locks, bounds,
+leaf identity, source-defect reports and frontier continuity; producer hashes
+alone are insufficient. Audit topology-loss and safety-net counts in receipts.
+
 ## Numeric acceptance contract (proposed, not measured passes)
 
 One source Mtri is one million **input** triangles; CPU is whole-process user+sys,
@@ -489,6 +560,40 @@ builds/runs; parallel file work has explicit ownership.
 - **Dependencies/parallel:** starts first; agree the handoff and leases before
   S2/S3/S4 integration. S5 oracle preparation and S7 adapter parsing can proceed
   on the agreed schema without editing these owned files concurrently.
+
+### S1b — scalable shared borders: after S1, before S8
+
+- **Scope/files:** in `hlod/`, extend `interfaces::{build,reduce,merge_rows}` with
+  disk-backed all-owner chains, junctions, source-subarc maps and certificates;
+  owner extrema alone cannot recover adjacency. Replace
+  `geometry::{build_parent,attempt,missing}` leaf-edge locks with shared level
+  boundaries, boundary retriangulation and permitted interior simplification;
+  remove AboveCap and implement the reported last-resort capped frontier.
+  Extend `store::{TileGeometry,CoarseTile,HlodRow}` for contracts/frontiers;
+  `encode::{encode,check}` for canonical border decode; and
+  `mod::{plan,job_charge,walk,memory_backed_need,admit_scratch}` for spill,
+  admission and no content-less gaps. Retain exact leaves, tree addresses and
+  D4 representative IDs; use S2's source queries, not the uncapped high-valence
+  `representatives` scan. Integrate S3/S5 obligations in D11.
+- **Tests:** 500M/billion-sheet arithmetic; oscillatory borders; >24,576 mandatory
+  junctions; many sheet loops; nonmanifold/high-valence/duplicated soup; unequal
+  neighbouring G; zero-error terminal leaves; every k=1…h; corner meetings;
+  reversed chains; codec displacement; source T-junctions; checkerboard,
+  normal/MASK borders; permitted interior loss versus protected border contact;
+  forced safety-net/frontier continuity; jobs/budget determinism, tmpfs exhaustion.
+- **Acceptance:** tex3/crop3 first-view bytes must not regress against the S3
+  **0.41 / 0.84 / 3.68 MB** anchor with identical cameras and complete dependency
+  accounting; retain the complete census and explain pair-count changes, with
+  D11's zero same-depth / ≤GE/8 mixed-depth bounds. Leaves remain byte-identical
+  with exact IDs. Compare whole/coarse CPU per source Mtri on the same lane,
+  require non-regression and retain S1's ≤8 CPU-s/Mtri geometry allocation.
+  Run `mesh-1e7` sanity with cap/census/identity/CPU/bytes/resource receipts,
+  explicitly counting topology simplifications and safety-net uses (including
+  zero); this is not S8 acceptance or a 500M/billion-scale pass.
+- **Commitment:** this is the owner's design commitment, not measured acceptance.
+  Scale gates tune constants (E ladder factors, cap, budgets), not the algorithm
+  or guarantees; the approved hard cap remains 8,192. S1b integrates after S1
+  with S2/S3/S5 and is required before S8. The earlier effort total excludes S1b.
 
 ### S2 — decoded two-sided error measurement: 2–3 days
 
