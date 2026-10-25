@@ -1534,6 +1534,8 @@ fn repeated_chain_content_stays_inside_its_tile() {
         depth: 0,
         geometric_error: 1.,
         primitives: 1,
+        sampling: None,
+        encoded_depth: 0,
     };
     let payload = Aabb {
         lo: [-1., -coarse, -1.],

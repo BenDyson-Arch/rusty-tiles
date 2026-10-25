@@ -1,7 +1,7 @@
 //! HLOD S1 acceptance: real runs on small analytic fixtures, checked on DECODED published
 //! bytes by an independent census (its own GLB decoder; interfaces derived from the decoded
 //! leaves alone, never from producer records), plus the controls that must fail.
-use super::{Mutation, Settings, TilerLod};
+use super::{error::Schedule, Mutation, Settings, TilerLod};
 use crate::{
     content_integrity::meshopt::{self as codec, Mode},
     mesh_large::{
@@ -995,6 +995,40 @@ struct Run {
     mutation: Mutation,
     budget: Option<u64>,
     profile: LeafProfile,
+    /// S2's schedule: reduced unless a test exercises S2's measurement itself.
+    sampling: Schedule,
+    nearest_steps: u64,
+}
+
+/// S2's reduced sampling for tests that do not exercise its measurement. Production (and
+/// every delivery outside library tests) uses `Schedule::PRODUCTION`: 200,000 per depth,
+/// 2,048 per tile.
+const TEST_SAMPLING: Schedule = Schedule {
+    per_depth: 4096,
+    per_tile: 64,
+};
+/// S2's nearest-search budget for those tests (production: `error::NEAREST_STEPS`). Its
+/// controls (every source sliver vertex, every proxy vertex and edge) do not scale with the
+/// schedule; a small budget keeps adversarial geometry cheap and only raises G.
+const TEST_NEAREST_STEPS: u64 = 64;
+
+/// Stage settings of the public-pipeline tests (reduced S2 work, see `TEST_SAMPLING`).
+fn test_settings(cap: usize) -> Settings {
+    Settings {
+        cap,
+        sampling: TEST_SAMPLING,
+        nearest_steps: TEST_NEAREST_STEPS,
+        ..Settings::default()
+    }
+}
+
+/// A run with S2's production schedule and budget, for tests of its measurement.
+fn s2_run() -> Run {
+    Run {
+        sampling: Schedule::PRODUCTION,
+        nearest_steps: super::error::NEAREST_STEPS,
+        ..Run::default()
+    }
 }
 
 impl Default for Run {
@@ -1007,6 +1041,8 @@ impl Default for Run {
             mutation: Mutation::None,
             budget: None,
             profile: LeafProfile::Balanced,
+            sampling: TEST_SAMPLING,
+            nearest_steps: TEST_NEAREST_STEPS,
         }
     }
 }
@@ -1022,6 +1058,8 @@ fn stage(input: &Path, out: &Path, run: &Run) -> Result<PathBuf, crate::JobFailu
         .with_hlod_settings(Settings {
             cap: run.cap,
             mutation: run.mutation,
+            nearest_steps: run.nearest_steps,
+            sampling: run.sampling,
         });
     if run.lod == TilerLod::H17 {
         request = request.with_lod_target(run.cap);
@@ -1373,8 +1411,8 @@ fn distant_long_slivers_lock_nothing_and_never_refuse() {
 /// Exact seams do no geometric matching, so the chords cost the pass only their items (at
 /// most six per triangle) and lock nothing they do not share. Never refused, crack-free, and
 /// identical (counters included) at one and four jobs.
-#[test]
-fn random_chords_cost_linear_work_and_never_refuse() {
+/// 2,048 random chord slivers spanning two ribbon blocks, written under `dir`.
+fn chords_input(dir: &Path) -> PathBuf {
     let mut state = 0x9e37_79b9_7f4a_7c15u64;
     let mut next = move || {
         state ^= state << 13;
@@ -1394,13 +1432,18 @@ fn random_chords_cost_linear_work_and_never_refuse() {
         chords.positions.extend([a, b, [b[0], b[1], b[2] + 0.005]]);
         chords.indices.extend([base, base + 1, base + 2]);
     }
-    let work = tempfile::tempdir().unwrap();
     let left = ribbons(128);
     let mut right = left.clone();
     for p in &mut right.positions {
         p[0] += 100.;
     }
-    let input = write_gltf(&work.path().join("src"), &[left, right, chords]);
+    write_gltf(dir, &[left, right, chords])
+}
+
+#[test]
+fn random_chords_cost_linear_work_and_never_refuse() {
+    let work = tempfile::tempdir().unwrap();
+    let input = chords_input(&work.path().join("src"));
     let run = |jobs: usize, name: &str| {
         let run = Run {
             leaf_triangles: crate::mesh_large::config::CONSUMER_TABLE_ROWS,
@@ -1590,15 +1633,22 @@ fn parent_jobs_allocate_within_their_charge() {
 
     let built = grid.unwrap();
     let (checked, peak) = crate::test_alloc::peak(|| {
+        let g = &built.geometry;
+        let fixed: Vec<bool> = encode::open_border(&g.triangles, g.positions.len())
+            .iter()
+            .zip(&built.locked)
+            .map(|(b, l)| *b || *l)
+            .collect();
+        let positions = lattice.encode_coarse(&g.positions, &g.ells, &fixed, g.key.depth)?;
         let encoded = encode::encode(
-            &built.geometry,
+            g,
             &built.locked,
-            &lattice,
+            positions,
             &[],
             &crate::mesh_large::batching::MaterialClasses::EMPTY,
             Mutation::None,
         )?;
-        encode::check(&built.geometry, &built.locked, &encoded.glb)
+        encode::check(g, &built.locked, &encoded)
     });
     checked.unwrap();
     eprintln!(
@@ -1654,16 +1704,23 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
         lease: None,
     };
     let locked = [true, true, false, false];
+    let fixed: Vec<bool> = encode::open_border(&tile.triangles, tile.positions.len())
+        .iter()
+        .zip(&locked)
+        .map(|(b, l)| *b || *l)
+        .collect();
     let encoded = encode::encode(
         &tile,
         &locked,
-        &lattice,
+        lattice
+            .encode_coarse(&tile.positions, &tile.ells, &fixed, tile.key.depth)
+            .unwrap(),
         &[],
         &crate::mesh_large::batching::MaterialClasses::EMPTY,
         Mutation::None,
     )
     .unwrap();
-    encode::check(&tile, &locked, &encoded.glb).unwrap();
+    encode::check(&tile, &locked, &encoded).unwrap();
     let decoded = decode(&encoded.glb);
     let mut seen = 0;
     for face in &decoded.faces {
@@ -1699,7 +1756,8 @@ fn single_child_chains_publish_their_content_once() {
     ];
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &source);
-    let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+    let run = s2_run();
+    let dir = stage(&input, &work.path().join("hlod"), &run).unwrap();
     let census = census(&dir);
     assert_eq!(census.duplicate_chain_tiles, 0, "{census:?}");
     assert_eq!(census.reversed_coarse_faces, 0, "{census:?}");
@@ -1713,6 +1771,32 @@ fn single_child_chains_publish_their_content_once() {
     let passed = manifest["hlod"]["passThrough"].as_u64().unwrap();
     assert!(passed >= 3, "{}", manifest["hlod"]);
     assert!(census.coarse >= 1, "{census:?}");
+    // S2 measures each encoded tile once: seeds and depth schedules follow its encoded
+    // depth, not the top of the chain it is published at.
+    let proxies = rows(&dir.join("proxies.jsonl"));
+    assert!(proxies.iter().any(|r| r["encodedDepth"] != r["depth"]));
+    let mut samples = [0u64; 32];
+    for row in &proxies {
+        let depth = row["encodedDepth"].as_u64().unwrap() as usize;
+        let measurement = &row["measurement"];
+        samples[depth] += measurement["areaSamplesPerDirection"].as_u64().unwrap();
+        let key = super::store::TileKey {
+            first: row["first"].as_u64().unwrap(),
+            end: row["end"].as_u64().unwrap(),
+            depth: depth as u32,
+            leaf_begin: 0,
+            leaf_end: 0,
+        };
+        assert_eq!(
+            measurement["seed"].as_u64().unwrap(),
+            super::error::seed(key)
+        );
+    }
+    for (depth, n) in samples.iter().enumerate().filter(|(_, n)| **n > 0) {
+        assert!(*n >= super::error::MIN_DEPTH);
+        let summary = &manifest["hlod"]["errorMeasurement"]["byDepth"][depth];
+        assert_eq!(summary["sourceAreaSamples"].as_u64(), Some(*n));
+    }
     let archive = work.path().join("chain.3tz");
     let result = public(&input, &archive, None, 2).unwrap();
     assert!(result.diagnostics.hlod.unwrap().tiles >= 1);
@@ -2780,10 +2864,7 @@ fn public(
         .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(jobs).unwrap()))
         .with_lod(TilerLod::Hlod)
         .with_test_leaf_triangles(256)
-        .with_hlod_settings(Settings {
-            cap: 300,
-            mutation: Mutation::None,
-        })
+        .with_hlod_settings(test_settings(300))
         .with_test_spill(
             crate::spill::SortConfig {
                 run_bytes: 1 << 16,
@@ -2885,10 +2966,7 @@ fn cancellation_during_hlod_cleans_up() {
         TilerRequest::new(&input, &output)
             .with_lod(TilerLod::Hlod)
             .with_test_leaf_triangles(256)
-            .with_hlod_settings(Settings {
-                cap: 300,
-                mutation: Mutation::None,
-            })
+            .with_hlod_settings(test_settings(300))
             .with_scratch_dir(&scratch),
         &control,
     )
@@ -2922,6 +3000,8 @@ fn evidence_census() {
             leaf_triangles: crate::mesh_large::config::CONSUMER_TABLE_ROWS,
             cap: super::TRIANGLE_CAP,
             jobs: 4,
+            sampling: Schedule::PRODUCTION,
+            nearest_steps: super::error::NEAREST_STEPS,
             budget: std::env::var("RT_HLOD_EVIDENCE_BUDGET")
                 .ok()
                 .map(|b| crate::mesh_large::resources::parse_memory_budget(&b).unwrap()),
@@ -2980,4 +3060,586 @@ fn evidence_census() {
     // Exact seams: source T-junctions and unwelded seams are reported (the census's
     // overlap and perpendicular counts above, the manifest's source-defect counts), not
     // asserted; omitted coarse tiles are reported by `omittedProxies`.
+}
+
+// ---------------------------------------------------------------------------------------
+// S2: sampled two-sided source error.
+
+/// A source index of `captured` admitted through a walk-style scratch ledger (S2 writes no
+/// scratch it has not admitted).
+fn with_source_index<R>(
+    captured: &crate::mesh_large::full::FullCaptured,
+    f: impl FnOnce(&super::source_index::SourceIndex) -> R,
+) -> R {
+    use super::{scratch::ScratchLedger, source_index};
+    let admit = |_: u64| Ok(());
+    let ledger = ScratchLedger::new(&captured.scratch, captured.scratch.live_bytes(), &admit);
+    let need = source_index::scratch_need(captured.triangles.len()).unwrap();
+    let lease = ledger
+        .admit(source_index::SourceIndex::COMPONENT, need)
+        .unwrap();
+    let index = source_index::SourceIndex::build(captured, &lease, &|| Ok(())).unwrap();
+    ledger.check().unwrap();
+    f(&index)
+}
+
+fn capture_hlod(input: &Path, leaf_triangles: u64) -> crate::mesh_large::full::FullCaptured {
+    use crate::mesh_large::{
+        config::{Jobs, TreeConfig},
+        full,
+    };
+    let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(leaf_triangles);
+    config.lod = TilerLod::Hlod;
+    config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+    full::capture(input, &config, &mut || Ok(())).unwrap()
+}
+
+#[test]
+fn measured_positions_must_match_decoded_glb_bits() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &sheet());
+    let failure = stage(
+        &input,
+        &work.path().join("wrong-measurement"),
+        &Run {
+            mutation: Mutation::WrongMeasuredPosition,
+            ..Run::default()
+        },
+    )
+    .unwrap_err();
+    assert!(
+        failure
+            .error
+            .to_string()
+            .contains("measured positions differ from decoded GLB bits"),
+        "{}",
+        failure.error
+    );
+}
+
+/// Disk/index nearest against exhaustive triangle arithmetic, including clipped ranges
+/// through block boundaries, deterministic source-order ties and original donor rows; the
+/// budgeted production search agrees with it on this ordinary source, unexhausted.
+#[test]
+fn source_index_matches_exhaustive_with_range_clipping_and_ties() {
+    use super::{
+        error::Nearest,
+        source_index::{bary, closest, distance2, Hit, Triangle},
+    };
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &thin_islands());
+    let captured = capture_hlod(&input, 256);
+    let source: Vec<_> = captured
+        .triangles
+        .reader()
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    with_source_index(&captured, |index| {
+        let mut random = 0x7159ac23u32;
+        for (first, end) in [
+            (0, source.len()),
+            (17, 300),
+            (250, 520),
+            (source.len() - 13, source.len()),
+        ] {
+            let key = super::store::TileKey {
+                first: first as u64,
+                end: end as u64,
+                depth: 1,
+                leaf_begin: 0,
+                leaf_end: 1,
+            };
+            let mut query = index.query(&captured, key).unwrap();
+            let mut paged = index.paged_query(&captured, key).unwrap();
+            let mut budgeted = index.query(&captured, key).unwrap();
+            let mut nearest = Nearest::new();
+            let streamed: Vec<_> = query.surface().unwrap().map(|t| t.unwrap().rank).collect();
+            let mut streamed_sorted = streamed.clone();
+            streamed_sorted.sort_unstable();
+            assert_eq!(
+                streamed_sorted,
+                (first as u64..end as u64).collect::<Vec<_>>()
+            );
+            for _ in 0..40 {
+                let mut unit = || {
+                    random ^= random << 13;
+                    random ^= random >> 17;
+                    random ^= random << 5;
+                    random as f64 / u32::MAX as f64
+                };
+                let p = [unit() * 110., unit() * 12., unit() * 110.];
+                let actual = query.nearest(p).unwrap();
+                let mut expected = Hit::empty();
+                for (i, t) in source[first..end].iter().enumerate() {
+                    let points = Triangle::new(t.triangle.positions, 0).positions();
+                    let w = closest(p, points);
+                    let d = distance2(p, bary(points, w));
+                    let rank = (first + i) as u64;
+                    let order = (t.triangle.source, t.expanded_ordinal);
+                    if d < expected.distance2
+                        || (d == expected.distance2
+                            && (order, rank) < (expected.order, expected.rank))
+                    {
+                        expected.rank = rank;
+                        expected.bary = w;
+                        expected.distance2 = d;
+                        expected.order = order;
+                    }
+                }
+                let disk = paged.nearest(p).unwrap();
+                assert_eq!(disk.rank, expected.rank);
+                assert_eq!(disk.distance2, expected.distance2);
+                assert_eq!(actual.rank, expected.rank);
+                assert!((actual.distance2 - expected.distance2).abs() < 1e-10);
+                let bounded = nearest.source(&mut budgeted, p).unwrap();
+                assert_eq!(bounded.rank, expected.rank);
+                assert!((bounded.distance2 - expected.distance2).abs() < 1e-10);
+                let t = query.triangle(actual).unwrap();
+                let expected_triangle = source[actual.rank as usize];
+                assert_eq!(t, expected_triangle);
+                assert_eq!(t.corners, expected_triangle.corners);
+                assert_eq!(t.flags, expected_triangle.flags);
+                assert_eq!(t.material, expected_triangle.material);
+                assert!(actual.bary.iter().all(|v| v.is_finite() && *v >= 0.));
+            }
+            assert_eq!(nearest.stats.exhausted, 0, "{:?}", nearest.stats);
+        }
+    });
+    captured.close().unwrap();
+}
+
+/// The source index writes no scratch it has not admitted: under-admitted, its first write
+/// is refused (a resource limit) rather than worked around.
+#[test]
+fn source_index_refuses_scratch_past_its_admission() {
+    use super::{scratch::ScratchLedger, source_index::SourceIndex};
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &sheet());
+    let captured = capture_hlod(&input, 256);
+    let admit = |_: u64| Ok(());
+    let ledger = ScratchLedger::new(&captured.scratch, captured.scratch.live_bytes(), &admit);
+    let lease = ledger.admit(SourceIndex::COMPONENT, 4096).unwrap();
+    let before = captured.scratch.live_bytes();
+    let error = SourceIndex::build(&captured, &lease, &|| Ok(()))
+        .err()
+        .unwrap();
+    assert_eq!(error.kind(), JobErrorKind::ResourceLimit, "{error}");
+    assert!(captured.scratch.live_bytes() <= before + 4096);
+    drop(lease);
+    captured.close().unwrap();
+}
+
+/// The review's adversary (round 3 of #278): R distinct parallel oblique triangles whose
+/// boxes all contain every query, while every nearest distance is positive. Exact search
+/// tests every triangle per query, warm hints included (32 queries at R = 32,768 took
+/// 1,048,607 `closest` calls). S2's budgeted search stays at O(B + depth) per query
+/// whatever R, on the resident proxy path and on the paged source path, returns a finite
+/// distance no smaller than the exact one (conservative for G) and counts its exhaustions.
+#[test]
+fn nearest_searches_are_bounded_on_oblique_adversaries() {
+    use super::{
+        error::{Nearest, NEAREST_STEPS},
+        source_index::{Hit, Surface, Triangle, BLOCK, CLOSEST_CALLS},
+    };
+    let oblique = |r: u64| -> Vec<[[f32; 3]; 3]> {
+        (0..r)
+            .map(|i| {
+                let d = i as f32 / 100_000.;
+                [[3. + d, -1., -1.], [-1., 3. + d, -1.], [-1., -1., 3. + d]]
+            })
+            .collect()
+    };
+    let calls = |f: &mut dyn FnMut()| {
+        CLOSEST_CALLS.with(|c| c.set(0));
+        f();
+        CLOSEST_CALLS.with(|c| c.get())
+    };
+    let queries: Vec<[f64; 3]> = (0..32).map(|j| [j as f64 / 1000., 0., 0.]).collect();
+    let q = queries.len() as u64;
+    // Resident surface (the decoded coarse tile of source-to-proxy samples).
+    for r in [32_768u64, 131_072] {
+        let surface = Surface::new(
+            oblique(r)
+                .into_iter()
+                .enumerate()
+                .map(|(i, t)| Triangle::new(t, i as u64))
+                .collect(),
+        )
+        .unwrap();
+        let key = super::store::TileKey {
+            first: 0,
+            end: u64::MAX,
+            depth: 0,
+            leaf_begin: 0,
+            leaf_end: 0,
+        };
+        let mut exact = Vec::new();
+        let exact_calls = calls(&mut || {
+            let mut hint = None;
+            for p in &queries {
+                exact.push(surface.nearest_hint(*p, key, &mut hint));
+            }
+        });
+        assert_eq!(exact_calls, q * r + q - 1, "the probe's Θ(Q·R)");
+        let mut nearest = Nearest::new();
+        let mut found: Vec<Hit> = Vec::new();
+        let used = calls(&mut || {
+            let mut hint = None;
+            for p in &queries {
+                found.push(nearest.surface(&surface, *p, &mut hint));
+            }
+        });
+        // One hint test plus the budget per query (no cold seed after the first).
+        assert!(used <= q * (NEAREST_STEPS + 1) + 64, "R={r}: {used} calls");
+        assert_eq!(nearest.stats.searches, q);
+        assert!(nearest.stats.exhausted > 0, "{:?}", nearest.stats);
+        for (a, e) in found.iter().zip(&exact) {
+            assert!(a.distance2.is_finite() && a.distance2 >= e.distance2);
+        }
+        eprintln!(
+            "OBLIQUE resident R={r} Q={q}: exact {exact_calls} closest calls, bounded {used} \
+             ({:?})",
+            nearest.stats
+        );
+    }
+    // Paged source index (the proxy-to-source samples and representatives).
+    let r = 32_768u64;
+    let mesh = Mesh {
+        positions: oblique(r).into_iter().flatten().collect(),
+        indices: (0..3 * r as u32).collect(),
+        color: [0.5, 0.5, 0.5, 1.],
+    };
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &[mesh]);
+    let captured = capture_hlod(&input, 8192);
+    let n = captured.triangles.len();
+    assert_eq!(n, r);
+    with_source_index(&captured, |index| {
+        let key = super::store::TileKey {
+            first: 0,
+            end: n,
+            depth: 0,
+            leaf_begin: 0,
+            leaf_end: 1,
+        };
+        let mut exact = Vec::new();
+        let exact_calls = calls(&mut || {
+            let mut query = index.query(&captured, key).unwrap();
+            for p in &queries {
+                exact.push(query.nearest(*p).unwrap());
+            }
+        });
+        assert!(exact_calls >= q * r, "{exact_calls}");
+        let mut nearest = Nearest::new();
+        let mut found = Vec::new();
+        let used = calls(&mut || {
+            let mut query = index.query(&captured, key).unwrap();
+            for p in &queries {
+                found.push(nearest.source(&mut query, *p).unwrap());
+            }
+        });
+        // Per query: the hint, the budget, and at most one cold seed's block.
+        assert!(
+            used <= q * (NEAREST_STEPS + 1) + BLOCK as u64,
+            "{used} calls"
+        );
+        assert!(nearest.stats.exhausted > 0, "{:?}", nearest.stats);
+        for (a, e) in found.iter().zip(&exact) {
+            assert!(a.distance2.is_finite() && a.distance2 >= e.distance2);
+        }
+        eprintln!(
+            "OBLIQUE paged R={r} Q={q}: exact {exact_calls} closest calls, bounded {used} ({:?})",
+            nearest.stats
+        );
+    });
+    captured.close().unwrap();
+}
+
+/// D1 omission: omitted cells hold no content, so S2 measures, samples and stores nothing
+/// for them. At cap 12 every coarse tile of the sheet is omitted (nothing is measured); at
+/// cap 30 some are published above omitted-free subtrees, each measured once, its G at
+/// least every published descendant's, and delivery floors the content-less cells above.
+#[test]
+fn omitted_cells_are_not_measured_and_errors_stay_monotone() {
+    use crate::mesh_large::delivery::{self, plan::LIMITS};
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &sheet());
+    for cap in [12, 30] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("cap{cap}")),
+            &Run {
+                cap,
+                ..Run::default()
+            },
+        )
+        .unwrap_or_else(|f| panic!("{}", f.error));
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let hlod = &manifest["hlod"];
+        assert!(hlod["omittedProxies"].as_u64().unwrap() > 0, "{hlod}");
+        let proxies = rows(&dir.join("proxies.jsonl"));
+        assert_eq!(proxies.is_empty(), cap == 12, "{hlod}");
+        let measurement = &hlod["errorMeasurement"];
+        let measured: u64 = measurement["byDepth"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|d| d["tiles"].as_u64().unwrap())
+            .sum();
+        assert_eq!(measured, proxies.len() as u64, "one measurement per row");
+        assert_eq!(hlod["tiles"].as_u64(), Some(measured));
+        let searches: u64 = proxies
+            .iter()
+            .map(|r| r["nearestSearch"]["searches"].as_u64().unwrap())
+            .sum();
+        assert_eq!(searches > 0, cap == 30);
+        assert_eq!(measurement["nearest"]["searches"].as_u64(), Some(searches));
+        for row in &proxies {
+            let g = row["geometricError"].as_f64().unwrap();
+            let m = &row["measurement"];
+            assert!(g >= 1.05 * m["sampledMax"].as_f64().unwrap());
+            assert!(g >= row["childrenError"].as_f64().unwrap());
+            // Published descendants (deeper, inside its source range) never exceed it.
+            let (first, end) = (row["first"].as_u64().unwrap(), row["end"].as_u64().unwrap());
+            for other in &proxies {
+                let (f, e) = (
+                    other["first"].as_u64().unwrap(),
+                    other["end"].as_u64().unwrap(),
+                );
+                if other["depth"].as_u64() > row["depth"].as_u64() && first <= f && e <= end {
+                    assert!(other["geometricError"].as_f64().unwrap() <= g);
+                }
+            }
+        }
+        let output = work.path().join(format!("cap{cap}.3tz"));
+        let mut file = fs::File::create(&output).unwrap();
+        delivery::publish_with_limits(
+            &MeshTilesetRequest::new(&dir, &output),
+            LIMITS,
+            &mut file,
+            work.path(),
+        )
+        .unwrap();
+        drop(file);
+        inspect(ValidationRequest::new(&output)).unwrap();
+        let shape = refinement_shape(&output);
+        assert_eq!(
+            shape.empty_below_content + shape.error_inversions,
+            0,
+            "{shape:?}"
+        );
+    }
+}
+
+#[test]
+fn delivery_refuses_understated_and_incomplete_sampled_error() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &sheet());
+    let dir = stage(
+        &input,
+        &work.path().join("stage"),
+        &Run {
+            leaf_triangles: 1024,
+            cap: 1500,
+            ..s2_run()
+        },
+    )
+    .unwrap();
+    let original = rows(&dir.join("proxies.jsonl"));
+    for mutation in 0..10 {
+        let mut damaged = original.clone();
+        let row = damaged.last_mut().unwrap();
+        match mutation {
+            0 => row["geometricError"] = json!(0.),
+            1 => row["measurement"]["sourceToProxy"]["area"]["samples"] = json!(1),
+            2 => row["measurement"]["q"] = json!(12345.),
+            3 => row["measurement"]["margin"] = json!(0.),
+            4 => {
+                row.as_object_mut().unwrap().remove("errorPolicy");
+                row.as_object_mut().unwrap().remove("measurement");
+            }
+            6 => {
+                row.as_object_mut().unwrap().remove("encodedDepth");
+            }
+            7 => row["encodedDepth"] = json!(31),
+            8 => row["encodedDepth"] = json!(row["encodedDepth"].as_u64().unwrap() + 1),
+            // Every row's share looks complete against an inflated depth schedule, but the
+            // published rows (nothing omitted) do not cover it.
+            9 => {
+                for row in &mut damaged {
+                    let m = &mut row["measurement"];
+                    m["depthSourceTriangles"] =
+                        json!(m["depthSourceTriangles"].as_u64().unwrap() * 1000);
+                }
+            }
+            _ => {
+                for row in damaged
+                    .iter_mut()
+                    .filter(|r| r["encodedDepth"].as_u64().unwrap() > 0)
+                {
+                    let m = &mut row["measurement"];
+                    m["areaSamplesPerDirection"] = json!(2048);
+                    m["sourceToProxy"]["area"]["samples"] = json!(2048);
+                    m["proxyToSource"]["area"]["samples"] = json!(2048);
+                    let maximum = m["sampledMax"].as_f64().unwrap();
+                    let margin = maximum * 0.05;
+                    m["margin"] = json!(margin);
+                    row["geometricError"] =
+                        json!(row["geometricError"].as_f64().unwrap().max(maximum * 1.05));
+                }
+            }
+        };
+        if mutation == 5 {
+            let mut maximum = 0f64;
+            for row in &mut damaged {
+                maximum = maximum.max(row["geometricError"].as_f64().unwrap());
+                row["geometricError"] = json!(maximum);
+            }
+        }
+        let data = damaged
+            .iter()
+            .map(|r| format!("{}\n", serde_json::to_string(r).unwrap()))
+            .collect::<String>();
+        fs::write(dir.join("proxies.jsonl"), data).unwrap();
+        let output = work.path().join(format!("bad-{mutation}.3tz"));
+        let failure = mesh_leaves_to_3tz(
+            MeshTilesetRequest::new(&dir, &output),
+            &RunControl::default(),
+        )
+        .unwrap_err();
+        let message = failure.error.to_string();
+        match mutation {
+            5 => assert!(message.contains("invalid S2 sample counts"), "{message}"),
+            9 => assert!(message.contains("source triangles scheduled"), "{message}"),
+            _ => {}
+        }
+        assert!(!output.exists());
+    }
+}
+
+/// Evidence lane, not CI: S2's cost on the adversarial chords input (every box overlaps
+/// almost every query) at production settings (8,192-triangle leaves and cap, one job),
+/// for each budget in `RT_HLOD_EVIDENCE_STEPS` (comma-separated, default `4096,1024,256`)
+/// and both schedules. Writes `chords-s2.json` under `RT_HLOD_EVIDENCE_DIR`: S2 CPU,
+/// searches, steps and exhaustions by encoded depth, and G by depth.
+#[test]
+#[ignore = "evidence lane: needs RT_HLOD_EVIDENCE_DIR"]
+fn evidence_chords_s2_cost() {
+    let out = PathBuf::from(std::env::var("RT_HLOD_EVIDENCE_DIR").unwrap());
+    fs::create_dir_all(&out).unwrap();
+    let input = chords_input(&out.join("src"));
+    let budgets: Vec<u64> = std::env::var("RT_HLOD_EVIDENCE_STEPS")
+        .unwrap_or_else(|_| "4096,1024,256".into())
+        .split(',')
+        .map(|b| b.parse().unwrap())
+        .collect();
+    let mut records = Vec::new();
+    for (label, sampling) in [
+        ("production", Schedule::PRODUCTION),
+        ("test", TEST_SAMPLING),
+    ] {
+        for &steps in &budgets {
+            let output = out.join(format!("chords-{label}-{steps}.3tz"));
+            let started = std::time::Instant::now();
+            let result = crate::mesh_large::mesh_to_tileset(
+                TilerRequest::new(&input, &output)
+                    .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(1).unwrap()))
+                    .with_lod(TilerLod::Hlod)
+                    .with_test_leaf_triangles(crate::mesh_large::config::CONSUMER_TABLE_ROWS)
+                    .with_hlod_settings(Settings {
+                        nearest_steps: steps,
+                        sampling,
+                        ..Settings::default()
+                    }),
+                &RunControl::default(),
+            )
+            .unwrap_or_else(|f| panic!("{}", f.error));
+            let wall = started.elapsed().as_secs_f64();
+            let h = result.diagnostics.hlod.unwrap();
+            let m = &h.error_measurement;
+            let depths: Vec<Value> = m
+                .by_depth
+                .iter()
+                .enumerate()
+                .filter(|(_, d)| d.tiles > 0)
+                .map(|(i, d)| {
+                    json!({
+                        "encodedDepth": i, "tiles": d.tiles, "g": d.geometric_error,
+                        "sampledMax": d.sampled_max,
+                        "s2CpuSeconds": h.error_cpu_by_depth.get(i).copied().unwrap_or(0.),
+                        "searches": d.nearest.searches, "steps": d.nearest.steps,
+                        "exhausted": d.nearest.exhausted, "maxSteps": d.nearest.max_steps,
+                        "sourceAreaSamples": d.source_area_samples,
+                        "sourceControls": d.source_controls, "proxyControls": d.proxy_controls,
+                    })
+                })
+                .collect();
+            let record = json!({
+                "schedule": label, "nearestSteps": steps, "wallSeconds": wall,
+                "stageCpuSeconds": h.cpu_seconds, "s2CpuSeconds": h.error_cpu_seconds,
+                "s2Cpu": h.error_cpu, "nearest": m.nearest, "byDepth": depths,
+            });
+            eprintln!("CHORDS-S2 {record}");
+            records.push(record);
+            fs::remove_file(&output).ok();
+        }
+    }
+    fs::write(
+        out.join("chords-s2.json"),
+        serde_json::to_vec_pretty(&records).unwrap(),
+    )
+    .unwrap();
+}
+
+/// S2's whole measurement (representatives, both directed passes and their controls) on
+/// an adversarial source through the real stage, at production's nearest budget: every
+/// search stays within its budget plus one seed, some exhaust, and G still covers the
+/// sampled error and the children's.
+#[test]
+fn s2_measurement_is_bounded_on_an_oblique_source() {
+    use super::{error::NEAREST_STEPS, source_index::BLOCK};
+    let r = 1024u32;
+    let mesh = Mesh {
+        positions: (0..r)
+            .flat_map(|i| {
+                let d = i as f32 / 10_000.;
+                [[3. + d, -1., -1.], [-1., 3. + d, -1.], [-1., -1., 3. + d]]
+            })
+            .collect(),
+        indices: (0..3 * r).collect(),
+        color: [0.5, 0.5, 0.5, 1.],
+    };
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &[mesh]);
+    let dir = stage(
+        &input,
+        &work.path().join("oblique"),
+        // Disjoint triangles do not simplify: a cap above the whole source keeps parents.
+        &Run {
+            cap: 2048,
+            nearest_steps: NEAREST_STEPS,
+            ..Run::default()
+        },
+    )
+    .unwrap_or_else(|f| panic!("{}", f.error));
+    let proxies = rows(&dir.join("proxies.jsonl"));
+    assert!(!proxies.is_empty());
+    let bound = NEAREST_STEPS + BLOCK as u64 + 64;
+    let mut exhausted = 0;
+    for row in &proxies {
+        let s = &row["nearestSearch"];
+        let (searches, steps) = (
+            s["searches"].as_u64().unwrap(),
+            s["steps"].as_u64().unwrap(),
+        );
+        assert!(s["maxSteps"].as_u64().unwrap() <= bound, "{s}");
+        assert!(steps <= searches * bound, "{s}");
+        exhausted += s["exhausted"].as_u64().unwrap();
+        let g = row["geometricError"].as_f64().unwrap();
+        assert!(g >= 1.05 * row["measurement"]["sampledMax"].as_f64().unwrap());
+        assert!(g >= row["childrenError"].as_f64().unwrap());
+    }
+    assert!(exhausted > 0, "the adversary exhausts some searches");
 }

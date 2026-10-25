@@ -1267,7 +1267,7 @@ pub fn mesh_to_leaf_payloads(
     };
     let hlod_plan = match &config.memory_budget {
         Some(budget) if config.lod == super::super::hlod::TilerLod::Hlod => {
-            match super::super::hlod::plan(&captured, &config, budget, request.hlod.cap) {
+            match super::super::hlod::plan(&captured, &config, budget, &request.hlod) {
                 Ok(plan) => Some(plan),
                 Err(error) => {
                     let mut failed = attempt.fail(error);

@@ -337,9 +337,15 @@ fn scratch_need(
                 corner_infos.flow(lod_sources),
             ])?,
         )?,
+        // The incidence pass admits its phases as they start (it declares nothing here);
+        // S2's source index, always built beside the walk's rows, is preflighted up front
+        // too and admitted again through the walk's ledger before its first write.
         super::hlod::TilerLod::Hlod => add(
             leaf_plans,
-            super::hlod::interfaces::scratch_need(n, config.sorter(1)).ok_or_else(overflow)?,
+            add(
+                super::hlod::interfaces::scratch_need(n, config.sorter(1)).ok_or_else(overflow)?,
+                super::hlod::source_index::scratch_need(n).ok_or_else(overflow)?,
+            )?,
         )?,
     };
     let stages = ScratchStages {

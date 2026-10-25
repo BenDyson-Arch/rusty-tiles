@@ -14,11 +14,14 @@
 //! each is a pure function of its children, so output is identical for any job count or
 //! budget. It writes `proxies/` and `proxies.jsonl` (postorder) for H16 delivery, exactly
 //! where H17 did; coarse tiles are untextured (flat class materials) until S3, and their
-//! error is S1's provisional estimate until S2.
+//! error is measured against the source in both directions by S2 (`error`). Omitted cells
+//! hold no content, so nothing is measured for them.
 mod encode;
+pub(crate) mod error;
 mod geometry;
 pub(crate) mod interfaces;
 pub(crate) mod scratch;
+pub(crate) mod source_index;
 pub(crate) mod store;
 #[cfg(test)]
 mod tests;
@@ -56,7 +59,7 @@ pub enum TilerLod {
     /// H17 certified geometry with the H27 proxy bake (current default).
     #[default]
     H17,
-    /// 0.4 classic octree HLOD (S1: untextured coarse tiles, provisional error).
+    /// 0.4 classic octree HLOD (untextured coarse tiles, measured source error).
     Hlod,
 }
 
@@ -113,13 +116,16 @@ const ROW_WINDOW: usize = 1024;
 /// Encoded GLB, compression scratch and decoded check copy of one coarse tile.
 const JOB_ENCODE_BYTES: u64 = 16 << 20;
 
-/// One parent job's admission for `merged` input triangles: its workspace, encode allowance
-/// and a cap-sized output.
-fn job_charge(merged: u64, cap: usize) -> u64 {
+/// One parent job's admission for `merged` input triangles: its workspace, encode allowance,
+/// S2's source query, measurement and nearest-search workspace, and a cap-sized output.
+fn job_charge(merged: u64, settings: &Settings) -> u64 {
     merged
         .saturating_mul(JOB_BYTES_PER_TRIANGLE)
         .saturating_add(JOB_ENCODE_BYTES)
-        .saturating_add(TileGeometry::charge(cap as u64))
+        .saturating_add(source_index::QUERY_BYTES)
+        .saturating_add(error::WORK_BYTES)
+        .saturating_add(error::search_bytes(settings.nearest_steps))
+        .saturating_add(TileGeometry::charge(settings.cap as u64))
 }
 
 fn state(message: impl Into<String>) -> JobError {
@@ -134,6 +140,10 @@ fn resource(message: impl Into<String>) -> JobError {
 pub(crate) struct Settings {
     pub cap: usize,
     pub mutation: Mutation,
+    /// S2's per-query nearest-search budget (`error::NEAREST_STEPS`).
+    pub nearest_steps: u64,
+    /// S2's sampling schedule; delivery admits only production's outside library tests.
+    pub sampling: error::Schedule,
 }
 
 impl Default for Settings {
@@ -141,6 +151,8 @@ impl Default for Settings {
         Self {
             cap: TRIANGLE_CAP,
             mutation: Mutation::None,
+            nearest_steps: error::NEAREST_STEPS,
+            sampling: error::Schedule::PRODUCTION,
         }
     }
 }
@@ -174,8 +186,9 @@ pub(crate) fn plan(
     captured: &FullCaptured,
     config: &TreeConfig,
     budget: &MemoryBudget,
-    cap: usize,
+    settings: &Settings,
 ) -> Result<HlodMemoryPlan, JobError> {
+    let cap = settings.cap;
     let leaf_cap = config.leaf_triangles();
     let held = TileGeometry::charge(leaf_cap.max(cap as u64));
     let height = u64::from(captured.tree.stats.height);
@@ -188,7 +201,7 @@ pub(crate) fn plan(
         .saturating_mul(8)
         .saturating_mul(height + 1)
         .saturating_add(read.saturating_sub(held));
-    let job = job_charge(leaf_cap.max(cap as u64).saturating_mul(8), cap);
+    let job = job_charge(leaf_cap.max(cap as u64).saturating_mul(8), settings);
     let sorter = config.sorter(1);
     let incidence = interfaces::memory_need(sorter, leaf_cap, captured.tree.stats.leaves);
     let buffer = config.sort.buffer_bytes as u64;
@@ -202,6 +215,7 @@ pub(crate) fn plan(
         .owned_metadata_bytes
         .saturating_add(captured.report.memory.geometry.document_bytes)
         .saturating_add(STAGE_RESERVE)
+        .saturating_add(source_index::BUILD_BYTES)
         .saturating_add(streams);
     let minimum = fixed.saturating_add(incidence.max(window.saturating_add(job)));
     let tmpfs = if captured.scratch.memory_backed() {
@@ -290,6 +304,13 @@ pub(crate) struct HlodReport {
     pub pass_through: u64,
     pub max_error_by_depth: Vec<f64>,
     pub incidence: IncidenceStats,
+    pub error_measurement: error::ErrorReport,
+    #[serde(skip)]
+    pub error_cpu_seconds: f64,
+    #[serde(skip)]
+    pub error_cpu: error::CpuReport,
+    #[serde(skip)]
+    pub error_cpu_by_depth: Vec<f64>,
 }
 
 /// Run facts of the stage outside the deterministic manifest.
@@ -300,13 +321,19 @@ pub struct HlodDiagnostics {
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
     pub cpu_seconds: Option<f64>,
     pub incidence_cpu_seconds: Option<f64>,
+    /// Source-index construction plus summed worker-thread measurement/identity CPU.
+    pub error_cpu_seconds: Option<f64>,
+    pub error_cpu: error::CpuReport,
+    /// Summed worker S2 CPU seconds by encoded depth (index construction excluded).
+    pub error_cpu_by_depth: Vec<f64>,
+    pub error_measurement: error::ErrorReport,
     pub wall_seconds: f64,
     pub incidence_scratch_peak_bytes: u64,
     /// The incidence pass's staged scratch declarations (its declared bound is their
     /// largest) against which that peak is checked as the pass returns.
     pub incidence_scratch: interfaces::ScratchPhases,
-    /// The largest admission of each walk scratch component (`scratch::ScratchLedger`: S2
-    /// samples, S3 pages and charts, ...; none in S1).
+    /// The largest admission of each walk scratch component (`scratch::ScratchLedger`: S2's
+    /// source index, S3 pages and charts, ...).
     pub scratch_components: std::collections::BTreeMap<&'static str, u64>,
     /// The stage's scratch peak from the incidence pass's start to the walk's end, and its
     /// bound: the incidence pass's own, or the walk's base plus its largest simultaneous
@@ -418,9 +445,10 @@ pub(crate) fn produce(
     let mut report = HlodReport {
         schema_version: 1,
         method: "octree-hlod",
-        error_policy: store::PROVISIONAL_POLICY,
+        error_policy: error::POLICY,
         appearance: "untextured: flat material-class factors and smooth normals until S3",
         triangle_cap: settings.cap as u64,
+        error_measurement: error::ErrorReport::new(settings.nearest_steps, settings.sampling),
         ..Default::default()
     };
     let mut diagnostics = HlodDiagnostics {
@@ -474,15 +502,41 @@ pub(crate) fn produce(
     )?;
     let walk_started = std::time::Instant::now();
     // The walk's scratch: the incidence row stream (at most its walk phase) beside every
-    // component a downstream slice admits before allocating (none in S1).
+    // component a downstream slice admits before allocating: S2's source index, admitted
+    // before its first write and held through the walk.
     let ledger = scratch::ScratchLedger::new(
         &captured.scratch,
         diagnostics.incidence_scratch.walk,
         &admit,
     );
-    let result = walk(&input, rows, &rows_path, &mut report, &ledger, check);
+    let index_start = resources::process_cpu_seconds();
+    let index_lease = ledger.admit(
+        source_index::SourceIndex::COMPONENT,
+        source_index::scratch_need(captured.triangles.len())
+            .ok_or_else(|| resource("source index scratch overflows"))?,
+    )?;
+    let source = source_index::SourceIndex::build(captured, &index_lease, check)?;
+    let sampling = error::SamplingPlan::new(captured, settings.sampling)?;
+    let index_cpu = resources::process_cpu_seconds()
+        .zip(index_start)
+        .map(|(b, a)| b - a);
+    let materials = encode::flat_materials(&captured.materials);
+    let job = Job {
+        input: &input,
+        materials: &materials,
+        source: &source,
+        sampling: &sampling,
+        check,
+    };
+    let result = walk(&job, rows, &rows_path, &mut report);
+    diagnostics.error_cpu_seconds = index_cpu.map(|s| s + report.error_cpu_seconds);
+    diagnostics.error_cpu = report.error_cpu;
+    diagnostics.error_cpu_by_depth = report.error_cpu_by_depth.clone();
+    diagnostics.error_cpu.index = index_cpu.unwrap_or(0.);
     let lease_peak = result?;
     ledger.check()?;
+    drop(source);
+    drop(index_lease);
     diagnostics.scratch_components = ledger.components();
     diagnostics.stage_scratch_peak_bytes = captured.scratch.stage_peak_bytes();
     let stage_bound = diagnostics
@@ -502,6 +556,7 @@ pub(crate) fn produce(
     input
         .phases
         .finished(Phase::HlodGeometry, walk_started.elapsed().as_secs_f64())?;
+    diagnostics.error_measurement = report.error_measurement.clone();
     diagnostics.tiles = report.tiles;
     diagnostics.lease_peak_bytes = lease_peak;
     diagnostics.cpu_seconds = resources::process_cpu_seconds()
@@ -675,12 +730,15 @@ fn shrink(tile: &mut TileGeometry) {
 }
 
 /// Memory-backed scratch charged to memory by the HLOD plan: capture's declared need, raised
-/// to the incidence pass's worst case beside capture's retained files (staged admission
-/// cannot take memory nobody charged).
+/// to the incidence pass's worst case beside capture's retained files and S2's source index
+/// (staged admission cannot take memory nobody charged).
 fn memory_backed_need(captured: &FullCaptured, config: &TreeConfig) -> Result<u64, JobError> {
     let need = &captured.report.scratch;
-    interfaces::memory_backed_need(captured.triangles.len(), config.sorter(1))
+    let n = captured.triangles.len();
+    interfaces::memory_backed_need(n, config.sorter(1))
         .and_then(|b| b.checked_add(need.stages.leaf_plans))
+        // S2's source index, admitted at the walk's start beside the incidence rows.
+        .and_then(|b| b.checked_add(source_index::scratch_need(n)?))
         .map(|b| b.max(need.need_bytes))
         .ok_or_else(|| resource("HLOD memory-backed scratch need overflows"))
 }
@@ -716,19 +774,21 @@ fn admit_scratch(captured: &FullCaptured, config: &TreeConfig, bound: u64) -> Re
     Ok(())
 }
 
-/// One parent: geometry, encoding, the pre-publication check, error and its member.
-#[allow(clippy::too_many_arguments)]
-fn build_tile(
-    closed: &Closed,
-    children: Vec<TileGeometry>,
-    captured: &FullCaptured,
-    materials: &[Value],
-    stage: &Path,
-    settings: Settings,
-    // Downstream slices admit their walk scratch here before allocating (unused in S1).
-    _ledger: &scratch::ScratchLedger<'_>,
-    check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Done {
+/// What every parent job of the walk shares.
+struct Job<'j, 'a> {
+    input: &'j HlodInput<'a>,
+    materials: &'j [Value],
+    /// S2's source index: bounded queries of each tile's descendant source range.
+    source: &'j source_index::SourceIndex,
+    sampling: &'j error::SamplingPlan,
+    check: &'j (dyn Fn() -> Result<(), JobError> + Sync),
+}
+
+/// One parent: geometry, encoding, the pre-publication check, error and its member. An
+/// omitted parent (its interface cannot fit the cap) returns before any S2 work: it holds
+/// no content, so there is nothing to measure, sample or store.
+fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -> Done {
+    let (captured, settings, check) = (job.input.captured, job.input.settings, job.check);
     let built = if closed.single_leaf {
         // Halved, or where its interface cannot be halved, the copy within the cap.
         let half = children[0].triangles.len().div_ceil(2).min(settings.cap);
@@ -757,36 +817,98 @@ fn build_tile(
             tile.representative.remove(t);
         }
     }
+    let cpu_start = error::thread_cpu();
+    let mut query = job.source.query(captured, built.geometry.key)?;
+    let mut nearest = error::Nearest::with_steps(settings.nearest_steps);
+    // Keep S1's open-border vertices at their leaf-canonical decode. Prepare the final
+    // positions once: representatives and measurement both consume this publication.
+    let border = encode::open_border(&built.geometry.triangles, built.geometry.positions.len());
+    let fixed: Vec<bool> = built
+        .locked
+        .iter()
+        .zip(&border)
+        .map(|(l, b)| *l || *b)
+        .collect();
+    let positions = captured.lattice.encode_coarse(
+        &built.geometry.positions,
+        &built.geometry.ells,
+        &fixed,
+        built.geometry.key.depth,
+    )?;
+    // D4 identity on the final decoded centroid, in the descendant source range (bounded
+    // nearest search). Charting/encoding must preserve these positions and rows in S3.
+    let mut representatives = Vec::with_capacity(built.geometry.triangles.len());
+    let mut centroid_checks = Vec::with_capacity(built.geometry.triangles.len());
+    for (i, t) in built.geometry.triangles.iter().enumerate() {
+        if i % 256 == 0 {
+            check()?;
+        }
+        let p = std::array::from_fn(|a| {
+            t.iter()
+                .map(|&v| f64::from(positions.decoded[v as usize][a]))
+                .sum::<f64>()
+                / 3.
+        });
+        let hit = nearest.source(&mut query, p)?;
+        representatives.push(query.primitive(hit));
+        centroid_checks.push(hit.distance2.sqrt());
+    }
+    let mut table = representatives.clone();
+    table.sort_unstable();
+    table.dedup();
+    built.geometry.representative = representatives
+        .iter()
+        .map(|p| table.binary_search(p).unwrap() as u32)
+        .collect();
+    built.geometry.primitives = table;
+    let identity_cpu = error::thread_cpu().zip(cpu_start).map(|(b, a)| b - a);
     let tile = &built.geometry;
     let encoded = encode::encode(
         tile,
         &built.locked,
-        &captured.lattice,
-        materials,
+        positions,
+        job.materials,
         &captured.material_classes,
         settings.mutation,
     )?;
-    if settings.mutation != Mutation::MoveVertexUnchecked {
-        encode::check(tile, &built.locked, &encoded.glb)?;
-    }
-    let error = store::provisional_error(&CoarseTile {
-        key: tile.key,
-        decoded: &encoded.decoded,
-        triangles: &tile.triangles,
-        locked: &built.locked,
-        representative: &tile.representative,
-        primitives: &tile.primitives,
-        bounds: encoded.bounds,
-        children_error: built.children_error,
-        simplifier_error: built.simplifier_error,
-        encode_displacement: encoded.displacement,
-        stopping: built.stopping,
-    });
+    let published = if settings.mutation != Mutation::MoveVertexUnchecked {
+        encode::check(tile, &built.locked, &encoded)?
+    } else {
+        crate::mesh_large::lod::codec::decode(&encoded.glb)?;
+        encoded.decoded.clone()
+    };
+    let count = job.sampling.count(tile.key)?;
+    let cpu_start = error::thread_cpu();
+    let (error, measurement, mut error_cpu) = error::measure(
+        &CoarseTile {
+            key: tile.key,
+            decoded: &published,
+            triangles: &tile.triangles,
+            locked: &built.locked,
+            representative: &tile.representative,
+            primitives: &tile.primitives,
+            bounds: encoded.bounds,
+            children_error: built.children_error,
+            simplifier_error: built.simplifier_error,
+            encode_displacement: encoded.displacement,
+            stopping: built.stopping,
+        },
+        &mut query,
+        &mut nearest,
+        count,
+        &centroid_checks,
+        check,
+    )?;
+    error_cpu.representatives = identity_cpu.unwrap_or(0.);
+    let error_cpu_seconds = error::thread_cpu()
+        .zip(cpu_start)
+        .zip(identity_cpu)
+        .map_or(0., |((b, a), i)| b - a + i);
     if !error.geometric_error.is_finite() || error.geometric_error < built.children_error {
         return Err(state("coarse error is nonfinite or below its children's"));
     }
     let uri = tile.key.uri();
-    let path = stage.join(&uri);
+    let path = job.input.stage.join(&uri);
     let mut file =
         fs::File::create(&path).map_err(|e| JobError::io("create coarse tile", &path, e))?;
     file.write_all(&encoded.glb)
@@ -808,6 +930,10 @@ fn build_tile(
         leaf_end: tile.key.leaf_end,
         geometric_error: error.geometric_error,
         error_policy: error.policy,
+        measurement,
+        nearest_search: nearest.stats,
+        error_cpu_seconds,
+        error_cpu,
         children_error: built.children_error,
         simplifier_error: built.simplifier_error,
         encode_displacement: encoded.displacement,
@@ -826,10 +952,14 @@ fn build_tile(
     };
     let mut geometry = built.geometry;
     geometry.geometric_error = error.geometric_error;
+    shrink(&mut geometry);
     Ok((Some(geometry), Finished::Row(Box::new(row))))
 }
 
 fn tally(report: &mut HlodReport, row: &HlodRow) {
+    report.error_cpu_seconds += row.error_cpu_seconds;
+    report.error_cpu.add(row.error_cpu);
+    report.error_measurement.nearest.add(row.nearest_search);
     report.tiles += 1;
     report.triangles += u64::from(row.triangles);
     report.max_triangles = report.max_triangles.max(u64::from(row.triangles));
@@ -851,6 +981,22 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
         report.float_tiles += 1;
     }
     report.bytes += row.bytes;
+    // S2's summaries are keyed by encoded depth (seeds and schedules); a tile published at
+    // the top of its pass-through chain keeps them.
+    let encoded = row.encoded_depth as usize;
+    let by_depth = &mut report.error_measurement.by_depth;
+    if by_depth.len() <= encoded {
+        by_depth.resize_with(encoded + 1, Default::default);
+    }
+    by_depth[encoded].add(row.measurement, row.geometric_error, row.nearest_search);
+    let cpu = &mut report.error_cpu_by_depth;
+    if cpu.len() <= encoded {
+        cpu.resize(encoded + 1, 0.);
+    }
+    cpu[encoded] += row.error_cpu_seconds;
+    if row.depth == 0 {
+        report.error_measurement.root = Some(row.measurement);
+    }
     let depth = row.depth as usize;
     if report.max_error_by_depth.len() <= depth {
         report.max_error_by_depth.resize(depth + 1, 0.);
@@ -860,17 +1006,15 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
 
 /// The preorder walk; returns the ledger's lease peak.
 fn walk(
-    input: &HlodInput<'_>,
+    job: &Job<'_, '_>,
     rows: crate::spill::SortedStream<'_, InterfaceRow>,
     rows_path: &Path,
     report: &mut HlodReport,
-    scratch_ledger: &scratch::ScratchLedger<'_>,
-    check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<u64, JobError> {
+    let (input, check) = (job.input, job.check);
     let captured = input.captured;
     let plan = input.plan;
     let settings = input.settings;
-    let materials = encode::flat_materials(&captured.materials);
     let ledger = Ledger::new(plan.ledger_bytes);
     let job_bytes = plan.job_bytes;
     // The most a job merges: eight capped children (an omitted child is never merged).
@@ -917,7 +1061,6 @@ fn walk(
         let mut finished_rows: BTreeMap<u64, Finished> = BTreeMap::new();
         let (mut next_id, mut next_seq, mut written, mut inflight) = (0u64, 0u64, 0u64, 0usize);
         let mut leaf = 0u32;
-        let materials = &materials;
         let stage = input.stage;
         // Spawn every pending parent whose children are ready, in postorder, while workers
         // and the ledger admit its job.
@@ -973,16 +1116,7 @@ fn walk(
                 scope.spawn(move |_| {
                     let (id, seq) = (closed.id, closed.seq);
                     let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        let mut built = build_tile(
-                            &closed,
-                            children,
-                            captured,
-                            materials,
-                            stage,
-                            settings,
-                            scratch_ledger,
-                            check,
-                        )?;
+                        let mut built = build_tile(job, &closed, children)?;
                         // The job's admission includes its output: keep that part while the
                         // tile is held for its parent, release the workspace.
                         if let Some(tile) = built.0.as_mut() {

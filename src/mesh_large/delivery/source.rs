@@ -206,6 +206,10 @@ pub(crate) struct ProxyRow {
     pub depth: u32,
     pub geometric_error: f64,
     pub primitives: u32,
+    /// S2's area samples per direction, its depth schedule's source triangles and the
+    /// sampling schedule.
+    pub sampling: Option<(u64, u64, crate::mesh_large::hlod::error::Schedule)>,
+    pub encoded_depth: u32,
 }
 
 #[derive(Deserialize)]
@@ -218,16 +222,51 @@ struct ProxyWire {
     first: u64,
     end: u64,
     depth: u32,
+    #[serde(default)]
+    encoded_depth: Option<u32>,
     geometric_error: f64,
     primitives: u32,
+    #[serde(default)]
+    error_policy: Option<String>,
+    #[serde(default)]
+    measurement: Option<crate::mesh_large::hlod::error::Summary>,
+    #[serde(default)]
+    children_error: Option<f64>,
 }
 
 impl ProxyRow {
-    pub(crate) fn parse(line: &str, row: u64) -> Result<Self, JobError> {
+    pub(crate) fn parse(line: &str, row: u64, hlod: bool) -> Result<Self, JobError> {
         let bad = |why: &str| input(format!("proxies.jsonl row {row}: {why}"));
         let w: ProxyWire = serde_json::from_str(line).map_err(|e| bad(&e.to_string()))?;
         if w.schema_version != 1 {
             return Err(bad("unsupported schemaVersion"));
+        }
+        let encoded_depth = match w.encoded_depth {
+            Some(d) if d >= w.depth && d <= 30 => d,
+            None if !hlod => w.depth,
+            _ => return Err(bad("missing or invalid encodedDepth")),
+        };
+        match (w.error_policy.as_deref(), w.measurement.as_ref()) {
+            (Some(crate::mesh_large::hlod::error::POLICY), Some(summary)) => {
+                let key = crate::mesh_large::hlod::store::TileKey {
+                    first: w.first,
+                    end: w.end,
+                    depth: encoded_depth,
+                    leaf_begin: 0,
+                    leaf_end: 0,
+                };
+                if summary.seed != crate::mesh_large::hlod::error::seed(key) {
+                    return Err(bad("measurement seed differs from encoded tile"));
+                }
+                let children = w
+                    .children_error
+                    .ok_or_else(|| bad("S2 row has no childrenError"))?;
+                summary
+                    .validate(w.geometric_error, children, w.end.saturating_sub(w.first))
+                    .map_err(|e| bad(&e.to_string()))?;
+            }
+            (None, None) if !hlod => {} // Historical H17 rows, removed with that producer in S6.
+            _ => return Err(bad("missing or unsupported sampled-error policy/summary")),
         }
         let expected = format!("proxies/f{}-d{}.glb", w.first, w.depth);
         if w.uri != expected {
@@ -251,7 +290,75 @@ impl ProxyRow {
             depth: w.depth,
             geometric_error: w.geometric_error,
             primitives: w.primitives,
+            encoded_depth,
+            sampling: w.measurement.as_ref().map(|s| {
+                (
+                    s.area_samples_per_direction,
+                    s.depth_source_triangles,
+                    s.schedule,
+                )
+            }),
         })
+    }
+}
+
+/// S2's sampling of one encoded depth over its published rows: area samples per direction,
+/// source triangles and the schedule's source triangles at the depth (equal on every row).
+#[derive(Clone, Copy, Default)]
+struct DepthSampling {
+    samples: u64,
+    range: u64,
+    total: u64,
+    schedule: crate::mesh_large::hlod::error::Schedule,
+}
+
+impl DepthSampling {
+    fn add(
+        &mut self,
+        samples: u64,
+        range: u64,
+        total: u64,
+        schedule: crate::mesh_large::hlod::error::Schedule,
+    ) -> Result<(), JobError> {
+        if self.total != 0 && (self.total != total || self.schedule != schedule) {
+            return Err(input(
+                "HLOD rows of one depth differ in their sampling schedule",
+            ));
+        }
+        self.total = total;
+        self.schedule = schedule;
+        self.samples = self
+            .samples
+            .checked_add(samples)
+            .ok_or_else(|| input("HLOD sample count overflow"))?;
+        self.range = self
+            .range
+            .checked_add(range)
+            .ok_or_else(|| input("HLOD sampled range overflow"))?;
+        Ok(())
+    }
+
+    /// D2's minimum: 200,000 samples per direction at a depth whose tiles are all
+    /// published. Omitted cells are not measured, so with omissions the published tiles
+    /// keep the depth's density over the source they cover.
+    fn check(&self, depth: usize, omitted: u64) -> Result<(), JobError> {
+        if self.total == 0 {
+            return Ok(());
+        }
+        if self.range > self.total || (omitted == 0 && self.range != self.total) {
+            return Err(input(format!(
+                "HLOD depth {depth} rows cover {} of the {} source triangles scheduled",
+                self.range, self.total
+            )));
+        }
+        let need = self.schedule.required(self.range, self.total)?;
+        if self.samples < need {
+            return Err(input(format!(
+                "incomplete HLOD depth {depth} sampling: {}/{need} per direction",
+                self.samples
+            )));
+        }
+        Ok(())
     }
 }
 
@@ -456,6 +563,9 @@ pub(crate) struct LeafDirectory {
     /// The coarse rows may skip internal tiles: an HLOD stage (`hlod` in the manifest),
     /// whose single-child pass-through cells publish no content.
     pub sparse_proxies: bool,
+    /// HLOD cells whose coarse tile was omitted (`hlod.omittedProxies`): they publish no
+    /// content and are not measured.
+    omitted_proxies: u64,
     /// Largest GLB JSON chunk read for bounds.
     max_glb_json: u64,
 }
@@ -498,6 +608,7 @@ impl LeafDirectory {
             totals,
             proxies,
             sparse_proxies: proxies && manifest.get("hlod").is_some(),
+            omitted_proxies: manifest["hlod"]["omittedProxies"].as_u64().unwrap_or(0),
             max_glb_json: MAX_GLB_JSON,
         })
     }
@@ -526,13 +637,36 @@ impl LeafDirectory {
         let file = File::open(&path).map_err(|e| JobError::io("open proxy rows", &path, e))?;
         let mut lines = BufReader::new(file).lines();
         let mut row = 0u64;
+        let mut depths = [DepthSampling::default(); 32];
+        let mut finished = false;
         Ok(Box::new(std::iter::from_fn(move || {
-            let line = lines.next()?;
+            if finished {
+                return None;
+            }
+            let line = match lines.next() {
+                Some(line) => line,
+                None => {
+                    finished = true;
+                    return depths
+                        .iter()
+                        .enumerate()
+                        .find_map(|(depth, d)| d.check(depth, self.omitted_proxies).err())
+                        .map(Err);
+                }
+            };
             row += 1;
             Some(
                 line.map_err(|e| JobError::io("read proxy rows", &path, e))
-                    .and_then(|line| ProxyRow::parse(&line, row))
+                    .and_then(|line| ProxyRow::parse(&line, row, self.sparse_proxies))
                     .and_then(|proxy| {
+                        if let Some((samples, total, schedule)) = proxy.sampling {
+                            depths[proxy.encoded_depth as usize].add(
+                                samples,
+                                proxy.end - proxy.first,
+                                total,
+                                schedule,
+                            )?;
+                        }
                         let bounds = payload_bounds(
                             &self.member(&proxy.uri),
                             &proxy.uri,

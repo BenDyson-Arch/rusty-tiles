@@ -748,7 +748,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             ));
         }
         if let Some(rows) = self.proxies.as_mut() {
-            if self.lookahead.is_some() || rows.next().is_some() {
+            if self.lookahead.is_some() || rows.next().transpose()?.is_some() {
                 return Err(JobError::new(
                     JobErrorKind::InvalidInput,
                     "proxies.jsonl has rows beyond the internal tiles",
@@ -898,6 +898,8 @@ mod omission_tests {
             depth: 0,
             geometric_error: 1e9,
             primitives: 1,
+            sampling: None,
+            encoded_depth: 0,
         };
         let (shape, _) = plan(2, vec![root]);
         let err = shape.unwrap_err();
@@ -919,6 +921,8 @@ mod omission_tests {
             depth: 0,
             geometric_error: 1e9,
             primitives: 1,
+            sampling: None,
+            encoded_depth: 0,
         };
         let tight = Limits {
             objects: 4,
