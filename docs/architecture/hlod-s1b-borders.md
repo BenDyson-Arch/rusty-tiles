@@ -220,3 +220,11 @@ tiles' final published G (zero for absent kinds, max-reduced across tiles).
 All regions/controls are bounded by the eight-child input and capped output.
 As with closures, conservative region assignment is a cap-fit cost requiring
 real byte/G/CPU acceptance, not a continuous source-surface correspondence proof.
+
+A rejected opening first gets a bounded surface-preserving retry: pin every
+vertex of original reference faces incident to its new rim and run ordinary
+reduction again. This preserves those nondegenerate faces without inventing
+a closure patch. Pins grow monotonically for at most three feedback rounds;
+all rejected proposals stay in attempted receipts. The fixed cap and full-cap
+retry remain unchanged. The 9a5f conservative-control probe reported omission
+and failed first-view bytes; it is rejected evidence, not an accepted frontier.

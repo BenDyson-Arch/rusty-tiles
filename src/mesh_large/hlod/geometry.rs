@@ -276,12 +276,13 @@ pub(crate) fn build_parent(
     }
     let floor = contract.scale.max(children_error);
     let reference = merged.clone();
+    let mut opening_pins = HashSet::default();
     for (i, &cap) in caps.iter().enumerate() {
         if caps[..i].contains(&cap) {
             continue;
         }
         for preserve_holes in [false, true] {
-            match attempt(
+            if let Some(mut b) = assessed_attempt(
                 tile,
                 &merged,
                 interface,
@@ -291,28 +292,17 @@ pub(crate) fn build_parent(
                 &reference,
                 floor,
                 preserve_holes,
-            ) {
-                Err(e) if e.kind() == JobErrorKind::Unsupported => continue,
-                Ok(mut b) => {
-                    let accepted = assess(&mut b)?;
-                    if !accepted {
-                        b.change.receipt.rejected_hole_closures += b.change.receipt.closed_holes;
-                        b.change.receipt.rejected_hole_openings += b.change.receipt.opened_holes;
-                    }
-                    attempted.add(b.change.receipt);
-                    if !accepted {
-                        continue;
-                    }
-                    return Ok({
-                        attempted.add(topology);
-                        b.topology.add(topology);
-                        Outcome {
-                            built: Some(b),
-                            attempted_topology: attempted,
-                        }
-                    });
-                }
-                Err(e) => return Err(e),
+                &mut opening_pins,
+                &mut attempted,
+                assess,
+                check,
+            )? {
+                attempted.add(topology);
+                b.topology.add(topology);
+                return Ok(Outcome {
+                    built: Some(b),
+                    attempted_topology: attempted,
+                });
             }
         }
     }
@@ -328,7 +318,7 @@ pub(crate) fn build_parent(
             topology::remesh(&mut merged, interface, round, &mut topology);
         }
         for preserve_holes in [false, true] {
-            match attempt(
+            if let Some(mut b) = assessed_attempt(
                 tile,
                 &merged,
                 interface,
@@ -338,33 +328,21 @@ pub(crate) fn build_parent(
                 &reference,
                 floor,
                 preserve_holes,
-            ) {
-                Err(e) if e.kind() == JobErrorKind::Unsupported => {}
-                Ok(mut b) => {
-                    let accepted = assess(&mut b)?;
-                    if !accepted {
-                        b.change.receipt.rejected_hole_closures += b.change.receipt.closed_holes;
-                        b.change.receipt.rejected_hole_openings += b.change.receipt.opened_holes;
-                    }
-                    attempted.add(b.change.receipt);
-                    if !accepted {
-                        continue;
-                    }
-                    // Final topology is compared with the pre-cleanup input; do not count
-                    // intermediate component deletion a second time.
-                    topology.dropped_components = 0;
-                    topology.closed_holes = 0;
-                    topology.opened_holes = 0;
-                    return Ok({
-                        attempted.add(topology);
-                        b.topology.add(topology);
-                        Outcome {
-                            built: Some(b),
-                            attempted_topology: attempted,
-                        }
-                    });
-                }
-                Err(e) => return Err(e),
+                &mut opening_pins,
+                &mut attempted,
+                assess,
+                check,
+            )? {
+                // Final comparison already counts actual changes against the reference.
+                topology.dropped_components = 0;
+                topology.closed_holes = 0;
+                topology.opened_holes = 0;
+                attempted.add(topology);
+                b.topology.add(topology);
+                return Ok(Outcome {
+                    built: Some(b),
+                    attempted_topology: attempted,
+                });
             }
         }
     }
@@ -373,6 +351,75 @@ pub(crate) fn build_parent(
         built: None,
         attempted_topology: attempted,
     })
+}
+
+/// Keep the source face ring around a rejected new hole before considering omission.
+/// Pins grow monotonically and retries are bounded; no patch or new boundary is invented.
+fn assessed_attempt(
+    tile: TileKey,
+    merged: &Merged,
+    interface: &[InterfaceRow],
+    cap: usize,
+    children_error: f64,
+    original_faces: &[[u32; 3]],
+    reference: &Merged,
+    floor: f64,
+    preserve_holes: bool,
+    opening_pins: &mut HashSet<Key>,
+    attempted: &mut TopologyReceipt,
+    assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+) -> Result<Option<Built>, JobError> {
+    for round in 0..=RETRIES {
+        check()?;
+        let mut b = match attempt(
+            tile,
+            merged,
+            interface,
+            cap,
+            children_error,
+            original_faces,
+            reference,
+            floor,
+            preserve_holes,
+            opening_pins,
+        ) {
+            Ok(b) => b,
+            Err(e) if e.kind() == JobErrorKind::Unsupported => return Ok(None),
+            Err(e) => return Err(e),
+        };
+        b.retries += round;
+        let accepted = assess(&mut b)?;
+        if !accepted {
+            b.change.receipt.rejected_hole_closures += b.change.receipt.closed_holes;
+            b.change.receipt.rejected_hole_openings += b.change.receipt.opened_holes;
+        }
+        attempted.add(b.change.receipt);
+        if accepted {
+            return Ok(Some(b));
+        }
+        if round == RETRIES || b.change.receipt.opened_holes == 0 {
+            break;
+        }
+        let rim: HashSet<Key> = b
+            .change
+            .opening_boundary
+            .iter()
+            .flatten()
+            .map(|p| key(*p))
+            .collect();
+        let before = opening_pins.len();
+        for t in &reference.triangles {
+            let keys = t.map(|v| reference.keys[v as usize]);
+            if keys.iter().any(|k| rim.contains(k)) {
+                opening_pins.extend(keys);
+            }
+        }
+        if opening_pins.len() == before {
+            break;
+        }
+    }
+    Ok(None)
 }
 
 /// One build of the parent from `merged` children under `interface`; `unsupported` when
@@ -387,6 +434,7 @@ fn attempt(
     reference: &Merged,
     floor: f64,
     preserve_holes: bool,
+    opening_pins: &HashSet<Key>,
 ) -> Result<Built, JobError> {
     let segments: HashSet<(Key, Key)> = interface
         .iter()
@@ -409,11 +457,14 @@ fn attempt(
             lost_points.len()
         )));
     }
-    let locked: Vec<bool> = if preserve_holes {
+    let mut locked: Vec<bool> = if preserve_holes {
         topology::protected(merged, interface, true).0
     } else {
         merged.keys.iter().map(|k| vertices.contains(k)).collect()
     };
+    for (v, lock) in locked.iter_mut().enumerate() {
+        *lock |= opening_pins.contains(&merged.keys[v]);
+    }
     let input = merged.triangles.len();
     let mut protected = vec![false; input];
     let mut retries = 0;
