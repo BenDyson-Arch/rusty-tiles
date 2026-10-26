@@ -98,6 +98,12 @@ def textured(material):
 
 IDENTITY = [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]
 KEYS = ('node_index','mesh_index','primitive_index','triangle_index')
+# D4 ties (owner, 2026-10-26): two implementations cannot agree bit for bit on
+# float distances. Each coordinate difference of magnitude <= M = |centroid| +
+# descendant source diagonal rounds by <= 2**-52 * M; the distance path (difference,
+# projection, interpolation, subtraction, squared sum, square root) has <= 8 such
+# steps, and the producer and this oracle may err in opposite directions: 2 * 8.
+TIE_ULPS = 16
 
 
 def multiply(a,b):
@@ -307,14 +313,33 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
             result['exemptCrackEvents']=store.db.execute("SELECT count(*) FROM exemptions WHERE kind='crack'").fetchone()[0]
             result['exemptCrackEventBasis']='deduplicated (tile,source-open-edge) positive sampled-width witnesses only; changed open edges are candidates, and unmeasured correspondences are not zero-gap proofs'
             result['exemptWindingEvents']=result['winding']['exemptWindingEvents']
+            ties=dict(accepted=0,maxExcess=0.0,maxTau=0.0,maxExcessOverTau=0.0,
+                      tolerance='tau = 16 * 2**-52 * (|centroid| + descendant source box diagonal)')
             for t in tiles:
                 if not t['children']: continue
                 for f in store.faces(int(t['id'])):
                     p=[sum(v[k] for v in f['xyz'])/3 for k in range(3)]
                     nearest,want=store.nearest(p,t['lo'],t['hi'],distance2)
                     actual=f['ids'].get('source_primitive',{})
-                    require(all(actual.get(k)==want[k] for k in ('expanded_ordinal','material_index')),'representativeIdentity',t['id'])
-                    require(tuple(actual.get(k) for k in KEYS[:3])==nearest[:3],'representativeIdentity',t['id'])
+                    primitive=tuple(actual.get(k) for k in KEYS[:3])
+                    named=(primitive,actual.get('expanded_ordinal'),actual.get('material_index'))
+                    if named!=(tuple(nearest[:3]),want['expanded_ordinal'],want['material_index']):
+                        # D4 tie: the producer breaks ties on its own arithmetic. Accept
+                        # the named primitive only within tau of the minimum distance.
+                        box=store.source_box(t['lo'],t['hi'])
+                        tau=TIE_ULPS*2.0**-52*(math.sqrt(sum(x*x for x in p))+
+                            math.sqrt(sum((box[2*k+1]-box[2*k])**2 for k in range(3))))
+                        d0=math.sqrt(distance2(p,want['xyz']))
+                        hit=store.within(p,t['lo'],t['hi'],distance2,d0+tau,
+                            lambda identity,w:(tuple(identity[:3]),w['expanded_ordinal'],w['material_index'])==named)
+                        require(hit is not None,'representativeIdentity',t['id'])
+                        excess=math.sqrt(distance2(p,hit[1]['xyz']))-d0
+                        require(excess<=tau,'representativeIdentity',t['id'])
+                        ties['accepted']+=1
+                        if excess>=ties['maxExcess']:
+                            ties.update(maxExcess=excess,maxTau=tau)
+                        ties['maxExcessOverTau']=max(ties['maxExcessOverTau'],excess/tau)
+                        want=hit[1]
                     representatives+=1
                     require(material_class(f['material'])==material_class(want['material']),'representativeMaterialClass',t['id'])
             # Upward omission, single first-renderable cover and empty-cell
@@ -330,6 +355,7 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                     result['omission']['producerReport']=compare(result['omission'],json.load(f))
                 require(result['omission']['producerReport']['ok'],'omissionReport',
                         json.dumps(result['omission']['producerReport']['differences'],sort_keys=True))
+            result['representativeTies']=ties
             result.update(ok=True,leafTriangles=leaf_count,tiles=len(tiles),representatives=representatives,
                           coordinateFrame=coordinate_frame,profile=profile,
                           leafSourcePointsChecked=source_points,

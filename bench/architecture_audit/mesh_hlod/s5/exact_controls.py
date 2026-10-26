@@ -22,7 +22,7 @@ D, E, F = [0,-2,0], [0,0,2], [0,0,-2]
 T, DETOUR = [1,0,0], [.5,-.5,0]
 
 
-def payload(triangles, *, leaf, first=0):
+def payload(triangles, *, leaf, first=0, primitive=0):
     """One core primitive and one primitive identity row, with literal bytes."""
     binary=bytearray();views=[];accessors=[]
     def view(data):
@@ -50,6 +50,7 @@ def payload(triangles, *, leaf, first=0):
     for slot,label in enumerate(('source_primitive','source_triangle') if leaf else ('source_primitive',)):
         rows=count if slot else 1
         columns={key:[0]*rows for key in ('node_index','mesh_index','primitive_index','expanded_ordinal','material_index')}
+        columns['primitive_index']=columns['expanded_ordinal']=[primitive]*rows
         if slot:
             attrs['_FEATURE_ID_1']=acc((rank for rank in range(count) for _ in range(3)),5126,1)
             columns['triangle_index']=list(range(first,first+count))
@@ -148,6 +149,24 @@ def generate(root):
             incidence=source_incidence([original[:split],original[split:]]))
         if check is None:case['coarseTriangles']=coarse
         cases.append(case)
+    # D4 ties: leaf A holds T (primitive 0), leaf B holds T lifted by delta
+    # (primitive 1); the coarse face T names primitive 1, the later source order.
+    # Within tau = 16 ulps of the coordinate scale it is a tie; beyond, refused.
+    for name,delta,check in (('tie-exact-later-primitive',0.0,None),
+            ('tie-within-tau',2.0**-50,None),('near-tie-beyond-tau',2.0**-20,'representativeIdentity')):
+        folder=root/name;folder.mkdir(exist_ok=True)
+        t=[[0,0,0],[2,0,0],[0,2,0]];lifted=[[x,y,z+delta] for x,y,z in t]
+        (folder/'coarse.glb').write_bytes(payload([t],leaf=False,primitive=1))
+        (folder/'left.glb').write_bytes(payload([t],leaf=True))
+        (folder/'right.glb').write_bytes(payload([lifted],leaf=True,primitive=1))
+        (folder/'tileset.json').write_text(json.dumps(dict(asset={'version':'1.1'},geometricError=0,
+            root=tile('coarse.glb',[tile('left.glb'),tile('right.glb')])),separators=(',',':')))
+        source=root/(name+'-source.json')
+        source.write_text(json.dumps({'triangles':{f'0,0,{p},0':dict(xyz=xyz,vertices=[0,1,2],
+            expanded_ordinal=p,material_index=0,material=controls.MATERIALS[0],
+            normals=controls.NORMALS,uvs=controls.UVS) for p,xyz in ((0,t),(1,lifted))}},separators=(',',':'))+'\n')
+        cases.append(dict(name=name,oracleCheck=check,archiveCheck=None,source=source.name,
+            incidence=source_incidence([[t],[lifted]])))
     (root/'cases.json').write_text(json.dumps(cases,indent=2)+'\n')
     return cases
 

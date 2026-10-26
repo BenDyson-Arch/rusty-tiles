@@ -8,7 +8,8 @@
 //! Ordered key scans find actual outside-leaf owners and stage sparse ancestor
 //! obligations. No chords, T contacts, distance joins or tolerant adjacency are
 //! inferred. Every directed incident owner survives local balanced cancellation.
-//! Original-ID interval joins independently replay even disjoint placements.
+//! Original IDs recorded once at ingest are checked by one ordered key scan,
+//! including disjoint placements and repeated references.
 //! No triangle soup or archive-sized geometry/alias vector is retained.
 //! Decoding, key work, scans, owner walks and queries consume the existing work
 //! budget, including one unit per 10,000 SQLite VM operations. SQLite's page
@@ -505,127 +506,6 @@ fn replay_document<'a>(
     )?;
     Ok((doc, bin, work))
 }
-type OriginalMap = BTreeMap<(Source, u64), [u64; 3]>;
-
-/// The range index is conservative: every exact original alias in a leaf is
-/// replayed, including aliases absent from the geometric boundary reduction.
-fn replay_originals(
-    bytes: &[u8],
-    frame: Matrix,
-    cap: usize,
-    effort: &Effort,
-) -> Result<OriginalMap, Error> {
-    let (doc, bin, mut work) = replay_document(bytes, cap, effort)?;
-    let nodes = doc["nodes"]
-        .as_array()
-        .ok_or_else(|| bad("sourceIdentity", "missing replay nodes"))?;
-    let scene = doc["scene"].as_u64().unwrap_or(0) as usize;
-    let roots = doc["scenes"][scene]["nodes"]
-        .as_array()
-        .ok_or_else(|| bad("sourceIdentity", "missing replay scene"))?;
-    let mut originals = OriginalMap::new();
-    let mut stack = vec![(roots.as_slice(), 0usize, IDENTITY)];
-    while let Some((children, next, parent)) = stack.last_mut() {
-        if *next == children.len() {
-            stack.pop();
-            continue;
-        }
-        let id = identity::uint(&children[*next])?;
-        *next += 1;
-        work.charge(1)?;
-        let node = nodes
-            .get(id)
-            .ok_or_else(|| bad("sourceIdentity", "replay node outside document"))?;
-        let m = multiply(*parent, node_matrix(node)?);
-        if let Some(mesh) = node.get("mesh") {
-            for p in doc["meshes"][identity::uint(mesh)?]["primitives"]
-                .as_array()
-                .into_iter()
-                .flatten()
-            {
-                let positions = Accessor::new(
-                    &doc,
-                    bin,
-                    identity::uint(&p["attributes"]["POSITION"])?,
-                    &mut work,
-                )?;
-                let indices = p
-                    .get("indices")
-                    .map(|i| Accessor::new(&doc, bin, identity::uint(i)?, &mut work))
-                    .transpose()?;
-                let triangle = Feature::new(&doc, bin, p, "source_triangle", &mut work)?
-                    .ok_or_else(|| bad("sourceIdentity", "missing leaf original rows in replay"))?;
-                let count = indices.as_ref().map_or(positions.count, |i| i.count);
-                for corner in (0..count).step_by(3) {
-                    work.charge(12)?;
-                    let first = match &indices {
-                        Some(i) => i.index(corner)?,
-                        None => corner,
-                    };
-                    let (row, source) = triangle.row(first, &mut work)?;
-                    for j in 0..3 {
-                        work.charge(originals.len().max(2).ilog2() as usize + 1)?;
-                        let id = match &indices {
-                            Some(i) => i.index(corner + j)?,
-                            None => corner + j,
-                        };
-                        let p = positions.position(id, m)?;
-                        // Match ingest scene evaluation followed by reference
-                        // placement; folding matrices changes exact f64 results.
-                        let p = point(frame, p);
-                        finite(&p)?;
-                        let exact = point_key(p);
-                        let key = (source, triangle.columns[6 + j].at(row)?);
-                        if let Some(previous) = originals.get(&key) {
-                            if *previous != exact {
-                                return Err(bad(
-                                    "sourceIdentity",
-                                    "original vertex has distinct exact decoded placed positions",
-                                ));
-                            }
-                        } else {
-                            if originals.len().saturating_mul(144) >= cap {
-                                return Err(Error::limit("sourceIdentity: replay original workspace exceeds decoded document budget"));
-                            }
-                            originals.insert(key, exact);
-                        }
-                    }
-                }
-            }
-        }
-        if let Some(children) = node["children"].as_array() {
-            stack.push((children.as_slice(), 0, m));
-        }
-    }
-    effort.charge(usize::try_from(work.used).map_err(|_| super::refused())?)?;
-    Ok(originals)
-}
-fn compare_originals(
-    left: &OriginalMap,
-    right: &OriginalMap,
-    effort: &Effort,
-) -> Result<(), Error> {
-    let (mut l, mut r) = (left.iter(), right.iter());
-    let (mut a, mut b) = (l.next(), r.next());
-    while let (Some((ka, pa)), Some((kb, pb))) = (a, b) {
-        effort.charge(1)?;
-        match ka.cmp(kb) {
-            std::cmp::Ordering::Less => a = l.next(),
-            std::cmp::Ordering::Greater => b = r.next(),
-            std::cmp::Ordering::Equal => {
-                if pa != pb {
-                    return Err(bad(
-                        "sourceIdentity",
-                        "same original vertex has distinct exact decoded placed positions",
-                    ));
-                }
-                a = l.next();
-                b = r.next();
-            }
-        }
-    }
-    Ok(())
-}
 
 // Interface canonicalization is f32. Original alias identity deliberately keeps
 // the separate exact f64 point_key above; casting must never weaken R9.
@@ -942,8 +822,7 @@ impl Store {
             CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL);
             CREATE TABLE placements(id INTEGER PRIMARY KEY,tile INTEGER NOT NULL,rank INTEGER NOT NULL,frame BLOB NOT NULL,leaf INTEGER NOT NULL);
             CREATE INDEX placement_rank ON placements(rank,leaf,id);
-            CREATE TABLE original_domains(rank INTEGER NOT NULL,source BLOB NOT NULL,lo BLOB NOT NULL,hi BLOB NOT NULL,PRIMARY KEY(rank,source));
-            CREATE INDEX original_domain_source ON original_domains(source,lo,rank,hi);
+            CREATE TABLE originals(source BLOB NOT NULL,vertex BLOB NOT NULL,rank INTEGER NOT NULL,point BLOB NOT NULL,PRIMARY KEY(source,vertex,rank)) WITHOUT ROWID;
             CREATE TABLE leaf_points(key BLOB NOT NULL,tile INTEGER NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             CREATE TABLE leaf_segments(key BLOB NOT NULL,tile INTEGER NOT NULL,nf INTEGER NOT NULL,nr INTEGER NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             CREATE TABLE shared_point_keys(key BLOB PRIMARY KEY) WITHOUT ROWID;
@@ -1319,37 +1198,23 @@ impl Store {
                 "original triangle table has unreferenced rows",
             ));
         }
-        let mut domain: Option<(Source, u64, u64)> = None;
-        let mut insert_domain = self
+        // One row per original vertex in the payload frame; placement is applied by
+        // the alias scan, in the same scene-then-reference order a replay used.
+        let mut insert = self
             .connection
-            .prepare_cached("INSERT INTO original_domains VALUES(?,?,?,?)")
+            .prepare_cached("INSERT INTO originals VALUES(?,?,?,?)")
             .map_err(sql)?;
-        let flush = |d: (Source, u64, u64),
-                     stmt: &mut rusqlite::CachedStatement<'_>|
-         -> Result<(), Error> {
-            let source: Vec<u8> = d.0.into_iter().flat_map(u64::to_be_bytes).collect();
-            stmt.execute(params![
-                integer(rank)?,
-                source,
-                d.1.to_be_bytes().to_vec(),
-                d.2.to_be_bytes().to_vec()
-            ])
-            .map_err(sql)?;
-            Ok(())
-        };
-        for &(source, vertex) in originals.keys() {
+        for (&(source, vertex), p) in &originals {
             work.charge(1)?;
-            if let Some(d) = &mut domain {
-                if d.0 == source {
-                    d.2 = vertex;
-                    continue;
-                }
-                flush(*d, &mut insert_domain)?;
-            }
-            domain = Some((source, vertex, vertex));
-        }
-        if let Some(d) = domain {
-            flush(d, &mut insert_domain)?;
+            let source: Vec<u8> = source.into_iter().flat_map(u64::to_be_bytes).collect();
+            insert
+                .execute(params![
+                    source,
+                    vertex.to_be_bytes().to_vec(),
+                    integer(rank)?,
+                    encode(p)
+                ])
+                .map_err(sql)?;
         }
         Ok(work.used)
     }
@@ -1509,7 +1374,7 @@ impl Store {
         census.omission = self.omission(effort)?;
         self.single_cover(effort)?;
         self.place_references(effort)?;
-        self.replay_original_aliases(effort, read)?;
+        self.replay_original_aliases(effort)?;
         self.collect_leaves(effort, read)?;
         self.point_requirements(&mut census, effort)?;
         self.segment_requirements(&mut census, effort)?;
@@ -1571,77 +1436,36 @@ impl Store {
         self.connection.execute_batch("UPDATE tiles SET leaf=NOT EXISTS(SELECT 1 FROM refs r WHERE r.tile>tiles.id AND r.tile<=tiles.last);").map_err(sql)?;
         Ok(())
     }
-    fn replay_original_aliases(
-        &self,
-        effort: &Effort,
-        read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
-    ) -> Result<(), Error> {
-        let mut outer = self
+    /// Every original vertex shared by leaf placements, including repeated
+    /// references to one payload and disjoint geometry, must have one exact placed
+    /// f64 position (normalized zero). One ordered scan over (source, vertex) rows
+    /// recorded at ingest: each payload is decoded once, never per pair.
+    fn replay_original_aliases(&self, effort: &Effort) -> Result<(), Error> {
+        let mut query = self
             .connection
-            .prepare("SELECT id,rank,frame FROM placements WHERE leaf=1 ORDER BY id")
+            .prepare("SELECT o.source,o.vertex,o.point,p.frame FROM originals o JOIN placements p ON p.rank=o.rank WHERE p.leaf=1 ORDER BY o.source,o.vertex")
             .map_err(sql)?;
-        let mut rows = outer.query([]).map_err(sql)?;
-        let mut domains = self
-            .connection
-            .prepare("SELECT source,lo,hi FROM original_domains WHERE rank=?")
-            .map_err(sql)?;
-        // Source/lo and rank/leaf/id are indexed. Enumerate and charge every
-        // returned range candidate before testing its upper bound or aliases.
-        // A disjoint geometry box never excludes an identity candidate.
-        let mut candidates = self.connection.prepare("SELECT p.id,p.rank,p.frame,d.hi FROM original_domains d INDEXED BY original_domain_source CROSS JOIN placements p INDEXED BY placement_rank ON p.rank=d.rank WHERE d.source=?1 AND d.lo<=?2 AND p.leaf=1 AND p.id>?3").map_err(sql)?;
+        let mut rows = query.query([]).map_err(sql)?;
+        let mut group: Option<(Vec<u8>, Vec<u8>, [u64; 3])> = None;
         while let Some(row) = rows.next().map_err(sql)? {
             effort.charge(1)?;
-            let id: i64 = row.get(0).map_err(sql)?;
-            let rank: i64 = row.get(1).map_err(sql)?;
-            let frame: Vec<u8> = row.get(2).map_err(sql)?;
-            let mut local = domains.query([rank]).map_err(sql)?;
-            let mut seen = BTreeSet::new();
-            let mut left = None;
-            while let Some(domain) = local.next().map_err(sql)? {
-                effort.charge(1)?;
-                let source: Vec<u8> = domain.get(0).map_err(sql)?;
-                let lo: Vec<u8> = domain.get(1).map_err(sql)?;
-                let hi: Vec<u8> = domain.get(2).map_err(sql)?;
-                let mut nearby = candidates.query(params![source, hi, id]).map_err(sql)?;
-                while let Some(other) = nearby.next().map_err(sql)? {
-                    effort.charge(1)?;
-                    let high: Vec<u8> = other.get(3).map_err(sql)?;
-                    if high < lo {
-                        continue;
-                    }
-                    let other_id: i64 = other.get(0).map_err(sql)?;
-                    effort.charge(seen.len().max(2).ilog2() as usize + 1)?;
-                    if seen.contains(&other_id) {
-                        continue;
-                    }
-                    if seen.len().saturating_mul(48) >= self.decoded_limit {
-                        return Err(Error::limit(
-                            "sourceIdentity: replay pair workspace exceeds decoded document budget",
+            let source: Vec<u8> = row.get(0).map_err(sql)?;
+            let vertex: Vec<u8> = row.get(1).map_err(sql)?;
+            let local = decode::<3>(&row.get::<_, Vec<u8>>(2).map_err(sql)?)?;
+            let frame = decode::<16>(&row.get::<_, Vec<u8>>(3).map_err(sql)?)?;
+            let placed = point(frame, local);
+            finite(&placed)?;
+            let exact = point_key(placed);
+            match &group {
+                Some((s, v, first)) if *s == source && *v == vertex => {
+                    if *first != exact {
+                        return Err(bad(
+                            "sourceIdentity",
+                            "original vertex has distinct exact decoded placed positions",
                         ));
                     }
-                    seen.insert(other_id);
-                    if left.is_none() {
-                        effort.charge(1)?;
-                        let bytes = read(u64::try_from(rank).map_err(|_| super::refused())?)?;
-                        left = Some(replay_originals(
-                            &bytes,
-                            decode::<16>(&frame)?,
-                            self.decoded_limit,
-                            effort,
-                        )?);
-                    }
-                    let other_rank: i64 = other.get(1).map_err(sql)?;
-                    let other_frame: Vec<u8> = other.get(2).map_err(sql)?;
-                    effort.charge(1)?;
-                    let bytes = read(u64::try_from(other_rank).map_err(|_| super::refused())?)?;
-                    let right = replay_originals(
-                        &bytes,
-                        decode::<16>(&other_frame)?,
-                        self.decoded_limit,
-                        effort,
-                    )?;
-                    compare_originals(left.as_ref().unwrap(), &right, effort)?;
                 }
+                _ => group = Some((source, vertex, exact)),
             }
         }
         Ok(())
@@ -2420,107 +2244,56 @@ mod tests {
         bytes.extend(bin);
         bytes
     }
-    fn original_fixture(offset: f64, inconsistent: bool) -> Vec<u8> {
-        use serde_json::json;
-        let vertices = [
-            [offset, 0., 0.],
-            [offset + 2., 0., 0.],
-            [offset, 2., 0.],
-            [offset, 0., 2.],
-        ];
-        let ids = [[0usize, 1, 2], [1, 0, 3], [0, 2, 3], [1, 3, 2]];
-        let mut faces = ids.map(|face| face.map(|i| vertices[i]));
-        if inconsistent {
-            faces[0][0][0] += 0.125;
-        }
-        let bytes = replay_fixture(&faces);
-        let n = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
-        let mut doc: Value = serde_json::from_slice(&bytes[20..20 + n]).unwrap();
-        let mut bin = bytes[28 + n..].to_vec();
-        let mut schema = serde_json::Map::new();
-        let mut properties = serde_json::Map::new();
-        for (column, key) in SOURCE_COLUMNS
-            .into_iter()
-            .chain(["triangle_index", "vertex_0", "vertex_1", "vertex_2"])
-            .enumerate()
-        {
-            let view = doc["bufferViews"].as_array().unwrap().len();
-            doc["bufferViews"]
-                .as_array_mut()
-                .unwrap()
-                .push(json!({"buffer":0,"byteOffset":bin.len(),"byteLength":32}));
-            for (row, face) in ids.iter().enumerate() {
-                let value = match column {
-                    0..=4 => 0,
-                    5 => row as u64,
-                    _ => face[column - 6] as u64,
-                };
-                bin.extend(value.to_le_bytes());
-            }
-            schema.insert(key.into(), json!({"componentType":"UINT64"}));
-            properties.insert(key.into(), json!({"values":view}));
-        }
-        let view = doc["bufferViews"].as_array().unwrap().len();
-        doc["bufferViews"]
-            .as_array_mut()
-            .unwrap()
-            .push(json!({"buffer":0,"byteOffset":bin.len(),"byteLength":24}));
-        for row in 0u16..4 {
-            for _ in 0..3 {
-                bin.extend(row.to_le_bytes());
-            }
-        }
-        doc["accessors"]
-            .as_array_mut()
-            .unwrap()
-            .push(json!({"bufferView":view,"componentType":5123,"type":"SCALAR","count":12}));
-        let primitive = &mut doc["meshes"][0]["primitives"][0];
-        primitive["attributes"]["_FEATURE_ID_0"] = json!(1);
-        primitive["extensions"] = json!({"EXT_mesh_features":{"featureIds":[{"label":"source_triangle","attribute":0,"propertyTable":0,"featureCount":4}]}});
-        doc["extensions"] = json!({"EXT_structural_metadata":{"schema":{"classes":{"source_triangle":{"properties":schema}}},"propertyTables":[{"class":"source_triangle","count":4,"properties":properties}]}});
-        doc["buffers"][0]["byteLength"] = json!(bin.len());
-        pack_fixture(doc, bin)
-    }
     #[test]
     fn original_replay_compares_closed_aliases_after_exact_reference_placement() {
-        let source =
-            replay_originals(&original_fixture(0., false), IDENTITY, 1 << 20, &effort()).unwrap();
-        assert_eq!(source.len(), 4);
-        let mut frame = IDENTITY;
-        frame[12] = 10.;
-        let rebased =
-            replay_originals(&original_fixture(-10., false), frame, 1 << 20, &effort()).unwrap();
-        compare_originals(&source, &rebased, &effort()).unwrap();
-        for gap in [0.125, 10.] {
-            frame[12] = 10. + gap;
-            let moved = replay_originals(&original_fixture(-10., false), frame, 1 << 20, &effort())
-                .unwrap();
-            assert!(compare_originals(&source, &moved, &effort())
+        // Rows: (rank, payload-frame x of vertex 0, placement x shift). A rebased
+        // payload placed back exactly agrees; any gap, or a repeated reference to the
+        // same payload moved by a gap, refuses.
+        fn aliases(items: &[(i64, f64, f64)]) -> Result<(), Error> {
+            let mut s = store();
+            s.materialize()?;
+            for (id, &(rank, x, shift)) in items.iter().enumerate() {
+                s.connection
+                    .execute(
+                        "INSERT OR IGNORE INTO originals VALUES(?,?,?,?)",
+                        params![vec![0u8; 40], 0u64.to_be_bytes().to_vec(), rank, encode(&[x, 1., 2.])],
+                    )
+                    .map_err(sql)?;
+                let mut frame = IDENTITY;
+                frame[12] = shift;
+                s.connection
+                    .execute(
+                        "INSERT INTO placements(id,tile,rank,frame,leaf) VALUES(?,?,?,?,1)",
+                        params![id as i64, id as i64, rank, encode(&frame)],
+                    )
+                    .map_err(sql)?;
+            }
+            s.replay_original_aliases(&effort())
+        }
+        aliases(&[(0, 0., 0.), (1, -10., 10.)]).unwrap();
+        aliases(&[(0, 0., 0.), (0, 0., 0.)]).unwrap();
+        // One ulp at 10: exact identity, never a tolerance.
+        let ulp = f64::from_bits(10f64.to_bits() + 1) - 10.;
+        for gap in [0.125, 10., ulp] {
+            assert!(aliases(&[(0, 0., 0.), (1, -10., 10. + gap)])
+                .unwrap_err()
+                .to_string()
+                .contains("sourceIdentity"));
+            assert!(aliases(&[(0, 0., 0.), (0, 0., gap)])
                 .unwrap_err()
                 .to_string()
                 .contains("sourceIdentity"));
         }
-        assert!(
-            replay_originals(&original_fixture(0., true), IDENTITY, 1 << 20, &effort())
-                .unwrap_err()
-                .to_string()
-                .contains("sourceIdentity")
-        );
     }
-    fn domain_pair(a: (u64, u64), b: (u64, u64)) -> Store {
+    /// Literal original rows (vertex, payload-frame point), one leaf placement each.
+    fn original_rows(rows: &[(u64, Point)]) -> Store {
         let mut s = store();
         s.materialize().unwrap();
-        s.decoded_limit = 1 << 20;
-        for (rank, (lo, hi)) in [a, b].into_iter().enumerate() {
+        for (rank, &(vertex, p)) in rows.iter().enumerate() {
             s.connection
                 .execute(
-                    "INSERT INTO original_domains VALUES(?,?,?,?)",
-                    params![
-                        rank as i64,
-                        vec![0u8; 40],
-                        lo.to_be_bytes().to_vec(),
-                        hi.to_be_bytes().to_vec()
-                    ],
+                    "INSERT INTO originals VALUES(?,?,?,?)",
+                    params![vec![0u8; 40], vertex.to_be_bytes().to_vec(), rank as i64, encode(&p)],
                 )
                 .unwrap();
             s.connection
@@ -2533,66 +2306,38 @@ mod tests {
         s
     }
     #[test]
-    fn original_domain_ranges_include_equal_endpoints_and_full_uint64() {
-        for (a, b, overlap) in [
-            ((0, i64::MAX as u64), (i64::MAX as u64, u64::MAX), true),
-            ((1u64 << 63, u64::MAX), (u64::MAX, u64::MAX), true),
-            ((0, 0), (u64::MAX, u64::MAX), false),
-            ((u64::MAX, u64::MAX), (0, u64::MAX - 1), false),
+    fn original_keys_are_exact_full_width_uint64() {
+        let (p, q) = ([1., 2., 3.], [1., 2., 3.5]);
+        for (a, b, compared) in [
+            (i64::MAX as u64, i64::MAX as u64, true),
+            (u64::MAX, u64::MAX, true),
+            (1u64 << 63, (1u64 << 63) - 1, false),
+            (u64::MAX, u64::MAX - 1, false),
+            (0, u64::MAX, false),
         ] {
-            let s = domain_pair(a, b);
-            let mut reads = 0;
-            let result = s.replay_original_aliases(&effort(), &mut |_| {
-                reads += 1;
-                Err(bad("sourceIdentity", "selected identity pair"))
-            });
-            if overlap {
-                assert!(result
-                    .unwrap_err()
-                    .to_string()
-                    .contains("selected identity pair"));
-                assert_eq!(reads, 1);
+            let result = original_rows(&[(a, p), (b, q)]).replay_original_aliases(&effort());
+            if compared {
+                assert!(result.unwrap_err().to_string().contains("sourceIdentity"));
             } else {
                 result.unwrap();
-                assert_eq!(reads, 0);
             }
+            original_rows(&[(a, p), (b, p)])
+                .replay_original_aliases(&effort())
+                .unwrap();
         }
     }
     #[test]
-    fn identity_candidates_charge_before_interval_filter_and_repeat_placements() {
-        let s = domain_pair((u64::MAX, u64::MAX), (0, u64::MAX - 1));
+    fn original_scan_charges_every_row() {
+        let rows: Vec<(u64, Point)> = (0..4).map(|v| (v, [v as f64, 0., 0.])).collect();
+        let s = original_rows(&rows);
         let mut work = effort();
-        work.budget.value = 2;
+        work.budget.value = 3;
         assert!(s
-            .replay_original_aliases(&work, &mut |_| panic!("disjoint intervals"))
+            .replay_original_aliases(&work)
             .unwrap_err()
             .exceeded()
             .is_some());
-        let bytes = original_fixture(0., false);
-        for gap in [0., 0.125, 10.] {
-            let s = domain_pair((0, 3), (0, 3));
-            // Two references to one payload still have distinct placed meanings.
-            s.connection
-                .execute("UPDATE placements SET rank=0 WHERE id=1", [])
-                .unwrap();
-            let mut frame = IDENTITY;
-            frame[12] = gap;
-            s.connection
-                .execute("UPDATE placements SET frame=? WHERE id=1", [encode(&frame)])
-                .unwrap();
-            let mut reads = 0;
-            let result = s.replay_original_aliases(&effort(), &mut |rank| {
-                assert_eq!(rank, 0);
-                reads += 1;
-                Ok(bytes.clone())
-            });
-            assert_eq!(reads, 2);
-            if gap == 0. {
-                result.unwrap();
-            } else {
-                assert!(result.unwrap_err().to_string().contains("sourceIdentity"));
-            }
-        }
+        s.replay_original_aliases(&effort()).unwrap();
     }
 
     fn delivery_case(
@@ -2792,11 +2537,10 @@ mod tests {
         let a = [1., 0., 0.];
         let b = [f64::from_bits(1f64.to_bits() + 1), 0., 0.];
         assert_eq!(canonical(a).unwrap(), canonical(b).unwrap());
-        let mut left = OriginalMap::new();
-        left.insert(([0; 5], 0), point_key(a));
-        let mut right = OriginalMap::new();
-        right.insert(([0; 5], 0), point_key(b));
-        assert!(compare_originals(&left, &right, &effort())
+        // Original identity keeps the exact f64 bits the f32 seam key merges.
+        let s = original_rows(&[(0, a), (0, b)]);
+        assert!(s
+            .replay_original_aliases(&effort())
             .unwrap_err()
             .to_string()
             .contains("sourceIdentity"));

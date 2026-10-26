@@ -71,12 +71,14 @@ exactly by every ancestor with an outside owner; required edge directions are
 checked independently. Closed, locally balanced and nonmanifold items remain in
 the incidence relation. Three distinct collinear keys still contribute items.
 
-The separate original-ID check retains conservative full-width vertex ranges
-and bounded per-payload alias replay, including disjoint boxes and repeated
-references. Every shared original key must retain its exact placed f64 position;
-f32 seam canonicalization cannot weaken that identity relation. Selected rereads,
-decoding, key/map work, group members, owner walks and SQLite VM work keep their
-shared charges; dense work refuses rather than silently truncating.
+The separate original-ID check records, during ingest's single decode, one disk
+row per original vertex (full-width source and vertex IDs, payload-frame point)
+and scans them in key order, applying each leaf placement as a replay would. Every
+shared original key, including disjoint geometry and repeated references, must
+keep its exact placed f64 position; f32 seam canonicalization cannot weaken that
+identity relation. Each payload is decoded at ingest and once per placement for
+its surface; decoding, key/map work, group members, owner walks and SQLite VM
+work keep their shared charges; dense work refuses rather than truncating.
 
 `interfaceCensus` reports decoded-leaf `sharedPoints`, `sharedSegments`,
 `sourceOpenEdges` and `sourceOpenEdgesWithSharedEndpoints`. A source-open edge has
@@ -135,7 +137,10 @@ values, else `omissionReport`. `oracle.py` runs the same owner after its source
 checks and also refuses a decoded payload above 8,192 faces (`triangleCap`).
 
 `oracle.py` checks source leaf multiplicity/IDs/geometry/normals, materials and
-nearest coarse representatives, with D4 ties in source order. Analytic manifests
+nearest coarse representatives. A named primitive other than the source-order
+nearest is accepted only within tau = 16 * 2^-52 * (|centroid| + descendant
+source diagonal) of the minimum distance (D4 ties), and the largest excess is
+reported; the exact-tie, within-tau and beyond-tau controls pin it. Analytic manifests
 check exact UVs/materials. Real textured leaves may legitimately crop/repack UVs
 and texture bindings: their material class/PBR constants/slot presence and
 rendered UV structure are checked, while UV/source-pixel correspondence is
