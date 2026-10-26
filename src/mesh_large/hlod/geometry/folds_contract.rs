@@ -144,8 +144,8 @@ impl Source {
                 complete &= segment.interval[0] == parameter && segment.endpoints[0] == endpoint;
                 parameter = segment.interval[1];
                 endpoint = segment.endpoints[1];
-                for d in 0..2 {
-                    minimum[d] = minimum[d].min(segment.counts[d]);
+                for (min, count) in minimum.iter_mut().zip(segment.counts) {
+                    *min = (*min).min(count);
                 }
             }
             if complete && parameter == 1. && endpoint == chord.1 {
@@ -161,14 +161,14 @@ impl Source {
 mod tests {
     use super::*;
 
-    fn chain(
-        counts: &[[u32; 2]],
-    ) -> (
+    type Chain = (
         Vec<[f32; 3]>,
         Vec<[u32; 3]>,
         Vec<InterfaceRow>,
         Vec<Mapping>,
-    ) {
+    );
+
+    fn chain(counts: &[[u32; 2]]) -> Chain {
         // Decreasing coordinates and reversed mapping labels exercise both
         // canonical chord direction and source-edge direction normalization.
         let mut p: Vec<_> = (0..=counts.len())
@@ -184,8 +184,8 @@ mod tests {
         let mut previous = Vec::new();
         for (i, count) in counts.iter().enumerate() {
             previous.push(InterfaceRow::new(0, key(p[i]), key(p[i + 1]), 0, 1));
-            for d in 0..2 {
-                for wing in 0..count[d] {
+            for (d, &count) in count.iter().enumerate() {
+                for wing in 0..count {
                     let v = p.len() as u32;
                     // All same-direction wings are acute, with distinct faces.
                     p.push([0., 1. + wing as f32, if d == 0 { 1. } else { -1. }]);
@@ -310,7 +310,7 @@ mod tests {
     fn contraction_guard_incremental_workspace_fits_parent_charge() {
         const TRIANGLES: usize = 32_768;
         let arcs = TRIANGLES / 2;
-        assert!(TRIANGLES <= 8 * crate::mesh_large::hlod::TRIANGLE_CAP);
+        const { assert!(TRIANGLES <= 8 * crate::mesh_large::hlod::TRIANGLE_CAP) };
         assert!(arcs <= 3 * crate::mesh_large::hlod::TRIANGLE_CAP);
         let mut p = Vec::with_capacity(5 * arcs);
         let mut triangles = Vec::with_capacity(TRIANGLES);

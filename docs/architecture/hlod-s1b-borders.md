@@ -164,7 +164,7 @@ logical depth, whose E still floors G.
 
 The independent r1 review found real producer folds hidden by orientation flips.
 These were not validator semantics. Contraction now rejects inverted snaps,
-new area from degenerate faces, and unsupported mapped edge pairs. Constrained
+new area from degenerate faces, and unsupported directed edge fans. Constrained
 reconstruction changes only faces incident to contracted vertices, fixes the first
 interior ring and preserves the rest of the surface. Projected charts separate
 nonmanifold sheets and sharp folds. New zero-area faces are discarded; no arbitrary
@@ -287,3 +287,20 @@ used 276.26 million search steps against 265.61 million at 3/4. Keep the measure
 3/4 target and remove redundant geometry bookkeeping without changing output.
 Exact-source paired CPU receipts, including failed trials, remain in the evidence
 directory. Full-cap retry and all acceptance gates stay.
+
+Source-support checks precede contraction in both direct and constrained paths.
+A new shared chord receives only the directional minimum over a complete,
+contiguous path of unique real previous-interface edges. Face licenses are never
+expanded by that path certificate. A child cannot create a new edge between shared
+contacts or a new face with three shared corners; canonical decode retains input
+keys, so merging children cannot manufacture original-source multiplicity.
+Changed interior repeated fans must still pass the exact nonacute-side check.
+Local free neighbours of two shared contacts are pinned before reduction, avoiding
+the broad contact-star protection that exhausted the cap on a real parent.
+
+The independent census checks both repeated directions, including balanced 2/2,
+using integer arithmetic independent of the producer's expansion predicate. A
+coincident group needs a descendant source group of sufficient multiplicity at
+every coarse corner; unrelated source twins and aggregate edge counts give no
+license. These edge/face checks do not claim general triangle-interior intersection
+detection. Final-source independent review and exact-artifact gates remain required.
