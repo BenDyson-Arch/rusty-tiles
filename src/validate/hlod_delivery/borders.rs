@@ -150,6 +150,30 @@ fn distinct_sides(edge: &CanonicalEdge, direction: usize, surface: &Surface) -> 
                 .all(|e| wedge(a, b, *c, *e) != std::cmp::Ordering::Greater)
     })
 }
+/// Whether all `left` items can be matched to distinct `right` items (Kuhn's
+/// augmenting paths; sizes are one edge's incident faces).
+fn matching(left: usize, right: usize, compatible: &dyn Fn(usize, usize) -> bool) -> bool {
+    fn augment(
+        l: usize,
+        right: usize,
+        compatible: &dyn Fn(usize, usize) -> bool,
+        seen: &mut [bool],
+        owner: &mut [Option<usize>],
+    ) -> bool {
+        for r in 0..right {
+            if compatible(l, r) && !seen[r] {
+                seen[r] = true;
+                if owner[r].is_none_or(|o| augment(o, right, compatible, seen, owner)) {
+                    owner[r] = Some(l);
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    let mut owner = vec![None; right];
+    (0..left).all(|l| augment(l, right, compatible, &mut vec![false; right], &mut owner))
+}
 /// Where one tile delivers a border vertex: retained exactly (empty), or on a chord
 /// (`lower`, `upper`) at ordinal `i` of `m` counted from `lower`.
 fn image(chord: CanonicalEdge, i: u64, m: u64) -> Vec<u8> {
@@ -417,7 +441,7 @@ impl Store {
             // lower-to-higher direction and back; the arc may run either way.
             let lower_first = arc[0].0 == edge.0;
             let mut support = [i64::MAX; 2];
-            for (x, y) in arc {
+            for &(x, y) in &arc {
                 effort.charge(1)?;
                 let (nf, nr) = self.leaf_incidence(tile, key(x, y))?;
                 let (with, against) = if x < y { (nf, nr) } else { (nr, nf) };
@@ -429,7 +453,18 @@ impl Store {
                 support = [support[0].min(forward), support[1].min(reverse)];
             }
             for (direction, n, other) in [(0, e.forward, e.reverse), (1, e.reverse, e.forward)] {
-                if n < 2 || support[direction] >= n as i64 {
+                if n < 2
+                    || (support[direction] >= n as i64
+                        && self.corresponds(
+                            tile,
+                            edge,
+                            direction,
+                            &arc,
+                            lower_first,
+                            surface,
+                            effort,
+                        )?)
+                {
                     continue;
                 }
                 effort.charge(n.saturating_mul(n) as usize)?;
@@ -474,6 +509,68 @@ impl Store {
             }
         }
         Ok(())
+    }
+
+    /// Whether every coarse face using `edge` in `direction` (0: lower to higher
+    /// key) matches its own descendant source face, one to one, on every source edge
+    /// of `arc`: same direction along the arc, third corner on the same side of the
+    /// coarse edge (exact acute wedge). An unrelated face of that edge (another
+    /// book page on another side) supplies no correspondence.
+    #[allow(clippy::too_many_arguments)]
+    fn corresponds(
+        &self,
+        tile: i64,
+        edge: &CanonicalEdge,
+        direction: usize,
+        arc: &[(CanonicalPoint, CanonicalPoint)],
+        lower_first: bool,
+        surface: &Surface,
+        effort: &Effort,
+    ) -> Result<bool, Error> {
+        let point = |p: CanonicalPoint| p.map(f32::from_bits);
+        let (a, b) = (point(edge.0), point(edge.1));
+        let mut coarse = Vec::new();
+        for f in &surface.faces {
+            for j in 0..3 {
+                let (x, y) = (f[j], f[(j + 1) % 3]);
+                if (if direction == 0 { (x, y) } else { (y, x) }) == *edge {
+                    coarse.push(point(f[(j + 2) % 3]));
+                }
+            }
+        }
+        let mut query = self
+            .connection
+            .prepare_cached(
+                "SELECT f.third FROM edge_faces f,tiles t WHERE t.id=?2 AND f.key=?1 AND f.dir=?3 AND f.tile>t.id AND f.tile<=t.last",
+            )
+            .map_err(sql)?;
+        for &(x, y) in arc {
+            // The source direction that runs like the coarse face's `direction`.
+            let along = usize::from(x > y);
+            let wanted = if (direction == 0) == lower_first {
+                along
+            } else {
+                1 - along
+            };
+            let mut source = Vec::new();
+            let mut rows = query
+                .query(params![super::edge_bytes(key(x, y)), tile, wanted as i64])
+                .map_err(sql)?;
+            while let Some(row) = rows.next().map_err(sql)? {
+                effort.charge(1)?;
+                source.push(point(super::read_point(
+                    &row.get::<_, Vec<u8>>(0).map_err(sql)?,
+                )?));
+            }
+            effort.charge(coarse.len().saturating_mul(source.len()).saturating_mul(4))?;
+            let compatible = |c: usize, s: usize| {
+                wedge(a, b, coarse[c], source[s]) == std::cmp::Ordering::Greater
+            };
+            if !matching(coarse.len(), source.len(), &compatible) {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     /// Descendant leaf faces on a canonical edge, (lower to higher key, back).
@@ -817,6 +914,34 @@ mod tests {
         refused(case(vec![t, r]), "interfaceWinding");
         // Three coarse copies on the plate's corners exceed its two source faces.
         refused(case(vec![plate]), "interfaceWinding");
+    }
+    #[test]
+    fn edge_multiplicity_licenses_only_faces_matched_on_their_own_side() {
+        // A0's fan face [(0,0,0), P1, P2] runs (0,0,0) -> P1. A raised source page on
+        // that edge lies on the P0 side (review r2 finding 1).
+        let o = [0., 0., 0.];
+        let page = [o, P[1], [2., 0.001, 0.25]];
+        let case = |extra: Vec<[Point; 3]>| {
+            let [mut a0, a1] = a_leaves();
+            a0.push(page);
+            let [b0, b1] = b_leaves();
+            let mut a = a_coarse(&ALL);
+            a.extend(extra);
+            tree(&[
+                (None, 16., None),
+                (Some(0), 2., Some(a)),
+                (Some(1), 0., Some(a0)),
+                (Some(1), 0., Some(a1)),
+                (Some(0), 2., Some(b_coarse(&ALL))),
+                (Some(4), 0., Some(b0)),
+                (Some(4), 0., Some(b1)),
+            ])
+        };
+        // Keeping the page is matched to the page; dropping it is ordinary.
+        case(vec![page]).unwrap();
+        case(Vec::new()).unwrap();
+        // A new face beside [o, P1, P2], same direction and side, matches nothing.
+        refused(case(vec![[o, P[1], [3., 0., 1.2]]]), "interfaceWinding");
     }
     #[test]
     fn identical_sibling_contraction_within_g_over_16_passes() {

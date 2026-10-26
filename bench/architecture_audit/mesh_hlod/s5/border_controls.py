@@ -542,6 +542,158 @@ def review(name):
     return doc, files, source, records
 
 
+def review2(name):
+    """Sol's review-2 fixtures (hlod-s5-d11-review2-20261026), each now permanent."""
+    global EXTENT
+
+    def boxes(doc, box):
+        def walk(t):
+            t['boundingVolume'] = {'box': list(box)}
+            for c in t.get('children', []):
+                walk(c)
+        walk(doc['root'])
+        refinable(doc)
+    if name in ('page-crossed', 'page-same-side', 'page-retained'):
+        # A source page on edge a -> b. Crossed: the page lies on the other side and
+        # a new coarse face overlaps the sheet face on this side. Same side: the
+        # page lies 0.001 above where the coarse face is, a matched simplification.
+        case = Case(name)
+        a, b, c = case.fx.quad_faces(1, 1)[0]
+        third = point(.5, .001, 1.5) if name == 'page-crossed' else point(1.5, .001, 1.5)
+        page = (a, b, third)
+        case.fx.extra = {'A0': [page]}
+        doc, files, source, records = build(case)
+        out = [f for f in case.fx.coarse('A') if f != page]
+        out.append(page if name == 'page-retained' else (a, b, point(1.5, 0, 1.5)))
+        files['A.glb'] = glb(out, identities(out), leaf=False)
+    elif name == 'rim-vertex-removed':
+        # Half a unit hole filled and its rim vertex b retriangulated away: the
+        # cycle count is unchanged, the coarse patch lies 1/3 from source.
+        case = Case(name)
+        case.fx.hole = {'A1': {(1, 2)}}
+        doc, files, source, records = build(case)
+        a, b, c = point(1, 0, 2), point(2, 0, 2), point(2, 0, 3)
+        out = [f for f in case.fx.coarse('A') if b not in f]
+        ring = [a, point(2, 0, 1), point(3, 0, 1), point(3, 0, 2), c]
+        out += [oriented((ring[0], ring[j], ring[j + 1])) for j in range(1, 4)]
+        files['A.glb'] = glb(out, identities(out), leaf=False)
+    elif name == 'simultaneous-close-open':
+        # Two small holes sharing a corner in a raised patch: one closes, one opens;
+        # the receipt claims neither.
+        case = Case(name)
+        coords, h = [1, 1.5 - 1 / 512, 1.5, 1.5 + 1 / 512, 2], 1 / 512
+
+        def patch(missing):
+            fs = []
+            for i in range(4):
+                for j in range(4):
+                    if (i, j) == missing:
+                        continue
+                    v = [point(coords[i], .01, coords[j]), point(coords[i + 1], .01, coords[j]),
+                         point(coords[i + 1], .01, coords[j + 1]), point(coords[i], .01, coords[j + 1])]
+                    fs += [oriented((v[0], v[1], v[2])), oriented((v[0], v[2], v[3]))]
+            return fs
+        case.fx.extra = {'A0': patch((1, 1))}
+        doc, files, source, records = build(case)
+        out = [f for f in case.fx.coarse('A') if f not in case.fx.extra['A0']] + patch((2, 2))
+        files['A.glb'] = glb(out, identities(out), leaf=False)
+    elif name in ('remote-drop', 'loss-between-samples'):
+        if name == 'remote-drop':
+            # A tiny component 1000 above the sheet: exact loss 1000, G 1050.
+            EXTENT = 1000.
+            drop = oriented((point(2, 1000, 1), point(2.001, 1000, 1), point(2, 1000, 1.001)))
+            extra, g = [drop], 1050.
+        else:
+            # The producer's sixteen controls miss the loss at p = (1/8, 1/8, 3/4)
+            # (0.0039986 > G = E1); this checker's level-8 grid samples it.
+            length, rad = .0025, .004
+            drop = oriented((point(2, .5, 1), point(2 + length, .5, 1), point(2, .5, 1 + length)))
+            centre = point(2 + length / 8, .5, 1 + length / 8)
+            ring = set()
+            for q in sorted(set(tuple((drop[0][k] * a_ + drop[1][k] * b_ + drop[2][k] * (4 - a_ - b_)) / 4
+                                      for k in range(3)) for a_ in range(5) for b_ in range(5 - a_)) |
+                            {tuple(sum(p[k] for p in drop) / 3 for k in range(3))}):
+                dx, dz = q[0] - centre[0], q[2] - centre[2]
+                n = math.hypot(dx, dz)
+                ring.add(point(centre[0] + rad * dx / n, .5, centre[2] + rad * dz / n))
+            extra = [drop] + [oriented((point(x - 1e-6, y, z - 1e-6), point(x + 1e-6, y, z - 1e-6), point(x, y, z + 1e-6)))
+                              for x, y, z in sorted(ring)]
+            g = None
+        try:
+            case = Case(name)
+            case.fx.extra = {'A0': extra}
+            doc, files, source, records = build(case)
+        finally:
+            EXTENT = 8.0
+        out = [f for f in case.fx.coarse('A') if f != drop]
+        files['A.glb'] = glb(out, identities(out), leaf=False)
+        diameter = math.sqrt(sum((max(p[k] for p in drop) - min(p[k] for p in drop)) ** 2 for k in range(3)))
+        e = 1000. / 1024 / 2 if name == 'remote-drop' else scale(1)
+        if name == 'remote-drop':
+            loss = 1000.
+            doc['root']['children'][0]['geometricError'] = records[0]['tile']['geometricError'] = g
+            boxes(doc, [4, -2, 500, 2000, 0, 0, 0, 2000, 0, 0, 0, 2000])
+        else:
+            loss, g = 0.0035573626656298612, e  # the producer's controls only
+        for label in ('topology', 'attemptedTopology'):
+            records[0]['tile'][label].update(droppedComponents=1, droppedComponentToProxy=loss,
+                                             droppedComponentGIncrease=max(1.05 * loss - e, 0.0),
+                                             droppedComponentFinalG=g, maxDroppedComponentDiameter=diameter)
+        if name == 'remote-drop':
+            for r in records:
+                if r['kind'] == 'tile':
+                    r['contract']['scale'] = 1000. / 1024 / 2 ** r['contract']['depth']
+    elif name in ('depth-fraction', 'depth-boolean'):
+        doc, files, source, records = build(Case('contracted'))
+        depth = 1.5 if name == 'depth-fraction' else True
+        for r in records:
+            if r['kind'] == 'tile':
+                r['tile']['depth'] = r['contract']['depth'] = depth
+                r['contract']['scale'] = EXTENT / 1024. * 2.0 ** -depth
+        return doc, files, source, records
+    elif name == 'depth-ancestor':
+        # A labelled at depth 1 below an omitted cell also labelled depth 1.
+        doc, files, source, records = build(Case('mixed-within'))
+        node = doc['root']['children'][0]
+        doc['root']['children'][0] = dict(boundingVolume=copy.deepcopy(node['boundingVolume']),
+                                          geometricError=node['geometricError'], refine='REPLACE', children=[node])
+        records[-1].update(source=False, reason='descendant_omission', frontier=[dict(leafBegin=2, leafEnd=4)])
+        records.append(dict(schemaVersion=1, kind='omitted', key=dict(first=0, end=32, depth=1, leafBegin=0, leafEnd=2),
+                            reason='contract_lower_bound', source=True, frontier=[dict(leafBegin=0, leafEnd=2)],
+                            attemptedTopology={}))
+        refinable(doc)
+        return doc, files, source, records
+    elif name in ('frontier-duplicate', 'frontier-subset'):
+        doc, files, source, records = build(Case('contracted'))
+        if name == 'frontier-duplicate':
+            records[-1]['frontier'].append(copy.deepcopy(records[-1]['frontier'][0]))
+        else:
+            records[-1]['frontier'].pop()
+        return doc, files, source, records
+    elif name == 'zero-epsilon-collinear':
+        # Equally spaced collinear P0..P4 contracted to P0-P4: exact image, epsilon 0.
+        return build(Case('contracted', offset=0.))
+    _rehash(records, files)
+    return doc, files, source, records
+
+
+REVIEW2 = [
+    ('page-crossed', 'interfaceWinding', 'interfaceWinding'),
+    ('page-same-side', None, None),
+    ('page-retained', None, None),
+    ('rim-vertex-removed', 'holeClosure', None),
+    ('simultaneous-close-open', 'topologyReceipt', None),
+    ('remote-drop', None, None),
+    ('loss-between-samples', 'topologyReceipt', None),
+    ('depth-fraction', 'borderDepth', None),
+    ('depth-boolean', 'borderDepth', None),
+    ('depth-ancestor', 'borderDepth', None),
+    ('frontier-duplicate', 'omissionReport', None),
+    ('frontier-subset', 'omissionReport', None),
+    ('zero-epsilon-collinear', None, None),
+]
+
+
 REVIEW = [
     ('drop-loss-lie', 'topologyReceipt', None),
     ('shared-corner-hole', 'holeClosure', None),
@@ -562,8 +714,10 @@ def generate(root):
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     out = []
-    for name, oracle_check, native_check in CASES + REVIEW:
-        if any(name == r[0] for r in REVIEW):
+    for name, oracle_check, native_check in CASES + REVIEW + REVIEW2:
+        if any(name == r[0] for r in REVIEW2):
+            doc, files, source, records = review2(name)
+        elif any(name == r[0] for r in REVIEW):
             doc, files, source, records = review(name)
         else:
             doc, files, source, records = build(Case(name, oracle_check, native_check, OFFSETS.get(name, 0.0001)))

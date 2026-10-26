@@ -870,6 +870,9 @@ impl Store {
             CREATE TABLE shared_point_keys(key BLOB PRIMARY KEY) WITHOUT ROWID;
             CREATE TABLE requirements(tile INTEGER NOT NULL,kind INTEGER NOT NULL,key BLOB NOT NULL,directions INTEGER NOT NULL,PRIMARY KEY(tile,kind,key)) WITHOUT ROWID;
             CREATE TABLE leaf_faces(corners BLOB NOT NULL,tile INTEGER NOT NULL,n INTEGER NOT NULL,PRIMARY KEY(corners,tile)) WITHOUT ROWID;
+            CREATE TABLE multi_edges(key BLOB PRIMARY KEY) WITHOUT ROWID;
+            CREATE TABLE edge_faces(key BLOB NOT NULL,tile INTEGER NOT NULL,third BLOB NOT NULL,dir INTEGER NOT NULL);
+            CREATE INDEX edge_faces_key ON edge_faces(key,tile);
             CREATE TABLE twin_points(key BLOB NOT NULL,corners BLOB NOT NULL,PRIMARY KEY(key,corners)) WITHOUT ROWID;
             CREATE TABLE border_map(key BLOB NOT NULL,tile INTEGER NOT NULL,image BLOB NOT NULL,d REAL NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             BEGIN;").map_err(sql)?;
@@ -1427,6 +1430,7 @@ impl Store {
                  (SELECT 0 AS i UNION ALL SELECT 1 UNION ALL SELECT 2) k WHERE 1 ON CONFLICT DO NOTHING",
             )
             .map_err(sql)?;
+        self.edge_faces(effort, read)?;
         self.point_requirements(&mut census, effort)?;
         self.segment_requirements(&mut census, effort)?;
         self.check_coarse(&mut census, effort, read)?;
@@ -1828,6 +1832,63 @@ impl Store {
                 k.sort_unstable();
                 let bytes: Vec<u8> = k.iter().flat_map(|p| point_bytes(*p)).collect();
                 face.execute(params![bytes, tile]).map_err(sql)?;
+            }
+        }
+        Ok(())
+    }
+    /// Leaf faces on every edge some direction of which carries two or more
+    /// descendant faces: their third corners and directions, so coarse multiplicity
+    /// is matched to source faces on its own side rather than counted. A second,
+    /// bounded replay of only the leaves holding such edges.
+    fn edge_faces(
+        &self,
+        effort: &Effort,
+        read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
+    ) -> Result<(), Error> {
+        self.connection
+            .execute_batch(
+                "INSERT INTO multi_edges SELECT key FROM leaf_segments GROUP BY key HAVING sum(nf)>=2 OR sum(nr)>=2",
+            )
+            .map_err(sql)?;
+        let mut query = self
+            .connection
+            .prepare(
+                "SELECT p.tile,p.rank,p.frame FROM placements p WHERE p.leaf=1 AND EXISTS(
+                 SELECT 1 FROM leaf_segments s JOIN multi_edges m ON m.key=s.key WHERE s.tile=p.tile) ORDER BY p.id",
+            )
+            .map_err(sql)?;
+        let mut rows = query.query([]).map_err(sql)?;
+        let mut multi = self
+            .connection
+            .prepare_cached("SELECT EXISTS(SELECT 1 FROM multi_edges WHERE key=?)")
+            .map_err(sql)?;
+        let mut insert = self
+            .connection
+            .prepare_cached("INSERT INTO edge_faces VALUES(?,?,?,?)")
+            .map_err(sql)?;
+        while let Some(row) = rows.next().map_err(sql)? {
+            effort.charge(1)?;
+            let tile: i64 = row.get(0).map_err(sql)?;
+            let surface = self.surface(
+                row.get(1).map_err(sql)?,
+                &row.get::<_, Vec<u8>>(2).map_err(sql)?,
+                effort,
+                read,
+            )?;
+            for f in &surface.faces {
+                for j in 0..3 {
+                    effort.charge(2)?;
+                    let (x, y, c) = (f[j], f[(j + 1) % 3], f[(j + 2) % 3]);
+                    let key = edge_bytes(if x < y { (x, y) } else { (y, x) });
+                    if multi
+                        .query_row([&key], |r| r.get::<_, bool>(0))
+                        .map_err(sql)?
+                    {
+                        insert
+                            .execute(params![key, tile, point_bytes(c), i64::from(x > y)])
+                            .map_err(sql)?;
+                    }
+                }
             }
         }
         Ok(())

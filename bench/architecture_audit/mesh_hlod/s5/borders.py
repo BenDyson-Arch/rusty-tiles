@@ -20,9 +20,15 @@ parent job's decoded input: dropped components and their measured proxy distance
 closures and openings per boundary cluster (cycle rank) with measured loss, the
 G contributions, contractedVertices and the complete omission frontier.
 
+Topology losses are sampled witnesses under D2, like G itself: exact distances
+(a complete box-hierarchy nearest search with exact Fractions) at S1b's fixed
+controls and this checker's own deterministic barycentric level-8 grid on every
+affected face. They are lower bounds on a continuous maximum, never upper bounds.
+D11's border certificate is different: exact over the piecewise-linear arc.
+
 Not proven here: the history-dependent receipt counters listed in the result's
-``uninspected``, a continuous source map behind licensed coincident faces, and
-S2's sampled two-sided error.
+``uninspected``, a continuous source map behind licensed coincident faces, losses
+between samples, and S2's sampled two-sided error.
 """
 import collections
 import hashlib
@@ -223,12 +229,52 @@ def _twins(store):
     return store.twin_sets, store.twin_corners, store.twin_region
 
 
+def _edge_faces(store):
+    """Verified source faces on every canonical edge some direction of which has
+    two or more faces: directed edge (x, y) -> [(third corner, leaf)]."""
+    if not hasattr(store, 'edge_faces'):
+        multi = {(a, b) for a, b in store.db.execute(
+            'SELECT a,b FROM canonical_edges GROUP BY a,b HAVING sum(nf)>=2 OR sum(nr)>=2')}
+        index = collections.defaultdict(list)
+        if multi:
+            for leaf, a, b, c in store.db.execute(
+                    'SELECT s.leaf,x.canonical,y.canonical,z.canonical FROM source_corners c '
+                    'JOIN source s ON s.id=c.source JOIN canonical_map x ON x.point=c.a '
+                    'JOIN canonical_map y ON y.point=c.b JOIN canonical_map z ON z.point=c.c'):
+                store.work.charge()
+                corners = (a, b, c)
+                if len(set(corners)) < 3:
+                    continue
+                for k in range(3):
+                    x, y, z = corners[k], corners[(k + 1) % 3], corners[(k + 2) % 3]
+                    if _key(x, y) in multi:
+                        index[x, y].append((z, leaf))
+        store.edge_faces = index
+    return store.edge_faces
+
+
+def _matching(left, right, compatible):
+    """Whether all `left` items match distinct `right` items (augmenting paths)."""
+    owner = [None] * right
+
+    def augment(item, seen):
+        for r in range(right):
+            if compatible(item, r) and not seen[r]:
+                seen[r] = True
+                if owner[r] is None or augment(owner[r], seen):
+                    owner[r] = item
+                    return True
+        return False
+    return all(augment(item, [False] * right) for item in range(left))
+
+
 def folds(store, tile, directed, arcs, require, faces=()):
     """Directed incidences are counted, never reduced to a mask (S1b review 1).
 
-    A coarse edge used n >= 2 times in one direction needs n verified descendant
-    source faces that way on every source edge it stands for (itself, or each edge
-    of its contracted arc). Otherwise it must keep the other direction and those
+    A coarse edge used n >= 2 times in one direction needs each of those faces
+    matched to its own descendant source face (same direction, same side of the
+    edge by exact wedge sign) on every source edge it stands for (itself, or each
+    edge of its contracted arc); a count of unrelated pages is not enough. Otherwise it must keep the other direction and those
     faces must lie on distinct sides (exact wedge sign): a simplified book spine's
     perpendicular pages or a collapsed plate's opposite sheets. A fold, duplicate or
     leaning flap is refused, balanced or not. Coincident coarse faces (n on one
@@ -244,25 +290,27 @@ def folds(store, tile, directed, arcs, require, faces=()):
             ids[p] = row[0] if row else None
         return ids[p]
 
-    def support(p, q):
+    def corresponds(p, q):
+        """Every coarse face on p -> q matched, one to one, to a descendant source
+        face running the same way on every source edge it stands for, with its third
+        corner on the same side of the coarse edge (exact acute wedge)."""
         a, b = canonical(p), canonical(q)
         if a is None or b is None:
-            return 0
+            return False
         path = arcs.get(_key(a, b), [a, b])
         if path[0] != a:
             path = path[::-1]
-        least = None
+        thirds = [f[(j + 2) % 3] for f in faces for j in range(3) if (f[j], f[(j + 1) % 3]) == (p, q)]
+        index = _edge_faces(store)
         for x, y in zip(path, path[1:]):
-            store.work.charge()
-            nf, nr = store.db.execute(
-                'SELECT coalesce(sum(nf),0),coalesce(sum(nr),0) FROM canonical_edges '
-                'WHERE a=? AND b=? AND leaf>=? AND leaf<?', (*_key(x, y), lo, hi)).fetchone()
-            n = nf if x < y else nr
-            least = n if least is None else min(least, n)
-        return least or 0
+            source = [store.canonical_xyz(z) for z, leaf in index.get((x, y), ()) if lo <= leaf < hi]
+            store.work.charge(len(thirds) * len(source) + 1)
+            if not _matching(len(thirds), len(source), lambda c, s: _wedge(p, q, thirds[c], source[s]) > 0):
+                return False
+        return True
     for (p, q), n in directed.items():
         store.work.charge()
-        if n < 2 or support(p, q) >= n:
+        if n < 2 or corresponds(p, q):
             continue
         store.work.charge(n * n)
         require(directed.get((q, p), 0) > 0 and _distinct_sides(p, q, faces), 'interfaceWinding',
@@ -358,17 +406,25 @@ def _boundary(faces):
     return list(loops.values())
 
 
+SAMPLE_LEVEL = 8
+
+
 def _samples(f):
-    """S1b's fixed controls on one triangle: the quarter grid and the centroid."""
-    out = [tuple((f[0][k] * a + f[1][k] * b + f[2][k] * (4 - a - b)) / 4 for k in range(3))
-           for a in range(5) for b in range(5 - a)]
-    out.append(tuple(sum(p[k] for p in f) / 3 for k in range(3)))
-    return out
+    """Loss witnesses on one triangle: S1b's fixed controls (quarter grid and
+    centroid) plus this checker's own deterministic stratified grid (barycentric
+    level 8: 45 points including corners and edge midpoints). Sampled witnesses
+    under D2, never a continuous bound."""
+    out = set()
+    for level in (4, SAMPLE_LEVEL):
+        for a in range(level + 1):
+            for b in range(level + 1 - a):
+                out.add(tuple((f[0][k] * a + f[1][k] * b + f[2][k] * (level - a - b)) / level for k in range(3)))
+    out.add(tuple(sum(p[k] for p in f) / 3 for k in range(3)))
+    return sorted(out)
 
 
-def _closest(p, f):
-    """Closest point of triangle f to p and its feature: ('v', i), ('e', i) for edge
-    f[i]-f[i+1], or ('f',). Float; a measurement witness, not a certificate."""
+def _closest_float(p, f):
+    """Float closest point and feature (Ericson); witness selection only."""
     a, b, c = f
     sub = lambda x, y: [x[k] - y[k] for k in range(3)]
     dot = lambda x, y: sum(x[k] * y[k] for k in range(3))
@@ -382,14 +438,14 @@ def _closest(p, f):
     if d3 >= 0 and d4 <= d3:
         return b, ('v', 1)
     vc = d1 * d4 - d3 * d2
-    if vc <= 0 and d1 >= 0 and d3 <= 0 and d1 - d3 != 0:
+    if vc <= 0 and d1 >= 0 and d3 <= 0 and d1 != d3:
         return at(a, ab, d1 / (d1 - d3)), ('e', 0)
     cp = sub(p, c)
     d5, d6 = dot(ab, cp), dot(ac, cp)
     if d6 >= 0 and d5 <= d6:
         return c, ('v', 2)
     vb = d5 * d2 - d1 * d6
-    if vb <= 0 and d2 >= 0 and d6 <= 0 and d2 - d6 != 0:
+    if vb <= 0 and d2 >= 0 and d6 <= 0 and d2 != d6:
         return at(a, ac, d2 / (d2 - d6)), ('e', 2)
     va = d3 * d6 - d5 * d4
     if va <= 0 and d4 - d3 >= 0 and d5 - d6 >= 0 and (d4 - d3) + (d5 - d6) != 0:
@@ -401,79 +457,145 @@ def _closest(p, f):
     return tuple(a[k] + ab[k] * v + ac[k] * w for k in range(3)), ('f',)
 
 
+def _closest_exact(p, f):
+    """Exact closest point of triangle f to p (Fractions) and its feature:
+    ('v', i), ('e', i) for edge f[i]-f[i+1], or ('f',) (Ericson's regions). A
+    collinear face (three distinct keys, zero area) is its three segments."""
+    try:
+        return _closest_regions(p, f)
+    except ZeroDivisionError:
+        best = None
+        for i in range(3):
+            a, b = _fractions(f[i]), _fractions(f[(i + 1) % 3])
+            q = _fractions(p)
+            d = [b[k] - a[k] for k in range(3)]
+            dd = sum(x * x for x in d)
+            t = 0 if dd == 0 else min(max(sum((q[k] - a[k]) * d[k] for k in range(3)) / dd, 0), 1)
+            point = tuple(a[k] + d[k] * t for k in range(3))
+            feature = ('v', i) if t == 0 else ('v', (i + 1) % 3) if t == 1 else ('e', i)
+            d2 = _distance2(q, point)
+            if best is None or d2 < best[0]:
+                best = (d2, point, feature)
+        return best[1], best[2]
+
+
+def _closest_regions(p, f):
+    p, a, b, c = (_fractions(x) for x in (p, f[0], f[1], f[2]))
+    sub = lambda x, y: [x[k] - y[k] for k in range(3)]
+    dot = lambda x, y: sum(x[k] * y[k] for k in range(3))
+    at = lambda base, u, s: tuple(base[k] + u[k] * s for k in range(3))
+    ab, ac, ap = sub(b, a), sub(c, a), sub(p, a)
+    d1, d2 = dot(ab, ap), dot(ac, ap)
+    if d1 <= 0 and d2 <= 0:
+        return a, ('v', 0)
+    bp = sub(p, b)
+    d3, d4 = dot(ab, bp), dot(ac, bp)
+    if d3 >= 0 and d4 <= d3:
+        return b, ('v', 1)
+    vc = d1 * d4 - d3 * d2
+    if vc <= 0 and d1 >= 0 and d3 <= 0:
+        return at(a, ab, d1 / (d1 - d3)), ('e', 0)
+    cp = sub(p, c)
+    d5, d6 = dot(ab, cp), dot(ac, cp)
+    if d6 >= 0 and d5 <= d6:
+        return c, ('v', 2)
+    vb = d5 * d2 - d1 * d6
+    if vb <= 0 and d2 >= 0 and d6 <= 0:
+        return at(a, ac, d2 / (d2 - d6)), ('e', 2)
+    va = d3 * d6 - d5 * d4
+    if va <= 0 and d4 - d3 >= 0 and d5 - d6 >= 0:
+        return at(b, sub(c, b), (d4 - d3) / ((d4 - d3) + (d5 - d6))), ('e', 1)
+    denom = va + vb + vc
+    v, w = vb / denom, vc / denom
+    return tuple(a[k] + ab[k] * v + ac[k] * w for k in range(3)), ('f',)
+
+
 class _Mesh:
-    """A tile-sized face set: exact distances, projections and boundary tests."""
+    """A tile-sized face set with complete exact nearest-face queries.
+
+    An axis-aligned box hierarchy is searched best-first. A box's float distance,
+    shrunk by a relative 2^-48, is a certified lower bound; a branch is pruned only
+    when that bound exceeds the exact (Fraction) best, so a remote point, a sliver
+    or a near-tie never loses its true nearest face."""
     def __init__(self, faces):
         self.faces = [f for f in faces if len(set(f)) == 3]
         count = collections.Counter(_key(f[k], f[(k + 1) % 3]) for f in self.faces for k in range(3))
         self.open = {e for e, n in count.items() if n == 1}
         self.open_points = {p for e in self.open for p in e}
-        # Uniform grid over face boxes: about one face per cell.
-        self.grid = collections.defaultdict(list)
+        self.nodes = []
         if self.faces:
-            lo = [min(q[k] for f in self.faces for q in f) for k in range(3)]
-            hi = [max(q[k] for f in self.faces for q in f) for k in range(3)]
-            span = max(max(hi[k] - lo[k] for k in range(3)), 1e-30)
-            self.lo, self.cell = lo, span / max(1, round(len(self.faces) ** (1 / 3)))
-            for i, f in enumerate(self.faces):
-                a = self._cell([min(q[k] for q in f) for k in range(3)])
-                b = self._cell([max(q[k] for q in f) for k in range(3)])
-                for x in range(a[0], b[0] + 1):
-                    for y in range(a[1], b[1] + 1):
-                        for z in range(a[2], b[2] + 1):
-                            self.grid[x, y, z].append(i)
+            self._build(list(range(len(self.faces))))
 
-    def _cell(self, p):
-        return tuple(int(math.floor((p[k] - self.lo[k]) / self.cell)) for k in range(3))
+    def _box(self, items):
+        lo = [min(q[k] for i in items for q in self.faces[i]) for k in range(3)]
+        hi = [max(q[k] for i in items for q in self.faces[i]) for k in range(3)]
+        return lo, hi
 
-    def _ranked(self, p):
-        """Candidate faces by increasing float distance; rings grow until the best
-        lies within the searched cube (complete for the nearest face)."""
-        if not self.faces:
-            return []
-        c, seen, out, ring = self._cell(p), set(), [], 0
-        limit = max(len(self.grid), 1)
-        while True:
-            for x in range(c[0] - ring, c[0] + ring + 1):
-                for y in range(c[1] - ring, c[1] + ring + 1):
-                    for z in range(c[2] - ring, c[2] + ring + 1):
-                        if max(abs(x - c[0]), abs(y - c[1]), abs(z - c[2])) != ring:
-                            continue
-                        for i in self.grid.get((x, y, z), ()):
-                            if i in seen:
-                                continue
-                            seen.add(i)
-                            f = self.faces[i]
-                            q, feature = _closest(p, f)
-                            out.append((sum((p[k] - q[k]) ** 2 for k in range(3)), q, feature, f))
-            out.sort(key=lambda r: r[0])
-            reach = ring * self.cell
-            if out and out[0][0] <= reach * reach * 0.999:
-                return out
-            if len(seen) == len(self.faces) or ring > limit:
-                return out
-            ring += 1
+    def _build(self, items):
+        lo, hi = self._box(items)
+        index = len(self.nodes)
+        self.nodes.append([lo, hi, None, None, None])
+        if len(items) <= 4:
+            self.nodes[index][4] = items
+            return index
+        axis = max(range(3), key=lambda k: hi[k] - lo[k])
+        items.sort(key=lambda i: sum(q[axis] for q in self.faces[i]))
+        half = len(items) // 2
+        left = self._build(items[:half])
+        right = self._build(items[half:])
+        self.nodes[index][2], self.nodes[index][3] = left, right
+        return index
 
-    def distance(self, p):
-        """Exact distance from p to the face set (float candidates, exact minimum)."""
-        from oracle import distance2
-        ranked = self._ranked(p)
-        if not ranked:
-            return math.inf
-        bound = ranked[0][0] * (1 + 1e-9) + 1e-300
-        best = min(distance2(p, f) for d, _, _, f in ranked if d <= bound * 4 + 1e-24)
-        return math.sqrt(best)
+    @staticmethod
+    def _lower(p, lo, hi):
+        d = sum(max(lo[k] - p[k], 0.0, p[k] - hi[k]) ** 2 for k in range(3))
+        return d * (1 - 2.0 ** -48)
 
-    def project(self, p):
-        ranked = self._ranked(p)
-        return ranked[0][1] if ranked else p
+    def nearest(self, p, work=None, exact=True):
+        """(squared distance, closest point, feature, face) of the nearest face:
+        exact, or a float estimate (exact=False) for choosing witnesses only."""
+        import heapq
+        if not self.nodes:
+            return None
+        best = None
+        heap = [(self._lower(p, self.nodes[0][0], self.nodes[0][1]), 0)]
+        while heap:
+            bound, index = heapq.heappop(heap)
+            if best is not None and bound > float(best[0]) * (1 + 2.0 ** -50) * (1 if exact else 1.001):
+                break
+            lo, hi, left, right, items = self.nodes[index]
+            if items is not None:
+                for i in items:
+                    if work is not None:
+                        work.charge()
+                    if exact:
+                        q, feature = _closest_exact(p, self.faces[i])
+                        d2 = _distance2(_fractions(p), q)
+                    else:
+                        q, feature = _closest_float(p, self.faces[i])
+                        d2 = sum((p[k] - q[k]) ** 2 for k in range(3))
+                    if best is None or d2 < best[0]:
+                        best = (d2, q, feature, self.faces[i])
+                continue
+            for child in (left, right):
+                heapq.heappush(heap, (self._lower(p, self.nodes[child][0], self.nodes[child][1]), child))
+        return best
 
-    def over_boundary(self, p):
-        """Whether p's nearest point on the face set is on a one-sided edge or vertex."""
-        ranked = self._ranked(p)
-        if not ranked:
+    def distance(self, p, work=None):
+        found = self.nearest(p, work)
+        return math.inf if found is None else math.sqrt(found[0])
+
+    def project(self, p, work=None):
+        found = self.nearest(p, work, exact=False)
+        return p if found is None else tuple(float(x) for x in found[1])
+
+    def over_boundary(self, p, work=None):
+        """Whether p's nearest point is on a one-sided edge or vertex (float: it
+        selects witnesses, whose distances are then measured exactly)."""
+        found = self.nearest(p, work, exact=False)
+        if found is None:
             return False
-        _, _, feature, f = ranked[0]
+        _, _, feature, f = found
         if feature[0] == 'v':
             return f[feature[1]] in self.open_points
         if feature[0] == 'e':
@@ -481,15 +603,81 @@ class _Mesh:
             return _key(f[i], f[(i + 1) % 3]) in self.open
         return False
 
-    def near(self, points):
-        """Faces with a corner within the bounding box of `points`, doubled."""
-        if not points:
-            return []
-        lo = [min(p[k] for p in points) for k in range(3)]
-        hi = [max(p[k] for p in points) for k in range(3)]
-        pad = [max(hi[k] - lo[k], 1e-12) / 2 for k in range(3)]
-        inside = lambda q: all(lo[k] - pad[k] <= q[k] <= hi[k] + pad[k] for k in range(3))
-        return [f for f in self.faces if any(inside(q) for q in f)]
+    def near(self, boxes):
+        """Faces meeting any of the given (lo, hi) boxes."""
+        out = []
+        for f in self.faces:
+            lo = [min(q[k] for q in f) for k in range(3)]
+            hi = [max(q[k] for q in f) for k in range(3)]
+            if any(all(lo[k] <= bh[k] and hi[k] >= bl[k] for k in range(3)) for bl, bh in boxes):
+                out.append(f)
+        return out
+
+
+def _suppressed(edges, shared):
+    """Boundary graph with unshared degree-two vertices suppressed: paths between
+    anchors (shared, or degree other than two) keyed by endpoints; a loop through
+    one anchor or none is keyed by its own vertices, so distinct loops never match."""
+    adjacency = collections.defaultdict(list)
+    for x, y in edges:
+        adjacency[x].append(y)
+        adjacency[y].append(x)
+    anchor = {v for v, around in adjacency.items() if len(around) != 2 or v in shared}
+    seen, out = set(), []
+    for start in sorted(anchor):
+        for first in adjacency[start]:
+            if _key(start, first) in seen:
+                continue
+            path, at, nxt = [start], start, first
+            while True:
+                seen.add(_key(at, nxt))
+                path.append(nxt)
+                if nxt in anchor:
+                    break
+                around = adjacency[nxt]
+                at, nxt = nxt, around[1] if around[0] == at else around[0]
+            a, b = path[0], path[-1]
+            out.append(('loop', a, frozenset(path[1:-1])) if a == b else _key(a, b))
+    for x, y in edges:
+        if _key(x, y) not in seen:
+            # A cycle with no anchor at all.
+            loop, at, nxt = {x}, x, y
+            seen.add(_key(x, y))
+            while nxt != x:
+                loop.add(nxt)
+                around = adjacency[nxt]
+                at, nxt = nxt, around[1] if around[0] == at else around[0]
+                seen.add(_key(at, nxt))
+            out.append(('cycle', frozenset(loop)))
+    return out
+
+
+def _rank(keys):
+    """Cycle rank (edges - vertices + components) of a suppressed multigraph."""
+    root = _UnionFind()
+    vertices, edges = set(), 0
+    for k in keys:
+        if k[0] in ('loop', 'cycle'):
+            v = k if k[0] == 'cycle' else ('anchor', k[1])
+            vertices.add(v)
+            root(v)
+            edges += 1
+        else:
+            a, b = ('anchor', k[0]), ('anchor', k[1])
+            vertices |= {a, b}
+            root.join(a, b)
+            edges += 1
+    components = len({root(v) for v in vertices})
+    return edges - len(vertices) + components
+
+
+def _cycle_changes(before, after):
+    """Cycles removed from and added to the common boundary graph (S1b's rule)."""
+    shared = {p for e in before for p in e} & {p for e in after for p in e}
+    a, b = collections.Counter(_suppressed(before, shared)), collections.Counter(_suppressed(after, shared))
+    common = list((a & b).elements())
+    rank = _rank(common)
+    return _rank(list(a.elements())) - rank, _rank(list(b.elements())) - rank
 
 
 def _cycle_centroids(components):
@@ -558,6 +746,11 @@ class Audit:
         by_sha, omitted = {}, []
         for r in rows:
             require(r.get('schemaVersion') == 1, 'borderAudit', 'unknown audit schema')
+            depths = ([r['tile'].get('depth'), r.get('contract', {}).get('depth')] if r.get('kind') == 'tile'
+                      else [r.get('key', {}).get('depth')] if r.get('kind') == 'omitted' else [])
+            # Logical build depths are integers of the bounded octree (not bool).
+            require(all(type(d) is int and 0 <= d <= 63 for d in depths), 'borderDepth',
+                    f'audit record has a logical depth outside the integers 0..63: {depths}')
             if r.get('kind') == 'tile':
                 sha = r['tile']['sha256']
                 require(sha not in by_sha, 'borderAudit', f'two audit records for payload {sha}')
@@ -987,7 +1180,7 @@ class Audit:
             for f in faces_of[key]:
                 for q in _samples(f):
                     store.work.charge(len(output))
-                    loss = max(loss, mesh.distance(q))
+                    loss = max(loss, mesh.distance(q, store.work))
         self.stats['droppedComponents'] += dropped
         self.stats['maxDroppedLossOverE'] = max(self.stats['maxDroppedLossOverE'], loss / e)
         if dropped:
@@ -1006,116 +1199,120 @@ class Audit:
         self.holes(t, source, output, border, published, e, reach, slack, lambda p: root(p) in lost)
 
     def holes(self, t, source, output, border, published, e, reach, slack, dropped):
-        """Boundary changes between the job's input and output, per region.
+        """Every boundary change between the job's input and output, per cluster.
 
-        Boundary components of input and output are joined into clusters when they
-        share (near) vertices. A cluster's cycle-rank drop counts its closures and
-        its rise its openings; the audit may report more (a closure and an opening in
-        one cluster) but never fewer. Wherever an input boundary vertex became
-        interior, or the output has boundary vertices the input lacked, the loss is
-        measured: centroids of every fundamental cycle projected across the change,
-        and fixed controls of faces lying over the old boundary, exactly against
-        source (closures) or the delivered proxy (openings). Both must fit E; a
-        change with no witness is refused."""
+        Input boundary edges and output boundary edges (output vertices mapped to
+        input keys within codec tolerance) are clustered by shared vertices. Removed
+        and added cycles are counted separately on the common boundary graph after
+        suppressing unshared degree-two vertices (S1b's own definition), so a
+        closure and an opening never cancel. A cluster whose boundary edges changed
+        at all is measured: coarse samples lying over the old boundary against
+        source (and every removed cycle's centroid projected onto the output), and
+        input samples lying over the new boundary against the delivered proxy (and
+        every added cycle's centroid projected onto the input). Where cycles were
+        removed or added the loss must fit E; a pure boundary simplification must
+        fit G (D2). The receipt may report more operations, never fewer."""
         require, store = self.require, self.store
         tid = int(t['id'])
-        before, after = _boundary(source), _boundary(output)
-        before_near = _Near({p for points, _ in before for p in points}, reach)
-        after_near = _Near({p for points, _ in after for p in points}, reach)
-        out_points = _Near({p for f in output for p in f}, reach)
-        in_points = _Near({p for f in source for p in f}, reach)
-        # Clusters: input and output boundary components sharing a near vertex.
-        cluster = _UnionFind()
-        owner = {}
-        for i, (points, _) in enumerate(before):
-            cluster(('in', i))
-            for p in points:
-                owner[p] = ('in', i)
-        for j, (points, _) in enumerate(after):
-            cluster(('out', j))
-            for p in points:
-                hit = before_near.nearest(p)
-                if hit is not None:
-                    cluster.join(('out', j), owner[hit])
-        members = collections.defaultdict(lambda: ([], []))
-        for i in range(len(before)):
-            members[cluster(('in', i))][0].append(i)
-        for j in range(len(after)):
-            members[cluster(('out', j))][1].append(j)
-        rank = lambda c: len(c[1]) - len(c[0]) + 1
         input_mesh, output_mesh = _Mesh(source), _Mesh(output)
+        inputs = _Near({p for f in source for p in f}, reach)
+        to_input = lambda p: inputs.nearest(p) or p
+        before = {e_ for e_ in input_mesh.open if not dropped(e_[0])}
+        after = set()
+        for x, y in output_mesh.open:
+            x, y = to_input(x), to_input(y)
+            if x != y:
+                after.add(_key(x, y))
+        cluster = _UnionFind()
+        for x, y in before | after:
+            cluster.join(x, y)
+        groups = collections.defaultdict(lambda: (set(), set()))
+        for e_ in before:
+            groups[cluster(e_[0])][0].add(e_)
+        for e_ in after:
+            groups[cluster(e_[0])][1].add(e_)
         closed = opened = 0
-        closure_loss = opening_loss = rim = 0.0
-        for ins, outs in members.values():
-            points_in = set().union(*(before[i][0] for i in ins)) if ins else set()
-            points_out = set().union(*(after[j][0] for j in outs)) if outs else set()
-            if ins and all(dropped(next(iter(before[i][0]))) for i in ins) and not outs:
+        losses = dict(closure=0.0, opening=0.0, rim=0.0)
+        for ins, outs in groups.values():
+            if ins == outs:
                 continue
-            r_in = sum(rank(before[i]) for i in ins)
-            r_out = sum(rank(after[j]) for j in outs)
-            touches = bool((points_in | points_out) & border)
-            # A covered input boundary vertex, or a boundary vertex the input lacked.
-            covered = [p for p in points_in if out_points.find(p) and not after_near.find(p)]
-            new = [p for p in points_out if not before_near.find(p)]
-            if touches:
-                require(r_out >= r_in, 'holeClosure',
+            removed, added = _cycle_changes(ins, outs)
+            closed += removed
+            opened += added
+            points = {p for e_ in ins | outs for p in e_}
+            if points & border:
+                require(not removed, 'holeClosure',
                         f'tile {tid}: a boundary cycle touching a delivered border was closed')
-                require(r_out <= r_in and not new, 'holeOpening',
-                        f'tile {tid}: an opened boundary touches a delivered border')
-            closed += max(r_in - r_out, 0)
-            opened += max(r_out - r_in, 0)
-            if covered or r_in > r_out:
-                witnesses = [output_mesh.project(c) for c in _cycle_centroids([before[i] for i in ins])]
-                for f in output_mesh.near(points_in):
-                    for q in _samples(f):
-                        store.work.charge(len(source))
-                        if input_mesh.over_boundary(q):
-                            witnesses.append(q)
-                require(bool(witnesses), 'holeClosure', f'tile {tid}: a closure has no measurable patch')
-                for q in witnesses:
+                require(not added, 'holeOpening', f'tile {tid}: an opened boundary touches a delivered border')
+            # Edges on the tile's own shared border change by certified contraction
+            # (exact above); only the rest of a cluster's change is measured here.
+            on_border = lambda e_: e_[0] in border and e_[1] in border
+            lost, new = {e_ for e_ in ins - outs if not on_border(e_)}, {e_ for e_ in outs - ins if not on_border(e_)}
+            if not (removed or added or lost or new):
+                continue
+            limit, label = (e, 'E') if removed or added else (t['g'], 'G')
+            self.stats['changedBoundaryClusters'] += 1
+            self.stats['topologyClusters'] += bool(removed or added)
+            boxes = lambda edges: [([min(x[k], y[k]) - math.dist(x, y) for k in range(3)],
+                                    [max(x[k], y[k]) + math.dist(x, y) for k in range(3)]) for x, y in edges]
+            # Coverage: coarse surface over the old boundary, against source.
+            witnesses = []
+            if removed:
+                witnesses += [output_mesh.project(c, store.work)
+                              for c in _cycle_centroids([(set(p for e_ in ins for p in e_), list(ins))])]
+            for f in output_mesh.near(boxes(lost)):
+                for q in _samples(f):
                     store.work.charge()
-                    closure_loss = max(closure_loss, self.source_distance(t, q))
-            if new or r_out > r_in:
-                witnesses = [input_mesh.project(c) for c in _cycle_centroids([after[j] for j in outs])]
-                for f in input_mesh.near(points_out):
-                    for q in _samples(f):
-                        store.work.charge(len(output))
-                        if output_mesh.over_boundary(q):
-                            witnesses.append(q)
-                require(bool(witnesses), 'holeOpening', f'tile {tid}: an opening has no measurable lost surface')
-                for q in witnesses:
-                    store.work.charge(len(output))
-                    opening_loss = max(opening_loss, output_mesh.distance(q))
-                for j in outs:
-                    for a, b in after[j][1]:
-                        m = tuple((a[k] + b[k]) / 2 for k in range(3))
-                        d = self.source_distance(t, m)
-                        rim = max(rim, d)
-                        self.stats['maxOpeningRimOverE'] = max(self.stats['maxOpeningRimOverE'], d / e)
-                        require(d <= e * (1 + 1e-9) + slack, 'holeOpening',
-                                f'tile {tid}: opened hole rim is {d} from source, above E = {e}')
-        self.stats['maxClosureLossOverE'] = max(self.stats['maxClosureLossOverE'], closure_loss / e)
-        self.stats['maxOpeningLossOverE'] = max(self.stats['maxOpeningLossOverE'], opening_loss / e)
-        require(closure_loss <= e * (1 + 1e-9) + slack, 'holeClosure',
-                f'tile {tid}: a closed or covered hole is {closure_loss} from source, above E = {e}')
-        require(opening_loss <= e * (1 + 1e-9) + slack, 'holeOpening',
-                f'tile {tid}: an opened hole lost surface {opening_loss} from the proxy, above E = {e}')
+                    if input_mesh.over_boundary(q, store.work):
+                        witnesses.append(q)
+            require(bool(witnesses) or not removed, 'holeClosure',
+                    f'tile {tid}: a closure has no measurable patch')
+            loss = max((self.source_distance(t, q) for q in witnesses), default=0.0)
+            key = 'closure' if removed else 'coverage'
+            self.stats[f'max{key.title()}LossOverE'] = max(self.stats[f'max{key.title()}LossOverE'], loss / e)
+            if removed:
+                losses['closure'] = max(losses['closure'], loss)
+            require(loss <= limit * (1 + 1e-9) + slack, 'holeClosure',
+                    f'tile {tid}: coarse surface over an old boundary is {loss} from source, above {label} = {limit}')
+            # Lost surface: input surface over the new boundary, against the proxy.
+            witnesses = []
+            if added:
+                witnesses += [input_mesh.project(c, store.work)
+                              for c in _cycle_centroids([(set(p for e_ in outs for p in e_), list(outs))])]
+            for f in input_mesh.near(boxes(new)):
+                for q in _samples(f):
+                    store.work.charge()
+                    if output_mesh.over_boundary(q, store.work):
+                        witnesses.append(q)
+            require(bool(witnesses) or not added, 'holeOpening',
+                    f'tile {tid}: an opening has no measurable lost surface')
+            loss = max((output_mesh.distance(q, store.work) for q in witnesses), default=0.0)
+            if added:
+                losses['opening'] = max(losses['opening'], loss)
+                for x, y in new:
+                    m = tuple((x[k] + y[k]) / 2 for k in range(3))
+                    losses['rim'] = max(losses['rim'], self.source_distance(t, m))
+                require(losses['rim'] <= e * (1 + 1e-9) + slack, 'holeOpening',
+                        f'tile {tid}: opened hole rim is {losses["rim"]} from source, above E = {e}')
+            self.stats['maxLostSurfaceOverE'] = max(self.stats['maxLostSurfaceOverE'], loss / e)
+            require(loss <= limit * (1 + 1e-9) + slack, 'holeOpening',
+                    f'tile {tid}: surface lost at a new boundary is {loss} from the proxy, above {label} = {limit}')
         self.stats['closedHoles'] += closed
         self.stats['openedHoles'] += opened
+        self.stats['maxOpeningRimOverE'] = max(self.stats['maxOpeningRimOverE'], losses['rim'] / e)
         require(published['closedHoles'] >= closed and published['openedHoles'] >= opened, 'topologyReceipt',
                 f'tile {tid}: re-derived {closed} closed / {opened} opened holes, audit reports '
                 f'{published["closedHoles"]} / {published["openedHoles"]}')
-        require((published['closedHoles'] == 0 or closure_loss > 0 or closed) and
-                (published['openedHoles'] == 0 or opening_loss > 0 or opened), 'topologyReceipt',
-                f'tile {tid}: audit reports holes the delivered boundaries do not show')
+        require((published['closedHoles'] == 0 or closed) and (published['openedHoles'] == 0 or opened),
+                'topologyReceipt', f'tile {tid}: audit reports holes the delivered boundaries do not show')
         if published['closedHoles']:
-            require(published['holePatchToSource'] >= closure_loss - slack, 'topologyReceipt',
-                    f'tile {tid}: audit holePatchToSource {published["holePatchToSource"]} under the measured {closure_loss}')
+            require(published['holePatchToSource'] >= losses['closure'] - slack, 'topologyReceipt',
+                    f'tile {tid}: audit holePatchToSource {published["holePatchToSource"]} under the measured {losses["closure"]}')
         if published['openedHoles']:
-            require(published['openedHoleToProxy'] >= opening_loss - slack, 'topologyReceipt',
-                    f'tile {tid}: audit openedHoleToProxy {published["openedHoleToProxy"]} under the measured {opening_loss}')
-            require(published['openedHoleBoundaryToSource'] >= rim - slack, 'topologyReceipt',
-                    f'tile {tid}: audit openedHoleBoundaryToSource {published["openedHoleBoundaryToSource"]} under the measured {rim}')
+            require(published['openedHoleToProxy'] >= losses['opening'] - slack, 'topologyReceipt',
+                    f'tile {tid}: audit openedHoleToProxy {published["openedHoleToProxy"]} under the measured {losses["opening"]}')
+            require(published['openedHoleBoundaryToSource'] >= losses['rim'] - slack, 'topologyReceipt',
+                    f'tile {tid}: audit openedHoleBoundaryToSource {published["openedHoleBoundaryToSource"]} under the measured {losses["rim"]}')
 
     def source_distance(self, t, p):
         from oracle import distance2
@@ -1201,7 +1398,10 @@ def inspect(store, tiles, leaves, archive, require, audit_path=None, extent=None
         'holeBoundaryToPatch beyond the E/1.05 receipt bound; closure loss is measured patch-to-source',
         'topologyAttempt/topologyConstruction location hints: operations are re-derived, never read',
         'a contact with a leaf whose logical depth the tree does not fix is required exact, not claimed',
-        'coincident coarse faces are licensed per corner and twin region, not by a continuous source map']
+        'coincident coarse faces are licensed per corner and twin region, not by a continuous source map',
+        'topology losses (drops, closures, openings, boundary changes) are sampled witnesses under D2: exact '
+        'distances at S1b\'s quarter-grid controls and this checker\'s barycentric level-8 grid on every affected '
+        'face, never a continuous maximum (a loss between samples is not bounded)']
     stats.update(auditCpuSeconds=time.process_time() - started, audited=True, sidecarSha256=hashlib.sha256(data).hexdigest(), sidecarBytes=len(data),
                  records=len(audit.records), omittedRecords=len(omitted), extent=extent)
     return stats
