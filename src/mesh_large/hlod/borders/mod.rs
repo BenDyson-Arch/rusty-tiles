@@ -418,6 +418,41 @@ impl Borders {
                 }
             }
             pieces.push(end);
+        } else if end > begin + 1 {
+            // An open shared path may complete a boundary loop through a nonshared
+            // source edge. Keep an interior witness so contraction cannot identify that
+            // loop with its chord. Prefer the furthest retained point from the endpoint
+            // line; straight paths use the middle retained point. This costs one extra
+            // vertex per chain, independent of its source sampling density.
+            let a = self
+                .source
+                .key(start)?
+                .map(|x| f64::from(f32::from_bits(x)));
+            let b = self.source.key(at)?.map(|x| f64::from(f32::from_bits(x)));
+            let direction: [f64; 3] = std::array::from_fn(|k| b[k] - a[k]);
+            let length2 = direction.iter().map(|x| x * x).sum::<f64>();
+            let middle = begin + (end - begin) / 2;
+            let mut chosen: Option<(f64, u64)> = None;
+            for i in begin + 1..end {
+                let p = arc.get(i)?;
+                if p[2] == 0 {
+                    continue;
+                }
+                let p = self.source.key(p[0])?.map(|x| f64::from(f32::from_bits(x)));
+                let t = (0..3).map(|k| (p[k] - a[k]) * direction[k]).sum::<f64>() / length2;
+                let distance2 = (0..3)
+                    .map(|k| (p[k] - a[k] - t * direction[k]).powi(2))
+                    .sum::<f64>();
+                if chosen.is_none_or(|(distance, old)| {
+                    distance2 > distance
+                        || (distance2 == distance && i.abs_diff(middle) < old.abs_diff(middle))
+                }) {
+                    chosen = Some((distance2, i));
+                }
+            }
+            if let Some((_, witness)) = chosen {
+                pieces.insert(1, witness);
+            }
         }
         for pair in pieces.windows(2) {
             self.shortcuts(
@@ -691,7 +726,7 @@ mod tests {
             &scratch,
             sorter,
             &tree,
-            rows.into_iter().map(Ok),
+            rows.iter().copied().map(Ok),
             std::iter::empty(),
             4096.,
             &lease,
@@ -735,6 +770,31 @@ mod tests {
             .unwrap()
             .interface
             .is_empty());
+        drop(borders);
+        // A nonshared source boundary meeting point 2 can complete a hole through
+        // the straight tail. Its separate open chain retains an interior witness.
+        let pinned = Borders::build(
+            &scratch,
+            sorter,
+            &tree,
+            rows.into_iter().map(Ok),
+            [Ok(super::super::interfaces::KeyRecord(points[2]))].into_iter(),
+            4096.,
+            &lease,
+            &|| Ok(()),
+        )
+        .unwrap();
+        let middle = pinned.mapping(1, points[3]).unwrap().unwrap();
+        assert_eq!((middle.0, middle.1), (points[3], points[3]));
+        assert_eq!(
+            pinned
+                .contract(tile(0, 2, 1, 0, 2), 100)
+                .unwrap()
+                .unwrap()
+                .certificates
+                .len(),
+            4
+        );
         ledger.check().unwrap();
     }
 }

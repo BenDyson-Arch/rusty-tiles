@@ -1843,7 +1843,7 @@ fn walk(
                 // read nothing further and let in-flight jobs finish. No earlier tile needs
                 // a leaf not yet read (it is closed), so this never blocks the walk.
                 while (finished_rows.len() >= ROW_WINDOW
-                    || ready.len() + pending.len() >= ready_limit)
+                    || ready.len() + pending.len() + inflight >= ready_limit)
                     && inflight > 0
                 {
                     receive(&mut pending, &mut ready, &mut inflight, &mut finished_rows)?;

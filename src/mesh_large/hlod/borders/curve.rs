@@ -73,9 +73,9 @@ pub(super) fn shortcuts(
         let mut i = start + 1;
         while i <= last {
             let b = point(i)?;
-            let radius = (epsilon - guard).max(0.) / 3f64.sqrt();
+            let radius = (epsilon - 2. * guard).max(0.) / 3f64.sqrt();
             let n = (i - start) as f64;
-            let mut fits = epsilon >= guard;
+            let mut fits = epsilon >= 2. * guard;
             for axis in 0..3 {
                 let delta = f64::from(b[axis]) - f64::from(a[axis]);
                 lower[axis] = lower[axis].max(((delta - radius) / n).next_up());
@@ -97,7 +97,8 @@ pub(super) fn shortcuts(
             return Err(state("source arc has no retained endpoint"));
         }
         let b = point(end)?;
-        let mut bound = 0f64;
+        let mut distance_max = 0f64;
+        let mut local_guard = rounding(a, b);
         for i in start + 1..end {
             let p = point(i)?;
             let t = (i - start) as f64 / (end - start) as f64;
@@ -108,8 +109,17 @@ pub(super) fn shortcuts(
                 })
                 .sum::<f64>()
                 .sqrt();
-            bound = bound.max((distance + guard).next_up());
+            distance_max = distance_max.max(distance);
+            local_guard = local_guard.max(rounding(p, p));
         }
+        // The first retained chord may come from a finer level. A distant large-coordinate
+        // part of a newly joined chain must not invalidate that already certified chord.
+        // Selection uses the conservative whole-chain guard; certification uses this arc.
+        let bound = if end == start + 1 {
+            0.
+        } else {
+            (distance_max + local_guard).next_up()
+        };
         if bound > epsilon {
             return Err(state("shortcut exceeds its source-arc displacement budget"));
         }
@@ -144,6 +154,27 @@ mod tests {
         (result, reads)
     }
 
+    #[test]
+    fn a_joined_chain_cannot_invalidate_its_finer_retained_chord() {
+        let points = [[0., 0., 0.], [1., 0., 0.], [2., 0., 0.], [1e20, 0., 0.]];
+        let mut chords = Vec::new();
+        shortcuts(
+            0,
+            3,
+            1e-5,
+            &mut |i| Ok(points[i as usize]),
+            &mut |i| Ok(i != 1),
+            &mut |a, b, e| {
+                chords.push((a, b, e));
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(chords.len(), 2);
+        assert_eq!((chords[0].0, chords[0].1), (0, 2));
+        assert!(chords[0].2 <= 1e-5);
+        assert_eq!(chords[1], (2, 3, 0.));
+    }
     #[test]
     fn straight_sheet_borders_do_not_retain_source_density() {
         for count in [64, 1024, 32768] {

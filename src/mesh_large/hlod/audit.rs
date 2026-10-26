@@ -187,3 +187,58 @@ impl<'a> Writer<'a> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{mesh_large::hlod::scratch::ScratchLedger, spill::Scratch};
+
+    #[test]
+    fn sidecar_ranges_hash_and_exclusive_creation_are_independent_of_stage_lifetime() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("out.hlod-audit");
+        let receipt;
+        {
+            let scratch = Scratch::create(Some(dir.path()), 0).unwrap();
+            let ledger = ScratchLedger::new(&scratch, 0, &|_| Ok(()));
+            let lease = ledger.admit_external("audit", 4096).unwrap();
+            let writer = Writer::new(&path, 4096, &lease).unwrap();
+            let one = writer
+                .append(&serde_json::json!({"kind":"control", "id": 1}))
+                .unwrap();
+            let two = writer
+                .append(&serde_json::json!({"kind":"control", "id": 2}))
+                .unwrap();
+            receipt = writer.finish().unwrap();
+            let bytes = fs::read(&receipt.path).unwrap();
+            assert_eq!(receipt.bytes as usize, bytes.len());
+            assert_eq!(receipt.sha256, format!("{:x}", Sha256::digest(&bytes)));
+            assert_eq!(one.offset, 0);
+            assert_eq!(two.offset, one.bytes);
+            assert_eq!(two.offset + two.bytes, receipt.bytes);
+            for (index, id) in [(one, 1), (two, 2)] {
+                let at = index.offset as usize;
+                let row: serde_json::Value =
+                    serde_json::from_slice(&bytes[at..at + index.bytes as usize]).unwrap();
+                assert_eq!(row["id"], id);
+            }
+            assert!(Writer::new(&path, 4096, &lease).is_err());
+            assert_eq!(fs::read(&receipt.path).unwrap(), bytes);
+        }
+        assert_eq!(fs::metadata(receipt.path).unwrap().len(), receipt.bytes);
+    }
+
+    #[test]
+    fn sidecar_overrun_is_refused_before_any_file_bytes_are_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let scratch = Scratch::create(Some(dir.path()), 0).unwrap();
+        let ledger = ScratchLedger::new(&scratch, 0, &|_| Ok(()));
+        let lease = ledger.admit_external("audit", 1).unwrap();
+        let writer = Writer::new(&dir.path().join("audit"), 1, &lease).unwrap();
+        writer
+            .append(&serde_json::json!({"tooLarge":true}))
+            .unwrap();
+        assert!(writer.finish().is_err());
+        assert_eq!(fs::metadata(&writer.path).unwrap().len(), 0);
+    }
+}

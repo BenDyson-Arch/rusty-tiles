@@ -41,3 +41,15 @@ non-regression uses each dataset's restacked S3 baseline (tex3: 0.378/0.770/3.59
 crop3: 0.418/0.849/3.881 MB), exact bytes and complete dependency accounting.
 The mesh-1e7 sanity bake requires coordinator clearance; its command and receipts
 will be prepared, while all local bakes remain tex3/crop3 only.
+
+The cap-fit proof must distinguish general bounded work from a constructive surface
+domain. A stalled, consistently oriented height-field patch with simple projected
+boundary loops can be reconstructed by constrained Delaunay triangulation, using
+only its boundary and mandatory interface vertices/edges. Flooding across boundary
+constraints preserves all holes. With B boundary vertices, I mandatory interior
+vertices and b loops, T = 2I + B + 2b - 4 per connected patch; source interior
+sampling does not appear. Projection collisions, folds, nonmanifold edges and
+crossing constraints are outside this constructive domain. They still enter bounded
+cleanup/clustering and the explicitly reported last-resort frontier. This replaces
+an unproved claim that vertex clustering alone guarantees cap fit. No parent input
+or output cap is relaxed. S2 measures the reconstructed surface before S3 runs.

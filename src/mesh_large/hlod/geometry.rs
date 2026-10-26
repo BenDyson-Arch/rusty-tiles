@@ -1,6 +1,7 @@
 //! D11: bounded parents from immediate children and a common, certified border contract.
 //! Boundary reconstruction precedes meshopt reduction. Stalled interiors get bounded
 //! topology cleanup and remeshing; only the reported capped frontier remains afterwards.
+mod constrained;
 mod topology;
 pub(crate) use topology::Receipt as TopologyReceipt;
 
@@ -288,6 +289,9 @@ pub(crate) fn build_parent(
     // eligible interior components, then remesh with increasingly coarse interior cells.
     let floor = contract.scale.max(children_error);
     topology::cleanup(&mut merged, interface, floor, &mut topology);
+    if let Some(receipt) = constrained::remesh(&mut merged, interface, *caps.last().unwrap()) {
+        topology.add(receipt);
+    }
     for round in 0..=6 {
         check()?;
         if round != 0 {
@@ -360,7 +364,7 @@ fn attempt(
         .triangles
         .iter()
         .all(|t| t[0] == t[1] || t[1] == t[2] || t[0] == t[2]);
-    let (mut output, simplifier_error, stopping) = if input <= cap {
+    let (mut output, mut simplifier_error, stopping) = if input <= cap {
         (merged.triangles.clone(), 0., StoppingBound::Input)
     } else if degenerate_only {
         (
@@ -464,7 +468,40 @@ fn attempt(
             ),
         ));
     }
-    let Some((topology, topology_floor)) = topology::changes(merged, &output, interface) else {
+    let mut topology_change = topology::changes(merged, &output, interface);
+    if topology_change.is_none() {
+        // A boundary loop touching the contract must survive. Retain its incident ring
+        // and simplify only the remaining interior before escalating to the remesher.
+        let (boundary, _) = topology::protected(merged, interface);
+        let mut keep = Vec::new();
+        let mut rest = Vec::new();
+        for (i, t) in merged.triangles.iter().enumerate() {
+            if t.iter().any(|&v| boundary[v as usize]) {
+                keep.push(*t);
+                protected[i] = true;
+            } else {
+                rest.push(*t);
+            }
+        }
+        if keep.len() < cap {
+            let fixed: HashSet<u32> = keep.iter().flatten().copied().collect();
+            let (mut reduced, e) =
+                simplify(merged, &rest, &|v| fixed.contains(&v), cap - keep.len());
+            reduced.extend(keep);
+            reoriented += orient(original_faces, &mut reduced);
+            let lost = missing(&reduced, &merged.keys, &segments, &vertices);
+            if !reduced.is_empty() && reduced.len() <= cap && lost.0.is_empty() && lost.1.is_empty()
+            {
+                topology_change = topology::changes(merged, &reduced, interface);
+                if topology_change.is_some() {
+                    output = reduced;
+                    simplifier_error = e;
+                    retries += 1;
+                }
+            }
+        }
+    }
+    let Some((topology, topology_floor)) = topology_change else {
         return Err(JobError::new(
             JobErrorKind::Unsupported,
             "simplification removes a border-connected component or touching boundary loop",

@@ -3033,7 +3033,7 @@ fn cancellation_during_hlod_cleans_up() {
 }
 
 /// Evidence lane, not CI: the production-settings HLOD stage (8,192-triangle leaves and
-/// coarse cap, balanced, four jobs, optional `RT_HLOD_EVIDENCE_BUDGET`) of
+/// coarse cap, balanced, two jobs, optional `RT_HLOD_EVIDENCE_BUDGET`) of
 /// `RT_HLOD_EVIDENCE_INPUT`, written under `RT_HLOD_EVIDENCE_DIR`, censused on its decoded bytes. Writes `census.json` with every
 /// member's SHA-256 so the CLI archive's members can be matched to the censused bytes.
 #[test]
@@ -3049,7 +3049,7 @@ fn evidence_census() {
         &Run {
             leaf_triangles: crate::mesh_large::config::CONSUMER_TABLE_ROWS,
             cap: super::TRIANGLE_CAP,
-            jobs: 4,
+            jobs: 2,
             sampling: Schedule::PRODUCTION,
             nearest_steps: super::error::NEAREST_STEPS,
             budget: std::env::var("RT_HLOD_EVIDENCE_BUDGET")
@@ -3081,6 +3081,11 @@ fn evidence_census() {
         "leaves": census.leaves, "coarse": census.coarse, "maxDepth": census.max_depth,
         "sharedSegments": census.shared_edges, "sharedPoints": census.shared_vertices,
         "nonmanifoldSegments": census.nonmanifold_edges, "checkedSegments": census.checked_segments,
+        "contractedSourceSegments": census.contracted_source_segments,
+        "contractedSourceVertices": census.contracted_source_vertices,
+        "certificateFailures": census.certificate_failures,
+        "maxSameDepthGapM": census.max_same_depth_gap_m,
+        "maxMixedDepthGapM": census.max_mixed_depth_gap_m,
         "missingSegments": census.missing_segments, "missingPoints": census.missing_vertices,
         "mixedPairs": census.mixed_pairs, "sameDepthPairs": census.same_depth_pairs,
         "maxCoarseTriangles": census.max_coarse_triangles, "invalidFeatures": census.invalid_features,
@@ -3104,9 +3109,11 @@ fn evidence_census() {
             + census.missing_vertices
             + census.moved_border_vertices
             + census.duplicate_chain_tiles
-            + census.reversed_coarse_faces,
+            + census.reversed_coarse_faces
+            + census.certificate_failures,
         0
     );
+    assert_eq!(census.max_same_depth_gap_m, 0.);
     // Exact seams: source T-junctions and unwelded seams are reported (the census's
     // overlap and perpendicular counts above, the manifest's source-defect counts), not
     // asserted; omitted coarse tiles are reported by `omittedProxies`.
@@ -3972,4 +3979,110 @@ fn s2_measurement_is_bounded_on_an_oblique_source() {
         assert!(g >= row["childrenError"].as_f64().unwrap());
     }
     assert!(exhausted > 0, "the adversary exhausts some searches");
+}
+
+/// Replays bounded parent jobs from immutable archive evidence; never performs a bake.
+#[test]
+#[ignore = "evidence lane: RT_HLOD_REPLAY_DIR"]
+fn evidence_replay_topology() {
+    use super::{borders::Contract, interfaces::InterfaceRow, store::*};
+    let root = PathBuf::from(std::env::var("RT_HLOD_REPLAY_DIR").unwrap());
+    let old = rows(&root.join("candidate-c053-tex3/out.hlod-audit/borders.jsonl"));
+    let current = rows(&root.join("candidate-bbbe-tex3/out.hlod-audit/borders.jsonl"));
+    let mut archive =
+        zip::ZipArchive::new(fs::File::open(root.join("candidate-bbbe-tex3/out.3tz")).unwrap())
+            .unwrap();
+    let point = |v: &Value| std::array::from_fn(|i| v[i].as_u64().unwrap() as u32);
+    let key = |v: &Value| TileKey {
+        first: v["first"].as_u64().unwrap(),
+        end: v["end"].as_u64().unwrap(),
+        depth: v["depth"].as_u64().unwrap() as u32,
+        leaf_begin: v["leafBegin"].as_u64().unwrap() as u32,
+        leaf_end: v["leafEnd"].as_u64().unwrap() as u32,
+    };
+    for omitted in current
+        .iter()
+        .filter(|r| r["kind"] == "omitted" && r["source"] == true)
+    {
+        let tile = key(&omitted["key"]);
+        let row = old
+            .iter()
+            .find(|r| r["tile"]["first"] == tile.first && r["tile"]["depth"] == tile.depth)
+            .unwrap();
+        let c = &row["contract"];
+        let contract = Contract {
+            depth: tile.depth,
+            scale: c["scale"].as_f64().unwrap(),
+            certificates: vec![],
+            interface: c["interface"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|r| {
+                    InterfaceRow::new(
+                        r["leaf"].as_u64().unwrap() as u32,
+                        point(&r["a"]),
+                        point(&r["b"]),
+                        r["lo"].as_u64().unwrap() as u32,
+                        r["hi"].as_u64().unwrap() as u32,
+                    )
+                })
+                .collect(),
+        };
+        let children: Vec<_> = omitted["frontier"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| {
+                let k = key(v);
+                let mut bytes = Vec::new();
+                archive
+                    .by_name(&format!("content/f{}-d{}.glb", k.first, k.depth))
+                    .unwrap()
+                    .read_to_end(&mut bytes)
+                    .unwrap();
+                let faces = decode(&bytes).faces;
+                let n = faces.len();
+                TileGeometry {
+                    key: k,
+                    positions: faces.into_iter().flatten().collect(),
+                    ells: vec![k.depth as u8; n * 3],
+                    triangles: (0..n as u32)
+                        .map(|i| [i * 3, i * 3 + 1, i * 3 + 2])
+                        .collect(),
+                    representative: vec![0; n],
+                    primitives: vec![SourcePrimitive {
+                        node: 0,
+                        mesh: 0,
+                        primitive: 0,
+                        expanded_ordinal: 0,
+                        material: u32::MAX,
+                    }],
+                    interface: vec![],
+                    geometric_error: 0.,
+                    lease: None,
+                }
+            })
+            .collect();
+        let built = super::geometry::build_parent(
+            tile,
+            &children,
+            &[8192],
+            &contract,
+            &|_| Ok(None),
+            &|| Ok(()),
+        )
+        .unwrap();
+        eprintln!(
+            "REPLAY {}: built={} attempts={:?}",
+            tile.first,
+            built.built.is_some(),
+            built.attempted_topology
+        );
+        assert!(
+            built.built.is_some(),
+            "bounded real parent {} must fit",
+            tile.first
+        );
+    }
 }

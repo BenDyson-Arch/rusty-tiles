@@ -894,35 +894,44 @@ fn all_slots_mask_factors_and_the_normal_frame_survive() {
                 p.tangent.as_ref().unwrap(),
             );
             for f in 0..p.positions.len() / 3 {
-                let c: [f64; 3] = std::array::from_fn(|a| {
-                    (0..3).map(|k| p.positions[3 * f + k][a]).sum::<f64>() / 3.
-                });
-                let t: [f64; 2] =
-                    std::array::from_fn(|a| (0..3).map(|k| uv[3 * f + k][a]).sum::<f64>() / 3.);
-                // MASK alpha follows the source's x < 32 texel split (away from the edge).
-                if (c[0] - 50.).abs() > 6. {
-                    let a = bilinear(&base, t)[3];
-                    assert!(
-                        if c[0] < 50. { a < 0.2 } else { a > 0.8 },
-                        "alpha {a} at {c:?}"
-                    );
+                for weights in [[1. / 3.; 3], [0.5, 0.5, 0.], [0., 0.5, 0.5], [0.5, 0., 0.5]] {
+                    let c: [f64; 3] = std::array::from_fn(|a| {
+                        (0..3)
+                            .map(|k| p.positions[3 * f + k][a] * weights[k])
+                            .sum::<f64>()
+                    });
+                    let t: [f64; 2] = std::array::from_fn(|a| {
+                        (0..3).map(|k| uv[3 * f + k][a] * weights[k]).sum::<f64>()
+                    });
+                    // MASK alpha follows the source's x < 32 texel split (away from the edge).
+                    if (c[0] - 50.).abs() > 6. {
+                        let a = bilinear(&base, t)[3];
+                        assert!(
+                            if c[0] < 50. { a < 0.2 } else { a > 0.8 },
+                            "alpha {a} at {c:?}"
+                        );
+                    }
+                    let v = bilinear(&normal_page, t).map(|x| 2. * x - 1.);
+                    let n: [f64; 3] = std::array::from_fn(|a| {
+                        (0..3).map(|k| nrm[3 * f + k][a] * weights[k]).sum::<f64>()
+                    });
+                    let tt: [f64; 4] = std::array::from_fn(|a| {
+                        (0..3).map(|k| tan[3 * f + k][a] * weights[k]).sum::<f64>()
+                    });
+                    let b = [
+                        n[1] * tt[2] - n[2] * tt[1],
+                        n[2] * tt[0] - n[0] * tt[2],
+                        n[0] * tt[1] - n[1] * tt[0],
+                    ]
+                    .map(|x| x * tt[3].signum());
+                    let w: [f64; 3] =
+                        std::array::from_fn(|a| tt[a] * v[0] + b[a] * v[1] + n[a] * v[2]);
+                    let l = (w[0] * w[0] + w[1] * w[1] + w[2] * w[2]).sqrt();
+                    let cos =
+                        (w[0] * want_world[0] + w[1] * want_world[1] + w[2] * want_world[2]) / l;
+                    worst = worst.max(cos.clamp(-1., 1.).acos().to_degrees());
+                    checked += 1;
                 }
-                let v = bilinear(&normal_page, t).map(|x| 2. * x - 1.);
-                let n: [f64; 3] =
-                    std::array::from_fn(|a| (0..3).map(|k| nrm[3 * f + k][a]).sum::<f64>() / 3.);
-                let tt: [f64; 4] =
-                    std::array::from_fn(|a| (0..3).map(|k| tan[3 * f + k][a]).sum::<f64>() / 3.);
-                let b = [
-                    n[1] * tt[2] - n[2] * tt[1],
-                    n[2] * tt[0] - n[0] * tt[2],
-                    n[0] * tt[1] - n[1] * tt[0],
-                ]
-                .map(|x| x * tt[3].signum());
-                let w: [f64; 3] = std::array::from_fn(|a| tt[a] * v[0] + b[a] * v[1] + n[a] * v[2]);
-                let l = (w[0] * w[0] + w[1] * w[1] + w[2] * w[2]).sqrt();
-                let cos = (w[0] * want_world[0] + w[1] * want_world[1] + w[2] * want_world[2]) / l;
-                worst = worst.max(cos.clamp(-1., 1.).acos().to_degrees());
-                checked += 1;
             }
         }
     }
@@ -1265,4 +1274,132 @@ fn evidence_appearance() {
         "method":"200,000 area-weighted samples per direction; nearest-surface correspondence; base colour = factor x level-0 bilinear texture x COLOR_0 in linear light, compared in sRGB; published pages decoded at level 0 (KTX2 transcoded)"})).unwrap()).unwrap();
     drop(captured);
     let _ = fs::remove_dir_all(&scratch);
+}
+
+/// Same source-side checker signal sampled on decoded borders at different delivered
+/// depths. Compare coincident points along unequal subdivisions, away from checker steps.
+#[test]
+fn checkerboard_borders_agree_across_mixed_lod() {
+    use std::{collections::BTreeMap, sync::Arc};
+    fn checker(x: u32, y: u32) -> [u8; 4] {
+        let v = if ((x / 7) + (y / 7)) % 2 == 0 {
+            32
+        } else {
+            224
+        };
+        [v, v, v, 255]
+    }
+    struct Edge {
+        a: [f64; 3],
+        b: [f64; 3],
+        uv: [[f64; 2]; 2],
+        image: Arc<(u32, u32, Vec<u8>)>,
+    }
+    let work = tempfile::tempdir().unwrap();
+    let mut f = base_fixture();
+    f.surface = Surface::Plane;
+    f.images = vec![checker];
+    let dir = stage(
+        &write_fixture(&work.path().join("src"), &f),
+        &work.path().join("out"),
+    );
+    let mut tiles = Vec::new();
+    for (row, glb) in coarse(&dir) {
+        let mut edges: BTreeMap<([u64; 3], [u64; 3]), (usize, Edge)> = BTreeMap::new();
+        for p in glb.prims() {
+            let page = Arc::new(glb.texture(
+                texture_index(&p.material, "/pbrMetallicRoughness/baseColorTexture/index").unwrap(),
+            ));
+            let uv = p.uv.unwrap();
+            for face in 0..p.positions.len() / 3 {
+                for k in 0..3 {
+                    let (a, b) = (3 * face + k, 3 * face + (k + 1) % 3);
+                    let bits = |p: [f64; 3]| p.map(|x| if x == 0. { 0 } else { x.to_bits() });
+                    let (ka, kb) = (bits(p.positions[a]), bits(p.positions[b]));
+                    let entry = edges.entry((ka.min(kb), ka.max(kb))).or_insert_with(|| {
+                        (
+                            0,
+                            Edge {
+                                a: p.positions[a],
+                                b: p.positions[b],
+                                uv: [uv[a], uv[b]],
+                                image: page.clone(),
+                            },
+                        )
+                    });
+                    entry.0 += 1;
+                }
+            }
+        }
+        tiles.push((
+            row,
+            edges
+                .into_values()
+                .filter(|(n, _)| *n == 1)
+                .map(|(_, e)| e)
+                .collect::<Vec<_>>(),
+        ));
+    }
+    let mut checked = 0;
+    for (i, (a, left)) in tiles.iter().enumerate() {
+        for (b, right) in &tiles[i + 1..] {
+            if a["depth"] == b["depth"] {
+                continue;
+            }
+            if a["first"].as_u64().unwrap() < b["end"].as_u64().unwrap()
+                && b["first"].as_u64().unwrap() < a["end"].as_u64().unwrap()
+            {
+                continue;
+            }
+            for e in left {
+                let p: [f64; 3] = std::array::from_fn(|k| (e.a[k] + e.b[k]) * 0.5);
+                if [p[0], p[2]].iter().any(|x| {
+                    let pixel = x / 100. * 64. - 0.5;
+                    let r = pixel.rem_euclid(7.);
+                    r < 2. || r > 5.
+                }) {
+                    continue;
+                }
+                for f in right {
+                    let d: [f64; 3] = std::array::from_fn(|k| f.b[k] - f.a[k]);
+                    let length2 = d.iter().map(|x| x * x).sum::<f64>();
+                    if length2 == 0. {
+                        continue;
+                    }
+                    let t = (0..3).map(|k| (p[k] - f.a[k]) * d[k]).sum::<f64>() / length2;
+                    if !(0.0..=1.0).contains(&t) {
+                        continue;
+                    }
+                    if (0..3)
+                        .map(|k| (f.a[k] + t * d[k] - p[k]).powi(2))
+                        .sum::<f64>()
+                        > 1e-12
+                    {
+                        continue;
+                    }
+                    let x = bilinear(
+                        &e.image,
+                        std::array::from_fn(|k| (e.uv[0][k] + e.uv[1][k]) * 0.5),
+                    );
+                    let y = bilinear(
+                        &f.image,
+                        std::array::from_fn(|k| f.uv[0][k] * (1. - t) + f.uv[1][k] * t),
+                    );
+                    let difference = (0..3).map(|k| (x[k] - y[k]).abs()).fold(0f64, f64::max);
+                    assert!(
+                        difference < 0.2,
+                        "mixed depths {}/{} at {p:?}: {x:?} vs {y:?}",
+                        a["depth"],
+                        b["depth"]
+                    );
+                    checked += 1;
+                    break;
+                }
+            }
+        }
+    }
+    assert!(
+        checked >= 10,
+        "only {checked} decoded mixed-depth border samples"
+    );
 }
