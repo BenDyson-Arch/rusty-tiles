@@ -12,7 +12,7 @@ use super::{
     store::{SourcePrimitive, StoppingBound, TileGeometry, TileKey},
 };
 use crate::{JobError, JobErrorKind};
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 /// Protect-and-retry rounds after the first simplification.
 pub(crate) const RETRIES: u32 = 3;
@@ -61,7 +61,7 @@ struct Merged {
 
 fn merge(children: &[TileGeometry]) -> Merged {
     let triangles: usize = children.iter().map(|c| c.triangles.len()).sum();
-    let mut index: HashMap<Key, u32> = HashMap::with_capacity(triangles);
+    let mut index: HashMap<Key, u32> = HashMap::with_capacity_and_hasher(triangles, Default::default());
     let mut merged = Merged {
         keys: Vec::new(),
         ells: Vec::new(),
@@ -117,8 +117,8 @@ fn missing(
     segments: &HashSet<(Key, Key)>,
     points: &HashSet<Key>,
 ) -> (Vec<(Key, Key)>, Vec<Key>) {
-    let mut present_edges = HashSet::with_capacity(triangles.len() * 3);
-    let mut present_points = HashSet::with_capacity(triangles.len() * 3);
+    let mut present_edges = HashSet::with_capacity_and_hasher(triangles.len() * 3, Default::default());
+    let mut present_points = HashSet::with_capacity_and_hasher(triangles.len() * 3, Default::default());
     for t in triangles {
         for k in 0..3 {
             let (a, b) = (keys[t[k] as usize], keys[t[(k + 1) % 3] as usize]);
@@ -149,7 +149,7 @@ fn simplify(
     locked: &dyn Fn(u32) -> bool,
     target: usize,
 ) -> (Vec<[u32; 3]>, f64) {
-    let mut local: HashMap<u32, u32> = HashMap::with_capacity(faces.len() * 2);
+    let mut local: HashMap<u32, u32> = HashMap::with_capacity_and_hasher(faces.len() * 2, Default::default());
     let mut global = Vec::new();
     let mut indices = Vec::with_capacity(faces.len() * 3);
     for f in faces {

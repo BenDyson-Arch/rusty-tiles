@@ -88,7 +88,9 @@ const STAGE_RESERVE: u64 = 256 << 20;
 ///   quadric (44), collapse remap and lock), per index 24 (adjacency edge, collapse, order),
 ///   so 372.
 ///
-/// The sum is under 1,570. After meshopt returns (its temporaries and `simplify`'s arrays
+/// These simplifier terms sum to under 1,570. The pre-contraction face list adds 12
+/// bytes per triangle and the exact-capacity reference clone adds at most 111, still
+/// below 1,700. After meshopt returns (its temporaries and `simplify`'s arrays
 /// freed), keeping faces on their source orientation (`geometry::orient`) holds two face
 /// sets (12-byte entries, under 30 bytes each per merged triangle). Topology and constrained
 /// remeshing run after the simplifier workspace is released; every output remains capped.

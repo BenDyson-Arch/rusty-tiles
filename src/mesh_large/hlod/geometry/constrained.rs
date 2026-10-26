@@ -3,8 +3,9 @@
 //! Outside this domain return to the bounded general remesher without changing the mesh.
 use super::{topology, Merged};
 use crate::mesh_large::hlod::interfaces::InterfaceRow;
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use spade::{ConstrainedDelaunayTriangulation, Point2, Triangulation};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 fn edge(a: u32, b: u32) -> (u32, u32) {
     (a.min(b), a.max(b))
@@ -32,7 +33,7 @@ pub(super) fn remesh(
     if patches.len() > cap {
         return None;
     }
-    let mut required_by_component: HashMap<usize, Vec<(u32, u32)>> = HashMap::new();
+    let mut required_by_component: HashMap<usize, Vec<(u32, u32)>> = HashMap::default();
     for r in interface {
         let (a, b) = (*ids.get(&r.a)?, *ids.get(&r.b)?);
         if components[a as usize] != components[b as usize] {
@@ -89,7 +90,7 @@ pub(super) fn remesh(
         if boundary.is_empty() {
             return None;
         }
-        let mut adjacent: HashMap<u32, Vec<u32>> = HashMap::new();
+        let mut adjacent: HashMap<u32, Vec<u32>> = HashMap::default();
         for &(a, b) in &boundary {
             adjacent.entry(a).or_default().push(b);
             adjacent.entry(b).or_default().push(a);
@@ -97,7 +98,7 @@ pub(super) fn remesh(
         if adjacent.values().any(|v| v.len() != 2) {
             return None;
         }
-        let mut visited = HashSet::new();
+        let mut visited = HashSet::default();
         let mut loops = 0;
         for &start in adjacent.keys() {
             if visited.contains(&start) {
@@ -131,8 +132,8 @@ pub(super) fn remesh(
             return None;
         }
         let mut cdt = ConstrainedDelaunayTriangulation::<Point2<f64>>::new();
-        let mut handles = HashMap::new();
-        let mut reverse = HashMap::new();
+        let mut handles = HashMap::default();
+        let mut reverse = HashMap::default();
         for v in vertices {
             let p = m.positions[v as usize];
             let handle = cdt
@@ -152,7 +153,7 @@ pub(super) fn remesh(
             }
             cdt.add_constraint(handles[&a], handles[&b]);
         }
-        let mut flags = HashMap::new();
+        let mut flags = HashMap::default();
         let mut queue = VecDeque::new();
         for e in cdt.directed_edges().filter(|e| e.face().is_outer()) {
             if let Some(face) = e.rev().face().as_inner() {

@@ -5,7 +5,7 @@ use crate::{
     mesh_large::hlod::interfaces::{InterfaceRow, Key},
     JobError,
 };
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -167,13 +167,13 @@ pub(super) fn contract(
     let original_representatives = m.representative.clone();
     // Remove collapsed strips before checking the delivered arcs. A degenerate strip
     // can mention an edge which disappears when another face keeps its component alive.
-    let mut alive = HashSet::new();
+    let mut alive = HashSet::default();
     for (i, t) in m.triangles.iter().enumerate() {
         if surface(t) {
             alive.insert(component[original[i][0] as usize]);
         }
     }
-    let mut kept = HashSet::new();
+    let mut kept = HashSet::default();
     let keep: Vec<bool> = m
         .triangles
         .iter()
@@ -194,8 +194,8 @@ pub(super) fn contract(
     if lost_edges.is_empty() && lost_points.is_empty() {
         return Ok(());
     }
-    let mut candidates = HashMap::new();
-    let mut witnesses: HashMap<usize, Vec<u32>> = HashMap::new();
+    let mut candidates = HashMap::default();
+    let mut witnesses: HashMap<usize, Vec<u32>> = HashMap::default();
     for (i, t) in original.iter().enumerate() {
         let witness = witnesses.entry(component[t[0] as usize]).or_default();
         for &v in t {
@@ -254,7 +254,7 @@ pub(super) fn contract(
 /// strict diameter bound below the known G floor can be dropped. Keep one component if
 /// every component is eligible, so the parent still has geometry to measure against.
 pub(super) fn cleanup(m: &mut Merged, interface: &[InterfaceRow], g: f64, r: &mut Receipt) {
-    let mut seen = HashSet::new();
+    let mut seen = HashSet::default();
     let keep: Vec<bool> = m
         .triangles
         .iter()
@@ -264,7 +264,7 @@ pub(super) fn cleanup(m: &mut Merged, interface: &[InterfaceRow], g: f64, r: &mu
     retain(m, &keep);
     let component = Components::mesh(m);
     let border = points(interface);
-    let mut boxes: HashMap<usize, ([f64; 3], [f64; 3], bool)> = HashMap::new();
+    let mut boxes: HashMap<usize, ([f64; 3], [f64; 3], bool)> = HashMap::default();
     for t in &m.triangles {
         for &v in t {
             let p = m.positions[v as usize].map(f64::from);
@@ -320,7 +320,7 @@ pub(super) fn changes(
     };
     let component = Components::mesh(m);
     let border = points(interface);
-    let mut bounds: HashMap<usize, ([f64; 3], [f64; 3], bool)> = HashMap::new();
+    let mut bounds: HashMap<usize, ([f64; 3], [f64; 3], bool)> = HashMap::default();
     for t in &m.triangles {
         for &v in t {
             let p = m.positions[v as usize].map(f64::from);
@@ -338,7 +338,7 @@ pub(super) fn changes(
         .map(|v| component[*v as usize])
         .collect();
     let mut receipt = Receipt::default();
-    let mut dropped = HashSet::new();
+    let mut dropped = HashSet::default();
     for (c, (lo, hi, touch)) in &bounds {
         if !surviving.contains(c) {
             if *touch {
@@ -355,7 +355,7 @@ pub(super) fn changes(
         }
     }
     let boundary = |triangles: &[[u32; 3]]| {
-        let mut edges: HashMap<(u32, u32), u32> = HashMap::new();
+        let mut edges: HashMap<(u32, u32), u32> = HashMap::default();
         for t in triangles {
             for i in 0..3 {
                 let (a, b) = (t[i], t[(i + 1) % 3]);
@@ -378,7 +378,7 @@ pub(super) fn changes(
     };
     let (old_edges, old_degree, old_root) = boundary(&m.triangles);
     let (new_edges, new_degree, new_root) = boundary(output);
-    let mut touching = HashSet::new();
+    let mut touching = HashSet::default();
     for v in 0..m.keys.len() {
         if old_degree[v] > 0 && border.contains(&m.keys[v]) {
             touching.insert(old_root[v]);
@@ -407,8 +407,8 @@ pub(super) fn changes(
                 adjacent[b as usize].push(a);
             }
         }
-        let mut visited = HashSet::new();
-        let mut paths = HashMap::new();
+        let mut visited = HashSet::default();
+        let mut paths = HashMap::default();
         for &a in &anchors {
             if adjacent[a as usize].is_empty() {
                 return None;
@@ -444,7 +444,7 @@ pub(super) fn changes(
         return rejected("touching boundary graph changed after suppressing degree-two vertices");
     }
     let cycles = |edges: &HashMap<(u32, u32), u32>, degree: &[u32], roots: &[usize]| {
-        let mut graph_counts: HashMap<usize, (usize, usize)> = HashMap::new();
+        let mut graph_counts: HashMap<usize, (usize, usize)> = HashMap::default();
         for (&(a, _), &n) in edges {
             if n == 1 {
                 graph_counts.entry(roots[a as usize]).or_default().0 += 1;
@@ -455,7 +455,7 @@ pub(super) fn changes(
                 graph_counts.entry(roots[v]).or_default().1 += 1;
             }
         }
-        let mut per_component: HashMap<usize, usize> = HashMap::new();
+        let mut per_component: HashMap<usize, usize> = HashMap::default();
         for (root, (edges, vertices)) in graph_counts {
             if surviving.contains(&component[root]) {
                 *per_component.entry(component[root]).or_default() += edges + 1 - vertices;
@@ -538,7 +538,7 @@ fn changed_cycles(
 ) -> (HashSet<usize>, usize, usize) {
     let n = old_degree.len();
     let mut anchors = vec![false; n];
-    let mut contacts = HashMap::<(usize, usize), usize>::new();
+    let mut contacts = HashMap::<(usize, usize), usize>::default();
     for v in 0..n {
         let shared = old_degree[v] > 0 && new_degree[v] > 0;
         anchors[v] = shared
@@ -549,8 +549,8 @@ fn changed_cycles(
         }
     }
     // Anchor isolated cycles too. Distinct entirely replaced cycles have no shared key.
-    let mut old_anchored = HashSet::new();
-    let mut new_anchored = HashSet::new();
+    let mut old_anchored = HashSet::default();
+    let mut new_anchored = HashSet::default();
     for (v, &anchor) in anchors.iter().enumerate() {
         if anchor && old_degree[v] > 0 {
             old_anchored.insert(old_root[v]);
@@ -575,8 +575,8 @@ fn changed_cycles(
                 adjacent[b as usize].push(a);
             }
         }
-        let mut visited = HashSet::new();
-        let mut paths = HashMap::<(u32, u32), usize>::new();
+        let mut visited = HashSet::default();
+        let mut paths = HashMap::<(u32, u32), usize>::default();
         for (v, &anchor) in anchors.iter().enumerate() {
             if !anchor {
                 continue;
@@ -620,8 +620,8 @@ fn changed_cycles(
         for &(a, b) in paths.keys() {
             groups.join(a, b);
         }
-        let mut vertices = HashSet::new();
-        let mut counts = HashMap::<usize, (usize, usize)>::new();
+        let mut vertices = HashSet::default();
+        let mut counts = HashMap::<usize, (usize, usize)>::default();
         for (&(a, b), &count) in paths {
             let r = groups.root(a as usize);
             counts.entry(r).or_default().0 += count;
@@ -631,7 +631,7 @@ fn changed_cycles(
                 }
             }
         }
-        let mut result = HashMap::<usize, usize>::new();
+        let mut result = HashMap::<usize, usize>::default();
         for (r, (edges, vertices)) in counts {
             if surviving.contains(&component[r]) {
                 *result.entry(roots[r]).or_default() += edges + 1 - vertices;
@@ -643,7 +643,7 @@ fn changed_cycles(
     let new_ranks = ranks(&new_paths, new_root);
     let common_old = ranks(&common, old_root);
     let common_new = ranks(&common, new_root);
-    let mut closed = HashSet::new();
+    let mut closed = HashSet::default();
     let mut closed_count = 0;
     for (root, count) in old_ranks {
         let lost = count - common_old.get(&root).copied().unwrap_or(0);
@@ -669,7 +669,7 @@ pub(super) fn protected(
 ) -> (Vec<bool>, usize) {
     let border = points(interface);
     let mut locked: Vec<bool> = m.keys.iter().map(|k| border.contains(k)).collect();
-    let mut edges: HashMap<(u32, u32), u32> = HashMap::new();
+    let mut edges: HashMap<(u32, u32), u32> = HashMap::default();
     for t in &m.triangles {
         for i in 0..3 {
             let (a, b) = (t[i], t[(i + 1) % 3]);
@@ -682,13 +682,13 @@ pub(super) fn protected(
             boundary.join(a, b);
         }
     }
-    let mut touched = HashSet::new();
+    let mut touched = HashSet::default();
     for (v, &lock) in locked.iter().enumerate() {
         if lock {
             touched.insert(boundary.root(v));
         }
     }
-    let mut loops = HashSet::new();
+    let mut loops = HashSet::default();
     for (&(a, b), &n) in &edges {
         if n == 1 {
             let root = boundary.root(a as usize);
@@ -701,7 +701,7 @@ pub(super) fn protected(
     }
     // One fixed support triangle per component prevents deletion of any surface component.
     let component = Components::mesh(m);
-    let mut supported = HashSet::new();
+    let mut supported = HashSet::default();
     for t in &m.triangles {
         if supported.insert(component[t[0] as usize]) {
             for &v in t {
@@ -734,7 +734,7 @@ pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: 
         return;
     }
     let width = extent / (1u32 << (6 - round.min(6))) as f64;
-    let mut cells = HashMap::new();
+    let mut cells = HashMap::default();
     let mut map = Vec::with_capacity(m.keys.len());
     for (v, p) in m.positions.iter().enumerate() {
         if locked[v] {
@@ -752,7 +752,7 @@ pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: 
         .iter()
         .map(|t| mapped(&m.positions, *t, &map))
         .collect();
-    let mut seen = HashSet::new();
+    let mut seen = HashSet::default();
     let keep: Vec<_> = output
         .iter()
         .map(|t| surface(t) && seen.insert(oriented(t)))
@@ -896,7 +896,7 @@ pub(super) mod tests {
         )
         .unwrap();
         let segments = [(a, b)].into_iter().collect();
-        assert!(missing(&m.triangles, &m.keys, &segments, &HashSet::new())
+        assert!(missing(&m.triangles, &m.keys, &segments, &HashSet::default())
             .0
             .is_empty());
         assert_eq!(receipt.reconstructed_faces, 1);
