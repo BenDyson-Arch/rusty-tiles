@@ -279,7 +279,10 @@ needs n descendant source faces that way on every edge it stands for (S1b review
 same-direction faces lie on opposite sides (wings to their third corners at least
 120 degrees apart): a collapsed thin plate's opposite-facing sheets (2/1, 2/2). A
 lone reversed face (2/0), a fold re-flipped onto the border, a duplicate or an
-upright sliver flap on one side is refused. Exact (epsilon = 0) archives reduce to the D1 exact-seam census.
+upright sliver flap on one side is refused. Coincident coarse faces (one corner
+set, either orientation) need coincident faces in a descendant leaf (a plate
+thinner than its leaf encoding) or the descendant incidence on every edge they
+use; the license is leaf-local, so twins split across leaves are not seen. Exact (epsilon = 0) archives reduce to the D1 exact-seam census.
 
 Native (`src/validate/hlod_delivery/borders.rs`, archive only) bounds each
 contracted vertex's displacement from its chord, in f64 rounded outward, by the
@@ -310,6 +313,6 @@ content-less cells. Without a sidecar, any contraction is refused (`borderAudit`
 `--producer-report` compares the run report's sidecar hash and bytes.
 
 `border_controls.py` builds a literal two-cell fixture with an honest sidecar: five
-positives and 23 named mutants (geometry: both validators where the archive shows
+positives and 24 named mutants (geometry: both validators where the archive shows
 it; sidecar lies and topology receipts: oracle, while native passes),
 plus a contracted bump sheet baked by the real producer that must pass both.

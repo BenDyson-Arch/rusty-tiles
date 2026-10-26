@@ -342,9 +342,12 @@ impl Store {
     /// stands for (a nonmanifold spine; interior edges have no leaf support).
     /// Otherwise the edge must keep both directions and its same-direction faces
     /// must lie on opposite sides, the wings to their third corners at least 120
-    /// degrees apart: a collapsed thin plate's two opposite-facing sheets. Same-direction faces on one side
-    /// (a fold re-flipped onto the border, a duplicate, an upright sliver flap)
-    /// overlap and are refused.
+    /// degrees apart: a collapsed thin plate's two opposite-facing sheets.
+    /// Same-direction faces on one side (a fold re-flipped onto the border, a
+    /// duplicate, an upright sliver flap) overlap and are refused. Coincident faces
+    /// (one corner set, either orientation) need coincident faces in a descendant
+    /// leaf (a plate thinner than its leaf encoding) or the descendant incidence on
+    /// every edge they use; leaf-local only, twins split across leaves are not seen.
     pub(super) fn equal_directions(
         &self,
         tile: i64,
@@ -352,7 +355,6 @@ impl Store {
         contracted: &BTreeMap<CanonicalEdge, Vec<CanonicalPoint>>,
         effort: &Effort,
     ) -> Result<(), Error> {
-        let mut last = None;
         for (edge, e) in &surface.edges {
             effort.charge(1)?;
             let excess = |n: u64, other: u64| n >= 2 && n > other;
@@ -376,28 +378,10 @@ impl Store {
             } else {
                 (e.reverse, e.forward)
             };
-            let last = match last {
-                Some(last) => last,
-                None => {
-                    let value: i64 = self
-                        .connection
-                        .query_row("SELECT last FROM tiles WHERE id=?", [tile], |r| r.get(0))
-                        .map_err(sql)?;
-                    *last.insert(value)
-                }
-            };
             let mut witnessed = true;
             for (x, y) in arc {
                 effort.charge(1)?;
-                let (nf, nr): (i64, i64) = self
-                    .connection
-                    .prepare_cached("SELECT coalesce(sum(nf),0),coalesce(sum(nr),0) FROM leaf_segments WHERE key=? AND tile>? AND tile<=?")
-                    .and_then(|mut q| {
-                        q.query_row(params![super::edge_bytes(key(x, y)), tile, last], |r| {
-                            Ok((r.get(0)?, r.get(1)?))
-                        })
-                    })
-                    .map_err(sql)?;
+                let (nf, nr) = self.leaf_incidence(tile, key(x, y))?;
                 // Descendant faces running x -> y (the arc direction) and back.
                 let (with, against) = if x < y { (nf, nr) } else { (nr, nf) };
                 let enough = |coarse: u64, other: u64, source: i64| {
@@ -417,7 +401,54 @@ impl Store {
                 ));
             }
         }
+        let mut corners = BTreeMap::<[CanonicalPoint; 3], u32>::new();
+        for f in &surface.faces {
+            effort.charge(1)?;
+            let mut k = *f;
+            k.sort_unstable();
+            *corners.entry(k).or_default() += 1;
+        }
+        let licensed: bool = self
+            .connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM tiles l,tiles t WHERE t.id=?1 AND l.id>t.id AND l.id<=t.last AND l.coincident=1)",
+                [tile],
+                |r| r.get(0),
+            )
+            .map_err(sql)?;
+        for (c, _) in corners.iter().filter(|(_, n)| **n > 1 && !licensed) {
+            for (x, y) in [(c[0], c[1]), (c[1], c[2]), (c[0], c[2])] {
+                let edge = key(x, y);
+                let e = surface.edges[&edge];
+                let arc: Vec<(CanonicalPoint, CanonicalPoint)> = match contracted.get(&edge) {
+                    Some(path) => path.windows(2).map(|w| (w[0], w[1])).collect(),
+                    None => vec![edge],
+                };
+                for (x, y) in arc {
+                    effort.charge(1)?;
+                    let (nf, nr) = self.leaf_incidence(tile, key(x, y))?;
+                    if nf + nr < (e.forward + e.reverse) as i64 {
+                        return Err(bad(
+                            "interfaceWinding",
+                            &format!("coincident coarse faces without that descendant multiplicity: tile={tile}"),
+                        ));
+                    }
+                }
+            }
+        }
         Ok(())
+    }
+
+    /// Descendant leaf faces on a canonical edge, (lower to higher key, back).
+    fn leaf_incidence(&self, tile: i64, edge: CanonicalEdge) -> Result<(i64, i64), Error> {
+        self.connection
+            .prepare_cached("SELECT coalesce(sum(s.nf),0),coalesce(sum(s.nr),0) FROM leaf_segments s,tiles t WHERE t.id=?2 AND s.key=?1 AND s.tile>t.id AND s.tile<=t.last")
+            .and_then(|mut q| {
+                q.query_row(params![super::edge_bytes(edge), tile], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })
+            })
+            .map_err(sql)
     }
 
     /// Pairwise rules at every shared border vertex, grouped by key.
@@ -756,6 +787,14 @@ mod tests {
         overlapped.push(overlapped[0]);
         refused(
             siblings(overlapped, 2., b_coarse(&[0, 4]), 2.),
+            "interfaceWinding",
+        );
+        // A coincident reversed twin: each side single, but no source has it.
+        let mut twinned = a_coarse(&[0, 4]);
+        let [x, y, z] = twinned[0];
+        twinned.push([x, z, y]);
+        refused(
+            siblings(twinned, 2., b_coarse(&[0, 4]), 2.),
             "interfaceWinding",
         );
         let mut tripled = a_coarse(&[0, 4]);

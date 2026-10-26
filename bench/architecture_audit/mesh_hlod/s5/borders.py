@@ -196,14 +196,17 @@ def _two_sided(a, b, faces):
                for side in wings for i, u in enumerate(side) for v in side[i + 1:])
 
 
-def folds(store, tile, directed, arcs, require, faces=()):
+def folds(store, tile, directed, arcs, require, faces=(), licensed=False):
     """Directed incidences are counted, never reduced to a mask (S1b review 1).
 
     A coarse edge used n >= 2 times in one direction and more often than the other
     needs n verified descendant source faces in that direction on every source edge
     it stands for: itself, or each edge of its contracted arc. Otherwise it must keep
     both directions with its same-direction faces on opposite sides (a collapsed
-    thin plate); a fold, duplicate or upright sliver on one side is refused."""
+    thin plate); a fold, duplicate or upright sliver on one side is refused.
+    Coincident faces (one corner set, either orientation) need coincident faces in
+    a descendant leaf (a plate thinner than its encoding) or the descendant
+    incidence on every edge they use."""
     tid, lo, hi = int(tile['id']), tile['lo'], tile['hi']
     ids = {}
 
@@ -233,6 +236,25 @@ def folds(store, tile, directed, arcs, require, faces=()):
         require(supported or plate, 'interfaceWinding',
                 f'tile {tid}: coarse edge {p} -> {q} used {n} times in one direction without that '
                 'descendant source multiplicity')
+    if licensed:
+        return
+    corners = collections.Counter(tuple(sorted(f)) for f in faces)
+    for c, n in corners.items():
+        if n < 2:
+            continue
+        for p, q in ((c[0], c[1]), (c[1], c[2]), (c[0], c[2])):
+            store.work.charge()
+            total = directed.get((p, q), 0) + directed.get((q, p), 0)
+            a, b = canonical(p), canonical(q)
+            path = None if a is None or b is None else arcs.get(_key(a, b), [min(a, b), max(a, b)])
+            supported = path is not None
+            for x, y in zip(path or [], (path or [])[1:]):
+                nf, nr = store.db.execute(
+                    'SELECT coalesce(sum(nf),0),coalesce(sum(nr),0) FROM canonical_edges '
+                    'WHERE a=? AND b=? AND leaf>=? AND leaf<?', (*_key(x, y), lo, hi)).fetchone()
+                supported &= nf + nr >= total
+            require(supported, 'interfaceWinding',
+                    f'tile {tid}: coincident coarse faces {c} without that descendant multiplicity')
 
 
 class _UnionFind:

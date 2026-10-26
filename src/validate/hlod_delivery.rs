@@ -856,7 +856,7 @@ impl Store {
             .map_err(|e| Error::Scratch(ScratchRefusal::Io(e)))?;
         let connection = Connection::open(file.path()).map_err(sql)?;
         connection.execute_batch("PRAGMA cache_size=-8192; PRAGMA temp_store=FILE; PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;
-            CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER);
+            CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER,coincident INTEGER NOT NULL DEFAULT 0);
             CREATE INDEX tile_parent ON tiles(parent);
             CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL); CREATE INDEX refs_tile ON refs(tile); CREATE INDEX refs_rank ON refs(rank);
             CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL);
@@ -1803,7 +1803,25 @@ impl Store {
                 effort,
                 read,
             )?;
-            self.record_leaf(row.get(0).map_err(sql)?, &surface, effort)?;
+            let tile: i64 = row.get(0).map_err(sql)?;
+            self.record_leaf(tile, &surface, effort)?;
+            // Coincident source faces (one corner set) license coarse ones above.
+            effort.charge(surface.faces.len())?;
+            let mut corners: Vec<[CanonicalPoint; 3]> = surface
+                .faces
+                .iter()
+                .map(|f| {
+                    let mut k = *f;
+                    k.sort_unstable();
+                    k
+                })
+                .collect();
+            corners.sort_unstable();
+            if corners.windows(2).any(|w| w[0] == w[1]) {
+                self.connection
+                    .execute("UPDATE tiles SET coincident=1 WHERE id=?", [tile])
+                    .map_err(sql)?;
+            }
         }
         Ok(())
     }
