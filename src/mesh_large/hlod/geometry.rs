@@ -1,7 +1,11 @@
 //! D11: bounded parents from immediate children and a common, certified border contract.
 //! Boundary reconstruction precedes meshopt reduction. Stalled interiors get bounded
 //! topology cleanup and remeshing; only the reported capped frontier remains afterwards.
+#[cfg(test)]
+mod combined_controls;
 mod constrained;
+#[cfg(test)]
+mod fold_probe;
 pub(crate) mod folds;
 pub(crate) mod locations;
 pub(crate) mod measurement;
@@ -20,6 +24,10 @@ type BorderMap<'a> = dyn Fn(Key) -> Result<Option<(Key, Key, f64, u8)>, JobError
 
 /// Protect-and-retry rounds after the first simplification.
 pub(crate) const RETRIES: u32 = 3;
+// Geometry proposals have no S2/audit write until accepted. This separate fixed
+// allowance lets local carrier protection converge without multiplying measured
+// hole-opening attempts or their scratch reservation.
+const FOLD_RETRIES: u32 = 8;
 
 fn state(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message.into())
@@ -39,7 +47,7 @@ pub(crate) struct Built {
     pub retries: u32,
     pub interface_vertices: u32,
     pub interface_segments: u32,
-    /// Output faces turned to (or dropped beside) their source orientation (`orient`).
+    /// Historical receipt field; proposals are rejected rather than reoriented.
     pub reoriented: u32,
     pub topology: topology::Receipt,
     pub change: topology::Change,
@@ -224,6 +232,8 @@ pub(crate) fn build_parent(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<Outcome, JobError> {
     check()?;
+    #[cfg(test)]
+    fold_probe::capture(tile, children, contract, caps);
     let mut merged = merge(children);
     let reference = merged.clone();
     if merged.triangles.is_empty() {
@@ -310,8 +320,8 @@ pub(crate) fn build_parent(
     }
     for round in 0..=6 {
         check()?;
-        if round != 0 {
-            topology::remesh(&mut merged, interface, round, &mut topology);
+        if round != 0 && !topology::remesh(&mut merged, interface, round, &mut topology) {
+            continue;
         }
         for preserve_holes in [false, true] {
             if let Some(mut b) = assessed_attempt(
@@ -383,7 +393,13 @@ fn assessed_attempt(
             opening_pins,
         ) {
             Ok(b) => b,
-            Err(e) if e.kind() == JobErrorKind::Unsupported => return Ok(None),
+            Err(e) if e.kind() == JobErrorKind::Unsupported => {
+                #[cfg(test)]
+                if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
+                    eprintln!("replay unsupported cap={cap} preserve_holes={preserve_holes} round={round}: {e}");
+                }
+                return Ok(None);
+            }
             Err(e) => return Err(e),
         };
         b.retries += round;
@@ -420,8 +436,8 @@ fn assessed_attempt(
     Ok(None)
 }
 
-/// One build of the parent from `merged` children under `interface`; `unsupported` when
-/// its interface cannot fit `cap`.
+/// One bounded parent proposal. Unsupported means its protected repair did not
+/// produce an eligible capped result; it is not a proof of cap infeasibility.
 fn attempt(
     tile: TileKey,
     merged: &Merged,
@@ -470,7 +486,7 @@ fn attempt(
         .triangles
         .iter()
         .all(|t| t[0] == t[1] || t[1] == t[2] || t[0] == t[2]);
-    let (mut output, mut simplifier_error, stopping) = if input <= cap {
+    let (output, simplifier_error, stopping) = if input <= cap {
         (merged.triangles.clone(), 0., StoppingBound::Input)
     } else if degenerate_only {
         (
@@ -481,27 +497,49 @@ fn attempt(
     } else {
         let (mut output, mut error) =
             simplify(merged, &merged.triangles, &|v| locked[v as usize], cap);
+        let mut topology_protected = false;
+        let mut fold_retries = 0;
         loop {
             let (edges, points) = missing(&output, &merged.keys, &segments, &vertices);
             let invalid = folds::Source::new(&merged.positions, contracted_faces)
                 .violations(&merged.positions, &output);
-            if edges.is_empty() && points.is_empty() && !invalid.iter().any(|v| *v) {
+            #[cfg(test)]
+            if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
+                eprintln!(
+                    "replay retry={retries} faces={} invalid={} protected={} missing={}/{}",
+                    output.len(),
+                    invalid.iter().filter(|v| **v).count(),
+                    protected.iter().filter(|v| **v).count(),
+                    edges.len(),
+                    points.len()
+                );
+            }
+            let valid = edges.is_empty() && points.is_empty() && !invalid.iter().any(|v| *v);
+            if valid && topology::changes(reference, &output, interface, floor).is_some() {
                 break;
             }
-            if retries == RETRIES {
-                return Err(JobError::new(
-                    JobErrorKind::Unsupported,
-                    format!(
-                        "coarse tile f{}-d{}: simplification still drops {} interface segments \
-                         and {} interface vertices, or introduces a fold, after {RETRIES} protected retries \
-                         ({input} input triangles, {} protected, cap {cap})",
-                        tile.first,
-                        tile.depth,
-                        edges.len(),
-                        points.len(),
-                        protected.iter().filter(|p| **p).count()
-                    ),
-                ));
+            let previously_protected = protected.iter().filter(|p| **p).count();
+            if valid || fold_retries == FOLD_RETRIES {
+                if topology_protected {
+                    return Err(JobError::new(
+                        JobErrorKind::Unsupported,
+                        format!("coarse tile f{}-d{}: protected reduction exhausted its repair budget for topology and orientation ({input} input triangles, {} protected, cap {cap})",
+                            tile.first, tile.depth, protected.iter().filter(|p| **p).count()),
+                    ));
+                }
+                // Keep these carriers in the SAME partition as all previous fold
+                // protection. A fresh whole-mesh reduction would discard that evidence.
+                for (keep, support) in protected.iter_mut().zip(topology::support_faces(
+                    merged,
+                    interface,
+                    preserve_holes,
+                )) {
+                    *keep |= support;
+                }
+                topology_protected = true;
+                fold_retries = 0;
+            } else {
+                fold_retries += 1;
             }
             retries += 1;
             let edges: HashSet<(Key, Key)> = edges.into_iter().collect();
@@ -516,6 +554,12 @@ fn attempt(
                 if t.iter().any(|&v| invalid[v as usize]) {
                     protected[i] = true;
                 }
+            }
+            if protected.iter().filter(|p| **p).count() == previously_protected {
+                return Err(JobError::new(
+                    JobErrorKind::Unsupported,
+                    "protected reduction made no progress",
+                ));
             }
             let keep: Vec<[u32; 3]> = merged
                 .triangles
@@ -585,37 +629,7 @@ fn attempt(
             ),
         ));
     }
-    let mut topology_change = topology::changes(reference, &output, interface, floor);
-    if topology_change.is_none() {
-        // Pin the protected boundary vertices and component supports, allowing their
-        // adjacent faces to retriangulate. Retaining the entire incident face ring wastes
-        // interior triangles and can increase measured G even when the cap still fits.
-        let (boundary, _) = topology::protected(merged, interface, preserve_holes);
-        let (reduced, e) = simplify(
-            merged,
-            &merged.triangles,
-            &|v| boundary[v as usize] || locked[v as usize],
-            cap,
-        );
-        let lost = missing(&reduced, &merged.keys, &segments, &vertices);
-        if !reduced.is_empty()
-            && reduced.len() <= cap
-            && lost.0.is_empty()
-            && lost.1.is_empty()
-            && !folds::Source::new(&merged.positions, contracted_faces)
-                .violations(&merged.positions, &reduced)
-                .iter()
-                .any(|v| *v)
-        {
-            topology_change = topology::changes(reference, &reduced, interface, floor);
-            if topology_change.is_some() {
-                output = reduced;
-                simplifier_error = e;
-                retries += 1;
-            }
-        }
-    }
-
+    let topology_change = topology::changes(reference, &output, interface, floor);
     let Some(change) = topology_change else {
         return Err(JobError::new(
             JobErrorKind::Unsupported,

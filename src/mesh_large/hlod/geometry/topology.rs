@@ -337,7 +337,9 @@ pub(super) fn changes(
     }
     let rejected = |reason: &str| {
         #[cfg(test)]
-        if std::env::var_os("RT_HLOD_REPLAY_DIR").is_some() {
+        if std::env::var_os("RT_HLOD_REPLAY_DIR").is_some()
+            || std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some()
+        {
             eprintln!("TOPOLOGY: {reason}");
         }
         let _ = reason;
@@ -799,10 +801,42 @@ pub(super) fn protected(
     (locked, loops.len())
 }
 
+/// Exact carriers for protected boundary edges and one face of every component.
+/// Merely pinning both edge endpoints does not preserve its incident face: its third
+/// vertex can collapse onto an endpoint while the endpoints survive elsewhere.
+pub(super) fn support_faces(m: &Merged, interface: &[InterfaceRow], interior: bool) -> Vec<bool> {
+    let (locked, _) = protected(m, interface, interior);
+    let mut edges: HashMap<(u32, u32), u32> = HashMap::default();
+    for t in &m.triangles {
+        for i in 0..3 {
+            let (a, b) = (t[i], t[(i + 1) % 3]);
+            *edges.entry((a.min(b), a.max(b))).or_default() += 1;
+        }
+    }
+    let component = Components::mesh(m);
+    let mut supported = HashSet::default();
+    m.triangles
+        .iter()
+        .map(|t| {
+            let support = supported.insert(component[t[0] as usize]);
+            support
+                || (0..3).any(|i| {
+                    let (a, b) = (t[i], t[(i + 1) % 3]);
+                    locked[a as usize] && locked[b as usize] && edges[&(a.min(b), a.max(b))] == 1
+                })
+        })
+        .collect()
+}
+
 /// Topology-changing vertex clustering, only after ordinary simplification has stalled.
 /// All allocations and visits are bounded by the eight-child job. Components remain
 /// separate; protected boundary loops and one support face per component survive.
-pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: &mut Receipt) {
+pub(super) fn remesh(
+    m: &mut Merged,
+    interface: &[InterfaceRow],
+    round: u32,
+    r: &mut Receipt,
+) -> bool {
     let (locked, _) = protected(m, interface, false);
     let component = Components::mesh(m);
     let mut lo = [f64::INFINITY; 3];
@@ -818,7 +852,7 @@ pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: 
     }
     let extent = (0..3).map(|a| hi[a] - lo[a]).fold(0f64, f64::max);
     if extent == 0. {
-        return;
+        return false;
     }
     let width = extent / (1u32 << (6 - round.min(6))) as f64;
     let mut cells = HashMap::default();
@@ -847,7 +881,7 @@ pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: 
         || !mapped_incidence(m, &map)
     {
         r.rejected_remesh_rounds += 1;
-        return;
+        return false;
     }
     let mut seen = HashSet::default();
     let keep: Vec<_> = output
@@ -860,9 +894,10 @@ pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: 
         .filter(|c| c.receipt.closed_holes == 0 && c.receipt.opened_holes == 0)
     else {
         r.rejected_remesh_rounds += 1;
-        return;
+        return false;
     };
     r.add(change.receipt);
+    let changed = m.triangles != output;
     r.remeshed_vertices += map
         .iter()
         .enumerate()
@@ -870,6 +905,7 @@ pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: 
         .count() as u64;
     retain(m, &keep);
     m.triangles = output;
+    changed
 }
 
 #[cfg(test)]
@@ -908,6 +944,25 @@ pub(super) mod tests {
             triangles,
         }
     }
+    #[test]
+    fn boundary_carriers_keep_the_free_third_vertex_without_freezing_the_whole_ring() {
+        let m = ring();
+        let p = m.keys[0];
+        let border = [InterfaceRow::new(0, p, p, 0, 1)];
+        let carriers = support_faces(&m, &border, false);
+        assert_eq!(
+            carriers,
+            [true, false, true, false, true, false, true, false]
+        );
+        assert!(support_faces(&m, &border, true).iter().all(|v| *v));
+        let (pins, _) = protected(&m, &border, false);
+        // Both endpoints of the boundary edge are fixed, while its third corner
+        // is free. Keeping the carrier itself prevents a collapse onto that edge.
+        assert!(pins[2] && pins[3]);
+        assert!(!pins[6]);
+        assert!(carriers[4]);
+    }
+
     #[test]
     fn many_touching_sheet_loops_can_retriangulate_but_none_can_close() {
         let mut m = ring();
