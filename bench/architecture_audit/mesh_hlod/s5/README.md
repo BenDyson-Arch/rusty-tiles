@@ -272,21 +272,26 @@ tile's border from decoded leaf incidence (edges/points with an owner leaf insid
 and one outside), split it at retained vertices and require: junctions and
 point-only contacts exact, every arc delivered as exactly one chord, no chord
 shared by two arcs, every arc edge covered, and chord directions witnessed on
-every edge of the arc. Directed incidences are counted, never reduced to a mask:
-a coarse edge used n >= 2 times in one direction and more often than the other
-needs n descendant source faces that way on every edge it stands for (S1b review
-1). Without that support it is admitted only if it keeps both directions and no
-two same-direction faces lie on one side (an acute wedge between the wings to
-their third corners): a simplified book spine's perpendicular pages or a
-collapsed thin plate's opposite sheets (2/1, 2/2). A lone reversed face (2/0), a
-fold re-flipped onto the border, a duplicate or a leaning flap is refused. Coincident coarse faces (one corner
-set, either orientation) need coincident faces in a descendant leaf (a plate
-thinner than its leaf encoding) or the descendant incidence on every edge they
-use; the license is leaf-local, so twins split across leaves are not seen. Exact (epsilon = 0) archives reduce to the D1 exact-seam census.
+every edge of the arc. Directed incidences are counted, never reduced to a mask
+(S1b review 1): a coarse edge used n >= 2 times in one direction needs n descendant
+source faces that way on every source edge it stands for. Without that support it
+keeps the other direction and its same-direction faces lie on distinct sides: the
+exact sign of |d|^2 (u.w) - (u.d)(w.d) (d the edge, u and w towards the third
+corners) is never positive, so no acute wedge, and no face is collinear with the
+edge. A simplified book spine's perpendicular pages (0) and a collapsed plate's
+opposite sheets (negative) pass; a lone reversed face (2/0), a fold re-flipped onto
+the border, a duplicate or a leaning flap is refused, balanced or not. The 90
+degree boundary is a policy: an acute nonmanifold junction keeps its leaf support
+or is refused. Coincident coarse faces (n on one corner set, either orientation)
+need, at every corner, a descendant coincident source set of at least n faces
+(native: an index of every leaf face; oracle: verified source faces, all corners in
+one connected twin region). Exact (epsilon = 0) archives reduce to the D1
+exact-seam census.
 
 Native (`src/validate/hlod_delivery/borders.rs`, archive only) bounds each
-contracted vertex's displacement from its chord, in f64 rounded outward, by the
-tile's G/16 (`borderDisplacement`). The archive carries no logical depth (chains
+contracted vertex's displacement from its chord by the tile's G/16
+(`borderDisplacement`); the residual (v - a) - (b - a) i/m is rounded outward in
+proportion to those differences, so a rigid translation changes nothing. The archive carries no logical depth (chains
 are spliced, placeholders transparent), so pairwise rules use only what the tree
 proves: siblings share one depth and must deliver identical images
 (`sameDepthBorderGap`); a tile whose cell parent is an ancestor of a disjoint tile
@@ -299,20 +304,32 @@ the larger G, terminal contacts the tree does not order, or topology receipts.
 
 The oracle (`borders.py`) re-derives the same arcs from source canonical keys with
 exact Fraction displacement. With `--border-audit borders.jsonl` (an index only)
-it joins records to payloads by SHA-256 and leaf interval, recomputes E_d from the
-captured source extent (`borderScale`, G >= E_d), then checks, in this order:
-same-depth equality and |Q_d - Q_(d+k)| <= min(E_d, G)/8 at every shared source
-breakpoint using the claimed logical depths (strictly increasing down the tree),
-terminal contacts whose leaf depth the tree or a labelled sibling fixes; then each
-certificate (hinted chain re-walked through incidence, ordinals, endpoints, exact
-displacement <= epsilon <= E_d/16, one certificate per arc, interface items);
-then topology receipts against the parent job's decoded input (dropped
-components, closed/opened hole cycles with exact source distances of patch faces
-and new rims, and the G-contribution formulas); then omitted records against
-content-less cells. Without a sidecar, any contraction is refused (`borderAudit`).
-`--producer-report` compares the run report's sidecar hash and bytes.
+it joins records to payloads by SHA-256 and leaf interval and validates every depth
+label (coarse and omitted records) against the tree: cell siblings equal, strictly
+deeper below a labelled cell (`borderDepth`). It recomputes E_d from the captured
+source extent (`borderScale`, G >= E_d), then checks, in this order: same-depth
+equality and |Q_d - Q_(d+k)| <= min(E_d, G)/8 at every shared source breakpoint;
+terminal contacts, where a leaf not proven deeper than the tile (exact depth from
+a labelled sibling, else the lower bound below its labelled cell ancestor) forces
+an exact contact and a proven one must also be claimed; each certificate (hinted
+chain re-walked, ordinals, endpoints, exact displacement <= epsilon <= E_d/16, one
+certificate per arc, interface items); then topology against the parent job's
+decoded input. Dropped components must be interior, below max(E, child G), and
+their loss is measured on S1b's fixed controls (quarter grid and centroid) exactly
+to the delivered proxy: the receipt may not under-report it and G must cover 1.05
+times it. Boundary components of input and output join into clusters; cycle-rank
+drops and rises are closures and openings, which the receipt may exceed but not
+undercount. Wherever an input boundary vertex became interior or new boundary
+appeared, loss is measured at every fundamental cycle centroid projected across
+the change and at fixed controls lying over the old boundary, exactly against
+source (closures) or the proxy (openings), within E; a change without a witness is
+refused. `contractedVertices` (input vertices on contracted arcs) and the complete
+omission frontier (with multiplicity) are compared exactly; history-dependent
+counters are listed as uninspected. Without a sidecar, any contraction is refused
+(`borderAudit`). `--producer-report` compares the run report's sidecar hash and
+bytes.
 
-`border_controls.py` builds a literal two-cell fixture with an honest sidecar: five
-positives and 24 named mutants (geometry: both validators where the archive shows
+`border_controls.py` builds a literal two-cell fixture with an honest sidecar: seven
+positives and 35 named mutants, including every review-1 reproducer (geometry: both validators where the archive shows
 it; sidecar lies and topology receipts: oracle, while native passes),
 plus a contracted bump sheet baked by the real producer that must pass both.

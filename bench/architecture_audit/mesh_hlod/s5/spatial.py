@@ -58,7 +58,6 @@ class Store:
         self.source_bounds = {}
         self.leaf_boxes = {}
         self.captured = None
-        self.coincident = set()
         self.db.executescript('''
           PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;
           PRAGMA temp_store=FILE; PRAGMA cache_size=-65536;
@@ -102,12 +101,6 @@ class Store:
         return (json.loads(r[0]) for r in self.db.execute('SELECT data FROM faces WHERE tile=?', (tile,)))
 
     def put_faces(self, tile, faces):
-        faces=list(faces)
-        # Tiles holding two faces on one corner set (either orientation).
-        corners=[tuple(sorted(f32_point(p) for p in f['xyz'])) for f in faces]
-        corners=[c for c in corners if len(set(c))==3]
-        if len(set(corners))<len(corners):
-            self.coincident.add(tile)
         self.db.executemany('INSERT INTO faces VALUES (?,?)',
                             ((tile,json.dumps(f,separators=(',',':'))) for f in faces))
 
@@ -461,8 +454,7 @@ class Store:
             if t['children']:
                 # D11: coarse borders are arcs between retained exact vertices.
                 arcs=borders.tile_border(self,t,vertices,directed,require,d11)
-                licensed=any(int(leaves[i]['id']) in self.coincident for i in range(t['lo'],t['hi']))
-                borders.folds(self,t,directed,arcs,require,surface,licensed)
+                borders.folds(self,t,directed,arcs,require,surface)
             for kind,a,b in self.db.execute('SELECT kind,a,b FROM requirements WHERE tile=? ORDER BY kind DESC',(int(t['id']),)):
                 self.work.charge()
                 if t['children'] and kind<2:

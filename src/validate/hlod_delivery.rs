@@ -20,7 +20,9 @@
 //! between retained exact vertices, one witnessed chord per arc, each contracted
 //! vertex within G/16 of its chord at its edge ordinal; junctions and point
 //! contacts stay exact. Siblings agree exactly, a shallower leaf locks deeper
-//! neighbours, and other provably no-deeper pairs stay within G/8.
+//! neighbours, and other provably no-deeper pairs stay within G/8. Directed
+//! incidences are counted: unsupported same-direction multiplicity must lie on
+//! distinct sides (exact wedge sign) and coincident faces need coincident source.
 //!
 //! Census basis is decoded leaf canonical keys, not unavailable original source
 //! coordinates. Uninspected here (source oracle and audit sidecar): contraction
@@ -856,7 +858,7 @@ impl Store {
             .map_err(|e| Error::Scratch(ScratchRefusal::Io(e)))?;
         let connection = Connection::open(file.path()).map_err(sql)?;
         connection.execute_batch("PRAGMA cache_size=-8192; PRAGMA temp_store=FILE; PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;
-            CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER,coincident INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER);
             CREATE INDEX tile_parent ON tiles(parent);
             CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL); CREATE INDEX refs_tile ON refs(tile); CREATE INDEX refs_rank ON refs(rank);
             CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL);
@@ -867,6 +869,8 @@ impl Store {
             CREATE TABLE leaf_segments(key BLOB NOT NULL,tile INTEGER NOT NULL,nf INTEGER NOT NULL,nr INTEGER NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             CREATE TABLE shared_point_keys(key BLOB PRIMARY KEY) WITHOUT ROWID;
             CREATE TABLE requirements(tile INTEGER NOT NULL,kind INTEGER NOT NULL,key BLOB NOT NULL,directions INTEGER NOT NULL,PRIMARY KEY(tile,kind,key)) WITHOUT ROWID;
+            CREATE TABLE leaf_faces(corners BLOB NOT NULL,tile INTEGER NOT NULL,n INTEGER NOT NULL,PRIMARY KEY(corners,tile)) WITHOUT ROWID;
+            CREATE TABLE twin_points(key BLOB NOT NULL,corners BLOB NOT NULL,PRIMARY KEY(key,corners)) WITHOUT ROWID;
             CREATE TABLE border_map(key BLOB NOT NULL,tile INTEGER NOT NULL,image BLOB NOT NULL,d REAL NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             BEGIN;").map_err(sql)?;
         let pending = std::mem::take(&mut self.pending);
@@ -1416,6 +1420,13 @@ impl Store {
         self.place_references(effort)?;
         self.replay_original_aliases(effort)?;
         self.collect_leaves(effort, read)?;
+        self.connection
+            .execute_batch(
+                "INSERT INTO twin_points SELECT substr(corners,1+12*k.i,12),corners FROM
+                 (SELECT corners FROM leaf_faces GROUP BY corners HAVING sum(n)>1),
+                 (SELECT 0 AS i UNION ALL SELECT 1 UNION ALL SELECT 2) k WHERE 1 ON CONFLICT DO NOTHING",
+            )
+            .map_err(sql)?;
         self.point_requirements(&mut census, effort)?;
         self.segment_requirements(&mut census, effort)?;
         self.check_coarse(&mut census, effort, read)?;
@@ -1805,22 +1816,18 @@ impl Store {
             )?;
             let tile: i64 = row.get(0).map_err(sql)?;
             self.record_leaf(tile, &surface, effort)?;
-            // Coincident source faces (one corner set) license coarse ones above.
-            effort.charge(surface.faces.len())?;
-            let mut corners: Vec<[CanonicalPoint; 3]> = surface
-                .faces
-                .iter()
-                .map(|f| {
-                    let mut k = *f;
-                    k.sort_unstable();
-                    k
-                })
-                .collect();
-            corners.sort_unstable();
-            if corners.windows(2).any(|w| w[0] == w[1]) {
-                self.connection
-                    .execute("UPDATE tiles SET coincident=1 WHERE id=?", [tile])
-                    .map_err(sql)?;
+            // Every leaf face by corner set, so coincident source groups are found
+            // across leaves too (they license coincident coarse faces above).
+            let mut face = self
+                .connection
+                .prepare_cached("INSERT INTO leaf_faces VALUES(?,?,1) ON CONFLICT(corners,tile) DO UPDATE SET n=n+1")
+                .map_err(sql)?;
+            for f in &surface.faces {
+                effort.charge(1)?;
+                let mut k = *f;
+                k.sort_unstable();
+                let bytes: Vec<u8> = k.iter().flat_map(|p| point_bytes(*p)).collect();
+                face.execute(params![bytes, tile]).map_err(sql)?;
             }
         }
         Ok(())

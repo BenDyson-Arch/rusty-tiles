@@ -49,55 +49,105 @@ fn coordinate(bits: u32) -> f64 {
     f64::from(f32::from_bits(bits))
 }
 /// Upper bound of |v - chord(i/m)|, the chord from `a` (ordinal 0) to `b` (ordinal m).
+/// The residual is formed from differences, (v - a) - (b - a) i/m, so its rounding
+/// allowance scales with those differences: translation-invariant, and zero on an
+/// axis where all three coordinates are equal.
 fn displacement(a: CanonicalPoint, b: CanonicalPoint, v: CanonicalPoint, i: u64, m: u64) -> f64 {
     const U: f64 = f64::EPSILON / 2.;
     let t = i as f64 / m as f64;
     let mut sum = 0.;
     for k in 0..3 {
         let (a, b, v) = (coordinate(a[k]), coordinate(b[k]), coordinate(v[k]));
-        let q = a + (b - a) * t;
-        // Five roundings of magnitude at most |a| + |b| (and underflow).
-        let d = (v - q).abs() + 8. * U * (a.abs() + b.abs()) + f64::MIN_POSITIVE;
+        let (dv, db) = (v - a, b - a);
+        // Two differences, a product with the rounded ordinal and the subtraction:
+        // at most 2u|dv| + 4u|db| to first order; 8u covers the second order.
+        let error = 8. * U * (dv.abs() + db.abs());
+        let d = (dv - db * t).abs() + error + if error > 0. { f64::MIN_POSITIVE } else { 0. };
         sum += d * d;
     }
     sum.sqrt() * OUTWARD
 }
-/// Whether no pair of same-direction faces on `edge` lies on one side: unit wings
-/// (edge to third corner, perpendicular to the edge) never form an acute wedge
-/// (cosine above 1e-6). A book's perpendicular pages and a collapsed plate's
-/// opposite sheets pass; a duplicate, a fold or a leaning flap does not. A wing of
-/// zero length (a collinear face) is on no side and never passes.
-fn two_sided(edge: &CanonicalEdge, surface: &Surface) -> bool {
-    let (a, b) = (edge.0.map(coordinate), edge.1.map(coordinate));
-    let d: [f64; 3] = std::array::from_fn(|k| b[k] - a[k]);
-    let dd: f64 = d.iter().map(|x| x * x).sum();
-    let mut wings: [Vec<[f64; 3]>; 2] = [Vec::new(), Vec::new()];
-    for f in &surface.faces {
-        for j in 0..3 {
-            let (x, y, c) = (f[j], f[(j + 1) % 3], f[(j + 2) % 3]);
-            let direction = match (x, y) {
-                _ if (x, y) == *edge => 0,
-                _ if (y, x) == *edge => 1,
-                _ => continue,
-            };
-            let c = c.map(coordinate);
-            let w: [f64; 3] = std::array::from_fn(|k| c[k] - a[k]);
-            let t = w.iter().zip(&d).map(|(w, d)| w * d).sum::<f64>() / dd;
-            let w: [f64; 3] = std::array::from_fn(|k| w[k] - t * d[k]);
-            let norm = w.iter().map(|x| x * x).sum::<f64>().sqrt();
-            if norm.is_nan() || norm <= 0. || !norm.is_finite() {
-                return false;
+
+/// Exact sum of f64 terms as a nonoverlapping expansion (Shewchuk's grow-expansion
+/// with zero elimination); its sign is the sign of its largest component.
+fn exact_sign(terms: &[f64]) -> std::cmp::Ordering {
+    let mut expansion: Vec<f64> = Vec::new();
+    for &b in terms {
+        let mut q = b;
+        let mut next = Vec::with_capacity(expansion.len() + 1);
+        for &e in &expansion {
+            let s = q + e;
+            let bv = s - q;
+            let h = (q - (s - bv)) + (e - bv);
+            if h != 0. {
+                next.push(h);
             }
-            wings[direction].push(w.map(|x| x / norm));
+            q = s;
+        }
+        if q != 0. {
+            next.push(q);
+        }
+        expansion = next;
+    }
+    expansion
+        .last()
+        .map_or(std::cmp::Ordering::Equal, |x| x.total_cmp(&0.))
+}
+/// Exact products of two term lists whose entries are f32 values or their exact
+/// pairwise products (each product of two f32 is exact in f64; a further product
+/// splits into its rounded value and exact fused remainder).
+fn product(x: &[f64], y: &[f64], out: &mut Vec<f64>, sign: f64) {
+    for &a in x {
+        for &b in y {
+            let p = a * b;
+            out.push(sign * p);
+            let e = a.mul_add(b, -p);
+            if e != 0. {
+                out.push(sign * e);
+            }
         }
     }
-    wings.iter().all(|side| {
-        side.len() < 2
-            || side.iter().enumerate().all(|(i, u)| {
-                side[i + 1..]
-                    .iter()
-                    .all(|v| u.iter().zip(v).map(|(u, v)| u * v).sum::<f64>() <= 1e-6)
-            })
+}
+/// Sign of |d|^2 (u.w) - (u.d)(w.d) for d = b - a, u = c - a, w = e - a: the
+/// wings (perpendicular to the edge) towards c and e form an acute wedge (+), a
+/// right angle (0) or an obtuse one (-). Exact over f32 coordinates; with c = e it
+/// is |d x u|^2, zero only for a collinear face.
+fn wedge(a: [f32; 3], b: [f32; 3], c: [f32; 3], e: [f32; 3]) -> std::cmp::Ordering {
+    let difference = |p: [f32; 3], k: usize| [f64::from(p[k]), -f64::from(a[k])];
+    let dot = |p: [f32; 3], q: [f32; 3]| {
+        let mut terms = Vec::new();
+        for k in 0..3 {
+            product(&difference(p, k), &difference(q, k), &mut terms, 1.);
+        }
+        terms
+    };
+    let mut terms = Vec::new();
+    product(&dot(b, b), &dot(c, e), &mut terms, 1.);
+    product(&dot(c, b), &dot(e, b), &mut terms, -1.);
+    exact_sign(&terms)
+}
+/// Whether the edge's same-direction faces of `direction` (0: lower to higher key)
+/// lie on distinct sides: every pair forms a right or obtuse wedge, and no face is
+/// collinear with the edge. A book's perpendicular pages and a collapsed plate's
+/// opposite sheets pass; a duplicate, a fold or a leaning flap does not.
+fn distinct_sides(edge: &CanonicalEdge, direction: usize, surface: &Surface) -> bool {
+    let point = |p: CanonicalPoint| p.map(f32::from_bits);
+    let (a, b) = (point(edge.0), point(edge.1));
+    let mut thirds = Vec::new();
+    for f in &surface.faces {
+        for j in 0..3 {
+            let (x, y) = (f[j], f[(j + 1) % 3]);
+            let along = if direction == 0 { (x, y) } else { (y, x) };
+            if along == *edge {
+                thirds.push(point(f[(j + 2) % 3]));
+            }
+        }
+    }
+    thirds.iter().enumerate().all(|(i, c)| {
+        wedge(a, b, *c, *c) == std::cmp::Ordering::Greater
+            && thirds[i + 1..]
+                .iter()
+                .all(|e| wedge(a, b, *c, *e) != std::cmp::Ordering::Greater)
     })
 }
 /// Where one tile delivers a border vertex: retained exactly (empty), or on a chord
@@ -339,17 +389,14 @@ impl Store {
     }
 
     /// Every directed incidence is counted, not reduced to a direction mask. A
-    /// coarse edge used n >= 2 times in one direction and more often than the other
-    /// needs n descendant source faces in that direction on every source edge it
-    /// stands for (a nonmanifold spine; interior edges have no leaf support).
-    /// Otherwise the edge must keep both directions and no two same-direction faces
-    /// may lie on one side (an acute wedge between the wings to their third
-    /// corners): a simplified book spine or a collapsed thin plate's sheets.
-    /// Same-direction faces on one side (a fold re-flipped onto the border, a
-    /// duplicate, an upright sliver flap) overlap and are refused. Coincident faces
-    /// (one corner set, either orientation) need coincident faces in a descendant
-    /// leaf (a plate thinner than its leaf encoding) or the descendant incidence on
-    /// every edge they use; leaf-local only, twins split across leaves are not seen.
+    /// coarse edge used n >= 2 times in one direction needs n descendant source faces
+    /// that way on every source edge it stands for (a nonmanifold spine retained).
+    /// Otherwise the edge must keep the other direction and those faces must lie on
+    /// distinct sides (`distinct_sides`: no acute wedge, exactly): a simplified book
+    /// spine's perpendicular pages or a collapsed plate's opposite sheets. A fold
+    /// re-flipped onto the border, a duplicate or a leaning flap is refused, balanced
+    /// or not. Coincident faces (n on one corner set, either orientation) need, at
+    /// every corner, a descendant coincident source group of at least n faces.
     pub(super) fn equal_directions(
         &self,
         tile: i64,
@@ -359,82 +406,70 @@ impl Store {
     ) -> Result<(), Error> {
         for (edge, e) in &surface.edges {
             effort.charge(1)?;
-            let excess = |n: u64, other: u64| n >= 2 && n > other;
-            if !excess(e.forward, e.reverse) && !excess(e.reverse, e.forward) {
+            if e.forward < 2 && e.reverse < 2 {
                 continue;
             }
-            // A nonmanifold source can hold several same-direction faces on one
-            // edge (a book's pages on its spine): that multiplicity may be retained.
-            // This only admits the count; it does not prove either face's
-            // orientation (a page reversed onto the spine passes here). Native
-            // validation does not prove coarse orientation away from required
-            // interface directions; the source oracle's exact coincident-face guard
-            // does (book-reversed-face control, review r12).
             let arc: Vec<(CanonicalPoint, CanonicalPoint)> = match contracted.get(edge) {
                 Some(path) => path.windows(2).map(|w| (w[0], w[1])).collect(),
                 None => vec![*edge],
             };
-            // Directed counts read along the arc from its first vertex.
-            let (along, back) = if arc[0].0 == edge.0 {
-                (e.forward, e.reverse)
-            } else {
-                (e.reverse, e.forward)
-            };
-            let mut witnessed = true;
+            // Descendant faces on every source edge, read in the coarse edge's
+            // lower-to-higher direction and back; the arc may run either way.
+            let lower_first = arc[0].0 == edge.0;
+            let mut support = [i64::MAX; 2];
             for (x, y) in arc {
                 effort.charge(1)?;
                 let (nf, nr) = self.leaf_incidence(tile, key(x, y))?;
-                // Descendant faces running x -> y (the arc direction) and back.
                 let (with, against) = if x < y { (nf, nr) } else { (nr, nf) };
-                let enough = |coarse: u64, other: u64, source: i64| {
-                    !excess(coarse, other) || source >= coarse as i64
+                let (forward, reverse) = if lower_first {
+                    (with, against)
+                } else {
+                    (against, with)
                 };
-                witnessed &= enough(along, back, with) && enough(back, along, against);
+                support = [support[0].min(forward), support[1].min(reverse)];
             }
-            // A plate keeps both directions on the edge; a lone reversed face
-            // (2/0 across the edge) has none and stays refused.
-            if !witnessed && !(e.forward > 0 && e.reverse > 0 && two_sided(edge, surface)) {
-                return Err(bad(
-                    "interfaceWinding",
-                    &format!(
-                        "coarse edge used {}/{} times per direction without that descendant multiplicity: tile={tile}",
-                        e.forward, e.reverse
-                    ),
-                ));
+            for (direction, n, other) in [(0, e.forward, e.reverse), (1, e.reverse, e.forward)] {
+                if n < 2 || support[direction] >= n as i64 {
+                    continue;
+                }
+                effort.charge(n.saturating_mul(n) as usize)?;
+                // A lone reversed face (2/0 across the edge) keeps no other direction.
+                if other == 0 || !distinct_sides(edge, direction, surface) {
+                    return Err(bad(
+                        "interfaceWinding",
+                        &format!(
+                            "coarse edge used {}/{} times per direction, overlapping without that descendant multiplicity: tile={tile}",
+                            e.forward, e.reverse
+                        ),
+                    ));
+                }
             }
         }
-        let mut corners = BTreeMap::<[CanonicalPoint; 3], u32>::new();
+        let mut corners = BTreeMap::<[CanonicalPoint; 3], i64>::new();
         for f in &surface.faces {
             effort.charge(1)?;
             let mut k = *f;
             k.sort_unstable();
             *corners.entry(k).or_default() += 1;
         }
-        let licensed: bool = self
+        let mut licensed = self
             .connection
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM tiles l,tiles t WHERE t.id=?1 AND l.id>t.id AND l.id<=t.last AND l.coincident=1)",
-                [tile],
-                |r| r.get(0),
+            .prepare_cached(
+                "SELECT EXISTS(SELECT 1 FROM twin_points p,tiles t WHERE t.id=?2 AND p.key=?1 AND
+                 (SELECT coalesce(sum(f.n),0) FROM leaf_faces f WHERE f.corners=p.corners AND f.tile>t.id AND f.tile<=t.last)>=?3)",
             )
             .map_err(sql)?;
-        for (c, _) in corners.iter().filter(|(_, n)| **n > 1 && !licensed) {
-            for (x, y) in [(c[0], c[1]), (c[1], c[2]), (c[0], c[2])] {
-                let edge = key(x, y);
-                let e = surface.edges[&edge];
-                let arc: Vec<(CanonicalPoint, CanonicalPoint)> = match contracted.get(&edge) {
-                    Some(path) => path.windows(2).map(|w| (w[0], w[1])).collect(),
-                    None => vec![edge],
-                };
-                for (x, y) in arc {
-                    effort.charge(1)?;
-                    let (nf, nr) = self.leaf_incidence(tile, key(x, y))?;
-                    if nf + nr < (e.forward + e.reverse) as i64 {
-                        return Err(bad(
-                            "interfaceWinding",
-                            &format!("coincident coarse faces without that descendant multiplicity: tile={tile}"),
-                        ));
-                    }
+        for (c, &n) in corners.iter().filter(|(_, n)| **n > 1) {
+            for v in c {
+                effort.charge(1)?;
+                let ok: bool = licensed
+                    .query_row(params![super::point_bytes(*v), tile, n], |r| r.get(0))
+                    .map_err(sql)?;
+                if !ok {
+                    return Err(bad(
+                        "interfaceWinding",
+                        &format!("{n} coincident coarse faces without a coincident source group of that multiplicity at every corner: tile={tile}"),
+                    ));
                 }
             }
         }
@@ -710,6 +745,78 @@ mod tests {
         let off = [0.5f32.to_bits(), 0.25f32.to_bits(), 0];
         let d = displacement(a, b, off, 1, 2);
         assert!((0.25..0.25 * (1. + 1e-12)).contains(&d));
+    }
+    #[test]
+    fn wedge_sign_is_exact_and_displacement_translation_invariant() {
+        use std::cmp::Ordering::*;
+        let (a, b) = ([0f32, 0., 0.], [0f32, 0., 1.]);
+        // Perpendicular pages, an acute pair, an obtuse pair and a collinear face.
+        assert_eq!(wedge(a, b, [1., 0., 0.5], [0., 1., 0.25]), Equal);
+        assert_eq!(wedge(a, b, [1., 0., 0.5], [1., 1e-7, 0.25]), Greater);
+        assert_eq!(wedge(a, b, [1., 0., 0.5], [-1., 1e-7, 0.25]), Less);
+        assert_eq!(wedge(a, b, [0., 0., 3.], [0., 0., 3.]), Equal);
+        // Exact even where every coordinate is far from the origin.
+        let far = 1e12f32;
+        let shift = |p: [f32; 3]| [p[0], p[1] + far, p[2]];
+        assert_eq!(
+            wedge(
+                shift(a),
+                shift(b),
+                shift([1., 0., 0.5]),
+                shift([0., 4096., 0.25])
+            ),
+            Equal
+        );
+        // A rigid translation leaves a contraction's displacement unchanged
+        // (review r1: an absolute-coordinate allowance refused it at y = 1e12).
+        let bits = |p: [f32; 3]| p.map(|v| if v == 0. { 0 } else { v.to_bits() });
+        let (p0, p2, p4) = ([4f32, 0., 0.], [4.0001f32, 0., 2.], [4f32, 0., 4.]);
+        let near = displacement(bits(p0), bits(p4), bits(p2), 2, 4);
+        let moved = displacement(bits(shift(p0)), bits(shift(p4)), bits(shift(p2)), 2, 4);
+        assert!(
+            near < 0.000101 && (moved - near).abs() < 1e-12,
+            "{near} {moved}"
+        );
+        // On the chord only the difference-scaled allowance remains, not 1e12 ulps.
+        let on = displacement(
+            bits(shift(p0)),
+            bits(shift(p4)),
+            bits(shift([4., 0., 1.])),
+            1,
+            4,
+        );
+        assert!(on < 1e-13, "{on}");
+    }
+    #[test]
+    fn coincident_coarse_faces_need_a_coincident_source_group_at_every_corner() {
+        // A tiny back-to-back source plate in A0 does not license a new coarse twin
+        // elsewhere (review r1 finding 1); it licenses one on its own corners.
+        let plate = [[1., 0.1, 1.], [1.001, 0.1, 1.], [1., 0.1, 1.001]];
+        let twin = [plate[0], plate[2], plate[1]];
+        let case = |extra: Vec<[Point; 3]>| {
+            let [mut a0, a1] = a_leaves();
+            a0.extend([plate, twin]);
+            let [b0, b1] = b_leaves();
+            let mut a = a_coarse(&[0, 4]);
+            a.extend([plate, twin]);
+            a.extend(extra);
+            tree(&[
+                (None, 16., None),
+                (Some(0), 2., Some(a)),
+                (Some(1), 0., Some(a0)),
+                (Some(1), 0., Some(a1)),
+                (Some(0), 2., Some(b_coarse(&[0, 4]))),
+                (Some(4), 0., Some(b0)),
+                (Some(4), 0., Some(b1)),
+            ])
+        };
+        case(Vec::new()).unwrap();
+        let t = [[1.1, 0., 1.1], [1.2, 0., 1.1], [1.1, 0., 1.2]];
+        let r = [t[0], t[2], t[1]];
+        refused(case(vec![t, r, t, r]), "interfaceWinding");
+        refused(case(vec![t, r]), "interfaceWinding");
+        // Three coarse copies on the plate's corners exceed its two source faces.
+        refused(case(vec![plate]), "interfaceWinding");
     }
     #[test]
     fn identical_sibling_contraction_within_g_over_16_passes() {

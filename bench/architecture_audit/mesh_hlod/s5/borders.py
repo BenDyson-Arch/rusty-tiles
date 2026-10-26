@@ -9,16 +9,20 @@ chord at its original edge ordinal; displacements and gaps are exact Fractions.
 
 The S1b audit sidecar (``borders.jsonl``, schema 1) is an index only: payload
 SHA-256 joins a record to its archive tile, and its logical depth, certificates
-and receipts are claims. Every claim is recomputed from geometry and compared:
-E_d from the captured source extent, each certificate's hinted chain re-walked
-through source incidence, epsilon against the exact arc displacement, complete
-one-to-one arc coverage, terminal contacts the tree proves, same-depth equality
-and mixed-depth gaps at every shared source breakpoint, dropped components,
-hole closures/openings, their G contributions and omitted cells.
+and receipts are claims. Depth labels are first validated against every relation
+the tree proves (cell siblings equal, strictly deeper below a labelled cell).
+Then, from geometry: E_d from the captured source extent, same-depth equality and
+mixed-depth gaps at every shared source breakpoint, terminal contacts (a leaf not
+proven deeper than the tile forces an exact contact), each certificate's hinted
+chain re-walked through source incidence, epsilon against the exact arc
+displacement, complete one-to-one arc coverage, and topology re-derived from the
+parent job's decoded input: dropped components and their measured proxy distance,
+closures and openings per boundary cluster (cycle rank) with measured loss, the
+G contributions, contractedVertices and the complete omission frontier.
 
-Not proven here: a terminal contact with a leaf whose logical depth neither the
-tree nor a labelled sibling fixes (counted), hole-loss witnesses beyond the
-patch/rim/lost-face controls named below, and S2's sampled two-sided error.
+Not proven here: the history-dependent receipt counters listed in the result's
+``uninspected``, a continuous source map behind licensed coincident faces, and
+S2's sampled two-sided error.
 """
 import collections
 import hashlib
@@ -174,40 +178,62 @@ def _tile_border(store, tile, vertices, directed, require, stats):
     return contracted
 
 
-def _two_sided(a, b, faces):
-    """No same-direction pair of faces on edge a-b lies on one side: unit wings
-    (edge to third corner, perpendicular to it) never form an acute wedge (cosine
-    above 1e-6). Perpendicular book pages and opposite plate sheets pass."""
+def _wedge(a, b, c, e):
+    """Exact sign of |d|^2 (u.w) - (u.d)(w.d), d = b - a, u = c - a, w = e - a: the
+    wings towards c and e (perpendicular to the edge) form an acute wedge (> 0), a
+    right angle (0) or an obtuse one (< 0). With c = e it is |d x u|^2."""
+    a, b, c, e = (_fractions(p) for p in (a, b, c, e))
     d = [b[k] - a[k] for k in range(3)]
-    dd = sum(x * x for x in d)
-    wings = ([], [])
-    for f in faces:
-        for j in range(3):
-            x, y, c = f[j], f[(j + 1) % 3], f[(j + 2) % 3]
-            if (x, y) not in ((a, b), (b, a)):
-                continue
-            w = [c[k] - a[k] for k in range(3)]
-            t = sum(w[k] * d[k] for k in range(3)) / dd
-            w = [w[k] - t * d[k] for k in range(3)]
-            norm = math.sqrt(sum(v * v for v in w))
-            if not norm > 0 or not math.isfinite(norm):
-                return False
-            wings[(x, y) != (a, b)].append([v / norm for v in w])
-    return all(sum(u[k] * v[k] for k in range(3)) <= 1e-6
-               for side in wings for i, u in enumerate(side) for v in side[i + 1:])
+    u = [c[k] - a[k] for k in range(3)]
+    w = [e[k] - a[k] for k in range(3)]
+    dot = lambda x, y: sum(x[k] * y[k] for k in range(3))
+    value = dot(d, d) * dot(u, w) - dot(u, d) * dot(w, d)
+    return (value > 0) - (value < 0)
 
 
-def folds(store, tile, directed, arcs, require, faces=(), licensed=False):
+def _distinct_sides(a, b, faces):
+    """Same-direction faces on a -> b lie on distinct sides: every pair forms a right
+    or obtuse wedge and none is collinear with the edge (exact)."""
+    thirds = [f[(j + 2) % 3] for f in faces for j in range(3) if (f[j], f[(j + 1) % 3]) == (a, b)]
+    return all(_wedge(a, b, c, c) > 0 and all(_wedge(a, b, c, e) <= 0 for e in thirds[i + 1:])
+               for i, c in enumerate(thirds))
+
+
+def _twins(store):
+    """Coincident verified source faces: canonical corner set -> leaves (one entry
+    per face), the corner -> sets index and connected twin regions (sets sharing a
+    corner). Built once from the source manifest's canonical incidence."""
+    if not hasattr(store, 'twin_sets'):
+        sets = collections.defaultdict(list)
+        for leaf, a, b, c in store.db.execute(
+                'SELECT s.leaf,x.canonical,y.canonical,z.canonical FROM source_corners c '
+                'JOIN source s ON s.id=c.source JOIN canonical_map x ON x.point=c.a '
+                'JOIN canonical_map y ON y.point=c.b JOIN canonical_map z ON z.point=c.c'):
+            store.work.charge()
+            if len({a, b, c}) == 3:
+                sets[tuple(sorted((a, b, c)))].append(leaf)
+        sets = {k: v for k, v in sets.items() if len(v) > 1}
+        corners = collections.defaultdict(list)
+        region = _UnionFind()
+        for k in sets:
+            for v in k:
+                corners[v].append(k)
+                region.join(('v', v), ('s', k))
+        store.twin_sets, store.twin_corners, store.twin_region = sets, corners, region
+    return store.twin_sets, store.twin_corners, store.twin_region
+
+
+def folds(store, tile, directed, arcs, require, faces=()):
     """Directed incidences are counted, never reduced to a mask (S1b review 1).
 
-    A coarse edge used n >= 2 times in one direction and more often than the other
-    needs n verified descendant source faces in that direction on every source edge
-    it stands for: itself, or each edge of its contracted arc. Otherwise it must keep
-    both directions with no same-direction pair on one side (a simplified book
-    spine, a collapsed thin plate); a fold, duplicate or leaning flap is refused.
-    Coincident faces (one corner set, either orientation) need coincident faces in
-    a descendant leaf (a plate thinner than its encoding) or the descendant
-    incidence on every edge they use."""
+    A coarse edge used n >= 2 times in one direction needs n verified descendant
+    source faces that way on every source edge it stands for (itself, or each edge
+    of its contracted arc). Otherwise it must keep the other direction and those
+    faces must lie on distinct sides (exact wedge sign): a simplified book spine's
+    perpendicular pages or a collapsed plate's opposite sheets. A fold, duplicate or
+    leaning flap is refused, balanced or not. Coincident coarse faces (n on one
+    corner set, either orientation) need, at every corner, a descendant coincident
+    source set of at least n faces, all in one connected twin region."""
     tid, lo, hi = int(tile['id']), tile['lo'], tile['hi']
     ids = {}
 
@@ -217,45 +243,50 @@ def folds(store, tile, directed, arcs, require, faces=(), licensed=False):
                                    (struct.pack('<3d', *(0.0 if x == 0 else x for x in p)),)).fetchone()
             ids[p] = row[0] if row else None
         return ids[p]
+
+    def support(p, q):
+        a, b = canonical(p), canonical(q)
+        if a is None or b is None:
+            return 0
+        path = arcs.get(_key(a, b), [a, b])
+        if path[0] != a:
+            path = path[::-1]
+        least = None
+        for x, y in zip(path, path[1:]):
+            store.work.charge()
+            nf, nr = store.db.execute(
+                'SELECT coalesce(sum(nf),0),coalesce(sum(nr),0) FROM canonical_edges '
+                'WHERE a=? AND b=? AND leaf>=? AND leaf<?', (*_key(x, y), lo, hi)).fetchone()
+            n = nf if x < y else nr
+            least = n if least is None else min(least, n)
+        return least or 0
     for (p, q), n in directed.items():
         store.work.charge()
-        if n < 2 or n <= directed.get((q, p), 0):
+        if n < 2 or support(p, q) >= n:
             continue
-        a, b = canonical(p), canonical(q)
-        path = None if a is None or b is None else arcs.get(_key(a, b), [min(a, b), max(a, b)])
-        supported = path is not None
-        if supported:
-            if path[0] != a:
-                path = path[::-1]
-            for x, y in zip(path, path[1:]):
-                store.work.charge()
-                nf, nr = store.db.execute(
-                    'SELECT coalesce(sum(nf),0),coalesce(sum(nr),0) FROM canonical_edges '
-                    'WHERE a=? AND b=? AND leaf>=? AND leaf<?', (*_key(x, y), lo, hi)).fetchone()
-                supported &= (nf if x < y else nr) >= n
-        plate = directed.get((q, p), 0) > 0 and _two_sided(p, q, faces)
-        require(supported or plate, 'interfaceWinding',
-                f'tile {tid}: coarse edge {p} -> {q} used {n} times in one direction without that '
-                'descendant source multiplicity')
-    if licensed:
-        return
+        store.work.charge(n * n)
+        require(directed.get((q, p), 0) > 0 and _distinct_sides(p, q, faces), 'interfaceWinding',
+                f'tile {tid}: coarse edge {p} -> {q} used {n} times one way, overlapping without '
+                'that descendant source multiplicity')
     corners = collections.Counter(tuple(sorted(f)) for f in faces)
+    if not any(n > 1 for n in corners.values()):
+        return
+    sets, index, region = _twins(store)
     for c, n in corners.items():
         if n < 2:
             continue
-        for p, q in ((c[0], c[1]), (c[1], c[2]), (c[0], c[2])):
-            store.work.charge()
-            total = directed.get((p, q), 0) + directed.get((q, p), 0)
-            a, b = canonical(p), canonical(q)
-            path = None if a is None or b is None else arcs.get(_key(a, b), [min(a, b), max(a, b)])
-            supported = path is not None
-            for x, y in zip(path or [], (path or [])[1:]):
-                nf, nr = store.db.execute(
-                    'SELECT coalesce(sum(nf),0),coalesce(sum(nr),0) FROM canonical_edges '
-                    'WHERE a=? AND b=? AND leaf>=? AND leaf<?', (*_key(x, y), lo, hi)).fetchone()
-                supported &= nf + nr >= total
-            require(supported, 'interfaceWinding',
-                    f'tile {tid}: coincident coarse faces {c} without that descendant multiplicity')
+        regions = None
+        for p in c:
+            v = canonical(p)
+            here = set()
+            for k in index.get(v, ()) if v is not None else ():
+                store.work.charge()
+                if sum(lo <= leaf < hi for leaf in sets[k]) >= n:
+                    here.add(region(('s', k)))
+            regions = here if regions is None else regions & here
+        require(bool(regions), 'interfaceWinding',
+                f'tile {tid}: {n} coincident coarse faces {c} without a coincident source set of that '
+                'multiplicity at every corner, in one twin region')
 
 
 class _UnionFind:
@@ -289,8 +320,13 @@ class _Near:
         return tuple(int(math.floor(p[k] / self.cell[k])) for k in range(3))
 
     def find(self, p):
+        q = self.nearest(p)
+        return None if q is None else 'exact' if q == p else 'tolerance'
+
+    def nearest(self, p):
+        """The point itself, or one within ``reach``, or None."""
         if p in self.points:
-            return 'exact'
+            return p
         if not any(self.reach):
             return None
         c = self._cell(p)
@@ -299,7 +335,7 @@ class _Near:
                 for dz in (-1, 0, 1):
                     for q in self.grid.get((c[0] + dx, c[1] + dy, c[2] + dz), ()):
                         if all(abs(p[k] - q[k]) <= self.reach[k] for k in range(3)):
-                            return 'tolerance'
+                            return q
         return None
 
 
@@ -320,6 +356,176 @@ def _boundary(faces):
         loops[root(a)][0].update((a, b))
         loops[root(a)][1].append((a, b))
     return list(loops.values())
+
+
+def _samples(f):
+    """S1b's fixed controls on one triangle: the quarter grid and the centroid."""
+    out = [tuple((f[0][k] * a + f[1][k] * b + f[2][k] * (4 - a - b)) / 4 for k in range(3))
+           for a in range(5) for b in range(5 - a)]
+    out.append(tuple(sum(p[k] for p in f) / 3 for k in range(3)))
+    return out
+
+
+def _closest(p, f):
+    """Closest point of triangle f to p and its feature: ('v', i), ('e', i) for edge
+    f[i]-f[i+1], or ('f',). Float; a measurement witness, not a certificate."""
+    a, b, c = f
+    sub = lambda x, y: [x[k] - y[k] for k in range(3)]
+    dot = lambda x, y: sum(x[k] * y[k] for k in range(3))
+    at = lambda base, u, s: tuple(base[k] + u[k] * s for k in range(3))
+    ab, ac, ap = sub(b, a), sub(c, a), sub(p, a)
+    d1, d2 = dot(ab, ap), dot(ac, ap)
+    if d1 <= 0 and d2 <= 0:
+        return a, ('v', 0)
+    bp = sub(p, b)
+    d3, d4 = dot(ab, bp), dot(ac, bp)
+    if d3 >= 0 and d4 <= d3:
+        return b, ('v', 1)
+    vc = d1 * d4 - d3 * d2
+    if vc <= 0 and d1 >= 0 and d3 <= 0 and d1 - d3 != 0:
+        return at(a, ab, d1 / (d1 - d3)), ('e', 0)
+    cp = sub(p, c)
+    d5, d6 = dot(ab, cp), dot(ac, cp)
+    if d6 >= 0 and d5 <= d6:
+        return c, ('v', 2)
+    vb = d5 * d2 - d1 * d6
+    if vb <= 0 and d2 >= 0 and d6 <= 0 and d2 - d6 != 0:
+        return at(a, ac, d2 / (d2 - d6)), ('e', 2)
+    va = d3 * d6 - d5 * d4
+    if va <= 0 and d4 - d3 >= 0 and d5 - d6 >= 0 and (d4 - d3) + (d5 - d6) != 0:
+        return at(b, sub(c, b), (d4 - d3) / ((d4 - d3) + (d5 - d6))), ('e', 1)
+    denom = va + vb + vc
+    if denom == 0:
+        return a, ('v', 0)
+    v, w = vb / denom, vc / denom
+    return tuple(a[k] + ab[k] * v + ac[k] * w for k in range(3)), ('f',)
+
+
+class _Mesh:
+    """A tile-sized face set: exact distances, projections and boundary tests."""
+    def __init__(self, faces):
+        self.faces = [f for f in faces if len(set(f)) == 3]
+        count = collections.Counter(_key(f[k], f[(k + 1) % 3]) for f in self.faces for k in range(3))
+        self.open = {e for e, n in count.items() if n == 1}
+        self.open_points = {p for e in self.open for p in e}
+        # Uniform grid over face boxes: about one face per cell.
+        self.grid = collections.defaultdict(list)
+        if self.faces:
+            lo = [min(q[k] for f in self.faces for q in f) for k in range(3)]
+            hi = [max(q[k] for f in self.faces for q in f) for k in range(3)]
+            span = max(max(hi[k] - lo[k] for k in range(3)), 1e-30)
+            self.lo, self.cell = lo, span / max(1, round(len(self.faces) ** (1 / 3)))
+            for i, f in enumerate(self.faces):
+                a = self._cell([min(q[k] for q in f) for k in range(3)])
+                b = self._cell([max(q[k] for q in f) for k in range(3)])
+                for x in range(a[0], b[0] + 1):
+                    for y in range(a[1], b[1] + 1):
+                        for z in range(a[2], b[2] + 1):
+                            self.grid[x, y, z].append(i)
+
+    def _cell(self, p):
+        return tuple(int(math.floor((p[k] - self.lo[k]) / self.cell)) for k in range(3))
+
+    def _ranked(self, p):
+        """Candidate faces by increasing float distance; rings grow until the best
+        lies within the searched cube (complete for the nearest face)."""
+        if not self.faces:
+            return []
+        c, seen, out, ring = self._cell(p), set(), [], 0
+        limit = max(len(self.grid), 1)
+        while True:
+            for x in range(c[0] - ring, c[0] + ring + 1):
+                for y in range(c[1] - ring, c[1] + ring + 1):
+                    for z in range(c[2] - ring, c[2] + ring + 1):
+                        if max(abs(x - c[0]), abs(y - c[1]), abs(z - c[2])) != ring:
+                            continue
+                        for i in self.grid.get((x, y, z), ()):
+                            if i in seen:
+                                continue
+                            seen.add(i)
+                            f = self.faces[i]
+                            q, feature = _closest(p, f)
+                            out.append((sum((p[k] - q[k]) ** 2 for k in range(3)), q, feature, f))
+            out.sort(key=lambda r: r[0])
+            reach = ring * self.cell
+            if out and out[0][0] <= reach * reach * 0.999:
+                return out
+            if len(seen) == len(self.faces) or ring > limit:
+                return out
+            ring += 1
+
+    def distance(self, p):
+        """Exact distance from p to the face set (float candidates, exact minimum)."""
+        from oracle import distance2
+        ranked = self._ranked(p)
+        if not ranked:
+            return math.inf
+        bound = ranked[0][0] * (1 + 1e-9) + 1e-300
+        best = min(distance2(p, f) for d, _, _, f in ranked if d <= bound * 4 + 1e-24)
+        return math.sqrt(best)
+
+    def project(self, p):
+        ranked = self._ranked(p)
+        return ranked[0][1] if ranked else p
+
+    def over_boundary(self, p):
+        """Whether p's nearest point on the face set is on a one-sided edge or vertex."""
+        ranked = self._ranked(p)
+        if not ranked:
+            return False
+        _, _, feature, f = ranked[0]
+        if feature[0] == 'v':
+            return f[feature[1]] in self.open_points
+        if feature[0] == 'e':
+            i = feature[1]
+            return _key(f[i], f[(i + 1) % 3]) in self.open
+        return False
+
+    def near(self, points):
+        """Faces with a corner within the bounding box of `points`, doubled."""
+        if not points:
+            return []
+        lo = [min(p[k] for p in points) for k in range(3)]
+        hi = [max(p[k] for p in points) for k in range(3)]
+        pad = [max(hi[k] - lo[k], 1e-12) / 2 for k in range(3)]
+        inside = lambda q: all(lo[k] - pad[k] <= q[k] <= hi[k] + pad[k] for k in range(3))
+        return [f for f in self.faces if any(inside(q) for q in f)]
+
+
+def _cycle_centroids(components):
+    """Vertex centroids of a fundamental cycle basis of boundary components."""
+    out = []
+    for points, edges in components:
+        adjacency = collections.defaultdict(list)
+        for a, b in edges:
+            adjacency[a].append(b)
+            adjacency[b].append(a)
+        parent, depth, order = {}, {}, []
+        for start in points:
+            if start in parent:
+                continue
+            parent[start], depth[start] = None, 0
+            stack = [start]
+            while stack:
+                v = stack.pop()
+                order.append(v)
+                for w in adjacency[v]:
+                    if w not in parent:
+                        parent[w], depth[w] = v, depth[v] + 1
+                        stack.append(w)
+        tree = {_key(v, parent[v]) for v in parent if parent[v] is not None}
+        for a, b in edges:
+            if _key(a, b) in tree:
+                continue
+            path_a, path_b = [a], [b]
+            while path_a[-1] != path_b[-1]:
+                if depth[path_a[-1]] >= depth[path_b[-1]]:
+                    path_a.append(parent[path_a[-1]])
+                else:
+                    path_b.append(parent[path_b[-1]])
+            cycle = path_a + path_b[-2::-1]
+            out.append(tuple(sum(p[k] for p in cycle) / len(cycle) for k in range(3)))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -382,16 +588,6 @@ class Audit:
             used.add(sha)
         require(used == set(by_sha), 'borderAudit',
                 f'{len(set(by_sha) - used)} audit records name no delivered coarse payload')
-        # Logical depth increases strictly down the tree, except a repeated chain payload.
-        for t in self.tiles:
-            r = self.records.get(int(t['id']))
-            p = t['parent']
-            while r and p is not None and int(p['id']) not in self.records:
-                p = p['parent']
-            if r and p is not None:
-                q = self.records[int(p['id'])]
-                require(q['contract']['depth'] < r['contract']['depth'] or q is r, 'borderAudit',
-                        f'tile {t["id"]}: logical depth does not increase below tile {p["id"]}')
         return omitted
 
     # -- per tile ------------------------------------------------------------
@@ -522,37 +718,51 @@ class Audit:
         return p
 
     def depths(self, omitted):
-        """Exact or bounded logical depth of every tile, from labels and the tree."""
-        exact, lower = {}, {}
-        omitted_depths = collections.defaultdict(list)
-        for r in omitted:
-            omitted_depths[r['key']['leafBegin'], r['key']['leafEnd']].append(r['key']['depth'])
+        """Logical depth labels (coarse and omitted records), validated against every
+        relation the delivered tree proves before any is used: cell siblings share
+        one depth, and a labelled cell is strictly deeper than its labelled cell
+        ancestors (a repeated chain payload excepted). Returns exact depths (labels,
+        and leaves with a labelled sibling) and proven lower bounds for the rest."""
+        require = self.require
+        labels, source = {}, {}
         for t in self.tiles:
             tid = int(t['id'])
             if tid in self.records:
-                exact[tid] = self.records[tid]['contract']['depth']
+                labels[tid], source[tid] = self.records[tid]['contract']['depth'], id(self.records[tid])
+        # Omitted cells with one leaf interval form a chain: shallower cells first.
+        claimed = collections.defaultdict(list)
+        for r in omitted:
+            claimed[r['key']['leafBegin'], r['key']['leafEnd']].append(r['key']['depth'])
+        cells = collections.defaultdict(list)
+        for t in self.tiles:
+            if not t['contents'] and not t['external']:
+                cells[t['lo'], t['hi']].append(int(t['id']))
+        for key, ids in cells.items():
+            for tid, depth in zip(ids, sorted(claimed.get(key, ()))):
+                labels[tid], source[tid] = depth, ('omitted', tid)
+        exact, lower = dict(labels), {}
         for t in self.tiles:
             tid = int(t['id'])
-            if tid in exact:
-                continue
-            parent = self.cell_parent(t)
-            if parent is not None:
-                siblings = [c for c in self.cell_children(parent) if int(c['id']) in self.records]
-                labels = {self.records[int(c['id'])]['contract']['depth'] for c in siblings}
-                if labels:
-                    self.require(len(labels) == 1, 'borderAudit',
-                                 f'tiles below {parent["id"]} have distinct logical depths')
-                    exact[tid] = labels.pop()
-                    continue
+            parent, steps = self.cell_parent(t), 1
+            while parent is not None and int(parent['id']) not in labels:
+                parent, steps = self.cell_parent(parent), steps + 1
+            if parent is not None and tid in labels:
                 pid = int(parent['id'])
-                if pid in exact:
-                    lower[tid] = exact[pid] + 1
-                elif (parent['lo'], parent['hi']) in omitted_depths:
-                    lower[tid] = min(omitted_depths[parent['lo'], parent['hi']]) + 1
-                else:
-                    lower[tid] = lower.get(pid, 0) + 1
-            else:
-                lower[tid] = 0
+                require(labels[pid] < labels[tid] or source[pid] == source[tid], 'borderDepth',
+                        f'tile {tid}: logical depth {labels[tid]} is not below cell ancestor {pid} '
+                        f'({labels[pid]})')
+            if tid not in labels:
+                lower[tid] = labels[int(parent['id'])] + steps if parent is not None else 0
+        for t in self.tiles:
+            children = [int(c['id']) for c in self.cell_children(t)]
+            found = {labels[c] for c in children if c in labels}
+            require(len(found) <= 1, 'borderDepth',
+                    f'cell children of tile {t["id"]} claim distinct logical depths {sorted(found)}')
+            for c in children:
+                if found and c not in labels:
+                    exact[c] = next(iter(found))
+                    lower[c] = exact[c]
+        self.stats['depthLabels'] = len(labels)
         return exact, lower
 
     def cell_children(self, t):
@@ -588,7 +798,7 @@ class Audit:
                 t = t['parent']
             return False
 
-        self.unclaimed = {}
+        self.unclaimed, self.locks = {}, []
         current, group = None, []
         rows = store.db.execute('SELECT point,tile,lower,upper,i,m FROM border_images ORDER BY point,tile')
         for row in list(rows) + [(None,) * 6]:
@@ -600,7 +810,8 @@ class Audit:
             if row[0] is not None:
                 group.append(row)
         self.stats['position'] = len(position)
-        # Claims are compared only after every geometric terminal contact passed.
+        # Terminal locks after every pairwise gap; claims after every lock.
+        require(not self.locks, 'terminalBorderLock', self.locks[0] if self.locks else '')
         for tile, point in self.unclaimed.items():
             require(False, 'terminalBorderLock',
                     f'tile {tile}: proven terminal contact {store.canonical_xyz(point)} missing from its audit claims')
@@ -652,12 +863,17 @@ class Audit:
                 elif lower.get(lid, 0) > d:
                     terminal = False
                 else:
-                    self.stats['terminalContactsUndetermined'] += 1
+                    # Unresolved: the leaf may be no deeper than the tile, so its
+                    # contact must be exact; a contraction here is never accepted.
+                    self.stats['terminalContactsUnresolvedExact'] += 1
+                    if lower_ is not None:
+                        self.locks.append(f'tile {t["id"]} contracts a border vertex shared with leaf {leaf["id"]}, '
+                                          f'whose depth (at least {lower.get(lid, 0)}) is not proven deeper than {d}')
                     continue
                 if terminal:
                     self.stats['terminalContacts'] += 1
-                    require(lower_ is None, 'terminalBorderLock',
-                            f'tile {t["id"]} contracts a border vertex shared with no-deeper leaf {leaf["id"]}')
+                    if lower_ is not None:
+                        self.locks.append(f'tile {t["id"]} contracts a border vertex shared with no-deeper leaf {leaf["id"]}')
                     if point not in self.terminal_claims.get(int(t['id']), set()):
                         self.unclaimed.setdefault(int(t['id']), point)
 
@@ -704,15 +920,18 @@ class Audit:
         self.components(t, children, e, child_g, retained, published)
 
     def components(self, t, children, e, child_g, retained, published):
-        """Independent dropped-component, closure and opening census of one parent job.
+        """Independent dropped-component, closure and opening replay of one parent job.
 
         The job input is the union of the cell children's decoded payloads, welded by
         f32 key. Lossy coarse interiors may be re-quantized, so an input vertex
-        survives at an output vertex within both payloads' codec tolerances."""
+        survives at an output vertex within both payloads' codec tolerances (`slack`
+        widens every comparison with a producer distance by the same amount)."""
         require, store = self.require, self.store
         tid = int(t['id'])
         border = {f32_point(store.canonical_xyz(p)) for (p,) in store.db.execute(
             'SELECT point FROM border_images WHERE tile=?', (tid,))}
+        contracted = {f32_point(store.canonical_xyz(p)) for (p,) in store.db.execute(
+            'SELECT point FROM border_images WHERE tile=? AND lower IS NOT NULL', (tid,))}
         tolerance = [0.0] * 3
 
         def faces(tile):
@@ -727,16 +946,27 @@ class Audit:
         source = [f for c in children if c['contents'] for f in faces(c)]
         output = faces(t)
         reach = [2 * x for x in tolerance]
+        slack = 2 * math.sqrt(sum(x * x for x in reach))
+        # contractedVertices: the job's input vertices this tile contracts onto chords.
+        derived = len({p for f in source for p in f} & contracted)
+        require(published['contractedVertices'] == derived, 'topologyReceipt',
+                f'tile {tid}: audit contractedVertices {published["contractedVertices"]}, '
+                f're-derived {derived} input vertices on contracted arcs')
         root = _UnionFind()
         for f in source:
             for p in f[1:]:
                 root.join(f[0], p)
         groups = collections.defaultdict(set)
+        faces_of = collections.defaultdict(list)
         for p in list(root.parent):
             groups[root(p)].add(p)
+        for f in source:
+            faces_of[root(f[0])].append(f)
         out_points = _Near({p for f in output for p in f}, reach)
+        mesh = _Mesh(output)
         dropped, ambiguous, lost = 0, False, set()
         floor = max(e, child_g)
+        loss = diameter_max = 0.0
         for key, members in groups.items():
             store.work.charge(len(members))
             hits = [out_points.find(p) for p in members]
@@ -750,73 +980,142 @@ class Audit:
             lo = [min(p[k] for p in members) for k in range(3)]
             hi = [max(p[k] for p in members) for k in range(3)]
             diameter = math.sqrt(sum((hi[k] - lo[k]) ** 2 for k in range(3)))
-            slack = 2 * math.sqrt(sum(x * x for x in reach))
+            diameter_max = max(diameter_max, diameter)
             require(diameter < floor + slack and diameter < t['g'] + slack, 'droppedComponent',
                     f'tile {tid}: dropped component diameter {diameter} not below max(E, child G) {floor}')
-            self.stats['maxDroppedDiameterOverFloor'] = max(self.stats['maxDroppedDiameterOverFloor'],
-                                                            diameter / floor if floor else math.inf)
+            # Its loss: S1b's fixed controls on every face, exactly to the delivered proxy.
+            for f in faces_of[key]:
+                for q in _samples(f):
+                    store.work.charge(len(output))
+                    loss = max(loss, mesh.distance(q))
         self.stats['droppedComponents'] += dropped
+        self.stats['maxDroppedLossOverE'] = max(self.stats['maxDroppedLossOverE'], loss / e)
+        if dropped:
+            require(published['droppedComponentToProxy'] >= loss - slack, 'topologyReceipt',
+                    f'tile {tid}: audit droppedComponentToProxy {published["droppedComponentToProxy"]} '
+                    f'under the measured {loss}')
+            require(t['g'] >= max(floor, 1.05 * (loss - slack)) * (1 - 1e-12), 'droppedComponent',
+                    f'tile {tid}: G {t["g"]} omits the measured drop loss {loss} (x1.05, floor {floor})')
+            require(abs(published['maxDroppedComponentDiameter'] - diameter_max) <= slack + 1e-12 * diameter_max,
+                    'topologyReceipt', f'tile {tid}: audit maxDroppedComponentDiameter '
+                    f'{published["maxDroppedComponentDiameter"]} != re-derived {diameter_max}')
         if dropped != published['droppedComponents']:
             require(ambiguous and dropped < published['droppedComponents'], 'topologyReceipt',
                     f'tile {tid}: {dropped} dropped components re-derived, audit reports {published["droppedComponents"]}')
             self.stats['droppedComponentsWithinTolerance'] += published['droppedComponents'] - dropped
-        self.holes(t, source, output, border, published, e, reach, lambda p: root(p) in lost)
+        self.holes(t, source, output, border, published, e, reach, slack, lambda p: root(p) in lost)
 
-    def holes(self, t, source, output, border, published, e, reach, dropped):
-        """Interior boundary cycles lost (closed) or added (opened) between input and output.
+    def holes(self, t, source, output, border, published, e, reach, slack, dropped):
+        """Boundary changes between the job's input and output, per region.
 
-        A boundary component's cycle rank (edges - vertices + 1) counts its loops, so
-        one closure and one opening cannot cancel. Patch faces spanning only a closed
-        cycle's corners and every opened rim edge are measured against exact source."""
-        require = self.require
+        Boundary components of input and output are joined into clusters when they
+        share (near) vertices. A cluster's cycle-rank drop counts its closures and
+        its rise its openings; the audit may report more (a closure and an opening in
+        one cluster) but never fewer. Wherever an input boundary vertex became
+        interior, or the output has boundary vertices the input lacked, the loss is
+        measured: centroids of every fundamental cycle projected across the change,
+        and fixed controls of faces lying over the old boundary, exactly against
+        source (closures) or the delivered proxy (openings). Both must fit E; a
+        change with no witness is refused."""
+        require, store = self.require, self.store
         tid = int(t['id'])
         before, after = _boundary(source), _boundary(output)
-        after_near = _Near({p for points, _ in after for p in points}, reach)
         before_near = _Near({p for points, _ in before for p in points}, reach)
+        after_near = _Near({p for points, _ in after for p in points}, reach)
+        out_points = _Near({p for f in output for p in f}, reach)
+        in_points = _Near({p for f in source for p in f}, reach)
+        # Clusters: input and output boundary components sharing a near vertex.
+        cluster = _UnionFind()
+        owner = {}
+        for i, (points, _) in enumerate(before):
+            cluster(('in', i))
+            for p in points:
+                owner[p] = ('in', i)
+        for j, (points, _) in enumerate(after):
+            cluster(('out', j))
+            for p in points:
+                hit = before_near.nearest(p)
+                if hit is not None:
+                    cluster.join(('out', j), owner[hit])
+        members = collections.defaultdict(lambda: ([], []))
+        for i in range(len(before)):
+            members[cluster(('in', i))][0].append(i)
+        for j in range(len(after)):
+            members[cluster(('out', j))][1].append(j)
+        rank = lambda c: len(c[1]) - len(c[0]) + 1
+        input_mesh, output_mesh = _Mesh(source), _Mesh(output)
         closed = opened = 0
-        for points, edges in before:
-            touches = bool(points & border)
-            kept = any(after_near.find(p) for p in points)
+        closure_loss = opening_loss = rim = 0.0
+        for ins, outs in members.values():
+            points_in = set().union(*(before[i][0] for i in ins)) if ins else set()
+            points_out = set().union(*(after[j][0] for j in outs)) if outs else set()
+            if ins and all(dropped(next(iter(before[i][0]))) for i in ins) and not outs:
+                continue
+            r_in = sum(rank(before[i]) for i in ins)
+            r_out = sum(rank(after[j]) for j in outs)
+            touches = bool((points_in | points_out) & border)
+            # A covered input boundary vertex, or a boundary vertex the input lacked.
+            covered = [p for p in points_in if out_points.find(p) and not after_near.find(p)]
+            new = [p for p in points_out if not before_near.find(p)]
             if touches:
-                require(kept, 'holeClosure', f'tile {tid}: a boundary cycle touching a delivered border was closed')
-                continue
-            rank = len(edges) - len(points) + 1
-            if kept or dropped(next(iter(points))):
-                continue
-            if not rank:
-                # A boundary path, not a hole (two open runs sewn or simplified away).
-                self.stats['vanishedBoundaryPaths'] += 1
-                continue
-            closed += rank
-            witnessed = False
-            for f in output:
-                if len(set(f)) == 3 and all(p in points for p in f):
-                    witnessed = True
-                    c = tuple(sum(p[k] for p in f) / 3 for k in range(3))
-                    d = self.source_distance(t, c)
-                    self.stats['maxClosureLossOverE'] = max(self.stats['maxClosureLossOverE'], d / e)
-                    require(d <= e * (1 + 1e-9), 'holeClosure',
-                            f'tile {tid}: closed hole patch is {d} from source, above E = {e}')
-            self.stats['closuresWithoutPatchWitness'] += not witnessed
-        for points, edges in after:
-            if points & border or any(before_near.find(p) for p in points):
-                continue
-            rank = len(edges) - len(points) + 1
-            if not rank:
-                self.stats['newBoundaryPaths'] += 1
-                continue
-            opened += rank
-            for a, b in edges:
-                m = tuple((a[k] + b[k]) / 2 for k in range(3))
-                d = self.source_distance(t, m)
-                self.stats['maxOpeningRimOverE'] = max(self.stats['maxOpeningRimOverE'], d / e)
-                require(d <= e * (1 + 1e-9), 'holeOpening',
-                        f'tile {tid}: opened hole rim is {d} from source, above E = {e}')
+                require(r_out >= r_in, 'holeClosure',
+                        f'tile {tid}: a boundary cycle touching a delivered border was closed')
+                require(r_out <= r_in and not new, 'holeOpening',
+                        f'tile {tid}: an opened boundary touches a delivered border')
+            closed += max(r_in - r_out, 0)
+            opened += max(r_out - r_in, 0)
+            if covered or r_in > r_out:
+                witnesses = [output_mesh.project(c) for c in _cycle_centroids([before[i] for i in ins])]
+                for f in output_mesh.near(points_in):
+                    for q in _samples(f):
+                        store.work.charge(len(source))
+                        if input_mesh.over_boundary(q):
+                            witnesses.append(q)
+                require(bool(witnesses), 'holeClosure', f'tile {tid}: a closure has no measurable patch')
+                for q in witnesses:
+                    store.work.charge()
+                    closure_loss = max(closure_loss, self.source_distance(t, q))
+            if new or r_out > r_in:
+                witnesses = [input_mesh.project(c) for c in _cycle_centroids([after[j] for j in outs])]
+                for f in input_mesh.near(points_out):
+                    for q in _samples(f):
+                        store.work.charge(len(output))
+                        if output_mesh.over_boundary(q):
+                            witnesses.append(q)
+                require(bool(witnesses), 'holeOpening', f'tile {tid}: an opening has no measurable lost surface')
+                for q in witnesses:
+                    store.work.charge(len(output))
+                    opening_loss = max(opening_loss, output_mesh.distance(q))
+                for j in outs:
+                    for a, b in after[j][1]:
+                        m = tuple((a[k] + b[k]) / 2 for k in range(3))
+                        d = self.source_distance(t, m)
+                        rim = max(rim, d)
+                        self.stats['maxOpeningRimOverE'] = max(self.stats['maxOpeningRimOverE'], d / e)
+                        require(d <= e * (1 + 1e-9) + slack, 'holeOpening',
+                                f'tile {tid}: opened hole rim is {d} from source, above E = {e}')
+        self.stats['maxClosureLossOverE'] = max(self.stats['maxClosureLossOverE'], closure_loss / e)
+        self.stats['maxOpeningLossOverE'] = max(self.stats['maxOpeningLossOverE'], opening_loss / e)
+        require(closure_loss <= e * (1 + 1e-9) + slack, 'holeClosure',
+                f'tile {tid}: a closed or covered hole is {closure_loss} from source, above E = {e}')
+        require(opening_loss <= e * (1 + 1e-9) + slack, 'holeOpening',
+                f'tile {tid}: an opened hole lost surface {opening_loss} from the proxy, above E = {e}')
         self.stats['closedHoles'] += closed
         self.stats['openedHoles'] += opened
-        require(closed == published['closedHoles'] and opened == published['openedHoles'], 'topologyReceipt',
+        require(published['closedHoles'] >= closed and published['openedHoles'] >= opened, 'topologyReceipt',
                 f'tile {tid}: re-derived {closed} closed / {opened} opened holes, audit reports '
                 f'{published["closedHoles"]} / {published["openedHoles"]}')
+        require((published['closedHoles'] == 0 or closure_loss > 0 or closed) and
+                (published['openedHoles'] == 0 or opening_loss > 0 or opened), 'topologyReceipt',
+                f'tile {tid}: audit reports holes the delivered boundaries do not show')
+        if published['closedHoles']:
+            require(published['holePatchToSource'] >= closure_loss - slack, 'topologyReceipt',
+                    f'tile {tid}: audit holePatchToSource {published["holePatchToSource"]} under the measured {closure_loss}')
+        if published['openedHoles']:
+            require(published['openedHoleToProxy'] >= opening_loss - slack, 'topologyReceipt',
+                    f'tile {tid}: audit openedHoleToProxy {published["openedHoleToProxy"]} under the measured {opening_loss}')
+            require(published['openedHoleBoundaryToSource'] >= rim - slack, 'topologyReceipt',
+                    f'tile {tid}: audit openedHoleBoundaryToSource {published["openedHoleBoundaryToSource"]} under the measured {rim}')
 
     def source_distance(self, t, p):
         from oracle import distance2
@@ -828,7 +1127,7 @@ class Audit:
         require = self.require
         cells = collections.Counter()
         sources = collections.Counter()
-        frontier = collections.defaultdict(set)
+        frontier = collections.defaultdict(collections.Counter)
         for t in self.tiles:
             if t['contents'] or t['external']:
                 continue
@@ -837,9 +1136,10 @@ class Audit:
             rendered = [c for c in self.cell_children(t) if c['contents']]
             children = self.cell_children(t)
             sources[key] += all(c['contents'] for c in children)
-            frontier[key] |= {(c['lo'], c['hi']) for c in rendered}
+            frontier[key].update((c['lo'], c['hi']) for c in rendered)
         claimed = collections.Counter()
         claimed_sources = collections.Counter()
+        claimed_frontier = collections.defaultdict(collections.Counter)
         for r in omitted:
             k = r['key']
             key = (k['leafBegin'], k['leafEnd'])
@@ -850,12 +1150,16 @@ class Audit:
             require(r['source'] == (reason != 'descendant_omission'), 'omissionReport',
                     f'omission source flag disagrees with reason {reason}')
             claimed_sources[key] += r['source']
-            for f in r['frontier']:
-                require((f['leafBegin'], f['leafEnd']) in frontier[key], 'omissionReport',
-                        f'omission frontier {f} is no rendered cell child of the omitted cell')
+            claimed_frontier[key].update((f['leafBegin'], f['leafEnd']) for f in r['frontier'])
         require(claimed == cells, 'omissionReport',
                 f'audit omitted cells {sorted(claimed.items())} != archive {sorted(cells.items())}')
         require(claimed_sources == sources, 'omissionReport', 'audit omission sources differ from the archive')
+        # The complete frontier, with multiplicity: every rendered cell child of the
+        # omitted cells on one leaf interval (a chain reports it once, below).
+        for key in cells:
+            require(claimed_frontier[key] == frontier[key], 'omissionReport',
+                    f'omitted cells over leaves {key}: audit frontier {sorted(claimed_frontier[key].elements())} '
+                    f'!= rendered cell children {sorted(frontier[key].elements())}')
         self.stats['omittedCells'] = sum(cells.values())
 
 
@@ -890,6 +1194,14 @@ def inspect(store, tiles, leaves, archive, require, audit_path=None, extent=None
         audit.topology(t, r, e, retained)
     audit.omission(omitted)
     stats = dict(audit.stats)
+    stats['uninspected'] = [
+        'history-dependent receipt counters (reconstructedFaces, duplicateFaces, remeshedVertices, remeshRounds, '
+        'constrainedRemeshes, rejectedRemeshRounds, rejectedHoleClosures, rejectedHoleOpenings) and every '
+        'attemptedTopology distance: rejected proposals leave no delivered geometry',
+        'holeBoundaryToPatch beyond the E/1.05 receipt bound; closure loss is measured patch-to-source',
+        'topologyAttempt/topologyConstruction location hints: operations are re-derived, never read',
+        'a contact with a leaf whose logical depth the tree does not fix is required exact, not claimed',
+        'coincident coarse faces are licensed per corner and twin region, not by a continuous source map']
     stats.update(auditCpuSeconds=time.process_time() - started, audited=True, sidecarSha256=hashlib.sha256(data).hexdigest(), sidecarBytes=len(data),
                  records=len(audit.records), omittedRecords=len(omitted), extent=extent)
     return stats

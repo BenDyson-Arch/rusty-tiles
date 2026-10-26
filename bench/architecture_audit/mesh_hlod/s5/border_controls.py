@@ -29,8 +29,11 @@ def f32(v):
     return struct.unpack('<f', struct.pack('<f', v))[0]
 
 
+SHIFT = 0.0  # a rigid glTF-y translation of the whole fixture (review r1 finding 7)
+
+
 def point(x, y, z):
-    return (f32(x), f32(y), f32(z))
+    return (f32(x), f32(y + SHIFT), f32(z))
 
 
 def key(p):
@@ -200,6 +203,12 @@ def build(case):
     if name.startswith('mixed'):
         tree, keep_m = 'mixed', (0, 4)
         g_a, g_b = 0.004, 0.02
+    if name == 'mixed-within':
+        # A valid mixed depth: A's leaves lie below A' (depth 2), which contracts
+        # exactly like its cousin M, so no leaf is as shallow as M.
+        tree, g_a, g_b = 'mixed-deep', sheet_g, sheet_g
+        keep_a = keep_b = (0, 4)
+        keep_m = (0, 2, 4)
     if name.startswith('terminal-'):
         tree, keep_m = 'terminal', (0, 4) if name == 'terminal-contracted' else (0, 1, 2, 3, 4)
     if name.startswith('dropped'):
@@ -226,7 +235,7 @@ def build(case):
             fx.annulus = ('A0', (1, 0), 0.004)
             inner = fx.inner()
             patch = [(inner[0], inner[1], inner[2]), (inner[0], inner[2], inner[3])]
-            loss = 0.0014
+            loss = 0.0021  # the square centre is 0.002 from source
         else:
             fx.hole['A1'] = {(1, 2)}
             q = [point(1, 0, 2), point(2, 0, 2), point(2, 0, 3), point(1, 0, 3)]
@@ -285,6 +294,13 @@ def build(case):
     if tree == 'siblings':
         root = tile(None, 0, [tile('A.glb', g_a, [leaf('A0'), leaf('A1')]), tile('B.glb', g_b, [leaf('B0'), leaf('B1')])])
         intervals = {'A': (0, 2), 'B': (2, 4)}
+    elif tree == 'mixed-deep':
+        m, a2 = fx.coarse('B', keep_m), fx.coarse('A', keep_m)
+        files['M.glb'] = glb(m, identities(m), leaf=False)
+        files['A2.glb'] = glb(a2, identities(a2), leaf=False)
+        root = tile(None, 0, [tile('A.glb', g_a, [tile('A2.glb', 0.002, [leaf('A0'), leaf('A1')])]),
+                              tile('B.glb', g_b, [tile('M.glb', 0.002, [leaf('B0'), leaf('B1')])])])
+        intervals = {'A': (0, 2), 'A2': (0, 2), 'B': (2, 4), 'M': (2, 4)}
     elif tree == 'mixed':
         m = fx.coarse('B', keep_m)
         files['M.glb'] = glb(m, identities(m), leaf=False)
@@ -303,7 +319,7 @@ def build(case):
         intervals = {'B': (1, 3), 'M': (1, 3)}
     doc = refinable(dict(asset={'version': '1.1'}, geometricError=0, root=root))
 
-    def record(cell, uri, depth, g, keep, topology=None, terminal=False):
+    def record(cell, uri, depth, g, keep, topology=None, terminal=False, child_keep=(0, 1, 2, 3, 4)):
         data = files[uri]
         arcs = list(zip(keep, keep[1:]))
         certificates = []
@@ -326,6 +342,8 @@ def build(case):
                                      first=0, end=0, epsilon=0.0, terminalLock=False))
         receipt = dict.fromkeys(TOPOLOGY, 0)
         receipt.update({k: 0.0 for k in TOPOLOGY if k[0].islower() and any(s in k for s in ('Source', 'Patch', 'Proxy', 'Increase', 'FinalG', 'Diameter'))})
+        # Input (leaf) vertices this tile contracts onto its chords.
+        receipt['contractedVertices'] = len(set(child_keep) - set(keep))
         receipt.update(topology or {})
         lo, hi = intervals[cell]
         return dict(schemaVersion=1, kind='tile',
@@ -341,10 +359,14 @@ def build(case):
         frontier = [dict(leafBegin=0, leafEnd=1), dict(leafBegin=1, leafEnd=3)]
         total = 3
     else:
-        records.append(record('A', 'A.glb', depth_a, g_a, keep_a, topology_a))
-        records.append(record('B', 'B.glb', depth_b, g_b, keep_b))
+        below = keep_m if tree == 'mixed-deep' else (0, 1, 2, 3, 4)
+        records.append(record('A', 'A.glb', depth_a, g_a, keep_a, topology_a, child_keep=below))
+        records.append(record('B', 'B.glb', depth_b, g_b, keep_b, child_keep=below))
         if tree == 'mixed':
             records.append(record('M', 'M.glb', 2, g_b, keep_m))
+        if tree == 'mixed-deep':
+            records.append(record('A2', 'A2.glb', 2, 0.002, keep_m))
+            records.append(record('M', 'M.glb', 2, 0.002, keep_m))
         frontier = [dict(leafBegin=0, leafEnd=2), dict(leafBegin=2, leafEnd=4)]
         total = 4
     records.append(dict(schemaVersion=1, kind='omitted', key=dict(first=0, end=triangle, depth=0, leafBegin=0,
@@ -393,6 +415,8 @@ CASES = [
     # Geometry mutants: both validators where the archive alone shows them.
     ('same-depth-gap', 'sameDepthBorderGap', 'sameDepthBorderGap'),
     ('mixed-beyond-g8', 'mixedDepthBorderGap', 'mixedDepthBorderGap'),
+    # M contracts against A's depth-2 leaves; only the oracle orders those cousins.
+    ('mixed-unresolved-terminal', 'terminalBorderLock', None),
     ('terminal-contracted', 'terminalBorderLock', 'terminalBorderLock'),
     ('missing-chord', 'interfaceSegments', 'interfaceSegments'),
     ('contracted-fold', 'interfaceWinding', 'interfaceWinding'),
@@ -414,13 +438,135 @@ CASES = [
 OFFSETS = {'mixed-beyond-g8': 0.001}
 
 
+def _rehash(records, files):
+    for r in records:
+        if r['kind'] == 'tile':
+            data = files[r['tile']['uri']]
+            r['tile']['sha256'], r['tile']['bytes'] = hashlib.sha256(data).hexdigest(), len(data)
+
+
+def review(name):
+    """Sol's review-1 fixtures (hlod-s5-d11-review1-20261026), each now permanent."""
+    global SHIFT
+    if name == 'drop-loss-lie':
+        # The dropped component lies 0.5 above the proxy; the receipt claims zero.
+        doc, files, source, records = build(Case('dropped-small'))
+        row, g = records[0]['tile'], scale(1)
+        row['geometricError'] = g
+        for label in ('topology', 'attemptedTopology'):
+            row[label].update(droppedComponentToProxy=0.0, droppedComponentGIncrease=0.0,
+                              droppedComponentFinalG=g)
+        doc['root']['children'][0]['geometricError'] = g
+        return doc, files, source, records
+    if name == 'shared-corner-hole':
+        # Two holes meet at (2, 0, 2); filling one leaves a rank-1 boundary.
+        case = Case(name)
+        case.fx.hole = {'A0': {(1, 1)}, 'A1': {(2, 2)}}
+        doc, files, source, records = build(case)
+        a = case.fx.coarse('A', patch=case.fx.quad_faces(1, 1))
+        files['A.glb'] = glb(a, identities(a), leaf=False)
+    elif name in ('unrelated-license', 'unlicensed-twins'):
+        # A back-to-back source plate elsewhere licenses no new coarse twin.
+        case = Case('contracted')
+        if name == 'unrelated-license':
+            t = (point(1, .1, 1), point(1.001, .1, 1), point(1, .1, 1.001))
+            case.fx.extra = {'A0': [t, (t[0], t[2], t[1])]}
+        doc, files, source, records = build(case)
+        a = case.fx.coarse('A', (0, 4))
+        t = (point(1.1, 0, 1.1), point(1.2, 0, 1.1), point(1.1, 0, 1.2))
+        a += [t, (t[0], t[2], t[1]), t, (t[0], t[2], t[1])]
+        files['A.glb'] = glb(a, identities(a), leaf=False)
+    elif name == 'empty-omission-frontier':
+        doc, files, source, records = build(Case('contracted'))
+        records[-1]['frontier'] = []
+        return doc, files, source, records
+    elif name == 'invented-contracted-vertices':
+        doc, files, source, records = build(Case('contracted'))
+        records[0]['tile']['topology']['contractedVertices'] = 999999
+        return doc, files, source, records
+    elif name == 'uninspected-history-counters':
+        # History-dependent counters are listed as uninspected, not compared.
+        doc, files, source, records = build(Case('contracted'))
+        records[0]['tile']['topology']['duplicateFaces'] = 999999
+        return doc, files, source, records
+    elif name == 'coherent-depth-lie':
+        # Sibling B relabelled depth 2 with a matching scale: same-depth A/B disagree.
+        doc, files, source, records = build(Case('same-depth-gap'))
+        records[1]['tile']['depth'] = records[1]['contract']['depth'] = 2
+        records[1]['contract']['scale'] = scale(2)
+        return doc, files, source, records
+    elif name == 'unknown-terminal-contact':
+        # Terminal leaf L below an omitted cell: depth unresolved, M contracts it.
+        doc, files, source, records = build(Case('terminal-contracted'))
+        leaf = doc['root']['children'][0]
+        doc['root']['children'][0] = dict(boundingVolume=copy.deepcopy(leaf['boundingVolume']), geometricError=0,
+                                          refine='REPLACE', children=[leaf])
+        refinable(doc)
+        root = records[-1]
+        root.update(source=False, reason='descendant_omission', frontier=[dict(leafBegin=1, leafEnd=3)])
+        records.append(dict(schemaVersion=1, kind='omitted', key=dict(first=0, end=32, depth=1, leafBegin=0, leafEnd=1),
+                            reason='contract_lower_bound', source=True, frontier=[dict(leafBegin=0, leafEnd=1)],
+                            attemptedTopology={}))
+        return doc, files, source, records
+    elif name == 'translated-contraction':
+        SHIFT = 1e12
+        try:
+            doc, files, source, records = build(Case('contracted'))
+        finally:
+            SHIFT = 0.0
+
+        def volume(node):
+            node['boundingVolume']['box'][2] = f32(1e12)
+            for child in node.get('children', []):
+                volume(child)
+        volume(doc['root'])
+        return doc, files, source, records
+    elif name == 'steiner-hole-closure':
+        # The unit hole closed by a fan through a new vertex, receipt claiming 0.001.
+        case = Case('closure-loss-hidden')
+        doc, files, source, records = build(case)
+        q = [point(1, 0, 2), point(2, 0, 2), point(2, 0, 3), point(1, 0, 3)]
+        c = point(1.5, 0, 2.5)
+        a = case.fx.coarse('A', patch=[(q[k], q[(k + 1) % 4], c) for k in range(4)])
+        files['A.glb'] = glb(a, identities(a), leaf=False)
+    elif name == 'unmeasured-hole-opening':
+        # A unit hole opened in A; its rim lies on source, its lost centre 1/2 away.
+        case = Case(name)
+        doc, files, source, records = build(case)
+        remove = case.fx.quad_faces(1, 2)
+        a = [f for f in case.fx.coarse('A') if f not in remove]
+        files['A.glb'] = glb(a, identities(a), leaf=False)
+        for label in ('topology', 'attemptedTopology'):
+            records[0]['tile'][label].update(openedHoles=1, openedHoleFinalG=scale(1))
+    _rehash(records, files)
+    return doc, files, source, records
+
+
+REVIEW = [
+    ('drop-loss-lie', 'topologyReceipt', None),
+    ('shared-corner-hole', 'holeClosure', None),
+    ('unrelated-license', 'interfaceWinding', 'interfaceWinding'),
+    ('unlicensed-twins', 'interfaceWinding', 'interfaceWinding'),
+    ('empty-omission-frontier', 'omissionReport', None),
+    ('invented-contracted-vertices', 'topologyReceipt', None),
+    ('uninspected-history-counters', None, None),
+    ('coherent-depth-lie', 'borderDepth', 'sameDepthBorderGap'),
+    ('unknown-terminal-contact', 'terminalBorderLock', None),
+    ('translated-contraction', None, None),
+    ('steiner-hole-closure', 'holeClosure', None),
+    ('unmeasured-hole-opening', 'holeOpening', None),
+]
+
+
 def generate(root):
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     out = []
-    for name, oracle_check, native_check in CASES:
-        case = Case(name, oracle_check, native_check, OFFSETS.get(name, 0.0001))
-        doc, files, source, records = build(case)
+    for name, oracle_check, native_check in CASES + REVIEW:
+        if any(name == r[0] for r in REVIEW):
+            doc, files, source, records = review(name)
+        else:
+            doc, files, source, records = build(Case(name, oracle_check, native_check, OFFSETS.get(name, 0.0001)))
         folder = root / name
         folder.mkdir(exist_ok=True)
         for member, data in files.items():
