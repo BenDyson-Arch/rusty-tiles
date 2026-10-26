@@ -20,18 +20,18 @@
     },
     "mesh": {
       "#order": "b4a31f26344da2d224b707fa34c3666cae34c1fed5951021a25c9bf4b8050879",
-      "@3dtilesIndex1@": "f4c05e7384ef59b51b2676a3dfe7cf6fe80c95ae3e2a57e8bed2fe6c8ae129fb",
+      "@3dtilesIndex1@": "1d2d28d5ec875aef91463eaf6157901ac9221d485ddec248b45a48c89d97ba2f",
       "content/f0-d0.glb": "a7747937e880c0408dc874d0a8a658da774011d14905b47fc3196073886f3590",
       "conversion.json": "e902182bb20d556f18ba7c8f900592f5fd8d2b0cf122cbc7bf440b3e71cc8f16",
-      "tileset.json": "503a7e4ed586249e9ed9cb77cda6efd3729a03a9afbdcfe523788b4af35c520d"
+      "tileset.json": "5700e32851ab91d47852f24335d31c01d937c3c3431e91fb51d661e74a68d917"
     },
     "mesh-balanced": {
-      "#archive": "126362142941c0c7f9c50cfac70daa966885917c1694b411a3a3d382fcbfaf30",
+      "#archive": "01285b7aa2e91d9f6da01439fcc1f48ed53892aaf26021333c6be1cfde452cc3",
       "#order": "b4a31f26344da2d224b707fa34c3666cae34c1fed5951021a25c9bf4b8050879",
-      "@3dtilesIndex1@": "da7112269e2851792468918ddd2725f450684dc86e54ed03bb04db5d6791acd3",
+      "@3dtilesIndex1@": "e6e5a352296d440dda761dfc6cbd0ba593f575cfcb77566673308c60441f915c",
       "content/f0-d0.glb": "ef423bf01ec1ef3a59e7cd3663939f61aef6f339539cec5b9bd6d4b12687c1af",
       "conversion.json": "40b9d7e022dacacc9e185da6ec5dff20742816ec87c8e7422445aab2e6b63393",
-      "tileset.json": "06ed1a350bc433c4ef1ed6e19147cecf56b740d2457ef972ca6687617ca80fe0"
+      "tileset.json": "65e7ce0fa3bf76b7f0779cdcd0576b96f13ad55577d6894c1673fb47eb694e27"
     }
   }
 }

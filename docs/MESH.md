@@ -29,7 +29,7 @@ preserves the previous destination. The output cannot overwrite or alias the
 source or its dependencies. Installation does not promise power-loss durability.
 The archive declares itself an HLOD delivery (`asset.extras.rustyTiles.lod` is
 `"hlod"` in `tileset.json`), so `validate` applies every HLOD check without
-`--expectProfile hlod`, and refuses a copy whose payload labels were stripped.
+being asked to, and refuses a copy whose payload labels were stripped.
 
 ## Source and placement
 
