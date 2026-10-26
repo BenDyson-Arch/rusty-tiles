@@ -16,7 +16,7 @@ pub(super) fn remesh(
     interface: &[InterfaceRow],
     cap: usize,
 ) -> Option<topology::Receipt> {
-    triangulate(m, interface, cap, None)
+    triangulate(m, interface, cap, None, &[])
 }
 
 /// Reconstruct contracted patches with all unaffected interior samples. In particular,
@@ -26,8 +26,9 @@ pub(super) fn contract(
     m: &mut Merged,
     interface: &[InterfaceRow],
     map: &[u32],
+    endpoints: &[u32],
 ) -> Option<topology::Receipt> {
-    triangulate(m, interface, usize::MAX, Some(map))
+    triangulate(m, interface, usize::MAX, Some(map), endpoints)
 }
 
 fn triangulate(
@@ -35,16 +36,29 @@ fn triangulate(
     interface: &[InterfaceRow],
     cap: usize,
     mapping: Option<&[u32]>,
+    endpoints: &[u32],
 ) -> Option<topology::Receipt> {
     let components = topology::components(m);
     let mut patches: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    // Freeze the surface beyond the first interior ring. Only triangles incident to a
-    // removed border vertex participate in reconstruction; their unmoved edges become
-    // the constrained ring. A diagonal change cannot alter a distant curved surface.
+    // Freeze the surface beyond the first interior ring. Include both removed vertices
+    // and retained chord endpoints: an interior sample on the chord may need its two
+    // endpoint faces rebuilt as well. Their unmoved edges form the constrained ring.
+    let mut touched = vec![false; m.positions.len()];
+    for &v in endpoints {
+        touched[v as usize] = true;
+    }
+    if let Some(map) = mapping {
+        for (v, &to) in map.iter().enumerate() {
+            if v != to as usize {
+                touched[v] = true;
+                touched[to as usize] = true;
+            }
+        }
+    }
     let affected: Vec<bool> = m
         .triangles
         .iter()
-        .map(|t| mapping.is_some_and(|map| t.iter().any(|&v| map[v as usize] != v)))
+        .map(|t| t.iter().any(|&v| touched[v as usize]))
         .collect();
     let face_patches = if mapping.is_some() {
         manifold_patches(m, &affected)
@@ -82,11 +96,7 @@ fn triangulate(
     let mut representatives = Vec::new();
     let mut count = 0;
     for (_, faces) in patches {
-        if mapping.is_some_and(|map| {
-            faces
-                .iter()
-                .all(|&i| m.triangles[i].iter().all(|&v| map[v as usize] == v))
-        }) {
+        if mapping.is_some() && faces.iter().all(|&i| !affected[i]) {
             output.extend(faces.iter().map(|&i| m.triangles[i]));
             representatives.extend(faces.iter().map(|&i| m.representative[i]));
             continue;
@@ -393,6 +403,48 @@ mod tests {
         }
     }
     #[test]
+    fn contracted_strip_workspace_fits_the_parent_charge() {
+        let mut m = sheet(181, false); // 65,522 faces: almost eight capped children.
+        let input = m.triangles.len();
+        let mut map: Vec<_> = (0..m.positions.len() as u32).collect();
+        for (v, target) in map.iter_mut().enumerate().take(181).skip(1) {
+            *target = if v <= 90 { 0 } else { 181 };
+        }
+        let interface = [InterfaceRow::new(0, m.keys[0], m.keys[181], 0, 1)];
+        let (receipt, peak) =
+            crate::test_alloc::peak(|| contract(&mut m, &interface, &map, &[0, 181]));
+        assert!(receipt.is_some());
+        let charge = input as u64 * super::super::super::JOB_BYTES_PER_TRIANGLE;
+        eprintln!("CONTRACTION workspace {peak} bytes / {input} faces, charge {charge}");
+        assert!(peak as u64 <= charge);
+    }
+
+    #[test]
+    fn interior_point_on_new_chord_does_not_make_a_sliver_or_split_the_chord() {
+        let positions = vec![
+            [0., 0., 0.],
+            [1., 0.1, 0.],
+            [2., 0., 0.],
+            [1., 0., 0.],
+            [1., -1., 0.],
+        ];
+        let triangles = vec![[0, 1, 3], [1, 2, 3], [0, 3, 4], [3, 2, 4]];
+        let mut m = Merged {
+            keys: positions.iter().copied().map(key).collect(),
+            ells: vec![0; positions.len()],
+            representative: vec![sheet(1, false).representative[0]; triangles.len()],
+            positions,
+            triangles,
+        };
+        let interface = [InterfaceRow::new(0, m.keys[0], m.keys[2], 0, 1)];
+        contract(&mut m, &interface, &[0, 0, 2, 3, 4], &[0, 2]).unwrap();
+        assert_eq!(m.triangles.len(), 1);
+        let t = m.triangles[0];
+        assert!(t.contains(&0) && t.contains(&2) && t.contains(&4));
+        assert!(topology::normal(&m.positions, t)[2] < 0.);
+    }
+
+    #[test]
     fn contracted_strip_retriangulates_a_fold_and_freezes_the_interior_ring() {
         // Snapping m to a in (m,q,p) reverses its sign. Flipping that face would
         // double-cover the same side of a-p. The constrained strip has area 1.35.
@@ -417,7 +469,7 @@ mod tests {
             .map(|&t| topology::normal(&m.positions, t)[2])
             .sum();
         let interface = [InterfaceRow::new(0, m.keys[0], m.keys[2], 0, 1)];
-        let receipt = contract(&mut m, &interface, &[0, 0, 2, 3, 4, 5]).unwrap();
+        let receipt = contract(&mut m, &interface, &[0, 0, 2, 3, 4, 5], &[0, 2]).unwrap();
         assert!(receipt.constrained_remeshes > 0);
         assert!(m.triangles.contains(&[3, 4, 5]), "curved interior moved");
         let strip: Vec<_> = m

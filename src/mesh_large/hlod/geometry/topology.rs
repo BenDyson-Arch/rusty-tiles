@@ -196,13 +196,20 @@ pub(super) fn contract(
         .map(|(i, k)| (*k, i as u32))
         .collect();
     let mut map: Vec<u32> = (0..m.keys.len() as u32).collect();
+    let mut endpoints = Vec::new();
     for (v, target) in map.iter_mut().enumerate() {
         if let Some((a, b, t, _)) = mapping(m.keys[v])? {
             let k = if t <= 0.5 { a } else { b };
             let Some(&id) = ids.get(&k) else {
                 return Ok(false);
             };
-            receipt.contracted_vertices += u64::from(id != v as u32);
+            if id != v as u32 {
+                let (Some(&a), Some(&b)) = (ids.get(&a), ids.get(&b)) else {
+                    return Ok(false);
+                };
+                endpoints.extend([a, b]);
+                receipt.contracted_vertices += 1;
+            }
             *target = id;
         }
     }
@@ -243,7 +250,7 @@ pub(super) fn contract(
         m.representative = representatives;
         return Ok(true);
     }
-    if let Some(r) = super::constrained::contract(m, interface, &map) {
+    if let Some(r) = super::constrained::contract(m, interface, &map, &endpoints) {
         receipt.reconstructed_faces += m.triangles.len() as u64;
         receipt.add(r);
         Ok(true)
