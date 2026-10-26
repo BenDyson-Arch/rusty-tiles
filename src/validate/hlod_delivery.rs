@@ -848,7 +848,10 @@ impl Store {
         }
         for &(tile, rank) in &pending.refs {
             connection
-                .execute("INSERT INTO refs VALUES(?,?)", params![integer(tile)?, integer(rank)?])
+                .execute(
+                    "INSERT INTO refs VALUES(?,?)",
+                    params![integer(tile)?, integer(rank)?],
+                )
                 .map_err(sql)?;
         }
         for (rank, identity, triangle, digest) in &pending.payloads {
@@ -1228,7 +1231,9 @@ impl Store {
         digest: &[u8],
     ) -> Result<(), Error> {
         if self.connection.0.is_none() {
-            self.pending.payloads.push((rank, identity, triangle, digest.to_vec()));
+            self.pending
+                .payloads
+                .push((rank, identity, triangle, digest.to_vec()));
             return self.bound_pending();
         }
         self.connection
@@ -1585,7 +1590,9 @@ impl Store {
                 } else if !replace {
                     return Err(bad(
                         "frontierCoverage",
-                        &format!("ADD content of tile {id} stays drawn over its renderable descendants"),
+                        &format!(
+                            "ADD content of tile {id} stays drawn over its renderable descendants"
+                        ),
                     ));
                 }
             }
@@ -1966,8 +1973,13 @@ impl Store {
                     effort.charge(1)?;
                     if (e.forward == 2 && e.reverse == 0) || (e.reverse == 2 && e.forward == 0) {
                         // A nonmanifold source can hold two same-direction faces on
-                        // one edge (a book's pages on its spine): the coarse pair is
-                        // then a retained source multiplicity, not a flipped face.
+                        // one edge (a book's pages on its spine): the pair may then be
+                        // retained source multiplicity. This only admits the edge
+                        // count; it does not prove either face's orientation (a page
+                        // reversed onto the spine passes here). Native validation does
+                        // not prove coarse orientation away from required interface
+                        // directions; the source oracle's exact coincident-face guard
+                        // does (book-reversed-face control, review r12).
                         effort.charge(1)?;
                         let last: i64 = self
                             .connection
@@ -2249,7 +2261,12 @@ mod tests {
                 s.connection
                     .execute(
                         "INSERT OR IGNORE INTO originals VALUES(?,?,?,?)",
-                        params![vec![0u8; 40], 0u64.to_be_bytes().to_vec(), rank, encode(&[x, 1., 2.])],
+                        params![
+                            vec![0u8; 40],
+                            0u64.to_be_bytes().to_vec(),
+                            rank,
+                            encode(&[x, 1., 2.])
+                        ],
                     )
                     .map_err(sql)?;
                 let mut frame = IDENTITY;
@@ -2286,7 +2303,12 @@ mod tests {
             s.connection
                 .execute(
                     "INSERT INTO originals VALUES(?,?,?,?)",
-                    params![vec![0u8; 40], vertex.to_be_bytes().to_vec(), rank as i64, encode(&p)],
+                    params![
+                        vec![0u8; 40],
+                        vertex.to_be_bytes().to_vec(),
+                        rank as i64,
+                        encode(&p)
+                    ],
                 )
                 .unwrap();
             s.connection
@@ -2637,7 +2659,10 @@ mod tests {
                 assert_eq!(s.census().unwrap().max_payload_triangles, 8192);
             } else {
                 let error = result.unwrap_err().to_string();
-                assert!(error.contains("triangleCap") && error.contains("8193"), "{error}");
+                assert!(
+                    error.contains("triangleCap") && error.contains("8193"),
+                    "{error}"
+                );
             }
         }
         for same in [false, true] {
@@ -2666,10 +2691,7 @@ mod tests {
     /// One delivered tile in preorder: (parent, placeholder, refine, payload ranks).
     /// Ranks on childless tiles are leaf payloads (with original triangle rows).
     type Row<'a> = (Option<u64>, bool, Option<bool>, &'a [u64]);
-    fn omission_case(
-        tiles: &[Row<'_>],
-        digests: &[(u64, u64)],
-    ) -> Result<Omission, Error> {
+    fn omission_case(tiles: &[Row<'_>], digests: &[(u64, u64)]) -> Result<Omission, Error> {
         omission_errors(tiles, digests, &[])
     }
     /// `errors` overrides a tile's (geometricError, box diagonal); the default is the
@@ -2685,20 +2707,18 @@ mod tests {
         for (id, &(parent, placeholder, refine, ranks)) in tiles.iter().enumerate() {
             let id = id as u64;
             s.tile(id, parent, IDENTITY)?;
-            let (_, error, diagonal) = errors
-                .iter()
-                .copied()
-                .find(|e| e.0 == id)
-                .unwrap_or((id, 16., Some(1.)));
+            let (_, error, diagonal) =
+                errors
+                    .iter()
+                    .copied()
+                    .find(|e| e.0 == id)
+                    .unwrap_or((id, 16., Some(1.)));
             s.kind(id, refine, placeholder, error, diagonal)?;
             let leaf = !tiles.iter().any(|t| t.0 == Some(id));
             for &rank in ranks {
                 s.reference(id, rank)?;
                 if seen.insert(rank) {
-                    let digest = digests
-                        .iter()
-                        .find(|d| d.0 == rank)
-                        .map_or(rank, |d| d.1);
+                    let digest = digests.iter().find(|d| d.0 == rank).map_or(rank, |d| d.1);
                     s.payload_bytes(rank, true, leaf, &digest.to_be_bytes())?;
                 }
             }
@@ -2761,7 +2781,11 @@ mod tests {
         ];
         let omission = omission_case(&chain, &[]).unwrap();
         assert_eq!(
-            (omission.omitted_cells, omission.omission_sources, omission.omitted_by_depth),
+            (
+                omission.omitted_cells,
+                omission.omission_sources,
+                omission.omitted_by_depth
+            ),
             (2, 1, vec![1, 1])
         );
     }
@@ -2848,7 +2872,11 @@ mod tests {
             (Some(0), false, None, N),
         ];
         refusal(omission_case(&open, &[]), "frontierCoverage");
-        let dangling = [(None, false, None, N), (Some(0), false, None, &[1][..]), (Some(0), true, None, N)];
+        let dangling = [
+            (None, false, None, N),
+            (Some(0), false, None, &[1][..]),
+            (Some(0), true, None, N),
+        ];
         refusal(omission_case(&dangling, &[]), "frontierCoverage");
         // ADD content stays drawn over its leaves.
         let add = [
