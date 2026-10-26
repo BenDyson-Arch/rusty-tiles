@@ -450,8 +450,10 @@ mod tests {
         let built = located_proposal();
         let key = built.geometry.key;
         let index = writer.construction(key, &built.change.dropped).unwrap();
-        let mut topology = super::super::geometry::TopologyReceipt::default();
-        topology.dropped_components = 1;
+        let topology = super::super::geometry::TopologyReceipt {
+            dropped_components: 1,
+            ..Default::default()
+        };
         writer
             .omitted(
                 key,
