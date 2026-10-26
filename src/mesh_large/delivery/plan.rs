@@ -284,6 +284,8 @@ pub(crate) struct Shape {
     pub spliced_chain_cells: u64,
     /// HLOD cells whose coarse tile was omitted (content-less, every ancestor too).
     pub omitted_cells: u64,
+    /// Logical omitted cells, including pass-through cells, by ownership depth.
+    pub omitted_by_depth: Vec<u64>,
     /// The largest number of tile records held at once by the open stack and its inline
     /// fragments (the planner's resident hierarchy state).
     pub peak_held_records: u64,
@@ -542,6 +544,11 @@ impl<'s, S: Sink> Builder<'s, S> {
                 next if self.sparse => {
                     omitted = true;
                     self.shape.omitted_cells += 1;
+                    let depth = frame.depth as usize;
+                    self.shape
+                        .omitted_by_depth
+                        .resize(self.shape.omitted_by_depth.len().max(depth + 1), 0);
+                    self.shape.omitted_by_depth[depth] += 1;
                     self.lookahead = next;
                     None
                 }

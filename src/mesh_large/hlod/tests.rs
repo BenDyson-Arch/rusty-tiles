@@ -3441,6 +3441,33 @@ fn omitted_cells_are_not_measured_and_errors_stay_monotone() {
             0,
             "{shape:?}"
         );
+        // The total alone cannot authorize omissions at other depths. Move one reported
+        // omission while preserving the sum; the intact stage must now be refused.
+        let mut damaged_manifest = manifest.clone();
+        let counts = damaged_manifest["hlod"]["omittedByDepth"]
+            .as_array_mut()
+            .unwrap();
+        let from = counts.iter().position(|v| v.as_u64().unwrap() > 0).unwrap();
+        let to = (from + 1) % counts.len();
+        counts[from] = json!(counts[from].as_u64().unwrap() - 1);
+        counts[to] = json!(counts[to].as_u64().unwrap() + 1);
+        fs::write(
+            dir.join("manifest.json"),
+            serde_json::to_vec(&damaged_manifest).unwrap(),
+        )
+        .unwrap();
+        let output = work.path().join(format!("bad-omissions-{cap}.3tz"));
+        let failure = mesh_leaves_to_3tz(
+            MeshTilesetRequest::new(&dir, &output),
+            &RunControl::default(),
+        )
+        .unwrap_err();
+        assert!(
+            failure.error.to_string().contains("omission counts differ"),
+            "{}",
+            failure.error
+        );
+        assert!(!output.exists());
     }
 }
 
@@ -3459,7 +3486,7 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
     )
     .unwrap();
     let original = rows(&dir.join("proxies.jsonl"));
-    for mutation in 0..10 {
+    for mutation in 0..12 {
         let mut damaged = original.clone();
         let row = damaged.last_mut().unwrap();
         match mutation {
@@ -3485,6 +3512,10 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
                         json!(m["depthSourceTriangles"].as_u64().unwrap() * 1000);
                 }
             }
+            // S2 review r9: a missing whole depth (or the entire coarse stream) must
+            // not silently become a frontier when the producer reported no omissions.
+            10 => damaged.retain(|r| r["depth"].as_u64().unwrap() != 0),
+            11 => damaged.clear(),
             _ => {
                 for row in damaged
                     .iter_mut()
@@ -3524,6 +3555,7 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
         match mutation {
             5 => assert!(message.contains("invalid S2 sample counts"), "{message}"),
             9 => assert!(message.contains("source triangles scheduled"), "{message}"),
+            10 | 11 => assert!(message.contains("omission counts differ"), "{message}"),
             _ => {}
         }
         assert!(!output.exists());

@@ -552,6 +552,7 @@ fn omitted_cells_get_no_pages_textures_or_donor_work() {
     let work = tempfile::tempdir().unwrap();
     let input = write_fixture(&work.path().join("in"), &base_fixture());
     let mut omitted_any = false;
+    let mut all_omitted = false;
     for cap in [12, 40, 120] {
         let dir = stage_capped(&input, &work.path().join(format!("cap{cap}")), cap);
         let manifest: Value =
@@ -559,6 +560,24 @@ fn omitted_cells_get_no_pages_textures_or_donor_work() {
         let hlod = &manifest["hlod"];
         omitted_any |= hlod["omittedProxies"].as_u64().unwrap() > 0;
         let proxies = rows(&dir.join("proxies.jsonl"));
+        if proxies.is_empty() {
+            all_omitted = true;
+            let resources: Value =
+                serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+            let diagnostics = &resources["hlod"]["diagnostics"];
+            let cache = &diagnostics["image_cache"];
+            for key in ["hits", "misses", "peakResidentBytes"] {
+                assert_eq!(cache[key].as_u64(), Some(0), "cap {cap}: {diagnostics}");
+            }
+            assert_eq!(cache["loadCpuSeconds"].as_f64(), Some(0.));
+            for key in ["surface", "charts", "query", "sample", "encode"] {
+                assert_eq!(
+                    diagnostics["appearance_seconds"][key].as_f64(),
+                    Some(0.),
+                    "discarded appearance work at cap {cap}: {diagnostics}"
+                );
+            }
+        }
         let files = fs::read_dir(dir.join("proxies")).unwrap().count();
         assert_eq!(files, proxies.len(), "cap {cap}: a tile file without a row");
         let depths = hlod["appearanceByDepth"].as_array().unwrap();
@@ -577,6 +596,7 @@ fn omitted_cells_get_no_pages_textures_or_donor_work() {
         }
     }
     assert!(omitted_any, "some cap omits cells");
+    assert!(all_omitted, "one textured case must omit every coarse cell");
 }
 
 /// Adversarial: 32 strips, each its own textured material class and source image, so
