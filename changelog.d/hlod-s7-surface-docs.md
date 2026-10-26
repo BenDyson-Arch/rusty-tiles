@@ -31,8 +31,13 @@
   leaves, so exact annotation maps to leaves). Coarse textures are fresh
   content-sized charts, and a profile picks one colour codec for leaves and coarse
   pages (ETC1S for `fast` and `balanced`, UASTC for `quality`, PNG for `lossless`).
-  The mesh guide, CLI reference and Python README describe this; the H16 and H28
-  contracts carry HLOD notes.
+  A parent whose locked interface cannot fit the 8,192-triangle cap is omitted (with
+  every ancestor) instead of refusing the run, and the capped descendant frontier is
+  published; a coarse page that no codec step can deliver within its gates falls back to
+  its exact level-0 PNG, sampled without mips. The mesh guide, CLI reference and Python
+  README describe this; the H16 and H28 contracts carry HLOD notes. Where an earlier
+  entry in this release (the H16 mesh delivery) says coarse tiles are certified, read
+  it as superseded by this one.
 
 ### Removed
 

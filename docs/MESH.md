@@ -139,9 +139,10 @@ source that would need native PROJ for only some vertices is refused.
 
 ## Coarse levels (HLOD)
 
-Leaves are the exact tiles; every occupied cell above them publishes one coarse
-tile built from its children. This is the only coarse-tile method; it has no
-selector, and a plain `mesh` run uses it.
+Leaves are the exact tiles; an occupied cell above them publishes one coarse tile
+built from its children, unless it is [omitted](#hierarchy-and-cracks) because its
+locked interface cannot fit the triangle cap. This is the only coarse-tile method; it
+has no selector, and a plain `mesh` run uses it.
 
 ### Hierarchy and cracks
 
@@ -155,13 +156,26 @@ selector, and a plain `mesh` run uses it.
   *outer interface*, where its surface meets geometry outside its own subtree, are
   locked: simplification never moves or deletes them, and every tile that carries
   one decodes it to the same position at every depth. Edges between children inside
-  the parent are free to collapse. If a locked interface cannot fit a parent's
-  triangle cap the run is `unsupported`, naming the tile, the count and the
-  constraint; an interface is never thinned. Published bytes are decoded and
+  the parent are free to collapse. An interface is never thinned. Published bytes are decoded and
   checked before publication, and the acceptance campaign counts decoded interface
   segments independently. Crack-free means no gap along a locked interface between
   tiles of any depth mix; it does not make a coarse level watertight or hide its
   silhouette change.
+- **Omission, not refusal.** 8,192 triangles stays the hard published cap. A parent
+  whose exact locked interface, or a topology plain simplification cannot reduce,
+  needs more triangles than the cap allows has its coarse tile **omitted**; the run
+  does not fail. Omission propagates upward: every ancestor to the root is omitted
+  too, because a parent cannot be built with a hole where the omitted tile was. An
+  omitted cell publishes no content and holds no geometry, and the capped descendant
+  frontier (coarse tiles and leaves below it) is what the archive publishes there. An
+  omitted cell takes the empty-parent error (at least 16 times its box diagonal), so it
+  refines whenever it is visible and no content-bearing ancestor sits above a
+  content-less one, and delivery and `validate` refuse a coarse tile above an omitted
+  cell. Omission shows as content-less tiles in the published tileset; its counts are
+  kept in the internal leaf manifest, not in `tilerReport` or `diagnostics`. Omission
+  is a bounded last resort and costs client requests near the omitted region (about 8
+  times the depth in content-less cells plus the children's tiles). It is distinct from resource refusals: a budget or scratch/disk shortfall is
+  still `resource_limit`, and an unreadable or unsupported source is still refused.
 - **Single-child chains.** A cell whose only child is a coarse tile publishes that
   tile once, at the top of the chain; the cells below carry no content and the same
   error, so refinement stays monotone. A cell whose only child is a leaf publishes
@@ -203,19 +217,30 @@ Each covered texel takes the nearest captured source point and samples the sourc
 images at the texel's footprint level in linear light. Base colour (multiplied by
 `COLOR_0`), emissive, metallic-roughness and occlusion are resampled; normal maps
 are re-expressed in the coarse tile's tangent frame. Factors, `alphaMode`, MASK
-cutoff, double-sidedness and samplers are kept, so one H28 material class stays one
-class. Untextured classes keep flat class factors, plus a per-vertex `COLOR_0`
+cutoff and double-sidedness are kept, so one H28 material class stays one class. The
+source samplers (wrap, filters) apply while baking, when texels are sampled from the
+source images; they are not carried onto the coarse page, which publishes newly
+authored atlas samplers (clamp to edge; linear with mip-linear minification for a
+KTX2 page, linear without mips for a PNG page). Untextured classes keep flat class factors, plus a per-vertex `COLOR_0`
 taken from the nearest source surface when the source carries colours. `NORMAL` is
 published only when the source carries normals, so leaves and coarse tiles of one
 source shade the same way. Coarse pages are not required to reproduce leaf texels:
 they are an appearance approximation of the surface, with no appearance
 certificate.
 
-Coarse pages go through the same delivery encoder, gates and escalation ladder as
-leaf pages, so a profile chooses one colour codec for both (the table under
+Coarse pages go through the same delivery encoder and decoded-image gates as leaf
+pages, so a profile chooses one colour codec for both (the table under
 [Profiles](#profiles-and-resources)). A tile's pages together are bounded to about
 2²⁰ texels per slot, shared by surface area among its material classes, so a parent
 with many classes splits one page's worth instead of taking a full page for each.
+
+The coarse ladder differs from the leaf ladder below at its end. A coarse page that
+misses a gate is re-encoded (UASTC level 2, then 3) as a leaf page is, but a page that
+no codec step can deliver within its gates never fails the run: it is published as its
+exact level-0 PNG and sampled without mips. Pages escalated or delivered this way are
+counted per depth in `diagnostics.hlod.appearance_by_depth` (`escalatedPages`,
+`pngPages`); the report's
+`escalated_pages` and `escalation_diagnostics` cover leaf pages.
 
 Normal, metallic-roughness and other data pages, MASK coverage and ID pages follow
 their own class rules in every profile (see [Profiles](#profiles-and-resources)).
@@ -356,7 +381,7 @@ decoded gate. Smooth wrong-mip content can still pass even a 20 dB floor; the
 revision records a >40 dB example and proposes a separately calibrated spatial
 derivative/band-pass check. PSNR does not establish mip provenance.
 
-In a lossy profile, a texture page that misses any decoded-image gate at the
+In a lossy profile, a **leaf** texture page that misses any decoded-image gate at the
 profile's own encoder setting (per-level channel and normal floors, MASK
 coverage, the source-sampler check) is re-encoded one step stronger instead of
 failing the run: UASTC pack level 2, then UASTC level 3. Every step is checked
@@ -364,7 +389,8 @@ again by the same gates; gates are never loosened. If level 3 also misses and
 the page's sampler reads level 0 only (no mipmap minification), the page is
 delivered as an exact level-0 PNG, which keeps the sampler. A mip-sampled page
 that still misses at level 3 fails the run, because glTF PNG cannot carry its
-authored coarse levels. Escalation costs output size: an ETC1S page re-encoded
+authored coarse levels. (Coarse pages never fail this way; see
+[coarse appearance](#coarse-appearance).) Escalation costs output size: an ETC1S page re-encoded
 as UASTC is several times larger, and a PNG fallback page is typically the
 largest form of the page (up to 4 bytes per texel). The ladder depends only on
 the page, so output is identical for any worker count. Cancellation is polled
@@ -455,8 +481,15 @@ One declared ceiling governs the whole run, with one rule on every surface:
   indivisible work against it before allocating: source and JSON metadata, sort
   buffers, interface incidence, the child tiles held for their parents and the
   active parents, decoded source images, chart/page/codec workspace, memory-backed
-  scratch and archive staging. A source without images reserves no texture, chart,
-  mip or codec workspace.
+  capture scratch and the archive stage's resident buffers (`archive_minimum_bytes`).
+  A source without images reserves no texture, chart, mip or codec workspace.
+  **Not charged:** output staging and intermediate files that live on memory-backed
+  (tmpfs) storage. A work directory, scratch parent or output on tmpfs consumes memory
+  that the budget does not account for, so the budget does not bound a run whose
+  storage is memory-backed. This is a known remaining D8 obligation, planned with the
+  archive-staging work; until then keep large outputs and intermediates on disk. The
+  resident archive-preparation buffers (charged) are distinct from archive storage
+  (not charged when memory-backed).
 - **Pressure never changes output.** It serializes work (`--jobs` stays a maximum
   under the same budget), and what cannot fit even alone is a `resource_limit`
   refusal naming the stage and the bytes it needs, before that stage allocates and
@@ -467,7 +500,12 @@ One declared ceiling governs the whole run, with one rule on every surface:
   `default_undetected`, and the detected headroom), the least budget that admits each
   stage (`minimum_bytes`, `capture_minimum_bytes`, `leaf_minimum_bytes`,
   `archive_minimum_bytes`) and the coarse stage's plan (`hlod`);
-  `diagnostics.hlod.lease_peak_bytes` is its highest simultaneous lease.
+  `diagnostics.hlod.lease_peak_bytes` is its highest simultaneous lease. The minima
+  include charged request facts such as the lengths of the input, output and scratch
+  paths (sort descriptors carry them), and the detected headroom is a host observation,
+  so the same conversion reports slightly different minima from differently named
+  paths (a few hundred bytes to about 130 kB on a 0.79M-triangle crop). This is
+  deterministic accounting: the archive does not depend on it.
 - **What it is not.** It is an admission and planning ceiling, not an operating
   system limit or a measured peak-RSS guarantee; measured peaks come from the
   acceptance campaign.

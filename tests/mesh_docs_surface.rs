@@ -297,3 +297,29 @@ fn documented_budget_defaults_match_the_code() {
     assert!(resources.contains("DEFAULT_CEILING_BYTES: u64 = 4 << 30"));
     assert!(resources.contains("UNDETECTED_BYTES: u64 = 2 << 30"));
 }
+
+#[test]
+fn policy_statements_match_the_implementation() {
+    let guide = current_guide(&read("docs/MESH.md"));
+    // A parent that cannot fit the cap is omitted, never refused (amended D1).
+    let omission = section(&guide, "### Hierarchy and cracks", false);
+    assert!(omission.contains("**Omission, not refusal.**"));
+    assert!(omission.contains("omitted"), "omission must be described");
+    assert!(
+        !omission.contains("the run is `unsupported`"),
+        "a cap-infeasible parent is omitted, not refused"
+    );
+    assert!(
+        read("src/mesh_large/hlod/geometry.rs").contains("omit"),
+        "the guide describes omission; the geometry stage must implement it"
+    );
+    // Coarse pages publish their own atlas samplers and always have the PNG fallback.
+    let appearance = section(&guide, "### Coarse appearance", false);
+    assert!(!appearance.contains("samplers are kept"));
+    assert!(appearance.contains("newly\nauthored atlas samplers"));
+    assert!(appearance.contains("never fails the run"));
+    assert!(read("src/mesh_large/hlod/appearance.rs").contains("level0_sampled: true"));
+    // The budget does not cover output or intermediates on memory-backed storage.
+    let budget = section(&guide, "### Memory budget", false);
+    assert!(budget.contains("**Not charged:**") && budget.contains("tmpfs"));
+}

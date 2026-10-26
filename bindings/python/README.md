@@ -94,9 +94,11 @@ progresses. Base-colour and emissive pages, leaf and coarse, are KTX2 ETC1S
 `lossless`; KTX2/Basis and meshopt are in-process, and JPEG source decoding
 remains supported.
 
-A lossy texture page that misses a decoded-image gate is re-encoded at UASTC
+A lossy **leaf** texture page that misses a decoded-image gate is re-encoded at UASTC
 level 2, then level 3, and, for pages sampled at level 0 only, delivered as an
-exact PNG; a mip-sampled page still failing at level 3 fails the call. Escalated
+exact PNG; a mip-sampled page still failing at level 3 fails the call. A coarse
+page never fails the call this way: it falls back to its exact level-0 PNG, sampled
+without mips, and is counted in `result.diagnostics["hlod"]["appearance_by_depth"]`. Escalated
 pages are larger than the profile's own encoding (PNG fallback pages most of
 all). `result.report["escalated_pages"]` (`uastc_level2`, `uastc_level3`),
 `["lossless_fallback_pages"]`, `["escalation_diagnostics"]` (the first 32 pages:
