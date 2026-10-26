@@ -508,37 +508,28 @@ fn attempt(
     }
     let mut topology_change = topology::changes(reference, &output, interface, floor);
     if topology_change.is_none() {
-        // A boundary loop touching the contract must survive. Retain its incident ring
-        // and simplify only the remaining interior before escalating to the remesher.
+        // Pin the protected boundary vertices and component supports, allowing their
+        // adjacent faces to retriangulate. Retaining the entire incident face ring wastes
+        // interior triangles and can increase measured G even when the cap still fits.
         let (boundary, _) = topology::protected(merged, interface, preserve_holes);
-        let mut keep = Vec::new();
-        let mut rest = Vec::new();
-        for (i, t) in merged.triangles.iter().enumerate() {
-            if t.iter().any(|&v| boundary[v as usize]) {
-                keep.push(*t);
-                protected[i] = true;
-            } else {
-                rest.push(*t);
-            }
-        }
-        if keep.len() < cap {
-            let fixed: HashSet<u32> = keep.iter().flatten().copied().collect();
-            let (mut reduced, e) =
-                simplify(merged, &rest, &|v| fixed.contains(&v), cap - keep.len());
-            reduced.extend(keep);
-            reoriented += orient(original_faces, &mut reduced);
-            let lost = missing(&reduced, &merged.keys, &segments, &vertices);
-            if !reduced.is_empty() && reduced.len() <= cap && lost.0.is_empty() && lost.1.is_empty()
-            {
-                topology_change = topology::changes(reference, &reduced, interface, floor);
-                if topology_change.is_some() {
-                    output = reduced;
-                    simplifier_error = e;
-                    retries += 1;
-                }
+        let (mut reduced, e) = simplify(
+            merged,
+            &merged.triangles,
+            &|v| boundary[v as usize] || locked[v as usize],
+            cap,
+        );
+        reoriented += orient(original_faces, &mut reduced);
+        let lost = missing(&reduced, &merged.keys, &segments, &vertices);
+        if !reduced.is_empty() && reduced.len() <= cap && lost.0.is_empty() && lost.1.is_empty() {
+            topology_change = topology::changes(reference, &reduced, interface, floor);
+            if topology_change.is_some() {
+                output = reduced;
+                simplifier_error = e;
+                retries += 1;
             }
         }
     }
+
     let Some(change) = topology_change else {
         return Err(JobError::new(
             JobErrorKind::Unsupported,

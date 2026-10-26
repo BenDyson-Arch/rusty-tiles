@@ -82,8 +82,9 @@ encoder verifies those bits. No nearest-curve sampling supplies a certificate.
 `geometry` merges at most eight immediate capped children. It reconstructs
 contracted borders, simplifies, and checks actual topology. A protected boundary
 component is compared as a multigraph with degree-two vertices suppressed;
-border contacts and branch vertices remain anchors. An incident-ring retry
-retains protected boundary faces before simplifying the remaining interior.
+border contacts and branch vertices remain anchors. A bounded retry pins protected boundary vertices and component supports while
+allowing their adjacent faces to retriangulate. Retaining whole incident rings
+wasted interior triangles and increased measured G in the tex3/crop3 probe.
 Interior duplicate removal/component cleanup, constructive projected remeshing
 and a fixed six-round clustering pass precede a reported frontier. These bounded
 jobs cost P*F(8C); the constructive domain above has a cap-fit argument, while
@@ -180,3 +181,11 @@ a small interior closure has nonzero measured loss; identical sub-G components
 with/without border contact differ in eligibility; a large interior component
 survives. Final tex3/crop3 gates remain open until re-baked with source identities,
 per-depth G/operation attribution, complete first-view accounting and CPU receipts.
+
+The topology receipt compares boundary paths after degree-two suppression and
+counts cycles lost from, and added to, their common graph separately. A closure
+and simultaneous opening cannot cancel in a net cycle count. This is a producer
+correspondence rule; S5 must re-derive it. The final S2 proxy strata and centroid
+controls also track every face in the conservative closure domain; any over-E
+sample rejects the proposal before S3, even if the preliminary fixed controls
+missed it. Rejected closure attempts are counted separately from delivered changes.

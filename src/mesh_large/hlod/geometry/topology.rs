@@ -379,28 +379,12 @@ pub(super) fn changes(
     let (old_edges, old_degree, old_root) = boundary(&m.triangles);
     let (new_edges, new_degree, new_root) = boundary(output);
     let mut touching = HashSet::new();
-    let mut before = HashSet::new();
     for v in 0..m.keys.len() {
-        if old_degree[v] > 0 {
-            if surviving.contains(&component[v]) {
-                before.insert(old_root[v]);
+        if old_degree[v] > 0 && border.contains(&m.keys[v]) {
+            touching.insert(old_root[v]);
+            if new_degree[v] == 0 {
+                return rejected("border boundary vertex became interior");
             }
-            if border.contains(&m.keys[v]) {
-                touching.insert(old_root[v]);
-            }
-        }
-    }
-    let mut matches: HashMap<usize, HashSet<usize>> = HashMap::new();
-    let mut counts: HashMap<(usize, usize), usize> = HashMap::new();
-    let mut labels: HashMap<usize, HashSet<usize>> = HashMap::new();
-    for v in 0..m.keys.len() {
-        if old_degree[v] > 0 && new_degree[v] > 0 {
-            matches.entry(old_root[v]).or_default().insert(new_root[v]);
-            *counts.entry((old_root[v], new_root[v])).or_default() += 1;
-            labels.entry(new_root[v]).or_default().insert(old_root[v]);
-        }
-        if old_degree[v] > 0 && border.contains(&m.keys[v]) && new_degree[v] == 0 {
-            return rejected("border boundary vertex became interior");
         }
     }
     // A boundary component can branch at a nonmanifold pinch. Preserve its graph up
@@ -481,36 +465,22 @@ pub(super) fn changes(
     };
     let before_counts = cycles(&old_edges, &old_degree, &old_root);
     let after_counts = cycles(&new_edges, &new_degree, &new_root);
-    let mut lost_cycles = HashSet::new();
-    for (&c, &count) in &before_counts {
-        let next = after_counts.get(&c).copied().unwrap_or(0);
-        receipt.closed_holes += count.saturating_sub(next) as u64;
-        if next < count {
-            lost_cycles.insert(c);
-        }
-    }
-    for (&c, &count) in &after_counts {
-        receipt.opened_holes +=
-            count.saturating_sub(before_counts.get(&c).copied().unwrap_or(0)) as u64;
-    }
-    let mut closed: HashSet<usize> = before
-        .into_iter()
-        .filter(|root| {
-            matches.get(root).is_none_or(|roots| {
-                roots.len() != 1 || {
-                    let to = roots.iter().next().unwrap();
-                    labels[to].len() > 1 || counts[&(*root, *to)] < 3
-                }
-            })
-        })
-        .collect();
-    // A branching boundary can lose a cycle without disconnecting. Measure the
-    // affected changed surface, never the diameter of the whole boundary graph.
-    for v in 0..m.keys.len() {
-        if old_degree[v] > 0 && old_degree[v] != 2 && lost_cycles.contains(&component[v]) {
-            closed.insert(old_root[v]);
-        }
-    }
+    let (closed, closed_count, opened_count) = changed_cycles(
+        &old_edges,
+        &new_edges,
+        &old_degree,
+        &new_degree,
+        &old_root,
+        &new_root,
+        &component,
+        &surviving,
+    );
+    receipt.closed_holes = closed_count as u64;
+    receipt.opened_holes = opened_count as u64;
+    debug_assert_eq!(
+        before_counts.values().sum::<usize>() + opened_count,
+        after_counts.values().sum::<usize>() + closed_count
+    );
     let affected: HashSet<usize> = closed.iter().map(|&r| component[r]).collect();
     let old_faces: HashSet<_> = m.triangles.iter().map(oriented).collect();
     let patch_faces = if receipt.closed_holes > 0 {
@@ -551,6 +521,142 @@ pub(super) fn changes(
         boundary,
         dropped,
     })
+}
+
+/// Common boundary paths are compared after suppressing unshared degree-two vertices.
+/// Cycle rank of their intersection distinguishes closure from simultaneous opening;
+/// subtracting only whole-component ranks would silently cancel those two operations.
+fn changed_cycles(
+    old: &HashMap<(u32, u32), u32>,
+    new: &HashMap<(u32, u32), u32>,
+    old_degree: &[u32],
+    new_degree: &[u32],
+    old_root: &[usize],
+    new_root: &[usize],
+    component: &[usize],
+    surviving: &HashSet<usize>,
+) -> (HashSet<usize>, usize, usize) {
+    let n = old_degree.len();
+    let mut anchors = vec![false; n];
+    let mut contacts = HashMap::<(usize, usize), usize>::new();
+    for v in 0..n {
+        let shared = old_degree[v] > 0 && new_degree[v] > 0;
+        anchors[v] = shared
+            || (old_degree[v] > 0 && old_degree[v] != 2)
+            || (new_degree[v] > 0 && new_degree[v] != 2);
+        if shared {
+            *contacts.entry((old_root[v], new_root[v])).or_default() += 1;
+        }
+    }
+    // Anchor isolated cycles too. Distinct entirely replaced cycles have no shared key.
+    let mut old_anchored = HashSet::new();
+    let mut new_anchored = HashSet::new();
+    for (v, &anchor) in anchors.iter().enumerate() {
+        if anchor && old_degree[v] > 0 {
+            old_anchored.insert(old_root[v]);
+        }
+        if anchor && new_degree[v] > 0 {
+            new_anchored.insert(new_root[v]);
+        }
+    }
+    for v in 0..n {
+        if old_degree[v] > 0 && !old_anchored.contains(&old_root[v]) {
+            anchors[old_root[v]] = true;
+        }
+        if new_degree[v] > 0 && !new_anchored.contains(&new_root[v]) {
+            anchors[new_root[v]] = true;
+        }
+    }
+    let paths = |edges: &HashMap<(u32, u32), u32>| {
+        let mut adjacent = vec![Vec::new(); n];
+        for (&(a, b), &count) in edges {
+            if count == 1 {
+                adjacent[a as usize].push(b);
+                adjacent[b as usize].push(a);
+            }
+        }
+        let mut visited = HashSet::new();
+        let mut paths = HashMap::<(u32, u32), usize>::new();
+        for (v, &anchor) in anchors.iter().enumerate() {
+            if !anchor {
+                continue;
+            }
+            let a = v as u32;
+            for &b in &adjacent[v] {
+                if !visited.insert((a.min(b), a.max(b))) {
+                    continue;
+                }
+                let (mut previous, mut at) = (a, b);
+                while !anchors[at as usize] {
+                    let next = adjacent[at as usize]
+                        .iter()
+                        .copied()
+                        .find(|&v| v != previous)
+                        .unwrap();
+                    visited.insert((at.min(next), at.max(next)));
+                    previous = at;
+                    at = next;
+                }
+                *paths.entry((a.min(at), a.max(at))).or_default() += 1;
+            }
+        }
+        paths
+    };
+    let (old_paths, new_paths) = (paths(old), paths(new));
+    let common: HashMap<_, _> = old_paths
+        .iter()
+        .filter_map(|(&(a, b), &count)| {
+            let next = new_paths.get(&(a, b)).copied().unwrap_or(0);
+            // Fewer than three retained contacts cannot establish a surviving closed loop.
+            let contacts = contacts
+                .get(&(old_root[a as usize], new_root[a as usize]))
+                .copied()
+                .unwrap_or(0);
+            (next > 0 && contacts >= 3).then_some(((a, b), count.min(next)))
+        })
+        .collect();
+    let ranks = |paths: &HashMap<(u32, u32), usize>, roots: &[usize]| {
+        let mut groups = Components::new(n);
+        for &(a, b) in paths.keys() {
+            groups.join(a, b);
+        }
+        let mut vertices = HashSet::new();
+        let mut counts = HashMap::<usize, (usize, usize)>::new();
+        for (&(a, b), &count) in paths {
+            let r = groups.root(a as usize);
+            counts.entry(r).or_default().0 += count;
+            for v in [a, b] {
+                if vertices.insert(v) {
+                    counts.entry(r).or_default().1 += 1;
+                }
+            }
+        }
+        let mut result = HashMap::<usize, usize>::new();
+        for (r, (edges, vertices)) in counts {
+            if surviving.contains(&component[r]) {
+                *result.entry(roots[r]).or_default() += edges + 1 - vertices;
+            }
+        }
+        result
+    };
+    let old_ranks = ranks(&old_paths, old_root);
+    let new_ranks = ranks(&new_paths, new_root);
+    let common_old = ranks(&common, old_root);
+    let common_new = ranks(&common, new_root);
+    let mut closed = HashSet::new();
+    let mut closed_count = 0;
+    for (root, count) in old_ranks {
+        let lost = count - common_old.get(&root).copied().unwrap_or(0);
+        if lost > 0 {
+            closed.insert(root);
+            closed_count += lost;
+        }
+    }
+    let opened_count = new_ranks
+        .into_iter()
+        .map(|(r, count)| count - common_new.get(&r).copied().unwrap_or(0))
+        .sum();
+    (closed, closed_count, opened_count)
 }
 
 /// Boundary edge components touching a delivered arc or live junction are protected in
@@ -737,6 +843,34 @@ pub(super) mod tests {
         assert_eq!(loss.receipt.closed_holes, 1);
         assert!(!loss.patch_faces.is_empty());
     }
+    #[test]
+    fn closing_one_hole_and_opening_another_do_not_cancel_in_the_receipt() {
+        let mut m = ring();
+        m.positions = (0..=3)
+            .flat_map(|y| (0..=5).map(move |x| [x as f32, y as f32, 0.]))
+            .collect();
+        m.keys = m.positions.iter().map(|p| p.map(f32::to_bits)).collect();
+        m.triangles.clear();
+        let mut output = Vec::new();
+        for y in 0..3u32 {
+            for x in 0..5 {
+                let a = y * 6 + x;
+                let faces = [[a, a + 1, a + 7], [a, a + 7, a + 6]];
+                if (x, y) != (1, 1) {
+                    m.triangles.extend(faces);
+                }
+                if (x, y) != (3, 1) {
+                    output.extend(faces);
+                }
+            }
+        }
+        let change = changes(&m, &output, &[], 1.).unwrap();
+        assert_eq!(change.receipt.closed_holes, 1);
+        assert_eq!(change.receipt.opened_holes, 1);
+        assert_eq!(change.patch_faces.len(), 2);
+        assert_eq!(change.boundary.len(), 4);
+    }
+
     #[test]
     fn degenerate_strip_removal_cannot_remove_the_certified_edge() {
         let mut m = ring();
