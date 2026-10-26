@@ -80,7 +80,15 @@ by 1024 and by 2^d. Every endpoint uses the common leaf-canonical f32 bits; the
 encoder verifies those bits. No nearest-curve sampling supplies a certificate.
 
 `geometry` merges at most eight immediate capped children. It reconstructs
-contracted borders, simplifies, and checks actual topology. A protected boundary
+contracted borders, simplifies, and checks actual topology. Border mapping only
+queries the union of immediate child interface keys: coarsening merges
+owners, and nested canonical endpoints ensure every live parent border was a child
+border. Interior vertices cannot acquire a new external owner. This avoids disk
+searches for interior vertices without changing the contract. Dense local remaps
+preserve first-use vertex order; required-edge checking removes found witnesses
+from the required set instead of materializing all interior edges.
+
+A protected boundary
 component is compared as a multigraph with degree-two vertices suppressed;
 border contacts and branch vertices remain anchors. A bounded retry pins protected boundary vertices and component supports while
 allowing their adjacent faces to retriangulate. Retaining whole incident rings

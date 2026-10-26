@@ -120,27 +120,20 @@ fn missing(
     segments: &HashSet<(Key, Key)>,
     points: &HashSet<Key>,
 ) -> (Vec<(Key, Key)>, Vec<Key>) {
-    let mut present_edges =
-        HashSet::with_capacity_and_hasher(triangles.len() * 3, Default::default());
-    let mut present_points =
-        HashSet::with_capacity_and_hasher(triangles.len() * 3, Default::default());
+    let mut missing_edges = segments.clone();
+    let mut missing_points = points.clone();
     for t in triangles {
         for k in 0..3 {
             let (a, b) = (keys[t[k] as usize], keys[t[(k + 1) % 3] as usize]);
-            present_edges.insert(edge(a, b));
-            present_points.insert(a);
+            missing_edges.remove(&edge(a, b));
+            missing_points.remove(&a);
+        }
+        if missing_edges.is_empty() && missing_points.is_empty() {
+            return (Vec::new(), Vec::new());
         }
     }
-    let mut edges: Vec<_> = segments
-        .iter()
-        .filter(|e| !present_edges.contains(*e))
-        .copied()
-        .collect();
-    let mut lost: Vec<_> = points
-        .iter()
-        .filter(|v| !present_points.contains(*v))
-        .copied()
-        .collect();
+    let mut edges: Vec<_> = missing_edges.into_iter().collect();
+    let mut lost: Vec<_> = missing_points.into_iter().collect();
     edges.sort_unstable();
     lost.sort_unstable();
     (edges, lost)
@@ -154,18 +147,20 @@ fn simplify(
     locked: &dyn Fn(u32) -> bool,
     target: usize,
 ) -> (Vec<[u32; 3]>, f64) {
-    let mut local: HashMap<u32, u32> =
-        HashMap::with_capacity_and_hasher(faces.len() * 2, Default::default());
+    // Merged indices are dense and bounded to eight capped children. Preserve first-use
+    // order without hashing each corner, including when simplifying a protected subset.
+    let mut local = vec![u32::MAX; merged.positions.len()];
     let mut global = Vec::new();
     let mut indices = Vec::with_capacity(faces.len() * 3);
     for f in faces {
         for &v in f {
             let next = global.len() as u32;
-            let id = *local.entry(v).or_insert(next);
-            if id == next {
+            let id = &mut local[v as usize];
+            if *id == u32::MAX {
+                *id = next;
                 global.push(v);
             }
-            indices.push(id);
+            indices.push(*id);
         }
     }
     let positions: Vec<[f32; 3]> = global
@@ -270,7 +265,27 @@ pub(crate) fn build_parent(
     let interface = &contract.interface;
     let mut topology = topology::Receipt::default();
     let mut attempted = topology::Receipt::default();
-    topology::contract(&mut merged, interface, mapping, &mut topology)?;
+    {
+        // Coarsening only merges owners: every live parent border is a child border.
+        // Nested canonical endpoints therefore make the union of child interfaces a
+        // complete lookup domain. Interior vertices need no disk-backed source search.
+        let child_border: HashSet<Key> = children
+            .iter()
+            .flat_map(|c| c.interface.iter().flat_map(|r| [r.a, r.b]))
+            .collect();
+        topology::contract(
+            &mut merged,
+            interface,
+            &|k| {
+                if child_border.contains(&k) {
+                    mapping(k)
+                } else {
+                    Ok(None)
+                }
+            },
+            &mut topology,
+        )?;
+    }
     if caps.is_empty() {
         return Err(state("a parent build needs at least one cap"));
     }
@@ -666,6 +681,79 @@ fn attempt(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parent_mapping_queries_only_child_interfaces_and_keeps_the_contracted_arc() {
+        let parent = TileKey {
+            first: 0,
+            end: 2,
+            depth: 0,
+            leaf_begin: 0,
+            leaf_end: 1,
+        };
+        let positions = vec![
+            [0., 0., 0.],
+            [0.5, 0., 0.],
+            [1., 0., 0.],
+            [0., 1., 0.],
+            [1., 1., 0.],
+        ];
+        let [a, middle, b] = [key(positions[0]), key(positions[1]), key(positions[2])];
+        let child = TileGeometry {
+            key: TileKey { depth: 1, ..parent },
+            positions,
+            ells: vec![1; 5],
+            triangles: vec![[0, 1, 2], [0, 3, 4]],
+            representative: vec![0; 2],
+            primitives: vec![SourcePrimitive {
+                node: 0,
+                mesh: 0,
+                primitive: 0,
+                expanded_ordinal: 0,
+                material: u32::MAX,
+            }],
+            interface: vec![
+                InterfaceRow::new(0, a, middle, 0, 1),
+                InterfaceRow::new(0, middle, b, 0, 1),
+            ],
+            geometric_error: 0.,
+            lease: None,
+        };
+        let calls = std::cell::Cell::new(0);
+        let built = build_parent(
+            parent,
+            &[child],
+            &[8],
+            &Contract {
+                depth: 0,
+                interface: vec![InterfaceRow::new(0, a, b, 0, 1)],
+                certificates: vec![],
+                terminal_vertices: vec![],
+                scale: 0.,
+            },
+            &|p| {
+                assert!([a, middle, b].contains(&p), "interior source lookup");
+                calls.set(calls.get() + 1);
+                Ok((p == middle).then_some((a, b, 0.5, 1)))
+            },
+            &mut |_| Ok(true),
+            &|| Ok(()),
+        )
+        .unwrap()
+        .built
+        .unwrap();
+        assert_eq!(calls.get(), 3);
+        let geometry = built.geometry;
+        let keys: Vec<_> = geometry.positions.iter().copied().map(key).collect();
+        let absent = missing(
+            &geometry.triangles,
+            &keys,
+            &[edge(a, b)].into_iter().collect(),
+            &HashSet::default(),
+        );
+        assert!(absent.0.is_empty());
+        assert!(built.topology.contracted_vertices > 0);
+    }
 
     fn merged(triangles: Vec<[u32; 3]>) -> Merged {
         Merged {
