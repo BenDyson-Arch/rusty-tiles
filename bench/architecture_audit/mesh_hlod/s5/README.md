@@ -218,6 +218,31 @@ Integration passes 121 cases and 772 hashes. Round 9's S1 `756283e2` cap12/cap30
 archives fail `emptyCellRefinement`; their corrected variants pass, with derived
 omission counts equal to S1's (21/16/[1,4,16], 17/12/[1,4,12]).
 
+On develop `652f1800` (S1/S2/S3 merged) own tex3/crop3 bakes publish. Both
+oracles pass every check except `representativeIdentity`: 628 of 499,554 coarse
+faces; all sampled cases are distance ties between source primitives (equal or
+1 ulp), broken differently from D4's source order. S1's omission report equals
+the derived counts. Native validation exceeds the scaled `totalPayloadElements`
+budget (about 4.2e9 needed vs 0.92e9 on tex3); with raised caps every native
+check passes, agreeing with the oracle's shared/open-edge counts.
+
+Superseded checkpoint receipts (`33ce60c5`, `9bc1760d`, the exact-seam and R11
+records) moved to `~/.cache/rusty-tiles-evidence/tree-trim-s5-20261025/README-history-f1e841c0.md`
+with their immutable manifests unchanged.
+
+### Upward-omission revision (S1 `98a1bec5`)
+
+S1 `756283e2` then `98a1bec5` are merged; S2 sampling and S3 appearance are
+kept, with two test-initializer seams. The above-cap positive is replaced by an
+8,192 positive and 8,193 coarse/leaf `triangleCap` negatives. Analytic controls
+whose root is content-less now give it the empty-cell floor (`refinable`);
+only those `tileset.json` hashes changed. `omission_controls.py` adds 12
+explicit/external/implicit cases with oracle/native parity, including R9's
+children-error omitted cells, and producer-report agreement/mismatch.
+Integration passes 121 cases and 772 hashes. Round 9's S1 `756283e2` cap12/cap30
+archives fail `emptyCellRefinement`; their corrected variants pass, with derived
+omission counts equal to S1's (21/16/[1,4,16], 17/12/[1,4,12]).
+
 Own tex3/crop3 bakes at this integration refuse before publication: S1's walk
 ledger finds S2's unadmitted scratch (314,783,887 > 216,795,519 and
 264,788,907 > 166,800,539 bytes). No archive, oracle or native verdict exists
