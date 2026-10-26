@@ -449,7 +449,8 @@ fn external_leaf_payload_driver() {
 
 /// HLOD slice S6: H17 certified LOD and the H27 proxy bake are gone from production, with
 /// no export, feature, hidden switch or compatibility record left behind. A static scan of
-/// the crate, CLI and Python binding sources (this file excepted: it names what it bans).
+/// the crate, CLI and Python binding production sources (test-only `*tests.rs` files
+/// excepted: they assert the banned records are absent from published output).
 #[test]
 fn no_h17_or_h27_production_symbols_remain() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -481,7 +482,6 @@ fn no_h17_or_h27_production_symbols_remain() {
         "lod_vanished",
         "lod_filled",
     ];
-    let this = root.join("src/mesh_large/tests.rs");
     let mut stack = vec![root.join("src"), root.join("bindings/python/src")];
     let mut scanned = 0;
     while let Some(dir) = stack.pop() {
@@ -491,7 +491,8 @@ fn no_h17_or_h27_production_symbols_remain() {
                 stack.push(path);
                 continue;
             }
-            if path.extension().is_none_or(|e| e != "rs") || path == this {
+            let name = path.file_name().unwrap().to_string_lossy();
+            if !name.ends_with(".rs") || name.ends_with("tests.rs") {
                 continue;
             }
             let text = fs::read_to_string(&path).unwrap();

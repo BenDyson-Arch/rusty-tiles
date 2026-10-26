@@ -1296,10 +1296,29 @@ fn real_h8_leaves_under_low_limits_publish_implicit_roots_and_reject_corruption(
         start..start + v["byteLength"].as_u64().unwrap() as usize
     };
     let (available, contents) = subtree_availability(subtree, *levels);
-    // A non-root tile with content, and its bit position in the level-order bitstream.
-    let victim = *contents.iter().find(|t| t[0] == 1).unwrap();
-    assert!(available.contains(&victim));
-    let bit = 1 + (victim[1] | victim[2] << 1 | victim[3] << 2) as usize;
+    // A tile's position in the level-order (Morton within each level) bitstream, which is
+    // also the order of the subtree's property-table rows.
+    let index = |t: &[u32; 4]| -> usize {
+        let morton = (0..t[0]).fold(0usize, |m, bit| {
+            m | (((t[1] >> bit) & 1) as usize) << (3 * bit)
+                | (((t[2] >> bit) & 1) as usize) << (3 * bit + 1)
+                | (((t[3] >> bit) & 1) as usize) << (3 * bit + 2)
+        });
+        ((1usize << (3 * t[0])) - 1) / 7 + morton
+    };
+    // A non-root available tile with an available child (under HLOD it may be a content-less
+    // single-child cell), and a non-root tile with content.
+    let has_child = |t: &[u32; 4]| {
+        available.iter().any(|c| {
+            c[0] == t[0] + 1 && c[1] >> 1 == t[1] && c[2] >> 1 == t[2] && c[3] >> 1 == t[3]
+        })
+    };
+    let victim = *available
+        .iter()
+        .find(|t| t[0] >= 1 && has_child(t))
+        .unwrap();
+    let content = *contents.iter().find(|t| t[0] >= 1).unwrap();
+    let bit = index(&victim);
 
     type Archive = BTreeMap<String, Vec<u8>>;
     let damage = |case: &str, change: &dyn Fn(&mut Archive)| -> String {
@@ -1345,7 +1364,10 @@ fn real_h8_leaves_under_low_limits_publish_implicit_roots_and_reject_corruption(
             .as_u64()
             .unwrap();
         // The victim's box centre x (12 f64 per row, rows in availability order).
-        let row = available.iter().position(|t| *t == victim).unwrap();
+        let row = available
+            .iter()
+            .filter(|t| index(t) < index(&victim))
+            .count();
         let at = view(property).start + row * 96;
         let x = f64::from_le_bytes(bytes[at..at + 8].try_into().unwrap());
         bytes[at..at + 8].copy_from_slice(&(x + 1.0e6).to_le_bytes());
@@ -1353,7 +1375,7 @@ fn real_h8_leaves_under_low_limits_publish_implicit_roots_and_reject_corruption(
     let missing = damage("missing", &|edited| {
         let name = format!(
             "implicit-content/{root_key}-{}-{}-{}-{}.glb",
-            victim[0], victim[1], victim[2], victim[3]
+            content[0], content[1], content[2], content[3]
         );
         edited.remove(&name).unwrap();
     });
