@@ -129,10 +129,10 @@ def generate(root):
         cases.append(dict(name=name,oracleCheck=check,archiveCheck=check,
             source=source.name,incidence=source_incidence([left,right])))
     # R12 P3 witness: a book spine with two forward and one reverse source face;
-    # the coarse pair [A,B,C],[A,B,E] is forward twice, so native multiplicity
-    # admits it, yet [A,B,E] reverses source [B,A,E]. Native validation does not
-    # prove coarse orientation away from required interfaces; the oracle's exact
-    # coincident-face guard must refuse it.
+    # the coarse pair [A,B,C],[A,B,E] is forward twice, yet [A,B,E] reverses source
+    # [B,A,E]. A multiplicity count once admitted it natively; D11 review 2 matches
+    # each coarse face to a same-direction source face on its own side, so native
+    # refuses it too, beside the oracle's exact coincident-face guard.
     name='book-reversed-face';folder=root/name;folder.mkdir(exist_ok=True)
     left,right=[[A,B,C],[A,B,D]],[[B,A,E]]
     (folder/'coarse.glb').write_bytes(payload([[A,B,C],[A,B,E]],leaf=False))
@@ -145,7 +145,7 @@ def generate(root):
         vertices=[i*3+k for k in range(3)],expanded_ordinal=0,material_index=0,
         material=controls.MATERIALS[0],normals=controls.NORMALS,uvs=controls.UVS)
         for i,triangle in enumerate(left+right)}},separators=(',',':'))+'\n')
-    cases.append(dict(name=name,oracleCheck='interfaceWinding',archiveCheck=None,
+    cases.append(dict(name=name,oracleCheck='interfaceWinding',archiveCheck='interfaceWinding',
         source=source.name,incidence=source_incidence([left,right])))
     # D1's hard cap is per payload, leaf or coarse: 8,192 is admitted, 8,193
     # refused. Distinct separated triangles keep nearest-reference work bounded

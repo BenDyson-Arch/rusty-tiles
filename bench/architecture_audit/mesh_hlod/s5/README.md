@@ -41,10 +41,11 @@ valid. An empty ADD override cannot clear a barrier owned by a renderable
 REPLACE ancestor. All delivery checks, continuity included, apply only once HLOD
 identity is expected: other tilesets may keep empty intermediates, and the disk
 store (with its scratch) is created only then, from a bounded pending buffer.
-A coarse edge with two equal-direction faces is refused unless descendant leaves
-hold that multiplicity (a nonmanifold spine). That admits the count only: native
-validation does not prove coarse face orientation away from required interface
-directions; the oracle's coincident-face guard does (`book-reversed-face`).
+A coarse edge with two equal-direction faces is refused unless each matches a
+descendant source face of that direction on its own side (a nonmanifold spine; see
+D11 below), so a page reversed onto the spine (`book-reversed-face`) is refused
+natively and by the oracle's coincident-face guard. Native validation still does
+not prove coarse face orientation away from shared edges.
 Expectation is owned outside payload labels: `--expect-profile hlod`
 (`ValidationRequest::expect_profile`) or the archive's own declaration
 (`asset.extras.rustyTiles.lod` or `conversion.json` `lod` equal to `hlod`) makes
