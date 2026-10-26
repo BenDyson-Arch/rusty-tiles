@@ -113,10 +113,16 @@ pub(super) struct Contract {
     pub depth: u32,
     pub interface: Vec<InterfaceRow>,
     pub certificates: Vec<Certificate>,
+    /// Exact vertex contacts with a terminal leaf, including contacts with no shared edge.
+    pub terminal_vertices: Vec<Key>,
     pub scale: f64,
 }
 
 impl Contract {
+    pub(super) fn terminal_locks(&self) -> u64 {
+        self.terminal_vertices.len() as u64
+            + self.certificates.iter().filter(|c| c.terminal_lock).count() as u64
+    }
     /// Every required point and edge must occur in a triangle. This necessary lower bound
     /// is independent of remeshing; exceeding it makes the capped frontier unavoidable.
     pub(super) fn minimum_triangles(&self) -> usize {
@@ -576,11 +582,19 @@ impl Borders {
         let mut at = n[6];
         let mut interface = Vec::new();
         let mut certificates = Vec::new();
+        let mut terminal_vertices = Vec::new();
         while at != NONE {
             let link = self.refs.get(at)?;
             let s = self.segments.get(link[1])?;
-            let a = self.source.key(s[0])?;
-            let b = self.source.key(s[1])?;
+            let va = self.source.vertices.get(s[0])?;
+            let vb = self.source.vertices.get(s[1])?;
+            let a = [va[0] as u32, va[1] as u32, va[2] as u32];
+            let b = [vb[0] as u32, vb[1] as u32, vb[2] as u32];
+            for (p, v) in [(a, va), (b, vb)] {
+                if v[7] as u32 <= key.depth {
+                    terminal_vertices.push(p);
+                }
+            }
             let lo = self.source.owners.get(s[8])?[0] as u32;
             let hi = self.source.owners.get(s[9] - 1)?[0] as u32;
             for p in [a, b] {
@@ -609,10 +623,13 @@ impl Borders {
         }
         super::interfaces::merge_rows(&mut interface);
         certificates.sort_by_key(|c| (c.endpoints, c.chain, c.first));
+        terminal_vertices.sort_unstable();
+        terminal_vertices.dedup();
         Ok(Some(Contract {
             depth: key.depth,
             interface,
             certificates,
+            terminal_vertices,
             scale: self.scale(self.publication_depth(key)?),
         }))
     }
@@ -661,6 +678,7 @@ mod tests {
             depth: 0,
             interface,
             certificates: vec![],
+            terminal_vertices: vec![],
             scale: 1.,
         };
         assert_eq!(c.minimum_triangles(), 8193);
@@ -708,7 +726,9 @@ mod tests {
         let tree = tree.finish().unwrap();
         let points = [k(0., 0.), k(1., 1.), k(2., 0.), k(3., 0.), k(4., 0.)];
         let mut rows = Vec::new();
+        let isolated = k(9., 9.);
         for leaf in 0..4 {
+            rows.push(InterfaceRow::new(leaf, isolated, isolated, 0, 3));
             let start = if leaf % 2 == 0 { 0 } else { 2 };
             for i in start..start + 2 {
                 let (a, b) = (points[i].min(points[i + 1]), points[i].max(points[i + 1]));
@@ -760,6 +780,10 @@ mod tests {
         assert_eq!(middle.2, 0.5);
         let leaf = borders.contract(tile(1, 2, 2, 1, 2), 100).unwrap().unwrap();
         assert_eq!(leaf.certificates.len(), 2);
+        assert_eq!(leaf.terminal_vertices.len(), 4);
+        assert!(leaf.terminal_vertices.contains(&isolated));
+        assert_eq!(leaf.terminal_locks(), 6);
+        assert_eq!(left.terminal_locks(), 0);
         assert!(leaf
             .certificates
             .iter()

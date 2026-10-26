@@ -493,6 +493,7 @@ struct Census {
     contracted_source_segments: usize,
     contracted_source_vertices: usize,
     certificate_failures: usize,
+    certificate_winding_failures: usize,
     max_same_depth_gap_m: f64,
     max_mixed_depth_gap_m: f64,
     missing_segments: usize,
@@ -1152,6 +1153,7 @@ fn accept_with(name: &str, source: &[Mesh], run: Run, defects: bool) -> (Census,
     assert_eq!(census.missing_segments, 0, "{name}: {census:?}");
     assert_eq!(census.missing_vertices, 0, "{name}: {census:?}");
     assert_eq!(census.certificate_failures, 0, "{name}: {census:?}");
+    assert_eq!(census.certificate_winding_failures, 0, "{name}: {census:?}");
     assert_eq!(census.max_same_depth_gap_m, 0., "{name}: {census:?}");
     assert_eq!(census.invalid_features, 0, "{name}: {census:?}");
     assert_eq!(census.moved_border_vertices, 0, "{name}: {census:?}");
@@ -1159,6 +1161,7 @@ fn accept_with(name: &str, source: &[Mesh], run: Run, defects: bool) -> (Census,
     if !defects {
         assert_eq!(census.missing_overlap_items, 0, "{name}: {census:?}");
         assert_eq!(census.certificate_failures, 0, "{name}: {census:?}");
+        assert_eq!(census.certificate_winding_failures, 0, "{name}: {census:?}");
         assert_eq!(census.max_same_depth_gap_m, 0., "{name}: {census:?}");
     }
     assert_eq!(census.duplicate_chain_tiles, 0, "{name}: {census:?}");
@@ -1686,6 +1689,7 @@ fn parent_jobs_allocate_within_their_charge() {
                     depth: parent.depth,
                     interface,
                     certificates: Vec::new(),
+                    terminal_vertices: Vec::new(),
                     scale: 0.,
                 },
                 &|_| Ok(None),
@@ -2941,6 +2945,25 @@ fn output_is_identical_across_jobs_and_budgets() {
     )
     .unwrap();
     assert!(published(&one) == published(&many));
+    let spilled = stage(
+        &input,
+        &work.path().join("spilled"),
+        &Run {
+            jobs: 2,
+            mutation: Mutation::ForceSpill,
+            ..Run::default()
+        },
+    )
+    .unwrap();
+    let resources: Value =
+        serde_json::from_slice(&fs::read(spilled.join("resources.json")).unwrap()).unwrap();
+    assert!(
+        resources["hlod"]["diagnostics"]["held_spill"]["tiles"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert!(published(&one) == published(&spilled));
 }
 
 fn public(
@@ -3177,6 +3200,7 @@ fn evidence_census() {
         "contractedSourceSegments": census.contracted_source_segments,
         "contractedSourceVertices": census.contracted_source_vertices,
         "certificateFailures": census.certificate_failures,
+        "certificateWindingFailures": census.certificate_winding_failures,
         "maxSameDepthGapM": census.max_same_depth_gap_m,
         "maxMixedDepthGapM": census.max_mixed_depth_gap_m,
         "missingSegments": census.missing_segments, "missingPoints": census.missing_vertices,
@@ -3207,6 +3231,7 @@ fn evidence_census() {
         0
     );
     assert_eq!(census.max_same_depth_gap_m, 0.);
+    assert_eq!(census.certificate_winding_failures, 0);
     // Exact seams: source T-junctions and unwelded seams are reported (the census's
     // overlap and perpendicular counts above, the manifest's source-defect counts), not
     // asserted; omitted coarse tiles are reported by `omittedProxies`.
@@ -4103,6 +4128,7 @@ fn evidence_replay_topology() {
             depth: tile.depth,
             scale: c["scale"].as_f64().unwrap(),
             certificates: vec![],
+            terminal_vertices: vec![],
             interface: c["interface"]
                 .as_array()
                 .unwrap()

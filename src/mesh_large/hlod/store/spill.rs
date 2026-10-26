@@ -234,7 +234,10 @@ impl<'l, 's> Manager<'l, 's> {
         }
         let file = writer.finish()?;
         assert_eq!(file.len(), size);
-        self.live.store(next, Ordering::Relaxed);
+        // The walk is the only writer, but workers can drop loaded spills during I/O.
+        // Add this completed file to the current count; storing the pre-write snapshot
+        // would resurrect concurrently released bytes and eventually refuse valid jobs.
+        self.live.fetch_add(size, Ordering::Relaxed);
         self.stats.tiles += 1;
         self.stats.bytes += size;
         self.stats.peak_bytes = self.stats.peak_bytes.max(next);

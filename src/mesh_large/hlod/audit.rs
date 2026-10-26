@@ -48,11 +48,13 @@ pub(crate) struct Index {
     pub bytes: u64,
 }
 
-/// Decimal JSON's worst case: a source arc record has at most 24 u32 coordinates,
-/// three u64 ordinals, one finite f64 and fixed keys. Point contacts are smaller.
+/// Decimal JSON's worst case per reference includes three interface rows (27 u32s),
+/// the certificate (15 u32s, two u64s, f64), and two terminal vertices (six u32s).
+/// 1 KiB covers these numbers and fixed keys; 8 KiB covers the fixed tile/omission
+/// row, topology and measurement summaries, including full-width counters.
 pub(super) fn bound(refs: u64, nodes: u64) -> Option<u64> {
-    refs.checked_mul(768)?
-        .checked_add(nodes.checked_mul(4096)?)?
+    refs.checked_mul(1024)?
+        .checked_add(nodes.checked_mul(8192)?)?
         .checked_add(4096)
 }
 pub(super) fn existing_parent(path: &Path) -> &Path {
@@ -192,6 +194,35 @@ impl<'a> Writer<'a> {
 mod tests {
     use super::*;
     use crate::{mesh_large::hlod::scratch::ScratchLedger, spill::Scratch};
+
+    #[test]
+    fn terminal_contact_json_fits_the_precharged_reference_bound() {
+        use crate::mesh_large::hlod::{borders::Certificate, interfaces::InterfaceRow};
+        let a = [u32::MAX; 3];
+        let b = [u32::MAX - 1; 3];
+        let contract = Contract {
+            depth: 31,
+            interface: vec![
+                InterfaceRow::new(u32::MAX, a, a, u32::MAX, u32::MAX),
+                InterfaceRow::new(u32::MAX, b, b, u32::MAX, u32::MAX),
+                InterfaceRow::new(u32::MAX, b, a, u32::MAX, u32::MAX),
+            ],
+            certificates: vec![Certificate {
+                endpoints: [a, b],
+                chain: [a, b],
+                origin: a,
+                first: u64::MAX - 1,
+                end: u64::MAX,
+                epsilon: f64::MAX,
+                terminal_lock: false,
+            }],
+            terminal_vertices: vec![a, b],
+            scale: f64::MAX,
+        };
+        let n = serde_json::to_vec(&contract).unwrap().len() as u64;
+        // Includes fixed contract keys too, so this is stricter than the per-ref claim.
+        assert!(n <= bound(1, 0).unwrap() - bound(0, 0).unwrap(), "{n}");
+    }
 
     #[test]
     fn sidecar_ranges_hash_and_exclusive_creation_are_independent_of_stage_lifetime() {

@@ -1,12 +1,12 @@
-//! 0.4 HLOD (decision record `docs/architecture/hlod-040-decision.md`, slice S1): classic
-//! octree HLOD geometry over the frozen ownership tree.
+//! 0.4 HLOD (decision record `docs/architecture/hlod-040-decision.md`, D11/S1b):
+//! classic octree HLOD geometry over the frozen ownership tree.
 //!
-//! Leaves are H8's, unchanged and byte-identical. Every occupied cell above them gets a
-//! parent built from its immediate children by position-welded meshopt simplification to
-//! at most 8,192 triangles, locking only its outer interface with other ownership subtrees
-//! as complete segments at their leaf-canonical decoded positions (D1). By induction every
-//! ancestor keeps the outer segments of its descendants, so disjoint independently refined
-//! tiles agree at every depth mix; the bytes are decoded and checked before publication.
+//! Leaves remain byte-identical. Capped immediate children are reconstructed against
+//! common depth-wise border contracts, then simplified to at most 8,192 triangles.
+//! Source-parameter certificates give identical same-depth edges and mixed-depth gaps
+//! bounded by the coarse geometric error / 8. Terminal leaf contacts remain exact.
+//! Impossible capped parents publish no content and omission propagates to the root;
+//! bounded descendants provide the reported last-resort frontier.
 //!
 //! The stage streams: one spillable incidence pass, then a preorder walk that holds only
 //! the tiles waiting for their parent, admitted against the run's declared memory budget
@@ -90,8 +90,8 @@ const STAGE_RESERVE: u64 = 256 << 20;
 ///
 /// The sum is under 1,570. After meshopt returns (its temporaries and `simplify`'s arrays
 /// freed), keeping faces on their source orientation (`geometry::orient`) holds two face
-/// sets (12-byte entries, under 30 bytes each per merged triangle); a parent kept above the
-/// cap holds and encodes at most its merged triangles in what that freed (`job_charge`).
+/// sets (12-byte entries, under 30 bytes each per merged triangle). Topology and constrained
+/// remeshing run after the simplifier workspace is released; every output remains capped.
 /// Earlier phases (the weld index while merging, the interface rows while merging them,
 /// the representative tables) peak lower. Measured on adversarial jobs by
 /// `parent_jobs_allocate_within_their_charge` (a counting allocator, meshoptimizer routed
@@ -1319,11 +1319,7 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
             .fold(0., f64::max),
         topology: built.topology,
         topology_error_floor: built.topology_floor,
-        terminal_locks: contract
-            .certificates
-            .iter()
-            .filter(|c| c.terminal_lock)
-            .count() as u64,
+        terminal_locks: contract.terminal_locks(),
         audit_record: None,
     };
     let mut geometry = built.geometry;
@@ -1618,6 +1614,10 @@ fn walk(
             timings.sample += timing.sample;
             timings.encode += timing.encode;
             ready.insert(id, geometry.map(store::spill::Held::Resident));
+            #[cfg(test)]
+            if settings.mutation == Mutation::ForceSpill {
+                while spill.borrow_mut().spill_one(ready)? {}
+            }
             finished_rows.insert(seq, row);
             spawn(pending, ready, inflight)
         };
@@ -1712,11 +1712,7 @@ fn walk(
                     .iter()
                     .map(|c| c.epsilon)
                     .fold(0., f64::max);
-                row.terminal_locks = contract
-                    .certificates
-                    .iter()
-                    .filter(|c| c.terminal_lock)
-                    .count() as u64;
+                row.terminal_locks = contract.terminal_locks();
                 if let Some(audit) = audit {
                     row.audit_record = Some(audit.tile(&row, &contract)?);
                 }
@@ -1878,6 +1874,10 @@ fn walk(
                         kinds.insert(id, Child::Leaf);
                         adopt(parent, id, &kinds, &mut publish);
                         ready.insert(id, Some(store::spill::Held::Resident(tile)));
+                        #[cfg(test)]
+                        if settings.mutation == Mutation::ForceSpill {
+                            while spill.borrow_mut().spill_one(&mut ready)? {}
+                        }
                     }
                     None => {
                         return Err(state(

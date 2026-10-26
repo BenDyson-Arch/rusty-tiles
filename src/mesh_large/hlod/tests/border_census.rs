@@ -99,6 +99,23 @@ pub(super) fn check(
         .filter(|r| r["kind"] == "tile")
         .map(|r| (r["tile"]["uri"].as_str().unwrap().to_owned(), r))
         .collect();
+    let mut source_directions: HashMap<Edge, BTreeMap<usize, u8>> = HashMap::new();
+    for t in tiles.iter().filter(|t| t.leaf) {
+        for f in &t.faces {
+            if f[0] == f[1] || f[1] == f[2] || f[0] == f[2] {
+                continue;
+            }
+            for i in 0..3 {
+                let (a, b) = (f[i], f[(i + 1) % 3]);
+                *source_directions
+                    .entry(seg(a, b))
+                    .or_default()
+                    .entry(t.begin)
+                    .or_default() |= if a < b { 1 } else { 2 };
+            }
+        }
+    }
+    let reverse = |mask: u8| ((mask & 1) << 1) | ((mask & 2) >> 1);
     let mut graphs = HashMap::new();
     let mut coverage: Vec<HashMap<Edge, [Q; 2]>> = Vec::new();
     let mut vertices: Vec<HashMap<Point, Q>> = Vec::new();
@@ -112,11 +129,16 @@ pub(super) fn check(
             l.iter().any(|x| (t.begin..t.end).contains(x))
                 && l.iter().any(|x| !(t.begin..t.end).contains(x))
         };
-        let actual: HashSet<Edge> = t
-            .faces
-            .iter()
-            .flat_map(|f| (0..3).map(move |i| seg(f[i], f[(i + 1) % 3])))
-            .collect();
+        let mut actual: HashMap<Edge, u8> = HashMap::new();
+        for f in &t.faces {
+            if f[0] == f[1] || f[1] == f[2] || f[0] == f[2] {
+                continue;
+            }
+            for i in 0..3 {
+                let (a, b) = (f[i], f[(i + 1) % 3]);
+                *actual.entry(seg(a, b)).or_default() |= if a < b { 1 } else { 2 };
+            }
+        }
         let actual_points: HashSet<Point> = t.faces.iter().flatten().copied().collect();
         let mut covered = HashMap::new();
         let mut mapped = HashMap::new();
@@ -189,7 +211,7 @@ pub(super) fn check(
                     (chain[first], chain[end]),
                     "wrong source endpoint IDs"
                 );
-                if !actual.contains(&seg(a, b)) {
+                if !actual.contains_key(&seg(a, b)) {
                     c.missing_segments += 1;
                 }
                 let epsilon = cert["epsilon"].as_f64().unwrap();
@@ -206,8 +228,20 @@ pub(super) fn check(
                     }
                     at_values.push(value);
                 }
+                let delivered = actual.get(&seg(a, b)).copied().unwrap_or(0);
+                let delivered = if a < b { delivered } else { reverse(delivered) };
+                let mut wrong_winding = false;
                 for i in first..end {
                     let e = seg(chain[i], chain[i + 1]);
+                    let allowed = source_directions[&e]
+                        .range(t.begin..t.end)
+                        .fold(0, |mask, (_, direction)| mask | direction);
+                    let allowed = if chain[i] < chain[i + 1] {
+                        allowed
+                    } else {
+                        reverse(allowed)
+                    };
+                    wrong_winding |= delivered & !allowed != 0;
                     assert!(
                         crosses(&edges[&e]),
                         "certificate claims another tile's source edge"
@@ -225,6 +259,7 @@ pub(super) fn check(
                         assert_eq!(v, [q(e.0), q(e.1)], "terminal leaf arc moved");
                     }
                 }
+                c.certificate_winding_failures += usize::from(wrong_winding);
             }
             for (&p, l) in points {
                 if crosses(l) && (graph.live.contains(&p) || !graph.adjacent.contains_key(&p)) {
