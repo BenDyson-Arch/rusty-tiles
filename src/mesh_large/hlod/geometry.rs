@@ -2,6 +2,7 @@
 //! Boundary reconstruction precedes meshopt reduction. Stalled interiors get bounded
 //! topology cleanup and remeshing; only the reported capped frontier remains afterwards.
 mod constrained;
+pub(crate) mod folds;
 pub(crate) mod locations;
 pub(crate) mod measurement;
 mod topology;
@@ -210,35 +211,6 @@ fn oriented(t: &[u32; 3]) -> [u32; 3] {
     let k = (0..3).min_by_key(|&k| t[k]).unwrap();
     [t[k], t[(k + 1) % 3], t[(k + 2) % 3]]
 }
-fn reversed(t: &[u32; 3]) -> [u32; 3] {
-    oriented(&[t[0], t[2], t[1]])
-}
-
-/// Keep every output face on its source orientation. Collapsing an edge across a fold (two
-/// sheets of the surface back to back) can land a face exactly on an opposite-facing input
-/// face: its own normal did not flip (meshopt's check), but it now duplicates that face's
-/// corners in reverse. Such a face, the exact reverse of an input face and not itself one,
-/// is dropped where its source-facing twin is in the output (the same corners, edges and
-/// area remain) and turned to the source's orientation otherwise. Returns the faces fixed.
-fn orient(faces: &[[u32; 3]], output: &mut Vec<[u32; 3]>) -> u32 {
-    let input: HashSet<[u32; 3]> = faces.iter().map(oriented).collect();
-    let present: HashSet<[u32; 3]> = output.iter().map(oriented).collect();
-    let mut fixed = 0;
-    output.retain_mut(|t| {
-        let degenerate = t[0] == t[1] || t[1] == t[2] || t[0] == t[2];
-        if degenerate || input.contains(&oriented(t)) || !input.contains(&reversed(t)) {
-            return true;
-        }
-        fixed += 1;
-        if present.contains(&reversed(t)) {
-            return false;
-        }
-        t.swap(1, 2);
-        true
-    });
-    fixed
-}
-
 /// Reconstruct the common contracted boundary before ordinary reduction. Only capped
 /// immediate children enter this job. After a stalled reduction, explicitly remesh the
 /// interior; omission is the reported last resort and propagates upwards in the walk.
@@ -253,7 +225,6 @@ pub(crate) fn build_parent(
 ) -> Result<Outcome, JobError> {
     check()?;
     let mut merged = merge(children);
-    let original_faces = merged.triangles.clone();
     let reference = merged.clone();
     if merged.triangles.is_empty() {
         return Err(state(format!(
@@ -295,6 +266,7 @@ pub(crate) fn build_parent(
             });
         }
     }
+    let contracted_faces = merged.triangles.clone();
     if caps.is_empty() {
         return Err(state("a parent build needs at least one cap"));
     }
@@ -311,8 +283,8 @@ pub(crate) fn build_parent(
                 interface,
                 cap,
                 children_error,
-                &original_faces,
                 &reference,
+                &contracted_faces,
                 floor,
                 preserve_holes,
                 &mut opening_pins,
@@ -348,8 +320,8 @@ pub(crate) fn build_parent(
                 interface,
                 *caps.last().unwrap(),
                 children_error,
-                &original_faces,
                 &reference,
+                &contracted_faces,
                 floor,
                 preserve_holes,
                 &mut opening_pins,
@@ -387,8 +359,8 @@ fn assessed_attempt(
     interface: &[InterfaceRow],
     cap: usize,
     children_error: f64,
-    original_faces: &[[u32; 3]],
     reference: &Merged,
+    contracted_faces: &[[u32; 3]],
     floor: f64,
     preserve_holes: bool,
     opening_pins: &mut HashSet<Key>,
@@ -404,8 +376,8 @@ fn assessed_attempt(
             interface,
             cap,
             children_error,
-            original_faces,
             reference,
+            contracted_faces,
             floor,
             preserve_holes,
             opening_pins,
@@ -456,8 +428,8 @@ fn attempt(
     interface: &[InterfaceRow],
     cap: usize,
     children_error: f64,
-    original_faces: &[[u32; 3]],
     reference: &Merged,
+    contracted_faces: &[[u32; 3]],
     floor: f64,
     preserve_holes: bool,
     opening_pins: &HashSet<Key>,
@@ -494,7 +466,6 @@ fn attempt(
     let input = merged.triangles.len();
     let mut protected = vec![false; input];
     let mut retries = 0;
-    let mut reoriented = 0;
     let degenerate_only = merged
         .triangles
         .iter()
@@ -510,10 +481,11 @@ fn attempt(
     } else {
         let (mut output, mut error) =
             simplify(merged, &merged.triangles, &|v| locked[v as usize], cap);
-        reoriented = orient(original_faces, &mut output);
         loop {
             let (edges, points) = missing(&output, &merged.keys, &segments, &vertices);
-            if edges.is_empty() && points.is_empty() {
+            let invalid = folds::Source::new(&merged.positions, contracted_faces)
+                .violations(&merged.positions, &output);
+            if edges.is_empty() && points.is_empty() && !invalid.iter().any(|v| *v) {
                 break;
             }
             if retries == RETRIES {
@@ -521,7 +493,7 @@ fn attempt(
                     JobErrorKind::Unsupported,
                     format!(
                         "coarse tile f{}-d{}: simplification still drops {} interface segments \
-                         and {} interface vertices after {RETRIES} protected retries \
+                         and {} interface vertices, or introduces a fold, after {RETRIES} protected retries \
                          ({input} input triangles, {} protected, cap {cap})",
                         tile.first,
                         tile.depth,
@@ -539,6 +511,9 @@ fn attempt(
                 if (0..3)
                     .any(|k| edges.contains(&edge(o[k], o[(k + 1) % 3])) || points.contains(&o[k]))
                 {
+                    protected[i] = true;
+                }
+                if t.iter().any(|&v| invalid[v as usize]) {
                     protected[i] = true;
                 }
             }
@@ -569,7 +544,6 @@ fn attempt(
             };
             reduced.extend(keep);
             output = reduced;
-            reoriented = orient(original_faces, &mut output);
             error = e;
         }
         if output.len() > cap {
@@ -591,8 +565,16 @@ fn attempt(
             (output, error, StoppingBound::TriangleBudget)
         }
     };
-    if matches!(stopping, StoppingBound::Input) {
-        reoriented += orient(original_faces, &mut output);
+    if matches!(stopping, StoppingBound::Input)
+        && folds::Source::new(&merged.positions, contracted_faces)
+            .violations(&merged.positions, &output)
+            .iter()
+            .any(|v| *v)
+    {
+        return Err(JobError::new(
+            JobErrorKind::Unsupported,
+            "remeshing introduces coincident or folded faces",
+        ));
     }
     if output.is_empty() {
         return Err(JobError::new(
@@ -609,15 +591,22 @@ fn attempt(
         // adjacent faces to retriangulate. Retaining the entire incident face ring wastes
         // interior triangles and can increase measured G even when the cap still fits.
         let (boundary, _) = topology::protected(merged, interface, preserve_holes);
-        let (mut reduced, e) = simplify(
+        let (reduced, e) = simplify(
             merged,
             &merged.triangles,
             &|v| boundary[v as usize] || locked[v as usize],
             cap,
         );
-        reoriented += orient(original_faces, &mut reduced);
         let lost = missing(&reduced, &merged.keys, &segments, &vertices);
-        if !reduced.is_empty() && reduced.len() <= cap && lost.0.is_empty() && lost.1.is_empty() {
+        if !reduced.is_empty()
+            && reduced.len() <= cap
+            && lost.0.is_empty()
+            && lost.1.is_empty()
+            && !folds::Source::new(&merged.positions, contracted_faces)
+                .violations(&merged.positions, &reduced)
+                .iter()
+                .any(|v| *v)
+        {
             topology_change = topology::changes(reference, &reduced, interface, floor);
             if topology_change.is_some() {
                 output = reduced;
@@ -681,7 +670,7 @@ fn attempt(
         retries,
         interface_vertices: vertices.len() as u32,
         interface_segments: segments.len() as u32,
-        reoriented,
+        reoriented: 0,
         topology: change.receipt,
         change,
         controls: Default::default(),
@@ -766,31 +755,88 @@ mod tests {
         assert!(built.topology.contracted_vertices > 0);
     }
 
-    fn merged(triangles: Vec<[u32; 3]>) -> Merged {
-        Merged {
-            keys: Vec::new(),
-            ells: Vec::new(),
-            positions: Vec::new(),
-            triangles,
-            representative: Vec::new(),
-        }
-    }
-
-    /// S5 round 5: a face collapsed onto an opposite-facing input face is dropped beside its
-    /// source-facing twin, turned where it stands alone, and left alone where the input holds
-    /// both orientations (back-to-back coincident sheets) or it reverses no input face.
     #[test]
-    fn simplified_faces_keep_their_source_orientation() {
-        let input = merged(vec![[0, 1, 2], [2, 1, 3]]);
-        let mut beside = vec![[1, 2, 0], [0, 2, 1], [1, 3, 4]];
-        assert_eq!(orient(&input.triangles, &mut beside), 1);
-        assert_eq!(beside, vec![[1, 2, 0], [1, 3, 4]]);
-        let mut alone = vec![[2, 1, 0], [1, 3, 4]];
-        assert_eq!(orient(&input.triangles, &mut alone), 1);
-        assert_eq!(alone, vec![[2, 0, 1], [1, 3, 4]]);
-        let both = merged(vec![[0, 1, 2], [0, 2, 1]]);
-        let mut kept = vec![[0, 2, 1], [1, 2, 0]];
-        assert_eq!(orient(&both.triangles, &mut kept), 0);
-        assert_eq!(kept, vec![[0, 2, 1], [1, 2, 0]]);
+    fn thin_tetrahedron_collapse_retries_instead_of_publishing_fresh_twins() {
+        let positions = vec![
+            [0., 0., 0.],
+            [1., 0., 0.],
+            [0., 1., 0.],
+            [0.25, 0.25, 0.01],
+            [1. / 3., 1. / 3., 0.],
+        ];
+        let triangles = vec![
+            [0, 1, 4],
+            [1, 2, 4],
+            [2, 0, 4],
+            [0, 3, 1],
+            [1, 3, 2],
+            [2, 3, 0],
+        ];
+        let merged = Merged {
+            keys: positions.iter().copied().map(key).collect(),
+            ells: vec![0; positions.len()],
+            positions,
+            representative: Vec::new(),
+            triangles,
+        };
+        let source = folds::Source::new(&merged.positions, &merged.triangles);
+        let (raw, _) = simplify(&merged, &merged.triangles, &|v| v < 3, 2);
+        assert!(
+            source
+                .violations(&merged.positions, &raw)
+                .iter()
+                .any(|v| *v),
+            "{raw:?}"
+        );
+        let interface = (0..3)
+            .map(|v| InterfaceRow::new(0, merged.keys[v], merged.keys[v], 0, 1))
+            .collect::<Vec<_>>();
+        let mut merged = merged;
+        merged.representative.resize(
+            merged.triangles.len(),
+            SourcePrimitive {
+                node: 0,
+                mesh: 0,
+                primitive: 0,
+                expanded_ordinal: 0,
+                material: u32::MAX,
+            },
+        );
+        let tile = TileKey {
+            first: 0,
+            end: 6,
+            depth: 0,
+            leaf_begin: 0,
+            leaf_end: 1,
+        };
+        let pins = HashSet::default();
+        assert!(attempt(
+            tile,
+            &merged,
+            &interface,
+            2,
+            0.,
+            &merged,
+            &merged.triangles,
+            1.,
+            false,
+            &pins
+        )
+        .is_err());
+        let built = attempt(
+            tile,
+            &merged,
+            &interface,
+            6,
+            0.,
+            &merged,
+            &merged.triangles,
+            1.,
+            false,
+            &pins,
+        )
+        .unwrap();
+        assert_eq!(built.geometry.triangles.len(), 6);
+        assert_eq!(built.reoriented, 0);
     }
 }

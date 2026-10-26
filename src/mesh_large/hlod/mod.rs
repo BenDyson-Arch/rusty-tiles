@@ -90,11 +90,13 @@ const STAGE_RESERVE: u64 = 256 << 20;
 ///   quadric (44), collapse remap and lock), per index 24 (adjacency edge, collapse, order),
 ///   so 372.
 ///
-/// These simplifier terms sum to under 1,570. The pre-contraction face list adds 12
+/// These simplifier terms sum to under 1,570. The contracted face list adds 12
 /// bytes per triangle and the exact-capacity reference clone adds at most 111, still
 /// below 1,700. After meshopt returns (its temporaries and `simplify`'s arrays
-/// freed), keeping faces on their source orientation (`geometry::orient`) holds two face
-/// sets (12-byte entries, under 30 bytes each per merged triangle). Topology and constrained
+/// freed), fold rejection holds source face/edge counts (under 330 bytes per triangle),
+/// a sorted incidence array (168), and face flags. Its smaller face-group array is
+/// freed before incidence allocation; all these tables are released before the next
+/// meshopt call. This phase remains below the simplifier peak. Topology and constrained
 /// remeshing run after the simplifier workspace is released; every output remains capped.
 /// Earlier phases (the weld index while merging, the interface rows while merging them,
 /// the representative tables) peak lower. Measured on adversarial jobs by
@@ -1154,12 +1156,34 @@ fn prepare(
         .zip(&border)
         .map(|(l, b)| *l || *b)
         .collect();
-    let positions = captured.lattice.encode_coarse(
+    let mut positions = captured.lattice.encode_coarse(
         &built.geometry.positions,
         &built.geometry.ells,
         &fixed,
         built.geometry.key.depth,
     )?;
+    // Coarse snapping can collapse an otherwise valid thin surface onto itself.
+    // Preserve its existing canonical points in that case; do not delete a twin
+    // after decoding or hide the resulting fold by changing winding.
+    if !geometry::folds::decode_valid(
+        &built.geometry.positions,
+        &positions.decoded,
+        &built.geometry.triangles,
+    ) {
+        positions = captured.lattice.encode_coarse(
+            &built.geometry.positions,
+            &built.geometry.ells,
+            &vec![true; fixed.len()],
+            built.geometry.key.depth,
+        )?;
+        if !geometry::folds::decode_valid(
+            &built.geometry.positions,
+            &positions.decoded,
+            &built.geometry.triangles,
+        ) {
+            return Ok(None);
+        }
+    }
     let Some(controls) = geometry::measurement::assess(
         &mut built.change,
         &positions.decoded,

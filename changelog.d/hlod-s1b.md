@@ -20,3 +20,6 @@
   their interior ring, and count directed seam incidences against source subarcs.
 - Bound chord emission work by distinct owners, and add operation locations to
   the optional external audit sidecar.
+- Reject simplification proposals that introduce coincident faces or overlapping
+  edge fans, retain local face rings on retry, and preserve canonical geometry
+  when coarse encoding would invert or collapse faces.

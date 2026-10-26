@@ -245,6 +245,8 @@ pub(super) fn contract(
         && lost.0.is_empty()
         && lost.1.is_empty()
         && mapped_incidence(m, &map)
+        && super::folds::Source::new(&m.positions, &m.triangles)
+            .preserves_faces(&m.positions, &output)
     {
         m.triangles = output;
         m.representative = representatives;
