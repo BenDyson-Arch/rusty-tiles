@@ -495,6 +495,10 @@ struct Census {
     certificate_failures: usize,
     certificate_winding_failures: usize,
     unsupported_same_direction_edges: usize,
+    coincident_coarse_face_groups: usize,
+    duplicate_coarse_faces: usize,
+    reversed_twin_face_groups: usize,
+    unsupported_coincident_face_groups: usize,
     max_same_depth_gap_m: f64,
     max_mixed_depth_gap_m: f64,
     missing_segments: usize,
@@ -1215,6 +1219,10 @@ fn accept_with(name: &str, source: &[Mesh], run: Run, defects: bool) -> (Census,
         census.unsupported_same_direction_edges, 0,
         "{name}: {census:?}"
     );
+    assert_eq!(
+        census.unsupported_coincident_face_groups, 0,
+        "{name}: {census:?}"
+    );
     assert!(census.max_coarse_triangles <= run.cap, "{name}: {census:?}");
     assert!(
         census.mixed_pairs > 0 && census.same_depth_pairs > 0,
@@ -1569,7 +1577,7 @@ fn random_chords_cost_linear_work_and_never_refuse() {
     let manifest = |dir: &Path| -> Value {
         serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap()
     };
-    let (m1, m4) = (manifest(&one), manifest(&four));
+    let m1 = manifest(&one);
     let incidence = &m1["hlod"]["incidence"];
     eprintln!("CHORDS {incidence}");
     let triangles = 2 * 128 * 64 * 2 + 2048;
@@ -1581,7 +1589,7 @@ fn random_chords_cost_linear_work_and_never_refuse() {
         incidence["rows"].as_u64().unwrap() <= incidence["items"].as_u64().unwrap(),
         "{incidence}"
     );
-    assert_eq!(m1["hlod"], m4["hlod"]);
+    assert_eq!(audit_semantics(&one), audit_semantics(&four));
     assert_eq!(published(&one), published(&four));
     let census = census(&one);
     assert_eq!(
@@ -3268,6 +3276,10 @@ fn evidence_census() {
         "certificateFailures": census.certificate_failures,
         "certificateWindingFailures": census.certificate_winding_failures,
         "unsupportedSameDirectionEdges": census.unsupported_same_direction_edges,
+        "coincidentCoarseFaceGroups": census.coincident_coarse_face_groups,
+        "duplicateCoarseFaces": census.duplicate_coarse_faces,
+        "reversedTwinFaceGroups": census.reversed_twin_face_groups,
+        "unsupportedCoincidentFaceGroups": census.unsupported_coincident_face_groups,
         "maxSameDepthGapM": census.max_same_depth_gap_m,
         "maxMixedDepthGapM": census.max_mixed_depth_gap_m,
         "missingSegments": census.missing_segments, "missingPoints": census.missing_vertices,
@@ -3300,6 +3312,7 @@ fn evidence_census() {
     assert_eq!(census.max_same_depth_gap_m, 0.);
     assert_eq!(census.certificate_winding_failures, 0);
     assert_eq!(census.unsupported_same_direction_edges, 0);
+    assert_eq!(census.unsupported_coincident_face_groups, 0);
     // Exact seams: source T-junctions and unwelded seams are reported (the census's
     // overlap and perpendicular counts above, the manifest's source-defect counts), not
     // asserted; omitted coarse tiles are reported by `omittedProxies`.
@@ -4366,6 +4379,10 @@ fn contracted_borders_do_not_fold_collinear_book_or_sheet_surfaces() {
         let census = census(&dir);
         eprintln!("R1 {name}: {census:?}");
         assert!(census.coarse >= 3);
+        assert_eq!(
+            census.unsupported_coincident_face_groups, 0,
+            "{name}: {census:?}"
+        );
         assert_eq!(
             census.unsupported_same_direction_edges, 0,
             "{name}: {census:?}"

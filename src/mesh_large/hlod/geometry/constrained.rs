@@ -324,6 +324,10 @@ fn triangulate(
     }
     let mut receipt = change.receipt;
     receipt.constrained_remeshes = count;
+    if !super::folds::Source::new(&m.positions, &m.triangles).preserves_faces(&m.positions, &output)
+    {
+        return None;
+    }
     m.triangles = output;
     m.representative = representatives;
     Some(receipt)
