@@ -3,12 +3,12 @@
 - `mesh`: each leaf and coarse tile now publishes one glTF primitive (node, mesh,
   material and texture page set) per material class, instead of one per source
   primitive. Source materials with equal factors, alpha mode, sidedness, bound
-  slots and source filters merge, even when they read different images. Proxy
+  slots and source filters merge, even when they read different images. Coarse
   pages are packed per material class, and MASK leaf pages of one class share a
   page. A primitive still splits for a different vertex attribute set, or for a
   position window that `UNSIGNED_SHORT` cannot hold. Decoded positions and
-  every triangle's `source_primitive`/`source_triangle`/`proxy_source` feature
-  IDs are unchanged. On a 0.79M-triangle photogrammetry crop, glTF primitives
+  every leaf triangle's `source_primitive`/`source_triangle` feature IDs are
+  unchanged. On a 0.79M-triangle photogrammetry crop, glTF primitives
   fall from 1,439 to 156 over the leaves and from 1,124 to 109 over the coarse
   tiles (the root from 58 primitives and 110 textures to 3 and 1). A mipmapped
   source sampler (also the default without a sampler) still keeps one leaf page,

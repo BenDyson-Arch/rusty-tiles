@@ -188,9 +188,11 @@ struct TilerArgs {
     /// Owned working-data parent; publication staging remains beside the output
     #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
     scratch_dir: Option<PathBuf>,
-    /// Declared memory budget: bytes, or with a KiB/MiB/GiB/TiB suffix
+    /// Declared memory budget: bytes, or with a KiB/MiB/GiB/TiB suffix (2GiB). A ceiling for
+    /// every stage, never raised; a run that cannot fit is refused. Default: the lesser of
+    /// 4 GiB and half the detected headroom
     #[arg(long = "memory-budget", visible_alias = "memoryBudget", value_name = "BYTES",
-          value_parser = parse_memory_budget, hide = true)]
+          value_parser = parse_memory_budget)]
     memory_budget: Option<u64>,
     #[command(flatten)]
     placement: RigidPlacementArgs,

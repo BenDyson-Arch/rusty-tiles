@@ -31,7 +31,7 @@ Python wheels contain the standard conversion APIs; there is no native-geospatia
 
 | Your data | Command | Output | Needs `native-geospatial` |
 | --- | --- | --- | --- |
-| Static textured GLB or glTF meshes, in local metres or a declared source CRS | `mesh` | Streamed 3D Tiles 1.1 implicit tileset with certified coarse levels, as `.3tz` | Only for CRS operations outside the grid-free tier |
+| Static textured GLB or glTF meshes, in local metres or a declared source CRS | `mesh` | Streamed 3D Tiles 1.1 implicit tileset with exact leaves and coarse levels, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | LAS or LAZ point clouds | `point-cloud` | 3D Tiles with sampled parents and full-detail leaves, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | GeoPackage or GeoJSON | `vector` | Experimental glTF vector tiles, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | Shapefile or other OGR vector formats | `vector` | Experimental glTF vector tiles, as `.3tz` | Yes |

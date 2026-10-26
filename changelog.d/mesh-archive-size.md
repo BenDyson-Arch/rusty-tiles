@@ -2,7 +2,7 @@
 
 - Mesh tiler (`rusty-tiles mesh` / `mesh_to_tileset`): archives are about 2.5x
   smaller (pohnpei, 24.4M triangles: 2.90 GB to 1.14 GB; 119 to 47 bytes per
-  source triangle). The per-triangle provenance tables of leaves and proxies are
+  source triangle). The per-triangle provenance tables of leaves and coarse tiles are
   losslessly meshopt-compressed (`EXT_meshopt_compression`, ATTRIBUTES/NONE); their
   schema, column types and decoded values are unchanged. Leaf normals in `fast`,
   `balanced` and `quality` are 12-bit octahedral codes behind the meshopt

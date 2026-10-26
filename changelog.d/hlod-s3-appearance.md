@@ -1,6 +1,6 @@
 ### Changed
 
-- `mesh --lod hlod`: coarse tiles are textured (slice S3 of the HLOD decision).
+- `mesh`: coarse tiles are textured (slice S3 of the HLOD decision).
   Each material class of a coarse tile gets fresh planar charts, each turned to its
   minimum-area rectangle, with small charts merged into their neighbours. The charts
   are packed into one block-aligned page sized to its content: multiples of four from
