@@ -93,10 +93,10 @@ def source_incidence(groups):
         sourceOpenEdgesWithSharedEndpoints=sum(all(points[p]-owners[edge] for p in edge) for edge in opened))
 
 
-def tile(uri=None,children=None):
-    result=dict(boundingVolume={'box':[20000,0,0,40000,0,0,0,40000,0,0,0,40000]},geometricError=0,refine='REPLACE')
+def tile(uri=None,children=None,box=(20000,40000)):
+    result=dict(boundingVolume={'box':[box[0],0,0,box[1],0,0,0,box[1],0,0,0,box[1]]},geometricError=0,refine='REPLACE')
     if uri:result['content']={'uri':uri}
-    if children:result['children']=children
+    if children:result['children']=[dict(c,boundingVolume=result['boundingVolume']) for c in children]
     return result
 
 
@@ -128,6 +128,25 @@ def generate(root):
             for i,triangle in enumerate(original)}},separators=(',',':'))+'\n')
         cases.append(dict(name=name,oracleCheck=check,archiveCheck=check,
             source=source.name,incidence=source_incidence([left,right])))
+    # R12 P3 witness: a book spine with two forward and one reverse source face;
+    # the coarse pair [A,B,C],[A,B,E] is forward twice, so native multiplicity
+    # admits it, yet [A,B,E] reverses source [B,A,E]. Native validation does not
+    # prove coarse orientation away from required interfaces; the oracle's exact
+    # coincident-face guard must refuse it.
+    name='book-reversed-face';folder=root/name;folder.mkdir(exist_ok=True)
+    left,right=[[A,B,C],[A,B,D]],[[B,A,E]]
+    (folder/'coarse.glb').write_bytes(payload([[A,B,C],[A,B,E]],leaf=False))
+    (folder/'left.glb').write_bytes(payload(left,leaf=True))
+    (folder/'right.glb').write_bytes(payload(right,leaf=True,first=2))
+    (folder/'tileset.json').write_text(json.dumps(dict(asset={'version':'1.1'},geometricError=0,
+        root=tile('coarse.glb',[tile('left.glb'),tile('right.glb')])),separators=(',',':')))
+    source=root/(name+'-source.json')
+    source.write_text(json.dumps({'triangles':{f'0,0,0,{i}':dict(xyz=triangle,
+        vertices=[i*3+k for k in range(3)],expanded_ordinal=0,material_index=0,
+        material=controls.MATERIALS[0],normals=controls.NORMALS,uvs=controls.UVS)
+        for i,triangle in enumerate(left+right)}},separators=(',',':'))+'\n')
+    cases.append(dict(name=name,oracleCheck='interfaceWinding',archiveCheck=None,
+        source=source.name,incidence=source_incidence([left,right])))
     # D1's hard cap is per payload, leaf or coarse: 8,192 is admitted, 8,193
     # refused. Distinct separated triangles keep nearest-reference work bounded
     # by the R-tree rather than an 8,193-by-8,193 coincident query product.
@@ -149,24 +168,39 @@ def generate(root):
             incidence=source_incidence([original[:split],original[split:]]))
         if check is None:case['coarseTriangles']=coarse
         cases.append(case)
-    # D4 ties: leaf A holds T (primitive 0), leaf B holds T lifted by delta
-    # (primitive 1); the coarse face T names primitive 1, the later source order.
-    # Within tau = 16 ulps of the coordinate scale it is a tie; beyond, refused.
-    for name,delta,check in (('tie-exact-later-primitive',0.0,None),
-            ('tie-within-tau',2.0**-50,None),('near-tie-beyond-tau',2.0**-20,'representativeIdentity')):
+    # D4 ties: leaf A holds T (primitive 0), leaf B holds a second triangle
+    # (primitive 1); the coarse face is T and names `named`. Within tau of the
+    # exact minimum it is a tie; beyond, refused. The r12 slivers (w = 2^-14 over
+    # 8,192 m, locally and at an ECEF x offset) have a float Gram determinant of
+    # zero: exact distances keep T's interior, so naming the lifted wide face
+    # fails and naming T beside a coplanar wide face passes.
+    t=[[0,0,0],[2,0,0],[0,2,0]];w=2.0**-14
+    def sliver(offset):
+        thin=[[offset,0,0],[offset+8192,0,0],[offset+8192,w,0]]
+        wide=[[offset,0,0],[offset+8192,0,0],[offset,4*w,0]]
+        return thin,wide,[[x,y,z+w/8] for x,y,z in wide]
+    local,ecef=sliver(0.0),sliver(6400000.0)
+    big=(50000000,100000000)
+    for name,first,second,named,check,box in (
+            ('tie-exact-later-primitive',t,t,1,None,(20000,40000)),
+            ('tie-within-tau',t,[[x,y,z+2.0**-50] for x,y,z in t],1,None,(20000,40000)),
+            ('near-tie-beyond-tau',t,[[x,y,z+2.0**-20] for x,y,z in t],1,'representativeIdentity',(20000,40000)),
+            ('local-sliver-wrong',local[0],local[2],1,'representativeIdentity',big),
+            ('local-sliver-correct',local[0],local[1],0,None,big),
+            ('ecef-sliver-wrong',ecef[0],ecef[2],1,'representativeIdentity',big),
+            ('ecef-sliver-correct',ecef[0],ecef[1],0,None,big)):
         folder=root/name;folder.mkdir(exist_ok=True)
-        t=[[0,0,0],[2,0,0],[0,2,0]];lifted=[[x,y,z+delta] for x,y,z in t]
-        (folder/'coarse.glb').write_bytes(payload([t],leaf=False,primitive=1))
-        (folder/'left.glb').write_bytes(payload([t],leaf=True))
-        (folder/'right.glb').write_bytes(payload([lifted],leaf=True,primitive=1))
+        (folder/'coarse.glb').write_bytes(payload([first],leaf=False,primitive=named))
+        (folder/'left.glb').write_bytes(payload([first],leaf=True))
+        (folder/'right.glb').write_bytes(payload([second],leaf=True,primitive=1))
         (folder/'tileset.json').write_text(json.dumps(dict(asset={'version':'1.1'},geometricError=0,
-            root=tile('coarse.glb',[tile('left.glb'),tile('right.glb')])),separators=(',',':')))
+            root=tile('coarse.glb',[tile('left.glb'),tile('right.glb')],box=box)),separators=(',',':')))
         source=root/(name+'-source.json')
         source.write_text(json.dumps({'triangles':{f'0,0,{p},0':dict(xyz=xyz,vertices=[0,1,2],
             expanded_ordinal=p,material_index=0,material=controls.MATERIALS[0],
-            normals=controls.NORMALS,uvs=controls.UVS) for p,xyz in ((0,t),(1,lifted))}},separators=(',',':'))+'\n')
+            normals=controls.NORMALS,uvs=controls.UVS) for p,xyz in ((0,first),(1,second))}},separators=(',',':'))+'\n')
         cases.append(dict(name=name,oracleCheck=check,archiveCheck=None,source=source.name,
-            incidence=source_incidence([[t],[lifted]])))
+            incidence=source_incidence([[first],[second]])))
     (root/'cases.json').write_text(json.dumps(cases,indent=2)+'\n')
     return cases
 
@@ -195,7 +229,7 @@ def run(root,binary=None):
             archive=folder.with_suffix('.3tz')
             packed=subprocess.run([str(binary),'convert','-i',str(folder),'-o',str(archive),'--force','--json'],capture_output=True,timeout=30)
             assert packed.returncode==0,(case['name'],packed.stdout[-2000:],packed.stderr[-2000:])
-            checked=subprocess.run([str(binary),'validate',str(archive),'--json'],capture_output=True,timeout=30)
+            checked=subprocess.run([str(binary),'validate',str(archive),'--json','--expect-profile','hlod'],capture_output=True,timeout=30)
             report=json.loads(checked.stdout)
             if case['archiveCheck']:
                 assert checked.returncode==3 and case['archiveCheck'] in report['error']['message'],(case['name'],report)
