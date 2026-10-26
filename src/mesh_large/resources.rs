@@ -83,7 +83,7 @@ impl MemoryBudget {
 /// Check an explicit byte budget from any surface: positive. Rust callers hold a `u64`
 /// already; the CLI and Python reach it through [`parse_memory_budget`], so one rule
 /// refuses zero everywhere.
-pub fn validate_memory_budget(bytes: u64) -> Result<u64, JobError> {
+pub(crate) fn validate_memory_budget(bytes: u64) -> Result<u64, JobError> {
     if bytes == 0 {
         return Err(invalid("memory budget must be a positive byte count"));
     }

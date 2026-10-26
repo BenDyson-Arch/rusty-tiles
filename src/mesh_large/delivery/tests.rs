@@ -251,7 +251,10 @@ fn members(path: &Path) -> BTreeMap<String, Vec<u8>> {
 
 /// An independent subtree reader: the available tiles and contents of a one-subtree,
 /// `availableLevels == subtreeLevels` OCTREE subtree, from its bitstreams.
-fn subtree_availability(bytes: &[u8], levels: u32) -> (BTreeSet<[u32; 4]>, BTreeSet<[u32; 4]>) {
+pub(crate) fn subtree_availability(
+    bytes: &[u8],
+    levels: u32,
+) -> (BTreeSet<[u32; 4]>, BTreeSet<[u32; 4]>) {
     assert_eq!(&bytes[..4], b"subt");
     let json_len = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
     let bin_len = u64::from_le_bytes(bytes[16..24].try_into().unwrap()) as usize;
@@ -1133,9 +1136,8 @@ fn untextured(input: &Path) -> PathBuf {
 }
 
 /// Every payload's property tables are within the consumer limit; returns the number of
-/// leaves (two tables: source_primitive and source_triangle). H17 proxies (a
-/// source_primitive table, one proxy_source table when it fits and record tables) are
-/// checked for the limit too but not counted.
+/// leaves (two tables: source_primitive and source_triangle). HLOD coarse tiles (one
+/// representative source_primitive table, D4) are checked for the limit too but not counted.
 fn leaf_tables_within_consumer_limit(archive: &BTreeMap<String, Vec<u8>>) -> usize {
     let mut leaves = 0;
     for (name, bytes) in archive {
@@ -1147,10 +1149,15 @@ fn leaf_tables_within_consumer_limit(archive: &BTreeMap<String, Vec<u8>>) -> usi
         let tables = doc["extensions"]["EXT_structural_metadata"]["propertyTables"]
             .as_array()
             .unwrap();
-        let proxy = tables.iter().any(|t| t["class"] == "proxy_source");
-        if !proxy {
+        let classes: Vec<_> = tables
+            .iter()
+            .map(|t| t["class"].as_str().unwrap())
+            .collect();
+        if classes.contains(&"source_triangle") {
             leaves += 1;
-            assert_eq!(tables.len(), 2, "{name}");
+            assert_eq!(classes, ["source_primitive", "source_triangle"], "{name}");
+        } else {
+            assert_eq!(classes, ["source_primitive"], "{name}");
         }
         for table in tables {
             assert!(table["count"].as_u64().unwrap() <= 8192, "{name}");
@@ -1237,7 +1244,7 @@ fn real_leaves_from_h8_publish_deterministically_and_validate() {
         .any(|c| c == "KTX2 level data and transcoding"));
 }
 
-/// Real H8 leaves (textured: KTX2 leaves and proxies) under the tight partition must come
+/// Real H8 leaves (textured: KTX2 leaves and HLOD coarse tiles) under the tight partition must come
 /// out with implicit roots; the archive validates with decoded containment, and three
 /// corruptions of an implicit root's content or metadata are each refused by the validator
 /// (an error, not a panic): a tile-availability bit cleared on a tile that has content, a
@@ -1289,10 +1296,29 @@ fn real_h8_leaves_under_low_limits_publish_implicit_roots_and_reject_corruption(
         start..start + v["byteLength"].as_u64().unwrap() as usize
     };
     let (available, contents) = subtree_availability(subtree, *levels);
-    // A non-root tile with content, and its bit position in the level-order bitstream.
-    let victim = *contents.iter().find(|t| t[0] == 1).unwrap();
-    assert!(available.contains(&victim));
-    let bit = 1 + (victim[1] | victim[2] << 1 | victim[3] << 2) as usize;
+    // A tile's position in the level-order (Morton within each level) bitstream, which is
+    // also the order of the subtree's property-table rows.
+    let index = |t: &[u32; 4]| -> usize {
+        let morton = (0..t[0]).fold(0usize, |m, bit| {
+            m | (((t[1] >> bit) & 1) as usize) << (3 * bit)
+                | (((t[2] >> bit) & 1) as usize) << (3 * bit + 1)
+                | (((t[3] >> bit) & 1) as usize) << (3 * bit + 2)
+        });
+        ((1usize << (3 * t[0])) - 1) / 7 + morton
+    };
+    // A non-root available tile with an available child (under HLOD it may be a content-less
+    // single-child cell), and a non-root tile with content.
+    let has_child = |t: &[u32; 4]| {
+        available.iter().any(|c| {
+            c[0] == t[0] + 1 && c[1] >> 1 == t[1] && c[2] >> 1 == t[2] && c[3] >> 1 == t[3]
+        })
+    };
+    let victim = *available
+        .iter()
+        .find(|t| t[0] >= 1 && has_child(t))
+        .unwrap();
+    let content = *contents.iter().find(|t| t[0] >= 1).unwrap();
+    let bit = index(&victim);
 
     type Archive = BTreeMap<String, Vec<u8>>;
     let damage = |case: &str, change: &dyn Fn(&mut Archive)| -> String {
@@ -1338,7 +1364,10 @@ fn real_h8_leaves_under_low_limits_publish_implicit_roots_and_reject_corruption(
             .as_u64()
             .unwrap();
         // The victim's box centre x (12 f64 per row, rows in availability order).
-        let row = available.iter().position(|t| *t == victim).unwrap();
+        let row = available
+            .iter()
+            .filter(|t| index(t) < index(&victim))
+            .count();
         let at = view(property).start + row * 96;
         let x = f64::from_le_bytes(bytes[at..at + 8].try_into().unwrap());
         bytes[at..at + 8].copy_from_slice(&(x + 1.0e6).to_le_bytes());
@@ -1346,7 +1375,7 @@ fn real_h8_leaves_under_low_limits_publish_implicit_roots_and_reject_corruption(
     let missing = damage("missing", &|edited| {
         let name = format!(
             "implicit-content/{root_key}-{}-{}-{}-{}.glb",
-            victim[0], victim[1], victim[2], victim[3]
+            content[0], content[1], content[2], content[3]
         );
         edited.remove(&name).unwrap();
     });
@@ -1505,4 +1534,76 @@ fn reviewer_tiler_conversion_member_is_in_early_and_exact_ceiling() {
     .unwrap();
     assert_eq!(admitted.facts().members, exact + 1);
     assert!(!output.exists());
+}
+
+/// Round 4: a chain cell that repeats its coarse payload (here inside an implicit root,
+/// forced by tight caps) holds that payload's bounds, which reach past its children's.
+#[test]
+fn repeated_chain_content_stays_inside_its_tile() {
+    struct Capture(Option<Node>);
+    impl Sink for Capture {
+        fn external(&mut self, _: Node) -> Result<Linked, JobError> {
+            panic!("no external document expected")
+        }
+        fn root(&mut self, node: Node) -> Result<(), JobError> {
+            self.0 = Some(node);
+            Ok(())
+        }
+    }
+    let (fine, coarse) = (3. / 4096., 4. / 4096.);
+    let row = super::source::ProxyRow {
+        uri: "proxies/f0-d0.glb".into(),
+        sha256: [0; 32],
+        bytes: 64,
+        first: 0,
+        end: 2,
+        depth: 0,
+        geometric_error: 1.,
+        primitives: 1,
+        sampling: (0, 0, crate::mesh_large::hlod::error::Schedule::PRODUCTION),
+        encoded_depth: 0,
+    };
+    let payload = Aabb {
+        lo: [-1., -coarse, -1.],
+        hi: [1., coarse, 1.],
+    };
+    let proxies: super::plan::Proxies<'_> = Box::new(std::iter::once(Ok((row, payload))));
+    let mut sink = Capture(None);
+    let tight = Limits {
+        objects: 3,
+        records: 6,
+        levels: 2,
+    };
+    let mut builder = Builder::with_proxies(&mut sink, tight, Some(proxies));
+    for i in 0..2u64 {
+        let mut digits = Digits::ROOT;
+        for d in [0, 0, i as u8] {
+            digits.push(d);
+        }
+        let leaf = LeafRow {
+            uri: format!("leaves/{i:012}.glb"),
+            sha256: [0; 32],
+            bytes: 64,
+            first: i,
+            end: i + 1,
+            digits,
+            last_octant: i as u8,
+            packed: false,
+            synthetic: 0,
+            geometry_error: 0.,
+        };
+        let bounds = Aabb {
+            lo: [-1., -fine, -1.],
+            hi: [1., fine, 1.],
+        };
+        builder.push(leaf, bounds).unwrap();
+    }
+    builder.finish().unwrap();
+    let root = sink.0.unwrap();
+    assert!(root.is_implicit_root());
+    let chain = &root.children[0];
+    assert!(chain.is_chain_cell());
+    for i in 0..3 {
+        assert!(chain.extent.lo[i] <= payload.lo[i] && chain.extent.hi[i] >= payload.hi[i]);
+    }
 }

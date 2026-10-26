@@ -1,7 +1,7 @@
 //! Path-based bindings for the portable default build.
 use pyo3::{
     create_exception,
-    exceptions::{PyBaseException, PyException, PyTypeError},
+    exceptions::{PyBaseException, PyException, PyTypeError, PyValueError},
     prelude::*,
     types::{PyBool, PyDict, PyInt, PyList},
 };
@@ -16,7 +16,7 @@ use tiles_core::{
     vector::{VectorLodOptions, VectorOptions},
     Error, JobError, JobErrorKind, JobFailure, MeshPlacement, MeshSourceCrs, ModelManifestRequest,
     ModelWrapRequest, Observer, OutputPolicy, RunControl, RunEvent, SourceAxes, TilerJobs,
-    TilerLod, TilerProfile, TilerRequest,
+    TilerProfile, TilerRequest,
 };
 
 create_exception!(rusty_tiles, TilesError, PyException);
@@ -343,17 +343,17 @@ fn tiler_jobs(py: Python<'_>, jobs: Option<Bound<'_, PyAny>>) -> PyResult<TilerJ
     Ok(TilerJobs::Maximum(count))
 }
 
-/// The private memory budget: an integer byte count (not a bool), refused as an invalid request
-/// when zero, negative or beyond 2^64 - 1. The value is rendered with the base `int.__repr__`
-/// (never the object's own `__str__`, which an `int` subclass may override) and parsed by the
-/// shared core parser, so the CLI and Python refuse identically.
+/// The memory budget: an integer byte count (not a bool), refused as an invalid request when
+/// zero, negative or beyond 2^64 - 1. The value is rendered with the base `int.__repr__` (never
+/// the object's own `__str__`, which an `int` subclass may override) and parsed by the shared
+/// core parser, so the CLI and Python refuse identically.
 fn tiler_memory_budget(py: Python<'_>, budget: Option<Bound<'_, PyAny>>) -> PyResult<Option<u64>> {
     let Some(budget) = budget else {
         return Ok(None);
     };
     if budget.is_instance_of::<PyBool>() || !budget.is_instance_of::<PyInt>() {
         return Err(PyTypeError::new_err(
-            "_memory_budget_bytes must be an integer byte count or None",
+            "memory_budget_bytes must be an integer byte count or None",
         ));
     }
     let text = py
@@ -368,38 +368,12 @@ fn tiler_memory_budget(py: Python<'_>, budget: Option<Bound<'_, PyAny>>) -> PyRe
         .map_err(|error| tiler_request_error(py, error))
 }
 
-/// The private options of `mesh_to_tileset`, taken through `**kwargs` so that they appear in
-/// neither `help()` nor `inspect.signature()`: `_lod` (the coarse-tile method) and
-/// `_memory_budget_bytes`. Any other keyword is the usual `TypeError`.
-fn private_options<'py>(
-    kwargs: Option<&Bound<'py, PyDict>>,
-) -> PyResult<(Option<String>, Option<Bound<'py, PyAny>>)> {
-    let (mut lod, mut budget) = (None, None);
-    for (key, value) in kwargs.into_iter().flat_map(|kwargs| kwargs.iter()) {
-        match key.extract::<String>()?.as_str() {
-            "_lod" if value.is_none() => {}
-            "_lod" => {
-                lod = Some(value.extract::<String>().map_err(|_| {
-                    PyTypeError::new_err("_lod must be a string or None")
-                })?)
-            }
-            "_memory_budget_bytes" if value.is_none() => {}
-            "_memory_budget_bytes" => budget = Some(value),
-            other => {
-                return Err(PyTypeError::new_err(format!(
-                    "mesh_to_tileset() got an unexpected keyword argument '{other}'"
-                )))
-            }
-        }
-    }
-    Ok((lod, budget))
-}
-
 /// Stream an admitted static mesh into one Tiles 1.1 .3tz: local metre/Y-up, or a declared
 /// source CRS mapped at capture. Profiles are provisional; jobs is a resource-capped
-/// maximum, and None means auto.
+/// maximum, and None means auto. memory_budget_bytes is a declared ceiling in bytes, never
+/// raised; None resolves the lesser of 4 GiB and half the detected headroom.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None, **kwargs))]
+#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None))]
 #[allow(clippy::too_many_arguments)]
 fn mesh_to_tileset(
     py: Python<'_>,
@@ -408,6 +382,7 @@ fn mesh_to_tileset(
     profile: &str,
     jobs: Option<Bound<'_, PyAny>>,
     scratch_dir: Option<PathBuf>,
+    memory_budget_bytes: Option<Bound<'_, PyAny>>,
     anchor: Option<(f64, f64, f64)>,
     orientation_xyzw: Option<(f64, f64, f64, f64)>,
     scene_offset: Option<(f64, f64, f64)>,
@@ -418,21 +393,13 @@ fn mesh_to_tileset(
     height_offset: Option<f64>,
     force: bool,
     callback: Option<Py<PyAny>>,
-    kwargs: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<TilerResult> {
     let profile = profile
         .parse::<TilerProfile>()
         .map_err(|error| tiler_request_error(py, error))?;
     let jobs = tiler_jobs(py, jobs)?;
-    let (lod, budget) = private_options(kwargs)?;
-    let memory_budget = tiler_memory_budget(py, budget)?;
-    let lod = lod
-        .map(|lod| lod.parse::<TilerLod>())
-        .transpose()
-        .map_err(|error| tiler_request_error(py, error))?;
-    // The whole request is checked before any file (an offset file, then the source) is read.
-    tiles_core::check_memory_budget_request(lod.unwrap_or_default(), memory_budget)
-        .map_err(|error| tiler_request_error(py, error))?;
+    // Refused here, before any file (an offset file, then the source) is read.
+    let memory_budget = tiler_memory_budget(py, memory_budget_bytes)?;
     let source_axes = source_axes
         .map(|axes| match axes {
             "xyz" => Ok(SourceAxes::Xyz),
@@ -471,9 +438,6 @@ fn mesh_to_tileset(
     }
     if let Some(bytes) = memory_budget {
         request = request.with_memory_budget(bytes);
-    }
-    if let Some(lod) = lod {
-        request = request.with_lod(lod);
     }
     let result = run_job(py, callback, |run| {
         tiles_core::mesh_to_tileset(request, run)
@@ -1017,19 +981,33 @@ impl ValidationPayloadsIter {
 /// `totalBytesRead`, `totalPayloadElements`, `containmentWorkUnits`, `containmentBytesRead`,
 /// `containmentDecodedBytes`) to non-negative ints below 2**64: a volume cap is set, a budget is
 /// replaced (values below the defaults are allowed). `scratch_dir` places validation scratch
-/// in that existing directory. `callback` receives progress events; raising from it (or
-/// Ctrl-C) stops the validation and the exception propagates.
+/// in that existing directory. `expect_profile="hlod"` requires the 0.4 HLOD profile whatever
+/// the archive's labels say: every payload must carry source identity and every HLOD check
+/// runs (an archive declaring HLOD itself is held to it anyway); any other value raises
+/// `ValueError` before the archive is opened. `callback` receives progress events; raising from
+/// it (or Ctrl-C) stops the validation and the exception propagates.
 #[pyfunction]
-#[pyo3(signature = (input, *, lazy_payloads = false, max_volume = None, scratch_dir = None, callback = None))]
+#[pyo3(signature = (input, *, lazy_payloads = false, max_volume = None, scratch_dir = None, expect_profile = None, callback = None))]
+#[allow(clippy::too_many_arguments)]
 fn validate(
     py: Python<'_>,
     input: PathBuf,
     lazy_payloads: bool,
     max_volume: Option<Bound<'_, PyAny>>,
     scratch_dir: Option<PathBuf>,
+    expect_profile: Option<String>,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<Py<PyAny>> {
-    use tiles_core::validate::{LimitKey, ValidationFailure, ValidationRequest};
+    use tiles_core::validate::{ExpectedProfile, LimitKey, ValidationFailure, ValidationRequest};
+    let expected = match expect_profile.as_deref() {
+        None => None,
+        Some("hlod") => Some(ExpectedProfile::Hlod),
+        Some(other) => {
+            return Err(PyValueError::new_err(format!(
+                "expect_profile must be \"hlod\", not {other:?}"
+            )))
+        }
+    };
     if callback
         .as_ref()
         .is_some_and(|callback| !callback.bind(py).is_callable())
@@ -1037,6 +1015,9 @@ fn validate(
         return Err(PyTypeError::new_err("callback must be callable"));
     }
     let mut request = ValidationRequest::new(input);
+    if let Some(profile) = expected {
+        request = request.expect_profile(profile);
+    }
     if let Some(mapping) = max_volume {
         let mapping = mapping
             .cast::<pyo3::types::PyMapping>()

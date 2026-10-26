@@ -70,14 +70,6 @@ pub(crate) struct TileGeometry {
     pub geometric_error: f64,
     /// Admission of this resident record against the stage ledger.
     pub lease: Option<Lease>,
-    pub measurement: Option<CachedMeasurement>,
-}
-
-/// Fixed-size held evidence for exact publication/source-range reuse.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct CachedMeasurement {
-    pub sha256: [u8; 32],
-    pub summary: super::error::Summary,
 }
 
 /// Proven resident bound per triangle of a held tile (capacities equal lengths after
@@ -139,12 +131,13 @@ impl TileGeometry {
 ///   index (`3n` entries of 16 bytes and a control byte in at most `48n/7` buckets, < 117);
 /// - representatives: rows, their sorted copy and the indices (index released);
 /// - rows: the held layout with the interface reserved at six items (the held bound);
-/// - open edges: the held bound plus the point map (≤ 3 entries of 20 bytes and a control
-///   byte in ≤ 48/7 buckets each, < 144) and the edge list (3 × 24 bytes);
-/// - shrinking the interface: the held bound plus its old reservation (216 bytes).
+/// - shrinking the interface: the held bound plus its old reservation (6 × 36 bytes).
 ///
-/// The open-edge phase is the peak: the held bound plus 216 bytes.
-pub(crate) const LEAF_READ_BYTES_PER_TRIANGLE: u64 = HELD_BYTES_PER_TRIANGLE + 216;
+/// The shrink is the peak (the weld's 168 bytes and the representatives' two rows and an
+/// index stay below the held bound plus 216, the held bound already holding 271 bytes and a
+/// row per triangle): the held bound plus 216 bytes.
+pub(crate) const LEAF_READ_BYTES_PER_TRIANGLE: u64 =
+    HELD_BYTES_PER_TRIANGLE + 6 * std::mem::size_of::<InterfaceRow>() as u64;
 /// Fixed part of reading one leaf: the record and small-table minimums of its hash maps.
 pub(crate) const LEAF_READ_FIXED_BYTES: u64 = HELD_FIXED_BYTES + 4096;
 
@@ -201,6 +194,8 @@ pub(crate) struct HlodRow {
     pub geometric_error: f64,
     pub error_policy: &'static str,
     pub measurement: super::error::Summary,
+    /// The tile's budgeted nearest searches (`error::NEAREST_STEPS`), exhaustions included.
+    pub nearest_search: super::error::SearchStats,
     #[serde(skip)]
     pub error_cpu_seconds: f64,
     #[serde(skip)]
@@ -218,6 +213,9 @@ pub(crate) struct HlodRow {
     pub retries: u32,
     pub interface_vertices: u32,
     pub interface_segments: u32,
+    /// Simplified faces that landed exactly on an opposite-facing source face (a collapse
+    /// across a fold), turned to the source's orientation or dropped beside their twin.
+    pub reoriented_faces: u32,
     pub quantized: bool,
     pub bounds: BoundsRow,
     pub appearance: super::appearance::TileAppearance,

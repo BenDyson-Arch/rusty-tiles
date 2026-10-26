@@ -569,8 +569,10 @@ fn generated_dags_match_the_reference_traversal_at_every_cap() {
         .unwrap_or(8);
     let stride = sweep_stride();
     let (mut accepted, mut failed, mut memoized) = (0, 0, 0);
-    for seed in 0..seeds {
-        let archive = random_archive(seed);
+    // Keep a known valid shared-document case as the continuity contract can
+    // correctly reject formerly valid random REPLACE loading barriers.
+    let archives = std::iter::once(dag(2, 2)).chain((0..seeds).map(random_archive));
+    for (seed, archive) in archives.enumerate() {
         let (_work, path) = package(&archive);
         let base = same(&path, &ValidationLimits::default());
         if std::env::var_os("EM_DEBUG").is_some() {

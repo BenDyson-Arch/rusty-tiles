@@ -69,12 +69,15 @@ fn every_converter_prints_wrote_reports_and_next_lines() {
             }
             "vector" => assert!(first.ends_with(" (4 features, 3 tiles)"), "{first}"),
             "terrain" => assert!(first.ends_with(" (1 tile)"), "{first}"),
-            "mesh" => assert!(
-                first.ends_with(
+            "mesh" => {
+                // The default-profile recipe pins the ETC1S `balanced` output; the other is lossless.
+                let expected = if recipe.name == "mesh-balanced" {
+                    " (1 tile, 128 triangles, 1 leaf, balanced profile, workers: capture 1, leaves 1)"
+                } else {
                     " (1 tile, 1152 triangles, 1 leaf, lossless profile, workers: capture 1, leaves 1)"
-                ),
-                "{first}"
-            ),
+                };
+                assert!(first.ends_with(expected), "{first}")
+            }
             "glb-to-3tz" | "createTilesetJson" => {
                 assert!(first.ends_with(" (1152 triangles)"), "{first}")
             }
@@ -440,5 +443,31 @@ fn removed_legacy_mesh_commands_are_unknown_subcommands() {
             "{name}: {stderr}"
         );
         assert!(!output.exists(), "{name} wrote output");
+    }
+}
+
+/// HLOD slice S6 removed H17/H27: HLOD is the only coarse-tile method, with no hidden
+/// legacy switch. `mesh --lod` (any value) is an unknown argument, refused as a usage error
+/// before any input or output work.
+#[test]
+fn mesh_has_no_hidden_lod_switch() {
+    let work = tempfile::tempdir().unwrap();
+    let input = support::repo_root().join("tests/fixtures/example.glb");
+    for value in ["h17", "hlod"] {
+        let output = work.path().join(format!("{value}.3tz"));
+        let result = Command::new(bin())
+            .args(["mesh", "--lod", value, "-i"])
+            .arg(&input)
+            .arg("-o")
+            .arg(&output)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert_eq!(result.status.code(), Some(2), "{value}: {stderr}");
+        assert!(
+            stderr.contains("unexpected argument '--lod'"),
+            "{value}: {stderr}"
+        );
+        assert!(!output.exists(), "{value} wrote output");
     }
 }

@@ -2,7 +2,7 @@
 
 - Mesh tiler scratch admission: the upfront scratch need is now the largest declared stage
   working set (each external sort charged its streamed runs plus at most one intermediate merge
-  group, `S + min(S, F × run)`, and H17's declared pre-pass) with a 10% model margin and
+  group, `S + min(S, F × run)`, and the HLOD incidence pass) with a 10% model margin and
   per-file allocation rounding, instead of the sum of all stages with the whole logical need
   added again as extent overhead. On a 24.4M-triangle mesh the need falls from about
   4,300 to about 1,040 bytes per triangle. Each capture stage rechecks free space for its own

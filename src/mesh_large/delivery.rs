@@ -11,7 +11,7 @@ mod archive;
 pub(crate) mod plan;
 pub(crate) mod source;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use self::{
     plan::{document_members, state, Builder, Limits, Linked, Node, Shape, Sink, LIMITS},
@@ -91,8 +91,7 @@ pub struct MeshTilesetReport {
     pub max_depth: u32,
     pub synthetic_leaves: u64,
     pub packed_leaves: u64,
-    /// Internal tiles with an H17 coarse tile (all of them when the leaf directory has
-    /// proxies; none for a full-detail-only directory).
+    /// Internal tiles with an HLOD coarse tile (none for a full-detail-only directory).
     pub proxies: u64,
     /// Every 3TZ member, `tileset.json` and the index included.
     pub members: u64,
@@ -169,9 +168,10 @@ fn leaf_content(row: &LeafRow, member: String) -> Result<ContentRef, JobError> {
     .map_err(|e| state(e.to_string()))
 }
 
-/// The content of an H17 proxy published as `member`: its source identities are the
-/// present primitives of its `source_primitive` table; removed ones are in its
-/// `lod_vanished` table. The digest binds the tile's rank range to the payload.
+/// The content of an HLOD coarse tile published as `member`: its source identities are the
+/// rows of its representative `source_primitive` table (D4). The digest binds the tile's
+/// rank range to the payload. Its domain string is a published accounting constant, kept
+/// from the coarse tiles' first producer so the identity digests do not change.
 fn proxy_content(row: &ProxyRow, member: String) -> Result<ContentRef, JobError> {
     let mut digest = Sha256::new();
     digest.update(b"rusty-tiles/h17/proxy-identity/v1\0");
@@ -222,6 +222,21 @@ impl Sink for PlanSink {
     }
 }
 
+/// Explicit children with every chain or omitted cell replaced by its children
+/// (recursively): a coarse tile's children are then its renderable replacements, each with
+/// its own box and error (no greater than the coarse tile's).
+fn spliced(children: Vec<Node>) -> Vec<Node> {
+    let mut out = Vec::with_capacity(children.len());
+    for child in children {
+        if child.is_chain_cell() && !child.is_implicit_root() {
+            out.extend(spliced(child.children));
+        } else {
+            out.push(child);
+        }
+    }
+    out
+}
+
 /// Run a forest-writer call with the job's cancellation as its checkpoint.
 fn forest<T>(
     staging: &Path,
@@ -267,9 +282,17 @@ impl WriteSink<'_> {
         self.stage_payload(&row.uri, row.bytes, row.sha256, member)
     }
 
-    fn stage_proxy(&mut self, node: &Node, member: &str) -> Result<Vec<ContentRef>, JobError> {
-        let Some(row) = node.proxy.as_deref() else {
-            return Ok(Vec::new());
+    /// Stage a tile's coarse content; with `chain`, a chain cell repeats its coarse tile.
+    fn stage_proxy(
+        &mut self,
+        node: &Node,
+        member: &str,
+        chain: bool,
+    ) -> Result<Vec<ContentRef>, JobError> {
+        let row = match (node.proxy.as_deref(), node.chain.as_deref()) {
+            (Some(row), _) => row,
+            (None, Some(row)) if chain => row,
+            _ => return Ok(Vec::new()),
         };
         self.stage_payload(&row.uri, row.bytes, row.sha256, member)?;
         Ok(vec![proxy_content(row, member.to_owned())?])
@@ -309,7 +332,12 @@ impl WriteSink<'_> {
         }
     }
 
+    /// A document's root tile (a chain cell there repeats its coarse tile).
     fn tile(&mut self, node: Node) -> Result<ForestTile<TileExtras>, JobError> {
+        self.tile_in(node, true)
+    }
+
+    fn tile_in(&mut self, node: Node, root: bool) -> Result<ForestTile<TileExtras>, JobError> {
         if let Some(link) = node.link {
             return link
                 .map(ForestTile::Link)
@@ -331,13 +359,13 @@ impl WriteSink<'_> {
         let contents = self.stage_proxy(
             &node,
             &format!("content/f{}-d{}.glb", node.first, node.depth),
+            root,
         )?;
         let own = record(&node, contents)?;
-        let children = node
-            .children
-            .into_iter()
-            .map(|child| self.tile(child))
-            .collect::<Result<_, _>>()?;
+        let mut children = Vec::with_capacity(node.children.len());
+        for child in spliced(node.children) {
+            children.push(self.tile_in(child, false)?);
+        }
         Ok(ForestTile::explicit(own, children))
     }
 
@@ -401,7 +429,7 @@ impl WriteSink<'_> {
             "implicit-content/{key}-{}-{}-{}-{}.glb",
             c.level, c.x, c.y, c.z
         );
-        let contents = self.stage_proxy(&node, &member)?;
+        let contents = self.stage_proxy(&node, &member, true)?;
         if !contents.is_empty() {
             planned.contents[0].push(c);
         }
@@ -497,8 +525,7 @@ fn plan_pass(
 ) -> Result<Planned, JobError> {
     let mut sink = PlanSink::default();
     let proxies = leaves.proxies.then(|| leaves.proxy_rows()).transpose()?;
-    let mut builder = Builder::with_proxies(&mut sink, limits, proxies)
-        .with_sparse_proxies(leaves.sparse_proxies);
+    let mut builder = Builder::with_proxies(&mut sink, limits, proxies);
     let mut triangles = 0u64;
     for (index, item) in leaves.leaves()?.enumerate() {
         if index % 256 == 0 {
@@ -545,6 +572,17 @@ pub(crate) fn publish(
     work_parent: &Path,
 ) -> Result<(MeshTilesetReport, u64), JobError> {
     publish_with(request, LIMITS, attempt_check, out, work_parent)
+}
+
+/// [`publish`] under other fragment caps (tests forcing implicit roots and documents).
+#[cfg(test)]
+pub(crate) fn publish_with_limits(
+    request: &MeshTilesetRequest,
+    limits: Limits,
+    out: &mut File,
+    work_parent: &Path,
+) -> Result<(MeshTilesetReport, u64), JobError> {
+    publish_with(request, limits, &mut || Ok(()), out, work_parent)
 }
 
 fn publish_with(
@@ -722,8 +760,7 @@ pub(crate) fn write_prepared(
         check,
     };
     let proxies = leaves.proxies.then(|| leaves.proxy_rows()).transpose()?;
-    let mut builder = Builder::with_proxies(&mut sink, limits, proxies)
-        .with_sparse_proxies(leaves.sparse_proxies);
+    let mut builder = Builder::with_proxies(&mut sink, limits, proxies);
     for (index, item) in leaves.leaves()?.enumerate() {
         if index % 256 == 0 {
             (builder.sink().check)()?;

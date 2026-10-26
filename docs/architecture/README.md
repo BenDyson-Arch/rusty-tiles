@@ -1,11 +1,15 @@
 # Architecture foundations for 0.4.0
 
-## Current implementation direction — 2026-10-12
+## Current implementation direction — amended 2026-10-24
 
 The [0.4 delivery and 0.6 transition roadmap](04-tiles2-roadmap.md) governs new
 work and sequencing. **0.4 ships Tiles 1.1 / glTF 2.0**, including implicit tiling
-and the certified textured large-mesh tiler. Its owned tile data and output
+and the textured classic octree HLOD large-mesh tiler. Its owned tile data and output
 boundaries prepare for **0.6's official Tiles 2.0 / glTF 2.1 transition**.
+The [HLOD direction decision](hlod-040-decision.md) supersedes H17 certified
+coarse geometry and H27's per-texel bake; S6 removed both, and HLOD is the only
+coarse path. Its integrated acceptance is pending. The roadmap also proposes #267's finite non-mesh bar for owner approval
+in this review; it is not yet an accepted exception to the foundation gate below.
 Draft experiments may inform design, but draft-format viewer support does not
 block 0.4. The [interrupted-track ledger](04-track-dispositions.md) records what
 continues, what is superseded, and how unfinished source can be recovered.
@@ -91,9 +95,8 @@ wherever the concrete scope has not adopted them.
 - [H16 real-mesh, scale and consumer acceptance](../../bench/architecture_audit/mesh_large_h16/README.md)
 - [H28 per-tile primitive batching contract](h28-tile-batching-contract.md)
 - [0.4 mesh direction: classic octree HLOD](hlod-040-decision.md) governs coarse
-  tiles; the [H17 LOD contract](h17-lod-contract.md) is superseded when its code is
-  removed, and the [mesh guide](../MESH.md#coarse-levels-hlod) describes the public
-  surface (its [memory budget](../MESH.md#memory-budget-coming-with-the-hlod-default) is planned, not yet an option)
+  tiles; H17 is removed, and the [mesh guide](../MESH.md#coarse-levels-hlod) describes the
+  public surface, including its [memory budget](../MESH.md#memory-budget)
 - [HLOD S2 sampled-error measurement](hlod-s2-error.md)
 
 - [I1 implicit read contract](i1-implicit-read-contract.md)

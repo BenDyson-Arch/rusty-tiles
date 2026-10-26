@@ -3,10 +3,20 @@
 C1 implements read-only inspection of self-contained 3TZ archives. Rust uses
 `validate::inspect(ValidationRequest::new(path))` (or `inspect_with(request, &RunControl)`
 for cancellation and progress); CLI uses `validate PATH [--maxVolume KEY=N]...
-[--scratchDir DIR]`; Python uses `validate(path, *, lazy_payloads=False, max_volume=None,
-scratch_dir=None, callback=None)`. Rust returns a typed `ValidationReport`, which
+[--scratchDir DIR] [--expectProfile hlod]`; Python uses `validate(path, *,
+lazy_payloads=False, max_volume=None, scratch_dir=None, expect_profile=None,
+callback=None)`. Rust returns a typed `ValidationReport`, which
 adapters serialize without adding domain decisions. There is no external-tool
 option or subprocess fallback. The limits are described under "Limits" below.
+
+An archive that declares the 0.4 HLOD profile (`asset.extras.rustyTiles.lod` or the
+conversion report's `lod` equal to `"hlod"`) is held to the HLOD checks: every payload
+must carry source identity, and the HLOD identity, interface and continuity checks run.
+`--expectProfile hlod` (Rust `ValidationRequest::expect_profile(ExpectedProfile::Hlod)`,
+Python `expect_profile="hlod"`) requires that profile whatever the archive's labels say, so
+an archive stripped of its labels cannot pass as a plain one. `hlod` is the only value; any
+other is refused as `usage` (Python `ValueError`) before the archive is opened. The checks
+are listed in the [HLOD acceptance record](../bench/architecture_audit/mesh_hlod/s5/README.md).
 
 Supported payloads are GLB 2.0 and archive-local glTF 2.0. Unavailable versions
 or legacy interpretations do not receive an opaque successful pass.

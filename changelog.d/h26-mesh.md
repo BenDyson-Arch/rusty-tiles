@@ -1,6 +1,6 @@
 ### Added
 
-- `rusty-tiles mesh` and Python `mesh_to_tileset` run one streamed local-metre mesh pipeline through leaf encoding, certified coarse levels with baked proxy textures and implicit `.3tz` delivery, with rigid WGS84 placement, provisional profiles, memory-capped maximum workers, typed errors and separate runtime diagnostics. `doctor --command mesh` describes the built-in capability.
+- `rusty-tiles mesh` and Python `mesh_to_tileset` run one streamed local-metre mesh pipeline through leaf encoding, HLOD coarse levels (sampled error, textured) and implicit `.3tz` delivery, with rigid WGS84 placement, provisional profiles, memory-capped maximum workers, typed errors and separate runtime diagnostics. `doctor --command mesh` describes the built-in capability.
 
 ### Changed
 

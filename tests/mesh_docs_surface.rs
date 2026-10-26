@@ -1,6 +1,5 @@
-//! The mesh guide, the CLI reference and the Python README promise only options that exist,
-//! never advertise the hidden coarse-tile selector, and keep certified/proxy/ledger claims inside
-//! the sections that describe the legacy path.
+//! The mesh guide, the CLI reference and the Python README promise only options and report
+//! fields that exist, and name the removed H17/H27 surface only in the migration section.
 use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 fn read(relative: &str) -> String {
@@ -106,34 +105,39 @@ fn mesh_flags() -> BTreeSet<String> {
 }
 
 #[test]
-fn help_names_no_removed_option_and_no_hidden_one() {
+fn help_names_the_budget_and_no_removed_option() {
     let mesh = help(&["mesh"]);
     for removed in REMOVED {
         assert!(!mesh.contains(removed), "{removed} in mesh --help");
     }
-    for needed in ["--profile", "--jobs", "--scratchDir"] {
+    for needed in [
+        "--profile",
+        "--jobs",
+        "--scratchDir",
+        "--memory-budget",
+        "--memoryBudget",
+    ] {
         assert!(mesh.contains(needed), "{needed} missing from mesh --help");
     }
-    for hidden in ["--memory-budget", "--memoryBudget", "--lod"] {
-        assert!(!mesh.contains(hidden), "hidden {hidden} in mesh --help");
+    for gone in ["--lod", "H17", "h17"] {
+        assert!(!mesh.contains(gone), "{gone} in mesh --help");
     }
+    let validate = help(&["validate"]);
+    assert!(validate.contains("--expectProfile") && validate.contains("--expect-profile"));
+}
+
+/// The guide with its migration section (which names removed things as removed) cut out.
+fn current_guide(guide: &str) -> String {
+    section(guide, "## Migration from older mesh converters", true)
 }
 
 #[test]
 fn guides_promise_only_existing_mesh_options() {
     let known = mesh_flags();
-    let mesh_guide = read("docs/MESH.md");
     let cli = read("docs/CLI.md");
     let documents = [
-        // The migration section and the legacy section may name removed options as removed.
-        (
-            "docs/MESH.md",
-            section(
-                &section(&mesh_guide, "## Migration from older mesh converters", true),
-                "## Legacy H17 coarse tiles",
-                true,
-            ),
-        ),
+        // The migration section may name removed options as removed.
+        ("docs/MESH.md", current_guide(&read("docs/MESH.md"))),
         ("docs/CLI.md (mesh)", section(&cli, "### mesh", false)),
         (
             "bindings/python/README.md (mesh)",
@@ -150,18 +154,36 @@ fn guides_promise_only_existing_mesh_options() {
             assert!(named.contains("--jobs"), "{name}: expected mesh options");
         }
         for flag in &named {
-            // The Python README also names other commands' options only through their own
-            // guides; every flag it prints must still be a real mesh or global flag.
+            // Every flag a guide prints must be a real mesh or global flag.
             assert!(
                 known.contains(flag),
                 "{name} promises {flag}, which `mesh --help` does not offer"
             );
         }
     }
+    // The validate profile option is documented where validation is.
+    let validate = section(&cli, "### validate", false);
+    assert!(validate.contains("--expectProfile") && validate.contains("--expect-profile"));
 }
 
 #[test]
-fn the_hlod_selector_is_never_advertised() {
+fn the_budget_is_documented_on_every_surface() {
+    let guide = read("docs/MESH.md");
+    for needed in [
+        "--memory-budget BYTES",
+        "memory_budget_bytes",
+        "with_memory_budget",
+    ] {
+        assert!(guide.contains(needed), "docs/MESH.md lacks {needed}");
+    }
+    assert!(section(&read("docs/CLI.md"), "### mesh", false).contains("--memory-budget"));
+    let python = read("bindings/python/README.md");
+    assert!(python.contains("memory_budget_bytes=None"));
+    assert!(python.contains("expect_profile"));
+}
+
+#[test]
+fn removed_surface_is_named_only_in_the_migration_section() {
     // Other converters have their own `--lod`-style options, so match whole tokens, and read
     // only the mesh section of the CLI reference.
     let token = |text: &str, word: &str| {
@@ -174,7 +196,7 @@ fn the_hlod_selector_is_never_advertised() {
         })
     };
     for (name, text) in [
-        ("docs/MESH.md", read("docs/MESH.md")),
+        ("docs/MESH.md", current_guide(&read("docs/MESH.md"))),
         (
             "docs/CLI.md (mesh)",
             section(&read("docs/CLI.md"), "### mesh", false),
@@ -185,75 +207,83 @@ fn the_hlod_selector_is_never_advertised() {
             read("bindings/python/README.md"),
         ),
     ] {
-        for hidden in [
+        for removed in [
             "--lod",
             "_lod",
             "TilerLod",
             "with_lod",
-            "--memory-budget",
-            "--memoryBudget",
-            "memory_budget_bytes",
-            "with_memory_budget",
+            "_memory_budget_bytes",
+            "proxy_bake",
+            "proxy_source",
+            "lod_prepass",
+            "lod_simplify",
+            "seam_resolution",
+            "lod_finish",
+            "lod_vanished",
+            "lod_filled",
         ] {
-            assert!(!token(&text, hidden), "{name} advertises {hidden}");
+            assert!(!token(&text, removed), "{name} promises removed {removed}");
         }
     }
     assert!(!help(&[]).contains("--lod"));
 }
 
 #[test]
-fn certified_proxy_and_ledger_claims_stay_in_the_legacy_sections() {
-    let guide = read("docs/MESH.md");
-    let current = section(
-        &section(
-            &section(&guide, "## Legacy H17 coarse tiles", true),
-            "## Migration from older mesh converters",
-            true,
-        ),
-        "### Migrating from the legacy coarse tiles to HLOD",
-        true,
-    );
-    // The status block quotes the legacy path by name; it is the one place outside them.
-    let current: String = current
-        .lines()
-        .filter(|line| !line.starts_with('>'))
-        .map(|line| format!("{line}\n"))
-        .collect();
-    let current = current
+fn certified_proxy_and_ledger_claims_are_gone_from_the_guide() {
+    let current = current_guide(&read("docs/MESH.md"))
         .replace("not certified", "")
         .replace("not-certified", "")
+        .replace("not certification", "")
         // A real report field whose name predates HLOD.
-        .replace("unique_proxies", "")
-        .replace("not certification", "");
+        .replace("unique_proxies", "");
     for forbidden in [
         "certified",
-        "proxy_source",
         "ledger",
+        "H17",
         "H27",
         "proxy",
         "proxies",
         "Proxy",
+        "legacy path",
+        "Legacy H17",
     ] {
         assert!(
             !current.contains(forbidden),
-            "docs/MESH.md describes `{forbidden}` outside the legacy sections: {}",
+            "docs/MESH.md describes `{forbidden}` outside the migration section: {}",
             current
                 .lines()
                 .find(|line| line.contains(forbidden))
                 .unwrap_or_default()
         );
     }
-    // The legacy fence exists and says so.
-    let legacy = section(&guide, "## Legacy H17 coarse tiles", false);
-    assert!(legacy.contains("proxy_source") && legacy.contains("certified"));
-    let status = guide
+}
+
+#[test]
+fn documented_phases_are_the_reported_phases() {
+    // The `phase_seconds` fields of the run diagnostics, read from their definition.
+    let phases = read("src/mesh_large/phases.rs");
+    let start = phases.find("pub struct PhaseSeconds {").unwrap();
+    let fields: BTreeSet<String> = phases[start..]
         .lines()
-        .filter(|l| l.starts_with('>'))
-        .collect::<String>();
-    assert!(
-        status.contains("legacy"),
-        "status note must name the legacy path"
-    );
+        .skip(1)
+        .take_while(|line| !line.starts_with('}'))
+        .filter_map(|line| line.trim().strip_prefix("pub ")?.split(':').next())
+        .map(String::from)
+        .collect();
+    assert_eq!(fields.len(), 5, "{fields:?}");
+    let guide = read("docs/MESH.md");
+    let sentence_start = guide
+        .find("`phase_seconds` holds the wall seconds of")
+        .unwrap();
+    let sentence = &guide[sentence_start..];
+    let sentence = &sentence[..sentence.find(". ").unwrap()];
+    let documented: BTreeSet<String> = sentence
+        .split('`')
+        .skip(3)
+        .step_by(2)
+        .map(String::from)
+        .collect();
+    assert_eq!(documented, fields);
 }
 
 #[test]
@@ -261,9 +291,7 @@ fn documented_budget_defaults_match_the_code() {
     let guide = read("docs/MESH.md");
     let budget = section(&guide, "### Memory budget", false);
     assert!(budget.contains("**4 GiB**") && budget.contains("2 GiB when headroom"));
-    // The budget is documented only as planned, never as a current option.
-    assert!(budget.contains("**Not a current option.**"), "{budget}");
-    assert!(guide.contains("### Memory budget (coming with the HLOD default)"));
+    assert!(!budget.contains("Not a current option") && !budget.contains("hidden"));
     // 4 GiB ceiling and 2 GiB undetected default are the constants the guide quotes.
     let resources = read("src/mesh_large/resources.rs");
     assert!(resources.contains("DEFAULT_CEILING_BYTES: u64 = 4 << 30"));

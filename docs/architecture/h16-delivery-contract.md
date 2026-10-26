@@ -1,27 +1,30 @@
 # H16 streamed hierarchy and 3TZ delivery
 
-> **HLOD amendment (draft, effective when the legacy path is removed).** With HLOD
-> coarse levels a parent's `geometricError` is a sampled, measured value (the
-> maximum of its children's and 1.05 times the sampled two-way distance to the
-> source), not an H17 certified bound, and coarse tiles reach delivery through the
-> HLOD stage's `proxies.jsonl` rows (`HlodRow`) rather than H17 certificates. The
-> declared memory budget bounds archive preparation too: a budgeted run caps member
-> GLB JSON at 1 MiB and reserves H16's resident bound before leaves are built
-> ([memory budget](../MESH.md#memory-budget-coming-with-the-hlod-default)). References below to certified H17
-> content describe the legacy path.
-
-
 Status: implemented on `ml/h16-delivery` (PR #192), light process (tests, one
 nonauthor review, perf/memory evidence, consumer proof, CI). This slice publishes
 H1's tile tree ([H1 contract](h1-capture-tree-contract.md)) and H8's full-detail
 leaves (#187) as one Tiles 1.1 implicit forest in a `.3tz`, through the shared
 typed serializer of #191/#198 (`src/tileset_node.rs`, `src/implicit/tileset.rs`,
 `src/implicit/tileset/stream.rs`). Parents carry no content unless the leaf
-directory has H17 coarse tiles (`proxyManifest`), which are then published as
-their content ([H17 contract](h17-lod-contract.md)). The public entry is
+directory has HLOD coarse tiles (`proxyManifest`, with the stage's `hlod`
+record), which are then published as their content
+([HLOD decision](hlod-040-decision.md), D1–D4). The public entry is
 `rusty-tiles mesh` / `mesh_to_tileset` (H26); the leaf-directory steps are
 crate-internal. Evidence: `~/.cache/rusty-tiles-evidence/h16-20261013/`
 ([acceptance record](../../bench/architecture_audit/mesh_large_h16/README.md)).
+
+> **S6 amendment — 2026-10-26.** H17 was removed; its historical contract is at
+> [`9a19c0e5`](https://github.com/BenDyson-Arch/rusty-tiles/blob/9a19c0e537ae3c7a7375f4e2039339b6599396a8/docs/architecture/h17-lod-contract.md). HLOD is the only coarse producer. Its rows carry
+> `encodedDepth` and S2's sampled-error policy and summary, and they may skip
+> internal tiles: a single-child pass-through cell publishes no content below
+> its chain's coarse tile, and an omitted cell (D1) has no row. A leaf directory
+> naming `proxyManifest` without an `hlod` record is refused. The coarse content
+> identity digest keeps its original domain string, so published accounting is
+> unchanged.
+>
+> **S7 note.** The declared memory budget ([memory budget](../MESH.md#memory-budget))
+> bounds archive preparation too: member GLB JSON is capped at 1 MiB, and the run
+> reserves H16's resident bound (`archive_minimum_bytes`) before the leaves are built.
 
 ## Input boundary
 
@@ -143,8 +146,9 @@ correspondence bound. An empty parent's error is `max(16 · box diagonal,
 children's errors)`: CesiumJS (default maximum screen-space error 16) refines it
 until the whole box projects below about one pixel, so leaves are reached at
 any distance. This is a traversal policy for empty tiles, not a proxy
-certificate; with full-detail-only output a far view loads every visible leaf
-until H17 supplies certified coarse content. The tileset error is
+certificate; with full-detail-only output a far view loads every visible leaf.
+A coarse tile publishes HLOD's sampled source error G (D2), never below its
+children's; an omitted cell takes the empty-parent error. The tileset error is
 `max(1 m, root error, root diagonal)`.
 
 Placement is local metres with one rigid anchor/orientation/offset matrix on
@@ -282,7 +286,7 @@ Real mesh, consumer proof and performance figures are in the acceptance record.
 
 ## Follow-ups
 
-H17 coarse content and certificates; the C1 `KHR_texture_basisu` admission; the
+The C1 `KHR_texture_basisu` admission; the
 validator-scale slices; H8 throughput (`ml/h8-throughput`) and its texture
 gates; the documented CesiumJS sRGB/ASTC colour limit; retuning the partition
 constants with perf evidence; a bounded-memory replacement for the serializer's

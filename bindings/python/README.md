@@ -54,19 +54,19 @@ required reports and cleanup diagnostics, as described below.
 
 | Function | Keyword arguments |
 | --- | --- |
-| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
+| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `memory_budget_bytes=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
 | `model_to_manifest(input, ...)` | Same rigid placement/policy/callback keywords; returns `ModelManifestResult` with fixed sibling output |
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=8192` (at most 8192), `chunk_points=100000`, `metadata_attributes=False`, `callback=None` |
 | `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage; returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; returns `PackageResult` |
-| `validate(input, *, lazy_payloads=False, max_volume=None, scratch_dir=None, callback=None)` | Returns the bounded [validation report](../../docs/VALIDATION.md), including completed checks, inspection gaps, `storedBytes`, the effective `limits` and their `limitDerivation`. `max_volume` maps limit keys to ints (opt-in volume caps such as `sourceArchiveBytes`, or replaced budgets such as `hierarchyVisits`); a bad key or value raises `InvalidRequestError` before any I/O. `scratch_dir` places scratch in an existing directory. `callback` receives progress events; raising from it, or Ctrl-C, stops the validation. A limit refusal's `ResourceLimitError.limit` is `{"limit", "value", "observed", "derivation"}` |
+| `validate(input, *, lazy_payloads=False, max_volume=None, scratch_dir=None, expect_profile=None, callback=None)` | Returns the bounded [validation report](../../docs/VALIDATION.md), including completed checks, inspection gaps, `storedBytes`, the effective `limits` and their `limitDerivation`. `max_volume` maps limit keys to ints (opt-in volume caps such as `sourceArchiveBytes`, or replaced budgets such as `hierarchyVisits`); a bad key or value raises `InvalidRequestError` before any I/O. `scratch_dir` places scratch in an existing directory. `expect_profile="hlod"` requires the HLOD profile whatever the archive's labels say (every payload must carry source identity and every HLOD check runs; an archive that declares HLOD itself is held to it anyway); any other value raises `ValueError` before the archive is opened. `callback` receives progress events; raising from it, or Ctrl-C, stops the validation. A limit refusal's `ResourceLimitError.limit` is `{"limit", "value", "observed", "derivation"}` |
 
 ### Streamed local mesh tiler
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
-scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
-source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
+scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None,
+scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
 height_offset=None, force=False, callback=None)` is the single new public
 source-mesh operation.
 It runs capture, leaf payloads, coarse levels and implicit hierarchy delivery through
@@ -76,8 +76,7 @@ of detail (HLOD). A coarse tile's geometric error is a sampled, measured distanc
 the source, not a certificate; its triangles carry one representative
 `source_primitive` ID while leaves keep exact provenance; and its textures are fresh
 charts sampled from the source, an approximation with no appearance certificate. See
-the [mesh guide](../../docs/MESH.md#coarse-levels-hlod), which also marks the legacy
-certified-proxy path a plain call still builds until it is removed.
+the [mesh guide](../../docs/MESH.md#coarse-levels-hlod).
 
 It accepts the local static metre/Y-up/core PBR domain in the [mesh guide](../../docs/MESH.md),
 with optional rigid WGS84 ellipsoidal anchor, active ENU quaternion and source
@@ -90,9 +89,9 @@ with the CLI's rules; it excludes the rigid placement keywords and `None` or
 texture-format selector, explicit mode or coarse-tile tuning.
 All four profile names (`fast`, default `balanced`, `quality`, `lossless`) are
 provisional; constants will be calibrated together as HLOD acceptance
-progresses. Once the separate default-codec change (#277) lands, base-colour and
-emissive pages, leaf and coarse, are KTX2 ETC1S (quality 50 in `fast`, 90 in
-`balanced`), UASTC in `quality` and PNG in `lossless`; KTX2/Basis and meshopt are in-process, and JPEG source decoding
+progresses. Base-colour and emissive pages, leaf and coarse, are KTX2 ETC1S
+(quality 50 in `fast`, 90 in `balanced`), UASTC in `quality` and PNG in
+`lossless`; KTX2/Basis and meshopt are in-process, and JPEG source decoding
 remains supported.
 
 A lossy texture page that misses a decoded-image gate is re-encoded at UASTC
@@ -105,6 +104,15 @@ leaf, first, depth, page, slot, sources, step, misses) and
 `["escalation_diagnostics_omitted"]` describe them. Cancellation through the
 callback is polled before every re-encode step. See the
 [mesh guide](../../docs/MESH.md#profiles-and-resources).
+
+`memory_budget_bytes` is the run's declared memory ceiling in bytes: a positive `int`
+(a `bool`, float or string is a `TypeError`; zero, a negative number or a value above
+2**64 - 1 is `InvalidRequestError`, raised before any file is read). `None` resolves
+the lesser of 4 GiB and half the detected headroom (2 GiB if undetected). The budget
+is never raised, a run that cannot fit under it raises `ResourceLimitError` before it
+allocates, and the archive does not depend on it. `result.diagnostics["memory"]` holds
+the resolved `budget` and each stage's minimum. See the
+[memory budget](../../docs/MESH.md#memory-budget).
 
 `jobs=None` means memory-aware auto. A positive integer is a maximum capped by
 cores and the stage's memory admission. Unknown memory uses one worker; a
@@ -353,7 +361,9 @@ output.
 the bounded raster directory request/error boundary. The standard wheel has no GDAL raster capability
 and raises `UnsupportedError` without creating output or invoking callbacks;
 invalid XYZ requests raise `InvalidRequestError` first. No native wheel or pip
-extra is introduced. The native Rust/CLI profile and filesystem guarantees are
+extra is introduced. R2 imagery pyramid conversion is a native Rust/CLI capability.
+Python exports none of `raster_to_pyramid`, `RasterRequest` or `RasterDisplay`.
+The native Rust/CLI profile and filesystem guarantees are
 specified in `docs/architecture/d1-raster-contract.md` and
 `docs/architecture/d1-directory-contract.md`.
 

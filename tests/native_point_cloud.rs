@@ -1024,12 +1024,17 @@ fn geotiff_header_and_explicit_crs_place_xyz_with_original_source_metadata() {
         reference = Some(manifest);
     }
     let output = work.path().join("rejected.3tz");
-    for options in [
-        vec!["--sourceCrs", "header"],
-        vec!["--sourceCrs", "EPSG:4979", "--heightOffset", "0"],
-        vec!["--sourceCrs", "local", "--heightOffset", "0"],
+    for (options, exit) in [
+        (vec!["--sourceCrs", "header"], 2),
+        (vec!["--sourceCrs", "EPSG:4979", "--heightOffset", "0"], 3),
+        (vec!["--sourceCrs", "local", "--heightOffset", "0"], 2),
     ] {
-        assert_eq!(call(&input, &output, &options).status.code(), Some(3));
+        let result = call(&input, &output, &options);
+        assert_eq!(result.status.code(), Some(exit));
+        if exit == 2 {
+            let response: Value = serde_json::from_slice(&result.stdout).unwrap();
+            assert_eq!(response["error"]["code"], "invalid_request");
+        }
         assert!(!output.exists());
     }
 }

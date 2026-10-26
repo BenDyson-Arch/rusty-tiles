@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sqlite3
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -263,27 +264,26 @@ class WheelAPI(unittest.TestCase):
         self.assertGreaterEqual(len([row for row in invalid if integers(row)]), 4)
         for row in invalid:
             text = row["text"]
-            for lod in ("hlod", "h17"):
-                with self.subTest(text=text, lod=lod):
-                    if integers(row):
-                        # Zero, negative and overflowing integers are core refusals.
-                        with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
-                            rusty_tiles.mesh_to_tileset(
-                                source, output, force=True, callback=events.append,
-                                _memory_budget_bytes=int(text), _lod=lod)
-                        self.assertEqual(caught.exception.kind, "invalid_request")
-                        self.assertIn("memory budget", str(caught.exception))
-                    else:
-                        # Python takes integers only: suffix text is a type error.
-                        with self.assertRaises(TypeError):
-                            rusty_tiles.mesh_to_tileset(
-                                source, output, force=True, callback=events.append,
-                                _memory_budget_bytes=text, _lod=lod)
-                    self.assertEqual(output.read_bytes(), b"previous")
-                    self.assertEqual(events, [])
+            with self.subTest(text=text):
+                if integers(row):
+                    # Zero, negative and overflowing integers are core refusals.
+                    with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+                        rusty_tiles.mesh_to_tileset(
+                            source, output, force=True, callback=events.append,
+                            memory_budget_bytes=int(text))
+                    self.assertEqual(caught.exception.kind, "invalid_request")
+                    self.assertIn("memory budget", str(caught.exception))
+                else:
+                    # Python takes integers only: suffix text is a type error.
+                    with self.assertRaises(TypeError):
+                        rusty_tiles.mesh_to_tileset(
+                            source, output, force=True, callback=events.append,
+                            memory_budget_bytes=text)
+                self.assertEqual(output.read_bytes(), b"previous")
+                self.assertEqual(events, [])
         for value in (True, False, 1.0, 2.5, b"1", [1], "1"):
             with self.subTest(value=value), self.assertRaises(TypeError):
-                rusty_tiles.mesh_to_tileset(source, output, _memory_budget_bytes=value)
+                rusty_tiles.mesh_to_tileset(source, output, memory_budget_bytes=value)
         for row in BUDGET_MATRIX["valid"]:
             if not re.fullmatch(r"\d+", row["text"]):
                 continue
@@ -291,18 +291,14 @@ class WheelAPI(unittest.TestCase):
                 # Accepted: the run proceeds to the source, which is missing.
                 with self.assertRaises(rusty_tiles.TilesIOError):
                     rusty_tiles.mesh_to_tileset(
-                        source, output, force=True, _memory_budget_bytes=int(row["bytes"]),
-                        _lod="hlod")
-        # The legacy default method does not enforce a budget, so it refuses one, ahead of
-        # the (missing) source and an output that fails its own rules.
-        for budget in (2 << 30, 4 << 30):
-            with self.subTest(default_method=budget), \
-                    self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
-                rusty_tiles.mesh_to_tileset(source, self.root / "x.txt",
-                                            _memory_budget_bytes=budget)
-            self.assertIn("memory budget", str(caught.exception))
-        with self.assertRaises(rusty_tiles.InvalidRequestError):
-            rusty_tiles.mesh_to_tileset(source, output, _lod="octree")
+                        source, output, force=True, memory_budget_bytes=int(row["bytes"]))
+        # An invalid budget is refused ahead of an output that fails its own rules.
+        with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+            rusty_tiles.mesh_to_tileset(source, self.root / "x.txt", memory_budget_bytes=0)
+        self.assertIn("memory budget", str(caught.exception))
+        # The coarse-tile selector is gone: it is not a keyword any more.
+        with self.assertRaises(TypeError):
+            rusty_tiles.mesh_to_tileset(source, output, _lod="hlod")
 
     def test_tiler_budget_ignores_overridable_int_methods_and_checks_before_any_file(self):
         class Liar(int):
@@ -322,30 +318,26 @@ class WheelAPI(unittest.TestCase):
         for value in (-1, 0, 2**64, 2**200):
             with self.subTest(value=value):
                 with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
-                    rusty_tiles.mesh_to_tileset(source, output, _lod="hlod",
-                                                _memory_budget_bytes=Liar(value))
+                    rusty_tiles.mesh_to_tileset(source, output,
+                                                memory_budget_bytes=Liar(value))
                 self.assertIn("memory budget", str(caught.exception))
         # A genuine value in a subclass is still accepted and reaches the (missing) source.
         with self.assertRaises(rusty_tiles.TilesIOError):
-            rusty_tiles.mesh_to_tileset(source, output, _lod="hlod",
-                                        _memory_budget_bytes=Liar(2 << 30))
-        # The request is refused before the offset file is read: the budget is invalid for the
-        # default method, and the missing offset file would otherwise be an I/O error.
+            rusty_tiles.mesh_to_tileset(source, output, memory_budget_bytes=Liar(2 << 30))
+        # The request is refused before the offset file is read: the missing offset file
+        # would otherwise be an I/O error.
         missing_offset = self.root / "no-such-offset.txt"
-        for options in ({}, {"_lod": "h17"}):
-            with self.subTest(options=options):
-                with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
-                    rusty_tiles.mesh_to_tileset(
-                        source, output, source_crs="EPSG:3857",
-                        source_offset_file=missing_offset, _memory_budget_bytes=2 << 30,
-                        **options)
-                self.assertEqual(caught.exception.kind, "invalid_request")
-                self.assertIn("memory budget", str(caught.exception))
-        # With a compatible request the offset file is read, so the same call is an I/O error.
+        with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+            rusty_tiles.mesh_to_tileset(
+                source, output, source_crs="EPSG:3857",
+                source_offset_file=missing_offset, memory_budget_bytes=0)
+        self.assertEqual(caught.exception.kind, "invalid_request")
+        self.assertIn("memory budget", str(caught.exception))
+        # With a valid budget the offset file is read, so the same call is an I/O error.
         with self.assertRaises(rusty_tiles.TilesError) as caught:
             rusty_tiles.mesh_to_tileset(
                 source, output, source_crs="EPSG:3857", source_offset_file=missing_offset,
-                _lod="hlod", _memory_budget_bytes=2 << 30)
+                memory_budget_bytes=2 << 30)
         self.assertNotIsInstance(caught.exception, rusty_tiles.InvalidRequestError)
         self.assertFalse(output.exists())
 
@@ -360,20 +352,25 @@ class WheelAPI(unittest.TestCase):
             events.append(event)
 
         result = rusty_tiles.mesh_to_tileset(
-            source, output, jobs=1, _memory_budget_bytes=2 << 30, callback=observe, _lod="hlod")
+            source, output, jobs=1, memory_budget_bytes=2 << 30, callback=observe)
         budget = result.diagnostics["memory"]["budget"]
         self.assertEqual((budget["requested_bytes"], budget["resolved_bytes"], budget["source"]),
                          (2 << 30, 2 << 30, "explicit"))
         self.assertGreater(result.diagnostics["memory"]["minimum_bytes"], 0)
         self.assertGreater(result.diagnostics["hlod"]["tiles"], 0)
         self.assertGreater(result.report["tiles"], result.report["leaves"])
+        # The removed legacy report fields are not in the installed result.
+        self.assertNotIn("proxy_bake", result.diagnostics)
+        self.assertEqual(set(result.diagnostics["phase_seconds"]),
+                         {"capture", "leaf_build", "hlod_incidence", "hlod_geometry", "archive"})
         with zipfile.ZipFile(output) as archive:
             self.assertEqual(result.report, json.loads(archive.read("conversion.json")))
         self.assertTrue(any(event.get("phase") == "hlod_geometry" for event in events))
         self.assertTrue(any(event.get("phase") == "ready_to_publish" for event in events))
+        # The archive validates as HLOD whatever its labels say (the S5 profile requirement).
+        rusty_tiles.validate(output, expect_profile="hlod")
         # An unset budget resolves the documented default and never exceeds 4 GiB.
-        defaulted = rusty_tiles.mesh_to_tileset(
-            source, self.root / "default.3tz", jobs=1, _lod="hlod")
+        defaulted = rusty_tiles.mesh_to_tileset(source, self.root / "default.3tz", jobs=1)
         default_budget = defaulted.diagnostics["memory"]["budget"]
         self.assertIsNone(default_budget["requested_bytes"])
         self.assertLessEqual(default_budget["resolved_bytes"], 4 << 30)
@@ -390,14 +387,13 @@ class WheelAPI(unittest.TestCase):
 
         aborted = self.root / "aborted.3tz"
         with self.assertRaises(RuntimeError) as caught:
-            rusty_tiles.mesh_to_tileset(source, aborted, jobs=1, callback=fail, _lod="hlod")
+            rusty_tiles.mesh_to_tileset(source, aborted, jobs=1, callback=fail)
         self.assertIs(caught.exception, failure)
         self.assertFalse(aborted.exists())
         # Below the stage minimum the run is a typed resource refusal that publishes nothing.
         refused = self.root / "refused.3tz"
         with self.assertRaises(rusty_tiles.ResourceLimitError) as caught:
-            rusty_tiles.mesh_to_tileset(source, refused, jobs=1, _memory_budget_bytes=1 << 20,
-                                        _lod="hlod")
+            rusty_tiles.mesh_to_tileset(source, refused, jobs=1, memory_budget_bytes=1 << 20)
         self.assertEqual(caught.exception.kind, "resource_limit")
         self.assertFalse(refused.exists())
         self.assertFalse(any(path.name.startswith(".tiles-") for path in self.root.iterdir()))
@@ -408,12 +404,12 @@ class WheelAPI(unittest.TestCase):
         write_grid_mesh(source)
         cli_output = self.root / "cli.3tz"
         completed = subprocess.run(
-            [CLI, "--json", "mesh", "-i", str(source), "-o", str(cli_output), "--lod", "hlod",
+            [CLI, "--json", "mesh", "-i", str(source), "-o", str(cli_output),
              "--jobs", "1", "--memory-budget", "2GiB"],
             capture_output=True, check=True, timeout=300)
         envelope = json.loads(completed.stdout)
         python = rusty_tiles.mesh_to_tileset(
-            source, self.root / "python.3tz", jobs=1, _memory_budget_bytes=2 << 30, _lod="hlod")
+            source, self.root / "python.3tz", jobs=1, memory_budget_bytes=2 << 30)
         self.assertEqual((self.root / "python.3tz").read_bytes(), cli_output.read_bytes())
         self.assertEqual(python.report, envelope["tilerReport"])
         with zipfile.ZipFile(cli_output) as archive:
@@ -438,28 +434,29 @@ class WheelAPI(unittest.TestCase):
                          envelope["diagnostics"]["memory"]["hlod"]["minimum_bytes"])
         self.assertEqual(python.diagnostics["hlod"]["tiles"], envelope["diagnostics"]["hlod"]["tiles"])
         self.assertEqual(python.diagnostics["archive_bytes"], envelope["diagnostics"]["archive_bytes"])
+        # Both validate the same way under the HLOD profile requirement.
+        checked = subprocess.run([CLI, "--json", "validate", str(cli_output), "--expect-profile", "hlod"],
+                                 capture_output=True, check=True, timeout=300)
+        self.assertTrue(json.loads(checked.stdout)["ok"])
 
     def test_tiler_documented_signatures_name_only_installed_parameters(self):
         installed = set(inspect.signature(rusty_tiles.mesh_to_tileset).parameters)
-        documented = {"input", "output", "profile", "jobs", "scratch_dir",
+        documented = {"input", "output", "profile", "jobs", "scratch_dir", "memory_budget_bytes",
                       "anchor", "orientation_xyzw", "scene_offset", "source_crs", "source_axes",
                       "source_offset", "source_offset_file", "height_offset", "force", "callback"}
-        # The private selector and budget travel through **kwargs: no signature or help() names
-        # them, and any other keyword is still a TypeError.
-        self.assertEqual(installed - documented, {"kwargs"})
-        self.assertLessEqual(documented, installed)
+        self.assertEqual(installed, documented)
         shown = io.StringIO()
         with contextlib.redirect_stdout(shown):
             help(rusty_tiles.mesh_to_tileset)
-        for hidden in ("_lod", "memory_budget", "hlod"):
-            self.assertNotIn(hidden, shown.getvalue() + str(inspect.signature(rusty_tiles.mesh_to_tileset))
-                             + (rusty_tiles.mesh_to_tileset.__doc__ or ""))
+        self.assertIn("memory_budget_bytes", shown.getvalue())
+        for removed in ("_lod", "h17", "H17"):
+            self.assertNotIn(removed, shown.getvalue())
         with self.assertRaises(TypeError):
-            rusty_tiles.mesh_to_tileset(self.root / "x.glb", self.root / "x.3tz", _lod_typo="hlod")
+            rusty_tiles.mesh_to_tileset(self.root / "x.glb", self.root / "x.3tz", _memory_budget_bytes=1)
         for name in ("docs/MESH.md", "bindings/python/README.md"):
             text = (ROOT / name).read_text()
             self.assertNotIn("_lod", text, name)
-            self.assertNotIn("memory_budget_bytes", text, name)
+            self.assertNotIn("_memory_budget_bytes", text, name)
             signature = re.search(r"mesh_to_tileset\(input, output, \*,([^)]*)\)", text, re.S)
             self.assertIsNotNone(signature, name)
             names = re.findall(r"(\w+)=", signature.group(1))
@@ -551,6 +548,12 @@ class WheelAPI(unittest.TestCase):
             self.assertEqual(len(transform), 16)
             self.assertEqual(result.report["root_transform"], transform)
         self.assertEqual(result.report["coordinates"], "wgs84-ecef")
+
+    def test_r2_imagery_pyramid_is_not_a_python_capability(self):
+        self.assertFalse(hasattr(rusty_tiles, "raster_to_pyramid"))
+        self.assertFalse(hasattr(rusty_tiles, "RasterRequest"))
+        self.assertFalse(hasattr(rusty_tiles, "RasterDisplay"))
+        self.assertTrue(callable(rusty_tiles.raster_tile_to_directory))
 
     def test_d1_native_capability_is_explicit_and_leaves_no_output(self):
         output = self.root / "d1-raster"
@@ -676,6 +679,94 @@ class WheelAPI(unittest.TestCase):
         self.assertAlmostEqual(tileset["root"]["transform"][12], 6378137 + 130, delta=0.001)
         self.assertEqual(source.read_bytes(), before)
         self.assertFalse(Path(str(source) + "-wal").exists())
+
+    @unittest.skipUnless(os.environ.get("RUSTY_TILES_BIN"), "CLI required for paired vector acceptance")
+    def test_vector_cli_python_published_geometry_metadata_height_and_defaults(self):
+        sys.path.insert(0, str(ROOT / "tests"))
+        from vector_fidelity_oracle import check_source, decode, ecef
+        source = self.root / "paired.geojson"
+        source.write_text(json.dumps(dict(type="FeatureCollection", features=[
+            dict(type="Feature", id=7, properties=dict(name="height", integer=2**60+3,
+                 missing=None, tags=[1, None, "x"]),
+                 geometry=dict(type="Point", coordinates=[9.001, 1.002, 17]))])))
+        # The GeoPackage fixture from the adjacent test is authored independently
+        # with sqlite/WKB, and keeps an explicit horizontal-CRS height offset.
+        gpkg = self.root / "paired.gpkg"
+        with closing(sqlite3.connect(gpkg)) as db, db:
+            db.executescript("""
+                PRAGMA application_id=1196444487;
+                CREATE TABLE gpkg_spatial_ref_sys(srs_name TEXT,srs_id INTEGER PRIMARY KEY,
+                  organization TEXT,organization_coordsys_id INTEGER,definition TEXT,description TEXT);
+                INSERT INTO gpkg_spatial_ref_sys VALUES('WGS 84',4326,'EPSG',4326,
+                  'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433],AUTHORITY["EPSG","4326"]]','');
+                CREATE TABLE gpkg_contents(table_name TEXT PRIMARY KEY,data_type TEXT,
+                  identifier TEXT,description TEXT,last_change TEXT,min_x REAL,min_y REAL,
+                  max_x REAL,max_y REAL,srs_id INTEGER);
+                INSERT INTO gpkg_contents(table_name,data_type,identifier,srs_id)
+                  VALUES('survey','features','survey',4326);
+                CREATE TABLE gpkg_geometry_columns(table_name TEXT,column_name TEXT,
+                  geometry_type_name TEXT,srs_id INTEGER,z INTEGER,m INTEGER);
+                INSERT INTO gpkg_geometry_columns VALUES('survey','geom','GEOMETRY',4326,1,0);
+                CREATE TABLE survey(fid INTEGER PRIMARY KEY,geom BLOB,name TEXT);
+            """)
+            db.execute("INSERT INTO survey VALUES(7,?,'height')",
+                       (b"GP\x00\x01" + struct.pack("<iBI3d", 4326, 1, 1001, 0, 0, 123),))
+        for path, layer, properties, position in [
+            (source, "paired", dict(name="height", integer=2**60+3, missing=None, tags='[1,null,"x"]'), ecef(9.001,1.002,24)),
+            (gpkg, "survey", dict(name="height"), ecef(0,0,130))]:
+            with self.subTest(source=path.suffix):
+                options = dict(source_crs="EPSG:4326", height_offset=7, list_fields="json",
+                               quantize=True, meshopt=True, jobs=2, reproducible=True)
+                output = self.root / (path.suffix[1:]+"-python.3tz")
+                result = rusty_tiles.vector_to_3tz(path, output, **options)
+                cli = self.root / (path.suffix[1:]+"-cli.3tz")
+                run = subprocess.run([os.environ["RUSTY_TILES_BIN"], "vector", "-i", str(path),
+                    "-o", str(cli), "--sourceCrs", "EPSG:4326", "--heightOffset", "7",
+                    "--listFields", "json", "--quantize", "--meshopt", "--jobs", "2", "--reproducible"],
+                    capture_output=True, text=True)
+                self.assertEqual(run.returncode, 0, run.stdout+run.stderr)
+                expected = {"7": dict(mode=0, properties=dict(properties, _source_id="7", _source_layer=layer), parts=[(position,)])}
+                for archive in (output, cli):
+                    actual, report = decode(archive)
+                    check_source(actual, expected, report["oraclePositionToleranceMetres"])
+                cli_report = decode(cli)[1]
+                for key in ("budgets", "metadata", "lodLevels", "lodToleranceMetres", "features", "skipInvalidEnabled", "repairEnabled"):
+                    self.assertEqual(result.report[key], cli_report[key])
+                self.assertEqual(result.report["layers"][0]["heightOffset"], 7)
+                self.assertEqual(result.report["layers"][0]["heightMode"], cli_report["layers"][0]["heightMode"])
+                if path.suffix == ".geojson":
+                    doc = json.loads(path.read_text())
+                    doc['features'].append(dict(type='Feature',id=8,properties=dict(name='invalid'),
+                        geometry=dict(type='LineString',coordinates=[[9,1,17]])))
+                    path.write_text(json.dumps(doc))
+                else:
+                    with closing(sqlite3.connect(path)) as db, db:
+                        db.execute("INSERT INTO survey VALUES(8,?,'invalid')",
+                            (b"GP\x00\x01"+struct.pack("<iBII3d",4326,1,1002,1,0,0,123),))
+                strict_api = self.root / (path.suffix[1:]+"-strict-api.3tz")
+                with self.assertRaises(rusty_tiles.DataError):
+                    rusty_tiles.vector_to_3tz(path,strict_api,**options)
+                self.assertFalse(strict_api.exists())
+                strict_cli = self.root / (path.suffix[1:]+"-strict-cli.3tz")
+                command = [os.environ["RUSTY_TILES_BIN"], "--json", "vector", "-i", str(path),
+                    "-o", str(strict_cli), "--sourceCrs", "EPSG:4326", "--heightOffset", "7",
+                    "--listFields", "json", "--quantize", "--meshopt", "--jobs", "2", "--reproducible"]
+                refused = subprocess.run(command,capture_output=True,text=True)
+                self.assertEqual(refused.returncode,3,refused.stdout+refused.stderr)
+                self.assertEqual(json.loads(refused.stdout)['error']['kind'],'invalid_input')
+                self.assertFalse(strict_cli.exists())
+                skipped_api = self.root / (path.suffix[1:]+"-skip-api.3tz")
+                skipped = rusty_tiles.vector_to_3tz(path,skipped_api,skip_invalid=True,**options)
+                command.append('--skipInvalid')
+                accepted = subprocess.run(command,capture_output=True,text=True)
+                self.assertEqual(accepted.returncode,0,accepted.stdout+accepted.stderr)
+                for archive in (skipped_api,strict_cli):
+                    survivors, skip_report = decode(archive)
+                    check_source(survivors,expected,skip_report['oraclePositionToleranceMetres'])
+                    self.assertEqual(skip_report['features'],1)
+                    self.assertEqual(skip_report['skippedFeatures'],1)
+                self.assertTrue(skipped.report['skipInvalidEnabled'])
+
 
     def test_vector_unsupported_crs_and_height_refusals(self):
         source = self.root / "points.geojson"
@@ -1265,6 +1356,56 @@ class WheelAPI(unittest.TestCase):
         self.assertIn("decodedContentBounds", report["notInspected"])
         self.assertIn("decodedContentBounds.skin", report["notInspected"])
         self.assertIn("scene transforms", report["notInspected"])
+
+    def test_validate_hlod_expectation(self):
+        # Review r12/r13: the HLOD expectation belongs to the caller or the archive's own
+        # declaration, never to payload labels whose removal it must detect. A tileset whose
+        # payloads carry no source identity passes as generic unless HLOD is expected.
+        payload = struct.pack("<9f", 0, 0, 0, 1, 0, 0, 0, 1, 0)
+        document = json.dumps({
+            "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}],
+            "nodes": [{"mesh": 0}], "buffers": [{"byteLength": 36}],
+            "bufferViews": [{"buffer": 0, "byteLength": 36}],
+            "accessors": [{"bufferView": 0, "componentType": 5126, "type": "VEC3",
+                           "count": 3, "min": [0, 0, 0], "max": [1, 1, 0]}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+        }).encode()
+        document += b" " * (-len(document) % 4)
+        glb = (struct.pack("<4sII", b"glTF", 2, 28 + len(document) + 36)
+               + struct.pack("<I4s", len(document), b"JSON") + document
+               + struct.pack("<I4s", 36, b"BIN\0") + payload)
+        archives = {}
+        for name in ("undeclared", "asset", "report"):
+            data = self.root / f"stripped-{name}"
+            data.mkdir()
+            (data / "a.glb").write_bytes(glb)
+            asset = {"version": "1.1"}
+            if name == "asset":
+                asset["extras"] = {"rustyTiles": {"lod": "hlod"}}
+            if name == "report":
+                (data / "conversion.json").write_text(json.dumps({"lod": "hlod"}))
+            (data / "tileset.json").write_text(json.dumps({
+                "asset": asset, "geometricError": 0,
+                "root": {"boundingVolume": {"box": [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]},
+                         "geometricError": 0, "content": {"uri": "a.glb"}},
+            }))
+            archives[name] = rusty_tiles.convert_to_3tz(
+                data, self.root / f"stripped-{name}.3tz").output
+        for name, archive in archives.items():
+            with self.assertRaisesRegex(rusty_tiles.TilesError, "hlodFeatureIds", msg=name):
+                rusty_tiles.validate(archive, expect_profile="hlod")
+            if name == "undeclared":
+                report = rusty_tiles.validate(archive)
+                self.assertNotIn("hlodFeatureIds", report["checks"])
+            else:
+                with self.assertRaisesRegex(rusty_tiles.TilesError, "hlodFeatureIds", msg=name):
+                    rusty_tiles.validate(archive)
+        missing = self.root / "absent.3tz"
+        for bad in ("HLOD", "h17", ""):
+            with self.assertRaises(ValueError, msg=bad):
+                rusty_tiles.validate(missing, expect_profile=bad)
+        with self.assertRaises(TypeError):
+            rusty_tiles.validate(missing, expect_profile=1)
 
     def test_validate_limit_surface(self):
         # VS-C: opt-in caps are None, overrides are validated before any I/O, a limit refusal

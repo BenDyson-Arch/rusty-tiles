@@ -1,5 +1,12 @@
 # H27 immutable proxy appearance core
 
+> **Historical — 2026-10-26.** `mesh_large::bake`, `bake_pass.rs` and the H27 leaf
+> witness were removed in HLOD slice S6
+> ([decision](../../../docs/architecture/hlod-040-decision.md)); the last commit
+> holding them is `9a19c0e5`. This record, its mutant lists and control generator
+> are kept as audit evidence; they target the removed sources and are not
+> successor requirements. HLOD's coarse appearance is `mesh_large/hlod/appearance.rs`.
+
 This slice supplies the internal `mesh_large::bake` component. It preserves
 raw POSITION words, decoded oriented geometry, node TRS, source/material
 identity and arbitrary integer feature sets. Its charts, raster, pre-encode

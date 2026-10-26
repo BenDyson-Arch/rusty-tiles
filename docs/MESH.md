@@ -13,12 +13,6 @@ tile's geometric error is a **sampled, measured** distance to the source surface
 not a certificate. A successful conversion does not establish the final tiler's
 resource, fidelity, scale or consumer acceptance.
 
-> **Status.** This guide describes the 0.4 HLOD coarse levels. The legacy
-> certified-proxy path (H17 geometry with the H27 proxy bake) is still what a
-> plain `mesh` run builds until it is removed; its behaviour is kept, clearly
-> marked, in [Legacy H17 coarse tiles](#legacy-h17-coarse-tiles). Leaves,
-> source admission, placement, profiles, delivery and reports apply to both.
-
 ## Convert a local scene
 
 ```sh
@@ -146,8 +140,8 @@ source that would need native PROJ for only some vertices is refused.
 ## Coarse levels (HLOD)
 
 Leaves are the exact tiles; every occupied cell above them publishes one coarse
-tile built from its children. This is the 0.4 coarse-tile method; see the
-[status note](#mesh-tiling) for the legacy path that a plain run still takes.
+tile built from its children. This is the only coarse-tile method; it has no
+selector, and a plain `mesh` run uses it.
 
 ### Hierarchy and cracks
 
@@ -218,16 +212,10 @@ they are an appearance approximation of the surface, with no appearance
 certificate.
 
 Coarse pages go through the same delivery encoder, gates and escalation ladder as
-leaf pages, so a profile chooses one colour codec for both. The ETC1S defaults
-below come from the separate default-codec change (#277); a build without it keeps
-its previous `fast`/`balanced` colour codec, and this table is correct once it lands.
-
-| Profile | Colour pages (leaves and coarse) |
-| --- | --- |
-| `fast` | KTX2 ETC1S, quality 50 |
-| `balanced` (default) | KTX2 ETC1S, quality 90 |
-| `quality` | KTX2 UASTC with Zstandard |
-| `lossless` | PNG |
+leaf pages, so a profile chooses one colour codec for both (the table under
+[Profiles](#profiles-and-resources)). A tile's pages together are bounded to about
+2²⁰ texels per slot, shared by surface area among its material classes, so a parent
+with many classes splits one page's worth instead of taking a full page for each.
 
 Normal, metallic-roughness and other data pages, MASK coverage and ID pages follow
 their own class rules in every profile (see [Profiles](#profiles-and-resources)).
@@ -260,13 +248,113 @@ because one triangle samples it.
 
 `--profile` accepts `fast`, `balanced` (the default), `quality` or `lossless`.
 These are **provisional policies**: leaf sizing, texture resolution, encoder
-effort and other constants will be calibrated together after coarse geometry
-and baking exist. Do not build scripts around today's numerical constants.
+effort and other constants will be calibrated together as HLOD implementation
+and acceptance progress. Do not build scripts around today's numerical constants.
 Every present PBR slot follows its colour/data class and the chosen policy.
 Lossy output uses in-process KTX2/Basis; lossless leaf textures use PNG.
 `lossless` describes the agreed leaf texel policy, not exact source GLB bytes,
 arbitrary viewer filtering, or lossless coarse geometry. Leaf coordinate
 encoding and provenance still follow the tiler contract.
+
+Colour-class pages (base colour and emissive), in **both leaves and coarse
+tiles**, use the following initial codec. The single policy owner is
+`src/mesh_large/leaves/delivery.rs::codec_settings`; coarse delivery calls it
+through the shared authored-chain encoder.
+
+| Profile | Colour codec | ETC1S quality / effort |
+| --- | --- | --- |
+| `fast` | KTX2 ETC1S (BasisLZ) | 50 / 0 (lean) |
+| `balanced` (default) | KTX2 ETC1S (BasisLZ) | 90 / 0 (good) |
+| `quality` | KTX2 UASTC + Zstd | unchanged |
+| `lossless` | PNG | unchanged |
+
+Quality uses the wrapper's 1–100 scale; effort 0 maps to native ETC1S
+compression level 0. The initial effort-3 setting mapped to native level 2;
+the [effort sweep](../bench/architecture_audit/etc1s_default/effort.md) records
+the processing cost and byte/error tradeoffs behind the revision. Colour remains
+sRGB with class-correct authored mips. Normal and metallic-roughness remain UASTC;
+occlusion remains scalar ETC1S q90/effort 0 in fast/balanced and UASTC in
+quality. ID pages remain exact PNG in every profile.
+
+The processing tradeoff is explicit: the matched two-worker tex3 sweep took
+47.1/56.5 CPU-s for fast/balanced ETC1S, versus 16.1/18.2 CPU-s for their
+previous UASTC pack 0 codec. Effort 0 cuts the initial effort 3 cost substantially
+and balanced meets the 91.2 CPU-s quality-reference budget, while costing about
+3× the previous same-profile codec's encode CPU. Full tables, byte savings,
+measurement context and resource limits are in the linked effort record.
+
+Decoded RGB floors are support-weighted and checked on **every mip**, including
+1×1. The leaf/delivery gate selects a band by the count of texels with positive
+support, not their summed weights or the padded level area. The middle band is
+64–1,023 supported texels; tiny means fewer than 64.
+A page must meet all applicable criteria; PSNR is in dB, errors in RGBA8 byte units.
+
+| Colour profile | PSNR ≥1,024 / middle / tiny | Large p99.9 cap | Worst supported 4×4 block RMSE cap |
+| --- | --- | --- | --- |
+| `fast` | 20 / 16 / 13 | 112 | 96 |
+| `balanced` | 20 / 16 / 13 | 80 | 80 |
+| `quality` | 27 / 23 / 23 | 64 | 48 |
+
+These fast/balanced RGB gates are looser than develop's previous UASTC floors
+of 24 dB at ≥1,024 supported texels and 20 dB below that, and their local and
+decoded sampler caps are wider. The accepted byte saving carries an explicit
+reduction in reconstruction accuracy.
+Tiny fast/balanced levels additionally require **combined RGB PSNR ≥16 dB**,
+computed from the mean of the three channel MSEs, never the mean of their dB
+values. This catches correlated RGB damage while admitting a shared-palette
+tail concentrated in one channel. The sampler applies this joint floor only
+to decoded colour in its own tiny area band; authored correspondence remains
+strict and separate.
+
+The percentile cap is omitted below 1,024 supported texels; the block guard stays
+active. Alpha keeps PSNR/max-error floors of 30/80 (fast), 30/64 (balanced),
+34/32 (quality). Normal RGB keeps 30/112 plus normalized-length mean/max caps
+0.08/0.20, 0.05/0.15, 0.03/0.10 respectively, and angular mean/p99 caps
+3°/12°. Metallic-roughness keeps 30/32 on G/B; occlusion keeps 30/80 on R
+(quality 30/8). MASK decoded coverage keeps the attainable semantic gap plus
+0.02/0.01/0.005. Non-MASK alpha and data source-sampler floors are unchanged.
+Decoded fast/balanced colour source sampling uses the same RGB PSNR bands,
+selected by the sampled level's **area** (width × height), including padding,
+not its positive-support count. Nearest-mip filtering rounds to the selected
+level; a fractional mip blend uses the coarser participating level. Non-mip
+filters use level zero. Thus a sparsely supported 32×32 level uses the large
+sampler band even when its leaf gate uses the tiny band. Maximum errors are
+160/144 respectively. Quality keeps 34/24. Pre-encode source correspondence
+keeps its original 22/56, 22/32, 34/24 limits; codec error does not authorize
+weaker chart correspondence. These errors are in sRGB byte space after
+linear-light sampling.
+
+The q50/q90 photo, alpha-photo and odd-size fixture bases were authored into
+valid colour-correct mip pages (POT padding has zero support). They measured
+minimum channel PSNR 20.28/20.67 dB at ≥1,024 texels, 18.57/18.62 dB in the
+middle band and 13.30/13.30 dB in tiny mips at effort 0. Their minimum joint
+tiny RGB PSNR is 16.85 dB. The effort-0 smooth 64² photo control
+reaches 17.05/17.16 dB in the middle band. Shared palettes and joint-channel
+reconstruction explain the coarse/tiny channel tails, motivating the initial
+20/16/12 bands. The processing-cost revision raises tiny channel PSNR to 13 dB
+and adds the 16 dB joint RGB floor. The former 12 dB admitted a light flat grey 200
+page wrongly converted to linear bytes 147 (13.65 dB in all channels). Raising
+the channel floor to 14 dB would also reject valid 13.30 dB fixture tails; the
+joint guard separates those cases. The existing codec byte-domain
+pyramids were measured separately; they do not define the colour-mip filtering contract.
+
+A legal ETC1S decode is not automatically acceptable. The effort-0 128² and 256²
+smooth-photo stress controls miss the large-level floors and require escalation; the
+256² q90 case reaches 17.52 dB and p99.9 95 on its 32² mip. Noise/chroma-noise also miss the RGB floors; they do not set
+acceptance floors. Percentile/block caps retain local damage detection, with
+flat/low-noise and saturated checker controls measured separately. Source max
+caps cover photo tails with margin; alpha/MASK guards remain independent and
+are never relaxed to admit RGB error.
+
+This brings forward D7 by the owner's 2026-10-24 decision. Calibration and
+bounded tex3/crop3 measurements, corruption controls and proof limits are
+recorded in [the ETC1S acceptance record](../bench/architecture_audit/etc1s_default/README.md).
+The [processing-cost revision](../bench/architecture_audit/etc1s_default/effort.md)
+records the effort sweep, tighter tiny gate and default-lossy archive golden.
+Black pages, inverted channels and an upsampled coarse checker mip fail the
+decoded gate. Smooth wrong-mip content can still pass even a 20 dB floor; the
+revision records a >40 dB example and proposes a separately calibrated spatial
+derivative/band-pass check. PSNR does not establish mip provenance.
 
 In a lossy profile, a texture page that misses any decoded-image gate at the
 profile's own encoder setting (per-level channel and normal floors, MASK
@@ -306,8 +394,8 @@ intermediates use the output parent. Final archive staging remains on the output
 filesystem beside the destination. Disk-backed scratch is usually
 preferable for large sources; memory-backed scratch consumes memory in the
 worker plan and is reported. Admission requires free scratch for the largest
-declared stage working set (files retained from earlier stages, H17's pre-pass,
-and each external sort's runs). Sort runs are 8 MiB chunk files removed as soon as
+declared stage working set (files retained from earlier stages, the HLOD
+incidence pass and source index, and each external sort's runs). Sort runs are 8 MiB chunk files removed as soon as
 they are read, so a sorted stream and the output it feeds share space, with at
 most `F` partly read chunks of slack. A 10% margin and per-file rounding are
 added: about 0.5 KB per source triangle at scale with every vertex attribute present.
@@ -325,11 +413,11 @@ separately against the same free space. Memory-backed (tmpfs) scratch is charged
 to the worker memory plan, but a work directory or output on tmpfs is not.
 Each capture stage rechecks free space for its own working set on entry and
 fails closed if its measured peak exceeds its declared bound; the diagnostics
-report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). The H17
-pre-pass is measured the same way, and the whole-run spill peak
-(`run_scratch_peak_bytes`) must stay within the declared need. Coarse-tile
-sidecar files and the legacy bake handoff files are budgeted by their own stages and are not in
-these spill figures. A preflight is
+report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). The HLOD
+incidence pass is measured the same way (`leaf_delivery.hlod_incidence_scratch_peak_bytes`), and the
+whole-run spill peak (`run_scratch_peak_bytes`) must stay within the declared need.
+The coarse walk's own scratch is admitted through its memory leases
+(`diagnostics.hlod.scratch_components`) and is not in the capture figures. A preflight is
 not a reservation against unrelated writers. Owned intermediate files are
 cleaned on success and failure. Any cleanup failure carries actionable paths
 and does not replace the original cause.
@@ -342,23 +430,23 @@ individual-item and format limits still apply. The 3TZ member ceiling is
 texture-format option, external encoder fallback or compression bypass on
 `mesh`.
 
-### Memory budget (coming with the HLOD default)
+### Memory budget
 
-**Not a current option.** A plain `mesh` run takes no budget, and no public CLI
-option, Python keyword or Rust method accepts one yet: the option stays hidden until
-the HLOD coarse levels are the default, because the legacy path cannot enforce a
-budget. This section describes the planned surface so the defaults are settled
-before it appears.
+One declared ceiling governs the whole run, with one rule on every surface:
 
-One declared ceiling will govern the whole run, with one rule on every surface (a
-CLI option, a Python keyword and a Rust request method, all taking a byte count).
+| Surface | Spelling |
+| --- | --- |
+| CLI | `--memory-budget BYTES` (`--memoryBudget`) |
+| Python | `mesh_to_tileset(..., memory_budget_bytes=None)` |
+| Rust | `TilerRequest::with_memory_budget(bytes)` |
 
 - **Values.** A positive integer number of bytes. The CLI also takes the binary
-  suffixes `B`, `KiB`, `MiB`, `GiB` and `TiB` (`2GiB`); Python takes
-  an `int`. Zero, signs, fractions, exponents, decimal-unit (`GB`) or lowercase
+  suffixes `B`, `KiB`, `MiB`, `GiB` and `TiB` (`2GiB`); Python takes an `int`, and
+  Rust a `u64`. Zero, signs, fractions, exponents, decimal-unit (`GB`) or lowercase
   suffixes, booleans (Python: `TypeError`) and values above 2⁶⁴−1 are
-  `invalid_request`, refused before any source or output is touched (a CLI usage
-  error carries exit 2 and `error.code="usage"`, like `--jobs`).
+  `invalid_request`, refused before any source or output is touched, including an
+  offset file (a CLI usage error carries exit 2 and `error.code="usage"`, like
+  `--jobs`).
 - **Default.** Without one, the lesser of **4 GiB** and half the detected
   host/cgroup headroom; 2 GiB when headroom cannot be detected. An explicit budget,
   2 GiB for example, is a ceiling that is never silently raised: every stage plans
@@ -383,8 +471,6 @@ CLI option, a Python keyword and a Rust request method, all taking a byte count)
 - **What it is not.** It is an admission and planning ceiling, not an operating
   system limit or a measured peak-RSS guarantee; measured peaks come from the
   acceptance campaign.
-- **Until then.** The legacy path a plain run takes does not enforce a budget, so
-  the hidden option is refused there (`invalid_request`) instead of being ignored.
 
 ### Primitives, atlases and editability
 
@@ -420,98 +506,6 @@ against UNSIGNED_INT vertex attributes; rusty-tiles chooses not to write them),
 and FLOAT holds every integer only up to 2^24. A larger ID is `unsupported`
 rather than rounded.
 
-## Legacy H17 coarse tiles
-
-A plain `mesh` run still builds coarse tiles with the legacy path until it is
-removed in favour of the [HLOD coarse levels](#coarse-levels-hlod). Nothing in
-this section applies to HLOD, and the section, the `lod_*` and `proxy_bake` report
-fields and the `proxy_source` identity go with the path.
-
-- **Geometry (H17).** Each parent carries a simplified proxy whose geometric error
-  is **certified** as a bound on its two-way distance to the source
-  ([H17 contract](architecture/h17-lod-contract.md), superseded by the HLOD
-  direction), with seam thinning and fill. A parent tile's geometric error is that
-  certified error; baking never changes a proxy's geometry or error.
-- **Identity.** A proxy triangle's `proxy_source` feature-ID row names one source
-  triangle (or a fill). In vertex space proxies are exact only to the source
-  primitive, or to the majority source. Proxies are exact in texture space,
-  because charts never overlap. They carry no `baked_feature_id_*` textures.
-- **Reports.** `texel_ownership.unique_proxies` is every proxy (vacuous when no
-  baker runs). Runtime phases are `lod_prepass`, `lod_simplify`, `seam_resolution`,
-  `lod_finish` and `proxy_bake` (the three middle LOD phases summed over depths in
-  `phase_seconds`); the first 16 proxy tiles that take the facing fallback also log
-  their id; `proxy_bake` reports the baked `tiles`,
-  `retried_tiles`, worker seconds per bake step (charts, raster, encode, assemble,
-  commit) and the appearance fallback counts (`facing_fallback_samples`, `_faces`,
-  `_tiles`; `fill_fallback_samples`).
-- **Lighting history.** Before commit `bc6b3710` (#237) the proxies of a source without
-  NORMAL also published NORMAL, TANGENT and COLOR_0, so Cesium lit them (darker, with a
-  blue cast) while it drew the leaves unlit, and a view that mixed the two showed hard
-  seams. Proxy primitives now publish NORMAL and COLOR_0 only where their source
-  primitive's leaves carry them, and TANGENT only with a baked normal map. The
-  tests pin that attribute rule for the legacy proxies.
-
-### Legacy proxy textures (H27)
-
-Every legacy proxy tile is baked after its certified geometry is fixed. The
-bake keeps the proxy's exact POSITION words, node transform, face order, source
-and material identity and every feature-ID set, adds new chart UVs, and fills
-each present PBR slot (base colour, metallic-roughness, normal, occlusion,
-emissive) by sampling the captured source images.
-Lossy profiles deliver proxy pages through the same KTX2/Basis gates and
-escalation ladder as leaves; `lossless` delivers a PNG base level. The complete
-proxy GLB is read back before it replaces the untextured one, and a tile that
-would exceed the per-tile byte budget is rebaked at a lower texel density.
-
-A proxy starts at its children's texel density: the coarsest child's
-world-area-weighted median texel spacing (a few near-degenerate source UV
-triangles do not coarsen it), or a profile fraction of its geometric error if
-that is coarser (`balanced`: one sixteenth; `fast` twice that; `quality` and
-`lossless` half).
-
-Appearance rules:
-
-- **Sub-texel slivers have no texture.** A face whose exact page footprint is
-  strictly under one square texel, and whose quantized UVs collapse or invert,
-  is published without a texture sampling obligation (a no-raster face). It
-  keeps its geometry, corner normals/colours and feature IDs; it covers no texel
-  centre, so it would have sampled the gutter or a neighbouring chart anyway. A
-  collapse at or above one square texel is a chart defect: the chart is
-  repacked at a higher density, and the run refuses after four attempts.
-  Zero-area faces are always no-raster.
-- **Feature IDs above 2^24 are refused.** glTF says UNSIGNED_INT vertex
-  attributes SHOULD NOT be used; that guidance is advisory, but rusty-tiles
-  chooses not to write them. A feature-ID attribute is therefore UNSIGNED_BYTE,
-  UNSIGNED_SHORT or FLOAT, and FLOAT holds every integer only up to 2^24. A
-  larger ID is `unsupported` rather than rounded.
-
-- **A face turned away from its source samples the nearest source surface.**
-  A proxy texel samples the nearest point of a source triangle of the face's own
-  primitive that faces the proxy face. Simplification can fold or flip a face so
-  that no triangle of its primitive in the tile faces it (a flipped sliver); that
-  face then samples the nearest same-primitive surface point regardless of
-  orientation, with the same material, texture and tie-break order, and its
-  normal-map texels keep the source's world-space direction. A donor farther
-  than two longest edges of the face is refused as `unsupported`, with the
-  distance in the message. The run diagnostics count these texels, faces and
-  tiles (`proxy_bake`).
-
-Known limitations of the legacy bake:
-
-- A proxy directly above leaf tiles samples the original source images, not
-  the leaves' delivered pages, because leaf pages keep no per-texel terminal
-  ledger. This is correct but slower than resampling the children; keeping
-  that ledger is a planned 0.4.x follow-up.
-- Baking dominates conversion time. Proxies of one depth bake in parallel
-  (up to `--jobs`), but one proxy bakes on one thread, so the narrow top of the
-  tree runs serially. On a 0.79M-triangle textured crop (eight hardware
-  threads, `--jobs 8`) the whole conversion took about two minutes, about
-  100 s of it baking 63 coarse tiles.
-- A proxy whose retained children do not fit its worker's share of the bake
-  memory is baked again after its depth, alone with the whole allowance, so
-  `--jobs` does not change which inputs convert (or their output) but can add
-  serial time.
-
 ## Python
 
 ```python
@@ -520,7 +514,7 @@ import rusty_tiles
 
 result = rusty_tiles.mesh_to_tileset(
     Path("local.glb"), Path("placed.3tz"),
-    profile="balanced", jobs=None, scratch_dir=None,
+    profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None,
     anchor=(153.02, -27.47, 25.0),
     orientation_xyzw=(0.0, 0.0, 0.0, 1.0),
     scene_offset=(10.0, 2.0, -5.0),
@@ -534,7 +528,7 @@ print(result.report["triangles"], result.diagnostics["leaf_delivery"]["jobs"])
 ```
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
-scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
+scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None, scene_offset=None,
 source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
 height_offset=None, force=False, callback=None)` accepts `str` or `os.PathLike`
 paths. `source_crs=None` or `"local"` keeps local input; `source_axes` is
@@ -542,7 +536,9 @@ paths. `source_crs=None` or `"local"` keeps local input; `source_axes` is
 sequence, `source_offset_file` a path, and `height_offset` defaults to 0, with
 the CLI's rules. `jobs=None`
 means auto; a positive integer is a maximum. Booleans and noninteger worker
-counts are rejected. Unknown legacy keywords raise `TypeError`. Python calls
+counts are rejected. `memory_budget_bytes` is the [memory budget](#memory-budget): a
+positive `int` (not a `bool`), checked before any file is read; `None` takes the
+default. Unknown keywords raise `TypeError`. Python calls
 the same core operation without launching the CLI or an encoder, and releases
 the GIL during native work.
 
@@ -593,28 +589,25 @@ for placed output. A coarse tile's geometric error is its sampled, measured erro
 ([geometric error](#geometric-error-sampled-not-certified)); coarse textures are
 an appearance approximation with no appearance certificate
 ([coarse appearance](#coarse-appearance)), and charting never changes a position or
-the error. The legacy path's error semantics are described under
-[Legacy H17 coarse tiles](#legacy-h17-coarse-tiles).
+the error.
 
 Runtime diagnostics stay **outside the archive** so worker/scratch choices do
 not alter its semantic bytes. They include `requested_jobs`, `capture`,
 `leaf_delivery`, `archive_bytes`, `peak_held_records`, `phase_seconds`, the
-`memory` budget and stage plan (coarse-stage runs), and the coarse stage's `hlod`
-facts (tiles, workers, CPU seconds, lease peak, `error_measurement` and the
-per-depth appearance summary: page texels, covered texels, cap hits and the
-requested and achieved spacing). `phase_seconds` holds the wall seconds of
-`capture`, `leaf_build`, `hlod_incidence`, `hlod_geometry` and `archive`; the
-legacy path's phases and bake diagnostics are described under
-[Legacy H17 coarse tiles](#legacy-h17-coarse-tiles). Stage objects describe
-worker admission and owned memory/scratch resources; their declared accounting
-is not an automatically measured RSS guarantee. Absolute scratch paths and
-resource observations are diagnostics, not semantic profile constants.
+`memory` budget and stage plan ([memory budget](#memory-budget)), and the coarse
+stage's `hlod` facts (tiles, workers, CPU seconds, lease peak, `error_measurement`
+and the per-depth appearance summary: page texels, covered texels, cap hits and the
+requested and achieved spacing). `memory` and `hlod` are present in every result.
+`phase_seconds` holds the wall seconds of `capture`, `leaf_build`, `hlod_incidence`,
+`hlod_geometry` and `archive`. Stage objects describe worker admission and owned
+memory/scratch resources; their declared accounting is not an automatically
+measured RSS guarantee. Absolute scratch paths and resource observations are
+diagnostics, not semantic profile constants.
 
 `--progress json` emits NDJSON work events on stderr with named phases and
 nullable totals: `conversion`, `capture`, then inside the leaf stage
 `leaf_build` (leaves), `hlod_incidence` and `hlod_geometry` (coarse stage), then
-`leaf_payloads`, `archive` and `ready_to_publish`. The legacy path's phases
-are listed under [Legacy H17 coarse tiles](#legacy-h17-coarse-tiles). Each finished
+`leaf_payloads`, `archive` and `ready_to_publish`. Each finished
 phase also logs its wall seconds and the run's elapsed seconds as a `log` event.
 Required events finish before publication; the returned
 successful result establishes installation. A post-install cleanup problem
@@ -674,22 +667,21 @@ output mode. `glb-to-3tz` / `glb_to_3tz` and `createTilesetJson` /
 `model_to_manifest` remain the separate exact-byte wrapping/sibling-manifest
 products.
 
-### Migrating from the legacy coarse tiles to HLOD
+### Development builds before the HLOD coarse levels
 
-These changes take effect for a plain `mesh` run when HLOD replaces the legacy path
-(see the [status note](#mesh-tiling)); until then they describe what to expect.
+Builds made during 0.4.0 development used certified proxy geometry with a
+separate texture bake. That path was removed outright, with no switch, alias or
+compatibility mode; nothing in a release publishes its output. Scripts written
+against those builds need these changes:
 
-| Legacy path | HLOD |
+| Development build | Now |
 | --- | --- |
-| A parent's geometric error is a certified bound on its two-way distance to the source | A sampled, measured error ([not a certificate](#geometric-error-sampled-not-certified)); do not rely on it as a guarantee against unsampled outliers |
-| Coarse tiles carry `proxy_source` rows naming a source triangle (or a fill) | One representative `source_primitive` ID per coarse triangle; no `proxy_source`, no coarse source-triangle table. Read leaves for exact provenance and annotation |
-| Coarse textures are baked per texel against a certified proxy and a bake ledger | Fresh content-sized charts, nearest-source bake, no ledger or drift gate |
-| Phases `lod_prepass`, `lod_simplify`, `seam_resolution`, `lod_finish`, `proxy_bake` and the `proxy_bake` diagnostics | Phases `hlod_incidence` and `hlod_geometry`; diagnostics `hlod` and `memory` |
-| No memory budget; capture and leaves size themselves to detected headroom | A declared [memory budget](#memory-budget-coming-with-the-hlod-default) is planned, with a default of the lesser of 4 GiB and half the headroom |
-| Crack-freedom by certified seam thinning | Crack-free by construction with locked outer interfaces |
-
-Scripts that read `proxy_source`, the legacy phase names or `proxy_bake` need
-updating; there is no shipping mode that keeps both.
+| A parent's geometric error was a certified distance bound | A sampled, measured error ([not a certificate](#geometric-error-sampled-not-certified)) |
+| Coarse tiles carried `proxy_source` rows naming a source triangle | One representative `source_primitive` ID per coarse triangle; read leaves for exact provenance and annotation |
+| Phases `lod_prepass`, `lod_simplify`, `seam_resolution`, `lod_finish`, `proxy_bake`, and the `proxy_bake` diagnostics | Phases `hlod_incidence` and `hlod_geometry`; diagnostics `hlod` and `memory` |
+| Scratch diagnostics `lod_prepass` and `lod_prepass_scratch_peak_bytes` | `hlod_incidence` and `hlod_incidence_scratch_peak_bytes` |
+| A hidden coarse-tile selector (`--lod`) | Removed; there is one method |
+| A hidden, optional memory budget | The public [memory budget](#memory-budget); a budget always resolves |
 
 ## Known Cesium colour limitation
 
@@ -723,8 +715,7 @@ exports) gives leaves with POSITION and TEXCOORD_0 only, and CesiumJS 1.146
 draws such tiles unlit, so the texture colour is shown as sampled. Coarse tiles
 publish NORMAL only where the source carries normals, so a view that mixes leaves
 and coarse tiles of one source shades them the same way, without the hard seams
-and tint step a lit coarse tile beside unlit leaves would show (the history is in
-[Legacy H17 coarse tiles](#legacy-h17-coarse-tiles)). A source that does carry
+and tint step a lit coarse tile beside unlit leaves would show. A source that does carry
 normals is lit in Cesium for leaves and coarse tiles alike, so its apparent
 brightness follows Cesium's lighting.
 
@@ -734,8 +725,7 @@ What is verified and what is not.
   emissive) in the H19 probe, with numeric shader samples of KTX2 pages; the
   lit-versus-unlit mismatch and its removal on one 0.79M-triangle photogrammetry
   crop in CesiumJS 1.146 (a visual check by the maintainer, not a pixel measurement);
-  and, for the legacy coarse tiles, their attribute set against the leaves, which
-  the tests pin.
+  and the coarse tiles' attribute set against the leaves, which the tests pin.
 - Not verified: how much of the filtering error shows on the unlit path as
   against the lit one (H19 measured sampled values, not a full rendered
   appearance); other CesiumJS versions, GPUs, browsers and viewers; whether PNG
