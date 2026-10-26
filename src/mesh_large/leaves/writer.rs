@@ -946,7 +946,6 @@ mod tests {
             }],
             textures: vec![json!({"source":0,"sampler":0})],
             samplers: vec![json!({"magFilter":9729,"minFilter":9729,"wrapS":33071,"wrapT":33071})],
-            preencode: Vec::new(),
         }
     }
     fn plan(profile: Profile) -> LatticePlan {

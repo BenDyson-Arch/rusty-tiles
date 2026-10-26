@@ -12,8 +12,8 @@
 //! the tiles waiting for their parent, admitted against the run's declared memory budget
 //! (D8) and released as each parent completes. Parents are built by up to `jobs` workers;
 //! each is a pure function of its children, so output is identical for any job count or
-//! budget. It writes `proxies/` and `proxies.jsonl` (postorder) for H16 delivery, exactly
-//! where H17 did. Coarse appearance (S3, [`appearance`]) is fresh content-sized charts
+//! budget. It writes `proxies/` and `proxies.jsonl` (postorder) for H16 delivery. Coarse
+//! appearance (S3, [`appearance`]) is fresh content-sized charts
 //! baked from the captured source; the error is measured against the source in both
 //! directions by S2 (`error`). Omitted cells hold no content, so nothing is measured,
 //! charted, baked or textured for them.
@@ -22,6 +22,7 @@ pub(crate) mod appearance;
 mod appearance_tests;
 pub(crate) mod bake;
 mod charts;
+pub(crate) mod decode;
 mod encode;
 pub(crate) mod error;
 mod geometry;
@@ -54,34 +55,8 @@ use std::{
     fs,
     io::{BufRead, BufWriter, Write},
     path::Path,
-    str::FromStr,
     sync::mpsc,
 };
-
-/// Coarse-tile method. H17 stays the default until the HLOD slices replace it (S6/S8).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TilerLod {
-    /// H17 certified geometry with the H27 proxy bake (current default).
-    #[default]
-    H17,
-    /// 0.4 classic octree HLOD (untextured coarse tiles, measured source error).
-    Hlod,
-}
-
-impl FromStr for TilerLod {
-    type Err = JobError;
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "h17" => Ok(Self::H17),
-            "hlod" => Ok(Self::Hlod),
-            _ => Err(JobError::new(
-                JobErrorKind::InvalidRequest,
-                "lod must be h17 or hlod",
-            )),
-        }
-    }
-}
 
 /// S3's coarse appearance policy (recorded in the stage manifest).
 pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized pages, charts isolated through COARSE_ISLAND_ISOLATED_LEVELS mips, at max(G/16, 1e-5 m), \
@@ -1113,7 +1088,7 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
         // Every decoded corner carries exactly the measured (and charted) position bits.
         encode::check(tile, &built.locked, &encoded)?;
     } else {
-        crate::mesh_large::lod::codec::decode(&encoded.glb)?;
+        decode::decode(&encoded.glb)?;
     }
     if !error.geometric_error.is_finite() || error.geometric_error < built.children_error {
         return Err(state("coarse error is nonfinite or below its children's"));

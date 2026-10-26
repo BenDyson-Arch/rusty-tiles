@@ -86,9 +86,8 @@ pub(crate) struct TreeConfig {
     pub output_parents: Option<(PathBuf, PathBuf)>,
     /// Declared source CRS applied at capture; `None` is local metres/Y-up.
     pub source_crs: Option<super::MeshSourceCrs>,
-    /// Coarse-tile method; it also selects the incidence pass capture declares scratch for.
-    pub lod: super::hlod::TilerLod,
-    /// D8's resolved run budget (HLOD runs): every stage plans against it as a ceiling.
+    /// D8's resolved run budget: every stage plans against it as a ceiling. Only the
+    /// capture-only diagnostic build runs without one.
     pub memory_budget: Option<super::resources::MemoryBudget>,
     /// Test seam: largest spill chunk of the capture scratch.
     #[cfg(test)]
@@ -133,7 +132,6 @@ impl TreeConfig {
             member_ceiling: MEMBER_CEILING_3TZ,
             output_parents: None,
             source_crs: None,
-            lod: super::hlod::TilerLod::H17,
             memory_budget: None,
             #[cfg(test)]
             test_chunk_bytes: None,

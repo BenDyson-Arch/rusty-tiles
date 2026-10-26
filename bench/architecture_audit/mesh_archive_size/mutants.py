@@ -19,14 +19,15 @@ SELF_TEST = ('python', 'bench/architecture_audit/c2_decoded_containment/oracle/s
 
 # (name, [(file, old, new)], check)
 MUTANTS = [
-    ('lod-table-decoding-skipped', [('src/mesh_large/lod/codec.rs',
+    # The client-order decoder moved from H17's lod/codec.rs to hlod/decode.rs in S6.
+    ('lod-table-decoding-skipped', [('src/mesh_large/hlod/decode.rs',
       '.and_then(|e| e.get("EXT_meshopt_compression"))\n        {',
       '.and_then(|e| e.get("EXT_meshopt_compression_skipped"))\n        {')],
-     ('cargo', '--lib', ['public_mesh_to_tileset_publishes_certified_coarse_tiles'])),
-    ('lod-uint64-column-misread', [('src/mesh_large/lod/codec.rs',
+     ('cargo', '--lib', ['mesh_large::hlod::tests::decoder_reads_leaf_provenance_columns_exactly'])),
+    ('lod-uint64-column-misread', [('src/mesh_large/hlod/decode.rs',
       '"UINT64" | "FLOAT64" => 8,\n                    _ => return Err(invalid("property component type")),',
       '"UINT64" | "FLOAT64" => 4,\n                    _ => return Err(invalid("property component type")),')],
-     ('cargo', '--lib', ['mesh_large::lod::tests'])),
+     ('cargo', '--lib', ['mesh_large::hlod::tests::decoder_reads_leaf_provenance_columns_exactly'])),
     ('validator-octahedral-filter-skipped', [(MESHOPT,
       'if filter == Filter::Octahedral {\n        octahedral(&mut decoded, count, stride)?;',
       'if filter == Filter::Octahedral && false {\n        octahedral(&mut decoded, count, stride)?;')], C1),

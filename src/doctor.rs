@@ -356,7 +356,7 @@ impl Resolver<'_> {
                 "encoding":"in-process meshopt and KTX2/Basis; PNG for lossless leaf textures",
                 "workers":"auto or a positive maximum; cores and available memory cap actual workers per stage; unknown available memory admits one worker",
                 "memberCeiling":crate::archive3tz::MEMBER_CEILING,
-                "limitations":"One static local scene with confined resources and the admitted core PBR/attribute domain. No source CRS inference or geoid conversion. Full-detail leaves sit under certified coarse parent tiles (simplified proxies whose geometric error bounds their distance to the source) with proxy textures baked from the source appearance; proxy appearance is an approximation and carries no certificate. CesiumJS 1.146.0 has a bounded KTX2 sRGB filtering limitation; see docs/MESH.md.",
+                "limitations":"One static local scene with confined resources and the admitted core PBR/attribute domain. No source CRS inference or geoid conversion. Full-detail leaves sit under HLOD coarse parent tiles (simplified from their children; geometric error is a sampled source-distance estimate, not a bound) with fresh charts baked from the source appearance; coarse appearance is an approximation. CesiumJS 1.146.0 has a bounded KTX2 sRGB filtering limitation; see docs/MESH.md.",
                 "note":"Readiness is build capability, not admission of a source, output filesystem, memory plan or viewer. No external encoder or system geospatial library is required."
             }))),
             Command::GlbTo3tz

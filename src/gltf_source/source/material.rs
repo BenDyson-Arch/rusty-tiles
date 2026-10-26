@@ -1,7 +1,6 @@
 //! Validated core PBR material bindings; no image ownership, I/O or encoding.
 use super::{array, invalid, list, number, object, uint, unsupported, vector, Result};
 use serde_json::Value;
-use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TextureSlot {
@@ -114,7 +113,7 @@ impl Material {
         }
         Ok(value)
     }
-    /// The flat (untextured) material of an H17 geometry proxy: every texture binding is
+    /// The flat (untextured) material of an HLOD coarse tile: every texture binding is
     /// removed and every literal factor kept; alpha masking (texture driven) becomes opaque.
     pub(crate) fn flat_proxy(&self) -> Value {
         let mut value = self.value.clone();
@@ -150,50 +149,9 @@ impl Material {
         &self.value
     }
 
-    /// JSON pointers of the texture slots this material binds.
-    pub(crate) fn bound_slot_pointers(&self) -> Vec<String> {
-        SLOTS
-            .iter()
-            .zip(&self.bindings)
-            .filter(|(_, b)| b.is_some())
-            .map(|(spec, _)| spec.path.iter().map(|k| format!("/{k}")).collect())
-            .collect()
-    }
-
-    /// JSON pointers of every texture slot a material may bind.
-    pub(crate) fn slot_pointers() -> impl Iterator<Item = String> {
-        SLOTS
-            .iter()
-            .map(|spec| spec.path.iter().map(|k| format!("/{k}")).collect())
-    }
-
     pub(crate) fn has_normal_texture(&self) -> bool {
         self.bindings()
             .any(|binding| binding.slot == TextureSlot::Normal)
-    }
-
-    /// Preserve every admitted field, including omissions; replace only indices.
-    pub(crate) fn remap(&self, texture_ids: &BTreeMap<usize, usize>) -> Result<Value> {
-        let mut value = self.value.clone();
-        for (spec, binding) in SLOTS.iter().zip(&self.bindings) {
-            let Some(binding) = binding else {
-                continue;
-            };
-            let local = texture_ids
-                .get(&binding.texture)
-                .ok_or_else(|| invalid("prepared material texture missing from local closure"))?;
-            let mut info = &mut value;
-            for key in spec.path {
-                info = info
-                    .get_mut(*key)
-                    .ok_or_else(|| invalid("prepared material binding path is absent"))?;
-            }
-            let index = info
-                .get_mut("index")
-                .ok_or_else(|| invalid("prepared material binding index is absent"))?;
-            *index = Value::from(*local);
-        }
-        Ok(value)
     }
 }
 
@@ -357,7 +315,7 @@ mod tests {
     }
 
     #[test]
-    fn all_roles_remap_without_inventing_defaults_or_merging_bindings() {
+    fn all_roles_bind_without_inventing_defaults_or_merging_bindings() {
         let original = json!({
             "name":"descriptive label",
             "pbrMetallicRoughness":{
@@ -370,7 +328,7 @@ mod tests {
             "emissiveTexture":{"index":2,"texCoord":1},
             "emissiveFactor":[0.1,0.2,0.3],"alphaMode":"MASK","doubleSided":false
         });
-        let material = parse(&document(original), 256).unwrap().remove(0);
+        let material = parse(&document(original.clone()), 256).unwrap().remove(0);
         assert!(material.has_normal_texture());
         assert_eq!(
             material
@@ -379,29 +337,10 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![(2, 0), (0, 1), (1, 0), (0, 0), (2, 1)]
         );
-        assert_eq!(
-            material
-                .remap(&BTreeMap::from([(0, 7), (1, 4), (2, 9)]))
-                .unwrap(),
-            json!({
-                "pbrMetallicRoughness":{
-                    "baseColorTexture":{"index":9},
-                    "metallicRoughnessTexture":{"index":7,"texCoord":1},
-                    "metallicFactor":0.4
-                },
-                "normalTexture":{"index":4,"texCoord":0,"scale":-2.0},
-                "occlusionTexture":{"index":7,"strength":0},
-                "emissiveTexture":{"index":9,"texCoord":1},
-                "emissiveFactor":[0.1,0.2,0.3],"alphaMode":"MASK","doubleSided":false
-            })
-        );
-        assert_eq!(
-            material
-                .remap(&BTreeMap::from([(0, 0), (2, 1)]))
-                .unwrap_err()
-                .kind(),
-            JobErrorKind::InvalidInput
-        );
+        // Every admitted field is kept as authored, omissions included; only the label goes.
+        let mut literal = original;
+        literal.as_object_mut().unwrap().remove("name");
+        assert_eq!(material.literal(), &literal);
     }
 
     #[test]
@@ -451,13 +390,13 @@ mod tests {
         let plain = parse(&json!({"materials":[{}]}), 256).unwrap().remove(0);
         assert_eq!(plain.bindings().count(), 0);
         assert!(!plain.has_normal_texture());
-        assert_eq!(plain.remap(&BTreeMap::new()).unwrap(), json!({}));
+        assert_eq!(plain.literal(), &json!({}));
         for scale in [-2.0, 0.0, 1.0, 3.0] {
             for strength in [0.0, 1.0] {
                 let value = json!({"normalTexture":{"index":0,"scale":scale},
                     "occlusionTexture":{"index":0,"strength":strength}});
                 let material = parse(&document(value.clone()), 256).unwrap().remove(0);
-                assert_eq!(material.remap(&BTreeMap::from([(0, 0)])).unwrap(), value);
+                assert_eq!(material.literal(), &value);
             }
         }
     }
