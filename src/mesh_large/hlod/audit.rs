@@ -77,7 +77,7 @@ pub(super) fn bound(refs: u64, nodes: u64, source_triangle_depths: u64) -> Optio
 /// Audit evidence is optional but complete: exceeding this internal tmpfs budget
 /// refuses the run; it never truncates a record or skips operations. Ordinary disks
 /// retain the logical maximum and preflight only actual growth.
-const MEMORY_BACKED_BYTE_BUDGET: u64 = 256 << 20;
+const MEMORY_BACKED_BYTE_BUDGET: u64 = 64 << 20;
 pub(super) fn admitted_bound(logical: u64, memory_backed: bool) -> u64 {
     if memory_backed {
         logical.min(MEMORY_BACKED_BYTE_BUDGET)

@@ -1106,13 +1106,57 @@ fn files(dir: &Path, sub: &str) -> BTreeMap<String, Vec<u8>> {
     out
 }
 
-/// The deterministic published stage: leaves, coarse tiles, their rows and the manifest.
+/// Publication semantics are deterministic; streaming audit byte addresses and hashes
+/// reflect worker completion order. Only those external-evidence handles are normalized.
 fn published(dir: &Path) -> BTreeMap<String, Vec<u8>> {
     let mut out = files(dir, "leaves");
     for sub in ["proxies", "leaves.jsonl", "proxies.jsonl", "manifest.json"] {
         out.extend(files(dir, sub));
     }
+    for (name, bytes) in &mut out {
+        if name == "proxies.jsonl" {
+            let normalized: Vec<u8> = rows(&dir.join(name))
+                .into_iter()
+                .flat_map(|mut r| {
+                    r.as_object_mut().unwrap().remove("auditRecord");
+                    let mut line = serde_json::to_vec(&r).unwrap();
+                    line.push(b'\n');
+                    line
+                })
+                .collect();
+            *bytes = normalized;
+        } else if name == "manifest.json" {
+            let mut manifest: Value = serde_json::from_slice(bytes).unwrap();
+            manifest["hlod"].as_object_mut().unwrap().remove("audit");
+            *bytes = serde_json::to_vec(&manifest).unwrap();
+        }
+    }
     out
+}
+
+/// Compare every audit fact, including per-operation locations and attempt multiplicity,
+/// independent of physical line order and byte-address links. Dedicated receipt tests
+/// verify those links against each run's own file.
+fn audit_semantics(dir: &Path) -> Vec<Vec<u8>> {
+    let resources: Value =
+        serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+    let path = resources["hlod"]["diagnostics"]["audit"]["path"]
+        .as_str()
+        .unwrap();
+    let mut records: Vec<_> = rows(Path::new(path))
+        .into_iter()
+        .map(|mut row| {
+            let object = row.as_object_mut().unwrap();
+            object.remove("publishedTopologyAttempt");
+            object.remove("constructionTopology");
+            if let Some(tile) = object.get_mut("tile") {
+                tile.as_object_mut().unwrap().remove("auditRecord");
+            }
+            serde_json::to_vec(&row).unwrap()
+        })
+        .collect();
+    records.sort_unstable();
+    records
 }
 
 fn archive(dir: &Path, output: &Path) {
@@ -2943,6 +2987,7 @@ fn output_is_identical_across_jobs_and_budgets() {
     )
     .unwrap();
     assert!(published(&one) == published(&many));
+    assert!(audit_semantics(&one) == audit_semantics(&many));
     let spilled = stage(
         &input,
         &work.path().join("spilled"),
@@ -2962,6 +3007,22 @@ fn output_is_identical_across_jobs_and_budgets() {
             > 0
     );
     assert!(published(&one) == published(&spilled));
+    assert!(audit_semantics(&one) == audit_semantics(&spilled));
+    let mut reference = None;
+    for (label, stage) in [("one", &one), ("many", &many), ("spilled", &spilled)] {
+        let output = work.path().join(format!("{label}.3tz"));
+        mesh_leaves_to_3tz(
+            MeshTilesetRequest::new(stage, &output),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let bytes = fs::read(output).unwrap();
+        if let Some(expected) = &reference {
+            assert!(&bytes == expected, "archive differs for {label}");
+        } else {
+            reference = Some(bytes);
+        }
+    }
 }
 
 fn public(
