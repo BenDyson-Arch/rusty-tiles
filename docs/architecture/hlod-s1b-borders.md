@@ -189,3 +189,11 @@ correspondence rule; S5 must re-derive it. The final S2 proxy strata and centroi
 controls also track every face in the conservative closure domain; any over-E
 sample rejects the proposal before S3, even if the preliminary fixed controls
 missed it. Rejected closure attempts are counted separately from delivered changes.
+
+The first four logical build depths target 3/4 of the payload cap before trying
+the full cap; deeper parents retain the full target. This internal budget tuning
+leaves the 8,192 hard cap, E ladder, eligibility rules and frontier algorithm
+unchanged. It trades measured coarse geometry detail for client payload room;
+actual final G and all three first-view totals must still pass the same gates.
+The 3c4923eb probe established spare coarse G but larger tex3 textures because
+S3 spacing follows G; it did not authorize a byte-growth waiver.

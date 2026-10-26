@@ -1240,6 +1240,10 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
     let outcome = if let Some(contract) = &contract {
         let half = if closed.single_leaf {
             children[0].triangles.len().div_ceil(2).min(settings.cap)
+        } else if closed.key.depth <= 3 {
+            // D11 scale-gate budget: reserve payload room for appearance at the first
+            // four depths. A failed target still gets the unchanged hard-cap attempt.
+            (settings.cap * 3 / 4).max(1)
         } else {
             settings.cap
         };
