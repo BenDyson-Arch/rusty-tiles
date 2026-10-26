@@ -6,6 +6,8 @@
   remeshing, with explicit omission frontiers and optional durable audit receipts.
 - Report omission totals and per-depth border, topology and frontier counts in
   public HLOD diagnostics, including zeros.
+- Measure opened-hole loss within the depth budget, reject border contacts, and
+  report attempted/published operations and affected tiles' final geometric error.
 
 ### Fixed
 
@@ -13,5 +15,3 @@
   or per-depth omission counts, including loss of an entire coarse level.
 - Verify that an entirely omitted textured coarse frontier performs no image-cache
   loads or appearance work.
-
-Opened holes receive budgeted local loss controls, border-contact rejection and separate attempted/published topology receipts, with affected-tile final G for each operation kind.

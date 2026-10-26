@@ -198,7 +198,7 @@ controls also track every face in the conservative closure domain; any over-E
 sample rejects the proposal before S3, even if the preliminary fixed controls
 missed it. Rejected closure attempts are counted separately from delivered changes.
 
-The first four logical build depths target 1/2 of the payload cap before trying
+The first four logical build depths target 3/4 of the payload cap before trying
 the full cap; deeper parents retain the full target. This internal budget tuning
 leaves the 8,192 hard cap, E ladder, eligibility rules and frontier algorithm
 unchanged. It trades measured coarse geometry detail for client payload room;
@@ -237,6 +237,9 @@ all rejected proposals stay in attempted receipts. The fixed cap and full-cap
 retry remain unchanged. The 9a5f conservative-control probe reported omission
 and failed first-view bytes; it is rejected evidence, not an accepted frontier.
 
-The ed6b paired CPU comparison failed tex3 despite passing byte/G gates. The
-1/2 target is a constant-only scale-gate trial to reduce first-view appearance
-work within develop's per-depth G. Full-cap retry and all acceptance gates stay.
+The CPU gate includes full source measurement and appearance work. Smaller
+coarse targets reduce bytes but can increase nearest-search work: the 1/2 trial
+used 276.26 million search steps against 265.61 million at 3/4. Keep the measured
+3/4 target and remove redundant geometry bookkeeping without changing output.
+Exact-source paired CPU receipts, including failed trials, remain in the evidence
+directory. Full-cap retry and all acceptance gates stay.

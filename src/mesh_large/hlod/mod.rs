@@ -1278,7 +1278,7 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
         } else if closed.key.depth <= 3 {
             // D11 scale-gate budget: reserve payload room for appearance at the first
             // four depths. A failed target still gets the unchanged hard-cap attempt.
-            (settings.cap / 2).max(1)
+            (settings.cap * 3 / 4).max(1)
         } else {
             settings.cap
         };
