@@ -2,6 +2,8 @@
 //! incidence, live chains and source parameters again from independently decoded leaves;
 //! check actual delivered edges, every source breakpoint, every owner and every depth mix.
 use super::*;
+#[path = "border_census_exact.rs"]
+mod exact;
 type Edge = (Point, Point);
 type Q = [f64; 3];
 fn q(p: Point) -> Q {
@@ -61,45 +63,61 @@ fn face_directions(faces: &[[Point; 3]]) -> HashMap<[Point; 3], [usize; 2]> {
     }
     groups
 }
-fn leaf_has_coincident_faces(faces: &[[Point; 3]]) -> bool {
-    face_directions(faces).values().any(|n| n[0] + n[1] > 1)
+/// Source groups are derived only from decoded leaves. Keep each corner set's
+/// counts by leaf so a coarse tile can sum exactly its own descendants, including
+/// groups split across leaves. Orientation does not affect coincidence licensing.
+#[derive(Default)]
+struct SourceCoincidence {
+    by_face: HashMap<[Point; 3], BTreeMap<usize, usize>>,
+    at_point: HashMap<Point, Vec<[Point; 3]>>,
 }
-/// Same-direction wings may be perpendicular or opposite (book pages or a collapsed
-/// plate), but never acute. A collinear wing has no side and cannot justify excess.
-/// Index third corners once per tile rather than rescanning all faces for each edge.
-fn two_sided(edge: Edge, incident: &[Vec<Point>; 2]) -> bool {
-    let (a, b) = (q(edge.0), q(edge.1));
-    let d: Q = std::array::from_fn(|i| b[i] - a[i]);
-    let dd: f64 = d.iter().map(|v| v * v).sum();
-    for side in incident {
-        let mut wings: Vec<Q> = Vec::with_capacity(side.len());
-        for &point in side {
-            let p = q(point);
-            let w: Q = std::array::from_fn(|i| p[i] - a[i]);
-            let t = w.iter().zip(d).map(|(w, d)| w * d).sum::<f64>() / dd;
-            let w: Q = std::array::from_fn(|i| w[i] - t * d[i]);
-            let norm = w.iter().map(|v| v * v).sum::<f64>().sqrt();
-            if !norm.is_finite() || norm <= 0. {
-                return false;
+impl SourceCoincidence {
+    fn add_leaf(&mut self, leaf: usize, faces: &[[Point; 3]]) {
+        for (face, directions) in face_directions(faces) {
+            let counts = self.by_face.entry(face).or_default();
+            if counts.is_empty() {
+                for p in face {
+                    self.at_point.entry(p).or_default().push(face);
+                }
             }
-            let unit = w.map(|v| v / norm);
-            if wings
-                .iter()
-                .any(|other| unit.iter().zip(other).map(|(a, b)| a * b).sum::<f64>() > 1e-6)
-            {
-                return false;
-            }
-            wings.push(unit);
+            *counts.entry(leaf).or_default() += directions[0] + directions[1];
         }
     }
-    true
+    fn licenses(&self, face: [Point; 3], n: usize, descendants: std::ops::Range<usize>) -> bool {
+        face.into_iter().all(|p| {
+            self.at_point.get(&p).is_some_and(|groups| {
+                groups.iter().any(|source| {
+                    self.by_face[source]
+                        .range(descendants.clone())
+                        .map(|(_, &count)| count)
+                        .sum::<usize>()
+                        >= n
+                })
+            })
+        })
+    }
+}
+/// Check only the unsupported direction: source-supported faces need no geometric
+/// fallback. Nonzero wings live in a 2D normal plane, where at most four vectors
+/// can be pairwise nonacute; reject larger sets before doing any pair work.
+fn nonacute_side(edge: Edge, side: &[Point]) -> bool {
+    use std::cmp::Ordering::Greater;
+    if side.len() > 4 {
+        return false;
+    }
+    side.iter().enumerate().all(|(i, &p)| {
+        exact::wedge_sign(edge, p, p) == Greater
+            && side[i + 1..]
+                .iter()
+                .all(|&other| exact::wedge_sign(edge, p, other) != Greater)
+    })
 }
 fn fold_census(
     faces: &[[Point; 3]],
     actual: &HashMap<Edge, [u32; 2]>,
     support: &HashMap<Edge, [u32; 2]>,
-    total_support: &HashMap<Edge, u32>,
-    descendant_coincident: bool,
+    source_coincidence: &SourceCoincidence,
+    descendants: std::ops::Range<usize>,
 ) -> FoldCensus {
     let mut c = FoldCensus::default();
     let mut incident = HashMap::<Edge, [Vec<Point>; 2]>::new();
@@ -112,15 +130,22 @@ fn fold_census(
             incident.entry(seg(a, b)).or_default()[usize::from(a > b)].push(f[(i + 2) % 3]);
         }
     }
-    let excess = |n, other| n >= 2 && n > other;
     for (&edge, &[forward, reverse]) in actual {
-        if !excess(forward, reverse) && !excess(reverse, forward) {
+        if forward < 2 && reverse < 2 {
             continue;
         }
         let allowed = support.get(&edge).copied().unwrap_or([0, 0]);
-        let witnessed = (!excess(forward, reverse) || allowed[0] >= forward)
-            && (!excess(reverse, forward) || allowed[1] >= reverse);
-        if !witnessed && !(forward > 0 && reverse > 0 && two_sided(edge, &incident[&edge])) {
+        // Directional minima were taken over EVERY represented source subedge.
+        // Balanced 2/2 needs the same check as 2/1, and a supported side must not
+        // be subjected to the other side's geometric fallback.
+        if [(0, forward, reverse), (1, reverse, forward)]
+            .into_iter()
+            .any(|(direction, n, other)| {
+                n >= 2
+                    && allowed[direction] < n
+                    && (other == 0 || !nonacute_side(edge, &incident[&edge][direction]))
+            })
+        {
             c.unsupported_edges += 1;
         }
     }
@@ -135,16 +160,10 @@ fn fold_census(
             continue;
         }
         c.coincident_groups += 1;
-        // Match native licensing: any coincident group within a descendant leaf,
-        // or enough source incidence on EVERY used edge/subedge. Twins split across
-        // different leaves do not supply the leaf-local coincidence license.
-        if !descendant_coincident
-            && (0..3).any(|i| {
-                let edge = seg(face[i], face[(i + 1) % 3]);
-                let used = actual[&edge];
-                total_support.get(&edge).copied().unwrap_or(0) < used[0] + used[1]
-            })
-        {
+        // Every coarse corner needs a source corner group with at least n
+        // faces in this tile's descendant leaves. Corners may use different
+        // groups; unrelated twins and edge incidence alone do not license them.
+        if !source_coincidence.licenses(face, n, descendants.clone()) {
             c.unsupported_coincident_groups += 1;
         }
     }
@@ -219,11 +238,9 @@ pub(super) fn check(
         .map(|r| (r["tile"]["uri"].as_str().unwrap().to_owned(), r))
         .collect();
     let mut source_directions: HashMap<Edge, BTreeMap<usize, [u32; 2]>> = HashMap::new();
-    let mut source_coincident = BTreeSet::new();
+    let mut source_coincidence = SourceCoincidence::default();
     for t in tiles.iter().filter(|t| t.leaf) {
-        if leaf_has_coincident_faces(&t.faces) {
-            source_coincident.insert(t.begin);
-        }
+        source_coincidence.add_leaf(t.begin, &t.faces);
         for f in &t.faces {
             if f[0] == f[1] || f[1] == f[2] || f[0] == f[2] {
                 continue;
@@ -263,9 +280,6 @@ pub(super) fn check(
             }
         }
         let mut chord_support = HashMap::<Edge, [u32; 2]>::new();
-        // Minima of directional and total source counts are distinct: summing two
-        // independent directional minima could understate the per-subedge total.
-        let mut chord_total_support = HashMap::<Edge, u32>::new();
         let actual_points: HashSet<Point> = t.faces.iter().flatten().copied().collect();
         let mut covered = HashMap::new();
         let mut mapped = HashMap::new();
@@ -359,7 +373,6 @@ pub(super) fn check(
                 let delivered = if a < b { delivered } else { reverse(delivered) };
                 let mut wrong_winding = false;
                 let mut support = [u32::MAX; 2];
-                let mut total_support = u32::MAX;
                 for i in first..end {
                     let e = seg(chain[i], chain[i + 1]);
                     let allowed = source_directions[&e]
@@ -371,7 +384,6 @@ pub(super) fn check(
                         reverse(allowed)
                     };
                     wrong_winding |= delivered[0] > allowed[0] || delivered[1] > allowed[1];
-                    total_support = total_support.min(allowed[0] + allowed[1]);
                     support = [support[0].min(allowed[0]), support[1].min(allowed[1])];
                     assert!(
                         crosses(&edges[&e]),
@@ -392,7 +404,6 @@ pub(super) fn check(
                 }
                 c.certificate_winding_failures += usize::from(wrong_winding);
                 chord_support.insert(seg(a, b), if a < b { support } else { reverse(support) });
-                chord_total_support.insert(seg(a, b), total_support);
             }
             for (&p, l) in points {
                 if crosses(l) && (graph.live.contains(&p) || !graph.adjacent.contains_key(&p)) {
@@ -405,23 +416,20 @@ pub(super) fn check(
         }
         if !t.leaf {
             for &edge in actual.keys() {
-                let source = chord_support.entry(edge).or_insert_with(|| {
+                chord_support.entry(edge).or_insert_with(|| {
                     source_directions.get(&edge).map_or([0, 0], |owners| {
                         owners
                             .range(t.begin..t.end)
                             .fold([0, 0], |a, (_, b)| [a[0] + b[0], a[1] + b[1]])
                     })
                 });
-                chord_total_support
-                    .entry(edge)
-                    .or_insert(source[0] + source[1]);
             }
             let folds = fold_census(
                 &t.faces,
                 &actual,
                 &chord_support,
-                &chord_total_support,
-                source_coincident.range(t.begin..t.end).next().is_some(),
+                &source_coincidence,
+                t.begin..t.end,
             );
             c.unsupported_same_direction_edges += folds.unsupported_edges;
             c.coincident_coarse_face_groups += folds.coincident_groups;
@@ -490,11 +498,22 @@ mod fold_controls {
 
     const A: [f32; 3] = [0., 0., 0.];
     const B: [f32; 3] = [0., 0., 1.];
-    fn probe(faces: &[[[f32; 3]; 3]], allowed: [u32; 2], total: u32, licensed: bool) -> FoldCensus {
-        let faces: Vec<_> = faces
+    fn decoded(faces: &[[[f32; 3]; 3]]) -> Vec<[Point; 3]> {
+        faces
             .iter()
             .map(|f| f.map(|p| p.map(f32::to_bits)))
-            .collect();
+            .collect()
+    }
+    fn probe(faces: &[[[f32; 3]; 3]], allowed: [u32; 2]) -> FoldCensus {
+        probe_with_leaves(faces, allowed, &[], 0..0)
+    }
+    fn probe_with_leaves(
+        faces: &[[[f32; 3]; 3]],
+        allowed: [u32; 2],
+        leaves: &[Vec<[[f32; 3]; 3]>],
+        descendants: std::ops::Range<usize>,
+    ) -> FoldCensus {
+        let faces = decoded(faces);
         let mut actual = HashMap::<Edge, [u32; 2]>::new();
         for f in &faces {
             for i in 0..3 {
@@ -507,9 +526,11 @@ mod fold_controls {
         // each control isolates the tested edge or coincident corner group.
         let mut support = actual.clone();
         support.insert(edge, allowed);
-        let mut totals: HashMap<_, _> = actual.iter().map(|(e, n)| (*e, n[0] + n[1])).collect();
-        totals.insert(edge, total);
-        fold_census(&faces, &actual, &support, &totals, licensed)
+        let mut source = SourceCoincidence::default();
+        for (leaf, faces) in leaves.iter().enumerate() {
+            source.add_leaf(leaf, &decoded(faces));
+        }
+        fold_census(&faces, &actual, &support, &source, descendants)
     }
 
     #[test]
@@ -519,12 +540,12 @@ mod fold_controls {
             [A, B, [1., 1., 0.]],
             [A, B, [2., 1., 0.]],
         ];
-        assert_eq!(probe(&faces, [1, 0], 1, false).unsupported_edges, 1);
+        assert_eq!(probe(&faces, [1, 0]).unsupported_edges, 1);
         let mixed = [faces[0], faces[1], [B, A, [-1., 0., 0.]]];
-        assert_eq!(probe(&mixed, [1, 1], 2, false).unsupported_edges, 1);
+        assert_eq!(probe(&mixed, [1, 1]).unsupported_edges, 1);
         // Proper nonmanifold source multiplicity admits even a one-way spine.
-        assert_eq!(probe(&faces, [3, 0], 3, false).unsupported_edges, 0);
-        assert_eq!(probe(&faces, [2, 0], 2, false).unsupported_edges, 1);
+        assert_eq!(probe(&faces, [3, 0]).unsupported_edges, 0);
+        assert_eq!(probe(&faces, [2, 0]).unsupported_edges, 1);
     }
 
     #[test]
@@ -533,70 +554,275 @@ mod fold_controls {
         let reverse = [B, A, [-1., 0., 0.]];
         for third in [[0., 1., 0.], [-1., 0., 0.]] {
             let faces = [forward, [A, B, third], reverse];
-            assert_eq!(probe(&faces, [0, 0], 0, false).unsupported_edges, 0);
+            assert_eq!(probe(&faces, [0, 0]).unsupported_edges, 0);
         }
         for third in [[1., 1., 0.], [0., 0., 0.5]] {
             let faces = [forward, [A, B, third], reverse];
-            assert_eq!(probe(&faces, [0, 0], 0, false).unsupported_edges, 1);
+            assert_eq!(probe(&faces, [0, 0]).unsupported_edges, 1);
         }
         // Perpendicular pages alone cannot license a one-way unsupported fold.
         assert_eq!(
-            probe(&[forward, [A, B, [0., 1., 0.]]], [0, 0], 0, false).unsupported_edges,
+            probe(&[forward, [A, B, [0., 1., 0.]]], [0, 0]).unsupported_edges,
             1
         );
     }
 
     #[test]
+    fn balanced_two_two_on_ordinary_one_one_source_checks_both_directions() {
+        let forward = [A, B, [1., 0., 0.]];
+        let reverse = [B, A, [-1., 0., 0.]];
+        for (left, right, unsupported) in [
+            ([0., 1., 0.], [0., -1., 0.], 0),
+            ([1., 1., 0.], [0., -1., 0.], 1),
+            ([0., 1., 0.], [-1., -1., 0.], 1),
+            ([1., 1., 0.], [-1., -1., 0.], 1),
+        ] {
+            let faces = [forward, [A, B, left], reverse, [B, A, right]];
+            assert_eq!(probe(&faces, [1, 1]).unsupported_edges, unsupported);
+        }
+    }
+
+    #[test]
+    fn supported_direction_bypasses_only_its_own_geometric_fallback() {
+        // Three acute/collinear forward wings are source-supported. Only the two
+        // unsupported reverse wings need geometry, even though they are fewer.
+        for (third, unsupported) in [([0., -1., 0.], 0), ([-1., -1., 0.], 1)] {
+            let faces = [
+                [A, B, [1., 0., 0.]],
+                [A, B, [1., 1., 0.]],
+                [A, B, [0., 0., 0.5]],
+                [B, A, [-1., 0., 0.]],
+                [B, A, third],
+            ];
+            assert_eq!(probe(&faces, [3, 1]).unsupported_edges, unsupported);
+            let reversed = faces.map(|[a, b, c]| [b, a, c]);
+            assert_eq!(probe(&reversed, [1, 3]).unsupported_edges, unsupported);
+        }
+    }
+
+    #[test]
+    fn near_right_wedges_have_no_angular_tolerance() {
+        // The minimum subnormal also gets lost if the projected dot is evaluated
+        // by ordinary f64 arithmetic: its contribution is added to 0.5 * 0.25.
+        for tiny in [1e-7, f32::from_bits(1)] {
+            for (x, unsupported) in [(tiny, 1), (0., 0), (-tiny, 0)] {
+                let faces = [
+                    [A, B, [1., 0., 0.5]],
+                    [A, B, [x, 1., 0.25]],
+                    [B, A, [-1., 0., 0.]],
+                ];
+                assert_eq!(
+                    probe(&faces, [1, 1]).unsupported_edges,
+                    unsupported,
+                    "x={x:?}"
+                );
+                let reversed = faces.map(|[a, b, c]| [b, a, c]);
+                assert_eq!(probe(&reversed, [1, 1]).unsupported_edges, unsupported);
+            }
+        }
+    }
+
+    #[test]
+    fn exact_wedge_sign_survives_extreme_finite_f32_and_cancellation() {
+        use std::cmp::Ordering::{Equal, Greater, Less};
+        let bits = |p: [f32; 3]| p.map(|v| if v == 0. { 0 } else { v.to_bits() });
+        let tiny = f32::from_bits(1);
+        let huge = f32::MAX;
+        // Each direction of exponent imbalance is intentional: one must retain
+        // subnormal normal-plane terms beside huge along-edge products, the
+        // other huge normal-plane terms beside a subnormal edge length.
+        for (along, across) in [(huge, tiny), (tiny, huge)] {
+            // Rotate the tested axis so all three dot-product terms matter.
+            for axis in 0..3 {
+                let rotate = |p: [f32; 3]| bits(std::array::from_fn(|i| p[(i + axis) % 3]));
+                let a = rotate([-along, 0., 0.]);
+                let b = rotate([along, 0., 0.]);
+                let c = rotate([0., across, 0.]);
+                for (y, expected) in [(across, Greater), (0., Equal), (-across, Less)] {
+                    let e = rotate([0., y, across]);
+                    for edge in [(a, b), (b, a)] {
+                        assert_eq!(exact::wedge_sign(edge, c, e), expected);
+                        assert_eq!(exact::wedge_sign(edge, e, c), expected);
+                    }
+                }
+                assert_eq!(exact::wedge_sign((a, b), c, c), Greater);
+                assert_eq!(exact::wedge_sign((a, b), rotate([0., 0., 0.]), c), Equal);
+                // A different origin on the same line changes neither wing.
+                assert_eq!(exact::wedge_sign((rotate([0., 0., 0.]), b), c, c), Greater);
+            }
+        }
+    }
+
+    #[test]
+    fn exact_wedge_matches_bounded_integer_reference_across_exponents() {
+        // i128 is an independent arithmetic reference on these small integers;
+        // exact power-of-two rescaling moves their bits across the limb range.
+        let mut state = 17u32;
+        for _ in 0..64 {
+            let p: [[i128; 3]; 4] = std::array::from_fn(|_| {
+                std::array::from_fn(|_| {
+                    state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+                    i128::from((state >> 16) % 15) - 7
+                })
+            });
+            let diff = |i: usize| -> [i128; 3] { std::array::from_fn(|j| p[i][j] - p[0][j]) };
+            let dot = |x: [i128; 3], y: [i128; 3]| (0..3).map(|i| x[i] * y[i]).sum::<i128>();
+            let (d, u, w) = (diff(1), diff(2), diff(3));
+            let expected = (dot(d, d) * dot(u, w) - dot(u, d) * dot(w, d)).cmp(&0);
+            for scale in [f32::from_bits(1 << 9), 1., f32::from_bits(247 << 23)] {
+                let [a, b, c, e] = p.map(|q| {
+                    q.map(|v| {
+                        let value = v as f32 * scale;
+                        if value == 0. {
+                            0
+                        } else {
+                            value.to_bits()
+                        }
+                    })
+                });
+                assert_eq!(exact::wedge_sign((a, b), c, e), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn nonacute_fallback_has_a_four_wing_bound_only_when_unsupported() {
+        let wings = [[1., 0., 0.], [0., 1., 0.], [-1., 0., 0.], [0., -1., 0.]];
+        let mut faces: Vec<_> = wings.into_iter().map(|p| [A, B, p]).collect();
+        faces.push([B, A, [2., 2., 0.]]);
+        assert_eq!(probe(&faces, [1, 1]).unsupported_edges, 0);
+        faces.push([A, B, [1., 1., 0.]]);
+        assert_eq!(probe(&faces, [1, 1]).unsupported_edges, 1);
+        assert_eq!(probe(&faces, [5, 1]).unsupported_edges, 0);
+        // The early cardinality check also bounds large unsupported incidences.
+        let edge = seg(A.map(f32::to_bits), B.map(f32::to_bits));
+        assert!(!nonacute_side(edge, &vec![[1f32.to_bits(), 0, 0]; 1024]));
+    }
+
+    #[test]
     fn coincidence_counts_oriented_duplicates_and_reversed_twins_separately() {
         let face = [A, B, [1., 0., 0.]];
-        let duplicate = probe(&[face, [face[1], face[2], face[0]]], [1, 0], 1, false);
+        let duplicate = probe(&[face, [face[1], face[2], face[0]]], [1, 0]);
         assert_eq!(duplicate.coincident_groups, 1);
         assert_eq!(duplicate.duplicate_faces, 1);
         assert_eq!(duplicate.reversed_twin_groups, 0);
         assert_eq!(duplicate.unsupported_coincident_groups, 1);
-        let twin = probe(&[face, [face[0], face[2], face[1]]], [1, 0], 1, false);
+        let twin = probe(&[face, [face[0], face[2], face[1]]], [1, 0]);
         assert_eq!(twin.unsupported_edges, 0); // 1/1 passes direction counts.
         assert_eq!(twin.coincident_groups, 1);
         assert_eq!(twin.duplicate_faces, 0);
         assert_eq!(twin.reversed_twin_groups, 1);
         assert_eq!(twin.unsupported_coincident_groups, 1);
-        // Any leaf-local descendant coincidence licenses the twin, as in native
-        // D11. Otherwise every source edge/subedge must carry the full total.
-        assert_eq!(
-            probe(&[face, [face[0], face[2], face[1]]], [1, 0], 1, true)
-                .unsupported_coincident_groups,
-            0
-        );
-        assert_eq!(
-            probe(&[face, [face[0], face[2], face[1]]], [1, 1], 2, false)
-                .unsupported_coincident_groups,
-            0
-        );
+        // Both source orientations contribute to the same corner-set count.
+        for source in [
+            vec![face, [face[0], face[2], face[1]]],
+            vec![face, [face[1], face[2], face[0]]],
+        ] {
+            assert_eq!(
+                probe_with_leaves(&[face, face], [2, 0], &[source], 0..1)
+                    .unsupported_coincident_groups,
+                0
+            );
+        }
     }
 
     #[test]
-    fn coincident_source_license_is_leaf_local() {
-        let face = [A, B, [1., 0., 0.]].map(|p| p.map(f32::to_bits));
-        let reverse = [face[0], face[2], face[1]];
-        assert!(!leaf_has_coincident_faces(&[face]));
-        assert!(!leaf_has_coincident_faces(&[reverse]));
-        assert!(leaf_has_coincident_faces(&[face, reverse]));
-        assert!(leaf_has_coincident_faces(&[
-            face,
-            [face[1], face[2], face[0]]
-        ]));
-    }
-
-    #[test]
-    fn total_arc_support_is_not_the_sum_of_directional_minima() {
+    fn unrelated_descendant_twins_and_edge_totals_do_not_license_coincidence() {
         let face = [A, B, [1., 0., 0.]];
-        // Two source subedges with counts 2/0 and 0/2 have directional minima
-        // 0/0, yet both supply total 2. A reversed twin's total guard uses that
-        // separate minimum, while the direction guard has no excess at 1/1.
-        let twin = probe(&[face, [face[0], face[2], face[1]]], [0, 0], 2, false);
-        assert_eq!(twin.unsupported_edges, 0);
-        assert_eq!(twin.unsupported_coincident_groups, 0);
-        let missing = probe(&[face, [face[0], face[2], face[1]]], [0, 0], 1, false);
-        assert_eq!(missing.unsupported_coincident_groups, 1);
+        let twin = [face[0], face[2], face[1]];
+        let elsewhere = [[2., 0., 0.], [2., 0., 1.], [3., 0., 0.]];
+        let unrelated = vec![elsewhere, [elsewhere[0], elsewhere[2], elsewhere[1]]];
+        assert_eq!(
+            probe_with_leaves(&[face, twin], [1, 1], &[unrelated], 0..1)
+                .unsupported_coincident_groups,
+            1
+        );
+        // Every target edge has two actual source faces (one each way), but
+        // their distinct third corners leave no coincident source corner set.
+        let mut edge_sources = Vec::new();
+        for i in 0..3 {
+            let (a, b) = (face[i], face[(i + 1) % 3]);
+            edge_sources.push([a, b, [2., 2., (2 * i) as f32]]);
+            edge_sources.push([b, a, [2., 2., (2 * i + 1) as f32]]);
+        }
+        let census = probe_with_leaves(&[face, twin], [1, 1], &[edge_sources], 0..1);
+        assert_eq!(census.unsupported_edges, 0);
+        assert_eq!(census.unsupported_coincident_groups, 1);
+    }
+
+    #[test]
+    fn source_groups_sum_across_descendant_leaves_only() {
+        let face = [A, B, [1., 0., 0.]];
+        let twin = [face[0], face[2], face[1]];
+        let leaves = [vec![face], vec![twin], vec![face]];
+        // No leaf is coincident on its own: the group spans decoded leaves.
+        assert_eq!(
+            probe_with_leaves(&[face, twin], [1, 1], &leaves, 0..2).unsupported_coincident_groups,
+            0
+        );
+        assert_eq!(
+            probe_with_leaves(&[face, twin], [1, 1], &leaves, 0..1).unsupported_coincident_groups,
+            1
+        );
+        // Two source copies license two, but never three coarse copies.
+        assert_eq!(
+            probe_with_leaves(&[face, twin, face], [2, 1], &leaves, 0..2)
+                .unsupported_coincident_groups,
+            1
+        );
+        assert_eq!(
+            probe_with_leaves(&[face, twin, face], [2, 1], &leaves, 0..3)
+                .unsupported_coincident_groups,
+            0
+        );
+        // Source groups outside the coarse tile cannot help any corner.
+        assert_eq!(
+            probe_with_leaves(&[face, twin], [1, 1], &leaves, 1..2).unsupported_coincident_groups,
+            1
+        );
+        assert_eq!(
+            probe_with_leaves(&[face, twin], [1, 1], &leaves, 3..3).unsupported_coincident_groups,
+            1
+        );
+    }
+
+    #[test]
+    fn every_coarse_corner_needs_one_source_group_of_sufficient_multiplicity() {
+        let face = [A, B, [1., 0., 0.]];
+        let twin = [face[0], face[2], face[1]];
+        // Each corner can use a different coincident source group; the coarse
+        // face itself need not occur in the source. Split each group over leaves.
+        let groups = face.map(|p| [p, [2., 2., 0.], [2., 2., 1.]]);
+        let leaves = [groups.to_vec(), groups.to_vec()];
+        assert_eq!(
+            probe_with_leaves(&[face, twin], [1, 1], &leaves, 0..2).unsupported_coincident_groups,
+            0
+        );
+        for missing in 0..3 {
+            let mut incomplete = leaves.clone();
+            incomplete[1].remove(missing);
+            assert_eq!(
+                probe_with_leaves(&[face, twin], [1, 1], &incomplete, 0..2)
+                    .unsupported_coincident_groups,
+                1,
+                "corner {missing} has only one matching source face"
+            );
+        }
+        // Counts at a corner cannot be pooled across different corner sets.
+        // These two distinct singleton groups touch each corner but license none.
+        let singletons: Vec<_> = face
+            .into_iter()
+            .flat_map(|p| {
+                [
+                    [p, [2., 2., 0.], [2., 2., 1.]],
+                    [p, [3., 3., 0.], [3., 3., 1.]],
+                ]
+            })
+            .collect();
+        assert_eq!(
+            probe_with_leaves(&[face, twin], [1, 1], &[singletons], 0..1)
+                .unsupported_coincident_groups,
+            1
+        );
     }
 }

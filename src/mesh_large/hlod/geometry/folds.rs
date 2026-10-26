@@ -105,13 +105,34 @@ impl Source {
                 counts[d] += 1;
             }
             let source = self.edges.get(&edge).copied().unwrap_or_default();
-            let unsupported = (0..2)
-                .any(|d| counts[d] >= 2 && counts[d] > counts[1 - d] && counts[d] > source[d]);
-            if unsupported
-                && !(counts[0] > 0
-                    && counts[1] > 0
-                    && two_sided(edge, edges[at..end].iter().map(|r| r.1)))
-            {
+            let unsupported = (0..2).any(|d| {
+                if counts[d] < 2 {
+                    return false;
+                }
+                // Child incidence is not automatically source multiplicity: a
+                // child may have admitted a new, nonacute book spine. Only carry
+                // its license unchanged; moving a wing must pass the side test
+                // again, even when balanced 2/2 counts are unchanged.
+                let unchanged = counts[d] <= source[d]
+                    && edges[at..end]
+                        .iter()
+                        .filter(|(_, (_, direction, _))| *direction == d)
+                        .all(|&(_, (i, _, _))| {
+                            let (f, direction) =
+                                face(triangles[i].map(|v| key(positions[v as usize])));
+                            self.faces.get(&f).is_some_and(|n| n[direction] != 0)
+                        });
+                !unchanged
+                    && (counts[1 - d] == 0
+                        || !distinct_sides(
+                            edge,
+                            edges[at..end]
+                                .iter()
+                                .filter(|(_, (_, direction, _))| *direction == d)
+                                .map(|(_, (_, _, third))| *third),
+                        ))
+            });
+            if unsupported {
                 for &(_, (i, _, _)) in &edges[at..end] {
                     invalid[i] = true;
                 }
@@ -130,39 +151,77 @@ impl Source {
     }
 }
 
-fn two_sided(edge: Edge, incidence: impl Iterator<Item = Incidence> + Clone) -> bool {
-    let p = |k: Key| k.map(|x| f64::from(f32::from_bits(x)));
-    let (a, b) = (p(edge.0), p(edge.1));
-    let d: [f64; 3] = std::array::from_fn(|k| b[k] - a[k]);
-    let dd = d.iter().map(|x| x * x).sum::<f64>();
-    for direction in 0..2 {
-        let mut wings = Vec::<[f64; 3]>::new();
-        for (_, dir, c) in incidence.clone() {
-            if dir != direction {
-                continue;
-            }
-            if wings.len() == 4 {
-                return false;
-            }
-            let c = p(c);
-            let w: [f64; 3] = std::array::from_fn(|k| c[k] - a[k]);
-            let t = w.iter().zip(d).map(|(w, d)| w * d).sum::<f64>() / dd;
-            let w: [f64; 3] = std::array::from_fn(|k| w[k] - t * d[k]);
-            let norm = w.iter().map(|x| x * x).sum::<f64>().sqrt();
-            if !norm.is_finite() || norm <= 0. {
-                return false;
-            }
-            let w = w.map(|x| x / norm);
-            if wings
-                .iter()
-                .any(|u| u.iter().zip(w).map(|(u, w)| u * w).sum::<f64>() > 1e-6)
-            {
-                return false;
-            }
-            wings.push(w);
+fn distinct_sides(edge: Edge, thirds: impl Iterator<Item = Key>) -> bool {
+    let mut normals = Vec::<[Vec<f64>; 3]>::with_capacity(4);
+    for c in thirds {
+        if normals.len() == 4 {
+            return false;
         }
+        let n = exact_normal(edge, c);
+        if n.iter().all(Vec::is_empty) || normals.iter().any(|u| acute(u, &n)) {
+            return false;
+        }
+        normals.push(n);
     }
     true
+}
+
+/// Grow an exact nonoverlapping expansion in place (TwoSum, zero elimination).
+/// Degree-four terms over finite f32 coordinates are multiples of 2^-596 with
+/// magnitudes below 2^522, safely inside f64's normal range, including residuals.
+fn add(expansion: &mut Vec<f64>, mut q: f64) {
+    let mut written = 0;
+    for i in 0..expansion.len() {
+        let e = expansion[i];
+        let sum = q + e;
+        let b = sum - q;
+        let residual = (q - (sum - b)) + (e - b);
+        if residual != 0. {
+            expansion[written] = residual;
+            written += 1;
+        }
+        q = sum;
+    }
+    expansion.truncate(written);
+    if q != 0. {
+        expansion.push(q);
+    }
+}
+
+/// (b-a) cross (c-a), with differences expanded before multiplication. A pair
+/// of f32 coordinates multiplies exactly in f64, even across its entire exponent
+/// range. Keeping the cancellation terms avoids a translation-dependent epsilon.
+fn exact_normal(edge: Edge, c: Key) -> [Vec<f64>; 3] {
+    let p = |k: Key| k.map(|x| f64::from(f32::from_bits(x)));
+    let (a, b, c) = (p(edge.0), p(edge.1), p(c));
+    std::array::from_fn(|i| {
+        let (j, k) = ((i + 1) % 3, (i + 2) % 3);
+        let mut terms = Vec::with_capacity(8);
+        for (j, k, sign) in [(j, k, 1.), (k, j, -1.)] {
+            for x in [b[j], -a[j]] {
+                for y in [c[k], -a[k]] {
+                    add(&mut terms, sign * x * y);
+                }
+            }
+        }
+        terms
+    })
+}
+
+/// Cross-product dot sign equals the perpendicular wings' dot sign. Split every
+/// product with its exact fused remainder; no angular tolerance or normalization.
+fn acute(a: &[Vec<f64>; 3], b: &[Vec<f64>; 3]) -> bool {
+    let mut sum = Vec::new();
+    for (a, b) in a.iter().zip(b) {
+        for &a in a {
+            for &b in b {
+                let p = a * b;
+                add(&mut sum, a.mul_add(b, -p));
+                add(&mut sum, p);
+            }
+        }
+    }
+    sum.last().is_some_and(|&x| x > 0.)
 }
 
 /// Encoding keeps face correspondence, so test every normal as well as multiplicity.
@@ -192,6 +251,79 @@ pub(crate) fn decode_valid(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn balanced_fans_check_both_sides_and_cannot_inherit_a_new_acute_wing() {
+        let mut p = [
+            [0., 0., 0.],
+            [1., 0., 0.],
+            [0., 1., 0.],
+            [0., 0., 1.],
+            [0., -1., 0.],
+            [0., 0., -1.],
+        ];
+        let source = Source::new(&p, &[[0, 1, 2], [1, 0, 4]]);
+        let fan = [[0, 1, 2], [0, 1, 3], [1, 0, 4], [1, 0, 5]];
+        assert!(!source.violations(&p, &fan).iter().any(|v| *v));
+        let child = Source::new(&p, &fan);
+        for (corner, side) in [(3, 1.), (5, -1.)] {
+            let before = p[corner];
+            // Positive but far below the old 1e-6 angular allowance.
+            p[corner][1] = side * f32::from_bits(1);
+            assert!(source.violations(&p, &fan).iter().any(|v| *v));
+            assert!(child.violations(&p, &fan).iter().any(|v| *v));
+            p[corner] = before;
+        }
+        // Original acute nonmanifold sheets remain legal when kept exactly.
+        p[3][1] = 0.5;
+        assert!(!Source::new(&p, &fan)
+            .violations(&p, &fan)
+            .iter()
+            .any(|v| *v));
+    }
+
+    #[test]
+    fn wing_sign_handles_full_f32_range_and_exact_right_angles() {
+        for (large, small) in [(f32::MAX, f32::from_bits(1)), (1., 1.), (1e-30, 1e30)] {
+            let edge = (key([large, small, 0.]), key([-large, small, 0.]));
+            let a = exact_normal(edge, key([0., small, small]));
+            for (z, expected) in [(-small, false), (0., false), (small, true)] {
+                let b = exact_normal(edge, key([0., 2. * small, z]));
+                assert_eq!(acute(&a, &b), expected);
+                assert!(a.iter().any(|v| !v.is_empty()));
+                assert!(b.iter().any(|v| !v.is_empty()));
+            }
+        }
+    }
+
+    #[test]
+    fn expansion_wing_sign_matches_integer_reference() {
+        let mut seed = 117u64;
+        let mut next = || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            ((seed >> 32) as i32 % (1 << 20)) as i128
+        };
+        for _ in 0..128 {
+            let p: [[i128; 3]; 4] = std::array::from_fn(|_| std::array::from_fn(|_| next()));
+            let normal = |c: usize| {
+                let d: [i128; 3] = std::array::from_fn(|k| p[1][k] - p[0][k]);
+                let u: [i128; 3] = std::array::from_fn(|k| p[c][k] - p[0][k]);
+                std::array::from_fn::<_, 3, _>(|i| {
+                    let (j, k) = ((i + 1) % 3, (i + 2) % 3);
+                    d[j] * u[k] - d[k] * u[j]
+                })
+            };
+            let expected = normal(2)
+                .iter()
+                .zip(normal(3))
+                .map(|(a, b)| a * b)
+                .sum::<i128>();
+            let keys = p.map(|p| key(p.map(|v| v as f32)));
+            let a = exact_normal((keys[0], keys[1]), keys[2]);
+            let b = exact_normal((keys[0], keys[1]), keys[3]);
+            assert_eq!(acute(&a, &b), expected > 0);
+        }
+    }
 
     #[test]
     fn new_twins_and_acute_flaps_are_rejected_but_source_sheets_survive() {
