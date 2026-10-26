@@ -734,17 +734,18 @@ fn cancellation_stops_a_memo_replay_at_its_next_event() {
     ]);
     CHECKS.with(|checks| checks.set(0));
     let all = events(&path);
-    // The second placement replays the shared document's 2,101 tiles.
+    // Each of the shared document's 2,101 tiles has a C2 tile event and a
+    // delivery-kind event; cancellation checks cover both bounded operations.
     let replayed = CHECKS.with(std::cell::Cell::get);
-    assert_eq!(replayed, 2101);
-    // The replay's heartbeat: two events with the placing task's unchanged count.
+    assert_eq!(replayed, 4202);
+    // Four heartbeats have the placing task's unchanged traversal count.
     let traverse: Vec<_> = all
         .iter()
         .filter(|(phase, _, _)| phase == "validate.traverse")
         .map(|(_, done, _)| *done)
         .collect();
     let placing = *traverse.last().unwrap();
-    assert_eq!(traverse.iter().filter(|&&done| done == placing).count(), 2);
+    assert_eq!(traverse.iter().filter(|&&done| done == placing).count(), 4);
     // Each heartbeat lands on a multiple of 1,024 replayed checks.
     struct Heartbeats(Mutex<Vec<(u64, u64)>>);
     impl Observer for Heartbeats {
@@ -774,8 +775,8 @@ fn cancellation_stops_a_memo_replay_at_its_next_event() {
         .filter(|(done, _)| *done == placing)
         .map(|(_, checks)| *checks)
         .collect();
-    assert_eq!(beats, [1024, 2048]);
-    for at in [1, 1024, 1500, 2101] {
+    assert_eq!(beats, [1024, 2048, 3072, 4096]);
+    for at in [1, 1024, 1500, 2101, 3072, 4202] {
         let control = RunControl::default();
         CANCEL_AT_CHECK
             .with(|cancel| *cancel.borrow_mut() = Some((at, control.cancellation_handle())));

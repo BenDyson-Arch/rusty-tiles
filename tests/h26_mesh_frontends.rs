@@ -133,13 +133,34 @@ fn cli_report_is_the_archive_report_with_separate_resource_diagnostics() {
             .as_str()
             .unwrap()
             .starts_with("mesh phase leaf_build: ")));
-    let seconds = &envelope["diagnostics"]["phase_seconds"];
-    for phase in ["capture", "leaf_build", "proxy_bake", "archive"] {
+    // HLOD is the only coarse path: its phases and stage facts are reported, the removed
+    // H17/H27 ones are not.
+    let diagnostics = &envelope["diagnostics"];
+    let seconds = &diagnostics["phase_seconds"];
+    for phase in [
+        "capture",
+        "leaf_build",
+        "hlod_incidence",
+        "hlod_geometry",
+        "archive",
+    ] {
         assert!(seconds[phase].as_f64().unwrap() >= 0., "{phase}");
     }
-    assert_eq!(
-        envelope["diagnostics"]["proxy_bake"]["facing_fallback_faces"],
-        0
+    for removed in [
+        "lod_simplify",
+        "seam_resolution",
+        "lod_finish",
+        "proxy_bake",
+    ] {
+        assert!(seconds.get(removed).is_none(), "{removed}");
+    }
+    assert!(diagnostics.get("proxy_bake").is_none());
+    assert!(diagnostics["hlod"]["tiles"].is_u64());
+    assert!(
+        diagnostics["memory"]["budget"]["resolved_bytes"]
+            .as_u64()
+            .unwrap()
+            > 0
     );
 }
 

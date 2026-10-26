@@ -51,7 +51,7 @@ pub use mesh_large::{
 #[doc(hidden)]
 pub use mesh_large::{
     parse_memory_budget, BudgetSource, HlodDiagnostics, HlodMemoryPlan, MemoryBudget,
-    MemoryDiagnostics, TilerLod,
+    MemoryDiagnostics,
 };
 pub use pack::{validate_3tz, TZ_INDEX_NAME};
 pub use raster_directory::{

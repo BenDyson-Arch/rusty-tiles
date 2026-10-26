@@ -91,8 +91,7 @@ pub struct MeshTilesetReport {
     pub max_depth: u32,
     pub synthetic_leaves: u64,
     pub packed_leaves: u64,
-    /// Internal tiles with an H17 coarse tile (all of them when the leaf directory has
-    /// proxies; none for a full-detail-only directory).
+    /// Internal tiles with an HLOD coarse tile (none for a full-detail-only directory).
     pub proxies: u64,
     /// Every 3TZ member, `tileset.json` and the index included.
     pub members: u64,
@@ -169,9 +168,10 @@ fn leaf_content(row: &LeafRow, member: String) -> Result<ContentRef, JobError> {
     .map_err(|e| state(e.to_string()))
 }
 
-/// The content of an H17 proxy published as `member`: its source identities are the
-/// present primitives of its `source_primitive` table; removed ones are in its
-/// `lod_vanished` table. The digest binds the tile's rank range to the payload.
+/// The content of an HLOD coarse tile published as `member`: its source identities are the
+/// rows of its representative `source_primitive` table (D4). The digest binds the tile's
+/// rank range to the payload. Its domain string is a published accounting constant, kept
+/// from the coarse tiles' first producer so the identity digests do not change.
 fn proxy_content(row: &ProxyRow, member: String) -> Result<ContentRef, JobError> {
     let mut digest = Sha256::new();
     digest.update(b"rusty-tiles/h17/proxy-identity/v1\0");
@@ -525,8 +525,7 @@ fn plan_pass(
 ) -> Result<Planned, JobError> {
     let mut sink = PlanSink::default();
     let proxies = leaves.proxies.then(|| leaves.proxy_rows()).transpose()?;
-    let mut builder = Builder::with_proxies(&mut sink, limits, proxies)
-        .with_sparse_proxies(leaves.sparse_proxies);
+    let mut builder = Builder::with_proxies(&mut sink, limits, proxies);
     let mut triangles = 0u64;
     for (index, item) in leaves.leaves()?.enumerate() {
         if index % 256 == 0 {
@@ -761,8 +760,7 @@ pub(crate) fn write_prepared(
         check,
     };
     let proxies = leaves.proxies.then(|| leaves.proxy_rows()).transpose()?;
-    let mut builder = Builder::with_proxies(&mut sink, limits, proxies)
-        .with_sparse_proxies(leaves.sparse_proxies);
+    let mut builder = Builder::with_proxies(&mut sink, limits, proxies);
     for (index, item) in leaves.leaves()?.enumerate() {
         if index % 256 == 0 {
             (builder.sink().check)()?;

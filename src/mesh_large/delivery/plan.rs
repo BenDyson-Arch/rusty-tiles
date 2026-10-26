@@ -104,7 +104,7 @@ pub(crate) struct Node {
     /// the root) published as an implicit root rather than as explicit tiles.
     pub implicit: bool,
     pub leaf: Option<Box<LeafRow>>,
-    /// The H17 coarse tile of an internal tile.
+    /// The HLOD coarse tile of an internal tile.
     pub proxy: Option<Box<ProxyRow>>,
     /// An HLOD single-child chain cell below its chain's coarse tile (this row) has no
     /// content of its own. Cesium's empty traversal would let the coarse tile stop drawing
@@ -278,7 +278,7 @@ pub(crate) struct Shape {
     pub max_depth: u32,
     pub synthetic_leaves: u64,
     pub packed_leaves: u64,
-    /// Internal tiles published with an H17 coarse tile.
+    /// Internal tiles published with an HLOD coarse tile.
     pub proxies: u64,
     /// HLOD chain cells spliced out of explicit output (not in `tiles`).
     pub spliced_chain_cells: u64,
@@ -315,7 +315,7 @@ impl Frame {
 }
 
 /// The streaming builder. Feed leaves in row order, then [`Builder::finish`].
-/// H17 proxy rows in postorder, with their decoded bounds.
+/// HLOD coarse rows in postorder, with their decoded bounds.
 pub(crate) type Proxies<'p> = Box<dyn Iterator<Item = Result<(ProxyRow, Aabb), JobError>> + 'p>;
 
 pub(crate) struct Builder<'s, S: Sink> {
@@ -327,9 +327,7 @@ pub(crate) struct Builder<'s, S: Sink> {
     held: u64,
     pub shape: Shape,
     finished_root: bool,
-    /// Proxy rows may skip internal tiles (HLOD pass-through cells publish no content).
-    sparse: bool,
-    /// The next proxy row, read but not yet matched (sparse rows only).
+    /// The next proxy row, read but not yet matched.
     lookahead: Option<(ProxyRow, Aabb)>,
 }
 
@@ -342,7 +340,9 @@ impl<'s, S: Sink> Builder<'s, S> {
         Self::with_proxies(sink, limits, None)
     }
 
-    /// A builder that gives every internal tile the next H17 proxy row (postorder).
+    /// A builder that matches the HLOD coarse rows (postorder) to internal tiles. Rows may
+    /// skip internal tiles: single-child pass-through cells and omitted cells publish no
+    /// content.
     pub(crate) fn with_proxies(
         sink: &'s mut S,
         limits: Limits,
@@ -357,15 +357,8 @@ impl<'s, S: Sink> Builder<'s, S> {
             held: 0,
             shape: Shape::default(),
             finished_root: false,
-            sparse: false,
             lookahead: None,
         }
-    }
-
-    /// Let proxy rows skip internal tiles, which then publish no content.
-    pub(crate) fn with_sparse_proxies(mut self, sparse: bool) -> Self {
-        self.sparse = sparse;
-        self
     }
 
     pub(crate) fn sink(&mut self) -> &mut S {
@@ -520,13 +513,11 @@ impl<'s, S: Sink> Builder<'s, S> {
                     self.shape.proxies += 1;
                     Some(Box::new(row))
                 }
-                // Sparse coarse rows (HLOD): a cell of a single-child chain publishes no
-                // content below the chain's coarse tile, which is the next row (same rank
-                // range, shallower). It takes that tile's error, so refinement through it is
+                // A cell of a single-child chain publishes no content below the chain's
+                // coarse tile, which is the next row (same rank range, shallower). It takes that tile's error, so refinement through it is
                 // monotone and happens exactly where the coarse tile's own cell would refine.
                 Some((row, bounds))
-                    if self.sparse
-                        && (row.first, row.end) == (frame.first, self.next_rank)
+                    if (row.first, row.end) == (frame.first, self.next_rank)
                         && row.depth < frame.depth =>
                 {
                     chain_error = Some(row.geometric_error);
@@ -537,25 +528,13 @@ impl<'s, S: Sink> Builder<'s, S> {
                     self.lookahead = Some((row, bounds));
                     None
                 }
-                // Sparse coarse rows (HLOD): a cell whose coarse tile was omitted has no row
-                // (the next row is a later tile's in postorder, or there is none).
-                next if self.sparse => {
+                // A cell whose coarse tile was omitted has no row (the next row is a later
+                // tile's in postorder, or there is none).
+                next => {
                     omitted = true;
                     self.shape.omitted_cells += 1;
                     self.lookahead = next;
                     None
-                }
-                Some((row, _)) => {
-                    return Err(bad(format!(
-                        "proxies.jsonl row {} is not internal tile f{}-d{} (postorder)",
-                        row.uri, frame.first, frame.depth
-                    )))
-                }
-                None => {
-                    return Err(bad(format!(
-                        "proxies.jsonl ends before internal tile f{}-d{}",
-                        frame.first, frame.depth
-                    )))
                 }
             }
         } else {
@@ -587,7 +566,7 @@ impl<'s, S: Sink> Builder<'s, S> {
                     ),
                 ))
             }
-            // Content-less (an H17 empty parent, or an omitted HLOD cell): it must refine
+            // Content-less (an empty parent, or an omitted HLOD cell): it must refine
             // whenever it is visible, or Cesium stops at it and draws nothing there (an empty
             // tile traverses only while its own screen-space error passes the maximum, and an
             // omitted cell has no content ancestor to fall back on). Written the same way
@@ -823,8 +802,7 @@ mod omission_tests {
                 },
             ))
         });
-        let mut builder = Builder::with_proxies(&mut sink, limits, Some(Box::new(rows)))
-            .with_sparse_proxies(true);
+        let mut builder = Builder::with_proxies(&mut sink, limits, Some(Box::new(rows)));
         let leaves = 8u64.pow(depth);
         let result = (|| {
             for i in 0..leaves {
@@ -898,7 +876,7 @@ mod omission_tests {
             depth: 0,
             geometric_error: 1e9,
             primitives: 1,
-            sampling: None,
+            sampling: (0, 0, crate::mesh_large::hlod::error::Schedule::PRODUCTION),
             encoded_depth: 0,
         };
         let (shape, _) = plan(2, vec![root]);
@@ -921,7 +899,7 @@ mod omission_tests {
             depth: 0,
             geometric_error: 1e9,
             primitives: 1,
-            sampling: None,
+            sampling: (0, 0, crate::mesh_large::hlod::error::Schedule::PRODUCTION),
             encoded_depth: 0,
         };
         let tight = Limits {

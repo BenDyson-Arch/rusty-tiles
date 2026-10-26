@@ -100,6 +100,16 @@ enum Command {
         /// the user cache directory, then the system temporary directory, disk-backed first)
         #[arg(long = "scratchDir", visible_alias = "scratch-dir", value_name = "DIR")]
         scratch_dir: Option<PathBuf>,
+        /// Require a delivery profile regardless of labels inside the archive. `hlod`: every
+        /// payload must carry source identity and every HLOD check runs; an archive declaring
+        /// HLOD (asset.extras.rustyTiles.lod or conversion.json lod) is held to it anyway
+        #[arg(
+            long = "expectProfile",
+            visible_alias = "expect-profile",
+            value_name = "PROFILE",
+            value_parser = ["hlod"]
+        )]
+        expect_profile: Option<String>,
     },
     /// Check converter capabilities and local CRS resources
     Doctor(DoctorArgs),
@@ -178,10 +188,7 @@ struct TilerArgs {
     /// Owned working-data parent; publication staging remains beside the output
     #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
     scratch_dir: Option<PathBuf>,
-    /// Coarse-tile method: h17 (default) or hlod (0.4 octree HLOD, in development)
-    #[arg(long, default_value = "h17", hide = true)]
-    lod: rusty_tiles::TilerLod,
-    /// Declared memory budget for an hlod run: bytes, or with a KiB/MiB/GiB/TiB suffix
+    /// Declared memory budget: bytes, or with a KiB/MiB/GiB/TiB suffix
     #[arg(long = "memory-budget", visible_alias = "memoryBudget", value_name = "BYTES",
           value_parser = parse_memory_budget, hide = true)]
     memory_budget: Option<u64>,
@@ -1155,7 +1162,6 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             if let Some(path) = a.scratch_dir {
                 request = request.with_scratch_dir(path);
             }
-            request = request.with_lod(a.lod);
             if let Some(bytes) = a.memory_budget {
                 request = request.with_memory_budget(bytes);
             }
@@ -1170,8 +1176,12 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             input,
             max_volume,
             scratch_dir,
+            expect_profile,
         } => {
             let mut request = rusty_tiles::validate::ValidationRequest::new(&input);
+            if expect_profile.is_some() {
+                request = request.expect_profile(rusty_tiles::validate::ExpectedProfile::Hlod);
+            }
             let mut seen = std::collections::BTreeSet::new();
             for (key, value) in max_volume {
                 if !seen.insert(key) {

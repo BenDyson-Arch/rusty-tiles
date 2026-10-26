@@ -79,7 +79,7 @@ fn byte(x: f64) -> u8 {
 }
 /// sRGB byte to linear, from a table of [`linear_exact`] (bit-identical): colour
 /// reduction converts every source texel of every footprint, and `powf` per call was
-/// about a third of proxy bake CPU when source mip chains are rebuilt.
+/// about a third of the former proxy bake CPU when source mip chains are rebuilt.
 fn linear(x: u8) -> f64 {
     static TABLE: std::sync::OnceLock<[f64; 256]> = std::sync::OnceLock::new();
     TABLE.get_or_init(|| std::array::from_fn(|i| linear_exact(i as u8)))[usize::from(x)]

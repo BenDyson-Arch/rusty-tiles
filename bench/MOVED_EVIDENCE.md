@@ -20,3 +20,16 @@ reads them. Each file is kept unchanged, at the same relative path, under
 | `bench/terrain_benchmark_results.json` | 14871 | `2b3ded4c1b1f7fb1cb31d514d611bb34f4c18331f0702616485c96550ab5327e` |
 | `bench/architecture_audit/foundation/results.json` | 100877 | `41cedf375d6d585850bb856ad3be3b2924964d4bd3c8103173fca4996f154489` |
 | `bench/architecture_audit/f1b1/resource-initial.json` | 75371 | `9d05cc245567df997e071c6a49f629c0564b6d57dc7dcfd09dc9db7008cc6d8b` |
+
+## S5 control hash manifests (2026-10-25)
+
+Per-file SHA-256 dumps of the generated S5 controls. `tests/hlod_acceptance.rs` now
+checks one digest per family (`controls-digest.json`) over the same sorted
+`path<TAB>sha256` lines. The dumps are kept under
+`~/.cache/rusty-tiles-evidence/tree-trim-s5-20261025/` and were last held by commit
+`f1e841c0`.
+
+| Path | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `bench/architecture_audit/mesh_hlod/s5/controls-sha256.json` | 50276 | `d8f04095256266611909891bdd3309e0f710d91c4f26c49b6ad6d7b474089da9` |
+| `bench/architecture_audit/mesh_hlod/s5/revision-controls-sha256.json` | 30316 | `e3d6d3cd51d4e68b5711b1c10fa2d783942f756b12ddd84a0eb9363cfd5e88a0` |

@@ -1,7 +1,7 @@
 //! ID / class texture pages: `EXT_mesh_features` feature ID textures and
 //! categorical `EXT_structural_metadata` property textures. A future annotate
-//! pass or H13 bake requests one with [`bake`] and attaches a level to a leaf
-//! (or a coarse proxy) with [`IdTexture::append_level`].
+//! pass requests one with [`bake`] and attaches a level to a leaf
+//! (or a coarse tile) with [`IdTexture::append_level`].
 //!
 //! Contract:
 //! - Any number (>= 1) of ID sets. Each set is 1..=4 little-endian bytes and is

@@ -350,7 +350,6 @@ fn any_number_of_feature_id_sets() {
         pages: Vec::new(),
         textures: Vec::new(),
         samplers: vec![json!({"magFilter":9729,"minFilter":9987})],
-        preencode: Vec::new(),
     };
     let refs = out.append_level(&mut atlas, 0).unwrap();
     assert_eq!(refs.len(), 7);
@@ -478,7 +477,6 @@ fn featureless_levels_emit_no_feature_id_entry() {
         pages: Vec::new(),
         textures: Vec::new(),
         samplers: Vec::new(),
-        preencode: Vec::new(),
     };
     let refs = out.append_level(&mut atlas, 0).unwrap();
     assert_eq!(refs[0].feature_id(0, "empty"), None);
