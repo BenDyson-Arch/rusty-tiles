@@ -327,7 +327,7 @@ pub(crate) fn plan(
     };
     if let Some(path) = &settings.audit_dir {
         if audit::memory_backed(path)? {
-            tmpfs = tmpfs.saturating_add(
+            tmpfs = tmpfs.saturating_add(audit::admitted_bound(
                 audit::bound(
                     captured
                         .triangles
@@ -335,9 +335,15 @@ pub(crate) fn plan(
                         .saturating_mul(6)
                         .saturating_mul(u64::from(captured.tree.stats.height)),
                     captured.tree.stats.nodes,
+                    captured
+                        .triangles
+                        .len()
+                        .checked_mul(u64::from(captured.tree.stats.height))
+                        .ok_or_else(|| resource("audit triangle-depth bound overflows"))?,
                 )
                 .ok_or_else(|| resource("audit memory bound overflows"))?,
-            );
+                true,
+            ));
         }
     }
     let ceiling = budget
@@ -490,12 +496,9 @@ pub struct HlodDiagnostics {
     pub audit: Option<audit::FileReceipt>,
     pub(crate) borders_by_depth: Vec<borders::DepthReceipt>,
     /// Published content-less cells and the cap failures that originated them.
-    #[serde(rename = "omittedProxies")]
     pub omitted_proxies: u64,
-    #[serde(rename = "omissionSources")]
     pub omission_sources: u64,
     /// One entry per captured tree depth, including depths with no omissions.
-    #[serde(rename = "omittedByDepth")]
     pub omitted_by_depth: Vec<u64>,
     pub tiles: u64,
     pub jobs: u64,
@@ -632,6 +635,8 @@ enum Finished {
         reason: OmissionReason,
         frontier: Vec<TileKey>,
         topology: Box<geometry::TopologyReceipt>,
+        topology_attempts: u32,
+        construction_topology: Option<audit::Index>,
     },
 }
 
@@ -779,8 +784,19 @@ pub(crate) fn produce(
         check,
     };
     let audit_bound = borders
-        .audit_bound()
+        .audit_bound(
+            captured
+                .triangles
+                .len()
+                .checked_mul(u64::from(captured.tree.stats.height))
+                .ok_or_else(|| resource("audit triangle-depth bound overflows"))?,
+        )
         .ok_or_else(|| resource("audit bound overflows"))?;
+    let audit_bound = if let Some(path) = &settings.audit_dir {
+        audit::admitted_bound(audit_bound, audit::memory_backed(path)?)
+    } else {
+        audit_bound
+    };
     let audit_lease = settings
         .audit_dir
         .as_ref()
@@ -1263,13 +1279,20 @@ fn prepare(
 /// One parent: geometry, error, appearance, encoding, the pre-publication check and its
 /// member. Topology eligibility may query source geometry for a rejected proposal.
 /// An omitted parent runs no appearance work and publishes no S2 measurement.
-fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -> Done {
+fn build_tile(
+    job: &Job<'_, '_>,
+    closed: &Closed,
+    children: Vec<TileGeometry>,
+    audit: Option<&audit::Writer<'_>>,
+) -> Done {
     let (captured, settings, check) = (job.input.captured, &job.input.settings, job.check);
     let contract = job
         .borders
         .contract(closed.key, 6 * settings.cap)?
         .filter(|c| c.minimum_triangles() <= settings.cap);
     let mut prepared = None;
+    let mut topology_attempts = 0;
+    let mut published_topology_attempt = None;
     let mut query = job.source.query(captured, closed.key)?;
     let mut nearest = error::Nearest::with_steps(settings.nearest_steps);
     let outcome = if let Some(contract) = &contract {
@@ -1302,7 +1325,15 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
                     }
                 }
                 prepared = prepare(job, built, contract, &mut query, &mut nearest)?;
-                Ok(prepared.is_some())
+                let accepted = prepared.is_some();
+                if let Some(audit) = audit {
+                    topology_attempts += 1;
+                    let index = audit.topology_attempt(built, topology_attempts, accepted)?;
+                    if accepted {
+                        published_topology_attempt = Some(index);
+                    }
+                }
+                Ok(accepted)
             },
             check,
         )?
@@ -1310,10 +1341,15 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
         geometry::Outcome {
             built: None,
             attempted_topology: Default::default(),
+            construction_dropped: Vec::new(),
         }
     };
     let Some(mut built) = outcome.built else {
         // Its interface cannot fit the cap: omitted, nothing held for its parent.
+        let construction_topology = audit
+            .filter(|_| !outcome.construction_dropped.is_empty())
+            .map(|a| a.construction(closed.key, &outcome.construction_dropped))
+            .transpose()?;
         let omitted = Finished::Omitted {
             key: closed.key,
             reason: if contract.is_some() {
@@ -1331,6 +1367,8 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
                 })
                 .collect::<Result<_, JobError>>()?,
             topology: Box::new(outcome.attempted_topology),
+            topology_attempts,
+            construction_topology,
         };
         return Ok((None, omitted, appearance::Timing::default()));
     };
@@ -1432,6 +1470,8 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
         attempted_topology: outcome.attempted_topology,
         terminal_locks: contract.terminal_locks(),
         audit_record: None,
+        topology_attempts,
+        published_topology_attempt,
     };
     let mut geometry = built.geometry;
     geometry.geometric_error = error.geometric_error;
@@ -1642,6 +1682,8 @@ fn walk(
                         reason: OmissionReason::DescendantOmission,
                         frontier,
                         topology: Default::default(),
+                        topology_attempts: 0,
+                        construction_topology: None,
                     };
                     let _ = sender.send((
                         closed.id,
@@ -1685,7 +1727,7 @@ fn walk(
                 scope.spawn(move |_| {
                     let (id, seq) = (closed.id, closed.seq);
                     let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        let mut built = build_tile(job, &closed, children)?;
+                        let mut built = build_tile(job, &closed, children, audit)?;
                         // The job's admission includes its output: keep that part while the
                         // tile is held for its parent, release the workspace.
                         if let Some(tile) = built.0.as_mut() {
@@ -1750,6 +1792,8 @@ fn walk(
                         reason,
                         frontier,
                         topology,
+                        topology_attempts,
+                        construction_topology,
                     } => {
                         let source = reason.source();
                         report.borders_by_depth[key.depth as usize]
@@ -1773,6 +1817,12 @@ fn walk(
                                         *topology
                                     } else {
                                         Default::default()
+                                    },
+                                    if d == key.depth { topology_attempts } else { 0 },
+                                    if d == key.depth {
+                                        construction_topology
+                                    } else {
+                                        None
                                     },
                                 )?;
                             }

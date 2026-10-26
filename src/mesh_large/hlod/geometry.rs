@@ -2,6 +2,7 @@
 //! Boundary reconstruction precedes meshopt reduction. Stalled interiors get bounded
 //! topology cleanup and remeshing; only the reported capped frontier remains afterwards.
 mod constrained;
+pub(crate) mod locations;
 pub(crate) mod measurement;
 mod topology;
 pub(crate) use topology::Receipt as TopologyReceipt;
@@ -48,6 +49,7 @@ pub(crate) struct Outcome {
     pub built: Option<Built>,
     /// All measured proposals, including rejected candidates and the accepted publication.
     pub attempted_topology: TopologyReceipt,
+    pub construction_dropped: Vec<[[f32; 3]; 3]>,
 }
 
 /// Children merged into one vertex space welded by canonical decoded position, in child
@@ -252,6 +254,7 @@ pub(crate) fn build_parent(
     check()?;
     let mut merged = merge(children);
     let original_faces = merged.triangles.clone();
+    let reference = merged.clone();
     if merged.triangles.is_empty() {
         return Err(state(format!(
             "coarse tile f{}-d{} has no source triangle",
@@ -273,7 +276,7 @@ pub(crate) fn build_parent(
             .iter()
             .flat_map(|c| c.interface.iter().flat_map(|r| [r.a, r.b]))
             .collect();
-        topology::contract(
+        if !topology::contract(
             &mut merged,
             interface,
             &|k| {
@@ -284,13 +287,18 @@ pub(crate) fn build_parent(
                 }
             },
             &mut topology,
-        )?;
+        )? {
+            return Ok(Outcome {
+                built: None,
+                attempted_topology: topology,
+                construction_dropped: Vec::new(),
+            });
+        }
     }
     if caps.is_empty() {
         return Err(state("a parent build needs at least one cap"));
     }
     let floor = contract.scale.max(children_error);
-    let reference = merged.clone();
     let mut opening_pins = HashSet::default();
     for (i, &cap) in caps.iter().enumerate() {
         if caps[..i].contains(&cap) {
@@ -317,13 +325,14 @@ pub(crate) fn build_parent(
                 return Ok(Outcome {
                     built: Some(b),
                     attempted_topology: attempted,
+                    construction_dropped: Vec::new(),
                 });
             }
         }
     }
     // D11: simplifier stagnation alone is not cap infeasibility. Deduplicate and remove
     // eligible interior components, then remesh with increasingly coarse interior cells.
-    topology::cleanup(&mut merged, interface, floor, &mut topology);
+    let construction_dropped = topology::cleanup(&mut merged, interface, floor, &mut topology);
     if let Some(receipt) = constrained::remesh(&mut merged, interface, *caps.last().unwrap()) {
         topology.add(receipt);
     }
@@ -357,6 +366,7 @@ pub(crate) fn build_parent(
                 return Ok(Outcome {
                     built: Some(b),
                     attempted_topology: attempted,
+                    construction_dropped: Vec::new(),
                 });
             }
         }
@@ -365,6 +375,7 @@ pub(crate) fn build_parent(
     Ok(Outcome {
         built: None,
         attempted_topology: attempted,
+        construction_dropped,
     })
 }
 
@@ -703,8 +714,8 @@ mod tests {
             key: TileKey { depth: 1, ..parent },
             positions,
             ells: vec![1; 5],
-            triangles: vec![[0, 1, 2], [0, 3, 4]],
-            representative: vec![0; 2],
+            triangles: vec![[0, 1, 3], [1, 4, 3], [1, 2, 4]],
+            representative: vec![0; 3],
             primitives: vec![SourcePrimitive {
                 node: 0,
                 mesh: 0,

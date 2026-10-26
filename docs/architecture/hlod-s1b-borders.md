@@ -65,7 +65,9 @@ endpoints pin chain contacts without inventing T-junction edges. A vertex is
 removable only with two active edges and equal coarsened owner sets. High valence
 walks each adjacency once; full owner comparisons happen only at degree two.
 Consequently the total compared owner rows per level are bounded by incidence,
-not an owner cross-product. Binary source-key lookup and sorting give O(n log n)
+not an owner cross-product. Chord emission binary-skips each owner's DFS leaf
+interval, so it does not rescan a large leaf-owner run for every chord; counted
+reads test the adversarial fan-plus-zigzag family. Binary source-key lookup and sorting give O(n log n)
 work; fixed-height level walks add O(nh). Fixed page caches bound resident I/O
 state independently of source size.
 Each graph store has 128 fixed 16 KiB pages; the memory plan charges all
@@ -160,13 +162,43 @@ and IDs remain exact and separately checked. Single-child payload reuse requires
 equal complete decoded contracts; encoded sample depth may differ from published
 logical depth, whose E still floors G.
 
-Develop's S5 checks still require every original shared point/edge at every
-ancestor and key winding support by original edge. The first merged S1b focused
-run passes its independent D11 censuses but has 12 archive-inspection failures
-under those checks. Exact-point failures need D11 adaptation; contracted-edge
-winding failures need source-subarc support re-derivation before attributing them
-to validator semantics or producer orientation. S1b does not weaken or bypass
-S5. These failures remain open until its separately owned follow-up is integrated.
+The independent r1 review found real producer folds hidden by orientation flips.
+These were not validator semantics. Contraction now rejects inverted snaps,
+new area from degenerate faces, and unsupported mapped edge pairs. Constrained
+reconstruction changes only faces incident to contracted vertices, fixes the first
+interior ring and preserves the rest of the surface. Projected charts separate
+nonmanifold sheets and sharp folds. New zero-area faces are discarded; no arbitrary
+component witness invents a repair triangle. Topology comparison starts before
+contraction. Interior clustering likewise rejects inversions instead of flipping.
+
+The independent census counts directed incidences, including multiplicity. A
+contracted nonmanifold book spine can legitimately carry two equally directed
+pages: support must be re-derived on every original source subedge in the tile's
+leaf interval. No certificate alone supplies that support. Unsupported same-side
+pairs remain failures. S5's separately owned follow-up must retain this check and
+adapt original-point requirements to the common D11 contract.
+
+Audit v1 has additive location records. Each `topologyAttempt` has a tile key,
+local attempt ordinal, acceptance flag, measured receipt and `hintOnly: true`
+locations. Final tile/omission records carry `topologyAttempts`; a tile's
+`publishedTopologyAttempt` is its accepted record's byte index. A final omission
+may also reference `constructionTopology` for cleanup drops that never reached an
+assessed proposal. Each operation has a kind, ordinal and location-bank index.
+Drop banks identify individual components; closure/opening banks conservatively
+identify affected regions, with full bounds/counts and at most eight actual face
+and edge anchors per bank. `truncated` states when anchors are a subset. Coordinates
+are candidate/source controls before final output quantization, not proof of
+final decoded geometry. `sourceHint` supplies the exact descendant interval.
+S5 must re-derive operations from the source and delivered surfaces.
+
+Record serialization is counted before any record bytes are written. A tmpfs
+sidecar has a fixed internal 256 MiB budget included in the memory plan and
+ScratchLedger; exceeding it refuses with ResourceLimit and never drops evidence.
+Ordinary disk uses the conservative logical maximum with actual-growth free-space
+checks. The archive and client request graph never contain these records.
+Public `diagnostics.hlod` uses `omitted_proxies`, `omission_sources`,
+`omitted_by_depth` and `borders_by_depth`; shared nested report records retain
+camelCase, consistent with existing `appearance_by_depth`/`error_measurement`.
 
 ## Topology eligibility revision (2026-10-26)
 

@@ -222,6 +222,11 @@ pub(crate) struct HlodRow {
     pub appearance: super::appearance::TileAppearance,
     pub terminal_locks: u64,
     pub audit_record: Option<super::audit::Index>,
+    /// Sidecar-only links; omitted from the deterministic manifest and client archive.
+    #[serde(skip)]
+    pub topology_attempts: u32,
+    #[serde(skip)]
+    pub published_topology_attempt: Option<super::audit::Index>,
     pub border_scale: f64,
     pub border_epsilon: f64,
     pub topology: super::geometry::TopologyReceipt,

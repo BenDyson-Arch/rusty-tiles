@@ -494,6 +494,7 @@ struct Census {
     contracted_source_vertices: usize,
     certificate_failures: usize,
     certificate_winding_failures: usize,
+    unsupported_same_direction_edges: usize,
     max_same_depth_gap_m: f64,
     max_mixed_depth_gap_m: f64,
     missing_segments: usize,
@@ -1166,6 +1167,10 @@ fn accept_with(name: &str, source: &[Mesh], run: Run, defects: bool) -> (Census,
     }
     assert_eq!(census.duplicate_chain_tiles, 0, "{name}: {census:?}");
     assert_eq!(census.reversed_coarse_faces, 0, "{name}: {census:?}");
+    assert_eq!(
+        census.unsupported_same_direction_edges, 0,
+        "{name}: {census:?}"
+    );
     assert!(census.max_coarse_triangles <= run.cap, "{name}: {census:?}");
     assert!(
         census.mixed_pairs > 0 && census.same_depth_pairs > 0,
@@ -3002,9 +3007,9 @@ fn budget_equality_admits_and_one_below_refuses() {
     assert_eq!(memory.hlod.texture_workspace_bytes, 0);
     let hlod = first.diagnostics.hlod.clone();
     let public_summary = serde_json::to_value(&hlod).unwrap();
-    assert_eq!(public_summary["omittedProxies"], 0);
-    assert_eq!(public_summary["omissionSources"], 0);
-    let depths = public_summary["omittedByDepth"].as_array().unwrap();
+    assert_eq!(public_summary["omitted_proxies"], 0);
+    assert_eq!(public_summary["omission_sources"], 0);
+    let depths = public_summary["omitted_by_depth"].as_array().unwrap();
     assert!(!depths.is_empty());
     assert!(depths.iter().all(|count| count == 0));
     assert_eq!(depths.len(), hlod.borders_by_depth.len());
@@ -3201,6 +3206,7 @@ fn evidence_census() {
         "contractedSourceVertices": census.contracted_source_vertices,
         "certificateFailures": census.certificate_failures,
         "certificateWindingFailures": census.certificate_winding_failures,
+        "unsupportedSameDirectionEdges": census.unsupported_same_direction_edges,
         "maxSameDepthGapM": census.max_same_depth_gap_m,
         "maxMixedDepthGapM": census.max_mixed_depth_gap_m,
         "missingSegments": census.missing_segments, "missingPoints": census.missing_vertices,
@@ -3232,6 +3238,7 @@ fn evidence_census() {
     );
     assert_eq!(census.max_same_depth_gap_m, 0.);
     assert_eq!(census.certificate_winding_failures, 0);
+    assert_eq!(census.unsupported_same_direction_edges, 0);
     // Exact seams: source T-junctions and unwelded seams are reported (the census's
     // overlap and perpendicular counts above, the manifest's source-defect counts), not
     // asserted; omitted coarse tiles are reported by `omittedProxies`.
@@ -4266,4 +4273,61 @@ fn tmpfs_exhaustion_is_admitted_before_border_or_frontier_writes() {
     .unwrap();
     assert_eq!(allowed.minimum_bytes, exact);
     assert_eq!(captured.scratch.live_bytes(), bytes_before);
+}
+
+/// The review's three contraction controls: inspect delivered directed incidences before
+/// the separately maintained validator's original-point rule. A bit mask cannot see folds.
+#[test]
+fn contracted_borders_do_not_fold_collinear_book_or_sheet_surfaces() {
+    let c = T_LINE;
+    let flat = |_: f32, _: f32| 2.;
+    let collinear = vec![
+        grid((1, 40), (0., c), (0., 100.), &flat, [0.6, 0.5, 0.4, 1.]),
+        grid((30, 400), (c, 100.), (0., 100.), &flat, [0.3, 0.6, 0.3, 1.]),
+    ];
+    for (name, source, profile) in [
+        ("collinear", collinear, LeafProfile::Balanced),
+        ("book", book(), LeafProfile::Balanced),
+        ("sheet", sheet(), LeafProfile::Lossless),
+    ] {
+        let work = tempfile::tempdir().unwrap();
+        let input = write_gltf(&work.path().join("src"), &source);
+        let dir = stage(
+            &input,
+            &work.path().join("hlod"),
+            &Run {
+                profile,
+                nearest_steps: super::error::NEAREST_STEPS,
+                ..Run::default()
+            },
+        )
+        .unwrap();
+        let census = census(&dir);
+        eprintln!("R1 {name}: {census:?}");
+        assert!(census.coarse >= 3);
+        assert_eq!(
+            census.unsupported_same_direction_edges, 0,
+            "{name}: {census:?}"
+        );
+        assert_eq!(census.certificate_winding_failures, 0, "{name}: {census:?}");
+        assert_eq!(census.certificate_failures, 0);
+        assert_eq!(census.missing_segments + census.missing_vertices, 0);
+        assert_eq!(census.max_same_depth_gap_m, 0.);
+        let mut errors = BTreeMap::<u64, f64>::new();
+        for row in rows(&dir.join("proxies.jsonl")) {
+            let g = row["geometricError"].as_f64().unwrap();
+            let depth = row["encodedDepth"].as_u64().unwrap();
+            let maximum = errors.entry(depth).or_default();
+            *maximum = maximum.max(g);
+        }
+        eprintln!("R1 {name} G: {errors:?}");
+        if name == "collinear" {
+            for (d, baseline) in [5.26, 4.78, 3.45, 2.06].into_iter().enumerate() {
+                assert!(
+                    errors.get(&(d as u64)).is_some_and(|g| *g <= baseline),
+                    "{errors:?}"
+                );
+            }
+        }
+    }
 }

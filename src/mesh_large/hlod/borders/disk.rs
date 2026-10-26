@@ -106,6 +106,8 @@ impl Storage {
 pub(super) struct Disk<const N: usize> {
     storage: std::sync::Mutex<Storage>,
     pub(super) len: u64,
+    #[cfg(test)]
+    reads: std::sync::atomic::AtomicU64,
 }
 impl<const N: usize> Disk<N> {
     pub(super) fn new(scratch: &Scratch, name: &str) -> Result<Self, JobError> {
@@ -117,9 +119,14 @@ impl<const N: usize> Disk<N> {
                 clock: 0,
             }),
             len: 0,
+            #[cfg(test)]
+            reads: std::sync::atomic::AtomicU64::new(0),
         })
     }
     pub(super) fn get(&self, index: u64) -> Result<[u64; N], JobError> {
+        #[cfg(test)]
+        self.reads
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if index >= self.len {
             return Err(super::curve::state("graph slot is out of range"));
         }
@@ -129,6 +136,10 @@ impl<const N: usize> Disk<N> {
         let page = storage.page(index / count, width)?;
         let at = (index % count) as usize * width;
         Ok(Words::<N>::decode(&page.bytes[at..at + width]).0)
+    }
+    #[cfg(test)]
+    pub(super) fn read_count(&self) -> u64 {
+        self.reads.load(std::sync::atomic::Ordering::Relaxed)
     }
     pub(super) fn set(&mut self, index: u64, record: [u64; N]) -> Result<(), JobError> {
         let width = N * 8;

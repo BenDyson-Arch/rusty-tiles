@@ -560,13 +560,18 @@ fn omitted_cells_get_no_pages_textures_or_donor_work() {
         let resources: Value =
             serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
         let diagnostics = &resources["hlod"]["diagnostics"];
-        for key in ["omittedProxies", "omissionSources", "omittedByDepth"] {
-            assert_eq!(diagnostics[key], hlod[key], "cap {cap}: {key}");
+        for (public, internal) in [
+            ("omitted_proxies", "omittedProxies"),
+            ("omission_sources", "omissionSources"),
+            ("omitted_by_depth", "omittedByDepth"),
+        ] {
+            assert_eq!(diagnostics[public], hlod[internal], "cap {cap}: {public}");
+            assert!(diagnostics.get(internal).is_none());
         }
-        assert_eq!(diagnostics["borders_by_depth"], hlod["bordersByDepth"]);
-        let by_depth = diagnostics["omittedByDepth"].as_array().unwrap();
+        let by_depth = diagnostics["omitted_by_depth"].as_array().unwrap();
         let borders = diagnostics["borders_by_depth"].as_array().unwrap();
         assert_eq!(by_depth.len(), borders.len());
+        assert_eq!(diagnostics["borders_by_depth"], hlod["bordersByDepth"]);
         for (count, depth) in by_depth.iter().zip(borders) {
             assert_eq!(count, &depth["omittedCells"]);
         }

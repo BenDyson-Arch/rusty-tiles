@@ -31,6 +31,33 @@ pub(super) struct Source {
     pub(super) leaf_rows: Sequence<InterfaceRow>,
 }
 
+/// Owner rows are sorted by DFS leaf index. All leaves of one depth owner occupy
+/// its node's half-open leaf interval, so skip that whole run without scanning it.
+/// The returned position is the first row belonging to the next owner (or `end`).
+pub(super) fn next_owner(
+    owners: &Disk<1>,
+    at: u64,
+    end: u64,
+    leaf_end: u64,
+) -> Result<u64, JobError> {
+    let mut lo = at + 1;
+    // Most runs are singletons; avoid a binary search in that common case.
+    if lo == end || owners.get(lo)?[0] >= leaf_end {
+        return Ok(lo);
+    }
+    lo += 1;
+    let mut hi = end;
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        if owners.get(mid)?[0] < leaf_end {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    Ok(lo)
+}
+
 fn build_tree(
     scratch: &Scratch,
     tree: &Sequence<NodeRecord>,
@@ -300,5 +327,25 @@ impl Source {
             }
         }
         Ok(i == a[1] && j == b[1])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn owner_skip_respects_sparse_leaf_intervals_and_run_end() {
+        let work = tempfile::tempdir().unwrap();
+        let scratch = Scratch::create(Some(work.path()), 0).unwrap();
+        let mut owners = Disk::<1>::new(&scratch, "owners").unwrap();
+        for leaf in [0, 1, 1, 4, 7, 8, 9] {
+            owners.push([leaf]).unwrap();
+        }
+        assert_eq!(next_owner(&owners, 0, 7, 4).unwrap(), 3);
+        assert_eq!(next_owner(&owners, 3, 7, 8).unwrap(), 5);
+        assert_eq!(next_owner(&owners, 5, 7, 10).unwrap(), 7);
+        assert_eq!(next_owner(&owners, 3, 4, 8).unwrap(), 4);
+        assert_eq!(next_owner(&owners, 6, 7, 10).unwrap(), 7);
     }
 }

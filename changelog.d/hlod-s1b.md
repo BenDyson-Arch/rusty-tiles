@@ -15,3 +15,8 @@
   or per-depth omission counts, including loss of an entire coarse level.
 - Verify that an entirely omitted textured coarse frontier performs no image-cache
   loads or appearance work.
+
+- Reconstruct contracted border strips without inverted or zero-area faces, retain
+  their interior ring, and count directed seam incidences against source subarcs.
+- Bound chord emission work by distinct owners, and add operation locations to
+  the optional external audit sidecar.

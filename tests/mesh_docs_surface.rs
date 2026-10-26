@@ -309,9 +309,9 @@ fn policy_statements_match_the_implementation() {
     assert!(omission.contains("omitted"), "omission must be described");
     for field in [
         "diagnostics.hlod",
-        "omittedProxies",
-        "omissionSources",
-        "omittedByDepth",
+        "omitted_proxies",
+        "omission_sources",
+        "omitted_by_depth",
         "borders_by_depth",
         "including zeros",
     ] {
