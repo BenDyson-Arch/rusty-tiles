@@ -3,7 +3,7 @@ pub(super) mod atlas;
 pub(in crate::mesh_large) mod crops;
 pub(in crate::mesh_large) mod delivery;
 pub(in crate::mesh_large) mod geometry;
-#[allow(dead_code)] // Requested by H13 baking and the future annotate pass.
+#[allow(dead_code)] // Requested by the future annotate pass.
 pub(crate) mod id_texture;
 pub(in crate::mesh_large) mod mask;
 pub(in crate::mesh_large) mod mips;
