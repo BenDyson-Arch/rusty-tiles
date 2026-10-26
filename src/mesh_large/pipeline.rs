@@ -590,7 +590,7 @@ pub fn mesh_to_tileset(
         let leaf = producer::produce(
             work.path(),
             &captured,
-            &config,
+            config,
             &plan,
             request.profile,
             producer::Coarse {
