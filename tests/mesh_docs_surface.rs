@@ -237,7 +237,9 @@ fn certified_proxy_and_ledger_claims_are_gone_from_the_guide() {
         // D11 certifies source-parameter border displacement, not surface error.
         .replace("displacement certified against those arcs", "")
         // A real report field whose name predates HLOD.
-        .replace("unique_proxies", "");
+        .replace("unique_proxies", "")
+        // D11's public omission count, not the removed proxy-bake surface.
+        .replace("omitted_proxies", "");
     for forbidden in [
         "certified",
         "ledger",

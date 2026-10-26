@@ -192,10 +192,13 @@ final decoded geometry. `sourceHint` supplies the exact descendant interval.
 S5 must re-derive operations from the source and delivered surfaces.
 
 Record serialization is counted before any record bytes are written. A tmpfs
-sidecar has a fixed internal 256 MiB budget included in the memory plan and
+sidecar has a fixed internal 64 MiB budget included in the memory plan and
 ScratchLedger; exceeding it refuses with ResourceLimit and never drops evidence.
 Ordinary disk uses the conservative logical maximum with actual-growth free-space
-checks. The archive and client request graph never contain these records.
+checks. The archive and client request graph never contain these records. Attempt records
+can arrive in worker completion order. Determinism tests compare every audit fact
+and location after removing physical byte-address links, and compare complete
+client archives byte-for-byte across job counts, budgets and forced spills.
 Public `diagnostics.hlod` uses `omitted_proxies`, `omission_sources`,
 `omitted_by_depth` and `borders_by_depth`; shared nested report records retain
 camelCase, consistent with existing `appearance_by_depth`/`error_measurement`.

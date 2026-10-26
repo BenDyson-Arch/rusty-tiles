@@ -441,7 +441,7 @@ subvolumes of one pool report different ids, so their demands are checked
 separately against the same free space. Memory-backed (tmpfs) scratch is charged
 to the worker memory plan, but a work directory or output on tmpfs is not.
 
-The internal opt-in HLOD audit (`RT_HLOD_AUDIT_DIR`) reserves at most 256 MiB
+The internal opt-in HLOD audit (`RT_HLOD_AUDIT_DIR`) reserves at most 64 MiB
 for evidence on a memory-backed destination, shared by its memory-plan reservation
 and actual write budget. Exceeding that budget refuses the run with `resource_limit`;
 it never truncates evidence or skips operations. On ordinary disk, the audit keeps
