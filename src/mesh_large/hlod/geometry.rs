@@ -253,13 +253,16 @@ pub(crate) fn build_parent(
         // Coarsening only merges owners: every live parent border is a child border.
         // Nested canonical endpoints therefore make the union of child interfaces a
         // complete lookup domain. Interior vertices need no disk-backed source search.
-        let child_border: HashSet<Key> = children
+        let previous_interface: Vec<_> = children
             .iter()
-            .flat_map(|c| c.interface.iter().flat_map(|r| [r.a, r.b]))
+            .flat_map(|c| c.interface.iter().copied())
             .collect();
+        let child_border: HashSet<Key> =
+            previous_interface.iter().flat_map(|r| [r.a, r.b]).collect();
         if !topology::contract(
             &mut merged,
             interface,
+            &previous_interface,
             &|k| {
                 if child_border.contains(&k) {
                     mapping(k)
@@ -476,8 +479,9 @@ fn attempt(
     } else {
         merged.keys.iter().map(|k| vertices.contains(k)).collect()
     };
+    let contact_pins = folds::contact_pins(&merged.keys, &merged.triangles, interface);
     for (v, lock) in locked.iter_mut().enumerate() {
-        *lock |= opening_pins.contains(&merged.keys[v]);
+        *lock |= opening_pins.contains(&merged.keys[v]) || contact_pins[v];
     }
     let input = merged.triangles.len();
     let mut protected = vec![false; input];
@@ -502,6 +506,7 @@ fn attempt(
         loop {
             let (edges, points) = missing(&output, &merged.keys, &segments, &vertices);
             let invalid = folds::Source::new(&merged.positions, contracted_faces)
+                .with_boundary(interface)
                 .violations(&merged.positions, &output);
             #[cfg(test)]
             if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
@@ -611,6 +616,7 @@ fn attempt(
     };
     if matches!(stopping, StoppingBound::Input)
         && folds::Source::new(&merged.positions, contracted_faces)
+            .with_boundary(interface)
             .violations(&merged.positions, &output)
             .iter()
             .any(|v| *v)

@@ -16,7 +16,8 @@ pub(super) fn remesh(
     interface: &[InterfaceRow],
     cap: usize,
 ) -> Option<topology::Receipt> {
-    triangulate(m, interface, cap, None, &[])
+    let guard = super::folds::Source::new(&m.positions, &m.triangles).with_boundary(interface);
+    triangulate(m, interface, cap, None, &[], &guard)
 }
 
 /// Reconstruct contracted patches with all unaffected interior samples. In particular,
@@ -27,8 +28,9 @@ pub(super) fn contract(
     interface: &[InterfaceRow],
     map: &[u32],
     endpoints: &[u32],
+    guard: &super::folds::Source,
 ) -> Option<topology::Receipt> {
-    triangulate(m, interface, usize::MAX, Some(map), endpoints)
+    triangulate(m, interface, usize::MAX, Some(map), endpoints, guard)
 }
 
 fn triangulate(
@@ -37,6 +39,7 @@ fn triangulate(
     cap: usize,
     mapping: Option<&[u32]>,
     endpoints: &[u32],
+    guard: &super::folds::Source,
 ) -> Option<topology::Receipt> {
     let components = topology::components(m);
     let mut patches: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
@@ -324,8 +327,7 @@ fn triangulate(
     }
     let mut receipt = change.receipt;
     receipt.constrained_remeshes = count;
-    if !super::folds::Source::new(&m.positions, &m.triangles).preserves_faces(&m.positions, &output)
-    {
+    if guard.violations(&m.positions, &output).iter().any(|v| *v) {
         return None;
     }
     m.triangles = output;
@@ -375,6 +377,34 @@ fn manifold_patches(m: &Merged, affected: &[bool]) -> Vec<usize> {
 mod tests {
     use super::*;
     use crate::mesh_large::hlod::{interfaces::key, store::SourcePrimitive};
+
+    fn contract_path(
+        m: &mut Merged,
+        interface: &[InterfaceRow],
+        map: &[u32],
+        endpoints: &[u32],
+        path: &[u32],
+    ) -> Option<topology::Receipt> {
+        let (a, b) = (m.keys[path[0] as usize], m.keys[*path.last()? as usize]);
+        let mut mapping = vec![None; m.keys.len()];
+        for (i, &v) in path.iter().enumerate().skip(1).take(path.len() - 2) {
+            mapping[v as usize] = Some((a, b, i as f64 / (path.len() - 1) as f64, 0));
+        }
+        let previous: Vec<_> = path
+            .windows(2)
+            .map(|pair| {
+                InterfaceRow::new(0, m.keys[pair[0] as usize], m.keys[pair[1] as usize], 0, 1)
+            })
+            .collect();
+        let guard = super::super::folds::Source::for_contraction(
+            &m.positions,
+            &m.triangles,
+            interface,
+            &previous,
+            &mapping,
+        );
+        contract(m, interface, map, endpoints, &guard)
+    }
     fn sheet(n: u32, hole: bool) -> Merged {
         let positions: Vec<_> = (0..=n)
             .flat_map(|y| (0..=n).map(move |x| [x as f32, y as f32, 0.]))
@@ -415,8 +445,15 @@ mod tests {
             *target = if v <= 90 { 0 } else { 181 };
         }
         let interface = [InterfaceRow::new(0, m.keys[0], m.keys[181], 0, 1)];
-        let (receipt, peak) =
-            crate::test_alloc::peak(|| contract(&mut m, &interface, &map, &[0, 181]));
+        let (receipt, peak) = crate::test_alloc::peak(|| {
+            contract_path(
+                &mut m,
+                &interface,
+                &map,
+                &[0, 181],
+                &(0..=181).collect::<Vec<_>>(),
+            )
+        });
         assert!(receipt.is_some());
         let charge = input as u64 * super::super::super::JOB_BYTES_PER_TRIANGLE;
         eprintln!("CONTRACTION workspace {peak} bytes / {input} faces, charge {charge}");
@@ -441,7 +478,7 @@ mod tests {
             triangles,
         };
         let interface = [InterfaceRow::new(0, m.keys[0], m.keys[2], 0, 1)];
-        contract(&mut m, &interface, &[0, 0, 2, 3, 4], &[0, 2]).unwrap();
+        contract_path(&mut m, &interface, &[0, 0, 2, 3, 4], &[0, 2], &[0, 1, 2]).unwrap();
         assert_eq!(m.triangles.len(), 1);
         let t = m.triangles[0];
         assert!(t.contains(&0) && t.contains(&2) && t.contains(&4));
@@ -473,7 +510,8 @@ mod tests {
             .map(|&t| topology::normal(&m.positions, t)[2])
             .sum();
         let interface = [InterfaceRow::new(0, m.keys[0], m.keys[2], 0, 1)];
-        let receipt = contract(&mut m, &interface, &[0, 0, 2, 3, 4, 5], &[0, 2]).unwrap();
+        let receipt =
+            contract_path(&mut m, &interface, &[0, 0, 2, 3, 4, 5], &[0, 2], &[0, 1, 2]).unwrap();
         assert!(receipt.constrained_remeshes > 0);
         assert!(m.triangles.contains(&[3, 4, 5]), "curved interior moved");
         let strip: Vec<_> = m

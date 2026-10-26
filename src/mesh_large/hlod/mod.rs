@@ -1169,6 +1169,7 @@ fn prepare(
         &built.geometry.positions,
         &positions.decoded,
         &built.geometry.triangles,
+        &built.geometry.interface,
     ) {
         positions = captured.lattice.encode_coarse(
             &built.geometry.positions,
@@ -1180,6 +1181,7 @@ fn prepare(
             &built.geometry.positions,
             &positions.decoded,
             &built.geometry.triangles,
+            &built.geometry.interface,
         ) {
             return Ok(None);
         }

@@ -4378,6 +4378,15 @@ fn contracted_borders_do_not_fold_collinear_book_or_sheet_surfaces() {
         .unwrap();
         let census = census(&dir);
         eprintln!("R1 {name}: {census:?}");
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        eprintln!(
+            "R1 {name} publication: omitted={}, by_depth={}, pass_through={}",
+            manifest["hlod"]["omittedProxies"],
+            manifest["hlod"]["omittedByDepth"],
+            manifest["hlod"]["passThrough"],
+        );
+        assert_eq!(manifest["hlod"]["omittedProxies"], 0, "{name}: {manifest}");
         assert!(census.coarse >= 3);
         assert_eq!(
             census.unsupported_coincident_face_groups, 0,
@@ -4394,7 +4403,9 @@ fn contracted_borders_do_not_fold_collinear_book_or_sheet_surfaces() {
         let mut errors = BTreeMap::<u64, f64>::new();
         for row in rows(&dir.join("proxies.jsonl")) {
             let g = row["geometricError"].as_f64().unwrap();
-            let depth = row["encodedDepth"].as_u64().unwrap();
+            // Quality follows logical publication depth. A reused single-child
+            // payload may retain a deeper encoded depth for its S2 schedule.
+            let depth = row["depth"].as_u64().unwrap();
             let maximum = errors.entry(depth).or_default();
             *maximum = maximum.max(g);
         }

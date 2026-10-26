@@ -164,7 +164,7 @@ logical depth, whose E still floors G.
 
 The independent r1 review found real producer folds hidden by orientation flips.
 These were not validator semantics. Contraction now rejects inverted snaps,
-new area from degenerate faces, and unsupported mapped edge pairs. Constrained
+new area from degenerate faces, and unsupported directed edge fans. Constrained
 reconstruction changes only faces incident to contracted vertices, fixes the first
 interior ring and preserves the rest of the surface. Projected charts separate
 nonmanifold sheets and sharp folds. New zero-area faces are discarded; no arbitrary
@@ -216,7 +216,13 @@ Its measurement domain conservatively includes every changed output face in an
 affected surface component and the original affected boundary edges. This avoids
 assuming a planar hole or treating planarity as loss. Decoded patch vertices,
 edge/interior controls and source-projected boundary controls measure both
-directions. Use E/1.05 as the admission limit so S2's margin cannot make an
+directions. For the boundary-to-surface direction, retain unchanged faces of the
+same affected component as witnesses too: a branching boundary can contain a
+retained loop far from the changed patch. Omitting those witnesses creates an
+artificial hole in the query index and can falsely reject a flat-sheet closure.
+The added carrier indices are bounded by the parent output; changed patch faces
+still receive every patch-to-source control. Use E/1.05 as the admission limit
+so S2's margin cannot make an
 admitted closure set G. Unsupported/over-budget proposals retain their boundary
 through a bounded retry. Interior remeshing may not hide an unchecked closure.
 
@@ -287,3 +293,20 @@ used 276.26 million search steps against 265.61 million at 3/4. Keep the measure
 3/4 target and remove redundant geometry bookkeeping without changing output.
 Exact-source paired CPU receipts, including failed trials, remain in the evidence
 directory. Full-cap retry and all acceptance gates stay.
+
+Source-support checks precede contraction in both direct and constrained paths.
+A new shared chord receives only the directional minimum over a complete,
+contiguous path of unique real previous-interface edges. Face licenses are never
+expanded by that path certificate. A child cannot create a new edge between shared
+contacts or a new face with three shared corners; canonical decode retains input
+keys, so merging children cannot manufacture original-source multiplicity.
+Changed interior repeated fans must still pass the exact nonacute-side check.
+Local free neighbours of two shared contacts are pinned before reduction, avoiding
+the broad contact-star protection that exhausted the cap on a real parent.
+
+The independent census checks both repeated directions, including balanced 2/2,
+using integer arithmetic independent of the producer's expansion predicate. A
+coincident group needs a descendant source group of sufficient multiplicity at
+every coarse corner; unrelated source twins and aggregate edge counts give no
+license. These edge/face checks do not claim general triangle-interior intersection
+detection. Final-source independent review and exact-artifact gates remain required.

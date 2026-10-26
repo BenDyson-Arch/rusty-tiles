@@ -63,9 +63,10 @@ fn fold_repairs_and_component_carriers_share_one_protected_partition() {
         triangles,
     };
     let cap = 24;
-    let interface: Vec<_> = (0..3)
-        .map(|v| InterfaceRow::new(0, merged.keys[v], merged.keys[v], 0, 1))
-        .collect();
+    // Use interior pins (as from a prior hole repair), so proactive shared-contact
+    // carriers do not prevent the fold this control must exercise.
+    let interface = Vec::new();
+    let opening_pins = merged.keys[..3].iter().copied().collect();
     let source = folds::Source::new(&merged.positions, &merged.triangles);
     let (raw, _) = simplify(&merged, &merged.triangles, &|v| v < 3, cap);
     assert!(
@@ -137,7 +138,7 @@ fn fold_repairs_and_component_carriers_share_one_protected_partition() {
         &merged.triangles,
         0.1,
         false,
-        &HashSet::default(),
+        &opening_pins,
     )
     .expect("combined fold and topology protection must fit the cap");
     assert!(built.retries >= 2, "both protection stages must run");

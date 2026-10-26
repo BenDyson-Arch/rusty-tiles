@@ -120,6 +120,16 @@ pub(crate) fn assess(
             }
             patch.push(t);
         }
+        // Closure locations conservatively include the entire branching boundary.
+        // Its retained parts are covered by unchanged faces, not necessarily by a
+        // changed patch face. Keep those real witnesses in the same component;
+        // excluding them would measure distance to an artificial hole in the index.
+        patch.extend(
+            change
+                .closure_carriers
+                .iter()
+                .map(|&i| Triangle::new(triangles[i].map(|v| decoded[v as usize]), i as u64)),
+        );
         let patch = Surface::new(patch)?;
         for edge in &change.boundary {
             check()?;
@@ -345,6 +355,60 @@ mod tests {
                 )
                 .unwrap()
                 .is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn closure_on_a_branching_boundary_keeps_unchanged_surface_witnesses() {
+        let mut m = ring();
+        // A retained wing shares the inner loop's vertex. Both boundary cycles
+        // belong to one branching boundary, but only the courtyard is closed.
+        m.positions.extend([[-0.1, -0.1, 4.], [-0.1, 0.9, 4.]]);
+        m.keys = m.positions.iter().map(|p| p.map(f32::to_bits)).collect();
+        m.triangles.push([4, 8, 9]);
+        let mut filled = m.triangles.clone();
+        filled.extend([[4, 5, 6], [4, 6, 7]]);
+        let source = Surface::new(
+            m.triangles
+                .iter()
+                .enumerate()
+                .map(|(i, t)| Triangle::new(t.map(|v| m.positions[v as usize]), i as u64))
+                .collect(),
+        )
+        .unwrap();
+        for retain_carriers in [false, true] {
+            let mut change = topology::changes(&m, &filled, &[], 0.2).unwrap();
+            assert_eq!(change.receipt.closed_holes, 1);
+            assert_eq!(change.receipt.opened_holes, 0);
+            assert!(change.closure_carriers.contains(&8));
+            if !retain_carriers {
+                change.closure_carriers.clear();
+            }
+            let mut nearest = Nearest::with_steps(super::super::super::error::NEAREST_STEPS);
+            let mut hint = None;
+            let result = assess(
+                &mut change,
+                &m.positions,
+                &filled,
+                0.2,
+                0.2,
+                &mut |p, _| {
+                    let hit = nearest.surface(&source, p, &mut hint);
+                    let triangle = m.triangles[hit.rank as usize]
+                        .map(|v| m.positions[v as usize].map(f64::from));
+                    Ok((source_index::bary(triangle, hit.bary), hit.distance2.sqrt()))
+                },
+                &|| Ok(()),
+            )
+            .unwrap();
+            assert_eq!(result.is_some(), retain_carriers);
+            if let Some(controls) = result {
+                assert!(controls.closure_max > 0.09 && controls.closure_max < 0.11);
+                assert!(change.receipt.hole_boundary_to_patch < 1e-12);
+                assert!(controls.proxy.iter().any(|&d| d > 0.09));
+            } else {
+                assert!(change.receipt.hole_boundary_to_patch * 1.05 > 0.2);
             }
         }
     }

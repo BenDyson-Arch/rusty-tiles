@@ -218,7 +218,15 @@ pub(super) fn capture(
     caps: &[usize],
 ) {
     use std::io::Write;
-    if tile.first != 1 || tile.depth != 4 || std::env::var_os("RT_HLOD_FOLD_CAPTURE").is_none() {
+    let Some(selected) = std::env::var_os("RT_HLOD_FOLD_CAPTURE") else {
+        return;
+    };
+    let selected = selected.to_string_lossy();
+    let selected = selected
+        .split_once(':')
+        .and_then(|(first, depth)| Some((first.parse::<u64>().ok()?, depth.parse::<u32>().ok()?)))
+        .unwrap_or((1, 4));
+    if (tile.first, tile.depth) != selected {
         return;
     }
     let children: Vec<_> = children
