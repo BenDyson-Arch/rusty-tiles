@@ -21,6 +21,7 @@ pub(crate) mod appearance;
 #[cfg(test)]
 mod appearance_tests;
 pub(crate) mod bake;
+mod borders;
 mod charts;
 mod encode;
 pub(crate) mod error;
