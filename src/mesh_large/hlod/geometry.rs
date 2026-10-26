@@ -1,6 +1,8 @@
 //! D11: bounded parents from immediate children and a common, certified border contract.
 //! Boundary reconstruction precedes meshopt reduction. Stalled interiors get bounded
 //! topology cleanup and remeshing; only the reported capped frontier remains afterwards.
+#[cfg(test)]
+mod combined_controls;
 mod constrained;
 #[cfg(test)]
 mod fold_probe;
@@ -226,6 +228,8 @@ pub(crate) fn build_parent(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<Outcome, JobError> {
     check()?;
+    #[cfg(test)]
+    fold_probe::capture(tile, children, contract, caps);
     let mut merged = merge(children);
     let reference = merged.clone();
     if merged.triangles.is_empty() {
@@ -536,6 +540,18 @@ fn attempt(
             retries += 1;
             let edges: HashSet<(Key, Key)> = edges.into_iter().collect();
             let points: HashSet<Key> = points.into_iter().collect();
+            // Preserve the immediate ring as well as the failed face's stars.
+            // Otherwise a collapse just outside a kept star can recreate the
+            // same flap on its edge in the next reduction. This is one bounded
+            // adjacency pass, not a whole-component lock.
+            let mut ring = invalid.clone();
+            for t in &merged.triangles {
+                if t.iter().any(|&v| invalid[v as usize]) {
+                    for &v in t {
+                        ring[v as usize] = true;
+                    }
+                }
+            }
             for (i, t) in merged.triangles.iter().enumerate() {
                 let o = t.map(|v| merged.keys[v as usize]);
                 if (0..3)
@@ -543,7 +559,7 @@ fn attempt(
                 {
                     protected[i] = true;
                 }
-                if t.iter().any(|&v| invalid[v as usize]) {
+                if t.iter().any(|&v| ring[v as usize]) {
                     protected[i] = true;
                 }
             }
