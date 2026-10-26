@@ -355,6 +355,10 @@ class Audit:
                 sha = r['tile']['sha256']
                 require(sha not in by_sha, 'borderAudit', f'two audit records for payload {sha}')
                 by_sha[sha] = r
+            elif r.get('kind') in ('topologyAttempt', 'topologyConstruction'):
+                # Additive location hints (audit v1): operations are re-derived from
+                # the delivered surfaces and source, never read from these.
+                self.stats[r['kind'] + 'Hints'] += 1
             else:
                 require(r.get('kind') == 'omitted', 'borderAudit', f'unknown audit record kind {r.get("kind")!r}')
                 omitted.append(r)
