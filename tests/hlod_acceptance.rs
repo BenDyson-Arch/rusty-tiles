@@ -46,14 +46,23 @@ fn family_lines(work: &Path, family: &str) -> Vec<String> {
     let mut lines: Vec<String> = files
         .into_iter()
         .filter_map(|path| {
-            let relative = path.strip_prefix(work).unwrap().to_str().unwrap().to_owned();
+            let relative = path
+                .strip_prefix(work)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_owned();
             let first = relative.split('/').next().unwrap();
             let member = matches!(
                 path.extension().and_then(|e| e.to_str()),
                 Some("json" | "glb" | "bin" | "subtree")
             );
-            (member && (family != "base" || !OTHER.contains(&first)))
-            .then(|| format!("{relative}\t{:x}\n", Sha256::digest(fs::read(&path).unwrap())))
+            (member && (family != "base" || !OTHER.contains(&first))).then(|| {
+                format!(
+                    "{relative}\t{:x}\n",
+                    Sha256::digest(fs::read(&path).unwrap())
+                )
+            })
         })
         .collect();
     lines.sort();

@@ -25,7 +25,7 @@ impl SpaceRole {
 pub(crate) enum PreflightStage {
     Geometry,
     Texture,
-    /// H17 coarse levels: the vertex incidence join, slim source and proxy sidecars.
+    /// HLOD coarse levels: interface incidence, source index and coarse payloads.
     Lod,
 }
 

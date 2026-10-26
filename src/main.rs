@@ -178,10 +178,7 @@ struct TilerArgs {
     /// Owned working-data parent; publication staging remains beside the output
     #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
     scratch_dir: Option<PathBuf>,
-    /// Coarse-tile method: h17 (default) or hlod (0.4 octree HLOD, in development)
-    #[arg(long, default_value = "h17", hide = true)]
-    lod: rusty_tiles::TilerLod,
-    /// Declared memory budget for an hlod run: bytes, or with a KiB/MiB/GiB/TiB suffix
+    /// Declared memory budget: bytes, or with a KiB/MiB/GiB/TiB suffix
     #[arg(long = "memory-budget", visible_alias = "memoryBudget", value_name = "BYTES",
           value_parser = parse_memory_budget, hide = true)]
     memory_budget: Option<u64>,
@@ -1155,7 +1152,6 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             if let Some(path) = a.scratch_dir {
                 request = request.with_scratch_dir(path);
             }
-            request = request.with_lod(a.lod);
             if let Some(bytes) = a.memory_budget {
                 request = request.with_memory_budget(bytes);
             }

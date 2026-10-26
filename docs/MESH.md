@@ -504,7 +504,7 @@ proxies have no pages to share. `source_coordinates` is `local-gltf` or
 `wgs84` placement at that origin. `root_transform` is null for local
 output, whose root has no transform, or the exact emitted column-major matrix
 for placed output. A parent tile's geometric error is its proxy's certified
-error ([H17 contract](architecture/h17-lod-contract.md)). Proxy textures are an
+error ([H17 contract at `9a19c0e5`](https://github.com/BenDyson-Arch/rusty-tiles/blob/9a19c0e537ae3c7a7375f4e2039339b6599396a8/docs/architecture/h17-lod-contract.md)). Proxy textures are an
 appearance approximation (see [Coarse tile textures](#coarse-tile-textures)); no
 appearance certificate is fabricated, and baking never changes a proxy's
 geometry or geometric error.

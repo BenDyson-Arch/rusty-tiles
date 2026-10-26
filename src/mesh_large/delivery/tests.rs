@@ -1136,9 +1136,8 @@ fn untextured(input: &Path) -> PathBuf {
 }
 
 /// Every payload's property tables are within the consumer limit; returns the number of
-/// leaves (two tables: source_primitive and source_triangle). H17 proxies (a
-/// source_primitive table, one proxy_source table when it fits and record tables) are
-/// checked for the limit too but not counted.
+/// leaves (two tables: source_primitive and source_triangle). HLOD coarse tiles (one
+/// representative source_primitive table, D4) are checked for the limit too but not counted.
 fn leaf_tables_within_consumer_limit(archive: &BTreeMap<String, Vec<u8>>) -> usize {
     let mut leaves = 0;
     for (name, bytes) in archive {
@@ -1150,10 +1149,15 @@ fn leaf_tables_within_consumer_limit(archive: &BTreeMap<String, Vec<u8>>) -> usi
         let tables = doc["extensions"]["EXT_structural_metadata"]["propertyTables"]
             .as_array()
             .unwrap();
-        let proxy = tables.iter().any(|t| t["class"] == "proxy_source");
-        if !proxy {
+        let classes: Vec<_> = tables
+            .iter()
+            .map(|t| t["class"].as_str().unwrap())
+            .collect();
+        if classes.contains(&"source_triangle") {
             leaves += 1;
-            assert_eq!(tables.len(), 2, "{name}");
+            assert_eq!(classes, ["source_primitive", "source_triangle"], "{name}");
+        } else {
+            assert_eq!(classes, ["source_primitive"], "{name}");
         }
         for table in tables {
             assert!(table["count"].as_u64().unwrap() <= 8192, "{name}");
@@ -1240,7 +1244,7 @@ fn real_leaves_from_h8_publish_deterministically_and_validate() {
         .any(|c| c == "KTX2 level data and transcoding"));
 }
 
-/// Real H8 leaves (textured: KTX2 leaves and proxies) under the tight partition must come
+/// Real H8 leaves (textured: KTX2 leaves and HLOD coarse tiles) under the tight partition must come
 /// out with implicit roots; the archive validates with decoded containment, and three
 /// corruptions of an implicit root's content or metadata are each refused by the validator
 /// (an error, not a panic): a tile-availability bit cleared on a tile that has content, a
@@ -1534,7 +1538,7 @@ fn repeated_chain_content_stays_inside_its_tile() {
         depth: 0,
         geometric_error: 1.,
         primitives: 1,
-        sampling: None,
+        sampling: (0, 0, crate::mesh_large::hlod::error::Schedule::PRODUCTION),
         encoded_depth: 0,
     };
     let payload = Aabb {
@@ -1548,8 +1552,7 @@ fn repeated_chain_content_stays_inside_its_tile() {
         records: 6,
         levels: 2,
     };
-    let mut builder =
-        Builder::with_proxies(&mut sink, tight, Some(proxies)).with_sparse_proxies(true);
+    let mut builder = Builder::with_proxies(&mut sink, tight, Some(proxies));
     for i in 0..2u64 {
         let mut digits = Digits::ROOT;
         for d in [0, 0, i as u8] {

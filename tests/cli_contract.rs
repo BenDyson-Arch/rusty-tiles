@@ -445,3 +445,29 @@ fn removed_legacy_mesh_commands_are_unknown_subcommands() {
         assert!(!output.exists(), "{name} wrote output");
     }
 }
+
+/// HLOD slice S6 removed H17/H27: HLOD is the only coarse-tile method, with no hidden
+/// legacy switch. `mesh --lod` (any value) is an unknown argument, refused as a usage error
+/// before any input or output work.
+#[test]
+fn mesh_has_no_hidden_lod_switch() {
+    let work = tempfile::tempdir().unwrap();
+    let input = support::repo_root().join("tests/fixtures/example.glb");
+    for value in ["h17", "hlod"] {
+        let output = work.path().join(format!("{value}.3tz"));
+        let result = Command::new(bin())
+            .args(["mesh", "--lod", value, "-i"])
+            .arg(&input)
+            .arg("-o")
+            .arg(&output)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert_eq!(result.status.code(), Some(2), "{value}: {stderr}");
+        assert!(
+            stderr.contains("unexpected argument '--lod'"),
+            "{value}: {stderr}"
+        );
+        assert!(!output.exists(), "{value} wrote output");
+    }
+}

@@ -31,7 +31,7 @@ const SORT_THREAD_BYTES: u64 = 8_000_000;
 /// Scratch bytes live at each capture stage's peak, from declared counts and the sorter's file
 /// lifetimes ([`config::sort_spill`]). Each figure includes the files retained from earlier
 /// stages. As a measurement (`scratch_stage_peaks`) the same fields hold observed peaks;
-/// `lod_prepass` is then 0 because H17 runs after capture.
+/// `lod_prepass` is then 0 because the HLOD stage runs after capture.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct ScratchStages {
     /// Corner, positioned-corner and full-triangle sorts of the attribute capture.
@@ -44,7 +44,8 @@ pub struct ScratchStages {
     pub tree: u64,
     pub corner_depths: u64,
     pub leaf_plans: u64,
-    /// Everything retained for leaves plus H17's own declared pre-pass need.
+    /// Everything retained for leaves plus the HLOD stage's declared incidence and source-index
+    /// need (the field keeps its name).
     pub lod_prepass: u64,
 }
 impl ScratchStages {
@@ -274,11 +275,6 @@ fn scratch_need(
     let corner_depth_bytes = mul(n, (CornerDepth::SIZE + CornerVertices::SIZE) as u64)?;
     // Every leaf holds at least one triangle and is a tree node.
     let leaf_plan_bytes = mul(n.min(nodes), LeafPlan::SIZE as u64)?;
-    let incidences = config::sort_spill::<super::lod::incidence::Incidence>(corners, sorter)
-        .ok_or_else(overflow)?;
-    let corner_infos = config::sort_spill::<super::lod::incidence::CornerInfo>(corners, sorter)
-        .ok_or_else(overflow)?;
-    let lod_sources = mul(n, super::lod::incidence::LodSource::SIZE as u64)?;
     let max = |values: &[Option<u64>]| -> Result<u64, JobError> {
         values
             .iter()
@@ -324,30 +320,17 @@ fn scratch_need(
     )?;
     let kept = base;
     let leaf_plans = add(add(kept, corner_depth_bytes)?, leaf_plan_bytes)?;
-    // H17's pre-pass (lod/incidence.rs): an incidence sort streamed into a corner-info sort,
-    // streamed with the retained sequences into the slim LOD source.
-    // HLOD instead runs its own interface incidence pass in this stage (hlod/interfaces.rs).
-    let lod_prepass = match config.lod {
-        super::hlod::TilerLod::H17 => add(
-            leaf_plans,
-            max(&[
-                Some(incidences.finish_peak),
-                incidences.flow(corner_infos.push_peak),
-                Some(corner_infos.finish_peak),
-                corner_infos.flow(lod_sources),
-            ])?,
+    // HLOD's interface incidence pass (hlod/interfaces.rs) admits its phases as they start
+    // (it declares nothing here); S2's source index, always built beside the walk's rows, is
+    // preflighted up front too and admitted again through the walk's ledger before its first
+    // write.
+    let lod_prepass = add(
+        leaf_plans,
+        add(
+            super::hlod::interfaces::scratch_need(n, config.sorter(1)).ok_or_else(overflow)?,
+            super::hlod::source_index::scratch_need(n).ok_or_else(overflow)?,
         )?,
-        // The incidence pass admits its phases as they start (it declares nothing here);
-        // S2's source index, always built beside the walk's rows, is preflighted up front
-        // too and admitted again through the walk's ledger before its first write.
-        super::hlod::TilerLod::Hlod => add(
-            leaf_plans,
-            add(
-                super::hlod::interfaces::scratch_need(n, config.sorter(1)).ok_or_else(overflow)?,
-                super::hlod::source_index::scratch_need(n).ok_or_else(overflow)?,
-            )?,
-        )?,
-    };
+    )?;
     let stages = ScratchStages {
         capture,
         projection: projection_stage,
@@ -372,12 +355,7 @@ fn scratch_need(
     let chunk_files = logical_need_bytes.div_ceil((crate::spill::CHUNK_BYTES / 2) as u64);
     let max_live_files = add(max_live_files, chunk_files)?;
     // HLOD's overlap join holds a bounded set of its own files besides its runs.
-    let max_live_files = match config.lod {
-        super::hlod::TilerLod::H17 => max_live_files,
-        super::hlod::TilerLod::Hlod => {
-            add(max_live_files, super::hlod::interfaces::INCIDENCE_MAX_FILES)?
-        }
-    };
+    let max_live_files = add(max_live_files, super::hlod::interfaces::INCIDENCE_MAX_FILES)?;
     let file_rounding_bytes = config::file_rounding(unit, max_live_files).ok_or_else(overflow)?;
     let allocation_reserve_bytes = add(logical_need_bytes.div_ceil(10), file_rounding_bytes)?;
     let need_bytes = add(logical_need_bytes, allocation_reserve_bytes)?;
@@ -1427,9 +1405,7 @@ pub(super) mod tests {
                 );
             }
         }
-        let material = output.materials[0]
-            .remap(&[(0, 0)].into_iter().collect())
-            .unwrap();
+        let material = output.materials[0].literal();
         assert_eq!(material["pbrMetallicRoughness"]["metallicFactor"], 0.25);
         assert_eq!(
             material["pbrMetallicRoughness"]["baseColorTexture"]["texCoord"],
@@ -1967,11 +1943,13 @@ pub(super) mod tests {
         assert_eq!(need.stages.capture, 2910 + 2910);
         assert_eq!(need.stages.projection, 2 * 2860);
         assert_eq!(need.stages.images, 2860 + 8192);
-        // One chunk per sort here: a stream holds all of its chunk until read through, so the
-        // incidence stream (30 B per corner) and its partly read chunk bound H17.
+        // The HLOD stage's declared share: its incidence and source-index scratch beside
+        // everything retained for leaves.
         assert_eq!(
             need.stages.lod_prepass,
-            need.stages.leaf_plans + 2 * 30 * 30
+            need.stages.leaf_plans
+                + super::super::hlod::interfaces::scratch_need(10, cfg.sorter(1)).unwrap()
+                + super::super::hlod::source_index::scratch_need(10).unwrap()
         );
         assert_eq!(need.logical_need_bytes, need.stages.max());
         // Control: the old reserve re-added the whole logical need as extent overhead. Now the

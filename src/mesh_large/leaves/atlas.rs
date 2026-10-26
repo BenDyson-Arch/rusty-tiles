@@ -806,8 +806,6 @@ pub(super) struct Services<'a> {
     /// Declared per-page workspace limit for internal allocation checks.
     pub memory: u64,
     pub check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
-    /// Spill every page's pre-encode values for the bake pass (accepted attempts kept).
-    pub preencode: Option<&'a crate::mesh_large::bake_pass::PreencodeStore>,
 }
 
 /// Bytes leased from the memory gate for one page: page assembly, the
@@ -871,7 +869,6 @@ fn island_receipts(b: &Binding) -> Value {
 struct EncodedPage {
     delivered: delivery::Delivery,
     binding_receipts: Vec<Value>,
-    preencode: Option<super::prepared::PreencodePage>,
 }
 
 /// glTF material property of a texture slot, for diagnostics.
@@ -935,29 +932,6 @@ fn page_error(
     )
 }
 
-/// Ends the `MaskDelivery` borrow of the page's surface samples before the page buffers
-/// move into the retained pre-encode record.
-fn drop_mask_borrow(_mask: Option<MaskDelivery<'_>>) {}
-
-fn slot_name(slot: TextureSlot) -> &'static str {
-    match slot {
-        TextureSlot::BaseColor => "baseColor",
-        TextureSlot::MetallicRoughness => "metallicRoughness",
-        TextureSlot::Normal => "normal",
-        TextureSlot::Occlusion => "occlusion",
-        TextureSlot::Emissive => "emissive",
-    }
-}
-
-fn class_name(class: Class) -> &'static str {
-    match class {
-        Class::Colour => "colour",
-        Class::Normal => "normal",
-        Class::Data => "data",
-        Class::Id => "id",
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 fn encode_page(
     services: &Services<'_>,
@@ -967,7 +941,6 @@ fn encode_page(
     profile: Profile,
     depth: u8,
     drop: u32,
-    leaf: u64,
 ) -> Result<EncodedPage, JobError> {
     let captured = services.captured;
     let memory = services.memory;
@@ -989,7 +962,6 @@ fn encode_page(
     let primitives = &layout.primitives;
     let masked = &layout.masked;
     let mut receipts = Vec::new();
-    let mut preencode = None;
     let delivered = {
         let pixels = (page.width as usize)
             .checked_mul(page.height as usize)
@@ -1107,30 +1079,6 @@ fn encode_page(
             mask,
             ladder,
         )?;
-        drop_mask_borrow(mask);
-        if let Some(store) = services.preencode {
-            preencode = Some(store.write_page(
-                leaf,
-                drop,
-                &super::prepared::PreencodePage {
-                    page: page_id as u32,
-                    slot: slot_name(page.slot).to_owned(),
-                    class: class_name(class(page.slot)).to_owned(),
-                    width: page.width,
-                    height: page.height,
-                    levels: vec![super::prepared::PreencodeLevel {
-                        width: page.width,
-                        height: page.height,
-                        rgba,
-                    }],
-                    support: Some(support),
-                    min_filter: page.sampler.min_filter,
-                    mag_filter: page.sampler.mag_filter,
-                    density_drop: drop,
-                    source_mips: false,
-                },
-            )?);
-        }
         delivered
     };
     timing::count(Counter::Pages, 1);
@@ -1142,7 +1090,6 @@ fn encode_page(
     Ok(EncodedPage {
         delivered,
         binding_receipts: receipts,
-        preencode,
     })
 }
 
@@ -1156,7 +1103,6 @@ pub(super) fn prepare(
     profile: Profile,
     depth: u8,
     drop: u32,
-    leaf: u64,
 ) -> Result<(PreparedAtlas, Appearance), PrepareError> {
     let captured = services.captured;
     let resources = AtlasResources {
@@ -1181,7 +1127,7 @@ pub(super) fn prepare(
         .par_iter()
         .enumerate()
         .map(|(page_id, page)| {
-            encode_page(services, &layout, page, page_id, profile, depth, drop, leaf)
+            encode_page(services, &layout, page, page_id, profile, depth, drop)
                 .map_err(|e| page_error(e, page_id, page.slot, &sources[page_id]))
         })
         .collect();
@@ -1196,7 +1142,6 @@ pub(super) fn prepare(
         pages: Vec::new(),
         textures: Vec::new(),
         samplers: Vec::new(),
-        preencode: Vec::new(),
     };
     let mut receipts = Vec::new();
     let mut escalations = Vec::new();
@@ -1205,9 +1150,7 @@ pub(super) fn prepare(
         let EncodedPage {
             delivered,
             binding_receipts,
-            preencode,
         } = result?;
-        atlas.preencode.extend(preencode);
         receipts.extend(binding_receipts);
         let escalation = delivered.escalation.as_ref().map(|e| {
             json!({"step":e.step.name(),"misses":e.misses.iter().map(delivery::GateMiss::to_json).collect::<Vec<_>>()})

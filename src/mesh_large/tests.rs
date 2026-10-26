@@ -446,3 +446,73 @@ fn external_leaf_payload_driver() {
     )
     .unwrap();
 }
+
+/// HLOD slice S6: H17 certified LOD and the H27 proxy bake are gone from production, with
+/// no export, feature, hidden switch or compatibility record left behind. A static scan of
+/// the crate, CLI and Python binding sources (this file excepted: it names what it bans).
+#[test]
+fn no_h17_or_h27_production_symbols_remain() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for removed in [
+        "src/mesh_large/lod",
+        "src/mesh_large/bake",
+        "src/mesh_large/bake_pass.rs",
+        "src/mesh_large/leaves/witness.rs",
+        "docs/architecture/h17-lod-contract.md",
+    ] {
+        assert!(!root.join(removed).exists(), "{removed} still exists");
+    }
+    // Module paths, types, request/CLI switches and the H17 coarse records.
+    let banned = [
+        "mesh_large::lod",
+        "super::lod",
+        "super::super::lod",
+        "bake_pass",
+        "ProxyBaker",
+        "ProxyTextureBaker",
+        "PreencodeStore",
+        "PreencodePage",
+        "HandoffSink",
+        "TilerLod",
+        "with_lod(",
+        "Coarse::H17",
+        "\"h17\"",
+        "proxy_source",
+        "lod_vanished",
+        "lod_filled",
+    ];
+    let this = root.join("src/mesh_large/tests.rs");
+    let mut stack = vec![root.join("src"), root.join("bindings/python/src")];
+    let mut scanned = 0;
+    while let Some(dir) = stack.pop() {
+        for entry in fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.extension().is_none_or(|e| e != "rs") || path == this {
+                continue;
+            }
+            let text = fs::read_to_string(&path).unwrap();
+            for token in banned {
+                assert!(!text.contains(token), "{} names {token}", path.display());
+            }
+            scanned += 1;
+        }
+    }
+    assert!(scanned > 100, "scanned only {scanned} files");
+    let module = fs::read_to_string(root.join("src/mesh_large/mod.rs")).unwrap();
+    for declaration in ["mod lod;", "mod bake;"] {
+        assert!(
+            !module.contains(declaration),
+            "mesh_large declares {declaration}"
+        );
+    }
+    let manifest = fs::read_to_string(root.join("Cargo.toml")).unwrap();
+    let features = manifest.split("[features]").nth(1).unwrap();
+    let features = features.split("\n[").next().unwrap().to_ascii_lowercase();
+    for name in ["h17", "h27", "lod", "proxy"] {
+        assert!(!features.contains(name), "Cargo feature names {name}");
+    }
+}

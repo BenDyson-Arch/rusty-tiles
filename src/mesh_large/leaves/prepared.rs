@@ -21,36 +21,4 @@ pub(in crate::mesh_large) struct PreparedAtlas {
     pub pages: Vec<PreparedPage>,
     pub textures: Vec<Value>,
     pub samplers: Vec<Value>,
-    /// The accepted pages' PRE-ENCODE values, page order, when a bake pass will consume
-    /// them (empty otherwise).
-    pub preencode: Vec<PreencodePage>,
-}
-
-/// One pre-encode level: RGBA8 texels before any codec.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub(in crate::mesh_large) struct PreencodeLevel {
-    pub width: u32,
-    pub height: u32,
-    pub rgba: Vec<u8>,
-}
-
-/// A leaf page exactly as authored before encoding, with its sampling context. Pages built
-/// from original-source mips carry every authored level; packed pages carry the base level
-/// and its support mask (`1` where a crop interior texel is real source support), from
-/// which `delivery::encode` derived its sparse chain.
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub(in crate::mesh_large) struct PreencodePage {
-    pub page: u32,
-    /// glTF material slot role (`baseColor`, `normal`, ...).
-    pub slot: String,
-    /// `colour`, `normal`, `data` or `id`.
-    pub class: String,
-    pub width: u32,
-    pub height: u32,
-    pub levels: Vec<PreencodeLevel>,
-    pub support: Option<Vec<u32>>,
-    pub min_filter: u32,
-    pub mag_filter: u32,
-    pub density_drop: u32,
-    pub source_mips: bool,
 }

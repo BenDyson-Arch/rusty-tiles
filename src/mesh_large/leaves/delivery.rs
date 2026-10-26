@@ -2590,7 +2590,7 @@ mod tests {
     }
 
     /// The sharp modular pattern that the codec's own detail-correlation floor
-    /// refuses at the profile step (found by the H27 witness fixture).
+    /// refuses at the profile step (found by a leaf-witness fixture).
     fn sharp_page(edge: usize) -> Vec<u8> {
         (0..edge * edge)
             .flat_map(|i| {

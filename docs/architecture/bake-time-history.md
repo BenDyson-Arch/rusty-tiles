@@ -145,7 +145,7 @@ Depths 7–6 account for 52% of #260 proxy wall; depths 3–1 still take 1,156.5
 | **Jobs / memory admission** | Develop `bake/integration.rs:234,327` divides the allowance equally, then reruns refused tiles serially. [I3] d7: 25 retries, 1,676.6 s; profile windows put ~1,390 s (83% of d7 elapsed) in its serial portion. #251 uses halving worker counts / doubled shares (`bccac563:integration.rs:286`); [J] refusals at 4.541 and 9.083 GiB. 14 of 25 earlier d7 refusals had already rasterised before failing codec/ledger admission [J README]. | Bounded ownership is inherent. Late refusal, discarded raster work and equal-share-induced serial tails are avoidable. #251's pre-check and graduated retries help; #260 removes retries for this input, so those savings must not be counted again on [K]. |
 | **Cancellation lock convoy** (#246) | C fix2→fix3: 2,764→283 CPU-s, 905.9→112.1 s wall; system CPU 712→3 s. Source and colour code also changed, so this is a combined repair, not a perfectly isolated lock benchmark [I README]. `integration.rs:245` records the lock mechanism. | Demonstrated historical waste, largely repaired. Do not extrapolate pre-fix multi-hour failures to current expected throughput. |
 
-The H17 contract is [here](h17-lod-contract.md); the bake contract and integration
+The H17 contract (removed in S6) is at [`9a19c0e5`](https://github.com/BenDyson-Arch/rusty-tiles/blob/9a19c0e537ae3c7a7375f4e2039339b6599396a8/docs/architecture/h17-lod-contract.md); the bake contract and integration
 record are [here](../../bench/architecture_audit/mesh_large_h27/README.md), with
 the source design in `E/tiler-bake-design-20261013/`. H28's unchanged-geometry and
 batching guarantees are [here](h28-tile-batching-contract.md). Today's

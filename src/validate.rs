@@ -2300,8 +2300,13 @@ impl Check<'_> {
         placeholder: bool,
         (error, diagonal): (f64, Option<f64>),
     ) -> Result<(), Error> {
-        self.delivery
-            .kind(self.delivery_path[tile], refine, placeholder, error, diagonal)?;
+        self.delivery.kind(
+            self.delivery_path[tile],
+            refine,
+            placeholder,
+            error,
+            diagonal,
+        )?;
         if self.recording.last().is_some_and(|r| !r.opaque) {
             match self.local(Some(tile)) {
                 Some(tile) => self.record(Event::Delivery {
