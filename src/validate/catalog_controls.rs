@@ -5,13 +5,13 @@ use super::*;
 use crate::archive3tz::FORCED;
 
 /// Runs `inspect` with the catalog profile forced on this thread. A successful report
-/// includes delivery-hierarchy scratch in both catalog profiles.
+/// states scratch exactly when the profile spills (`TMPDIR` is a disk in these runs).
 fn inspect_as(path: &Path, forced: bool) -> Result<ValidationReport, Error> {
     FORCED.with(|f| f.set(Some(forced)));
     let result = inspect_selected(ValidationRequest::new(path), ValidationLimits::default());
     FORCED.with(|f| f.set(None));
     if let Ok(report) = &result {
-        assert!(report.scratch.is_some(), "{:?}", report.scratch);
+        assert_eq!(report.scratch.is_some(), forced, "{:?}", report.scratch);
     }
     result
 }

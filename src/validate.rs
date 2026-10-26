@@ -3561,12 +3561,9 @@ fn inspect_run(
         ]
         .into_iter()
         .chain(implicit.then_some("implicitAddressingAndAvailability"))
-        .chain([
-            "geometricErrorOrder",
-            "replaceContentContinuity",
-            "resourceReferences",
-            "recordedBudgets",
-        ])
+        .chain(["geometricErrorOrder"])
+        .chain(check.hlod_identity.then_some("replaceContentContinuity"))
+        .chain(["resourceReferences", "recordedBudgets"])
         .chain(contained.then_some("decodedContentContainment"))
         .chain(check.hlod_identity.then_some("hlodFeatureIds"))
         .chain(check.hlod_identity.then_some("interfaceSegments"))

@@ -38,7 +38,11 @@ I1's expanded availability walk and memo replays. `replaceContentContinuity`
 rejects ordinary contentless cells between a REPLACE renderable ancestor and its
 renderable descendants. Leading empty roots and external-link placeholders are
 valid. An empty ADD override cannot clear a barrier owned by a renderable
-REPLACE ancestor.
+REPLACE ancestor. All delivery checks, continuity included, apply only once HLOD
+identity is expected: other tilesets may keep empty intermediates, and the disk
+store (with its scratch) is created only then, from a bounded pending buffer.
+A coarse edge with two equal-direction faces is refused unless descendant leaves
+hold that same multiplicity (a nonmanifold spine).
 
 Upward omission (S1 `756283e2` amendment) is checked once identity is expected,
 from the delivered hierarchy alone. `triangleCap` refuses any payload, leaf or

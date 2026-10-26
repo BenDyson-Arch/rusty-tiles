@@ -863,13 +863,46 @@ impl Effort {
     }
 }
 
+/// The disk store once it exists; every query path runs after `materialize`.
+struct Db(Option<Connection>);
+impl std::ops::Deref for Db {
+    type Target = Connection;
+    fn deref(&self) -> &Connection {
+        self.0
+            .as_ref()
+            .expect("HLOD delivery store is used before it is materialized")
+    }
+}
+/// Rows registered before any HLOD identity is known. Archives without it never
+/// create the disk store or report its scratch; a bounded buffer otherwise moves
+/// to disk at the first identity payload, expectation or overflow.
+#[derive(Default)]
+struct Pending {
+    tiles: Vec<PendingTile>,
+    index: std::collections::HashMap<u64, usize>,
+    refs: Vec<(u64, u64)>,
+    payloads: Vec<(u64, bool, bool, Vec<u8>)>,
+}
+struct PendingTile {
+    id: u64,
+    parent: Option<u64>,
+    world: Matrix,
+    refine: Option<bool>,
+    placeholder: bool,
+    error: Option<f64>,
+    diagonal: Option<f64>,
+}
+/// Buffered rows (tiles, references and payloads) before the store moves to disk.
+const PENDING_ROWS: usize = 16_384;
+
 /// One validation's disk hierarchy and decoded boundary index. Field order closes
 /// SQLite before removing its private file and the existing scratch anchor.
 pub(super) struct Store {
-    connection: Connection,
-    _file: tempfile::NamedTempFile,
-    _anchor: SlotFile,
+    connection: Db,
+    _file: Option<tempfile::NamedTempFile>,
+    _anchor: Option<SlotFile>,
     _scratch: Arc<Scratch>,
+    pending: Pending,
     pub(super) checked: bool,
     common_root: Option<Matrix>,
     profile_exclusion: Option<&'static str>,
@@ -878,10 +911,28 @@ pub(super) struct Store {
 }
 impl Store {
     pub(super) fn new(scratch: Arc<Scratch>) -> Result<Self, Error> {
-        let anchor = SlotFile::new(&scratch, "hlod-delivery", 1).map_err(spill_failure)?;
+        Ok(Self {
+            connection: Db(None),
+            _file: None,
+            _anchor: None,
+            _scratch: scratch,
+            pending: Pending::default(),
+            checked: false,
+            common_root: None,
+            profile_exclusion: None,
+            decoded_limit: 0,
+            census: None,
+        })
+    }
+    /// Create the disk store and replay the pending rows into it, once.
+    fn materialize(&mut self) -> Result<(), Error> {
+        if self.connection.0.is_some() {
+            return Ok(());
+        }
+        let anchor = SlotFile::new(&self._scratch, "hlod-delivery", 1).map_err(spill_failure)?;
         let file = tempfile::Builder::new()
             .prefix("hlod-delivery-")
-            .tempfile_in(scratch.path())
+            .tempfile_in(self._scratch.path())
             .map_err(|e| Error::Scratch(ScratchRefusal::Io(e)))?;
         let connection = Connection::open(file.path()).map_err(sql)?;
         connection.execute_batch("PRAGMA cache_size=-8192; PRAGMA temp_store=FILE; PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;
@@ -899,17 +950,48 @@ impl Store {
             CREATE TABLE requirements(tile INTEGER NOT NULL,kind INTEGER NOT NULL,key BLOB NOT NULL,directions INTEGER NOT NULL,PRIMARY KEY(tile,kind,key)) WITHOUT ROWID;
             CREATE TABLE fulfilled(tile INTEGER NOT NULL,kind INTEGER NOT NULL,key BLOB NOT NULL,directions INTEGER NOT NULL,PRIMARY KEY(tile,kind,key)) WITHOUT ROWID;
             BEGIN;").map_err(sql)?;
-        Ok(Self {
-            connection,
-            _file: file,
-            _anchor: anchor,
-            _scratch: scratch,
-            checked: false,
-            common_root: None,
-            profile_exclusion: None,
-            decoded_limit: 0,
-            census: None,
-        })
+        let pending = std::mem::take(&mut self.pending);
+        for t in &pending.tiles {
+            connection
+                .execute(
+                    "INSERT INTO tiles(id,parent,world,refine,placeholder,error,diagonal) VALUES(?,?,?,?,?,?,?)",
+                    params![
+                        integer(t.id)?,
+                        t.parent.map(integer).transpose()?,
+                        encode(&t.world),
+                        t.refine,
+                        t.placeholder,
+                        t.error,
+                        t.diagonal
+                    ],
+                )
+                .map_err(sql)?;
+        }
+        for &(tile, rank) in &pending.refs {
+            connection
+                .execute("INSERT INTO refs VALUES(?,?)", params![integer(tile)?, integer(rank)?])
+                .map_err(sql)?;
+        }
+        for (rank, identity, triangle, digest) in &pending.payloads {
+            connection
+                .execute(
+                    "INSERT INTO payloads(rank,identity_present,triangle_present,digest) VALUES(?,?,?,?)",
+                    params![integer(*rank)?, identity, triangle, digest],
+                )
+                .map_err(sql)?;
+        }
+        self.connection = Db(Some(connection));
+        self._file = Some(file);
+        self._anchor = Some(anchor);
+        Ok(())
+    }
+    /// Move to disk when the bounded buffer is full.
+    fn bound_pending(&mut self) -> Result<(), Error> {
+        let p = &self.pending;
+        if p.tiles.len() + p.refs.len() + p.payloads.len() >= PENDING_ROWS {
+            self.materialize()?;
+        }
+        Ok(())
     }
     pub(super) fn tile(
         &mut self,
@@ -922,13 +1004,19 @@ impl Store {
             self.exclude_scene("singular tile placement is outside the decoded interface profile");
         }
         let world = if let Some(p) = parent {
-            let bytes: Vec<u8> = self
-                .connection
-                .query_row("SELECT world FROM tiles WHERE id=?", [integer(p)?], |r| {
-                    r.get(0)
-                })
-                .map_err(sql)?;
-            multiply(decode::<16>(&bytes)?, local)
+            let world = match self.pending.index.get(&p) {
+                Some(&i) if self.connection.0.is_none() => self.pending.tiles[i].world,
+                _ => {
+                    let bytes: Vec<u8> = self
+                        .connection
+                        .query_row("SELECT world FROM tiles WHERE id=?", [integer(p)?], |r| {
+                            r.get(0)
+                        })
+                        .map_err(sql)?;
+                    decode::<16>(&bytes)?
+                }
+            };
+            multiply(world, local)
         } else {
             if self.common_root.is_some_and(|m| m != local) {
                 self.exclude_scene(
@@ -941,6 +1029,19 @@ impl Store {
             IDENTITY
         };
         finite(&world)?;
+        if self.connection.0.is_none() {
+            self.pending.index.insert(id, self.pending.tiles.len());
+            self.pending.tiles.push(PendingTile {
+                id,
+                parent,
+                world,
+                refine: None,
+                placeholder: false,
+                error: None,
+                diagonal: None,
+            });
+            return self.bound_pending();
+        }
         self.connection
             .execute(
                 "INSERT INTO tiles(id,parent,world) VALUES(?,?,?)",
@@ -961,6 +1062,17 @@ impl Store {
         error: f64,
         diagonal: Option<f64>,
     ) -> Result<(), Error> {
+        if self.connection.0.is_none() {
+            let i = *self
+                .pending
+                .index
+                .get(&id)
+                .ok_or_else(|| Error::InvalidState("delivery kind before its tile".into()))?;
+            let t = &mut self.pending.tiles[i];
+            (t.refine, t.placeholder, t.error, t.diagonal) =
+                (refine, placeholder, Some(error), diagonal);
+            return Ok(());
+        }
         self.connection
             .execute(
                 "UPDATE tiles SET refine=?,placeholder=?,error=?,diagonal=? WHERE id=?",
@@ -970,6 +1082,10 @@ impl Store {
         Ok(())
     }
     pub(super) fn reference(&mut self, id: u64, rank: u64) -> Result<(), Error> {
+        if self.connection.0.is_none() {
+            self.pending.refs.push((id, rank));
+            return self.bound_pending();
+        }
         self.connection
             .execute(
                 "INSERT INTO refs VALUES(?,?)",
@@ -1022,6 +1138,8 @@ impl Store {
             self.payload_bytes(rank, false, false, &digest)?;
             return Ok(0);
         }
+        // Source identity is now expected: the hierarchy and payload rows go to disk.
+        self.materialize()?;
         if !embedded {
             return Err(Error::unsupported(
                 "hlodFeatureIds: native delivery identity requires embedded GLB",
@@ -1234,16 +1352,20 @@ impl Store {
     }
     /// Analytic payload rows: distinct ranks have distinct bytes.
     #[cfg(test)]
-    fn payload(&self, rank: u64, identity: bool, triangle: bool) -> Result<(), Error> {
+    fn payload(&mut self, rank: u64, identity: bool, triangle: bool) -> Result<(), Error> {
         self.payload_bytes(rank, identity, triangle, &rank.to_be_bytes())
     }
     fn payload_bytes(
-        &self,
+        &mut self,
         rank: u64,
         identity: bool,
         triangle: bool,
         digest: &[u8],
     ) -> Result<(), Error> {
+        if self.connection.0.is_none() {
+            self.pending.payloads.push((rank, identity, triangle, digest.to_vec()));
+            return self.bound_pending();
+        }
         self.connection
             .execute(
                 "INSERT INTO payloads(rank,identity_present,triangle_present,digest) VALUES(?,?,?,?)",
@@ -1256,10 +1378,11 @@ impl Store {
     /// Add to managed scratch peak for a conservative combined peak. SQLite's
     /// transient sort files are outside this count; its page cache is separately capped.
     pub(super) fn disk_bytes(&self) -> u64 {
-        self._file
-            .as_file()
-            .metadata()
-            .map_or(0, |metadata| metadata.len())
+        self._file.as_ref().map_or(0, |file| {
+            file.as_file()
+                .metadata()
+                .map_or(0, |metadata| metadata.len())
+        })
     }
 
     /// A traversal-owned placement semantic (for example an up-axis override)
@@ -1280,6 +1403,13 @@ impl Store {
         already: u64,
         read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
     ) -> Result<u64, Error> {
+        // Without HLOD identity nothing below applies: no store, no scratch.
+        if self.connection.0.is_none() {
+            if !self.checked && !self.pending.payloads.iter().any(|p| p.1) {
+                return Ok(0);
+            }
+            self.materialize()?;
+        }
         let used = Arc::new(AtomicU64::new(0));
         let effort = Effort {
             budget,
@@ -1312,7 +1442,6 @@ impl Store {
         effort: &Effort,
         read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
     ) -> Result<Option<DecodedInterfaceCensus>, Error> {
-        self.hierarchy(effort)?;
         let declared: bool = self
             .connection
             .query_row(
@@ -1325,6 +1454,9 @@ impl Store {
         if !self.checked {
             return Ok(None);
         }
+        // REPLACE continuity is an HLOD delivery property: other tilesets may keep
+        // content-less intermediate tiles (the I1/C2 owners accept them).
+        self.hierarchy(effort)?;
         if let Some(reason) = self.profile_exclusion {
             return Err(Error::unsupported(format!("interfaceSegments: {reason}")));
         }
@@ -2006,9 +2138,30 @@ impl Store {
                 read,
             )?;
             if !row.get::<_, bool>(3).map_err(sql)? {
-                for e in surface.edges.values() {
+                for (key, e) in &surface.edges {
                     effort.charge(1)?;
                     if (e.forward == 2 && e.reverse == 0) || (e.reverse == 2 && e.forward == 0) {
+                        // A nonmanifold source can hold two same-direction faces on
+                        // one edge (a book's pages on its spine): the coarse pair is
+                        // then a retained source multiplicity, not a flipped face.
+                        effort.charge(1)?;
+                        let last: i64 = self
+                            .connection
+                            .prepare_cached("SELECT last FROM tiles WHERE id=?")
+                            .and_then(|mut q| q.query_row([tile], |r| r.get(0)))
+                            .map_err(sql)?;
+                        let (nf, nr): (i64, i64) = self
+                            .connection
+                            .prepare_cached("SELECT coalesce(sum(nf),0),coalesce(sum(nr),0) FROM leaf_segments WHERE key=? AND tile>? AND tile<=?")
+                            .and_then(|mut q| {
+                                q.query_row(params![edge_bytes(*key), tile, last], |r| {
+                                    Ok((r.get(0)?, r.get(1)?))
+                                })
+                            })
+                            .map_err(sql)?;
+                        if (e.forward == 2 && nf >= 2) || (e.reverse == 2 && nr >= 2) {
+                            continue;
+                        }
                         return Err(bad(
                             "interfaceWinding",
                             "coarse shared edge has equal directed incidences",
@@ -2077,8 +2230,8 @@ mod tests {
         Store::new(Arc::new(scratch)).unwrap()
     }
     #[test]
-    fn continuity_runs_without_identity_and_respects_link_placeholders() {
-        for placeholder in [false, true] {
+    fn continuity_is_hlod_only_and_respects_link_placeholders() {
+        for (hlod, placeholder) in [(false, false), (true, false), (true, true)] {
             let mut s = store();
             s.tile(0, None, IDENTITY).unwrap();
             s.tile(1, Some(0), IDENTITY).unwrap();
@@ -2088,14 +2241,22 @@ mod tests {
             s.reference(2, 2).unwrap();
             s.payload(0, false, false).unwrap();
             s.payload(2, false, false).unwrap();
+            if hlod {
+                s.expect_identity();
+            }
             let result = s.finish(budget(), 0, &mut |_| panic!("unexpected replay"));
-            if placeholder {
-                result.unwrap();
-            } else {
-                assert!(result
+            match (hlod, placeholder) {
+                // Other tilesets may keep empty intermediates; no disk store exists.
+                (false, _) => {
+                    result.unwrap();
+                    assert!(s._file.is_none() && s.census().is_none());
+                }
+                // The link passes continuity; the stripped payloads then refuse.
+                (true, true) => assert!(result.unwrap_err().to_string().contains("hlodFeatureIds")),
+                (true, false) => assert!(result
                     .unwrap_err()
                     .to_string()
-                    .contains("replaceContentContinuity"));
+                    .contains("replaceContentContinuity")),
             }
         }
     }
@@ -2163,6 +2324,7 @@ mod tests {
         s.reference(2, 2).unwrap();
         s.payload(0, false, false).unwrap();
         s.payload(2, false, false).unwrap();
+        s.expect_identity();
         assert!(s
             .finish(budget(), 0, &mut |_| panic!("unexpected replay"))
             .unwrap_err()
@@ -2340,6 +2502,7 @@ mod tests {
     }
     fn domain_pair(a: (u64, u64), b: (u64, u64)) -> Store {
         let mut s = store();
+        s.materialize().unwrap();
         s.decoded_limit = 1 << 20;
         for (rank, (lo, hi)) in [a, b].into_iter().enumerate() {
             s.connection
@@ -2633,7 +2796,8 @@ mod tests {
     }
     #[test]
     fn every_incident_face_and_repeated_reference_contributes_to_open_count() {
-        let s = store();
+        let mut s = store();
+        s.materialize().unwrap();
         let face = [[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]];
         let surface = replay_surface(&replay_fixture(&face), IDENTITY, 1 << 20, &effort()).unwrap();
         s.record_leaf(7, &surface, &effort()).unwrap();
@@ -2673,6 +2837,38 @@ mod tests {
             .contains("interfaceWinding"));
         assert!(s.census().is_none());
     }
+    /// A book's spine: two source pages traverse AB forward and a third backward.
+    /// The coarse pair of forward faces is retained source multiplicity; with only
+    /// one forward source face (the test above) the same coarse pair is refused.
+    #[test]
+    fn nonmanifold_source_multiplicity_admits_equal_coarse_directions() {
+        let (a, b, c, d, e) = (
+            [0., 0., 0.],
+            [2., 0., 0.],
+            [0., 2., 0.],
+            [2., -2., 0.],
+            [0., 0., 2.],
+        );
+        let payloads = [
+            replay_fixture(&[[a, b, c], [a, b, d]]),
+            replay_fixture(&[[a, b, c]]),
+            replay_fixture(&[[a, b, d]]),
+            replay_fixture(&[[b, a, e]]),
+        ];
+        let mut s = store();
+        s.decoded_limit = 1 << 20;
+        s.tile(0, None, IDENTITY).unwrap();
+        for leaf in 1..4 {
+            s.tile(leaf, Some(0), IDENTITY).unwrap();
+        }
+        for rank in 0..4 {
+            s.reference(rank, rank).unwrap();
+            s.payload(rank, true, rank != 0).unwrap();
+        }
+        s.finish(budget(), 0, &mut |rank| Ok(payloads[rank as usize].clone()))
+            .unwrap();
+        assert_eq!(s.census().unwrap().shared_segments, 1);
+    }
     #[test]
     fn hard_cap_refuses_any_payload_above_8192_while_d4_property_rows_remain_bounded() {
         // Leaf or coarse, the cap is per payload; 8,192 exactly is admitted.
@@ -2684,6 +2880,7 @@ mod tests {
                 s.reference(rank, rank).unwrap();
                 s.payload(rank, true, rank == 1).unwrap();
             }
+            s.materialize().unwrap();
             s.connection
                 .execute(
                     "UPDATE payloads SET triangles=? WHERE rank=?",
@@ -2710,6 +2907,7 @@ mod tests {
             if !same {
                 s.payload(1, true, true).unwrap();
             }
+            s.materialize().unwrap();
             s.connection
                 .execute("UPDATE payloads SET primitive_rows=8193 WHERE rank=0", [])
                 .unwrap();
@@ -2979,6 +3177,7 @@ mod tests {
         local[14] = -10.;
         s.tile(1, Some(0), local).unwrap();
         s.reference(1, 0).unwrap();
+        s.materialize().unwrap();
         s.hierarchy(&effort()).unwrap();
         s.place_references(&effort()).unwrap();
         let frame: Vec<u8> = s
@@ -3006,11 +3205,36 @@ mod tests {
             .is_some());
     }
 
+    /// The pending buffer is bounded: a long identity-free prefix moves to disk, and a
+    /// later HLOD expectation still sees every registered row.
+    #[test]
+    fn pending_rows_move_to_disk_when_the_buffer_fills() {
+        let mut s = store();
+        let n = PENDING_ROWS as u64;
+        s.tile(0, None, IDENTITY).unwrap();
+        for id in 1..n {
+            s.tile(id, Some(id - 1), IDENTITY).unwrap();
+            assert_eq!(s._file.is_some(), id + 1 >= n, "{id}");
+        }
+        s.expect_identity();
+        let error = s
+            .finish(budget(), 0, &mut |_| panic!("unexpected replay"))
+            .unwrap_err();
+        // The replayed chain is checked: its content-less cells have no G.
+        assert!(error.to_string().contains("emptyCellRefinement"), "{error}");
+        let tiles: i64 = s
+            .connection
+            .query_row("SELECT count(*) FROM tiles", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(tiles as u64, n);
+    }
     #[test]
     fn final_work_has_a_structured_budget_refusal() {
         let mut s = store();
         s.tile(0, None, IDENTITY).unwrap();
         s.tile(1, Some(0), IDENTITY).unwrap();
+        // Only an HLOD expectation creates delivery work.
+        s.expect_identity();
         let error = s
             .finish(
                 Budget {

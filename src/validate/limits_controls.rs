@@ -374,8 +374,7 @@ fn limit_members_are_independent_of_profile_scratch_and_override_order() {
                 }
                 let report = inspect(request).unwrap();
                 FORCED.with(|f| f.set(None));
-                // Continuity's delivery hierarchy uses disk in both catalog profiles.
-                assert!(report.scratch.is_some());
+                assert_eq!(report.scratch.is_some(), forced);
                 seen.insert(limit_members(&report));
             }
         }
