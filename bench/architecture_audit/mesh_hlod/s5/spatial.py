@@ -102,6 +102,7 @@ class Store:
         return (json.loads(r[0]) for r in self.db.execute('SELECT data FROM faces WHERE tile=?', (tile,)))
 
     def put_faces(self, tile, faces):
+        faces=list(faces)
         # Tiles holding two faces on one corner set (either orientation).
         corners=[tuple(sorted(f32_point(p) for p in f['xyz'])) for f in faces]
         corners=[c for c in corners if len(set(c))==3]
