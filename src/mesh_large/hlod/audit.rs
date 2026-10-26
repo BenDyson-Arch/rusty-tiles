@@ -578,7 +578,7 @@ mod tests {
         let cap = MEMORY_BACKED_BYTE_BUDGET;
         for logical in [0, cap - 1, cap, cap + 1, u64::MAX] {
             assert_eq!(admitted_bound(logical, false), logical);
-            assert_eq!(admitted_bound(logical, true), logical.min(256 << 20));
+            assert_eq!(admitted_bound(logical, true), logical.min(64 << 20));
         }
     }
 

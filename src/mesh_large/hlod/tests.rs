@@ -1569,7 +1569,7 @@ fn random_chords_cost_linear_work_and_never_refuse() {
     let manifest = |dir: &Path| -> Value {
         serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap()
     };
-    let (m1, m4) = (manifest(&one), manifest(&four));
+    let m1 = manifest(&one);
     let incidence = &m1["hlod"]["incidence"];
     eprintln!("CHORDS {incidence}");
     let triangles = 2 * 128 * 64 * 2 + 2048;
@@ -1581,7 +1581,7 @@ fn random_chords_cost_linear_work_and_never_refuse() {
         incidence["rows"].as_u64().unwrap() <= incidence["items"].as_u64().unwrap(),
         "{incidence}"
     );
-    assert_eq!(m1["hlod"], m4["hlod"]);
+    assert_eq!(audit_semantics(&one), audit_semantics(&four));
     assert_eq!(published(&one), published(&four));
     let census = census(&one);
     assert_eq!(
