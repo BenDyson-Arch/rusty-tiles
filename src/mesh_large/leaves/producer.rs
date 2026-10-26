@@ -847,7 +847,7 @@ pub(crate) fn produce(
             cache_peak_resident_bytes: stats.peak_resident_bytes,
             cache_hits: stats.hits,
             cache_misses: stats.misses,
-            lod_prepass_scratch_peak_bytes: hlod_diagnostics.incidence_scratch_peak_bytes,
+            hlod_incidence_scratch_peak_bytes: hlod_diagnostics.incidence_scratch_peak_bytes,
         },
         hlod: hlod_diagnostics,
     })
@@ -870,7 +870,7 @@ pub struct LeafStageDiagnostics {
     pub cache_hits: u64,
     pub cache_misses: u64,
     /// Measured scratch peak of the HLOD incidence pass, retained capture files included.
-    pub lod_prepass_scratch_peak_bytes: u64,
+    pub hlod_incidence_scratch_peak_bytes: u64,
 }
 pub(crate) struct LeafStageOutput {
     pub report: LeafOutputReport,

@@ -53,8 +53,7 @@ impl MemoryBudget {
         detected: Option<u64>,
     ) -> Result<Self, JobError> {
         let (resolved, source) = match (requested, detected) {
-            (Some(0), _) => return Err(invalid("memory budget must be a positive byte count")),
-            (Some(bytes), _) => (bytes, BudgetSource::Explicit),
+            (Some(bytes), _) => (validate_memory_budget(bytes)?, BudgetSource::Explicit),
             (None, Some(headroom)) if headroom / 2 < DEFAULT_CEILING_BYTES => {
                 (headroom / 2, BudgetSource::DefaultHeadroom)
             }
@@ -81,9 +80,20 @@ impl MemoryBudget {
     }
 }
 
-/// Parse `--memory-budget`: a positive decimal byte count with an optional binary suffix
-/// (`KiB`, `MiB`, `GiB`, `TiB`; `B` for bytes). Zero, signs, fractions, decimal-unit
-/// suffixes and overflow are refused.
+/// Check an explicit byte budget from any surface: positive. Rust callers hold a `u64`
+/// already; the CLI and Python reach it through [`parse_memory_budget`], so one rule
+/// refuses zero everywhere.
+pub(crate) fn validate_memory_budget(bytes: u64) -> Result<u64, JobError> {
+    if bytes == 0 {
+        return Err(invalid("memory budget must be a positive byte count"));
+    }
+    Ok(bytes)
+}
+
+/// Parse a memory budget (CLI `--memory-budget`, and Python's integer after conversion to
+/// decimal text): a positive decimal byte count with an optional binary suffix (`KiB`,
+/// `MiB`, `GiB`, `TiB`; `B` for bytes). Zero, signs, fractions, decimal-unit suffixes,
+/// booleans and overflow are refused as `invalid_request`.
 pub fn parse_memory_budget(text: &str) -> Result<u64, JobError> {
     let refuse = || {
         invalid(format!(
@@ -108,10 +118,7 @@ pub fn parse_memory_budget(text: &str) -> Result<u64, JobError> {
     let bytes = value
         .checked_mul(1u64 << shift)
         .ok_or_else(|| invalid(format!("memory budget {text:?} exceeds 2^64 - 1 bytes")))?;
-    if bytes == 0 {
-        return Err(invalid("memory budget must be a positive byte count"));
-    }
-    Ok(bytes)
+    validate_memory_budget(bytes)
 }
 
 /// A counting byte ledger. Leases are taken before the allocation they cover and released
@@ -258,6 +265,37 @@ mod tests {
         );
     }
 
+    /// The matrix the CLI and Python suites also read: one rule for every surface.
+    #[test]
+    fn shared_budget_matrix_parses_identically() {
+        let matrix: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/memory_budget_matrix.json"
+        ))
+        .unwrap();
+        for row in matrix["valid"].as_array().unwrap() {
+            let text = row["text"].as_str().unwrap();
+            let bytes: u64 = row["bytes"].as_str().unwrap().parse().unwrap();
+            assert_eq!(parse_memory_budget(text).unwrap(), bytes, "{text:?}");
+            assert_eq!(validate_memory_budget(bytes).unwrap(), bytes);
+            let resolved = MemoryBudget::resolve_with(Some(bytes), Some(1 << 30)).unwrap();
+            assert_eq!(
+                (resolved.resolved_bytes, resolved.source),
+                (bytes, BudgetSource::Explicit)
+            );
+        }
+        let invalid = matrix["invalid"].as_array().unwrap();
+        assert!(invalid.len() >= 15);
+        for row in invalid {
+            let text = row["text"].as_str().unwrap();
+            let error = parse_memory_budget(text).unwrap_err();
+            assert_eq!(error.kind(), JobErrorKind::InvalidRequest, "{text:?}");
+        }
+        assert_eq!(
+            validate_memory_budget(0).unwrap_err().kind(),
+            JobErrorKind::InvalidRequest
+        );
+    }
+
     #[test]
     fn default_resolution_is_the_lesser_of_4gib_and_half_headroom() {
         let r = |requested, detected| MemoryBudget::resolve_with(requested, detected).unwrap();
@@ -265,6 +303,17 @@ mod tests {
         assert_eq!(
             (big.resolved_bytes, big.source),
             (4 << 30, BudgetSource::DefaultCeiling)
+        );
+        // Half of 8 GiB is exactly the ceiling; the 2 GiB gate-(a) budget is honoured as given.
+        let edge = r(None, Some(8 << 30));
+        assert_eq!(
+            (edge.resolved_bytes, edge.source),
+            (4 << 30, BudgetSource::DefaultCeiling)
+        );
+        let two = r(Some(2 << 30), Some(64 << 30));
+        assert_eq!(
+            (two.resolved_bytes, two.source),
+            (2 << 30, BudgetSource::Explicit)
         );
         let small = r(None, Some(6 << 30));
         assert_eq!(

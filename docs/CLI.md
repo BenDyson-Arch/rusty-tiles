@@ -49,9 +49,10 @@ The shared layout is a bounded implicit forest. Producer naming/partition detail
 ### mesh
 
 Streams one static glTF/GLB scene, local metre/Y-up or in a declared source CRS,
-through capture, leaf encoding, certified coarse levels and Tiles 1.1 implicit `.3tz` delivery. Every parent
-tile carries a simplified proxy whose geometric error bounds its two-way distance to the source, with proxy
-textures baked from the source appearance. See the [mesh guide](MESH.md)
+through capture, leaf encoding, HLOD coarse levels and Tiles 1.1 implicit `.3tz` delivery. Leaves are exact;
+every parent tile is built from its children with locked outer interfaces (crack-free by construction), a sampled,
+measured geometric error rather than a certificate, a representative source-primitive identity and freshly
+baked textures. See the [mesh guide](MESH.md)
 for admitted sources, placement, resources, migration and the known Cesium
 KTX2 colour-filtering limitation. The preparatory leaf/delivery commands and
 Rust exports are now internal.
@@ -61,6 +62,7 @@ Rust exports are now internal.
 | `--profile` | | `balanced` | `fast`, `balanced`, `quality` or `lossless`; policies/constants are provisional |
 | `--jobs` | | `auto` | Positive maximum workers or memory-aware auto; actual workers are capped per stage by cores and memory; unknown memory uses one worker |
 | `--scratchDir` | `--scratch-dir` | platform scratch parent | Owned working-data parent; final archive staging stays beside output |
+| `--memory-budget BYTES` | `--memoryBudget` | lesser of 4 GiB and half the detected headroom (2 GiB if undetected) | Declared memory ceiling for every stage, never raised: a positive byte count with an optional `B`, `KiB`, `MiB`, `GiB` or `TiB` suffix (`2GiB`). A run that cannot fit is refused as `resource_limit` before it allocates, and the archive does not depend on the budget. Invalid values are usage errors (exit 2). See the [memory budget](MESH.md#memory-budget) |
 | `--anchor LON LAT HEIGHT` | | none | WGS84 longitude/latitude degrees and ellipsoidal height metres; omission keeps local output |
 | `--orientationXyzw X Y Z W` | `--orientation-xyzw` | identity with anchor | Active ENU near-unit quaternion, scalar W last; requires anchor |
 | `--sceneOffset X Y Z` | `--scene-offset` | zero with anchor | Post-node source Y-up metre translation before orientation; requires anchor |
@@ -72,12 +74,12 @@ Rust exports are now internal.
 
 Shared `-i`/`-o`/`--force`, `--json` and `--progress json` apply. Output is `.3tz`
 only. `--json` returns `tilerReport` (snake_case, identical to `conversion.json`),
-`diagnostics` (requested/actual workers and resources, outside the archive),
+`diagnostics` (requested/actual workers, the resolved `memory` budget and stage plan, the coarse stage's `hlod` facts and `phase_seconds`; outside the archive),
 `cleanupDiagnostics`, and the resolved output. Input is local with optional
 rigid placement, or in a declared [source CRS](MESH.md#source-crs) whose
 per-vertex map (positions, normals and tangents) is applied at capture and whose
 ENU frame becomes the root transform. There is no CRS inference, geoid
-conversion, leaf/proxy tuning, explicit/full-detail mode or texture-format flag. Profiles do not freeze numerical settings and
+conversion, coarse-tile tuning, explicit/full-detail mode or texture-format flag. Profiles do not freeze numerical settings and
 `lossless` is not a source-GLB byte-preservation promise.
 
 ### point-cloud
@@ -250,6 +252,7 @@ and raster outputs, are rejected as invalid input; package supported content bef
 | --- | --- | --- | --- |
 | `--maxVolume KEY=N` | `--max-volume` | profile defaults | Set an opt-in volume cap or replace an amplification budget; repeatable, once per key. `KEY` is one of `sourceArchiveBytes`, `archiveEntries`, `centralDirectoryBytes`, `archiveStoredBytes`, `hierarchyVisits`, `references`, `totalBytesRead`, `totalPayloadElements`, `containmentWorkUnits`, `containmentBytesRead` or `containmentDecodedBytes`; `N` is a decimal integer. Values may be below the defaults (stricter); per-item format limits are fixed. See [validation limits](VALIDATION.md) |
 | `--scratchDir DIR` | `--scratch-dir` | `TMPDIR`, then the user cache directory, then the system temporary directory | Put validation scratch files inside this existing directory |
+| `--expectProfile PROFILE` | `--expect-profile` | none | Require a delivery profile whatever the archive's labels say. `hlod` (the only value): every payload must carry source identity and every HLOD check runs; an archive that declares HLOD itself is held to it anyway. Python: `validate(..., expect_profile="hlod")` |
 
 The typed JSON report lists `checks` and `notInspected`, per-payload accessor,
 primitive and vertex counts, archive counts, and fixed admission `limits`.
@@ -413,7 +416,7 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 | `raster` | `source_cog` and `aligned_warp` use native normalized progress out of 1,000,000; `tiling` reports completed tiles on the same scale and resets for each zoom. `raster_complete` reports actual tile count before sealing and installation. |
 | `terrain` | `terrain`, counting tiles |
 | `convert` | `encoding`, `ready_to_publish`; these package events finish before installation |
-| `mesh` | Named capture/leaf/hierarchy/archive work; required events finish before installation; see the mesh guide |
+| `mesh` | `capture`, `leaf_build`, `hlod_incidence`, `hlod_geometry`, `leaf_payloads`, `archive`, `ready_to_publish`; required events finish before installation; see the mesh guide |
 
 Events report work units, not time remaining.
 

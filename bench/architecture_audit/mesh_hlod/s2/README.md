@@ -14,7 +14,7 @@ moved out of the tree, pinned in `retired-bench/SHA256SUMS`) are historical.
 
 ## Crop bakes
 
-Release, balanced, `--jobs 2 --lod hlod --memory-budget 8GiB`, measured slot 2
+Release, balanced, `--jobs 2 --lod hlod --memory-budget 8GiB` (`--lod` was removed in S6; HLOD is the only method), measured slot 2
 (not a quiet timing lane), user scope `MemoryMax=10G`, `MemorySwapMax=0`, idle
 priority; zero cgroup max/OOM events. Both inputs: 788,425 source triangles, 156
 leaves, 61 encoded parents, 2 pass-through cells, 0 omitted cells.

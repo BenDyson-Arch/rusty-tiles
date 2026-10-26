@@ -8,7 +8,7 @@
   packed into RGBA8 PNG pages. Each set gets its own `channels`. Gutters and
   padding hold the no-feature value, so each set's `nullFeatureId` is
   2^(8*bytes)-1. Mips use a support-weighted mode and never average IDs. Each
-  mip level is a separate exact PNG for coarse proxies. The sampler uses
+  mip level is a separate exact PNG. The sampler uses
   NEAREST/NEAREST, so viewers generate no mipmaps. Basis KTX2 is refused for
   this class. Leaves may carry extra `featureIds` entries after the two source
   sets. The writer refuses any ID texture whose sampler is not NEAREST.

@@ -31,7 +31,7 @@ const SORT_THREAD_BYTES: u64 = 8_000_000;
 /// Scratch bytes live at each capture stage's peak, from declared counts and the sorter's file
 /// lifetimes ([`config::sort_spill`]). Each figure includes the files retained from earlier
 /// stages. As a measurement (`scratch_stage_peaks`) the same fields hold observed peaks;
-/// `lod_prepass` is then 0 because the HLOD stage runs after capture.
+/// `hlod_incidence` is then 0 because the HLOD stage runs after capture.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct ScratchStages {
     /// Corner, positioned-corner and full-triangle sorts of the attribute capture.
@@ -45,8 +45,8 @@ pub struct ScratchStages {
     pub corner_depths: u64,
     pub leaf_plans: u64,
     /// Everything retained for leaves plus the HLOD stage's declared incidence and source-index
-    /// need (the field keeps its name).
-    pub lod_prepass: u64,
+    /// need.
+    pub hlod_incidence: u64,
 }
 impl ScratchStages {
     fn max(&self) -> u64 {
@@ -57,7 +57,7 @@ impl ScratchStages {
             self.tree,
             self.corner_depths,
             self.leaf_plans,
-            self.lod_prepass,
+            self.hlod_incidence,
         ]
         .into_iter()
         .max()
@@ -111,7 +111,7 @@ pub(crate) struct FullCaptureReport {
     pub image_capture: ImageCaptureBounds,
     pub scratch_logical_peak_bytes: u64,
     /// Measured peak live scratch of each capture stage (the declared bounds are
-    /// `scratch.stages`); `lod_prepass` is 0 here.
+    /// `scratch.stages`); `hlod_incidence` is 0 here.
     pub scratch_stage_peaks: ScratchStages,
     pub scratch_memory_backed: bool,
     /// Local encoding contract version: dataset-wide zero origin/aligned lattice.
@@ -318,7 +318,7 @@ fn scratch_need(
     // (it declares nothing here); S2's source index, always built beside the walk's rows, is
     // preflighted up front too and admitted again through the walk's ledger before its first
     // write.
-    let lod_prepass = add(
+    let hlod_incidence = add(
         leaf_plans,
         add(
             super::hlod::interfaces::scratch_need(n, config.sorter(1)).ok_or_else(overflow)?,
@@ -332,7 +332,7 @@ fn scratch_need(
         tree,
         corner_depths,
         leaf_plans,
-        lod_prepass,
+        hlod_incidence,
     };
     let h1 =
         config::scratch_need_parts(n, scan.geometry_bytes, config, unit).ok_or_else(overflow)?;
@@ -1809,7 +1809,7 @@ pub(super) mod tests {
         // The HLOD stage's declared share: its incidence and source-index scratch beside
         // everything retained for leaves.
         assert_eq!(
-            need.stages.lod_prepass,
+            need.stages.hlod_incidence,
             need.stages.leaf_plans
                 + super::super::hlod::interfaces::scratch_need(10, cfg.sorter(1)).unwrap()
                 + super::super::hlod::source_index::scratch_need(10).unwrap()

@@ -343,11 +343,37 @@ fn tiler_jobs(py: Python<'_>, jobs: Option<Bound<'_, PyAny>>) -> PyResult<TilerJ
     Ok(TilerJobs::Maximum(count))
 }
 
+/// The memory budget: an integer byte count (not a bool), refused as an invalid request when
+/// zero, negative or beyond 2^64 - 1. The value is rendered with the base `int.__repr__` (never
+/// the object's own `__str__`, which an `int` subclass may override) and parsed by the shared
+/// core parser, so the CLI and Python refuse identically.
+fn tiler_memory_budget(py: Python<'_>, budget: Option<Bound<'_, PyAny>>) -> PyResult<Option<u64>> {
+    let Some(budget) = budget else {
+        return Ok(None);
+    };
+    if budget.is_instance_of::<PyBool>() || !budget.is_instance_of::<PyInt>() {
+        return Err(PyTypeError::new_err(
+            "memory_budget_bytes must be an integer byte count or None",
+        ));
+    }
+    let text = py
+        .get_type::<PyInt>()
+        .getattr("__repr__")
+        .and_then(|repr| repr.call1((&budget,)))
+        .and_then(|text| text.extract::<String>())
+        // An integer too long for Python's own decimal conversion limit is far past 2^64.
+        .unwrap_or_else(|_| "9".repeat(64));
+    tiles_core::parse_memory_budget(&text)
+        .map(Some)
+        .map_err(|error| tiler_request_error(py, error))
+}
+
 /// Stream an admitted static mesh into one Tiles 1.1 .3tz: local metre/Y-up, or a declared
 /// source CRS mapped at capture. Profiles are provisional; jobs is a resource-capped
-/// maximum, and None means auto.
+/// maximum, and None means auto. memory_budget_bytes is a declared ceiling in bytes, never
+/// raised; None resolves the lesser of 4 GiB and half the detected headroom.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None))]
+#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None))]
 #[allow(clippy::too_many_arguments)]
 fn mesh_to_tileset(
     py: Python<'_>,
@@ -356,6 +382,7 @@ fn mesh_to_tileset(
     profile: &str,
     jobs: Option<Bound<'_, PyAny>>,
     scratch_dir: Option<PathBuf>,
+    memory_budget_bytes: Option<Bound<'_, PyAny>>,
     anchor: Option<(f64, f64, f64)>,
     orientation_xyzw: Option<(f64, f64, f64, f64)>,
     scene_offset: Option<(f64, f64, f64)>,
@@ -371,6 +398,8 @@ fn mesh_to_tileset(
         .parse::<TilerProfile>()
         .map_err(|error| tiler_request_error(py, error))?;
     let jobs = tiler_jobs(py, jobs)?;
+    // Refused here, before any file (an offset file, then the source) is read.
+    let memory_budget = tiler_memory_budget(py, memory_budget_bytes)?;
     let source_axes = source_axes
         .map(|axes| match axes {
             "xyz" => Ok(SourceAxes::Xyz),
@@ -406,6 +435,9 @@ fn mesh_to_tileset(
     }
     if let Some(path) = scratch_dir {
         request = request.with_scratch_dir(path);
+    }
+    if let Some(bytes) = memory_budget {
+        request = request.with_memory_budget(bytes);
     }
     let result = run_job(py, callback, |run| {
         tiles_core::mesh_to_tileset(request, run)

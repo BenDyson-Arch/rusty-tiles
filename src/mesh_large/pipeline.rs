@@ -108,10 +108,11 @@ impl TilerRequest {
             test_spill: None,
         }
     }
-    /// Declared memory budget in bytes (D8), a ceiling for every stage of the run.
-    /// Without one, a run resolves the lesser of 4 GiB and half the detected headroom
-    /// (2 GiB when undetected). Zero is refused.
-    #[doc(hidden)]
+    /// Declared memory budget in bytes, a ceiling for every stage of the run: never raised,
+    /// and a run that cannot fit under it is refused as `resource_limit` before the binding
+    /// stage allocates. Without one the run resolves the lesser of 4 GiB and half the
+    /// detected host/cgroup headroom (2 GiB when headroom is undetected). Zero is refused as
+    /// `invalid_request` before any source I/O.
     pub fn with_memory_budget(mut self, bytes: u64) -> Self {
         self.memory_budget = Some(bytes);
         self
@@ -275,7 +276,7 @@ pub struct CaptureDiagnostics {
     pub scratch_memory_backed: bool,
     /// Declared largest working set of each capture stage, retained files included.
     pub scratch_stage_bytes: super::full::ScratchStages,
-    /// Measured peak of each capture stage (`lod_prepass` runs later and reads 0).
+    /// Measured peak of each capture stage (`hlod_incidence` runs later and reads 0).
     pub scratch_stage_peak_bytes: super::full::ScratchStages,
     /// Output-side admission reservation on the work directory and output filesystems.
     pub output_reserve_bytes: u64,
@@ -322,6 +323,14 @@ pub struct TilerResult {
 }
 fn invalid(message: &str) -> JobError {
     JobError::new(JobErrorKind::InvalidRequest, message)
+}
+
+/// Budget request rules, checked before any filesystem access.
+fn check_memory_budget(request: &TilerRequest) -> Result<(), JobError> {
+    match request.memory_budget {
+        Some(bytes) => super::resources::validate_memory_budget(bytes).map(|_| ()),
+        None => Ok(()),
+    }
 }
 
 fn preflight(request: &TilerRequest) -> Result<(PathBuf, ResolvedPlacement), JobError> {
@@ -382,6 +391,8 @@ pub fn mesh_to_tileset(
 ) -> Result<TilerResult, JobFailure> {
     let attempt = control.begin()?;
     attempt.check().map_err(|e| attempt.fail(e))?;
+    // Request intent is refused first: no path, source or output is touched for a bad budget.
+    check_memory_budget(&request).map_err(|e| attempt.fail(e))?;
     let (output, placement) = preflight(&request).map_err(|e| attempt.fail(e))?;
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs.into();

@@ -1,23 +1,17 @@
 # Mesh tiling
 
-> **Direction change, 2026-10-24:** the [0.4 HLOD decision](architecture/hlod-040-decision.md)
-> replaces H17/H27 for the forthcoming implementation. This guide below still
-> describes the current code; sampled coarse error, representative coarse IDs,
-> the new bake and memory-budget option are planned, not shipped. The guide will
-> change with implementation; historical ledger follow-ups are superseded.
-
 `rusty-tiles mesh` and Python's `rusty_tiles.mesh_to_tileset` stream one admitted
 static glTF/GLB scene, in local metres or a declared source CRS, into a 3D Tiles
 1.1 implicit forest in one `.3tz`.
 Content is glTF 2.0. The encoder is bundled: meshopt and KTX2/Basis need no
 external executable or system geospatial library in the standard CLI or wheel.
 
-The current pipeline captures the source, writes full-detail leaf GLBs, certifies
-coarse geometry for every parent tile (H17: simplified proxies whose geometric
-error bounds their two-way distance to the source), bakes proxy textures for
-those coarse tiles from the source appearance (H27), and publishes the hierarchy.
-A successful conversion does not establish the final tiler's resource, fidelity,
-scale or consumer acceptance.
+The pipeline captures the source, writes exact full-detail leaf GLBs, builds
+every coarse parent tile from its children as a classic octree level of detail
+(HLOD: [coarse levels](#coarse-levels-hlod)), and publishes the hierarchy. A coarse
+tile's geometric error is a **sampled, measured** distance to the source surface,
+not a certificate. A successful conversion does not establish the final tiler's
+resource, fidelity, scale or consumer acceptance.
 
 ## Convert a local scene
 
@@ -143,6 +137,138 @@ codes, coordinate epochs and Lambert azimuthal equal area need the
 `unsupported` before source I/O. One operation serves the whole capture: a
 source that would need native PROJ for only some vertices is refused.
 
+## Coarse levels (HLOD)
+
+Leaves are the exact tiles; an occupied cell above them publishes one coarse tile
+built from its children, unless it is [omitted](#hierarchy-and-cracks) because its
+locked interface cannot fit the triangle cap. This is the only coarse-tile method; it
+has no selector, and a plain `mesh` run uses it.
+
+### Hierarchy and cracks
+
+- **Leaves are exact.** Each leaf holds its source triangles unchanged (at most
+  8,192) with original vertex references and full provenance. Coarse levels never
+  alter a leaf.
+- **Coarse tiles are bounded.** A parent welds its children's vertices by decoded
+  position and reduces them with meshopt to at most 8,192 triangles. The triangle
+  cap leads; there is no error target.
+- **Crack-free by construction.** The vertices, segments and points on a tile's
+  *outer interface*, where its surface meets geometry outside its own subtree, are
+  locked: simplification never moves or deletes them, and every tile that carries
+  one decodes it to the same position at every depth. Edges between children inside
+  the parent are free to collapse. An interface is never thinned. Published bytes are decoded and
+  checked before publication, and the acceptance campaign counts decoded interface
+  segments independently. Crack-free means no gap along a locked interface between
+  tiles of any depth mix; it does not make a coarse level watertight or hide its
+  silhouette change.
+- **Omission, not refusal.** 8,192 triangles stays the hard published cap. If a
+  parent still needs more triangles than the cap after simplification (its exact locked
+  interface, or topology that simplification cannot reduce, is too large), its coarse
+  tile is **omitted**; the run does not fail. Omission propagates upward: every ancestor to the root is omitted
+  too, because a parent cannot be built with a hole where the omitted tile was. An
+  omitted cell publishes no content and holds no geometry, and the capped descendant
+  frontier (coarse tiles and leaves below it) is what the archive publishes there. An
+  omitted cell takes the empty-parent error (at least 16 times its box diagonal), so it
+  refines whenever it is visible and no content-bearing ancestor sits above a
+  content-less one, and delivery and `validate` refuse a coarse tile above an omitted
+  cell. Omission shows as content-less tiles in the published tileset; its counts are
+  kept in the internal leaf manifest, not in `tilerReport` or `diagnostics`. Omission
+  is a bounded last resort and costs client requests near the omitted region (about 8
+  times the depth in content-less cells plus the children's tiles). It is distinct from resource refusals: a budget or scratch/disk shortfall is
+  still `resource_limit`, and an unreadable or unsupported source is still refused.
+- **Single-child chains.** A cell whose only child is a coarse tile publishes that
+  tile once, at the top of the chain; the cells below carry no content and the same
+  error, so refinement stays monotone. A cell whose only child is a leaf publishes
+  a reduced copy of it.
+
+### Geometric error: sampled, not certified
+
+A coarse tile's `geometricError` is `G = max(max child G, 1.05 × M)`, where `M` is
+the larger of two directed distances measured on the **decoded positions a viewer
+sees** against the captured source surface in the tile's source range: coarse to
+source and source to coarse. Sampling is deterministic and area-stratified, with
+extra controls at patch boundaries, one vertex per connected component and sliver
+triangles. At least 2,048 samples per direction are taken for each tile and at
+least 200,000 per direction for each occupied depth; scheduling is seeded by tile,
+so `--jobs` never changes the result. `G` is monotone down the tree and is the
+value in `tileset.json` and the implicit-subtree metadata.
+
+This is **not** certification. A sampled maximum is neither a Hausdorff bound nor a
+guarantee against unsampled outliers (the 5% margin exceeds the roughly 1% maximum
+exceedance seen in prototype audits; it is not a covering radius), and no universal
+bound is claimed.
+Incomplete required sampling is a `resource_limit` refusal, never a zero error,
+and a non-finite measurement fails the run. `diagnostics.hlod.error_measurement`
+reports the policy version, sample counts and per-direction mean/p95/p99/max.
+`validate` checks that errors are finite, non-negative, ordered and consistent
+between explicit and implicit metadata; it does not recompute source distances.
+
+### Coarse appearance
+
+Each material class of a coarse tile gets fresh planar charts on its final decoded
+positions (UV seams of the source are ignored; positions never move), packed into
+one content-sized page per bound slot: the least-area rectangle of whole 4×4 codec
+blocks, at most 1,024 texels a side, that holds the charts, with a 2-texel gutter. Texel spacing is
+`max(G / 16, 1e-5 m)`, but never finer than the source's own texel spacing over
+that surface, so a page never carries more texels than the source has. If the
+content cannot fit 1,024², the page uses the finest spacing that does.
+
+Each covered texel takes the nearest captured source point and samples the source
+images at the texel's footprint level in linear light. Base colour (multiplied by
+`COLOR_0`), emissive, metallic-roughness and occlusion are resampled; normal maps
+are re-expressed in the coarse tile's tangent frame. Factors, `alphaMode`, MASK
+cutoff and double-sidedness are kept, so one H28 material class stays one class. The
+source samplers (wrap, filters) apply while baking, when texels are sampled from the
+source images; they are not carried onto the coarse page, which publishes newly
+authored atlas samplers (clamp to edge; linear with mip-linear minification for a
+KTX2 page, linear without mips for a PNG page). Untextured classes keep flat class factors, plus a per-vertex `COLOR_0`
+taken from the nearest source surface when the source carries colours. `NORMAL` is
+published only when the source carries normals, so leaves and coarse tiles of one
+source shade the same way. Coarse pages are not required to reproduce leaf texels:
+they are an appearance approximation of the surface, with no appearance
+certificate.
+
+Coarse pages go through the same delivery encoder and decoded-image gates as leaf
+pages, so a profile chooses one colour codec for both (the table under
+[Profiles](#profiles-and-resources)). A tile's pages together are bounded to about
+2²⁰ texels per slot, shared by surface area among its material classes, so a parent
+with many classes splits one page's worth instead of taking a full page for each.
+
+The coarse ladder differs from the leaf ladder below at its end. A coarse page that
+misses a gate is re-encoded (UASTC level 2, then 3) as a leaf page is, but a page that
+no codec step can deliver within its gates never fails the run: it is published as its
+exact level-0 PNG and sampled without mips. Pages escalated or delivered this way are
+counted per depth in `diagnostics.hlod.appearance_by_depth` (`escalatedPages`,
+`pngPages`); the report's
+`escalated_pages` and `escalation_diagnostics` cover leaf pages.
+
+Normal, metallic-roughness and other data pages, MASK coverage and ID pages follow
+their own class rules in every profile (see [Profiles](#profiles-and-resources)).
+Leaf atlases keep only each leaf's needed source regions, with aligned crops, wrap,
+gutters and per-level mips; a leaf never depends on a whole source image merely
+because one triangle samples it.
+
+### Identity, annotation and editability
+
+- **Leaves** keep exact `source_primitive` and `source_triangle` feature IDs for
+  every triangle, with original corner order.
+- **Coarse tiles** carry one `source_primitive` feature ID per triangle, duplicated
+  at all three corners: the source primitive nearest to the triangle's decoded
+  centroid within the tile's source range (ties by distance, then source order).
+  It is a **representative**, not ancestry or a triangle mapping, and a primitive
+  that no longer shows in a coarse tile need not appear there. Coarse tiles have no
+  per-triangle source IDs and no source-triangle table. Each tile keeps one property
+  table per ID set.
+- **Annotation.** Primitive-level labels may be shown on coarse tiles as
+  representative picks. Exact annotation maps source-triangle annotations onto
+  **leaves**. An arbitrary region cannot propagate exactly through coarse IDs; it
+  needs an explicit later aggregation or rebake policy.
+- **Texture editing.** A leaf is exact in texture space when no two triangles'
+  decoded UVs share interior area on a page (`unique`); overlapping, mirrored or
+  repeated source UVs make it `shared`, editable in vertex space only. Coarse charts
+  never overlap, so a coarse page is editable, but editing it changes only that
+  coarse tile, not its leaves or other levels, and does not make its provenance exact.
+
 ## Profiles and resources
 
 `--profile` accepts `fast`, `balanced` (the default), `quality` or `lossless`.
@@ -156,10 +282,9 @@ arbitrary viewer filtering, or lossless coarse geometry. Leaf coordinate
 encoding and provenance still follow the tiler contract.
 
 Colour-class pages (base colour and emissive), in **both leaves and coarse
-proxies**, use the following initial codec. The single policy owner is
-`src/mesh_large/leaves/delivery.rs::codec_settings`; proxy delivery calls it
-through the shared authored-chain encoder. HLOD consumers of that encoder
-inherit the same choice.
+tiles**, use the following initial codec. The single policy owner is
+`src/mesh_large/leaves/delivery.rs::codec_settings`; coarse delivery calls it
+through the shared authored-chain encoder.
 
 | Profile | Colour codec | ETC1S quality / effort |
 | --- | --- | --- |
@@ -256,7 +381,7 @@ decoded gate. Smooth wrong-mip content can still pass even a 20 dB floor; the
 revision records a >40 dB example and proposes a separately calibrated spatial
 derivative/band-pass check. PSNR does not establish mip provenance.
 
-In a lossy profile, a texture page that misses any decoded-image gate at the
+In a lossy profile, a **leaf** texture page that misses any decoded-image gate at the
 profile's own encoder setting (per-level channel and normal floors, MASK
 coverage, the source-sampler check) is re-encoded one step stronger instead of
 failing the run: UASTC pack level 2, then UASTC level 3. Every step is checked
@@ -264,72 +389,12 @@ again by the same gates; gates are never loosened. If level 3 also misses and
 the page's sampler reads level 0 only (no mipmap minification), the page is
 delivered as an exact level-0 PNG, which keeps the sampler. A mip-sampled page
 that still misses at level 3 fails the run, because glTF PNG cannot carry its
-authored coarse levels. Escalation costs output size: an ETC1S page re-encoded
+authored coarse levels. (Coarse pages never fail this way; see
+[coarse appearance](#coarse-appearance).) Escalation costs output size: an ETC1S page re-encoded
 as UASTC is several times larger, and a PNG fallback page is typically the
 largest form of the page (up to 4 bytes per texel). The ladder depends only on
 the page, so output is identical for any worker count. Cancellation is polled
 before every re-encode step, so a run can stop between steps of one page.
-
-### Coarse tile textures
-
-Every coarse (proxy) tile is baked after its certified geometry is fixed. The
-bake keeps the proxy's exact POSITION words, node transform, face order, source
-and material identity and every feature-ID set, adds new chart UVs, and fills
-each present PBR slot (base colour, metallic-roughness, normal, occlusion,
-emissive) by sampling the captured source images.
-Lossy profiles deliver proxy pages through the same KTX2/Basis gates and
-escalation ladder as leaves; `lossless` delivers a PNG base level. The complete
-proxy GLB is read back before it replaces the untextured one, and a tile that
-would exceed the per-tile byte budget is rebaked at a lower texel density.
-
-A proxy starts at its children's texel density: the coarsest child's
-world-area-weighted median texel spacing (a few near-degenerate source UV
-triangles do not coarsen it), or a profile fraction of its geometric error if
-that is coarser (`balanced`: one sixteenth; `fast` twice that; `quality` and
-`lossless` half).
-
-Appearance rules:
-
-- **Sub-texel slivers have no texture.** A face whose exact page footprint is
-  strictly under one square texel, and whose quantized UVs collapse or invert,
-  is published without a texture sampling obligation (a no-raster face). It
-  keeps its geometry, corner normals/colours and feature IDs; it covers no texel
-  centre, so it would have sampled the gutter or a neighbouring chart anyway. A
-  collapse at or above one square texel is a chart defect: the chart is
-  repacked at a higher density, and the run refuses after four attempts.
-  Zero-area faces are always no-raster.
-- **Feature IDs above 2^24 are refused.** glTF says UNSIGNED_INT vertex
-  attributes SHOULD NOT be used; that guidance is advisory, but rusty-tiles
-  chooses not to write them. A feature-ID attribute is therefore UNSIGNED_BYTE,
-  UNSIGNED_SHORT or FLOAT, and FLOAT holds every integer only up to 2^24. A
-  larger ID is `unsupported` rather than rounded.
-
-- **A face turned away from its source samples the nearest source surface.**
-  A proxy texel samples the nearest point of a source triangle of the face's own
-  primitive that faces the proxy face. Simplification can fold or flip a face so
-  that no triangle of its primitive in the tile faces it (a flipped sliver); that
-  face then samples the nearest same-primitive surface point regardless of
-  orientation, with the same material, texture and tie-break order, and its
-  normal-map texels keep the source's world-space direction. A donor farther
-  than two longest edges of the face is refused as `unsupported`, with the
-  distance in the message. The run diagnostics count these texels, faces and
-  tiles (`proxy_bake`).
-
-Known limitations (0.4):
-
-- A proxy directly above leaf tiles samples the original source images, not
-  the leaves' delivered pages, because leaf pages keep no per-texel terminal
-  ledger. This is correct but slower than resampling the children; keeping
-  that ledger is a planned 0.4.x follow-up.
-- Baking dominates conversion time. Proxies of one depth bake in parallel
-  (up to `--jobs`), but one proxy bakes on one thread, so the narrow top of the
-  tree runs serially. On a 0.79M-triangle textured crop (eight hardware
-  threads, `--jobs 8`) the whole conversion took about two minutes, about
-  100 s of it baking 63 coarse tiles.
-- A proxy whose retained children do not fit its worker's share of the bake
-  memory is baked again after its depth, alone with the whole allowance, so
-  `--jobs` does not change which inputs convert (or their output) but can add
-  serial time.
 
 Leaf normals are a profile property. `lossless` keeps the f32 source normal
 (after the node transform, renormalized at capture). `fast`, `balanced` and
@@ -355,8 +420,8 @@ intermediates use the output parent. Final archive staging remains on the output
 filesystem beside the destination. Disk-backed scratch is usually
 preferable for large sources; memory-backed scratch consumes memory in the
 worker plan and is reported. Admission requires free scratch for the largest
-declared stage working set (files retained from earlier stages, H17's pre-pass,
-and each external sort's runs). Sort runs are 8 MiB chunk files removed as soon as
+declared stage working set (files retained from earlier stages, the HLOD
+incidence pass and source index, and each external sort's runs). Sort runs are 8 MiB chunk files removed as soon as
 they are read, so a sorted stream and the output it feeds share space, with at
 most `F` partly read chunks of slack. A 10% margin and per-file rounding are
 added: about 0.5 KB per source triangle at scale with every vertex attribute present.
@@ -374,11 +439,11 @@ separately against the same free space. Memory-backed (tmpfs) scratch is charged
 to the worker memory plan, but a work directory or output on tmpfs is not.
 Each capture stage rechecks free space for its own working set on entry and
 fails closed if its measured peak exceeds its declared bound; the diagnostics
-report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). The H17
-pre-pass is measured the same way, and the whole-run spill peak
-(`run_scratch_peak_bytes`) must stay within the declared need. LOD proxy
-sidecars and bake handoff files are budgeted by their own stages and are not in
-these spill figures. A preflight is
+report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). The HLOD
+incidence pass is measured the same way (`leaf_delivery.hlod_incidence_scratch_peak_bytes`), and the
+whole-run spill peak (`run_scratch_peak_bytes`) must stay within the declared need.
+The coarse walk's own scratch is admitted through its memory leases
+(`diagnostics.hlod.scratch_components`) and is not in the capture figures. A preflight is
 not a reservation against unrelated writers. Owned intermediate files are
 cleaned on success and failure. Any cleanup failure carries actionable paths
 and does not replace the original cause.
@@ -387,9 +452,63 @@ There is no total source-byte or triangle-size refusal. JSON, hierarchy,
 individual-item and format limits still apply. The 3TZ member ceiling is
 178,956,970, including the root document, reports and index; exceeding it returns
 `unsupported`. Per-tile budgets are derived from policy. There is no
-`--leaf-triangles`, proxy triangle/error flag, explicit/full-detail selector,
+`--leaf-triangles`, coarse-tile triangle/error flag, explicit/full-detail selector,
 texture-format option, external encoder fallback or compression bypass on
 `mesh`.
+
+### Memory budget
+
+One declared ceiling governs the whole run, with one rule on every surface:
+
+| Surface | Spelling |
+| --- | --- |
+| CLI | `--memory-budget BYTES` (`--memoryBudget`) |
+| Python | `mesh_to_tileset(..., memory_budget_bytes=None)` |
+| Rust | `TilerRequest::with_memory_budget(bytes)` |
+
+- **Values.** A positive integer number of bytes. The CLI also takes the binary
+  suffixes `B`, `KiB`, `MiB`, `GiB` and `TiB` (`2GiB`); Python takes an `int`, and
+  Rust a `u64`. Zero, signs, fractions, exponents, decimal-unit (`GB`) or lowercase
+  suffixes, booleans (Python: `TypeError`) and values above 2⁶⁴−1 are
+  `invalid_request`, refused before any source or output is touched, including an
+  offset file (a CLI usage error carries exit 2 and `error.code="usage"`, like
+  `--jobs`).
+- **Default.** Without one, the lesser of **4 GiB** and half the detected
+  host/cgroup headroom; 2 GiB when headroom cannot be detected. An explicit budget,
+  2 GiB for example, is a ceiling that is never silently raised: every stage plans
+  against the lesser of the budget and the detected headroom.
+- **What it covers.** Capture, the leaf stage and the coarse stage admit their
+  indivisible work against it before allocating: source and JSON metadata, sort
+  buffers, interface incidence, the child tiles held for their parents and the
+  active parents, decoded source images, chart/page/codec workspace, memory-backed
+  capture scratch and the archive stage's resident buffers (`archive_minimum_bytes`).
+  A source without images reserves no texture, chart, mip or codec workspace.
+  **Not charged:** output staging and intermediate files that live on memory-backed
+  (tmpfs) storage. A work directory, scratch parent or output on tmpfs consumes memory
+  that the budget does not account for, so the budget does not bound a run whose
+  storage is memory-backed. This is a known remaining D8 obligation, planned with the
+  archive-staging work; until then keep large outputs and intermediates on disk. The
+  resident archive-preparation buffers (charged) are distinct from archive storage
+  (not charged when memory-backed).
+- **Pressure never changes output.** It serializes work (`--jobs` stays a maximum
+  under the same budget), and what cannot fit even alone is a `resource_limit`
+  refusal naming the stage and the bytes it needs, before that stage allocates and
+  before anything is published. Archives are identical for every budget that
+  admits the run.
+- **Reporting.** `diagnostics.memory` holds the `budget` (`requested_bytes`,
+  `resolved_bytes`, `source`: `explicit`, `default_ceiling`, `default_headroom` or
+  `default_undetected`, and the detected headroom), the least budget that admits each
+  stage (`minimum_bytes`, `capture_minimum_bytes`, `leaf_minimum_bytes`,
+  `archive_minimum_bytes`) and the coarse stage's plan (`hlod`);
+  `diagnostics.hlod.lease_peak_bytes` is its highest simultaneous lease. The minima
+  include charged request facts such as the lengths of the input, output and scratch
+  paths (sort descriptors carry them), and the detected headroom is a host observation,
+  so the same conversion reports slightly different minima from differently named
+  paths (a few hundred bytes to about 130 kB on a 0.79M-triangle crop). This is
+  deterministic accounting: the archive does not depend on it.
+- **What it is not.** It is an admission and planning ceiling, not an operating
+  system limit or a measured peak-RSS guarantee; measured peaks come from the
+  acceptance campaign.
 
 ### Primitives, atlases and editability
 
@@ -405,26 +524,25 @@ merged positions are rebased onto one shared quantization offset without being
 quantized again, so every decoded vertex is bit-identical to a per-primitive
 encoding. Primitives split only where those properties differ, where a mipmapped
 source sampler keeps a dedicated leaf page in a lossy profile, or where a class
-overflows one page. Picking is unchanged: every triangle keeps its
-`source_primitive` and `source_triangle` (leaf) or `proxy_source` (proxy)
-feature ID, with one property table per feature-ID set.
+overflows one page. Every leaf triangle keeps its `source_primitive` and
+`source_triangle` feature IDs; a coarse triangle carries one representative
+`source_primitive` ID ([identity](#identity-annotation-and-editability)). Each
+tile has one property table per feature-ID set. Feature-ID attributes carry no
+baked ID textures: each set is already an exact per-face vertex attribute
+against its property table.
 
-Proxies carry no `baked_feature_id_*` textures. Each proxy feature-ID set is
-already an exact per-face vertex attribute against the same property table,
-which those textures only repeated.
+Leaves are exact in vertex space: every triangle keeps its source provenance.
+They are also exact in texture space when no two triangles' decoded UVs share
+interior area on a page, so each texel has one owner. The tiler checks this
+exactly after atlasing. Overlapping, mirrored or repeated source UVs make a
+leaf `shared`, which is editable in vertex space only; such a leaf is never
+refused. Coarse-tile editability and annotation limits are described under
+[Coarse levels](#identity-annotation-and-editability).
 
-Editability:
-
-- **Leaves** are exact in vertex space: every triangle keeps its source
-  provenance. They are also exact in texture space when no two triangles'
-  decoded UVs share interior area on a page, so each texel has one owner. The
-  tiler checks this exactly after atlasing. Overlapping, mirrored or repeated
-  source UVs make a leaf `shared`, which is editable in vertex space only; such a
-  leaf is never refused.
-- **Proxies** are exact in texture space, because charts never overlap. In
-  vertex space they are exact only to the source primitive, or to the majority
-  source: a proxy triangle comes from simplified geometry, and its
-  `proxy_source` row names one source triangle (or a fill).
+Feature-ID attributes are UNSIGNED_BYTE, UNSIGNED_SHORT or FLOAT (glTF advises
+against UNSIGNED_INT vertex attributes; rusty-tiles chooses not to write them),
+and FLOAT holds every integer only up to 2^24. A larger ID is `unsupported`
+rather than rounded.
 
 ## Python
 
@@ -434,7 +552,7 @@ import rusty_tiles
 
 result = rusty_tiles.mesh_to_tileset(
     Path("local.glb"), Path("placed.3tz"),
-    profile="balanced", jobs=None, scratch_dir=None,
+    profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None,
     anchor=(153.02, -27.47, 25.0),
     orientation_xyzw=(0.0, 0.0, 0.0, 1.0),
     scene_offset=(10.0, 2.0, -5.0),
@@ -448,7 +566,7 @@ print(result.report["triangles"], result.diagnostics["leaf_delivery"]["jobs"])
 ```
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
-scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
+scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None, scene_offset=None,
 source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
 height_offset=None, force=False, callback=None)` accepts `str` or `os.PathLike`
 paths. `source_crs=None` or `"local"` keeps local input; `source_axes` is
@@ -456,7 +574,9 @@ paths. `source_crs=None` or `"local"` keeps local input; `source_axes` is
 sequence, `source_offset_file` a path, and `height_offset` defaults to 0, with
 the CLI's rules. `jobs=None`
 means auto; a positive integer is a maximum. Booleans and noninteger worker
-counts are rejected. Unknown legacy keywords raise `TypeError`. Python calls
+counts are rejected. `memory_budget_bytes` is the [memory budget](#memory-budget): a
+positive `int` (not a `bool`), checked before any file is read; `None` takes the
+default. Unknown keywords raise `TypeError`. Python calls
 the same core operation without launching the CLI or an encoder, and releases
 the GIL during native work.
 
@@ -489,49 +609,44 @@ its `leaf`, `first` source triangle rank and `depth`, `page`, `slot`, `sources`
 `escalation_diagnostics_omitted` counts escalated pages beyond that bounded
 list. `texel_ownership` reports texture-space editability:
 `unique_leaves`, `shared_leaves`, the `shared_triangles` of shared leaves,
-`unique_proxies` (always every proxy), and `shared`. That list holds the first
+`unique_proxies` (the field name predates HLOD; it counts every coarse tile, whose
+charts never overlap), and `shared`. That list holds the first
 64 shared leaves (`leaf`, `first`, `depth`, `texel_ownership: "shared"`,
 `triangles`); `shared_omitted` counts the rest. Every leaf that is not listed
 or omitted is `unique`. Ownership is all-or-nothing per leaf: one pair of
 overlapping footprints marks the whole leaf `shared`, so use `shared_triangles` (and
 a leaf row's `sharedTriangles`) over the leaf's `triangles` for the fraction of the
-leaf that is affected. `unique_proxies` is vacuous when no baker runs: untextured
-proxies have no pages to share. `source_coordinates` is `local-gltf` or
+leaf that is affected. `source_coordinates` is `local-gltf` or
 `source-crs`; `coordinates` is `local-gltf` or `wgs84-ecef`. A source CRS adds
 `source_crs` (definition, axes, source offset, height offset, `portable` or
 `native` operation, the chosen origin, `jacobian_lattice_cells` and
 `jacobian_exact_cells`) and reports its derived ENU frame as a
 `wgs84` placement at that origin. `root_transform` is null for local
 output, whose root has no transform, or the exact emitted column-major matrix
-for placed output. A parent tile's geometric error is its proxy's certified
-error ([H17 contract at `9a19c0e5`](https://github.com/BenDyson-Arch/rusty-tiles/blob/9a19c0e537ae3c7a7375f4e2039339b6599396a8/docs/architecture/h17-lod-contract.md)). Proxy textures are an
-appearance approximation (see [Coarse tile textures](#coarse-tile-textures)); no
-appearance certificate is fabricated, and baking never changes a proxy's
-geometry or geometric error.
+for placed output. A coarse tile's geometric error is its sampled, measured error
+([geometric error](#geometric-error-sampled-not-certified)); coarse textures are
+an appearance approximation with no appearance certificate
+([coarse appearance](#coarse-appearance)), and charting never changes a position or
+the error.
 
 Runtime diagnostics stay **outside the archive** so worker/scratch choices do
 not alter its semantic bytes. They include `requested_jobs`, `capture`,
-`leaf_delivery`, `archive_bytes`, `peak_held_records`, `phase_seconds` and
-`proxy_bake`. `phase_seconds` holds the wall seconds of `capture`, `leaf_build`,
-`lod_prepass`, `lod_simplify`, `seam_resolution`, `lod_finish`, `proxy_bake` and
-`archive` (the three middle LOD phases summed over depths). `proxy_bake` holds
-the baked `tiles`, `retried_tiles` (tiles that refused their worker's share of
-the bake memory and were baked again alone, serially), worker seconds per bake step (charts, raster, encode,
-assemble, commit; summed over workers, so they overlap) and the appearance
-fallback counts (`facing_fallback_samples`, `_faces`, `_tiles`;
-`fill_fallback_samples`). Stage objects describe
-worker admission and owned memory/scratch resources; their declared accounting
-is not an automatically measured RSS guarantee. Absolute scratch paths and
-resource observations are diagnostics, not semantic profile constants.
+`leaf_delivery`, `archive_bytes`, `peak_held_records`, `phase_seconds`, the
+`memory` budget and stage plan ([memory budget](#memory-budget)), and the coarse
+stage's `hlod` facts (tiles, workers, CPU seconds, lease peak, `error_measurement`
+and the per-depth appearance summary: page texels, covered texels, cap hits and the
+requested and achieved spacing). `memory` and `hlod` are present in every result.
+`phase_seconds` holds the wall seconds of `capture`, `leaf_build`, `hlod_incidence`,
+`hlod_geometry` and `archive`. Stage objects describe worker admission and owned
+memory/scratch resources; their declared accounting is not an automatically
+measured RSS guarantee. Absolute scratch paths and resource observations are
+diagnostics, not semantic profile constants.
 
 `--progress json` emits NDJSON work events on stderr with named phases and
 nullable totals: `conversion`, `capture`, then inside the leaf stage
-`leaf_build` (leaves), `lod_prepass`, `lod_simplify`, `seam_resolution` and
-`lod_finish` (each counting finished depths), `proxy_bake` (tiles), then
-`leaf_payloads`, `archive` and `ready_to_publish`. Each finished phase, and each
-LOD and bake depth, also logs its wall seconds and the run's elapsed seconds as
-a `log` event; the first 16 proxy tiles that take the facing fallback log their
-id, then one line says the rest are only counted.
+`leaf_build` (leaves), `hlod_incidence` and `hlod_geometry` (coarse stage), then
+`leaf_payloads`, `archive` and `ready_to_publish`. Each finished
+phase also logs its wall seconds and the run's elapsed seconds as a `log` event.
 Required events finish before publication; the returned
 successful result establishes installation. A post-install cleanup problem
 remains success with cleanup diagnostics.
@@ -590,6 +705,22 @@ output mode. `glb-to-3tz` / `glb_to_3tz` and `createTilesetJson` /
 `model_to_manifest` remain the separate exact-byte wrapping/sibling-manifest
 products.
 
+### Development builds before the HLOD coarse levels
+
+Builds made during 0.4.0 development used certified proxy geometry with a
+separate texture bake. That path was removed outright, with no switch, alias or
+compatibility mode; nothing in a release publishes its output. Scripts written
+against those builds need these changes:
+
+| Development build | Now |
+| --- | --- |
+| A parent's geometric error was a certified distance bound | A sampled, measured error ([not a certificate](#geometric-error-sampled-not-certified)) |
+| Coarse tiles carried `proxy_source` rows naming a source triangle | One representative `source_primitive` ID per coarse triangle; read leaves for exact provenance and annotation |
+| Phases `lod_prepass`, `lod_simplify`, `seam_resolution`, `lod_finish`, `proxy_bake`, and the `proxy_bake` diagnostics | Phases `hlod_incidence` and `hlod_geometry`; diagnostics `hlod` and `memory` |
+| Scratch diagnostics `lod_prepass` and `lod_prepass_scratch_peak_bytes` | `hlod_incidence` and `hlod_incidence_scratch_peak_bytes` |
+| A hidden coarse-tile selector (`--lod`) | Removed; there is one method |
+| A hidden, optional memory budget | The public [memory budget](#memory-budget); a budget always resolves |
+
 ## Known Cesium colour limitation
 
 CesiumJS 1.146.0 has a known KTX2 colour-filtering limitation. In the tested
@@ -611,25 +742,20 @@ adds no viewer-specific compensation.
 
 ### Colour space and lighting in CesiumJS
 
-What the tiler writes. Base colour and emissive pages of leaves and of baked
-coarse (proxy) tiles are sRGB-encoded: lossy profiles carry the sRGB transfer in
-the KTX2 container, and proxy pages are averaged in linear light and re-encoded
-to sRGB when baked. Metallic-roughness, occlusion and normal pages are linear
-data. The tiler's tests pin that a proxy's base colour uses the same sRGB
-transfer as its leaves and reproduces a flat source colour.
+What the tiler writes. Base colour and emissive pages of leaves and of coarse
+tiles are sRGB-encoded: lossy profiles carry the sRGB transfer in the KTX2
+container, and coarse pages are sampled in linear light and re-encoded to sRGB
+when baked. Metallic-roughness, occlusion and normal pages are linear data.
 
 Lit and unlit tiles. Whether a tile is lit depends on its vertex attributes, not
 on a setting of the tiler. A source without NORMAL (typical photogrammetry
 exports) gives leaves with POSITION and TEXCOORD_0 only, and CesiumJS 1.146
-draws such tiles unlit, so the texture colour is shown as sampled. Before
-commit `bc6b3710` (#237) the proxies of such a source also published NORMAL,
-TANGENT and COLOR_0. Cesium lit the proxies (darker, with a blue cast) and drew
-the leaves unlit, so a view that mixed the two showed hard seams and a visible
-tint step. Proxy primitives now publish NORMAL and COLOR_0 only where their
-source primitive's leaves carry them, and TANGENT only with a baked normal map
-(which brings NORMAL). Leaves and proxies of one source therefore shade the same
-way. A source that does carry normals is lit in Cesium for leaves and proxies
-alike, so its apparent brightness follows Cesium's lighting.
+draws such tiles unlit, so the texture colour is shown as sampled. Coarse tiles
+publish NORMAL only where the source carries normals, so a view that mixes leaves
+and coarse tiles of one source shades them the same way, without the hard seams
+and tint step a lit coarse tile beside unlit leaves would show. A source that does carry
+normals is lit in Cesium for leaves and coarse tiles alike, so its apparent
+brightness follows Cesium's lighting.
 
 What is verified and what is not.
 
@@ -637,7 +763,7 @@ What is verified and what is not.
   emissive) in the H19 probe, with numeric shader samples of KTX2 pages; the
   lit-versus-unlit mismatch and its removal on one 0.79M-triangle photogrammetry
   crop in CesiumJS 1.146 (a visual check by the maintainer, not a pixel measurement);
-  and the attribute set of proxies against leaves, which the tests pin.
+  and the coarse tiles' attribute set against the leaves, which the tests pin.
 - Not verified: how much of the filtering error shows on the unlit path as
   against the lit one (H19 measured sampled values, not a full rendered
   appearance); other CesiumJS versions, GPUs, browsers and viewers; whether PNG

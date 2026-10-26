@@ -21,6 +21,10 @@ crate-internal. Evidence: `~/.cache/rusty-tiles-evidence/h16-20261013/`
 > naming `proxyManifest` without an `hlod` record is refused. The coarse content
 > identity digest keeps its original domain string, so published accounting is
 > unchanged.
+>
+> **S7 note.** The declared memory budget ([memory budget](../MESH.md#memory-budget))
+> bounds archive preparation too: member GLB JSON is capped at 1 MiB, and the run
+> reserves H16's resident bound (`archive_minimum_bytes`) before the leaves are built.
 
 ## Input boundary
 
