@@ -1,5 +1,13 @@
 # H28 per-tile primitive batching: independent comparison tools
 
+> **`cmp_h28.py` is historical — 2026-10-26.** Its proxy-face identity reads H17's
+> `proxy_source` feature set (and its `fill` column), which HLOD slice S6 removed: HLOD
+> coarse tiles carry only a representative `source_primitive` set (D4), so the script
+> stops with `KeyError: 'proxy_source'` on current archives, including its same-build null
+> control. It is kept unchanged (its hash below still matches) as evidence for the
+> `h28-20261021` runs of H17-era archives; it is not an oracle for current output.
+> `overlap.py` reads only leaf `TEXCOORD_0` and remains usable.
+
 Retained oracles for `docs/architecture/h28-tile-batching-contract.md`. They share no
 code with the Rust writers: GLBs are decoded with the reference JavaScript meshopt decoder
 and read through numpy. Bulk output (reports, archives) stays in

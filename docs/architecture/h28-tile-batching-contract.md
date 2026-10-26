@@ -70,12 +70,13 @@ H28 makes each tile emit as few primitives as glTF semantics allow.
    page's MASK coverage fitting and receipts are aggregate: its surface samples
    are the union of its bindings' samples under the class's one alpha factor and
    cutoff, and one receipt set covers the page (a different cutoff is another
-   class and another page). Proxy page packing groups
-   charts by material class instead of source material. Charts stay per
-   (source primitive, material), and the raster still samples each face's own
-   source texture. A page's `material` is the class representative (the lowest
-   source material ID of the class), and child sampling checks the donor page
-   against the face's class.
+   class and another page). Coarse tiles (HLOD, D5) group faces by material
+   class and chart them afresh, with no source-primitive or source-UV chart
+   boundary; each textured class gets one content-sized page per bound slot,
+   baked from the nearest captured source surface of that class
+   (`mesh_large/hlod/appearance.rs`). (Historical, removed in S6: H27 charts per
+   (source primitive, material), each face sampling its own source texture, and
+   child sampling checking a donor page against the face's class.)
 5. **Texture-space ownership.** A tile is texture-editable exactly when no two
    triangles' decoded-UV footprints share interior area on any published page.
    For leaves it is computed after atlasing on the published f32 UVs with exact
@@ -83,18 +84,18 @@ H28 makes each tile emit as few primitives as glTF semantics allow.
    2^-56 (|uv| < 8). A triangle of zero exact area owns no interior. Two
    triangles are disjoint when one of the six edge-normal axes weakly separates
    their projections, evaluated exactly in i128. A coordinate outside that
-   domain counts its triangle as shared, which is conservative. Proxies are
-   unique by construction: the chart overlap test, disjoint packed chart
-   rectangles, and the raster double-coverage check, which still refuses a
-   violation. Each leaf row in `leaves.jsonl` records
+   domain counts its triangle as shared, which is conservative. Coarse tiles
+   are unique by construction: fresh charts reject interior overlap and their
+   packed rectangles are disjoint (`mesh_large/hlod/charts.rs`). (Historical: H27
+   also refused a raster double-coverage violation.) Each leaf row in `leaves.jsonl` records
    `texelOwnership` (`unique`/`shared`) and `sharedTriangles`.
    `conversion.json` records `texel_ownership`: unique and shared leaf counts,
    shared triangles, proxies (all unique), and the first 64 shared leaves by
    `(first, depth)` with an omitted count. Overlapping or wrapping source UVs
    never refuse a tile; such a tile is only vertex-space editable.
    Ownership is all-or-nothing per leaf; `sharedTriangles` over the leaf's
-   triangle count gives the affected fraction. `unique_proxies` is vacuous when no
-   baker runs (proxies carry no pages then).
+   triangle count gives the affected fraction. `unique_proxies` is vacuous for an
+   untextured coarse tile (it carries no pages).
 
 ## Feature-ID textures
 
@@ -125,7 +126,7 @@ pre-encode handoff, were removed in S6.)
 - A mipmapped source sampler in a non-lossless profile keeps a dedicated leaf page
   per binding (an original-source mip chain), so its source primitives do not
   merge in leaves. A texture without a sampler resolves to mipmapped sampling,
-  so this is the common case for exported scenes; proxies still merge them.
+  so this is the common case for exported scenes; coarse tiles still merge them.
   Sharing mip-chain pages needs its own appearance design (crops aligned per
   level, a truncated chain) and is left open. A class that overflows one page splits by page. Both are recorded
   limits, not refusals.
