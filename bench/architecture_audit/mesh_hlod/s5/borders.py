@@ -25,6 +25,7 @@ import hashlib
 import json
 import math
 import struct
+import time
 from fractions import Fraction
 
 from spatial import f32_point, WorkLimit, MAX_QUERY_CANDIDATES
@@ -69,6 +70,14 @@ def tile_border(store, tile, vertices, directed, require, stats):
 
     ``vertices`` holds the tile's rendered corner tuples and ``directed`` counts
     its nondegenerate directed edges by corner tuples."""
+    started = time.process_time()
+    try:
+        return _tile_border(store, tile, vertices, directed, require, stats)
+    finally:
+        stats['arcCpuSeconds'] += time.process_time() - started
+
+
+def _tile_border(store, tile, vertices, directed, require, stats):
     tid, lo, hi = int(tile['id']), tile['lo'], tile['hi']
     edges, points = {}, set()
     for kind, a, b in store.db.execute(
@@ -801,6 +810,7 @@ class Audit:
 def inspect(store, tiles, leaves, archive, require, audit_path=None, extent=None, census=None):
     """D11 audit after the census. Without a sidecar, contraction is refused."""
     census = census or {}
+    started = time.process_time()
     if audit_path is None:
         require(not census.get('contractedBorderArcs'), 'borderAudit',
                 'contracted borders cannot be certified without the S1b audit sidecar')
@@ -828,7 +838,7 @@ def inspect(store, tiles, leaves, archive, require, audit_path=None, extent=None
         audit.topology(t, r, e, retained)
     audit.omission(omitted)
     stats = dict(audit.stats)
-    stats.update(audited=True, sidecarSha256=hashlib.sha256(data).hexdigest(), sidecarBytes=len(data),
+    stats.update(auditCpuSeconds=time.process_time() - started, audited=True, sidecarSha256=hashlib.sha256(data).hexdigest(), sidecarBytes=len(data),
                  records=len(audit.records), omittedRecords=len(omitted), extent=extent)
     return stats
 

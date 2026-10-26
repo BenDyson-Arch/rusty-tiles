@@ -484,5 +484,6 @@ class Store:
                     contractedBorderArcs=d11['contractedBorderArcs'],
                     contractedBorderVertices=d11['contractedBorderVertices'],
                     borderArcs=d11['borderArcs'],
+                    borderArcCpuSeconds=d11['arcCpuSeconds'],
                     coarseTriangleCountBasis='expanded tile instances, summed across each tile contents; every payload is separately within the hard 8,192 (triangleCap)',
                     canonical=self.canonical_stats,candidateWork=self.work.used,workLimit=self.work.limit)
