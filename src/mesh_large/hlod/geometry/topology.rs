@@ -896,9 +896,11 @@ pub(super) mod tests {
         )
         .unwrap();
         let segments = [(a, b)].into_iter().collect();
-        assert!(missing(&m.triangles, &m.keys, &segments, &HashSet::default())
-            .0
-            .is_empty());
+        assert!(
+            missing(&m.triangles, &m.keys, &segments, &HashSet::default())
+                .0
+                .is_empty()
+        );
         assert_eq!(receipt.reconstructed_faces, 1);
     }
     #[test]

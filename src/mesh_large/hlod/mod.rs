@@ -487,6 +487,14 @@ pub struct DepthAppearance {
 pub struct HlodDiagnostics {
     pub audit: Option<audit::FileReceipt>,
     pub(crate) borders_by_depth: Vec<borders::DepthReceipt>,
+    /// Published content-less cells and the cap failures that originated them.
+    #[serde(rename = "omittedProxies")]
+    pub omitted_proxies: u64,
+    #[serde(rename = "omissionSources")]
+    pub omission_sources: u64,
+    /// One entry per captured tree depth, including depths with no omissions.
+    #[serde(rename = "omittedByDepth")]
+    pub omitted_by_depth: Vec<u64>,
     pub tiles: u64,
     pub jobs: u64,
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
@@ -640,12 +648,21 @@ pub(crate) fn produce(
         error_policy: error::POLICY,
         appearance: APPEARANCE_POLICY,
         triangle_cap: settings.cap as u64,
+        omitted_by_depth: vec![0; captured.tree.stats.height as usize],
+        borders_by_depth: (0..captured.tree.stats.height)
+            .map(|depth| borders::DepthReceipt {
+                depth,
+                ..Default::default()
+            })
+            .collect(),
         error_measurement: error::ErrorReport::new(settings.nearest_steps, settings.sampling),
         ..Default::default()
     };
     let mut diagnostics = HlodDiagnostics {
         jobs: input.plan.jobs,
         ledger_bytes: input.plan.ledger_bytes,
+        omitted_by_depth: report.omitted_by_depth.clone(),
+        borders_by_depth: report.borders_by_depth.clone(),
         ..Default::default()
     };
     let proxies_dir = input.stage.join("proxies");
@@ -657,7 +674,7 @@ pub(crate) fn produce(
         diagnostics.wall_seconds = started.elapsed().as_secs_f64();
         return Ok((report, diagnostics));
     }
-    // The incidence pass is capture's declared `lod_prepass` scratch stage.
+    // The incidence pass is capture's declared `hlod_incidence` scratch stage.
     input.phases.progress(Phase::HlodIncidence, 0, Some(1))?;
     let incidence_started = std::time::Instant::now();
     captured.scratch.begin_stage();
@@ -827,6 +844,9 @@ pub(crate) fn produce(
         .finished(Phase::HlodGeometry, walk_started.elapsed().as_secs_f64())?;
     diagnostics.error_measurement = report.error_measurement.clone();
     diagnostics.tiles = report.tiles;
+    diagnostics.omitted_proxies = report.omitted_proxies;
+    diagnostics.omission_sources = report.omission_sources;
+    diagnostics.omitted_by_depth = report.omitted_by_depth.clone();
     diagnostics.borders_by_depth = report.borders_by_depth.clone();
     diagnostics.appearance_by_depth = report.appearance_by_depth.clone();
     diagnostics.lease_peak_bytes = lease_peak;
@@ -1743,9 +1763,6 @@ fn walk(
                             }
                             report.omitted_proxies += 1;
                             let d = d as usize;
-                            if report.omitted_by_depth.len() <= d {
-                                report.omitted_by_depth.resize(d + 1, 0);
-                            }
                             report.omitted_by_depth[d] += 1;
                             report.borders_by_depth[d].omitted_cells += 1;
                             report.borders_by_depth[d].omission_sources +=

@@ -3009,6 +3009,13 @@ fn budget_equality_admits_and_one_below_refuses() {
     assert_eq!(first.diagnostics.leaf_delivery.cache_bytes, 0);
     assert_eq!(memory.hlod.texture_workspace_bytes, 0);
     let hlod = first.diagnostics.hlod.clone();
+    let public_summary = serde_json::to_value(&hlod).unwrap();
+    assert_eq!(public_summary["omittedProxies"], 0);
+    assert_eq!(public_summary["omissionSources"], 0);
+    let depths = public_summary["omittedByDepth"].as_array().unwrap();
+    assert!(!depths.is_empty());
+    assert!(depths.iter().all(|count| count == 0));
+    assert_eq!(depths.len(), hlod.borders_by_depth.len());
     assert!(hlod.tiles >= 3 && hlod.lease_peak_bytes <= memory.hlod.ledger_bytes);
     let minimum = memory.minimum_bytes;
     let exact = public(&input, &work.path().join("b.3tz"), Some(minimum), 3).unwrap();

@@ -557,13 +557,23 @@ fn omitted_cells_get_no_pages_textures_or_donor_work() {
         let manifest: Value =
             serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
         let hlod = &manifest["hlod"];
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        let diagnostics = &resources["hlod"]["diagnostics"];
+        for key in ["omittedProxies", "omissionSources", "omittedByDepth"] {
+            assert_eq!(diagnostics[key], hlod[key], "cap {cap}: {key}");
+        }
+        assert_eq!(diagnostics["borders_by_depth"], hlod["bordersByDepth"]);
+        let by_depth = diagnostics["omittedByDepth"].as_array().unwrap();
+        let borders = diagnostics["borders_by_depth"].as_array().unwrap();
+        assert_eq!(by_depth.len(), borders.len());
+        for (count, depth) in by_depth.iter().zip(borders) {
+            assert_eq!(count, &depth["omittedCells"]);
+        }
         omitted_any |= hlod["omittedProxies"].as_u64().unwrap() > 0;
         let proxies = rows(&dir.join("proxies.jsonl"));
         if proxies.is_empty() {
             all_omitted = true;
-            let resources: Value =
-                serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
-            let diagnostics = &resources["hlod"]["diagnostics"];
             let cache = &diagnostics["image_cache"];
             for key in ["hits", "misses", "peakResidentBytes"] {
                 assert_eq!(cache[key].as_u64(), Some(0), "cap {cap}: {diagnostics}");
