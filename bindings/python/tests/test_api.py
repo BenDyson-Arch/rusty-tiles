@@ -1107,6 +1107,56 @@ class WheelAPI(unittest.TestCase):
         self.assertIn("decodedContentBounds.skin", report["notInspected"])
         self.assertIn("scene transforms", report["notInspected"])
 
+    def test_validate_hlod_expectation(self):
+        # Review r12/r13: the HLOD expectation belongs to the caller or the archive's own
+        # declaration, never to payload labels whose removal it must detect. A tileset whose
+        # payloads carry no source identity passes as generic unless HLOD is expected.
+        payload = struct.pack("<9f", 0, 0, 0, 1, 0, 0, 0, 1, 0)
+        document = json.dumps({
+            "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}],
+            "nodes": [{"mesh": 0}], "buffers": [{"byteLength": 36}],
+            "bufferViews": [{"buffer": 0, "byteLength": 36}],
+            "accessors": [{"bufferView": 0, "componentType": 5126, "type": "VEC3",
+                           "count": 3, "min": [0, 0, 0], "max": [1, 1, 0]}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+        }).encode()
+        document += b" " * (-len(document) % 4)
+        glb = (struct.pack("<4sII", b"glTF", 2, 28 + len(document) + 36)
+               + struct.pack("<I4s", len(document), b"JSON") + document
+               + struct.pack("<I4s", 36, b"BIN\0") + payload)
+        archives = {}
+        for name in ("undeclared", "asset", "report"):
+            data = self.root / f"stripped-{name}"
+            data.mkdir()
+            (data / "a.glb").write_bytes(glb)
+            asset = {"version": "1.1"}
+            if name == "asset":
+                asset["extras"] = {"rustyTiles": {"lod": "hlod"}}
+            if name == "report":
+                (data / "conversion.json").write_text(json.dumps({"lod": "hlod"}))
+            (data / "tileset.json").write_text(json.dumps({
+                "asset": asset, "geometricError": 0,
+                "root": {"boundingVolume": {"box": [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]},
+                         "geometricError": 0, "content": {"uri": "a.glb"}},
+            }))
+            archives[name] = rusty_tiles.convert_to_3tz(
+                data, self.root / f"stripped-{name}.3tz").output
+        for name, archive in archives.items():
+            with self.assertRaisesRegex(rusty_tiles.TilesError, "hlodFeatureIds", msg=name):
+                rusty_tiles.validate(archive, expect_profile="hlod")
+            if name == "undeclared":
+                report = rusty_tiles.validate(archive)
+                self.assertNotIn("hlodFeatureIds", report["checks"])
+            else:
+                with self.assertRaisesRegex(rusty_tiles.TilesError, "hlodFeatureIds", msg=name):
+                    rusty_tiles.validate(archive)
+        missing = self.root / "absent.3tz"
+        for bad in ("HLOD", "h17", ""):
+            with self.assertRaises(ValueError, msg=bad):
+                rusty_tiles.validate(missing, expect_profile=bad)
+        with self.assertRaises(TypeError):
+            rusty_tiles.validate(missing, expect_profile=1)
+
     def test_validate_limit_surface(self):
         # VS-C: opt-in caps are None, overrides are validated before any I/O, a limit refusal
         # carries its structured cause, and the callback sees progress and can stop the run.

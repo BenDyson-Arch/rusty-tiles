@@ -116,13 +116,27 @@ def textured(material):
 IDENTITY = [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]
 KEYS = ('node_index','mesh_index','primitive_index','triangle_index')
 # D4 ties (owner, 2026-10-26): this oracle's distances are exact, so tau covers
-# only the producer's f64 arithmetic. On a well-conditioned evaluation each
-# coordinate difference of magnitude <= M = |centroid| + descendant source diagonal
-# rounds by <= 2**-52 * M, and its distance path (difference, projection,
-# interpolation, subtraction, squared sum, square root) has <= 8 such steps; the
-# allowance doubles that. An ill-conditioned producer evaluation that misses by
-# more than tau is refused as a producer defect, never widened into a tie.
+# only the producer's f64 arithmetic. It is a stated acceptance policy, not a
+# universal forward-error bound: it is sized for a well-conditioned evaluation
+# near the source (<= 8 roundings of magnitude M = |centroid| + descendant source
+# diagonal, doubled), and does not bound cancellation, ill-conditioned
+# projections or distances to a remote compact box (r13). A producer pick that
+# misses by more than tau is refused as a producer defect, never widened.
 TIE_ULPS = 16
+
+
+def tie_excess(named, minimum):
+    """sqrt(named) - sqrt(minimum) from exact squared distances, for reports.
+
+    The difference of squares is exact; dividing by the sum of the roots avoids the
+    cancellation that rounds a sub-ulp positive excess to zero (review r13). It is
+    zero only for an exact tie."""
+    difference=named-minimum
+    if difference<=0:
+        return 0.0
+    roots=Fraction(math.sqrt(named))+Fraction(math.sqrt(minimum))
+    # Underflowed roots: still report a positive, nonzero excess.
+    return float(difference/roots) or math.ulp(0.0) if roots else math.ulp(0.0)
 
 
 def within_tau(named, minimum, tau):
@@ -339,7 +353,7 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
             result['exemptCrackEvents']=store.db.execute("SELECT count(*) FROM exemptions WHERE kind='crack'").fetchone()[0]
             result['exemptCrackEventBasis']='deduplicated (tile,source-open-edge) positive sampled-width witnesses only; changed open edges are candidates, and unmeasured correspondences are not zero-gap proofs'
             result['exemptWindingEvents']=result['winding']['exemptWindingEvents']
-            ties=dict(accepted=0,maxExcess=0.0,maxTau=0.0,maxExcessOverTau=0.0,
+            ties=dict(accepted=0,exactTies=0,maxExcess=0.0,maxTau=0.0,maxExcessOverTau=0.0,
                       tolerance='exact oracle distances; tau = 16 * 2**-52 * (|centroid| + descendant source box diagonal) for producer arithmetic')
             for t in tiles:
                 if not t['children']: continue
@@ -362,11 +376,14 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                         named_distance=distance2(p,hit[1]['xyz'])
                         require(within_tau(named_distance,minimum,tau),'representativeIdentity',t['id'])
                         # Reporting only; the decision above is exact.
-                        excess=max(math.sqrt(named_distance)-math.sqrt(minimum),0.0)
+                        excess=tie_excess(named_distance,minimum)
                         ties['accepted']+=1
+                        ties['exactTies']+=named_distance==minimum
                         if excess>=ties['maxExcess']:
                             ties.update(maxExcess=excess,maxTau=tau)
-                        ties['maxExcessOverTau']=max(ties['maxExcessOverTau'],excess/tau)
+                        # Zero tau (all-zero source and centroid) admits only exact ties.
+                        ratio=excess/tau if tau>0 else (0.0 if excess==0 else math.inf)
+                        ties['maxExcessOverTau']=max(ties['maxExcessOverTau'],ratio)
                         want=hit[1]
                     representatives+=1
                     require(material_class(f['material'])==material_class(want['material']),'representativeMaterialClass',t['id'])

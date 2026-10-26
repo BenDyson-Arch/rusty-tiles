@@ -181,6 +181,34 @@ def generate(root):
         return thin,wide,[[x,y,z+w/8] for x,y,z in wide]
     local,ecef=sliver(0.0),sliver(6400000.0)
     big=(50000000,100000000)
+    # r13: an exact tie of two zero-area source faces at the origin (tau is zero),
+    # and a remote compact source pair whose float squared distances tie at 8192^2:
+    # naming the float-picked farther face fails at the origin and, at an ECEF
+    # offset, is a positive sub-ulp excess within tau that must not report as 0.
+    zero=[[0,0,0]]*3;L=8192.0
+    far=lambda o:[[o+L,w,0],[o+L,2*w,0],[o+L,w,w]]
+    near=lambda o:[[o+L,0,0],[o+L,w/4,0],[o+L,0,w/4]]
+    query=lambda o:[[o-1,-1,0],[o+1,-1,0],[o,2,0]]
+    for name,first,second,named,check,box,coarse,ties in (
+            ('allzero-exact-tie',zero,zero,1,None,(20000,40000),zero,dict(exactTies=1)),
+            ('remote-source-float-pick',far(0.0),near(0.0),0,'representativeIdentity',(20000,40000),query(0.0),None),
+            ('remote-source-exact-pick',far(0.0),near(0.0),1,None,(20000,40000),query(0.0),None),
+            ('positive-excess-reported',far(6400000.0),near(6400000.0),0,None,big,query(6400000.0),
+             dict(exactTies=0,positiveExcess=True))):
+        folder=root/name;folder.mkdir(exist_ok=True)
+        (folder/'coarse.glb').write_bytes(payload([coarse],leaf=False,primitive=named))
+        (folder/'left.glb').write_bytes(payload([first],leaf=True))
+        (folder/'right.glb').write_bytes(payload([second],leaf=True,primitive=1))
+        (folder/'tileset.json').write_text(json.dumps(dict(asset={'version':'1.1'},geometricError=0,
+            root=tile('coarse.glb',[tile('left.glb'),tile('right.glb')],box=box)),separators=(',',':')))
+        source=root/(name+'-source.json')
+        source.write_text(json.dumps({'triangles':{f'0,0,{p},0':dict(xyz=xyz,vertices=[0,1,2],
+            expanded_ordinal=p,material_index=0,material=controls.MATERIALS[0],
+            normals=controls.NORMALS,uvs=controls.UVS) for p,xyz in ((0,first),(1,second))}},separators=(',',':'))+'\n')
+        case=dict(name=name,oracleCheck=check,archiveCheck=None,source=source.name,
+            incidence=source_incidence([[first],[second]]))
+        if ties:case['ties']=ties
+        cases.append(case)
     for name,first,second,named,check,box in (
             ('tie-exact-later-primitive',t,t,1,None,(20000,40000)),
             ('tie-within-tau',t,[[x,y,z+2.0**-50] for x,y,z in t],1,None,(20000,40000)),
@@ -217,6 +245,12 @@ def run(root,binary=None):
             result=audit(folder,root/case['source'],scratch=root,work_limit=2_000_000)
             assert case['oracleCheck'] is None,(case,result)
             for key,value in case['incidence'].items():assert result[key]==value,(case['name'],key,result[key],value)
+            for key,value in case.get('ties',{}).items():
+                ties=result['representativeTies']
+                if key=='positiveExcess':
+                    assert 0<ties['maxExcess']<=ties['maxTau'] and ties['maxExcessOverTau']>0,(case['name'],ties)
+                else:
+                    assert ties[key]==value,(case['name'],key,ties)
             if 'coarseTriangles' in case:
                 assert result['representatives']==case['coarseTriangles'],result
                 assert result['maxCoarseTriangles']==case['coarseTriangles']<=8192,result

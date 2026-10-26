@@ -1,7 +1,7 @@
 //! Path-based bindings for the portable default build.
 use pyo3::{
     create_exception,
-    exceptions::{PyBaseException, PyException, PyTypeError},
+    exceptions::{PyBaseException, PyException, PyTypeError, PyValueError},
     prelude::*,
     types::{PyBool, PyDict, PyInt, PyList},
 };
@@ -949,19 +949,33 @@ impl ValidationPayloadsIter {
 /// `totalBytesRead`, `totalPayloadElements`, `containmentWorkUnits`, `containmentBytesRead`,
 /// `containmentDecodedBytes`) to non-negative ints below 2**64: a volume cap is set, a budget is
 /// replaced (values below the defaults are allowed). `scratch_dir` places validation scratch
-/// in that existing directory. `callback` receives progress events; raising from it (or
-/// Ctrl-C) stops the validation and the exception propagates.
+/// in that existing directory. `expect_profile="hlod"` requires the 0.4 HLOD profile whatever
+/// the archive's labels say: every payload must carry source identity and every HLOD check
+/// runs (an archive declaring HLOD itself is held to it anyway); any other value raises
+/// `ValueError` before the archive is opened. `callback` receives progress events; raising from
+/// it (or Ctrl-C) stops the validation and the exception propagates.
 #[pyfunction]
-#[pyo3(signature = (input, *, lazy_payloads = false, max_volume = None, scratch_dir = None, callback = None))]
+#[pyo3(signature = (input, *, lazy_payloads = false, max_volume = None, scratch_dir = None, expect_profile = None, callback = None))]
+#[allow(clippy::too_many_arguments)]
 fn validate(
     py: Python<'_>,
     input: PathBuf,
     lazy_payloads: bool,
     max_volume: Option<Bound<'_, PyAny>>,
     scratch_dir: Option<PathBuf>,
+    expect_profile: Option<String>,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<Py<PyAny>> {
-    use tiles_core::validate::{LimitKey, ValidationFailure, ValidationRequest};
+    use tiles_core::validate::{ExpectedProfile, LimitKey, ValidationFailure, ValidationRequest};
+    let expected = match expect_profile.as_deref() {
+        None => None,
+        Some("hlod") => Some(ExpectedProfile::Hlod),
+        Some(other) => {
+            return Err(PyValueError::new_err(format!(
+                "expect_profile must be \"hlod\", not {other:?}"
+            )))
+        }
+    };
     if callback
         .as_ref()
         .is_some_and(|callback| !callback.bind(py).is_callable())
@@ -969,6 +983,9 @@ fn validate(
         return Err(PyTypeError::new_err("callback must be callable"));
     }
     let mut request = ValidationRequest::new(input);
+    if let Some(profile) = expected {
+        request = request.expect_profile(profile);
+    }
     if let Some(mapping) = max_volume {
         let mapping = mapping
             .cast::<pyo3::types::PyMapping>()
