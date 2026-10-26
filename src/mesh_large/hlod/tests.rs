@@ -2,7 +2,7 @@
 //! bytes by an independent census (its own GLB decoder; interfaces derived from the decoded
 //! leaves alone, never from producer records), plus the controls that must fail.
 mod border_census;
-use super::{error::Schedule, Mutation, Settings, TilerLod};
+use super::{error::Schedule, Mutation, Settings};
 use crate::{
     content_integrity::meshopt::{self as codec, Mode},
     mesh_large::{
@@ -1007,7 +1007,6 @@ struct Run {
     leaf_triangles: u64,
     cap: usize,
     jobs: usize,
-    lod: TilerLod,
     mutation: Mutation,
     budget: Option<u64>,
     profile: LeafProfile,
@@ -1053,7 +1052,6 @@ impl Default for Run {
             leaf_triangles: 256,
             cap: 300,
             jobs: 2,
-            lod: TilerLod::Hlod,
             mutation: Mutation::None,
             budget: None,
             profile: LeafProfile::Balanced,
@@ -1070,7 +1068,6 @@ fn stage(input: &Path, out: &Path, run: &Run) -> Result<PathBuf, crate::JobFailu
         .with_jobs(NonZeroUsize::new(run.jobs).unwrap())
         .with_scratch_dir(&scratch)
         .with_leaf_triangles(run.leaf_triangles)
-        .with_lod(run.lod)
         .with_hlod_settings(Settings {
             audit_dir: Some(std::sync::Arc::new(out.with_extension("hlod-audit"))),
             cap: run.cap,
@@ -1078,9 +1075,6 @@ fn stage(input: &Path, out: &Path, run: &Run) -> Result<PathBuf, crate::JobFailu
             nearest_steps: run.nearest_steps,
             sampling: run.sampling,
         });
-    if run.lod == TilerLod::H17 {
-        request = request.with_lod_target(run.cap);
-    }
     if let Some(budget) = run.budget {
         request = request.with_memory_budget(budget);
     }
@@ -1134,7 +1128,7 @@ fn archive(dir: &Path, output: &Path) {
 }
 
 /// The full acceptance on one fixture: zero missing decoded segments/points at every
-/// tile, leaves byte-identical to the H17 run, the cap, valid representatives, and a
+/// tile, the cap, valid representatives, and a
 /// validated archive.
 fn accept(name: &str, source: &[Mesh], run: Run) -> Census {
     accept_with(name, source, run, false).0
@@ -1188,23 +1182,6 @@ fn accept_with(name: &str, source: &[Mesh], run: Run, defects: bool) -> (Census,
             assert!(g >= leaf_error);
         }
     }
-    // Leaves are H8's, byte for byte, whichever coarse method runs.
-    let h17 = stage(
-        &input,
-        &work.path().join("h17"),
-        &Run {
-            lod: TilerLod::H17,
-            leaf_triangles: run.leaf_triangles,
-            profile: run.profile,
-            ..Run::default()
-        },
-    )
-    .unwrap();
-    let mut a = files(&dir, "leaves");
-    a.extend(files(&dir, "leaves.jsonl"));
-    let mut b = files(&h17, "leaves");
-    b.extend(files(&h17, "leaves.jsonl"));
-    assert!(a == b, "{name}: HLOD leaves differ from H17's");
     archive(&dir, &work.path().join("out.3tz"));
     let manifest: Value =
         serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
@@ -1292,6 +1269,68 @@ fn canonical_decode_is_every_leaf_decode_and_survives_coarse_encoding() {
 fn sheet_is_crack_free_at_every_depth_mix_with_exact_leaves() {
     let census = accept("sheet", &sheet(), Run::default());
     assert!(census.shared_edges > 100, "{census:?}");
+}
+
+/// Leaves are H8's, byte for byte, whatever the coarse stage does: a different triangle cap
+/// (so different coarse tiles) leaves every leaf member and manifest row unchanged.
+#[test]
+fn leaves_do_not_depend_on_the_coarse_stage() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &sheet());
+    let a = stage(&input, &work.path().join("a"), &Run::default()).unwrap();
+    let b = stage(
+        &input,
+        &work.path().join("b"),
+        &Run {
+            cap: 2000,
+            ..Run::default()
+        },
+    )
+    .unwrap();
+    assert!(files(&a, "proxies") != files(&b, "proxies"));
+    let mut leaves_a = files(&a, "leaves");
+    leaves_a.extend(files(&a, "leaves.jsonl"));
+    let mut leaves_b = files(&b, "leaves");
+    leaves_b.extend(files(&b, "leaves.jsonl"));
+    assert!(leaves_a == leaves_b, "leaves differ between coarse caps");
+}
+
+/// The client-order decoder HLOD checks its own bytes with (`decode`) reads every leaf's
+/// meshopt streams and its 64-bit provenance columns exactly: the decoded `source_triangle`
+/// rows name every source triangle exactly once.
+#[test]
+fn decoder_reads_leaf_provenance_columns_exactly() {
+    let work = tempfile::tempdir().unwrap();
+    let source = sheet();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+    let mut seen = BTreeMap::<(u64, u64, u64), BTreeSet<u64>>::new();
+    let mut faces = 0usize;
+    for (uri, bytes) in files(&dir, "leaves") {
+        let decoded = super::decode::decode(&bytes).unwrap();
+        for face in &decoded.faces {
+            let (id, table) = face.feature(&decoded.tables, "source_triangle").unwrap();
+            let t = &decoded.tables[table];
+            assert_eq!(t.components["triangle_index"], "UINT64", "{uri}");
+            let column = |name: &str| t.columns[name][id as usize];
+            let primitive = (
+                column("node_index"),
+                column("mesh_index"),
+                column("primitive_index"),
+            );
+            assert!(seen
+                .entry(primitive)
+                .or_default()
+                .insert(column("triangle_index")));
+            faces += 1;
+        }
+    }
+    let expected: Vec<usize> = source.iter().map(|m| m.indices.len() / 3).collect();
+    assert_eq!(faces, expected.iter().sum::<usize>());
+    assert_eq!(seen.len(), expected.len());
+    for (triangles, count) in seen.values().zip(&expected) {
+        assert!(triangles.iter().copied().eq(0..*count as u64));
+    }
 }
 
 /// Owner decision (exact seams): a source T-junction is not a shared edge. Along the line the
@@ -1831,7 +1870,7 @@ fn single_child_chains_publish_their_content_once() {
     }
     let archive = work.path().join("chain.3tz");
     let result = public(&input, &archive, None, 2).unwrap();
-    assert!(result.diagnostics.hlod.unwrap().tiles >= 1);
+    assert!(result.diagnostics.hlod.tiles >= 1);
     // The chain cells are spliced out of the explicit hierarchy: no content-less tile below
     // content (Cesium would drop the coarse tile there before its replacements load), and
     // the coarse tile's children are its deeper renderable replacements.
@@ -2912,7 +2951,6 @@ fn public(
 ) -> Result<crate::TilerResult, crate::JobFailure> {
     let mut request = TilerRequest::new(input, output)
         .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(jobs).unwrap()))
-        .with_lod(TilerLod::Hlod)
         .with_test_leaf_triangles(256)
         .with_hlod_settings(test_settings(300))
         .with_test_spill(
@@ -2938,7 +2976,7 @@ fn budget_equality_admits_and_one_below_refuses() {
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &sheet());
     let first = public(&input, &work.path().join("a.3tz"), Some(64 << 30), 3).unwrap();
-    let memory = first.diagnostics.memory.clone().unwrap();
+    let memory = first.diagnostics.memory.clone();
     assert_eq!(memory.budget.resolved_bytes, 64 << 30);
     assert_eq!(
         first.diagnostics.leaf_delivery.page_bytes, 0,
@@ -2946,11 +2984,11 @@ fn budget_equality_admits_and_one_below_refuses() {
     );
     assert_eq!(first.diagnostics.leaf_delivery.cache_bytes, 0);
     assert_eq!(memory.hlod.texture_workspace_bytes, 0);
-    let hlod = first.diagnostics.hlod.clone().unwrap();
+    let hlod = first.diagnostics.hlod.clone();
     assert!(hlod.tiles >= 3 && hlod.lease_peak_bytes <= memory.hlod.ledger_bytes);
     let minimum = memory.minimum_bytes;
     let exact = public(&input, &work.path().join("b.3tz"), Some(minimum), 3).unwrap();
-    assert_eq!(exact.diagnostics.memory.unwrap().minimum_bytes, minimum);
+    assert_eq!(exact.diagnostics.memory.minimum_bytes, minimum);
     assert!(
         fs::read(work.path().join("a.3tz")).unwrap()
             == fs::read(work.path().join("b.3tz")).unwrap()
@@ -2963,15 +3001,7 @@ fn budget_equality_admits_and_one_below_refuses() {
         below.error
     );
     assert!(!work.path().join("c.3tz").exists());
-    // A budget names the HLOD path only; zero is refused.
-    let h17 = crate::mesh_large::mesh_to_tileset(
-        TilerRequest::new(&input, work.path().join("d.3tz"))
-            .with_test_leaf_triangles(256)
-            .with_memory_budget(1 << 30),
-        &RunControl::default(),
-    )
-    .unwrap_err();
-    assert_eq!(h17.error.kind(), JobErrorKind::InvalidRequest);
+    // Zero is refused.
     let zero = public(&input, &work.path().join("e.3tz"), Some(0), 1).unwrap_err();
     assert_eq!(zero.error.kind(), JobErrorKind::InvalidRequest);
     // The public archive's coarse members are the HLOD members.
@@ -2983,6 +3013,70 @@ fn budget_equality_admits_and_one_below_refuses() {
         coarse += usize::from(bytes.windows(25).any(|w| w == b"rusty_tiles_large_hlod_v1"));
     }
     assert_eq!(coarse as u64, hlod.tiles);
+}
+
+/// S6: the public operation's default path is HLOD, with nothing selected. A plain request
+/// (only smaller leaves, so the fixture has coarse levels) resolves the automatic budget,
+/// runs the HLOD phases and publishes a validated archive whose coarse members carry only
+/// the representative `source_primitive` table (D4): no `proxy_source`, vanish or fill
+/// records, no certificate fields, and monotone errors with content-less cells refining.
+#[test]
+fn default_public_path_publishes_hlod_coarse_tiles_without_h17_records() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &sheet());
+    let output = work.path().join("default.3tz");
+    let result = crate::mesh_large::mesh_to_tileset(
+        TilerRequest::new(&input, &output).with_test_leaf_triangles(256),
+        &RunControl::default(),
+    )
+    .unwrap();
+    let d = &result.diagnostics;
+    assert_ne!(
+        d.memory.budget.source,
+        crate::mesh_large::BudgetSource::Explicit
+    );
+    assert!(d.hlod.tiles >= 3, "{:?}", d.hlod.tiles);
+    assert!(d.phase_seconds.hlod_geometry > 0.);
+    let checked = inspect(ValidationRequest::new(&output)).unwrap();
+    assert!(checked
+        .checks
+        .iter()
+        .any(|c| c == "decodedContentContainment"));
+    check_errors(&expand_archive(&output).0);
+    let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
+    let (mut coarse, mut leaves) = (0u64, 0u64);
+    for i in 0..zip.len() {
+        let mut member = zip.by_index(i).unwrap();
+        let name = member.name().to_owned();
+        let mut bytes = Vec::new();
+        member.read_to_end(&mut bytes).unwrap();
+        for retired in [
+            &b"proxy_source"[..],
+            b"lod_vanished",
+            b"lod_filled",
+            b"certif",
+        ] {
+            assert!(
+                !bytes.windows(retired.len()).any(|w| w == retired),
+                "{name} holds {}",
+                String::from_utf8_lossy(retired)
+            );
+        }
+        if !name.ends_with(".glb") {
+            continue;
+        }
+        let decoded = super::decode::decode(&bytes).unwrap();
+        let classes: Vec<_> = decoded.tables.iter().map(|t| t.class.as_str()).collect();
+        if classes.contains(&"source_triangle") {
+            leaves += 1;
+        } else {
+            assert_eq!(classes, ["source_primitive"], "{name}");
+            assert!(decoded.faces.iter().all(|f| f.uniform_features), "{name}");
+            coarse += 1;
+        }
+    }
+    assert_eq!(coarse, d.hlod.tiles);
+    assert_eq!(leaves, result.report.leaves);
 }
 
 /// Cancellation inside the HLOD stage leaves no output and no scratch.
@@ -3014,7 +3108,6 @@ fn cancellation_during_hlod_cleans_up() {
     let output = work.path().join("cancelled.3tz");
     let failure = crate::mesh_large::mesh_to_tileset(
         TilerRequest::new(&input, &output)
-            .with_lod(TilerLod::Hlod)
             .with_test_leaf_triangles(256)
             .with_hlod_settings(test_settings(300))
             .with_scratch_dir(&scratch),
@@ -3164,7 +3257,6 @@ fn capture_hlod(input: &Path, leaf_triangles: u64) -> crate::mesh_large::full::F
         full,
     };
     let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(leaf_triangles);
-    config.lod = TilerLod::Hlod;
     config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
     full::capture(input, &config, &mut || Ok(())).unwrap()
 }
@@ -3646,7 +3738,6 @@ fn bake_donors_are_exact_across_close_parallel_sheets() {
     ];
     let input = write_gltf(&work.path().join("src"), &sheets);
     let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(256);
-    config.lod = TilerLod::Hlod;
     config.jobs = crate::mesh_large::config::Jobs::Fixed(NonZeroUsize::new(1).unwrap());
     let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
     let key = super::store::TileKey {
@@ -3776,7 +3867,6 @@ fn cold_donor_search_always_has_a_finite_witness() {
         )],
     );
     let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(256);
-    config.lod = TilerLod::Hlod;
     config.jobs = crate::mesh_large::config::Jobs::Fixed(NonZeroUsize::new(1).unwrap());
     let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
     let key = super::store::TileKey {
@@ -3883,7 +3973,6 @@ fn evidence_chords_s2_cost() {
             let result = crate::mesh_large::mesh_to_tileset(
                 TilerRequest::new(&input, &output)
                     .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(1).unwrap()))
-                    .with_lod(TilerLod::Hlod)
                     .with_test_leaf_triangles(crate::mesh_large::config::CONSUMER_TABLE_ROWS)
                     .with_hlod_settings(Settings {
                         nearest_steps: steps,
@@ -3894,7 +3983,7 @@ fn evidence_chords_s2_cost() {
             )
             .unwrap_or_else(|f| panic!("{}", f.error));
             let wall = started.elapsed().as_secs_f64();
-            let h = result.diagnostics.hlod.unwrap();
+            let h = result.diagnostics.hlod;
             let m = &h.error_measurement;
             let depths: Vec<Value> = m
                 .by_depth

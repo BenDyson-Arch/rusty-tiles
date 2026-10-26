@@ -479,9 +479,7 @@ pub(crate) fn check(
     locked: &[bool],
     encoded: &Encoded,
 ) -> Result<Vec<[f32; 3]>, JobError> {
-    // TODO(S6): this borrows H17's client-order decoder; move it under `hlod/` (or the S5
-    // validator's decoder) before `lod/` is deleted.
-    let decoded = crate::mesh_large::lod::codec::decode(&encoded.glb)?;
+    let decoded = super::decode::decode(&encoded.glb)?;
     let mut published = vec![[0.; 3]; tile.positions.len()];
     let what = || format!("coarse tile f{}-d{}", tile.key.first, tile.key.depth);
     if decoded.faces.len() != tile.triangles.len()

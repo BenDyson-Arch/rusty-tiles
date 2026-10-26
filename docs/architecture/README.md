@@ -7,8 +7,8 @@ work and sequencing. **0.4 ships Tiles 1.1 / glTF 2.0**, including implicit tili
 and the textured classic octree HLOD large-mesh tiler. Its owned tile data and output
 boundaries prepare for **0.6's official Tiles 2.0 / glTF 2.1 transition**.
 The [HLOD direction decision](hlod-040-decision.md) supersedes H17 certified
-coarse geometry and H27's per-texel bake; implementation and acceptance are
-pending. The roadmap also proposes #267's finite non-mesh bar for owner approval
+coarse geometry and H27's per-texel bake; S6 removed both, and HLOD is the only
+coarse path. Its integrated acceptance is pending. The roadmap also proposes #267's finite non-mesh bar for owner approval
 in this review; it is not yet an accepted exception to the foundation gate below.
 Draft experiments may inform design, but draft-format viewer support does not
 block 0.4. The [interrupted-track ledger](04-track-dispositions.md) records what

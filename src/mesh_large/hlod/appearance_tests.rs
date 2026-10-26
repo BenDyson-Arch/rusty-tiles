@@ -4,7 +4,7 @@
 //! coarse tangent frame, geometry and IDs are untouched by charting, image-free colourless
 //! input bypasses appearance, and vertex colours follow the source. Also the evidence
 //! lane measuring cut PSNR against the source in both directions.
-use super::{source_index, store::TileKey, TilerLod};
+use super::{source_index, store::TileKey};
 use crate::{
     content_integrity::meshopt::{self as codec, Filter, Mode},
     mesh_large::leaves::producer::{mesh_to_leaf_payloads, LeafOutputRequest, LeafProfile},
@@ -207,7 +207,6 @@ fn stage_capped(input: &Path, out: &Path, cap: usize) -> PathBuf {
         .with_jobs(NonZeroUsize::new(2).unwrap())
         .with_scratch_dir(&scratch)
         .with_leaf_triangles(256)
-        .with_lod(TilerLod::Hlod)
         .with_hlod_settings(super::tests::test_settings(cap));
     let dir = mesh_to_leaf_payloads(request, &RunControl::default())
         .unwrap()

@@ -1,13 +1,10 @@
 //! Private streamed mesh foundation. Tile producers will consume these owned spill records.
 //! Full capture owns attributes, images and the frozen lattice; H8 publishes full-detail
-//! leaves, H17 (`lod`) certifies the coarse tiles inside the H8 producer while the capture is
-//! live (or, selected explicitly, `hlod` builds 0.4 octree HLOD coarse tiles), and H16
-//! (`delivery`) publishes their hierarchy as a `.3tz`.
+//! leaves, `hlod` builds the 0.4 octree HLOD coarse tiles inside the H8 producer while the
+//! capture is live, and H16 (`delivery`) publishes their hierarchy as a `.3tz`.
 #![allow(dead_code)] // First concrete consumer is the diagnostic acceptance driver; tiler follows.
 
 mod attributes;
-mod bake;
-pub(in crate::mesh_large) mod bake_pass;
 mod batching;
 mod capture;
 mod config;
@@ -17,14 +14,13 @@ mod hlod;
 mod images;
 mod input;
 mod leaves;
-mod lod;
 mod phases;
 mod pipeline;
 mod records;
 mod resources;
 mod source_crs;
 mod tree;
-pub use hlod::{HlodDiagnostics, HlodMemoryPlan, TilerLod};
+pub use hlod::{HlodDiagnostics, HlodMemoryPlan};
 pub use pipeline::{
     mesh_to_tileset, MemoryDiagnostics, TilerDiagnostics, TilerJobs, TilerProfile, TilerReport,
     TilerRequest, TilerResult,

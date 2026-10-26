@@ -6,11 +6,21 @@ use std::{
     io,
     path::{Path, PathBuf},
 };
+/// A delivery profile the caller requires the archive to satisfy, independently of any
+/// label inside the archive.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExpectedProfile {
+    /// 0.4 octree HLOD: source identity on every payload and every HLOD delivery check
+    /// (continuity, cap, omission, cover, interfaces) are mandatory. Missing identity is a
+    /// refusal, never a fall-back to generic validation.
+    Hlod,
+}
 #[derive(Clone, Debug)]
 pub struct ValidationRequest {
     input: PathBuf,
     plan: LimitPlan,
     scratch_dir: Option<PathBuf>,
+    expected: Option<ExpectedProfile>,
 }
 impl ValidationRequest {
     pub fn new(input: impl Into<PathBuf>) -> Self {
@@ -18,7 +28,14 @@ impl ValidationRequest {
             input: input.into(),
             plan: LimitPlan::default(),
             scratch_dir: None,
+            expected: None,
         }
+    }
+    /// Requires `profile`. An archive declaring HLOD itself (`asset.extras.rustyTiles.lod` or
+    /// the conversion report's `lod`, equal to `"hlod"`) is held to it without this call.
+    pub fn expect_profile(mut self, profile: ExpectedProfile) -> Self {
+        self.expected = Some(profile);
+        self
     }
     /// Overrides one configurable limit (VS-C-3): a Class B volume cap is set, a Class C
     /// budget is replaced. Values below the default floors are allowed. A later call for the
@@ -40,6 +57,9 @@ impl ValidationRequest {
     }
     pub(crate) fn scratch(&self) -> Option<&Path> {
         self.scratch_dir.as_deref()
+    }
+    pub(crate) fn expected_profile(&self) -> Option<ExpectedProfile> {
+        self.expected
     }
 }
 /// A validator scratch failure (VS-C-5 T1): never a verdict on the archive.
@@ -238,9 +258,35 @@ pub struct ValidationReport {
     pub limit_derivation: LimitDerivation,
     /// One row per inspected payload URI, in URI byte order, read on demand.
     pub payloads: PayloadRows,
+    /// Exact item incidence derived from decoded leaf placements. Original-source
+    /// fidelity and source-open-edge exemptions require the source-aware audit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interface_census: Option<InterfaceCensus>,
     /// Present only when the catalog or the payload rows spilled to scratch.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scratch: Option<ScratchReport>,
+}
+/// Archive-only incidence, cap and omission observations; no producer counters are used.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterfaceCensus {
+    pub basis: &'static str,
+    pub shared_points: u64,
+    pub shared_segments: u64,
+    pub source_open_edges: u64,
+    pub source_open_edges_with_shared_endpoints: u64,
+    /// The largest payload, counted over all its scene instances; every payload is at
+    /// most the hard 8,192 (`triangleCap` refuses otherwise).
+    pub max_payload_triangles: u64,
+    /// Content-less delivered cells (placeholders excluded), by cell depth, and those
+    /// whose cell children all render. Derived from the hierarchy, compared with
+    /// producer reports only by the source-aware audit.
+    pub omitted_cells: u64,
+    pub omission_sources: u64,
+    pub omitted_by_depth: Vec<u64>,
+    /// Tiles of the first renderable cover and the renderable leaves it covers once.
+    pub frontier_tiles: u64,
+    pub frontier_leaves: u64,
 }
 /// The validation's scratch use, reported whenever any spill file was written.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -270,6 +316,9 @@ impl ValidationReport {
         value["storedBytes"] = self.stored_bytes.into();
         value["limits"] = serde_json::to_value(&self.limits)?;
         value["limitDerivation"] = serde_json::to_value(&self.limit_derivation)?;
+        if let Some(census) = &self.interface_census {
+            value["interfaceCensus"] = serde_json::to_value(census)?;
+        }
         if let Some(scratch) = self.scratch {
             value["scratch"] = serde_json::to_value(scratch)?;
         }

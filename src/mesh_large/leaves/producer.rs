@@ -58,10 +58,6 @@ pub struct LeafOutputRequest {
     profile: LeafProfile,
     jobs: Jobs,
     scratch_dir: Option<PathBuf>,
-    lod_mutation: super::super::lod::Mutation,
-    lod_target: usize,
-    baker: Option<std::sync::Arc<dyn super::super::bake_pass::ProxyBaker>>,
-    lod: super::super::hlod::TilerLod,
     memory_budget: Option<u64>,
     hlod: super::super::hlod::Settings,
     #[cfg(test)]
@@ -79,22 +75,13 @@ impl LeafOutputRequest {
             profile,
             jobs: Jobs::Auto,
             scratch_dir: None,
-            lod_mutation: super::super::lod::Mutation::None,
-            lod_target: super::super::lod::TARGET_FACES,
-            baker: None,
-            lod: super::super::hlod::TilerLod::H17,
             memory_budget: None,
             hlod: super::super::hlod::Settings::default(),
             #[cfg(test)]
             leaf_triangles: None,
         }
     }
-    /// Build coarse tiles with the 0.4 HLOD stage instead of H17.
-    pub(crate) fn with_lod(mut self, lod: super::super::hlod::TilerLod) -> Self {
-        self.lod = lod;
-        self
-    }
-    /// Declared memory budget (HLOD runs).
+    /// Declared memory budget (D8).
     pub(crate) fn with_memory_budget(mut self, bytes: u64) -> Self {
         self.memory_budget = Some(bytes);
         self
@@ -111,27 +98,6 @@ impl LeafOutputRequest {
     }
     pub fn with_scratch_dir(mut self, path: impl Into<PathBuf>) -> Self {
         self.scratch_dir = Some(path.into());
-        self
-    }
-    /// Test controls: run the coarse levels with a certificate mutation.
-    #[cfg(test)]
-    pub(crate) fn with_lod_mutation(mut self, mutation: super::super::lod::Mutation) -> Self {
-        self.lod_mutation = mutation;
-        self
-    }
-    /// Bake the coarse tiles' appearance (H13) after they are certified. Without a baker
-    /// the proxies stay untextured.
-    pub(in crate::mesh_large) fn with_baker(
-        mut self,
-        baker: std::sync::Arc<dyn super::super::bake_pass::ProxyBaker>,
-    ) -> Self {
-        self.baker = Some(baker);
-        self
-    }
-    /// Test fixtures: a smaller coarse-tile face target, so small inputs get deep LOD.
-    #[cfg(test)]
-    pub(crate) fn with_lod_target(mut self, target: usize) -> Self {
-        self.lod_target = target;
         self
     }
     /// Test fixtures: smaller leaves, so small inputs get several leaves and coarse levels.
@@ -151,7 +117,7 @@ pub struct LeafOutputReport {
     pub maximum_glb_bytes: u64,
     pub maximum_geometry_error: f64,
     pub density_reduced_leaves: u64,
-    /// H17 coarse tiles (untextured certified proxies) written beside the leaves.
+    /// HLOD coarse tiles written beside the leaves.
     pub proxies: u64,
     pub proxy_bytes: u64,
     /// Lossy pages delivered by a stronger UASTC step after their profile's
@@ -584,10 +550,9 @@ fn encode_leaf(
     config: &TreeConfig,
     leaves: &Path,
     index: u64,
-    preencode: Option<&super::super::bake_pass::PreencodeStore>,
 ) -> Result<LeafEncoded, JobError> {
     let node = &input.node;
-    leaf_encode(input, services, config, leaves, index, preencode).map_err(|error| {
+    leaf_encode(input, services, config, leaves, index).map_err(|error| {
         if error.kind() == JobErrorKind::Cancelled {
             return error;
         }
@@ -608,25 +573,9 @@ fn leaf_encode(
     config: &TreeConfig,
     leaves: &Path,
     index: u64,
-    preencode: Option<&super::super::bake_pass::PreencodeStore>,
 ) -> Result<LeafEncoded, JobError> {
     let node = &input.node;
     let captured = services.captured;
-    // The bake witness names each face by its global sorted rank: the leaf's records are
-    // read in rank order from `node.first`.
-    let ranks: std::collections::HashMap<_, _> = if preencode.is_some() {
-        input
-            .records
-            .iter()
-            .zip(node.first..)
-            .map(|(row, rank)| {
-                let s = row.triangle.source;
-                ((s.node, s.mesh, s.primitive, s.triangle), rank)
-            })
-            .collect()
-    } else {
-        Default::default()
-    };
     let ((glb, appearance), density_drop, density_reasons) = encode_with_density_budget(
         config.profile,
         u32::from(input.plan.density_drop),
@@ -639,7 +588,6 @@ fn leaf_encode(
                     config.profile,
                     node.depth() as u8,
                     density_drop,
-                    index,
                 ),
                 |atlas| {
                     let mut leaf = timing::time(Stage::GlbWrite, || {
@@ -656,12 +604,6 @@ fn leaf_encode(
                             (services.check)()
                         })
                     })?;
-                    let positions = std::mem::take(&mut leaf.positions);
-                    let normals = std::mem::take(&mut leaf.normals);
-                    if let Some(store) = preencode {
-                        let witness = super::witness::build(atlas, &positions, &normals, &ranks)?;
-                        store.write_leaf(index, density_drop, atlas, &witness)?;
-                    }
                     Ok(leaf)
                 },
             )
@@ -702,40 +644,9 @@ pub(crate) fn produce(
     phases: &Phases<'_>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<LeafStageOutput, JobError> {
-    use super::super::{bake_pass, lod::handoff::HandoffSink};
-    let (mutation, target, baker) = match coarse {
-        Coarse::H17 {
-            mutation,
-            target,
-            baker,
-        } => (mutation, target, baker),
-        Coarse::Hlod { .. } => (super::super::lod::Mutation::None, 0, None),
-    };
     let leaf_started = std::time::Instant::now();
     let total_leaves = captured.tree.stats.leaves;
     phases.progress(Phase::LeafBuild, 0, Some(total_leaves))?;
-    // With a baker: owned scratch for the accepted leaf pre-encode pages and the frozen
-    // tile packets.
-    let bake_dir = captured.scratch.path().join("bake");
-    // One allowance for both stores: half the scratch volume's free space, measured before
-    // the leaves are written (a failed probe is an error, never an allowance of zero). Both
-    // stores fill during H8 and H17 and drain only as the baker consumes them.
-    let (preencode, handoff) = match baker {
-        Some(_) => {
-            let volume = crate::spill::inspect_volume(captured.scratch.path())?;
-            let budget = std::sync::Arc::new(super::super::lod::handoff::ScratchBudget::new(
-                volume.available_bytes / 2,
-            ));
-            (
-                Some(bake_pass::PreencodeStore::new(
-                    bake_dir.join("preencode"),
-                    budget.clone(),
-                )?),
-                Some(HandoffSink::new(bake_dir.join("handoff"), budget)?),
-            )
-        }
-        None => (None, None),
-    };
     let leaves = path.join("leaves");
     fs::create_dir(&leaves).map_err(|e| JobError::io("create leaf directory", &leaves, e))?;
     let manifest_path = path.join("leaves.jsonl");
@@ -789,9 +700,7 @@ pub(crate) fn produce(
         gate: &gate,
         memory: stage.page_bytes,
         check: &leaf_check,
-        preencode: preencode.as_ref(),
     };
-    let preencode_ref = preencode.as_ref();
     let mut nodes = captured.tree.nodes.reader()?;
     let result = pool.in_place_scope(|scope| -> Result<(), JobError> {
         type Done = Result<(LeafEncoded, LeafInput), JobError>;
@@ -837,14 +746,7 @@ pub(crate) fn produce(
                         // writer never waits for a result that cannot come.
                         let encoded =
                             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                encode_leaf(
-                                    &input,
-                                    services,
-                                    config,
-                                    leaves_dir,
-                                    index,
-                                    preencode_ref,
-                                )
+                                encode_leaf(&input, services, config, leaves_dir, index)
                             }))
                             .unwrap_or_else(|_| Err(invariant("leaf worker panicked")));
                         // The receiver outlives every task of this scope.
@@ -891,136 +793,43 @@ pub(crate) fn produce(
         .map_err(|e| JobError::io("finish leaf manifest", &manifest_path, e))?;
     phases.progress(Phase::LeafBuild, total_leaves, Some(total_leaves))?;
     phases.finished(Phase::LeafBuild, leaf_started.elapsed().as_secs_f64())?;
-    if let Coarse::Hlod { plan, settings } = coarse {
-        // Opt-in stage timing: the leaf stage's share, before HLOD adds its own.
-        let leaf_timing = timing::snapshot();
-        // HLOD needs no decoded image or leaf worker: record the cache and page-gate
-        // observations, then release the decoded images and the pool before its own
-        // admission takes effect (the gate and services own no memory).
-        let stats = cache.stats();
-        let gate_peak = gate.peak();
-        drop(cache);
-        drop(pool);
-        let (hlod, hlod_diagnostics) = timing::time(Stage::Lod, || {
-            super::super::hlod::produce(
-                super::super::hlod::HlodInput {
-                    stage: path,
-                    captured,
-                    config,
-                    plan,
-                    settings,
-                    phases,
-                },
-                check,
-            )
-        })?;
-        report.proxies = hlod.tiles;
-        report.texel_ownership.unique_proxies = hlod.tiles;
-        report.proxy_bytes = hlod.bytes;
-        let doc = json!({"schemaVersion":1,"kind":"full_detail_leaf_payloads","report":report,"lattice":captured.lattice,"provenanceSchema":"rusty_tiles_large_source_v1","leafManifest":"leaves.jsonl","proxyManifest":"proxies.jsonl","hlod":hlod,"losslessMipGuarantee":"PNG level0 exact; viewer-generated minification levels outside guarantee"});
-        write_file(
-            &path.join("manifest.json"),
-            &serde_json::to_vec_pretty(&doc).map_err(|e| invariant(&e.to_string()))?,
-        )?;
-        let resources = json!({"hlod":{"plan":plan,"diagnostics":hlod_diagnostics},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate_peak,"sourceCache":stats});
-        write_file(
-            &path.join("resources.json"),
-            &serde_json::to_vec_pretty(&resources).map_err(|e| invariant(&e.to_string()))?,
-        )?;
-        timing::finish(json!({"lod":"hlod","leafStageTiming":leaf_timing}));
-        return Ok(LeafStageOutput {
-            report,
-            diagnostics: LeafStageDiagnostics {
-                memory_bound_bytes: stage.bound_bytes,
-                jobs: stage.jobs,
-                jobs_limited_by: stage.jobs_limited_by,
-                available_bytes: stage.available_bytes,
-                page_bytes: stage.page_bytes,
-                gate_bytes: stage.gate_bytes,
-                cache_bytes: stage.cache_bytes,
-                global_bytes: stage.global_bytes,
-                leaf_bytes: stage.leaf_bytes,
-                window: stage.window,
-                page_gate_peak_bytes: gate_peak,
-                cache_peak_resident_bytes: stats.peak_resident_bytes,
-                cache_hits: stats.hits,
-                cache_misses: stats.misses,
-                lod_prepass_scratch_peak_bytes: hlod_diagnostics.incidence_scratch_peak_bytes,
-            },
-            hlod: Some(hlod_diagnostics),
-        });
-    }
-    let mut lod = timing::time(Stage::Lod, || {
-        super::super::lod::produce(
-            super::super::lod::LodInput {
+    let Coarse { plan, settings } = coarse;
+    // Opt-in stage timing: the leaf stage's share, before HLOD adds its own.
+    let leaf_timing = timing::snapshot();
+    // HLOD needs no decoded image or leaf worker: record the cache and page-gate
+    // observations, then release the decoded images and the pool before its own
+    // admission takes effect (the gate and services own no memory).
+    let stats = cache.stats();
+    let gate_peak = gate.peak();
+    drop(cache);
+    drop(pool);
+    let (hlod, hlod_diagnostics) = timing::time(Stage::Lod, || {
+        super::super::hlod::produce(
+            super::super::hlod::HlodInput {
                 stage: path,
                 captured,
-                scratch: &captured.scratch,
-                sort: config.sorter(stage.jobs as usize),
-                jobs: stage.jobs as usize,
-                mutation,
-                target,
-                handoff: handoff.as_ref(),
+                config,
+                plan,
+                settings,
                 phases,
             },
             check,
         )
     })?;
-    report.proxies = lod.proxies;
-    report.texel_ownership.unique_proxies = lod.proxies;
-    report.proxy_bytes = lod.proxy_bytes;
-    // The bake hook: capture and staging are still live here.
-    if let (Some(baker), Some(handoff), Some(preencode)) = (baker, &handoff, &preencode) {
-        let pass = bake_pass::BakePass::new(
-            captured,
-            config.profile,
-            config.tile_bytes(),
-            stage.jobs as usize,
-            path,
-            handoff,
-            preencode,
-            phases,
-            check,
-        );
-        let bake_started = std::time::Instant::now();
-        let baked = baker.bake(&pass);
-        // The totals are logged on failure too: they show how far the bake got.
-        let summary = phases.bake_summary();
-        baked?;
-        summary?;
-        phases.finished(Phase::ProxyBake, bake_started.elapsed().as_secs_f64())?;
-        // The manifest reports the published (baked) proxy bytes, and keeps the certified
-        // untextured figure beside them.
-        let baked = pass.finish()?;
-        lod.untextured_proxy_bytes = Some(lod.proxy_bytes);
-        lod.proxy_bytes = baked;
-        report.proxy_bytes = baked;
-    }
-    drop(handoff);
-    drop(preencode);
-    if bake_dir.exists() {
-        fs::remove_dir_all(&bake_dir)
-            .map_err(|e| JobError::io("remove bake scratch", &bake_dir, e))?;
-    }
-    let doc = json!({"schemaVersion":1,"kind":"full_detail_leaf_payloads","report":report,"lattice":captured.lattice,"provenanceSchema":"rusty_tiles_large_source_v1","leafManifest":"leaves.jsonl","proxyManifest":"proxies.jsonl","lod":lod,"losslessMipGuarantee":"PNG level0 exact; viewer-generated minification levels outside guarantee"});
+    report.proxies = hlod.tiles;
+    report.texel_ownership.unique_proxies = hlod.tiles;
+    report.proxy_bytes = hlod.bytes;
+    let doc = json!({"schemaVersion":1,"kind":"full_detail_leaf_payloads","report":report,"lattice":captured.lattice,"provenanceSchema":"rusty_tiles_large_source_v1","leafManifest":"leaves.jsonl","proxyManifest":"proxies.jsonl","hlod":hlod,"losslessMipGuarantee":"PNG level0 exact; viewer-generated minification levels outside guarantee"});
     write_file(
         &path.join("manifest.json"),
         &serde_json::to_vec_pretty(&doc).map_err(|e| invariant(&e.to_string()))?,
     )?;
-    let resources = json!({"lod":{"jobs":lod.jobs,"tileRuns":lod.tile_runs,"seconds":lod.seconds,"prepassSeconds":lod.prepass_seconds,"auditSeconds":lod.audit_seconds,"phaseSeconds":{"loadChildren":lod.phase_seconds[0],"islandsSeams":lod.phase_seconds[1],"simplify":lod.phase_seconds[2],"encodeComposed":lod.phase_seconds[3],"direct":lod.phase_seconds[4],"primitivesFills":lod.phase_seconds[5],"finalEncode":lod.phase_seconds[6],"encodeUnfilled":lod.phase_seconds[7],"proxyToChildren":lod.phase_seconds[8],"childrenToProxy":lod.phase_seconds[9]}},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats(),"nativeWorkspace":"conservative provisional charge; measured scale acceptance recorded separately"});
+    let resources = json!({"hlod":{"plan":plan,"diagnostics":hlod_diagnostics},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate_peak,"sourceCache":stats});
     write_file(
         &path.join("resources.json"),
         &serde_json::to_vec_pretty(&resources).map_err(|e| invariant(&e.to_string()))?,
     )?;
-    let source_texels: u64 = captured
-        .image_info
-        .iter()
-        .map(|i| u64::from(i.width) * u64::from(i.height))
-        .sum();
-    timing::finish(
-        json!({"profile":profile,"leaves":report.leaves,"triangles":report.triangles,"glbBytes":report.glb_bytes,"sourceImages":captured.image_info.len(),"sourceTexels":source_texels,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats()}),
-    );
-    let stats = cache.stats();
+    timing::finish(json!({"lod":"hlod","leafStageTiming":leaf_timing}));
     Ok(LeafStageOutput {
         report,
         diagnostics: LeafStageDiagnostics {
@@ -1034,13 +843,13 @@ pub(crate) fn produce(
             global_bytes: stage.global_bytes,
             leaf_bytes: stage.leaf_bytes,
             window: stage.window,
-            page_gate_peak_bytes: gate.peak(),
+            page_gate_peak_bytes: gate_peak,
             cache_peak_resident_bytes: stats.peak_resident_bytes,
             cache_hits: stats.hits,
             cache_misses: stats.misses,
-            lod_prepass_scratch_peak_bytes: lod.prepass_scratch_peak_bytes,
+            lod_prepass_scratch_peak_bytes: hlod_diagnostics.incidence_scratch_peak_bytes,
         },
-        hlod: None,
+        hlod: hlod_diagnostics,
     })
 }
 
@@ -1060,31 +869,22 @@ pub struct LeafStageDiagnostics {
     pub cache_peak_resident_bytes: u64,
     pub cache_hits: u64,
     pub cache_misses: u64,
-    /// Measured scratch peak of H17's pre-pass, retained capture files included (0 when
-    /// the tree has no internal tile and the pre-pass does not run).
+    /// Measured scratch peak of the HLOD incidence pass, retained capture files included.
     pub lod_prepass_scratch_peak_bytes: u64,
 }
 pub(crate) struct LeafStageOutput {
     pub report: LeafOutputReport,
     pub diagnostics: LeafStageDiagnostics,
-    /// HLOD stage run facts (HLOD runs only).
-    pub hlod: Option<super::super::hlod::HlodDiagnostics>,
+    /// HLOD stage run facts.
+    pub hlod: super::super::hlod::HlodDiagnostics,
 }
 
-/// The coarse-tile stage run inside the producer while the capture is live.
+/// The HLOD coarse-tile stage run inside the producer while the capture is live, under
+/// its admitted memory plan.
 #[derive(Clone, Copy)]
-pub(crate) enum Coarse<'a> {
-    /// H17 certified geometry, optionally textured by the H27 bake.
-    H17 {
-        mutation: super::super::lod::Mutation,
-        target: usize,
-        baker: Option<&'a dyn super::super::bake_pass::ProxyBaker>,
-    },
-    /// 0.4 HLOD geometry under its admitted memory plan.
-    Hlod {
-        plan: &'a super::super::hlod::HlodMemoryPlan,
-        settings: &'a super::super::hlod::Settings,
-    },
+pub(crate) struct Coarse<'a> {
+    pub plan: &'a super::super::hlod::HlodMemoryPlan,
+    pub settings: &'a super::super::hlod::Settings,
 }
 
 fn write_leaf(
@@ -1207,26 +1007,15 @@ pub fn mesh_to_leaf_payloads(
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs;
     config.scratch_dir = request.scratch_dir;
-    config.lod = request.lod;
     #[cfg(test)]
     if let Some(leaf_triangles) = request.leaf_triangles {
         config = config.with_leaf_triangles(leaf_triangles);
     }
-    match request.lod {
-        super::super::hlod::TilerLod::Hlod => {
-            config.memory_budget = Some(
-                crate::mesh_large::resources::MemoryBudget::resolve(request.memory_budget)
-                    .map_err(|e| attempt.fail(e))?,
-            );
-        }
-        super::super::hlod::TilerLod::H17 if request.memory_budget.is_some() => {
-            return Err(attempt.fail(JobError::new(
-                JobErrorKind::InvalidRequest,
-                "a memory budget requires the HLOD coarse-tile method",
-            )));
-        }
-        super::super::hlod::TilerLod::H17 => {}
-    }
+    let budget = match crate::mesh_large::resources::MemoryBudget::resolve(request.memory_budget) {
+        Ok(budget) => budget,
+        Err(error) => return Err(attempt.fail(error)),
+    };
+    config.memory_budget = Some(budget);
     let captured = match timing::time(Stage::Capture, || {
         full::capture(&request.input, &config, &mut || attempt.check())
     }) {
@@ -1247,29 +1036,17 @@ pub fn mesh_to_leaf_payloads(
             return Err(failed);
         }
     };
-    let hlod_plan = match &config.memory_budget {
-        Some(budget) if config.lod == super::super::hlod::TilerLod::Hlod => {
-            match super::super::hlod::plan(&captured, &config, budget, &request.hlod) {
-                Ok(plan) => Some(plan),
-                Err(error) => {
-                    let mut failed = attempt.fail(error);
-                    close_failed_capture(captured, &mut failed);
-                    return Err(failed);
-                }
-            }
+    let hlod_plan = match super::super::hlod::plan(&captured, &config, &budget, &request.hlod) {
+        Ok(plan) => plan,
+        Err(error) => {
+            let mut failed = attempt.fail(error);
+            close_failed_capture(captured, &mut failed);
+            return Err(failed);
         }
-        _ => None,
     };
-    let coarse = match &hlod_plan {
-        Some(plan) => Coarse::Hlod {
-            plan,
-            settings: &request.hlod,
-        },
-        None => Coarse::H17 {
-            mutation: request.lod_mutation,
-            target: request.lod_target,
-            baker: request.baker.as_deref(),
-        },
+    let coarse = Coarse {
+        plan: &hlod_plan,
+        settings: &request.hlod,
     };
     let stage = match target.stage_pending(&attempt) {
         Ok(stage) => stage,
@@ -1681,7 +1458,7 @@ mod tests {
             let row: serde_json::Value = serde_json::from_str(row).unwrap();
             files.push(fs::read(output.join(row["uri"].as_str().unwrap())).unwrap());
         }
-        // H17 coarse tiles are part of the deterministic output too.
+        // HLOD coarse tiles are part of the deterministic output too.
         let proxies = fs::read_to_string(output.join("proxies.jsonl")).unwrap();
         files.push(proxies.as_bytes().to_vec());
         for row in proxies.lines() {

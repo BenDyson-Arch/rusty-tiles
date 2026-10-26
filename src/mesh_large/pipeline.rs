@@ -3,10 +3,10 @@ use super::{
     config::{Jobs, TreeConfig},
     delivery::{self, DeliveryFacts, MeshTilesetRequest},
     full,
-    hlod::{HlodDiagnostics, HlodMemoryPlan, TilerLod},
+    hlod::{HlodDiagnostics, HlodMemoryPlan},
     input::StreamSource,
     leaves::producer,
-    phases::{Phase, PhaseSeconds, Phases, ProxyBakeDiagnostics},
+    phases::{Phase, PhaseSeconds, Phases},
     resources::MemoryBudget,
     source_crs::{MeshSourceCrs, MeshSourceCrsReport},
 };
@@ -78,7 +78,6 @@ pub struct TilerRequest {
     placement: MeshPlacement,
     source_crs: Option<MeshSourceCrs>,
     policy: OutputPolicy,
-    lod: TilerLod,
     memory_budget: Option<u64>,
     #[cfg(test)]
     hlod: super::hlod::Settings,
@@ -100,7 +99,6 @@ impl TilerRequest {
             placement: MeshPlacement::Local,
             source_crs: None,
             policy: OutputPolicy::CreateNew,
-            lod: TilerLod::H17,
             memory_budget: None,
             #[cfg(test)]
             hlod: super::hlod::Settings::default(),
@@ -110,15 +108,8 @@ impl TilerRequest {
             test_spill: None,
         }
     }
-    /// Coarse-tile method (hidden while H17 is the default): `Hlod` selects the 0.4 octree
-    /// HLOD geometry, untextured with a provisional error until its later slices land.
-    #[doc(hidden)]
-    pub fn with_lod(mut self, lod: TilerLod) -> Self {
-        self.lod = lod;
-        self
-    }
-    /// Declared memory budget in bytes (D8), a ceiling for every stage of an HLOD run.
-    /// Without one, HLOD runs resolve the lesser of 4 GiB and half the detected headroom
+    /// Declared memory budget in bytes (D8), a ceiling for every stage of the run.
+    /// Without one, a run resolves the lesser of 4 GiB and half the detected headroom
     /// (2 GiB when undetected). Zero is refused.
     #[doc(hidden)]
     pub fn with_memory_budget(mut self, bytes: u64) -> Self {
@@ -288,7 +279,7 @@ pub struct CaptureDiagnostics {
     pub scratch_stage_peak_bytes: super::full::ScratchStages,
     /// Output-side admission reservation on the work directory and output filesystems.
     pub output_reserve_bytes: u64,
-    /// Whole-run spill peak, including H17 and the bake; at most `scratch_logical_need_bytes`.
+    /// Whole-run spill peak, including the HLOD stage; at most `scratch_logical_need_bytes`.
     pub run_scratch_peak_bytes: u64,
 }
 #[derive(Clone, Debug, Serialize)]
@@ -300,12 +291,10 @@ pub struct TilerDiagnostics {
     pub peak_held_records: u64,
     /// Wall seconds of each named phase of the run.
     pub phase_seconds: PhaseSeconds,
-    /// Proxy bake totals: tiles, per-step worker seconds, appearance fallbacks.
-    pub proxy_bake: ProxyBakeDiagnostics,
-    /// The declared budget and each stage's admission (HLOD runs).
-    pub memory: Option<MemoryDiagnostics>,
-    /// HLOD stage run facts (HLOD runs).
-    pub hlod: Option<HlodDiagnostics>,
+    /// The declared budget and each stage's admission.
+    pub memory: MemoryDiagnostics,
+    /// HLOD stage run facts.
+    pub hlod: HlodDiagnostics,
 }
 
 /// D8: the resolved budget and what each stage planned and needed under it.
@@ -397,19 +386,8 @@ pub fn mesh_to_tileset(
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs.into();
     config.source_crs = request.source_crs.clone();
-    config.lod = request.lod;
-    match request.lod {
-        TilerLod::Hlod => {
-            config.memory_budget =
-                Some(MemoryBudget::resolve(request.memory_budget).map_err(|e| attempt.fail(e))?)
-        }
-        TilerLod::H17 if request.memory_budget.is_some() => {
-            return Err(attempt.fail(invalid(
-                "a memory budget requires the HLOD coarse-tile method (--lod hlod)",
-            )))
-        }
-        TilerLod::H17 => {}
-    }
+    let budget = MemoryBudget::resolve(request.memory_budget).map_err(|e| attempt.fail(e))?;
+    config.memory_budget = Some(budget);
     #[cfg(test)]
     if let Some(leaf_triangles) = request.leaf_triangles {
         config = config.with_leaf_triangles(leaf_triangles);
@@ -484,74 +462,49 @@ pub fn mesh_to_tileset(
         let settings = &request.hlod;
         #[cfg(not(test))]
         let settings = &super::hlod::Settings::default();
-        let (hlod_plan, memory) = match &config.memory_budget {
-            Some(budget) => {
-                let hlod = super::hlod::plan(&captured, &config, budget, &settings)?;
-                let c = &captured.report;
-                let capture_minimum = c
-                    .jobs
-                    .base_memory_bytes
-                    .saturating_add(c.jobs.per_job_memory_bytes)
-                    .saturating_add(c.jobs.memory_backed_scratch_bytes);
-                let tmpfs = if captured.scratch.memory_backed() {
-                    c.scratch.need_bytes
-                } else {
-                    0
-                };
-                let archive_minimum = c
-                    .memory
-                    .owned_metadata_bytes
-                    .saturating_add(c.memory.geometry.document_bytes)
-                    .saturating_add(256 << 20)
-                    .saturating_add(tmpfs)
-                    .saturating_add(delivery::resident_bound(
-                        delivery::source::TILER_MAX_GLB_JSON,
-                    ));
-                let available = budget.ceiling(super::config::available_memory());
-                if available < archive_minimum {
-                    return Err(JobError::new(
-                        JobErrorKind::ResourceLimit,
-                        format!(
-                            "archive preparation needs at least {archive_minimum} bytes but the \
-                             memory budget allows {available}"
-                        ),
-                    ));
-                }
-                let memory = MemoryDiagnostics {
-                    budget: *budget,
-                    minimum_bytes: capture_minimum
-                        .max(plan.minimum_bytes())
-                        .max(hlod.minimum_bytes)
-                        .max(archive_minimum),
-                    archive_minimum_bytes: archive_minimum,
-                    capture_minimum_bytes: capture_minimum,
-                    capture_bound_bytes: c.memory.bound_bytes,
-                    leaf_minimum_bytes: plan.minimum_bytes(),
-                    leaf_bound_bytes: plan.bound_bytes(),
-                    hlod: hlod.clone(),
-                };
-                (Some(hlod), Some(memory))
-            }
-            None => (None, None),
+        let hlod = super::hlod::plan(&captured, &config, &budget, settings)?;
+        let c = &captured.report;
+        let capture_minimum = c
+            .jobs
+            .base_memory_bytes
+            .saturating_add(c.jobs.per_job_memory_bytes)
+            .saturating_add(c.jobs.memory_backed_scratch_bytes);
+        let tmpfs = if captured.scratch.memory_backed() {
+            c.scratch.need_bytes
+        } else {
+            0
         };
-        // H27: the coarse tiles are textured by the bake core, with its stage policy
-        // resolved once from this run (memory, source cache, query work, page edge).
-        let baker = match config.lod {
-            TilerLod::H17 => Some(super::bake::integration::ProxyTextureBaker::for_stage(
-                config.profile,
-                &captured,
-            )?),
-            TilerLod::Hlod => None,
-        };
-        let coarse = match &hlod_plan {
-            Some(plan) => producer::Coarse::Hlod { plan, settings },
-            None => producer::Coarse::H17 {
-                mutation: super::lod::Mutation::None,
-                target: super::lod::TARGET_FACES,
-                baker: baker
-                    .as_ref()
-                    .map(|b| b as &dyn super::bake_pass::ProxyBaker),
-            },
+        let archive_minimum = c
+            .memory
+            .owned_metadata_bytes
+            .saturating_add(c.memory.geometry.document_bytes)
+            .saturating_add(256 << 20)
+            .saturating_add(tmpfs)
+            .saturating_add(delivery::resident_bound(
+                delivery::source::TILER_MAX_GLB_JSON,
+            ));
+        let available = budget.ceiling(super::config::available_memory());
+        if available < archive_minimum {
+            return Err(JobError::new(
+                JobErrorKind::ResourceLimit,
+                format!(
+                    "archive preparation needs at least {archive_minimum} bytes but the \
+                     memory budget allows {available}"
+                ),
+            ));
+        }
+        let memory = MemoryDiagnostics {
+            budget,
+            minimum_bytes: capture_minimum
+                .max(plan.minimum_bytes())
+                .max(hlod.minimum_bytes)
+                .max(archive_minimum),
+            archive_minimum_bytes: archive_minimum,
+            capture_minimum_bytes: capture_minimum,
+            capture_bound_bytes: c.memory.bound_bytes,
+            leaf_minimum_bytes: plan.minimum_bytes(),
+            leaf_bound_bytes: plan.bound_bytes(),
+            hlod: hlod.clone(),
         };
         let leaf = producer::produce(
             work.path(),
@@ -559,7 +512,10 @@ pub fn mesh_to_tileset(
             &config,
             &plan,
             request.profile,
-            coarse,
+            producer::Coarse {
+                plan: &hlod,
+                settings,
+            },
             &phases,
             &|| attempt.check(),
         )?;
@@ -568,7 +524,7 @@ pub fn mesh_to_tileset(
             done: leaf.report.leaves,
             total: Some(leaf.report.leaves),
         })?;
-        // H17 certified the coarse tiles inside the producer, while the capture was live;
+        // HLOD built the coarse tiles inside the producer, while the capture was live;
         // delivery publishes them with the leaves.
         let delivery_request = MeshTilesetRequest::new(work.path(), &output);
         // A source CRS derives the root placement from the captured origin.
@@ -583,11 +539,8 @@ pub fn mesh_to_tileset(
                 serde_json::to_vec(&TilerReport::new(&captured.report, &leaf.report, facts))
                     .map_err(|e| JobError::new(JobErrorKind::InvalidState, e.to_string()))
             },
-            // A budgeted run charged archive preparation for its own small members.
-            match config.memory_budget {
-                Some(_) => delivery::source::TILER_MAX_GLB_JSON,
-                None => delivery::source::MAX_GLB_JSON,
-            },
+            // The run's budget charged archive preparation for its own small members.
+            delivery::source::TILER_MAX_GLB_JSON,
         )?;
         let report = TilerReport::new(&captured.report, &leaf.report, &prepared.facts());
         let (delivered, archive_bytes) = delivery::write_prepared(
@@ -599,9 +552,8 @@ pub fn mesh_to_tileset(
         phases.progress(Phase::Archive, 1, Some(1))?;
         phases.finished(Phase::Archive, archive_started.elapsed().as_secs_f64())?;
         let c = &captured.report;
-        // Every spill stage after capture (H17 pre-pass, coarse levels, bake) shares the
-        // admitted scratch: the whole-run peak must stay within the declared need. LOD proxy
-        // sidecars and bake handoff files are budgeted by their owners and not counted here.
+        // Every spill stage after capture (HLOD incidence, source index, coarse levels) shares
+        // the admitted scratch: the whole-run peak must stay within the declared need.
         let run_scratch_peak_bytes = captured.scratch.peak_bytes();
         if run_scratch_peak_bytes > c.scratch.logical_need_bytes {
             return Err(JobError::new(
@@ -632,7 +584,6 @@ pub fn mesh_to_tileset(
             archive_bytes,
             peak_held_records: delivered.peak_held_records,
             phase_seconds: phases.seconds(),
-            proxy_bake: phases.bake(),
             memory,
             hlod: leaf.hlod,
         };

@@ -195,7 +195,7 @@ impl LeafRow {
     }
 }
 
-/// One `proxies.jsonl` row: an H17 coarse tile, in postorder (H16's tile-closing order).
+/// One `proxies.jsonl` row: an HLOD coarse tile, in postorder (H16's tile-closing order).
 #[derive(Clone, Debug)]
 pub(crate) struct ProxyRow {
     pub uri: String,
@@ -208,7 +208,7 @@ pub(crate) struct ProxyRow {
     pub primitives: u32,
     /// S2's area samples per direction, its depth schedule's source triangles and the
     /// sampling schedule.
-    pub sampling: Option<(u64, u64, crate::mesh_large::hlod::error::Schedule)>,
+    pub sampling: (u64, u64, crate::mesh_large::hlod::error::Schedule),
     pub encoded_depth: u32,
 }
 
@@ -235,7 +235,7 @@ struct ProxyWire {
 }
 
 impl ProxyRow {
-    pub(crate) fn parse(line: &str, row: u64, hlod: bool) -> Result<Self, JobError> {
+    pub(crate) fn parse(line: &str, row: u64) -> Result<Self, JobError> {
         let bad = |why: &str| input(format!("proxies.jsonl row {row}: {why}"));
         let w: ProxyWire = serde_json::from_str(line).map_err(|e| bad(&e.to_string()))?;
         if w.schema_version != 1 {
@@ -243,10 +243,9 @@ impl ProxyRow {
         }
         let encoded_depth = match w.encoded_depth {
             Some(d) if d >= w.depth && d <= 30 => d,
-            None if !hlod => w.depth,
             _ => return Err(bad("missing or invalid encodedDepth")),
         };
-        match (w.error_policy.as_deref(), w.measurement.as_ref()) {
+        let summary = match (w.error_policy.as_deref(), w.measurement) {
             (Some(crate::mesh_large::hlod::error::POLICY), Some(summary)) => {
                 let key = crate::mesh_large::hlod::store::TileKey {
                     first: w.first,
@@ -264,10 +263,10 @@ impl ProxyRow {
                 summary
                     .validate(w.geometric_error, children, w.end.saturating_sub(w.first))
                     .map_err(|e| bad(&e.to_string()))?;
+                summary
             }
-            (None, None) if !hlod => {} // Historical H17 rows, removed with that producer in S6.
             _ => return Err(bad("missing or unsupported sampled-error policy/summary")),
-        }
+        };
         let expected = format!("proxies/f{}-d{}.glb", w.first, w.depth);
         if w.uri != expected {
             return Err(bad("uri is not proxies/f<first>-d<depth>.glb"));
@@ -291,13 +290,11 @@ impl ProxyRow {
             geometric_error: w.geometric_error,
             primitives: w.primitives,
             encoded_depth,
-            sampling: w.measurement.as_ref().map(|s| {
-                (
-                    s.area_samples_per_direction,
-                    s.depth_source_triangles,
-                    s.schedule,
-                )
-            }),
+            sampling: (
+                summary.area_samples_per_direction,
+                summary.depth_source_triangles,
+                summary.schedule,
+            ),
         })
     }
 }
@@ -438,7 +435,7 @@ pub(crate) fn glb_bounds(path: &Path, row: &LeafRow) -> Result<Aabb, JobError> {
     payload_bounds(path, &row.uri, row.bytes, MAX_GLB_JSON)
 }
 
-/// [`glb_bounds`] for any H8/H17 payload of `bytes` bytes whose JSON chunk is at most
+/// [`glb_bounds`] for any leaf or coarse payload of `bytes` bytes whose JSON chunk is at most
 /// `max_json` bytes.
 pub(crate) fn payload_bounds(
     path: &Path,
@@ -558,11 +555,8 @@ pub(crate) struct LeafTotals {
 pub(crate) struct LeafDirectory {
     root: PathBuf,
     pub totals: LeafTotals,
-    /// H17 coarse tiles are present (`proxyManifest`).
+    /// HLOD coarse tiles are present (`proxyManifest`, with the stage's `hlod` record).
     pub proxies: bool,
-    /// The coarse rows may skip internal tiles: an HLOD stage (`hlod` in the manifest),
-    /// whose single-child pass-through cells publish no content.
-    pub sparse_proxies: bool,
     /// HLOD cells whose coarse tile was omitted (`hlod.omittedProxies`): they publish no
     /// content and are not measured.
     omitted_proxies: u64,
@@ -604,8 +598,12 @@ impl LeafDirectory {
             Some(v) if v == "proxies.jsonl" => true,
             Some(_) => return Err(input("manifest.json proxyManifest is not proxies.jsonl")),
         };
-        let sparse_proxies = proxies && manifest.get("hlod").is_some();
-        let (omitted_proxies, omitted_by_depth) = if sparse_proxies {
+        if proxies && manifest.get("hlod").is_none() {
+            return Err(input(
+                "manifest.json names coarse tiles without an HLOD stage record (hlod)",
+            ));
+        }
+        let (omitted_proxies, omitted_by_depth) = if proxies {
             let total = manifest["hlod"]["omittedProxies"]
                 .as_u64()
                 .ok_or_else(|| input("manifest.json hlod has no omittedProxies"))?;
@@ -627,7 +625,6 @@ impl LeafDirectory {
             root: root.to_owned(),
             totals,
             proxies,
-            sparse_proxies,
             omitted_proxies,
             omitted_by_depth,
             max_glb_json: MAX_GLB_JSON,
@@ -638,7 +635,7 @@ impl LeafDirectory {
     /// logical cells. This also detects loss of an entire level, which row-local sampling
     /// checks cannot see, and includes omitted single-child chains.
     pub(crate) fn check_omissions(&self, shape: &super::plan::Shape) -> Result<(), JobError> {
-        if !self.sparse_proxies {
+        if !self.proxies {
             return Ok(());
         }
         let different_depth = (0..32).find(|&d| {
@@ -671,7 +668,7 @@ impl LeafDirectory {
         self.root.join(uri)
     }
 
-    /// The H17 proxy rows with their decoded bounds, in file (post)order; empty when the
+    /// The HLOD coarse rows with their decoded bounds, in file (post)order; empty when the
     /// directory has none.
     pub(crate) fn proxy_rows(&self) -> Result<super::plan::Proxies<'_>, JobError> {
         if !self.proxies {
@@ -707,16 +704,15 @@ impl LeafDirectory {
             row += 1;
             Some(
                 line.map_err(|e| JobError::io("read proxy rows", &path, e))
-                    .and_then(|line| ProxyRow::parse(&line, row, self.sparse_proxies))
+                    .and_then(|line| ProxyRow::parse(&line, row))
                     .and_then(|proxy| {
-                        if let Some((samples, total, schedule)) = proxy.sampling {
-                            depths[proxy.encoded_depth as usize].add(
-                                samples,
-                                proxy.end - proxy.first,
-                                total,
-                                schedule,
-                            )?;
-                        }
+                        let (samples, total, schedule) = proxy.sampling;
+                        depths[proxy.encoded_depth as usize].add(
+                            samples,
+                            proxy.end - proxy.first,
+                            total,
+                            schedule,
+                        )?;
                         let bounds = payload_bounds(
                             &self.member(&proxy.uri),
                             &proxy.uri,
