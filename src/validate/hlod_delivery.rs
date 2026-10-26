@@ -8,7 +8,8 @@
 //! Ordered key scans find actual outside-leaf owners and stage sparse ancestor
 //! obligations. No chords, T contacts, distance joins or tolerant adjacency are
 //! inferred. Every directed incident owner survives local balanced cancellation.
-//! Original-ID interval joins independently replay even disjoint placements.
+//! Original IDs recorded once at ingest are checked by one ordered key scan,
+//! including disjoint placements and repeated references.
 //! No triangle soup or archive-sized geometry/alias vector is retained.
 //! Decoding, key work, scans, owner walks and queries consume the existing work
 //! budget, including one unit per 10,000 SQLite VM operations. SQLite's page
@@ -505,9 +506,6 @@ fn replay_document<'a>(
     )?;
     Ok((doc, bin, work))
 }
-
-/// The range index is conservative: every exact original alias in a leaf is
-/// replayed, including aliases absent from the geometric boundary reduction.
 
 // Interface canonicalization is f32. Original alias identity deliberately keeps
 // the separate exact f64 point_key above; casting must never weaken R9.
