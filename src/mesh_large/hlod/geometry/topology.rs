@@ -92,6 +92,9 @@ impl Receipt {
 pub(crate) struct Change {
     pub receipt: Receipt,
     pub patch_faces: Vec<usize>,
+    /// Unchanged faces in the closure's component. A branching boundary can include
+    /// retained loops; their source points must still see their existing surface.
+    pub closure_carriers: Vec<usize>,
     pub boundary: Vec<[[f32; 3]; 2]>,
     pub dropped: Vec<[[f32; 3]; 3]>,
     pub opening_reference: Vec<([[f32; 3]; 3], bool)>,
@@ -504,15 +507,22 @@ pub(super) fn changes(
         after_counts.values().sum::<usize>() + closed_count
     );
     let affected: HashSet<usize> = closed.iter().map(|&r| component[r]).collect();
+    let mut closure_carriers = Vec::new();
     let patch_faces = if receipt.closed_holes > 0 {
         let old_faces: HashSet<_> = m.triangles.iter().map(oriented).collect();
         output
             .iter()
             .enumerate()
-            .filter(|(_, t)| {
-                affected.contains(&component[t[0] as usize]) && !old_faces.contains(&oriented(t))
+            .filter_map(|(i, t)| {
+                if !affected.contains(&component[t[0] as usize]) {
+                    None
+                } else if old_faces.contains(&oriented(t)) {
+                    closure_carriers.push(i);
+                    None
+                } else {
+                    Some(i)
+                }
             })
-            .map(|(i, _)| i)
             .collect()
     } else {
         Vec::new()
@@ -584,6 +594,7 @@ pub(super) fn changes(
     Some(Change {
         receipt,
         patch_faces,
+        closure_carriers,
         boundary,
         dropped,
         opening_reference,

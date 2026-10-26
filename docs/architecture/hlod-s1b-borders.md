@@ -216,7 +216,13 @@ Its measurement domain conservatively includes every changed output face in an
 affected surface component and the original affected boundary edges. This avoids
 assuming a planar hole or treating planarity as loss. Decoded patch vertices,
 edge/interior controls and source-projected boundary controls measure both
-directions. Use E/1.05 as the admission limit so S2's margin cannot make an
+directions. For the boundary-to-surface direction, retain unchanged faces of the
+same affected component as witnesses too: a branching boundary can contain a
+retained loop far from the changed patch. Omitting those witnesses creates an
+artificial hole in the query index and can falsely reject a flat-sheet closure.
+The added carrier indices are bounded by the parent output; changed patch faces
+still receive every patch-to-source control. Use E/1.05 as the admission limit
+so S2's margin cannot make an
 admitted closure set G. Unsupported/over-budget proposals retain their boundary
 through a bounded retry. Interior remeshing may not hide an unchecked closure.
 
