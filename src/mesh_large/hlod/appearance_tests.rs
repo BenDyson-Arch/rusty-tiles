@@ -1288,26 +1288,56 @@ fn evidence_appearance() {
 /// Same source-side checker signal sampled on decoded borders at different delivered
 /// depths. Compare coincident points along unequal subdivisions, away from checker steps.
 #[test]
-fn checkerboard_borders_agree_across_mixed_lod() {
+fn checkerboard_normal_and_mask_borders_agree_across_mixed_lod() {
     use std::{collections::BTreeMap, sync::Arc};
     fn checker(x: u32, y: u32) -> [u8; 4] {
-        let v = if ((x / 7) + (y / 7)) % 2 == 0 {
+        let v = if ((x / 7) + (y / 7)).is_multiple_of(2) {
             32
         } else {
             224
         };
-        [v, v, v, 255]
+        [v, v, v, if x < 32 { 0 } else { 255 }]
     }
     struct Edge {
         a: [f64; 3],
         b: [f64; 3],
         uv: [[f64; 2]; 2],
         image: Arc<(u32, u32, Vec<u8>)>,
+        normal_image: Arc<(u32, u32, Vec<u8>)>,
+        normal: [[f64; 3]; 2],
+        tangent: [[f64; 4]; 2],
     }
+    let unit = |v: [f64; 3]| {
+        let length = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+        v.map(|x| x / length)
+    };
+    let world_normal = |edge: &Edge, t: f64| {
+        let uv = std::array::from_fn(|k| edge.uv[0][k] * (1. - t) + edge.uv[1][k] * t);
+        let v = bilinear(&edge.normal_image, uv).map(|x| 2. * x - 1.);
+        let n: [f64; 3] =
+            std::array::from_fn(|k| edge.normal[0][k] * (1. - t) + edge.normal[1][k] * t);
+        let tangent: [f64; 4] =
+            std::array::from_fn(|k| edge.tangent[0][k] * (1. - t) + edge.tangent[1][k] * t);
+        let b = [
+            n[1] * tangent[2] - n[2] * tangent[1],
+            n[2] * tangent[0] - n[0] * tangent[2],
+            n[0] * tangent[1] - n[1] * tangent[0],
+        ]
+        .map(|x| x * tangent[3].signum());
+        unit(std::array::from_fn(|k| {
+            tangent[k] * v[0] + b[k] * v[1] + n[k] * v[2]
+        }))
+    };
+    let want_world = unit([0.3, 0.95, -0.1]);
+    let dot = |a: [f64; 3], b: [f64; 3]| (0..3).map(|k| a[k] * b[k]).sum::<f64>();
     let work = tempfile::tempdir().unwrap();
     let mut f = base_fixture();
     f.surface = Surface::Plane;
-    f.images = vec![checker];
+    f.images = vec![checker, bumpy];
+    f.frame = true;
+    f.material["normalTexture"] = json!({"index":1});
+    f.material["alphaMode"] = json!("MASK");
+    f.material["alphaCutoff"] = json!(0.4);
     let dir = stage(
         &write_fixture(&work.path().join("src"), &f),
         &work.path().join("out"),
@@ -1319,7 +1349,13 @@ fn checkerboard_borders_agree_across_mixed_lod() {
             let page = Arc::new(glb.texture(
                 texture_index(&p.material, "/pbrMetallicRoughness/baseColorTexture/index").unwrap(),
             ));
+            assert_eq!(p.material["alphaMode"], "MASK");
+            assert_eq!(p.material["alphaCutoff"], 0.4);
+            let normal_page =
+                Arc::new(glb.texture(texture_index(&p.material, "/normalTexture/index").unwrap()));
             let uv = p.uv.unwrap();
+            let normal = p.normal.unwrap();
+            let tangent = p.tangent.unwrap();
             for face in 0..p.positions.len() / 3 {
                 for k in 0..3 {
                     let (a, b) = (3 * face + k, 3 * face + (k + 1) % 3);
@@ -1333,6 +1369,9 @@ fn checkerboard_borders_agree_across_mixed_lod() {
                                 b: p.positions[b],
                                 uv: [uv[a], uv[b]],
                                 image: page.clone(),
+                                normal_image: normal_page.clone(),
+                                normal: [normal[a], normal[b]],
+                                tangent: [tangent[a], tangent[b]],
                             },
                         )
                     });
@@ -1350,6 +1389,7 @@ fn checkerboard_borders_agree_across_mixed_lod() {
         ));
     }
     let mut checked = 0;
+    let mut alpha_sides = [0usize; 2];
     for (i, (a, left)) in tiles.iter().enumerate() {
         for (b, right) in &tiles[i + 1..] {
             if a["depth"] == b["depth"] {
@@ -1361,52 +1401,75 @@ fn checkerboard_borders_agree_across_mixed_lod() {
                 continue;
             }
             for e in left {
-                let p: [f64; 3] = std::array::from_fn(|k| (e.a[k] + e.b[k]) * 0.5);
-                if [p[0], p[2]].iter().any(|x| {
-                    let pixel = x / 100. * 64. - 0.5;
-                    let r = pixel.rem_euclid(7.);
-                    r < 2. || r > 5.
-                }) {
-                    continue;
-                }
-                for f in right {
-                    let d: [f64; 3] = std::array::from_fn(|k| f.b[k] - f.a[k]);
-                    let length2 = d.iter().map(|x| x * x).sum::<f64>();
-                    if length2 == 0. {
+                for u in [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875] {
+                    let p: [f64; 3] = std::array::from_fn(|k| e.a[k] * (1. - u) + e.b[k] * u);
+                    if [p[0], p[2]].iter().any(|x| {
+                        let pixel = x / 100. * 64. - 0.5;
+                        let r = pixel.rem_euclid(7.);
+                        r < 2. || r > 5.
+                    }) {
                         continue;
                     }
-                    let t = (0..3).map(|k| (p[k] - f.a[k]) * d[k]).sum::<f64>() / length2;
-                    if !(0.0..=1.0).contains(&t) {
-                        continue;
+                    for f in right {
+                        let d: [f64; 3] = std::array::from_fn(|k| f.b[k] - f.a[k]);
+                        let length2 = d.iter().map(|x| x * x).sum::<f64>();
+                        if length2 == 0. {
+                            continue;
+                        }
+                        let t = (0..3).map(|k| (p[k] - f.a[k]) * d[k]).sum::<f64>() / length2;
+                        if !(0.0..=1.0).contains(&t) {
+                            continue;
+                        }
+                        if (0..3)
+                            .map(|k| (f.a[k] + t * d[k] - p[k]).powi(2))
+                            .sum::<f64>()
+                            > 1e-12
+                        {
+                            continue;
+                        }
+                        let x = bilinear(
+                            &e.image,
+                            std::array::from_fn(|k| e.uv[0][k] * (1. - u) + e.uv[1][k] * u),
+                        );
+                        let y = bilinear(
+                            &f.image,
+                            std::array::from_fn(|k| f.uv[0][k] * (1. - t) + f.uv[1][k] * t),
+                        );
+                        let difference = (0..3).map(|k| (x[k] - y[k]).abs()).fold(0f64, f64::max);
+                        assert!(
+                            difference < 0.2,
+                            "mixed depths {}/{} at {p:?}: {x:?} vs {y:?}",
+                            a["depth"],
+                            b["depth"]
+                        );
+                        // Decode each side through its own page and tangent frame, and
+                        // compare both to the independent source-space normal.
+                        let nx = world_normal(e, u);
+                        let ny = world_normal(f, t);
+                        let cos4 = 4f64.to_radians().cos();
+                        assert!(
+                            dot(nx, want_world) > cos4 && dot(ny, want_world) > cos4,
+                            "source normal at {p:?}: {nx:?} / {ny:?}"
+                        );
+                        assert!(dot(nx, ny) > 8f64.to_radians().cos());
+                        if (p[0] - 50.).abs() > 6. {
+                            let opaque = p[0] > 50.;
+                            assert_eq!(x[3] >= 0.4, opaque, "left MASK at {p:?}");
+                            assert_eq!(y[3] >= 0.4, opaque, "right MASK at {p:?}");
+                            assert!((x[3] - y[3]).abs() < 0.2);
+                            alpha_sides[usize::from(opaque)] += 1;
+                        }
+                        checked += 1;
+                        break;
                     }
-                    if (0..3)
-                        .map(|k| (f.a[k] + t * d[k] - p[k]).powi(2))
-                        .sum::<f64>()
-                        > 1e-12
-                    {
-                        continue;
-                    }
-                    let x = bilinear(
-                        &e.image,
-                        std::array::from_fn(|k| (e.uv[0][k] + e.uv[1][k]) * 0.5),
-                    );
-                    let y = bilinear(
-                        &f.image,
-                        std::array::from_fn(|k| f.uv[0][k] * (1. - t) + f.uv[1][k] * t),
-                    );
-                    let difference = (0..3).map(|k| (x[k] - y[k]).abs()).fold(0f64, f64::max);
-                    assert!(
-                        difference < 0.2,
-                        "mixed depths {}/{} at {p:?}: {x:?} vs {y:?}",
-                        a["depth"],
-                        b["depth"]
-                    );
-                    checked += 1;
-                    break;
                 }
             }
         }
     }
+    assert!(
+        alpha_sides.iter().all(|&n| n > 0),
+        "MASK sides {alpha_sides:?}"
+    );
     assert!(
         checked >= 10,
         "only {checked} decoded mixed-depth border samples"

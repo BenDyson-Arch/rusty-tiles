@@ -132,7 +132,7 @@ fn retain(m: &mut Merged, keep: &[bool]) {
 pub(super) fn contract(
     m: &mut Merged,
     interface: &[InterfaceRow],
-    mapping: &dyn Fn(Key) -> Result<Option<(Key, Key, f64, u8)>, JobError>,
+    mapping: &super::BorderMap<'_>,
     receipt: &mut Receipt,
 ) -> Result<(), JobError> {
     let mut ids: HashMap<Key, u32> = m
@@ -142,7 +142,7 @@ pub(super) fn contract(
         .map(|(i, k)| (*k, i as u32))
         .collect();
     let mut map: Vec<u32> = (0..m.keys.len() as u32).collect();
-    for v in 0..map.len() {
+    for (v, target) in map.iter_mut().enumerate() {
         if let Some((a, b, t, ell)) = mapping(m.keys[v])? {
             let k = if t <= 0.5 { a } else { b };
             let next = m.keys.len() as u32;
@@ -153,7 +153,7 @@ pub(super) fn contract(
                 m.ells.push(ell);
             }
             receipt.contracted_vertices += u64::from(id != v as u32);
-            map[v] = id;
+            *target = id;
         }
     }
     if receipt.contracted_vertices == 0 {
@@ -325,9 +325,9 @@ pub(super) fn changes(
         for &v in t {
             let p = m.positions[v as usize].map(f64::from);
             let b = bounds.entry(component[v as usize]).or_insert((p, p, false));
-            for a in 0..3 {
-                b.0[a] = b.0[a].min(p[a]);
-                b.1[a] = b.1[a].max(p[a]);
+            for (a, coordinate) in p.into_iter().enumerate() {
+                b.0[a] = b.0[a].min(coordinate);
+                b.1[a] = b.1[a].max(coordinate);
             }
             b.2 |= border.contains(&m.keys[v as usize]);
         }

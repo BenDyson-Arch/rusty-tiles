@@ -14,6 +14,8 @@ use super::{
 use crate::{JobError, JobErrorKind};
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
+type BorderMap<'a> = dyn Fn(Key) -> Result<Option<(Key, Key, f64, u8)>, JobError> + 'a;
+
 /// Protect-and-retry rounds after the first simplification.
 pub(crate) const RETRIES: u32 = 3;
 
@@ -248,7 +250,7 @@ pub(crate) fn build_parent(
     children: &[TileGeometry],
     caps: &[usize],
     contract: &Contract,
-    mapping: &dyn Fn(Key) -> Result<Option<(Key, Key, f64, u8)>, JobError>,
+    mapping: &BorderMap<'_>,
     assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<Outcome, JobError> {

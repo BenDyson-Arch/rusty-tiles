@@ -4,6 +4,8 @@
   canonical same-depth edges and bounding mixed-depth gaps by geometric error.
 - Keep coarse payloads within 8,192 triangles using bounded topology cleanup and
   remeshing, with explicit omission frontiers and optional durable audit receipts.
+- Report omission totals and per-depth border, topology and frontier counts in
+  public HLOD diagnostics, including zeros.
 
 ### Fixed
 

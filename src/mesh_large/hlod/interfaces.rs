@@ -638,7 +638,6 @@ fn reduce<'s>(
     if group.len != 0 {
         flush(&mut group, stats, &mut point)?;
     }
-    drop(flush);
     drop(group);
     let (shared, ends, open_ends) = (shared.finish()?, ends.finish()?, open_ends.finish()?);
     let open_bytes = open_ends.len() * KeyRecord::SIZE as u64;

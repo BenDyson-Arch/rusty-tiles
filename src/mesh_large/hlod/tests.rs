@@ -1029,7 +1029,7 @@ const TEST_SAMPLING: Schedule = Schedule {
 const TEST_NEAREST_STEPS: u64 = 64;
 
 /// Stage settings of the public-pipeline tests (reduced S2 work, see `TEST_SAMPLING`).
-pub(super) fn test_settings(cap: usize) -> Settings {
+pub(crate) fn test_settings(cap: usize) -> Settings {
     Settings {
         cap,
         sampling: TEST_SAMPLING,
@@ -2309,28 +2309,20 @@ fn duplicated_soup_is_admitted_and_crack_free() {
         0,
         "{census:?}"
     );
-    // D11 permits dropping small wholly interior components. These formerly omitted
-    // ancestors now fit; S2 measures the removed surface and the receipt counts it.
+    // Each isolated triangle has diameter sqrt(2), larger than the existing
+    // G floor. The owner's measured-topology rule protects these components;
+    // tight-cap ancestors use the reported frontier instead of dropping them.
     let dir = stage(&input, &work.path().join("capped"), &Run::default()).unwrap();
     let manifest: Value =
         serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
-    assert_eq!(manifest["hlod"]["omittedProxies"], 0);
+    assert!(manifest["hlod"]["omittedProxies"].as_u64().unwrap() > 0);
     let dropped: u64 = manifest["hlod"]["bordersByDepth"]
         .as_array()
         .unwrap()
         .iter()
         .map(|d| d["topology"]["droppedComponents"].as_u64().unwrap())
         .sum();
-    assert!(dropped > 0);
-    for row in rows(&dir.join("proxies.jsonl")) {
-        if row["topology"]["droppedComponents"].as_u64().unwrap() > 0 {
-            assert!(
-                row["geometricError"].as_f64().unwrap()
-                    >= row["topologyErrorFloor"].as_f64().unwrap()
-            );
-            assert!(row["geometricError"].as_f64().unwrap() > 1.);
-        }
-    }
+    assert_eq!(dropped, 0, "large interior components must survive");
     // Sol round 8: nothing compounds; every job merges at most eight capped children.
     assert_bounded_jobs(&dir, 300);
     for row in rows(&dir.join("proxies.jsonl")) {
@@ -4209,4 +4201,69 @@ fn evidence_replay_topology() {
             tile.first
         );
     }
+}
+
+/// Inject a memory-backed volume instead of allocating a large tmpfs. Both memory
+/// exhaustion and free-space exhaustion must refuse before any HLOD/audit write.
+#[test]
+fn tmpfs_exhaustion_is_admitted_before_border_or_frontier_writes() {
+    use crate::{
+        mesh_large::{
+            config::{Jobs, TreeConfig},
+            resources::MemoryBudget,
+        },
+        spill::{FileIo, Scratch, Volume},
+    };
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &sheet());
+    let mut captured = capture_hlod(&input, 256);
+    let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(256);
+    config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+    let settings = test_settings(300);
+    let generous = MemoryBudget::resolve(Some(8 << 30)).unwrap();
+    let disk_min = super::plan(&captured, &config, &generous, &settings)
+        .unwrap()
+        .minimum_bytes;
+    let need = super::memory_backed_need(&captured, &config, settings.cap).unwrap();
+    let volume = |available_bytes| Volume {
+        available_bytes,
+        memory_backed: true,
+        allocation_unit_bytes: 4096,
+    };
+    let empty = work.path().join("tmpfs");
+    fs::create_dir(&empty).unwrap();
+    assert!(
+        Scratch::create_with(Some(&empty), need, std::sync::Arc::new(FileIo), |_| Ok(
+            volume(need - 1)
+        ))
+        .is_err()
+    );
+    assert_eq!(fs::read_dir(&empty).unwrap().count(), 0);
+    let ram = Scratch::create_with(Some(&empty), 0, std::sync::Arc::new(FileIo), |_| {
+        Ok(volume(u64::MAX))
+    })
+    .unwrap();
+    let _disk = std::mem::replace(&mut captured.scratch, ram);
+    assert!(captured.scratch.memory_backed());
+    let bytes_before = captured.scratch.live_bytes();
+    // The capture's original scratch may itself be tmpfs on this host.
+    let exact = disk_min + if _disk.memory_backed() { 0 } else { need };
+    let denied = super::plan(
+        &captured,
+        &config,
+        &MemoryBudget::resolve(Some(exact - 1)).unwrap(),
+        &settings,
+    )
+    .unwrap_err();
+    assert_eq!(denied.kind(), JobErrorKind::ResourceLimit);
+    assert!(denied.to_string().contains("memory-backed scratch"));
+    let allowed = super::plan(
+        &captured,
+        &config,
+        &MemoryBudget::resolve(Some(exact)).unwrap(),
+        &settings,
+    )
+    .unwrap();
+    assert_eq!(allowed.minimum_bytes, exact);
+    assert_eq!(captured.scratch.live_bytes(), bytes_before);
 }

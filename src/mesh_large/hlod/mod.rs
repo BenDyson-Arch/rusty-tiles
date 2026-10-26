@@ -15,8 +15,8 @@
 //! budget. It writes `proxies/` and `proxies.jsonl` (postorder) for H16 delivery. Coarse
 //! appearance (S3, [`appearance`]) is fresh content-sized charts
 //! baked from the captured source; the error is measured against the source in both
-//! directions by S2 (`error`). Omitted cells hold no content, so nothing is measured,
-//! charted, baked or textured for them.
+//! directions by S2 (`error`). Omitted cells publish no content or measurement;
+//! topology trials may query source geometry, but no appearance work runs for them.
 pub(crate) mod appearance;
 #[cfg(test)]
 mod appearance_tests;
@@ -34,6 +34,8 @@ pub(crate) mod source_index;
 pub(crate) mod store;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+pub(crate) use tests::test_settings;
 
 pub(crate) use encode::Mutation;
 

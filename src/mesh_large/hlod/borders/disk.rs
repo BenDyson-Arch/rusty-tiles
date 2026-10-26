@@ -12,7 +12,7 @@ pub(super) struct Words<const N: usize>(pub [u64; N]);
 impl<const N: usize> Record for Words<N> {
     const SIZE: usize = N * 8;
     fn encode(&self, bytes: &mut [u8]) {
-        for (v, b) in self.0.iter().zip(bytes.chunks_exact_mut(8)) {
+        for (v, b) in self.0.iter().zip(bytes.as_chunks_mut::<8>().0) {
             b.copy_from_slice(&v.to_le_bytes());
         }
     }
