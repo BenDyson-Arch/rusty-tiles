@@ -2,6 +2,7 @@
 //! primitives and the published error, with no certificates. Also the resident form in
 //! which a finished tile waits for its parent; it is leased against the run's memory
 //! budget and dropped (lease released) as soon as the parent is built.
+pub(crate) mod spill;
 use super::interfaces::InterfaceRow;
 use crate::mesh_large::{records::Bounds, resources::Lease};
 use serde::Serialize;
@@ -219,6 +220,7 @@ pub(crate) struct HlodRow {
     pub quantized: bool,
     pub bounds: BoundsRow,
     pub appearance: super::appearance::TileAppearance,
+    pub topology_error_floor: f64,
     pub terminal_locks: u64,
     pub audit_record: Option<super::audit::Index>,
     pub border_scale: f64,

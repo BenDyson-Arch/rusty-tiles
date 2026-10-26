@@ -827,18 +827,20 @@ mod tests {
     #[test]
     fn a_point_shared_by_many_leaves_is_one_row_per_leaf_with_the_full_interval() {
         let c = k([0., 0., 0.]);
-        let leaves: Vec<Vec<[Key; 3]>> = (0..64)
+        let leaves: Vec<Vec<[Key; 3]>> = (0..GROUP_MEMORY + 1)
             .map(|i| {
-                let a = f64::from(i) / 64. * std::f64::consts::TAU;
-                let b = f64::from(i + 1) / 64. * std::f64::consts::TAU;
+                let a = i as f64 / (GROUP_MEMORY + 1) as f64 * std::f64::consts::TAU;
+                let b = (i + 1) as f64 / (GROUP_MEMORY + 1) as f64 * std::f64::consts::TAU;
                 vec![[c, k([a.cos(), a.sin(), 0.]), k([b.cos(), b.sin(), 0.])]]
             })
             .collect();
         let (rows, stats) = incidence(&leaves);
         let centre: Vec<_> = rows.iter().filter(|r| r.a == c && r.b == c).collect();
-        assert_eq!(centre.len(), 64);
-        assert!(centre.iter().all(|r| (r.lo, r.hi) == (0, 63)));
-        assert!(stats.shared_segments >= 63, "{stats:?}");
+        assert_eq!(centre.len(), GROUP_MEMORY + 1);
+        assert!(centre
+            .iter()
+            .all(|r| (r.lo, r.hi) == (0, GROUP_MEMORY as u32)));
+        assert!(stats.shared_segments >= GROUP_MEMORY as u64, "{stats:?}");
     }
 
     /// A group of one item per leaf is charged in the stage's resident bound.

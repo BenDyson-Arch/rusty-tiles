@@ -506,6 +506,46 @@ impl SlotFile {
             .map_err(|e| SpillError::io("write spill slots", self.file.path(), e))
     }
 
+    /// A contiguous run of complete slots, for bounded page caches. Accounts the logical
+    /// extent before any positioned write, just like a single-slot write.
+    pub(crate) fn write_many(&mut self, index: u64, bytes: &[u8]) -> Result<(), SpillError> {
+        if bytes.is_empty() || !bytes.len().is_multiple_of(self.width) {
+            return Err(SpillError::InvalidConfig(
+                "slot batch write of the wrong width",
+            ));
+        }
+        let end = index
+            .checked_add((bytes.len() / self.width) as u64)
+            .ok_or(SpillError::Overflow)?;
+        if end > self.end {
+            self.file.completed(self.offset(end)?);
+            self.end = end;
+        }
+        super::scratch::write_all_at(&self.handle, bytes, self.offset(index)?)
+            .map_err(|e| SpillError::io("write spill slots", self.file.path(), e))
+    }
+    pub(crate) fn read_many(&self, index: u64, bytes: &mut [u8]) -> Result<(), SpillError> {
+        if bytes.is_empty() || !bytes.len().is_multiple_of(self.width) {
+            return Err(SpillError::InvalidConfig(
+                "slot batch read of the wrong width",
+            ));
+        }
+        let end = index
+            .checked_add((bytes.len() / self.width) as u64)
+            .ok_or(SpillError::Overflow)?;
+        if end > self.end {
+            return Err(SpillError::CorruptRun {
+                path: self.file.path().to_owned(),
+                detail: "slot batch was never written".into(),
+            });
+        }
+        read_exact_at(&self.handle, bytes, self.offset(index)?)
+            .map_err(|e| SpillError::io("read spill slots", self.file.path(), e))
+    }
+    pub(crate) fn len(&self) -> u64 {
+        self.end
+    }
+
     /// Reads slot `index` into `bytes` (the slot width); a slot past the end is corrupt.
     pub(crate) fn read(&self, index: u64, bytes: &mut [u8]) -> Result<(), SpillError> {
         if bytes.len() != self.width {

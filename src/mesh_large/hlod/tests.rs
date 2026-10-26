@@ -1662,10 +1662,10 @@ fn parent_jobs_allocate_within_their_charge() {
         match (kind, built) {
             // Its whole interface cannot fit the cap: omitted (nothing published or held),
             // never refused.
-            (0, built) => assert!(built.unwrap().is_none()),
-            (2, built) => grid = Some(built.unwrap().unwrap()),
+            (0, built) => assert!(built.unwrap().built.is_none()),
+            (2, built) => grid = Some(built.unwrap().built.unwrap()),
             // The retries ran (and fitted, or ran out and omitted it).
-            (_, Ok(b)) => assert!(b.is_none_or(|b| b.retries > 0), "kind {kind}"),
+            (_, Ok(b)) => assert!(b.built.is_none_or(|b| b.retries > 0), "kind {kind}"),
             (_, Err(e)) => panic!("kind {kind}: {e}"),
         }
     }
@@ -2265,14 +2265,28 @@ fn duplicated_soup_is_admitted_and_crack_free() {
         0,
         "{census:?}"
     );
-    // Plain simplification cannot reduce duplicated disconnected triangles (no pruning,
-    // D3): below the cap those parents are omitted, never published above it, never refused.
+    // D11 permits dropping small wholly interior components. These formerly omitted
+    // ancestors now fit; S2 measures the removed surface and the receipt counts it.
     let dir = stage(&input, &work.path().join("capped"), &Run::default()).unwrap();
     let manifest: Value =
         serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
-    let omitted: Vec<u64> =
-        serde_json::from_value(manifest["hlod"]["omittedByDepth"].clone()).unwrap();
-    assert_eq!(omitted.first(), Some(&1), "{}", manifest["hlod"]);
+    assert_eq!(manifest["hlod"]["omittedProxies"], 0);
+    let dropped: u64 = manifest["hlod"]["bordersByDepth"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| d["topology"]["droppedComponents"].as_u64().unwrap())
+        .sum();
+    assert!(dropped > 0);
+    for row in rows(&dir.join("proxies.jsonl")) {
+        if row["topology"]["droppedComponents"].as_u64().unwrap() > 0 {
+            assert!(
+                row["geometricError"].as_f64().unwrap()
+                    >= row["topologyErrorFloor"].as_f64().unwrap()
+            );
+            assert!(row["geometricError"].as_f64().unwrap() > 1.);
+        }
+    }
     // Sol round 8: nothing compounds; every job merges at most eight capped children.
     assert_bounded_jobs(&dir, 300);
     for row in rows(&dir.join("proxies.jsonl")) {

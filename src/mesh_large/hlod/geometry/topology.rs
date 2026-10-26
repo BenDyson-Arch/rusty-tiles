@@ -15,8 +15,11 @@ pub(crate) struct Receipt {
     pub duplicate_faces: u64,
     pub dropped_components: u64,
     pub closed_holes: u64,
+    pub opened_holes: u64,
     pub remeshed_vertices: u64,
     pub remesh_rounds: u64,
+    pub rejected_remesh_rounds: u64,
+    pub max_loss_diameter: f64,
 }
 impl Receipt {
     pub(crate) fn add(&mut self, r: Self) {
@@ -25,8 +28,11 @@ impl Receipt {
         self.duplicate_faces += r.duplicate_faces;
         self.dropped_components += r.dropped_components;
         self.closed_holes += r.closed_holes;
+        self.opened_holes += r.opened_holes;
         self.remeshed_vertices += r.remeshed_vertices;
         self.remesh_rounds += r.remesh_rounds;
+        self.rejected_remesh_rounds += r.rejected_remesh_rounds;
+        self.max_loss_diameter = self.max_loss_diameter.max(r.max_loss_diameter);
     }
 }
 
@@ -238,6 +244,179 @@ pub(super) fn cleanup(m: &mut Merged, interface: &[InterfaceRow], g: f64, r: &mu
     retain(m, &keep);
 }
 
+/// Compare the actual output topology, including changes made by meshopt itself. A
+/// boundary cycle touching the interface must survive as a distinct boundary cycle with
+/// its border contacts. Interior component loss contributes a strict diameter floor to G.
+/// This is checked after simplification and before S2; it never substitutes for S2.
+pub(super) fn changes(
+    m: &Merged,
+    output: &[[u32; 3]],
+    interface: &[InterfaceRow],
+) -> Option<(Receipt, f64)> {
+    if output == m.triangles {
+        return Some((Receipt::default(), 0.));
+    }
+    let component = Components::mesh(m);
+    let border = points(interface);
+    let mut bounds: HashMap<usize, ([f64; 3], [f64; 3], bool)> = HashMap::new();
+    for t in &m.triangles {
+        for &v in t {
+            let p = m.positions[v as usize].map(f64::from);
+            let b = bounds.entry(component[v as usize]).or_insert((p, p, false));
+            for a in 0..3 {
+                b.0[a] = b.0[a].min(p[a]);
+                b.1[a] = b.1[a].max(p[a]);
+            }
+            b.2 |= border.contains(&m.keys[v as usize]);
+        }
+    }
+    let surviving: HashSet<usize> = output
+        .iter()
+        .flatten()
+        .map(|v| component[*v as usize])
+        .collect();
+    let mut receipt = Receipt::default();
+    let mut floor = 0f64;
+    for (c, (lo, hi, touch)) in &bounds {
+        if !surviving.contains(c) {
+            if *touch {
+                return None;
+            }
+            receipt.dropped_components += 1;
+            floor = floor.max(
+                (0..3)
+                    .map(|a| (hi[a] - lo[a]).powi(2))
+                    .sum::<f64>()
+                    .sqrt()
+                    .next_up(),
+            );
+        }
+    }
+    let boundary = |triangles: &[[u32; 3]]| {
+        let mut edges: HashMap<(u32, u32), u32> = HashMap::new();
+        for t in triangles {
+            for i in 0..3 {
+                let (a, b) = (t[i], t[(i + 1) % 3]);
+                if a != b {
+                    *edges.entry((a.min(b), a.max(b))).or_default() += 1;
+                }
+            }
+        }
+        let mut groups = Components::new(m.keys.len());
+        let mut degree = vec![0u32; m.keys.len()];
+        for (&(a, b), &n) in &edges {
+            if n == 1 {
+                groups.join(a, b);
+                degree[a as usize] += 1;
+                degree[b as usize] += 1;
+            }
+        }
+        let root: Vec<usize> = (0..m.keys.len()).map(|v| groups.root(v)).collect();
+        (edges, degree, root)
+    };
+    let (old_edges, old_degree, old_root) = boundary(&m.triangles);
+    let (new_edges, new_degree, new_root) = boundary(output);
+    let mut touching = HashSet::new();
+    let mut complex = HashSet::new();
+    let mut new_complex = HashSet::new();
+    let mut before = HashSet::new();
+    let mut after: HashMap<usize, HashSet<usize>> = HashMap::new();
+    for v in 0..m.keys.len() {
+        if old_degree[v] > 0 {
+            if surviving.contains(&component[v]) {
+                before.insert(old_root[v]);
+            }
+            if border.contains(&m.keys[v]) {
+                touching.insert(old_root[v]);
+            }
+            if old_degree[v] != 2 {
+                complex.insert(old_root[v]);
+            }
+        }
+        if new_degree[v] > 0 {
+            after.entry(component[v]).or_default().insert(new_root[v]);
+            if new_degree[v] != 2 {
+                new_complex.insert(new_root[v]);
+            }
+        }
+    }
+    let mut matches: HashMap<usize, HashSet<usize>> = HashMap::new();
+    let mut counts: HashMap<(usize, usize), usize> = HashMap::new();
+    let mut labels: HashMap<usize, HashSet<usize>> = HashMap::new();
+    for v in 0..m.keys.len() {
+        if old_degree[v] > 0 && new_degree[v] > 0 {
+            matches.entry(old_root[v]).or_default().insert(new_root[v]);
+            *counts.entry((old_root[v], new_root[v])).or_default() += 1;
+            labels.entry(new_root[v]).or_default().insert(old_root[v]);
+        }
+        if old_degree[v] > 0 && border.contains(&m.keys[v]) && new_degree[v] == 0 {
+            return None;
+        }
+    }
+    for root in touching {
+        if complex.contains(&root) {
+            // At a branching boundary retain the graph, because a loop count alone cannot
+            // distinguish its incident holes. This path is bounded by the capped job.
+            if old_edges.iter().any(|(&(a, b), &n)| {
+                n == 1 && old_root[a as usize] == root && new_edges.get(&(a, b)) != Some(&1)
+            }) {
+                return None;
+            }
+        } else {
+            let roots = matches.get(&root)?;
+            if roots.len() != 1 {
+                return None;
+            }
+            let to = *roots.iter().next()?;
+            if counts[&(root, to)] < 3 || labels[&to].len() != 1 || new_complex.contains(&to) {
+                return None;
+            }
+        }
+    }
+    let mut before_counts: HashMap<usize, usize> = HashMap::new();
+    for &root in &before {
+        *before_counts.entry(component[root]).or_default() += 1;
+    }
+    for (component, count) in before_counts {
+        let next = after.get(&component).map_or(0, HashSet::len);
+        receipt.closed_holes += count.saturating_sub(next) as u64;
+        receipt.opened_holes += next.saturating_sub(count) as u64;
+    }
+    let closed: HashSet<usize> = before
+        .into_iter()
+        .filter(|root| {
+            matches.get(root).is_none_or(|roots| {
+                roots.len() != 1 || {
+                    let to = roots.iter().next().unwrap();
+                    labels[to].len() > 1 || counts[&(*root, *to)] < 3
+                }
+            })
+        })
+        .collect();
+    let mut hole_bounds: HashMap<usize, ([f64; 3], [f64; 3])> = HashMap::new();
+    for v in 0..m.keys.len() {
+        if old_degree[v] > 0 && closed.contains(&old_root[v]) {
+            let p = m.positions[v].map(f64::from);
+            let b = hole_bounds.entry(old_root[v]).or_insert((p, p));
+            for a in 0..3 {
+                b.0[a] = b.0[a].min(p[a]);
+                b.1[a] = b.1[a].max(p[a]);
+            }
+        }
+    }
+    for (lo, hi) in hole_bounds.values() {
+        floor = floor.max(
+            (0..3)
+                .map(|a| (hi[a] - lo[a]).powi(2))
+                .sum::<f64>()
+                .sqrt()
+                .next_up(),
+        );
+    }
+    receipt.max_loss_diameter = floor;
+    Some((receipt, floor))
+}
+
 /// Boundary edge components touching a delivered arc or live junction are protected in
 /// full. A free vertex never maps onto a protected one, so each such boundary edge keeps
 /// its one incident face. No touching hole can close during interior clustering.
@@ -291,7 +470,7 @@ fn protected(m: &Merged, interface: &[InterfaceRow]) -> (Vec<bool>, usize) {
 /// All allocations and visits are bounded by the eight-child job. Components remain
 /// separate; protected boundary loops and one support face per component survive.
 pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: &mut Receipt) {
-    let (locked, before) = protected(m, interface);
+    let (locked, _) = protected(m, interface);
     let component = Components::mesh(m);
     let mut lo = [f64::INFINITY; 3];
     let mut hi = [f64::NEG_INFINITY; 3];
@@ -319,27 +498,103 @@ pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: 
         let cell: [i64; 3] =
             std::array::from_fn(|a| ((f64::from(p[a]) - lo[a]) / width).floor() as i64);
         let id = *cells.entry((component[v], cell)).or_insert(v as u32);
-        r.remeshed_vertices += u64::from(id != v as u32);
+
         map.push(id);
     }
-    for t in &mut m.triangles {
-        *t = mapped(&m.positions, *t, &map);
-    }
-    let mut seen = HashSet::new();
-    let keep = m
+    let mut output: Vec<_> = m
         .triangles
         .iter()
+        .map(|t| mapped(&m.positions, *t, &map))
+        .collect();
+    let mut seen = HashSet::new();
+    let keep: Vec<_> = output
+        .iter()
         .map(|t| surface(t) && seen.insert(oriented(t)))
-        .collect::<Vec<_>>();
-    retain(m, &keep);
-    let (_, after) = protected(m, interface);
-    r.closed_holes += before.saturating_sub(after) as u64;
+        .collect();
+    let mut i = 0;
+    output.retain(|_| (keep[i], i += 1).0);
     r.remesh_rounds += 1;
+    let Some((change, _)) = changes(m, &output, interface) else {
+        r.rejected_remesh_rounds += 1;
+        return;
+    };
+    r.add(change);
+    r.remeshed_vertices += map
+        .iter()
+        .enumerate()
+        .filter(|(v, to)| *v != **to as usize)
+        .count() as u64;
+    retain(m, &keep);
+    m.triangles = output;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn ring() -> Merged {
+        let positions = vec![
+            [-2., -2., 0.],
+            [2., -2., 0.],
+            [2., 2., 0.],
+            [-2., 2., 0.],
+            [-0.1, -0.1, 0.],
+            [0.1, -0.1, 0.],
+            [0.1, 0.1, 0.],
+            [-0.1, 0.1, 0.],
+        ];
+        let mut triangles = Vec::new();
+        for i in 0..4u32 {
+            let j = (i + 1) % 4;
+            triangles.extend([[i, j, i + 4], [j, j + 4, i + 4]]);
+        }
+        Merged {
+            keys: positions.iter().map(|p| p.map(f32::to_bits)).collect(),
+            ells: vec![0; 8],
+            positions,
+            representative: vec![
+                crate::mesh_large::hlod::store::SourcePrimitive {
+                    node: 0,
+                    mesh: 0,
+                    primitive: 0,
+                    expanded_ordinal: 0,
+                    material: u32::MAX
+                };
+                triangles.len()
+            ],
+            triangles,
+        }
+    }
+    #[test]
+    fn closing_a_hole_with_border_contact_is_rejected_and_interior_closure_is_measured() {
+        let m = ring();
+        let mut filled = m.triangles.clone();
+        filled.extend([[4, 5, 6], [4, 6, 7]]);
+        let p = m.keys[4];
+        let border = vec![InterfaceRow::new(0, p, p, 0, 1)];
+        assert!(
+            changes(&m, &filled, &border).is_none(),
+            "even one junction contact protects a hole"
+        );
+        let (receipt, floor) = changes(&m, &filled, &[]).unwrap();
+        assert_eq!(receipt.closed_holes, 1);
+        assert_eq!(receipt.dropped_components, 0);
+        assert!(floor > 0.28 && floor < 0.29);
+    }
+    #[test]
+    fn interior_remeshing_preserves_a_hole_touching_a_border_junction() {
+        let mut m = ring();
+        let original = m.triangles.clone();
+        let p = m.keys[4];
+        let border = vec![InterfaceRow::new(0, p, p, 0, 1)];
+        let mut receipt = Receipt::default();
+        for round in 1..=6 {
+            remesh(&mut m, &border, round, &mut receipt);
+        }
+        assert_eq!(receipt.closed_holes, 0);
+        let mut before = ring();
+        before.triangles = original;
+        assert!(changes(&before, &m.triangles, &border).is_some());
+    }
     #[test]
     fn sub_g_border_component_survives_while_identical_interior_component_is_dropped() {
         let positions = vec![

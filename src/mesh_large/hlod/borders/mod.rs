@@ -10,7 +10,10 @@ pub(super) fn memory_need(sorter: SortConfig) -> u64 {
         + sorter.memory_bound::<disk::Words<7>>()
         + 8 * sorter.buffer_bytes as u64
         + (1 << 16)
+        + 12 * disk::CACHE_BYTES
 }
+
+pub(super) const WALK_CACHE_BYTES: u64 = 8 * disk::CACHE_BYTES;
 
 use self::{
     curve::{state, Ladder},
@@ -74,6 +77,7 @@ pub(crate) struct DepthReceipt {
     pub terminal_locks: u64,
     pub max_epsilon: f64,
     pub topology: super::geometry::TopologyReceipt,
+    pub attempted_topology: super::geometry::TopologyReceipt,
     pub omission_sources: u64,
     pub omitted_cells: u64,
     pub frontier_tiles: u64,
@@ -110,6 +114,15 @@ pub(super) struct Contract {
     pub interface: Vec<InterfaceRow>,
     pub certificates: Vec<Certificate>,
     pub scale: f64,
+}
+
+impl Contract {
+    /// Every required point and edge must occur in a triangle. This necessary lower bound
+    /// is independent of remeshing; exceeding it makes the capped frontier unavoidable.
+    pub(super) fn minimum_triangles(&self) -> usize {
+        let points = self.interface.iter().filter(|r| r.is_vertex()).count();
+        points.max(self.interface.len() - points).div_ceil(3)
+    }
 }
 
 impl Borders {
@@ -164,6 +177,11 @@ impl Borders {
             borders.source.nodes.set(id, node)?;
             ancestors[depth as usize] = (node[0], node[1], published);
         }
+        borders.source.flush()?;
+        borders.maps.flush()?;
+        borders.segments.flush()?;
+        borders.refs.flush()?;
+        lease.charge(borders.bytes())?;
         Ok(borders)
     }
     pub(super) fn audit_bound(&self) -> Option<u64> {
@@ -595,6 +613,23 @@ mod tests {
     };
     fn k(x: f32, y: f32) -> Key {
         [x, y, 0.].map(f32::to_bits)
+    }
+    #[test]
+    fn more_than_24576_mandatory_junctions_cannot_fit_the_hard_cap() {
+        let interface = (0..24_577)
+            .map(|i| {
+                let p = k(i as f32, 0.);
+                InterfaceRow::new(0, p, p, 0, 1)
+            })
+            .collect();
+        let c = Contract {
+            depth: 0,
+            interface,
+            certificates: vec![],
+            scale: 1.,
+        };
+        assert_eq!(c.minimum_triangles(), 8193);
+        assert!(c.minimum_triangles() > super::super::TRIANGLE_CAP);
     }
     #[test]
     fn all_owners_share_certified_chords_and_terminal_leaves_stay_exact() {

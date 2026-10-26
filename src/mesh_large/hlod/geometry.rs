@@ -1,11 +1,6 @@
-//! D1: a parent from its immediate children by position-welded meshopt simplification.
-//!
-//! Only the parent's outer interface with other ownership subtrees is locked, as complete
-//! segments (shared source edges) and shared vertices (point contacts and junctions);
-//! interior child boundaries and UV/attribute/primitive seams are free. When meshopt still
-//! deletes a required segment, the input faces incident to it are protected (kept
-//! verbatim, their vertices locked) and the rest is simplified again, a bounded number of
-//! times. A tile that cannot keep its interface within the cap is `unsupported`.
+//! D11: bounded parents from immediate children and a common, certified border contract.
+//! Boundary reconstruction precedes meshopt reduction. Stalled interiors get bounded
+//! topology cleanup and remeshing; only the reported capped frontier remains afterwards.
 mod topology;
 pub(crate) use topology::Receipt as TopologyReceipt;
 
@@ -41,6 +36,13 @@ pub(crate) struct Built {
     /// Output faces turned to (or dropped beside) their source orientation (`orient`).
     pub reoriented: u32,
     pub topology: topology::Receipt,
+    pub topology_floor: f64,
+}
+
+pub(crate) struct Outcome {
+    pub built: Option<Built>,
+    /// Cleanup attempted before a last-resort omission, also recorded when discarded.
+    pub attempted_topology: TopologyReceipt,
 }
 
 /// Children merged into one vertex space welded by canonical decoded position, in child
@@ -211,8 +213,8 @@ fn reversed(t: &[u32; 3]) -> [u32; 3] {
 /// corners in reverse. Such a face, the exact reverse of an input face and not itself one,
 /// is dropped where its source-facing twin is in the output (the same corners, edges and
 /// area remain) and turned to the source's orientation otherwise. Returns the faces fixed.
-fn orient(merged: &Merged, output: &mut Vec<[u32; 3]>) -> u32 {
-    let input: HashSet<[u32; 3]> = merged.triangles.iter().map(oriented).collect();
+fn orient(faces: &[[u32; 3]], output: &mut Vec<[u32; 3]>) -> u32 {
+    let input: HashSet<[u32; 3]> = faces.iter().map(oriented).collect();
     let present: HashSet<[u32; 3]> = output.iter().map(oriented).collect();
     let mut fixed = 0;
     output.retain_mut(|t| {
@@ -240,9 +242,10 @@ pub(crate) fn build_parent(
     contract: &Contract,
     mapping: &dyn Fn(Key) -> Result<Option<(Key, Key, f64, u8)>, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<Option<Built>, JobError> {
+) -> Result<Outcome, JobError> {
     check()?;
     let mut merged = merge(children);
+    let original_faces = merged.triangles.clone();
     if merged.triangles.is_empty() {
         return Err(state(format!(
             "coarse tile f{}-d{} has no source triangle",
@@ -260,12 +263,23 @@ pub(crate) fn build_parent(
         return Err(state("a parent build needs at least one cap"));
     }
     for &cap in caps {
-        match attempt(tile, &merged, interface, cap, children_error) {
+        match attempt(
+            tile,
+            &merged,
+            interface,
+            cap,
+            children_error,
+            &original_faces,
+        ) {
             Err(e) if e.kind() == JobErrorKind::Unsupported => continue,
             built => {
                 return built.map(|mut b| {
-                    b.topology = topology;
-                    Some(b)
+                    b.topology.add(topology);
+                    b.topology_floor = b.topology_floor.max(b.topology.max_loss_diameter);
+                    Outcome {
+                        built: Some(b),
+                        attempted_topology: TopologyReceipt::default(),
+                    }
                 })
             }
         }
@@ -285,17 +299,25 @@ pub(crate) fn build_parent(
             interface,
             *caps.last().unwrap(),
             children_error,
+            &original_faces,
         ) {
             Err(e) if e.kind() == JobErrorKind::Unsupported => {}
             built => {
                 return built.map(|mut b| {
-                    b.topology = topology;
-                    Some(b)
+                    b.topology.add(topology);
+                    b.topology_floor = b.topology_floor.max(b.topology.max_loss_diameter);
+                    Outcome {
+                        built: Some(b),
+                        attempted_topology: TopologyReceipt::default(),
+                    }
                 })
             }
         }
     }
-    Ok(None)
+    Ok(Outcome {
+        built: None,
+        attempted_topology: topology,
+    })
 }
 
 /// One build of the parent from `merged` children under `interface`; `unsupported` when
@@ -306,6 +328,7 @@ fn attempt(
     interface: &[InterfaceRow],
     cap: usize,
     children_error: f64,
+    original_faces: &[[u32; 3]],
 ) -> Result<Built, JobError> {
     let segments: HashSet<(Key, Key)> = interface
         .iter()
@@ -337,7 +360,7 @@ fn attempt(
         .triangles
         .iter()
         .all(|t| t[0] == t[1] || t[1] == t[2] || t[0] == t[2]);
-    let (output, simplifier_error, stopping) = if input <= cap {
+    let (mut output, simplifier_error, stopping) = if input <= cap {
         (merged.triangles.clone(), 0., StoppingBound::Input)
     } else if degenerate_only {
         (
@@ -348,7 +371,7 @@ fn attempt(
     } else {
         let (mut output, mut error) =
             simplify(merged, &merged.triangles, &|v| locked[v as usize], cap);
-        reoriented = orient(merged, &mut output);
+        reoriented = orient(original_faces, &mut output);
         loop {
             let (edges, points) = missing(&output, &merged.keys, &segments, &vertices);
             if edges.is_empty() && points.is_empty() {
@@ -407,7 +430,7 @@ fn attempt(
             };
             reduced.extend(keep);
             output = reduced;
-            reoriented = orient(merged, &mut output);
+            reoriented = orient(original_faces, &mut output);
             error = e;
         }
         if output.len() > cap {
@@ -429,6 +452,9 @@ fn attempt(
             (output, error, StoppingBound::TriangleBudget)
         }
     };
+    if matches!(stopping, StoppingBound::Input) {
+        reoriented += orient(original_faces, &mut output);
+    }
     if output.is_empty() {
         return Err(JobError::new(
             JobErrorKind::Unsupported,
@@ -438,6 +464,12 @@ fn attempt(
             ),
         ));
     }
+    let Some((topology, topology_floor)) = topology::changes(merged, &output, interface) else {
+        return Err(JobError::new(
+            JobErrorKind::Unsupported,
+            "simplification removes a border-connected component or touching boundary loop",
+        ));
+    };
     if !simplifier_error.is_finite() {
         return Err(state("meshopt reported a nonfinite error"));
     }
@@ -487,7 +519,8 @@ fn attempt(
         interface_vertices: vertices.len() as u32,
         interface_segments: segments.len() as u32,
         reoriented,
-        topology: topology::Receipt::default(),
+        topology,
+        topology_floor,
         geometry,
     })
 }
@@ -513,14 +546,14 @@ mod tests {
     fn simplified_faces_keep_their_source_orientation() {
         let input = merged(vec![[0, 1, 2], [2, 1, 3]]);
         let mut beside = vec![[1, 2, 0], [0, 2, 1], [1, 3, 4]];
-        assert_eq!(orient(&input, &mut beside), 1);
+        assert_eq!(orient(&input.triangles, &mut beside), 1);
         assert_eq!(beside, vec![[1, 2, 0], [1, 3, 4]]);
         let mut alone = vec![[2, 1, 0], [1, 3, 4]];
-        assert_eq!(orient(&input, &mut alone), 1);
+        assert_eq!(orient(&input.triangles, &mut alone), 1);
         assert_eq!(alone, vec![[2, 0, 1], [1, 3, 4]]);
         let both = merged(vec![[0, 1, 2], [0, 2, 1]]);
         let mut kept = vec![[0, 2, 1], [1, 2, 0]];
-        assert_eq!(orient(&both, &mut kept), 0);
+        assert_eq!(orient(&both.triangles, &mut kept), 0);
         assert_eq!(kept, vec![[0, 2, 1], [1, 2, 0]]);
     }
 }

@@ -83,6 +83,13 @@ fn build_tree(
 }
 
 impl Source {
+    pub(super) fn flush(&self) -> Result<(), JobError> {
+        self.vertices.flush()?;
+        self.edges.flush()?;
+        self.owners.flush()?;
+        self.nodes.flush()?;
+        self.leaves.flush()
+    }
     /// `admitted` is the component lease's byte check. The caller admits the entire graph
     /// bound before entering; the check is repeated after materialized phases.
     pub(super) fn build(

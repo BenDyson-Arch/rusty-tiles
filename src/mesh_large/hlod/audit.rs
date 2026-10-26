@@ -146,20 +146,32 @@ impl<'a> Writer<'a> {
             contract,
         })
     }
-    pub(super) fn omitted(&self, key: TileKey, source: bool) -> Result<(), JobError> {
+    pub(super) fn omitted(
+        &self,
+        key: TileKey,
+        reason: super::OmissionReason,
+        frontier: &[TileKey],
+        topology: super::geometry::TopologyReceipt,
+    ) -> Result<(), JobError> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
-        struct Omitted {
+        struct Omitted<'a> {
             schema_version: u32,
             kind: &'static str,
             key: TileKey,
+            reason: super::OmissionReason,
             source: bool,
+            frontier: &'a [TileKey],
+            attempted_topology: super::geometry::TopologyReceipt,
         }
         self.append(&Omitted {
             schema_version: 1,
             kind: "omitted",
             key,
-            source,
+            reason,
+            source: reason.source(),
+            frontier,
+            attempted_topology: topology,
         })
         .map(|_| ())
     }
