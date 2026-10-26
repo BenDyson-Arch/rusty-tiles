@@ -15,6 +15,54 @@ pub(crate) struct Controls {
     pub proxy: Vec<f64>,
     pub closure_faces: Vec<bool>,
     pub closure_max: f64,
+    pub opening_faces: Vec<bool>,
+    pub opening_source_max: f64,
+    pub opening_proxy_max: f64,
+    opening: Option<Opening>,
+}
+
+struct Opening {
+    reference: Surface,
+    nearest: Nearest,
+    hint: Option<usize>,
+}
+impl std::fmt::Debug for Opening {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Opening")
+            .field("faces", &self.reference.triangles.len())
+            .finish()
+    }
+}
+impl Controls {
+    /// Final source strata on the conservative lost-surface domain participate in
+    /// eligibility too. If the bounded correspondence search exhausts its budget,
+    /// attribute the sample conservatively rather than silently excluding it.
+    pub(crate) fn source_sample(&mut self, p: V3, d: f64) {
+        if let Some(opening) = &mut self.opening {
+            let exhausted = opening.nearest.stats.exhausted;
+            let hit = opening
+                .nearest
+                .surface(&opening.reference, p, &mut opening.hint);
+            if hit.rank & 1 != 0 || opening.nearest.stats.exhausted != exhausted {
+                self.opening_source_max = self.opening_source_max.max(d);
+            }
+        }
+    }
+    pub(crate) fn proxy_sample(&mut self, rank: usize, d: f64) {
+        if self.closure_faces.get(rank) == Some(&true) {
+            self.closure_max = self.closure_max.max(d);
+        }
+        if self.opening_faces.get(rank) == Some(&true) {
+            self.opening_proxy_max = self.opening_proxy_max.max(d);
+        }
+    }
+    pub(crate) fn eligible(&self, e: f64) -> bool {
+        1.05 * self
+            .closure_max
+            .max(self.opening_source_max)
+            .max(self.opening_proxy_max)
+            <= e
+    }
 }
 
 /// Quarter-grid, including every corner, edge midpoint, interior point and centroid.
@@ -41,7 +89,13 @@ pub(crate) fn assess(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<Option<Controls>, JobError> {
     let mut controls = Controls::default();
-    if change.receipt.closed_holes == 0 && change.receipt.dropped_components == 0 {
+    if change.opening_border_contact {
+        return Ok(None);
+    }
+    if change.receipt.closed_holes == 0
+        && change.receipt.dropped_components == 0
+        && change.receipt.opened_holes == 0
+    {
         return Ok(Some(controls));
     }
     let mut nearest = Nearest::with_steps(super::super::error::NEAREST_STEPS);
@@ -87,7 +141,7 @@ pub(crate) fn assess(
             .hole_patch_to_source
             .max(change.receipt.hole_boundary_to_patch);
     }
-    if !change.dropped.is_empty() {
+    if !change.dropped.is_empty() || change.receipt.opened_holes > 0 {
         let proxy = Surface::new(
             triangles
                 .iter()
@@ -106,10 +160,64 @@ pub(crate) fn assess(
                 controls.source.push(d);
             }
         }
+        if change.receipt.opened_holes > 0 {
+            if change.opening_boundary.is_empty()
+                || !change.opening_reference.iter().any(|(_, lost)| *lost)
+            {
+                return Ok(None);
+            }
+            for (t, lost) in &change.opening_reference {
+                if !lost {
+                    continue;
+                }
+                check()?;
+                for p in samples(t.map(|p| p.map(f64::from))) {
+                    let (p, _) = source(p, true)?;
+                    let d = nearest.surface(&proxy, p, &mut hint).distance2.sqrt();
+                    change.receipt.opened_hole_to_proxy =
+                        change.receipt.opened_hole_to_proxy.max(d);
+                    if 1.05 * d > e {
+                        return Ok(None);
+                    }
+                    controls.source.push(d);
+                }
+            }
+            for edge in &change.opening_boundary {
+                check()?;
+                let [a, b] = edge.map(|p| p.map(f64::from));
+                for k in 0..=4 {
+                    let p = std::array::from_fn(|i| a[i] + (b[i] - a[i]) * k as f64 / 4.);
+                    let (_, d) = source(p, false)?;
+                    change.receipt.opened_hole_boundary_to_source =
+                        change.receipt.opened_hole_boundary_to_source.max(d);
+                    if 1.05 * d > e {
+                        return Ok(None);
+                    }
+                    controls.proxy.push(d);
+                }
+            }
+            controls.opening_faces.clone_from(&change.opening_faces);
+            controls.opening_source_max = change.receipt.opened_hole_to_proxy;
+            controls.opening_proxy_max = change.receipt.opened_hole_boundary_to_source;
+            controls.opening = Some(Opening {
+                reference: Surface::new(
+                    change
+                        .opening_reference
+                        .iter()
+                        .enumerate()
+                        .map(|(i, (t, lost))| Triangle::new(*t, 2 * i as u64 + u64::from(*lost)))
+                        .collect(),
+                )?,
+                nearest: Nearest::with_steps(super::super::error::NEAREST_STEPS),
+                hint: None,
+            });
+        }
     }
     change.receipt.hole_g_increase = (1.05 * controls.closure_max - g_floor).max(0.);
     change.receipt.dropped_component_g_increase =
         (1.05 * change.receipt.dropped_component_to_proxy - g_floor).max(0.);
+    change.receipt.opened_hole_g_increase =
+        (1.05 * controls.opening_source_max.max(controls.opening_proxy_max) - g_floor).max(0.);
     Ok(Some(controls))
 }
 
@@ -117,6 +225,77 @@ pub(crate) fn assess(
 mod tests {
     use super::*;
     use crate::mesh_large::hlod::geometry::topology::{self, tests::ring};
+
+    #[test]
+    fn opened_hole_loss_is_budgeted_and_junction_or_edge_contact_is_refused() {
+        use crate::mesh_large::hlod::interfaces::InterfaceRow;
+        for (half_width, eligible) in [(1., false), (0.1, true)] {
+            let mut m = ring();
+            for p in &mut m.positions[4..] {
+                p[0] = half_width * p[0].signum();
+                p[1] = half_width * p[1].signum();
+            }
+            m.keys = m.positions.iter().map(|p| p.map(f32::to_bits)).collect();
+            let opened = m.triangles.clone();
+            m.triangles.extend([[4, 5, 6], [4, 6, 7]]);
+            let mut change = topology::changes(&m, &opened, &[], 0.2).unwrap();
+            assert_eq!(change.receipt.opened_holes, 1);
+            assert_eq!(change.receipt.closed_holes, 0);
+            assert_eq!(
+                change
+                    .opening_reference
+                    .iter()
+                    .filter(|(_, lost)| *lost)
+                    .count(),
+                2
+            );
+            let mut source = |p: V3, _| Ok(([p[0], p[1], 0.], p[2].abs()));
+            let result = assess(
+                &mut change,
+                &m.positions,
+                &opened,
+                0.2,
+                0.2,
+                &mut source,
+                &|| Ok(()),
+            )
+            .unwrap();
+            assert_eq!(result.is_some(), eligible);
+            if let Some(mut controls) = result {
+                assert!((change.receipt.opened_hole_to_proxy - f64::from(half_width)).abs() < 1e-8);
+                assert!(
+                    controls.source.iter().any(|&d| d > 0.09),
+                    "opening must enter final S2 controls"
+                );
+                assert_eq!(change.receipt.opened_hole_boundary_to_source, 0.);
+                assert_eq!(change.receipt.opened_hole_g_increase, 0.);
+                change.receipt.published(0.2);
+                assert_eq!(change.receipt.opened_hole_final_g, 0.2);
+                assert_eq!(change.receipt.closed_hole_final_g, 0.);
+                controls.source_sample([0., 0., 0.], 0.21);
+                assert!(
+                    !controls.eligible(0.2),
+                    "later S2 lost-region strata can reject an opening"
+                );
+            }
+            for b in [m.keys[4], m.keys[5]] {
+                let interface = [InterfaceRow::new(0, m.keys[4], b, 0, 1)];
+                let mut change = topology::changes(&m, &opened, &interface, 0.2).unwrap();
+                assert!(change.opening_border_contact);
+                assert!(assess(
+                    &mut change,
+                    &m.positions,
+                    &opened,
+                    0.2,
+                    0.2,
+                    &mut |_, _| panic!("border opening must be rejected before source work"),
+                    &|| Ok(())
+                )
+                .unwrap()
+                .is_none());
+            }
+        }
+    }
 
     #[test]
     fn courtyard_inradius_controls_closure_not_planarity_or_boundary_diameter() {

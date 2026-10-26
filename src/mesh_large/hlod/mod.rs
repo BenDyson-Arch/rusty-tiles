@@ -1225,7 +1225,17 @@ fn prepare(
     )?;
     // Check the actual final S2 patch samples too, including codec displacement and
     // centroid controls. A rejected closure gets a bounded boundary-preserving retry.
-    if built.controls.closure_max * 1.05 > contract.scale {
+    built.change.receipt.opened_hole_to_proxy = built
+        .change
+        .receipt
+        .opened_hole_to_proxy
+        .max(built.controls.opening_source_max);
+    built.change.receipt.opened_hole_boundary_to_source = built
+        .change
+        .receipt
+        .opened_hole_boundary_to_source
+        .max(built.controls.opening_proxy_max);
+    if !built.controls.eligible(contract.scale) {
         return Ok(None);
     }
     built.change.receipt.hole_patch_to_source = built
@@ -1233,8 +1243,9 @@ fn prepare(
         .receipt
         .hole_patch_to_source
         .max(built.controls.closure_max);
-    built.topology = built.change.receipt;
     error.geometric_error = error.geometric_error.max(contract.scale);
+    built.change.receipt.published(error.geometric_error);
+    built.topology = built.change.receipt;
     error_cpu.representatives = identity_cpu.unwrap_or(0.);
     let error_cpu_seconds = error::thread_cpu()
         .zip(cpu_start)
@@ -1418,6 +1429,7 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
             .map(|c| c.epsilon)
             .fold(0., f64::max),
         topology: built.topology,
+        attempted_topology: outcome.attempted_topology,
         terminal_locks: contract.terminal_locks(),
         audit_record: None,
     };
@@ -1438,6 +1450,7 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     borders.terminal_locks += row.terminal_locks;
     borders.max_epsilon = borders.max_epsilon.max(row.border_epsilon);
     borders.topology.add(row.topology);
+    borders.attempted_topology.add(row.attempted_topology);
     report.error_cpu_seconds += row.error_cpu_seconds;
     report.error_cpu.add(row.error_cpu);
     report.error_measurement.nearest.add(row.nearest_search);

@@ -222,7 +222,7 @@ pub(super) fn remesh(
         return None;
     }
     let change = topology::changes(m, &output, interface, 0.)?;
-    if change.receipt.closed_holes != 0 {
+    if change.receipt.closed_holes != 0 || change.receipt.opened_holes != 0 {
         return None;
     }
     let mut receipt = change.receipt;

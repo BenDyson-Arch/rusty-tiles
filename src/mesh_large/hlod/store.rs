@@ -225,6 +225,7 @@ pub(crate) struct HlodRow {
     pub border_scale: f64,
     pub border_epsilon: f64,
     pub topology: super::geometry::TopologyReceipt,
+    pub attempted_topology: super::geometry::TopologyReceipt,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]

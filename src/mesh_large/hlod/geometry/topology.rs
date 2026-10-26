@@ -21,12 +21,19 @@ pub(crate) struct Receipt {
     pub constrained_remeshes: u64,
     pub rejected_remesh_rounds: u64,
     pub rejected_hole_closures: u64,
+    pub rejected_hole_openings: u64,
     pub max_dropped_component_diameter: f64,
     pub hole_patch_to_source: f64,
     pub hole_boundary_to_patch: f64,
     pub dropped_component_to_proxy: f64,
+    pub opened_hole_to_proxy: f64,
+    pub opened_hole_boundary_to_source: f64,
     pub hole_g_increase: f64,
     pub dropped_component_g_increase: f64,
+    pub opened_hole_g_increase: f64,
+    pub closed_hole_final_g: f64,
+    pub opened_hole_final_g: f64,
+    pub dropped_component_final_g: f64,
 }
 impl Receipt {
     pub(crate) fn add(&mut self, r: Self) {
@@ -41,6 +48,7 @@ impl Receipt {
         self.constrained_remeshes += r.constrained_remeshes;
         self.rejected_remesh_rounds += r.rejected_remesh_rounds;
         self.rejected_hole_closures += r.rejected_hole_closures;
+        self.rejected_hole_openings += r.rejected_hole_openings;
         self.max_dropped_component_diameter = self
             .max_dropped_component_diameter
             .max(r.max_dropped_component_diameter);
@@ -53,6 +61,28 @@ impl Receipt {
         self.dropped_component_g_increase = self
             .dropped_component_g_increase
             .max(r.dropped_component_g_increase);
+        self.opened_hole_to_proxy = self.opened_hole_to_proxy.max(r.opened_hole_to_proxy);
+        self.opened_hole_boundary_to_source = self
+            .opened_hole_boundary_to_source
+            .max(r.opened_hole_boundary_to_source);
+        self.opened_hole_g_increase = self.opened_hole_g_increase.max(r.opened_hole_g_increase);
+        self.closed_hole_final_g = self.closed_hole_final_g.max(r.closed_hole_final_g);
+        self.opened_hole_final_g = self.opened_hole_final_g.max(r.opened_hole_final_g);
+        self.dropped_component_final_g = self
+            .dropped_component_final_g
+            .max(r.dropped_component_final_g);
+    }
+
+    pub(crate) fn published(&mut self, g: f64) {
+        if self.closed_holes > 0 {
+            self.closed_hole_final_g = g;
+        }
+        if self.opened_holes > 0 {
+            self.opened_hole_final_g = g;
+        }
+        if self.dropped_components > 0 {
+            self.dropped_component_final_g = g;
+        }
     }
 }
 
@@ -64,6 +94,10 @@ pub(crate) struct Change {
     pub patch_faces: Vec<usize>,
     pub boundary: Vec<[[f32; 3]; 2]>,
     pub dropped: Vec<[[f32; 3]; 3]>,
+    pub opening_reference: Vec<([[f32; 3]; 3], bool)>,
+    pub opening_boundary: Vec<[[f32; 3]; 2]>,
+    pub opening_faces: Vec<bool>,
+    pub opening_border_contact: bool,
 }
 
 struct Components(Vec<usize>);
@@ -465,7 +499,7 @@ pub(super) fn changes(
     };
     let before_counts = cycles(&old_edges, &old_degree, &old_root);
     let after_counts = cycles(&new_edges, &new_degree, &new_root);
-    let (closed, closed_count, opened_count) = changed_cycles(
+    let (closed, opened, closed_count, opened_count) = changed_cycles(
         &old_edges,
         &new_edges,
         &old_degree,
@@ -515,11 +549,59 @@ pub(super) fn changes(
         .filter(|t| dropped.contains(&component[t[0] as usize]))
         .map(|t| t.map(|v| m.positions[v as usize]))
         .collect();
+    let mut opening_reference = Vec::new();
+    let mut opening_boundary = Vec::new();
+    let mut opening_faces = Vec::new();
+    let mut opening_border_contact = false;
+    if opened_count > 0 {
+        // Include junction-only contacts, even when the vertex was interior before the
+        // simplification and therefore absent from the old touching-boundary signature.
+        opening_border_contact = (0..m.keys.len()).any(|v| {
+            new_degree[v] > 0 && opened.contains(&new_root[v]) && border.contains(&m.keys[v])
+        });
+        let affected: HashSet<_> = opened.iter().map(|&r| component[r]).collect();
+        let new_faces: HashSet<_> = output.iter().map(oriented).collect();
+        opening_reference = m
+            .triangles
+            .iter()
+            .map(|t| {
+                (
+                    t.map(|v| m.positions[v as usize]),
+                    affected.contains(&component[t[0] as usize])
+                        && !new_faces.contains(&oriented(t)),
+                )
+            })
+            .collect();
+        let mut edges: Vec<_> = new_edges
+            .iter()
+            .filter(|((a, _), n)| **n == 1 && opened.contains(&new_root[*a as usize]))
+            .map(|(&e, _)| e)
+            .collect();
+        edges.sort_unstable();
+        opening_boundary = edges
+            .iter()
+            .map(|&(a, b)| [m.positions[a as usize], m.positions[b as usize]])
+            .collect();
+        let edges: HashSet<_> = edges.into_iter().collect();
+        opening_faces = output
+            .iter()
+            .map(|t| {
+                (0..3).any(|i| {
+                    let (a, b) = (t[i], t[(i + 1) % 3]);
+                    edges.contains(&(a.min(b), a.max(b)))
+                })
+            })
+            .collect();
+    }
     Some(Change {
         receipt,
         patch_faces,
         boundary,
         dropped,
+        opening_reference,
+        opening_boundary,
+        opening_faces,
+        opening_border_contact,
     })
 }
 
@@ -535,7 +617,7 @@ fn changed_cycles(
     new_root: &[usize],
     component: &[usize],
     surviving: &HashSet<usize>,
-) -> (HashSet<usize>, usize, usize) {
+) -> (HashSet<usize>, HashSet<usize>, usize, usize) {
     let n = old_degree.len();
     let mut anchors = vec![false; n];
     let mut contacts = HashMap::<(usize, usize), usize>::default();
@@ -652,11 +734,16 @@ fn changed_cycles(
             closed_count += lost;
         }
     }
-    let opened_count = new_ranks
-        .into_iter()
-        .map(|(r, count)| count - common_new.get(&r).copied().unwrap_or(0))
-        .sum();
-    (closed, closed_count, opened_count)
+    let mut opened = HashSet::default();
+    let mut opened_count = 0;
+    for (r, count) in new_ranks {
+        let added = count - common_new.get(&r).copied().unwrap_or(0);
+        if added > 0 {
+            opened.insert(r);
+            opened_count += added;
+        }
+    }
+    (closed, opened, closed_count, opened_count)
 }
 
 /// Boundary edge components touching a delivered arc or live junction are protected in
@@ -760,7 +847,8 @@ pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: 
     let mut i = 0;
     output.retain(|_| (keep[i], i += 1).0);
     r.remesh_rounds += 1;
-    let Some(change) = changes(m, &output, interface, 0.).filter(|c| c.receipt.closed_holes == 0)
+    let Some(change) = changes(m, &output, interface, 0.)
+        .filter(|c| c.receipt.closed_holes == 0 && c.receipt.opened_holes == 0)
     else {
         r.rejected_remesh_rounds += 1;
         return;

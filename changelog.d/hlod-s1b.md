@@ -13,3 +13,5 @@
   or per-depth omission counts, including loss of an entire coarse level.
 - Verify that an entirely omitted textured coarse frontier performs no image-cache
   loads or appearance work.
+
+Opened holes receive budgeted local loss controls, border-contact rejection and separate attempted/published topology receipts, with affected-tile final G for each operation kind.

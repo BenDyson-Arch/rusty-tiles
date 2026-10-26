@@ -197,3 +197,26 @@ unchanged. It trades measured coarse geometry detail for client payload room;
 actual final G and all three first-view totals must still pass the same gates.
 The 3c4923eb probe established spare coarse G but larger tex3 textures because
 S3 spacing follows G; it did not authorize a byte-growth waiver.
+
+Opened holes are a separate operation. The changed input faces of an affected
+surviving component conservatively cover the lost region; fixed controls are
+projected onto captured source and measured against final decoded coarse geometry.
+The new rim is sampled back to source. Final S2 source strata mapped to changed
+reference faces and proxy strata on rim-adjacent faces also enter eligibility.
+A budget-exhausted reference correspondence conservatively includes the sample.
+Both directions, including the 5% margin, must fit E. Any new boundary component
+with an exact border-edge or junction contact is rejected before measurement.
+Thus an admitted opening cannot set G; bounded retries keep the surface instead.
+Intermediate remeshing cannot hide an unmeasured opening.
+
+Each tile row now includes `attemptedTopology` even when it publishes: it sums
+measured proposals including rejected ones and the accepted proposal. The separate
+`topology` receipt describes published operations. Both aggregate by depth and
+include zeros. `openedHoleToProxy` and `openedHoleBoundaryToSource` are local
+measured maxima; `openedHoleGIncrease` is the margined contribution above the
+incoming max(E, child G), using the same definition as closures/components.
+`closedHoleFinalG`, `openedHoleFinalG`, and `droppedComponentFinalG` give affected
+tiles' final published G (zero for absent kinds, max-reduced across tiles).
+All regions/controls are bounded by the eight-child input and capped output.
+As with closures, conservative region assignment is a cap-fit cost requiring
+real byte/G/CPU acceptance, not a continuous source-surface correspondence proof.

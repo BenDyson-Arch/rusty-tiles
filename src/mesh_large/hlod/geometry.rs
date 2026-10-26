@@ -46,7 +46,7 @@ pub(crate) struct Built {
 
 pub(crate) struct Outcome {
     pub built: Option<Built>,
-    /// Cleanup attempted before a last-resort omission, also recorded when discarded.
+    /// All measured proposals, including rejected candidates and the accepted publication.
     pub attempted_topology: TopologyReceipt,
 }
 
@@ -269,6 +269,7 @@ pub(crate) fn build_parent(
         .fold(0., f64::max);
     let interface = &contract.interface;
     let mut topology = topology::Receipt::default();
+    let mut attempted = topology::Receipt::default();
     topology::contract(&mut merged, interface, mapping, &mut topology)?;
     if caps.is_empty() {
         return Err(state("a parent build needs at least one cap"));
@@ -293,15 +294,21 @@ pub(crate) fn build_parent(
             ) {
                 Err(e) if e.kind() == JobErrorKind::Unsupported => continue,
                 Ok(mut b) => {
-                    if !assess(&mut b)? {
-                        topology.rejected_hole_closures += b.change.receipt.closed_holes;
+                    let accepted = assess(&mut b)?;
+                    if !accepted {
+                        b.change.receipt.rejected_hole_closures += b.change.receipt.closed_holes;
+                        b.change.receipt.rejected_hole_openings += b.change.receipt.opened_holes;
+                    }
+                    attempted.add(b.change.receipt);
+                    if !accepted {
                         continue;
                     }
                     return Ok({
+                        attempted.add(topology);
                         b.topology.add(topology);
                         Outcome {
                             built: Some(b),
-                            attempted_topology: TopologyReceipt::default(),
+                            attempted_topology: attempted,
                         }
                     });
                 }
@@ -334,8 +341,13 @@ pub(crate) fn build_parent(
             ) {
                 Err(e) if e.kind() == JobErrorKind::Unsupported => {}
                 Ok(mut b) => {
-                    if !assess(&mut b)? {
-                        topology.rejected_hole_closures += b.change.receipt.closed_holes;
+                    let accepted = assess(&mut b)?;
+                    if !accepted {
+                        b.change.receipt.rejected_hole_closures += b.change.receipt.closed_holes;
+                        b.change.receipt.rejected_hole_openings += b.change.receipt.opened_holes;
+                    }
+                    attempted.add(b.change.receipt);
+                    if !accepted {
                         continue;
                     }
                     // Final topology is compared with the pre-cleanup input; do not count
@@ -344,10 +356,11 @@ pub(crate) fn build_parent(
                     topology.closed_holes = 0;
                     topology.opened_holes = 0;
                     return Ok({
+                        attempted.add(topology);
                         b.topology.add(topology);
                         Outcome {
                             built: Some(b),
-                            attempted_topology: TopologyReceipt::default(),
+                            attempted_topology: attempted,
                         }
                     });
                 }
@@ -355,9 +368,10 @@ pub(crate) fn build_parent(
             }
         }
     }
+    attempted.add(topology);
     Ok(Outcome {
         built: None,
-        attempted_topology: topology,
+        attempted_topology: attempted,
     })
 }
 

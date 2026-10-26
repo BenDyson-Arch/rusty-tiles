@@ -658,6 +658,7 @@ pub(crate) fn measure(
     cpu.source_scan = elapsed(started);
     let started = thread_cpu();
     let mut hint = None;
+    let topology_source = std::mem::take(&mut topology.source);
     let source_to_proxy = directed(
         query.surface()?,
         source_area,
@@ -665,9 +666,13 @@ pub(crate) fn measure(
         seed,
         Controls {
             proxy: false,
-            initial: &topology.source,
+            initial: &topology_source,
         },
-        |p, _| Ok(nearest.surface(&proxy, p, &mut hint).distance2.sqrt()),
+        |p, _| {
+            let d = nearest.surface(&proxy, p, &mut hint).distance2.sqrt();
+            topology.source_sample(p, d);
+            Ok(d)
+        },
         check,
     )?;
     cpu.source_to_proxy = elapsed(started);
@@ -675,9 +680,7 @@ pub(crate) fn measure(
     let mut proxy_controls = centroid_checks.to_vec();
     proxy_controls.extend(&topology.proxy);
     for (i, &d) in centroid_checks.iter().enumerate() {
-        if topology.closure_faces.get(i) == Some(&true) {
-            topology.closure_max = topology.closure_max.max(d);
-        }
+        topology.proxy_sample(i, d);
     }
     let proxy_to_source = directed(
         proxy.triangles.iter().copied().map(Ok),
@@ -690,9 +693,7 @@ pub(crate) fn measure(
         },
         |p, rank| {
             let d = nearest.source(query, p)?.distance2.sqrt();
-            if topology.closure_faces.get(rank as usize) == Some(&true) {
-                topology.closure_max = topology.closure_max.max(d);
-            }
+            topology.proxy_sample(rank as usize, d);
             Ok(d)
         },
         check,
@@ -909,6 +910,15 @@ mod tests {
             g.geometric_error.max(budget),
             budget,
             "eligible closure cannot set published G"
+        );
+        let (g, opened) = pair(&closed, &source, 71);
+        assert!((opened.source_to_proxy.max() - 0.1).abs() < 1e-7);
+        assert!(opened.proxy_to_source.max() < 1e-12);
+        assert!(g.geometric_error > 0.104 && g.geometric_error < 0.106);
+        assert_eq!(
+            g.geometric_error.max(budget),
+            budget,
+            "eligible opening cannot set published G"
         );
     }
 
