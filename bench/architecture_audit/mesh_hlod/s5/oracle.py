@@ -11,6 +11,7 @@ import hashlib
 import itertools
 import json
 import math
+from fractions import Fraction
 from pathlib import Path
 import subprocess
 import sqlite3
@@ -48,24 +49,40 @@ def decode(path):
     return decoded
 
 def distance2(p, face):
-    """Orthogonal triangle projection plus three closed segments, independent of S2."""
-    a,b,c=face
-    sub=lambda x,y:[x[k]-y[k] for k in range(3)]
-    dot=lambda x,y:sum(u*v for u,v in zip(x,y))
-    u,v,w=sub(b,a),sub(c,a),sub(p,a)
+    """Exact squared distance from p to the closed triangle, as a Fraction.
+
+    Binary float inputs are exact dyadic rationals: put all twelve coordinates
+    on one power-of-two scale as integers. Region tests are signs of integer
+    numerators (no division, no rounding), so a skinny f32 triangle whose float
+    Gram determinant would round to zero keeps its interior (review r12).
+    """
+    ratios=[float(v).as_integer_ratio() for q in (p,*face) for v in q]
+    shift=max(d.bit_length()-1 for _,d in ratios)
+    n=[r<<(shift-d.bit_length()+1) for r,d in ratios]
+    P,A,B,C=n[0:3],n[3:6],n[6:9],n[9:12]
+    sub=lambda x,y:[x[0]-y[0],x[1]-y[1],x[2]-y[2]]
+    dot=lambda x,y:x[0]*y[0]+x[1]*y[1]+x[2]*y[2]
+    best=None  # (numerator, denominator) at scale 2**(2*shift)
+    u,v,w=sub(B,A),sub(C,A),sub(P,A)
     uu,uv,vv,wu,wv=dot(u,u),dot(u,v),dot(v,v),dot(w,u),dot(w,v)
     det=uu*vv-uv*uv
-    best=math.inf
     if det>0:
-        x,y=(wu*vv-wv*uv)/det,(wv*uu-wu*uv)/det
-        if x>=0 and y>=0 and x+y<=1:
-            best=sum((w[k]-x*u[k]-y*v[k])**2 for k in range(3))
-    for a,b in ((a,b),(b,c),(c,a)):
-        d,w=sub(b,a),sub(p,a)
-        length=dot(d,d)
-        t=max(0,min(1,dot(w,d)/length)) if length else 0
-        best=min(best,sum((w[k]-t*d[k])**2 for k in range(3)))
-    return best
+        x,y=wu*vv-wv*uv,wv*uu-wu*uv  # barycentric numerators over det
+        if x>=0 and y>=0 and x+y<=det:
+            # |w - (x u + y v)/det|^2 = |w|^2 - (x wu + y wv)/det at the projection.
+            best=(dot(w,w)*det-(x*wu+y*wv),det)
+    for s0,s1 in ((A,B),(B,C),(C,A)):
+        d,w=sub(s1,s0),sub(P,s0)
+        dd,wd=dot(d,d),dot(w,d)
+        if dd==0 or wd<=0:
+            candidate=(dot(w,w),1)
+        elif wd>=dd:
+            e=sub(w,d);candidate=(dot(e,e),1)
+        else:
+            candidate=(dot(w,w)*dd-wd*wd,dd)
+        if best is None or candidate[0]*best[1]<best[0]*candidate[1]:
+            best=candidate
+    return Fraction(best[0],best[1]<<(2*shift))
 
 def material_class(m):
     m=m or {}
@@ -98,12 +115,21 @@ def textured(material):
 
 IDENTITY = [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]
 KEYS = ('node_index','mesh_index','primitive_index','triangle_index')
-# D4 ties (owner, 2026-10-26): two implementations cannot agree bit for bit on
-# float distances. Each coordinate difference of magnitude <= M = |centroid| +
-# descendant source diagonal rounds by <= 2**-52 * M; the distance path (difference,
-# projection, interpolation, subtraction, squared sum, square root) has <= 8 such
-# steps, and the producer and this oracle may err in opposite directions: 2 * 8.
+# D4 ties (owner, 2026-10-26): this oracle's distances are exact, so tau covers
+# only the producer's f64 arithmetic. On a well-conditioned evaluation each
+# coordinate difference of magnitude <= M = |centroid| + descendant source diagonal
+# rounds by <= 2**-52 * M, and its distance path (difference, projection,
+# interpolation, subtraction, squared sum, square root) has <= 8 such steps; the
+# allowance doubles that. An ill-conditioned producer evaluation that misses by
+# more than tau is refused as a producer defect, never widened into a tie.
 TIE_ULPS = 16
+
+
+def within_tau(named, minimum, tau):
+    """Exact sqrt(named) - sqrt(minimum) <= tau for squared distances."""
+    tau=Fraction(tau)
+    gap=named-minimum-tau*tau
+    return gap<=0 or gap*gap<=4*tau*tau*minimum
 
 
 def multiply(a,b):
@@ -314,7 +340,7 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
             result['exemptCrackEventBasis']='deduplicated (tile,source-open-edge) positive sampled-width witnesses only; changed open edges are candidates, and unmeasured correspondences are not zero-gap proofs'
             result['exemptWindingEvents']=result['winding']['exemptWindingEvents']
             ties=dict(accepted=0,maxExcess=0.0,maxTau=0.0,maxExcessOverTau=0.0,
-                      tolerance='tau = 16 * 2**-52 * (|centroid| + descendant source box diagonal)')
+                      tolerance='exact oracle distances; tau = 16 * 2**-52 * (|centroid| + descendant source box diagonal) for producer arithmetic')
             for t in tiles:
                 if not t['children']: continue
                 for f in store.faces(int(t['id'])):
@@ -329,12 +355,14 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                         box=store.source_box(t['lo'],t['hi'])
                         tau=TIE_ULPS*2.0**-52*(math.sqrt(sum(x*x for x in p))+
                             math.sqrt(sum((box[2*k+1]-box[2*k])**2 for k in range(3))))
-                        d0=math.sqrt(distance2(p,want['xyz']))
-                        hit=store.within(p,t['lo'],t['hi'],distance2,d0+tau,
+                        minimum=distance2(p,want['xyz'])
+                        hit=store.within(p,t['lo'],t['hi'],distance2,math.sqrt(minimum)+tau,
                             lambda identity,w:(tuple(identity[:3]),w['expanded_ordinal'],w['material_index'])==named)
                         require(hit is not None,'representativeIdentity',t['id'])
-                        excess=math.sqrt(distance2(p,hit[1]['xyz']))-d0
-                        require(excess<=tau,'representativeIdentity',t['id'])
+                        named_distance=distance2(p,hit[1]['xyz'])
+                        require(within_tau(named_distance,minimum,tau),'representativeIdentity',t['id'])
+                        # Reporting only; the decision above is exact.
+                        excess=max(math.sqrt(named_distance)-math.sqrt(minimum),0.0)
                         ties['accepted']+=1
                         if excess>=ties['maxExcess']:
                             ties.update(maxExcess=excess,maxTau=tau)

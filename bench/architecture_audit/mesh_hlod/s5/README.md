@@ -42,7 +42,14 @@ REPLACE ancestor. All delivery checks, continuity included, apply only once HLOD
 identity is expected: other tilesets may keep empty intermediates, and the disk
 store (with its scratch) is created only then, from a bounded pending buffer.
 A coarse edge with two equal-direction faces is refused unless descendant leaves
-hold that same multiplicity (a nonmanifold spine).
+hold that multiplicity (a nonmanifold spine). That admits the count only: native
+validation does not prove coarse face orientation away from required interface
+directions; the oracle's coincident-face guard does (`book-reversed-face`).
+Expectation is owned outside payload labels: `--expect-profile hlod`
+(`ValidationRequest::expect_profile`) or the archive's own declaration
+(`asset.extras.rustyTiles.lod` or `conversion.json` `lod` equal to `hlod`) makes
+identity and every delivery check mandatory, so stripping all labels refuses.
+An undeclared, unflagged tileset validates as generic; HLOD is never inferred.
 
 Upward omission (S1 `756283e2` amendment) is checked once identity is expected,
 from the delivered hierarchy alone. `triangleCap` refuses any payload, leaf or
@@ -137,10 +144,12 @@ values, else `omissionReport`. `oracle.py` runs the same owner after its source
 checks and also refuses a decoded payload above 8,192 faces (`triangleCap`).
 
 `oracle.py` checks source leaf multiplicity/IDs/geometry/normals, materials and
-nearest coarse representatives. A named primitive other than the source-order
-nearest is accepted only within tau = 16 * 2^-52 * (|centroid| + descendant
-source diagonal) of the minimum distance (D4 ties), and the largest excess is
-reported; the exact-tie, within-tau and beyond-tau controls pin it. Analytic manifests
+nearest coarse representatives with exact rational point-triangle distances
+(integer region tests, no float Gram determinant; r12 slivers stay controls). A
+named primitive other than the source-order nearest is accepted only within
+tau = 16 * 2^-52 * (|centroid| + descendant source diagonal) of the exact
+minimum, an allowance for the producer's f64 arithmetic only (D4 ties); the
+largest excess is reported and exact-tie, within/beyond-tau controls pin it. Analytic manifests
 check exact UVs/materials. Real textured leaves may legitimately crop/repack UVs
 and texture bindings: their material class/PBR constants/slot presence and
 rendered UV structure are checked, while UV/source-pixel correspondence is

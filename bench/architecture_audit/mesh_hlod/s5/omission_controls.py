@@ -41,6 +41,24 @@ GROUPS = {'root.glb': [0, 1, 2, 3], 'left.glb': [0, 1], 'right.glb': [2, 3], 'mi
           **{f'leaf{i}.glb': [i] for i in range(4)}}
 
 
+def stripped(data):
+    """The GLB without any source identity: no feature IDs, tables or extensions."""
+    length = int.from_bytes(data[12:16], 'little')
+    doc, binary = json.loads(data[20:20 + length]), data[28 + length:]
+    doc.pop('extensions', None)
+    doc['extensionsUsed'] = [e for e in doc.get('extensionsUsed', [])
+                             if e not in ('EXT_mesh_features', 'EXT_structural_metadata')]
+    for mesh in doc['meshes']:
+        for primitive in mesh['primitives']:
+            primitive.pop('extensions', None)
+            primitive['attributes'] = {k: v for k, v in primitive['attributes'].items()
+                                       if not k.startswith('_FEATURE_ID_')}
+    text = json.dumps(doc).encode()
+    text += b' ' * (-len(text) % 4)
+    return (b'glTF' + struct.pack('<III', 2, 28 + len(text) + len(binary), len(text)) + b'JSON' + text
+            + struct.pack('<I', len(binary)) + b'BIN\0' + binary)
+
+
 def omitted(node, g):
     node.pop('content', None)
     node['geometricError'] = g
@@ -167,6 +185,21 @@ def generate(root):
             binary = bytes([0x23]) + bytes(7) + bytes([0x20]) + bytes(7)
             files['0-0-0.subtree'] = b'subt' + struct.pack('<IQQ', 1, len(data), len(binary)) + data + binary
         return edit
+    # Review r12 P2: stripping every identity label must not switch HLOD off. The
+    # omission defect above is only an HLOD defect; without an expectation it is
+    # an ordinary tileset. Native-only: there is no identity for the oracle.
+    for name, declare in (('stripped-undeclared', None), ('stripped-declared-asset', 'asset'),
+                          ('stripped-declared-report', 'report')):
+        def strip(doc, files, declare=declare):
+            content_above_branch_end(doc, files)
+            for uri in list(files):
+                files[uri] = stripped(files[uri])
+            if declare == 'asset':
+                doc['asset']['extras'] = {'rustyTiles': {'lod': 'hlod'}}
+            if declare == 'report':
+                files['conversion.json'] = json.dumps({'lod': 'hlod'}).encode()
+        case(name, strip, check='hlodFeatureIds', source='source-left.json',
+             extra=dict(nativeOnly=True, withoutFlag=None if declare is None else 'hlodFeatureIds'))
     case('implicit-omitted', implicit(8192),
          counts=dict(omittedCells=2, omissionSources=1, omittedByDepth=[1, 1], frontierTiles=1, frontierLeaves=1))
     case('implicit-omitted-children-error', implicit(8), check='emptyCellRefinement')
@@ -185,6 +218,26 @@ def run(root, binary=None):
         digest = hashlib.sha256(binary.read_bytes()).hexdigest()
     for c in cases:
         folder = root / c['name']
+        if c.get('nativeOnly'):
+            native = 'not run'
+            if binary:
+                archive = folder.with_suffix('.3tz')
+                packed = subprocess.run([str(binary), 'convert', '-i', str(folder), '-o', str(archive), '--force', '--json'],
+                                        capture_output=True, timeout=30)
+                assert packed.returncode == 0, (c['name'], packed.stderr[-2000:])
+                verdicts = []
+                for flag, want in ((['--expect-profile', 'hlod'], c['check']), ([], c['withoutFlag'])):
+                    checked = subprocess.run([str(binary), 'validate', str(archive), '--json', *flag],
+                                             capture_output=True, timeout=30)
+                    report = json.loads(checked.stdout)
+                    if want:
+                        assert checked.returncode == 3 and want in report['error']['message'], (c['name'], flag, report)
+                    else:
+                        assert checked.returncode == 0 and 'hlodFeatureIds' not in report['checks'], (c['name'], report)
+                    verdicts.append(want or 'generic pass')
+                native = ' / '.join(verdicts)
+            results.append(dict(name=c['name'], oracle='not applicable (no identity)', native=native))
+            continue
         try:
             result = audit(folder, root / c['source'], scratch=root, work_limit=2_000_000)
             assert c['check'] is None, (c, result)
@@ -220,7 +273,8 @@ def run(root, binary=None):
             packed = subprocess.run([str(binary), 'convert', '-i', str(folder), '-o', str(archive), '--force', '--json'],
                                     capture_output=True, timeout=30)
             assert packed.returncode == 0, (c['name'], packed.stdout[-2000:], packed.stderr[-2000:])
-            checked = subprocess.run([str(binary), 'validate', str(archive), '--json'], capture_output=True, timeout=30)
+            checked = subprocess.run([str(binary), 'validate', str(archive), '--json', '--expect-profile', 'hlod'],
+                                     capture_output=True, timeout=30)
             report = json.loads(checked.stdout)
             if c['check']:
                 assert checked.returncode == 3 and c['check'] in report['error']['message'], (c['name'], report)

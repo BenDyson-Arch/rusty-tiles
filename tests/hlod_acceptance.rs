@@ -1,7 +1,7 @@
 //! S5: named archive checks plus a separate source-aware acceptance oracle.
 use rusty_tiles::{
     package::{package, PackageRequest},
-    validate::{inspect, LimitKey, ValidationRequest},
+    validate::{inspect, ExpectedProfile, LimitKey, ValidationRequest},
     RunControl,
 };
 use serde_json::Value;
@@ -150,11 +150,13 @@ fn sampled_hlod_archives_and_named_mutants() {
             &RunControl::default(),
         )
         .unwrap();
-        let result = inspect(ValidationRequest::new(&archive));
+        // HLOD acceptance always states its expectation (review r12).
+        let result =
+            inspect(ValidationRequest::new(&archive).expect_profile(ExpectedProfile::Hlod));
         let cli = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
             .arg("validate")
             .arg(&archive)
-            .arg("--json")
+            .args(["--json", "--expect-profile", "hlod"])
             .output()
             .unwrap();
         let cli_report: Value = serde_json::from_slice(&cli.stdout).unwrap();
@@ -173,6 +175,7 @@ fn sampled_hlod_archives_and_named_mutants() {
             if name == "valid" {
                 let error = inspect(
                     ValidationRequest::new(&archive)
+                        .expect_profile(ExpectedProfile::Hlod)
                         .max_volume(LimitKey::TotalPayloadElements, 200),
                 )
                 .unwrap_err();
@@ -227,6 +230,37 @@ fn sampled_hlod_archives_and_named_mutants() {
                 .iter()
                 .any(|s| s == "geometricErrorAccuracy"));
             assert_eq!(serde_json::to_value(report).unwrap(), cli_report);
+        }
+    }
+    // Review r12: every identity label stripped, through the public API. The expectation
+    // comes from the caller or the archive's declaration, never from the labels.
+    for (name, declared) in [
+        ("stripped-undeclared", false),
+        ("stripped-declared-asset", true),
+        ("stripped-declared-report", true),
+    ] {
+        let archive = work.path().join(format!("omission/{name}-api.3tz"));
+        package(
+            PackageRequest::directory(work.path().join("omission").join(name), &archive),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let flagged =
+            inspect(ValidationRequest::new(&archive).expect_profile(ExpectedProfile::Hlod))
+                .unwrap_err()
+                .to_string();
+        assert!(flagged.contains("hlodFeatureIds"), "{name}: {flagged}");
+        let plain = inspect(ValidationRequest::new(&archive));
+        if declared {
+            let error = plain.unwrap_err().to_string();
+            assert!(error.contains("hlodFeatureIds"), "{name}: {error}");
+        } else {
+            let report = plain.unwrap_or_else(|e| panic!("{name}: generic tileset: {e}"));
+            assert!(report.interface_census.is_none(), "{name}");
+            assert!(
+                !report.checks.iter().any(|c| c == "hlodFeatureIds"),
+                "{name}"
+            );
         }
     }
     // I1's independently authored A-1: co-adjusted missing tile/content bit,

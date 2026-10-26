@@ -6,11 +6,21 @@ use std::{
     io,
     path::{Path, PathBuf},
 };
+/// A delivery profile the caller requires the archive to satisfy, independently of any
+/// label inside the archive.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExpectedProfile {
+    /// 0.4 octree HLOD: source identity on every payload and every HLOD delivery check
+    /// (continuity, cap, omission, cover, interfaces) are mandatory. Missing identity is a
+    /// refusal, never a fall-back to generic validation.
+    Hlod,
+}
 #[derive(Clone, Debug)]
 pub struct ValidationRequest {
     input: PathBuf,
     plan: LimitPlan,
     scratch_dir: Option<PathBuf>,
+    expected: Option<ExpectedProfile>,
 }
 impl ValidationRequest {
     pub fn new(input: impl Into<PathBuf>) -> Self {
@@ -18,7 +28,14 @@ impl ValidationRequest {
             input: input.into(),
             plan: LimitPlan::default(),
             scratch_dir: None,
+            expected: None,
         }
+    }
+    /// Requires `profile`. An archive declaring HLOD itself (`asset.extras.rustyTiles.lod` or
+    /// the conversion report's `lod`, equal to `"hlod"`) is held to it without this call.
+    pub fn expect_profile(mut self, profile: ExpectedProfile) -> Self {
+        self.expected = Some(profile);
+        self
     }
     /// Overrides one configurable limit (VS-C-3): a Class B volume cap is set, a Class C
     /// budget is replaced. Values below the default floors are allowed. A later call for the
@@ -40,6 +57,9 @@ impl ValidationRequest {
     }
     pub(crate) fn scratch(&self) -> Option<&Path> {
         self.scratch_dir.as_deref()
+    }
+    pub(crate) fn expected_profile(&self) -> Option<ExpectedProfile> {
+        self.expected
     }
 }
 /// A validator scratch failure (VS-C-5 T1): never a verdict on the archive.

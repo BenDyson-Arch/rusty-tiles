@@ -7,6 +7,7 @@ import collections
 import itertools
 import json
 import math
+from fractions import Fraction
 import sqlite3
 import struct
 
@@ -39,6 +40,11 @@ class Work:
 def bounds(points):
     return tuple(v for k in range(3) for v in
                  (min(p[k] for p in points), max(p[k] for p in points)))
+
+
+def _cube_slack(p, radius):
+    """Bound on the rounding of p[k] +/- radius and of stored f64 face boxes."""
+    return 4*2.0**-52*(max(abs(x) for x in p)+radius)+1e-300
 
 
 def box_distance(p, box):
@@ -276,8 +282,12 @@ class Store:
         return self.source_bounds[lo,hi]
 
     def within(self, p, lo, hi, distance2, radius, accept):
-        """Nearest accepted descendant source face no farther than radius, or None."""
-        params = tuple(v for k in range(3) for v in (p[k]+radius,p[k]-radius))
+        """Nearest accepted descendant source face no farther than radius, or None.
+
+        The cube is widened by the float rounding of its bounds, so every face
+        within radius is a candidate; the caller decides on exact distances."""
+        reach = radius + _cube_slack(p, radius)
+        params = tuple(v for k in range(3) for v in (p[k]+reach,p[k]-reach))
         rows = self.db.execute('SELECT source.id,leaf,key,data FROM source_box JOIN source USING(id) '
             'WHERE x0<=? AND x1>=? AND y0<=? AND y1>=? AND z0<=? AND z1>=?', params)
         best, answer = math.inf, None
@@ -291,7 +301,7 @@ class Store:
             if not accept(identity,want):
                 continue
             d=distance2(p,want['xyz'])
-            if d<=radius*radius and d<best:
+            if d<=Fraction(reach)**2 and d<best:
                 best,answer=d,(identity,want)
         return answer
 
@@ -332,7 +342,9 @@ class Store:
                 candidate = d,rank
                 if answer is None or candidate < best:
                     best, answer = candidate,(identity,want)
-            if answer is not None and best[0] <= radius*radius:
+            # Exact: complete once the best lies inside the cube shrunk by the
+            # rounding of its float bounds.
+            if answer is not None and best[0] <= Fraction(max(radius-_cube_slack(p,radius),0.0))**2:
                 return answer
             radius *= 2
             if not math.isfinite(radius):

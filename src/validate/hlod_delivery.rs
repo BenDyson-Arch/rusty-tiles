@@ -1973,8 +1973,13 @@ impl Store {
                     effort.charge(1)?;
                     if (e.forward == 2 && e.reverse == 0) || (e.reverse == 2 && e.forward == 0) {
                         // A nonmanifold source can hold two same-direction faces on
-                        // one edge (a book's pages on its spine): the coarse pair is
-                        // then a retained source multiplicity, not a flipped face.
+                        // one edge (a book's pages on its spine): the pair may then be
+                        // retained source multiplicity. This only admits the edge
+                        // count; it does not prove either face's orientation (a page
+                        // reversed onto the spine passes here). Native validation does
+                        // not prove coarse orientation away from required interface
+                        // directions; the source oracle's exact coincident-face guard
+                        // does (book-reversed-face control, review r12).
                         effort.charge(1)?;
                         let last: i64 = self
                             .connection
@@ -2256,7 +2261,12 @@ mod tests {
                 s.connection
                     .execute(
                         "INSERT OR IGNORE INTO originals VALUES(?,?,?,?)",
-                        params![vec![0u8; 40], 0u64.to_be_bytes().to_vec(), rank, encode(&[x, 1., 2.])],
+                        params![
+                            vec![0u8; 40],
+                            0u64.to_be_bytes().to_vec(),
+                            rank,
+                            encode(&[x, 1., 2.])
+                        ],
                     )
                     .map_err(sql)?;
                 let mut frame = IDENTITY;
@@ -2293,7 +2303,12 @@ mod tests {
             s.connection
                 .execute(
                     "INSERT INTO originals VALUES(?,?,?,?)",
-                    params![vec![0u8; 40], vertex.to_be_bytes().to_vec(), rank as i64, encode(&p)],
+                    params![
+                        vec![0u8; 40],
+                        vertex.to_be_bytes().to_vec(),
+                        rank as i64,
+                        encode(&p)
+                    ],
                 )
                 .unwrap();
             s.connection

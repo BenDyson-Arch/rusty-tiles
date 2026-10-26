@@ -129,7 +129,7 @@ def run(root, binary):
         archive = root / (name + '.3tz')
         packed = subprocess.run([str(binary), 'convert', '-i', str(folder), '-o', str(archive), '--force', '--json'], capture_output=True, timeout=20)
         assert packed.returncode == 0, (name, packed.stdout[-2000:])
-        checked = subprocess.run([str(binary), 'validate', str(archive), '--json'], capture_output=True, timeout=20)
+        checked = subprocess.run([str(binary), 'validate', str(archive), '--json', '--expect-profile', 'hlod'], capture_output=True, timeout=20)
         report = json.loads(checked.stdout)
         assert checked.returncode == code, (name, code, checked.returncode, report)
         if code:

@@ -100,6 +100,16 @@ enum Command {
         /// the user cache directory, then the system temporary directory, disk-backed first)
         #[arg(long = "scratchDir", visible_alias = "scratch-dir", value_name = "DIR")]
         scratch_dir: Option<PathBuf>,
+        /// Require a delivery profile regardless of labels inside the archive. `hlod`: every
+        /// payload must carry source identity and every HLOD check runs; an archive declaring
+        /// HLOD (asset.extras.rustyTiles.lod or conversion.json lod) is held to it anyway
+        #[arg(
+            long = "expectProfile",
+            visible_alias = "expect-profile",
+            value_name = "PROFILE",
+            value_parser = ["hlod"]
+        )]
+        expect_profile: Option<String>,
     },
     /// Check converter capabilities and local CRS resources
     Doctor(DoctorArgs),
@@ -1166,8 +1176,12 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             input,
             max_volume,
             scratch_dir,
+            expect_profile,
         } => {
             let mut request = rusty_tiles::validate::ValidationRequest::new(&input);
+            if expect_profile.is_some() {
+                request = request.expect_profile(rusty_tiles::validate::ExpectedProfile::Hlod);
+            }
             let mut seen = std::collections::BTreeSet::new();
             for (key, value) in max_volume {
                 if !seen.insert(key) {

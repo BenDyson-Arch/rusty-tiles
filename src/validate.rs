@@ -33,8 +33,8 @@ pub use limits::{
 use limits::{LimitPlan, Sources};
 pub use rows::{PayloadRows, PayloadRowsIter};
 pub use types::{
-    InterfaceCensus, PayloadReport, ScratchRefusal, ScratchReport, ValidationFailure,
-    ValidationLimits, ValidationReport, ValidationRequest,
+    ExpectedProfile, InterfaceCensus, PayloadReport, ScratchRefusal, ScratchReport,
+    ValidationFailure, ValidationLimits, ValidationReport, ValidationRequest,
 };
 type Error = ValidationFailure;
 use facts::{FactStore, Stored};
@@ -3223,6 +3223,7 @@ fn inspect_run(
         None => crate::spill::Placement::disk(true),
     };
     let path = request.input();
+    let expected_hlod = request.expected_profile() == Some(ExpectedProfile::Hlod);
     let source = open_archive(path)?;
     let before = source.metadata()?;
     let identity = same_file::Handle::from_file(source.try_clone()?)?;
@@ -3401,8 +3402,17 @@ fn inspect_run(
         }
     }
     {
-        // Only the vector build check reads this copy; it is dropped before traversal.
+        // Only the vector build and HLOD declaration checks read this copy; it is dropped
+        // before traversal.
         let (manifest, _) = check.resources.read_json("tileset.json")?;
+        // HLOD expectation is owned by the caller or the archive's own declaration, never
+        // inferred from payload labels whose removal it must detect (review r12).
+        if expected_hlod
+            || manifest["asset"]["extras"]["rustyTiles"]["lod"].as_str() == Some("hlod")
+            || check.reports["lod"].as_str() == Some("hlod")
+        {
+            check.delivery.expect_identity();
+        }
         if let Some(expected) = manifest["asset"]["extras"]["vectorBuildStateSha256"].as_str() {
             check.resources.reference("vector-build.json".into())?;
             if vector_build.as_deref() != Some(expected) {
