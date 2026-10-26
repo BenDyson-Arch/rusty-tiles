@@ -20,7 +20,13 @@ pub(crate) struct Receipt {
     pub remesh_rounds: u64,
     pub constrained_remeshes: u64,
     pub rejected_remesh_rounds: u64,
-    pub max_loss_diameter: f64,
+    pub rejected_hole_closures: u64,
+    pub max_dropped_component_diameter: f64,
+    pub hole_patch_to_source: f64,
+    pub hole_boundary_to_patch: f64,
+    pub dropped_component_to_proxy: f64,
+    pub hole_g_increase: f64,
+    pub dropped_component_g_increase: f64,
 }
 impl Receipt {
     pub(crate) fn add(&mut self, r: Self) {
@@ -34,8 +40,30 @@ impl Receipt {
         self.remesh_rounds += r.remesh_rounds;
         self.constrained_remeshes += r.constrained_remeshes;
         self.rejected_remesh_rounds += r.rejected_remesh_rounds;
-        self.max_loss_diameter = self.max_loss_diameter.max(r.max_loss_diameter);
+        self.rejected_hole_closures += r.rejected_hole_closures;
+        self.max_dropped_component_diameter = self
+            .max_dropped_component_diameter
+            .max(r.max_dropped_component_diameter);
+        self.hole_patch_to_source = self.hole_patch_to_source.max(r.hole_patch_to_source);
+        self.hole_boundary_to_patch = self.hole_boundary_to_patch.max(r.hole_boundary_to_patch);
+        self.dropped_component_to_proxy = self
+            .dropped_component_to_proxy
+            .max(r.dropped_component_to_proxy);
+        self.hole_g_increase = self.hole_g_increase.max(r.hole_g_increase);
+        self.dropped_component_g_increase = self
+            .dropped_component_g_increase
+            .max(r.dropped_component_g_increase);
     }
+}
+
+/// Bounded witnesses of an actual topology proposal. Faces index the proposed output;
+/// boundary and removed-component positions belong to the input before cleanup.
+#[derive(Debug, Default)]
+pub(crate) struct Change {
+    pub receipt: Receipt,
+    pub patch_faces: Vec<usize>,
+    pub boundary: Vec<[[f32; 3]; 2]>,
+    pub dropped: Vec<[[f32; 3]; 3]>,
 }
 
 struct Components(Vec<usize>);
@@ -271,15 +299,16 @@ pub(super) fn cleanup(m: &mut Merged, interface: &[InterfaceRow], g: f64, r: &mu
 
 /// Compare the actual output topology, including changes made by meshopt itself. A
 /// boundary cycle touching the interface must survive as a distinct boundary cycle with
-/// its border contacts. Interior component loss contributes a strict diameter floor to G.
+/// its border contacts. Interior component loss is eligible only below the existing G floor.
 /// This is checked after simplification and before S2; it never substitutes for S2.
 pub(super) fn changes(
     m: &Merged,
     output: &[[u32; 3]],
     interface: &[InterfaceRow],
-) -> Option<(Receipt, f64)> {
+    g: f64,
+) -> Option<Change> {
     if output == m.triangles {
-        return Some((Receipt::default(), 0.));
+        return Some(Change::default());
     }
     let rejected = |reason: &str| {
         #[cfg(test)]
@@ -309,20 +338,20 @@ pub(super) fn changes(
         .map(|v| component[*v as usize])
         .collect();
     let mut receipt = Receipt::default();
-    let mut floor = 0f64;
+    let mut dropped = HashSet::new();
     for (c, (lo, hi, touch)) in &bounds {
         if !surviving.contains(c) {
             if *touch {
                 return rejected("border component disappeared");
             }
+            let diameter = (0..3).map(|a| (hi[a] - lo[a]).powi(2)).sum::<f64>().sqrt();
+            if diameter >= g {
+                return rejected("interior component is not below the existing G floor");
+            }
+            dropped.insert(*c);
             receipt.dropped_components += 1;
-            floor = floor.max(
-                (0..3)
-                    .map(|a| (hi[a] - lo[a]).powi(2))
-                    .sum::<f64>()
-                    .sqrt()
-                    .next_up(),
-            );
+            receipt.max_dropped_component_diameter =
+                receipt.max_dropped_component_diameter.max(diameter);
         }
     }
     let boundary = |triangles: &[[u32; 3]]| {
@@ -475,41 +504,63 @@ pub(super) fn changes(
             })
         })
         .collect();
-    // At an interior branching boundary a lost cycle need not disconnect the boundary
-    // graph. Its whole source boundary supplies a conservative diameter floor.
+    // A branching boundary can lose a cycle without disconnecting. Measure the
+    // affected changed surface, never the diameter of the whole boundary graph.
     for v in 0..m.keys.len() {
         if old_degree[v] > 0 && old_degree[v] != 2 && lost_cycles.contains(&component[v]) {
             closed.insert(old_root[v]);
         }
     }
-    let mut hole_bounds: HashMap<usize, ([f64; 3], [f64; 3])> = HashMap::new();
-    for v in 0..m.keys.len() {
-        if old_degree[v] > 0 && closed.contains(&old_root[v]) {
-            let p = m.positions[v].map(f64::from);
-            let b = hole_bounds.entry(old_root[v]).or_insert((p, p));
-            for a in 0..3 {
-                b.0[a] = b.0[a].min(p[a]);
-                b.1[a] = b.1[a].max(p[a]);
-            }
-        }
-    }
-    for (lo, hi) in hole_bounds.values() {
-        floor = floor.max(
-            (0..3)
-                .map(|a| (hi[a] - lo[a]).powi(2))
-                .sum::<f64>()
-                .sqrt()
-                .next_up(),
-        );
-    }
-    receipt.max_loss_diameter = floor;
-    Some((receipt, floor))
+    let affected: HashSet<usize> = closed.iter().map(|&r| component[r]).collect();
+    let old_faces: HashSet<_> = m.triangles.iter().map(oriented).collect();
+    let patch_faces = if receipt.closed_holes > 0 {
+        output
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| {
+                affected.contains(&component[t[0] as usize]) && !old_faces.contains(&oriented(t))
+            })
+            .map(|(i, _)| i)
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let boundary = if receipt.closed_holes > 0 {
+        let mut edges: Vec<_> = old_edges
+            .iter()
+            .filter(|((a, _), n)| **n == 1 && closed.contains(&old_root[*a as usize]))
+            .map(|(&(a, b), _)| (a, b))
+            .collect();
+        edges.sort_unstable();
+        edges
+            .into_iter()
+            .map(|(a, b)| [m.positions[a as usize], m.positions[b as usize]])
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let dropped = m
+        .triangles
+        .iter()
+        .filter(|t| dropped.contains(&component[t[0] as usize]))
+        .map(|t| t.map(|v| m.positions[v as usize]))
+        .collect();
+    Some(Change {
+        receipt,
+        patch_faces,
+        boundary,
+        dropped,
+    })
 }
 
 /// Boundary edge components touching a delivered arc or live junction are protected in
 /// full. A free vertex never maps onto a protected one, so each such boundary edge keeps
 /// its one incident face. No touching hole can close during interior clustering.
-pub(super) fn protected(m: &Merged, interface: &[InterfaceRow]) -> (Vec<bool>, usize) {
+pub(super) fn protected(
+    m: &Merged,
+    interface: &[InterfaceRow],
+    interior: bool,
+) -> (Vec<bool>, usize) {
     let border = points(interface);
     let mut locked: Vec<bool> = m.keys.iter().map(|k| border.contains(k)).collect();
     let mut edges: HashMap<(u32, u32), u32> = HashMap::new();
@@ -536,7 +587,7 @@ pub(super) fn protected(m: &Merged, interface: &[InterfaceRow]) -> (Vec<bool>, u
         if n == 1 {
             let root = boundary.root(a as usize);
             loops.insert(root);
-            if touched.contains(&root) {
+            if interior || touched.contains(&root) {
                 locked[a as usize] = true;
                 locked[b as usize] = true;
             }
@@ -559,7 +610,7 @@ pub(super) fn protected(m: &Merged, interface: &[InterfaceRow]) -> (Vec<bool>, u
 /// All allocations and visits are bounded by the eight-child job. Components remain
 /// separate; protected boundary loops and one support face per component survive.
 pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: &mut Receipt) {
-    let (locked, _) = protected(m, interface);
+    let (locked, _) = protected(m, interface, false);
     let component = Components::mesh(m);
     let mut lo = [f64::INFINITY; 3];
     let mut hi = [f64::NEG_INFINITY; 3];
@@ -603,11 +654,12 @@ pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: 
     let mut i = 0;
     output.retain(|_| (keep[i], i += 1).0);
     r.remesh_rounds += 1;
-    let Some((change, _)) = changes(m, &output, interface) else {
+    let Some(change) = changes(m, &output, interface, 0.).filter(|c| c.receipt.closed_holes == 0)
+    else {
         r.rejected_remesh_rounds += 1;
         return;
     };
-    r.add(change);
+    r.add(change.receipt);
     r.remeshed_vertices += map
         .iter()
         .enumerate()
@@ -618,9 +670,9 @@ pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: 
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
-    fn ring() -> Merged {
+    pub(crate) fn ring() -> Merged {
         let positions = vec![
             [-2., -2., 0.],
             [2., -2., 0.],
@@ -672,12 +724,18 @@ mod tests {
         m.keys = m.positions.iter().map(|p| p.map(f32::to_bits)).collect();
         let p = m.keys[0];
         let border = vec![InterfaceRow::new(0, p, p, 0, 1)];
-        assert_eq!(changes(&m, &reduced, &border).unwrap().0.closed_holes, 0);
+        assert_eq!(
+            changes(&m, &reduced, &border, 100.)
+                .unwrap()
+                .receipt
+                .closed_holes,
+            0
+        );
         reduced.pop();
-        assert!(changes(&m, &reduced, &border).is_none());
-        let loss = changes(&m, &reduced, &[]).unwrap();
-        assert_eq!(loss.0.closed_holes, 1);
-        assert!(loss.1 > 1.);
+        assert!(changes(&m, &reduced, &border, 100.).is_none());
+        let loss = changes(&m, &reduced, &[], 100.).unwrap();
+        assert_eq!(loss.receipt.closed_holes, 1);
+        assert!(!loss.patch_faces.is_empty());
     }
     #[test]
     fn degenerate_strip_removal_cannot_remove_the_certified_edge() {
@@ -717,13 +775,15 @@ mod tests {
         let p = m.keys[4];
         let border = vec![InterfaceRow::new(0, p, p, 0, 1)];
         assert!(
-            changes(&m, &filled, &border).is_none(),
+            changes(&m, &filled, &border, 1.).is_none(),
             "even one junction contact protects a hole"
         );
-        let (receipt, floor) = changes(&m, &filled, &[]).unwrap();
+        let change = changes(&m, &filled, &[], 1.).unwrap();
+        let receipt = change.receipt;
         assert_eq!(receipt.closed_holes, 1);
         assert_eq!(receipt.dropped_components, 0);
-        assert!(floor > 0.28 && floor < 0.29);
+        assert_eq!(change.patch_faces, vec![8, 9]);
+        assert_eq!(change.boundary.len(), 4);
     }
     #[test]
     fn interior_remeshing_preserves_a_hole_touching_a_border_junction() {
@@ -738,7 +798,7 @@ mod tests {
         assert_eq!(receipt.closed_holes, 0);
         let mut before = ring();
         before.triangles = original;
-        assert!(changes(&before, &m.triangles, &border).is_some());
+        assert!(changes(&before, &m.triangles, &border, 1.).is_some());
     }
     #[test]
     fn sub_g_border_component_survives_while_identical_interior_component_is_dropped() {
@@ -768,6 +828,29 @@ mod tests {
                 2
             ],
         };
+        assert!(changes(&m, &[[3, 4, 5]], &interface, 1.).is_none());
+        assert_eq!(
+            changes(&m, &[[0, 1, 2]], &interface, 1.)
+                .unwrap()
+                .receipt
+                .dropped_components,
+            1
+        );
+        assert!(
+            changes(&m, &[[0, 1, 2]], &interface, 0.1).is_none(),
+            "implicit deletion must obey the same size rule"
+        );
+        let mut large = m.clone();
+        large.positions[4][0] = 3.;
+        large.keys = large
+            .positions
+            .iter()
+            .map(|p| p.map(f32::to_bits))
+            .collect();
+        assert!(changes(&large, &[[0, 1, 2]], &interface, 1.).is_none());
+        let mut receipt = Receipt::default();
+        cleanup(&mut large, &interface, 1., &mut receipt);
+        assert_eq!(large.triangles.len(), 2);
         let mut r = Receipt::default();
         cleanup(&mut m, &interface, 1., &mut r);
         assert_eq!(m.triangles, vec![[0, 1, 2]]);

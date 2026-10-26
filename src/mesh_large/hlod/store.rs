@@ -220,7 +220,6 @@ pub(crate) struct HlodRow {
     pub quantized: bool,
     pub bounds: BoundsRow,
     pub appearance: super::appearance::TileAppearance,
-    pub topology_error_floor: f64,
     pub terminal_locks: u64,
     pub audit_record: Option<super::audit::Index>,
     pub border_scale: f64,

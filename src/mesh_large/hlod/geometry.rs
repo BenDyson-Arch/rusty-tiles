@@ -2,6 +2,7 @@
 //! Boundary reconstruction precedes meshopt reduction. Stalled interiors get bounded
 //! topology cleanup and remeshing; only the reported capped frontier remains afterwards.
 mod constrained;
+pub(crate) mod measurement;
 mod topology;
 pub(crate) use topology::Receipt as TopologyReceipt;
 
@@ -37,7 +38,8 @@ pub(crate) struct Built {
     /// Output faces turned to (or dropped beside) their source orientation (`orient`).
     pub reoriented: u32,
     pub topology: topology::Receipt,
-    pub topology_floor: f64,
+    pub change: topology::Change,
+    pub controls: measurement::Controls,
 }
 
 pub(crate) struct Outcome {
@@ -48,6 +50,7 @@ pub(crate) struct Outcome {
 
 /// Children merged into one vertex space welded by canonical decoded position, in child
 /// (slot) order.
+#[derive(Clone)]
 struct Merged {
     keys: Vec<Key>,
     ells: Vec<u8>,
@@ -242,6 +245,7 @@ pub(crate) fn build_parent(
     caps: &[usize],
     contract: &Contract,
     mapping: &dyn Fn(Key) -> Result<Option<(Key, Key, f64, u8)>, JobError>,
+    assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<Outcome, JobError> {
     check()?;
@@ -263,31 +267,44 @@ pub(crate) fn build_parent(
     if caps.is_empty() {
         return Err(state("a parent build needs at least one cap"));
     }
-    for &cap in caps {
-        match attempt(
-            tile,
-            &merged,
-            interface,
-            cap,
-            children_error,
-            &original_faces,
-        ) {
-            Err(e) if e.kind() == JobErrorKind::Unsupported => continue,
-            built => {
-                return built.map(|mut b| {
-                    b.topology.add(topology);
-                    b.topology_floor = b.topology_floor.max(b.topology.max_loss_diameter);
-                    Outcome {
-                        built: Some(b),
-                        attempted_topology: TopologyReceipt::default(),
+    let floor = contract.scale.max(children_error);
+    let reference = merged.clone();
+    for (i, &cap) in caps.iter().enumerate() {
+        if caps[..i].contains(&cap) {
+            continue;
+        }
+        for preserve_holes in [false, true] {
+            match attempt(
+                tile,
+                &merged,
+                interface,
+                cap,
+                children_error,
+                &original_faces,
+                &reference,
+                floor,
+                preserve_holes,
+            ) {
+                Err(e) if e.kind() == JobErrorKind::Unsupported => continue,
+                Ok(mut b) => {
+                    if !assess(&mut b)? {
+                        topology.rejected_hole_closures += b.change.receipt.closed_holes;
+                        continue;
                     }
-                })
+                    return Ok({
+                        b.topology.add(topology);
+                        Outcome {
+                            built: Some(b),
+                            attempted_topology: TopologyReceipt::default(),
+                        }
+                    });
+                }
+                Err(e) => return Err(e),
             }
         }
     }
     // D11: simplifier stagnation alone is not cap infeasibility. Deduplicate and remove
     // eligible interior components, then remesh with increasingly coarse interior cells.
-    let floor = contract.scale.max(children_error);
     topology::cleanup(&mut merged, interface, floor, &mut topology);
     if let Some(receipt) = constrained::remesh(&mut merged, interface, *caps.last().unwrap()) {
         topology.add(receipt);
@@ -297,24 +314,38 @@ pub(crate) fn build_parent(
         if round != 0 {
             topology::remesh(&mut merged, interface, round, &mut topology);
         }
-        match attempt(
-            tile,
-            &merged,
-            interface,
-            *caps.last().unwrap(),
-            children_error,
-            &original_faces,
-        ) {
-            Err(e) if e.kind() == JobErrorKind::Unsupported => {}
-            built => {
-                return built.map(|mut b| {
-                    b.topology.add(topology);
-                    b.topology_floor = b.topology_floor.max(b.topology.max_loss_diameter);
-                    Outcome {
-                        built: Some(b),
-                        attempted_topology: TopologyReceipt::default(),
+        for preserve_holes in [false, true] {
+            match attempt(
+                tile,
+                &merged,
+                interface,
+                *caps.last().unwrap(),
+                children_error,
+                &original_faces,
+                &reference,
+                floor,
+                preserve_holes,
+            ) {
+                Err(e) if e.kind() == JobErrorKind::Unsupported => {}
+                Ok(mut b) => {
+                    if !assess(&mut b)? {
+                        topology.rejected_hole_closures += b.change.receipt.closed_holes;
+                        continue;
                     }
-                })
+                    // Final topology is compared with the pre-cleanup input; do not count
+                    // intermediate component deletion a second time.
+                    topology.dropped_components = 0;
+                    topology.closed_holes = 0;
+                    topology.opened_holes = 0;
+                    return Ok({
+                        b.topology.add(topology);
+                        Outcome {
+                            built: Some(b),
+                            attempted_topology: TopologyReceipt::default(),
+                        }
+                    });
+                }
+                Err(e) => return Err(e),
             }
         }
     }
@@ -333,6 +364,9 @@ fn attempt(
     cap: usize,
     children_error: f64,
     original_faces: &[[u32; 3]],
+    reference: &Merged,
+    floor: f64,
+    preserve_holes: bool,
 ) -> Result<Built, JobError> {
     let segments: HashSet<(Key, Key)> = interface
         .iter()
@@ -355,7 +389,11 @@ fn attempt(
             lost_points.len()
         )));
     }
-    let locked: Vec<bool> = merged.keys.iter().map(|k| vertices.contains(k)).collect();
+    let locked: Vec<bool> = if preserve_holes {
+        topology::protected(merged, interface, true).0
+    } else {
+        merged.keys.iter().map(|k| vertices.contains(k)).collect()
+    };
     let input = merged.triangles.len();
     let mut protected = vec![false; input];
     let mut retries = 0;
@@ -468,11 +506,11 @@ fn attempt(
             ),
         ));
     }
-    let mut topology_change = topology::changes(merged, &output, interface);
+    let mut topology_change = topology::changes(reference, &output, interface, floor);
     if topology_change.is_none() {
         // A boundary loop touching the contract must survive. Retain its incident ring
         // and simplify only the remaining interior before escalating to the remesher.
-        let (boundary, _) = topology::protected(merged, interface);
+        let (boundary, _) = topology::protected(merged, interface, preserve_holes);
         let mut keep = Vec::new();
         let mut rest = Vec::new();
         for (i, t) in merged.triangles.iter().enumerate() {
@@ -492,7 +530,7 @@ fn attempt(
             let lost = missing(&reduced, &merged.keys, &segments, &vertices);
             if !reduced.is_empty() && reduced.len() <= cap && lost.0.is_empty() && lost.1.is_empty()
             {
-                topology_change = topology::changes(merged, &reduced, interface);
+                topology_change = topology::changes(reference, &reduced, interface, floor);
                 if topology_change.is_some() {
                     output = reduced;
                     simplifier_error = e;
@@ -501,7 +539,7 @@ fn attempt(
             }
         }
     }
-    let Some((topology, topology_floor)) = topology_change else {
+    let Some(change) = topology_change else {
         return Err(JobError::new(
             JobErrorKind::Unsupported,
             "simplification removes a border-connected component or touching boundary loop",
@@ -556,8 +594,9 @@ fn attempt(
         interface_vertices: vertices.len() as u32,
         interface_segments: segments.len() as u32,
         reoriented,
-        topology,
-        topology_floor,
+        topology: change.receipt,
+        change,
+        controls: Default::default(),
         geometry,
     })
 }

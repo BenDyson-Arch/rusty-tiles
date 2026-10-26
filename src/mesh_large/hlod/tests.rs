@@ -1693,6 +1693,7 @@ fn parent_jobs_allocate_within_their_charge() {
                     scale: 0.,
                 },
                 &|_| Ok(None),
+                &mut |_| Ok(true),
                 &|| Ok(()),
             )
         });
@@ -4185,6 +4186,7 @@ fn evidence_replay_topology() {
             &[8192],
             &contract,
             &|_| Ok(None),
+            &mut |_| Ok(true),
             &|| Ok(()),
         )
         .unwrap();

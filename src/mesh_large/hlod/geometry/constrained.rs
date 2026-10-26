@@ -220,7 +220,11 @@ pub(super) fn remesh(
     if !lost.0.is_empty() || !lost.1.is_empty() {
         return None;
     }
-    let (mut receipt, _) = topology::changes(m, &output, interface)?;
+    let change = topology::changes(m, &output, interface, 0.)?;
+    if change.receipt.closed_holes != 0 {
+        return None;
+    }
+    let mut receipt = change.receipt;
     receipt.constrained_remeshes = count;
     m.triangles = output;
     m.representative = representatives;

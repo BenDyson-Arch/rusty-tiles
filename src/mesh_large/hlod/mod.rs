@@ -1087,73 +1087,24 @@ struct Job<'j, 'a> {
     check: &'j (dyn Fn() -> Result<(), JobError> + Sync),
 }
 
-/// One parent: geometry, error, appearance, encoding, the pre-publication check and its
-/// member. An omitted parent (its interface cannot fit the cap) returns before any S2 or S3
-/// work: it holds no content, so there is nothing to measure, sample, chart, bake or store.
-fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -> Done {
-    let (captured, settings, check) = (job.input.captured, &job.input.settings, job.check);
-    let contract = job
-        .borders
-        .contract(closed.key, 6 * settings.cap)?
-        .filter(|c| c.minimum_triangles() <= settings.cap);
-    let outcome = if let Some(contract) = &contract {
-        let half = if closed.single_leaf {
-            children[0].triangles.len().div_ceil(2).min(settings.cap)
-        } else {
-            settings.cap
-        };
-        geometry::build_parent(
-            closed.key,
-            &children,
-            &[half, settings.cap],
-            contract,
-            &|k| job.borders.mapping(closed.key.depth, k),
-            check,
-        )?
-    } else {
-        geometry::Outcome {
-            built: None,
-            attempted_topology: Default::default(),
-        }
-    };
-    let Some(mut built) = outcome.built else {
-        // Its interface cannot fit the cap: omitted, nothing held for its parent.
-        let omitted = Finished::Omitted {
-            key: closed.key,
-            reason: if contract.is_some() {
-                OmissionReason::RemeshStalled
-            } else {
-                OmissionReason::ContractLowerBound
-            },
-            frontier: children
-                .iter()
-                .map(|c| {
-                    Ok(TileKey {
-                        depth: job.borders.publication_depth(c.key)?,
-                        ..c.key
-                    })
-                })
-                .collect::<Result<_, JobError>>()?,
-            topology: outcome.attempted_topology,
-        };
-        return Ok((None, omitted, appearance::Timing::default()));
-    };
-    drop(children);
-    if settings.mutation == Mutation::DropSegment {
-        let tile = &mut built.geometry;
-        let locked: Vec<bool> = built.locked.clone();
-        if let Some(t) = tile
-            .triangles
-            .iter()
-            .position(|t| t.iter().filter(|v| locked[**v as usize]).count() >= 2)
-        {
-            tile.triangles.remove(t);
-            tile.representative.remove(t);
-        }
-    }
+struct Prepared {
+    positions: super::leaves::geometry::CoarsePositions,
+    error: store::TileError,
+    measurement: error::Summary,
+    error_cpu: error::CpuReport,
+    error_cpu_seconds: f64,
+}
+
+/// Final decode, topology eligibility, D4 and S2, before any appearance work.
+fn prepare(
+    job: &Job<'_, '_>,
+    built: &mut geometry::Built,
+    contract: &borders::Contract,
+    query: &mut source_index::SourceQuery<'_>,
+    nearest: &mut error::Nearest,
+) -> Result<Option<Prepared>, JobError> {
+    let (captured, check) = (job.input.captured, job.check);
     let cpu_start = error::thread_cpu();
-    let mut query = job.source.query(captured, built.geometry.key)?;
-    let mut nearest = error::Nearest::with_steps(settings.nearest_steps);
     // Keep S1's open-border vertices at their leaf-canonical decode. Prepare the final
     // positions once: representatives and measurement both consume this publication.
     let border = encode::open_border(&built.geometry.triangles, built.geometry.positions.len());
@@ -1169,6 +1120,30 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
         &fixed,
         built.geometry.key.depth,
     )?;
+    let Some(controls) = geometry::measurement::assess(
+        &mut built.change,
+        &positions.decoded,
+        &built.geometry.triangles,
+        contract.scale,
+        contract.scale.max(built.children_error),
+        &mut |p, position| {
+            let hit = nearest.source(query, p)?;
+            if !position {
+                return Ok((p, hit.distance2.sqrt()));
+            }
+            let t = query
+                .triangle(hit)?
+                .triangle
+                .positions
+                .map(|p| p.map(f64::from));
+            Ok((source_index::bary(t, hit.bary), hit.distance2.sqrt()))
+        },
+        check,
+    )?
+    else {
+        return Ok(None);
+    };
+    built.controls = controls;
     // D4 identity on the final decoded centroid, in the descendant source range (bounded
     // nearest search). Charting/encoding must preserve these positions and rows in S3.
     let mut representatives = Vec::with_capacity(built.geometry.triangles.len());
@@ -1183,7 +1158,7 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
                 .sum::<f64>()
                 / 3.
         });
-        let hit = nearest.source(&mut query, p)?;
+        let hit = nearest.source(query, p)?;
         representatives.push(query.primitive(hit));
         centroid_checks.push(hit.distance2.sqrt());
     }
@@ -1217,24 +1192,121 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
             encode_displacement: positions.displacement,
             stopping: built.stopping,
         },
-        &mut query,
-        &mut nearest,
+        query,
+        nearest,
         count,
         &centroid_checks,
+        &mut built.controls,
         check,
     )?;
-    let contract = contract
-        .as_ref()
-        .expect("a built tile has a border contract");
-    error.geometric_error = error
-        .geometric_error
-        .max(contract.scale)
-        .max(built.topology_floor);
+    // Check the actual final S2 patch samples too, including codec displacement and
+    // centroid controls. A rejected closure gets a bounded boundary-preserving retry.
+    if built.controls.closure_max * 1.05 > contract.scale {
+        return Ok(None);
+    }
+    built.change.receipt.hole_patch_to_source = built
+        .change
+        .receipt
+        .hole_patch_to_source
+        .max(built.controls.closure_max);
+    built.topology = built.change.receipt;
+    error.geometric_error = error.geometric_error.max(contract.scale);
     error_cpu.representatives = identity_cpu.unwrap_or(0.);
     let error_cpu_seconds = error::thread_cpu()
         .zip(cpu_start)
         .zip(identity_cpu)
         .map_or(0., |((b, a), i)| b - a + i);
+    Ok(Some(Prepared {
+        positions,
+        error,
+        measurement,
+        error_cpu,
+        error_cpu_seconds,
+    }))
+}
+
+/// One parent: geometry, error, appearance, encoding, the pre-publication check and its
+/// member. Topology eligibility may query source geometry for a rejected proposal.
+/// An omitted parent runs no appearance work and publishes no S2 measurement.
+fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -> Done {
+    let (captured, settings, check) = (job.input.captured, &job.input.settings, job.check);
+    let contract = job
+        .borders
+        .contract(closed.key, 6 * settings.cap)?
+        .filter(|c| c.minimum_triangles() <= settings.cap);
+    let mut prepared = None;
+    let mut query = job.source.query(captured, closed.key)?;
+    let mut nearest = error::Nearest::with_steps(settings.nearest_steps);
+    let outcome = if let Some(contract) = &contract {
+        let half = if closed.single_leaf {
+            children[0].triangles.len().div_ceil(2).min(settings.cap)
+        } else {
+            settings.cap
+        };
+        geometry::build_parent(
+            closed.key,
+            &children,
+            &[half, settings.cap],
+            contract,
+            &|k| job.borders.mapping(closed.key.depth, k),
+            &mut |built| {
+                if settings.mutation == Mutation::DropSegment {
+                    let tile = &mut built.geometry;
+                    let locked: Vec<bool> = built.locked.clone();
+                    if let Some(t) = tile
+                        .triangles
+                        .iter()
+                        .position(|t| t.iter().filter(|v| locked[**v as usize]).count() >= 2)
+                    {
+                        tile.triangles.remove(t);
+                        tile.representative.remove(t);
+                    }
+                }
+                prepared = prepare(job, built, contract, &mut query, &mut nearest)?;
+                Ok(prepared.is_some())
+            },
+            check,
+        )?
+    } else {
+        geometry::Outcome {
+            built: None,
+            attempted_topology: Default::default(),
+        }
+    };
+    let Some(mut built) = outcome.built else {
+        // Its interface cannot fit the cap: omitted, nothing held for its parent.
+        let omitted = Finished::Omitted {
+            key: closed.key,
+            reason: if contract.is_some() {
+                OmissionReason::RemeshStalled
+            } else {
+                OmissionReason::ContractLowerBound
+            },
+            frontier: children
+                .iter()
+                .map(|c| {
+                    Ok(TileKey {
+                        depth: job.borders.publication_depth(c.key)?,
+                        ..c.key
+                    })
+                })
+                .collect::<Result<_, JobError>>()?,
+            topology: outcome.attempted_topology,
+        };
+        return Ok((None, omitted, appearance::Timing::default()));
+    };
+    drop(children);
+    built.change = Default::default();
+    built.controls = Default::default();
+    let Prepared {
+        positions,
+        error,
+        measurement,
+        error_cpu,
+        error_cpu_seconds,
+    } = prepared.ok_or_else(|| state("accepted geometry has no final decoded measurement"))?;
+    let tile = &built.geometry;
+    let contract = contract.as_ref().expect("built tile has contract");
     // S3: fresh charts and a cheap source bake on the final decoded positions, through
     // the same bounded source query.
     let appearance = appearance::build(
@@ -1318,7 +1390,6 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
             .map(|c| c.epsilon)
             .fold(0., f64::max),
         topology: built.topology,
-        topology_error_floor: built.topology_floor,
         terminal_locks: contract.terminal_locks(),
         audit_record: None,
     };

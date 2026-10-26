@@ -126,7 +126,8 @@ published changes, terminal locks, omission sources/cells and frontier uses,
 including zeros. Topology records include contracted vertices, reconstructed
 faces, duplicate faces, dropped components, closed/opened holes, remeshed
 vertices/rounds, rejected rounds and constrained remeshes. S2 runs after all
-accepted changes; a conservative topology-loss diameter can additionally floor G.
+accepted changes. A diameter never floors G. Component diameter is only an
+eligibility bound against the existing max(E, child G).
 
 ## Independent acceptance boundary
 
@@ -148,3 +149,34 @@ under those checks. Exact-point failures need D11 adaptation; contracted-edge
 winding failures need source-subarc support re-derivation before attributing them
 to validator semantics or producer orientation. S1b does not weaken or bypass
 S5. These failures remain open until its separately owned follow-up is integrated.
+
+## Topology eligibility revision (2026-10-26)
+
+The owner rejected the whole-boundary diameter floor: a branching boundary's
+extent says nothing about a filled hole's displacement. Remove it. Retain exact
+border protection and S2's final decoded two-sided measurement. Reject deletion
+of any border-connected component or interior component whose bounding diameter
+is not strictly below max(E, child G), including implicit meshopt deletions.
+
+A proposed closure is checked before publication against the captured source.
+Its measurement domain conservatively includes every changed output face in an
+affected surface component and the original affected boundary edges. This avoids
+assuming a planar hole or treating planarity as loss. Decoded patch vertices,
+edge/interior controls and source-projected boundary controls measure both
+directions. Use E/1.05 as the admission limit so S2's margin cannot make an
+admitted closure set G. Unsupported/over-budget proposals retain their boundary
+through a bounded retry. Interior remeshing may not hide an unchecked closure.
+
+All measurements are bounded by the eight-child input and capped output; source
+queries use S2's fixed search budget. Receipts distinguish measured closure and
+component-loss controls from diameter eligibility, and report their contribution
+above the pre-existing G floor. Final S2 samples every delivered face and includes
+these additional controls. The conservative changed-face domain can reject a
+closure because another change in that component exceeds E; that is a documented
+cap-fit cost, not permission to omit silently or increase E based on the result.
+
+Independent controls: a planar courtyard whose inradius exceeds E stays open;
+a small interior closure has nonzero measured loss; identical sub-G components
+with/without border contact differ in eligibility; a large interior component
+survives. Final tex3/crop3 gates remain open until re-baked with source identities,
+per-depth G/operation attribution, complete first-view accounting and CPU receipts.

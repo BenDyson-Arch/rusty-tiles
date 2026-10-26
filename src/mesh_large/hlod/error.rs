@@ -494,6 +494,7 @@ struct Controls<'a> {
     initial: &'a [f64],
 }
 impl Controls<'_> {
+    #[cfg(test)]
     const SOURCE: Self = Self {
         proxy: false,
         initial: &[],
@@ -509,7 +510,7 @@ fn directed<I>(
     count: u64,
     seed: u64,
     policy: Controls<'_>,
-    mut distance: impl FnMut(V3) -> Result<f64, JobError>,
+    mut distance: impl FnMut(V3, u64) -> Result<f64, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<Direction, JobError>
 where
@@ -538,14 +539,14 @@ where
             }
         }
         let p = t.positions();
-        last = Some(p);
+        last = Some((p, t.rank));
         let area = t.area();
         let y = area - area_correction;
         let added = cumulative + y;
         area_correction = (added - cumulative) - y;
         cumulative = added;
         if area > 0. {
-            last_positive = Some(p);
+            last_positive = Some((p, t.rank));
         }
         // Cached subtree sums can differ from stream accumulation by roundoff.
         // Correct only that bounded endpoint uncertainty. A genuinely incomplete
@@ -558,9 +559,9 @@ where
             cumulative
         };
         let sample_triangle = if area > 0. {
-            p
+            (p, t.rank)
         } else {
-            last_positive.unwrap_or(p)
+            last_positive.unwrap_or((p, t.rank))
         };
         while i < count && total > 0. && next < endpoint {
             if i.is_multiple_of(256) {
@@ -568,8 +569,8 @@ where
             }
             let r = rng.unit().sqrt();
             let s = rng.unit();
-            let point = source_index::bary(sample_triangle, [1. - r, r * (1. - s), r * s]);
-            samples.add(distance(point)?)?;
+            let point = source_index::bary(sample_triangle.0, [1. - r, r * (1. - s), r * s]);
+            samples.add(distance(point, sample_triangle.1)?)?;
             i += 1;
             if i < count {
                 next = ((i as f64 + rng.unit()) / count as f64 * total).min(total.next_down());
@@ -577,7 +578,10 @@ where
         }
         for (corner, bits) in t.bits.into_iter().enumerate() {
             if (policy.proxy || t.controls & (1 << corner) != 0) && vertices.insert(bits) {
-                controls.add(distance(bits.map(|x| f64::from(f32::from_bits(x))))?)?;
+                controls.add(distance(
+                    bits.map(|x| f64::from(f32::from_bits(x))),
+                    t.rank,
+                )?)?;
             }
         }
         let edges = [(0, 1), (1, 2), (2, 0)];
@@ -591,9 +595,10 @@ where
                 || (area <= max_edge * 1e-4 && source_index::distance2(p[a], p[b]) == max_edge))
                 && seen_edges.insert((ka.min(kb), ka.max(kb)))
             {
-                controls.add(distance(std::array::from_fn(|k| {
-                    0.5 * (p[a][k] + p[b][k])
-                }))?)?;
+                controls.add(distance(
+                    std::array::from_fn(|k| 0.5 * (p[a][k] + p[b][k])),
+                    t.rank,
+                )?)?;
             }
         }
         ordinal += 1;
@@ -608,10 +613,10 @@ where
             }
             let r = rng.unit();
             let s = rng.unit();
-            samples.add(distance(source_index::bary(
-                last,
-                [1. - r, r * (1. - s), r * s],
-            ))?)?;
+            samples.add(distance(
+                source_index::bary(last.0, [1. - r, r * (1. - s), r * s]),
+                last.1,
+            )?)?;
             i += 1;
         }
     }
@@ -633,6 +638,7 @@ pub(crate) fn measure(
     nearest: &mut Nearest,
     count: Count,
     centroid_checks: &[f64],
+    topology: &mut super::geometry::measurement::Controls,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<(TileError, Summary, CpuReport), JobError> {
     let mut cpu = CpuReport::default();
@@ -657,12 +663,22 @@ pub(crate) fn measure(
         source_area,
         count.samples,
         seed,
-        Controls::SOURCE,
-        |p| Ok(nearest.surface(&proxy, p, &mut hint).distance2.sqrt()),
+        Controls {
+            proxy: false,
+            initial: &topology.source,
+        },
+        |p, _| Ok(nearest.surface(&proxy, p, &mut hint).distance2.sqrt()),
         check,
     )?;
     cpu.source_to_proxy = elapsed(started);
     let started = thread_cpu();
+    let mut proxy_controls = centroid_checks.to_vec();
+    proxy_controls.extend(&topology.proxy);
+    for (i, &d) in centroid_checks.iter().enumerate() {
+        if topology.closure_faces.get(i) == Some(&true) {
+            topology.closure_max = topology.closure_max.max(d);
+        }
+    }
     let proxy_to_source = directed(
         proxy.triangles.iter().copied().map(Ok),
         proxy_area,
@@ -670,9 +686,15 @@ pub(crate) fn measure(
         seed ^ 0xa5a5a5a5a5a5a5a5,
         Controls {
             proxy: true,
-            initial: centroid_checks,
+            initial: &proxy_controls,
         },
-        |p| Ok(nearest.source(query, p)?.distance2.sqrt()),
+        |p, rank| {
+            let d = nearest.source(query, p)?.distance2.sqrt();
+            if topology.closure_faces.get(rank as usize) == Some(&true) {
+                topology.closure_max = topology.closure_max.max(d);
+            }
+            Ok(d)
+        },
         check,
     )?;
     cpu.proxy_to_source = elapsed(started);
@@ -825,7 +847,7 @@ mod tests {
                 count,
                 seed,
                 policy,
-                |p| {
+                |p, _| {
                     let mut h = source_index::Hit::empty();
                     bv.nearest(p, all_key(), &mut h);
                     Ok(h.distance2.sqrt())
@@ -854,6 +876,42 @@ mod tests {
             [p(1., 0.), p(1., 1.), p(0., 1.)],
         ]
     }
+    #[test]
+    fn small_planar_closure_enters_two_sided_g_after_topology() {
+        let inner = [
+            [-0.1f32, -0.1, 0.],
+            [0.1, -0.1, 0.],
+            [0.1, 0.1, 0.],
+            [-0.1, 0.1, 0.],
+        ];
+        let outer = inner.map(|p| p.map(|v| v * 20.));
+        let mut source = Vec::new();
+        for i in 0..4 {
+            let j = (i + 1) % 4;
+            source.extend([
+                [outer[i], outer[j], inner[i]],
+                [outer[j], inner[j], inner[i]],
+            ]);
+        }
+        let mut closed = source.clone();
+        closed.extend([
+            [inner[0], inner[1], inner[2]],
+            [inner[0], inner[2], inner[3]],
+        ]);
+        let (_, unchanged) = pair(&source, &source, 71);
+        let (g, filled) = pair(&source, &closed, 71);
+        assert!(unchanged.sampled_max < 1e-12);
+        assert!((filled.sampled_max - 0.1).abs() < 1e-7);
+        assert!(g.geometric_error > 0.104 && g.geometric_error < 0.106);
+        let budget = 0.2;
+        assert!(filled.sampled_max * 1.05 < budget);
+        assert_eq!(
+            g.geometric_error.max(budget),
+            budget,
+            "eligible closure cannot set published G"
+        );
+    }
+
     #[test]
     fn analytic_tilted_plane_and_offset_are_within_margin() {
         let source = quad(|_, _| 0.);
@@ -1069,7 +1127,7 @@ mod tests {
             MIN_TILE,
             55,
             Controls::SOURCE,
-            |_| Ok(0.),
+            |_, _| Ok(0.),
             &|| Ok(()),
         )
         .err()
@@ -1081,7 +1139,7 @@ mod tests {
             MIN_TILE,
             55,
             Controls::SOURCE,
-            |_| Ok(0.),
+            |_, _| Ok(0.),
             &|| Ok(()),
         )
         .unwrap();
@@ -1100,7 +1158,7 @@ mod tests {
                 MIN_DEPTH,
                 1,
                 Controls::SOURCE,
-                |_| {
+                |_, _| {
                     calls.fetch_add(1, Ordering::Relaxed);
                     Ok(0.)
                 },
