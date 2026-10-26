@@ -85,18 +85,10 @@ fn fold_repairs_and_component_carriers_share_one_protected_partition() {
     // Independently reconstruct just the first fold repair. It must solve the
     // coincidence while still failing the component policy, so an implementation
     // that never combines the two protection sets cannot pass this control.
-    let mut ring = invalid.clone();
-    for t in &merged.triangles {
-        if t.iter().any(|&v| invalid[v as usize]) {
-            for &v in t {
-                ring[v as usize] = true;
-            }
-        }
-    }
     let protected: Vec<_> = merged
         .triangles
         .iter()
-        .map(|t| t.iter().any(|&v| ring[v as usize]))
+        .map(|t| t.iter().any(|&v| invalid[v as usize]))
         .collect();
     let keep: Vec<_> = merged
         .triangles

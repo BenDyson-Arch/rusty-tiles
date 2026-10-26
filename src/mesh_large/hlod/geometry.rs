@@ -24,6 +24,10 @@ type BorderMap<'a> = dyn Fn(Key) -> Result<Option<(Key, Key, f64, u8)>, JobError
 
 /// Protect-and-retry rounds after the first simplification.
 pub(crate) const RETRIES: u32 = 3;
+// Geometry proposals have no S2/audit write until accepted. This separate fixed
+// allowance lets local carrier protection converge without multiplying measured
+// hole-opening attempts or their scratch reservation.
+const FOLD_RETRIES: u32 = 8;
 
 fn state(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message.into())
@@ -432,8 +436,8 @@ fn assessed_attempt(
     Ok(None)
 }
 
-/// One build of the parent from `merged` children under `interface`; `unsupported` when
-/// its interface cannot fit `cap`.
+/// One bounded parent proposal. Unsupported means its protected repair did not
+/// produce an eligible capped result; it is not a proof of cap infeasibility.
 fn attempt(
     tile: TileKey,
     merged: &Merged,
@@ -515,11 +519,11 @@ fn attempt(
                 break;
             }
             let previously_protected = protected.iter().filter(|p| **p).count();
-            if valid || fold_retries == RETRIES {
+            if valid || fold_retries == FOLD_RETRIES {
                 if topology_protected {
                     return Err(JobError::new(
                         JobErrorKind::Unsupported,
-                        format!("coarse tile f{}-d{}: protected reduction cannot preserve topology and orientation ({input} input triangles, {} protected, cap {cap})",
+                        format!("coarse tile f{}-d{}: protected reduction exhausted its repair budget for topology and orientation ({input} input triangles, {} protected, cap {cap})",
                             tile.first, tile.depth, protected.iter().filter(|p| **p).count()),
                     ));
                 }
@@ -540,18 +544,6 @@ fn attempt(
             retries += 1;
             let edges: HashSet<(Key, Key)> = edges.into_iter().collect();
             let points: HashSet<Key> = points.into_iter().collect();
-            // Preserve the immediate ring as well as the failed face's stars.
-            // Otherwise a collapse just outside a kept star can recreate the
-            // same flap on its edge in the next reduction. This is one bounded
-            // adjacency pass, not a whole-component lock.
-            let mut ring = invalid.clone();
-            for t in &merged.triangles {
-                if t.iter().any(|&v| invalid[v as usize]) {
-                    for &v in t {
-                        ring[v as usize] = true;
-                    }
-                }
-            }
             for (i, t) in merged.triangles.iter().enumerate() {
                 let o = t.map(|v| merged.keys[v as usize]);
                 if (0..3)
@@ -559,7 +551,7 @@ fn attempt(
                 {
                     protected[i] = true;
                 }
-                if t.iter().any(|&v| ring[v as usize]) {
+                if t.iter().any(|&v| invalid[v as usize]) {
                     protected[i] = true;
                 }
             }
