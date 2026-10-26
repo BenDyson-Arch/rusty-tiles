@@ -174,12 +174,36 @@ def _tile_border(store, tile, vertices, directed, require, stats):
     return contracted
 
 
-def folds(store, tile, directed, arcs, require):
+def _two_sided(a, b, faces):
+    """Every same-direction pair of faces on edge a-b lies on opposite sides: unit
+    wings (edge to third corner, perpendicular to it) with cosine at most -1/2."""
+    d = [b[k] - a[k] for k in range(3)]
+    dd = sum(x * x for x in d)
+    wings = ([], [])
+    for f in faces:
+        for j in range(3):
+            x, y, c = f[j], f[(j + 1) % 3], f[(j + 2) % 3]
+            if (x, y) not in ((a, b), (b, a)):
+                continue
+            w = [c[k] - a[k] for k in range(3)]
+            t = sum(w[k] * d[k] for k in range(3)) / dd
+            w = [w[k] - t * d[k] for k in range(3)]
+            norm = math.sqrt(sum(v * v for v in w))
+            if not norm > 0 or not math.isfinite(norm):
+                return False
+            wings[(x, y) != (a, b)].append([v / norm for v in w])
+    return all(sum(u[k] * v[k] for k in range(3)) <= -0.5
+               for side in wings for i, u in enumerate(side) for v in side[i + 1:])
+
+
+def folds(store, tile, directed, arcs, require, faces=()):
     """Directed incidences are counted, never reduced to a mask (S1b review 1).
 
-    A coarse edge used n >= 2 times in one direction (a fold or an overlap on one
-    side) needs n verified descendant source faces in that direction on every
-    source edge it stands for: itself, or each edge of its contracted arc."""
+    A coarse edge used n >= 2 times in one direction and more often than the other
+    needs n verified descendant source faces in that direction on every source edge
+    it stands for: itself, or each edge of its contracted arc. Otherwise it must keep
+    both directions with its same-direction faces on opposite sides (a collapsed
+    thin plate); a fold, duplicate or upright sliver on one side is refused."""
     tid, lo, hi = int(tile['id']), tile['lo'], tile['hi']
     ids = {}
 
@@ -191,7 +215,7 @@ def folds(store, tile, directed, arcs, require):
         return ids[p]
     for (p, q), n in directed.items():
         store.work.charge()
-        if n < 2:
+        if n < 2 or n <= directed.get((q, p), 0):
             continue
         a, b = canonical(p), canonical(q)
         path = None if a is None or b is None else arcs.get(_key(a, b), [min(a, b), max(a, b)])
@@ -205,7 +229,8 @@ def folds(store, tile, directed, arcs, require):
                     'SELECT coalesce(sum(nf),0),coalesce(sum(nr),0) FROM canonical_edges '
                     'WHERE a=? AND b=? AND leaf>=? AND leaf<?', (*_key(x, y), lo, hi)).fetchone()
                 supported &= (nf if x < y else nr) >= n
-        require(supported, 'interfaceWinding',
+        plate = directed.get((q, p), 0) > 0 and _two_sided(p, q, faces)
+        require(supported or plate, 'interfaceWinding',
                 f'tile {tid}: coarse edge {p} -> {q} used {n} times in one direction without that '
                 'descendant source multiplicity')
 

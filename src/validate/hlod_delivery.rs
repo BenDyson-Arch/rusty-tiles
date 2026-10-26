@@ -576,6 +576,9 @@ impl Incidence {
 struct Surface {
     points: BTreeSet<CanonicalPoint>,
     edges: BTreeMap<CanonicalEdge, Incidence>,
+    /// Nondegenerate faces by key (at most the capped payload's triangles), read
+    /// only to place same-direction faces on the sides of an edge.
+    faces: Vec<[CanonicalPoint; 3]>,
     triangles: u64,
 }
 impl Surface {
@@ -585,6 +588,7 @@ impl Surface {
             .len()
             .saturating_mul(64)
             .saturating_add(self.edges.len().saturating_mul(128))
+            .saturating_add(self.faces.len().saturating_mul(36))
             .saturating_add(bytes)
             > cap
         {
@@ -609,6 +613,8 @@ impl Surface {
             add_count(&mut mine.forward, e.forward)?;
             add_count(&mut mine.reverse, e.reverse)?;
         }
+        self.reserve(other.faces.len().saturating_mul(36), cap)?;
+        self.faces.extend(other.faces);
         add_count(&mut self.triangles, other.triangles)
     }
     fn triangle(
@@ -625,6 +631,8 @@ impl Surface {
         if p[0] == p[1] || p[1] == p[2] || p[2] == p[0] {
             return Ok(());
         }
+        self.reserve(36, cap)?;
+        self.faces.push(p);
         for key in p {
             work.charge(2 * (self.points.len().max(2).ilog2() as usize + 1))?;
             if !self.points.contains(&key) {

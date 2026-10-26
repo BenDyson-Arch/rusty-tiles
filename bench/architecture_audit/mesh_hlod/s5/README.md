@@ -273,9 +273,13 @@ and one outside), split it at retained vertices and require: junctions and
 point-only contacts exact, every arc delivered as exactly one chord, no chord
 shared by two arcs, every arc edge covered, and chord directions witnessed on
 every edge of the arc. Directed incidences are counted, never reduced to a mask:
-a coarse edge used n >= 2 times in one direction (a contraction fold or overlap)
+a coarse edge used n >= 2 times in one direction and more often than the other
 needs n descendant source faces that way on every edge it stands for (S1b review
-1). Exact (epsilon = 0) archives reduce to the D1 exact-seam census.
+1). Without that support it is admitted only if it keeps both directions and its
+same-direction faces lie on opposite sides (wings to their third corners at least
+120 degrees apart): a collapsed thin plate's opposite-facing sheets (2/1, 2/2). A
+lone reversed face (2/0), a fold re-flipped onto the border, a duplicate or an
+upright sliver flap on one side is refused. Exact (epsilon = 0) archives reduce to the D1 exact-seam census.
 
 Native (`src/validate/hlod_delivery/borders.rs`, archive only) bounds each
 contracted vertex's displacement from its chord, in f64 rounded outward, by the
@@ -306,6 +310,6 @@ content-less cells. Without a sidecar, any contraction is refused (`borderAudit`
 `--producer-report` compares the run report's sidecar hash and bytes.
 
 `border_controls.py` builds a literal two-cell fixture with an honest sidecar: five
-positives and 22 named mutants (geometry: both validators where the archive shows
+positives and 23 named mutants (geometry: both validators where the archive shows
 it; sidecar lies and topology receipts: oracle, while native passes),
 plus a contracted bump sheet baked by the real producer that must pass both.

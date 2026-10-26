@@ -193,7 +193,7 @@ def build(case):
     tree = 'siblings'
     if name in ('contracted', 'eps-above-e16', 'eps-below-displacement', 'missing-subarc', 'wrong-ordinals',
                 'wrong-scale', 'depth-label-lie', 'lock-claim-contracted', 'unknown-payload', 'omission-unreported',
-                'missing-chord', 'contracted-fold'):
+                'missing-chord', 'contracted-fold', 'overlap-with-reverse'):
         keep_a = keep_b = (0, 4)
     if name == 'same-depth-gap':
         keep_a = (0, 4)
@@ -262,6 +262,8 @@ def build(case):
         a.append(tuple(point(3.25, 0, 2) if p not in (fx.P[0], fx.P[4]) else p for p in chord))
     if name == 'exact-fold':
         a.append(a[1])
+    if name == 'overlap-with-reverse':
+        a.append(a[0])
     b = fx.coarse('B', keep_b)
     files = {f'{n}.glb': glb(leaves[n], rows[n], leaf=True) for n in leaves}
     files['A.glb'] = glb(a, identities(a), leaf=False)
@@ -393,6 +395,7 @@ CASES = [
     ('missing-chord', 'interfaceSegments', 'interfaceSegments'),
     ('contracted-fold', 'interfaceWinding', 'interfaceWinding'),
     ('exact-fold', 'interfaceWinding', 'interfaceWinding'),
+    ('overlap-with-reverse', 'interfaceWinding', 'interfaceWinding'),
     ('dropped-border', 'interfacePoints', 'interfacePoints'),
     ('dropped-large', 'droppedComponent', None),
     ('closure-loss-hidden', 'holeClosure', None),

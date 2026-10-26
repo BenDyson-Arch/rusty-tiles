@@ -62,6 +62,42 @@ fn displacement(a: CanonicalPoint, b: CanonicalPoint, v: CanonicalPoint, i: u64,
     }
     sum.sqrt() * OUTWARD
 }
+/// Whether every pair of same-direction faces on `edge` lies on opposite sides:
+/// unit wings (edge to third corner, perpendicular to the edge) with cosine at most
+/// -1/2. A wing of zero length (a collinear face) is on no side and never passes.
+fn two_sided(edge: &CanonicalEdge, surface: &Surface) -> bool {
+    let (a, b) = (edge.0.map(coordinate), edge.1.map(coordinate));
+    let d: [f64; 3] = std::array::from_fn(|k| b[k] - a[k]);
+    let dd: f64 = d.iter().map(|x| x * x).sum();
+    let mut wings: [Vec<[f64; 3]>; 2] = [Vec::new(), Vec::new()];
+    for f in &surface.faces {
+        for j in 0..3 {
+            let (x, y, c) = (f[j], f[(j + 1) % 3], f[(j + 2) % 3]);
+            let direction = match (x, y) {
+                _ if (x, y) == *edge => 0,
+                _ if (y, x) == *edge => 1,
+                _ => continue,
+            };
+            let c = c.map(coordinate);
+            let w: [f64; 3] = std::array::from_fn(|k| c[k] - a[k]);
+            let t = w.iter().zip(&d).map(|(w, d)| w * d).sum::<f64>() / dd;
+            let w: [f64; 3] = std::array::from_fn(|k| w[k] - t * d[k]);
+            let norm = w.iter().map(|x| x * x).sum::<f64>().sqrt();
+            if !(norm > 0.) || !norm.is_finite() {
+                return false;
+            }
+            wings[direction].push(w.map(|x| x / norm));
+        }
+    }
+    wings.iter().all(|side| {
+        side.len() < 2
+            || side.iter().enumerate().all(|(i, u)| {
+                side[i + 1..]
+                    .iter()
+                    .all(|v| u.iter().zip(v).map(|(u, v)| u * v).sum::<f64>() <= -0.5)
+            })
+    })
+}
 /// Where one tile delivers a border vertex: retained exactly (empty), or on a chord
 /// (`lower`, `upper`) at ordinal `i` of `m` counted from `lower`.
 fn image(chord: CanonicalEdge, i: u64, m: u64) -> Vec<u8> {
@@ -300,10 +336,15 @@ impl Store {
         Ok(())
     }
 
-    /// Every directed incidence is counted, not reduced to a direction mask: a
-    /// coarse edge used n >= 2 times in one direction (a fold or overlap on one
-    /// side, contracted or not) needs n descendant source faces in that direction
-    /// on every source edge it stands for. Interior edges have no leaf support.
+    /// Every directed incidence is counted, not reduced to a direction mask. A
+    /// coarse edge used n >= 2 times in one direction and more often than the other
+    /// needs n descendant source faces in that direction on every source edge it
+    /// stands for (a nonmanifold spine; interior edges have no leaf support).
+    /// Otherwise the edge must keep both directions and its same-direction faces
+    /// must lie on opposite sides, the wings to their third corners at least 120
+    /// degrees apart: a collapsed thin plate's two opposite-facing sheets. Same-direction faces on one side
+    /// (a fold re-flipped onto the border, a duplicate, an upright sliver flap)
+    /// overlap and are refused.
     pub(super) fn equal_directions(
         &self,
         tile: i64,
@@ -314,7 +355,8 @@ impl Store {
         let mut last = None;
         for (edge, e) in &surface.edges {
             effort.charge(1)?;
-            if e.forward < 2 && e.reverse < 2 {
+            let excess = |n: u64, other: u64| n >= 2 && n > other;
+            if !excess(e.forward, e.reverse) && !excess(e.reverse, e.forward) {
                 continue;
             }
             // A nonmanifold source can hold several same-direction faces on one
@@ -358,10 +400,14 @@ impl Store {
                     .map_err(sql)?;
                 // Descendant faces running x -> y (the arc direction) and back.
                 let (with, against) = if x < y { (nf, nr) } else { (nr, nf) };
-                let enough = |coarse: u64, source: i64| coarse < 2 || source >= coarse as i64;
-                witnessed &= enough(along, with) && enough(back, against);
+                let enough = |coarse: u64, other: u64, source: i64| {
+                    !excess(coarse, other) || source >= coarse as i64
+                };
+                witnessed &= enough(along, back, with) && enough(back, along, against);
             }
-            if !witnessed {
+            // A plate keeps both directions on the edge; a lone reversed face
+            // (2/0 across the edge) has none and stays refused.
+            if !witnessed && !(e.forward > 0 && e.reverse > 0 && two_sided(edge, surface)) {
                 return Err(bad(
                     "interfaceWinding",
                     &format!(
@@ -703,6 +749,13 @@ mod tests {
         doubled.push(doubled[1]);
         refused(
             siblings(doubled, 0., b_coarse(&ALL), 0.),
+            "interfaceWinding",
+        );
+        // A same-side duplicate where the other direction is present (2/1).
+        let mut overlapped = a_coarse(&[0, 4]);
+        overlapped.push(overlapped[0]);
+        refused(
+            siblings(overlapped, 2., b_coarse(&[0, 4]), 2.),
             "interfaceWinding",
         );
         let mut tripled = a_coarse(&[0, 4]);

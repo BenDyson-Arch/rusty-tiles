@@ -427,7 +427,7 @@ class Store:
             if not t['rendered']:
                 continue
             vertices=set();adjacency=collections.defaultdict(set)
-            edge_counts=collections.Counter();directed=collections.Counter();triangles=0
+            edge_counts=collections.Counter();directed=collections.Counter();triangles=0;surface=[]
             for f in self.faces(int(t['id'])):
                 self.work.charge()
                 triangles+=1
@@ -437,6 +437,7 @@ class Store:
                 if len(set(f32_point(p) for p in ps))<3:
                     continue
                 vertices.update(ps)
+                surface.append(ps)
                 for k in range(3):
                     a,b=ps[k],ps[(k+1)%3]
                     adjacency[a].add(b);adjacency[b].add(a)
@@ -453,7 +454,7 @@ class Store:
             if t['children']:
                 # D11: coarse borders are arcs between retained exact vertices.
                 arcs=borders.tile_border(self,t,vertices,directed,require,d11)
-                borders.folds(self,t,directed,arcs,require)
+                borders.folds(self,t,directed,arcs,require,surface)
             for kind,a,b in self.db.execute('SELECT kind,a,b FROM requirements WHERE tile=? ORDER BY kind DESC',(int(t['id']),)):
                 self.work.charge()
                 if t['children'] and kind<2:
