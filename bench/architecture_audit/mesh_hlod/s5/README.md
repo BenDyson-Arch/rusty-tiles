@@ -144,10 +144,12 @@ values, else `omissionReport`. `oracle.py` runs the same owner after its source
 checks and also refuses a decoded payload above 8,192 faces (`triangleCap`).
 
 `oracle.py` checks source leaf multiplicity/IDs/geometry/normals, materials and
-nearest coarse representatives. A named primitive other than the source-order
-nearest is accepted only within tau = 16 * 2^-52 * (|centroid| + descendant
-source diagonal) of the minimum distance (D4 ties), and the largest excess is
-reported; the exact-tie, within-tau and beyond-tau controls pin it. Analytic manifests
+nearest coarse representatives with exact rational point-triangle distances
+(integer region tests, no float Gram determinant; r12 slivers stay controls). A
+named primitive other than the source-order nearest is accepted only within
+tau = 16 * 2^-52 * (|centroid| + descendant source diagonal) of the exact
+minimum, an allowance for the producer's f64 arithmetic only (D4 ties); the
+largest excess is reported and exact-tie, within/beyond-tau controls pin it. Analytic manifests
 check exact UVs/materials. Real textured leaves may legitimately crop/repack UVs
 and texture bindings: their material class/PBR constants/slot presence and
 rendered UV structure are checked, while UV/source-pixel correspondence is
