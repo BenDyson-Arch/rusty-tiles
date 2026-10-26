@@ -6,8 +6,8 @@
 //! C1/identity admission runs once per payload. Bounded geometry replay emits
 //! only compact point/edge keys and per-leaf face incidence into disk SQLite.
 //! Ordered key scans find actual outside-leaf owners and stage sparse ancestor
-//! obligations. No chords, T contacts, distance joins or tolerant adjacency are
-//! inferred. Every directed incident owner survives local balanced cancellation.
+//! obligations. No T contacts, distance joins or tolerant adjacency are inferred.
+//! Every directed incident owner survives local balanced cancellation.
 //! Original IDs recorded once at ingest are checked by one ordered key scan,
 //! including disjoint placements and repeated references.
 //! No triangle soup or archive-sized geometry/alias vector is retained.
@@ -16,10 +16,21 @@
 //! cache is bounded; temporary sorts are disk backed and transient sort sizes
 //! are outside disk_bytes(), which counts the monotonic main database only.
 //!
+//! D11 (`borders`): an ancestor may contract its shared leaf border to chords
+//! between retained exact vertices, one witnessed chord per arc, each contracted
+//! vertex within G/16 of its chord at its edge ordinal; junctions and point
+//! contacts stay exact. Siblings agree exactly, a shallower leaf locks deeper
+//! neighbours, and other provably no-deeper pairs stay within G/8.
+//!
 //! Census basis is decoded leaf canonical keys, not unavailable original source
-//! coordinates. Fresh coarse UV charts, source distance and coarse orientation
-//! outside required interfaces/local contradictory pairs remain uninspected.
+//! coordinates. Uninspected here (source oracle and audit sidecar): contraction
+//! against source arcs and producer certificates (epsilon, E_d, terminal-lock
+//! claims), logical depth (so same-depth exactness between cousins and G/8 where
+//! the finer neighbour has the larger G), topology receipts, fresh coarse UV
+//! charts, source distance, and coarse orientation outside required
+//! interfaces/local contradictory pairs.
 use super::{identity, invalid, spill_failure, Budget, Error, ScratchRefusal};
+mod borders;
 use crate::spill::{Scratch, SlotFile};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{value::RawValue, Value};
@@ -583,6 +594,23 @@ impl Surface {
         }
         Ok(())
     }
+    /// Another placement of the same tile: union of points, summed incidences.
+    fn merge(&mut self, other: Surface, cap: usize) -> Result<(), Error> {
+        for p in other.points {
+            if self.points.insert(p) {
+                self.reserve(64, cap)?;
+            }
+        }
+        for (key, e) in other.edges {
+            if !self.edges.contains_key(&key) {
+                self.reserve(128, cap)?;
+            }
+            let mine = self.edges.entry(key).or_default();
+            add_count(&mut mine.forward, e.forward)?;
+            add_count(&mut mine.reverse, e.reverse)?;
+        }
+        add_count(&mut self.triangles, other.triangles)
+    }
     fn triangle(
         &mut self,
         xyz: [Point; 3],
@@ -639,6 +667,10 @@ pub(super) struct DecodedInterfaceCensus {
     pub(super) source_open_edges_with_shared_endpoints: u64,
     pub(super) max_payload_triangles: u64,
     pub(super) omission: Omission,
+    /// D11 arcs delivered as one chord over two or more leaf edges, counted per
+    /// tile, and the leaf border vertices they contract.
+    pub(super) contracted_border_arcs: u64,
+    pub(super) contracted_border_vertices: u64,
 }
 /// Hard published triangle cap of every HLOD payload (D1), leaf or coarse.
 pub(super) const TRIANGLE_CAP: u64 = 8192;
@@ -816,7 +848,7 @@ impl Store {
             .map_err(|e| Error::Scratch(ScratchRefusal::Io(e)))?;
         let connection = Connection::open(file.path()).map_err(sql)?;
         connection.execute_batch("PRAGMA cache_size=-8192; PRAGMA temp_store=FILE; PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;
-            CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL);
+            CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER);
             CREATE INDEX tile_parent ON tiles(parent);
             CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL); CREATE INDEX refs_tile ON refs(tile); CREATE INDEX refs_rank ON refs(rank);
             CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL);
@@ -827,7 +859,7 @@ impl Store {
             CREATE TABLE leaf_segments(key BLOB NOT NULL,tile INTEGER NOT NULL,nf INTEGER NOT NULL,nr INTEGER NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             CREATE TABLE shared_point_keys(key BLOB PRIMARY KEY) WITHOUT ROWID;
             CREATE TABLE requirements(tile INTEGER NOT NULL,kind INTEGER NOT NULL,key BLOB NOT NULL,directions INTEGER NOT NULL,PRIMARY KEY(tile,kind,key)) WITHOUT ROWID;
-            CREATE TABLE fulfilled(tile INTEGER NOT NULL,kind INTEGER NOT NULL,key BLOB NOT NULL,directions INTEGER NOT NULL,PRIMARY KEY(tile,kind,key)) WITHOUT ROWID;
+            CREATE TABLE border_map(key BLOB NOT NULL,tile INTEGER NOT NULL,image BLOB NOT NULL,d REAL NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             BEGIN;").map_err(sql)?;
         let pending = std::mem::take(&mut self.pending);
         for t in &pending.tiles {
@@ -1378,7 +1410,8 @@ impl Store {
         self.collect_leaves(effort, read)?;
         self.point_requirements(&mut census, effort)?;
         self.segment_requirements(&mut census, effort)?;
-        self.check_coarse(effort, read)?;
+        self.check_coarse(&mut census, effort, read)?;
+        self.border_pairs(effort)?;
         Ok(Some(census))
     }
     fn hierarchy(&self, effort: &Effort) -> Result<(), Error> {
@@ -1387,6 +1420,7 @@ impl Store {
             replace: bool,
             renderable: bool,
             barrier: bool,
+            placeholder: bool,
         }
         let mut stack = Vec::<Frame>::new();
         let mut previous = -1i64;
@@ -1395,6 +1429,10 @@ impl Store {
         let mut end = self
             .connection
             .prepare_cached("UPDATE tiles SET last=? WHERE id=?")
+            .map_err(sql)?;
+        let mut cell = self
+            .connection
+            .prepare_cached("UPDATE tiles SET cell=? WHERE id=?")
             .map_err(sql)?;
         while let Some(row) = rows.next().map_err(sql)? {
             effort.charge(1)?;
@@ -1421,11 +1459,17 @@ impl Store {
                     "contentless REPLACE tile separates renderable ancestor and descendant",
                 ));
             }
+            // The cell parent (D11 depth order) is the nearest non-placeholder
+            // ancestor: links and implicit roots are not cells.
+            if let Some(parent) = stack.iter().rev().find(|f| !f.placeholder) {
+                cell.execute(params![parent.id, id]).map_err(sql)?;
+            }
             stack.push(Frame {
                 id,
                 replace,
                 renderable: if content { replace } else { renderable },
                 barrier: !content && (barrier || (!placeholder && renderable)),
+                placeholder,
             });
             previous = id;
         }
@@ -1926,118 +1970,50 @@ impl Store {
         }
         Ok(())
     }
-    fn match_surface(&self, tile: i64, surface: &Surface, effort: &Effort) -> Result<(), Error> {
-        let mut query = self
-            .connection
-            .prepare("SELECT kind,key FROM requirements WHERE tile=?")
-            .map_err(sql)?;
-        let mut rows = query.query([tile]).map_err(sql)?;
-        while let Some(row) = rows.next().map_err(sql)? {
-            let kind: i64 = row.get(0).map_err(sql)?;
-            let key: Vec<u8> = row.get(1).map_err(sql)?;
-            let size = if kind == 0 {
-                surface.points.len()
-            } else {
-                surface.edges.len()
-            };
-            effort.charge(size.max(2).ilog2() as usize + 1)?;
-            let directions = if kind == 0 {
-                surface.points.contains(&read_point(&key)?).then_some(0)
-            } else {
-                surface.edges.get(&read_edge(&key)?).map(|e| e.directions())
-            };
-            if let Some(directions) = directions {
-                self.connection.execute("INSERT INTO fulfilled VALUES(?,?,?,?) ON CONFLICT(tile,kind,key) DO UPDATE SET directions=fulfilled.directions|excluded.directions",params![tile,kind,key,directions]).map_err(sql)?;
-            }
-        }
-        Ok(())
-    }
+    /// Every coarse tile's decoded surface (all its placements) against its D11
+    /// border: exact junctions, one witnessed chord per shared arc, displacement.
     fn check_coarse(
         &self,
+        census: &mut DecodedInterfaceCensus,
         effort: &Effort,
         read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
     ) -> Result<(), Error> {
-        let mut query=self.connection.prepare("SELECT p.tile,p.rank,p.frame,g.triangle_present FROM placements p JOIN payloads g ON g.rank=p.rank WHERE p.leaf=0 ORDER BY p.id").map_err(sql)?;
+        let mut query = self
+            .connection
+            .prepare("SELECT tile,rank,frame FROM placements WHERE leaf=0 ORDER BY tile,id")
+            .map_err(sql)?;
         let mut rows = query.query([]).map_err(sql)?;
-        while let Some(row) = rows.next().map_err(sql)? {
+        let mut current: Option<(i64, Surface)> = None;
+        loop {
+            let row = rows.next().map_err(sql)?;
+            let tile: Option<i64> = row.map(|r| r.get(0)).transpose().map_err(sql)?;
+            if current.as_ref().map(|c| c.0) != tile {
+                if let Some((tile, surface)) = current.take() {
+                    let contracted = self.border(tile, &surface, effort)?;
+                    self.equal_directions(tile, &surface, &contracted, effort)?;
+                    for path in contracted.values() {
+                        add_count(&mut census.contracted_border_arcs, 1)?;
+                        add_count(
+                            &mut census.contracted_border_vertices,
+                            path.len() as u64 - 2,
+                        )?;
+                    }
+                }
+            }
+            let (Some(row), Some(tile)) = (row, tile) else {
+                break;
+            };
             effort.charge(1)?;
-            let tile: i64 = row.get(0).map_err(sql)?;
             let surface = self.surface(
                 row.get(1).map_err(sql)?,
                 &row.get::<_, Vec<u8>>(2).map_err(sql)?,
                 effort,
                 read,
             )?;
-            if !row.get::<_, bool>(3).map_err(sql)? {
-                for (key, e) in &surface.edges {
-                    effort.charge(1)?;
-                    if (e.forward == 2 && e.reverse == 0) || (e.reverse == 2 && e.forward == 0) {
-                        // A nonmanifold source can hold two same-direction faces on
-                        // one edge (a book's pages on its spine): the pair may then be
-                        // retained source multiplicity. This only admits the edge
-                        // count; it does not prove either face's orientation (a page
-                        // reversed onto the spine passes here). Native validation does
-                        // not prove coarse orientation away from required interface
-                        // directions; the source oracle's exact coincident-face guard
-                        // does (book-reversed-face control, review r12).
-                        effort.charge(1)?;
-                        let last: i64 = self
-                            .connection
-                            .prepare_cached("SELECT last FROM tiles WHERE id=?")
-                            .and_then(|mut q| q.query_row([tile], |r| r.get(0)))
-                            .map_err(sql)?;
-                        let (nf, nr): (i64, i64) = self
-                            .connection
-                            .prepare_cached("SELECT coalesce(sum(nf),0),coalesce(sum(nr),0) FROM leaf_segments WHERE key=? AND tile>? AND tile<=?")
-                            .and_then(|mut q| {
-                                q.query_row(params![edge_bytes(*key), tile, last], |r| {
-                                    Ok((r.get(0)?, r.get(1)?))
-                                })
-                            })
-                            .map_err(sql)?;
-                        if (e.forward == 2 && nf >= 2) || (e.reverse == 2 && nr >= 2) {
-                            continue;
-                        }
-                        return Err(bad(
-                            "interfaceWinding",
-                            "coarse shared edge has equal directed incidences",
-                        ));
-                    }
-                }
+            match &mut current {
+                Some((_, merged)) => merged.merge(surface, self.decoded_limit)?,
+                None => current = Some((tile, surface)),
             }
-            self.match_surface(tile, &surface, effort)?;
-        }
-        let mut query=self.connection.prepare("SELECT r.kind,r.directions,f.directions,r.tile FROM requirements r LEFT JOIN fulfilled f USING(tile,kind,key) ORDER BY r.kind,r.tile,r.key").map_err(sql)?;
-        let mut rows = query.query([]).map_err(sql)?;
-        while let Some(row) = rows.next().map_err(sql)? {
-            effort.charge(1)?;
-            let kind: i64 = row.get(0).map_err(sql)?;
-            let allowed: i64 = row.get(1).map_err(sql)?;
-            let actual: Option<i64> = row.get(2).map_err(sql)?;
-            // D1 preserves the unordered edge, not source face multiplicity.
-            // Every actual coarse direction needs a descendant source witness;
-            // ordinary simplification may remove other incident source faces.
-            if actual.is_some_and(|mask| (kind == 0 || mask != 0) && mask & !allowed == 0) {
-                continue;
-            }
-            let tile: i64 = row.get(3).map_err(sql)?;
-            let (label, detail) = if kind == 0 {
-                (
-                    "interfacePoints",
-                    "decoded ancestor lost an exact shared leaf point",
-                )
-            } else if actual.is_some() {
-                (
-                    "interfaceWinding",
-                    "decoded ancestor reverses a required directed leaf edge",
-                )
-            } else {
-                (
-                    "interfaceSegments",
-                    "decoded ancestor lacks an exact shared leaf edge",
-                )
-            };
-            return Err(bad(label, &format!("{detail}: tile={tile}")));
         }
         Ok(())
     }
@@ -2047,7 +2023,7 @@ impl Store {
 mod tests {
     use super::*;
 
-    fn budget() -> Budget {
+    pub(super) fn budget() -> Budget {
         Budget {
             key: super::super::LimitKey::TotalPayloadElements,
             value: 10_000_000,
@@ -2061,7 +2037,7 @@ mod tests {
             used: Arc::new(AtomicU64::new(0)),
         }
     }
-    fn store() -> Store {
+    pub(super) fn store() -> Store {
         let scratch = Scratch::create(None, 4096).unwrap();
         Store::new(Arc::new(scratch)).unwrap()
     }
@@ -2220,7 +2196,7 @@ mod tests {
             }
         }
     }
-    fn replay_fixture(faces: &[[Point; 3]]) -> Vec<u8> {
+    pub(super) fn replay_fixture(faces: &[[Point; 3]]) -> Vec<u8> {
         let bin: Vec<u8> = faces
             .iter()
             .flatten()

@@ -261,5 +261,51 @@ Own tex3/crop3 bakes at this integration refuse before publication: S1's walk
 ledger finds S2's unadmitted scratch (314,783,887 > 216,795,519 and
 264,788,907 > 166,800,539 bytes). No archive, oracle or native verdict exists
 for them; S2/S3 must admit their scratch.
-D11 border certificates, E/G inequalities, terminal locks, appearance continuity
-and topology-loss audits remain deferred to S1b's implementation.
+Appearance continuity remains deferred; D11 borders follow below.
+
+## D11 scalable borders (S1b)
+
+D11 lets an ancestor contract its shared leaf border: a delivered chord joins
+two retained exact source vertices and stands for the source arc between them,
+parameterized by original leaf-edge ordinal. Both validators derive each coarse
+tile's border from decoded leaf incidence (edges/points with an owner leaf inside
+and one outside), split it at retained vertices and require: junctions and
+point-only contacts exact, every arc delivered as exactly one chord, no chord
+shared by two arcs, every arc edge covered, and chord directions witnessed on
+every edge of the arc. Directed incidences are counted, never reduced to a mask:
+a coarse edge used n >= 2 times in one direction (a contraction fold or overlap)
+needs n descendant source faces that way on every edge it stands for (S1b review
+1). Exact (epsilon = 0) archives reduce to the D1 exact-seam census.
+
+Native (`src/validate/hlod_delivery/borders.rs`, archive only) bounds each
+contracted vertex's displacement from its chord, in f64 rounded outward, by the
+tile's G/16 (`borderDisplacement`). The archive carries no logical depth (chains
+are spliced, placeholders transparent), so pairwise rules use only what the tree
+proves: siblings share one depth and must deliver identical images
+(`sameDepthBorderGap`); a tile whose cell parent is an ancestor of a disjoint tile
+is no deeper than it, so a leaf there locks it exactly (`terminalBorderLock`) and a
+coarse tile needs d_X + d_Y <= G_X/8 (`mixedDepthBorderGap`). G/16 per tile bounds
+every other co-rendered pair by (G_X + G_Y)/16. The census reports
+`contractedBorderArcs`/`contractedBorderVertices`. Native cannot verify source
+arcs, certificates, E_d, same-depth cousins, G_coarse/8 where the finer tile has
+the larger G, terminal contacts the tree does not order, or topology receipts.
+
+The oracle (`borders.py`) re-derives the same arcs from source canonical keys with
+exact Fraction displacement. With `--border-audit borders.jsonl` (an index only)
+it joins records to payloads by SHA-256 and leaf interval, recomputes E_d from the
+captured source extent (`borderScale`, G >= E_d), then checks, in this order:
+same-depth equality and |Q_d - Q_(d+k)| <= min(E_d, G)/8 at every shared source
+breakpoint using the claimed logical depths (strictly increasing down the tree),
+terminal contacts whose leaf depth the tree or a labelled sibling fixes; then each
+certificate (hinted chain re-walked through incidence, ordinals, endpoints, exact
+displacement <= epsilon <= E_d/16, one certificate per arc, interface items);
+then topology receipts against the parent job's decoded input (dropped
+components, closed/opened hole cycles with exact source distances of patch faces
+and new rims, and the G-contribution formulas); then omitted records against
+content-less cells. Without a sidecar, any contraction is refused (`borderAudit`).
+`--producer-report` compares the run report's sidecar hash and bytes.
+
+`border_controls.py` builds a literal two-cell fixture with an honest sidecar: five
+positives and 22 named mutants (geometry: both validators where the archive shows
+it; sidecar lies and topology receipts: oracle, while native passes),
+plus a contracted bump sheet baked by the real producer that must pass both.

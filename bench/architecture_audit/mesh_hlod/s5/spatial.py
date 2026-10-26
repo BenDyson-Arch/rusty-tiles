@@ -57,6 +57,7 @@ class Store:
         self.work = work or Work()
         self.source_bounds = {}
         self.leaf_boxes = {}
+        self.captured = None
         self.db.executescript('''
           PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;
           PRAGMA temp_store=FILE; PRAGMA cache_size=-65536;
@@ -164,6 +165,10 @@ class Store:
         except sqlite3.IntegrityError:
             return False
         self.db.execute('INSERT INTO source_box VALUES (?,?,?,?,?,?,?)', (i,*bounds(want['xyz'])))
+        # Captured f32 positions bound the root cell; E_d derives from its extent.
+        box=bounds([f32_point(p) for p in want['xyz']])
+        self.captured=box if self.captured is None else tuple(
+            min(a,b) if k%2==0 else max(a,b) for k,(a,b) in enumerate(zip(self.captured,box)))
         ids = [self.point(p) for p in want['xyz']]
         self.db.execute('INSERT INTO source_corners VALUES (?,?,?,?)',(i,*ids))
         if actual is not None:
@@ -262,6 +267,11 @@ class Store:
             self.db.execute('INSERT OR IGNORE INTO source_shapes VALUES (?,?,?)',(shape,leaf,sign))
         self.canonical_stats=dict(stats)
         self.db.commit()
+
+    def extent(self):
+        """Maximum axis extent of the captured source (the root cell's E_0 basis)."""
+        box=self.captured
+        return max(box[2*k+1]-box[2*k] for k in range(3)) if box else 0.0
 
     def canonical_xyz(self, point):
         return struct.unpack('<3d',self.db.execute('SELECT xyz FROM canonical_points WHERE id=?',(point,)).fetchone()[0])
@@ -409,12 +419,15 @@ class Store:
                         if t['rendered'] and (low_a<t['lo'] or high_a>=t['hi']) and (low_b<t['lo'] or high_b>=t['hi']):
                             self.db.execute('INSERT OR IGNORE INTO requirements VALUES (?,?,?,?)',(int(t['id']),2,a,b))
         self.db.execute('CREATE TABLE rendered_borders(tile INTEGER,a BLOB,b BLOB,PRIMARY KEY(tile,a,b)) WITHOUT ROWID')
+        import borders
+        borders.prepare(self)
+        d11=collections.Counter()
         segments=points=exempt=max_triangles=0
         for t in tiles:
             if not t['rendered']:
                 continue
             vertices=set();adjacency=collections.defaultdict(set)
-            edge_counts=collections.Counter();triangles=0
+            edge_counts=collections.Counter();directed=collections.Counter();triangles=0
             for f in self.faces(int(t['id'])):
                 self.work.charge()
                 triangles+=1
@@ -428,6 +441,7 @@ class Store:
                     a,b=ps[k],ps[(k+1)%3]
                     adjacency[a].add(b);adjacency[b].add(a)
                     edge_counts[tuple(sorted((a,b)))]+=1
+                    directed[a,b]+=1
             if t['children']:
                 max_triangles=max(max_triangles,triangles)
             self.db.executemany('INSERT INTO rendered_borders VALUES (?,?,?)',
@@ -436,9 +450,15 @@ class Store:
             def canonical(p):
                 if p not in cache:cache[p]=self.canonical_xyz(p)
                 return cache[p]
+            if t['children']:
+                # D11: coarse borders are arcs between retained exact vertices.
+                arcs=borders.tile_border(self,t,vertices,directed,require,d11)
+                borders.folds(self,t,directed,arcs,require)
             for kind,a,b in self.db.execute('SELECT kind,a,b FROM requirements WHERE tile=? ORDER BY kind DESC',(int(t['id']),)):
                 self.work.charge()
-                if kind==0:
+                if t['children'] and kind<2:
+                    points+=kind==0;segments+=kind==1
+                elif kind==0:
                     points+=1
                     require(canonical(a) in vertices,'interfacePoints',t['id'])
                 elif kind==1:
@@ -461,5 +481,8 @@ class Store:
                     exemptOpenEdgeChanges=exempt,exemptCrackEvents=0,
                     mixedPairs=mixed,sameDepthPairs=same,
                     maxCoarseTriangles=max_triangles,
+                    contractedBorderArcs=d11['contractedBorderArcs'],
+                    contractedBorderVertices=d11['contractedBorderVertices'],
+                    borderArcs=d11['borderArcs'],
                     coarseTriangleCountBasis='expanded tile instances, summed across each tile contents; every payload is separately within the hard 8,192 (triangleCap)',
                     canonical=self.canonical_stats,candidateWork=self.work.used,workLimit=self.work.limit)

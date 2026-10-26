@@ -3552,6 +3552,8 @@ fn inspect_run(
             omitted_by_depth: c.omission.omitted_by_depth,
             frontier_tiles: c.omission.frontier_tiles,
             frontier_leaves: c.omission.frontier_leaves,
+            contracted_border_arcs: c.contracted_border_arcs,
+            contracted_border_vertices: c.contracted_border_vertices,
         }),
         scratch: scratch.is_created().then(|| ScratchReport {
             memory_backed: scratch.memory_backed(),
@@ -3584,6 +3586,10 @@ fn inspect_run(
         .chain(check.hlod_identity.then_some("interfaceSegments"))
         .chain(check.hlod_identity.then_some("interfacePoints"))
         .chain(check.hlod_identity.then_some("interfaceWinding"))
+        .chain(check.hlod_identity.then_some("borderDisplacement"))
+        .chain(check.hlod_identity.then_some("sameDepthBorderGap"))
+        .chain(check.hlod_identity.then_some("terminalBorderLock"))
+        .chain(check.hlod_identity.then_some("mixedDepthBorderGap"))
         .map(String::from)
         .collect(),
         not_inspected: check.not_inspected.into_iter().collect(),
