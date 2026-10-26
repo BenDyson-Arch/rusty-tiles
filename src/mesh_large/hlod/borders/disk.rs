@@ -24,9 +24,9 @@ impl<const N: usize> Record for Words<N> {
 }
 
 const PAGE_BYTES: usize = 16 << 10;
-const PAGES: usize = 64;
+const PAGES: usize = 128;
 const WAYS: usize = 4;
-/// Every store has at most 64 pages plus fixed metadata. Twelve stores overlap in the
+/// Every store has at most 128 pages plus fixed metadata. Twelve stores overlap in the
 /// graph build; eight survive for the walk. This never grows with source size.
 pub(super) const CACHE_BYTES: u64 = (PAGE_BYTES * PAGES + 16_384) as u64;
 struct Page {

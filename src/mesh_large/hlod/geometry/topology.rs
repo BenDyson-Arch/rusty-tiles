@@ -354,8 +354,18 @@ pub(super) fn changes(
     };
     let component = Components::mesh(m);
     let border = points(interface);
+    let surviving: HashSet<usize> = output
+        .iter()
+        .flatten()
+        .map(|v| component[*v as usize])
+        .collect();
     let mut bounds: HashMap<usize, ([f64; 3], [f64; 3], bool)> = HashMap::default();
     for t in &m.triangles {
+        // Only a removed component needs a diameter/contact eligibility decision.
+        // Boundary preservation below still checks every surviving component.
+        if surviving.contains(&component[t[0] as usize]) {
+            continue;
+        }
         for &v in t {
             let p = m.positions[v as usize].map(f64::from);
             let b = bounds.entry(component[v as usize]).or_insert((p, p, false));
@@ -366,11 +376,6 @@ pub(super) fn changes(
             b.2 |= border.contains(&m.keys[v as usize]);
         }
     }
-    let surviving: HashSet<usize> = output
-        .iter()
-        .flatten()
-        .map(|v| component[*v as usize])
-        .collect();
     let mut receipt = Receipt::default();
     let mut dropped = HashSet::default();
     for (c, (lo, hi, touch)) in &bounds {
@@ -398,6 +403,10 @@ pub(super) fn changes(
                 }
             }
         }
+        // All subsequent graph comparisons consume only one-sided boundary edges.
+        // Compact once instead of repeatedly walking the full surface-edge table.
+        edges.retain(|_, n| *n == 1);
+        edges.shrink_to_fit();
         let mut groups = Components::new(m.keys.len());
         let mut degree = vec![0u32; m.keys.len()];
         for (&(a, b), &n) in &edges {
@@ -516,8 +525,8 @@ pub(super) fn changes(
         after_counts.values().sum::<usize>() + closed_count
     );
     let affected: HashSet<usize> = closed.iter().map(|&r| component[r]).collect();
-    let old_faces: HashSet<_> = m.triangles.iter().map(oriented).collect();
     let patch_faces = if receipt.closed_holes > 0 {
+        let old_faces: HashSet<_> = m.triangles.iter().map(oriented).collect();
         output
             .iter()
             .enumerate()

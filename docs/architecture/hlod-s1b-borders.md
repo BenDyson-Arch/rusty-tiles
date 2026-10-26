@@ -68,6 +68,8 @@ Consequently the total compared owner rows per level are bounded by incidence,
 not an owner cross-product. Binary source-key lookup and sorting give O(n log n)
 work; fixed-height level walks add O(nh). Fixed page caches bound resident I/O
 state independently of source size.
+Each graph store has 128 fixed 16 KiB pages; the memory plan charges all
+overlapping stores through the same cache constant.
 
 Ordered chains use the original edge ordinal as common parameter. Coordinate
 corridors select shortcuts in linear work, retaining a nested subset of finer
@@ -99,6 +101,10 @@ jobs cost P*F(8C); the constructive domain above has a cap-fit argument, while
 `remesh_stalled` outside that domain records failure of the bounded remesher,
 not a mathematical proof that no alternative triangulation exists. That proof
 limit remains subject to independent acceptance.
+Topology eligibility computes diameter/contact bounds only for disappeared
+components. Its boundary graph drops interior edges once before comparing paths
+and cycles; closure face sets are built only when a closure is detected. These
+reductions preserve the same topology decisions and canonical output.
 
 The ready window counts resident/spilled siblings, pending jobs and in-flight
 outputs; its key bound is 8(h+1)+32. A spill is admitted before file creation and
