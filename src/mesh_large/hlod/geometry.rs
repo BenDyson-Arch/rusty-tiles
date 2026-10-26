@@ -497,6 +497,7 @@ fn attempt(
         .triangles
         .iter()
         .all(|t| t[0] == t[1] || t[1] == t[2] || t[0] == t[2]);
+    let mut accepted_change = None;
     let (output, simplifier_error, stopping) = if input <= cap {
         (merged.triangles.clone(), 0., StoppingBound::Input)
     } else if degenerate_only {
@@ -527,8 +528,11 @@ fn attempt(
                 );
             }
             let valid = edges.is_empty() && points.is_empty() && !invalid.iter().any(|v| *v);
-            if valid && topology::changes(reference, &output, interface, floor).is_some() {
-                break;
+            if valid {
+                accepted_change = topology::changes(reference, &output, interface, floor);
+                if accepted_change.is_some() {
+                    break;
+                }
             }
             let previously_protected = protected.iter().filter(|p| **p).count();
             if valid || fold_retries == FOLD_RETRIES {
@@ -642,7 +646,10 @@ fn attempt(
             ),
         ));
     }
-    let topology_change = topology::changes(reference, &output, interface, floor);
+    // The successful loop check used these same immutable inputs. Preserve its
+    // witnesses before compaction; input/degenerate-only paths still compare here.
+    let topology_change =
+        accepted_change.or_else(|| topology::changes(reference, &output, interface, floor));
     let Some(change) = topology_change else {
         return Err(JobError::new(
             JobErrorKind::Unsupported,

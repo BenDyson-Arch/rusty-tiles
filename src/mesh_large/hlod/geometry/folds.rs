@@ -33,8 +33,10 @@ impl Source {
             triangles.len(),
         );
         let mut result = Self {
-            faces: HashMap::default(),
-            edges: HashMap::default(),
+            // Reserve the face bound and the common surface-edge count. This is
+            // only a capacity hint: disconnected/nonmanifold inputs still grow.
+            faces: HashMap::with_capacity_and_hasher(triangles.len(), Default::default()),
+            edges: HashMap::with_capacity_and_hasher(triangles.len() * 3 / 2, Default::default()),
             boundary: HashSet::default(),
         };
         for t in triangles {
@@ -308,6 +310,27 @@ pub(crate) fn decode_valid(
 ) -> bool {
     let _cpu =
         super::super::cpu_profile::start(super::super::cpu_profile::Stage::Decode, triangles.len());
+    // An identity decode has exactly the source face/edge multiplicities and
+    // oriented-face licenses. Finite f32 normals have positive finite f64 self-dot
+    // whenever nonzero. Compare bits because signed zero is part of a canonical key.
+    if before.len() == after.len()
+        && before.iter().zip(after).all(|(a, b)| {
+            a.iter()
+                .zip(b)
+                .all(|(a, b)| a.is_finite() && a.to_bits() == b.to_bits())
+        })
+    {
+        return true;
+    }
+    decode_changed(before, after, triangles, boundary)
+}
+
+fn decode_changed(
+    before: &[[f32; 3]],
+    after: &[[f32; 3]],
+    triangles: &[[u32; 3]],
+    boundary: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
+) -> bool {
     // New decoded keys can acquire an owner in another tile, outside the source
     // incidence graph. Retain canonical source keys; merging onto an existing key
     // is still subject to the face, boundary-edge and orientation checks below.
@@ -336,6 +359,46 @@ pub(crate) fn decode_valid(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn identity_decode_agrees_with_full_guard_across_finite_f32_domain() {
+        // Exercise the unchanged full guard, including degenerate faces, twins,
+        // multiplicity, acute books, signed zero and extreme/subnormal exponents.
+        for exponent in [-149, -126, -80, -1, 0, 60, 100, 125] {
+            let s = 2f64.powi(exponent) as f32;
+            let p = [
+                [0., -0., 0.],
+                [s, 0., 0.],
+                [0., s, 0.],
+                [0., s, s],
+                [-s, -s, -s],
+                [f32::MAX, f32::MIN_POSITIVE, -f32::MAX],
+            ];
+            let faces = [
+                [0, 1, 2],
+                [0, 1, 3],
+                [1, 0, 2],
+                [1, 0, 4],
+                [0, 1, 2],
+                [0, 0, 0],
+                [2, 5, 4],
+            ];
+            for n in 0..=faces.len() {
+                for boundary in [Vec::new(), boundary(&p)] {
+                    assert!(decode_changed(&p, &p, &faces[..n], &boundary));
+                    assert!(decode_valid(&p, &p, &faces[..n], &boundary));
+                }
+            }
+            for v in 0..p.len() {
+                let mut changed = p;
+                changed[v] = p[(v + 1) % p.len()];
+                assert_eq!(
+                    decode_valid(&p, &changed, &faces, &boundary(&p)),
+                    decode_changed(&p, &changed, &faces, &boundary(&p)),
+                );
+            }
+        }
+    }
 
     fn boundary(points: &[[f32; 3]]) -> Vec<crate::mesh_large::hlod::interfaces::InterfaceRow> {
         points
