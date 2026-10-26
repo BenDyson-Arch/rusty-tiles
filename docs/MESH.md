@@ -27,6 +27,9 @@ conflict unless `--force` (or `-f`) is supplied. Replacement installs a complete
 archive after required work and callbacks finish. Failure before installation
 preserves the previous destination. The output cannot overwrite or alias the
 source or its dependencies. Installation does not promise power-loss durability.
+The archive declares itself an HLOD delivery (`asset.extras.rustyTiles.lod` is
+`"hlod"` in `tileset.json`), so `validate` applies every HLOD check without
+`--expectProfile hlod`, and refuses a copy whose payload labels were stripped.
 
 ## Source and placement
 
@@ -435,8 +438,9 @@ texel for KTX2 profiles, each with a 4/3 mip allowance (a texture-stage
 recheck). These are estimates, not bounds. Output demands are added to the
 scratch figure when they share a filesystem, told apart by device id: btrfs
 subvolumes of one pool report different ids, so their demands are checked
-separately against the same free space. Memory-backed (tmpfs) scratch is charged
-to the worker memory plan, but a work directory or output on tmpfs is not.
+separately against the same free space. Memory-backed (tmpfs) scratch, work
+directory and output staging are charged to the memory budget
+([Memory budget](#memory-budget)).
 Each capture stage rechecks free space for its own working set on entry and
 fails closed if its measured peak exceeds its declared bound; the diagnostics
 report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). The HLOD
@@ -483,13 +487,18 @@ One declared ceiling governs the whole run, with one rule on every surface:
   active parents, decoded source images, chart/page/codec workspace, memory-backed
   capture scratch and the archive stage's resident buffers (`archive_minimum_bytes`).
   A source without images reserves no texture, chart, mip or codec workspace.
-  **Not charged:** output staging and intermediate files that live on memory-backed
-  (tmpfs) storage. A work directory, scratch parent or output on tmpfs consumes memory
-  that the budget does not account for, so the budget does not bound a run whose
-  storage is memory-backed. This is a known remaining D8 obligation, planned with the
-  archive-staging work; until then keep large outputs and intermediates on disk. The
-  resident archive-preparation buffers (charged) are distinct from archive storage
-  (not charged when memory-backed).
+- **Memory-backed storage.** Files on memory-backed (tmpfs) storage are charged too.
+  Capture scratch there is charged at its declared need. After capture, each other
+  owner on tmpfs is charged one copy of the output-side reservation (see scratch
+  admission above) plus 32 MiB for manifests, documents and archive scratch that do
+  not scale with triangles: the private work directory (leaf and coarse payloads, forest
+  staging and the archive's scratch) and the archive staged beside the output. Every
+  later stage plans against the budget less that charge. The work directory is
+  measured before the archive is written, and the staged archive as it is written;
+  either past its charge is a `resource_limit` refusal (`use a disk-backed scratch
+  directory` or `stage the output on disk`). The estimate is generous for textured
+  sources and tighter for untextured ones (about 1.4× a measured untextured
+  0.79M-triangle crop), so disk remains the better place for large outputs.
 - **Pressure never changes output.** It serializes work (`--jobs` stays a maximum
   under the same budget), and what cannot fit even alone is a `resource_limit`
   refusal naming the stage and the bytes it needs, before that stage allocates and
@@ -499,7 +508,9 @@ One declared ceiling governs the whole run, with one rule on every surface:
   `resolved_bytes`, `source`: `explicit`, `default_ceiling`, `default_headroom` or
   `default_undetected`, and the detected headroom), the least budget that admits each
   stage (`minimum_bytes`, `capture_minimum_bytes`, `leaf_minimum_bytes`,
-  `archive_minimum_bytes`) and the coarse stage's plan (`hlod`);
+  `archive_minimum_bytes`), the coarse stage's plan (`hlod`) and the memory-backed
+  storage charges with what was measured against them (`memory_backed_storage`; their
+  sum is `budget.memory_backed_storage_bytes`);
   `diagnostics.hlod.lease_peak_bytes` is its highest simultaneous lease. The minima
   include charged request facts such as the lengths of the input, output and scratch
   paths (sort descriptors carry them), and the detected headroom is a host observation,

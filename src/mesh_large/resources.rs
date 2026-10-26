@@ -37,6 +37,11 @@ pub struct MemoryBudget {
     pub source: BudgetSource,
     /// Detected host/cgroup headroom at resolution (`None` where unreported).
     pub detected_headroom_bytes: Option<u64>,
+    /// Memory-backed (tmpfs) output and intermediate storage charged against the budget
+    /// once capture has sized it: the private work directory and the staged archive when
+    /// either lives on memory-backed storage (0 on disk). Every later stage plans against
+    /// what remains.
+    pub memory_backed_storage_bytes: u64,
 }
 
 fn invalid(message: impl Into<String>) -> JobError {
@@ -71,12 +76,16 @@ impl MemoryBudget {
             resolved_bytes: resolved,
             source,
             detected_headroom_bytes: detected,
+            memory_backed_storage_bytes: 0,
         })
     }
 
-    /// Memory a stage may plan against: the budget, never above the detected headroom.
+    /// Memory a stage may plan against: the budget, never above the detected headroom, less
+    /// the memory-backed storage charged to it.
     pub(crate) fn ceiling(&self, detected: Option<u64>) -> u64 {
-        detected.map_or(self.resolved_bytes, |d| d.min(self.resolved_bytes))
+        detected
+            .map_or(self.resolved_bytes, |d| d.min(self.resolved_bytes))
+            .saturating_sub(self.memory_backed_storage_bytes)
     }
 }
 
@@ -330,6 +339,14 @@ mod tests {
         assert_eq!(explicit.resolved_bytes, 12 << 30);
         assert_eq!(explicit.ceiling(Some(8 << 30)), 8 << 30);
         assert_eq!(explicit.ceiling(None), 12 << 30);
+        // Memory-backed storage is charged against both the budget and the headroom.
+        let charged = MemoryBudget {
+            memory_backed_storage_bytes: 1 << 30,
+            ..explicit
+        };
+        assert_eq!(charged.ceiling(Some(8 << 30)), 7 << 30);
+        assert_eq!(charged.ceiling(None), 11 << 30);
+        assert_eq!(charged.ceiling(Some(1 << 29)), 0);
         assert_eq!(
             MemoryBudget::resolve_with(Some(0), Some(1 << 30))
                 .unwrap_err()

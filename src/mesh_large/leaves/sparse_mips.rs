@@ -538,6 +538,54 @@ pub(in crate::mesh_large) fn build_islands(
     class: Class,
     memory_limit: u64,
 ) -> Result<Chain, JobError> {
+    build_levels(
+        width,
+        height,
+        rgba,
+        support,
+        labels,
+        isolated,
+        class,
+        memory_limit,
+        true,
+    )
+}
+
+/// Level 0 alone, gutters filled as in [`build_islands`], for a page whose sampler never
+/// reads a reduced level (no mipmap minification filter).
+pub(in crate::mesh_large) fn build_base(
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+    support: &[u32],
+    class: Class,
+    memory_limit: u64,
+) -> Result<Chain, JobError> {
+    build_levels(
+        width,
+        height,
+        rgba,
+        support,
+        None,
+        0,
+        class,
+        memory_limit,
+        false,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_levels(
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+    support: &[u32],
+    labels: Option<&[u32]>,
+    isolated: u32,
+    class: Class,
+    memory_limit: u64,
+    complete: bool,
+) -> Result<Chain, JobError> {
     if width < 4 || height < 4 || !width.is_multiple_of(4) || !height.is_multiple_of(4) {
         return Err(error(
             JobErrorKind::InvalidRequest,
@@ -612,7 +660,7 @@ pub(in crate::mesh_large) fn build_islands(
                     .ok_or_else(resource)?,
             )
             .ok_or_else(resource)?;
-        if w == 1 && h == 1 {
+        if !complete || (w == 1 && h == 1) {
             break;
         }
         w = (w / 2).max(1);
@@ -672,6 +720,9 @@ pub(in crate::mesh_large) fn build_islands(
     }
     fill_gutters(&mut base, class, &mut nearest, labels);
     chain.levels.push(base);
+    if count == 1 {
+        return Ok(chain);
+    }
     if class != Class::Id {
         for mut d in direct_levels(
             &chain.levels[0],

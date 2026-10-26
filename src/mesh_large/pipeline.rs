@@ -313,6 +313,52 @@ pub struct MemoryDiagnostics {
     /// Archive preparation and writing: captured metadata, runtime reserve, memory-backed
     /// scratch and H16's declared resident bound.
     pub archive_minimum_bytes: u64,
+    /// Memory-backed output and intermediate storage charged to the budget
+    /// (`budget.memory_backed_storage_bytes` is their sum) and what was measured against it.
+    pub memory_backed_storage: StorageDiagnostics,
+}
+
+/// D8 charges of memory-backed (tmpfs) storage after capture, `None` for an owner on disk.
+/// Each owner is charged one copy of capture's output reservation (`output_reserve_bytes`
+/// holds three: leaf staging, archive staging and a replaced destination, whose existing
+/// bytes the detected headroom already excludes) plus a fixed 32 MiB for files that do not
+/// scale with triangles. A measured owner past its charge is a `resource_limit` refusal, so
+/// the budget bounds the run.
+#[derive(Clone, Debug, Serialize)]
+pub struct StorageDiagnostics {
+    /// The private work directory: leaf and coarse payloads, forest staging and the
+    /// archive's scratch.
+    pub work_charge_bytes: Option<u64>,
+    /// The archive staged beside the output.
+    pub archive_charge_bytes: Option<u64>,
+    /// The charged work directory's measured files plus the archive's declared scratch,
+    /// checked before the archive is written.
+    pub work_bytes: Option<u64>,
+    /// The charged staged archive's length, checked as it is written.
+    pub archive_bytes: Option<u64>,
+}
+
+/// Fixed part of each memory-backed storage charge: leaf and coarse manifests, forest
+/// documents, the conversion report and the archive's index and directory scratch, which do
+/// not scale with triangles and dominate a small source's files.
+const STORAGE_FIXED_BYTES: u64 = 32 << 20;
+
+/// One copy of the output reservation, plus [`STORAGE_FIXED_BYTES`], for each of the work
+/// directory and the output parent that is memory-backed.
+fn storage_charges(
+    work: &Path,
+    output_parent: &Path,
+    scratch: &super::full::FullScratchNeed,
+) -> Result<delivery::StorageCharges, JobError> {
+    let copy = (scratch.output_reserve_bytes / 3).saturating_add(STORAGE_FIXED_BYTES);
+    let charge = |path: &Path| -> Result<Option<u64>, JobError> {
+        let volume = crate::spill::inspect_volume(path).map_err(JobError::from)?;
+        Ok(volume.memory_backed.then_some(copy))
+    };
+    Ok(delivery::StorageCharges {
+        work: charge(work)?,
+        archive: charge(output_parent)?,
+    })
 }
 #[derive(Debug)]
 pub struct TilerResult {
@@ -467,13 +513,28 @@ pub fn mesh_to_tileset(
             total: Some(1),
         })?;
         phases.finished(Phase::Capture, capture_started.elapsed().as_secs_f64())?;
-        let plan = producer::stage_plan(&config, &captured)?;
+        // D8: memory-backed storage written from here on is charged before any later stage
+        // plans, so every stage (leaf, HLOD, archive) sees the budget it leaves.
+        let charges = storage_charges(work.path(), parent, &captured.report.scratch)?;
+        let storage = charges
+            .work
+            .unwrap_or(0)
+            .checked_add(charges.archive.unwrap_or(0))
+            .ok_or_else(|| JobError::new(JobErrorKind::ResourceLimit, "storage charge overflow"))?;
+        let budget = MemoryBudget {
+            memory_backed_storage_bytes: storage,
+            ..budget
+        };
+        let mut config = config.clone();
+        config.memory_budget = Some(budget);
+        let config = &config;
+        let plan = producer::stage_plan(config, &captured)?;
         // HLOD admits its own stage against the declared budget before any leaf is built.
         #[cfg(test)]
         let settings = request.hlod;
         #[cfg(not(test))]
         let settings = super::hlod::Settings::default();
-        let hlod = super::hlod::plan(&captured, &config, &budget, &settings)?;
+        let hlod = super::hlod::plan(&captured, config, &budget, &settings)?;
         let c = &captured.report;
         let capture_minimum = c
             .jobs
@@ -504,18 +565,27 @@ pub fn mesh_to_tileset(
                 ),
             ));
         }
-        let memory = MemoryDiagnostics {
+        // Stages after capture admit against the budget less the storage charge.
+        let mut memory = MemoryDiagnostics {
             budget,
-            minimum_bytes: capture_minimum
-                .max(plan.minimum_bytes())
-                .max(hlod.minimum_bytes)
-                .max(archive_minimum),
+            minimum_bytes: capture_minimum.max(
+                plan.minimum_bytes()
+                    .max(hlod.minimum_bytes)
+                    .max(archive_minimum)
+                    .saturating_add(storage),
+            ),
             archive_minimum_bytes: archive_minimum,
             capture_minimum_bytes: capture_minimum,
             capture_bound_bytes: c.memory.bound_bytes,
             leaf_minimum_bytes: plan.minimum_bytes(),
             leaf_bound_bytes: plan.bound_bytes(),
             hlod: hlod.clone(),
+            memory_backed_storage: StorageDiagnostics {
+                work_charge_bytes: charges.work,
+                archive_charge_bytes: charges.archive,
+                work_bytes: None,
+                archive_bytes: None,
+            },
         };
         let leaf = producer::produce(
             work.path(),
@@ -554,12 +624,15 @@ pub fn mesh_to_tileset(
             delivery::source::TILER_MAX_GLB_JSON,
         )?;
         let report = TilerReport::new(&captured.report, &leaf.report, &prepared.facts());
-        let (delivered, archive_bytes) = delivery::write_prepared(
+        let (delivered, archive_bytes, work_bytes) = delivery::write_prepared(
             prepared,
             &mut || attempt.check(),
             staging.writer(),
             work.path(),
+            charges,
         )?;
+        memory.memory_backed_storage.work_bytes = work_bytes;
+        memory.memory_backed_storage.archive_bytes = charges.archive.map(|_| archive_bytes);
         phases.progress(Phase::Archive, 1, Some(1))?;
         phases.finished(Phase::Archive, archive_started.elapsed().as_secs_f64())?;
         let c = &captured.report;

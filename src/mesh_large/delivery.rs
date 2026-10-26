@@ -593,7 +593,52 @@ fn publish_with(
     work_parent: &Path,
 ) -> Result<(MeshTilesetReport, u64), JobError> {
     let prepared = prepare(request, limits, check, false)?;
-    write_prepared(prepared, check, out, work_parent)
+    write_prepared(prepared, check, out, work_parent, StorageCharges::default())
+        .map(|(report, bytes, _)| (report, bytes))
+}
+
+/// D8 charges of the publication's memory-backed (tmpfs) storage, `None` for an owner on
+/// disk: the private work directory (leaf and coarse payloads, forest documents and the
+/// archive's scratch) and the archive staged beside the output.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct StorageCharges {
+    pub work: Option<u64>,
+    pub archive: Option<u64>,
+}
+
+/// Bytes of the regular files under `dir`, a hard-linked file counted once: inside `links`
+/// (the forest staging, whose payload members are links to the leaf directory's files) a
+/// file with more than one link is skipped. Depth-first; resident state is one open
+/// directory per level.
+fn stored_bytes(dir: &Path, links: &Path) -> Result<u64, JobError> {
+    let entries = std::fs::read_dir(dir).map_err(|e| JobError::io("measure work files", dir, e))?;
+    let mut total = 0u64;
+    for entry in entries {
+        let entry = entry.map_err(|e| JobError::io("measure work files", dir, e))?;
+        let path = entry.path();
+        let metadata = std::fs::symlink_metadata(&path)
+            .map_err(|e| JobError::io("measure work files", &path, e))?;
+        let bytes = if metadata.is_dir() {
+            stored_bytes(&path, links)?
+        } else if metadata.is_file() && !(linked(&metadata) && path.starts_with(links)) {
+            metadata.len()
+        } else {
+            0
+        };
+        total = total
+            .checked_add(bytes)
+            .ok_or_else(|| state("work file bytes overflow"))?;
+    }
+    Ok(total)
+}
+
+#[cfg(unix)]
+fn linked(metadata: &std::fs::Metadata) -> bool {
+    std::os::unix::fs::MetadataExt::nlink(metadata) > 1
+}
+#[cfg(not(unix))]
+fn linked(_: &std::fs::Metadata) -> bool {
+    false
 }
 
 /// Semantic delivery facts known before archive serialization. No runtime measurements.
@@ -712,12 +757,18 @@ pub(crate) fn prepare_tiler(
     Ok(prepared)
 }
 
+/// Stage the forest under `work_parent` and write the archive into `out`. A charged work
+/// directory is measured once everything but the archive's scratch is staged (its declared
+/// need is added) and refused past its charge before the archive is written; a charged
+/// archive is refused before it grows past its charge. Returns the measured work bytes of a
+/// charged work directory.
 pub(crate) fn write_prepared(
     prepared: PreparedDelivery,
     check: &mut dyn FnMut() -> Result<(), JobError>,
     out: &mut File,
     work_parent: &Path,
-) -> Result<(MeshTilesetReport, u64), JobError> {
+    charges: StorageCharges,
+) -> Result<(MeshTilesetReport, u64, Option<u64>), JobError> {
     let PreparedDelivery {
         limits,
         leaves,
@@ -741,10 +792,17 @@ pub(crate) fn write_prepared(
         File::create(&names_path)
             .map_err(|e| JobError::io("create member list", &names_path, e))?,
     );
-    let document = TilesetDocument::root(
+    let mut document = TilesetDocument::root(
         GeometricError::new(planned.tileset_error).map_err(|e| state(e.to_string()))?,
         [],
     );
+    // The producer's HLOD output (coarse tiles with their stage record) declares itself, so
+    // a validator applies the HLOD expectation without being asked.
+    if leaves.proxies {
+        document = document
+            .declaring_hlod()
+            .map_err(|e| state(e.to_string()))?;
+    }
     let writer = ForestWriter::new(&document, &staging, OCTREE)
         .map_err(|e| state(e.to_string()))?
         .with_max_implicit_levels(plan::SKELETON_HEIGHT);
@@ -797,11 +855,37 @@ pub(crate) fn write_prepared(
     let bytes = serde_json::to_vec(&top).map_err(|e| state(e.to_string()))?;
     let tileset = staging.join("tileset.json");
     std::fs::write(&tileset, bytes).map_err(|e| JobError::io("write tileset.json", &tileset, e))?;
-    let scratch = crate::spill::Scratch::create(
-        Some(work.path()),
-        archive::scratch_need(members).ok_or_else(|| state("archive scratch overflow"))?,
+    let scratch_need =
+        archive::scratch_need(members).ok_or_else(|| state("archive scratch overflow"))?;
+    let work_bytes = match charges.work {
+        Some(charge) => {
+            let bytes = stored_bytes(work_parent, &staging)?
+                .checked_add(scratch_need)
+                .ok_or_else(|| state("work file bytes overflow"))?;
+            if bytes > charge {
+                return Err(JobError::new(
+                    JobErrorKind::ResourceLimit,
+                    format!(
+                        "the work directory on memory-backed storage needs {bytes} bytes \
+                         (payloads, forest documents and archive scratch), past the {charge} \
+                         charged to the memory budget; use a disk-backed scratch directory"
+                    ),
+                ));
+            }
+            Some(bytes)
+        }
+        None => None,
+    };
+    let scratch = crate::spill::Scratch::create(Some(work.path()), scratch_need)?;
+    let archive_bytes = archive::write(
+        &staging,
+        &names_path,
+        members - 1,
+        &scratch,
+        out,
+        check,
+        charges.archive,
     )?;
-    let archive_bytes = archive::write(&staging, &names_path, members - 1, &scratch, out, check)?;
     scratch.close()?;
     work.close()
         .map_err(|e| JobError::io("remove forest staging", work_parent, e))?;
@@ -826,7 +910,7 @@ pub(crate) fn write_prepared(
         peak_held_records: shape.peak_held_records,
         placement: placement.report(),
     };
-    Ok((report, archive_bytes))
+    Ok((report, archive_bytes, work_bytes))
 }
 
 /// Bytes of parsed `serde_json::Value` per byte of JSON text, a proven ceiling: a `Value`

@@ -74,7 +74,9 @@ pub(crate) fn scratch_need(members: u64) -> Option<u64> {
 
 /// Write the archive of `count` members named by `names` (one per line, `tileset.json` not
 /// among them) from `staging` into `out`: `tileset.json`, then `names` in order, then the
-/// index. Returns the archive length.
+/// index. Returns the archive length. With `limit` (the memory charged to an archive staged
+/// on memory-backed storage, D8) the archive is refused before a member or the central
+/// directory would take it past `limit`.
 pub(crate) fn write(
     staging: &Path,
     names: &Path,
@@ -82,10 +84,23 @@ pub(crate) fn write(
     scratch: &Scratch,
     out: &mut File,
     check: &mut dyn FnMut() -> Result<(), JobError>,
+    limit: Option<u64>,
 ) -> Result<u64, JobError> {
-    write_with(staging, names, count, scratch, out, check, SORT)
+    write_with(staging, names, count, scratch, out, check, SORT, limit)
 }
 
+/// The refusal of an archive past the memory charged to its memory-backed staging.
+fn over_charge(needed: u64, limit: u64) -> JobError {
+    JobError::new(
+        JobErrorKind::ResourceLimit,
+        format!(
+            "the archive staged on memory-backed storage needs at least {needed} bytes, past \
+             the {limit} charged to the memory budget; stage the output on disk"
+        ),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 fn write_with(
     staging: &Path,
     names: &Path,
@@ -94,7 +109,12 @@ fn write_with(
     out: &mut File,
     check: &mut dyn FnMut() -> Result<(), JobError>,
     sort: SortConfig,
+    limit: Option<u64>,
 ) -> Result<u64, JobError> {
+    let admit = |needed: u64| match limit {
+        Some(limit) if needed > limit => Err(over_charge(needed, limit)),
+        _ => Ok(()),
+    };
     let index_bytes = count
         .checked_mul(24)
         .filter(|bytes| *bytes < u64::from(u32::MAX))
@@ -130,6 +150,7 @@ fn write_with(
             })?;
         let offset =
             local_header(&mut writer, &name, size).map_err(io("write archive member", &path))?;
+        admit(offset.saturating_add(length))?;
         let mut crc = crc32fast::Hasher::new();
         let mut copied = 0u64;
         loop {
@@ -178,6 +199,7 @@ fn write_with(
     let index_path = Path::new(TZ_INDEX_NAME);
     let offset = local_header(&mut writer, TZ_INDEX_NAME, index_bytes as u32)
         .map_err(io("write archive index", index_path))?;
+    admit(offset.saturating_add(index_bytes))?;
     let mut crc = crc32fast::Hasher::new();
     let mut rows = 0u64;
     for row in sorter.finish()? {
@@ -217,6 +239,14 @@ fn write_with(
         .map_err(io("write central directory", &spool_path))?;
     let mut directory =
         File::open(&spool_path).map_err(io("read central-directory spool", &spool_path))?;
+    admit(
+        start.saturating_add(
+            directory
+                .metadata()
+                .map_err(io("read central-directory spool", &spool_path))?
+                .len(),
+        ),
+    )?;
     std::io::copy(&mut directory, &mut writer)
         .map_err(io("write central directory", &spool_path))?;
     let end = writer
@@ -230,6 +260,7 @@ fn write_with(
     let length = writer
         .stream_position()
         .map_err(io("write central directory", &spool_path))?;
+    admit(length)?;
     Ok(length)
 }
 
@@ -284,6 +315,7 @@ mod tests {
             &mut file,
             &mut || Ok(()),
             tiny,
+            None,
         )
         .unwrap();
         drop(file);
@@ -310,5 +342,52 @@ mod tests {
             "streamed and audited archives differ"
         );
         crate::archive3tz::validate_reader_3tz(std::io::Cursor::new(streamed)).unwrap();
+    }
+
+    /// D8: an archive staged on memory-backed storage is admitted up to its exact length and
+    /// refused one byte below it, at every stage of the stream (members, index, directory).
+    #[test]
+    fn memory_backed_archive_limit_admits_its_length_and_refuses_one_below() {
+        let work = tempfile::tempdir().unwrap();
+        let staging = work.path().join("staging");
+        std::fs::create_dir_all(&staging).unwrap();
+        std::fs::write(
+            staging.join("tileset.json"),
+            b"{\"asset\":{\"version\":\"1.1\"}}",
+        )
+        .unwrap();
+        std::fs::write(staging.join("a.glb"), vec![7u8; 5000]).unwrap();
+        std::fs::write(staging.join("b.glb"), vec![9u8; 3000]).unwrap();
+        let list = work.path().join("members.txt");
+        std::fs::write(&list, "a.glb\nb.glb\n").unwrap();
+        let scratch = Scratch::create(Some(work.path()), 1 << 20).unwrap();
+        let run = |name: &str, limit| {
+            let mut file = File::create(work.path().join(name)).unwrap();
+            write(
+                &staging,
+                &list,
+                3,
+                &scratch,
+                &mut file,
+                &mut || Ok(()),
+                limit,
+            )
+        };
+        let length = run("free.3tz", None).unwrap();
+        assert_eq!(run("exact.3tz", Some(length)).unwrap(), length);
+        assert_eq!(
+            std::fs::read(work.path().join("free.3tz")).unwrap(),
+            std::fs::read(work.path().join("exact.3tz")).unwrap()
+        );
+        for limit in [length - 1, 4000, 100] {
+            let error = run("over.3tz", Some(limit)).unwrap_err();
+            assert_eq!(error.kind(), JobErrorKind::ResourceLimit, "{error}");
+            assert!(error.to_string().contains("memory-backed"), "{error}");
+            // Refused before the stream ran far past the charge.
+            let written = std::fs::metadata(work.path().join("over.3tz"))
+                .unwrap()
+                .len();
+            assert!(written <= limit.max(5000) + (1 << 16), "{limit}: {written}");
+        }
     }
 }

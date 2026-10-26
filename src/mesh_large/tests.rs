@@ -517,3 +517,267 @@ fn no_h17_or_h27_production_symbols_remain() {
         assert!(!features.contains(name), "Cargo feature names {name}");
     }
 }
+
+/// A textured sheet for archive-level delivery checks: `side`² quads (two triangles each),
+/// the left half in material 0 (LINEAR minification, no mips) and the right half in
+/// material 1 (LINEAR_MIPMAP_LINEAR), each with its own smooth 256² image.
+fn textured_sheet(dir: &Path, side: usize) -> PathBuf {
+    fs::create_dir_all(dir).unwrap();
+    let (mut positions, mut uvs, mut indices) = (Vec::new(), Vec::new(), [Vec::new(), Vec::new()]);
+    for y in 0..=side {
+        for x in 0..=side {
+            let z = ((x * 7 + y * 3) % 5) as f32 * 0.01;
+            positions.extend([x as f32, y as f32, z]);
+            uvs.extend([x as f32 / side as f32, y as f32 / side as f32]);
+        }
+    }
+    let at = |x: usize, y: usize| (y * (side + 1) + x) as u32;
+    for y in 0..side {
+        for x in 0..side {
+            let quad = [
+                at(x, y),
+                at(x + 1, y),
+                at(x, y + 1),
+                at(x + 1, y),
+                at(x + 1, y + 1),
+                at(x, y + 1),
+            ];
+            indices[usize::from(x >= side / 2)].extend(quad);
+        }
+    }
+    let mut bytes = Vec::new();
+    for v in positions.iter().chain(&uvs) {
+        bytes.extend(v.to_le_bytes());
+    }
+    let index_offset = bytes.len();
+    for i in indices.iter().flatten() {
+        bytes.extend(i.to_le_bytes());
+    }
+    fs::write(dir.join("sheet.bin"), &bytes).unwrap();
+    for (n, name) in ["a.png", "b.png"].iter().enumerate() {
+        image::RgbaImage::from_fn(256, 256, |x, y| {
+            image::Rgba([
+                (x as u8).wrapping_add(n as u8 * 80),
+                y as u8,
+                ((x + y) / 2) as u8,
+                255,
+            ])
+        })
+        .save(dir.join(name))
+        .unwrap();
+    }
+    let vertices = (side + 1) * (side + 1);
+    let half = indices[0].len();
+    let doc = serde_json::json!({
+        "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+        "meshes":[{"primitives":[
+            {"attributes":{"POSITION":0,"TEXCOORD_0":1},"indices":2,"material":0},
+            {"attributes":{"POSITION":0,"TEXCOORD_0":1},"indices":3,"material":1}]}],
+        "buffers":[{"uri":"sheet.bin","byteLength":bytes.len()}],
+        "bufferViews":[
+            {"buffer":0,"byteOffset":0,"byteLength":vertices * 12},
+            {"buffer":0,"byteOffset":vertices * 12,"byteLength":vertices * 8},
+            {"buffer":0,"byteOffset":index_offset,"byteLength":half * 4},
+            {"buffer":0,"byteOffset":index_offset + half * 4,"byteLength":indices[1].len() * 4}],
+        "accessors":[
+            {"bufferView":0,"componentType":5126,"count":vertices,"type":"VEC3",
+             "min":[0,0,0],"max":[side as f32, side as f32, 0.04]},
+            {"bufferView":1,"componentType":5126,"count":vertices,"type":"VEC2"},
+            {"bufferView":2,"componentType":5125,"count":half,"type":"SCALAR"},
+            {"bufferView":3,"componentType":5125,"count":indices[1].len(),"type":"SCALAR"}],
+        "images":[{"uri":"a.png"},{"uri":"b.png"}],
+        "textures":[{"source":0,"sampler":0},{"source":1,"sampler":1}],
+        "samplers":[{"minFilter":9729,"magFilter":9729},{"minFilter":9987,"magFilter":9729}],
+        "materials":[
+            {"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}},
+            {"pbrMetallicRoughness":{"baseColorTexture":{"index":1}}}]
+    });
+    let input = dir.join("sheet.gltf");
+    fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+    input
+}
+
+/// A GLB's JSON document and binary chunk.
+fn glb_parts(bytes: &[u8]) -> (serde_json::Value, &[u8]) {
+    let length = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+    let doc = serde_json::from_slice(&bytes[20..20 + length]).unwrap();
+    (doc, bytes.get(28 + length..).unwrap_or(&[]))
+}
+
+/// S4 through the public operation. Every leaf and coarse texture of the published archive
+/// is checked independently of the producer: the KTX2 container header and level index are
+/// parsed here, every level is transcoded and sized, and its level count must be what the
+/// published sampler reads (the complete chain for a mipmapping minification filter, level
+/// 0 alone otherwise, S3 review P3-2). The archive declares HLOD in `tileset.json`, so plain
+/// validation runs the HLOD checks, and the same archive stripped of its identity labels is
+/// refused without any expectation flag.
+#[test]
+fn published_textures_match_their_samplers_and_the_archive_declares_hlod() {
+    use std::io::Read;
+    let work = tempfile::tempdir().unwrap();
+    let input = textured_sheet(&work.path().join("src"), 24);
+    let output = work.path().join("sheet.3tz");
+    let result = mesh_to_tileset(
+        TilerRequest::new(&input, &output).with_test_leaf_triangles(256),
+        &crate::RunControl::default(),
+    )
+    .unwrap();
+    assert!(result.diagnostics.hlod.tiles >= 3);
+    // D8: storage on memory-backed filesystems is charged, and measured within its charge.
+    let memory = &result.diagnostics.memory;
+    let storage = &memory.memory_backed_storage;
+    let tmpfs = crate::spill::inspect_volume(work.path())
+        .unwrap()
+        .memory_backed;
+    assert_eq!(storage.work_charge_bytes.is_some(), tmpfs);
+    assert_eq!(storage.archive_charge_bytes.is_some(), tmpfs);
+    assert_eq!(
+        memory.budget.memory_backed_storage_bytes,
+        storage.work_charge_bytes.unwrap_or(0) + storage.archive_charge_bytes.unwrap_or(0)
+    );
+    if tmpfs {
+        assert!(storage.work_bytes.unwrap() <= storage.work_charge_bytes.unwrap());
+        assert_eq!(
+            storage.archive_bytes,
+            Some(result.diagnostics.archive_bytes)
+        );
+        assert!(storage.archive_bytes <= storage.archive_charge_bytes);
+    }
+    let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
+    let mut members = Vec::new();
+    for i in 0..zip.len() {
+        let mut member = zip.by_index(i).unwrap();
+        let mut bytes = Vec::new();
+        member.read_to_end(&mut bytes).unwrap();
+        members.push((member.name().to_owned(), bytes));
+    }
+    let tileset: serde_json::Value = serde_json::from_slice(&members[0].1).unwrap();
+    assert_eq!(members[0].0, "tileset.json");
+    assert_eq!(tileset["asset"]["extras"]["rustyTiles"]["lod"], "hlod");
+    // (leaf level-0-only, leaf complete chain, coarse complete chain) KTX2 textures.
+    let mut seen = [0u32; 3];
+    for (name, bytes) in members.iter().filter(|(n, _)| n.ends_with(".glb")) {
+        let coarse = bytes.windows(25).any(|w| w == b"rusty_tiles_large_hlod_v1");
+        let (doc, bin) = glb_parts(bytes);
+        for texture in doc["textures"].as_array().into_iter().flatten() {
+            let sampler = &doc["samplers"][texture["sampler"].as_u64().unwrap() as usize];
+            let mipmapped = matches!(sampler["minFilter"].as_u64(), Some(9984..=9987) | None);
+            let image = texture["extensions"]["KHR_texture_basisu"]["source"]
+                .as_u64()
+                .or(texture["source"].as_u64())
+                .unwrap() as usize;
+            let image = &doc["images"][image];
+            let view = &doc["bufferViews"][image["bufferView"].as_u64().unwrap() as usize];
+            let start = view["byteOffset"].as_u64().unwrap_or(0) as usize;
+            let data = &bin[start..start + view["byteLength"].as_u64().unwrap() as usize];
+            if image["mimeType"] != "image/ktx2" {
+                assert_eq!(image["mimeType"], "image/png", "{name}");
+                image::load_from_memory_with_format(data, image::ImageFormat::Png).unwrap();
+                continue;
+            }
+            // KTX2 header (KTX 2.0 spec section 3): identifier, then little-endian fields.
+            assert_eq!(&data[..12], b"\xABKTX 20\xBB\r\n\x1A\n", "{name}");
+            let u32_at = |o: usize| u32::from_le_bytes(data[o..o + 4].try_into().unwrap());
+            let u64_at = |o: usize| u64::from_le_bytes(data[o..o + 8].try_into().unwrap());
+            let (vk_format, width, height) = (u32_at(12), u32_at(20), u32_at(24));
+            let (depth, layers, faces, levels) = (u32_at(28), u32_at(32), u32_at(36), u32_at(40));
+            assert_eq!(
+                (vk_format, depth, layers, faces),
+                (0, 0, 0, 1),
+                "{name}: Basis 2D"
+            );
+            assert!(matches!(u32_at(44), 1 | 2), "{name}: BasisLZ or Zstandard");
+            let complete = 32 - width.max(height).leading_zeros();
+            assert_eq!(
+                levels,
+                if mipmapped { complete } else { 1 },
+                "{name}: levels for minFilter {}",
+                sampler["minFilter"]
+            );
+            let transcoder = basisu::Transcoder::new(data).unwrap();
+            for level in 0..levels {
+                let index = 80 + 24 * level as usize;
+                let (offset, length) = (u64_at(index), u64_at(index + 8));
+                assert!(
+                    length > 0 && offset + length <= data.len() as u64,
+                    "{name} L{level}"
+                );
+                let rgba = transcoder
+                    .transcode(
+                        level,
+                        basisu::TargetFormat::Rgba32,
+                        basisu::DecodeFlags::NONE,
+                    )
+                    .unwrap();
+                let (w, h) = ((width >> level).max(1), (height >> level).max(1));
+                assert_eq!(
+                    rgba.len() as u64,
+                    u64::from(w) * u64::from(h) * 4,
+                    "{name} L{level}"
+                );
+            }
+            match (coarse, levels == complete && levels > 1) {
+                (false, false) => seen[0] += 1,
+                (false, true) => seen[1] += 1,
+                (true, true) => seen[2] += 1,
+                (true, false) => panic!("{name}: a coarse KTX2 page without its chain"),
+            }
+        }
+    }
+    assert!(seen.iter().all(|&n| n > 0), "{seen:?}");
+    // Declared: plain validation holds the archive to every HLOD check.
+    let checked =
+        crate::validate::inspect(crate::validate::ValidationRequest::new(&output)).unwrap();
+    assert!(checked.checks.iter().any(|c| c == "hlodFeatureIds"));
+    assert!(checked.interface_census.is_some());
+    // Stripped of every identity label (as the S5 omission controls strip), the declared
+    // archive is refused without a flag.
+    let stripped = work.path().join("stripped");
+    for (name, bytes) in &members {
+        let path = stripped.join(name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        if !name.ends_with(".glb") {
+            fs::write(&path, bytes).unwrap();
+            continue;
+        }
+        let (mut doc, bin) = glb_parts(bytes);
+        let doc = doc.as_object_mut().unwrap();
+        doc.remove("extensions");
+        if let Some(used) = doc.get_mut("extensionsUsed").and_then(|u| u.as_array_mut()) {
+            used.retain(|e| e != "EXT_mesh_features" && e != "EXT_structural_metadata");
+        }
+        for mesh in doc["meshes"].as_array_mut().unwrap() {
+            for primitive in mesh["primitives"].as_array_mut().unwrap() {
+                let primitive = primitive.as_object_mut().unwrap();
+                primitive.remove("extensions");
+                primitive["attributes"]
+                    .as_object_mut()
+                    .unwrap()
+                    .retain(|k, _| !k.starts_with("_FEATURE_ID_"));
+            }
+        }
+        let mut text = serde_json::to_vec(&doc).unwrap();
+        text.resize(text.len().next_multiple_of(4), b' ');
+        let mut glb = b"glTF".to_vec();
+        for word in [2, (28 + text.len() + bin.len()) as u32, text.len() as u32] {
+            glb.extend(word.to_le_bytes());
+        }
+        glb.extend(b"JSON");
+        glb.extend(&text);
+        glb.extend((bin.len() as u32).to_le_bytes());
+        glb.extend(b"BIN\0");
+        glb.extend(bin);
+        fs::write(&path, glb).unwrap();
+    }
+    fs::remove_file(stripped.join(crate::TZ_INDEX_NAME)).ok();
+    let archive = work.path().join("stripped.3tz");
+    crate::package::package(
+        crate::package::PackageRequest::directory(&stripped, &archive),
+        &crate::RunControl::default(),
+    )
+    .unwrap();
+    let error = crate::validate::inspect(crate::validate::ValidationRequest::new(&archive))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("hlodFeatureIds"), "{error}");
+}

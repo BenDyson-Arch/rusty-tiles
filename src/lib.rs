@@ -46,8 +46,8 @@ pub use mesh_archive::{
 };
 pub use mesh_large::{
     mesh_to_tileset, parse_memory_budget, BudgetSource, HlodDiagnostics, HlodMemoryPlan,
-    MemoryBudget, MemoryDiagnostics, MeshSourceCrs, MeshSourceCrsReport, TilerDiagnostics,
-    TilerJobs, TilerProfile, TilerReport, TilerRequest, TilerResult,
+    MemoryBudget, MemoryDiagnostics, MeshSourceCrs, MeshSourceCrsReport, StorageDiagnostics,
+    TilerDiagnostics, TilerJobs, TilerProfile, TilerReport, TilerRequest, TilerResult,
 };
 pub use pack::{validate_3tz, TZ_INDEX_NAME};
 pub use raster_directory::{

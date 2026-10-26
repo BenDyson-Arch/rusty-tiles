@@ -1607,3 +1607,90 @@ fn repeated_chain_content_stays_inside_its_tile() {
         assert!(chain.extent.lo[i] <= payload.lo[i] && chain.extent.hi[i] >= payload.hi[i]);
     }
 }
+
+/// D8: a work directory on memory-backed storage is measured once (hard-linked forest
+/// members count once) and admitted up to its measure, refused one byte below it before the
+/// archive is written, leaving no staging; a charged archive is refused below its length.
+#[test]
+fn memory_backed_work_and_archive_charges_admit_their_measure_and_refuse_one_below() {
+    let work = tempfile::tempdir().unwrap();
+    // The link-aware measure: a payload and its forest link count once.
+    let probe = work.path().join("probe");
+    std::fs::create_dir_all(probe.join("forest/sub")).unwrap();
+    std::fs::write(probe.join("payload.glb"), [1u8; 100]).unwrap();
+    std::fs::hard_link(
+        probe.join("payload.glb"),
+        probe.join("forest/sub/payload.glb"),
+    )
+    .unwrap();
+    std::fs::write(probe.join("forest/tileset.json"), [2u8; 10]).unwrap();
+    assert_eq!(stored_bytes(&probe, &probe.join("forest")).unwrap(), 110);
+    let dir = leaf_dir(work.path(), &mixed_tree(23));
+    let attempt = |name: &str, charges: StorageCharges| {
+        let output = work.path().join(name);
+        let mut file = File::create(&output).unwrap();
+        let request = MeshTilesetRequest::new(&dir, &output);
+        let prepared = prepare(&request, LIMITS, &mut || Ok(()), false).unwrap();
+        let result = write_prepared(prepared, &mut || Ok(()), &mut file, &dir, charges);
+        assert!(
+            !std::fs::read_dir(&dir).unwrap().any(|e| e
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".tiles-h16-")),
+            "{name}: forest staging left behind"
+        );
+        result.map(|(report, length, measured)| {
+            (
+                std::fs::read(&output).unwrap(),
+                length,
+                measured,
+                report.members,
+            )
+        })
+    };
+    let unlimited = StorageCharges {
+        work: Some(u64::MAX),
+        archive: Some(u64::MAX),
+    };
+    let (bytes, length, measured, members) = attempt("free.3tz", unlimited).unwrap();
+    let measured = measured.unwrap();
+    let payloads: u64 = std::fs::read_dir(dir.join("leaves"))
+        .unwrap()
+        .map(|e| e.unwrap().metadata().unwrap().len())
+        .sum();
+    // Payloads, manifests and forest documents, plus the archive's declared scratch.
+    assert!(
+        measured > payloads + archive::scratch_need(members).unwrap(),
+        "{measured} {payloads}"
+    );
+    let exact = StorageCharges {
+        work: Some(measured),
+        archive: Some(length),
+    };
+    assert_eq!(attempt("exact.3tz", exact).unwrap().0, bytes);
+    assert_eq!(
+        attempt("disk.3tz", StorageCharges::default()).unwrap().2,
+        None
+    );
+    for (charges, what) in [
+        (
+            StorageCharges {
+                work: Some(measured - 1),
+                ..exact
+            },
+            "work directory",
+        ),
+        (
+            StorageCharges {
+                archive: Some(length - 1),
+                ..exact
+            },
+            "archive staged",
+        ),
+    ] {
+        let error = attempt("over.3tz", charges).unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::ResourceLimit, "{error}");
+        assert!(error.to_string().contains(what), "{error}");
+    }
+}

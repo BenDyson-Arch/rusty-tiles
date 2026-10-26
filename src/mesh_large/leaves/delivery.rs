@@ -632,6 +632,20 @@ pub(in crate::mesh_large) fn encode(
     )
 }
 
+/// The levels a lossy page delivers, resolved by the owner of its published sampler.
+#[derive(Clone, Copy)]
+enum Levels<'a> {
+    /// Level 0 only: the sampler has no mipmap minification filter, so it never reads a
+    /// reduced level (S3 review P3-2).
+    Base,
+    /// The complete chain to 1x1, whose islands (`labels`, one per texel, 0 outside every
+    /// allocation) stay isolated through level `isolated` ([`sparse_mips::build_islands`]).
+    Complete {
+        labels: Option<&'a [u32]>,
+        isolated: u32,
+    },
+}
+
 /// [`encode`] for a packed island page: a complete chain whose islands (`labels`, one
 /// per texel, 0 outside every allocation) stay isolated through level `isolated`
 /// ([`sparse_mips::build_islands`]); dimensions may be any multiple of four.
@@ -642,6 +656,58 @@ pub(in crate::mesh_large) fn encode_islands(
     support: &[u32],
     labels: Option<&[u32]>,
     isolated: u32,
+    slot: TextureSlot,
+    profile: Profile,
+    memory_limit: u64,
+    mask: Option<MaskDelivery<'_>>,
+    ladder: Ladder<'_>,
+) -> Result<Delivery, JobError> {
+    encode_levels(
+        dimensions,
+        rgba,
+        support,
+        Levels::Complete { labels, isolated },
+        slot,
+        profile,
+        memory_limit,
+        mask,
+        ladder,
+    )
+}
+
+/// [`encode`] for a page whose sampler has no mipmap minification filter: level 0 alone,
+/// since such a sampler never reads a reduced level (S3 review P3-2). Lossless pages are
+/// the same exact PNG as [`encode_islands`] delivers.
+#[allow(clippy::too_many_arguments)]
+pub(in crate::mesh_large) fn encode_base(
+    dimensions: [u32; 2],
+    rgba: &[u8],
+    support: &[u32],
+    slot: TextureSlot,
+    profile: Profile,
+    memory_limit: u64,
+    mask: Option<MaskDelivery<'_>>,
+    ladder: Ladder<'_>,
+) -> Result<Delivery, JobError> {
+    encode_levels(
+        dimensions,
+        rgba,
+        support,
+        Levels::Base,
+        slot,
+        profile,
+        memory_limit,
+        mask,
+        ladder,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn encode_levels(
+    dimensions: [u32; 2],
+    rgba: &[u8],
+    support: &[u32],
+    levels: Levels<'_>,
     slot: TextureSlot,
     profile: Profile,
     memory_limit: u64,
@@ -662,7 +728,10 @@ pub(in crate::mesh_large) fn encode_islands(
             "delivery RGBA/support shape",
         ));
     }
-    let label_bytes = if labels.is_some() {
+    let label_bytes = if let Levels::Complete {
+        labels: Some(_), ..
+    } = levels
+    {
         base.checked_mul(6).ok_or_else(resource)?
     } else {
         0
@@ -691,8 +760,11 @@ pub(in crate::mesh_large) fn encode_islands(
             escalation: None,
         });
     }
-    let chain = timing::time(Stage::SparseMips, || {
-        sparse_mips::build_islands(
+    let chain = timing::time(Stage::SparseMips, || match levels {
+        Levels::Base => {
+            sparse_mips::build_base(width, height, rgba, support, class(slot), memory_limit)
+        }
+        Levels::Complete { labels, isolated } => sparse_mips::build_islands(
             width,
             height,
             rgba,
@@ -701,7 +773,7 @@ pub(in crate::mesh_large) fn encode_islands(
             isolated,
             class(slot),
             memory_limit,
-        )
+        ),
     })?;
     encode_authored(&chain, slot, profile, memory_limit, mask, ladder, |_| {
         Ok(Value::Null)
