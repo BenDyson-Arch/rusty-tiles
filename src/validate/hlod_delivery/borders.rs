@@ -62,9 +62,11 @@ fn displacement(a: CanonicalPoint, b: CanonicalPoint, v: CanonicalPoint, i: u64,
     }
     sum.sqrt() * OUTWARD
 }
-/// Whether every pair of same-direction faces on `edge` lies on opposite sides:
-/// unit wings (edge to third corner, perpendicular to the edge) with cosine at most
-/// -1/2. A wing of zero length (a collinear face) is on no side and never passes.
+/// Whether no pair of same-direction faces on `edge` lies on one side: unit wings
+/// (edge to third corner, perpendicular to the edge) never form an acute wedge
+/// (cosine above 1e-6). A book's perpendicular pages and a collapsed plate's
+/// opposite sheets pass; a duplicate, a fold or a leaning flap does not. A wing of
+/// zero length (a collinear face) is on no side and never passes.
 fn two_sided(edge: &CanonicalEdge, surface: &Surface) -> bool {
     let (a, b) = (edge.0.map(coordinate), edge.1.map(coordinate));
     let d: [f64; 3] = std::array::from_fn(|k| b[k] - a[k]);
@@ -94,7 +96,7 @@ fn two_sided(edge: &CanonicalEdge, surface: &Surface) -> bool {
             || side.iter().enumerate().all(|(i, u)| {
                 side[i + 1..]
                     .iter()
-                    .all(|v| u.iter().zip(v).map(|(u, v)| u * v).sum::<f64>() <= -0.5)
+                    .all(|v| u.iter().zip(v).map(|(u, v)| u * v).sum::<f64>() <= 1e-6)
             })
     })
 }
@@ -340,9 +342,9 @@ impl Store {
     /// coarse edge used n >= 2 times in one direction and more often than the other
     /// needs n descendant source faces in that direction on every source edge it
     /// stands for (a nonmanifold spine; interior edges have no leaf support).
-    /// Otherwise the edge must keep both directions and its same-direction faces
-    /// must lie on opposite sides, the wings to their third corners at least 120
-    /// degrees apart: a collapsed thin plate's two opposite-facing sheets.
+    /// Otherwise the edge must keep both directions and no two same-direction faces
+    /// may lie on one side (an acute wedge between the wings to their third
+    /// corners): a simplified book spine or a collapsed thin plate's sheets.
     /// Same-direction faces on one side (a fold re-flipped onto the border, a
     /// duplicate, an upright sliver flap) overlap and are refused. Coincident faces
     /// (one corner set, either orientation) need coincident faces in a descendant

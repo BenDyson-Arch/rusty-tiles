@@ -175,8 +175,9 @@ def _tile_border(store, tile, vertices, directed, require, stats):
 
 
 def _two_sided(a, b, faces):
-    """Every same-direction pair of faces on edge a-b lies on opposite sides: unit
-    wings (edge to third corner, perpendicular to it) with cosine at most -1/2."""
+    """No same-direction pair of faces on edge a-b lies on one side: unit wings
+    (edge to third corner, perpendicular to it) never form an acute wedge (cosine
+    above 1e-6). Perpendicular book pages and opposite plate sheets pass."""
     d = [b[k] - a[k] for k in range(3)]
     dd = sum(x * x for x in d)
     wings = ([], [])
@@ -192,7 +193,7 @@ def _two_sided(a, b, faces):
             if not norm > 0 or not math.isfinite(norm):
                 return False
             wings[(x, y) != (a, b)].append([v / norm for v in w])
-    return all(sum(u[k] * v[k] for k in range(3)) <= -0.5
+    return all(sum(u[k] * v[k] for k in range(3)) <= 1e-6
                for side in wings for i, u in enumerate(side) for v in side[i + 1:])
 
 
@@ -202,8 +203,8 @@ def folds(store, tile, directed, arcs, require, faces=(), licensed=False):
     A coarse edge used n >= 2 times in one direction and more often than the other
     needs n verified descendant source faces in that direction on every source edge
     it stands for: itself, or each edge of its contracted arc. Otherwise it must keep
-    both directions with its same-direction faces on opposite sides (a collapsed
-    thin plate); a fold, duplicate or upright sliver on one side is refused.
+    both directions with no same-direction pair on one side (a simplified book
+    spine, a collapsed thin plate); a fold, duplicate or leaning flap is refused.
     Coincident faces (one corner set, either orientation) need coincident faces in
     a descendant leaf (a plate thinner than its encoding) or the descendant
     incidence on every edge they use."""

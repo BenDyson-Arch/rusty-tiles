@@ -275,11 +275,11 @@ shared by two arcs, every arc edge covered, and chord directions witnessed on
 every edge of the arc. Directed incidences are counted, never reduced to a mask:
 a coarse edge used n >= 2 times in one direction and more often than the other
 needs n descendant source faces that way on every edge it stands for (S1b review
-1). Without that support it is admitted only if it keeps both directions and its
-same-direction faces lie on opposite sides (wings to their third corners at least
-120 degrees apart): a collapsed thin plate's opposite-facing sheets (2/1, 2/2). A
-lone reversed face (2/0), a fold re-flipped onto the border, a duplicate or an
-upright sliver flap on one side is refused. Coincident coarse faces (one corner
+1). Without that support it is admitted only if it keeps both directions and no
+two same-direction faces lie on one side (an acute wedge between the wings to
+their third corners): a simplified book spine's perpendicular pages or a
+collapsed thin plate's opposite sheets (2/1, 2/2). A lone reversed face (2/0), a
+fold re-flipped onto the border, a duplicate or a leaning flap is refused. Coincident coarse faces (one corner
 set, either orientation) need coincident faces in a descendant leaf (a plate
 thinner than its leaf encoding) or the descendant incidence on every edge they
 use; the license is leaf-local, so twins split across leaves are not seen. Exact (epsilon = 0) archives reduce to the D1 exact-seam census.
