@@ -266,15 +266,39 @@ class Store:
         if row[0] is not None:
             self.leaf_boxes[leaf]=row
 
-    def nearest(self, p, lo, hi, distance2):
-        # Expanding cubes are complete once the best triangle lies closer than
-        # the next cube boundary. Descendant filtering uses DFS leaf intervals.
+    def source_box(self, lo, hi):
+        """Axis box of the verified source faces in a descendant leaf interval."""
         if (lo,hi) not in self.source_bounds:
             self.work.charge(hi-lo)
             boxes=[self.leaf_boxes[i] for i in range(lo,hi) if i in self.leaf_boxes]
             self.source_bounds[lo,hi]=(tuple(v for k in range(3) for v in
                 (min(b[2*k] for b in boxes),max(b[2*k+1] for b in boxes))) if boxes else (None,)*6)
-        box = self.source_bounds[lo,hi]
+        return self.source_bounds[lo,hi]
+
+    def within(self, p, lo, hi, distance2, radius, accept):
+        """Nearest accepted descendant source face no farther than radius, or None."""
+        params = tuple(v for k in range(3) for v in (p[k]+radius,p[k]-radius))
+        rows = self.db.execute('SELECT source.id,leaf,key,data FROM source_box JOIN source USING(id) '
+            'WHERE x0<=? AND x1>=? AND y0<=? AND y1>=? AND z0<=? AND z1>=?', params)
+        best, answer = math.inf, None
+        for count,(i,leaf,key,data) in enumerate(rows):
+            self.work.charge()
+            if count>MAX_QUERY_CANDIDATES:
+                raise WorkLimit('tie source query candidate limit')
+            if not lo<=leaf<hi:
+                continue
+            want=json.loads(data);identity=tuple(map(int,key.split(',')))
+            if not accept(identity,want):
+                continue
+            d=distance2(p,want['xyz'])
+            if d<=radius*radius and d<best:
+                best,answer=d,(identity,want)
+        return answer
+
+    def nearest(self, p, lo, hi, distance2):
+        # Expanding cubes are complete once the best triangle lies closer than
+        # the next cube boundary. Descendant filtering uses DFS leaf intervals.
+        box = self.source_box(lo, hi)
         if box[0] is None:
             raise ValueError('coarse content has no verified descendant source faces')
         extent = max(box[2*k+1]-box[2*k] for k in range(3))

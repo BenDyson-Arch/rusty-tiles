@@ -210,6 +210,10 @@ leaf recovery and visible-quality gates. **Evidence:** E2, E3, E5, C/H17.
 **Owner amendment, 2026-10-24 (exact seams, see D1).** Unchanged. An omitted cell
 publishes no content, so it carries no identity table.
 
+**Owner amendment, 2026-10-26 (ties).** Validators accept any primitive within τ of the
+minimum distance; the producer breaks ties by source order. τ = 16 · 2⁻⁵² · (|centroid| +
+descendant source box diagonal), a float-rounding allowance, not a metric tolerance.
+
 
 Each coarse triangle carries one `source_primitive` feature ID selected from
 the nearest source primitive at its centroid in the tile's descendant source
