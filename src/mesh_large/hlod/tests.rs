@@ -4410,6 +4410,32 @@ fn contracted_borders_do_not_fold_collinear_book_or_sheet_surfaces() {
             *maximum = maximum.max(g);
         }
         eprintln!("R1 {name} G: {errors:?}");
+        // CPU work compares the complete archive and producer facts with the frozen
+        // source. This optional evidence capture does not change the staged geometry.
+        if let Some(root) = std::env::var_os("RT_HLOD_FIXTURE_IDENTITY_DIR") {
+            use sha2::{Digest, Sha256};
+            let evidence = Path::new(&root).join(name);
+            fs::create_dir(&evidence).unwrap();
+            mesh_leaves_to_3tz(
+                MeshTilesetRequest::new(&dir, evidence.join("out.3tz")),
+                &RunControl::default(),
+            )
+            .unwrap();
+            let hashes: BTreeMap<_, _> = published(&dir)
+                .into_iter()
+                .map(|(name, bytes)| (name, format!("{:x}", Sha256::digest(bytes))))
+                .collect();
+            fs::write(
+                evidence.join("published.json"),
+                serde_json::to_vec(&hashes).unwrap(),
+            )
+            .unwrap();
+            fs::write(
+                evidence.join("audit.json"),
+                serde_json::to_vec(&audit_semantics(&dir)).unwrap(),
+            )
+            .unwrap();
+        }
         if name == "collinear" {
             for (d, baseline) in [5.26, 4.78, 3.45, 2.06].into_iter().enumerate() {
                 assert!(

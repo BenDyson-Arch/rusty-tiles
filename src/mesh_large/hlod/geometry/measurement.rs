@@ -88,6 +88,10 @@ pub(crate) fn assess(
     source: &mut dyn FnMut(V3, bool) -> Result<(V3, f64), JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<Option<Controls>, JobError> {
+    let _cpu = super::super::cpu_profile::start(
+        super::super::cpu_profile::Stage::Measurement,
+        triangles.len(),
+    );
     let mut controls = Controls::default();
     if change.opening_border_contact {
         return Ok(None);

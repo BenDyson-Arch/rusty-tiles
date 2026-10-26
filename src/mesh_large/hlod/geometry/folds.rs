@@ -28,6 +28,10 @@ pub(crate) struct Source {
 
 impl Source {
     pub(crate) fn new(positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> Self {
+        let _cpu = super::super::cpu_profile::start(
+            super::super::cpu_profile::Stage::Source,
+            triangles.len(),
+        );
         let mut result = Self {
             faces: HashMap::default(),
             edges: HashMap::default(),
@@ -49,11 +53,19 @@ impl Source {
         mut self,
         rows: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
     ) -> Self {
+        let _cpu = super::super::cpu_profile::start(
+            super::super::cpu_profile::Stage::Boundary,
+            rows.len(),
+        );
         self.boundary.extend(rows.iter().flat_map(|r| [r.a, r.b]));
         self
     }
 
     fn bad_faces(&self, positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> Vec<bool> {
+        let _cpu = super::super::cpu_profile::start(
+            super::super::cpu_profile::Stage::Faces,
+            triangles.len(),
+        );
         let mut invalid = vec![false; triangles.len()];
         let mut faces = Vec::with_capacity(triangles.len());
         for (i, t) in triangles.iter().enumerate() {
@@ -97,6 +109,10 @@ impl Source {
     /// nonacute in their plane, so the fallback never enumerates high-valence pairs.
     pub(crate) fn violations(&self, positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> Vec<bool> {
         let mut invalid = self.bad_faces(positions, triangles);
+        let incidence_cpu = super::super::cpu_profile::start(
+            super::super::cpu_profile::Stage::Incidence,
+            triangles.len(),
+        );
         let mut edges = Vec::<(Edge, Incidence)>::with_capacity(triangles.len() * 3);
         for (i, t) in triangles.iter().enumerate() {
             let keys = t.map(|v| key(positions[v as usize]));
@@ -106,6 +122,9 @@ impl Source {
             }
         }
         edges.sort_unstable();
+        drop(incidence_cpu);
+        let _cpu =
+            super::super::cpu_profile::start(super::super::cpu_profile::Stage::Fans, edges.len());
         let mut at = 0;
         while at < edges.len() {
             let edge = edges[at].0;
@@ -177,6 +196,10 @@ pub(super) fn contact_pins(
     triangles: &[[u32; 3]],
     interface: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
 ) -> Vec<bool> {
+    let _cpu = super::super::cpu_profile::start(
+        super::super::cpu_profile::Stage::Contacts,
+        triangles.len(),
+    );
     let boundary: HashSet<_> = interface.iter().flat_map(|r| [r.a, r.b]).collect();
     let mut first = vec![u32::MAX; keys.len()];
     let mut pins = vec![false; keys.len()];
@@ -202,6 +225,7 @@ pub(super) fn contact_pins(
 }
 
 fn distinct_sides(edge: Edge, thirds: impl Iterator<Item = Key>) -> bool {
+    let _cpu = super::super::cpu_profile::start(super::super::cpu_profile::Stage::ExactFans, 1);
     let mut normals = Vec::<[Vec<f64>; 3]>::with_capacity(4);
     for c in thirds {
         if normals.len() == 4 {
@@ -282,6 +306,8 @@ pub(crate) fn decode_valid(
     triangles: &[[u32; 3]],
     boundary: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
 ) -> bool {
+    let _cpu =
+        super::super::cpu_profile::start(super::super::cpu_profile::Stage::Decode, triangles.len());
     // New decoded keys can acquire an owner in another tile, outside the source
     // incidence graph. Retain canonical source keys; merging onto an existing key
     // is still subject to the face, boundary-edge and orientation checks below.

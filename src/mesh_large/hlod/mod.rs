@@ -24,6 +24,7 @@ mod audit;
 pub(crate) mod bake;
 mod borders;
 mod charts;
+mod cpu_profile;
 pub(crate) mod decode;
 mod encode;
 pub(crate) mod error;
@@ -874,6 +875,7 @@ pub(crate) fn produce(
         .zip(cpu_started)
         .map(|(b, a)| b - a);
     diagnostics.wall_seconds = started.elapsed().as_secs_f64();
+    cpu_profile::dump();
     Ok((report, diagnostics))
 }
 

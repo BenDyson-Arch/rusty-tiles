@@ -73,6 +73,10 @@ struct Merged {
 }
 
 fn merge(children: &[TileGeometry]) -> Merged {
+    let _cpu = super::cpu_profile::start(
+        super::cpu_profile::Stage::Merge,
+        children.iter().map(|c| c.triangles.len()).sum(),
+    );
     let triangles: usize = children.iter().map(|c| c.triangles.len()).sum();
     let mut index: HashMap<Key, u32> =
         HashMap::with_capacity_and_hasher(triangles, Default::default());
@@ -158,6 +162,7 @@ fn simplify(
     locked: &dyn Fn(u32) -> bool,
     target: usize,
 ) -> (Vec<[u32; 3]>, f64) {
+    let _cpu = super::cpu_profile::start(super::cpu_profile::Stage::Simplify, faces.len());
     // Merged indices are dense and bounded to eight capped children. Preserve first-use
     // order without hashing each corner, including when simplifying a protected subset.
     let mut local = vec![u32::MAX; merged.positions.len()];
@@ -453,6 +458,8 @@ fn attempt(
     preserve_holes: bool,
     opening_pins: &HashSet<Key>,
 ) -> Result<Built, JobError> {
+    let _cpu =
+        super::cpu_profile::start(super::cpu_profile::Stage::Attempt, merged.triangles.len());
     let segments: HashSet<(Key, Key)> = interface
         .iter()
         .filter(|r| !r.is_vertex())
