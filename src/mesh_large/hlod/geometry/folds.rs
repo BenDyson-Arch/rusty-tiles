@@ -2,6 +2,9 @@
 //! This is a proposal check: it never removes, reverses or moves a face.
 use super::{key, Key};
 use rustc_hash::FxHashMap as HashMap;
+use rustc_hash::FxHashSet as HashSet;
+#[path = "folds_contract.rs"]
+mod contract;
 
 type Face = [Key; 3];
 type Edge = (Key, Key);
@@ -20,6 +23,7 @@ fn face(mut f: Face) -> (Face, usize) {
 pub(crate) struct Source {
     faces: HashMap<Face, [u32; 2]>,
     edges: HashMap<Edge, [u32; 2]>,
+    boundary: HashSet<Key>,
 }
 
 impl Source {
@@ -27,6 +31,7 @@ impl Source {
         let mut result = Self {
             faces: HashMap::default(),
             edges: HashMap::default(),
+            boundary: HashSet::default(),
         };
         for t in triangles {
             let keys = t.map(|v| key(positions[v as usize]));
@@ -40,11 +45,12 @@ impl Source {
         result
     }
 
-    /// Face-only check used before accepting a contraction. Directed edge support
-    /// for a new chord belongs to the common source-subarc contract, not its literal
-    /// absence from the uncontracted input. Coincident faces still need input faces.
-    pub(crate) fn preserves_faces(&self, positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> bool {
-        !self.bad_faces(positions, triangles).iter().any(|v| *v)
+    pub(crate) fn with_boundary(
+        mut self,
+        rows: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
+    ) -> Self {
+        self.boundary.extend(rows.iter().flat_map(|r| [r.a, r.b]));
+        self
     }
 
     fn bad_faces(&self, positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> Vec<bool> {
@@ -55,6 +61,10 @@ impl Source {
             let source = self.faces.get(&f).copied().unwrap_or_default();
             // Reject the old orient() repair rather than flipping or removing a face.
             invalid[i] = (source[d] == 0 && source[1 - d] != 0)
+                // Two disjoint children can independently close the same three
+                // shared points into opposite faces. Their union would license
+                // a new twin as "input". Retain the local source strip instead.
+                || (source == [0, 0] && f.iter().all(|p| self.boundary.contains(p)))
                 || (source == [0, 0]
                     && super::topology::normal(positions, *t)
                         .iter()
@@ -105,33 +115,41 @@ impl Source {
                 counts[d] += 1;
             }
             let source = self.edges.get(&edge).copied().unwrap_or_default();
-            let unsupported = (0..2).any(|d| {
-                if counts[d] < 2 {
-                    return false;
-                }
-                // Child incidence is not automatically source multiplicity: a
-                // child may have admitted a new, nonacute book spine. Only carry
-                // its license unchanged; moving a wing must pass the side test
-                // again, even when balanced 2/2 counts are unchanged.
-                let unchanged = counts[d] <= source[d]
-                    && edges[at..end]
-                        .iter()
-                        .filter(|(_, (_, direction, _))| *direction == d)
-                        .all(|&(_, (i, _, _))| {
-                            let (f, direction) =
-                                face(triangles[i].map(|v| key(positions[v as usize])));
-                            self.faces.get(&f).is_some_and(|n| n[direction] != 0)
-                        });
-                !unchanged
-                    && (counts[1 - d] == 0
-                        || !distinct_sides(
-                            edge,
-                            edges[at..end]
-                                .iter()
-                                .filter(|(_, (_, direction, _))| *direction == d)
-                                .map(|(_, (_, _, third))| *third),
-                        ))
-            });
+            let boundary = self.boundary.contains(&edge.0) && self.boundary.contains(&edge.1);
+            let unsupported = if boundary {
+                // A new edge between shared contacts could be created by either
+                // neighbour independently. Only an existing source edge or a
+                // chord certified over its entire previous arc supplies support.
+                (0..2).any(|d| counts[d] > source[d])
+            } else {
+                (0..2).any(|d| {
+                    if counts[d] < 2 {
+                        return false;
+                    }
+                    // Child incidence is not automatically source multiplicity: a
+                    // child may have admitted a new, nonacute book spine. Only carry
+                    // its license unchanged; moving a wing must pass the side test
+                    // again, even when balanced 2/2 counts are unchanged.
+                    let unchanged = counts[d] <= source[d]
+                        && edges[at..end]
+                            .iter()
+                            .filter(|(_, (_, direction, _))| *direction == d)
+                            .all(|&(_, (i, _, _))| {
+                                let (f, direction) =
+                                    face(triangles[i].map(|v| key(positions[v as usize])));
+                                self.faces.get(&f).is_some_and(|n| n[direction] != 0)
+                            });
+                    !unchanged
+                        && (counts[1 - d] == 0
+                            || !distinct_sides(
+                                edge,
+                                edges[at..end]
+                                    .iter()
+                                    .filter(|(_, (_, direction, _))| *direction == d)
+                                    .map(|(_, (_, _, third))| *third),
+                            ))
+                })
+            };
             if unsupported {
                 for &(_, (i, _, _)) in &edges[at..end] {
                     invalid[i] = true;
@@ -230,7 +248,15 @@ pub(crate) fn decode_valid(
     before: &[[f32; 3]],
     after: &[[f32; 3]],
     triangles: &[[u32; 3]],
+    boundary: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
 ) -> bool {
+    // New decoded keys can acquire an owner in another tile, outside the source
+    // incidence graph. Retain canonical source keys; merging onto an existing key
+    // is still subject to the face, boundary-edge and orientation checks below.
+    let keys: HashSet<_> = before.iter().copied().map(key).collect();
+    if after.iter().any(|&p| !keys.contains(&key(p))) {
+        return false;
+    }
     for &t in triangles {
         let a = super::topology::normal(before, t);
         let b = super::topology::normal(after, t);
@@ -243,6 +269,7 @@ pub(crate) fn decode_valid(
         }
     }
     !Source::new(before, triangles)
+        .with_boundary(boundary)
         .violations(after, triangles)
         .iter()
         .any(|v| *v)
@@ -251,6 +278,85 @@ pub(crate) fn decode_valid(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn boundary(points: &[[f32; 3]]) -> Vec<crate::mesh_large::hlod::interfaces::InterfaceRow> {
+        points
+            .iter()
+            .map(|&p| {
+                crate::mesh_large::hlod::interfaces::InterfaceRow::new(0, key(p), key(p), 0, 1)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn neighbouring_children_cannot_create_a_common_new_edge_or_face() {
+        let p = [
+            [0., 0., 0.],
+            [0., 1., 0.],
+            [2., 0., -1.],
+            [3., 0., -1.],
+            [0., 0.5, -0.125],
+            [2., 0., 1.],
+            [3., 0., 1.],
+            [0., 0.5, 0.125],
+        ];
+        let contacts = boundary(&p[..2]);
+        for (c, d, m) in [(2, 3, 4), (5, 6, 7)] {
+            let input = [
+                [0, m, c],
+                [m, 1, c],
+                [1, m, d],
+                [m, 0, d],
+                [0, c, d],
+                [1, d, c],
+            ];
+            let output = [[0, 1, c], [1, 0, d], [0, c, d], [1, d, c]];
+            // Each child alone looks like an ordinary 1/1 tetrahedral sheet.
+            assert!(!Source::new(&p, &input)
+                .violations(&p, &output)
+                .iter()
+                .any(|v| *v));
+            let source = Source::new(&p, &input).with_boundary(&contacts);
+            assert!(source.violations(&p, &output).iter().any(|v| *v));
+            assert!(!source.violations(&p, &input).iter().any(|v| *v));
+        }
+        let p = [
+            [0., 0., 0.],
+            [1., 0., 0.],
+            [0., 1., 0.],
+            [0.25, 0.25, 0.001],
+        ];
+        let contacts = boundary(&p[..3]);
+        let fan = [[0, 1, 3], [1, 2, 3], [2, 0, 3]];
+        // All three old boundary edges exist, so the face guard is needed too.
+        assert!(Source::new(&p, &fan)
+            .with_boundary(&contacts)
+            .violations(&p, &[[0, 1, 2]])
+            .iter()
+            .any(|v| *v));
+        assert!(!Source::new(&p, &[[0, 1, 2]])
+            .with_boundary(&contacts)
+            .violations(&p, &[[0, 1, 2]])
+            .iter()
+            .any(|v| *v));
+    }
+
+    #[test]
+    fn decoding_cannot_invent_owner_keys_or_close_a_shared_face() {
+        let before = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [0.001, 0.001, 0.]];
+        let triangles = [[3, 1, 2]];
+        let mut after = before;
+        after[3] = [0.002, 0.002, 0.];
+        assert!(!decode_valid(&before, &after, &triangles, &[]));
+        after[3] = before[0];
+        assert!(decode_valid(&before, &after, &triangles, &[]));
+        assert!(!decode_valid(
+            &before,
+            &after,
+            &triangles,
+            &boundary(&before[..3])
+        ));
+    }
 
     #[test]
     fn balanced_fans_check_both_sides_and_cannot_inherit_a_new_acute_wing() {
@@ -364,11 +470,17 @@ mod tests {
     }
     #[test]
     fn final_decode_cannot_invert_an_ordinary_manifold_face() {
-        let p = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [0., -1., 0.]];
+        let p = [
+            [0., 0., 0.],
+            [1., 0., 0.],
+            [0., 1., 0.],
+            [0., -1., 0.],
+            [0., 0.9, 0.01],
+        ];
         let triangles = [[0, 1, 2], [1, 0, 3]];
         let mut folded = p;
-        folded[3] = [0., 0.9, 0.01];
-        assert!(decode_valid(&p, &p, &triangles));
-        assert!(!decode_valid(&p, &folded, &triangles));
+        folded[3] = p[4];
+        assert!(decode_valid(&p, &p, &triangles, &[]));
+        assert!(!decode_valid(&p, &folded, &triangles, &[]));
     }
 }

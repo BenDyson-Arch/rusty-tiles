@@ -150,29 +150,6 @@ fn preserves_orientation(p: &[[f32; 3]], before: [u32; 3], after: [u32; 3]) -> b
     b.iter().all(|&x| x == 0.) || (0..3).map(|i| a[i] * b[i]).sum::<f64>() > 0.
 }
 
-/// Two same-direction faces are supported only when they already shared their source
-/// edge. Coalescing unrelated edges cannot create an overlapping manifold pair.
-fn mapped_incidence(m: &Merged, map: &[u32]) -> bool {
-    let mut edges = HashMap::<(u32, u32), ([u32; 2], (u32, u32), bool)>::default();
-    for &t in &m.triangles {
-        let out = t.map(|v| map[v as usize]);
-        if normal(&m.positions, out).iter().all(|&x| x == 0.) {
-            continue;
-        }
-        for i in 0..3 {
-            let (a, b) = (out[i], out[(i + 1) % 3]);
-            let old = (t[i].min(t[(i + 1) % 3]), t[i].max(t[(i + 1) % 3]));
-            let row = edges
-                .entry((a.min(b), a.max(b)))
-                .or_insert(([0, 0], old, true));
-            row.0[usize::from(a > b)] += 1;
-            row.2 &= row.1 == old;
-        }
-    }
-    edges.values().all(|(counts, _, same)| {
-        *same || !((counts[0] == 2 && counts[1] == 0) || (counts[1] == 2 && counts[0] == 0))
-    })
-}
 fn retain(m: &mut Merged, keep: &[bool]) {
     let mut i = 0;
     m.triangles.retain(|_| (keep[i], i += 1).0);
@@ -186,6 +163,7 @@ fn retain(m: &mut Merged, keep: &[bool]) {
 pub(super) fn contract(
     m: &mut Merged,
     interface: &[InterfaceRow],
+    previous_interface: &[InterfaceRow],
     mapping: &super::BorderMap<'_>,
     receipt: &mut Receipt,
 ) -> Result<bool, JobError> {
@@ -197,8 +175,11 @@ pub(super) fn contract(
         .collect();
     let mut map: Vec<u32> = (0..m.keys.len() as u32).collect();
     let mut endpoints = Vec::new();
+    let mut mapping_by_vertex = Vec::with_capacity(m.keys.len());
     for (v, target) in map.iter_mut().enumerate() {
-        if let Some((a, b, t, _)) = mapping(m.keys[v])? {
+        let mapped = mapping(m.keys[v])?;
+        mapping_by_vertex.push(mapped);
+        if let Some((a, b, t, _)) = mapped {
             let k = if t <= 0.5 { a } else { b };
             let Some(&id) = ids.get(&k) else {
                 return Ok(false);
@@ -216,6 +197,13 @@ pub(super) fn contract(
     if receipt.contracted_vertices == 0 {
         return Ok(true);
     }
+    let guard = super::folds::Source::for_contraction(
+        &m.positions,
+        &m.triangles,
+        interface,
+        previous_interface,
+        &mapping_by_vertex,
+    );
     let mut output = Vec::with_capacity(m.triangles.len());
     let mut representatives = Vec::with_capacity(m.triangles.len());
     let mut folded = false;
@@ -244,15 +232,13 @@ pub(super) fn contract(
         && !output.is_empty()
         && lost.0.is_empty()
         && lost.1.is_empty()
-        && mapped_incidence(m, &map)
-        && super::folds::Source::new(&m.positions, &m.triangles)
-            .preserves_faces(&m.positions, &output)
+        && !guard.violations(&m.positions, &output).iter().any(|v| *v)
     {
         m.triangles = output;
         m.representative = representatives;
         return Ok(true);
     }
-    if let Some(r) = super::constrained::contract(m, interface, &map, &endpoints) {
+    if let Some(r) = super::constrained::contract(m, interface, &map, &endpoints, &guard) {
         receipt.reconstructed_faces += m.triangles.len() as u64;
         receipt.add(r);
         Ok(true)
@@ -878,7 +864,6 @@ pub(super) fn remesh(
         .iter()
         .zip(&output)
         .any(|(&a, &b)| !preserves_orientation(&m.positions, a, b))
-        || !mapped_incidence(m, &map)
     {
         r.rejected_remesh_rounds += 1;
         return false;
@@ -890,6 +875,15 @@ pub(super) fn remesh(
         .collect();
     let mut i = 0;
     output.retain(|_| (keep[i], i += 1).0);
+    if super::folds::Source::new(&m.positions, &m.triangles)
+        .with_boundary(interface)
+        .violations(&m.positions, &output)
+        .iter()
+        .any(|v| *v)
+    {
+        r.rejected_remesh_rounds += 1;
+        return false;
+    }
     let Some(change) = changes(m, &output, interface, 0.)
         .filter(|c| c.receipt.closed_holes == 0 && c.receipt.opened_holes == 0)
     else {
@@ -911,6 +905,151 @@ pub(super) fn remesh(
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
+
+    fn mesh(positions: Vec<[f32; 3]>, triangles: Vec<[u32; 3]>) -> Merged {
+        Merged {
+            keys: positions.iter().copied().map(super::super::key).collect(),
+            ells: vec![0; positions.len()],
+            positions,
+            representative: vec![ring().representative[0]; triangles.len()],
+            triangles,
+        }
+    }
+
+    #[test]
+    fn contraction_review_p1_cannot_publish_an_acute_balanced_fan() {
+        let mut m = mesh(
+            vec![
+                [0., 0., 0.],
+                [0., 1., 0.],
+                [1., 0., 1.],
+                [1., 0., -1.],
+                [0.125, 0., 0.],
+                [1., 0., 2.],
+                [1., 0., -2.],
+                [1., 0., 0.],
+                [0.5, -1., 0.],
+            ],
+            vec![
+                [0, 1, 2],
+                [1, 0, 3],
+                [0, 2, 3],
+                [1, 3, 2],
+                [4, 1, 5],
+                [1, 4, 6],
+                [4, 5, 6],
+                [1, 6, 5],
+                [0, 4, 8],
+                [4, 7, 8],
+            ],
+        );
+        let (a, middle, q, r) = (m.keys[0], m.keys[4], m.keys[7], m.keys[8]);
+        let rows = |edges: &[(Key, Key)]| {
+            edges
+                .iter()
+                .map(|&(a, b)| InterfaceRow::new(0, a.min(b), a.max(b), 0, 1))
+                .collect::<Vec<_>>()
+        };
+        let interface = rows(&[(a, q), (a, r), (q, r)]);
+        let previous = rows(&[(a, middle), (middle, q), (a, r), (q, r)]);
+        let before = m.clone();
+        let mut mapping = vec![None; m.keys.len()];
+        mapping[4] = Some((a, q, 0.5, 0));
+        // Isolate the fan failure from the separate all-three-boundary-face
+        // rule: only a and q are boundary contacts for this guard control.
+        let guard = super::super::folds::Source::for_contraction(
+            &m.positions,
+            &m.triangles,
+            &rows(&[(a, q)]),
+            &previous,
+            &mapping,
+        );
+        let mapped: Vec<_> = m
+            .triangles
+            .iter()
+            .map(|t| t.map(|v| if v == 4 { 0 } else { v }))
+            .filter(|&t| normal(&m.positions, t).iter().any(|&n| n != 0.))
+            .collect();
+        assert_eq!(mapped.len(), 9);
+        let invalid = guard.violations(&m.positions, &mapped);
+        assert!(invalid[1] && invalid[5] && invalid[6]);
+        let mut receipt = Receipt::default();
+        let accepted = contract(
+            &mut m,
+            &interface,
+            &previous,
+            &|p| Ok((p == middle).then_some((a, q, 0.5, 0))),
+            &mut receipt,
+        )
+        .unwrap();
+        if accepted {
+            // A reconstructed result is allowed only if the original fan guard
+            // accepts it; accepting the mapped nine-face witness is forbidden.
+            let guard = super::super::folds::Source::new(&before.positions, &before.triangles);
+            assert!(!guard
+                .violations(&m.positions, &m.triangles)
+                .iter()
+                .any(|v| *v));
+            let counts = m.triangles.iter().fold([0; 2], |mut counts, t| {
+                for i in 0..3 {
+                    match (t[i], t[(i + 1) % 3]) {
+                        (0, 1) => counts[0] += 1,
+                        (1, 0) => counts[1] += 1,
+                        _ => {}
+                    }
+                }
+                counts
+            });
+            assert_ne!(counts, [2, 2]);
+        } else {
+            assert_eq!(m.keys, before.keys);
+            assert_eq!(m.ells, before.ells);
+            assert_eq!(m.positions, before.positions);
+            assert_eq!(m.triangles, before.triangles);
+            assert_eq!(m.representative, before.representative);
+        }
+    }
+
+    #[test]
+    fn contraction_preserves_a_certified_acute_nonmanifold_chain() {
+        let mut m = mesh(
+            vec![
+                [0., 0., 0.],
+                [1., 0., 0.],
+                [2., 0., 0.],
+                [0., 1., 0.],
+                [0., 2., 1.],
+                [0., -1., 0.],
+            ],
+            vec![
+                [0, 1, 3],
+                [1, 2, 3],
+                [0, 1, 4],
+                [1, 2, 4],
+                [1, 0, 5],
+                [2, 1, 5],
+            ],
+        );
+        let (a, middle, b) = (m.keys[0], m.keys[1], m.keys[2]);
+        let interface = [InterfaceRow::new(0, a, b, 0, 1)];
+        let previous = [
+            InterfaceRow::new(0, a, middle, 0, 1),
+            InterfaceRow::new(0, middle, b, 0, 1),
+        ];
+        let mut receipt = Receipt::default();
+        assert!(contract(
+            &mut m,
+            &interface,
+            &previous,
+            &|p| Ok((p == middle).then_some((a, b, 0.5, 0))),
+            &mut receipt
+        )
+        .unwrap());
+        assert_eq!(m.triangles, [[0, 2, 3], [0, 2, 4], [2, 0, 5]]);
+        assert_eq!(receipt.contracted_vertices, 1);
+        assert_eq!(receipt.reconstructed_faces, 0);
+    }
+
     pub(crate) fn ring() -> Merged {
         let positions = vec![
             [-2., -2., 0.],
@@ -1043,6 +1182,10 @@ pub(super) mod tests {
         contract(
             &mut m,
             &interface,
+            &[
+                InterfaceRow::new(0, a, middle, 0, 1),
+                InterfaceRow::new(0, middle, b, 0, 1),
+            ],
             &|p| Ok((p == middle).then_some((a, b, 0.5, 0))),
             &mut receipt,
         )
