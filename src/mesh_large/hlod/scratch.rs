@@ -30,6 +30,7 @@ struct State {
     peak: u64,
     /// Largest admission per component, for the report.
     largest: BTreeMap<&'static str, u64>,
+    external: BTreeMap<&'static str, u64>,
 }
 
 /// See the module notes.
@@ -46,6 +47,7 @@ pub(crate) struct ComponentLease<'l, 'a> {
     ledger: &'l ScratchLedger<'a>,
     name: &'static str,
     bytes: u64,
+    external: bool,
 }
 
 impl<'a> ScratchLedger<'a> {
@@ -75,7 +77,7 @@ impl<'a> ScratchLedger<'a> {
         bytes: u64,
     ) -> Result<ComponentLease<'_, 'a>, JobError> {
         let mut state = self.lock();
-        if state.admitted.contains_key(name) {
+        if state.admitted.contains_key(name) || state.external.contains_key(name) {
             return Err(JobError::new(
                 JobErrorKind::InvalidState,
                 format!("scratch component {name} is already admitted (one owner per name)"),
@@ -96,6 +98,32 @@ impl<'a> ScratchLedger<'a> {
             ledger: self,
             name,
             bytes,
+            external: false,
+        })
+    }
+
+    /// A separately preflighted output volume. Its file bytes have the same owned bound,
+    /// but must not be mistaken for memory-backed scratch on a different filesystem.
+    pub(crate) fn admit_external(
+        &self,
+        name: &'static str,
+        bytes: u64,
+    ) -> Result<ComponentLease<'_, 'a>, JobError> {
+        let mut state = self.lock();
+        if state.admitted.contains_key(name) || state.external.contains_key(name) {
+            return Err(JobError::new(
+                JobErrorKind::InvalidState,
+                "duplicate scratch component",
+            ));
+        }
+        state.external.insert(name, bytes);
+        let largest = state.largest.entry(name).or_default();
+        *largest = (*largest).max(bytes);
+        Ok(ComponentLease {
+            ledger: self,
+            name,
+            bytes,
+            external: true,
         })
     }
 
@@ -142,7 +170,12 @@ impl ComponentLease<'_, '_> {
 
 impl Drop for ComponentLease<'_, '_> {
     fn drop(&mut self) {
-        self.ledger.lock().admitted.remove(self.name);
+        let mut state = self.ledger.lock();
+        if self.external {
+            state.external.remove(self.name);
+        } else {
+            state.admitted.remove(self.name);
+        }
     }
 }
 

@@ -90,6 +90,9 @@ impl Source {
         sorter: SortConfig,
         tree: &Sequence<NodeRecord>,
         rows: impl Iterator<Item = Result<InterfaceRow, crate::spill::SpillError>>,
+        open_ends: impl Iterator<
+            Item = Result<super::super::interfaces::KeyRecord, crate::spill::SpillError>,
+        >,
         admitted: &dyn Fn() -> Result<(), JobError>,
         check: &(dyn Fn() -> Result<(), JobError> + Sync),
     ) -> Result<Self, JobError> {
@@ -195,6 +198,18 @@ impl Source {
             source.vertices.set(b, vb)?;
         }
         drop(raw_edges);
+        if source.vertices.len > 0 {
+            for (i, p) in open_ends.enumerate() {
+                if i.is_multiple_of(4096) {
+                    check()?;
+                }
+                if let Some(id) = source.vertex(p?.0)? {
+                    let mut v = source.vertices.get(id)?;
+                    v[7] |= 1 << 32;
+                    source.vertices.set(id, v)?;
+                }
+            }
+        }
         admitted()?;
         Ok(source)
     }

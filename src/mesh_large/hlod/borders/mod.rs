@@ -5,6 +5,12 @@
 mod curve;
 mod disk;
 mod graph;
+pub(super) fn memory_need(sorter: SortConfig) -> u64 {
+    sorter.memory_bound::<InterfaceRow>()
+        + sorter.memory_bound::<disk::Words<7>>()
+        + 8 * sorter.buffer_bytes as u64
+        + (1 << 16)
+}
 
 use self::{
     curve::{state, Ladder},
@@ -45,7 +51,7 @@ pub(super) fn scratch_need(
             h.checked_mul(
                 vertices
                     .checked_mul(104)?
-                    .checked_add(edges.checked_mul(112)?)?
+                    .checked_add(edges.checked_mul(80)?)?
                     .checked_add(rows.checked_mul(16)?)?,
             )?,
         )?;
@@ -53,13 +59,28 @@ pub(super) fn scratch_need(
     persistent
         .checked_add(sort.finish_peak)?
         .checked_add(sort.stream_slack)?
-        .checked_add(edges.checked_mul(72 + 8)?)?
+        .checked_add(edges.checked_mul(72 + 8 + 96)?)?
         .checked_add(vertices.checked_mul(24)?)
         .and_then(|v| v.checked_add(1 << 20))
 }
 
+#[derive(Clone, Debug, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DepthReceipt {
+    pub depth: u32,
+    pub scale: f64,
+    pub tiles: u64,
+    pub segments: u64,
+    pub terminal_locks: u64,
+    pub max_epsilon: f64,
+    pub topology: super::geometry::TopologyReceipt,
+    pub omission_sources: u64,
+    pub omitted_cells: u64,
+    pub frontier_tiles: u64,
+}
+
 pub(super) struct Borders {
-    pub(super) source: Source,
+    source: Source,
     /// Per (logical depth, source vertex): retained endpoint pair and source parameter.
     maps: Disk<3>,
     /// endpoints, chain source edge, origin, first/end source ordinal, epsilon bits, depth,
@@ -79,9 +100,13 @@ pub(super) struct Certificate {
     pub first: u64,
     pub end: u64,
     pub epsilon: f64,
+    pub terminal_lock: bool,
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(super) struct Contract {
+    pub depth: u32,
     pub interface: Vec<InterfaceRow>,
     pub certificates: Vec<Certificate>,
     pub scale: f64,
@@ -94,11 +119,20 @@ impl Borders {
         sorter: SortConfig,
         nodes: &Sequence<NodeRecord>,
         rows: impl Iterator<Item = Result<InterfaceRow, crate::spill::SpillError>>,
+        open_ends: impl Iterator<Item = Result<super::interfaces::KeyRecord, crate::spill::SpillError>>,
         extent: f64,
         lease: &ComponentLease<'_, '_>,
         check: &(dyn Fn() -> Result<(), JobError> + Sync),
     ) -> Result<Self, JobError> {
-        let source = Source::build(scratch, sorter, nodes, rows, &|| lease.charge(0), check)?;
+        let source = Source::build(
+            scratch,
+            sorter,
+            nodes,
+            rows,
+            open_ends,
+            &|| lease.charge(0),
+            check,
+        )?;
         let mut borders = Self {
             source,
             maps: Disk::new(scratch, "border-maps")?,
@@ -108,12 +142,32 @@ impl Borders {
         };
         // Source arcs are traversed one level at a time; their temporary ordered points
         // are discarded after certificates and source-vertex maps have been materialized.
-        for depth in 0..=borders.source.depth {
+        for depth in (0..=borders.source.depth).rev() {
             check()?;
             borders.level(scratch, depth, check)?;
             lease.charge(borders.bytes())?;
         }
+        let mut ancestors = [(0u64, 0u64, 0u32); 32];
+        for id in 0..borders.source.nodes.len {
+            let mut node = borders.source.nodes.get(id)?;
+            let depth = node[2] as u32;
+            let mut published = depth;
+            if node[5] == 0 && depth > 0 {
+                let parent = ancestors[depth as usize - 1];
+                if (parent.0, parent.1) == (node[0], node[1])
+                    && borders.contracts_equal(node[0], node[1], depth - 1, super::TRIANGLE_CAP)?
+                {
+                    published = parent.2;
+                }
+            }
+            node[5] |= u64::from(published) << 1;
+            borders.source.nodes.set(id, node)?;
+            ancestors[depth as usize] = (node[0], node[1], published);
+        }
         Ok(borders)
+    }
+    pub(super) fn audit_bound(&self) -> Option<u64> {
+        super::audit::bound(self.refs.len, self.source.nodes.len)
     }
     fn bytes(&self) -> u64 {
         self.source.vertices.len * 64
@@ -125,6 +179,48 @@ impl Borders {
             + self.maps.len * 24
             + self.segments.len * 80
             + self.refs.len * 16
+    }
+    pub(super) fn leaf_rows(&self) -> &Sequence<InterfaceRow> {
+        &self.source.leaf_rows
+    }
+    /// A chain cell may reuse its child's payload only when the complete decoded border
+    /// contract agrees. Comparison is bounded by the maximum cap-sized interface.
+    fn contracts_equal(
+        &self,
+        first: u64,
+        end: u64,
+        depth: u32,
+        cap: usize,
+    ) -> Result<bool, JobError> {
+        let key = |depth| TileKey {
+            first,
+            end,
+            depth,
+            leaf_begin: 0,
+            leaf_end: 0,
+        };
+        let Some(a) = self.contract(key(depth), 6 * cap)? else {
+            return Ok(false);
+        };
+        let Some(b) = self.contract(key(depth + 1), 6 * cap)? else {
+            return Ok(false);
+        };
+        Ok(a.interface
+            .iter()
+            .map(InterfaceRow::item)
+            .eq(b.interface.iter().map(InterfaceRow::item)))
+    }
+    pub(super) fn publication_depth(&self, key: TileKey) -> Result<u32, JobError> {
+        Ok((self.source.nodes.get(self.source.node(key)?)?[5] >> 1) as u32)
+    }
+    pub(super) fn can_collapse(&self, first: u64, end: u64, depth: u32) -> Result<bool, JobError> {
+        Ok(self.publication_depth(TileKey {
+            first,
+            end,
+            depth: depth + 1,
+            leaf_begin: 0,
+            leaf_end: 0,
+        })? <= depth)
     }
     pub(super) fn scale(&self, depth: u32) -> f64 {
         self.ladder.error(depth)
@@ -165,7 +261,7 @@ impl Borders {
                 edge = if e[0] == v { e[4] } else { e[5] };
             }
             let mut kind = u64::from(external);
-            if degree == 2 && !terminal {
+            if degree == 2 && !terminal && vertex[7] >> 32 == 0 {
                 let a = self.source.edges.get(two[0])?;
                 let b = self.source.edges.get(two[1])?;
                 if self.source.same_owners([a[2], a[3]], [b[2], b[3]], depth)?
@@ -192,7 +288,7 @@ impl Borders {
                 ])?;
             }
         }
-        let mut arc = Disk::<2>::new(scratch, "border-ordered-arc")?;
+        let mut arc = Disk::<3>::new(scratch, "border-ordered-arc")?;
         // Junction-started paths first. Adjacency has one link per incidence, so even a
         // high-valence vertex visits each incident edge once rather than pairing owners.
         for v in 0..self.source.vertices.len {
@@ -226,22 +322,31 @@ impl Borders {
         depth: u32,
         live: &Disk<3>,
         active: &mut Disk<1>,
-        arc: &mut Disk<2>,
+        arc: &mut Disk<3>,
         check: &(dyn Fn() -> Result<(), JobError> + Sync),
     ) -> Result<(), JobError> {
-        let begin = arc.len;
+        let mut begin = arc.len;
+        let retained = |v| -> Result<u64, JobError> {
+            if depth == self.source.depth {
+                return Ok(1);
+            }
+            let m = self
+                .maps
+                .get(u64::from(depth + 1) * self.source.vertices.len + v)?;
+            Ok(u64::from(m[0] == m[1]))
+        };
         let (mut at, mut edge) = (start, first_edge);
         loop {
             if (arc.len - begin).is_multiple_of(4096) {
                 check()?;
             }
-            arc.push([at, edge])?;
+            arc.push([at, edge, retained(at)?])?;
             active.set(edge, [2])?;
             let e = self.source.edges.get(edge)?;
             at = if e[0] == at { e[1] } else { e[0] };
             let next = live.get(at)?;
             if at == start || next[2] != 2 {
-                arc.push([at, NONE])?;
+                arc.push([at, NONE, retained(at)?])?;
                 break;
             }
             edge = if next[0] == edge { next[1] } else { next[0] };
@@ -249,18 +354,52 @@ impl Borders {
                 return Err(state("source arc revisits an edge before its endpoint"));
             }
         }
-        let end = arc.len - 1;
+        let mut end = arc.len - 1;
+        let mut first_edge = first_edge;
+        let mut start = start;
         let e = self.source.edges.get(first_edge)?;
         let epsilon = self.ladder.epsilon(depth);
         let mut pieces = vec![begin, end];
         if at == start {
             let count = end - begin;
-            if count < 3 {
+            let mut kept = 0;
+            let mut origin = NONE;
+            for i in begin..end {
+                if arc.get(i)?[2] != 0 {
+                    kept += 1;
+                    if origin == NONE {
+                        origin = i;
+                    }
+                }
+            }
+            if kept < 3 {
                 return Err(state(
-                    "a shared cycle has fewer than three distinct source edges",
+                    "a shared cycle has fewer than three retained vertices",
                 ));
             }
-            pieces = vec![begin, begin + count / 3, begin + 2 * count / 3, end];
+            let rotated = arc.len;
+            for i in 0..=count {
+                let mut p = arc.get(begin + (origin - begin + i) % count)?;
+                if i == count {
+                    p[1] = NONE;
+                }
+                arc.push(p)?;
+            }
+            begin = rotated;
+            end = begin + count;
+            first_edge = arc.get(begin)?[1];
+            start = arc.get(begin)?[0];
+            pieces = vec![begin];
+            let mut ordinal = 0;
+            for i in begin..end {
+                if arc.get(i)?[2] != 0 {
+                    if ordinal == kept / 3 || ordinal == 2 * kept / 3 {
+                        pieces.push(i);
+                    }
+                    ordinal += 1;
+                }
+            }
+            pieces.push(end);
         }
         for pair in pieces.windows(2) {
             self.shortcuts(
@@ -280,7 +419,7 @@ impl Borders {
 
     fn shortcuts(
         &mut self,
-        arc: &Disk<2>,
+        arc: &Disk<3>,
         first: u64,
         last: u64,
         origin_at: u64,
@@ -311,6 +450,7 @@ impl Borders {
                 let v = vertices.get(arc.get(i)?[0])?;
                 Ok([v[0] as u32, v[1] as u32, v[2] as u32].map(f32::from_bits))
             },
+            &mut |i| Ok(arc.get(i)?[2] != 0),
             &mut |a, b, bound| {
                 let va = arc.get(a)?[0];
                 let vb = arc.get(b)?[0];
@@ -409,6 +549,7 @@ impl Borders {
                     first: s[4],
                     end: s[5],
                     epsilon: f64::from_bits(s[6]),
+                    terminal_lock: edge[6] <= u64::from(key.depth),
                 });
             }
             at = link[0];
@@ -416,9 +557,10 @@ impl Borders {
         super::interfaces::merge_rows(&mut interface);
         certificates.sort_by_key(|c| (c.endpoints, c.chain, c.first));
         Ok(Some(Contract {
+            depth: key.depth,
             interface,
             certificates,
-            scale: self.scale(key.depth),
+            scale: self.scale(self.publication_depth(key)?),
         }))
     }
     pub(super) fn mapping(
@@ -515,6 +657,7 @@ mod tests {
             sorter,
             &tree,
             rows.into_iter().map(Ok),
+            std::iter::empty(),
             4096.,
             &lease,
             &|| Ok(()),

@@ -156,15 +156,21 @@ pub(crate) struct SamplingPlan {
     schedule: Schedule,
 }
 impl SamplingPlan {
-    pub(crate) fn new(captured: &FullCaptured, schedule: Schedule) -> Result<Self, JobError> {
+    pub(crate) fn new(
+        captured: &FullCaptured,
+        schedule: Schedule,
+        collapse: &dyn Fn(u64, u64, u32) -> Result<bool, JobError>,
+    ) -> Result<Self, JobError> {
         Self::from_nodes(
             captured.tree.nodes.reader()?.map(|n| n.map_err(Into::into)),
             schedule,
+            collapse,
         )
     }
     fn from_nodes(
         nodes: impl IntoIterator<Item = Result<crate::mesh_large::records::NodeRecord, JobError>>,
         schedule: Schedule,
+        collapse: &dyn Fn(u64, u64, u32) -> Result<bool, JobError>,
     ) -> Result<Self, JobError> {
         struct Frame {
             node: crate::mesh_large::records::NodeRecord,
@@ -178,7 +184,10 @@ impl SamplingPlan {
         let mut stack: Vec<Frame> = Vec::with_capacity(32);
         let mut close = |f: Frame| -> Result<(), JobError> {
             // Exactly matches walk::close: a single coarse child stands for this cell.
-            if f.children != 1 || !f.only_internal {
+            if f.children != 1
+                || !f.only_internal
+                || !collapse(f.node.first, f.node.end, f.node.depth())?
+            {
                 plan.add(f.node.depth(), f.node.end - f.node.first)?;
             }
             Ok(())
@@ -1023,6 +1032,7 @@ mod tests {
                 node(2, 80, 100, NodeKind::Leaf),
             ],
             Schedule::PRODUCTION,
+            &|_, _, _| Ok(true),
         )
         .unwrap();
         assert_eq!(&plan.totals[..5], &[100, 20, 0, 80, 0]);
@@ -1045,7 +1055,8 @@ mod tests {
         }
         assert!(SamplingPlan::from_nodes(
             [node(32, 0, 1, NodeKind::Internal)],
-            Schedule::PRODUCTION
+            Schedule::PRODUCTION,
+            &|_, _, _| Ok(true)
         )
         .is_err());
     }

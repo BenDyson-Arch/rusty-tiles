@@ -20,6 +20,7 @@
 pub(crate) mod appearance;
 #[cfg(test)]
 mod appearance_tests;
+mod audit;
 pub(crate) mod bake;
 mod borders;
 mod charts;
@@ -147,8 +148,9 @@ fn resource(message: impl Into<String>) -> JobError {
 }
 
 /// Stage settings; production uses [`Settings::default`].
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Settings {
+    pub audit_dir: Option<std::sync::Arc<std::path::PathBuf>>,
     pub cap: usize,
     pub mutation: Mutation,
     /// S2's per-query nearest-search budget (`error::NEAREST_STEPS`).
@@ -160,6 +162,7 @@ pub(crate) struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            audit_dir: std::env::var_os("RT_HLOD_AUDIT_DIR").map(|p| std::sync::Arc::new(p.into())),
             cap: TRIANGLE_CAP,
             mutation: Mutation::None,
             nearest_steps: error::NEAREST_STEPS,
@@ -315,7 +318,8 @@ pub(crate) fn plan(
         .saturating_add(appearance.texture)
         .saturating_add(appearance.color);
     let sorter = config.sorter(1);
-    let incidence = interfaces::memory_need(sorter, leaf_cap, captured.tree.stats.leaves);
+    let incidence = interfaces::memory_need(sorter, leaf_cap, captured.tree.stats.leaves)
+        .max(borders::memory_need(sorter));
     let buffer = config.sort.buffer_bytes as u64;
     // Five sequence readers plus the interface stream's merge buffers.
     let streams = buffer
@@ -336,11 +340,26 @@ pub(crate) fn plan(
                 .saturating_add(appearance.cache_floor),
         ),
     );
-    let tmpfs = if captured.scratch.memory_backed() {
+    let mut tmpfs = if captured.scratch.memory_backed() {
         memory_backed_need(captured, config)?
     } else {
         0
     };
+    if let Some(path) = &settings.audit_dir {
+        if audit::memory_backed(path)? {
+            tmpfs = tmpfs.saturating_add(
+                audit::bound(
+                    captured
+                        .triangles
+                        .len()
+                        .saturating_mul(6)
+                        .saturating_mul(u64::from(captured.tree.stats.height)),
+                    captured.tree.stats.nodes,
+                )
+                .ok_or_else(|| resource("audit memory bound overflows"))?,
+            );
+        }
+    }
     let ceiling = budget
         .ceiling(config::available_memory())
         .saturating_sub(tmpfs);
@@ -428,6 +447,8 @@ pub(crate) struct HlodReport {
     pub reoriented_faces: u64,
     pub interface_segments: u64,
     pub interface_vertices: u64,
+    pub borders_by_depth: Vec<borders::DepthReceipt>,
+    pub audit: Option<audit::Summary>,
     pub quantized_tiles: u64,
     pub float_tiles: u64,
     pub bytes: u64,
@@ -486,6 +507,8 @@ pub struct DepthAppearance {
 /// Run facts of the stage outside the deterministic manifest.
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct HlodDiagnostics {
+    pub audit: Option<audit::FileReceipt>,
+    pub(crate) borders_by_depth: Vec<borders::DepthReceipt>,
     pub tiles: u64,
     pub jobs: u64,
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
@@ -525,7 +548,7 @@ pub(crate) struct HlodInput<'a> {
     pub captured: &'a FullCaptured,
     pub config: &'a TreeConfig,
     pub plan: &'a HlodMemoryPlan,
-    pub settings: Settings,
+    pub settings: &'a Settings,
     pub phases: &'a Phases<'a>,
 }
 
@@ -603,7 +626,7 @@ enum Finished {
     /// Omitted at its cell depth: it could not keep its interface within the cap (`source`),
     /// or a child was omitted (propagated: omission reaches the root).
     Omitted {
-        depth: u32,
+        key: TileKey,
         source: bool,
     },
 }
@@ -616,7 +639,7 @@ pub(crate) fn produce(
     let started = std::time::Instant::now();
     let cpu_started = resources::process_cpu_seconds();
     let captured = input.captured;
-    let settings = input.settings;
+    let settings = &input.settings;
     let mut report = HlodReport {
         schema_version: 1,
         method: "octree-hlod",
@@ -645,7 +668,7 @@ pub(crate) fn produce(
     let incidence_started = std::time::Instant::now();
     captured.scratch.begin_stage();
     let admit = |bound: u64| admit_scratch(captured, input.config, bound);
-    let (rows, stats) = interfaces::build(
+    let (rows, stats, source_open_ends) = interfaces::build(
         &captured.scratch,
         input.config.sorter(1),
         &captured.tree.nodes,
@@ -684,6 +707,37 @@ pub(crate) fn produce(
         diagnostics.incidence_scratch.walk,
         &admit,
     );
+    let border_lease = ledger.admit(
+        borders::Borders::COMPONENT,
+        borders::scratch_need(
+            stats.rows,
+            stats.shared_points,
+            stats.shared_segments,
+            captured.tree.stats.nodes,
+            captured.tree.stats.leaves,
+            captured.tree.stats.height - 1,
+            input.config.sorter(1),
+        )
+        .ok_or_else(|| resource("shared-border scratch bound overflows"))?,
+    )?;
+    let borders = borders::Borders::build(
+        &captured.scratch,
+        input.config.sorter(1),
+        &captured.tree.nodes,
+        rows,
+        source_open_ends.reader()?,
+        captured.tree.stats.per_depth[0].maximum_extent,
+        &border_lease,
+        check,
+    )?;
+    drop(source_open_ends);
+    report.borders_by_depth = (0..captured.tree.stats.height)
+        .map(|depth| borders::DepthReceipt {
+            depth,
+            scale: borders.scale(depth),
+            ..Default::default()
+        })
+        .collect();
     let index_start = resources::process_cpu_seconds();
     let index_lease = ledger.admit(
         source_index::SourceIndex::COMPONENT,
@@ -691,7 +745,9 @@ pub(crate) fn produce(
             .ok_or_else(|| resource("source index scratch overflows"))?,
     )?;
     let source = source_index::SourceIndex::build(captured, &index_lease, check)?;
-    let sampling = error::SamplingPlan::new(captured, settings.sampling)?;
+    let sampling = error::SamplingPlan::new(captured, settings.sampling, &|first, end, depth| {
+        borders.can_collapse(first, end, depth)
+    })?;
     let index_cpu = resources::process_cpu_seconds()
         .zip(index_start)
         .map(|(b, a)| b - a);
@@ -709,14 +765,35 @@ pub(crate) fn produce(
         normals: layout & super::attributes::NORMAL != 0,
         check,
     };
+    let audit_bound = borders
+        .audit_bound()
+        .ok_or_else(|| resource("audit bound overflows"))?;
+    let audit_lease = settings
+        .audit_dir
+        .as_ref()
+        .map(|_| ledger.admit_external("s1b-audit", audit_bound))
+        .transpose()?;
+    let audit = settings
+        .audit_dir
+        .as_ref()
+        .zip(audit_lease.as_ref())
+        .map(|(path, lease)| audit::Writer::new(path, audit_bound, lease))
+        .transpose()?;
     let job = Job {
         input: &input,
         services: &services,
         source: &source,
+        borders: &borders,
         sampling: &sampling,
         check,
     };
-    let result = walk(&job, rows, &rows_path, &mut report);
+    let result = walk(
+        &job,
+        borders.leaf_rows(),
+        &rows_path,
+        &mut report,
+        audit.as_ref(),
+    );
     diagnostics.error_cpu_seconds = index_cpu.map(|s| s + report.error_cpu_seconds);
     diagnostics.error_cpu = report.error_cpu;
     diagnostics.error_cpu_by_depth = report.error_cpu_by_depth.clone();
@@ -724,9 +801,15 @@ pub(crate) fn produce(
     let (lease_peak, timings) = result?;
     diagnostics.appearance_seconds = timings;
     diagnostics.image_cache = cache.stats();
+    diagnostics.audit = audit.as_ref().map(audit::Writer::finish).transpose()?;
+    report.audit = diagnostics.audit.as_ref().map(audit::Summary::from);
+    drop(audit);
+    drop(audit_lease);
     ledger.check()?;
     drop(source);
     drop(index_lease);
+    drop(borders);
+    drop(border_lease);
     diagnostics.scratch_components = ledger.components();
     diagnostics.stage_scratch_peak_bytes = captured.scratch.stage_peak_bytes();
     let stage_bound = diagnostics
@@ -748,6 +831,7 @@ pub(crate) fn produce(
         .finished(Phase::HlodGeometry, walk_started.elapsed().as_secs_f64())?;
     diagnostics.error_measurement = report.error_measurement.clone();
     diagnostics.tiles = report.tiles;
+    diagnostics.borders_by_depth = report.borders_by_depth.clone();
     diagnostics.appearance_by_depth = report.appearance_by_depth.clone();
     diagnostics.lease_peak_bytes = lease_peak;
     diagnostics.cpu_seconds = resources::process_cpu_seconds()
@@ -786,7 +870,7 @@ impl LeafErrors {
 struct LeafStreams<'a> {
     triangles: crate::spill::SequenceReader<'a, super::attributes::FullTriangle>,
     depths: crate::spill::SequenceReader<'a, super::full::CornerDepth>,
-    rows: std::iter::Peekable<crate::spill::SortedStream<'a, InterfaceRow>>,
+    rows: std::iter::Peekable<crate::spill::SequenceReader<'a, InterfaceRow>>,
 }
 
 fn read_leaf(
@@ -930,6 +1014,17 @@ fn memory_backed_need(captured: &FullCaptured, config: &TreeConfig) -> Result<u6
         .and_then(|b| b.checked_add(need.stages.leaf_plans))
         // S2's source index, admitted at the walk's start beside the incidence rows.
         .and_then(|b| b.checked_add(source_index::scratch_need(n)?))
+        .and_then(|b| {
+            b.checked_add(borders::scratch_need(
+                n.checked_mul(6)?,
+                n.checked_mul(3)?,
+                n.checked_mul(3)?,
+                captured.tree.stats.nodes,
+                captured.tree.stats.leaves,
+                captured.tree.stats.height - 1,
+                config.sorter(1),
+            )?)
+        })
         .map(|b| b.max(need.need_bytes))
         .ok_or_else(|| resource("HLOD memory-backed scratch need overflows"))
 }
@@ -972,6 +1067,7 @@ struct Job<'j, 'a> {
     services: &'j appearance::Services<'j>,
     /// S2's source index: bounded queries of each tile's descendant source range.
     source: &'j source_index::SourceIndex,
+    borders: &'j borders::Borders,
     sampling: &'j error::SamplingPlan,
     check: &'j (dyn Fn() -> Result<(), JobError> + Sync),
 }
@@ -980,19 +1076,30 @@ struct Job<'j, 'a> {
 /// member. An omitted parent (its interface cannot fit the cap) returns before any S2 or S3
 /// work: it holds no content, so there is nothing to measure, sample, chart, bake or store.
 fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -> Done {
-    let (captured, settings, check) = (job.input.captured, job.input.settings, job.check);
-    let built = if closed.single_leaf {
-        // Halved, or where its interface cannot be halved, the copy within the cap.
-        let half = children[0].triangles.len().div_ceil(2).min(settings.cap);
-        geometry::build_parent(closed.key, &children, &[half, settings.cap], check)?
+    let (captured, settings, check) = (job.input.captured, &job.input.settings, job.check);
+    let contract = job.borders.contract(closed.key, 6 * settings.cap)?;
+    let built = if let Some(contract) = &contract {
+        let half = if closed.single_leaf {
+            children[0].triangles.len().div_ceil(2).min(settings.cap)
+        } else {
+            settings.cap
+        };
+        geometry::build_parent(
+            closed.key,
+            &children,
+            &[half, settings.cap],
+            contract,
+            &|k| job.borders.mapping(closed.key.depth, k),
+            check,
+        )?
     } else {
-        geometry::build_parent(closed.key, &children, &[settings.cap], check)?
+        None
     };
     drop(children);
     let Some(mut built) = built else {
         // Its interface cannot fit the cap: omitted, nothing held for its parent.
         let omitted = Finished::Omitted {
-            depth: closed.key.depth,
+            key: closed.key,
             source: true,
         };
         return Ok((None, omitted, appearance::Timing::default()));
@@ -1061,7 +1168,7 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
     // measurement of the published tile.
     let count = job.sampling.count(tile.key)?;
     let cpu_start = error::thread_cpu();
-    let (error, measurement, mut error_cpu) = error::measure(
+    let (mut error, measurement, mut error_cpu) = error::measure(
         &CoarseTile {
             key: tile.key,
             decoded: &positions.decoded,
@@ -1081,6 +1188,10 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
         &centroid_checks,
         check,
     )?;
+    let contract = contract
+        .as_ref()
+        .expect("a built tile has a border contract");
+    error.geometric_error = error.geometric_error.max(contract.scale);
     error_cpu.representatives = identity_cpu.unwrap_or(0.);
     let error_cpu_seconds = error::thread_cpu()
         .zip(cpu_start)
@@ -1162,6 +1273,19 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
         quantized: encoded.quantized,
         bounds: encoded.bounds.into(),
         appearance: appearance.facts,
+        border_scale: contract.scale,
+        border_epsilon: contract
+            .certificates
+            .iter()
+            .map(|c| c.epsilon)
+            .fold(0., f64::max),
+        topology: built.topology,
+        terminal_locks: contract
+            .certificates
+            .iter()
+            .filter(|c| c.terminal_lock)
+            .count() as u64,
+        audit_record: None,
     };
     let mut geometry = built.geometry;
     geometry.geometric_error = error.geometric_error;
@@ -1174,6 +1298,12 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
 }
 
 fn tally(report: &mut HlodReport, row: &HlodRow) {
+    let borders = &mut report.borders_by_depth[row.depth as usize];
+    borders.tiles += 1;
+    borders.segments += u64::from(row.interface_segments);
+    borders.terminal_locks += row.terminal_locks;
+    borders.max_epsilon = borders.max_epsilon.max(row.border_epsilon);
+    borders.topology.add(row.topology);
     report.error_cpu_seconds += row.error_cpu_seconds;
     report.error_cpu.add(row.error_cpu);
     report.error_measurement.nearest.add(row.nearest_search);
@@ -1269,9 +1399,10 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
 /// The preorder walk; returns the ledger's lease peak and the summed appearance timing.
 fn walk(
     job: &Job<'_, '_>,
-    rows: crate::spill::SortedStream<'_, InterfaceRow>,
+    rows: &crate::spill::Sequence<InterfaceRow>,
     rows_path: &Path,
     report: &mut HlodReport,
+    audit: Option<&audit::Writer<'_>>,
 ) -> Result<(u64, appearance::Timing), JobError> {
     let (input, check) = (job.input, job.check);
     let captured = input.captured;
@@ -1310,7 +1441,7 @@ fn walk(
     let mut streams = LeafStreams {
         triangles: captured.triangles.reader()?,
         depths: captured.corner_depths.reader()?,
-        rows: rows.peekable(),
+        rows: rows.reader()?.peekable(),
     };
     let total = captured.tree.stats.internal;
     input.phases.progress(Phase::HlodGeometry, 0, Some(total))?;
@@ -1346,7 +1477,7 @@ fn walk(
                     }
                     *inflight += 1;
                     let omitted = Finished::Omitted {
-                        depth: closed.key.depth,
+                        key: closed.key,
                         source: false,
                     };
                     let _ = sender.send((
@@ -1439,16 +1570,25 @@ fn walk(
                 let Publish { depth, chain, .. } = publish.remove(written).unwrap();
                 let mut row = match finished {
                     Finished::Row(row) => *row,
-                    Finished::Omitted { depth, source } => {
+                    Finished::Omitted { key, source } => {
                         // The cell and every pass-through cell above it publish no content.
                         report.omission_sources += u64::from(source);
-                        for d in std::iter::once(depth).chain(chain) {
+                        for d in std::iter::once(key.depth).chain(chain) {
+                            if let Some(audit) = audit {
+                                audit.omitted(
+                                    TileKey { depth: d, ..key },
+                                    source && d == key.depth,
+                                )?;
+                            }
                             report.omitted_proxies += 1;
                             let d = d as usize;
                             if report.omitted_by_depth.len() <= d {
                                 report.omitted_by_depth.resize(d + 1, 0);
                             }
                             report.omitted_by_depth[d] += 1;
+                            report.borders_by_depth[d].omitted_cells += 1;
+                            report.borders_by_depth[d].omission_sources +=
+                                u64::from(source && d == key.depth as usize);
                         }
                         *written += 1;
                         continue;
@@ -1469,6 +1609,30 @@ fn walk(
                         .map_err(|e| JobError::io("rename coarse tile", &from, e))?;
                     row.uri = key.uri();
                     row.depth = depth;
+                }
+                if let Some(audit) = audit {
+                    let key = TileKey {
+                        first: row.first,
+                        end: row.end,
+                        depth: row.depth,
+                        leaf_begin: row.leaf_begin,
+                        leaf_end: row.leaf_end,
+                    };
+                    let contract = job
+                        .borders
+                        .contract(key, 6 * job.input.settings.cap)?
+                        .ok_or_else(|| state("published tile has no bounded contract"))?;
+                    row.border_epsilon = contract
+                        .certificates
+                        .iter()
+                        .map(|c| c.epsilon)
+                        .fold(0., f64::max);
+                    row.terminal_locks = contract
+                        .certificates
+                        .iter()
+                        .filter(|c| c.terminal_lock)
+                        .count() as u64;
+                    row.audit_record = Some(audit.tile(&row, &contract)?);
                 }
                 tally(report, &row);
                 serde_json::to_writer(&mut writer, &row).map_err(|e| state(e.to_string()))?;
@@ -1502,8 +1666,15 @@ fn walk(
             // the top of the chain instead, and the cells below it there publish no content.
             // Same rank range and leaf interval, so the same outer interface.
             if let ([only], 1) = (&frame.children[..], frame.started) {
+                let border_chain = !matches!(kinds.get(only), Some(Child::Coarse(_)))
+                    || job.borders.can_collapse(
+                        frame.node.first,
+                        frame.node.end,
+                        frame.node.depth(),
+                    )?;
                 let only = *only;
-                if let Some(Child::Coarse(seq)) = kinds.get(&only).copied() {
+                if let Some(Child::Coarse(seq)) = kinds.get(&only).copied().filter(|_| border_chain)
+                {
                     let p = publish
                         .get_mut(&seq)
                         .ok_or_else(|| state("a coarse child without its row"))?;

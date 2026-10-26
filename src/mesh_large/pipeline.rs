@@ -481,9 +481,9 @@ pub fn mesh_to_tileset(
         let plan = producer::stage_plan(&config, &captured)?;
         // HLOD admits its own stage against the declared budget before any leaf is built.
         #[cfg(test)]
-        let settings = request.hlod;
+        let settings = &request.hlod;
         #[cfg(not(test))]
-        let settings = super::hlod::Settings::default();
+        let settings = &super::hlod::Settings::default();
         let (hlod_plan, memory) = match &config.memory_budget {
             Some(budget) => {
                 let hlod = super::hlod::plan(&captured, &config, budget, &settings)?;

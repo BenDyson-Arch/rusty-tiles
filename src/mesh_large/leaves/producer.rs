@@ -1083,7 +1083,7 @@ pub(crate) enum Coarse<'a> {
     /// 0.4 HLOD geometry under its admitted memory plan.
     Hlod {
         plan: &'a super::super::hlod::HlodMemoryPlan,
-        settings: super::super::hlod::Settings,
+        settings: &'a super::super::hlod::Settings,
     },
 }
 
@@ -1263,7 +1263,7 @@ pub fn mesh_to_leaf_payloads(
     let coarse = match &hlod_plan {
         Some(plan) => Coarse::Hlod {
             plan,
-            settings: request.hlod,
+            settings: &request.hlod,
         },
         None => Coarse::H17 {
             mutation: request.lod_mutation,

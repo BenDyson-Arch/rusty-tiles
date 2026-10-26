@@ -51,23 +51,31 @@ pub(super) fn shortcuts(
     last: u64,
     epsilon: f64,
     point: &mut impl FnMut(u64) -> Result<[f32; 3], JobError>,
+    retained: &mut impl FnMut(u64) -> Result<bool, JobError>,
     emit: &mut impl FnMut(u64, u64, f64) -> Result<(), JobError>,
 ) -> Result<(), JobError> {
     if first >= last || !epsilon.is_finite() || epsilon < 0. {
         return Err(state("invalid source arc or shortcut tolerance"));
+    }
+    // One common arithmetic allowance for the whole arc. An endpoint with larger
+    // absolute coordinates must not retroactively invalidate earlier corridors.
+    let mut guard = 0f64;
+    for i in first..=last {
+        let p = point(i)?;
+        guard = guard.max(rounding(p, p));
     }
     let mut start = first;
     while start < last {
         let a = point(start)?;
         let mut lower = [f64::NEG_INFINITY; 3];
         let mut upper = [f64::INFINITY; 3];
-        let mut end = start + 1;
+        let mut end = start;
         let mut i = start + 1;
         while i <= last {
             let b = point(i)?;
-            let radius = (epsilon - rounding(a, b)).max(0.) / 3f64.sqrt();
+            let radius = (epsilon - guard).max(0.) / 3f64.sqrt();
             let n = (i - start) as f64;
-            let mut fits = epsilon >= rounding(a, b);
+            let mut fits = epsilon >= guard;
             for axis in 0..3 {
                 let delta = f64::from(b[axis]) - f64::from(a[axis]);
                 lower[axis] = lower[axis].max(((delta - radius) / n).next_up());
@@ -77,11 +85,16 @@ pub(super) fn shortcuts(
             }
             // An original source edge always fits exactly. Failed extension finalizes the
             // last accepted endpoint, then starts the next chord there.
-            if i > start + 1 && !fits {
-                break;
+            if retained(i)? {
+                if end != start && !fits {
+                    break;
+                }
+                end = i;
             }
-            end = i;
             i += 1;
+        }
+        if end == start {
+            return Err(state("source arc has no retained endpoint"));
         }
         let b = point(end)?;
         let mut bound = 0f64;
@@ -95,7 +108,7 @@ pub(super) fn shortcuts(
                 })
                 .sum::<f64>()
                 .sqrt();
-            bound = bound.max((distance + rounding(a, b).max(rounding(a, p))).next_up());
+            bound = bound.max((distance + guard).next_up());
         }
         if bound > epsilon {
             return Err(state("shortcut exceeds its source-arc displacement budget"));
@@ -121,6 +134,7 @@ mod tests {
                 reads += 1;
                 Ok(points[i as usize])
             },
+            &mut |_| Ok(true),
             &mut |a, b, e| {
                 result.push((a, b, e));
                 Ok(())
@@ -136,7 +150,7 @@ mod tests {
             let points: Vec<_> = (0..=count).map(|i| [i as f32, 2., 0.]).collect();
             let (chords, reads) = contract(&points, 1e-5);
             assert_eq!(chords.len(), 1);
-            assert!(reads <= 3 * points.len());
+            assert!(reads <= 4 * points.len());
             assert!(chords[0].2 <= 1e-5);
         }
         // Arithmetic only: the leaf-resolution obstruction exceeds C for both sizes;
@@ -162,7 +176,7 @@ mod tests {
             }
             for epsilon in [0., 0.01, 2.] {
                 let (chords, reads) = contract(&p, epsilon);
-                assert!(reads <= 6 * p.len());
+                assert!(reads <= 7 * p.len());
                 let mut next = 0;
                 for (a, b, bound) in chords {
                     assert_eq!(a, next);
