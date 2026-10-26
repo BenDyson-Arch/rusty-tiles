@@ -227,6 +227,58 @@ mod tests {
     use crate::mesh_large::hlod::geometry::topology::{self, tests::ring};
 
     #[test]
+    fn lost_surface_controls_and_reference_index_fit_the_parent_charge() {
+        let n = 16u32;
+        let mut m = ring();
+        m.positions = (0..=n)
+            .flat_map(|y| (0..=n).map(move |x| [x as f32 / 64., y as f32 / 64., 0.]))
+            .collect();
+        m.keys = m.positions.iter().map(|p| p.map(f32::to_bits)).collect();
+        m.triangles.clear();
+        let mut output = Vec::new();
+        for y in 0..n {
+            for x in 0..n {
+                let a = y * (n + 1) + x;
+                m.triangles
+                    .extend([[a, a + 1, a + n + 2], [a, a + n + 2, a + n + 1]]);
+                if (x, y) != (n / 2, n / 2) {
+                    // Every diagonal changes; the conservative loss controls must cover
+                    // the whole changed region while remaining bounded to this parent.
+                    output.extend([[a, a + 1, a + n + 1], [a + 1, a + n + 2, a + n + 1]]);
+                }
+            }
+        }
+        let (controls, peak) = crate::test_alloc::peak(|| {
+            let mut change = topology::changes(&m, &output, &[], 0.2).unwrap();
+            assert_eq!(change.receipt.opened_holes, 1);
+            assess(
+                &mut change,
+                &m.positions,
+                &output,
+                0.2,
+                0.2,
+                &mut |p, _| Ok((p, 0.)),
+                &|| Ok(()),
+            )
+            .unwrap()
+            .unwrap()
+        });
+        assert!(controls.source.len() >= 16 * m.triangles.len());
+        assert!(controls.opening_source_max > 0.);
+        assert!(controls.eligible(0.2));
+        let charge = m.triangles.len() as u64 * super::super::super::JOB_BYTES_PER_TRIANGLE
+            + super::super::super::error::search_bytes(super::super::super::error::NEAREST_STEPS);
+        eprintln!(
+            "LOST SURFACE: peak {peak} bytes, charge {charge}, {} controls",
+            controls.source.len()
+        );
+        assert!(
+            peak as u64 <= charge,
+            "lost-surface peak {peak} > parent charge {charge}"
+        );
+    }
+
+    #[test]
     fn opened_hole_loss_is_budgeted_and_junction_or_edge_contact_is_refused() {
         use crate::mesh_large::hlod::interfaces::InterfaceRow;
         for (half_width, eligible) in [(1., false), (0.1, true)] {

@@ -631,7 +631,7 @@ enum Finished {
         key: TileKey,
         reason: OmissionReason,
         frontier: Vec<TileKey>,
-        topology: geometry::TopologyReceipt,
+        topology: Box<geometry::TopologyReceipt>,
     },
 }
 
@@ -1330,7 +1330,7 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
                     })
                 })
                 .collect::<Result<_, JobError>>()?,
-            topology: outcome.attempted_topology,
+            topology: Box::new(outcome.attempted_topology),
         };
         return Ok((None, omitted, appearance::Timing::default()));
     };
@@ -1754,7 +1754,7 @@ fn walk(
                         let source = reason.source();
                         report.borders_by_depth[key.depth as usize]
                             .attempted_topology
-                            .add(topology);
+                            .add(*topology);
                         report.borders_by_depth[key.depth as usize].frontier_tiles +=
                             frontier.len() as u64;
                         // The cell and every pass-through cell above it publish no content.
@@ -1770,7 +1770,7 @@ fn walk(
                                     },
                                     if d == key.depth { &frontier } else { &[] },
                                     if d == key.depth {
-                                        topology
+                                        *topology
                                     } else {
                                         Default::default()
                                     },

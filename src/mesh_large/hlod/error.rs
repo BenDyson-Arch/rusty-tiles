@@ -835,6 +835,15 @@ mod tests {
         seed: u64,
         count: u64,
     ) -> (TileError, Summary) {
+        pair_controls(a, b, seed, count, &[])
+    }
+    fn pair_controls(
+        a: &[[[f32; 3]; 3]],
+        b: &[[[f32; 3]; 3]],
+        seed: u64,
+        count: u64,
+        source_controls: &[f64],
+    ) -> (TileError, Summary) {
         let (a, b) = (triangles(a), triangles(b));
         let (ba, bb) = (
             Surface::new(a.clone()).unwrap(),
@@ -865,7 +874,15 @@ mod tests {
                 schedule: Schedule::PRODUCTION,
             },
             seed,
-            direction(a, &bb, seed, Controls::SOURCE),
+            direction(
+                a,
+                &bb,
+                seed,
+                Controls {
+                    proxy: false,
+                    initial: source_controls,
+                },
+            ),
             direction(b, &ba, seed + 1, Controls::PROXY),
         )
         .unwrap()
@@ -911,7 +928,9 @@ mod tests {
             budget,
             "eligible closure cannot set published G"
         );
-        let (g, opened) = pair(&closed, &source, 71);
+        // A tiny opening need not contain a global area-stratum sample. The local
+        // lost-surface controls supply its centre, independently known to be 0.1 away.
+        let (g, opened) = pair_controls(&closed, &source, 71, MIN_TILE, &[0.1]);
         assert!((opened.source_to_proxy.max() - 0.1).abs() < 1e-7);
         assert!(opened.proxy_to_source.max() < 1e-12);
         assert!(g.geometric_error > 0.104 && g.geometric_error < 0.106);
