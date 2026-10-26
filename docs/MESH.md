@@ -161,10 +161,10 @@ has no selector, and a plain `mesh` run uses it.
   segments independently. Crack-free means no gap along a locked interface between
   tiles of any depth mix; it does not make a coarse level watertight or hide its
   silhouette change.
-- **Omission, not refusal.** 8,192 triangles stays the hard published cap. A parent
-  whose exact locked interface, or a topology plain simplification cannot reduce,
-  needs more triangles than the cap allows has its coarse tile **omitted**; the run
-  does not fail. Omission propagates upward: every ancestor to the root is omitted
+- **Omission, not refusal.** 8,192 triangles stays the hard published cap. If a
+  parent still needs more triangles than the cap after simplification (its exact locked
+  interface, or topology that simplification cannot reduce, is too large), its coarse
+  tile is **omitted**; the run does not fail. Omission propagates upward: every ancestor to the root is omitted
   too, because a parent cannot be built with a hole where the omitted tile was. An
   omitted cell publishes no content and holds no geometry, and the capped descendant
   frontier (coarse tiles and leaves below it) is what the archive publishes there. An
