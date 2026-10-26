@@ -24,8 +24,9 @@ use std::collections::VecDeque;
 pub(crate) const BLOCK: usize = 256;
 const CACHE_BLOCKS: usize = 64;
 const CACHE_NODES: usize = 16384;
+const RESIDENT_CACHE_BLOCKS: usize = 384;
 /// Includes both caches, compact and full-row I/O, build workspace, stacks and slack.
-pub(crate) const QUERY_BYTES: u64 = 8 << 20;
+pub(crate) const QUERY_BYTES: u64 = 16 << 20;
 pub(crate) const BUILD_BYTES: u64 = 2 << 20;
 /// Compact triangles plus <= one fine node per two triangles, upper nodes and slack.
 pub(crate) fn scratch_need(n: u64) -> Option<u64> {
@@ -743,10 +744,10 @@ impl SourceIndex {
             .all(|r| r.children.is_some() || r.node.count > 0)
         {
             // Complete resident query hierarchy: drop the paged node cache before
-            // admitting twice as many fine blocks. Still inside QUERY_BYTES.
+            // admitting the larger fixed fine-block cache. Still inside QUERY_BYTES.
             query.node_cache = HashMap::default();
             query.node_fifo = VecDeque::new();
-            query.block_limit = 192;
+            query.block_limit = RESIDENT_CACHE_BLOCKS;
         }
         query.check_charge()?;
         Ok(query)
@@ -1301,6 +1302,40 @@ pub(crate) fn distance2(a: V3, b: V3) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn complete_query_cache_fits_its_fixed_charge() {
+        let block = Surface::new(
+            (0..BLOCK)
+                .map(|i| Triangle::new([[i as f32, 0., 0.]; 3], i as u64))
+                .collect(),
+        )
+        .unwrap();
+        let ((blocks, fifo), peak) = crate::test_alloc::peak(|| {
+            let mut blocks = HashMap::with_capacity_and_hasher(CACHE_BLOCKS, Default::default());
+            let mut fifo = VecDeque::with_capacity(CACHE_BLOCKS);
+            for i in 0..RESIDENT_CACHE_BLOCKS {
+                blocks.insert(
+                    i as u64,
+                    Surface {
+                        triangles: block.triangles.clone(),
+                        nodes: block.nodes.clone(),
+                    },
+                );
+                fifo.push_back(i as u64);
+            }
+            (blocks, fifo)
+        });
+        let cached = blocks.values().map(Surface::charge).sum::<usize>()
+            + blocks.capacity() * 2 * (std::mem::size_of::<(u64, Surface)>() + 1)
+            + fifo.capacity() * std::mem::size_of::<u64>();
+        // The compact hierarchy has at most 8,191 nodes. Reserve 2 MiB beyond its
+        // rounded capacity for I/O buffers, handles and an in-flight replacement.
+        let other = 8192 * std::mem::size_of::<Region>() + (2 << 20);
+        eprintln!("QUERY CACHE: charged blocks {cached}, allocation peak {peak}, other {other}");
+        assert!((cached + other) as u64 <= QUERY_BYTES);
+        assert!((peak + other) as u64 <= QUERY_BYTES);
+    }
+
     #[test]
     fn patch_controls_skip_interior_vertices_and_cover_boundaries() {
         let mut triangles = Vec::new();

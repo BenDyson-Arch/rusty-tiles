@@ -70,6 +70,9 @@ work; fixed-height level walks add O(nh). Fixed page caches bound resident I/O
 state independently of source size.
 Each graph store has 128 fixed 16 KiB pages; the memory plan charges all
 overlapping stores through the same cache constant.
+S2's per-job query charge is 16 MiB, allowing 384 cached fine blocks when its
+upper hierarchy is fully resident (64 on the paged path). This fixed cache
+budget changes neither search order nor the B=1,024 nearest-search limit.
 
 Ordered chains use the original edge ordinal as common parameter. Coordinate
 corridors select shortcuts in linear work, retaining a nested subset of finer

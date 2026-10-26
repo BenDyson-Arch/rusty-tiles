@@ -102,10 +102,13 @@ decoded `CoarseTile`, its representatives and G; chart spacing is
   admission is refused. Memory-backed scratch charges it to memory in the plan. S2
   writes no other scratch. Files are capture-owned and removed on success, refusal
   and cancellation.
-- **Memory:** each parent job is charged 8 MiB query caches, 4 MiB measurement
+- **Memory:** each parent job is charged 16 MiB query caches, 4 MiB measurement
   workspace and the search frontiers (`SEARCH_BYTES`, at most `2B+1` entries each);
   2 MiB fixed construction. Query caches check actual capacities and refuse past
   their allowance.
+  S1b's internal budget tuning retains 384 fine blocks when the upper hierarchy
+  is completely resident; the paged path retains 64 blocks. These fixed budgets
+  do not change B, sampling, nearest-search order or source-scale bounds.
 - **CPU:** index construction uses process CPU; representatives and each directed
   pass sum worker-thread CPU. CPU stays out of deterministic metadata.
 
