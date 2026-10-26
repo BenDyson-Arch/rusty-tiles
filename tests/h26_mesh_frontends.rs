@@ -146,12 +146,22 @@ fn cli_report_is_the_archive_report_with_separate_resource_diagnostics() {
     ] {
         assert!(seconds[phase].as_f64().unwrap() >= 0., "{phase}");
     }
-    for removed in ["lod_simplify", "seam_resolution", "lod_finish", "proxy_bake"] {
+    for removed in [
+        "lod_simplify",
+        "seam_resolution",
+        "lod_finish",
+        "proxy_bake",
+    ] {
         assert!(seconds.get(removed).is_none(), "{removed}");
     }
     assert!(diagnostics.get("proxy_bake").is_none());
     assert!(diagnostics["hlod"]["tiles"].is_u64());
-    assert!(diagnostics["memory"]["budget"]["resolved_bytes"].as_u64().unwrap() > 0);
+    assert!(
+        diagnostics["memory"]["budget"]["resolved_bytes"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
 }
 
 #[test]
