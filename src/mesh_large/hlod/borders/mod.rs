@@ -190,8 +190,8 @@ impl Borders {
         lease.charge(borders.bytes())?;
         Ok(borders)
     }
-    pub(super) fn audit_bound(&self) -> Option<u64> {
-        super::audit::bound(self.refs.len, self.source.nodes.len)
+    pub(super) fn audit_bound(&self, source_triangle_depths: u64) -> Option<u64> {
+        super::audit::bound(self.refs.len, self.source.nodes.len, source_triangle_depths)
     }
     fn bytes(&self) -> u64 {
         self.source.vertices.len * 64
@@ -535,18 +535,17 @@ impl Borders {
                     };
                     maps.set(u64::from(depth) * vertex_count + vertex, map)?;
                 }
-                let mut previous = NONE;
-                for at in owners[0]..owners[1] {
+                let mut at = owners[0];
+                while at < owners[1] {
                     let leaf = owner_store.get(at)?[0];
                     let owner = leaves.get(leaf)?[1 + depth as usize];
-                    if owner == previous {
-                        continue;
-                    }
                     let mut node = nodes.get(owner)?;
                     node[6] = refs.push([node[6], id])?;
                     node[7] += 1;
                     nodes.set(owner, node)?;
-                    previous = owner;
+                    // A fan can have arbitrarily many leaves per coarse owner. Visit
+                    // distinct owners in output order, with O(log rows) reads per ref.
+                    at = graph::next_owner(owner_store, at, owners[1], node[4])?;
                 }
                 Ok(())
             },
@@ -555,17 +554,14 @@ impl Borders {
     }
     fn emit_segment(&mut self, segment: [u64; 10]) -> Result<(), JobError> {
         let id = self.segments.push(segment)?;
-        let mut previous = NONE;
-        for at in segment[8]..segment[9] {
+        let mut at = segment[8];
+        while at < segment[9] {
             let owner = self.source.owner(at, segment[7] as u32)?;
-            if owner == previous {
-                continue;
-            }
             let mut node = self.source.nodes.get(owner)?;
             node[6] = self.refs.push([node[6], id])?;
             node[7] += 1;
             self.source.nodes.set(owner, node)?;
-            previous = owner;
+            at = graph::next_owner(&self.source.owners, at, segment[9], node[4])?;
         }
         Ok(())
     }
@@ -666,6 +662,138 @@ mod tests {
     fn k(x: f32, y: f32) -> Key {
         [x, y, 0.].map(f32::to_bits)
     }
+    #[test]
+    fn large_source_scratch_admission_is_checked_and_incidence_bounded() {
+        let sorter = SortConfig {
+            run_bytes: 1 << 20,
+            fan_in: 8,
+            buffer_bytes: 1 << 16,
+            jobs: 1,
+        };
+        for n in [500_000_000u64, 1_000_000_000] {
+            // The production caller's worst-case interface counts, with a full-height
+            // tree. The envelope covers all persistent levels and the external sort.
+            let need =
+                scratch_need(6 * n, 3 * n, 3 * n, 2 * n / 8192, n / 8192, 31, sorter).unwrap();
+            assert!((20_000 * n..=32_768 * n).contains(&need));
+        }
+        for field in 0..5 {
+            let mut counts = [1; 5];
+            counts[field] = u64::MAX;
+            assert!(scratch_need(
+                counts[0], counts[1], counts[2], counts[3], counts[4], 31, sorter,
+            )
+            .is_none());
+        }
+    }
+
+    #[test]
+    fn fan_owner_reads_scale_with_rows_and_height_not_chords_times_fan() {
+        fn subtree(tree: &mut SequenceWriter<NodeRecord>, first: u64, end: u64, depth: u8) {
+            let leaf = end - first == 1;
+            tree.push(&NodeRecord {
+                first,
+                end,
+                cell_depth: depth,
+                cell: 0,
+                path_len: 0,
+                path: 0,
+                last_octant: 0,
+                kind: if leaf {
+                    NodeKind::Leaf
+                } else {
+                    NodeKind::Internal
+                },
+                children: if leaf { 0 } else { 2 },
+                bytes: 0,
+                bounds: Bounds::EMPTY,
+            })
+            .unwrap();
+            if !leaf {
+                let middle = first + (end - first) / 2;
+                subtree(tree, first, middle, depth + 1);
+                subtree(tree, middle, end, depth + 1);
+            }
+        }
+        let mut previous_reads = None;
+        for exponent in [7u32, 9] {
+            // One fan with R owners followed by L zigzag edges, R=L. At depth one
+            // every edge has the same two owners, and every zigzag emits a chord.
+            let r = 1u64 << exponent;
+            let work = tempfile::tempdir().unwrap();
+            let scratch = Scratch::create(Some(work.path()), 0).unwrap();
+            let sorter = SortConfig {
+                run_bytes: 1 << 20,
+                fan_in: 8,
+                buffer_bytes: 1 << 16,
+                jobs: 1,
+            };
+            let mut tree = SequenceWriter::new(&scratch, "tree", 1 << 16).unwrap();
+            subtree(&mut tree, 0, 2 * r, 0);
+            let tree = tree.finish().unwrap();
+            let mut rows = Vec::new();
+            for i in 0..r {
+                let a = k(i as f32, ((i % 2) * 10) as f32);
+                let b = k((i + 1) as f32, (((i + 1) % 2) * 10) as f32);
+                let owners: Vec<u32> = if i == 0 {
+                    (0..r as u32).chain([r as u32]).collect()
+                } else {
+                    vec![(i % r) as u32, (r + i % r) as u32]
+                };
+                for owner in owners {
+                    rows.push(InterfaceRow::new(owner, a.min(b), a.max(b), 0, 1));
+                    rows.push(InterfaceRow::new(owner, a, a, 0, 1));
+                    rows.push(InterfaceRow::new(owner, b, b, 0, 1));
+                }
+            }
+            rows.sort_unstable();
+            rows.dedup();
+            let row_count = rows.len() as u64;
+            let height = exponent + 1;
+            let ledger = ScratchLedger::new(&scratch, scratch.live_bytes(), &|_| Ok(()));
+            let need = scratch_need(row_count, r + 1, r, 4 * r - 1, 2 * r, height, sorter).unwrap();
+            let lease = ledger.admit(Borders::COMPONENT, need).unwrap();
+            let borders = Borders::build(
+                &scratch,
+                sorter,
+                &tree,
+                rows.into_iter().map(Ok),
+                std::iter::empty(),
+                4096.,
+                &lease,
+                &|| Ok(()),
+            )
+            .unwrap();
+            let node = borders
+                .source
+                .node(TileKey {
+                    first: 0,
+                    end: r,
+                    depth: 1,
+                    leaf_begin: 0,
+                    leaf_end: r as u32,
+                })
+                .unwrap();
+            assert_eq!(borders.source.nodes.get(node).unwrap()[7], r);
+            // Count all positioned owner-row reads, including classification and owner
+            // comparisons, not just emission. The original raw-run emission violates
+            // both this height-scaled ceiling and the fourfold-input growth check.
+            let reads = borders.source.owners.read_count();
+            assert!(
+                reads <= 4 * row_count * u64::from(height + 1),
+                "R={r}, rows={row_count}, owner reads={reads}"
+            );
+            if let Some(previous) = previous_reads {
+                assert!(
+                    reads <= 6 * previous,
+                    "owner reads grew from {previous} to {reads}"
+                );
+            }
+            previous_reads = Some(reads);
+            ledger.check().unwrap();
+        }
+    }
+
     #[test]
     fn more_than_24576_mandatory_junctions_cannot_fit_the_hard_cap() {
         let interface = (0..24_577)

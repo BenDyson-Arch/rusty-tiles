@@ -144,13 +144,34 @@ pub(super) fn normal(p: &[[f32; 3]], t: [u32; 3]) -> [f64; 3] {
         a[0] * b[1] - a[1] * b[0],
     ]
 }
-fn mapped(p: &[[f32; 3]], t: [u32; 3], map: &[u32]) -> [u32; 3] {
-    let mut out = t.map(|v| map[v as usize]);
-    let (a, b) = (normal(p, t), normal(p, out));
-    if (0..3).map(|i| a[i] * b[i]).sum::<f64>() < 0. {
-        out.swap(1, 2);
+fn preserves_orientation(p: &[[f32; 3]], before: [u32; 3], after: [u32; 3]) -> bool {
+    let (a, b) = (normal(p, before), normal(p, after));
+    // A collapsed face contributes no surface; a zero-area input cannot grow surface.
+    b.iter().all(|&x| x == 0.) || (0..3).map(|i| a[i] * b[i]).sum::<f64>() > 0.
+}
+
+/// Two same-direction faces are supported only when they already shared their source
+/// edge. Coalescing unrelated edges cannot create an overlapping manifold pair.
+fn mapped_incidence(m: &Merged, map: &[u32]) -> bool {
+    let mut edges = HashMap::<(u32, u32), ([u32; 2], (u32, u32), bool)>::default();
+    for &t in &m.triangles {
+        let out = t.map(|v| map[v as usize]);
+        if normal(&m.positions, out).iter().all(|&x| x == 0.) {
+            continue;
+        }
+        for i in 0..3 {
+            let (a, b) = (out[i], out[(i + 1) % 3]);
+            let old = (t[i].min(t[(i + 1) % 3]), t[i].max(t[(i + 1) % 3]));
+            let row = edges
+                .entry((a.min(b), a.max(b)))
+                .or_insert(([0, 0], old, true));
+            row.0[usize::from(a > b)] += 1;
+            row.2 &= row.1 == old;
+        }
     }
-    out
+    edges.values().all(|(counts, _, same)| {
+        *same || !((counts[0] == 2 && counts[1] == 0) || (counts[1] == 2 && counts[0] == 0))
+    })
 }
 fn retain(m: &mut Merged, keep: &[bool]) {
     let mut i = 0;
@@ -159,17 +180,16 @@ fn retain(m: &mut Merged, keep: &[bool]) {
     m.representative.retain(|_| (keep[i], i += 1).0);
 }
 
-/// A source chain is mapped monotonically onto its canonical contracted endpoints. A
-/// threshold at the source midpoint collapses successive edge strips onto one chord.
-/// Endpoints are nested across levels, hence already present in the capped children.
-/// Degenerate incident strips may be retriangulated; the delivered edge is never split.
+/// Consume the shared chord without folding incident faces. A sign-preserving collapse
+/// is cheap; otherwise rebuild the affected manifold patch against the exact boundary.
+/// Failure leaves the source mesh intact for the caller's reported frontier policy.
 pub(super) fn contract(
     m: &mut Merged,
     interface: &[InterfaceRow],
     mapping: &super::BorderMap<'_>,
     receipt: &mut Receipt,
-) -> Result<(), JobError> {
-    let mut ids: HashMap<Key, u32> = m
+) -> Result<bool, JobError> {
+    let ids: HashMap<Key, u32> = m
         .keys
         .iter()
         .enumerate()
@@ -177,117 +197,71 @@ pub(super) fn contract(
         .collect();
     let mut map: Vec<u32> = (0..m.keys.len() as u32).collect();
     for (v, target) in map.iter_mut().enumerate() {
-        if let Some((a, b, t, ell)) = mapping(m.keys[v])? {
+        if let Some((a, b, t, _)) = mapping(m.keys[v])? {
             let k = if t <= 0.5 { a } else { b };
-            let next = m.keys.len() as u32;
-            let id = *ids.entry(k).or_insert(next);
-            if id == next {
-                m.keys.push(k);
-                m.positions.push(k.map(f32::from_bits));
-                m.ells.push(ell);
-            }
+            let Some(&id) = ids.get(&k) else {
+                return Ok(false);
+            };
             receipt.contracted_vertices += u64::from(id != v as u32);
             *target = id;
         }
     }
     if receipt.contracted_vertices == 0 {
-        return Ok(());
+        return Ok(true);
     }
-    let component = Components::mesh(m);
-    let original = m.triangles.clone();
-    for t in &mut m.triangles {
-        *t = mapped(&m.positions, *t, &map);
-    }
-    let original_representatives = m.representative.clone();
-    // Remove collapsed strips before checking the delivered arcs. A degenerate strip
-    // can mention an edge which disappears when another face keeps its component alive.
-    let mut alive = HashSet::default();
-    for (i, t) in m.triangles.iter().enumerate() {
-        if surface(t) {
-            alive.insert(component[original[i][0] as usize]);
+    let mut output = Vec::with_capacity(m.triangles.len());
+    let mut representatives = Vec::with_capacity(m.triangles.len());
+    let mut folded = false;
+    for (i, &t) in m.triangles.iter().enumerate() {
+        let out = t.map(|v| map[v as usize]);
+        let (a, b) = (normal(&m.positions, t), normal(&m.positions, out));
+        let old_area = a.iter().any(|&x| x != 0.);
+        let new_area = b.iter().any(|&x| x != 0.);
+        if !preserves_orientation(&m.positions, t, out) {
+            folded = true;
+        }
+        // Preserve an already degenerate source support, but never create a new sliver.
+        if new_area || !old_area {
+            output.push(out);
+            representatives.push(m.representative[i]);
         }
     }
-    let mut kept = HashSet::default();
-    let keep: Vec<bool> = m
-        .triangles
-        .iter()
-        .enumerate()
-        .map(|(i, t)| {
-            let c = component[original[i][0] as usize];
-            surface(t) || (!alive.contains(&c) && kept.insert(c))
-        })
-        .collect();
-    retain(m, &keep);
     let required = points(interface);
     let segments = interface
         .iter()
         .filter(|r| !r.is_vertex())
         .map(|r| (r.a, r.b))
         .collect();
-    let (lost_edges, lost_points) = missing(&m.triangles, &m.keys, &segments, &required);
-    if lost_edges.is_empty() && lost_points.is_empty() {
-        return Ok(());
+    let lost = missing(&output, &m.keys, &segments, &required);
+    if !folded
+        && !output.is_empty()
+        && lost.0.is_empty()
+        && lost.1.is_empty()
+        && mapped_incidence(m, &map)
+    {
+        m.triangles = output;
+        m.representative = representatives;
+        return Ok(true);
     }
-    let mut candidates = HashMap::default();
-    let mut witnesses: HashMap<usize, Vec<u32>> = HashMap::default();
-    for (i, t) in original.iter().enumerate() {
-        let witness = witnesses.entry(component[t[0] as usize]).or_default();
-        for &v in t {
-            candidates.entry(map[v as usize]).or_insert(i);
-            // Three distinct witnesses suffice to choose support distinct from two ends.
-            if witness.len() < 3 && !witness.contains(&v) {
-                witness.push(v);
-            }
-        }
+    if let Some(r) = super::constrained::contract(m, interface, &map) {
+        receipt.reconstructed_faces += m.triangles.len() as u64;
+        receipt.add(r);
+        Ok(true)
+    } else {
+        receipt.rejected_remesh_rounds += 1;
+        Ok(false)
     }
-    let repaired_points: HashSet<Key> = lost_edges.iter().flat_map(|(a, b)| [*a, *b]).collect();
-    for (a, b) in lost_edges.into_iter().chain(
-        lost_points
-            .into_iter()
-            .filter(|p| !repaired_points.contains(p))
-            .map(|p| (p, p)),
-    ) {
-        let (a, b) = (ids[&a], ids[&b]);
-        let i = candidates
-            .get(&a)
-            .or_else(|| candidates.get(&b))
-            .copied()
-            .ok_or_else(|| super::state("contracted border endpoint has no source component"))?;
-        let root = component[original[i][0] as usize];
-        let support = &witnesses[&root];
-        let c = support
-            .iter()
-            .copied()
-            .find(|v| *v != a && *v != b)
-            .unwrap_or(a);
-        let b = if a == b {
-            support
-                .iter()
-                .copied()
-                .find(|v| *v != a && *v != c)
-                .unwrap_or(b)
-        } else {
-            b
-        };
-        let mut face = [a, b, c];
-        let (old, new) = (
-            normal(&m.positions, original[i]),
-            normal(&m.positions, face),
-        );
-        if (0..3).map(|k| old[k] * new[k]).sum::<f64>() < 0. {
-            face.swap(1, 2);
-        }
-        m.triangles.push(face);
-        m.representative.push(original_representatives[i]);
-        receipt.reconstructed_faces += 1;
-    }
-    Ok(())
 }
 
 /// Duplicated oriented soup adds no surface. Only components with NO border contact and
 /// strict diameter bound below the known G floor can be dropped. Keep one component if
 /// every component is eligible, so the parent still has geometry to measure against.
-pub(super) fn cleanup(m: &mut Merged, interface: &[InterfaceRow], g: f64, r: &mut Receipt) {
+pub(super) fn cleanup(
+    m: &mut Merged,
+    interface: &[InterfaceRow],
+    g: f64,
+    r: &mut Receipt,
+) -> Vec<[[f32; 3]; 3]> {
     let mut seen = HashSet::default();
     let keep: Vec<bool> = m
         .triangles
@@ -328,7 +302,15 @@ pub(super) fn cleanup(m: &mut Merged, interface: &[InterfaceRow], g: f64, r: &mu
         .iter()
         .map(|t| !dropped.contains(&component[t[0] as usize]))
         .collect::<Vec<_>>();
+    let removed = m
+        .triangles
+        .iter()
+        .zip(&keep)
+        .filter(|(_, keep)| !**keep)
+        .map(|(t, _)| t.map(|v| m.positions[v as usize]))
+        .collect();
     retain(m, &keep);
+    removed
 }
 
 /// Compare the actual output topology, including changes made by meshopt itself. A
@@ -846,8 +828,18 @@ pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: 
     let mut output: Vec<_> = m
         .triangles
         .iter()
-        .map(|t| mapped(&m.positions, *t, &map))
+        .map(|t| t.map(|v| map[v as usize]))
         .collect();
+    r.remesh_rounds += 1;
+    if m.triangles
+        .iter()
+        .zip(&output)
+        .any(|(&a, &b)| !preserves_orientation(&m.positions, a, b))
+        || !mapped_incidence(m, &map)
+    {
+        r.rejected_remesh_rounds += 1;
+        return;
+    }
     let mut seen = HashSet::default();
     let keep: Vec<_> = output
         .iter()
@@ -855,7 +847,6 @@ pub(super) fn remesh(m: &mut Merged, interface: &[InterfaceRow], round: u32, r: 
         .collect();
     let mut i = 0;
     output.retain(|_| (keep[i], i += 1).0);
-    r.remesh_rounds += 1;
     let Some(change) = changes(m, &output, interface, 0.)
         .filter(|c| c.receipt.closed_holes == 0 && c.receipt.opened_holes == 0)
     else {
@@ -998,7 +989,7 @@ pub(super) mod tests {
                 .0
                 .is_empty()
         );
-        assert_eq!(receipt.reconstructed_faces, 1);
+        assert_eq!(receipt.reconstructed_faces, 0);
     }
     #[test]
     fn closing_a_hole_with_border_contact_is_rejected_and_interior_closure_is_measured() {

@@ -99,7 +99,7 @@ pub(super) fn check(
         .filter(|r| r["kind"] == "tile")
         .map(|r| (r["tile"]["uri"].as_str().unwrap().to_owned(), r))
         .collect();
-    let mut source_directions: HashMap<Edge, BTreeMap<usize, u8>> = HashMap::new();
+    let mut source_directions: HashMap<Edge, BTreeMap<usize, [u32; 2]>> = HashMap::new();
     for t in tiles.iter().filter(|t| t.leaf) {
         for f in &t.faces {
             if f[0] == f[1] || f[1] == f[2] || f[0] == f[2] {
@@ -107,15 +107,15 @@ pub(super) fn check(
             }
             for i in 0..3 {
                 let (a, b) = (f[i], f[(i + 1) % 3]);
-                *source_directions
+                source_directions
                     .entry(seg(a, b))
                     .or_default()
                     .entry(t.begin)
-                    .or_default() |= if a < b { 1 } else { 2 };
+                    .or_default()[usize::from(a > b)] += 1;
             }
         }
     }
-    let reverse = |mask: u8| ((mask & 1) << 1) | ((mask & 2) >> 1);
+    let reverse = |counts: [u32; 2]| [counts[1], counts[0]];
     let mut graphs = HashMap::new();
     let mut coverage: Vec<HashMap<Edge, [Q; 2]>> = Vec::new();
     let mut vertices: Vec<HashMap<Point, Q>> = Vec::new();
@@ -129,16 +129,17 @@ pub(super) fn check(
             l.iter().any(|x| (t.begin..t.end).contains(x))
                 && l.iter().any(|x| !(t.begin..t.end).contains(x))
         };
-        let mut actual: HashMap<Edge, u8> = HashMap::new();
+        let mut actual: HashMap<Edge, [u32; 2]> = HashMap::new();
         for f in &t.faces {
             if f[0] == f[1] || f[1] == f[2] || f[0] == f[2] {
                 continue;
             }
             for i in 0..3 {
                 let (a, b) = (f[i], f[(i + 1) % 3]);
-                *actual.entry(seg(a, b)).or_default() |= if a < b { 1 } else { 2 };
+                actual.entry(seg(a, b)).or_default()[usize::from(a > b)] += 1;
             }
         }
+        let mut chord_support = HashMap::<Edge, [u32; 2]>::new();
         let actual_points: HashSet<Point> = t.faces.iter().flatten().copied().collect();
         let mut covered = HashMap::new();
         let mut mapped = HashMap::new();
@@ -228,20 +229,22 @@ pub(super) fn check(
                     }
                     at_values.push(value);
                 }
-                let delivered = actual.get(&seg(a, b)).copied().unwrap_or(0);
+                let delivered = actual.get(&seg(a, b)).copied().unwrap_or([0, 0]);
                 let delivered = if a < b { delivered } else { reverse(delivered) };
                 let mut wrong_winding = false;
+                let mut support = [u32::MAX; 2];
                 for i in first..end {
                     let e = seg(chain[i], chain[i + 1]);
                     let allowed = source_directions[&e]
                         .range(t.begin..t.end)
-                        .fold(0, |mask, (_, direction)| mask | direction);
+                        .fold([0, 0], |a, (_, b)| [a[0] + b[0], a[1] + b[1]]);
                     let allowed = if chain[i] < chain[i + 1] {
                         allowed
                     } else {
                         reverse(allowed)
                     };
-                    wrong_winding |= delivered & !allowed != 0;
+                    wrong_winding |= delivered[0] > allowed[0] || delivered[1] > allowed[1];
+                    support = [support[0].min(allowed[0]), support[1].min(allowed[1])];
                     assert!(
                         crosses(&edges[&e]),
                         "certificate claims another tile's source edge"
@@ -260,6 +263,7 @@ pub(super) fn check(
                     }
                 }
                 c.certificate_winding_failures += usize::from(wrong_winding);
+                chord_support.insert(seg(a, b), if a < b { support } else { reverse(support) });
             }
             for (&p, l) in points {
                 if crosses(l) && (graph.live.contains(&p) || !graph.adjacent.contains_key(&p)) {
@@ -268,6 +272,24 @@ pub(super) fn check(
                     }
                     mapped.insert(p, q(p));
                 }
+            }
+        }
+        if !t.leaf {
+            for (edge, &[forward, reverse]) in &actual {
+                // A book spine may legitimately have two same-direction sheets in
+                // this tile. For a chord, independently re-derived incidence on EVERY
+                // source subedge supplies support, never the producer certificate alone.
+                let source = chord_support.get(edge).copied().unwrap_or_else(|| {
+                    source_directions.get(edge).map_or([0, 0], |owners| {
+                        owners
+                            .range(t.begin..t.end)
+                            .fold([0, 0], |a, (_, b)| [a[0] + b[0], a[1] + b[1]])
+                    })
+                });
+                c.unsupported_same_direction_edges += usize::from(
+                    (forward == 2 && reverse == 0 && source[0] < 2)
+                        || (reverse == 2 && forward == 0 && source[1] < 2),
+                );
             }
         }
         for (e, l) in edges {

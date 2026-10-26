@@ -172,8 +172,8 @@ has no selector, and a plain `mesh` run uses it.
   refines whenever it is visible and no content-bearing ancestor sits above a
   content-less one, and delivery and `validate` refuse a coarse tile above an omitted
   cell. Omission shows as content-less tiles in the published tileset.
-  `diagnostics.hlod` reports `omittedProxies`, `omissionSources` and
-  `omittedByDepth`, including zeros at every tree depth. Its `borders_by_depth`
+  `diagnostics.hlod` reports `omitted_proxies`, `omission_sources` and
+  `omitted_by_depth`, including zeros at every tree depth. Its `borders_by_depth`
   summary also reports border displacement, terminal locks, topology changes by
   kind, omission sources and capped-frontier uses, including zeros. The internal
   leaf manifest carries the same counts. Omission is a bounded last resort and costs client requests near the omitted region (about 8
@@ -440,6 +440,13 @@ scratch figure when they share a filesystem, told apart by device id: btrfs
 subvolumes of one pool report different ids, so their demands are checked
 separately against the same free space. Memory-backed (tmpfs) scratch is charged
 to the worker memory plan, but a work directory or output on tmpfs is not.
+
+The internal opt-in HLOD audit (`RT_HLOD_AUDIT_DIR`) reserves at most 256 MiB
+for evidence on a memory-backed destination, shared by its memory-plan reservation
+and actual write budget. Exceeding that budget refuses the run with `resource_limit`;
+it never truncates evidence or skips operations. On ordinary disk, the audit keeps
+its conservative logical bound and checks free space as the file grows.
+
 Each capture stage rechecks free space for its own working set on entry and
 fails closed if its measured peak exceeds its declared bound; the diagnostics
 report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). The HLOD

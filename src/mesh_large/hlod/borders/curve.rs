@@ -184,17 +184,36 @@ mod tests {
             assert!(reads <= 4 * points.len());
             assert!(chords[0].2 <= 1e-5);
         }
-        // Arithmetic only: the leaf-resolution obstruction exceeds C for both sizes;
-        // a 64x64 quad sheet has a bounded replacement independent of source density.
-        for n in [500_000_000u64, 1_000_000_000] {
-            assert!(4. * ((n / 16) as f64 / 2.).sqrt() > 8192.);
-            assert_eq!(2 * 64 * 64, 8192);
-            assert_eq!(4 * 64, 256);
+    }
+
+    #[test]
+    fn large_source_ordinals_keep_linear_point_reads() {
+        // Exercise production ordinal subtraction and certification without materializing
+        // a billion-element arc. Admission at those source sizes is tested in borders.
+        for first in [500_000_000u64, 1_000_000_000] {
+            let last = first + 1024;
+            let mut reads = 0;
+            let mut chords = Vec::new();
+            shortcuts(
+                first,
+                last,
+                1e-5,
+                &mut |i| {
+                    reads += 1;
+                    Ok([(i - first) as f32, 2., 0.])
+                },
+                &mut |_| Ok(true),
+                &mut |a, b, bound| {
+                    chords.push((a, b, bound));
+                    Ok(())
+                },
+            )
+            .unwrap();
+            assert_eq!(chords.len(), 1);
+            assert_eq!((chords[0].0, chords[0].1), (first, last));
+            assert!(chords[0].2 <= 1e-5);
+            assert!(reads <= 4 * (last - first + 1));
         }
-        assert!(
-            24_577usize.div_ceil(3) > 8192,
-            "mandatory junction obstruction"
-        );
     }
 
     #[test]
