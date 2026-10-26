@@ -460,16 +460,21 @@ fn attempt(
 ) -> Result<Built, JobError> {
     let _cpu =
         super::cpu_profile::start(super::cpu_profile::Stage::Attempt, merged.triangles.len());
-    let segments: HashSet<(Key, Key)> = interface
-        .iter()
-        .filter(|r| !r.is_vertex())
-        .map(|r| (r.a, r.b))
-        .collect();
-    let vertices: HashSet<Key> = interface
-        .iter()
-        .filter(|r| r.is_vertex())
-        .map(|r| r.a)
-        .collect();
+    let required = || {
+        let segments: HashSet<(Key, Key)> = interface
+            .iter()
+            .filter(|r| !r.is_vertex())
+            .map(|r| (r.a, r.b))
+            .collect();
+        let vertices: HashSet<Key> = interface
+            .iter()
+            .filter(|r| r.is_vertex())
+            .map(|r| r.a)
+            .collect();
+        (segments, vertices)
+    };
+    let (segments, vertices) = required();
+    let (interface_segments, interface_vertices) = (segments.len(), vertices.len());
     // By induction every child kept its own outer interface, a superset of these.
     let (lost_edges, lost_points) = missing(&merged.triangles, &merged.keys, &segments, &vertices);
     if !lost_edges.is_empty() || !lost_points.is_empty() {
@@ -490,6 +495,9 @@ fn attempt(
     for (v, lock) in locked.iter_mut().enumerate() {
         *lock |= opening_pins.contains(&merged.keys[v]) || contact_pins[v];
     }
+    drop(contact_pins);
+    drop(segments);
+    drop(vertices);
     let input = merged.triangles.len();
     let mut protected = vec![false; input];
     let mut retries = 0;
@@ -511,10 +519,19 @@ fn attempt(
             simplify(merged, &merged.triangles, &|v| locked[v as usize], cap);
         let mut topology_protected = false;
         let mut fold_retries = 0;
+        // Only one immutable post-contraction source per retry sequence. Release
+        // the interface query sets before the guard, and all repair sets before
+        // meshopt, so these maps fit the same parent workspace charge.
+        let mut fold_source = None;
         loop {
+            let (segments, vertices) = required();
             let (edges, points) = missing(&output, &merged.keys, &segments, &vertices);
-            let invalid = folds::Source::new(&merged.positions, contracted_faces)
-                .with_boundary(interface)
+            drop(segments);
+            drop(vertices);
+            let invalid = fold_source
+                .get_or_insert_with(|| {
+                    folds::Source::new(&merged.positions, contracted_faces).with_boundary(interface)
+                })
                 .violations(&merged.positions, &output);
             #[cfg(test)]
             if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
@@ -529,6 +546,9 @@ fn attempt(
             }
             let valid = edges.is_empty() && points.is_empty() && !invalid.iter().any(|v| *v);
             if valid {
+                // Topology comparison has its own tables; do not overlap them
+                // with a retained fold source. Rebuild only if it rejects.
+                fold_source = None;
                 accepted_change = topology::changes(reference, &output, interface, floor);
                 if accepted_change.is_some() {
                     break;
@@ -536,6 +556,7 @@ fn attempt(
             }
             let previously_protected = protected.iter().filter(|p| **p).count();
             if valid || fold_retries == FOLD_RETRIES {
+                fold_source = None;
                 if topology_protected {
                     return Err(JobError::new(
                         JobErrorKind::Unsupported,
@@ -577,6 +598,9 @@ fn attempt(
                     "protected reduction made no progress",
                 ));
             }
+            drop(edges);
+            drop(points);
+            drop(invalid);
             let keep: Vec<[u32; 3]> = merged
                 .triangles
                 .iter()
@@ -615,8 +639,8 @@ fn attempt(
                      ({input} input triangles, {} after simplification)",
                     tile.first,
                     tile.depth,
-                    segments.len(),
-                    vertices.len(),
+                    interface_segments,
+                    interface_vertices,
                     protected.iter().filter(|p| **p).count(),
                     output.len()
                 ),
@@ -702,8 +726,8 @@ fn attempt(
         input_triangles: input as u32,
         protected_faces: protected.iter().filter(|p| **p).count() as u32,
         retries,
-        interface_vertices: vertices.len() as u32,
-        interface_segments: segments.len() as u32,
+        interface_vertices: interface_vertices as u32,
+        interface_segments: interface_segments as u32,
         reoriented: 0,
         topology: change.receipt,
         change,

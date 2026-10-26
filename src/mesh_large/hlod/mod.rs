@@ -71,38 +71,33 @@ pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized 
 pub(crate) const TRIANGLE_CAP: usize = 8192;
 /// Runtime, allocator slack and output-writer reserve of the stage.
 const STAGE_RESERVE: u64 = 256 << 20;
-/// Charged workspace per merged input triangle of one parent job (`m` merged triangles, at
-/// most `3m` vertices and indices; children, held under their own leases, and the output,
-/// charged separately, excluded). Bytes per merged triangle of what is live at once at the
-/// peak, inside a protected retry's simplification (`geometry::build_parent`); a hash table
-/// of `k` entries of `T` bytes holds at most `16k/7` buckets of `T + 1` bytes:
-/// - merged vertices (key 12, depth 1, position 12; grown by doubling, at most twice) and
-///   triangles (12), representatives (24): `2 * 3 * 25 + 36 = 186`;
-/// - the parent's interface rows, at most six (leaf, item) rows of 36 bytes: 216;
-/// - required segment and point sets (at most `3m` each): `171.4 + 89.1`;
-/// - the lock and protection flags: 4;
-/// - the retry's keep and rest lists (doubling: 24), kept vertices (`3m` u32: 34.3), the lost
-///   segment and point sets (at most all required: 260.5), the previous and reduced output
-///   (24);
-/// - `simplify`'s own arrays: local index map (`3m` u32 pairs, growing from `2m`: 92.6),
-///   vertex list (24), indices (12), positions (36), locks (3), destination (12);
-/// - meshoptimizer's temporary arrays, all freed when the call returns: per vertex about 100
-///   bytes (adjacency offsets, remap and its hash table, wedge, kind, loops, positions,
-///   quadric (44), collapse remap and lock), per index 24 (adjacency edge, collapse, order),
-///   so 372.
-///
-/// These simplifier terms sum to under 1,570. The contracted face list adds 12
-/// bytes per triangle and the exact-capacity reference clone adds at most 111, still
-/// below 1,700. After meshopt returns (its temporaries and `simplify`'s arrays
-/// freed), fold rejection holds source face/edge counts (under 330 bytes per triangle),
-/// a sorted incidence array (168), and face flags. Its smaller face-group array is
-/// freed before incidence allocation; all these tables are released before the next
-/// meshopt call. This phase remains below the simplifier peak. Topology and constrained
-/// remeshing run after the simplifier workspace is released; every output remains capped.
-/// Earlier phases (the weld index while merging, the interface rows while merging them,
-/// the representative tables) peak lower. Measured on adversarial jobs by
-/// `parent_jobs_allocate_within_their_charge` (a counting allocator, meshoptimizer routed
-/// through it).
+/// Charged workspace per merged input triangle of one parent job (`m` merged triangles,
+/// at most `3m` vertices; held children and the returned output have separate leases).
+/// A hash table of `k` entries of `T` bytes uses at most `16k/7` buckets of `T + 1` bytes.
+/// Bytes per merged triangle simultaneously live during a protected retry's meshopt call:
+/// - merged vertices (key 12, depth 1, position 12, doubled capacity), triangles (12),
+///   representatives (24), interface rows (at most six of 36), exact-capacity reference
+///   clone (111) and contracted faces (12): `186 + 216 + 111 + 12 = 525`;
+/// - cached fold source: `m` faces (44 bytes), `3m` edges (32), `3m` boundary keys (12),
+///   including hash-table slack: under 419. Boundary insertion grows by DISTINCT keys;
+/// - lock/protection flags (4), keep/rest lists (24), kept vertices (`3m` u32 keys: 34.3),
+///   previous and reduced output (24);
+/// - `simplify` arrays: dense local map (12), global vertex list (24), indices (12),
+///   positions (36), locks (3), destination (12): 99;
+/// - meshoptimizer's temporary arrays: per vertex about 100 bytes (adjacency offsets,
+///   remap/hash table, wedge, kind, loops, positions, quadric, collapse remap and lock),
+///   per index 24 (adjacency edge, collapse, order): 372.
+/// These terms total under 1,503. Required interface sets and lost-item repair sets are
+/// explicitly released before meshopt. When checking missing items, the cached source,
+/// two copies of the required sets (under 521), lost-item vectors (108), base (525),
+/// output (12) and flags (4) total under 1,590. Source construction's transient rehash
+/// buckets precede its incidence arrays. Fold checking's sorted incidence array (168)
+/// replaces the smaller face-group array; it remains below that query peak.
+/// The cached source is explicitly released BEFORE topology comparison/support work,
+/// and never escapes the proposal. Topology and constrained remeshing therefore retain
+/// their prior lifetimes. Earlier merge/weld phases peak lower. The unchanged 1,700
+/// charge includes slack; `parent_jobs_allocate_within_their_charge` measures adversarial
+/// complete jobs, with meshoptimizer routed through the counting allocator.
 const JOB_BYTES_PER_TRIANGLE: u64 = 1700;
 /// Finished coarse rows held while an earlier tile is still being built (`walk`); each is a
 /// few hundred bytes, charged within `STAGE_RESERVE`.

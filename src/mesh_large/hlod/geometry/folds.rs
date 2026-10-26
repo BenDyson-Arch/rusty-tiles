@@ -59,7 +59,12 @@ impl Source {
             super::super::cpu_profile::Stage::Boundary,
             rows.len(),
         );
-        self.boundary.extend(rows.iter().flat_map(|r| [r.a, r.b]));
+        // Grow with distinct keys rather than the row iterator's (often duplicate)
+        // size hint. A parent source's checked boundary has at most 3m keys.
+        for r in rows {
+            self.boundary.insert(r.a);
+            self.boundary.insert(r.b);
+        }
         self
     }
 
