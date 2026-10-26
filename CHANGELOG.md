@@ -36,7 +36,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Added
 
-- Large-mesh tiler delivery (H16): `mesh_leaves_to_3tz` (`MeshTilesetRequest`, `MeshTilesetReport`, `MeshTilesetResult`) publishes an H8 full-detail leaf directory as a Tiles 1.1 implicit forest in one `.3tz`, streamed one document at a time with rigid anchor/orientation/offset placement on the root. Parents carry no content until coarse levels land. The 3TZ member ceiling refuses as `unsupported` before anything is staged. Hidden CLI: `mesh-leaves-to-3tz` and `mesh-large-to-3tz`. These exports and commands were replaced by `mesh` / `mesh_to_tileset` before release, whose parents carry certified, textured coarse content.
+- Large-mesh tiler delivery (H16): `mesh_leaves_to_3tz` (`MeshTilesetRequest`, `MeshTilesetReport`, `MeshTilesetResult`) publishes an H8 full-detail leaf directory as a Tiles 1.1 implicit forest in one `.3tz`, streamed one document at a time with rigid anchor/orientation/offset placement on the root. The 3TZ member ceiling refuses as `unsupported` before anything is staged. Hidden CLI: `mesh-leaves-to-3tz` and `mesh-large-to-3tz`. These exports and commands were replaced by `mesh` / `mesh_to_tileset` before release, whose parents carry textured HLOD coarse content.
 
 - Self-contained per-converter demo recipes, including an invented LAS generator. Strict release acceptance renders and picks the README example and exercises all five preview layers before and after a cache-disabled reload.
 - Candidate and release wheels are gated on checksum-pinned official Blender 4.5 LTS bundles for Linux x64, Windows x64 and both macOS architectures, in addition to CPython 3.10/3.14 on all five wheel platforms.
