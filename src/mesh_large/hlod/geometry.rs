@@ -479,8 +479,9 @@ fn attempt(
     } else {
         merged.keys.iter().map(|k| vertices.contains(k)).collect()
     };
+    let contact_pins = folds::contact_pins(&merged.keys, &merged.triangles, interface);
     for (v, lock) in locked.iter_mut().enumerate() {
-        *lock |= opening_pins.contains(&merged.keys[v]);
+        *lock |= opening_pins.contains(&merged.keys[v]) || contact_pins[v];
     }
     let input = merged.triangles.len();
     let mut protected = vec![false; input];

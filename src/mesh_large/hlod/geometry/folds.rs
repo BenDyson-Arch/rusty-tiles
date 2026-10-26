@@ -169,6 +169,38 @@ impl Source {
     }
 }
 
+/// Retain a local carrier before reduction can join two shared contacts. Pinning
+/// the free common neighbour is smaller than later freezing both contact stars.
+/// The proposal guard still checks multi-step collapses and every changed fan.
+pub(super) fn contact_pins(
+    keys: &[Key],
+    triangles: &[[u32; 3]],
+    interface: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
+) -> Vec<bool> {
+    let boundary: HashSet<_> = interface.iter().flat_map(|r| [r.a, r.b]).collect();
+    let mut first = vec![u32::MAX; keys.len()];
+    let mut pins = vec![false; keys.len()];
+    for t in triangles {
+        for i in 0..3 {
+            let v = t[i] as usize;
+            if boundary.contains(&keys[v]) {
+                continue;
+            }
+            for j in [1, 2] {
+                let other = t[(i + j) % 3];
+                if boundary.contains(&keys[other as usize]) {
+                    if first[v] == u32::MAX {
+                        first[v] = other;
+                    } else if first[v] != other {
+                        pins[v] = true;
+                    }
+                }
+            }
+        }
+    }
+    pins
+}
+
 fn distinct_sides(edge: Edge, thirds: impl Iterator<Item = Key>) -> bool {
     let mut normals = Vec::<[Vec<f64>; 3]>::with_capacity(4);
     for c in thirds {
@@ -339,6 +371,26 @@ mod tests {
             .violations(&p, &[[0, 1, 2]])
             .iter()
             .any(|v| *v));
+    }
+
+    #[test]
+    fn contact_carriers_pin_the_free_neighbour_not_whole_shared_stars() {
+        let p = [
+            [0., 0., 0.],
+            [1., 0., 0.],
+            [0., 1., 0.],
+            [0.25, 0.25, 0.01],
+            [2., 0., 0.],
+            [2., 1., 0.],
+        ];
+        let keys: Vec<_> = p.into_iter().map(key).collect();
+        // Vertex 3 joins contacts 0 and 1. Vertex 4 sees contact 0 repeatedly,
+        // but has only that one contact and must remain free to simplify.
+        let triangles = [[0, 3, 2], [1, 2, 3], [0, 4, 5], [0, 5, 4]];
+        assert_eq!(
+            contact_pins(&keys, &triangles, &boundary(&p[..2])),
+            [false, false, true, true, false, false]
+        );
     }
 
     #[test]
