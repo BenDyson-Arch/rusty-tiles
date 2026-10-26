@@ -86,11 +86,13 @@ const STAGE_RESERVE: u64 = 256 << 20;
 ///   positions (36), locks (3), destination (12): 99;
 /// - meshoptimizer's temporary arrays: per vertex about 100 bytes (adjacency offsets,
 ///   remap/hash table, wedge, kind, loops, positions, quadric, collapse remap and lock),
-///   per index 24 (adjacency edge, collapse, order): 372.
-/// These terms total under 1,503. Required interface sets and lost-item repair sets are
+///   per index 24 (adjacency edge, collapse, order): 372;
+/// - outer opening pins, at most `3m` reference keys: under 89.2.
+///
+/// These terms total under 1,591. Required interface sets and lost-item repair sets are
 /// explicitly released before meshopt. When checking missing items, the cached source,
-/// two copies of the required sets (under 521), lost-item vectors (108), base (525),
-/// output (12) and flags (4) total under 1,590. Source construction's transient rehash
+/// two copies of the required sets (under 522), lost-item vectors (108), base (525),
+/// output (12), flags (4) and opening pins (89.2) total under 1,680. Source rehash
 /// buckets precede its incidence arrays. Fold checking's sorted incidence array (168)
 /// replaces the smaller face-group array; it remains below that query peak.
 /// The cached source is explicitly released BEFORE topology comparison/support work,
