@@ -83,7 +83,7 @@ fn two_sided(edge: &CanonicalEdge, surface: &Surface) -> bool {
             let t = w.iter().zip(&d).map(|(w, d)| w * d).sum::<f64>() / dd;
             let w: [f64; 3] = std::array::from_fn(|k| w[k] - t * d[k]);
             let norm = w.iter().map(|x| x * x).sum::<f64>().sqrt();
-            if !(norm > 0.) || !norm.is_finite() {
+            if norm.is_nan() || norm <= 0. || !norm.is_finite() {
                 return false;
             }
             wings[direction].push(w.map(|x| x / norm));
