@@ -182,6 +182,27 @@ rows join to their source edges/points in three edge probes per source face,
 without a patch-by-row cross-product. Receipts count new oriented faces with
 multiplicity, excluding retained faces.
 
+Contraction tries at most three sequential triangulations against the same original
+Source: chart strips, coplanar panels, and chart strips with local endpoint-rooted
+interior diagonals. The third proposal checks at most two roots per strip. Collinear
+boundary subdivisions remain separate constraints; auxiliary spokes never span them.
+Unmoved interior source samples remain present, including points on auxiliary spokes.
+
+The parent geometry coefficient is 1,700 bytes per input triangle. Contract metadata
+has a separate admission allowance: for L linked items, reserve L certificates,
+2L terminal keys and both 3L interface-row vectors needed during merging. Production
+uses exact capacities and L <= 6C, so the allowance is L times the actual Rust sizes
+of one certificate, two keys and six rows (16,121,856 bytes at C=8,192 on this lane).
+Stable certificate sorting's scratch replaces the larger retired duplicate-row vector.
+Each parent job reserves it; the stage separately reserves the publication contract,
+and graph construction reserves both contracts compared for single-child reuse.
+These allocations stay inside the original memory budget, with no public knob.
+Complete-parent controls populate certificates and terminal contacts inside the
+counted closure, report combined peaks, and still enforce the geometry coefficient
+after subtracting only retained certificate/terminal storage. Interface rows remain
+in the geometry measurement. Fixed-cap admission and the 10 GiB execution limit
+do not change.
+
 For a simple projected sheet that CDT cannot reduce safely, a final fan proposal
 uses an existing local interior source vertex and preserves every boundary edge.
 Two oppositely oriented coincident sheets use distinct centers. At most two

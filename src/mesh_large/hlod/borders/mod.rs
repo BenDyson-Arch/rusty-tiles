@@ -11,6 +11,8 @@ pub(super) fn memory_need(sorter: SortConfig) -> u64 {
         + 8 * sorter.buffer_bytes as u64
         + (1 << 16)
         + 12 * disk::CACHE_BYTES
+        // Chain reuse compares two live contracts before the geometry stage.
+        + 2 * contract_workspace_bytes(6 * super::TRIANGLE_CAP as u64)
 }
 
 pub(super) const WALK_CACHE_BYTES: u64 = 8 * disk::CACHE_BYTES;
@@ -116,6 +118,20 @@ pub(super) struct Contract {
     /// Exact vertex contacts with a terminal leaf, including contacts with no shared edge.
     pub terminal_vertices: Vec<Key>,
     pub scale: f64,
+}
+
+/// Peak storage of contract construction for at most `limit` linked items. Each
+/// item emits at most one certificate, two terminal keys and three interface rows.
+/// `merge_rows` briefly holds both row vectors. Its retired row copy also covers
+/// stable certificate sorting's scratch (one certificate is smaller than three
+/// rows). Exact reservations below prevent growth transients. This allowance stays live
+/// through geometry, S2 and audit publication, independently of geometry workspace.
+pub(super) fn contract_workspace_bytes(limit: u64) -> u64 {
+    limit.saturating_mul(
+        (std::mem::size_of::<Certificate>()
+            + 2 * std::mem::size_of::<Key>()
+            + 6 * std::mem::size_of::<InterfaceRow>()) as u64,
+    )
 }
 
 impl Contract {
@@ -576,9 +592,10 @@ impl Borders {
             return Ok(None);
         }
         let mut at = n[6];
-        let mut interface = Vec::new();
-        let mut certificates = Vec::new();
-        let mut terminal_vertices = Vec::new();
+        let count = n[7] as usize;
+        let mut interface = Vec::with_capacity(3 * count);
+        let mut certificates = Vec::with_capacity(count);
+        let mut terminal_vertices = Vec::with_capacity(2 * count);
         while at != NONE {
             let link = self.refs.get(at)?;
             let s = self.segments.get(link[1])?;

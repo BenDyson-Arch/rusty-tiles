@@ -23,3 +23,7 @@
 - Reject simplification proposals that introduce coincident faces or overlapping
   edge fans, retain local face rings on retry, and preserve canonical geometry
   when coarse encoding would invert or collapse faces.
+- Recover stalled contractions through bounded sheet reduction and local strip
+  reconstruction, preserving exact collinear border subdivisions and source guards.
+- Include live border certificates and contract-construction buffers explicitly in
+  HLOD memory admission, including publication and single-child reuse.

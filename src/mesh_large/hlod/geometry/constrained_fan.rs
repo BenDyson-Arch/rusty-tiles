@@ -12,6 +12,7 @@ pub(super) fn chord_spokes(
     m: &Merged,
     boundary: &[(u32, u32)],
     endpoints: &[bool],
+    vertex_charts: &[u8],
     axis: usize,
     positive: bool,
 ) -> Option<Vec<(u32, u32)>> {
@@ -65,7 +66,11 @@ pub(super) fn chord_spokes(
         return None;
     }
     let mut choices = [None::<(f64, u32)>; 2];
-    for &v in next.keys().filter(|&&v| endpoints[v as usize]) {
+    let opposite = 1 << (2 * axis + usize::from(!positive));
+    for &v in next
+        .keys()
+        .filter(|&&v| endpoints[v as usize] && vertex_charts[v as usize] & opposite == 0)
+    {
         let distance = (0..2)
             .map(|k| (f64::from(m.positions[v as usize][(axis + 1 + k) % 3]) - center[k]).powi(2))
             .sum::<f64>();
@@ -85,13 +90,30 @@ pub(super) fn chord_spokes(
         }
     }
     for (_, root) in choices.into_iter().flatten() {
-        if boundary.iter().all(|&(a, b)| {
-            a == root || b == root || topology::normal(&m.positions, [a, b, root])[axis] * sign > 0.
-        }) {
+        let mut collinear = HashSet::default();
+        let mut valid = true;
+        for &(a, b) in boundary {
+            if a == root || b == root {
+                continue;
+            }
+            let wedge = topology::normal(&m.positions, [a, b, root])[axis] * sign;
+            if wedge < 0. {
+                valid = false;
+                break;
+            }
+            if wedge == 0. {
+                // A long side can have several retained collinear border edges.
+                // Keep those exact subdivisions, and add no auxiliary spoke that
+                // would span them. The CDT fills the nonzero sectors and retains
+                // every boundary vertex; no zero-area fan triangle is emitted.
+                collinear.extend([a, b]);
+            }
+        }
+        if valid {
             return Some(
                 next.keys()
                     .copied()
-                    .filter(|&v| v != root)
+                    .filter(|&v| v != root && !collinear.contains(&v))
                     .map(|v| edge(root, v))
                     .collect(),
             );
