@@ -327,13 +327,14 @@ suppressing unshared degree-two vertices (S1b's own definition), and the receipt
 may exceed but never undercount them. Every cluster whose boundary edges changed
 is measured on its conservative changed-face domain (`hlod-s1b-borders.md`):
 faces present on one side only, reachable from the cluster's boundary vertices
-through boundary, new or lost vertices, never through an unchanged interior. Every
+through boundary, new or lost vertices, never through an unchanged interior (one
+vertex-to-face index per tile; each vertex expanded once per flood, charged). Every
 grid control on the changed coarse faces is measured exactly against source
 (closures) and every control on the lost input faces against the proxy (openings),
 plus each removed or added cycle's centroid projected across the change. No feature
-test filters the grid (review 3); a control is skipped only when a float point on
-the target surface already lies within the running exact maximum, so it cannot
-raise it. Losses must fit E where cycles changed and G where a boundary was only
+test filters the grid (review 3). A control is skipped only when one target face,
+proposed by a float search, is at an exact squared distance no greater than the
+running exact maximum, so it cannot raise it; floats never decide (review 4). Losses must fit E where cycles changed and G where a boundary was only
 simplified; a change without a witness is refused. Distances come from a complete
 box-hierarchy nearest search with certified lower bounds and exact
 Fractions. All topology losses are sampled witnesses under D2, like G itself: S1b's
@@ -347,5 +348,8 @@ bytes.
 
 `border_controls.py` builds a literal two-cell fixture with an honest sidecar: 13
 positives and 46 named mutants, including every review-1, -2 and -3 reproducer (geometry: both validators where the archive shows
-it; sidecar lies and topology receipts: oracle, while native passes),
-plus a contracted bump sheet baked by the real producer that must pass both.
+it; sidecar lies and topology receipts: oracle, while native passes). Review 4's
+kernel witnesses run first: the two-triangle grid whose float early-out
+under-reported the exact maximum, and 1,024- and 8,192-face fans whose domain
+flood must stay linear and charged. Also run is a contracted bump sheet, baked by
+the real producer, which must pass both validators.

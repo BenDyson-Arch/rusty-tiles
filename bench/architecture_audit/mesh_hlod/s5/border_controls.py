@@ -809,6 +809,75 @@ def sheet(path, n):
                            data + struct.pack('<I', len(binary)) + b'BIN\0' + binary)
 
 
+class _Work:
+    def __init__(self):
+        self.used = 0
+
+    def charge(self, n=1):
+        self.used += n
+
+
+def kernels():
+    """Sol's review-4 measurement-kernel witnesses (hlod-s5-d11-review4-20261027)."""
+    import collections
+    import sqlite3
+    from types import SimpleNamespace
+    import borders
+    from oracle import distance2
+    out = []
+    # grid-underbound: a float early-out under-reported the exact grid maximum of
+    # two f32 triangles (6.5014e-9 against 6.5520e-9, across 7 * 2^-30). Both the
+    # proxy and the source route must now return the exhaustive exact maximum.
+    s = 2.0 ** -30
+    source = [tuple(x * s for x in p) for p in [
+        (390669151502336., 1822922633117696., -1261086149967872.),
+        (-534404527030272., -2493613988642816., 1725066098245632.),
+        (102251360157696., 477130064396288., -330076826632192.)]]
+    query = [tuple(x * s for x in p) for p in [
+        (-11119279., -1675592.375, -5866756.5), (-11119265., -1675596.375, -5866744.),
+        (-11119253., -1675606.875, -5866728.)]]
+    assert all(f32(x) == x for f in (source, query) for p in f for x in p)
+    controls = borders._samples(query)
+    assert len(controls) == 46
+    exhaustive = math.sqrt(max(distance2(q, source) for q in controls))
+    threshold = 7 * s
+    assert exhaustive > threshold
+    work = _Work()
+    mesh = borders._Mesh([source])
+
+    def audit():
+        return SimpleNamespace(store=SimpleNamespace(work=work), stats=collections.Counter())
+    a = audit()
+    proxy = borders.Audit.measured(
+        a, controls,
+        lambda q, m2: distance2(q, mesh.nearest(q, work, exact=False)[3]) <= m2,
+        lambda q: mesh.distance2(q, work))
+    b = audit()
+    db = sqlite3.connect(':memory:')
+    db.executescript('CREATE TABLE source(id INTEGER PRIMARY KEY, leaf INTEGER, data TEXT);'
+                     'CREATE VIRTUAL TABLE source_box USING rtree(id, x0, x1, y0, y1, z0, z1);')
+    db.execute('INSERT INTO source VALUES(1, 0, ?)', (json.dumps(dict(xyz=source)),))
+    db.execute('INSERT INTO source_box VALUES(1, ?, ?, ?, ?, ?, ?)',
+               tuple(v for k in range(3) for v in (min(q[k] for q in source), max(q[k] for q in source))))
+    b.store.db = db
+    tile = dict(lo=0, hi=1)
+    routed = borders.Audit.measured(b, controls, lambda q, m2: borders.Audit.source_within(b, tile, q, m2),
+                                    lambda q: distance2(q, source))
+    assert proxy == routed == exhaustive, (proxy, routed, exhaustive)
+    out.append(dict(name='grid-underbound', oracle='exact maximum', measured=routed, threshold=threshold,
+                    skipped=a.stats['controlsBoundedBelowMax'] + b.stats['controlsBoundedBelowMax']))
+    # domain-fan: n faces around one new centre were scanned n times each, uncharged.
+    for n in (1024, 8192):
+        centre = (0., 0., 0.)
+        rim = [(f32(math.cos(i * 2 * math.pi / n)), f32(math.sin(i * 2 * math.pi / n)), 0.) for i in range(n)]
+        changed = [((centre, rim[i], rim[(i + 1) % n]),) * 2 for i in range(n)]
+        work = _Work()
+        got = borders._Domain(changed, work).reach(set(rim), set(rim) | {centre})
+        assert len(got) == n and work.used <= 16 * n + 8, (n, work.used)
+        out.append(dict(name=f'domain-fan-{n}', faces=n, charged=work.used))
+    return out
+
+
 def native(binary, folder, archive):
     packed = subprocess.run([str(binary), 'convert', '-i', str(folder), '-o', str(archive), '--force', '--json'],
                             capture_output=True, timeout=60)
@@ -821,7 +890,7 @@ def native(binary, folder, archive):
 def run(root, binary=None):
     from oracle import audit, Failure
     root = Path(root)
-    results = []
+    results = kernels()
     for case in generate(root):
         name = case['name']
         try:

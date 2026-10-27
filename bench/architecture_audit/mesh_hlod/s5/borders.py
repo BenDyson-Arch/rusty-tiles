@@ -611,8 +611,12 @@ class _Mesh:
         return best
 
     def distance(self, p, work=None):
+        return math.sqrt(self.distance2(p, work))
+
+    def distance2(self, p, work=None):
+        """Exact squared distance to the nearest face (inf without faces)."""
         found = self.nearest(p, work)
-        return math.inf if found is None else math.sqrt(found[0])
+        return math.inf if found is None else found[0]
 
     def project(self, p, work=None):
         found = self.nearest(p, work, exact=False)
@@ -710,28 +714,48 @@ def _cycle_changes(before, after):
 
 
 def _margin(p):
-    """Rounding allowance of a float point on a face, relative to coordinates."""
+    """Slack for proposing candidate faces by float distance (never a decision)."""
     return 1e-12 * (1 + max(abs(x) for x in p))
 
 
-def _domain(changed, seeds, passable):
-    """Changed faces (geometry, mapped corners) reachable from faces touching
-    `seeds`, crossing only `passable` vertices (never an unchanged interior)."""
-    by_point = collections.defaultdict(list)
-    for i, (_, m) in enumerate(changed):
-        for p in m:
-            by_point[p].append(i)
-    todo = [i for i, (_, m) in enumerate(changed) if any(p in seeds for p in m)]
-    reached = set(todo)
-    while todo:
-        i = todo.pop()
-        for p in changed[i][1]:
-            if p in passable:
-                for j in by_point[p]:
-                    if j not in reached:
-                        reached.add(j)
-                        todo.append(j)
-    return [changed[i][0] for i in sorted(reached)]
+class _Domain:
+    """Changed faces (geometry, mapped corners) reachable from faces touching a
+    cluster's seed vertices, crossing only passable vertices (never an unchanged
+    interior). The vertex-to-face index is built once per tile, and a flood
+    expands each vertex's faces at most once, so it costs O(faces + incidences)
+    charged work units even around a high-valence fan centre."""
+    def __init__(self, changed, work):
+        self.changed, self.work = changed, work
+        self.by_point = collections.defaultdict(list)
+        work.charge(3 * len(changed) + 1)
+        for i, (_, m) in enumerate(changed):
+            for p in m:
+                self.by_point[p].append(i)
+
+    def reach(self, seeds, passable):
+        work, changed, by_point = self.work, self.changed, self.by_point
+        reached, expanded, todo = set(), set(), []
+
+        def expand(p):
+            if p in expanded:
+                return
+            expanded.add(p)
+            faces = by_point.get(p, ())
+            work.charge(len(faces) + 1)
+            for j in faces:
+                if j not in reached:
+                    reached.add(j)
+                    todo.append(j)
+        for p in seeds:
+            expand(p)
+        while todo:
+            i = todo.pop()
+            work.charge(3)
+            for p in changed[i][1]:
+                if p in passable:
+                    expand(p)
+        work.charge(len(reached))
+        return [changed[i][0] for i in sorted(reached)]
 
 
 def _cycle_centroids(components):
@@ -1269,6 +1293,7 @@ class Audit:
         require, store = self.require, self.store
         tid = int(t['id'])
         input_mesh, output_mesh = _Mesh(source), _Mesh(output)
+        from oracle import distance2
         inputs = _Near({p for f in source for p in f}, reach)
         to_input = lambda p: inputs.nearest(p) or p
         input_points = {p for f in source for p in f}
@@ -1290,6 +1315,7 @@ class Audit:
             seen[k] += 1
             if seen[k] > output_sets[k]:
                 changed_in.append((f, f))
+        closures, openings = _Domain(changed_out, store.work), _Domain(changed_in, store.work)
         before = {e_ for e_ in input_mesh.open if not dropped(e_[0])}
         after = set()
         for x, y in output_mesh.open:
@@ -1337,12 +1363,12 @@ class Audit:
                 witnesses += [output_mesh.project(c, store.work)
                               for c in _cycle_centroids([(set(p for e_ in ins for p in e_), list(ins))])]
             new_points = {q for f in changed_out for q in f[1] if q not in input_points}
-            for f in _domain(changed_out, cluster_points, cluster_points | new_points):
+            for f in closures.reach(cluster_points, cluster_points | new_points):
                 witnesses += _samples(f)
             require(bool(witnesses) or not removed, 'holeClosure',
                     f'tile {tid}: a closure has no measurable patch')
             loss = self.measured(witnesses, lambda q, m: self.source_within(t, q, m),
-                                 lambda q: self.source_distance(t, q))
+                                 lambda q: self.source_distance2(t, q))
             key = 'closure' if removed else 'coverage'
             self.stats[f'max{key.title()}LossOverE'] = max(self.stats[f'max{key.title()}LossOverE'], loss / e)
             if removed:
@@ -1355,15 +1381,17 @@ class Audit:
                 witnesses += [input_mesh.project(c, store.work)
                               for c in _cycle_centroids([(set(p for e_ in outs for p in e_), list(outs))])]
             lost_points = {q for f in changed_in for q in f[1] if not out_points.find(q)}
-            for f in _domain(changed_in, cluster_points, cluster_points | lost_points):
+            for f in openings.reach(cluster_points, cluster_points | lost_points):
                 witnesses += _samples(f)
             require(bool(witnesses) or not added, 'holeOpening',
                     f'tile {tid}: an opening has no measurable lost surface')
 
-            def proxy_within(q, m):
+            def proxy_within(q, m2):
+                # The float search only proposes a face; its exact distance decides.
                 found = output_mesh.nearest(q, store.work, exact=False)
-                return found is not None and math.sqrt(found[0]) * (1 + 1e-9) + _margin(q) <= m
-            loss = self.measured(witnesses, proxy_within, lambda q: output_mesh.distance(q, store.work))
+                store.work.charge()
+                return found is not None and distance2(q, found[3]) <= m2
+            loss = self.measured(witnesses, proxy_within, lambda q: output_mesh.distance2(q, store.work))
             if added:
                 losses['opening'] = max(losses['opening'], loss)
                 for x, y in new:
@@ -1391,24 +1419,28 @@ class Audit:
             require(published['openedHoleBoundaryToSource'] >= losses['rim'] - slack, 'topologyReceipt',
                     f'tile {tid}: audit openedHoleBoundaryToSource {published["openedHoleBoundaryToSource"]} under the measured {losses["rim"]}')
 
-    def measured(self, points, within, exact):
-        """Exact maximum loss over every control. A point is skipped only when a
-        float point on the target surface already lies within the running exact
-        maximum (so it cannot raise it): conservative, never a filter on features."""
-        best = 0.0
+    def measured(self, points, within, exact2):
+        """Exact maximum loss over every control. Squared distances stay exact
+        (Fractions). A control is skipped only when `within` exhibits one target
+        face at an exact squared distance no greater than the running maximum: the
+        nearest distance is at most that, so the control cannot raise it. Float
+        arithmetic only proposes the face; it never decides (review r4)."""
+        best = Fraction(0)
         for q in points:
             self.store.work.charge()
             if best > 0 and within(q, best):
                 self.stats['controlsBoundedBelowMax'] += 1
                 continue
             self.stats['controlsMeasuredExactly'] += 1
-            best = max(best, exact(q))
-        return best
+            best = max(best, exact2(q))
+        return math.sqrt(best)
 
-    def source_within(self, t, p, m):
-        """Whether some verified descendant source face has a float point within m
-        of p (an upper bound on the exact source distance, with a rounding margin)."""
-        reach = m * (1 + 1e-9) + _margin(p)
+    def source_within(self, t, p, m2):
+        """Whether some verified descendant source face is at an exact squared
+        distance <= m2 from p. A box query and float closest points only propose
+        candidate faces; each candidate's exact distance decides."""
+        from oracle import distance2
+        reach = math.sqrt(m2) * (1 + 1e-6) + _margin(p)
         rows = self.store.db.execute(
             'SELECT leaf,data FROM source_box JOIN source USING(id) '
             'WHERE x0<=? AND x1>=? AND y0<=? AND y1>=? AND z0<=? AND z1>=?',
@@ -1419,14 +1451,19 @@ class Audit:
                 continue
             f = json.loads(data)['xyz']
             q, _ = _closest_float(p, f)
-            if math.sqrt(sum((p[k] - q[k]) ** 2 for k in range(3))) * (1 + 1e-9) + _margin(p) <= m:
-                return True
+            if math.sqrt(sum((p[k] - q[k]) ** 2 for k in range(3))) <= reach:
+                self.store.work.charge()
+                if distance2(p, f) <= m2:
+                    return True
         return False
 
     def source_distance(self, t, p):
+        return math.sqrt(self.source_distance2(t, p))
+
+    def source_distance2(self, t, p):
         from oracle import distance2
         _, want = self.store.nearest(p, t['lo'], t['hi'], distance2)
-        return math.sqrt(distance2(p, want['xyz']))
+        return distance2(p, want['xyz'])
 
     # -- omission --------------------------------------------------------------
     def omission(self, omitted):
