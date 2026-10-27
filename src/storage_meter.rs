@@ -265,8 +265,9 @@ pub(crate) fn tempdir_in(parent: &Path, prefix: &str) -> io::Result<tempfile::Te
     tempfile::Builder::new().prefix(prefix).tempdir_in(parent)
 }
 
-/// The metered model of what is stored under `dir`: [`Meter::file_bytes`] per file and
-/// [`ENTRY_BYTES`] per directory, a hard-linked file inside `links` counted as an entry
+/// The metered model of what is stored under `dir`: per file the larger of
+/// [`Meter::file_bytes`] and its allocated blocks plus [`ENTRY_BYTES`], and [`ENTRY_BYTES`]
+/// per directory, a hard-linked file inside `links` counted as an entry
 /// only (its data is counted where it was written). Depth-first; one open directory per
 /// level. A metered run's stored model never exceeds what its meter admitted, so a larger
 /// figure names a write that bypassed the meter.
@@ -280,11 +281,25 @@ pub(crate) fn stored_bytes(meter: &Meter, dir: &Path, links: &Path) -> io::Resul
         } else if linked(&metadata) && path.starts_with(links) {
             ENTRY_BYTES
         } else {
-            meter.file_bytes(metadata.len())
+            // What the filesystem actually allocated, when that exceeds the length model
+            // (huge pages, preallocation): the cross-check must see real allocation.
+            meter
+                .file_bytes(metadata.len())
+                .max(allocated(&metadata).saturating_add(ENTRY_BYTES))
         };
         total = total.saturating_add(bytes);
     }
     Ok(total)
+}
+
+/// Bytes the filesystem allocated to a file (`st_blocks` × 512 on Unix).
+#[cfg(unix)]
+pub(crate) fn allocated(metadata: &std::fs::Metadata) -> u64 {
+    std::os::unix::fs::MetadataExt::blocks(metadata).saturating_mul(512)
+}
+#[cfg(not(unix))]
+pub(crate) fn allocated(metadata: &std::fs::Metadata) -> u64 {
+    metadata.len()
 }
 
 #[cfg(unix)]

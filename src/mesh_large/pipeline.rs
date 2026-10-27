@@ -344,6 +344,13 @@ pub struct StorageDiagnostics {
     /// (such storage declared disk-backed by `RUSTY_TILES_STORAGE_DISK=1`, not charged).
     pub work_storage: &'static str,
     pub archive_storage: &'static str,
+    /// The allocation unit each owner's writes are charged in: the filesystem's fragment, or
+    /// the transparent huge page size on a tmpfs whose `huge=` policy lets `write(2)` use one.
+    pub work_allocation_unit_bytes: u64,
+    pub archive_allocation_unit_bytes: u64,
+    /// A mount was identified by path prefix in mount-table order, because the kernel did not
+    /// report mount IDs (`statx`, Linux 5.8+).
+    pub mount_by_prefix: bool,
     /// What happened and what to do, when an owner's kind could not be resolved.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
@@ -382,7 +389,21 @@ fn owner_meter(
 }
 
 /// The plain explanation of storage whose kind could not be resolved, if any.
-fn storage_note(work: &str, archive: &str) -> Option<String> {
+fn storage_note(work: &str, archive: &str, mount_by_prefix: bool) -> Option<String> {
+    let note = storage_class_note(work, archive);
+    if !mount_by_prefix {
+        return note;
+    }
+    let prefix = "Mounts were identified by path prefix in mount-table order because the \
+                  kernel did not report mount IDs (statx, Linux 5.8+); a moved or propagated \
+                  mount may be misidentified.";
+    Some(match note {
+        Some(note) => format!("{note} {prefix}"),
+        None => prefix.to_owned(),
+    })
+}
+
+fn storage_class_note(work: &str, archive: &str) -> Option<String> {
     let owners = |class: &str| match (work == class, archive == class) {
         (true, true) => Some("the work directory and the archive staging"),
         (true, false) => Some("the work directory"),
@@ -413,11 +434,11 @@ fn storage_charges(
     work: &Path,
     output_parent: &Path,
     scratch: &super::full::FullScratchNeed,
-) -> Result<(delivery::StorageCharges, [&'static str; 2]), JobError> {
+) -> Result<(delivery::StorageCharges, [crate::spill::Volume; 2]), JobError> {
     let copy = (scratch.output_reserve_bytes / 3).saturating_add(STORAGE_FIXED_BYTES);
     let charge = |path: &Path, what, advice| -> Result<_, JobError> {
         let volume = crate::spill::inspect_volume(path).map_err(JobError::from)?;
-        Ok((owner_meter(&volume, copy, what, advice), volume.class()))
+        Ok((owner_meter(&volume, copy, what, advice), volume))
     };
     let (work, work_class) = charge(
         work,
@@ -590,8 +611,10 @@ pub fn mesh_to_tileset(
         // D8: memory-backed storage written from here on is charged before any later stage
         // plans, so every stage (leaf, HLOD, archive) sees the budget it leaves.
         #[allow(unused_mut)]
-        let (mut charges, [work_storage, archive_storage]) =
+        let (mut charges, [work_volume, archive_volume]) =
             storage_charges(work.path(), parent, &captured.report.scratch)?;
+        let (work_storage, archive_storage) = (work_volume.class(), archive_volume.class());
+        let mount_by_prefix = work_volume.mount_by_prefix || archive_volume.mount_by_prefix;
         #[cfg(test)]
         if let Some(limit) = request.test_work_charge {
             charges.work = Some(crate::storage_meter::Meter::new(
@@ -683,7 +706,10 @@ pub fn mesh_to_tileset(
             memory_backed_storage: StorageDiagnostics {
                 work_storage,
                 archive_storage,
-                note: storage_note(work_storage, archive_storage),
+                work_allocation_unit_bytes: work_volume.allocation_unit_bytes,
+                archive_allocation_unit_bytes: archive_volume.allocation_unit_bytes,
+                mount_by_prefix,
+                note: storage_note(work_storage, archive_storage, mount_by_prefix),
                 work_charge_bytes: limit(&charges.work),
                 archive_charge_bytes: limit(&charges.archive),
                 work_admitted_bytes: None,
@@ -846,6 +872,7 @@ mod storage_note_tests {
             available_bytes: 0,
             memory_backed,
             classification,
+            mount_by_prefix: false,
             allocation_unit_bytes: 4096,
         };
         let meter = |v: &Volume| owner_meter(v, 1 << 20, "w", "a").map(|m| m.limit());
@@ -870,9 +897,9 @@ mod storage_note_tests {
             ("memory_backed", "disk"),
             ("disk", "memory_backed"),
         ] {
-            assert_eq!(storage_note(work, archive), None);
+            assert_eq!(storage_note(work, archive, false), None);
         }
-        let note = storage_note("memory_backed_assumed", "memory_backed_assumed").unwrap();
+        let note = storage_note("memory_backed_assumed", "memory_backed_assumed", false).unwrap();
         for part in [
             "the work directory and the archive staging",
             "charged to the memory budget as memory-backed",
@@ -882,17 +909,33 @@ mod storage_note_tests {
         ] {
             assert!(note.contains(part), "{part}: {note}");
         }
-        let archive = storage_note("disk", "memory_backed_assumed").unwrap();
+        let archive = storage_note("disk", "memory_backed_assumed", false).unwrap();
         assert!(
             archive.starts_with("the archive staging beside the output"),
             "{archive}"
         );
-        let declared = storage_note("disk_declared", "memory_backed").unwrap();
+        let declared = storage_note("disk_declared", "memory_backed", false).unwrap();
         assert!(
             declared.starts_with("the work directory could not be classified")
                 && declared.contains("RUSTY_TILES_STORAGE_DISK=1 declares it disk-backed")
                 && declared.contains("not charged"),
             "{declared}"
         );
+    }
+
+    /// The prefix fallback is always reported, alone or after a class note.
+    #[test]
+    fn mount_prefix_fallback_is_reported() {
+        let alone = storage_note("disk", "memory_backed", true).unwrap();
+        assert!(
+            alone.starts_with("Mounts were identified by path prefix"),
+            "{alone}"
+        );
+        let both = storage_note("memory_backed_assumed", "disk", true).unwrap();
+        assert!(
+            both.starts_with("the work directory could not be classified"),
+            "{both}"
+        );
+        assert!(both.contains("statx, Linux 5.8+"), "{both}");
     }
 }
