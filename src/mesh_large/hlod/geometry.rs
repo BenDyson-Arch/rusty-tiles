@@ -73,6 +73,10 @@ struct Merged {
 }
 
 fn merge(children: &[TileGeometry]) -> Merged {
+    let _cpu = super::cpu_profile::start(
+        super::cpu_profile::Stage::Merge,
+        children.iter().map(|c| c.triangles.len()).sum(),
+    );
     let triangles: usize = children.iter().map(|c| c.triangles.len()).sum();
     let mut index: HashMap<Key, u32> =
         HashMap::with_capacity_and_hasher(triangles, Default::default());
@@ -158,6 +162,7 @@ fn simplify(
     locked: &dyn Fn(u32) -> bool,
     target: usize,
 ) -> (Vec<[u32; 3]>, f64) {
+    let _cpu = super::cpu_profile::start(super::cpu_profile::Stage::Simplify, faces.len());
     // Merged indices are dense and bounded to eight capped children. Preserve first-use
     // order without hashing each corner, including when simplifying a protected subset.
     let mut local = vec![u32::MAX; merged.positions.len()];
@@ -453,16 +458,23 @@ fn attempt(
     preserve_holes: bool,
     opening_pins: &HashSet<Key>,
 ) -> Result<Built, JobError> {
-    let segments: HashSet<(Key, Key)> = interface
-        .iter()
-        .filter(|r| !r.is_vertex())
-        .map(|r| (r.a, r.b))
-        .collect();
-    let vertices: HashSet<Key> = interface
-        .iter()
-        .filter(|r| r.is_vertex())
-        .map(|r| r.a)
-        .collect();
+    let _cpu =
+        super::cpu_profile::start(super::cpu_profile::Stage::Attempt, merged.triangles.len());
+    let required = || {
+        let segments: HashSet<(Key, Key)> = interface
+            .iter()
+            .filter(|r| !r.is_vertex())
+            .map(|r| (r.a, r.b))
+            .collect();
+        let vertices: HashSet<Key> = interface
+            .iter()
+            .filter(|r| r.is_vertex())
+            .map(|r| r.a)
+            .collect();
+        (segments, vertices)
+    };
+    let (segments, vertices) = required();
+    let (interface_segments, interface_vertices) = (segments.len(), vertices.len());
     // By induction every child kept its own outer interface, a superset of these.
     let (lost_edges, lost_points) = missing(&merged.triangles, &merged.keys, &segments, &vertices);
     if !lost_edges.is_empty() || !lost_points.is_empty() {
@@ -483,6 +495,9 @@ fn attempt(
     for (v, lock) in locked.iter_mut().enumerate() {
         *lock |= opening_pins.contains(&merged.keys[v]) || contact_pins[v];
     }
+    drop(contact_pins);
+    drop(segments);
+    drop(vertices);
     let input = merged.triangles.len();
     let mut protected = vec![false; input];
     let mut retries = 0;
@@ -490,6 +505,7 @@ fn attempt(
         .triangles
         .iter()
         .all(|t| t[0] == t[1] || t[1] == t[2] || t[0] == t[2]);
+    let mut accepted_change = None;
     let (output, simplifier_error, stopping) = if input <= cap {
         (merged.triangles.clone(), 0., StoppingBound::Input)
     } else if degenerate_only {
@@ -503,10 +519,19 @@ fn attempt(
             simplify(merged, &merged.triangles, &|v| locked[v as usize], cap);
         let mut topology_protected = false;
         let mut fold_retries = 0;
+        // Only one immutable post-contraction source per retry sequence. Release
+        // the interface query sets before the guard, and all repair sets before
+        // meshopt, so these maps fit the same parent workspace charge.
+        let mut fold_source = None;
         loop {
+            let (segments, vertices) = required();
             let (edges, points) = missing(&output, &merged.keys, &segments, &vertices);
-            let invalid = folds::Source::new(&merged.positions, contracted_faces)
-                .with_boundary(interface)
+            drop(segments);
+            drop(vertices);
+            let invalid = fold_source
+                .get_or_insert_with(|| {
+                    folds::Source::new(&merged.positions, contracted_faces).with_boundary(interface)
+                })
                 .violations(&merged.positions, &output);
             #[cfg(test)]
             if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
@@ -520,11 +545,18 @@ fn attempt(
                 );
             }
             let valid = edges.is_empty() && points.is_empty() && !invalid.iter().any(|v| *v);
-            if valid && topology::changes(reference, &output, interface, floor).is_some() {
-                break;
+            if valid {
+                // Topology comparison has its own tables; do not overlap them
+                // with a retained fold source. Rebuild only if it rejects.
+                fold_source = None;
+                accepted_change = topology::changes(reference, &output, interface, floor);
+                if accepted_change.is_some() {
+                    break;
+                }
             }
             let previously_protected = protected.iter().filter(|p| **p).count();
             if valid || fold_retries == FOLD_RETRIES {
+                fold_source = None;
                 if topology_protected {
                     return Err(JobError::new(
                         JobErrorKind::Unsupported,
@@ -566,6 +598,9 @@ fn attempt(
                     "protected reduction made no progress",
                 ));
             }
+            drop(edges);
+            drop(points);
+            drop(invalid);
             let keep: Vec<[u32; 3]> = merged
                 .triangles
                 .iter()
@@ -604,8 +639,8 @@ fn attempt(
                      ({input} input triangles, {} after simplification)",
                     tile.first,
                     tile.depth,
-                    segments.len(),
-                    vertices.len(),
+                    interface_segments,
+                    interface_vertices,
                     protected.iter().filter(|p| **p).count(),
                     output.len()
                 ),
@@ -635,7 +670,10 @@ fn attempt(
             ),
         ));
     }
-    let topology_change = topology::changes(reference, &output, interface, floor);
+    // The successful loop check used these same immutable inputs. Preserve its
+    // witnesses before compaction; input/degenerate-only paths still compare here.
+    let topology_change =
+        accepted_change.or_else(|| topology::changes(reference, &output, interface, floor));
     let Some(change) = topology_change else {
         return Err(JobError::new(
             JobErrorKind::Unsupported,
@@ -688,8 +726,8 @@ fn attempt(
         input_triangles: input as u32,
         protected_faces: protected.iter().filter(|p| **p).count() as u32,
         retries,
-        interface_vertices: vertices.len() as u32,
-        interface_segments: segments.len() as u32,
+        interface_vertices: interface_vertices as u32,
+        interface_segments: interface_segments as u32,
         reoriented: 0,
         topology: change.receipt,
         change,

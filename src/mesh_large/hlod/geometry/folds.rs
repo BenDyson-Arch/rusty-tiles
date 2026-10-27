@@ -28,9 +28,15 @@ pub(crate) struct Source {
 
 impl Source {
     pub(crate) fn new(positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> Self {
+        let _cpu = super::super::cpu_profile::start(
+            super::super::cpu_profile::Stage::Source,
+            triangles.len(),
+        );
         let mut result = Self {
-            faces: HashMap::default(),
-            edges: HashMap::default(),
+            // Reserve the face bound and the common surface-edge count. This is
+            // only a capacity hint: disconnected/nonmanifold inputs still grow.
+            faces: HashMap::with_capacity_and_hasher(triangles.len(), Default::default()),
+            edges: HashMap::with_capacity_and_hasher(triangles.len() * 3 / 2, Default::default()),
             boundary: HashSet::default(),
         };
         for t in triangles {
@@ -49,11 +55,24 @@ impl Source {
         mut self,
         rows: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
     ) -> Self {
-        self.boundary.extend(rows.iter().flat_map(|r| [r.a, r.b]));
+        let _cpu = super::super::cpu_profile::start(
+            super::super::cpu_profile::Stage::Boundary,
+            rows.len(),
+        );
+        // Grow with distinct keys rather than the row iterator's (often duplicate)
+        // size hint. A parent source's checked boundary has at most 3m keys.
+        for r in rows {
+            self.boundary.insert(r.a);
+            self.boundary.insert(r.b);
+        }
         self
     }
 
     fn bad_faces(&self, positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> Vec<bool> {
+        let _cpu = super::super::cpu_profile::start(
+            super::super::cpu_profile::Stage::Faces,
+            triangles.len(),
+        );
         let mut invalid = vec![false; triangles.len()];
         let mut faces = Vec::with_capacity(triangles.len());
         for (i, t) in triangles.iter().enumerate() {
@@ -97,6 +116,10 @@ impl Source {
     /// nonacute in their plane, so the fallback never enumerates high-valence pairs.
     pub(crate) fn violations(&self, positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> Vec<bool> {
         let mut invalid = self.bad_faces(positions, triangles);
+        let incidence_cpu = super::super::cpu_profile::start(
+            super::super::cpu_profile::Stage::Incidence,
+            triangles.len(),
+        );
         let mut edges = Vec::<(Edge, Incidence)>::with_capacity(triangles.len() * 3);
         for (i, t) in triangles.iter().enumerate() {
             let keys = t.map(|v| key(positions[v as usize]));
@@ -106,6 +129,9 @@ impl Source {
             }
         }
         edges.sort_unstable();
+        drop(incidence_cpu);
+        let _cpu =
+            super::super::cpu_profile::start(super::super::cpu_profile::Stage::Fans, edges.len());
         let mut at = 0;
         while at < edges.len() {
             let edge = edges[at].0;
@@ -177,6 +203,10 @@ pub(super) fn contact_pins(
     triangles: &[[u32; 3]],
     interface: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
 ) -> Vec<bool> {
+    let _cpu = super::super::cpu_profile::start(
+        super::super::cpu_profile::Stage::Contacts,
+        triangles.len(),
+    );
     let boundary: HashSet<_> = interface.iter().flat_map(|r| [r.a, r.b]).collect();
     let mut first = vec![u32::MAX; keys.len()];
     let mut pins = vec![false; keys.len()];
@@ -202,6 +232,7 @@ pub(super) fn contact_pins(
 }
 
 fn distinct_sides(edge: Edge, thirds: impl Iterator<Item = Key>) -> bool {
+    let _cpu = super::super::cpu_profile::start(super::super::cpu_profile::Stage::ExactFans, 1);
     let mut normals = Vec::<[Vec<f64>; 3]>::with_capacity(4);
     for c in thirds {
         if normals.len() == 4 {
@@ -282,6 +313,29 @@ pub(crate) fn decode_valid(
     triangles: &[[u32; 3]],
     boundary: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
 ) -> bool {
+    let _cpu =
+        super::super::cpu_profile::start(super::super::cpu_profile::Stage::Decode, triangles.len());
+    // An identity decode has exactly the source face/edge multiplicities and
+    // oriented-face licenses. Finite f32 normals have positive finite f64 self-dot
+    // whenever nonzero. Compare bits because signed zero is part of a canonical key.
+    if before.len() == after.len()
+        && before.iter().zip(after).all(|(a, b)| {
+            a.iter()
+                .zip(b)
+                .all(|(a, b)| a.is_finite() && a.to_bits() == b.to_bits())
+        })
+    {
+        return true;
+    }
+    decode_changed(before, after, triangles, boundary)
+}
+
+fn decode_changed(
+    before: &[[f32; 3]],
+    after: &[[f32; 3]],
+    triangles: &[[u32; 3]],
+    boundary: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
+) -> bool {
     // New decoded keys can acquire an owner in another tile, outside the source
     // incidence graph. Retain canonical source keys; merging onto an existing key
     // is still subject to the face, boundary-edge and orientation checks below.
@@ -310,6 +364,46 @@ pub(crate) fn decode_valid(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn identity_decode_agrees_with_full_guard_across_finite_f32_domain() {
+        // Exercise the unchanged full guard, including degenerate faces, twins,
+        // multiplicity, acute books, signed zero and extreme/subnormal exponents.
+        for exponent in [-149, -126, -80, -1, 0, 60, 100, 125] {
+            let s = 2f64.powi(exponent) as f32;
+            let p = [
+                [0., -0., 0.],
+                [s, 0., 0.],
+                [0., s, 0.],
+                [0., s, s],
+                [-s, -s, -s],
+                [f32::MAX, f32::MIN_POSITIVE, -f32::MAX],
+            ];
+            let faces = [
+                [0, 1, 2],
+                [0, 1, 3],
+                [1, 0, 2],
+                [1, 0, 4],
+                [0, 1, 2],
+                [0, 0, 0],
+                [2, 5, 4],
+            ];
+            for n in 0..=faces.len() {
+                for boundary in [Vec::new(), boundary(&p)] {
+                    assert!(decode_changed(&p, &p, &faces[..n], &boundary));
+                    assert!(decode_valid(&p, &p, &faces[..n], &boundary));
+                }
+            }
+            for v in 0..p.len() {
+                let mut changed = p;
+                changed[v] = p[(v + 1) % p.len()];
+                assert_eq!(
+                    decode_valid(&p, &changed, &faces, &boundary(&p)),
+                    decode_changed(&p, &changed, &faces, &boundary(&p)),
+                );
+            }
+        }
+    }
 
     fn boundary(points: &[[f32; 3]]) -> Vec<crate::mesh_large::hlod::interfaces::InterfaceRow> {
         points

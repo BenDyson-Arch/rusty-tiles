@@ -170,6 +170,10 @@ pub(super) fn contract(
     mapping: &super::BorderMap<'_>,
     receipt: &mut Receipt,
 ) -> Result<bool, JobError> {
+    let _cpu = super::super::cpu_profile::start(
+        super::super::cpu_profile::Stage::Contract,
+        m.triangles.len(),
+    );
     let ids: HashMap<Key, u32> = m
         .keys
         .iter()
@@ -321,6 +325,8 @@ pub(super) fn changes(
     interface: &[InterfaceRow],
     g: f64,
 ) -> Option<Change> {
+    let _cpu =
+        super::super::cpu_profile::start(super::super::cpu_profile::Stage::Topology, output.len());
     if output == m.triangles {
         return Some(Change::default());
     }
