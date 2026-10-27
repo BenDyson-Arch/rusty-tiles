@@ -618,6 +618,15 @@ class _Mesh:
         found = self.nearest(p, work)
         return math.inf if found is None else found[0]
 
+    def within(self, p, m2, work=None):
+        """Whether some face is at an exact squared distance <= m2 from p. The
+        float search only proposes the face; its exact distance decides."""
+        from oracle import distance2
+        found = self.nearest(p, work, exact=False)
+        if work is not None:
+            work.charge()
+        return found is not None and distance2(p, found[3]) <= m2
+
     def project(self, p, work=None):
         found = self.nearest(p, work, exact=False)
         return p if found is None else tuple(float(x) for x in found[1])
@@ -1293,7 +1302,6 @@ class Audit:
         require, store = self.require, self.store
         tid = int(t['id'])
         input_mesh, output_mesh = _Mesh(source), _Mesh(output)
-        from oracle import distance2
         inputs = _Near({p for f in source for p in f}, reach)
         to_input = lambda p: inputs.nearest(p) or p
         input_points = {p for f in source for p in f}
@@ -1386,12 +1394,8 @@ class Audit:
             require(bool(witnesses) or not added, 'holeOpening',
                     f'tile {tid}: an opening has no measurable lost surface')
 
-            def proxy_within(q, m2):
-                # The float search only proposes a face; its exact distance decides.
-                found = output_mesh.nearest(q, store.work, exact=False)
-                store.work.charge()
-                return found is not None and distance2(q, found[3]) <= m2
-            loss = self.measured(witnesses, proxy_within, lambda q: output_mesh.distance2(q, store.work))
+            loss = self.measured(witnesses, lambda q, m2: output_mesh.within(q, m2, store.work),
+                                 lambda q: output_mesh.distance2(q, store.work))
             if added:
                 losses['opening'] = max(losses['opening'], loss)
                 for x, y in new:

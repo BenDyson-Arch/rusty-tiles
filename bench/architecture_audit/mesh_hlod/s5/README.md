@@ -334,8 +334,9 @@ grid control on the changed coarse faces is measured exactly against source
 plus each removed or added cycle's centroid projected across the change. No feature
 test filters the grid (review 3). A control is skipped only when one target face,
 proposed by a float search, is at an exact squared distance no greater than the
-running exact maximum, so it cannot raise it; floats never decide (review 4). Losses must fit E where cycles changed and G where a boundary was only
-simplified; a change without a witness is refused. Distances come from a complete
+running exact maximum, so it cannot raise it; floats never decide (review 4).
+Losses must fit E where cycles changed and G where a boundary was only simplified;
+a change without a witness is refused. Distances come from a complete
 box-hierarchy nearest search with certified lower bounds and exact
 Fractions. All topology losses are sampled witnesses under D2, like G itself: S1b's
 quarter-grid controls plus this checker's own deterministic barycentric level-8

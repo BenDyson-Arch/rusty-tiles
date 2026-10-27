@@ -850,8 +850,7 @@ def kernels():
     a = audit()
     proxy = borders.Audit.measured(
         a, controls,
-        lambda q, m2: distance2(q, mesh.nearest(q, work, exact=False)[3]) <= m2,
-        lambda q: mesh.distance2(q, work))
+        lambda q, m2: mesh.within(q, m2, work), lambda q: mesh.distance2(q, work))
     b = audit()
     db = sqlite3.connect(':memory:')
     db.executescript('CREATE TABLE source(id INTEGER PRIMARY KEY, leaf INTEGER, data TEXT);'
