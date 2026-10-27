@@ -252,7 +252,8 @@ def check_leaf(f,manifest,stats=None,*,geometry=True):
     return ','.join(map(str,key)),want
 
 
-def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='root',profile='hlod',producer_manifest=None):
+def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='root',profile='hlod',producer_manifest=None,
+          border_audit=None,producer_report=None):
     """Check every published cell. Only one payload/tile is decoded at a time.
 
     root frame removes the archive's common placement, conjugating relative tile
@@ -353,6 +354,16 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
             result['exemptCrackEvents']=store.db.execute("SELECT count(*) FROM exemptions WHERE kind='crack'").fetchone()[0]
             result['exemptCrackEventBasis']='deduplicated (tile,source-open-edge) positive sampled-width witnesses only; changed open edges are candidates, and unmeasured correspondences are not zero-gap proofs'
             result['exemptWindingEvents']=result['winding']['exemptWindingEvents']
+            # D11: the S1b audit sidecar is an index; every claim is re-derived.
+            import borders
+            result['borders']=borders.inspect(store,tiles,leaves,archive,require,border_audit,
+                                              extent=store.extent(),census=result)
+            if producer_report is not None:
+                require(result['borders'].get('audited'),'borderAudit','a producer report needs the audit sidecar')
+                with open(producer_report) as f:
+                    result['borders']['producerReport']=borders.compare(result['borders'],json.load(f))
+                require(result['borders']['producerReport']['ok'],'borderAudit',
+                        json.dumps(result['borders']['producerReport']['differences'],sort_keys=True))
             ties=dict(accepted=0,exactTies=0,maxExcess=0.0,maxTau=0.0,maxExcessOverTau=0.0,
                       tolerance='exact oracle distances; tau = 16 * 2**-52 * (|centroid| + descendant source box diagonal) for producer arithmetic')
             for t in tiles:
@@ -428,10 +439,13 @@ if __name__=='__main__':
     p.add_argument('--coordinate-frame',choices=('root','world'),default='root')
     p.add_argument('--profile',choices=('hlod',),default='hlod')
     p.add_argument('--producer-manifest',help='S1 stage manifest.json; compared only after independent derivation')
+    p.add_argument('--border-audit',help='S1b borders.jsonl audit sidecar: an index whose claims are re-derived')
+    p.add_argument('--producer-report',help='producer run report naming the audit sidecar hash/bytes')
     a=p.parse_args()
     try:
         print(json.dumps(audit(a.root,a.expected,scratch=a.scratch,work_limit=a.work_limit,
-                              coordinate_frame=a.coordinate_frame,profile=a.profile,producer_manifest=a.producer_manifest),sort_keys=True))
+                              coordinate_frame=a.coordinate_frame,profile=a.profile,producer_manifest=a.producer_manifest,
+                              border_audit=a.border_audit,producer_report=a.producer_report),sort_keys=True))
     except Failure as e:
         print(json.dumps(dict(ok=False,check=e.check,detail=e.detail)))
         raise SystemExit(1)
