@@ -115,6 +115,25 @@ impl Source {
     /// avoids an allocation for every edge. More than four wings cannot be pairwise
     /// nonacute in their plane, so the fallback never enumerates high-valence pairs.
     pub(crate) fn violations(&self, positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> Vec<bool> {
+        self.check(positions, triangles, false)
+    }
+
+    /// A whole-panel fan has no certified contraction license for moved wings.
+    /// Retain the boundary count ceiling and also check changed boundary fans.
+    pub(super) fn remesh_violations(
+        &self,
+        positions: &[[f32; 3]],
+        triangles: &[[u32; 3]],
+    ) -> Vec<bool> {
+        self.check(positions, triangles, true)
+    }
+
+    fn check(
+        &self,
+        positions: &[[f32; 3]],
+        triangles: &[[u32; 3]],
+        changed_boundary: bool,
+    ) -> Vec<bool> {
         let mut invalid = self.bad_faces(positions, triangles);
         let incidence_cpu = super::super::cpu_profile::start(
             super::super::cpu_profile::Stage::Incidence,
@@ -142,11 +161,13 @@ impl Source {
             }
             let source = self.edges.get(&edge).copied().unwrap_or_default();
             let boundary = self.boundary.contains(&edge.0) && self.boundary.contains(&edge.1);
-            let unsupported = if boundary {
+            let unsupported = if boundary && (0..2).any(|d| counts[d] > source[d]) {
                 // A new edge between shared contacts could be created by either
                 // neighbour independently. Only an existing source edge or a
                 // chord certified over its entire previous arc supplies support.
-                (0..2).any(|d| counts[d] > source[d])
+                true
+            } else if boundary && !changed_boundary {
+                false
             } else {
                 (0..2).any(|d| {
                     if counts[d] < 2 {
@@ -207,7 +228,7 @@ pub(super) fn contact_pins(
         super::super::cpu_profile::Stage::Contacts,
         triangles.len(),
     );
-    let boundary: HashSet<_> = interface.iter().flat_map(|r| [r.a, r.b]).collect();
+    let boundary = super::interface_points(interface);
     let mut first = vec![u32::MAX; keys.len()];
     let mut pins = vec![false; keys.len()];
     for t in triangles {

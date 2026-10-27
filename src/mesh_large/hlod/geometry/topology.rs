@@ -1,6 +1,8 @@
 //! Bounded, tile-local boundary reconstruction and topology cleanup. The source graph
 //! supplies the boundary; this module never chooses or moves a contracted endpoint.
-use super::{missing, oriented, Merged};
+#[cfg(test)]
+use super::missing;
+use super::{oriented, Merged};
 use crate::{
     mesh_large::hlod::interfaces::{InterfaceRow, Key},
     JobError,
@@ -132,7 +134,7 @@ pub(super) fn components(m: &Merged) -> Vec<usize> {
     Components::mesh(m)
 }
 fn points(interface: &[InterfaceRow]) -> HashSet<Key> {
-    interface.iter().flat_map(|r| [r.a, r.b]).collect()
+    super::interface_points(interface)
 }
 fn surface(t: &[u32; 3]) -> bool {
     t[0] != t[1] && t[1] != t[2] && t[0] != t[2]
@@ -220,13 +222,7 @@ pub(super) fn contract_from(
     if receipt.contracted_vertices == 0 {
         return Ok(true);
     }
-    let guard = super::folds::Source::for_contraction(
-        &m.positions,
-        original_faces.unwrap_or(&m.triangles),
-        interface,
-        previous_interface,
-        &mapping_by_vertex,
-    );
+    drop(ids);
     let mut output = Vec::with_capacity(m.triangles.len());
     let mut representatives = Vec::with_capacity(m.triangles.len());
     let mut folded = false;
@@ -244,24 +240,42 @@ pub(super) fn contract_from(
             representatives.push(m.representative[i]);
         }
     }
+    #[cfg(test)]
+    crate::test_alloc::trace("contract mapped");
     let required = points(interface);
     let segments = interface
         .iter()
         .filter(|r| !r.is_vertex())
         .map(|r| (r.a, r.b))
         .collect();
-    let lost = missing(&output, &m.keys, &segments, &required);
-    if !folded
+    let lost = super::missing_owned(&output, &m.keys, segments, required);
+    let direct = !folded
         && !output.is_empty()
         && lost.0.is_empty()
         && lost.1.is_empty()
-        && !guard.violations(&m.positions, &output).iter().any(|v| *v)
-        && changes(m, &output, interface, 0.).is_some()
-    {
+        && changes(m, &output, interface, 0.).is_some();
+    drop(lost);
+    #[cfg(test)]
+    crate::test_alloc::trace("contract topology");
+    let guard = super::folds::Source::for_contraction(
+        &m.positions,
+        original_faces.unwrap_or(&m.triangles),
+        interface,
+        previous_interface,
+        &mapping_by_vertex,
+    );
+    #[cfg(test)]
+    crate::test_alloc::trace("contract source");
+    drop(mapping_by_vertex);
+    if direct && !guard.violations(&m.positions, &output).iter().any(|v| *v) {
         m.triangles = output;
         m.representative = representatives;
         return Ok(true);
     }
+    drop(output);
+    drop(representatives);
+    #[cfg(test)]
+    crate::test_alloc::trace("contract fallback");
     if let Some(r) = super::constrained::contract(
         m,
         interface,
@@ -365,11 +379,12 @@ pub(super) fn changes(
     };
     let component = Components::mesh(m);
     let border = points(interface);
-    let surviving: HashSet<usize> = output
-        .iter()
-        .flatten()
-        .map(|v| component[*v as usize])
-        .collect();
+    let mut surviving = HashSet::default();
+    for t in output {
+        for &v in t {
+            surviving.insert(component[v as usize]);
+        }
+    }
     let mut bounds: HashMap<usize, ([f64; 3], [f64; 3], bool)> = HashMap::default();
     for t in &m.triangles {
         // Only a removed component needs a diameter/contact eligibility decision.
@@ -404,6 +419,7 @@ pub(super) fn changes(
                 receipt.max_dropped_component_diameter.max(diameter);
         }
     }
+    drop(bounds);
     let boundary = |triangles: &[[u32; 3]]| {
         let mut edges: HashMap<(u32, u32), u32> = HashMap::default();
         for t in triangles {
@@ -414,24 +430,53 @@ pub(super) fn changes(
                 }
             }
         }
-        // All subsequent graph comparisons consume only one-sided boundary edges.
-        // Compact once instead of repeatedly walking the full surface-edge table.
         edges.retain(|_, n| *n == 1);
         edges.shrink_to_fit();
+        edges
+    };
+    #[cfg(test)]
+    crate::test_alloc::trace("changes start graphs");
+    let mut old_edges = boundary(&m.triangles);
+    let mut new_edges = boundary(output);
+    // A connected component of the UNION boundary graph whose edge sets are
+    // identical has identical cycles, contacts and path multiplicities. Remove
+    // only these exact unchanged components before correspondence work. Joining
+    // both graphs first retains every old/new component involved in a change.
+    {
+        let mut union = Components::new(m.keys.len());
+        for &(a, b) in old_edges.keys().chain(new_edges.keys()) {
+            union.join(a, b);
+        }
+        let mut changed = vec![false; m.keys.len()];
+        for &(a, _) in old_edges.keys().filter(|e| !new_edges.contains_key(e)) {
+            changed[union.root(a as usize)] = true;
+        }
+        for &(a, _) in new_edges.keys().filter(|e| !old_edges.contains_key(e)) {
+            changed[union.root(a as usize)] = true;
+        }
+        old_edges.retain(|&(a, _), _| changed[union.root(a as usize)]);
+        new_edges.retain(|&(a, _), _| changed[union.root(a as usize)]);
+    }
+    old_edges.shrink_to_fit();
+    new_edges.shrink_to_fit();
+    if dropped.is_empty() && old_edges.is_empty() && new_edges.is_empty() {
+        return Some(Change::default());
+    }
+    let graph = |edges: &HashMap<(u32, u32), u32>| {
         let mut groups = Components::new(m.keys.len());
         let mut degree = vec![0u32; m.keys.len()];
-        for (&(a, b), &n) in &edges {
-            if n == 1 {
-                groups.join(a, b);
-                degree[a as usize] += 1;
-                degree[b as usize] += 1;
-            }
+        for &(a, b) in edges.keys() {
+            groups.join(a, b);
+            degree[a as usize] += 1;
+            degree[b as usize] += 1;
         }
         let root: Vec<usize> = (0..m.keys.len()).map(|v| groups.root(v)).collect();
-        (edges, degree, root)
+        (degree, root)
     };
-    let (old_edges, old_degree, old_root) = boundary(&m.triangles);
-    let (new_edges, new_degree, new_root) = boundary(output);
+    let (old_degree, old_root) = graph(&old_edges);
+    let (new_degree, new_root) = graph(&new_edges);
+    #[cfg(test)]
+    crate::test_alloc::trace("changes graphs");
     let mut touching = HashSet::default();
     for v in 0..m.keys.len() {
         if old_degree[v] > 0 && border.contains(&m.keys[v]) {
@@ -454,41 +499,34 @@ pub(super) fn changes(
         .map(|v| v as u32)
         .collect();
     let signature = |edges: &HashMap<(u32, u32), u32>| -> Option<HashMap<(u32, u32), usize>> {
-        let mut adjacent = vec![Vec::new(); m.keys.len()];
-        for (&(a, b), &n) in edges {
-            if n == 1 {
-                adjacent[a as usize].push(b);
-                adjacent[b as usize].push(a);
-            }
-        }
-        let mut visited = HashSet::default();
-        let mut paths = HashMap::default();
+        let (offset, adjacent) = boundary_adjacency(m.keys.len(), edges);
+        let neighbors = |v: u32| &adjacent[offset[v as usize]..offset[v as usize + 1]];
+        let mut paths = HashMap::with_capacity_and_hasher(edges.len(), Default::default());
         for &a in &anchors {
-            if adjacent[a as usize].is_empty() {
+            if neighbors(a).is_empty() {
                 return None;
             }
-            for &next in &adjacent[a as usize] {
-                if !visited.insert((a.min(next), a.max(next))) {
-                    continue;
-                }
-                let (mut previous, mut at) = (a, next);
+            for &first in neighbors(a) {
+                let (mut previous, mut at) = (a, first);
                 while !anchors.contains(&at) {
-                    let neighbors = &adjacent[at as usize];
-                    if neighbors.len() != 2 {
+                    let next = neighbors(at);
+                    if next.len() != 2 {
                         return None;
                     }
-                    let next = if neighbors[0] == previous {
-                        neighbors[1]
+                    let next = if next[0] == previous {
+                        next[1]
                     } else {
-                        neighbors[0]
+                        next[0]
                     };
-                    if !visited.insert((at.min(next), at.max(next))) {
-                        return None;
-                    }
                     previous = at;
                     at = next;
                 }
-                *paths.entry((a.min(at), a.max(at))).or_default() += 1;
+                // Walk each anchored path in both directions; retain its canonical
+                // endpoint/first-edge direction. This includes loops at one anchor.
+                // Degree-two interiors cannot branch into an unanchored cycle.
+                if (a, first) < (at, previous) {
+                    *paths.entry((a.min(at), a.max(at))).or_default() += 1;
+                }
             }
         }
         Some(paths)
@@ -497,6 +535,9 @@ pub(super) fn changes(
     if signature(&new_edges).as_ref() != Some(&old_signature) {
         return rejected("touching boundary graph changed after suppressing degree-two vertices");
     }
+    drop((old_signature, anchors, touching));
+    #[cfg(test)]
+    crate::test_alloc::trace("changes signatures");
     let cycles = |edges: &HashMap<(u32, u32), u32>, degree: &[u32], roots: &[usize]| {
         let mut graph_counts: HashMap<usize, (usize, usize)> = HashMap::default();
         for (&(a, _), &n) in edges {
@@ -517,8 +558,12 @@ pub(super) fn changes(
         }
         per_component
     };
-    let before_counts = cycles(&old_edges, &old_degree, &old_root);
-    let after_counts = cycles(&new_edges, &new_degree, &new_root);
+    let before_count = cycles(&old_edges, &old_degree, &old_root)
+        .values()
+        .sum::<usize>();
+    let after_count = cycles(&new_edges, &new_degree, &new_root)
+        .values()
+        .sum::<usize>();
     let (closed, opened, closed_count, opened_count) = changed_cycles(
         &old_edges,
         &new_edges,
@@ -529,12 +574,11 @@ pub(super) fn changes(
         &component,
         &surviving,
     );
+    #[cfg(test)]
+    crate::test_alloc::trace("changes cycles");
     receipt.closed_holes = closed_count as u64;
     receipt.opened_holes = opened_count as u64;
-    debug_assert_eq!(
-        before_counts.values().sum::<usize>() + opened_count,
-        after_counts.values().sum::<usize>() + closed_count
-    );
+    debug_assert_eq!(before_count + opened_count, after_count + closed_count);
     let affected: HashSet<usize> = closed.iter().map(|&r| component[r]).collect();
     let mut closure_carriers = Vec::new();
     let patch_faces = if receipt.closed_holes > 0 {
@@ -620,6 +664,8 @@ pub(super) fn changes(
             })
             .collect();
     }
+    #[cfg(test)]
+    crate::test_alloc::trace("changes end");
     Some(Change {
         receipt,
         patch_faces,
@@ -631,6 +677,31 @@ pub(super) fn changes(
         opening_faces,
         opening_border_contact,
     })
+}
+
+/// Flat adjacency keeps graph traversal linear without a Vec allocation per vertex.
+fn boundary_adjacency(n: usize, edges: &HashMap<(u32, u32), u32>) -> (Vec<usize>, Vec<u32>) {
+    let mut offsets = vec![0usize; n + 1];
+    for (&(a, b), &count) in edges {
+        if count == 1 {
+            offsets[a as usize + 1] += 1;
+            offsets[b as usize + 1] += 1;
+        }
+    }
+    for v in 0..n {
+        offsets[v + 1] += offsets[v];
+    }
+    let mut adjacent = vec![0; offsets[n]];
+    let mut cursor = offsets[..n].to_vec();
+    for (&(a, b), &count) in edges {
+        if count == 1 {
+            adjacent[cursor[a as usize]] = b;
+            adjacent[cursor[b as usize]] = a;
+            cursor[a as usize] += 1;
+            cursor[b as usize] += 1;
+        }
+    }
+    (offsets, adjacent)
 }
 
 /// Common boundary paths are compared after suppressing unshared degree-two vertices.
@@ -678,41 +749,48 @@ fn changed_cycles(
         }
     }
     let paths = |edges: &HashMap<(u32, u32), u32>| {
-        let mut adjacent = vec![Vec::new(); n];
-        for (&(a, b), &count) in edges {
-            if count == 1 {
-                adjacent[a as usize].push(b);
-                adjacent[b as usize].push(a);
-            }
-        }
-        let mut visited = HashSet::default();
-        let mut paths = HashMap::<(u32, u32), usize>::default();
+        let (offset, adjacent) = boundary_adjacency(n, edges);
+        let neighbors = |v: u32| &adjacent[offset[v as usize]..offset[v as usize + 1]];
+        let mut paths =
+            HashMap::<(u32, u32), usize>::with_capacity_and_hasher(edges.len(), Default::default());
         for (v, &anchor) in anchors.iter().enumerate() {
             if !anchor {
                 continue;
             }
             let a = v as u32;
-            for &b in &adjacent[v] {
-                if !visited.insert((a.min(b), a.max(b))) {
-                    continue;
-                }
-                let (mut previous, mut at) = (a, b);
+            for &first in neighbors(a) {
+                let (mut previous, mut at) = (a, first);
                 while !anchors[at as usize] {
-                    let next = adjacent[at as usize]
+                    let next = neighbors(at)
                         .iter()
                         .copied()
                         .find(|&v| v != previous)
                         .unwrap();
-                    visited.insert((at.min(next), at.max(next)));
                     previous = at;
                     at = next;
                 }
-                *paths.entry((a.min(at), a.max(at))).or_default() += 1;
+                if (a, first) < (at, previous) {
+                    *paths.entry((a.min(at), a.max(at))).or_default() += 1;
+                }
             }
         }
         paths
     };
     let (old_paths, new_paths) = (paths(old), paths(new));
+    // Identical suppressed graphs with the same three-contact cycle witness make
+    // their common graph identical too. Every rank subtraction below is then zero.
+    // This avoids constructing three rank tables for dense retained boundaries.
+    if old_paths == new_paths
+        && old_paths.keys().all(|&(a, _)| {
+            contacts
+                .get(&(old_root[a as usize], new_root[a as usize]))
+                .copied()
+                .unwrap_or(0)
+                >= 3
+        })
+    {
+        return (HashSet::default(), HashSet::default(), 0, 0);
+    }
     let common: HashMap<_, _> = old_paths
         .iter()
         .filter_map(|(&(a, b), &count)| {
@@ -725,6 +803,7 @@ fn changed_cycles(
             (next > 0 && contacts >= 3).then_some(((a, b), count.min(next)))
         })
         .collect();
+    drop((anchors, contacts, old_anchored, new_anchored));
     let ranks = |paths: &HashMap<(u32, u32), usize>, roots: &[usize]| {
         let mut groups = Components::new(n);
         for &(a, b) in paths.keys() {
@@ -750,9 +829,12 @@ fn changed_cycles(
         result
     };
     let old_ranks = ranks(&old_paths, old_root);
+    drop(old_paths);
     let new_ranks = ranks(&new_paths, new_root);
+    drop(new_paths);
     let common_old = ranks(&common, old_root);
     let common_new = ranks(&common, new_root);
+    drop(common);
     let mut closed = HashSet::default();
     let mut closed_count = 0;
     for (root, count) in old_ranks {

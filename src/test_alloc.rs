@@ -108,3 +108,11 @@ pub(crate) fn peak<R>(f: impl FnOnce() -> R) -> (R, usize) {
     TRACK.with(|t| t.set(false));
     (result, PEAK.with(|p| p.get()).max(0) as usize)
 }
+
+pub(crate) fn trace(label: &str) {
+    if TRACK.with(Cell::get) && std::env::var_os("RT_HLOD_ALLOC_TRACE").is_some() {
+        let live = LIVE.with(Cell::get);
+        let peak = PEAK.with(Cell::get);
+        eprintln!("ALLOC {label}: live={live} peak={peak}");
+    }
+}

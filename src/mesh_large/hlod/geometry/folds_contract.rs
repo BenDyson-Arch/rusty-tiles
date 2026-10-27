@@ -72,9 +72,6 @@ impl Source {
         let mut segments = Vec::new();
         for row in previous_interface.iter().filter(|r| !r.is_vertex()) {
             let edge = (row.a.min(row.b), row.a.max(row.b));
-            if !seen.insert(edge) {
-                continue;
-            }
             let (Some(&a), Some(&b)) = (vertices.get(&edge.0), vertices.get(&edge.1)) else {
                 continue;
             };
@@ -87,6 +84,11 @@ impl Source {
                 candidates[i] = label
                     .map(|(edge, _)| edge)
                     .filter(|e| required.contains_key(e));
+            }
+            // Unrelated old interfaces need no deduplication table. Only edges
+            // with a candidate required chord can contribute path coverage.
+            if candidates.iter().all(Option::is_none) || !seen.insert(edge) {
+                continue;
             }
             for (i, chord) in candidates.into_iter().enumerate() {
                 let Some(chord) = chord else { continue };
