@@ -96,19 +96,45 @@ fn triangulate(
     // and retained chord endpoints: an interior sample on the chord may need its two
     // endpoint faces rebuilt as well. Their unmoved edges form the constrained ring.
     let mut touched = vec![false; m.positions.len()];
-    for &v in endpoints {
-        touched[v as usize] = true;
-    }
-    let chord_endpoints = if plan == PatchPlan::ChordSpokes {
-        touched.clone()
+    let mut chord_endpoints = if plan == PatchPlan::ChordSpokes {
+        vec![false; m.positions.len()]
     } else {
         Vec::new()
     };
+    for &v in endpoints {
+        if plan == PatchPlan::ChordSpokes {
+            chord_endpoints[v as usize] = true;
+        } else {
+            touched[v as usize] = true;
+        }
+    }
     if let Some(map) = mapping {
         for (v, &to) in map.iter().enumerate() {
             if v != to as usize {
                 touched[v] = true;
-                touched[to as usize] = true;
+                if plan != PatchPlan::ChordSpokes {
+                    touched[to as usize] = true;
+                }
+            }
+        }
+    }
+    // The final construction freezes endpoint-only faces: rebuilding those can
+    // move a coincident ear into a neighboring, originally unchanged sheet strip.
+    // A root shared with the opposite source chart cannot separate such sheets.
+    let mut vertex_charts = if plan == PatchPlan::ChordSpokes {
+        vec![0u8; m.positions.len()]
+    } else {
+        Vec::new()
+    };
+    if plan == PatchPlan::ChordSpokes {
+        for &t in &m.triangles {
+            let n = topology::normal(&m.positions, t);
+            let axis = (0..3).max_by(|&a, &b| n[a].abs().total_cmp(&n[b].abs()))?;
+            if n[axis] != 0. {
+                let chart = 1 << (2 * axis + usize::from(n[axis] > 0.));
+                for v in t {
+                    vertex_charts[v as usize] |= chart;
+                }
             }
         }
     }
@@ -283,13 +309,15 @@ fn triangulate(
             // longer collinear strip may need its ordinary CDT unchanged while
             // another sheet's new ear is repaired. The original global guard
             // still judges their complete union below.
-            if let Some(spokes) = fan::chord_spokes(
+            let spokes = fan::chord_spokes(
                 m,
                 &directed_boundary,
                 &chord_endpoints,
+                &vertex_charts,
                 axis,
                 sum[axis] > 0.,
-            ) {
+            );
+            if let Some(spokes) = spokes {
                 constraints.extend(spokes);
             }
         }
@@ -421,6 +449,7 @@ fn triangulate(
         touched,
         face_patches,
         chord_endpoints,
+        vertex_charts,
     ));
     #[cfg(test)]
     crate::test_alloc::trace("cdt finish");
@@ -468,9 +497,11 @@ fn finish(
     drop(lost);
     // Reject an illegal proposal before allocating topology witnesses. Both checks
     // consume the same immutable input and neither grants a source license.
-    if guard.violations(&m.positions, &output).iter().any(|v| *v) {
+    let invalid = guard.violations(&m.positions, &output);
+    if invalid.iter().any(|v| *v) {
         return rejected("finish", "original Source rejected candidate");
     }
+    drop(invalid);
     let change = topology::changes(m, &output, interface, 0.)
         .or_else(|| rejected("finish", "topology::changes refused"))?;
     if change.receipt.closed_holes != 0
@@ -765,7 +796,7 @@ mod tests {
 
     #[test]
     fn contracted_opposite_sheets_use_a_fixed_alternate_diagonal_without_new_twins() {
-        for interior in [false, true] {
+        for (interior, long_strip) in [(false, false), (true, false), (false, true)] {
             // Two local six-corner strips share their upper three source vertices.
             // Their distinct old arc midpoints keep the source faces apart. The
             // nearest-endpoint collapse and ordinary CDT create the new twin 2/3/6.
@@ -795,12 +826,25 @@ mod tests {
                 [10, 3, 6],
             ];
             if interior {
-                // This unmoved sample lies exactly on the auxiliary 4--3 spoke.
-                // It must split that spoke, rather than being suppressed like a
-                // sample on an exact delivered border chord.
+                // This unmoved sample lies on the auxiliary 4--3 line. It must
+                // survive either in the frozen ring or by splitting a spoke;
+                // it cannot be suppressed like a delivered-border sample.
                 positions.push([0.5, 0., 2.5]);
                 triangles[3] = [2, 5, 11];
                 triangles.extend([[5, 3, 11], [3, 2, 11]]);
+            } else if long_strip {
+                // Extra certified lower arcs leave several retained collinear
+                // border edges beyond the best root. They must survive exactly;
+                // zero wedges may select spokes but never emit zero-area faces.
+                positions.extend([
+                    [2., 0., 0.5],
+                    [2., 0.125, 0.5],
+                    [2., 0., 0.25],
+                    [2., 0.125, 0.25],
+                ]);
+                triangles[1] = [0, 13, 1];
+                triangles[6] = [8, 7, 14];
+                triangles.extend([[13, 11, 1], [11, 4, 1], [14, 7, 12], [12, 7, 9]]);
             }
             let mut m = Merged {
                 keys: positions.iter().copied().map(key).collect(),
@@ -816,11 +860,23 @@ mod tests {
                 let (a, b) = (m.keys[a], m.keys[b]);
                 InterfaceRow::new(0, a.min(b), a.max(b), 0, 1)
             };
-            let interface = [row(4, 6), row(9, 6)];
-            let previous = [(4, 5), (5, 6), (9, 10), (10, 6)].map(|(a, b)| row(a, b));
+            let mut interface = vec![row(4, 6), row(9, 6)];
+            let mut previous: Vec<_> = [(4, 5), (5, 6), (9, 10), (10, 6)]
+                .map(|(a, b)| row(a, b))
+                .into();
+            let mut endpoints = vec![4, 6, 9];
+            if long_strip {
+                interface.extend([row(0, 11), row(8, 12)]);
+                previous.extend([(0, 13), (13, 11), (8, 14), (14, 12)].map(|(a, b)| row(a, b)));
+                endpoints.extend([0, 11, 8, 12]);
+            }
             let mut labels = vec![None; m.positions.len()];
             labels[5] = Some((m.keys[6], m.keys[4], 0.5, 0));
             labels[10] = Some((m.keys[6], m.keys[9], 0.5, 0));
+            if long_strip {
+                labels[13] = Some((m.keys[11], m.keys[0], 0.5, 0));
+                labels[14] = Some((m.keys[12], m.keys[8], 0.5, 0));
+            }
             let guard = super::super::folds::Source::for_contraction(
                 &m.positions,
                 &m.triangles,
@@ -831,6 +887,10 @@ mod tests {
             let mut map: Vec<_> = (0..m.positions.len() as u32).collect();
             map[5] = 6;
             map[10] = 6;
+            if long_strip {
+                map[13] = 11;
+                map[14] = 12;
+            }
             let cap = m.triangles.len();
             let receipt = if interior {
                 triangulate(
@@ -838,7 +898,7 @@ mod tests {
                     &interface,
                     cap,
                     Some(&map),
-                    &[4, 6, 9],
+                    &endpoints,
                     &guard,
                     PatchPlan::ChordSpokes,
                 )
@@ -849,16 +909,27 @@ mod tests {
                     &interface,
                     cap,
                     Some(&map),
-                    &[4, 6, 9],
+                    &endpoints,
                     &guard,
                     PatchPlan::Charts
                 )
                 .is_none());
                 assert_eq!(m.triangles, before);
-                contract(&mut m, &interface, &map, &[4, 6, 9], cap, &guard).unwrap()
+                contract(&mut m, &interface, &map, &endpoints, cap, &guard).unwrap()
             };
             assert!(receipt.reconstructed_faces > 0);
             assert!(m.triangles.len() <= cap);
+            for t in before
+                .iter()
+                .filter(|t| t.iter().all(|&v| map[v as usize] == v))
+            {
+                assert!(
+                    m.triangles
+                        .iter()
+                        .any(|out| super::super::oriented(out) == super::super::oriented(t)),
+                    "endpoint-only source face was reconstructed"
+                );
+            }
             assert!(!guard
                 .violations(&m.positions, &m.triangles)
                 .iter()
@@ -877,6 +948,21 @@ mod tests {
                 assert!(
                     m.triangles.iter().any(|t| t.contains(&11)),
                     "source sample was dropped"
+                );
+            } else if long_strip {
+                assert_eq!(m.triangles.len(), 10);
+                for (a, b) in [(0, 11), (11, 4), (8, 12), (12, 9)] {
+                    assert!(
+                        m.triangles.iter().any(|t| t.contains(&a) && t.contains(&b)),
+                        "collinear border subdivision lost"
+                    );
+                }
+                assert!(
+                    !m.triangles
+                        .iter()
+                        .any(|t| (t.contains(&0) && t.contains(&4))
+                            || (t.contains(&8) && t.contains(&9))),
+                    "border subdivision spanned"
                 );
             } else {
                 assert_eq!(m.triangles.len(), 8);

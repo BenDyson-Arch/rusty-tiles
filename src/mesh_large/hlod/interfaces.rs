@@ -154,8 +154,10 @@ pub(crate) fn merge_rows(rows: &mut Vec<InterfaceRow>) {
             _ => out.push(r),
         }
     }
-    out.shrink_to_fit();
     *rows = out;
+    // Release the drained input before a moving shrink allocates its replacement.
+    // At most two row buffers then coexist, including allocator realloc transients.
+    rows.shrink_to_fit();
 }
 
 impl Record for InterfaceRow {

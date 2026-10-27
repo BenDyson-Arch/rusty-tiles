@@ -11,6 +11,8 @@ pub(super) fn memory_need(sorter: SortConfig) -> u64 {
         + 8 * sorter.buffer_bytes as u64
         + (1 << 16)
         + 12 * disk::CACHE_BYTES
+        // Chain reuse compares two live contracts before the geometry stage.
+        + 2 * contract_workspace_bytes(6 * super::TRIANGLE_CAP as u64)
 }
 
 pub(super) const WALK_CACHE_BYTES: u64 = 8 * disk::CACHE_BYTES;
@@ -116,6 +118,20 @@ pub(super) struct Contract {
     /// Exact vertex contacts with a terminal leaf, including contacts with no shared edge.
     pub terminal_vertices: Vec<Key>,
     pub scale: f64,
+}
+
+/// Peak storage of contract construction for at most `limit` linked items. Each
+/// item emits at most one certificate, two terminal keys and three interface rows.
+/// `merge_rows` briefly holds both row vectors. Its retired row copy also covers
+/// stable certificate sorting's scratch (one certificate is smaller than three
+/// rows). Exact reservations below prevent growth transients. This allowance stays live
+/// through geometry, S2 and audit publication, independently of geometry workspace.
+pub(super) fn contract_workspace_bytes(limit: u64) -> u64 {
+    limit.saturating_mul(
+        (std::mem::size_of::<Certificate>()
+            + 2 * std::mem::size_of::<Key>()
+            + 6 * std::mem::size_of::<InterfaceRow>()) as u64,
+    )
 }
 
 impl Contract {
@@ -576,9 +592,10 @@ impl Borders {
             return Ok(None);
         }
         let mut at = n[6];
-        let mut interface = Vec::new();
-        let mut certificates = Vec::new();
-        let mut terminal_vertices = Vec::new();
+        let count = n[7] as usize;
+        let mut interface = Vec::with_capacity(3 * count);
+        let mut certificates = Vec::with_capacity(count);
+        let mut terminal_vertices = Vec::with_capacity(2 * count);
         while at != NONE {
             let link = self.refs.get(at)?;
             let s = self.segments.get(link[1])?;
@@ -661,6 +678,52 @@ mod tests {
     };
     fn k(x: f32, y: f32) -> Key {
         [x, y, 0.].map(f32::to_bits)
+    }
+    #[test]
+    fn contract_normalization_at_link_limit_fits_its_own_allowance() {
+        // Model the constructor's maximum linked-item emission, then execute its
+        // actual normalization operations. Each disjoint triangle has terminal
+        // one-edge arcs: nine emitted rows merge to six. This includes the moving
+        // shrink counted by test_alloc, with all certificate/terminal buffers live.
+        // Disk graph caches have their own fixed allowance and are not modeled here.
+        let limit = 6 * super::super::TRIANGLE_CAP;
+        let ((rows, certificates, terminals), peak) = crate::test_alloc::peak(|| {
+            let mut rows = Vec::with_capacity(3 * limit);
+            let mut certificates = Vec::with_capacity(limit);
+            let mut terminals = Vec::with_capacity(2 * limit);
+            for i in 0..limit / 3 {
+                let x = 4. * i as f32;
+                let points = [k(x, 0.), k(x + 1., 0.), k(x, 1.)];
+                for j in 0..3 {
+                    let (a, b) = (points[j], points[(j + 1) % 3]);
+                    for p in [a, b] {
+                        rows.push(InterfaceRow::new(0, p, p, 0, 1));
+                        terminals.push(p);
+                    }
+                    rows.push(InterfaceRow::new(0, a.min(b), a.max(b), 0, 1));
+                    certificates.push(Certificate {
+                        endpoints: [a, b],
+                        chain: [a, b],
+                        origin: a,
+                        first: 0,
+                        end: 1,
+                        epsilon: 0.,
+                        terminal_lock: true,
+                    });
+                }
+            }
+            super::super::interfaces::merge_rows(&mut rows);
+            certificates.sort_by_key(|c| (c.endpoints, c.chain, c.first));
+            terminals.sort_unstable();
+            terminals.dedup();
+            (rows, certificates, terminals)
+        });
+        assert_eq!(rows.len(), 2 * limit);
+        assert_eq!(certificates.len(), limit);
+        assert_eq!(terminals.len(), limit);
+        let charge = contract_workspace_bytes(limit as u64);
+        eprintln!("CONTRACT CONSTRUCTION: links={limit}, peak={peak}, charge={charge}");
+        assert!(peak as u64 <= charge);
     }
     #[test]
     fn large_source_scratch_admission_is_checked_and_incidence_bounded() {

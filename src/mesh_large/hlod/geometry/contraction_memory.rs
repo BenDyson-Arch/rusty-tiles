@@ -5,7 +5,11 @@
 //! Only held children and the separately admitted disk source-owner graph predate
 //! measurement: contract rows, merge/reference, previous rows, lookups, contraction
 //! Source, topology checks, recovery and the returned output are all measured.
+//! The combined peak includes contract metadata; only retained certificate and
+//! terminal-key capacities are subtracted for the 1,700 B/face geometry check.
+//! Interface rows and their construction transients remain in that check.
 //! These are allocation controls, not RSS measurements or general CDT work bounds.
+use super::super::borders::{contract_workspace_bytes, Certificate};
 use super::*;
 use std::cell::Cell;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -66,6 +70,10 @@ fn row(leaf: u32, a: Key, b: Key) -> InterfaceRow {
     InterfaceRow::new(leaf, a.min(b), a.max(b), leaf, OUTSIDE_LEAF)
 }
 
+fn strip_row(leaf: u32, a: Key, b: Key) -> InterfaceRow {
+    InterfaceRow::new(leaf, a.min(b), a.max(b), leaf, OUTSIDE_LEAF + 1)
+}
+
 /// A constructive source-domain witness, independent of the producer's guard.
 /// An external owner holds the lower two faces. Thus every source edge incident
 /// to the midpoint has two faces: source-open endpoint pinning cannot forbid its
@@ -73,12 +81,14 @@ fn row(leaf: u32, a: Key, b: Key) -> InterfaceRow {
 /// For the rejection control an additional external triangle meets c only at a
 /// point; it adds no branch to the midpoint's shared arc.
 ///
-/// Each soup triangle can likewise have an oppositely oriented copy in that
-/// external owner. It has three distinct shared points and three shared edges,
-/// exactly six rows, with no source-open edges. Disconnected components and
+/// Each soup triangle has an oppositely oriented copy in a separate terminal
+/// exterior leaf at depth one. It has three distinct shared points and three
+/// shared edges, exactly six rows, with no source-open edges. Disconnected components and
 /// existing opposite source faces are supported; no fresh face license is added.
-/// The external owner has a depth-two descendant, so it is not terminal at the
-/// tested depth one. Its source graph is stage-owned, not parent-job workspace.
+/// The strip's exterior owner has a depth-two descendant (leaf OUTSIDE_LEAF+1),
+/// so it is not terminal at the tested depth one. The soup's terminal exterior
+/// leaf is OUTSIDE_LEAF. Source graphs are stage-owned; materialized contract
+/// certificates and terminal contacts below belong to the measured parent job.
 fn assert_source_domain(third_contact: bool) {
     let positions = [
         STRIP[0],
@@ -225,14 +235,14 @@ fn children(n: usize, fixture: Fixture) -> (TileKey, Vec<TileGeometry>) {
             child.triangles.extend_from_slice(fixture.faces());
             let [a, mid, b, c] = std::array::from_fn(|i| key(fixture.positions()[i]));
             child.interface.extend([
-                row(leaf, a, a),
-                row(leaf, mid, mid),
-                row(leaf, b, b),
-                row(leaf, a, mid),
-                row(leaf, mid, b),
+                strip_row(leaf, a, a),
+                strip_row(leaf, mid, mid),
+                strip_row(leaf, b, b),
+                strip_row(leaf, a, mid),
+                strip_row(leaf, mid, b),
             ]);
             if third_contact {
-                child.interface.push(row(leaf, c, c));
+                child.interface.push(strip_row(leaf, c, c));
             }
         }
         for _ in 0..soup_faces {
@@ -293,6 +303,226 @@ fn children(n: usize, fixture: Fixture) -> (TileKey, Vec<TileGeometry>) {
     )
 }
 
+#[derive(Clone, Copy, Debug)]
+struct Metadata {
+    certificates: usize,
+    certificate_capacity: usize,
+    terminal_vertices: usize,
+    terminal_capacity: usize,
+}
+
+impl Metadata {
+    fn of(contract: &Contract) -> Self {
+        Self {
+            certificates: contract.certificates.len(),
+            certificate_capacity: contract.certificates.capacity(),
+            terminal_vertices: contract.terminal_vertices.len(),
+            terminal_capacity: contract.terminal_vertices.capacity(),
+        }
+    }
+
+    fn bytes(self) -> usize {
+        self.certificate_capacity * std::mem::size_of::<Certificate>()
+            + self.terminal_capacity * std::mem::size_of::<Key>()
+    }
+}
+
+/// Model the exact reservations and emission of Borders::contract, including
+/// duplicate endpoint rows/terminal keys before merge/dedup. Soup endpoints are
+/// terminal junctions, so each literal edge is its own one-edge source chain.
+/// The strip is the nonterminal ordered arc [a,mid,b], and an isolated third
+/// contact contributes a linked point item but no certificate or terminal key.
+fn measured_contract(parent: TileKey, children: &[TileGeometry], fixture: Fixture) -> Contract {
+    let soup_faces: usize =
+        children.iter().map(|c| c.triangles.len()).sum::<usize>() - fixture.faces().len();
+    let expected_certificates = 3 * soup_faces + 1;
+    let count = expected_certificates + usize::from(fixture.third_contact());
+    let limit = 6 * super::super::TRIANGLE_CAP;
+    assert!(count <= limit);
+    // Allocate all retained metadata before rows, and never resize it. Thus its
+    // full capacity is live throughout row construction and the geometry job.
+    let mut certificates = Vec::with_capacity(count);
+    let mut terminal_vertices = Vec::with_capacity(2 * count);
+    let mut interface = Vec::with_capacity(3 * count);
+    for (slot, child) in children.iter().enumerate() {
+        let skip = if slot == 0 { fixture.faces().len() } else { 0 };
+        for t in &child.triangles[skip..] {
+            for i in 0..3 {
+                let (a, b) = edge(
+                    key(child.positions[t[i] as usize]),
+                    key(child.positions[t[(i + 1) % 3] as usize]),
+                );
+                let certificate = Certificate {
+                    endpoints: [a, b],
+                    chain: [a, b],
+                    origin: a,
+                    first: 0,
+                    end: 1,
+                    epsilon: 0.,
+                    terminal_lock: true,
+                };
+                assert_eq!(certificate.endpoints, certificate.chain);
+                assert_eq!(certificate.origin, certificate.chain[0]);
+                assert_eq!(certificate.end - certificate.first, 1);
+                assert_eq!(certificate.epsilon.to_bits(), 0f64.to_bits());
+                certificates.push(certificate);
+                terminal_vertices.extend([a, b]);
+                for point in [a, b] {
+                    interface.push(row(child.key.leaf_begin, point, point));
+                }
+                interface.push(row(child.key.leaf_begin, a, b));
+            }
+        }
+    }
+    let positions = fixture.positions();
+    let (a, mid, b) = (key(positions[0]), key(positions[1]), key(positions[2]));
+    assert!(a < mid && mid < b);
+    // Source ordinals are 0,1,2, so the chord's t=1/2 need not be a spatial
+    // midpoint. Match the outward certificate arithmetic of curve::shortcuts:
+    // literal edges are exactly zero; a genuine shortcut includes rounding.
+    let distance = (0..3)
+        .map(|axis| {
+            let interpolated =
+                f64::from(positions[0][axis]) * 0.5 + f64::from(positions[2][axis]) * 0.5;
+            (interpolated - f64::from(positions[1][axis])).powi(2)
+        })
+        .sum::<f64>()
+        .sqrt();
+    let rounding = positions[..3]
+        .iter()
+        .flatten()
+        .map(|&x| f64::from(x).abs())
+        .fold(1., f64::max)
+        * (128. * f64::EPSILON);
+    let epsilon = (distance + rounding).next_up();
+    assert!(epsilon > distance && epsilon.is_finite());
+    match fixture {
+        Fixture::Direct { .. } => assert_eq!(distance, 0.),
+        Fixture::Constrained => assert_eq!(distance, 0.5),
+    }
+    // These are existing child arc edges, while a-b is genuinely new.
+    assert!(!fixture
+        .faces()
+        .iter()
+        .any(|t| t.contains(&0) && t.contains(&2)));
+    for arc in [(a, mid), (mid, b)] {
+        assert!(children[0].interface.iter().any(|r| r.item() == arc));
+    }
+    certificates.push(Certificate {
+        endpoints: [a, b],
+        chain: [a, mid],
+        origin: a,
+        first: 0,
+        end: 2,
+        epsilon,
+        terminal_lock: false,
+    });
+    for point in [a, b] {
+        interface.push(strip_row(parent.leaf_begin, point, point));
+    }
+    interface.push(strip_row(parent.leaf_begin, a, b));
+    if fixture.third_contact() {
+        let c = key(positions[3]);
+        // An isolated point segment emits its endpoint row twice in production.
+        interface.extend([strip_row(parent.leaf_begin, c, c); 2]);
+    }
+    assert_eq!(certificates.len(), expected_certificates);
+    assert_eq!(terminal_vertices.len(), 6 * soup_faces);
+    assert_eq!(
+        interface.len(),
+        3 * expected_certificates + 2 * usize::from(fixture.third_contact())
+    );
+    assert_eq!(interface.capacity(), 3 * count);
+    super::super::interfaces::merge_rows(&mut interface);
+    certificates.sort_by_key(|c| (c.endpoints, c.chain, c.first));
+    terminal_vertices.sort_unstable();
+    terminal_vertices.dedup();
+    let contract = Contract {
+        depth: parent.depth,
+        interface,
+        certificates,
+        terminal_vertices,
+        // A depth-one ladder for an extent containing the generated source.
+        scale: (4. + 4. * soup_faces as f64) / 2048.,
+    };
+    let metadata = Metadata::of(&contract);
+    assert_eq!(metadata.certificates, expected_certificates);
+    assert_eq!(metadata.certificate_capacity, count);
+    assert_eq!(metadata.terminal_vertices, 3 * soup_faces);
+    assert_eq!(metadata.terminal_capacity, 2 * count);
+    assert!(metadata.certificate_capacity <= limit);
+    assert!(metadata.terminal_capacity <= 2 * limit);
+    assert_eq!(
+        contract.interface.len(),
+        6 * soup_faces + 3 + usize::from(fixture.third_contact())
+    );
+    assert_eq!(contract.interface.capacity(), contract.interface.len());
+    assert_eq!(
+        contract.interface.iter().filter(|r| !r.is_vertex()).count(),
+        expected_certificates
+    );
+    assert_eq!(
+        contract
+            .certificates
+            .iter()
+            .filter(|c| c.end - c.first == 2)
+            .count(),
+        1
+    );
+    assert_eq!(
+        contract
+            .certificates
+            .iter()
+            .filter(|c| c.terminal_lock)
+            .count(),
+        3 * soup_faces
+    );
+    assert!(contract
+        .certificates
+        .iter()
+        .all(|c| c.epsilon <= contract.scale / 16.));
+    assert!(contract
+        .terminal_vertices
+        .iter()
+        .all(|k| positions.iter().all(|p| key(*p) != *k)));
+    assert!(metadata.bytes() as u64 <= contract_workspace_bytes(limit as u64));
+    contract
+}
+
+fn assert_peaks(n: usize, combined_peak: usize, metadata: Metadata) {
+    let metadata_bytes = metadata.bytes();
+    let geometry_peak = combined_peak
+        .checked_sub(metadata_bytes)
+        .expect("retained metadata must be present in the combined peak");
+    let geometry_charge = n as u64 * super::super::JOB_BYTES_PER_TRIANGLE;
+    let contract_charge = contract_workspace_bytes((6 * super::super::TRIANGLE_CAP) as u64);
+    eprintln!(
+        "CONTRACT WORKSPACE: combined_peak={combined_peak} bytes, \
+        certificates={} capacity={}, terminal_vertices={} capacity={}, \
+        retained_metadata={metadata_bytes} bytes, geometry_peak={geometry_peak} bytes \
+        ({:.2} B/input-face), geometry_charge={geometry_charge}, \
+        contract_charge={contract_charge}, combined_charge={}",
+        metadata.certificates,
+        metadata.certificate_capacity,
+        metadata.terminal_vertices,
+        metadata.terminal_capacity,
+        geometry_peak as f64 / n as f64,
+        geometry_charge + contract_charge
+    );
+    assert_eq!(super::super::JOB_BYTES_PER_TRIANGLE, 1700);
+    // Subtract only certificate/terminal capacities; interface rows and every
+    // construction transient remain in this conservative geometry residual.
+    assert!(
+        geometry_peak as u64 <= geometry_charge,
+        "geometry {geometry_peak} > {geometry_charge}"
+    );
+    assert!(
+        combined_peak as u64 <= geometry_charge + contract_charge,
+        "combined {combined_peak} > {}",
+        geometry_charge + contract_charge
+    );
+}
+
 fn complete_parent(n: usize, third_contact: bool) {
     crate::test_alloc::route_meshopt();
     // Held inputs are separately leased, as in parent_jobs_allocate_within_their_charge.
@@ -305,32 +535,14 @@ fn complete_parent(n: usize, third_contact: bool) {
     let checks = AtomicUsize::new(0);
     let expected_rows = 6 * (n - 2) + 3 + usize::from(third_contact);
     let expected_contacts = 3 * (n - 2) + 3 + usize::from(third_contact);
-    let (result, peak) = crate::test_alloc::peak(|| {
-        // This allocation belongs to the parent job. In particular, do not
-        // prebuild the dense parent rows alongside the held child fixtures.
-        let mut interface: Vec<_> = children
-            .iter()
-            .flat_map(|child| child.interface.iter())
-            .filter(|r| r.outer(parent.leaf_begin, parent.leaf_end))
-            .filter(|r| r.a != mid && r.b != mid)
-            .copied()
-            .collect();
-        interface.push(row(0, a, b));
-        super::super::interfaces::merge_rows(&mut interface);
-        assert_eq!(interface.len(), expected_rows);
-        assert!(interface.len() <= 6 * super::super::TRIANGLE_CAP);
+    let ((result, metadata), peak) = crate::test_alloc::peak(|| {
+        let contract = measured_contract(parent, &children, Fixture::Direct { third_contact });
+        assert_eq!(contract.interface.len(), expected_rows);
         assert_eq!(
-            interface.iter().any(|r| r.a == c || r.b == c),
+            contract.interface.iter().any(|r| r.a == c || r.b == c),
             third_contact
         );
-        let contract = Contract {
-            depth: parent.depth,
-            interface,
-            certificates: Vec::new(),
-            terminal_vertices: Vec::new(),
-            scale: 0.,
-        };
-        build_parent(
+        let result = build_parent(
             parent,
             &children,
             &[super::super::TRIANGLE_CAP],
@@ -343,7 +555,7 @@ fn complete_parent(n: usize, third_contact: bool) {
                 } else {
                     // The geometry owner must not query an unshared interior key.
                     assert!(k != c || third_contact);
-                    Ok(Some((k, k, 0., 2)))
+                    Ok(Some((k, k, 0., if [a, b, c].contains(&k) { 2 } else { 1 })))
                 }
             },
             &mut |_| {
@@ -354,13 +566,16 @@ fn complete_parent(n: usize, third_contact: bool) {
                 checks.fetch_add(1, Ordering::Relaxed);
                 Ok(())
             },
-        )
+        );
+        // Read and retain both metadata vectors after the complete builder.
+        let metadata = Metadata::of(std::hint::black_box(&contract));
+        (result, metadata)
     });
     let charge = n as u64 * super::super::JOB_BYTES_PER_TRIANGLE;
     eprintln!(
         "COMPLETE CONTRACTION third_contact={third_contact}: input={n}, \
-        keys={}, previous_rows={}, parent_rows={expected_rows}, peak={peak} bytes, \
-        {:.2} B/input-face, charge={charge} ({} B/input-face), \
+        keys={}, previous_rows={}, parent_rows={expected_rows}, combined_peak={peak} bytes, \
+        {:.2} combined B/input-face, geometry_charge={charge} ({} B/input-face), \
         mapping_calls={}, mapped_mid={}",
         3 * n - 2,
         6 * (n - 2) + 5 + usize::from(third_contact),
@@ -368,11 +583,6 @@ fn complete_parent(n: usize, third_contact: bool) {
         super::super::JOB_BYTES_PER_TRIANGLE,
         calls.get(),
         mapped_mid.get()
-    );
-    assert_eq!(super::super::JOB_BYTES_PER_TRIANGLE, 1700);
-    assert!(
-        peak as u64 <= charge,
-        "{peak} > {charge}; third_contact={third_contact}"
     );
     let outcome = result.expect("complete parent must report an outcome");
     assert!(calls.get() >= expected_contacts);
@@ -428,6 +638,7 @@ fn complete_parent(n: usize, third_contact: bool) {
         let lost = missing(&geometry.triangles, &keys, &segments, &points);
         assert!(lost.0.is_empty() && lost.1.is_empty());
     }
+    assert_peaks(n, peak, metadata);
 }
 
 #[test]
@@ -454,32 +665,17 @@ fn complete_parent_constrained_contraction_dense_rows_fit_charge() {
     let soup_faces = n - FOLDED_FACES.len();
     let expected_rows = 6 * soup_faces + 3;
     let expected_contacts = 3 * soup_faces + 3;
-    let (result, peak) = crate::test_alloc::peak(|| {
-        let mut interface: Vec<_> = children
-            .iter()
-            .flat_map(|child| child.interface.iter())
-            .filter(|r| r.outer(parent.leaf_begin, parent.leaf_end))
-            .filter(|r| r.a != mid && r.b != mid)
-            .copied()
-            .collect();
-        interface.push(row(0, a, b));
-        super::super::interfaces::merge_rows(&mut interface);
-        assert_eq!(interface.len(), expected_rows);
-        assert!(interface.len() <= 6 * super::super::TRIANGLE_CAP);
-        assert!(interface
+    let ((result, metadata), peak) = crate::test_alloc::peak(|| {
+        let contract = measured_contract(parent, &children, Fixture::Constrained);
+        assert_eq!(contract.interface.len(), expected_rows);
+        assert!(contract
+            .interface
             .iter()
             .all(|r| ![mid, p, q, frozen].contains(&r.a) && ![mid, p, q, frozen].contains(&r.b)));
-        let contract = Contract {
-            depth: parent.depth,
-            interface,
-            certificates: Vec::new(),
-            terminal_vertices: Vec::new(),
-            scale: 0.,
-        };
         // This calls the complete producer, including its original-source
         // contraction guard and the successful constrained triangulator. There
         // is no helper-only measurement or substitute prelicensed output.
-        build_parent(
+        let result = build_parent(
             parent,
             &children,
             &[super::super::TRIANGLE_CAP],
@@ -491,7 +687,7 @@ fn complete_parent_constrained_contraction_dense_rows_fit_charge() {
                     mapped_mid.set(mapped_mid.get() + 1);
                     Ok(Some((a, b, 0.5, 2)))
                 } else {
-                    Ok(Some((k, k, 0., 2)))
+                    Ok(Some((k, k, 0., if [a, b].contains(&k) { 2 } else { 1 })))
                 }
             },
             &mut |_| {
@@ -499,13 +695,15 @@ fn complete_parent_constrained_contraction_dense_rows_fit_charge() {
                 Ok(true)
             },
             &|| Ok(()),
-        )
+        );
+        let metadata = Metadata::of(std::hint::black_box(&contract));
+        (result, metadata)
     });
     let charge = n as u64 * super::super::JOB_BYTES_PER_TRIANGLE;
     eprintln!(
         "COMPLETE CONTRACTION constrained: input={n}, keys={}, \
-        previous_rows={}, parent_rows={expected_rows}, peak={peak} bytes, \
-        {:.2} B/input-face, charge={charge} ({} B/input-face), \
+        previous_rows={}, parent_rows={expected_rows}, combined_peak={peak} bytes, \
+        {:.2} combined B/input-face, geometry_charge={charge} ({} B/input-face), \
         mapping_calls={}, mapped_mid={}",
         3 * soup_faces + FOLDED_STRIP.len(),
         6 * soup_faces + 5,
@@ -593,5 +791,5 @@ fn complete_parent_constrained_contraction_dense_rows_fit_charge() {
     assert!(lost.0.is_empty() && lost.1.is_empty());
     // Verify the actual successful CDT/frozen-ring result before the resource
     // assertion, so an overcharge cannot hide an unrelated branch failure.
-    assert!(peak as u64 <= charge, "constrained: {peak} > {charge}");
+    assert_peaks(n, peak, metadata);
 }

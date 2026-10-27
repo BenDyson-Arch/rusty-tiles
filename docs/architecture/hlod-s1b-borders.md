@@ -182,6 +182,27 @@ rows join to their source edges/points in three edge probes per source face,
 without a patch-by-row cross-product. Receipts count new oriented faces with
 multiplicity, excluding retained faces.
 
+Contraction tries at most three sequential triangulations against the same original
+Source: chart strips, coplanar panels, and chart strips with local endpoint-rooted
+interior diagonals. The third proposal checks at most two roots per strip. Collinear
+boundary subdivisions remain separate constraints; auxiliary spokes never span them.
+Unmoved interior source samples remain present, including points on auxiliary spokes.
+
+The parent geometry coefficient is 1,700 bytes per input triangle. Contract metadata
+has a separate admission allowance: for L linked items, reserve L certificates,
+2L terminal keys and both 3L interface-row vectors needed during merging. Production
+uses exact capacities and L <= 6C, so the allowance is L times the actual Rust sizes
+of one certificate, two keys and six rows (16,121,856 bytes at C=8,192 on this lane).
+Stable certificate sorting's scratch replaces the larger retired duplicate-row vector.
+Each parent job reserves it; the stage separately reserves the publication contract,
+and graph construction reserves both contracts compared for single-child reuse.
+These allocations stay inside the original memory budget, with no public knob.
+Complete-parent controls populate certificates and terminal contacts inside the
+counted closure, report combined peaks, and still enforce the geometry coefficient
+after subtracting only retained certificate/terminal storage. Interface rows remain
+in the geometry measurement. Fixed-cap admission and the 10 GiB execution limit
+do not change.
+
 For a simple projected sheet that CDT cannot reduce safely, a final fan proposal
 uses an existing local interior source vertex and preserves every boundary edge.
 Two oppositely oriented coincident sheets use distinct centers. At most two
@@ -317,6 +338,21 @@ used 276.26 million search steps against 265.61 million at 3/4. Keep the measure
 3/4 target and remove redundant geometry bookkeeping without changing output.
 Exact-source paired CPU receipts, including failed trials, remain in the evidence
 directory. Full-cap retry and all acceptance gates stay.
+
+Guard incidence records use temporary canonical vertex IDs for grouping only;
+directions and all source/boundary predicates retain exact decoded-key meaning.
+The key lookup is released before allocating incidence rows (24 rather than 56
+bytes each). Original face support is memoized within one check, never expanded.
+Literal preoptimization comparisons include duplicate keys, signed zero, extreme
+finite coordinates and both changed-boundary modes. These establish equivalence
+on their exercised domain, not independent geometric validity.
+
+Pinned meshopt 0.6.2 copies its input unchanged when the target is already met or
+every referenced vertex is locked. With our ErrorAbsolute-only options, no solve,
+pruning or index remapping can run in those cases; finite extent makes its final
+zero-error product zero. A shortcut avoids its temporary tables, while nonfinite
+extent retains the FFI path. A direct FFI control includes degenerate, coincident
+and reversed faces. All later topology, support and measured-error checks remain.
 
 Source-support checks precede contraction in both direct and constrained paths.
 A new shared chord receives only the directional minimum over a complete,

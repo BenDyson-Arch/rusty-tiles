@@ -96,10 +96,14 @@ const STAGE_RESERVE: u64 = 256 << 20;
 /// buckets precede its incidence arrays. Fold checking's sorted incidence array (168)
 /// replaces the smaller face-group array; it remains below that query peak.
 /// The cached source is explicitly released BEFORE topology comparison/support work,
-/// and never escapes the proposal. Topology and constrained remeshing therefore retain
-/// their prior lifetimes. Earlier merge/weld phases peak lower. The unchanged 1,700
-/// charge includes slack; `parent_jobs_allocate_within_their_charge` measures adversarial
-/// complete jobs, with meshoptimizer routed through the counting allocator.
+/// and never escapes the proposal. Contraction retains its original Source through
+/// sequential reconstruction attempts, but releases construction indexes before final
+/// Source/topology checks. Boundary comparison prunes identical connected union graphs
+/// and walks flat adjacency. Complete-parent direct, CDT and recovery controls count
+/// those overlapping lifetimes. Contract certificate/terminal storage and construction
+/// have a separate explicit allowance below, never borrowed from geometry or S2 space.
+/// The 1,700 coefficient is geometry workspace; the complete-parent controls report
+/// both it and the combined live contract cost, with meshopt allocations counted.
 const JOB_BYTES_PER_TRIANGLE: u64 = 1700;
 /// Finished coarse rows held while an earlier tile is still being built (`walk`); each is a
 /// few hundred bytes, charged within `STAGE_RESERVE`.
@@ -112,6 +116,9 @@ const JOB_ENCODE_BYTES: u64 = 16 << 20;
 fn job_charge(merged: u64, settings: &Settings) -> u64 {
     merged
         .saturating_mul(JOB_BYTES_PER_TRIANGLE)
+        .saturating_add(borders::contract_workspace_bytes(
+            (settings.cap as u64).saturating_mul(6),
+        ))
         .saturating_add(JOB_ENCODE_BYTES)
         .saturating_add(source_index::QUERY_BYTES)
         .saturating_add(error::WORK_BYTES)
@@ -312,6 +319,10 @@ pub(crate) fn plan(
         .saturating_add(STAGE_RESERVE)
         .saturating_add(source_index::BUILD_BYTES)
         .saturating_add(borders::WALK_CACHE_BYTES)
+        // Publication resolves one contract while admitted worker jobs remain live.
+        .saturating_add(borders::contract_workspace_bytes(
+            (settings.cap as u64).saturating_mul(6),
+        ))
         .saturating_add(streams);
     let minimum = fixed.saturating_add(
         incidence.max(

@@ -4521,6 +4521,11 @@ fn d11_back_to_back_has_zero_omissions_and_no_folds() {
 }
 
 #[test]
+fn d11_back_to_back_scaled_40_has_zero_omissions_and_no_folds() {
+    d11_coverage_control("back-to-back x40", &back_to_back(), 40.);
+}
+
+#[test]
 fn d11_t_junction_has_zero_omissions_and_no_folds() {
     d11_coverage_control("t-junction x1", &t_junction(), 1.);
 }

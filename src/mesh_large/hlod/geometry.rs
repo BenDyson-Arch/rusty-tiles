@@ -200,6 +200,19 @@ fn simplify_mapped(
     local: &mut [u32],
 ) -> (Vec<[u32; 3]>, f64) {
     let _cpu = super::cpu_profile::start(super::cpu_profile::Stage::Simplify, faces.len());
+    // In pinned meshopt 0.6.2, a satisfied target or all locked vertices leaves
+    // the copied index buffer untouched: no collapse, pruning or solve runs for
+    // our ErrorAbsolute-only options. Avoid allocating its quadrics/adjacency
+    // for these common tiny sheets. A finite extent is needed for its final
+    // sqrt(0) * extent to equal zero; unusual coordinates retain the FFI path.
+    if !faces.is_empty()
+        && (target == faces.len() || faces.iter().flatten().all(|&v| locked(v)))
+        && finite_extent(&merged.positions, faces)
+    {
+        let _fixed =
+            super::cpu_profile::start(super::cpu_profile::Stage::FixedSimplify, faces.len());
+        return (faces.to_vec(), 0.);
+    }
     // Merged indices are dense and bounded to eight capped children. Preserve first-use
     // order without hashing each corner, including when simplifying a protected subset.
     let mut global = Vec::new();
@@ -256,6 +269,21 @@ fn simplify_mapped(
         local[v as usize] = u32::MAX;
     }
     (triangles, f64::from(error))
+}
+
+fn finite_extent(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> bool {
+    let mut lo = [f32::MAX; 3];
+    let mut hi = [-f32::MAX; 3];
+    for &v in faces.iter().flatten() {
+        for (i, x) in positions[v as usize].into_iter().enumerate() {
+            if !x.is_finite() {
+                return false;
+            }
+            lo[i] = lo[i].min(x);
+            hi[i] = hi[i].max(x);
+        }
+    }
+    (0..3).all(|i| (hi[i] - lo[i]).is_finite())
 }
 
 /// A triangle rotated to start at its least vertex: equal for the same oriented face.
@@ -946,6 +974,80 @@ fn attempt_mode(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fixed_sheet_shortcut_matches_pinned_meshopt_with_degeneracies() {
+        for seed in 0..32u32 {
+            let positions: Vec<_> = (0..12)
+                .map(|i| {
+                    if seed % 4 == 0 {
+                        [0., -0., 0.]
+                    } else {
+                        [((i * 7 + seed) % 5) as f32, (i % 3) as f32, 0.]
+                    }
+                })
+                .collect();
+            // Includes repeated positions/indices, duplicate and reversed faces,
+            // nonmanifold shared edges and unused vertices. No cleanup is implied.
+            let triangles = vec![
+                [1, 2, 3],
+                [3, 2, 1],
+                [1, 2, 3],
+                [1, 2, 4],
+                [1, 5, 2],
+                [1, 1, 6],
+                [7, 8, 9],
+            ];
+            let merged = Merged {
+                keys: positions.iter().copied().map(key).collect(),
+                ells: vec![1; positions.len()],
+                positions,
+                triangles: triangles.clone(),
+                representative: vec![],
+            };
+            for (locked, target) in [(true, 0), (true, 3), (false, triangles.len())] {
+                let indices: Vec<_> = triangles.iter().flatten().copied().collect();
+                let mut actual = vec![0; indices.len()];
+                let locks = vec![u8::from(locked); merged.positions.len()];
+                let mut error = -1f32;
+                // SAFETY: buffers cover the declared indices/vertices, positions
+                // are tightly packed f32x3, and all indices are in range.
+                let n = unsafe {
+                    meshopt::ffi::meshopt_simplifyWithAttributes(
+                        actual.as_mut_ptr(),
+                        indices.as_ptr(),
+                        indices.len(),
+                        merged.positions.as_ptr().cast::<f32>(),
+                        merged.positions.len(),
+                        12,
+                        std::ptr::null(),
+                        0,
+                        std::ptr::null(),
+                        0,
+                        locks.as_ptr(),
+                        target * 3,
+                        f32::MAX,
+                        meshopt::SimplifyOptions::ErrorAbsolute.bits(),
+                        &mut error,
+                    )
+                };
+                actual.truncate(n);
+                assert_eq!(actual, indices);
+                assert_eq!(error.to_bits(), 0);
+                let mut local = vec![u32::MAX; merged.positions.len()];
+                let (output, estimate) =
+                    simplify_mapped(&merged, &triangles, &|_| locked, target, &mut local);
+                assert_eq!(output, triangles);
+                assert_eq!(estimate.to_bits(), 0);
+                assert!(local.iter().all(|&i| i == u32::MAX));
+            }
+        }
+        assert!(!finite_extent(
+            &[[f32::MAX, 0., 0.], [-f32::MAX, 0., 0.]],
+            &[[0, 1, 0]]
+        ));
+        assert!(!finite_extent(&[[f32::NAN, 0., 0.]], &[[0, 0, 0]]));
+    }
 
     #[test]
     fn parent_mapping_queries_only_child_interfaces_and_keeps_the_contracted_arc() {
