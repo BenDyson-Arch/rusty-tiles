@@ -886,7 +886,7 @@ def native(binary, folder, archive):
     return checked.returncode, json.loads(checked.stdout)
 
 
-def run(root, binary=None):
+def run(root, binary=None, sheet_n=120):
     from oracle import audit, Failure
     root = Path(root)
     results = kernels()
@@ -914,16 +914,16 @@ def run(root, binary=None):
             entry['native'] = label
         results.append(entry)
     if binary is not None:
-        results.append(producer(root / 'producer', binary))
+        results.append(producer(root / 'producer', binary, sheet_n))
     return results
 
 
-def producer(root, binary):
+def producer(root, binary, n=120):
     """The real producer's contracted borders pass both validators."""
     from oracle import audit
     root.mkdir(parents=True, exist_ok=True)
     source = root / 'sheet.glb'
-    sheet(source, 120)
+    sheet(source, n)
     audit_dir = root / 'out.hlod-audit'
     archive = root / 'out.3tz'
     report = subprocess.run([str(binary), '--json', 'mesh', '-i', str(source), '-o', str(archive), '--jobs', '2',
@@ -952,5 +952,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('outputdir', type=Path)
     parser.add_argument('--binary', type=Path)
+    parser.add_argument('--sheet', type=int, default=120,
+                        help='producer sheet size n (2n x 2n quads per half); CI uses 80, the smallest that contracts borders')
     args = parser.parse_args()
-    print(json.dumps(run(args.outputdir, args.binary), indent=2))
+    print(json.dumps(run(args.outputdir, args.binary, args.sheet), indent=2))

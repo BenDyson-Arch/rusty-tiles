@@ -113,7 +113,13 @@ fn sampled_hlod_archives_and_named_mutants() {
                         | "omission_controls.py"
                         | "border_controls.py"
                 ) {
-                    vec!["--binary", env!("CARGO_BIN_EXE_rusty-tiles")]
+                    let mut args = vec!["--binary", env!("CARGO_BIN_EXE_rusty-tiles")];
+                    // The producer sheet's exact audit dominates this test: 80 is the
+                    // smallest sheet with contracted borders (182 arcs); evidence runs use 120.
+                    if name == "border_controls.py" {
+                        args.extend(["--sheet", "80"]);
+                    }
+                    args
                 } else {
                     vec![]
                 },
