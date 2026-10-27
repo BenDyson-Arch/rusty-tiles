@@ -367,4 +367,48 @@ mod tests {
         // Unregistered paths are plain filesystem calls.
         write(&root.join("free.bin"), &vec![0; 2 * limit as usize]).unwrap();
     }
+
+    /// Real-mount lane (run by hand inside a user and mount namespace, see the S4 evidence
+    /// `mounts.sh`): `RT_PROBE_HUGE` is a directory on a `huge=always` tmpfs,
+    /// `RT_PROBE_COVERED` a path under a disk-upper overlay that a tmpfs-upper overlay mounted
+    /// later covers, and `RT_PROBE_DISK_OVERLAY` a path on an uncovered disk-upper overlay.
+    #[test]
+    #[ignore = "needs prepared mounts"]
+    fn real_mount_probe() {
+        let env = |key| PathBuf::from(std::env::var_os(key).expect(key));
+        let huge = env("RT_PROBE_HUGE");
+        let volume = crate::spill::inspect_volume(&huge).unwrap();
+        assert!(
+            volume.memory_backed && !volume.mount_by_prefix,
+            "{volume:?}"
+        );
+        assert!(volume.allocation_unit_bytes >= 2 << 20, "{volume:?}");
+        // The old base-page model admitted one byte in 5120 bytes; the huge unit refuses it.
+        let meter = Meter::new("probe", "probe", 5120, volume.allocation_unit_bytes);
+        let registration = register(&huge, meter.clone());
+        assert!(write(&huge.join("one.bin"), b"x").is_err());
+        assert!(!huge.join("one.bin").exists());
+        drop(registration);
+        let meter = Meter::new("probe", "probe", 3 << 20, volume.allocation_unit_bytes);
+        let registration = register(&huge, meter.clone());
+        write(&huge.join("one.bin"), b"x").unwrap();
+        let allocated = allocated(&std::fs::metadata(huge.join("one.bin")).unwrap());
+        assert!(
+            allocated >= 2 << 20 && allocated + ENTRY_BYTES <= meter.used(),
+            "{allocated}"
+        );
+        assert!(stored_bytes(&meter, &huge, &huge.join("none")).unwrap() <= meter.used());
+        drop(registration);
+        // Sensitivity: under a base-page model the cross-check still sees the real allocation.
+        let base = Meter::new("probe", "probe", u64::MAX, 4096);
+        assert!(stored_bytes(&base, &huge, &huge.join("none")).unwrap() >= 2 << 20);
+        let covered = crate::spill::inspect_volume(&env("RT_PROBE_COVERED")).unwrap();
+        assert!(
+            covered.memory_backed && !covered.mount_by_prefix,
+            "{covered:?}"
+        );
+        let disk = crate::spill::inspect_volume(&env("RT_PROBE_DISK_OVERLAY")).unwrap();
+        assert!(!disk.memory_backed && !disk.mount_by_prefix, "{disk:?}");
+        eprintln!("PROBE huge {volume:?}\nPROBE covered {covered:?}\nPROBE disk {disk:?}");
+    }
 }

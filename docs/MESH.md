@@ -495,12 +495,15 @@ One declared ceiling governs the whole run, with one rule on every surface:
   staging and the archive's scratch) and the archive staged beside the output. Every
   later stage plans against the budget less that charge. Every write into a charged
   owner is admitted before it lands, in whole allocation units plus 1 KiB per file,
-  link or directory (the archive's index, central directory and end records are
+  link or directory (the allocation unit is the transparent huge page, usually 2 MiB,
+  on a tmpfs whose `huge=` option is `always` or `within_size`, or when huge pages are
+  forced globally, because one written byte can take a whole huge page there) (the archive's index, central directory and end records are
   admitted together, at their exact size, before any of them is written); a write
   that would pass the charge is a `resource_limit` refusal (`use a disk-backed scratch
   directory` or `stage the output on disk`), so tmpfs never holds more than was
   charged. An overlay filesystem is classified by its writable upper layer (read from
-  `/proc/self/mountinfo`). The estimate is generous for textured sources and tighter
+  `/proc/self/mountinfo`, matching the path's mount by its `statx` mount ID; kernels
+  older than 5.8 fall back to mount-table order, reported as `mount_by_prefix`). The estimate is generous for textured sources and tighter
   for untextured ones (about 1.4× a measured untextured 0.79M-triangle crop), so disk
   remains the better place for large outputs.
 - **Containers.** Inside most containers the root filesystem is an overlay whose

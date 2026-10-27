@@ -14,5 +14,6 @@
   live on tmpfs (or on an overlay whose upper layer is tmpfs or cannot be
   resolved, as inside most containers; `RUSTY_TILES_STORAGE_DISK=1` declares
   such unresolvable storage disk-backed). Every write into them is admitted
-  before it lands; one that would pass the charge is a `resource_limit` refusal. `diagnostics.memory.memory_backed_storage` reports the charges and
+  before it lands, in huge pages on a tmpfs that uses them; one that would pass
+  the charge is a `resource_limit` refusal. `diagnostics.memory.memory_backed_storage` reports the charges and
   measurements; `budget.memory_backed_storage_bytes` is their sum.
