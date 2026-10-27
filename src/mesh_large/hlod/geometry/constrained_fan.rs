@@ -5,6 +5,101 @@ use std::collections::{BTreeMap, BTreeSet};
 
 type Chart = (usize, bool);
 
+/// One fixed alternative to the CDT's interior diagonals, rooted at a retained
+/// endpoint of the local contracted arc. These are auxiliary constraints only;
+/// the caller still inserts every unmoved interior source sample afterwards.
+pub(super) fn chord_spokes(
+    m: &Merged,
+    boundary: &[(u32, u32)],
+    endpoints: &[bool],
+    axis: usize,
+    positive: bool,
+) -> Option<Vec<(u32, u32)>> {
+    let mut next = BTreeMap::new();
+    let mut incoming = HashSet::default();
+    for &(a, b) in boundary {
+        if next.insert(a, b).is_some() || !incoming.insert(b) {
+            return None;
+        }
+    }
+    let start = *next.first_key_value()?.0;
+    let mut at = start;
+    for step in 0..boundary.len() {
+        at = *next.get(&at)?;
+        if at == start && step + 1 != boundary.len() {
+            return None;
+        }
+    }
+    if at != start || incoming.iter().any(|v| !next.contains_key(v)) {
+        return None;
+    }
+    let mut center = [0.; 2];
+    for &v in next.keys() {
+        for (k, x) in center.iter_mut().enumerate() {
+            *x += f64::from(m.positions[v as usize][(axis + 1 + k) % 3]);
+        }
+    }
+    for x in &mut center {
+        *x /= next.len() as f64;
+    }
+    // Prove that this oriented boundary is geometrically simple before using a
+    // boundary vertex as a fan root. The centroid is only a proof point, never an
+    // output vertex. Strict wedges and one winding rule out multiple covers.
+    let sign = if positive { 1. } else { -1. };
+    let mut turns = 0;
+    for &(a, b) in boundary {
+        let point = |v: u32| {
+            std::array::from_fn::<_, 2, _>(|k| {
+                f64::from(m.positions[v as usize][(axis + 1 + k) % 3]) - center[k]
+            })
+        };
+        let (a, b) = (point(a), point(b));
+        if (a[0] * b[1] - a[1] * b[0]) * sign <= 0. {
+            return None;
+        }
+        if a[1] * sign <= 0. && b[1] * sign > 0. {
+            turns += 1;
+        }
+    }
+    if turns != 1 {
+        return None;
+    }
+    let mut choices = [None::<(f64, u32)>; 2];
+    for &v in next.keys().filter(|&&v| endpoints[v as usize]) {
+        let distance = (0..2)
+            .map(|k| (f64::from(m.positions[v as usize][(axis + 1 + k) % 3]) - center[k]).powi(2))
+            .sum::<f64>();
+        let mut candidate = (distance, v);
+        for slot in &mut choices {
+            if slot.is_none_or(|old| {
+                candidate
+                    .0
+                    .total_cmp(&old.0)
+                    .then(candidate.1.cmp(&old.1))
+                    .is_lt()
+            }) {
+                let old = slot.replace(candidate);
+                let Some(old) = old else { break };
+                candidate = old;
+            }
+        }
+    }
+    for (_, root) in choices.into_iter().flatten() {
+        if boundary.iter().all(|&(a, b)| {
+            a == root || b == root || topology::normal(&m.positions, [a, b, root])[axis] * sign > 0.
+        }) {
+            return Some(
+                next.keys()
+                    .copied()
+                    .filter(|&v| v != root)
+                    .map(|v| edge(root, v))
+                    .collect(),
+            );
+        }
+    }
+    None
+}
+
 pub(super) fn remesh(
     m: &mut Merged,
     interface: &[InterfaceRow],

@@ -10,6 +10,13 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 #[path = "constrained_fan.rs"]
 mod fan;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PatchPlan {
+    Charts,
+    Planes,
+    ChordSpokes,
+}
+
 fn edge(a: u32, b: u32) -> (u32, u32) {
     (a.min(b), a.max(b))
 }
@@ -20,7 +27,7 @@ pub(super) fn remesh(
     cap: usize,
 ) -> Option<topology::Receipt> {
     let guard = super::folds::Source::new(&m.positions, &m.triangles).with_boundary(interface);
-    triangulate(m, interface, cap, None, &[], &guard, false)
+    triangulate(m, interface, cap, None, &[], &guard, PatchPlan::Charts)
         .or_else(|| fan::remesh(m, interface, cap, &guard))
 }
 
@@ -35,11 +42,43 @@ pub(super) fn contract(
     cap: usize,
     guard: &super::folds::Source,
 ) -> Option<topology::Receipt> {
-    // Both constructions consume the same pre-contraction source. A stricter chart
+    // All three constructions consume the same pre-contraction source. A stricter chart
     // partition may separate book pages that reconnect around a nonmanifold spine;
     // it cannot confer any new face or edge license.
-    triangulate(m, interface, cap, Some(map), endpoints, guard, false)
-        .or_else(|| triangulate(m, interface, cap, Some(map), endpoints, guard, true))
+    triangulate(
+        m,
+        interface,
+        cap,
+        Some(map),
+        endpoints,
+        guard,
+        PatchPlan::Charts,
+    )
+    .or_else(|| {
+        triangulate(
+            m,
+            interface,
+            cap,
+            Some(map),
+            endpoints,
+            guard,
+            PatchPlan::Planes,
+        )
+    })
+    // A deterministic CDT can select the same new ear on opposite sheets.
+    // One fixed endpoint-rooted partition changes those interior diagonals,
+    // retaining every source sample and the same original-source checks.
+    .or_else(|| {
+        triangulate(
+            m,
+            interface,
+            cap,
+            Some(map),
+            endpoints,
+            guard,
+            PatchPlan::ChordSpokes,
+        )
+    })
 }
 
 fn triangulate(
@@ -49,7 +88,7 @@ fn triangulate(
     mapping: Option<&[u32]>,
     endpoints: &[u32],
     guard: &super::folds::Source,
-    separate_sheets: bool,
+    plan: PatchPlan,
 ) -> Option<topology::Receipt> {
     let components = topology::components(m);
     let mut patches: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
@@ -60,6 +99,11 @@ fn triangulate(
     for &v in endpoints {
         touched[v as usize] = true;
     }
+    let chord_endpoints = if plan == PatchPlan::ChordSpokes {
+        touched.clone()
+    } else {
+        Vec::new()
+    };
     if let Some(map) = mapping {
         for (v, &to) in map.iter().enumerate() {
             if v != to as usize {
@@ -74,7 +118,7 @@ fn triangulate(
         .map(|t| t.iter().any(|&v| touched[v as usize]))
         .collect();
     let face_patches = if mapping.is_some() {
-        manifold_patches(m, &affected, separate_sheets)
+        manifold_patches(m, &affected, plan == PatchPlan::Planes)
     } else {
         Vec::new()
     };
@@ -159,6 +203,7 @@ fn triangulate(
             .filter(|(_, v)| v.0 == 1)
             .map(|(e, _)| *e)
             .collect();
+        let mut directed_boundary = Vec::new();
         if let Some(map) = mapping {
             let mut mapped = BTreeMap::<(u32, u32), i32>::new();
             for &(a, b) in &boundary {
@@ -173,6 +218,11 @@ fn triangulate(
             // edge. Same-direction multiplicity still cannot be a single sheet.
             if mapped.values().any(|&n| n.abs() > 1) {
                 return rejected("CDT", concat!(file!(), ":", line!()));
+            }
+            if plan == PatchPlan::ChordSpokes {
+                directed_boundary.extend(mapped.iter().filter_map(|(&(a, b), &n)| {
+                    (n != 0).then_some(if n > 0 { (a, b) } else { (b, a) })
+                }));
             }
             boundary = mapped
                 .into_iter()
@@ -228,6 +278,21 @@ fn triangulate(
         let mut vertices: BTreeSet<u32> = adjacent.keys().copied().collect();
         let mut constraints = boundary.clone();
         required.patch(m, &faces, mapping, &mut vertices, &mut constraints);
+        if plan == PatchPlan::ChordSpokes {
+            // Change only patches with a proven endpoint-rooted alternative. A
+            // longer collinear strip may need its ordinary CDT unchanged while
+            // another sheet's new ear is repaired. The original global guard
+            // still judges their complete union below.
+            if let Some(spokes) = fan::chord_spokes(
+                m,
+                &directed_boundary,
+                &chord_endpoints,
+                axis,
+                sum[axis] > 0.,
+            ) {
+                constraints.extend(spokes);
+            }
+        }
         // Only degree-two boundaries admit this formula. Touching mapped loops
         // are capped using the actual emitted faces below, including retained input.
         let mut predicted = 2 * (vertices.len() - adjacent.len()) + adjacent.len() + 2 * loops - 4;
@@ -267,9 +332,16 @@ fn triangulate(
                 let p = Point2::new(f64::from(p[(axis + 1) % 3]), f64::from(p[(axis + 2) % 3]));
                 // A collinear interior sample must not split a delivered border chord.
                 if let PositionInTriangulation::OnEdge(e) = cdt.locate(p) {
-                    if cdt.directed_edge(e).is_constraint_edge() {
+                    let e = cdt.directed_edge(e);
+                    let endpoints = edge(reverse[&e.from().fix()], reverse[&e.to().fix()]);
+                    if e.is_constraint_edge()
+                        && (boundary.contains(&endpoints) || required.segments.contains(&endpoints))
+                    {
                         continue;
                     }
+                    // An auxiliary spoke is not a delivered chord. Insert a source
+                    // sample on it normally, splitting that spoke rather than dropping
+                    // the mandatory unmoved interior sample.
                 }
                 let handle = cdt.insert(p).ok()?;
                 if reverse.insert(handle, v).is_some() {
@@ -341,7 +413,15 @@ fn triangulate(
     }
     // The patch iterator and each CDT have finished. Release their shared indexes
     // before missing/topology/Source work adds its own validation workspace.
-    drop((ids, required, components, affected, touched, face_patches));
+    drop((
+        ids,
+        required,
+        components,
+        affected,
+        touched,
+        face_patches,
+        chord_endpoints,
+    ));
     #[cfg(test)]
     crate::test_alloc::trace("cdt finish");
     finish(
@@ -381,11 +461,16 @@ fn finish(
         .map(|r| (r.a, r.b))
         .collect();
     let points = super::interface_points(interface);
-    let lost = super::missing(&output, &m.keys, &required, &points);
+    let lost = super::missing_owned(&output, &m.keys, required, points);
     if !lost.0.is_empty() || !lost.1.is_empty() {
         return rejected("finish", "missing required interface edge or point");
     }
-    drop((required, points, lost));
+    drop(lost);
+    // Reject an illegal proposal before allocating topology witnesses. Both checks
+    // consume the same immutable input and neither grants a source license.
+    if guard.violations(&m.positions, &output).iter().any(|v| *v) {
+        return rejected("finish", "original Source rejected candidate");
+    }
     let change = topology::changes(m, &output, interface, 0.)
         .or_else(|| rejected("finish", "topology::changes refused"))?;
     if change.receipt.closed_holes != 0
@@ -410,9 +495,6 @@ fn finish(
                 _ => receipt.reconstructed_faces += 1,
             }
         }
-    }
-    if guard.violations(&m.positions, &output).iter().any(|v| *v) {
-        return rejected("finish", "original Source rejected candidate");
     }
     m.triangles = output;
     m.representative = representatives;
@@ -679,6 +761,127 @@ mod tests {
             .violations(&m.positions, &m.triangles)
             .iter()
             .any(|v| *v));
+    }
+
+    #[test]
+    fn contracted_opposite_sheets_use_a_fixed_alternate_diagonal_without_new_twins() {
+        for interior in [false, true] {
+            // Two local six-corner strips share their upper three source vertices.
+            // Their distinct old arc midpoints keep the source faces apart. The
+            // nearest-endpoint collapse and ordinary CDT create the new twin 2/3/6.
+            let mut positions = vec![
+                [2., 0., 0.],
+                [0., 0., 1.],
+                [0., 0., 2.],
+                [0., 0., 3.],
+                [2., 0., 1.],
+                [2., 0., 2.],
+                [2., 0., 3.],
+                [0., 0.125, 1.],
+                [2., 0.125, 0.],
+                [2., 0.125, 1.],
+                [2., 0.125, 2.],
+            ];
+            let mut triangles = vec![
+                [1, 4, 2],
+                [0, 4, 1],
+                [4, 5, 2],
+                [2, 5, 3],
+                [5, 6, 3],
+                [7, 2, 9],
+                [8, 7, 9],
+                [9, 2, 10],
+                [2, 3, 10],
+                [10, 3, 6],
+            ];
+            if interior {
+                // This unmoved sample lies exactly on the auxiliary 4--3 spoke.
+                // It must split that spoke, rather than being suppressed like a
+                // sample on an exact delivered border chord.
+                positions.push([0.5, 0., 2.5]);
+                triangles[3] = [2, 5, 11];
+                triangles.extend([[5, 3, 11], [3, 2, 11]]);
+            }
+            let mut m = Merged {
+                keys: positions.iter().copied().map(key).collect(),
+                ells: vec![0; positions.len()],
+                representative: vec![sheet(1, false).representative[0]; triangles.len()],
+                positions,
+                triangles,
+            };
+            let before = m.triangles.clone();
+            // InterfaceRow::new consumes canonical items; it does not sort keys.
+            // Height puts key(9) after key(6), unlike their vertex-index order.
+            let row = |a: usize, b: usize| {
+                let (a, b) = (m.keys[a], m.keys[b]);
+                InterfaceRow::new(0, a.min(b), a.max(b), 0, 1)
+            };
+            let interface = [row(4, 6), row(9, 6)];
+            let previous = [(4, 5), (5, 6), (9, 10), (10, 6)].map(|(a, b)| row(a, b));
+            let mut labels = vec![None; m.positions.len()];
+            labels[5] = Some((m.keys[6], m.keys[4], 0.5, 0));
+            labels[10] = Some((m.keys[6], m.keys[9], 0.5, 0));
+            let guard = super::super::folds::Source::for_contraction(
+                &m.positions,
+                &m.triangles,
+                &interface,
+                &previous,
+                &labels,
+            );
+            let mut map: Vec<_> = (0..m.positions.len() as u32).collect();
+            map[5] = 6;
+            map[10] = 6;
+            let cap = m.triangles.len();
+            let receipt = if interior {
+                triangulate(
+                    &mut m,
+                    &interface,
+                    cap,
+                    Some(&map),
+                    &[4, 6, 9],
+                    &guard,
+                    PatchPlan::ChordSpokes,
+                )
+                .unwrap()
+            } else {
+                assert!(triangulate(
+                    &mut m,
+                    &interface,
+                    cap,
+                    Some(&map),
+                    &[4, 6, 9],
+                    &guard,
+                    PatchPlan::Charts
+                )
+                .is_none());
+                assert_eq!(m.triangles, before);
+                contract(&mut m, &interface, &map, &[4, 6, 9], cap, &guard).unwrap()
+            };
+            assert!(receipt.reconstructed_faces > 0);
+            assert!(m.triangles.len() <= cap);
+            assert!(!guard
+                .violations(&m.positions, &m.triangles)
+                .iter()
+                .any(|v| *v));
+            // Independent face-key census: neither duplicated nor reversed output
+            // triples are allowed, even though all directional chord counts fit.
+            let mut faces = BTreeSet::new();
+            for mut t in m.triangles.iter().copied() {
+                t.sort_unstable();
+                assert!(faces.insert(t), "new coincident face pair");
+            }
+            for a in [4, 9] {
+                assert!(m.triangles.iter().any(|t| t.contains(&a) && t.contains(&6)));
+            }
+            if interior {
+                assert!(
+                    m.triangles.iter().any(|t| t.contains(&11)),
+                    "source sample was dropped"
+                );
+            } else {
+                assert_eq!(m.triangles.len(), 8);
+            }
+        }
     }
 
     #[test]

@@ -153,8 +153,16 @@ fn missing(
     segments: &HashSet<(Key, Key)>,
     points: &HashSet<Key>,
 ) -> (Vec<(Key, Key)>, Vec<Key>) {
-    let mut missing_edges = segments.clone();
-    let mut missing_points = points.clone();
+    missing_owned(triangles, keys, segments.clone(), points.clone())
+}
+
+/// Consume temporary queries instead of retaining a second copy during the scan.
+fn missing_owned(
+    triangles: &[[u32; 3]],
+    keys: &[Key],
+    mut missing_edges: HashSet<(Key, Key)>,
+    mut missing_points: HashSet<Key>,
+) -> (Vec<(Key, Key)>, Vec<Key>) {
     for t in triangles {
         for k in 0..3 {
             let (a, b) = (keys[t[k] as usize], keys[t[(k + 1) % 3] as usize]);
@@ -705,9 +713,7 @@ fn attempt_mode(
         let mut fold_source = None;
         loop {
             let (segments, vertices) = required();
-            let (edges, points) = missing(&output, &merged.keys, &segments, &vertices);
-            drop(segments);
-            drop(vertices);
+            let (edges, points) = missing_owned(&output, &merged.keys, segments, vertices);
             let invalid = fold_source
                 .get_or_insert_with(|| {
                     folds::Source::new(&merged.positions, contracted_faces).with_boundary(interface)

@@ -1,6 +1,8 @@
 //! Bounded, tile-local boundary reconstruction and topology cleanup. The source graph
 //! supplies the boundary; this module never chooses or moves a contracted endpoint.
-use super::{missing, oriented, Merged};
+#[cfg(test)]
+use super::missing;
+use super::{oriented, Merged};
 use crate::{
     mesh_large::hlod::interfaces::{InterfaceRow, Key},
     JobError,
@@ -246,9 +248,7 @@ pub(super) fn contract_from(
         .filter(|r| !r.is_vertex())
         .map(|r| (r.a, r.b))
         .collect();
-    let lost = missing(&output, &m.keys, &segments, &required);
-    drop(required);
-    drop(segments);
+    let lost = super::missing_owned(&output, &m.keys, segments, required);
     let direct = !folded
         && !output.is_empty()
         && lost.0.is_empty()
@@ -379,11 +379,12 @@ pub(super) fn changes(
     };
     let component = Components::mesh(m);
     let border = points(interface);
-    let surviving: HashSet<usize> = output
-        .iter()
-        .flatten()
-        .map(|v| component[*v as usize])
-        .collect();
+    let mut surviving = HashSet::default();
+    for t in output {
+        for &v in t {
+            surviving.insert(component[v as usize]);
+        }
+    }
     let mut bounds: HashMap<usize, ([f64; 3], [f64; 3], bool)> = HashMap::default();
     for t in &m.triangles {
         // Only a removed component needs a diameter/contact eligibility decision.
@@ -429,26 +430,51 @@ pub(super) fn changes(
                 }
             }
         }
-        // All subsequent graph comparisons consume only one-sided boundary edges.
-        // Compact once instead of repeatedly walking the full surface-edge table.
         edges.retain(|_, n| *n == 1);
         edges.shrink_to_fit();
-        let mut groups = Components::new(m.keys.len());
-        let mut degree = vec![0u32; m.keys.len()];
-        for (&(a, b), &n) in &edges {
-            if n == 1 {
-                groups.join(a, b);
-                degree[a as usize] += 1;
-                degree[b as usize] += 1;
-            }
-        }
-        let root: Vec<usize> = (0..m.keys.len()).map(|v| groups.root(v)).collect();
-        (edges, degree, root)
+        edges
     };
     #[cfg(test)]
     crate::test_alloc::trace("changes start graphs");
-    let (old_edges, old_degree, old_root) = boundary(&m.triangles);
-    let (new_edges, new_degree, new_root) = boundary(output);
+    let mut old_edges = boundary(&m.triangles);
+    let mut new_edges = boundary(output);
+    // A connected component of the UNION boundary graph whose edge sets are
+    // identical has identical cycles, contacts and path multiplicities. Remove
+    // only these exact unchanged components before correspondence work. Joining
+    // both graphs first retains every old/new component involved in a change.
+    {
+        let mut union = Components::new(m.keys.len());
+        for &(a, b) in old_edges.keys().chain(new_edges.keys()) {
+            union.join(a, b);
+        }
+        let mut changed = vec![false; m.keys.len()];
+        for &(a, _) in old_edges.keys().filter(|e| !new_edges.contains_key(e)) {
+            changed[union.root(a as usize)] = true;
+        }
+        for &(a, _) in new_edges.keys().filter(|e| !old_edges.contains_key(e)) {
+            changed[union.root(a as usize)] = true;
+        }
+        old_edges.retain(|&(a, _), _| changed[union.root(a as usize)]);
+        new_edges.retain(|&(a, _), _| changed[union.root(a as usize)]);
+    }
+    old_edges.shrink_to_fit();
+    new_edges.shrink_to_fit();
+    if dropped.is_empty() && old_edges.is_empty() && new_edges.is_empty() {
+        return Some(Change::default());
+    }
+    let graph = |edges: &HashMap<(u32, u32), u32>| {
+        let mut groups = Components::new(m.keys.len());
+        let mut degree = vec![0u32; m.keys.len()];
+        for &(a, b) in edges.keys() {
+            groups.join(a, b);
+            degree[a as usize] += 1;
+            degree[b as usize] += 1;
+        }
+        let root: Vec<usize> = (0..m.keys.len()).map(|v| groups.root(v)).collect();
+        (degree, root)
+    };
+    let (old_degree, old_root) = graph(&old_edges);
+    let (new_degree, new_root) = graph(&new_edges);
     #[cfg(test)]
     crate::test_alloc::trace("changes graphs");
     let mut touching = HashSet::default();
@@ -475,7 +501,7 @@ pub(super) fn changes(
     let signature = |edges: &HashMap<(u32, u32), u32>| -> Option<HashMap<(u32, u32), usize>> {
         let (offset, adjacent) = boundary_adjacency(m.keys.len(), edges);
         let neighbors = |v: u32| &adjacent[offset[v as usize]..offset[v as usize + 1]];
-        let mut paths = HashMap::default();
+        let mut paths = HashMap::with_capacity_and_hasher(edges.len(), Default::default());
         for &a in &anchors {
             if neighbors(a).is_empty() {
                 return None;
@@ -532,8 +558,12 @@ pub(super) fn changes(
         }
         per_component
     };
-    let before_counts = cycles(&old_edges, &old_degree, &old_root);
-    let after_counts = cycles(&new_edges, &new_degree, &new_root);
+    let before_count = cycles(&old_edges, &old_degree, &old_root)
+        .values()
+        .sum::<usize>();
+    let after_count = cycles(&new_edges, &new_degree, &new_root)
+        .values()
+        .sum::<usize>();
     let (closed, opened, closed_count, opened_count) = changed_cycles(
         &old_edges,
         &new_edges,
@@ -548,10 +578,7 @@ pub(super) fn changes(
     crate::test_alloc::trace("changes cycles");
     receipt.closed_holes = closed_count as u64;
     receipt.opened_holes = opened_count as u64;
-    debug_assert_eq!(
-        before_counts.values().sum::<usize>() + opened_count,
-        after_counts.values().sum::<usize>() + closed_count
-    );
+    debug_assert_eq!(before_count + opened_count, after_count + closed_count);
     let affected: HashSet<usize> = closed.iter().map(|&r| component[r]).collect();
     let mut closure_carriers = Vec::new();
     let patch_faces = if receipt.closed_holes > 0 {
@@ -724,7 +751,8 @@ fn changed_cycles(
     let paths = |edges: &HashMap<(u32, u32), u32>| {
         let (offset, adjacent) = boundary_adjacency(n, edges);
         let neighbors = |v: u32| &adjacent[offset[v as usize]..offset[v as usize + 1]];
-        let mut paths = HashMap::<(u32, u32), usize>::default();
+        let mut paths =
+            HashMap::<(u32, u32), usize>::with_capacity_and_hasher(edges.len(), Default::default());
         for (v, &anchor) in anchors.iter().enumerate() {
             if !anchor {
                 continue;
@@ -749,6 +777,20 @@ fn changed_cycles(
         paths
     };
     let (old_paths, new_paths) = (paths(old), paths(new));
+    // Identical suppressed graphs with the same three-contact cycle witness make
+    // their common graph identical too. Every rank subtraction below is then zero.
+    // This avoids constructing three rank tables for dense retained boundaries.
+    if old_paths == new_paths
+        && old_paths.keys().all(|&(a, _)| {
+            contacts
+                .get(&(old_root[a as usize], new_root[a as usize]))
+                .copied()
+                .unwrap_or(0)
+                >= 3
+        })
+    {
+        return (HashSet::default(), HashSet::default(), 0, 0);
+    }
     let common: HashMap<_, _> = old_paths
         .iter()
         .filter_map(|(&(a, b), &count)| {

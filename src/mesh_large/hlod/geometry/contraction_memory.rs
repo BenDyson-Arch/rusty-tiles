@@ -1,7 +1,7 @@
 //! Complete-parent controls for the r2 conditional 1,965 B/face capacity model.
 //!
 //! Retain the real parent builder and both guards. Replace the old no-op mapping
-//! control with a constructible shared soup plus one contracted two-face strip.
+//! control with a constructible shared soup plus a direct or folded strip.
 //! Only held children and the separately admitted disk source-owner graph predate
 //! measurement: contract rows, merge/reference, previous rows, lookups, contraction
 //! Source, topology checks, recovery and the returned output are all measured.
@@ -19,6 +19,48 @@ const STRIP: [[f32; 3]; 4] = [
     [1., 0., 0.],  // b
     [0., 1., 0.],  // free third vertex (contact only in the rejection control)
 ];
+const DIRECT_FACES: [[u32; 3]; 2] = [[0, 1, 3], [1, 2, 3]];
+// The same four-face witness as the constrained strip/frozen-ring control.
+const FOLDED_STRIP: [[f32; 3]; 6] = [
+    [0., 0., 0.],
+    [1., 0., 0.],
+    [3., 0., 0.],
+    [0.5, 0.1, 0.],
+    [2., 1., 0.],
+    [1., 2., 3.],
+];
+const FOLDED_FACES: [[u32; 3]; 4] = [[0, 1, 3], [1, 4, 3], [1, 2, 4], [3, 4, 5]];
+
+#[derive(Clone, Copy)]
+enum Fixture {
+    Direct { third_contact: bool },
+    Constrained,
+}
+
+impl Fixture {
+    fn positions(self) -> &'static [[f32; 3]] {
+        match self {
+            Self::Direct { .. } => &STRIP,
+            Self::Constrained => &FOLDED_STRIP,
+        }
+    }
+
+    fn faces(self) -> &'static [[u32; 3]] {
+        match self {
+            Self::Direct { .. } => &DIRECT_FACES,
+            Self::Constrained => &FOLDED_FACES,
+        }
+    }
+
+    fn third_contact(self) -> bool {
+        matches!(
+            self,
+            Self::Direct {
+                third_contact: true
+            }
+        )
+    }
+}
 
 fn row(leaf: u32, a: Key, b: Key) -> InterfaceRow {
     InterfaceRow::new(leaf, a.min(b), a.max(b), leaf, OUTSIDE_LEAF)
@@ -86,16 +128,79 @@ fn assert_source_domain(third_contact: bool) {
     assert_eq!(STRIP[1][0], (STRIP[0][0] + STRIP[2][0]) / 2.);
 }
 
-fn children(n: usize, third_contact: bool) -> (TileKey, Vec<TileGeometry>) {
-    assert_source_domain(third_contact);
-    assert!(n >= CHILDREN + 2);
+/// The lower external fan closes a-m and m-b. The other midpoint edges m-p
+/// and m-q already have two local faces. The new external edge m-d also has
+/// two faces, so every midpoint incidence is closed, with opposite directions.
+/// The external owner shares precisely a, m, b and the two arc edges; p, q and
+/// the curved frozen-ring vertex remain free. No source-open pin or shared
+/// junction prevents the degree-two a-m-b arc from becoming its zero-error chord.
+fn assert_folded_source_domain() {
+    let mut positions = FOLDED_STRIP.to_vec();
+    positions.push([1., -1., 0.]); // d, owned only by the external tile
+    let external = [[1u32, 0, 6], [2, 1, 6]];
+    let counts = |faces: &[[u32; 3]]| {
+        let mut edges = HashMap::default();
+        for t in faces {
+            for i in 0..3 {
+                let (a, b) = (t[i], t[(i + 1) % 3]);
+                let count = edges.entry((a.min(b), a.max(b))).or_insert([0usize; 2]);
+                count[usize::from(a > b)] += 1;
+            }
+        }
+        edges
+    };
+    let local_edges = counts(&FOLDED_FACES);
+    let external_edges = counts(&external);
+    let mut shared: Vec<_> = local_edges
+        .keys()
+        .filter(|e| external_edges.contains_key(*e))
+        .copied()
+        .collect();
+    shared.sort_unstable();
+    assert_eq!(shared, [(0, 1), (1, 2)]);
+    for &(a, b) in local_edges.keys().chain(external_edges.keys()) {
+        if a == 1 || b == 1 {
+            let local = local_edges.get(&(a, b)).copied().unwrap_or_default();
+            let outside = external_edges.get(&(a, b)).copied().unwrap_or_default();
+            assert_eq!([local[0] + outside[0], local[1] + outside[1]], [1, 1]);
+        }
+    }
+    for (v, p) in FOLDED_STRIP.iter().enumerate() {
+        assert_eq!(
+            external
+                .iter()
+                .flatten()
+                .any(|&i| positions[i as usize] == *p),
+            v < 3
+        );
+    }
+    // A direct snap really inverts (m,q,p); an unchanged/direct path cannot
+    // satisfy the CDT receipt assertions below. All three arc points are collinear.
+    let [a, mid, b, p, q, _] = FOLDED_STRIP.map(|p| p.map(f64::from));
+    let area = |origin: [f64; 3]| {
+        (q[0] - origin[0]) * (p[1] - origin[1]) - (q[1] - origin[1]) * (p[0] - origin[0])
+    };
+    assert!(area(mid) > 0. && area(a) < 0.);
+    assert_eq!(a[1], mid[1]);
+    assert_eq!(mid[1], b[1]);
+}
+
+fn children(n: usize, fixture: Fixture) -> (TileKey, Vec<TileGeometry>) {
+    match fixture {
+        Fixture::Direct { third_contact } => assert_source_domain(third_contact),
+        Fixture::Constrained => assert_folded_source_domain(),
+    }
+    let strip_faces = fixture.faces().len();
+    let third_contact = fixture.third_contact();
+    assert!(n >= CHILDREN + strip_faces);
     assert!(n <= CHILDREN * super::super::TRIANGLE_CAP);
     let mut children = Vec::with_capacity(CHILDREN);
     let mut first = 0;
     let mut soup = 0;
     for slot in 0..CHILDREN {
-        let soup_faces = (n - 2) / CHILDREN + usize::from(slot < (n - 2) % CHILDREN);
-        let count = soup_faces + if slot == 0 { 2 } else { 0 };
+        let soup_faces =
+            (n - strip_faces) / CHILDREN + usize::from(slot < (n - strip_faces) % CHILDREN);
+        let count = soup_faces + if slot == 0 { strip_faces } else { 0 };
         assert!(count <= super::super::TRIANGLE_CAP);
         let leaf = slot as u32;
         let mut child = TileGeometry {
@@ -116,9 +221,9 @@ fn children(n: usize, third_contact: bool) -> (TileKey, Vec<TileGeometry>) {
             lease: None,
         };
         if slot == 0 {
-            child.positions.extend(STRIP);
-            child.triangles.extend([[0, 1, 3], [1, 2, 3]]);
-            let [a, mid, b, c] = STRIP.map(key);
+            child.positions.extend_from_slice(fixture.positions());
+            child.triangles.extend_from_slice(fixture.faces());
+            let [a, mid, b, c] = std::array::from_fn(|i| key(fixture.positions()[i]));
             child.interface.extend([
                 row(leaf, a, a),
                 row(leaf, mid, mid),
@@ -167,14 +272,14 @@ fn children(n: usize, third_contact: bool) -> (TileKey, Vec<TileGeometry>) {
         children.push(child);
     }
     assert_eq!(first, n as u64);
-    assert_eq!(soup, n - 2);
+    assert_eq!(soup, n - strip_faces);
     assert_eq!(
         children.iter().map(|c| c.positions.len()).sum::<usize>(),
-        3 * n - 2
+        3 * (n - strip_faces) + fixture.positions().len()
     );
     assert_eq!(
         children.iter().map(|c| c.interface.len()).sum::<usize>(),
-        6 * (n - 2) + 5 + usize::from(third_contact)
+        6 * (n - strip_faces) + 5 + usize::from(third_contact)
     );
     (
         TileKey {
@@ -192,7 +297,7 @@ fn complete_parent(n: usize, third_contact: bool) {
     crate::test_alloc::route_meshopt();
     // Held inputs are separately leased, as in parent_jobs_allocate_within_their_charge.
     // Nothing built here is moved into or freed within the counting closure.
-    let (parent, children) = children(n, third_contact);
+    let (parent, children) = children(n, Fixture::Direct { third_contact });
     let [a, mid, b, c] = STRIP.map(key);
     let calls = Cell::new(0usize);
     let mapped_mid = Cell::new(0usize);
@@ -333,4 +438,160 @@ fn complete_parent_actual_contraction_dense_rows_fit_charge() {
 #[test]
 fn complete_parent_rejected_contraction_and_recovery_dense_rows_fit_charge() {
     complete_parent(FACES, true);
+}
+
+#[test]
+fn complete_parent_constrained_contraction_dense_rows_fit_charge() {
+    crate::test_alloc::route_meshopt();
+    let n = FACES;
+    // Only held children and the source-owner domain witness predate counting.
+    // In particular, no merged mesh, reference or fold Source is preallocated.
+    let (parent, children) = children(n, Fixture::Constrained);
+    let [a, mid, b, p, q, frozen] = FOLDED_STRIP.map(key);
+    let calls = Cell::new(0usize);
+    let mapped_mid = Cell::new(0usize);
+    let assessed = Cell::new(0usize);
+    let soup_faces = n - FOLDED_FACES.len();
+    let expected_rows = 6 * soup_faces + 3;
+    let expected_contacts = 3 * soup_faces + 3;
+    let (result, peak) = crate::test_alloc::peak(|| {
+        let mut interface: Vec<_> = children
+            .iter()
+            .flat_map(|child| child.interface.iter())
+            .filter(|r| r.outer(parent.leaf_begin, parent.leaf_end))
+            .filter(|r| r.a != mid && r.b != mid)
+            .copied()
+            .collect();
+        interface.push(row(0, a, b));
+        super::super::interfaces::merge_rows(&mut interface);
+        assert_eq!(interface.len(), expected_rows);
+        assert!(interface.len() <= 6 * super::super::TRIANGLE_CAP);
+        assert!(interface
+            .iter()
+            .all(|r| ![mid, p, q, frozen].contains(&r.a) && ![mid, p, q, frozen].contains(&r.b)));
+        let contract = Contract {
+            depth: parent.depth,
+            interface,
+            certificates: Vec::new(),
+            terminal_vertices: Vec::new(),
+            scale: 0.,
+        };
+        // This calls the complete producer, including its original-source
+        // contraction guard and the successful constrained triangulator. There
+        // is no helper-only measurement or substitute prelicensed output.
+        build_parent(
+            parent,
+            &children,
+            &[super::super::TRIANGLE_CAP],
+            &contract,
+            &|k| {
+                calls.set(calls.get() + 1);
+                assert!(![p, q, frozen].contains(&k), "interior source lookup");
+                if k == mid {
+                    mapped_mid.set(mapped_mid.get() + 1);
+                    Ok(Some((a, b, 0.5, 2)))
+                } else {
+                    Ok(Some((k, k, 0., 2)))
+                }
+            },
+            &mut |_| {
+                assessed.set(assessed.get() + 1);
+                Ok(true)
+            },
+            &|| Ok(()),
+        )
+    });
+    let charge = n as u64 * super::super::JOB_BYTES_PER_TRIANGLE;
+    eprintln!(
+        "COMPLETE CONTRACTION constrained: input={n}, keys={}, \
+        previous_rows={}, parent_rows={expected_rows}, peak={peak} bytes, \
+        {:.2} B/input-face, charge={charge} ({} B/input-face), \
+        mapping_calls={}, mapped_mid={}",
+        3 * soup_faces + FOLDED_STRIP.len(),
+        6 * soup_faces + 5,
+        peak as f64 / n as f64,
+        super::super::JOB_BYTES_PER_TRIANGLE,
+        calls.get(),
+        mapped_mid.get()
+    );
+    assert_eq!(super::super::JOB_BYTES_PER_TRIANGLE, 1700);
+    let outcome = result.expect("complete constrained parent must report an outcome");
+    assert!(!outcome.contraction_failed);
+    assert!(outcome.attempted_topology.contracted_vertices > 0);
+    let built = outcome.built.expect("constrained strip must publish");
+    assert_eq!(calls.get(), expected_contacts);
+    assert_eq!(
+        mapped_mid.get(),
+        1,
+        "the initial CDT contraction must succeed"
+    );
+    assert_eq!(assessed.get(), 1);
+    assert_eq!(built.topology.contracted_vertices, 1);
+    assert!(
+        built.topology.constrained_remeshes > 0,
+        "a direct pass is not this control"
+    );
+    assert_eq!(built.topology.reconstructed_faces, 2);
+    assert_eq!(built.topology.rejected_remesh_rounds, 0);
+    let geometry = built.geometry;
+    assert_eq!(geometry.triangles.len(), n - 1);
+    assert_eq!(geometry.interface.len(), expected_rows);
+    let keys: Vec<_> = geometry.positions.iter().copied().map(key).collect();
+    assert!(!keys.contains(&mid));
+    let strip: Vec<_> = geometry
+        .triangles
+        .iter()
+        .copied()
+        .filter(|t| t.iter().all(|&v| geometry.positions[v as usize][0] < 4.))
+        .collect();
+    assert_eq!(strip.len(), 3);
+    assert!(
+        strip.iter().any(|t| {
+            let face = t.map(|v| keys[v as usize]);
+            face == [p, q, frozen] || face == [q, frozen, p] || face == [frozen, p, q]
+        }),
+        "the oriented frozen [3,4,5] face must survive exactly"
+    );
+    let rebuilt: Vec<_> = strip
+        .iter()
+        .copied()
+        .filter(|t| !t.iter().any(|&v| keys[v as usize] == frozen))
+        .collect();
+    assert_eq!(rebuilt.len(), 2);
+    assert!(rebuilt
+        .iter()
+        .all(|&t| topology::normal(&geometry.positions, t)[2] > 0.));
+    assert!(rebuilt.iter().any(|t| {
+        let face = t.map(|v| keys[v as usize]);
+        face.contains(&a) && face.contains(&b)
+    }));
+    let before: f64 = FOLDED_FACES[..3]
+        .iter()
+        .map(|&t| topology::normal(&FOLDED_STRIP, t)[2])
+        .sum();
+    let after: f64 = rebuilt
+        .iter()
+        .map(|&t| topology::normal(&geometry.positions, t)[2])
+        .sum();
+    assert!(
+        (before - after).abs() < 1e-12,
+        "strip area changed: {before} -> {after}"
+    );
+    let segments = geometry
+        .interface
+        .iter()
+        .filter(|r| !r.is_vertex())
+        .map(|r| (r.a, r.b))
+        .collect();
+    let points = geometry
+        .interface
+        .iter()
+        .filter(|r| r.is_vertex())
+        .map(|r| r.a)
+        .collect();
+    let lost = missing(&geometry.triangles, &keys, &segments, &points);
+    assert!(lost.0.is_empty() && lost.1.is_empty());
+    // Verify the actual successful CDT/frozen-ring result before the resource
+    // assertion, so an overcharge cannot hide an unrelated branch failure.
+    assert!(peak as u64 <= charge, "constrained: {peak} > {charge}");
 }

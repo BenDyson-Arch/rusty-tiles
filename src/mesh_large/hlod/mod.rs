@@ -1402,6 +1402,16 @@ fn build_tile(
         }
     };
     let Some(mut built) = outcome.built else {
+        #[cfg(test)]
+        if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
+            eprintln!(
+                "OMIT source f{}-d{} contraction_failed={} contract={}",
+                closed.key.first,
+                closed.key.depth,
+                outcome.contraction_failed,
+                contract.is_some()
+            );
+        }
         // Its interface cannot fit the cap: omitted, nothing held for its parent.
         let construction_topology = audit
             .filter(|_| !outcome.construction_dropped.is_empty())
