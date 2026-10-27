@@ -460,6 +460,7 @@ pub(crate) fn build_parent(
 /// Failed contraction is not an omission decision. Preserve the old border samples
 /// while reducing separate sheets at both caps, then try constructive and six bounded
 /// interior remeshes. Every final contraction is checked against the original faces.
+#[allow(clippy::too_many_arguments)]
 fn recover_contraction(
     merged: &mut Merged,
     reference: &Merged,
@@ -522,6 +523,7 @@ fn recover_contraction(
 
 /// Keep the source face ring around a rejected new hole before considering omission.
 /// Pins grow monotonically and retries are bounded; no patch or new boundary is invented.
+#[allow(clippy::too_many_arguments)]
 fn assessed_attempt(
     tile: TileKey,
     merged: &Merged,
@@ -598,6 +600,7 @@ fn assessed_attempt(
 
 /// One bounded parent proposal. Unsupported means its protected repair did not
 /// produce an eligible capped result; it is not a proof of cap infeasibility.
+#[allow(clippy::too_many_arguments)]
 fn attempt(
     tile: TileKey,
     merged: &Merged,
@@ -646,6 +649,7 @@ fn attempt(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn attempt_mode(
     tile: TileKey,
     merged: &Merged,

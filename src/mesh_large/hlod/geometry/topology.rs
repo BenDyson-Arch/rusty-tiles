@@ -855,6 +855,7 @@ fn boundary_adjacency(n: usize, edges: &HashMap<(u32, u32), u32>) -> (Vec<usize>
 /// Common boundary paths are compared after suppressing unshared degree-two vertices.
 /// Cycle rank of their intersection distinguishes closure from simultaneous opening;
 /// subtracting only whole-component ranks would silently cancel those two operations.
+#[allow(clippy::too_many_arguments)]
 fn changed_cycles(
     old: &HashMap<(u32, u32), u32>,
     new: &HashMap<(u32, u32), u32>,

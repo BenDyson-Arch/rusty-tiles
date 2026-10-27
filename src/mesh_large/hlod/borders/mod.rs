@@ -149,6 +149,7 @@ impl Contract {
 
 impl Borders {
     pub(super) const COMPONENT: &'static str = "s1b-shared-borders";
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn build(
         scratch: &Scratch,
         sorter: SortConfig,
@@ -355,6 +356,7 @@ impl Borders {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn chain(
         &mut self,
         start: u64,
@@ -492,6 +494,7 @@ impl Borders {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn shortcuts(
         &mut self,
         arc: &Disk<3>,
