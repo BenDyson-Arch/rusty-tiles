@@ -282,6 +282,9 @@ these additional controls. A closure's own loss is at least about the inradius o
 the hole it fills, so a hole wider than about 2E can never close; when Euler then
 puts every keep-all-holes triangulation over the cap, the tile is omitted and
 reported. That is a cap-fit cost, not permission to increase E based on the result.
+Two controls pin both sides: a sheet of 0.83 m holes reports its omissions upward,
+identically at three scales, and the same layout as 2 cm holes away from spikes that
+keep each cell far above E closes its holes with zero omissions.
 
 Independent controls: a planar courtyard whose inradius exceeds E stays open;
 a small interior closure has nonzero measured loss; identical sub-G components

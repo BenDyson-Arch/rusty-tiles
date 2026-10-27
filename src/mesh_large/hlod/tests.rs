@@ -4546,7 +4546,11 @@ fn reversed(mut m: Mesh) -> Mesh {
 /// Review r3 fixtures. Spiky bumps a few cells inside the open boundaries z = 0 and
 /// x = 100: local peaks behind a boundary that simplification retreats.
 fn spiky(x: f32, z: f32) -> f32 {
-    let mut y = bump(x, z);
+    spikes(bump(x, z), x, z)
+}
+
+/// The spikes alone, added to `y`.
+fn spikes(mut y: f32, x: f32, z: f32) -> f32 {
     for k in 0..9 {
         let x0 = 5. + 11. * k as f32;
         let (u, v) = ((x - x0) / 1.5, (z - 3.) / 1.5);
@@ -4578,22 +4582,41 @@ fn jagged_sheet() -> Vec<Mesh> {
 }
 
 /// Many one- and two-cell holes, several next to the cell lattice.
-fn holey_sheet() -> Vec<Mesh> {
-    let mut m = grid(
-        (60, 120),
-        (0., 100.),
-        (0., 100.),
-        &spiky,
-        [0.6, 0.5, 0.4, 1.],
-    );
+fn holey_cell(i: usize, j: usize) -> bool {
+    (i % 7 == 3 && j % 9 == 4)
+        || (i == 30 && j.is_multiple_of(5))
+        || (i % 11 == 5 && j % 13 == 6 && j > 0)
+}
+
+/// A 60×120 sheet at height `y` whose `hole` quads are holes: the whole 1.67×0.83 m quad,
+/// or with `width` a centred `width`-square hole ringed by eight triangles.
+fn holey(
+    y: &dyn Fn(f32, f32) -> f32,
+    hole: &dyn Fn(usize, usize) -> bool,
+    width: Option<f32>,
+) -> Vec<Mesh> {
+    let mut m = grid((60, 120), (0., 100.), (0., 100.), y, [0.6, 0.5, 0.4, 1.]);
+    let quads: Vec<[u32; 6]> = m.indices.chunks(6).map(|t| t.try_into().unwrap()).collect();
     let mut keep = Vec::new();
-    for (q, t) in m.indices.chunks(6).enumerate() {
-        let (i, j) = (q / 120, q % 120);
-        let hole = (i % 7 == 3 && j % 9 == 4)
-            || (i == 30 && j % 5 == 0)
-            || (i % 11 == 5 && j % 13 == 6 && j > 0);
-        if !hole {
-            keep.extend_from_slice(t);
+    for (q, t) in quads.into_iter().enumerate() {
+        if !hole(q / 120, q % 120) {
+            keep.extend(t);
+            continue;
+        }
+        let Some(w) = width else { continue };
+        // Corners in the grid's winding order, and the hole's in the same order.
+        let [a, b, d, _, _, c] = t;
+        let (p, r) = (m.positions[a as usize], m.positions[c as usize]);
+        let n = m.positions.len() as u32;
+        for (u, v) in [(-1., -1.), (-1., 1.), (1., 1.), (1., -1.)] {
+            let x = (p[0] + r[0]) / 2. + u * w / 2.;
+            let z = (p[2] + r[2]) / 2. + v * w / 2.;
+            m.positions.push([x, y(x, z), z]);
+        }
+        let outer = [a, b, c, d];
+        for k in 0..4 {
+            let (inner, next) = (n + k as u32, n + (k as u32 + 1) % 4);
+            keep.extend([outer[k], outer[(k + 1) % 4], next, outer[k], next, inner]);
         }
     }
     m.indices = keep;
@@ -4687,16 +4710,89 @@ fn closed_box() -> Vec<Mesh> {
     out
 }
 
-/// Tracked, not passing under D11: about 50 holes per depth-1 cell cannot all stay
-/// open under the 300 cap (Euler: V - 2 + 2h > cap), and closing one costs about half
-/// its 0.83 m width (0.42 m) against the source, even on the oracle's local closure
-/// domain, far above E (0.049 m at depth 1). Only tiny gap holes fit E. Passing needs
-/// a fixture or cap decision, not a looser guard. Run explicitly for the receipt.
+/// Honest omission: about 50 holes per depth-1 cell cannot all stay open under the 300
+/// cap (Euler: V - 2 + 2h > cap), and closing one loses at least its inradius (0.42 m)
+/// against the source on any domain, far above E (0.049 m at depth 1). Each such cell
+/// and the root are omitted, reported and counted; content-less tiles lie only under
+/// content-less ancestors; nothing folds; the receipt is scale-invariant.
 #[test]
-#[ignore = "holey sheet is cap-infeasible under D11 closures (S1c receipt; decision pending)"]
-fn d11_holey_sheet_has_zero_omissions_and_no_folds() {
+fn d11_holey_sheet_reports_its_cap_infeasible_omissions_upward() {
+    use crate::{mesh_large::delivery, validate::ExpectedProfile};
     for scale in [1., 40., 0.25] {
-        d11_coverage_control(&format!("holey x{scale}"), &holey_sheet(), scale);
+        let name = format!("holey x{scale}");
+        let work = tempfile::tempdir().unwrap();
+        let input = write_gltf_scaled(
+            &work.path().join("src"),
+            &holey(&spiky, &holey_cell, None),
+            &[[scale; 3]],
+        );
+        let run = production_nearest_run();
+        let dir = stage(&input, &work.path().join("hlod"), &run).unwrap();
+        assert!(!omission_receipt(&name, &dir));
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let h = &manifest["hlod"];
+        assert_eq!(
+            (
+                &h["omittedProxies"],
+                &h["omissionSources"],
+                &h["omittedByDepth"]
+            ),
+            (&json!(5), &json!(4), &json!([1, 4, 0, 0])),
+            "{name}: {h}"
+        );
+        assert_directed_census(&name, &census(&dir), run.cap);
+        let output = work.path().join("holey.3tz");
+        let mut file = fs::File::create(&output).unwrap();
+        delivery::publish_with_limits(
+            &MeshTilesetRequest::new(&dir, &output),
+            delivery::plan::LIMITS,
+            &mut file,
+            work.path(),
+        )
+        .unwrap();
+        drop(file);
+        inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod)).unwrap();
+        let shape = refinement_shape(&output);
+        assert_eq!(
+            shape.empty_below_content + shape.error_inversions,
+            0,
+            "{name}: {shape:?}"
+        );
+    }
+}
+
+/// The positive control for the local closure domain: the holey layout as 2 cm holes on
+/// a tilted plane, in a central block at least 20 m from the same spikes. The cap still
+/// forces closures. Each loses about 1 cm on its own hole's domain, inside E at every
+/// coarse depth, and is admitted although the spikes keep the rest of the cell far above
+/// E. (A whole-component closure domain admits none of them here.) Zero omissions and
+/// no folds at every scale.
+#[test]
+fn d11_pinhole_sheet_admits_local_closures_with_zero_omissions_and_no_folds() {
+    let pinholes = holey(
+        &|x, z| spikes(0.01 * x, x, z),
+        &|i, j| holey_cell(i, j) && (20..=40).contains(&i) && (42..=78).contains(&j),
+        Some(0.02),
+    );
+    for scale in [1., 40., 0.25] {
+        let name = format!("pinhole x{scale}");
+        let work = tempfile::tempdir().unwrap();
+        let input = write_gltf_scaled(&work.path().join("src"), &pinholes, &[[scale; 3]]);
+        let run = production_nearest_run();
+        let dir = stage(&input, &work.path().join("hlod"), &run).unwrap();
+        assert!(omission_receipt(&name, &dir), "{name}: omitted coverage");
+        assert_directed_census(&name, &census(&dir), run.cap);
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let closed: u64 = manifest["hlod"]["bordersByDepth"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|d| d["topology"]["closedHoles"].as_u64().unwrap())
+            .sum();
+        eprintln!("PINHOLE {name}: {closed} closed holes");
+        assert!(closed > 0, "{name}: no closure was admitted");
     }
 }
 
