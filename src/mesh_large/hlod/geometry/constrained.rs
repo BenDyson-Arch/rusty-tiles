@@ -451,8 +451,6 @@ fn triangulate(
         chord_endpoints,
         vertex_charts,
     ));
-    #[cfg(test)]
-    crate::test_alloc::trace("cdt finish");
     finish(
         m,
         interface,
@@ -464,13 +462,8 @@ fn triangulate(
     )
 }
 
-// Temporary replay diagnostics allocate nothing when disabled and are test-only.
-fn rejected<T>(stage: &str, reason: &str) -> Option<T> {
-    #[cfg(test)]
-    if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
-        eprintln!("CONSTRAINED {stage}: {reason}");
-    }
-    let _ = (stage, reason);
+// A declined construction step; `stage` and `reason` name the rejected case at the call site.
+fn rejected<T>(_stage: &str, _reason: &str) -> Option<T> {
     None
 }
 

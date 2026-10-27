@@ -188,11 +188,6 @@ pub(super) fn remesh(
         if boundary.len() < 3 || output.len().checked_add(boundary.len())? > cap {
             return super::rejected("fan", "boundary too small or whole output cap exceeded");
         }
-        #[cfg(test)]
-        if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
-            eprintln!("CONSTRAINED fan panel chart={chart:?} faces={} vertices={} boundary={} output={} cap={cap}",
-                faces.len(), vertices.len(), boundary.len(), output.len());
-        }
         let mut next = BTreeMap::new();
         let mut incoming = HashSet::default();
         for &(a, b) in &boundary {

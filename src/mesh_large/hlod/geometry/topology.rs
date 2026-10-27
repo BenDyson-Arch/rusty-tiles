@@ -240,8 +240,6 @@ pub(super) fn contract_from(
             representatives.push(m.representative[i]);
         }
     }
-    #[cfg(test)]
-    crate::test_alloc::trace("contract mapped");
     let required = points(interface);
     let segments = interface
         .iter()
@@ -255,8 +253,6 @@ pub(super) fn contract_from(
         && lost.1.is_empty()
         && changes(m, &output, interface, 0.).is_some();
     drop(lost);
-    #[cfg(test)]
-    crate::test_alloc::trace("contract topology");
     let guard = super::folds::Source::for_contraction(
         &m.positions,
         original_faces.unwrap_or(&m.triangles),
@@ -264,8 +260,6 @@ pub(super) fn contract_from(
         previous_interface,
         &mapping_by_vertex,
     );
-    #[cfg(test)]
-    crate::test_alloc::trace("contract source");
     drop(mapping_by_vertex);
     if direct && !guard.violations(&m.positions, &output).iter().any(|v| *v) {
         m.triangles = output;
@@ -274,8 +268,6 @@ pub(super) fn contract_from(
     }
     drop(output);
     drop(representatives);
-    #[cfg(test)]
-    crate::test_alloc::trace("contract fallback");
     if let Some(r) = super::constrained::contract(
         m,
         interface,
@@ -434,8 +426,6 @@ pub(super) fn changes(
         edges.shrink_to_fit();
         edges
     };
-    #[cfg(test)]
-    crate::test_alloc::trace("changes start graphs");
     let mut old_edges = boundary(&m.triangles);
     let mut new_edges = boundary(output);
     // A connected component of the UNION boundary graph whose edge sets are
@@ -475,8 +465,6 @@ pub(super) fn changes(
     };
     let (old_degree, old_root) = graph(&old_edges);
     let (new_degree, new_root) = graph(&new_edges);
-    #[cfg(test)]
-    crate::test_alloc::trace("changes graphs");
     let mut touching = HashSet::default();
     for v in 0..m.keys.len() {
         if old_degree[v] > 0 && border.contains(&m.keys[v]) {
@@ -536,8 +524,6 @@ pub(super) fn changes(
         return rejected("touching boundary graph changed after suppressing degree-two vertices");
     }
     drop((old_signature, anchors, touching));
-    #[cfg(test)]
-    crate::test_alloc::trace("changes signatures");
     let cycles = |edges: &HashMap<(u32, u32), u32>, degree: &[u32], roots: &[usize]| {
         let mut graph_counts: HashMap<usize, (usize, usize)> = HashMap::default();
         for (&(a, _), &n) in edges {
@@ -574,8 +560,6 @@ pub(super) fn changes(
         &component,
         &surviving,
     );
-    #[cfg(test)]
-    crate::test_alloc::trace("changes cycles");
     receipt.closed_holes = closed_count as u64;
     receipt.opened_holes = opened_count as u64;
     debug_assert_eq!(before_count + opened_count, after_count + closed_count);
@@ -664,8 +648,6 @@ pub(super) fn changes(
             })
             .collect();
     }
-    #[cfg(test)]
-    crate::test_alloc::trace("changes end");
     Some(Change {
         receipt,
         patch_faces,
