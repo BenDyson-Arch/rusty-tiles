@@ -339,6 +339,21 @@ used 276.26 million search steps against 265.61 million at 3/4. Keep the measure
 Exact-source paired CPU receipts, including failed trials, remain in the evidence
 directory. Full-cap retry and all acceptance gates stay.
 
+Guard incidence records use temporary canonical vertex IDs for grouping only;
+directions and all source/boundary predicates retain exact decoded-key meaning.
+The key lookup is released before allocating incidence rows (24 rather than 56
+bytes each). Original face support is memoized within one check, never expanded.
+Literal preoptimization comparisons include duplicate keys, signed zero, extreme
+finite coordinates and both changed-boundary modes. These establish equivalence
+on their exercised domain, not independent geometric validity.
+
+Pinned meshopt 0.6.2 copies its input unchanged when the target is already met or
+every referenced vertex is locked. With our ErrorAbsolute-only options, no solve,
+pruning or index remapping can run in those cases; finite extent makes its final
+zero-error product zero. A shortcut avoids its temporary tables, while nonfinite
+extent retains the FFI path. A direct FFI control includes degenerate, coincident
+and reversed faces. All later topology, support and measured-error checks remain.
+
 Source-support checks precede contraction in both direct and constrained paths.
 A new shared chord receives only the directional minimum over a complete,
 contiguous path of unique real previous-interface edges. Face licenses are never

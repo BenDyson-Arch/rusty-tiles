@@ -8,7 +8,7 @@ mod contract;
 
 type Face = [Key; 3];
 type Edge = (Key, Key);
-type Incidence = (usize, usize, Key);
+type Incidence = (usize, u8, u32);
 
 fn face(mut f: Face) -> (Face, usize) {
     let k = (0..3).min_by_key(|&i| f[i]).unwrap();
@@ -68,16 +68,19 @@ impl Source {
         self
     }
 
-    fn bad_faces(&self, positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> Vec<bool> {
+    fn bad_faces(&self, positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> (Vec<bool>, Vec<bool>) {
         let _cpu = super::super::cpu_profile::start(
             super::super::cpu_profile::Stage::Faces,
             triangles.len(),
         );
         let mut invalid = vec![false; triangles.len()];
+        let mut original = vec![false; triangles.len()];
         let mut faces = Vec::with_capacity(triangles.len());
         for (i, t) in triangles.iter().enumerate() {
             let (f, d) = face(t.map(|v| key(positions[v as usize])));
             let source = self.faces.get(&f).copied().unwrap_or_default();
+            // A source face license is independent of proposal validity below.
+            original[i] = source[d] != 0;
             // Reject the old orient() repair rather than flipping or removing a face.
             invalid[i] = (source[d] == 0 && source[1 - d] != 0)
                 // Two disjoint children can independently close the same three
@@ -108,7 +111,7 @@ impl Source {
             }
             at = end;
         }
-        invalid
+        (invalid, original)
     }
 
     /// Corners of rejected faces, in vertex order. One flat sorted incidence array
@@ -134,30 +137,55 @@ impl Source {
         triangles: &[[u32; 3]],
         changed_boundary: bool,
     ) -> Vec<bool> {
-        let mut invalid = self.bad_faces(positions, triangles);
+        let (mut invalid, original) = self.bad_faces(positions, triangles);
         let incidence_cpu = super::super::cpu_profile::start(
             super::super::cpu_profile::Stage::Incidence,
             triangles.len(),
         );
-        let mut edges = Vec::<(Edge, Incidence)>::with_capacity(triangles.len() * 3);
-        for (i, t) in triangles.iter().enumerate() {
-            let keys = t.map(|v| key(positions[v as usize]));
+        // Only referenced vertices consume workspace. Equal Keys share the first
+        // referenced index, including duplicate positions; signed zeros stay distinct.
+        // Drop the reserved 3m-entry lookup before allocating the 72m-byte edge
+        // array; only the 12m-byte corner IDs overlap that array (64-bit sizes).
+        let canonical = {
+            let mut by_key = HashMap::<Key, u32>::with_capacity_and_hasher(
+                triangles.len() * 3,
+                Default::default(),
+            );
+            let mut canonical = Vec::with_capacity(triangles.len());
+            for t in triangles {
+                canonical.push(t.map(|v| *by_key.entry(key(positions[v as usize])).or_insert(v)));
+            }
+            canonical
+        };
+        let mut edges = Vec::<((u32, u32), Incidence)>::with_capacity(triangles.len() * 3);
+        for (i, ids) in canonical.iter().enumerate() {
+            let keys = ids.map(|v| key(positions[v as usize]));
             for j in 0..3 {
-                let (a, b, c) = (keys[j], keys[(j + 1) % 3], keys[(j + 2) % 3]);
-                edges.push(((a.min(b), a.max(b)), (i, usize::from(a > b), c)));
+                let (a, b, c) = (ids[j], ids[(j + 1) % 3], ids[(j + 2) % 3]);
+                // Numeric IDs group edges only; direction retains Key ordering.
+                edges.push((
+                    (a.min(b), a.max(b)),
+                    (i, u8::from(keys[j] > keys[(j + 1) % 3]), c),
+                ));
             }
         }
+        drop(canonical);
         edges.sort_unstable();
         drop(incidence_cpu);
         let _cpu =
             super::super::cpu_profile::start(super::super::cpu_profile::Stage::Fans, edges.len());
         let mut at = 0;
         while at < edges.len() {
-            let edge = edges[at].0;
-            let end = at + edges[at..].partition_point(|r| r.0 == edge);
+            let ids = edges[at].0;
+            let end = at + edges[at..].partition_point(|r| r.0 == ids);
+            let (a, b) = (
+                key(positions[ids.0 as usize]),
+                key(positions[ids.1 as usize]),
+            );
+            let edge = (a.min(b), a.max(b));
             let mut counts = [0; 2];
             for &(_, (_, d, _)) in &edges[at..end] {
-                counts[d] += 1;
+                counts[d as usize] += 1;
             }
             let source = self.edges.get(&edge).copied().unwrap_or_default();
             let boundary = self.boundary.contains(&edge.0) && self.boundary.contains(&edge.1);
@@ -180,20 +208,16 @@ impl Source {
                     let unchanged = counts[d] <= source[d]
                         && edges[at..end]
                             .iter()
-                            .filter(|(_, (_, direction, _))| *direction == d)
-                            .all(|&(_, (i, _, _))| {
-                                let (f, direction) =
-                                    face(triangles[i].map(|v| key(positions[v as usize])));
-                                self.faces.get(&f).is_some_and(|n| n[direction] != 0)
-                            });
+                            .filter(|(_, (_, direction, _))| *direction == d as u8)
+                            .all(|&(_, (i, _, _))| original[i]);
                     !unchanged
                         && (counts[1 - d] == 0
                             || !distinct_sides(
                                 edge,
                                 edges[at..end]
                                     .iter()
-                                    .filter(|(_, (_, direction, _))| *direction == d)
-                                    .map(|(_, (_, _, third))| *third),
+                                    .filter(|(_, (_, direction, _))| *direction == d as u8)
+                                    .map(|(_, (_, _, third))| key(positions[*third as usize])),
                             ))
                 })
             };
@@ -215,6 +239,10 @@ impl Source {
         vertices
     }
 }
+
+#[cfg(test)]
+#[path = "folds_compact_tests.rs"]
+mod compact_tests;
 
 /// Retain a local carrier before reduction can join two shared contacts. Pinning
 /// the free common neighbour is smaller than later freezing both contact stars.
