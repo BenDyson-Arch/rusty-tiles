@@ -77,6 +77,18 @@ fn samples(p: [V3; 3]) -> impl Iterator<Item = V3> {
         .chain(std::iter::once(source_index::bary(p, [1. / 3.; 3])))
 }
 
+/// Eighth-grid plus centroid (the quarter grid included): a moved boundary's strip is
+/// thin, so its faces get the finer fixed density.
+fn fine_samples(p: [V3; 3]) -> impl Iterator<Item = V3> {
+    (0..=8)
+        .flat_map(move |a| {
+            (0..=8 - a).map(move |b| {
+                source_index::bary(p, [a as f64 / 8., b as f64 / 8., (8 - a - b) as f64 / 8.])
+            })
+        })
+        .chain(std::iter::once(source_index::bary(p, [1. / 3.; 3])))
+}
+
 /// `source` returns an actual captured-source witness and its distance. Budget exhaustion
 /// gives an upper distance, hence cannot make an over-budget closure eligible.
 pub(crate) fn assess(
@@ -96,14 +108,61 @@ pub(crate) fn assess(
     if change.opening_border_contact {
         return Ok(None);
     }
+    let strip = &change.strip;
+    let moved = !strip.lost_points.is_empty() || !strip.added_edges.is_empty();
     if change.receipt.closed_holes == 0
         && change.receipt.dropped_components == 0
         && change.receipt.opened_holes == 0
+        && !moved
     {
         return Ok(Some(controls));
     }
     let mut nearest = Nearest::with_steps(super::super::error::NEAREST_STEPS);
     let mut hint = None;
+    // The decoded proxy, for every lost-surface control below.
+    let proxy = if moved || !change.dropped.is_empty() || change.receipt.opened_holes > 0 {
+        Some(Surface::new(
+            triangles
+                .iter()
+                .enumerate()
+                .map(|(i, t)| Triangle::new(t.map(|v| decoded[v as usize]), i as u64))
+                .collect(),
+        )?)
+    } else {
+        None
+    };
+    if moved {
+        // A moved open boundary bounds G, not E: these witnesses only join S2's fixed
+        // controls. Changed input surface behind it is measured to the decoded proxy;
+        // added proxy surface to the source, at every eighth of an added edge and on
+        // the faces along it.
+        let proxy = proxy.as_ref().expect("built for a moved boundary");
+        let along = |[a, b]: [[f32; 3]; 2]| {
+            let [a, b] = [a, b].map(|p| p.map(f64::from));
+            (0..=8).map(move |k| std::array::from_fn(|i| a[i] + (b[i] - a[i]) * k as f64 / 8.))
+        };
+        for (i, &p) in strip.lost_points.iter().enumerate() {
+            if i % 256 == 0 {
+                check()?;
+            }
+            controls
+                .source
+                .push(nearest.surface(proxy, p, &mut hint).distance2.sqrt());
+        }
+        for &edge in &strip.added_edges {
+            check()?;
+            for p in along(edge) {
+                controls.proxy.push(source(p, false)?.1);
+            }
+        }
+        for &i in &strip.added_faces {
+            check()?;
+            for p in fine_samples(triangles[i].map(|v| decoded[v as usize].map(f64::from))) {
+                controls.proxy.push(source(p, false)?.1);
+            }
+        }
+        hint = None;
+    }
     if change.receipt.closed_holes > 0 {
         if change.patch_faces.is_empty() || change.boundary.is_empty() {
             return Ok(None);
@@ -155,20 +214,13 @@ pub(crate) fn assess(
             .hole_patch_to_source
             .max(change.receipt.hole_boundary_to_patch);
     }
-    if !change.dropped.is_empty() || change.receipt.opened_holes > 0 {
-        let proxy = Surface::new(
-            triangles
-                .iter()
-                .enumerate()
-                .map(|(i, t)| Triangle::new(t.map(|v| decoded[v as usize]), i as u64))
-                .collect(),
-        )?;
+    if let Some(proxy) = &proxy {
         hint = None;
         for t in &change.dropped {
             check()?;
             for p in samples(t.map(|p| p.map(f64::from))) {
                 let (p, _) = source(p, true)?;
-                let d = nearest.surface(&proxy, p, &mut hint).distance2.sqrt();
+                let d = nearest.surface(proxy, p, &mut hint).distance2.sqrt();
                 change.receipt.dropped_component_to_proxy =
                     change.receipt.dropped_component_to_proxy.max(d);
                 controls.source.push(d);
@@ -187,7 +239,7 @@ pub(crate) fn assess(
                 check()?;
                 for p in samples(t.map(|p| p.map(f64::from))) {
                     let (p, _) = source(p, true)?;
-                    let d = nearest.surface(&proxy, p, &mut hint).distance2.sqrt();
+                    let d = nearest.surface(proxy, p, &mut hint).distance2.sqrt();
                     change.receipt.opened_hole_to_proxy =
                         change.receipt.opened_hole_to_proxy.max(d);
                     if 1.05 * d > e {

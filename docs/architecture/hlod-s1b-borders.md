@@ -312,6 +312,18 @@ with an exact border-edge or junction contact is rejected before measurement.
 Thus an admitted opening cannot set G; bounded retries keep the surface instead.
 Intermediate remeshing cannot hide an unmeasured opening.
 
+A moved open boundary bounds G even when no cycle opens or closes. S2's area
+strata can miss a local peak on the simplified surface behind it. The S5 source
+oracle found one in tex3/crop3 tile f94536-d5: an input vertex 11 face hops from
+the changed boundary, 0.0188 m from the proxy, with G 0.0171. The producer
+measures the same domain as the oracle: changed input faces reachable from each
+changed boundary cluster (clusters changed only along shared borders excepted),
+flooding only through cluster and removed vertices. Every distinct corner, edge
+midpoint and centroid in that domain is measured to the decoded proxy. Added
+boundary edges (every eighth) and the output faces along them (eighth grid) are
+measured to source. These enter S2's fixed controls, so
+G = max(child G, 1.05 × sampled max) covers them; they never affect E eligibility.
+
 Each tile row now includes `attemptedTopology` even when it publishes: it sums
 measured proposals including rejected ones and the accepted proposal. The separate
 `topology` receipt describes published operations. Both aggregate by depth and

@@ -103,6 +103,17 @@ pub(crate) struct Change {
     pub opening_boundary: Vec<[[f32; 3]; 2]>,
     pub opening_faces: Vec<bool>,
     pub opening_border_contact: bool,
+    pub strip: Strip,
+}
+
+/// Witnesses of a moved open boundary: input points on the changed surface behind it
+/// (measured to the proxy), and added boundary edges with the output faces (indices)
+/// along them (measured to the source).
+#[derive(Debug, Default)]
+pub(crate) struct Strip {
+    pub lost_points: Vec<[f64; 3]>,
+    pub added_edges: Vec<[[f32; 3]; 2]>,
+    pub added_faces: Vec<usize>,
 }
 
 struct Components(Vec<usize>);
@@ -648,6 +659,9 @@ pub(super) fn changes(
             })
             .collect();
     }
+    let strip = strip(
+        m, output, &old_edges, &new_edges, &border, &component, &surviving,
+    );
     Some(Change {
         receipt,
         patch_faces,
@@ -658,7 +672,159 @@ pub(super) fn changes(
         opening_boundary,
         opening_faces,
         opening_border_contact,
+        strip,
     })
+}
+
+/// A boundary simplification moves an open boundary without necessarily opening or
+/// closing a cycle, and simplifies the surface behind it. Measure that surface the way
+/// the S5 source oracle does (`hlod-s1b-borders.md`): changed input faces reachable from
+/// each changed boundary cluster, flooding only through cluster and removed vertices.
+/// S2's area strata can miss a local peak there; these witnesses join S2's fixed
+/// controls and hence G. Clusters changed only along shared borders (certified
+/// contraction) and dropped components have their own controls.
+fn strip(
+    m: &Merged,
+    output: &[[u32; 3]],
+    old_edges: &HashMap<(u32, u32), u32>,
+    new_edges: &HashMap<(u32, u32), u32>,
+    border: &HashSet<Key>,
+    component: &[usize],
+    surviving: &HashSet<usize>,
+) -> Strip {
+    let n = m.keys.len();
+    let on_border = |a: u32, b: u32| {
+        border.contains(&m.keys[a as usize]) && border.contains(&m.keys[b as usize])
+    };
+    let live = |a: u32| surviving.contains(&component[a as usize]);
+    let mut cluster = Components::new(n);
+    for &(a, b) in old_edges.keys().chain(new_edges.keys()) {
+        cluster.join(a, b);
+    }
+    let mut moved_cluster = vec![false; n];
+    let mut added: Vec<(u32, u32)> = Vec::new();
+    for (from, to, collect) in [(old_edges, new_edges, false), (new_edges, old_edges, true)] {
+        for &(a, b) in from.keys() {
+            if !to.contains_key(&(a, b)) && live(a) && !on_border(a, b) {
+                moved_cluster[cluster.root(a as usize)] = true;
+                if collect {
+                    added.push((a, b));
+                }
+            }
+        }
+    }
+    let mut seed = vec![false; n];
+    for &(a, b) in old_edges.keys().chain(new_edges.keys()) {
+        if moved_cluster[cluster.root(a as usize)] {
+            seed[a as usize] = true;
+            seed[b as usize] = true;
+        }
+    }
+    drop((cluster, moved_cluster));
+    if !seed.iter().any(|s| *s) {
+        return Strip::default();
+    }
+    added.sort_unstable();
+    let mut in_output = vec![false; n];
+    for t in output {
+        for &v in t {
+            in_output[v as usize] = true;
+        }
+    }
+    let kept: HashSet<_> = output.iter().map(oriented).collect();
+    let changed: Vec<u32> = (0..m.triangles.len() as u32)
+        .filter(|&i| {
+            let t = &m.triangles[i as usize];
+            live(t[0]) && !kept.contains(&oriented(t))
+        })
+        .collect();
+    drop(kept);
+    // Vertex -> changed-face incidence, flat, so the flood is linear.
+    let mut offsets = vec![0usize; n + 1];
+    for &i in &changed {
+        for &v in &m.triangles[i as usize] {
+            offsets[v as usize + 1] += 1;
+        }
+    }
+    for v in 0..n {
+        offsets[v + 1] += offsets[v];
+    }
+    let mut faces = vec![0u32; offsets[n]];
+    let mut cursor = offsets[..n].to_vec();
+    for (j, &i) in changed.iter().enumerate() {
+        for &v in &m.triangles[i as usize] {
+            faces[cursor[v as usize]] = j as u32;
+            cursor[v as usize] += 1;
+        }
+    }
+    drop(cursor);
+    let passable = |v: usize| seed[v] || !in_output[v];
+    let mut expanded = vec![false; n];
+    let mut reached = vec![false; changed.len()];
+    let mut todo = Vec::new();
+    let mut expand = |v: usize, todo: &mut Vec<u32>, reached: &mut [bool]| {
+        if !std::mem::replace(&mut expanded[v], true) {
+            for &j in &faces[offsets[v]..offsets[v + 1]] {
+                if !std::mem::replace(&mut reached[j as usize], true) {
+                    todo.push(j);
+                }
+            }
+        }
+    };
+    for (v, _) in seed.iter().enumerate().filter(|(_, s)| **s) {
+        expand(v, &mut todo, &mut reached);
+    }
+    while let Some(j) = todo.pop() {
+        for &v in &m.triangles[changed[j as usize] as usize] {
+            if passable(v as usize) {
+                expand(v as usize, &mut todo, &mut reached);
+            }
+        }
+    }
+    drop((faces, offsets, expanded, todo));
+    // Each reached face: its distinct corners, edge midpoints and centroid.
+    let position = |v: u32| m.positions[v as usize].map(f64::from);
+    let mut corner = vec![false; n];
+    let mut edges = HashSet::default();
+    let mut lost_points = Vec::new();
+    for (j, &i) in changed.iter().enumerate() {
+        if !reached[j] {
+            continue;
+        }
+        let t = m.triangles[i as usize];
+        for k in 0..3 {
+            let (a, b) = (t[k], t[(k + 1) % 3]);
+            if !std::mem::replace(&mut corner[a as usize], true) {
+                lost_points.push(position(a));
+            }
+            if edges.insert((a.min(b), a.max(b))) {
+                let (p, q) = (position(a), position(b));
+                lost_points.push(std::array::from_fn(|c| (p[c] + q[c]) / 2.));
+            }
+        }
+        let p = t.map(position);
+        lost_points.push(std::array::from_fn(|c| (p[0][c] + p[1][c] + p[2][c]) / 3.));
+    }
+    let added_set: HashSet<_> = added.iter().copied().collect();
+    let added_faces = output
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| {
+            (0..3).any(|i| {
+                let (a, b) = (t[i], t[(i + 1) % 3]);
+                added_set.contains(&(a.min(b), a.max(b)))
+            })
+        })
+        .map(|(i, _)| i)
+        .collect();
+    Strip {
+        lost_points,
+        added_edges: added
+            .iter()
+            .map(|&(a, b)| [m.positions[a as usize], m.positions[b as usize]])
+            .collect(),
+        added_faces,
+    }
 }
 
 /// Flat adjacency keeps graph traversal linear without a Vec allocation per vertex.
@@ -1205,6 +1371,58 @@ pub(super) mod tests {
             ],
             triangles,
         }
+    }
+    #[test]
+    fn moved_boundary_witnesses_reach_simplified_surface_behind_the_strip() {
+        // A 9x9 grid loses its bottom row (a plain boundary retreat: no cycle opens or
+        // closes) and an interior vertex two rows in collapses onto the new boundary.
+        // The oracle-equivalent domain floods past the lost strip to that vertex.
+        let n = 8u32;
+        let mut m = ring();
+        m.positions = (0..=n)
+            .flat_map(|y| (0..=n).map(move |x| [x as f32, y as f32, 0.]))
+            .collect();
+        m.keys = m.positions.iter().map(|p| p.map(f32::to_bits)).collect();
+        m.ells = vec![0; m.positions.len()];
+        m.triangles.clear();
+        for y in 0..n {
+            for x in 0..n {
+                let a = y * (n + 1) + x;
+                m.triangles
+                    .extend([[a, a + 1, a + n + 2], [a, a + n + 2, a + n + 1]]);
+            }
+        }
+        let at = |x: u32, y: u32| y * (n + 1) + x;
+        let (v, u) = (at(4, 2), at(4, 1));
+        let output: Vec<[u32; 3]> = m
+            .triangles
+            .iter()
+            .filter(|t| t.iter().all(|&w| w > n))
+            .map(|t| t.map(|w| if w == v { u } else { w }))
+            .filter(|t| super::surface(t))
+            .collect();
+        let change = changes(&m, &output, &[], 0.5).unwrap();
+        assert_eq!(
+            (change.receipt.opened_holes, change.receipt.closed_holes),
+            (0, 0)
+        );
+        let has = |p: [f32; 3]| change.strip.lost_points.contains(&p.map(f64::from));
+        assert!(has(m.positions[at(4, 0) as usize]), "lost strip vertex");
+        assert!(
+            has(m.positions[v as usize]),
+            "collapsed vertex behind the strip"
+        );
+        assert!(!has(m.positions[at(4, 6) as usize]), "unchanged interior");
+        assert!(!change.strip.added_edges.is_empty() && !change.strip.added_faces.is_empty());
+        // The same interior collapse without a boundary change adds no witnesses.
+        let interior: Vec<[u32; 3]> = m
+            .triangles
+            .iter()
+            .map(|t| t.map(|w| if w == at(4, 5) { at(4, 4) } else { w }))
+            .filter(|t| super::surface(t))
+            .collect();
+        let change = changes(&m, &interior, &[], 0.5).unwrap();
+        assert!(change.strip.lost_points.is_empty() && change.strip.added_edges.is_empty());
     }
     #[test]
     fn boundary_carriers_keep_the_free_third_vertex_without_freezing_the_whole_ring() {
