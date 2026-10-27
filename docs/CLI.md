@@ -425,6 +425,7 @@ Events report work units, not time remaining.
 | Variable | Used by | Effect |
 | --- | --- | --- |
 | `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` | vector | Print raw GDAL and GEOS warnings. The former alias `RUSTY_TILES_PYTHON_TRACEBACK` was removed in 0.4.0 and is ignored. |
+| `RUSTY_TILES_STORAGE_DISK=1` | mesh | Declare storage whose kind cannot be resolved (a container's overlay root) disk-backed, so it is not charged to the memory budget; never overrides detected tmpfs. See [MESH.md](MESH.md#memory-budget). |
 | `PROJ_DATA` | geospatial commands | Directories holding `proj.db` and local grids |
 
 Contributor test variables are listed in [CONTRIBUTING.md](../CONTRIBUTING.md#run-the-tests).

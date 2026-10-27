@@ -23,9 +23,11 @@ pub(crate) use sequence::{
 pub(crate) use sort::{
     chunk_records, ExternalSorter, SortConfig, SortStats, SortedStream, CHUNK_BYTES,
 };
+#[cfg(test)]
+pub(crate) use volume::Classification;
 #[allow(unused_imports)]
 pub(crate) use volume::{
-    inspect_volume, preflight, same_filesystem, PreflightStage, SpaceRole, Volume,
+    inspect_volume, preflight, same_filesystem, PreflightStage, SpaceRole, Volume, STORAGE_DISK_ENV,
 };
 
 use crate::{JobError, JobErrorKind};

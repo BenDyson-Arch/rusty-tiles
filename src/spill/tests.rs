@@ -737,7 +737,7 @@ fn fixed(available: u64) -> impl FnOnce(&Path) -> Result<Volume, SpillError> {
         Ok(Volume {
             available_bytes: available,
             memory_backed: false,
-            memory_backed_assumed: false,
+            classification: super::volume::Classification::Detected,
             allocation_unit_bytes: 4096,
         })
     }
@@ -886,7 +886,7 @@ fn ram_named(path: &Path) -> Result<Volume, SpillError> {
     Ok(Volume {
         available_bytes: 1 << 40,
         memory_backed: path.file_name().is_some_and(|name| name == "ram"),
-        memory_backed_assumed: false,
+        classification: super::volume::Classification::Detected,
         allocation_unit_bytes: 4096,
     })
 }
@@ -1205,7 +1205,7 @@ fn allocation_unit_is_preserved_by_preflight_and_scratch() {
         Ok(Volume {
             available_bytes: 65536,
             memory_backed: true,
-            memory_backed_assumed: false,
+            classification: super::volume::Classification::Detected,
             allocation_unit_bytes: 65536,
         })
     })
@@ -1223,7 +1223,7 @@ fn zero_allocation_unit_is_a_typed_fault_before_scratch_creation() {
         Ok(Volume {
             available_bytes: u64::MAX,
             memory_backed: false,
-            memory_backed_assumed: false,
+            classification: super::volume::Classification::Detected,
             allocation_unit_bytes: 0,
         })
     })

@@ -338,11 +338,15 @@ pub struct MemoryDiagnostics {
 /// that would pass it is a `resource_limit` refusal, so the budget bounds the run.
 #[derive(Clone, Debug, Serialize)]
 pub struct StorageDiagnostics {
-    /// How each owner's filesystem was classified: `disk`, `memory_backed`, or
+    /// How each owner's filesystem was classified: `disk`, `memory_backed`,
     /// `memory_backed_assumed` (an overlay whose writable upper layer could not be resolved,
-    /// charged as memory-backed to fail safe).
+    /// as inside most containers, charged as memory-backed to fail safe) or `disk_declared`
+    /// (such storage declared disk-backed by `RUSTY_TILES_STORAGE_DISK=1`, not charged).
     pub work_storage: &'static str,
     pub archive_storage: &'static str,
+    /// What happened and what to do, when an owner's kind could not be resolved.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
     /// The private work directory: leaf and coarse payloads, forest staging and the
     /// archive's scratch.
     pub work_charge_bytes: Option<u64>,
@@ -364,6 +368,45 @@ pub struct StorageDiagnostics {
 /// not scale with triangles and dominate a small source's files.
 const STORAGE_FIXED_BYTES: u64 = 32 << 20;
 
+/// The meter charging `copy` to an owner on memory-backed storage (detected or assumed);
+/// none for disk, including storage declared disk-backed.
+fn owner_meter(
+    volume: &crate::spill::Volume,
+    copy: u64,
+    what: &'static str,
+    advice: &'static str,
+) -> Option<std::sync::Arc<crate::storage_meter::Meter>> {
+    volume
+        .memory_backed
+        .then(|| crate::storage_meter::Meter::new(what, advice, copy, volume.allocation_unit_bytes))
+}
+
+/// The plain explanation of storage whose kind could not be resolved, if any.
+fn storage_note(work: &str, archive: &str) -> Option<String> {
+    let owners = |class: &str| match (work == class, archive == class) {
+        (true, true) => Some("the work directory and the archive staging"),
+        (true, false) => Some("the work directory"),
+        (false, true) => Some("the archive staging beside the output"),
+        (false, false) => None,
+    };
+    let env = crate::spill::STORAGE_DISK_ENV;
+    if let Some(owners) = owners("memory_backed_assumed") {
+        return Some(format!(
+            "{owners} could not be classified (an overlay whose writable layer is not visible, \
+             as inside most containers), so it was charged to the memory budget as \
+             memory-backed storage. If it is on disk, either put the output and --scratch-dir \
+             on a mounted volume, which is detected as disk, or set {env}=1 to declare \
+             unresolvable storage disk-backed."
+        ));
+    }
+    owners("disk_declared").map(|owners| {
+        format!(
+            "{owners} could not be classified and {env}=1 declares it disk-backed, so it was \
+             not charged to the memory budget."
+        )
+    })
+}
+
 /// A meter of one copy of the output reservation, plus [`STORAGE_FIXED_BYTES`], for each of
 /// the work directory and the output parent that is memory-backed, with each owner's class.
 fn storage_charges(
@@ -371,14 +414,10 @@ fn storage_charges(
     output_parent: &Path,
     scratch: &super::full::FullScratchNeed,
 ) -> Result<(delivery::StorageCharges, [&'static str; 2]), JobError> {
-    use crate::storage_meter::Meter;
     let copy = (scratch.output_reserve_bytes / 3).saturating_add(STORAGE_FIXED_BYTES);
     let charge = |path: &Path, what, advice| -> Result<_, JobError> {
         let volume = crate::spill::inspect_volume(path).map_err(JobError::from)?;
-        let meter = volume
-            .memory_backed
-            .then(|| Meter::new(what, advice, copy, volume.allocation_unit_bytes));
-        Ok((meter, volume.class()))
+        Ok((owner_meter(&volume, copy, what, advice), volume.class()))
     };
     let (work, work_class) = charge(
         work,
@@ -644,6 +683,7 @@ pub fn mesh_to_tileset(
             memory_backed_storage: StorageDiagnostics {
                 work_storage,
                 archive_storage,
+                note: storage_note(work_storage, archive_storage),
                 work_charge_bytes: limit(&charges.work),
                 archive_charge_bytes: limit(&charges.archive),
                 work_admitted_bytes: None,
@@ -790,4 +830,69 @@ pub fn mesh_to_tileset(
         diagnostics,
         cleanup_diagnostics: published.cleanup_diagnostics,
     })
+}
+
+#[cfg(test)]
+mod storage_note_tests {
+    use super::{owner_meter, storage_note};
+    use crate::spill::{Classification, Volume};
+
+    /// Assumed memory-backed storage is charged; the same storage declared disk-backed is
+    /// not; detected tmpfs is charged whatever is declared (the declaration only reaches
+    /// unresolved storage, `spill::volume`).
+    #[test]
+    fn declared_disk_removes_the_charge_and_detected_tmpfs_keeps_it() {
+        let volume = |memory_backed, classification| Volume {
+            available_bytes: 0,
+            memory_backed,
+            classification,
+            allocation_unit_bytes: 4096,
+        };
+        let meter = |v: &Volume| owner_meter(v, 1 << 20, "w", "a").map(|m| m.limit());
+        let assumed = volume(true, Classification::AssumedMemory);
+        let declared = volume(false, Classification::DeclaredDisk);
+        let tmpfs = volume(true, Classification::Detected);
+        assert_eq!(meter(&assumed), Some(1 << 20));
+        assert_eq!(meter(&declared), None);
+        assert_eq!(meter(&tmpfs), Some(1 << 20));
+        assert_eq!(
+            (assumed.class(), declared.class(), tmpfs.class()),
+            ("memory_backed_assumed", "disk_declared", "memory_backed")
+        );
+    }
+
+    /// Assumed memory-backed storage is explained with both fixes; declared disk is named;
+    /// detected storage needs no note.
+    #[test]
+    fn unresolved_storage_is_explained_with_its_fixes() {
+        for (work, archive) in [
+            ("disk", "disk"),
+            ("memory_backed", "disk"),
+            ("disk", "memory_backed"),
+        ] {
+            assert_eq!(storage_note(work, archive), None);
+        }
+        let note = storage_note("memory_backed_assumed", "memory_backed_assumed").unwrap();
+        for part in [
+            "the work directory and the archive staging",
+            "charged to the memory budget as memory-backed",
+            "inside most containers",
+            "--scratch-dir on a mounted volume",
+            "RUSTY_TILES_STORAGE_DISK=1",
+        ] {
+            assert!(note.contains(part), "{part}: {note}");
+        }
+        let archive = storage_note("disk", "memory_backed_assumed").unwrap();
+        assert!(
+            archive.starts_with("the archive staging beside the output"),
+            "{archive}"
+        );
+        let declared = storage_note("disk_declared", "memory_backed").unwrap();
+        assert!(
+            declared.starts_with("the work directory could not be classified")
+                && declared.contains("RUSTY_TILES_STORAGE_DISK=1 declares it disk-backed")
+                && declared.contains("not charged"),
+            "{declared}"
+        );
+    }
 }

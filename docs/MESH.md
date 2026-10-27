@@ -500,10 +500,18 @@ One declared ceiling governs the whole run, with one rule on every surface:
   that would pass the charge is a `resource_limit` refusal (`use a disk-backed scratch
   directory` or `stage the output on disk`), so tmpfs never holds more than was
   charged. An overlay filesystem is classified by its writable upper layer (read from
-  `/proc/self/mountinfo`); one whose upper layer cannot be resolved, as inside most
-  containers, is charged as memory-backed and reported as `memory_backed_assumed`. The estimate is generous for textured
-  sources and tighter for untextured ones (about 1.4× a measured untextured
-  0.79M-triangle crop), so disk remains the better place for large outputs.
+  `/proc/self/mountinfo`). The estimate is generous for textured sources and tighter
+  for untextured ones (about 1.4× a measured untextured 0.79M-triangle crop), so disk
+  remains the better place for large outputs.
+- **Containers.** Inside most containers the root filesystem is an overlay whose
+  writable layer lives outside the container, so its kind cannot be resolved. Such
+  storage is charged as memory-backed to fail safe, reported as
+  `memory_backed_assumed`, and explained in `memory_backed_storage.note`. If it is
+  on disk, either put the output and `--scratch-dir` on a mounted volume (a bind or
+  named volume is detected as disk), or set `RUSTY_TILES_STORAGE_DISK=1` to declare
+  unresolvable storage disk-backed: it is then reported as `disk_declared` and not
+  charged. The declaration never reclassifies storage detected as tmpfs or ramfs;
+  any value other than `1` or `0` is refused.
 - **Pressure never changes output.** It serializes work (`--jobs` stays a maximum
   under the same budget), and what cannot fit even alone is a `resource_limit`
   refusal naming the stage and the bytes it needs, before that stage allocates and

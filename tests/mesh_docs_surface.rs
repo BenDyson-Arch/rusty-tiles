@@ -324,6 +324,11 @@ fn policy_statements_match_the_implementation() {
     assert!(!budget.contains("**Not charged:**"));
     assert!(budget.contains("**Memory-backed storage.**") && budget.contains("tmpfs"));
     assert!(budget.contains("`memory_backed_storage`"));
+    // Containers: the fail-safe charge and its documented declaration.
+    assert!(budget.contains("**Containers.**") && budget.contains("`memory_backed_assumed`"));
+    assert!(budget.contains("`RUSTY_TILES_STORAGE_DISK=1`") && budget.contains("`disk_declared`"));
+    assert!(read("src/spill/volume.rs").contains("\"RUSTY_TILES_STORAGE_DISK\""));
+    assert!(read("docs/CLI.md").contains("`RUSTY_TILES_STORAGE_DISK=1`"));
     let pipeline = read("src/mesh_large/pipeline.rs");
     assert!(pipeline.contains("fn storage_charges") && pipeline.contains("charges.archive"));
     // The producer declares HLOD, so validation needs no flag.

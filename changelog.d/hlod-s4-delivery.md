@@ -12,6 +12,7 @@
   intermediate storage: the private work directory and the staged archive each
   take one copy of the output reservation plus 32 MiB from the budget when they
   live on tmpfs (or on an overlay whose upper layer is tmpfs or cannot be
-  resolved). Every write into them is admitted before it lands; one that would
-  pass the charge is a `resource_limit` refusal. `diagnostics.memory.memory_backed_storage` reports the charges and
+  resolved, as inside most containers; `RUSTY_TILES_STORAGE_DISK=1` declares
+  such unresolvable storage disk-backed). Every write into them is admitted
+  before it lands; one that would pass the charge is a `resource_limit` refusal. `diagnostics.memory.memory_backed_storage` reports the charges and
   measurements; `budget.memory_backed_storage_bytes` is their sum.

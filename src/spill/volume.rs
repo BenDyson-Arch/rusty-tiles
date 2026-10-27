@@ -48,22 +48,73 @@ impl PreflightStage {
 pub(crate) struct Volume {
     pub available_bytes: u64,
     pub memory_backed: bool,
-    /// `memory_backed` was assumed to fail safe: an overlay whose writable upper layer could
-    /// not be resolved or inspected (for example a container's upper directory, which lives
-    /// outside this mount namespace).
-    pub memory_backed_assumed: bool,
+    /// How `memory_backed` was established.
+    pub classification: Classification,
     /// Filesystem allocation fragment/cluster size. Logical spill byte counts exclude this
     /// per-file rounding and filesystem metadata; the producer reserves those separately.
     pub allocation_unit_bytes: u64,
 }
 
+/// Declares storage whose kind cannot be resolved (an overlay whose writable upper layer is
+/// outside this mount namespace, as inside most containers) disk-backed: `1` declares it,
+/// unset or `0` keeps the fail-safe memory-backed charge. Storage detected as tmpfs or ramfs
+/// is never reclassified.
+pub(crate) const STORAGE_DISK_ENV: &str = "RUSTY_TILES_STORAGE_DISK";
+
+/// How a volume's `memory_backed` was established.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Classification {
+    /// The filesystem type, or an overlay's writable upper layer, was inspected.
+    Detected,
+    /// An overlay whose upper layer could not be resolved or inspected: memory-backed, to
+    /// fail safe.
+    AssumedMemory,
+    /// Such an overlay, declared disk-backed by [`STORAGE_DISK_ENV`].
+    DeclaredDisk,
+}
+
+/// What inspecting a path's filesystem established.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Detection {
+    Ram,
+    Disk,
+    /// An overlay whose upper layer could not be resolved or inspected.
+    Unresolved,
+}
+
+/// `memory_backed` and its classification from a detection and the [`STORAGE_DISK_ENV`]
+/// value. Only an unresolved detection consults the declaration.
+pub(crate) fn classify(
+    detection: Detection,
+    declared: Option<&std::ffi::OsStr>,
+) -> io::Result<(bool, Classification)> {
+    Ok(match detection {
+        Detection::Ram => (true, Classification::Detected),
+        Detection::Disk => (false, Classification::Detected),
+        Detection::Unresolved => match declared.map(|v| v.to_str()) {
+            None | Some(Some("0")) => (true, Classification::AssumedMemory),
+            Some(Some("1")) => (false, Classification::DeclaredDisk),
+            Some(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "{STORAGE_DISK_ENV} must be 1 (declare unresolvable storage disk) or 0"
+                    ),
+                ))
+            }
+        },
+    })
+}
+
 impl Volume {
-    /// `disk`, `memory_backed` or `memory_backed_assumed`, as reported in diagnostics.
+    /// `disk`, `memory_backed`, `memory_backed_assumed` or `disk_declared`, as reported in
+    /// diagnostics.
     pub(crate) fn class(&self) -> &'static str {
-        match (self.memory_backed, self.memory_backed_assumed) {
-            (false, _) => "disk",
-            (true, false) => "memory_backed",
-            (true, true) => "memory_backed_assumed",
+        match (self.memory_backed, self.classification) {
+            (_, Classification::AssumedMemory) => "memory_backed_assumed",
+            (_, Classification::DeclaredDisk) => "disk_declared",
+            (false, Classification::Detected) => "disk",
+            (true, Classification::Detected) => "memory_backed",
         }
     }
 }
@@ -230,29 +281,31 @@ mod implementation {
         } else {
             stat.f_bsize as u64
         };
-        let (memory_backed, memory_backed_assumed) = memory_backed(&path)?;
+        let (memory_backed, classification) = classify(
+            detect(&path)?,
+            std::env::var_os(STORAGE_DISK_ENV).as_deref(),
+        )?;
         Ok(Volume {
             available_bytes: (stat.f_bavail as u64).saturating_mul(unit),
             memory_backed,
-            memory_backed_assumed,
+            classification,
             allocation_unit_bytes: unit,
         })
     }
 
-    /// Whether the filesystem holding `path` is RAM, and whether that was assumed. An
-    /// overlay is classified by its writable upper layer (D8: a tmpfs upper layer is RAM, a
-    /// disk upper layer is disk); an upper layer that cannot be resolved or inspected is
-    /// assumed to be RAM, failing safe.
+    /// Whether the filesystem holding `path` is RAM. An overlay is classified by its writable
+    /// upper layer (D8: a tmpfs upper layer is RAM, a disk upper layer is disk); an upper
+    /// layer that cannot be resolved or inspected is [`Detection::Unresolved`].
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    fn memory_backed(path: &std::ffi::CStr) -> io::Result<(bool, bool)> {
+    fn detect(path: &std::ffi::CStr) -> io::Result<Detection> {
         use std::os::unix::ffi::OsStrExt;
         let mut kind = fs_type(path)?;
         let mut path = PathBuf::from(std::ffi::OsStr::from_bytes(path.to_bytes()));
         // An overlay's upper layer may itself be an overlay; a few levels suffice.
         for _ in 0..4 {
             match kind {
-                FsType::Ram => return Ok((true, false)),
-                FsType::Other => return Ok((false, false)),
+                FsType::Ram => return Ok(Detection::Ram),
+                FsType::Other => return Ok(Detection::Disk),
                 FsType::Overlay => {}
             }
             let upper = std::fs::canonicalize(&path).ok().and_then(|canonical| {
@@ -263,15 +316,15 @@ mod implementation {
                 }
             });
             let Some(upper) = upper else {
-                return Ok((true, true));
+                return Ok(Detection::Unresolved);
             };
             kind = match c_path(&upper).and_then(|c| fs_type(&c)) {
                 Ok(kind) => kind,
-                Err(_) => return Ok((true, true)),
+                Err(_) => return Ok(Detection::Unresolved),
             };
             path = upper;
         }
-        Ok((true, true))
+        Ok(Detection::Unresolved)
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -302,8 +355,8 @@ mod implementation {
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
-    fn memory_backed(_: &std::ffi::CStr) -> io::Result<(bool, bool)> {
-        Ok((false, false))
+    fn detect(_: &std::ffi::CStr) -> io::Result<Detection> {
+        Ok(Detection::Disk)
     }
 }
 
@@ -323,7 +376,7 @@ mod implementation {
         Ok(Volume {
             available_bytes: (stat.f_bavail as u64).saturating_mul(stat.f_bsize as u64),
             memory_backed: false,
-            memory_backed_assumed: false,
+            classification: Classification::Detected,
             allocation_unit_bytes: stat.f_bsize as u64,
         })
     }
@@ -411,7 +464,7 @@ mod implementation {
         Ok(Volume {
             available_bytes: available,
             memory_backed: false,
-            memory_backed_assumed: false,
+            classification: Classification::Detected,
             allocation_unit_bytes: u64::from(sectors) * u64::from(sector_bytes),
         })
     }
@@ -504,16 +557,43 @@ upperdir=/var/lib/docker/overlay2/abc/diff,workdir=/var/lib/docker/overlay2/abc/
         );
     }
 
+    /// The fail-safe charge and its declared override: only unresolved storage consults
+    /// the declaration, so detected tmpfs/ramfs stays memory-backed whatever it says.
     #[test]
-    fn volume_classes_name_assumed_memory() {
-        let volume = |memory_backed, memory_backed_assumed| Volume {
-            available_bytes: 0,
-            memory_backed,
-            memory_backed_assumed,
-            allocation_unit_bytes: 4096,
+    fn only_unresolved_storage_can_be_declared_disk() {
+        use std::ffi::OsStr;
+        let class = |detection, declared: Option<&str>| {
+            classify(detection, declared.map(OsStr::new)).map(|(memory_backed, classification)| {
+                Volume {
+                    available_bytes: 0,
+                    memory_backed,
+                    classification,
+                    allocation_unit_bytes: 4096,
+                }
+                .class()
+            })
         };
-        assert_eq!(volume(false, false).class(), "disk");
-        assert_eq!(volume(true, false).class(), "memory_backed");
-        assert_eq!(volume(true, true).class(), "memory_backed_assumed");
+        for declared in [None, Some("0"), Some("1")] {
+            assert_eq!(class(Detection::Ram, declared).unwrap(), "memory_backed");
+            assert_eq!(class(Detection::Disk, declared).unwrap(), "disk");
+        }
+        assert_eq!(
+            class(Detection::Unresolved, None).unwrap(),
+            "memory_backed_assumed"
+        );
+        assert_eq!(
+            class(Detection::Unresolved, Some("0")).unwrap(),
+            "memory_backed_assumed"
+        );
+        let declared = classify(Detection::Unresolved, Some(OsStr::new("1"))).unwrap();
+        assert_eq!(declared, (false, Classification::DeclaredDisk));
+        assert_eq!(
+            class(Detection::Unresolved, Some("1")).unwrap(),
+            "disk_declared"
+        );
+        for bad in ["yes", "true", "", "2"] {
+            let error = class(Detection::Unresolved, Some(bad)).unwrap_err();
+            assert!(error.to_string().contains(STORAGE_DISK_ENV), "{error}");
+        }
     }
 }
