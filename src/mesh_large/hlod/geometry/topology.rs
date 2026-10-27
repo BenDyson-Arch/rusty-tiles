@@ -605,24 +605,33 @@ pub(super) fn changes(
             }
         }
         drop((cluster, closing));
+        // As the oracle: a cluster that lost a cycle may not touch a delivered border
+        // anywhere, including where its moved boundary reaches a formerly interior point.
+        if (0..m.keys.len()).any(|v| seed[v] && border.contains(&m.keys[v])) {
+            return rejected("a closing boundary cluster touches a delivered border");
+        }
         closure_centroids = cycle_centroids(m, &old_edges, &seed);
         // Changed by multiset, as the oracle counts: a repeated face is changed once
-        // its input copies are used up.
+        // its input copies are used up. The patch is selected over the whole output, as
+        // the oracle does; carriers are per affected component, which is sound because no
+        // output face spans two input components (simplification collapses edges, and
+        // remesh cells and repairs are keyed by component).
+        debug_assert!(output.iter().all(|t| {
+            t.iter()
+                .all(|&v| component[v as usize] == component[t[0] as usize])
+        }));
         let mut old_faces: HashMap<[u32; 3], u32> = HashMap::default();
         for t in &m.triangles {
             *old_faces.entry(oriented(t)).or_default() += 1;
         }
         for (i, t) in output.iter().enumerate() {
-            if !affected.contains(&component[t[0] as usize]) {
-                continue;
-            }
             let kept = old_faces
                 .get_mut(&oriented(t))
                 .is_some_and(|n| std::mem::replace(n, n.saturating_sub(1)) > 0);
-            if kept || !t.iter().any(|&v| seed[v as usize]) {
-                closure_carriers.push(i);
-            } else {
+            if !kept && t.iter().any(|&v| seed[v as usize]) {
                 patch_faces.push(i);
+            } else if affected.contains(&component[t[0] as usize]) {
+                closure_carriers.push(i);
             }
         }
         let mut edges: Vec<_> = old_edges
@@ -856,62 +865,114 @@ fn strip(
 }
 
 /// The oracle's closure centroids: a depth-first spanning forest of the boundary edges
-/// on `seed` vertices; each non-tree edge closes one cycle through the forest. Visits
-/// are bounded by the job's boundary (a cycle walk by its forest depth).
+/// on `seed` vertices, iterating start points and adjacency in sorted position order as
+/// the oracle does, so both build the same basis; each non-tree edge closes one cycle.
+/// A cycle's vertex sum comes from root-relative prefix sums and a binary-lifting lowest
+/// common ancestor, so B boundary edges cost O(B log B), not one walk per cycle.
 fn cycle_centroids(m: &Merged, edges: &HashMap<(u32, u32), u32>, seed: &[bool]) -> Vec<[f64; 3]> {
+    let position = |v: u32| m.positions[v as usize].map(f64::from);
+    let order = |a: u32, b: u32| {
+        position(a)
+            .partial_cmp(&position(b))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    };
     let mut list: Vec<(u32, u32)> = edges
         .keys()
-        .copied()
-        .filter(|&(a, _)| seed[a as usize])
+        .filter(|&&(a, _)| seed[a as usize])
+        .map(|&(a, b)| if order(b, a).is_lt() { (b, a) } else { (a, b) })
         .collect();
-    list.sort_unstable();
-    let local: HashMap<(u32, u32), u32> = list.iter().map(|&e| (e, 1)).collect();
-    let (offset, adjacent) = boundary_adjacency(m.keys.len(), &local);
+    list.sort_unstable_by(|x, y| order(x.0, y.0).then(order(x.1, y.1)));
+    let mut points: Vec<u32> = list.iter().flat_map(|&(a, b)| [a, b]).collect();
+    points.sort_unstable_by(|&a, &b| order(a, b));
+    points.dedup();
+    let n = points.len();
+    let mut local = vec![u32::MAX; m.keys.len()];
+    for (i, &v) in points.iter().enumerate() {
+        local[v as usize] = i as u32;
+    }
+    let list: Vec<(usize, usize)> = list
+        .into_iter()
+        .map(|(a, b)| (local[a as usize] as usize, local[b as usize] as usize))
+        .collect();
     drop(local);
-    let mut parent = vec![u32::MAX; m.keys.len()];
-    let mut depth = vec![0u32; m.keys.len()];
+    // Adjacency in sorted edge order.
+    let mut offset = vec![0usize; n + 1];
+    for &(a, b) in &list {
+        offset[a + 1] += 1;
+        offset[b + 1] += 1;
+    }
+    for v in 0..n {
+        offset[v + 1] += offset[v];
+    }
+    let mut adjacent = vec![0usize; offset[n]];
+    let mut cursor = offset[..n].to_vec();
+    for &(a, b) in &list {
+        adjacent[cursor[a]] = b;
+        cursor[a] += 1;
+        adjacent[cursor[b]] = a;
+        cursor[b] += 1;
+    }
+    drop(cursor);
+    let mut parent = vec![usize::MAX; n];
+    let mut depth = vec![0u32; n];
+    let mut root = vec![0usize; n];
+    let mut sum = vec![[0f64; 3]; n];
     let mut stack = Vec::new();
-    for start in list.iter().flat_map(|&(a, b)| [a, b]) {
-        if parent[start as usize] != u32::MAX {
+    for start in 0..n {
+        if parent[start] != usize::MAX {
             continue;
         }
-        parent[start as usize] = start;
+        (parent[start], root[start]) = (start, start);
         stack.push(start);
         while let Some(v) = stack.pop() {
-            for &w in &adjacent[offset[v as usize]..offset[v as usize + 1]] {
-                if parent[w as usize] == u32::MAX {
-                    parent[w as usize] = v;
-                    depth[w as usize] = depth[v as usize] + 1;
+            for &w in &adjacent[offset[v]..offset[v + 1]] {
+                if parent[w] == usize::MAX {
+                    let (p, r) = (position(points[w]), position(points[root[v]]));
+                    (parent[w], depth[w], root[w]) = (v, depth[v] + 1, root[v]);
+                    sum[w] = std::array::from_fn(|i| sum[v][i] + (p[i] - r[i]));
                     stack.push(w);
                 }
             }
         }
     }
-    let position = |v: u32| m.positions[v as usize].map(f64::from);
-    let mut out = Vec::new();
-    for &(a, b) in &list {
-        if parent[a as usize] == b || parent[b as usize] == a {
-            continue;
+    drop((offset, adjacent, stack));
+    let levels = (32 - depth.iter().max().map_or(0, |d| d.leading_zeros())).max(1) as usize;
+    let mut up = parent.clone();
+    for j in 1..levels {
+        for v in 0..n {
+            let half = up[(j - 1) * n + v];
+            up.push(up[(j - 1) * n + half]);
         }
-        let (mut x, mut y) = (a, b);
-        let mut sum = [0f64; 3];
-        let mut count = 0usize;
-        let mut add = |v: u32| {
-            let p = position(v);
-            (0..3).for_each(|i| sum[i] += p[i]);
-            count += 1;
-        };
-        while x != y {
-            if depth[x as usize] >= depth[y as usize] {
-                add(x);
-                x = parent[x as usize];
-            } else {
-                add(y);
-                y = parent[y as usize];
+    }
+    let ancestor = |mut a: usize, mut b: usize| {
+        if depth[a] < depth[b] {
+            std::mem::swap(&mut a, &mut b);
+        }
+        let lift = depth[a] - depth[b];
+        for j in (0..levels).filter(|&j| lift >> j & 1 == 1) {
+            a = up[j * n + a];
+        }
+        if a == b {
+            return a;
+        }
+        for j in (0..levels).rev() {
+            if up[j * n + a] != up[j * n + b] {
+                (a, b) = (up[j * n + a], up[j * n + b]);
             }
         }
-        add(x);
-        out.push(sum.map(|s| s / count as f64));
+        parent[a]
+    };
+    let mut out = Vec::new();
+    for &(a, b) in &list {
+        if parent[a] == b || parent[b] == a {
+            continue;
+        }
+        let c = ancestor(a, b);
+        let count = (depth[a] + depth[b] - 2 * depth[c] + 1) as f64;
+        let (r, l) = (position(points[root[a]]), position(points[c]));
+        out.push(std::array::from_fn(|i| {
+            r[i] + (sum[a][i] + sum[b][i] - 2. * sum[c][i] + (l[i] - r[i])) / count
+        }));
     }
     out
 }
@@ -1723,6 +1784,53 @@ pub(super) mod tests {
         assert_eq!(patch, [[8, 9, 16], [8, 16, 15]]);
         assert_eq!(change.closure_carriers.len(), output.len() - 2);
         assert_eq!(change.closure_centroids, [[1.5, 1.5, 0.]]);
+    }
+
+    #[test]
+    fn a_closing_cluster_whose_moved_boundary_reaches_a_border_point_is_rejected() {
+        // Review S1c r1 P2-1: holes (2,2) and (3,3) pinch at vertex (3,3). The output fills
+        // (3,3) and removes quad (1,2), so the other hole's boundary moves onto vertex
+        // (1,2): interior before, a border point. The cluster lost a cycle and touches the
+        // border, which the S5 oracle refuses.
+        let m = grid(8, &[(2, 2), (3, 3)]);
+        let output = grid(8, &[(1, 2), (2, 2)]).triangles;
+        let k = m.keys[2 * 9 + 1];
+        let border = [InterfaceRow::new(0, k, k, 0, 1)];
+        assert!(changes(&m, &output, &border, 0.).is_none());
+        let free = changes(&m, &output, &[], 0.).unwrap();
+        assert_eq!(
+            (free.receipt.closed_holes, free.receipt.opened_holes),
+            (1, 0)
+        );
+    }
+
+    #[test]
+    fn a_rank_three_closing_cluster_has_the_oracles_centroid_basis() {
+        // Review S1c r1 P3-1: two L-shaped holes pinched at two vertices around an island.
+        // Expected: the S5 oracle's `_cycle_centroids` on the same edges.
+        let holes = [
+            (1, 1),
+            (2, 1),
+            (3, 1),
+            (1, 2),
+            (1, 3),
+            (4, 2),
+            (4, 3),
+            (4, 4),
+            (3, 4),
+            (2, 4),
+        ];
+        let m = grid(7, &holes);
+        let change = changes(&m, &grid(7, &[]).triangles, &[], 0.).unwrap();
+        assert_eq!(change.receipt.closed_holes, 3);
+        let oracle = [[3., 3., 0.], [3.5, 3.5, 0.], [23. / 6., 23. / 6., 0.]];
+        assert_eq!(change.closure_centroids.len(), oracle.len());
+        for (c, o) in change.closure_centroids.iter().zip(oracle) {
+            assert!(
+                (0..3).all(|i| (c[i] - o[i]).abs() < 1e-12),
+                "{c:?} vs {o:?}"
+            );
+        }
     }
 
     #[test]

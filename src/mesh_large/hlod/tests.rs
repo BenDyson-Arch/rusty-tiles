@@ -4763,11 +4763,14 @@ fn d11_holey_sheet_reports_its_cap_infeasible_omissions_upward() {
 }
 
 /// The positive control for the local closure domain: the holey layout as 2 cm holes on
-/// a tilted plane, in a central block at least 20 m from the same spikes. The cap still
-/// forces closures. Each loses about 1 cm on its own hole's domain, inside E at every
-/// coarse depth, and is admitted although the spikes keep the rest of the cell far above
-/// E. (A whole-component closure domain admits none of them here.) Zero omissions and
-/// no folds at every scale.
+/// a tilted plane, in a central block at least 20 m from the same spikes. The cap does not
+/// force closures here (keeping every hole also fits, which is all a whole-component
+/// closure domain admits), so this proves closures are admitted, not needed: each loses
+/// about 1 cm on its own hole's domain, inside E at every coarse depth, although the
+/// spikes keep the rest of the cell far above E. Zero omissions and no folds at every
+/// scale. A power-of-two scale is exact in f32 and reproduces the x1 proposals (21
+/// closures); x40 rounds every coordinate, and meshopt then breaks ties differently (4
+/// closures, as at x3 and x10).
 #[test]
 fn d11_pinhole_sheet_admits_local_closures_with_zero_omissions_and_no_folds() {
     let pinholes = holey(
@@ -4775,6 +4778,7 @@ fn d11_pinhole_sheet_admits_local_closures_with_zero_omissions_and_no_folds() {
         &|i, j| holey_cell(i, j) && (20..=40).contains(&i) && (42..=78).contains(&j),
         Some(0.02),
     );
+    let mut closures = Vec::new();
     for scale in [1., 40., 0.25] {
         let name = format!("pinhole x{scale}");
         let work = tempfile::tempdir().unwrap();
@@ -4793,7 +4797,12 @@ fn d11_pinhole_sheet_admits_local_closures_with_zero_omissions_and_no_folds() {
             .sum();
         eprintln!("PINHOLE {name}: {closed} closed holes");
         assert!(closed > 0, "{name}: no closure was admitted");
+        closures.push(closed);
     }
+    assert_eq!(
+        closures[0], closures[2],
+        "x0.25 is an exact rescaling of x1"
+    );
 }
 
 #[test]
