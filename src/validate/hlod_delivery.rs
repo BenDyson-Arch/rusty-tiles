@@ -2131,6 +2131,9 @@ mod tests {
             source: super::super::limits::Derivation::Explicit,
         }
     }
+    pub(super) fn effort_for_tests() -> Effort {
+        effort()
+    }
     fn effort() -> Effort {
         Effort {
             budget: budget(),

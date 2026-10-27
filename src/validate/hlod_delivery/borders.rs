@@ -1027,6 +1027,19 @@ mod tests {
         refused(case(vec![[o, P[1], [3., 0., 1.2]]]), "interfaceWinding");
     }
     #[test]
+    fn grouped_matching_reroutes_and_charges_its_real_work() {
+        use super::super::tests::effort_for_tests as effort;
+        // A fits X or Y, B only X: A must move to Y when B arrives (augmenting path).
+        let compatible = vec![vec![true, true], vec![true, false]];
+        assert!(routed(&[1, 1], &[1, 1], &compatible, &effort()).unwrap());
+        assert!(!routed(&[2], &[1, 1], &[vec![true, false]], &effort()).unwrap());
+        // Review r3: n coincident copies are one group pair; work is linear in n.
+        let e = effort();
+        assert!(routed(&[1024], &[1024], &[vec![true]], &e).unwrap());
+        let used = e.used.load(std::sync::atomic::Ordering::Relaxed);
+        assert!(used <= 4 * 1024, "{used}");
+    }
+    #[test]
     fn identical_sibling_contraction_within_g_over_16_passes() {
         // d = 0.1 <= 2/16; A + B gap bound 0.2 <= 2/8.
         siblings(a_coarse(&[0, 4]), 2., b_coarse(&[0, 4]), 2.).unwrap();

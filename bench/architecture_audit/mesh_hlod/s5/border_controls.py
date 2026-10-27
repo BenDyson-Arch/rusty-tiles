@@ -677,6 +677,49 @@ def review2(name):
     return doc, files, source, records
 
 
+def review3(name):
+    """Sol's review-3 fixtures (hlod-s5-d11-review3-20261027): a raised sheet at
+    y = 0.01 with a square hole around a tiny island. Filling (or opening) the
+    annulus changes two cycles whose centroids sit on the island; the changed faces
+    lie 0.01 above another source sheet, so only the full grid sees the loss."""
+    raised = lambda x, z: point(x, .01, z)
+
+    def square(x0, z0, x1, z1):
+        return [raised(x0, z0), raised(x1, z0), raised(x1, z1), raised(x0, z1)]
+
+    def ring(outer, inner):
+        return [f for k in range(4) for f in (oriented((outer[k], outer[(k + 1) % 4], inner[k])),
+                                             oriented((inner[k], outer[(k + 1) % 4], inner[(k + 1) % 4])))]
+    outer, hole = square(.9, 1.9, 2.1, 3.1), square(1, 2, 2, 3)
+    island = square(1.4995, 2.4995, 1.5005, 2.5005)
+    base = ring(outer, hole) + [oriented((island[0], island[1], island[2])), oriented((island[0], island[2], island[3]))]
+    patch = ring(hole, island)
+    opening = name.startswith('opening')
+    changed = name.endswith('filled')
+    case = Case(name)
+    case.fx.extra = {'A1': base + patch if opening else base}
+    doc, files, source, records = build(case)
+    if opening:
+        out = [f for f in case.fx.coarse('A') if not changed or f not in patch]
+        update = dict(openedHoles=2, openedHoleToProxy=0., openedHoleBoundaryToSource=0., openedHoleFinalG=scale(1))
+    else:
+        out = case.fx.coarse('A') + (patch if changed else [])
+        update = dict(closedHoles=2, holePatchToSource=0., closedHoleFinalG=scale(1))
+    for label in ('topology', 'attemptedTopology'):
+        records[0]['tile'][label].update(update if changed else {})
+    files['A.glb'] = glb(out, identities(out), leaf=False)
+    _rehash(records, files)
+    return doc, files, source, records
+
+
+REVIEW3 = [
+    ('selector-filled', 'holeClosure', None),
+    ('selector-unchanged', None, None),
+    ('opening-selector-filled', 'holeOpening', None),
+    ('opening-selector-unchanged', None, None),
+]
+
+
 REVIEW2 = [
     ('page-crossed', 'interfaceWinding', 'interfaceWinding'),
     ('page-same-side', None, None),
@@ -714,8 +757,10 @@ def generate(root):
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     out = []
-    for name, oracle_check, native_check in CASES + REVIEW + REVIEW2:
-        if any(name == r[0] for r in REVIEW2):
+    for name, oracle_check, native_check in CASES + REVIEW + REVIEW2 + REVIEW3:
+        if any(name == r[0] for r in REVIEW3):
+            doc, files, source, records = review3(name)
+        elif any(name == r[0] for r in REVIEW2):
             doc, files, source, records = review2(name)
         elif any(name == r[0] for r in REVIEW):
             doc, files, source, records = review(name)

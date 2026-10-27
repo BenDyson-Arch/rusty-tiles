@@ -253,19 +253,45 @@ def _edge_faces(store):
     return store.edge_faces
 
 
-def _matching(left, right, compatible):
-    """Whether all `left` items match distinct `right` items (augmenting paths)."""
-    owner = [None] * right
-
-    def augment(item, seen):
-        for r in range(right):
-            if compatible(item, r) and not seen[r]:
-                seen[r] = True
-                if owner[r] is None or augment(owner[r], seen):
-                    owner[r] = item
-                    return True
-        return False
-    return all(augment(item, [False] * right) for item in range(left))
+def _routed(left, right, compatible, work):
+    """Whether `left[i]` faces of each third-corner group route to distinct source
+    faces, `right[j]` per group, along `compatible[i][j]`: breadth-first augmenting
+    paths over groups, one unit per path, each search charged by its group pairs."""
+    flow = [[0] * len(right) for _ in left]
+    used, sent = [0] * len(right), [0] * len(left)
+    for _ in range(sum(left)):
+        work.charge(len(left) * len(right) + len(left) + len(right))
+        from_left, from_right = [None] * len(right), [None] * len(left)
+        queue = collections.deque(i for i in range(len(left)) if sent[i] < left[i])
+        seen = set(queue)
+        end = None
+        while queue and end is None:
+            i = queue.popleft()
+            for j in range(len(right)):
+                if not compatible[i][j] or from_left[j] is not None:
+                    continue
+                from_left[j] = i
+                if used[j] < right[j]:
+                    end = j
+                    break
+                for k in range(len(left)):
+                    if flow[k][j] and k not in seen:
+                        seen.add(k)
+                        from_right[k] = j
+                        queue.append(k)
+        if end is None:
+            return False
+        j = end
+        used[j] += 1
+        while True:
+            i = from_left[j]
+            flow[i][j] += 1
+            if from_right[i] is None:
+                sent[i] += 1
+                break
+            flow[i][from_right[i]] -= 1
+            j = from_right[i]
+    return True
 
 
 def folds(store, tile, directed, arcs, require, faces=()):
@@ -300,12 +326,15 @@ def folds(store, tile, directed, arcs, require, faces=()):
         path = arcs.get(_key(a, b), [a, b])
         if path[0] != a:
             path = path[::-1]
-        thirds = [f[(j + 2) % 3] for f in faces for j in range(3) if (f[j], f[(j + 1) % 3]) == (p, q)]
+        thirds = collections.Counter(f[(j + 2) % 3] for f in faces for j in range(3) if (f[j], f[(j + 1) % 3]) == (p, q))
         index = _edge_faces(store)
         for x, y in zip(path, path[1:]):
-            source = [store.canonical_xyz(z) for z, leaf in index.get((x, y), ()) if lo <= leaf < hi]
-            store.work.charge(len(thirds) * len(source) + 1)
-            if not _matching(len(thirds), len(source), lambda c, s: _wedge(p, q, thirds[c], source[s]) > 0):
+            # Grouped by exact third corner; each compatibility sign computed once.
+            source = collections.Counter(z for z, leaf in index.get((x, y), ()) if lo <= leaf < hi)
+            left, right = list(thirds.items()), [(store.canonical_xyz(z), n) for z, n in source.items()]
+            store.work.charge(len(left) * len(right) * 64 + 1)
+            compatible = [[_wedge(p, q, c, z) > 0 for z, _ in right] for c, _ in left]
+            if not _routed([n for _, n in left], [n for _, n in right], compatible, store.work):
                 return False
         return True
     for (p, q), n in directed.items():
@@ -678,6 +707,31 @@ def _cycle_changes(before, after):
     common = list((a & b).elements())
     rank = _rank(common)
     return _rank(list(a.elements())) - rank, _rank(list(b.elements())) - rank
+
+
+def _margin(p):
+    """Rounding allowance of a float point on a face, relative to coordinates."""
+    return 1e-12 * (1 + max(abs(x) for x in p))
+
+
+def _domain(changed, seeds, passable):
+    """Changed faces (geometry, mapped corners) reachable from faces touching
+    `seeds`, crossing only `passable` vertices (never an unchanged interior)."""
+    by_point = collections.defaultdict(list)
+    for i, (_, m) in enumerate(changed):
+        for p in m:
+            by_point[p].append(i)
+    todo = [i for i, (_, m) in enumerate(changed) if any(p in seeds for p in m)]
+    reached = set(todo)
+    while todo:
+        i = todo.pop()
+        for p in changed[i][1]:
+            if p in passable:
+                for j in by_point[p]:
+                    if j not in reached:
+                        reached.add(j)
+                        todo.append(j)
+    return [changed[i][0] for i in sorted(reached)]
 
 
 def _cycle_centroids(components):
@@ -1217,6 +1271,25 @@ class Audit:
         input_mesh, output_mesh = _Mesh(source), _Mesh(output)
         inputs = _Near({p for f in source for p in f}, reach)
         to_input = lambda p: inputs.nearest(p) or p
+        input_points = {p for f in source for p in f}
+        out_points = _Near({p for f in output for p in f}, reach)
+        # Faces present on one side only, by corner set in input keys (with
+        # multiplicity): (geometry, mapped corners) of each changed face.
+        source_sets = collections.Counter(tuple(sorted(f)) for f in input_mesh.faces)
+        mapped = [(f, tuple(to_input(p) for p in f)) for f in output_mesh.faces]
+        output_sets = collections.Counter(tuple(sorted(m)) for _, m in mapped)
+        changed_out, seen = [], collections.Counter()
+        for f, m in mapped:
+            k = tuple(sorted(m))
+            seen[k] += 1
+            if seen[k] > source_sets[k]:
+                changed_out.append((f, m))
+        changed_in, seen = [], collections.Counter()
+        for f in input_mesh.faces:
+            k = tuple(sorted(f))
+            seen[k] += 1
+            if seen[k] > output_sets[k]:
+                changed_in.append((f, f))
         before = {e_ for e_ in input_mesh.open if not dropped(e_[0])}
         after = set()
         for x, y in output_mesh.open:
@@ -1255,38 +1328,42 @@ class Audit:
             self.stats['topologyClusters'] += bool(removed or added)
             boxes = lambda edges: [([min(x[k], y[k]) - math.dist(x, y) for k in range(3)],
                                     [max(x[k], y[k]) + math.dist(x, y) for k in range(3)]) for x, y in edges]
-            # Coverage: coarse surface over the old boundary, against source.
+            # The conservative changed-face domain (hlod-s1b-borders.md): changed
+            # faces reachable from the cluster's boundary vertices through boundary,
+            # new or lost vertices only. Every grid control on it is measured.
+            cluster_points = {p for e_ in ins | outs for p in e_}
             witnesses = []
             if removed:
                 witnesses += [output_mesh.project(c, store.work)
                               for c in _cycle_centroids([(set(p for e_ in ins for p in e_), list(ins))])]
-            for f in output_mesh.near(boxes(lost)):
-                for q in _samples(f):
-                    store.work.charge()
-                    if input_mesh.over_boundary(q, store.work):
-                        witnesses.append(q)
+            new_points = {q for f in changed_out for q in f[1] if q not in input_points}
+            for f in _domain(changed_out, cluster_points, cluster_points | new_points):
+                witnesses += _samples(f)
             require(bool(witnesses) or not removed, 'holeClosure',
                     f'tile {tid}: a closure has no measurable patch')
-            loss = max((self.source_distance(t, q) for q in witnesses), default=0.0)
+            loss = self.measured(witnesses, lambda q, m: self.source_within(t, q, m),
+                                 lambda q: self.source_distance(t, q))
             key = 'closure' if removed else 'coverage'
             self.stats[f'max{key.title()}LossOverE'] = max(self.stats[f'max{key.title()}LossOverE'], loss / e)
             if removed:
                 losses['closure'] = max(losses['closure'], loss)
             require(loss <= limit * (1 + 1e-9) + slack, 'holeClosure',
-                    f'tile {tid}: coarse surface over an old boundary is {loss} from source, above {label} = {limit}')
-            # Lost surface: input surface over the new boundary, against the proxy.
+                    f'tile {tid}: changed coarse surface at an old boundary is {loss} from source, above {label} = {limit}')
+            # Lost surface at the new boundary, against the delivered proxy.
             witnesses = []
             if added:
                 witnesses += [input_mesh.project(c, store.work)
                               for c in _cycle_centroids([(set(p for e_ in outs for p in e_), list(outs))])]
-            for f in input_mesh.near(boxes(new)):
-                for q in _samples(f):
-                    store.work.charge()
-                    if output_mesh.over_boundary(q, store.work):
-                        witnesses.append(q)
+            lost_points = {q for f in changed_in for q in f[1] if not out_points.find(q)}
+            for f in _domain(changed_in, cluster_points, cluster_points | lost_points):
+                witnesses += _samples(f)
             require(bool(witnesses) or not added, 'holeOpening',
                     f'tile {tid}: an opening has no measurable lost surface')
-            loss = max((output_mesh.distance(q, store.work) for q in witnesses), default=0.0)
+
+            def proxy_within(q, m):
+                found = output_mesh.nearest(q, store.work, exact=False)
+                return found is not None and math.sqrt(found[0]) * (1 + 1e-9) + _margin(q) <= m
+            loss = self.measured(witnesses, proxy_within, lambda q: output_mesh.distance(q, store.work))
             if added:
                 losses['opening'] = max(losses['opening'], loss)
                 for x, y in new:
@@ -1313,6 +1390,38 @@ class Audit:
                     f'tile {tid}: audit openedHoleToProxy {published["openedHoleToProxy"]} under the measured {losses["opening"]}')
             require(published['openedHoleBoundaryToSource'] >= losses['rim'] - slack, 'topologyReceipt',
                     f'tile {tid}: audit openedHoleBoundaryToSource {published["openedHoleBoundaryToSource"]} under the measured {losses["rim"]}')
+
+    def measured(self, points, within, exact):
+        """Exact maximum loss over every control. A point is skipped only when a
+        float point on the target surface already lies within the running exact
+        maximum (so it cannot raise it): conservative, never a filter on features."""
+        best = 0.0
+        for q in points:
+            self.store.work.charge()
+            if best > 0 and within(q, best):
+                self.stats['controlsBoundedBelowMax'] += 1
+                continue
+            self.stats['controlsMeasuredExactly'] += 1
+            best = max(best, exact(q))
+        return best
+
+    def source_within(self, t, p, m):
+        """Whether some verified descendant source face has a float point within m
+        of p (an upper bound on the exact source distance, with a rounding margin)."""
+        reach = m * (1 + 1e-9) + _margin(p)
+        rows = self.store.db.execute(
+            'SELECT leaf,data FROM source_box JOIN source USING(id) '
+            'WHERE x0<=? AND x1>=? AND y0<=? AND y1>=? AND z0<=? AND z1>=?',
+            tuple(v for k in range(3) for v in (p[k] + reach, p[k] - reach)))
+        for leaf, data in rows:
+            self.store.work.charge()
+            if not t['lo'] <= leaf < t['hi']:
+                continue
+            f = json.loads(data)['xyz']
+            q, _ = _closest_float(p, f)
+            if math.sqrt(sum((p[k] - q[k]) ** 2 for k in range(3))) * (1 + 1e-9) + _margin(p) <= m:
+                return True
+        return False
 
     def source_distance(self, t, p):
         from oracle import distance2

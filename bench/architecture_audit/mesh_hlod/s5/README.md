@@ -325,12 +325,17 @@ to input keys within codec tolerance) are clustered by shared vertices; removed
 and added cycles are counted separately on the common boundary graph after
 suppressing unshared degree-two vertices (S1b's own definition), and the receipt
 may exceed but never undercount them. Every cluster whose boundary edges changed
-is measured: coarse samples over the old boundary (and each removed cycle's
-centroid projected onto the output) exactly against source, and input samples over
-the new boundary (and each added cycle's centroid projected onto the input) exactly
-against the proxy. Losses must fit E where cycles changed and G where a boundary
-was only simplified; a change without a witness is refused. Distances come from a
-complete box-hierarchy nearest search with certified lower bounds and exact
+is measured on its conservative changed-face domain (`hlod-s1b-borders.md`):
+faces present on one side only, reachable from the cluster's boundary vertices
+through boundary, new or lost vertices, never through an unchanged interior. Every
+grid control on the changed coarse faces is measured exactly against source
+(closures) and every control on the lost input faces against the proxy (openings),
+plus each removed or added cycle's centroid projected across the change. No feature
+test filters the grid (review 3); a control is skipped only when a float point on
+the target surface already lies within the running exact maximum, so it cannot
+raise it. Losses must fit E where cycles changed and G where a boundary was only
+simplified; a change without a witness is refused. Distances come from a complete
+box-hierarchy nearest search with certified lower bounds and exact
 Fractions. All topology losses are sampled witnesses under D2, like G itself: S1b's
 quarter-grid controls plus this checker's own deterministic barycentric level-8
 grid on every affected face. They bound a continuous maximum from below only.
@@ -340,7 +345,7 @@ frontier (with multiplicity) are compared exactly; logical depths must be intege
 (`borderAudit`). `--producer-report` compares the run report's sidecar hash and
 bytes.
 
-`border_controls.py` builds a literal two-cell fixture with an honest sidecar: 11
-positives and 44 named mutants, including every review-1 and review-2 reproducer (geometry: both validators where the archive shows
+`border_controls.py` builds a literal two-cell fixture with an honest sidecar: 13
+positives and 46 named mutants, including every review-1, -2 and -3 reproducer (geometry: both validators where the archive shows
 it; sidecar lies and topology receipts: oracle, while native passes),
 plus a contracted bump sheet baked by the real producer that must pass both.
