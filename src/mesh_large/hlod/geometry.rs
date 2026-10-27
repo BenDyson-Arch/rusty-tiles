@@ -556,7 +556,7 @@ fn assessed_attempt(
             Err(e) if e.kind() == JobErrorKind::Unsupported => {
                 #[cfg(test)]
                 if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
-                    eprintln!("replay unsupported cap={cap} preserve_holes={preserve_holes} round={round}: {e}");
+                    eprintln!("replay unsupported f{}-d{} cap={cap} preserve_holes={preserve_holes} round={round}: {e}", tile.first, tile.depth);
                 }
                 return Ok(None);
             }

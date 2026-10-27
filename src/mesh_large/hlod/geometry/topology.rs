@@ -1084,6 +1084,9 @@ pub(super) fn support_faces(m: &Merged, interface: &[InterfaceRow], interior: bo
         .collect()
 }
 
+/// Cluster-splitting passes per remesh round.
+const REMESH_SPLITS: u32 = 16;
+
 /// Topology-changing vertex clustering, only after ordinary simplification has stalled.
 /// All allocations and visits are bounded by the eight-child job. Components remain
 /// separate; protected boundary loops and one support face per component survive.
@@ -1124,42 +1127,98 @@ pub(super) fn remesh(
 
         map.push(id);
     }
-    let mut output: Vec<_> = m
-        .triangles
-        .iter()
-        .map(|t| t.map(|v| map[v as usize]))
-        .collect();
     r.remesh_rounds += 1;
-    if m.triangles
-        .iter()
-        .zip(&output)
-        .any(|(&a, &b)| !preserves_orientation(&m.positions, a, b))
-    {
-        r.rejected_remesh_rounds += 1;
-        return false;
-    }
-    let mut seen = HashSet::default();
-    let keep: Vec<_> = output
-        .iter()
-        .map(|t| surface(t) && seen.insert(oriented(t)))
-        .collect();
-    let mut i = 0;
-    output.retain(|_| (keep[i], i += 1).0);
-    if super::folds::Source::new(&m.positions, &m.triangles)
-        .with_boundary(interface)
-        .violations(&m.positions, &output)
-        .iter()
-        .any(|v| *v)
-    {
-        r.rejected_remesh_rounds += 1;
-        return false;
-    }
-    let Some(change) = changes(m, &output, interface, 0.)
-        .filter(|c| c.receipt.closed_holes == 0 && c.receipt.opened_holes == 0)
-    else {
-        r.rejected_remesh_rounds += 1;
-        return false;
+    // A clustered face that flips, or a fold, condemns its clusters, not the round:
+    // split those clusters (their vertices keep their own positions) and check again.
+    // Splitting only moves towards the unchanged input, so a bounded number of passes
+    // either finds a clustering every face of which passes, or rejects the round.
+    let guard = super::folds::Source::new(&m.positions, &m.triangles).with_boundary(interface);
+    let mut passes = 0;
+    let (output, keep, change) = loop {
+        let mut output: Vec<[u32; 3]> = m
+            .triangles
+            .iter()
+            .map(|t| t.map(|v| map[v as usize]))
+            .collect();
+        let mut split: HashSet<u32> = HashSet::default();
+        for (&before, after) in m.triangles.iter().zip(&output) {
+            if !preserves_orientation(&m.positions, before, *after) {
+                split.extend(after.iter().copied());
+            }
+        }
+        if split.is_empty() {
+            let mut seen = HashSet::default();
+            let keep: Vec<bool> = output
+                .iter()
+                .map(|t| surface(t) && seen.insert(oriented(t)))
+                .collect();
+            let mut i = 0;
+            output.retain(|_| (keep[i], i += 1).0);
+            let invalid = guard.violations(&m.positions, &output);
+            split.extend(
+                invalid
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, bad)| **bad)
+                    .map(|(v, _)| v as u32),
+            );
+            if split.is_empty() {
+                let change = changes(m, &output, interface, 0.)
+                    .filter(|c| c.receipt.closed_holes == 0 && c.receipt.opened_holes == 0);
+                if let Some(change) = change {
+                    break (output, keep, change);
+                }
+                // A boundary cycle closed or opened: split every cluster on an input
+                // boundary edge that no longer maps to an output boundary edge, and on
+                // every new output boundary edge.
+                let boundary = |faces: &[[u32; 3]]| {
+                    let mut n: HashMap<(u32, u32), u32> = HashMap::default();
+                    for t in faces.iter().filter(|t| surface(t)) {
+                        for i in 0..3 {
+                            let (a, b) = (t[i], t[(i + 1) % 3]);
+                            *n.entry((a.min(b), a.max(b))).or_default() += 1;
+                        }
+                    }
+                    n.retain(|_, c| *c == 1);
+                    n
+                };
+                let (before, after) = (boundary(&m.triangles), boundary(&output));
+                let mut images = HashSet::default();
+                for &(a, b) in before.keys() {
+                    let (x, y) = (map[a as usize], map[b as usize]);
+                    images.insert((x.min(y), x.max(y)));
+                    if x == y || !after.contains_key(&(x.min(y), x.max(y))) {
+                        split.extend([x, y]);
+                    }
+                }
+                for &(x, y) in after.keys() {
+                    if !images.contains(&(x, y)) {
+                        split.extend([x, y]);
+                    }
+                }
+                let mut size = vec![0u32; map.len()];
+                for &to in &map {
+                    size[to as usize] += 1;
+                }
+                split.retain(|&x| size[x as usize] > 1);
+                if split.is_empty() {
+                    r.rejected_remesh_rounds += 1;
+                    return false;
+                }
+            }
+        }
+        if passes == REMESH_SPLITS {
+            r.rejected_remesh_rounds += 1;
+            return false;
+        }
+        passes += 1;
+        for (v, to) in map.iter_mut().enumerate() {
+            if split.contains(to) {
+                *to = v as u32;
+            }
+        }
     };
+    drop(guard);
     r.add(change.receipt);
     let changed = m.triangles != output;
     r.remeshed_vertices += map

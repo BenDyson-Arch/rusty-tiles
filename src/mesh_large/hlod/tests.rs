@@ -4537,10 +4537,184 @@ fn d11_book_scaled_40_has_zero_omissions_and_no_folds() {
     d11_coverage_control("book x40", &book(), 40.);
 }
 
-/// Review r2's exact seven fixtures and four node scales. Always production nearest;
-/// set RT_HLOD_OMISSION_FULL_SAMPLING=1 for production area sampling as well.
+fn reversed(mut m: Mesh) -> Mesh {
+    for t in m.indices.chunks_mut(3) {
+        t.swap(1, 2);
+    }
+    m
+}
+
+/// Review r3 fixtures. Spiky bumps a few cells inside the open boundaries z = 0 and
+/// x = 100: local peaks behind a boundary that simplification retreats.
+fn spiky(x: f32, z: f32) -> f32 {
+    let mut y = bump(x, z);
+    for k in 0..9 {
+        let x0 = 5. + 11. * k as f32;
+        let (u, v) = ((x - x0) / 1.5, (z - 3.) / 1.5);
+        y += 1.5 / (1. + u * u + v * v);
+        let (u, v) = ((x - 97.) / 1.5, (z - x0) / 1.5);
+        y += 1.5 / (1. + u * u + v * v);
+    }
+    y
+}
+
+/// A fine sheet whose outer rows are a sawtooth, so simplification moves its boundary.
+fn jagged_sheet() -> Vec<Mesh> {
+    let mut m = grid(
+        (80, 80),
+        (0., 100.),
+        (0., 100.),
+        &spiky,
+        [0.6, 0.5, 0.4, 1.],
+    );
+    let mut keep = Vec::new();
+    for (q, t) in m.indices.chunks(6).enumerate() {
+        let (i, j) = (q / 80, q % 80);
+        if !(j < 2 && (i % 3 != 0) || i >= 78 && (j % 4 == 1)) {
+            keep.extend_from_slice(t);
+        }
+    }
+    m.indices = keep;
+    vec![m]
+}
+
+/// Many one- and two-cell holes, several next to the cell lattice.
+fn holey_sheet() -> Vec<Mesh> {
+    let mut m = grid(
+        (60, 120),
+        (0., 100.),
+        (0., 100.),
+        &spiky,
+        [0.6, 0.5, 0.4, 1.],
+    );
+    let mut keep = Vec::new();
+    for (q, t) in m.indices.chunks(6).enumerate() {
+        let (i, j) = (q / 120, q % 120);
+        let hole = (i % 7 == 3 && j % 9 == 4)
+            || (i == 30 && j % 5 == 0)
+            || (i % 11 == 5 && j % 13 == 6 && j > 0);
+        if !hole {
+            keep.extend_from_slice(t);
+        }
+    }
+    m.indices = keep;
+    vec![m]
+}
+
+/// Back-to-back plates with different tessellations, 0.1 mm apart.
+fn back_to_back_mismatched() -> Vec<Mesh> {
+    let top = grid(
+        (37, 71),
+        (0., 100.),
+        (0., 100.),
+        &|x, z| bump(x, z) + 1e-4,
+        [0.6, 0.5, 0.4, 1.],
+    );
+    let bottom = reversed(grid(
+        (40, 80),
+        (0., 100.),
+        (0., 100.),
+        &bump,
+        [0.3, 0.6, 0.3, 1.],
+    ));
+    vec![top, bottom]
+}
+
+/// Three stacked sheets 1 mm apart, the middle one reversed.
+fn triple_stack() -> Vec<Mesh> {
+    let a = grid((40, 80), (0., 100.), (0., 100.), &bump, [0.6, 0.5, 0.4, 1.]);
+    let b = reversed(grid(
+        (40, 80),
+        (0., 100.),
+        (0., 100.),
+        &|x, z| bump(x, z) + 1e-3,
+        [0.3, 0.6, 0.3, 1.],
+    ));
+    let c = grid(
+        (40, 80),
+        (0., 100.),
+        (0., 100.),
+        &|x, z| bump(x, z) + 2e-3,
+        [0.3, 0.3, 0.6, 1.],
+    );
+    vec![a, b, c]
+}
+
+/// Four sheets on one spine: the book plus a downward page.
+fn fin() -> Vec<Mesh> {
+    let mut out = book();
+    let mut page = grid(
+        (20, 50),
+        (-40., 0.),
+        (0., 100.),
+        &|_, _| 0.,
+        [0.5, 0.6, 0.5, 1.],
+    );
+    for p in &mut page.positions {
+        *p = [50., p[0], p[2]];
+    }
+    out.push(page);
+    out
+}
+
+/// A closed cube surface, one outward primitive per face, side 100.
+fn closed_box() -> Vec<Mesh> {
+    let n = 24;
+    let mut out = Vec::new();
+    for face in 0..6 {
+        let mut g = grid(
+            (n, n),
+            (0., 100.),
+            (0., 100.),
+            &|_, _| 0.,
+            [0.2 + 0.1 * face as f64, 0.5, 0.5, 1.],
+        );
+        for p in &mut g.positions {
+            let (u, v) = (p[0], p[2]);
+            *p = match face {
+                0 => [u, 0., v],
+                1 => [u, 100., v],
+                2 => [u, v, 0.],
+                3 => [u, v, 100.],
+                4 => [0., u, v],
+                _ => [100., u, v],
+            };
+        }
+        if matches!(face, 1 | 2 | 4) {
+            g = reversed(g);
+        }
+        out.push(g);
+    }
+    out
+}
+
+/// Tracked, not yet passing: about 50 holes per depth-1 cell cannot all stay open
+/// under the 300 cap (Euler), and every closure is rejected because closure loss is
+/// measured over the whole changed component, not the hole. Coordinator decision
+/// pending (FINAL report); run explicitly to see the current omission receipt.
 #[test]
-#[ignore = "28 staged runs; coordinator runs explicitly and captures OMISSION receipts"]
+#[ignore = "holey cap fit needs hole closures; closure-domain decision pending"]
+fn d11_holey_sheet_has_zero_omissions_and_no_folds() {
+    for scale in [1., 40., 0.25] {
+        d11_coverage_control(&format!("holey x{scale}"), &holey_sheet(), scale);
+    }
+}
+
+#[test]
+fn d11_back_to_back_mismatched_has_zero_omissions_and_no_folds() {
+    for scale in [1., 40., 0.25] {
+        d11_coverage_control(
+            &format!("back-to-back mismatched x{scale}"),
+            &back_to_back_mismatched(),
+            scale,
+        );
+    }
+}
+
+/// Review r2's exact seven fixtures and four node scales, plus review r3's further
+/// fixtures at three scales. Always production nearest; set
+/// RT_HLOD_OMISSION_FULL_SAMPLING=1 for production area sampling as well.
+#[test]
 fn omission_breadth_production_nearest() {
     let mut run = production_nearest_run();
     match std::env::var_os("RT_HLOD_OMISSION_FULL_SAMPLING") {
@@ -4562,42 +4736,54 @@ fn omission_breadth_production_nearest() {
         ("cluster", cluster),
         ("t-junction", t_junction),
     ];
+    let review_r3: [Fixture; 5] = [
+        ("jagged", jagged_sheet),
+        ("back-to-back mismatched", back_to_back_mismatched),
+        ("triple-stack", triple_stack),
+        ("fin", fin),
+        ("box", closed_box),
+    ];
+    let cases = [1f32, 4., 40., 0.25]
+        .into_iter()
+        .flat_map(|scale| fixtures.map(|f| (f, scale)))
+        .chain(
+            [1f32, 40., 0.25]
+                .into_iter()
+                .flat_map(|scale| review_r3.map(|f| (f, scale))),
+        );
     let mut failures = Vec::new();
     let mut checked = 0;
-    for scale in [1f32, 4., 40., 0.25] {
-        for (name, fixture) in fixtures {
-            let name = format!("{name} x{scale}");
-            let work = tempfile::tempdir().unwrap();
-            let source = fixture();
-            let input = write_gltf_scaled(
-                &work.path().join("src"),
-                &source,
-                &vec![[scale; 3]; source.len()],
-            );
-            match stage(&input, &work.path().join("hlod"), &run) {
-                Ok(dir) => {
-                    if !omission_receipt(&name, &dir) {
-                        failures.push(name);
-                    }
-                }
-                Err(error) => {
-                    eprintln!("OMISSION {name}: stage failed {error:?}");
+    for ((name, fixture), scale) in cases {
+        let name = format!("{name} x{scale}");
+        let work = tempfile::tempdir().unwrap();
+        let source = fixture();
+        let input = write_gltf_scaled(
+            &work.path().join("src"),
+            &source,
+            &vec![[scale; 3]; source.len()],
+        );
+        match stage(&input, &work.path().join("hlod"), &run) {
+            Ok(dir) => {
+                if !omission_receipt(&name, &dir) {
                     failures.push(name);
                 }
             }
-            checked += 1;
+            Err(error) => {
+                eprintln!("OMISSION {name}: stage failed {error:?}");
+                failures.push(name);
+            }
         }
+        checked += 1;
     }
     eprintln!(
         "OMISSION summary: checked={checked} failed={}",
         failures.len()
     );
-    assert_eq!(checked, 28);
+    assert_eq!(checked, 43);
     assert!(failures.is_empty(), "coverage failures: {failures:?}");
 }
 
 #[test]
-#[ignore = "six staged runs plus archives; coordinator runs contraction determinism explicitly"]
 fn contraction_output_is_identical_across_jobs_and_budgets() {
     for (name, source) in [("collinear", collinear()), ("book", book())] {
         eprintln!("CONTRACTION DETERMINISM {name}");
