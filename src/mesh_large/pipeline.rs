@@ -87,6 +87,10 @@ pub struct TilerRequest {
     /// Test seam: sort configuration and largest spill chunk, so small inputs spill.
     #[cfg(test)]
     test_spill: Option<(crate::spill::SortConfig, usize)>,
+    /// Test seam: meter the work directory with this charge whatever its filesystem, as if
+    /// it were memory-backed.
+    #[cfg(test)]
+    test_work_charge: Option<u64>,
 }
 impl TilerRequest {
     pub fn new(input: impl Into<PathBuf>, output: impl Into<PathBuf>) -> Self {
@@ -106,6 +110,8 @@ impl TilerRequest {
             leaf_triangles: None,
             #[cfg(test)]
             test_spill: None,
+            #[cfg(test)]
+            test_work_charge: None,
         }
     }
     /// Declared memory budget in bytes, a ceiling for every stage of the run: never raised,
@@ -125,6 +131,11 @@ impl TilerRequest {
     #[cfg(test)]
     pub(crate) fn with_test_leaf_triangles(mut self, leaf_triangles: u64) -> Self {
         self.leaf_triangles = Some(leaf_triangles);
+        self
+    }
+    #[cfg(test)]
+    pub(crate) fn with_test_work_charge(mut self, bytes: u64) -> Self {
+        self.test_work_charge = Some(bytes);
         self
     }
     #[cfg(test)]
@@ -313,6 +324,136 @@ pub struct MemoryDiagnostics {
     /// Archive preparation and writing: captured metadata, runtime reserve, memory-backed
     /// scratch and H16's declared resident bound.
     pub archive_minimum_bytes: u64,
+    /// Memory-backed output and intermediate storage charged to the budget
+    /// (`budget.memory_backed_storage_bytes` is their sum) and what was measured against it.
+    pub memory_backed_storage: StorageDiagnostics,
+}
+
+/// D8 charges of memory-backed (tmpfs) storage after capture, `None` for an owner on disk.
+/// Each owner is charged one copy of capture's output reservation (`output_reserve_bytes`
+/// holds three: leaf staging, archive staging and a replaced destination, whose existing
+/// bytes the detected headroom already excludes) plus a fixed 32 MiB for files that do not
+/// scale with triangles. Every write into a charged owner is admitted against its charge
+/// before it lands (whole allocation units plus 1 KiB per file, link or directory); a write
+/// that would pass it is a `resource_limit` refusal, so the budget bounds the run.
+#[derive(Clone, Debug, Serialize)]
+pub struct StorageDiagnostics {
+    /// How each owner's filesystem was classified: `disk`, `memory_backed`,
+    /// `memory_backed_assumed` (an overlay whose writable upper layer could not be resolved,
+    /// as inside most containers, charged as memory-backed to fail safe) or `disk_declared`
+    /// (such storage declared disk-backed by `RUSTY_TILES_STORAGE_DISK=1`, not charged).
+    pub work_storage: &'static str,
+    pub archive_storage: &'static str,
+    /// The allocation unit each owner's writes are charged in: the filesystem's fragment, or
+    /// the transparent huge page size on a tmpfs whose `huge=` policy lets `write(2)` use one.
+    pub work_allocation_unit_bytes: u64,
+    pub archive_allocation_unit_bytes: u64,
+    /// A mount was identified by path prefix in mount-table order, because the kernel did not
+    /// report mount IDs (`statx`, Linux 5.8+).
+    pub mount_by_prefix: bool,
+    /// What happened and what to do, when an owner's kind could not be resolved.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The private work directory: leaf and coarse payloads, forest staging and the
+    /// archive's scratch.
+    pub work_charge_bytes: Option<u64>,
+    /// The archive staged beside the output.
+    pub archive_charge_bytes: Option<u64>,
+    /// What the work directory's meter admitted over the run.
+    pub work_admitted_bytes: Option<u64>,
+    /// The charged work directory's stored files (in the meter's allocation model), measured
+    /// once the forest is staged; never above what was admitted.
+    pub work_bytes: Option<u64>,
+    /// What the staged archive's meter admitted: its length in allocation units plus its entry.
+    pub archive_admitted_bytes: Option<u64>,
+    /// The charged staged archive's length.
+    pub archive_bytes: Option<u64>,
+}
+
+/// Fixed part of each memory-backed storage charge: leaf and coarse manifests, forest
+/// documents, the conversion report and the archive's index and directory scratch, which do
+/// not scale with triangles and dominate a small source's files.
+const STORAGE_FIXED_BYTES: u64 = 32 << 20;
+
+/// The meter charging `copy` to an owner on memory-backed storage (detected or assumed);
+/// none for disk, including storage declared disk-backed.
+fn owner_meter(
+    volume: &crate::spill::Volume,
+    copy: u64,
+    what: &'static str,
+    advice: &'static str,
+) -> Option<std::sync::Arc<crate::storage_meter::Meter>> {
+    volume
+        .memory_backed
+        .then(|| crate::storage_meter::Meter::new(what, advice, copy, volume.allocation_unit_bytes))
+}
+
+/// The plain explanation of storage whose kind could not be resolved, if any.
+fn storage_note(work: &str, archive: &str, mount_by_prefix: bool) -> Option<String> {
+    let note = storage_class_note(work, archive);
+    if !mount_by_prefix {
+        return note;
+    }
+    let prefix = "Mounts were identified by path prefix in mount-table order because the \
+                  kernel did not report mount IDs (statx, Linux 5.8+); a moved or propagated \
+                  mount may be misidentified.";
+    Some(match note {
+        Some(note) => format!("{note} {prefix}"),
+        None => prefix.to_owned(),
+    })
+}
+
+fn storage_class_note(work: &str, archive: &str) -> Option<String> {
+    let owners = |class: &str| match (work == class, archive == class) {
+        (true, true) => Some("the work directory and the archive staging"),
+        (true, false) => Some("the work directory"),
+        (false, true) => Some("the archive staging beside the output"),
+        (false, false) => None,
+    };
+    let env = crate::spill::STORAGE_DISK_ENV;
+    if let Some(owners) = owners("memory_backed_assumed") {
+        return Some(format!(
+            "{owners} could not be classified (an overlay whose writable layer is not visible, \
+             as inside most containers), so it was charged to the memory budget as \
+             memory-backed storage. If it is on disk, either put the output and --scratch-dir \
+             on a mounted volume, which is detected as disk, or set {env}=1 to declare \
+             unresolvable storage disk-backed."
+        ));
+    }
+    owners("disk_declared").map(|owners| {
+        format!(
+            "{owners} could not be classified and {env}=1 declares it disk-backed, so it was \
+             not charged to the memory budget."
+        )
+    })
+}
+
+/// A meter of one copy of the output reservation, plus [`STORAGE_FIXED_BYTES`], for each of
+/// the work directory and the output parent that is memory-backed, with each owner's class.
+fn storage_charges(
+    work: &Path,
+    output_parent: &Path,
+    scratch: &super::full::FullScratchNeed,
+) -> Result<(delivery::StorageCharges, [crate::spill::Volume; 2]), JobError> {
+    let copy = (scratch.output_reserve_bytes / 3).saturating_add(STORAGE_FIXED_BYTES);
+    let charge = |path: &Path, what, advice| -> Result<_, JobError> {
+        let volume = crate::spill::inspect_volume(path).map_err(JobError::from)?;
+        Ok((owner_meter(&volume, copy, what, advice), volume))
+    };
+    let (work, work_class) = charge(
+        work,
+        "the work directory",
+        "use a disk-backed scratch directory",
+    )?;
+    let (archive, archive_class) = charge(
+        output_parent,
+        "the archive staged beside the output",
+        "stage the output on disk",
+    )?;
+    Ok((
+        delivery::StorageCharges { work, archive },
+        [work_class, archive_class],
+    ))
 }
 #[derive(Debug)]
 pub struct TilerResult {
@@ -467,13 +608,56 @@ pub fn mesh_to_tileset(
             total: Some(1),
         })?;
         phases.finished(Phase::Capture, capture_started.elapsed().as_secs_f64())?;
-        let plan = producer::stage_plan(&config, &captured)?;
+        // D8: memory-backed storage written from here on is charged before any later stage
+        // plans, so every stage (leaf, HLOD, archive) sees the budget it leaves.
+        #[allow(unused_mut)]
+        let (mut charges, [work_volume, archive_volume]) =
+            storage_charges(work.path(), parent, &captured.report.scratch)?;
+        let (work_storage, archive_storage) = (work_volume.class(), archive_volume.class());
+        let mount_by_prefix = work_volume.mount_by_prefix || archive_volume.mount_by_prefix;
+        #[cfg(test)]
+        if let Some(limit) = request.test_work_charge {
+            charges.work = Some(crate::storage_meter::Meter::new(
+                "the work directory",
+                "use a disk-backed scratch directory",
+                limit,
+                4096,
+            ));
+        }
+        let limit = |meter: &Option<std::sync::Arc<crate::storage_meter::Meter>>| {
+            meter.as_ref().map(|m| m.limit())
+        };
+        let storage = limit(&charges.work)
+            .unwrap_or(0)
+            .checked_add(limit(&charges.archive).unwrap_or(0))
+            .ok_or_else(|| JobError::new(JobErrorKind::ResourceLimit, "storage charge overflow"))?;
+        // Every entry written under the work directory from here on is admitted first.
+        let _work_meter = charges
+            .work
+            .clone()
+            .map(|meter| crate::storage_meter::register(work.path(), meter));
+        // A write the meters refused surfaces as the refusal, not its writer's I/O error.
+        let refused = |error: JobError| {
+            [&charges.work, &charges.archive]
+                .into_iter()
+                .flatten()
+                .find_map(|meter| meter.refusal())
+                .unwrap_or(error)
+        };
+        let budget = MemoryBudget {
+            memory_backed_storage_bytes: storage,
+            ..budget
+        };
+        let mut config = config.clone();
+        config.memory_budget = Some(budget);
+        let config = &config;
+        let plan = producer::stage_plan(config, &captured)?;
         // HLOD admits its own stage against the declared budget before any leaf is built.
         #[cfg(test)]
         let settings = &request.hlod;
         #[cfg(not(test))]
         let settings = &super::hlod::Settings::default();
-        let hlod = super::hlod::plan(&captured, &config, &budget, settings)?;
+        let hlod = super::hlod::plan(&captured, config, &budget, settings)?;
         let c = &captured.report;
         let capture_minimum = c
             .jobs
@@ -504,23 +688,40 @@ pub fn mesh_to_tileset(
                 ),
             ));
         }
-        let memory = MemoryDiagnostics {
+        // Stages after capture admit against the budget less the storage charge.
+        let mut memory = MemoryDiagnostics {
             budget,
-            minimum_bytes: capture_minimum
-                .max(plan.minimum_bytes())
-                .max(hlod.minimum_bytes)
-                .max(archive_minimum),
+            minimum_bytes: capture_minimum.max(
+                plan.minimum_bytes()
+                    .max(hlod.minimum_bytes)
+                    .max(archive_minimum)
+                    .saturating_add(storage),
+            ),
             archive_minimum_bytes: archive_minimum,
             capture_minimum_bytes: capture_minimum,
             capture_bound_bytes: c.memory.bound_bytes,
             leaf_minimum_bytes: plan.minimum_bytes(),
             leaf_bound_bytes: plan.bound_bytes(),
             hlod: hlod.clone(),
+            memory_backed_storage: StorageDiagnostics {
+                work_storage,
+                archive_storage,
+                work_allocation_unit_bytes: work_volume.allocation_unit_bytes,
+                archive_allocation_unit_bytes: archive_volume.allocation_unit_bytes,
+                mount_by_prefix,
+                note: storage_note(work_storage, archive_storage, mount_by_prefix),
+                work_charge_bytes: limit(&charges.work),
+                archive_charge_bytes: limit(&charges.archive),
+                work_admitted_bytes: None,
+                work_bytes: None,
+                archive_admitted_bytes: None,
+                archive_bytes: None,
+            },
         };
         let leaf = producer::produce(
             work.path(),
             &captured,
-            &config,
+            config,
             &plan,
             request.profile,
             producer::Coarse {
@@ -529,7 +730,8 @@ pub fn mesh_to_tileset(
             },
             &phases,
             &|| attempt.check(),
-        )?;
+        )
+        .map_err(refused)?;
         attempt.emit(&RunEvent::Progress {
             phase: "leaf_payloads",
             done: leaf.report.leaves,
@@ -554,12 +756,19 @@ pub fn mesh_to_tileset(
             delivery::source::TILER_MAX_GLB_JSON,
         )?;
         let report = TilerReport::new(&captured.report, &leaf.report, &prepared.facts());
-        let (delivered, archive_bytes) = delivery::write_prepared(
+        let (delivered, archive_bytes, work_bytes) = delivery::write_prepared(
             prepared,
             &mut || attempt.check(),
             staging.writer(),
             work.path(),
-        )?;
+            &charges,
+        )
+        .map_err(refused)?;
+        let storage_diagnostics = &mut memory.memory_backed_storage;
+        storage_diagnostics.work_bytes = work_bytes;
+        storage_diagnostics.work_admitted_bytes = charges.work.as_ref().map(|m| m.used());
+        storage_diagnostics.archive_admitted_bytes = charges.archive.as_ref().map(|m| m.used());
+        storage_diagnostics.archive_bytes = charges.archive.as_ref().map(|_| archive_bytes);
         phases.progress(Phase::Archive, 1, Some(1))?;
         phases.finished(Phase::Archive, archive_started.elapsed().as_secs_f64())?;
         let c = &captured.report;
@@ -647,4 +856,86 @@ pub fn mesh_to_tileset(
         diagnostics,
         cleanup_diagnostics: published.cleanup_diagnostics,
     })
+}
+
+#[cfg(test)]
+mod storage_note_tests {
+    use super::{owner_meter, storage_note};
+    use crate::spill::{Classification, Volume};
+
+    /// Assumed memory-backed storage is charged; the same storage declared disk-backed is
+    /// not; detected tmpfs is charged whatever is declared (the declaration only reaches
+    /// unresolved storage, `spill::volume`).
+    #[test]
+    fn declared_disk_removes_the_charge_and_detected_tmpfs_keeps_it() {
+        let volume = |memory_backed, classification| Volume {
+            available_bytes: 0,
+            memory_backed,
+            classification,
+            mount_by_prefix: false,
+            allocation_unit_bytes: 4096,
+        };
+        let meter = |v: &Volume| owner_meter(v, 1 << 20, "w", "a").map(|m| m.limit());
+        let assumed = volume(true, Classification::AssumedMemory);
+        let declared = volume(false, Classification::DeclaredDisk);
+        let tmpfs = volume(true, Classification::Detected);
+        assert_eq!(meter(&assumed), Some(1 << 20));
+        assert_eq!(meter(&declared), None);
+        assert_eq!(meter(&tmpfs), Some(1 << 20));
+        assert_eq!(
+            (assumed.class(), declared.class(), tmpfs.class()),
+            ("memory_backed_assumed", "disk_declared", "memory_backed")
+        );
+    }
+
+    /// Assumed memory-backed storage is explained with both fixes; declared disk is named;
+    /// detected storage needs no note.
+    #[test]
+    fn unresolved_storage_is_explained_with_its_fixes() {
+        for (work, archive) in [
+            ("disk", "disk"),
+            ("memory_backed", "disk"),
+            ("disk", "memory_backed"),
+        ] {
+            assert_eq!(storage_note(work, archive, false), None);
+        }
+        let note = storage_note("memory_backed_assumed", "memory_backed_assumed", false).unwrap();
+        for part in [
+            "the work directory and the archive staging",
+            "charged to the memory budget as memory-backed",
+            "inside most containers",
+            "--scratch-dir on a mounted volume",
+            "RUSTY_TILES_STORAGE_DISK=1",
+        ] {
+            assert!(note.contains(part), "{part}: {note}");
+        }
+        let archive = storage_note("disk", "memory_backed_assumed", false).unwrap();
+        assert!(
+            archive.starts_with("the archive staging beside the output"),
+            "{archive}"
+        );
+        let declared = storage_note("disk_declared", "memory_backed", false).unwrap();
+        assert!(
+            declared.starts_with("the work directory could not be classified")
+                && declared.contains("RUSTY_TILES_STORAGE_DISK=1 declares it disk-backed")
+                && declared.contains("not charged"),
+            "{declared}"
+        );
+    }
+
+    /// The prefix fallback is always reported, alone or after a class note.
+    #[test]
+    fn mount_prefix_fallback_is_reported() {
+        let alone = storage_note("disk", "memory_backed", true).unwrap();
+        assert!(
+            alone.starts_with("Mounts were identified by path prefix"),
+            "{alone}"
+        );
+        let both = storage_note("memory_backed_assumed", "disk", true).unwrap();
+        assert!(
+            both.starts_with("the work directory could not be classified"),
+            "{both}"
+        );
+        assert!(both.contains("statx, Linux 5.8+"), "{both}");
+    }
 }

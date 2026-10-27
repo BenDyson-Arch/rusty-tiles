@@ -30,8 +30,15 @@ pub(crate) trait SpillIo: Send + Sync {
     fn open_random(&self, path: &Path) -> io::Result<File> {
         File::open(path)
     }
-    /// A new file for positioned reads and writes (fixed-width slots).
+    /// A new file for positioned reads and writes (fixed-width slots). Positioned writes
+    /// cannot be metered, so a D8-charged memory-backed directory refuses them.
     fn create_slots(&self, path: &Path) -> io::Result<File> {
+        if crate::storage_meter::meter_for(path).is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "slot spill files cannot be metered in a charged memory-backed directory",
+            ));
+        }
         OpenOptions::new()
             .read(true)
             .write(true)
@@ -84,8 +91,8 @@ pub(crate) struct FileIo;
 
 impl SpillIo for FileIo {
     fn create(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
-        let file = OpenOptions::new().write(true).create_new(true).open(path)?;
-        Ok(Box::new(file))
+        // Spill under a D8-charged memory-backed directory is admitted before it lands.
+        Ok(Box::new(crate::storage_meter::create_new(path)?))
     }
     fn open(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
         Ok(Box::new(File::open(path)?))

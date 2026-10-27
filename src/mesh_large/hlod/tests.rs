@@ -4390,6 +4390,8 @@ fn tmpfs_exhaustion_is_admitted_before_border_or_frontier_writes() {
     let volume = |available_bytes| Volume {
         available_bytes,
         memory_backed: true,
+        classification: crate::spill::Classification::Detected,
+        mount_by_prefix: false,
         allocation_unit_bytes: 4096,
     };
     let empty = work.path().join("tmpfs");
@@ -4550,7 +4552,8 @@ fn omission_breadth_production_nearest() {
         "OMISSION settings: nearest_steps={} sampling={:?}",
         run.nearest_steps, run.sampling
     );
-    let fixtures: [(&str, fn() -> Vec<Mesh>); 7] = [
+    type Fixture = (&'static str, fn() -> Vec<Mesh>);
+    let fixtures: [Fixture; 7] = [
         ("sheet", sheet),
         ("book", book),
         ("collinear", collinear),

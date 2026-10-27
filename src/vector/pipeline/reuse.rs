@@ -877,6 +877,10 @@ mod fingerprint_tests {
         ("src/output.rs", "writes the conversion report file"),
         ("src/output_path.rs", "resolves the requested output path"),
         ("src/runtime.rs", "run control, events and staging"),
+        (
+            "src/storage_meter.rs",
+            "D8 write admission under mesh-registered directories; plain calls elsewhere",
+        ),
         ("src/validate.rs", "resource-limit error variant"),
     ];
 

@@ -27,6 +27,9 @@ conflict unless `--force` (or `-f`) is supplied. Replacement installs a complete
 archive after required work and callbacks finish. Failure before installation
 preserves the previous destination. The output cannot overwrite or alias the
 source or its dependencies. Installation does not promise power-loss durability.
+The archive declares itself an HLOD delivery (`asset.extras.rustyTiles.lod` is
+`"hlod"` in `tileset.json`), so `validate` applies every HLOD check without
+being asked to, and refuses a copy whose payload labels were stripped.
 
 ## Source and placement
 
@@ -438,8 +441,9 @@ texel for KTX2 profiles, each with a 4/3 mip allowance (a texture-stage
 recheck). These are estimates, not bounds. Output demands are added to the
 scratch figure when they share a filesystem, told apart by device id: btrfs
 subvolumes of one pool report different ids, so their demands are checked
-separately against the same free space. Memory-backed (tmpfs) scratch is charged
-to the worker memory plan, but a work directory or output on tmpfs is not.
+separately against the same free space. Memory-backed (tmpfs) scratch, work
+directory and output staging are charged to the memory budget
+([Memory budget](#memory-budget)).
 
 The internal opt-in HLOD audit (`RT_HLOD_AUDIT_DIR`) reserves at most 64 MiB
 for evidence on a memory-backed destination, shared by its memory-plan reservation
@@ -493,13 +497,34 @@ One declared ceiling governs the whole run, with one rule on every surface:
   active parents, decoded source images, chart/page/codec workspace, memory-backed
   capture scratch and the archive stage's resident buffers (`archive_minimum_bytes`).
   A source without images reserves no texture, chart, mip or codec workspace.
-  **Not charged:** output staging and intermediate files that live on memory-backed
-  (tmpfs) storage. A work directory, scratch parent or output on tmpfs consumes memory
-  that the budget does not account for, so the budget does not bound a run whose
-  storage is memory-backed. This is a known remaining D8 obligation, planned with the
-  archive-staging work; until then keep large outputs and intermediates on disk. The
-  resident archive-preparation buffers (charged) are distinct from archive storage
-  (not charged when memory-backed).
+- **Memory-backed storage.** Files on memory-backed (tmpfs) storage are charged too.
+  Capture scratch there is charged at its declared need. After capture, each other
+  owner on tmpfs is charged one copy of the output-side reservation (see scratch
+  admission above) plus 32 MiB for manifests, documents and archive scratch that do
+  not scale with triangles: the private work directory (leaf and coarse payloads, forest
+  staging and the archive's scratch) and the archive staged beside the output. Every
+  later stage plans against the budget less that charge. Every write into a charged
+  owner is admitted before it lands, in whole allocation units plus 1 KiB per file,
+  link or directory (the allocation unit is the transparent huge page, usually 2 MiB,
+  on a tmpfs whose `huge=` option is `always` or `within_size`, or when huge pages are
+  forced globally, because one written byte can take a whole huge page there) (the archive's index, central directory and end records are
+  admitted together, at their exact size, before any of them is written); a write
+  that would pass the charge is a `resource_limit` refusal (`use a disk-backed scratch
+  directory` or `stage the output on disk`), so tmpfs never holds more than was
+  charged. An overlay filesystem is classified by its writable upper layer (read from
+  `/proc/self/mountinfo`, matching the path's mount by its `statx` mount ID; kernels
+  older than 5.8 fall back to mount-table order, reported as `mount_by_prefix`). The estimate is generous for textured sources and tighter
+  for untextured ones (about 1.4× a measured untextured 0.79M-triangle crop), so disk
+  remains the better place for large outputs.
+- **Containers.** Inside most containers the root filesystem is an overlay whose
+  writable layer lives outside the container, so its kind cannot be resolved. Such
+  storage is charged as memory-backed to fail safe, reported as
+  `memory_backed_assumed`, and explained in `memory_backed_storage.note`. If it is
+  on disk, either put the output and `--scratch-dir` on a mounted volume (a bind or
+  named volume is detected as disk), or set `RUSTY_TILES_STORAGE_DISK=1` to declare
+  unresolvable storage disk-backed: it is then reported as `disk_declared` and not
+  charged. The declaration never reclassifies storage detected as tmpfs or ramfs;
+  any value other than `1` or `0` is refused.
 - **Pressure never changes output.** It serializes work (`--jobs` stays a maximum
   under the same budget), and what cannot fit even alone is a `resource_limit`
   refusal naming the stage and the bytes it needs, before that stage allocates and
@@ -509,7 +534,9 @@ One declared ceiling governs the whole run, with one rule on every surface:
   `resolved_bytes`, `source`: `explicit`, `default_ceiling`, `default_headroom` or
   `default_undetected`, and the detected headroom), the least budget that admits each
   stage (`minimum_bytes`, `capture_minimum_bytes`, `leaf_minimum_bytes`,
-  `archive_minimum_bytes`) and the coarse stage's plan (`hlod`);
+  `archive_minimum_bytes`), the coarse stage's plan (`hlod`) and the memory-backed
+  storage charges with what was measured against them (`memory_backed_storage`; their
+  sum is `budget.memory_backed_storage_bytes`);
   `diagnostics.hlod.lease_peak_bytes` is its highest simultaneous lease. The minima
   include charged request facts such as the lengths of the input, output and scratch
   paths (sort descriptors carry them), and the detected headroom is a host observation,

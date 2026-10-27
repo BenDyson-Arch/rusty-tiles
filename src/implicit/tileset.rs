@@ -1322,7 +1322,7 @@ impl Created {
             missing.push(parent.clone());
         }
         for dir in missing.into_iter().rev() {
-            std::fs::create_dir(&dir)?;
+            crate::storage_meter::create_dir(&dir)?;
             self.dirs.push(dir);
         }
         Ok(())
@@ -1332,11 +1332,8 @@ impl Created {
     fn file(&mut self, directory: &Path, member: &str, bytes: &[u8]) -> Result<(), Error> {
         self.parents(directory, member)?;
         let path = directory.join(member);
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .map_err(|error| exists(member, error))?;
+        let mut file =
+            crate::storage_meter::create_new(&path).map_err(|error| exists(member, error))?;
         self.files.push(path);
         std::io::Write::write_all(&mut file, bytes)?;
         Ok(())
@@ -1351,7 +1348,7 @@ impl Created {
         bytes: &[u8],
     ) -> Result<(), Error> {
         self.parents(directory, member)?;
-        match std::fs::hard_link(directory.join(raw), directory.join(member)) {
+        match crate::storage_meter::hard_link(&directory.join(raw), &directory.join(member)) {
             Ok(()) => {
                 self.files.push(directory.join(member));
                 Ok(())
