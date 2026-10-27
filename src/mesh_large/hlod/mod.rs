@@ -1195,16 +1195,6 @@ fn prepare(
             &built.geometry.triangles,
             &built.geometry.interface,
         ) {
-            #[cfg(test)]
-            if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
-                eprintln!(
-                    "PREPARE rejected f{}-d{} at {}:{}",
-                    built.geometry.key.first,
-                    built.geometry.key.depth,
-                    file!(),
-                    line!()
-                );
-            }
             return Ok(None);
         }
     }
@@ -1229,16 +1219,6 @@ fn prepare(
         check,
     )?
     else {
-        #[cfg(test)]
-        if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
-            eprintln!(
-                "PREPARE rejected f{}-d{} at {}:{}",
-                built.geometry.key.first,
-                built.geometry.key.depth,
-                file!(),
-                line!()
-            );
-        }
         return Ok(None);
     };
     built.controls = controls;
@@ -1310,16 +1290,6 @@ fn prepare(
         .opened_hole_boundary_to_source
         .max(built.controls.opening_proxy_max);
     if !built.controls.eligible(contract.scale) {
-        #[cfg(test)]
-        if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
-            eprintln!(
-                "PREPARE rejected f{}-d{} at {}:{}",
-                built.geometry.key.first,
-                built.geometry.key.depth,
-                file!(),
-                line!()
-            );
-        }
         return Ok(None);
     }
     built.change.receipt.hole_patch_to_source = built
@@ -1414,16 +1384,6 @@ fn build_tile(
         }
     };
     let Some(mut built) = outcome.built else {
-        #[cfg(test)]
-        if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
-            eprintln!(
-                "OMIT source f{}-d{} contraction_failed={} contract={}",
-                closed.key.first,
-                closed.key.depth,
-                outcome.contraction_failed,
-                contract.is_some()
-            );
-        }
         // Its interface cannot fit the cap: omitted, nothing held for its parent.
         let construction_topology = audit
             .filter(|_| !outcome.construction_dropped.is_empty())
