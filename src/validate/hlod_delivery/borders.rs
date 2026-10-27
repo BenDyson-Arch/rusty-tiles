@@ -150,29 +150,80 @@ fn distinct_sides(edge: &CanonicalEdge, direction: usize, surface: &Surface) -> 
                 .all(|e| wedge(a, b, *c, *e) != std::cmp::Ordering::Greater)
     })
 }
-/// Whether all `left` items can be matched to distinct `right` items (Kuhn's
-/// augmenting paths; sizes are one edge's incident faces).
-fn matching(left: usize, right: usize, compatible: &dyn Fn(usize, usize) -> bool) -> bool {
-    fn augment(
-        l: usize,
-        right: usize,
-        compatible: &dyn Fn(usize, usize) -> bool,
-        seen: &mut [bool],
-        owner: &mut [Option<usize>],
-    ) -> bool {
-        for r in 0..right {
-            if compatible(l, r) && !seen[r] {
-                seen[r] = true;
-                if owner[r].is_none_or(|o| augment(o, right, compatible, seen, owner)) {
-                    owner[r] = Some(l);
-                    return true;
+/// Charged units per exact wedge sign (its expansion holds up to ~600 terms).
+const WEDGE_UNITS: usize = 64;
+
+/// Whether `left[i]` coarse faces of each third-corner group can be matched to
+/// distinct source faces, `right[j]` per group, where `compatible[i][j]`: a
+/// capacitated bipartite flow by breadth-first augmenting paths between groups.
+/// Each path search visits at most every group pair once and is charged so; at
+/// most one path per coarse face, so the work is O(n G_c G_s) and charged.
+fn routed(
+    left: &[usize],
+    right: &[usize],
+    compatible: &[Vec<bool>],
+    effort: &Effort,
+) -> Result<bool, Error> {
+    let (gl, gr) = (left.len(), right.len());
+    let mut flow = vec![vec![0usize; gr]; gl];
+    let mut used = vec![0usize; gr];
+    let mut sent = vec![0usize; gl];
+    let demand: usize = left.iter().sum();
+    let mut total = 0;
+    while total < demand {
+        effort.charge(gl.saturating_mul(gr).saturating_add(gl + gr))?;
+        // Breadth-first from every left group with demand left; previous hop per node.
+        let mut from_left: Vec<Option<usize>> = vec![None; gr];
+        let mut from_right: Vec<Option<usize>> = vec![None; gl];
+        let mut seen_left = vec![false; gl];
+        let mut queue: std::collections::VecDeque<usize> =
+            (0..gl).filter(|&i| sent[i] < left[i]).collect();
+        for &i in &queue {
+            seen_left[i] = true;
+        }
+        let mut end = None;
+        while let Some(i) = queue.pop_front() {
+            for j in 0..gr {
+                if !compatible[i][j] || from_left[j].is_some() {
+                    continue;
+                }
+                from_left[j] = Some(i);
+                if used[j] < right[j] {
+                    end = Some(j);
+                    break;
+                }
+                for (k, row) in flow.iter().enumerate() {
+                    if row[j] > 0 && !seen_left[k] {
+                        seen_left[k] = true;
+                        from_right[k] = Some(j);
+                        queue.push_back(k);
+                    }
+                }
+            }
+            if end.is_some() {
+                break;
+            }
+        }
+        let Some(mut j) = end else { return Ok(false) };
+        // Push one unit back along the path.
+        used[j] += 1;
+        loop {
+            let i = from_left[j].expect("path node");
+            flow[i][j] += 1;
+            match from_right[i] {
+                Some(previous) => {
+                    flow[i][previous] -= 1;
+                    j = previous;
+                }
+                None => {
+                    sent[i] += 1;
+                    break;
                 }
             }
         }
-        false
+        total += 1;
     }
-    let mut owner = vec![None; right];
-    (0..left).all(|l| augment(l, right, compatible, &mut vec![false; right], &mut owner))
+    Ok(true)
 }
 /// Where one tile delivers a border vertex: retained exactly (empty), or on a chord
 /// (`lower`, `upper`) at ordinal `i` of `m` counted from `lower`.
@@ -467,7 +518,8 @@ impl Store {
                 {
                     continue;
                 }
-                effort.charge(n.saturating_mul(n) as usize)?;
+                effort
+                    .charge((n.saturating_mul(n) as usize).saturating_add(surface.faces.len()))?;
                 // A lone reversed face (2/0 across the edge) keeps no other direction.
                 if other == 0 || !distinct_sides(edge, direction, surface) {
                     return Err(bad(
@@ -529,12 +581,13 @@ impl Store {
     ) -> Result<bool, Error> {
         let point = |p: CanonicalPoint| p.map(f32::from_bits);
         let (a, b) = (point(edge.0), point(edge.1));
-        let mut coarse = Vec::new();
+        effort.charge(surface.faces.len())?;
+        let mut coarse = BTreeMap::<CanonicalPoint, usize>::new();
         for f in &surface.faces {
             for j in 0..3 {
                 let (x, y) = (f[j], f[(j + 1) % 3]);
                 if (if direction == 0 { (x, y) } else { (y, x) }) == *edge {
-                    coarse.push(point(f[(j + 2) % 3]));
+                    *coarse.entry(f[(j + 2) % 3]).or_default() += 1;
                 }
             }
         }
@@ -552,21 +605,48 @@ impl Store {
             } else {
                 1 - along
             };
-            let mut source = Vec::new();
+            let mut source = BTreeMap::<CanonicalPoint, usize>::new();
             let mut rows = query
                 .query(params![super::edge_bytes(key(x, y)), tile, wanted as i64])
                 .map_err(sql)?;
             while let Some(row) = rows.next().map_err(sql)? {
                 effort.charge(1)?;
-                source.push(point(super::read_point(
-                    &row.get::<_, Vec<u8>>(0).map_err(sql)?,
-                )?));
+                *source
+                    .entry(super::read_point(&row.get::<_, Vec<u8>>(0).map_err(sql)?)?)
+                    .or_default() += 1;
             }
-            effort.charge(coarse.len().saturating_mul(source.len()).saturating_mul(4))?;
-            let compatible = |c: usize, s: usize| {
-                wedge(a, b, coarse[c], source[s]) == std::cmp::Ordering::Greater
-            };
-            if !matching(coarse.len(), source.len(), &compatible) {
+            // One exact sign per distinct pair of third corners, admitted and charged.
+            let (left, right): (Vec<_>, Vec<_>) =
+                (coarse.iter().collect(), source.iter().collect());
+            if left
+                .len()
+                .saturating_mul(right.len())
+                .saturating_mul(2 * 8 + 1)
+                > self.decoded_limit
+            {
+                return Err(Error::limit(
+                    "interfaceWinding: one edge's face correspondence exceeds the decoded document budget",
+                ));
+            }
+            effort.charge(
+                left.len()
+                    .saturating_mul(right.len())
+                    .saturating_mul(WEDGE_UNITS),
+            )?;
+            let compatible: Vec<Vec<bool>> = left
+                .iter()
+                .map(|(c, _)| {
+                    right
+                        .iter()
+                        .map(|(s, _)| {
+                            wedge(a, b, point(**c), point(**s)) == std::cmp::Ordering::Greater
+                        })
+                        .collect()
+                })
+                .collect();
+            let counts =
+                |v: &[(&CanonicalPoint, &usize)]| v.iter().map(|(_, n)| **n).collect::<Vec<_>>();
+            if !routed(&counts(&left), &counts(&right), &compatible, effort)? {
                 return Ok(false);
             }
         }
@@ -608,7 +688,10 @@ impl Store {
             }
             let Some(row) = row else { break };
             effort.charge(1)?;
-            if group.len().saturating_add(1).saturating_mul(ITEM_BYTES) > self.decoded_limit {
+            // The owner row plus its sparse range-maximum levels and prefix counts.
+            let n = group.len().saturating_add(1);
+            let levels = n.ilog2() as usize + 1;
+            if n.saturating_mul(ITEM_BYTES.saturating_add(8 * (levels + 2))) > self.decoded_limit {
                 return Err(Error::limit(
                     "interfacePoints: one shared border vertex's owners exceed the decoded document budget",
                 ));

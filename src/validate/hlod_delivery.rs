@@ -1850,11 +1850,18 @@ impl Store {
                 "INSERT INTO multi_edges SELECT key FROM leaf_segments GROUP BY key HAVING sum(nf)>=2 OR sum(nr)>=2",
             )
             .map_err(sql)?;
+        // The leaves to replay, found once through the (key, tile) index from the
+        // multiplicity keys; placements are then read in one ordered pass.
+        self.connection
+            .execute_batch(
+                "CREATE TEMP TABLE replay_tiles(tile INTEGER PRIMARY KEY);
+                 INSERT OR IGNORE INTO replay_tiles SELECT s.tile FROM multi_edges m JOIN leaf_segments s ON s.key=m.key;",
+            )
+            .map_err(sql)?;
         let mut query = self
             .connection
             .prepare(
-                "SELECT p.tile,p.rank,p.frame FROM placements p WHERE p.leaf=1 AND EXISTS(
-                 SELECT 1 FROM leaf_segments s JOIN multi_edges m ON m.key=s.key WHERE s.tile=p.tile) ORDER BY p.id",
+                "SELECT p.tile,p.rank,p.frame FROM placements p WHERE p.leaf=1 AND p.tile IN (SELECT tile FROM replay_tiles) ORDER BY p.id",
             )
             .map_err(sql)?;
         let mut rows = query.query([]).map_err(sql)?;
