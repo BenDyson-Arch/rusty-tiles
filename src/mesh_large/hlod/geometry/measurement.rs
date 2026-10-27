@@ -120,7 +120,11 @@ pub(crate) fn assess(
     let mut nearest = Nearest::with_steps(super::super::error::NEAREST_STEPS);
     let mut hint = None;
     // The decoded proxy, for every lost-surface control below.
-    let proxy = if moved || !change.dropped.is_empty() || change.receipt.opened_holes > 0 {
+    let proxy = if moved
+        || !change.dropped.is_empty()
+        || change.receipt.opened_holes > 0
+        || (change.receipt.closed_holes > 0 && !change.closure_centroids.is_empty())
+    {
         Some(Surface::new(
             triangles
                 .iter()
@@ -173,7 +177,8 @@ pub(crate) fn assess(
             check()?;
             controls.closure_faces[i] = true;
             let t = Triangle::new(triangles[i].map(|v| decoded[v as usize]), i as u64);
-            for p in samples(t.positions()) {
+            // The oracle's grid: the eighth grid holds the quarter grid and centroid.
+            for p in fine_samples(t.positions()) {
                 let (_, d) = source(p, false)?;
                 change.receipt.hole_patch_to_source = change.receipt.hole_patch_to_source.max(d);
                 if d * 1.05 > e {
@@ -182,6 +187,22 @@ pub(crate) fn assess(
                 controls.proxy.push(d);
             }
             patch.push(t);
+        }
+        // The oracle's other closure witnesses: each cycle centroid of the closing
+        // boundary, projected onto the proxy, against source.
+        if let Some(proxy) = &proxy {
+            for &c in &change.closure_centroids {
+                check()?;
+                let hit = nearest.surface(proxy, c, &mut hint);
+                let face = triangles[hit.rank as usize].map(|v| decoded[v as usize].map(f64::from));
+                let (_, d) = source(source_index::bary(face, hit.bary), false)?;
+                change.receipt.hole_patch_to_source = change.receipt.hole_patch_to_source.max(d);
+                if d * 1.05 > e {
+                    return Ok(None);
+                }
+                controls.proxy.push(d);
+            }
+            hint = None;
         }
         // Closure locations conservatively include the entire branching boundary.
         // Its retained parts are covered by unchanged faces, not necessarily by a

@@ -257,16 +257,19 @@ of any border-connected component or interior component whose bounding diameter
 is not strictly below max(E, child G), including implicit meshopt deletions.
 
 A proposed closure is checked before publication against the captured source.
-Its measurement domain conservatively includes every changed output face in an
-affected surface component and the original affected boundary edges. This avoids
-assuming a planar hole or treating planarity as loss. Decoded patch vertices,
-edge/interior controls and source-projected boundary controls measure both
-directions. For the boundary-to-surface direction, retain unchanged faces of the
-same affected component as witnesses too: a branching boundary can contain a
-retained loop far from the changed patch. Omitting those witnesses creates an
-artificial hole in the query index and can falsely reject a flat-sheet closure.
-The added carrier indices are bounded by the parent output; changed patch faces
-still receive every patch-to-source control. Use E/1.05 as the admission limit
+Its measurement domain is the S5 oracle's: changed output faces (by oriented
+multiset) touching a boundary vertex of a closing cluster, a component of old and
+new boundary edges that lost a cycle, plus the original affected boundary edges.
+Each patch face gets the oracle's eighth grid, and each cycle centroid of the
+cluster's old boundary (a depth-first fundamental basis) is measured where it
+projects onto the proxy. Other changes in the same component are not closure loss;
+they reach G through S2 and the moved-boundary witnesses. This avoids assuming a
+planar hole or treating planarity as loss. For the boundary-to-surface direction,
+retain the rest of the affected component as witnesses too: a branching boundary
+can contain a retained loop far from the changed patch. Omitting those witnesses
+creates an artificial hole in the query index and can falsely reject a flat-sheet
+closure. The added carrier indices are bounded by the parent output; changed patch
+faces still receive every patch-to-source control. Use E/1.05 as the admission limit
 so S2's margin cannot make an
 admitted closure set G. Unsupported/over-budget proposals retain their boundary
 through a bounded retry. Interior remeshing may not hide an unchecked closure.
@@ -275,9 +278,10 @@ All measurements are bounded by the eight-child input and capped output; source
 queries use S2's fixed search budget. Receipts distinguish measured closure and
 component-loss controls from diameter eligibility, and report their contribution
 above the pre-existing G floor. Final S2 samples every delivered face and includes
-these additional controls. The conservative changed-face domain can reject a
-closure because another change in that component exceeds E; that is a documented
-cap-fit cost, not permission to omit silently or increase E based on the result.
+these additional controls. A closure's own loss is at least about the inradius of
+the hole it fills, so a hole wider than about 2E can never close; when Euler then
+puts every keep-all-holes triangulation over the cap, the tile is omitted and
+reported. That is a cap-fit cost, not permission to increase E based on the result.
 
 Independent controls: a planar courtyard whose inradius exceeds E stays open;
 a small interior closure has nonzero measured loss; identical sub-G components
@@ -289,7 +293,7 @@ The topology receipt compares boundary paths after degree-two suppression and
 counts cycles lost from, and added to, their common graph separately. A closure
 and simultaneous opening cannot cancel in a net cycle count. This is a producer
 correspondence rule; S5 must re-derive it. The final S2 proxy strata and centroid
-controls also track every face in the conservative closure domain; any over-E
+controls also track every face in the closure domain; any over-E
 sample rejects the proposal before S3, even if the preliminary fixed controls
 missed it. Rejected closure attempts are counted separately from delivered changes.
 
