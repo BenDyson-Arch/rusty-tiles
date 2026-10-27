@@ -5,6 +5,8 @@
 mod combined_controls;
 mod constrained;
 #[cfg(test)]
+mod contraction_memory;
+#[cfg(test)]
 mod fold_probe;
 pub(crate) mod folds;
 pub(crate) mod locations;
@@ -29,9 +31,23 @@ pub(crate) const RETRIES: u32 = 3;
 // allowance lets local carrier protection converge without multiplying measured
 // hole-opening attempts or their scratch reservation.
 const FOLD_RETRIES: u32 = 8;
+// Ordinary and independent-sheet strategies share ten reduction passes. Reserve
+// one for the second strategy; exhausting this allowance enters constructive
+// remeshing, rather than supplying evidence of cap infeasibility.
+const REDUCTION_PASSES: u32 = 10;
 
 fn state(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message.into())
+}
+
+/// Grow by distinct keys, never by the duplicated endpoint iterator's size hint.
+fn interface_points(interface: &[InterfaceRow]) -> HashSet<Key> {
+    let mut points = HashSet::default();
+    for row in interface {
+        points.insert(row.a);
+        points.insert(row.b);
+    }
+    points
 }
 
 /// A built parent, before encoding.
@@ -276,12 +292,14 @@ pub(crate) fn build_parent(
         // Coarsening only merges owners: every live parent border is a child border.
         // Nested canonical endpoints therefore make the union of child interfaces a
         // complete lookup domain. Interior vertices need no disk-backed source search.
-        let previous_interface: Vec<_> = children
-            .iter()
-            .flat_map(|c| c.interface.iter().copied())
-            .collect();
-        let child_border: HashSet<Key> =
-            previous_interface.iter().flat_map(|r| [r.a, r.b]).collect();
+        let mut previous_interface =
+            Vec::with_capacity(children.iter().map(|c| c.interface.len()).sum());
+        for child in children {
+            previous_interface.extend_from_slice(&child.interface);
+        }
+        super::interfaces::merge_rows(&mut previous_interface);
+        previous_interface.shrink_to_fit();
+        let child_border = interface_points(&previous_interface);
         let lookup = |k| {
             if child_border.contains(&k) {
                 mapping(k)
@@ -416,7 +434,7 @@ fn recover_contraction(
     receipt: &mut TopologyReceipt,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<bool, JobError> {
-    let border: HashSet<_> = previous.iter().flat_map(|r| [r.a, r.b]).collect();
+    let border = interface_points(previous);
     let locked: Vec<_> = merged.keys.iter().map(|k| border.contains(k)).collect();
     drop(border);
     for round in 0..caps.len() + 7 {
@@ -485,7 +503,7 @@ fn assessed_attempt(
 ) -> Result<Option<Built>, JobError> {
     for round in 0..=RETRIES {
         check()?;
-        let ordinary = attempt(
+        let proposal = attempt(
             tile,
             merged,
             interface,
@@ -497,25 +515,6 @@ fn assessed_attempt(
             preserve_holes,
             opening_pins,
         );
-        // An overprotected ring is a failed strategy, not a cap lower bound. Split
-        // independent surface sheets before accepting omission; all proposal guards
-        // and the same pre-contraction topology reference remain in force.
-        let proposal = match ordinary {
-            Err(e) if e.kind() == JobErrorKind::Unsupported => attempt_mode(
-                tile,
-                merged,
-                interface,
-                cap,
-                children_error,
-                reference,
-                contracted_faces,
-                floor,
-                preserve_holes,
-                opening_pins,
-                true,
-            ),
-            result => result,
-        };
         let mut b = match proposal {
             Ok(b) => b,
             Err(e) if e.kind() == JobErrorKind::Unsupported => {
@@ -575,7 +574,8 @@ fn attempt(
     preserve_holes: bool,
     opening_pins: &HashSet<Key>,
 ) -> Result<Built, JobError> {
-    attempt_mode(
+    let mut remaining = REDUCTION_PASSES;
+    let ordinary = attempt_mode(
         tile,
         merged,
         interface,
@@ -587,7 +587,27 @@ fn attempt(
         preserve_holes,
         opening_pins,
         false,
-    )
+        &mut remaining,
+    );
+    // An overprotected ring is a failed strategy, not a cap lower bound. Both
+    // strategies retain the same source guards and pre-contraction reference.
+    match ordinary {
+        Err(e) if e.kind() == JobErrorKind::Unsupported => attempt_mode(
+            tile,
+            merged,
+            interface,
+            cap,
+            children_error,
+            reference,
+            contracted_faces,
+            floor,
+            preserve_holes,
+            opening_pins,
+            true,
+            &mut remaining,
+        ),
+        result => result,
+    }
 }
 
 fn attempt_mode(
@@ -602,6 +622,7 @@ fn attempt_mode(
     preserve_holes: bool,
     opening_pins: &HashSet<Key>,
     separate_sheets: bool,
+    remaining: &mut u32,
 ) -> Result<Built, JobError> {
     let _cpu =
         super::cpu_profile::start(super::cpu_profile::Stage::Attempt, merged.triangles.len());
@@ -660,14 +681,22 @@ fn attempt_mode(
             StoppingBound::TriangleBudget,
         )
     } else {
-        let reduce = |faces: &[[u32; 3]], lock: &dyn Fn(u32) -> bool, target| {
-            if separate_sheets {
+        let mut reduce = |faces: &[[u32; 3]], lock: &dyn Fn(u32) -> bool, target| {
+            let reserve = u32::from(!separate_sheets);
+            if *remaining <= reserve {
+                return Err(JobError::new(
+                    JobErrorKind::Unsupported,
+                    "protected reduction exhausted its shared strategy budget",
+                ));
+            }
+            *remaining -= 1;
+            Ok(if separate_sheets {
                 sheets::simplify(merged, faces, lock, target)
             } else {
                 simplify(merged, faces, lock, target)
-            }
+            })
         };
-        let (mut output, mut error) = reduce(&merged.triangles, &|v| locked[v as usize], cap);
+        let (mut output, mut error) = reduce(&merged.triangles, &|v| locked[v as usize], cap)?;
         let mut topology_protected = false;
         let mut fold_retries = 0;
         // Only one immutable post-contraction source per retry sequence. Release
@@ -796,7 +825,7 @@ fn attempt_mode(
                     &rest,
                     &|v| locked[v as usize] || kept.contains(&v),
                     cap.saturating_sub(keep.len()),
-                )
+                )?
             };
             reduced.extend(keep);
             output = reduced;

@@ -2,10 +2,13 @@
 //! and mandatory interface items, discard source interior sampling, and retriangulate.
 //! Outside this domain return to the bounded general remesher without changing the mesh.
 use super::{topology, Merged};
-use crate::mesh_large::hlod::interfaces::InterfaceRow;
+use crate::mesh_large::hlod::{interfaces::InterfaceRow, store::SourcePrimitive};
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use spade::{ConstrainedDelaunayTriangulation, Point2, PositionInTriangulation, Triangulation};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+
+#[path = "constrained_fan.rs"]
+mod fan;
 
 fn edge(a: u32, b: u32) -> (u32, u32) {
     (a.min(b), a.max(b))
@@ -18,6 +21,7 @@ pub(super) fn remesh(
 ) -> Option<topology::Receipt> {
     let guard = super::folds::Source::new(&m.positions, &m.triangles).with_boundary(interface);
     triangulate(m, interface, cap, None, &[], &guard, false)
+        .or_else(|| fan::remesh(m, interface, cap, &guard))
 }
 
 /// Reconstruct contracted patches with all unaffected interior samples. In particular,
@@ -91,13 +95,13 @@ fn triangulate(
         .map(|(i, k)| (*k, i as u32))
         .collect();
     if patches.len() > cap {
-        return None;
+        return rejected("CDT", concat!(file!(), ":", line!()));
     }
     let mut required = Required::default();
     for r in interface {
         let (a, b) = (*ids.get(&r.a)?, *ids.get(&r.b)?);
         if mapping.is_none() && components[a as usize] != components[b as usize] {
-            return None;
+            return rejected("CDT", concat!(file!(), ":", line!()));
         }
         required.points.extend([a, b]);
         if a != b {
@@ -110,7 +114,7 @@ fn triangulate(
     for (_, faces) in patches {
         if mapping.is_some() && faces.iter().all(|&i| !affected[i]) {
             if output.len().checked_add(faces.len())? > cap {
-                return None;
+                return rejected("CDT", concat!(file!(), ":", line!()));
             }
             output.extend(faces.iter().map(|&i| m.triangles[i]));
             representatives.extend(faces.iter().map(|&i| m.representative[i]));
@@ -127,7 +131,7 @@ fn triangulate(
             for a in 0..3 {
                 let (v, w) = (t[a], t[(a + 1) % 3]);
                 if v == w {
-                    return None;
+                    return rejected("CDT", concat!(file!(), ":", line!()));
                 }
                 let (n, sign) = edges.entry(edge(v, w)).or_default();
                 *n += 1;
@@ -138,17 +142,17 @@ fn triangulate(
             .values()
             .any(|&(n, sign)| n > 2 || (n == 2 && sign != 0))
         {
-            return None;
+            return rejected("CDT", concat!(file!(), ":", line!()));
         }
         let axis = (0..3).max_by(|&a, &b| sum[a].abs().total_cmp(&sum[b].abs()))?;
         if sum[axis] == 0. {
-            return None;
+            return rejected("CDT", concat!(file!(), ":", line!()));
         }
         if faces
             .iter()
             .any(|&i| topology::normal(&m.positions, m.triangles[i])[axis] * sum[axis] <= 0.)
         {
-            return None;
+            return rejected("CDT", concat!(file!(), ":", line!()));
         }
         let mut boundary: BTreeSet<_> = edges
             .iter()
@@ -168,7 +172,7 @@ fn triangulate(
             // Opposite incidences cancel when a thin neck collapses to an interior
             // edge. Same-direction multiplicity still cannot be a single sheet.
             if mapped.values().any(|&n| n.abs() > 1) {
-                return None;
+                return rejected("CDT", concat!(file!(), ":", line!()));
             }
             boundary = mapped
                 .into_iter()
@@ -188,7 +192,7 @@ fn triangulate(
             }) {
                 continue;
             }
-            return None;
+            return rejected("CDT", concat!(file!(), ":", line!()));
         }
         let mut adjacent: HashMap<u32, Vec<u32>> = HashMap::default();
         for &(a, b) in &boundary {
@@ -203,7 +207,7 @@ fn triangulate(
             .values()
             .any(|v| v.len() < 2 || v.len() % 2 != 0 || (mapping.is_none() && v.len() != 2))
         {
-            return None;
+            return rejected("CDT", concat!(file!(), ":", line!()));
         }
         let mut visited = HashSet::default();
         let mut loops = 0;
@@ -228,7 +232,7 @@ fn triangulate(
         // are capped using the actual emitted faces below, including retained input.
         let mut predicted = 2 * (vertices.len() - adjacent.len()) + adjacent.len() + 2 * loops - 4;
         if mapping.is_none() && output.len().checked_add(predicted)? > cap {
-            return None;
+            return rejected("CDT", concat!(file!(), ":", line!()));
         }
         let mut cdt = ConstrainedDelaunayTriangulation::<Point2<f64>>::new();
         let mut handles = HashMap::default();
@@ -242,13 +246,13 @@ fn triangulate(
                 ))
                 .ok()?;
             if reverse.insert(handle, v).is_some() {
-                return None;
+                return rejected("CDT", concat!(file!(), ":", line!()));
             }
             handles.insert(v, handle);
         }
         for &(a, b) in &constraints {
             if !cdt.can_add_constraint(handles[&a], handles[&b]) {
-                return None;
+                return rejected("CDT", concat!(file!(), ":", line!()));
             }
             cdt.add_constraint(handles[&a], handles[&b]);
         }
@@ -269,7 +273,7 @@ fn triangulate(
                 }
                 let handle = cdt.insert(p).ok()?;
                 if reverse.insert(handle, v).is_some() {
-                    return None;
+                    return rejected("CDT", concat!(file!(), ":", line!()));
                 }
                 predicted += 2;
             }
@@ -283,7 +287,7 @@ fn triangulate(
                     boundary.contains(&edge(reverse[&e.from().fix()], reverse[&e.to().fix()]));
                 if let Some(old) = flags.insert(h, inside) {
                     if old != inside {
-                        return None;
+                        return rejected("CDT", concat!(file!(), ":", line!()));
                     }
                 } else {
                     queue.push_back(h);
@@ -300,7 +304,7 @@ fn triangulate(
                             .contains(&edge(reverse[&e.from().fix()], reverse[&e.to().fix()]));
                     if let Some(old) = flags.insert(next, value) {
                         if old != value {
-                            return None;
+                            return rejected("CDT", concat!(file!(), ":", line!()));
                         }
                     } else {
                         queue.push_back(next);
@@ -321,7 +325,7 @@ fn triangulate(
             }
             area += normal.abs();
             if output.len() == cap {
-                return None;
+                return rejected("CDT", concat!(file!(), ":", line!()));
             }
             output.push(t);
             representatives.push(m.representative[faces[0]]);
@@ -331,27 +335,69 @@ fn triangulate(
         if (mapping.is_none() && output.len() - start != predicted)
             || (mapping.is_none() && (area - sum[axis].abs()).abs() > 1e-10 * area.max(1.))
         {
-            return None;
+            return rejected("CDT", concat!(file!(), ":", line!()));
         }
         count += 1;
     }
+    // The patch iterator and each CDT have finished. Release their shared indexes
+    // before missing/topology/Source work adds its own validation workspace.
+    drop((ids, required, components, affected, touched, face_patches));
+    #[cfg(test)]
+    crate::test_alloc::trace("cdt finish");
+    finish(
+        m,
+        interface,
+        output,
+        representatives,
+        guard,
+        count,
+        mapping.is_some(),
+    )
+}
+
+// Temporary replay diagnostics allocate nothing when disabled and are test-only.
+fn rejected<T>(stage: &str, reason: &str) -> Option<T> {
+    #[cfg(test)]
+    if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
+        eprintln!("CONSTRAINED {stage}: {reason}");
+    }
+    let _ = (stage, reason);
+    None
+}
+
+// All constructive paths use the original source and the same publication checks.
+fn finish(
+    m: &mut Merged,
+    interface: &[InterfaceRow],
+    output: Vec<[u32; 3]>,
+    representatives: Vec<SourcePrimitive>,
+    guard: &super::folds::Source,
+    count: u64,
+    count_reconstructed: bool,
+) -> Option<topology::Receipt> {
     let required: HashSet<_> = interface
         .iter()
         .filter(|r| !r.is_vertex())
         .map(|r| (r.a, r.b))
         .collect();
-    let points = interface.iter().flat_map(|r| [r.a, r.b]).collect();
+    let points = super::interface_points(interface);
     let lost = super::missing(&output, &m.keys, &required, &points);
     if !lost.0.is_empty() || !lost.1.is_empty() {
-        return None;
+        return rejected("finish", "missing required interface edge or point");
     }
-    let change = topology::changes(m, &output, interface, 0.)?;
-    if change.receipt.closed_holes != 0 || change.receipt.opened_holes != 0 {
-        return None;
+    drop((required, points, lost));
+    let change = topology::changes(m, &output, interface, 0.)
+        .or_else(|| rejected("finish", "topology::changes refused"))?;
+    if change.receipt.closed_holes != 0
+        || change.receipt.opened_holes != 0
+        || change.receipt.dropped_components != 0
+    {
+        return rejected("finish", "closed/opened hole or dropped component");
     }
     let mut receipt = change.receipt;
+    drop(change);
     receipt.constrained_remeshes = count;
-    if mapping.is_some() {
+    if count_reconstructed {
         // Count new oriented output faces with multiplicity. Rebuilt patches may
         // also contain unchanged faces; neither those nor frozen input are repairs.
         let mut old = HashMap::<[u32; 3], usize>::default();
@@ -366,7 +412,7 @@ fn triangulate(
         }
     }
     if guard.violations(&m.positions, &output).iter().any(|v| *v) {
-        return None;
+        return rejected("finish", "original Source rejected candidate");
     }
     m.triangles = output;
     m.representative = representatives;

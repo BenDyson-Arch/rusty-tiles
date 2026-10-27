@@ -1183,6 +1183,16 @@ fn prepare(
             &built.geometry.triangles,
             &built.geometry.interface,
         ) {
+            #[cfg(test)]
+            if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
+                eprintln!(
+                    "PREPARE rejected f{}-d{} at {}:{}",
+                    built.geometry.key.first,
+                    built.geometry.key.depth,
+                    file!(),
+                    line!()
+                );
+            }
             return Ok(None);
         }
     }
@@ -1207,6 +1217,16 @@ fn prepare(
         check,
     )?
     else {
+        #[cfg(test)]
+        if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
+            eprintln!(
+                "PREPARE rejected f{}-d{} at {}:{}",
+                built.geometry.key.first,
+                built.geometry.key.depth,
+                file!(),
+                line!()
+            );
+        }
         return Ok(None);
     };
     built.controls = controls;
@@ -1278,6 +1298,16 @@ fn prepare(
         .opened_hole_boundary_to_source
         .max(built.controls.opening_proxy_max);
     if !built.controls.eligible(contract.scale) {
+        #[cfg(test)]
+        if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
+            eprintln!(
+                "PREPARE rejected f{}-d{} at {}:{}",
+                built.geometry.key.first,
+                built.geometry.key.depth,
+                file!(),
+                line!()
+            );
+        }
         return Ok(None);
     }
     built.change.receipt.hole_patch_to_source = built

@@ -140,7 +140,10 @@ point-only junctions. These records are producer claims, never independent proof
 
 A `kind: omitted` line records the logical source/leaf interval, depth, reason,
 frontier keys and attempted topology receipt. Reasons are
-`contract_lower_bound`, `remesh_stalled` and `descendant_omission`. Summaries per
+`contract_lower_bound`, `contraction_stalled`, `remesh_stalled` and
+`descendant_omission`. `contraction_stalled` means the original-source-checked
+contraction and its bounded recovery proposals all failed; a missing nested
+endpoint is an invalid-state error, never this ordinary omission. Summaries per
 depth include E, maximum epsilon, topology changes by kind, attempted versus
 published changes, terminal locks, omission sources/cells and frontier uses,
 including zeros. Topology records include contracted vertices, reconstructed
@@ -170,6 +173,27 @@ interior ring and preserves the rest of the surface. Projected charts separate
 nonmanifold sheets and sharp folds. New zero-area faces are discarded; no arbitrary
 component witness invents a repair triangle. Topology comparison starts before
 contraction. Interior clustering likewise rejects inversions instead of flipping.
+
+Contraction failure enters sheet reduction, constructive remeshing and clustering
+before the frontier. Every recovery contraction uses the original input face and
+edge licenses. Constrained contraction has a finite input-sized reconstruction
+cap, including frozen faces; publication still applies the payload cap. Required
+rows join to their source edges/points in three edge probes per source face,
+without a patch-by-row cross-product. Receipts count new oriented faces with
+multiplicity, excluding retained faces.
+
+For a simple projected sheet that CDT cannot reduce safely, a final fan proposal
+uses an existing local interior source vertex and preserves every boundary edge.
+Two oppositely oriented coincident sheets use distinct centers. At most two
+nearest eligible centers are checked per panel; positive projected wedges and
+exactly one winding establish a nonoverlapping fan. Holes, mandatory interior
+edges, incompatible mandatory points and non-star-shaped panels refuse this
+proposal. The unchanged original-source, interface and topology checks still
+govern publication, followed by S2. Fan construction is O(m log m) for a capped
+parent input of m faces. The local Spade CDT kernel has no established worst-case
+O(m log m) bound here; total source-size work retains the fixed-cap P*F(8C) term
+above, separately from global sorting. Controls cover production-nearest omission
+breadth and actual contraction/recovery allocation, not just no-op mappings.
 
 The independent census counts directed incidences, including multiplicity. A
 contracted nonmanifold book spine can legitimately carry two equally directed
