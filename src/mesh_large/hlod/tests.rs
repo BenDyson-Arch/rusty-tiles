@@ -1685,7 +1685,6 @@ fn random_chords_cost_linear_work_and_never_refuse() {
 #[test]
 fn parent_jobs_allocate_within_their_charge() {
     use super::{encode, geometry, interfaces::key, interfaces::InterfaceRow, store::*};
-    crate::test_alloc::route_meshopt();
     let bounds = Bounds {
         min: [-100.; 3],
         max: [100.; 3],

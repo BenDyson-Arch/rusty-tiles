@@ -524,7 +524,6 @@ fn assert_peaks(n: usize, combined_peak: usize, metadata: Metadata) {
 }
 
 fn complete_parent(n: usize, third_contact: bool) {
-    crate::test_alloc::route_meshopt();
     // Held inputs are separately leased, as in parent_jobs_allocate_within_their_charge.
     // Nothing built here is moved into or freed within the counting closure.
     let (parent, children) = children(n, Fixture::Direct { third_contact });
@@ -653,7 +652,6 @@ fn complete_parent_rejected_contraction_and_recovery_dense_rows_fit_charge() {
 
 #[test]
 fn complete_parent_constrained_contraction_dense_rows_fit_charge() {
-    crate::test_alloc::route_meshopt();
     let n = FACES;
     // Only held children and the source-owner domain witness predate counting.
     // In particular, no merged mesh, reference or fold Source is preallocated.
