@@ -41,10 +41,11 @@ valid. An empty ADD override cannot clear a barrier owned by a renderable
 REPLACE ancestor. All delivery checks, continuity included, apply only once HLOD
 identity is expected: other tilesets may keep empty intermediates, and the disk
 store (with its scratch) is created only then, from a bounded pending buffer.
-A coarse edge with two equal-direction faces is refused unless descendant leaves
-hold that multiplicity (a nonmanifold spine). That admits the count only: native
-validation does not prove coarse face orientation away from required interface
-directions; the oracle's coincident-face guard does (`book-reversed-face`).
+A coarse edge with two equal-direction faces is refused unless each matches a
+descendant source face of that direction on its own side (a nonmanifold spine; see
+D11 below), so a page reversed onto the spine (`book-reversed-face`) is refused
+natively and by the oracle's coincident-face guard. Native validation still does
+not prove coarse face orientation away from shared edges.
 Expectation is owned outside payload labels: `--expect-profile hlod`
 (`ValidationRequest::expect_profile`) or the archive's own declaration
 (`asset.extras.rustyTiles.lod` or `conversion.json` `lod` equal to `hlod`) makes
@@ -261,5 +262,95 @@ Own tex3/crop3 bakes at this integration refuse before publication: S1's walk
 ledger finds S2's unadmitted scratch (314,783,887 > 216,795,519 and
 264,788,907 > 166,800,539 bytes). No archive, oracle or native verdict exists
 for them; S2/S3 must admit their scratch.
-D11 border certificates, E/G inequalities, terminal locks, appearance continuity
-and topology-loss audits remain deferred to S1b's implementation.
+Appearance continuity remains deferred; D11 borders follow below.
+
+## D11 scalable borders (S1b)
+
+D11 lets an ancestor contract its shared leaf border: a delivered chord joins
+two retained exact source vertices and stands for the source arc between them,
+parameterized by original leaf-edge ordinal. Both validators derive each coarse
+tile's border from decoded leaf incidence (edges/points with an owner leaf inside
+and one outside), split it at retained vertices and require: junctions and
+point-only contacts exact, every arc delivered as exactly one chord, no chord
+shared by two arcs, every arc edge covered, and chord directions witnessed on
+every edge of the arc. Directed incidences are counted, never reduced to a mask
+(S1b review 1): a coarse edge used n >= 2 times in one direction must have each of
+those faces matched, one to one, to a descendant source face running the same way
+on every source edge it stands for, with its third corner on the same side of the
+edge (exact acute wedge): a count of unrelated pages licenses nothing (review 2).
+Without that correspondence it keeps the other direction and its same-direction
+faces lie on distinct sides: the exact sign of |d|^2 (u.w) - (u.d)(w.d) (d the
+edge, u and w towards the third corners) is never positive, so no acute wedge, and
+no face is collinear with the edge. A simplified book spine's perpendicular pages
+(0) and a collapsed plate's opposite sheets (negative) pass; a lone reversed face
+(2/0), a fold re-flipped onto the border, a duplicate or a leaning flap is refused,
+balanced or not. The 90 degree boundary is a policy: an acute nonmanifold junction
+keeps its source correspondence or is refused. Coincident coarse faces (n on one
+corner set, either orientation) need, at every corner, a descendant coincident
+source set of at least n faces (native: an index of every leaf face; oracle:
+verified source faces, all corners in one connected twin region). Exact (epsilon = 0) archives reduce to the D1
+exact-seam census, except that collinear vertices may contract at zero
+displacement (an exact image).
+
+Native (`src/validate/hlod_delivery/borders.rs`, archive only) bounds each
+contracted vertex's displacement from its chord by the tile's G/16
+(`borderDisplacement`); the residual (v - a) - (b - a) i/m is rounded outward in
+proportion to those differences, so a rigid translation changes nothing. The archive carries no logical depth (chains
+are spliced, placeholders transparent), so pairwise rules use only what the tree
+proves: siblings share one depth and must deliver identical images
+(`sameDepthBorderGap`); a tile whose cell parent is an ancestor of a disjoint tile
+is no deeper than it, so a leaf there locks it exactly (`terminalBorderLock`) and a
+coarse tile needs d_X + d_Y <= G_X/8 (`mixedDepthBorderGap`). G/16 per tile bounds
+every other co-rendered pair by (G_X + G_Y)/16. The census reports
+`contractedBorderArcs`/`contractedBorderVertices`. Native cannot verify source
+arcs, certificates, E_d, same-depth cousins, G_coarse/8 where the finer tile has
+the larger G, terminal contacts the tree does not order, or topology receipts.
+
+The oracle (`borders.py`) re-derives the same arcs from source canonical keys with
+exact Fraction displacement. With `--border-audit borders.jsonl` (an index only)
+it joins records to payloads by SHA-256 and leaf interval and validates every depth
+label (coarse and omitted records) against the tree: cell siblings equal, strictly
+deeper below a labelled cell (`borderDepth`). It recomputes E_d from the captured
+source extent (`borderScale`, G >= E_d), then checks, in this order: same-depth
+equality and |Q_d - Q_(d+k)| <= min(E_d, G)/8 at every shared source breakpoint;
+terminal contacts, where a leaf not proven deeper than the tile (exact depth from
+a labelled sibling, else the lower bound below its labelled cell ancestor) forces
+an exact contact and a proven one must also be claimed; each certificate (hinted
+chain re-walked, ordinals, endpoints, exact displacement <= epsilon <= E_d/16, one
+certificate per arc, interface items); then topology against the parent job's
+decoded input. Dropped components must be interior and below max(E, child G); the
+receipt may not under-report their measured loss to the delivered proxy, and G
+must cover 1.05 times it. Input and output boundary edges (output vertices mapped
+to input keys within codec tolerance) are clustered by shared vertices; removed
+and added cycles are counted separately on the common boundary graph after
+suppressing unshared degree-two vertices (S1b's own definition), and the receipt
+may exceed but never undercount them. Every cluster whose boundary edges changed
+is measured on its conservative changed-face domain (`hlod-s1b-borders.md`):
+faces present on one side only, reachable from the cluster's boundary vertices
+through boundary, new or lost vertices, never through an unchanged interior (one
+vertex-to-face index per tile; each vertex expanded once per flood, charged). Every
+grid control on the changed coarse faces is measured exactly against source
+(closures) and every control on the lost input faces against the proxy (openings),
+plus each removed or added cycle's centroid projected across the change. No feature
+test filters the grid (review 3). A control is skipped only when one target face,
+proposed by a float search, is at an exact squared distance no greater than the
+running exact maximum, so it cannot raise it; floats never decide (review 4).
+Losses must fit E where cycles changed and G where a boundary was only simplified;
+a change without a witness is refused. Distances come from a complete
+box-hierarchy nearest search with certified lower bounds and exact
+Fractions. All topology losses are sampled witnesses under D2, like G itself: S1b's
+quarter-grid controls plus this checker's own deterministic barycentric level-8
+grid on every affected face. They bound a continuous maximum from below only.
+`contractedVertices` (input vertices on contracted arcs) and the complete omission
+frontier (with multiplicity) are compared exactly; logical depths must be integers
+0..63; history-dependent counters are listed as uninspected. Without a sidecar, any contraction is refused
+(`borderAudit`). `--producer-report` compares the run report's sidecar hash and
+bytes.
+
+`border_controls.py` builds a literal two-cell fixture with an honest sidecar: 13
+positives and 46 named mutants, including every review-1, -2 and -3 reproducer (geometry: both validators where the archive shows
+it; sidecar lies and topology receipts: oracle, while native passes). Review 4's
+kernel witnesses run first: the two-triangle grid whose float early-out
+under-reported the exact maximum, and 1,024- and 8,192-face fans whose domain
+flood must stay linear and charged. Also run is a contracted bump sheet, baked by
+the real producer, which must pass both validators.

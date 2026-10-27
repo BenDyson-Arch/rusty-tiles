@@ -13,8 +13,9 @@ use std::{
 };
 
 /// Work-root directories outside the `base` family: the other digested families
-/// and run outputs (winding probes, omission producer-report inputs).
-const OTHER: [&str; 7] = [
+/// and run outputs (winding probes, omission producer-report inputs, D11 border
+/// controls, whose producer-baked sheet is not digested).
+const OTHER: [&str; 8] = [
     "lattice",
     "native",
     "nonmanifold",
@@ -22,6 +23,7 @@ const OTHER: [&str; 7] = [
     "omission",
     "winding",
     "omission-reports",
+    "border",
 ];
 
 /// Sorted `relative-path\tsha256\n` lines of a family's generated members.
@@ -92,6 +94,7 @@ fn sampled_hlod_archives_and_named_mutants() {
         "exact_controls.py",
         "omission_controls.py",
         "seam_diagnostic_controls.py",
+        "border_controls.py",
     ] {
         let probes = work.path().join(name.trim_end_matches("_controls.py"));
         let result = Command::new("python3")
@@ -108,8 +111,15 @@ fn sampled_hlod_archives_and_named_mutants() {
                         | "nonmanifold_controls.py"
                         | "exact_controls.py"
                         | "omission_controls.py"
+                        | "border_controls.py"
                 ) {
-                    vec!["--binary", env!("CARGO_BIN_EXE_rusty-tiles")]
+                    let mut args = vec!["--binary", env!("CARGO_BIN_EXE_rusty-tiles")];
+                    // The producer sheet's exact audit dominates this test: 80 is the
+                    // smallest sheet with contracted borders (182 arcs); evidence runs use 120.
+                    if name == "border_controls.py" {
+                        args.extend(["--sheet", "80"]);
+                    }
+                    args
                 } else {
                     vec![]
                 },

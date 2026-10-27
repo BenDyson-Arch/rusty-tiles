@@ -31,7 +31,10 @@ use crate::{
         leaves::geometry::LatticePlan,
         records::{NodeKind, NodeRecord},
     },
-    spill::{ExternalSorter, Record, Scratch, Sequence, SequenceWriter, SortConfig, SortedStream},
+    spill::{
+        ExternalSorter, Record, Scratch, Sequence, SequenceWriter, SlotFile, SortConfig,
+        SortedStream,
+    },
     JobError, JobErrorKind,
 };
 
@@ -94,7 +97,7 @@ impl Record for Item {
 
 /// A canonical key alone (shared points, open-edge endpoints).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct KeyRecord(Key);
+pub(crate) struct KeyRecord(pub Key);
 
 impl Record for KeyRecord {
     const SIZE: usize = 12;
@@ -108,7 +111,7 @@ impl Record for KeyRecord {
 
 /// A decoded point (`a == b`) or segment (`a < b`) shared with the DFS leaves `lo..=hi`,
 /// recorded for one holding `leaf`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub(crate) struct InterfaceRow {
     pub leaf: u32,
     pub a: Key,
@@ -151,8 +154,10 @@ pub(crate) fn merge_rows(rows: &mut Vec<InterfaceRow>) {
             _ => out.push(r),
         }
     }
-    out.shrink_to_fit();
     *rows = out;
+    // Release the drained input before a moving shrink allocates its replacement.
+    // At most two row buffers then coexist, including allocator realloc transients.
+    rows.shrink_to_fit();
 }
 
 impl Record for InterfaceRow {
@@ -231,7 +236,7 @@ fn reduce_phase(items: u64, sorter: SortConfig) -> Option<u64> {
     item.bytes
         .checked_add(item.stream_slack)?
         .checked_add(spill::<InterfaceRow>(items, sorter)?.push_peak)?
-        .checked_add(items.checked_mul(KeyRecord::SIZE as u64)?)
+        .checked_add(items.checked_mul(3 * KeyRecord::SIZE as u64 + Item::SIZE as u64)?)
 }
 fn ends_phase(rows: u64, points: u64, ends: u64, sorter: SortConfig) -> Option<u64> {
     let sort = spill::<KeyRecord>(ends, sorter)?;
@@ -258,8 +263,8 @@ pub(crate) fn memory_backed_need(triangles: u64, sorter: SortConfig) -> Option<u
     Some(
         items_phase(items, sorter)?
             .max(reduce_phase(items, sorter)?)
-            .max(ends_phase(items, items, items, sorter)?)
-            .max(walk_phase(items, sorter)?),
+            .max(ends_phase(items, items, items, sorter)?.checked_add(items.checked_mul(24)?)?)
+            .max(walk_phase(items, sorter)?.checked_add(items.checked_mul(24)?)?),
     )
 }
 
@@ -276,20 +281,20 @@ impl ScratchPhases {
 
 /// Scratch files the pass holds at once besides sort runs (rounded as chunks): the shared
 /// points and the open-edge endpoints.
-pub(crate) const INCIDENCE_MAX_FILES: u64 = 2;
+pub(crate) const INCIDENCE_MAX_FILES: u64 = 4;
 
 /// Resident bound of the pass: two sorters live at once (items streamed into rows, then the
 /// rows beside the endpoints' sort), one leaf's deduplicated items, one item group (at most
 /// one item per leaf, in a vector at most twice that) and two sequence writers.
-pub(crate) fn memory_need(sorter: SortConfig, leaf_triangles: u64, leaves: u64) -> u64 {
+pub(crate) fn memory_need(sorter: SortConfig, leaf_triangles: u64, _leaves: u64) -> u64 {
     let item = std::mem::size_of::<Item>() as u64;
     sorter
         .memory_bound::<Item>()
         .max(sorter.memory_bound::<KeyRecord>())
         .saturating_add(sorter.memory_bound::<InterfaceRow>())
         .saturating_add(leaf_triangles.saturating_mul(12 * item))
-        .saturating_add(leaves.saturating_mul(2 * item))
-        .saturating_add(2 * sorter.buffer_bytes as u64)
+        .saturating_add(GROUP_MEMORY as u64 * item)
+        .saturating_add(3 * sorter.buffer_bytes as u64)
 }
 
 /// Totals of the pass, for the report.
@@ -406,7 +411,14 @@ pub(crate) fn build<'s>(
     lattice: &LatticePlan,
     admit: &dyn Fn(u64) -> Result<(), JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<(SortedStream<'s, InterfaceRow>, IncidenceStats), JobError> {
+) -> Result<
+    (
+        SortedStream<'s, InterfaceRow>,
+        IncidenceStats,
+        Sequence<KeyRecord>,
+    ),
+    JobError,
+> {
     let overflow = || state("incidence scratch bound overflows");
     let mut stats = IncidenceStats::default();
     let retained = scratch.live_bytes();
@@ -474,7 +486,7 @@ pub(crate) fn build<'s>(
         .and_then(|b| b.checked_add(retained))
         .ok_or_else(overflow)?;
     admit(stats.scratch.items)?;
-    let rows = reduce(
+    let (rows, open_ends) = reduce(
         scratch,
         sorter,
         items.finish()?,
@@ -483,7 +495,56 @@ pub(crate) fn build<'s>(
         admit,
         check,
     )?;
-    Ok((rows, stats))
+    Ok((rows, stats, open_ends))
+}
+
+/// A high-valence item has a fixed resident prefix; every remaining owner spills to one
+/// reusable positioned file. The stream is consumed twice, never paired with itself.
+const GROUP_MEMORY: usize = 4096;
+struct OwnerGroup {
+    memory: Vec<Item>,
+    spill: SlotFile,
+    len: usize,
+    open: u64,
+    faces: u64,
+}
+impl OwnerGroup {
+    fn new(scratch: &Scratch) -> Result<Self, JobError> {
+        Ok(Self {
+            memory: Vec::with_capacity(GROUP_MEMORY),
+            spill: SlotFile::new(scratch, "interface-owner-group", Item::SIZE)?,
+            len: 0,
+            open: 0,
+            faces: 0,
+        })
+    }
+    fn push(&mut self, item: Item) -> Result<(), JobError> {
+        if self.len < GROUP_MEMORY {
+            self.memory.push(item);
+        } else {
+            let mut bytes = [0; Item::SIZE];
+            item.encode(&mut bytes);
+            self.spill.write((self.len - GROUP_MEMORY) as u64, &bytes)?;
+        }
+        self.len += 1;
+        self.open += u64::from(item.open);
+        self.faces += u64::from(item.faces);
+        Ok(())
+    }
+    fn get(&self, i: usize) -> Result<Item, JobError> {
+        if i < GROUP_MEMORY {
+            return Ok(self.memory[i]);
+        }
+        let mut bytes = [0; Item::SIZE];
+        self.spill.read((i - GROUP_MEMORY) as u64, &mut bytes)?;
+        Ok(Item::decode(&bytes))
+    }
+    fn clear(&mut self) {
+        self.memory.clear();
+        self.len = 0;
+        self.open = 0;
+        self.faces = 0;
+    }
 }
 
 /// Reduce sorted items to rows and the source-defect counts (see `build`).
@@ -495,7 +556,7 @@ fn reduce<'s>(
     retained: u64,
     admit: &dyn Fn(u64) -> Result<(), JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<SortedStream<'s, InterfaceRow>, JobError> {
+) -> Result<(SortedStream<'s, InterfaceRow>, Sequence<KeyRecord>), JobError> {
     let overflow = || state("incidence scratch bound overflows");
     stats.scratch.reduce = reduce_phase(stats.items, sorter)
         .and_then(|b| b.checked_add(retained))
@@ -506,26 +567,30 @@ fn reduce<'s>(
         SequenceWriter::<KeyRecord>::new(scratch, "hlod-shared-points", sorter.buffer_bytes)?;
     let mut ends =
         SequenceWriter::<KeyRecord>::new(scratch, "hlod-open-ends", sorter.buffer_bytes)?;
-    let mut group: Vec<Item> = Vec::new();
+    let mut open_ends =
+        SequenceWriter::<KeyRecord>::new(scratch, "hlod-source-open-ends", sorter.buffer_bytes)?;
+    let mut group = OwnerGroup::new(scratch)?;
     // The point group read last and whether it was shared: a segment `(a, b)` sorts after
     // the point `(a, a)` and before any later point, so this is its first endpoint's.
     let mut point: Option<(Key, bool)> = None;
     let leaves = stats.leaves;
-    let mut flush = |group: &mut Vec<Item>,
+    let mut flush = |group: &mut OwnerGroup,
                      stats: &mut IncidenceStats,
                      point: &mut Option<(Key, bool)>|
      -> Result<(), JobError> {
-        let (a, b) = (group[0].a, group[0].b);
-        let held = group.len() > 1;
+        let first = group.get(0)?;
+        let (a, b) = (first.a, first.b);
+        let held = group.len > 1;
         if held {
-            let (lo, hi) = (group[0].leaf, group[group.len() - 1].leaf);
+            let (lo, hi) = (first.leaf, group.get(group.len - 1)?.leaf);
             if a == b {
                 stats.shared_points += 1;
             } else {
                 stats.shared_segments += 1;
-                stats.multi_leaf_segments += u64::from(group.len() > 2);
+                stats.multi_leaf_segments += u64::from(group.len > 2);
             }
-            for g in group.iter() {
+            for i in 0..group.len {
+                let g = group.get(i)?;
                 rows.push(InterfaceRow::new(g.leaf, a, b, lo, hi))?;
                 stats.rows += 1;
             }
@@ -536,9 +601,11 @@ fn reduce<'s>(
                 shared.push(&KeyRecord(a))?;
             }
         } else {
-            stats.open_segments += group.iter().filter(|g| g.open).count() as u64;
-            if group.iter().map(|g| u64::from(g.faces)).sum::<u64>() == 1 {
+            stats.open_segments += group.open;
+            if group.faces == 1 {
                 stats.source_open_edges += 1;
+                open_ends.push(&KeyRecord(a))?;
+                open_ends.push(&KeyRecord(b))?;
                 if *point == Some((a, true)) {
                     ends.push(&KeyRecord(b))?;
                 }
@@ -555,6 +622,7 @@ fn reduce<'s>(
             check()?;
         }
         if group
+            .memory
             .first()
             .is_some_and(|g| (g.a, g.b) != (item.a, item.b))
         {
@@ -562,21 +630,24 @@ fn reduce<'s>(
         }
         // Items are unique per leaf and sorted, so the group's leaves ascend strictly and a
         // group holds at most one item per leaf (charged in `memory_need`).
-        if group.len() as u64 >= leaves {
+        if group.len as u64 >= leaves {
             return Err(state(
                 "an interface item group holds more items than leaves",
             ));
         }
-        group.push(item);
+        group.push(item)?;
     }
-    if !group.is_empty() {
+    if group.len != 0 {
         flush(&mut group, stats, &mut point)?;
     }
-    let (shared, ends) = (shared.finish()?, ends.finish()?);
+    drop(group);
+    let (shared, ends, open_ends) = (shared.finish()?, ends.finish()?, open_ends.finish()?);
+    let open_bytes = open_ends.len() * KeyRecord::SIZE as u64;
     // Second endpoints: the open edges whose first endpoint is shared, sorted by their second
     // and merged against the shared points (both ascending).
     stats.scratch.ends = ends_phase(stats.rows, shared.len(), ends.len(), sorter)
         .and_then(|b| b.checked_add(retained))
+        .and_then(|b| b.checked_add(open_bytes))
         .ok_or_else(overflow)?;
     admit(stats.scratch.ends)?;
     let mut sorted = ExternalSorter::<KeyRecord>::new(scratch, sorter)?;
@@ -603,9 +674,10 @@ fn reduce<'s>(
     drop(shared);
     stats.scratch.walk = walk_phase(stats.rows, sorter)
         .and_then(|b| b.checked_add(retained))
+        .and_then(|b| b.checked_add(open_bytes))
         .ok_or_else(overflow)?;
     admit(stats.scratch.walk)?;
-    Ok(rows.finish()?)
+    Ok((rows.finish()?, open_ends))
 }
 
 #[cfg(test)]
@@ -640,7 +712,7 @@ mod tests {
                 sorter.push(*i).unwrap();
             }
         }
-        let rows = reduce(
+        let (rows, _open_ends) = reduce(
             &scratch,
             SORT,
             sorter.finish().unwrap(),
@@ -756,25 +828,27 @@ mod tests {
     #[test]
     fn a_point_shared_by_many_leaves_is_one_row_per_leaf_with_the_full_interval() {
         let c = k([0., 0., 0.]);
-        let leaves: Vec<Vec<[Key; 3]>> = (0..64)
+        let leaves: Vec<Vec<[Key; 3]>> = (0..GROUP_MEMORY + 1)
             .map(|i| {
-                let a = f64::from(i) / 64. * std::f64::consts::TAU;
-                let b = f64::from(i + 1) / 64. * std::f64::consts::TAU;
+                let a = i as f64 / (GROUP_MEMORY + 1) as f64 * std::f64::consts::TAU;
+                let b = (i + 1) as f64 / (GROUP_MEMORY + 1) as f64 * std::f64::consts::TAU;
                 vec![[c, k([a.cos(), a.sin(), 0.]), k([b.cos(), b.sin(), 0.])]]
             })
             .collect();
         let (rows, stats) = incidence(&leaves);
         let centre: Vec<_> = rows.iter().filter(|r| r.a == c && r.b == c).collect();
-        assert_eq!(centre.len(), 64);
-        assert!(centre.iter().all(|r| (r.lo, r.hi) == (0, 63)));
-        assert!(stats.shared_segments >= 63, "{stats:?}");
+        assert_eq!(centre.len(), GROUP_MEMORY + 1);
+        assert!(centre
+            .iter()
+            .all(|r| (r.lo, r.hi) == (0, GROUP_MEMORY as u32)));
+        assert!(stats.shared_segments >= GROUP_MEMORY as u64, "{stats:?}");
     }
 
     /// A group of one item per leaf is charged in the stage's resident bound.
     #[test]
-    fn item_groups_are_charged_per_leaf() {
+    fn item_groups_have_fixed_memory_independent_of_leaf_count() {
         let base = memory_need(SORT, 256, 0);
         let more = memory_need(SORT, 256, 1 << 20);
-        assert!(more - base >= (1 << 20) * std::mem::size_of::<Item>() as u64);
+        assert_eq!(more, base);
     }
 }

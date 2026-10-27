@@ -560,6 +560,7 @@ pub(crate) struct LeafDirectory {
     /// HLOD cells whose coarse tile was omitted (`hlod.omittedProxies`): they publish no
     /// content and are not measured.
     omitted_proxies: u64,
+    omitted_by_depth: Vec<u64>,
     /// Largest GLB JSON chunk read for bounds.
     max_glb_json: u64,
 }
@@ -602,13 +603,55 @@ impl LeafDirectory {
                 "manifest.json names coarse tiles without an HLOD stage record (hlod)",
             ));
         }
+        let (omitted_proxies, omitted_by_depth) = if proxies {
+            let total = manifest["hlod"]["omittedProxies"]
+                .as_u64()
+                .ok_or_else(|| input("manifest.json hlod has no omittedProxies"))?;
+            let depths: Vec<u64> =
+                serde_json::from_value(manifest["hlod"]["omittedByDepth"].clone())
+                    .map_err(|_| input("manifest.json hlod has no valid omittedByDepth"))?;
+            if depths.len() > 32
+                || depths.iter().try_fold(0u64, |a, b| a.checked_add(*b)) != Some(total)
+            {
+                return Err(input(
+                    "HLOD omission counts disagree or exceed the tree height",
+                ));
+            }
+            (total, depths)
+        } else {
+            (0, Vec::new())
+        };
         Ok(Self {
             root: root.to_owned(),
             totals,
             proxies,
-            omitted_proxies: manifest["hlod"]["omittedProxies"].as_u64().unwrap_or(0),
+            omitted_proxies,
+            omitted_by_depth,
             max_glb_json: MAX_GLB_JSON,
         })
+    }
+
+    /// Missing rows authorize omission only when the producer reported those exact
+    /// logical cells. This also detects loss of an entire level, which row-local sampling
+    /// checks cannot see, and includes omitted single-child chains.
+    pub(crate) fn check_omissions(&self, shape: &super::plan::Shape) -> Result<(), JobError> {
+        if !self.proxies {
+            return Ok(());
+        }
+        let different_depth = (0..32).find(|&d| {
+            shape.omitted_by_depth.get(d).copied().unwrap_or(0)
+                != self.omitted_by_depth.get(d).copied().unwrap_or(0)
+        });
+        if shape.omitted_cells != self.omitted_proxies || different_depth.is_some() {
+            return Err(input(format!(
+                "HLOD omission counts differ: planned {} {:?}, manifest {} {:?}",
+                shape.omitted_cells,
+                shape.omitted_by_depth,
+                self.omitted_proxies,
+                self.omitted_by_depth
+            )));
+        }
+        Ok(())
     }
 
     /// Read bounds from GLB JSON chunks of at most `max` bytes (refusing larger ones).
@@ -648,7 +691,13 @@ impl LeafDirectory {
                     return depths
                         .iter()
                         .enumerate()
-                        .find_map(|(depth, d)| d.check(depth, self.omitted_proxies).err())
+                        .find_map(|(depth, d)| {
+                            d.check(
+                                depth,
+                                self.omitted_by_depth.get(depth).copied().unwrap_or(0),
+                            )
+                            .err()
+                        })
                         .map(Err);
                 }
             };

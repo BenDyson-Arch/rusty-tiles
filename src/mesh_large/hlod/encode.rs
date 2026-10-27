@@ -36,6 +36,9 @@ pub(crate) enum Mutation {
     WrongMeasuredPosition,
     /// Move one locked vertex by one code/ulp and skip the pre-publication check.
     MoveVertexUnchecked,
+    /// Exercise the real sibling spill/reload path independently of available RAM.
+    #[cfg(test)]
+    ForceSpill,
 }
 
 pub(crate) struct Encoded {

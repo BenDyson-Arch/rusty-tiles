@@ -886,7 +886,7 @@ pub(crate) struct LeafStageOutput {
 #[derive(Clone, Copy)]
 pub(crate) struct Coarse<'a> {
     pub plan: &'a super::super::hlod::HlodMemoryPlan,
-    pub settings: super::super::hlod::Settings,
+    pub settings: &'a super::super::hlod::Settings,
 }
 
 fn write_leaf(
@@ -1048,7 +1048,7 @@ pub fn mesh_to_leaf_payloads(
     };
     let coarse = Coarse {
         plan: &hlod_plan,
-        settings: request.hlod,
+        settings: &request.hlod,
     };
     let stage = match target.stage_pending(&attempt) {
         Ok(stage) => stage,
@@ -1216,6 +1216,9 @@ mod tests {
             let output = work.path().join(name);
             let result = mesh_to_leaf_payloads(
                 LeafOutputRequest::new(&input, &output, profile)
+                    .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                        crate::mesh_large::hlod::TRIANGLE_CAP,
+                    ))
                     .with_jobs(NonZeroUsize::new(1).unwrap()),
                 &RunControl::default(),
             )
@@ -1284,6 +1287,9 @@ mod tests {
         let output = work.path().join("out");
         mesh_to_leaf_payloads(
             LeafOutputRequest::new(&input, &output, LeafProfile::Quality)
+                .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                    crate::mesh_large::hlod::TRIANGLE_CAP,
+                ))
                 .with_jobs(NonZeroUsize::new(1).unwrap()),
             &RunControl::default(),
         )
@@ -1329,6 +1335,9 @@ mod tests {
             let output = work.path().join(format!("output{jobs}"));
             let result = mesh_to_leaf_payloads(
                 LeafOutputRequest::new(&input, &output, LeafProfile::Lossless)
+                    .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                        crate::mesh_large::hlod::TRIANGLE_CAP,
+                    ))
                     .with_jobs(NonZeroUsize::new(jobs).unwrap())
                     .with_scratch_dir(&scratch),
                 &RunControl::default(),
@@ -1480,6 +1489,9 @@ mod tests {
                 let output = work.path().join(format!("{profile:?}{jobs}"));
                 let result = mesh_to_leaf_payloads(
                     LeafOutputRequest::new(&input, &output, profile)
+                        .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                            crate::mesh_large::hlod::TRIANGLE_CAP,
+                        ))
                         .with_jobs(NonZeroUsize::new(jobs).unwrap()),
                     &RunControl::default(),
                 )
@@ -1534,6 +1546,9 @@ mod tests {
         let output = work.path().join("lossless");
         mesh_to_leaf_payloads(
             LeafOutputRequest::new(&input, &output, LeafProfile::Lossless)
+                .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                    crate::mesh_large::hlod::TRIANGLE_CAP,
+                ))
                 .with_jobs(NonZeroUsize::new(2).unwrap()),
             &RunControl::default(),
         )
@@ -1567,7 +1582,9 @@ mod tests {
         let control = RunControl::default();
         control.cancellation_handle().cancel();
         let failure = mesh_to_leaf_payloads(
-            LeafOutputRequest::new(input, &output, LeafProfile::Lossless),
+            LeafOutputRequest::new(input, &output, LeafProfile::Lossless).with_hlod_settings(
+                crate::mesh_large::hlod::test_settings(crate::mesh_large::hlod::TRIANGLE_CAP),
+            ),
             &control,
         )
         .unwrap_err();
@@ -1599,6 +1616,9 @@ mod tests {
             let output = work.path().join(format!("balanced{jobs}"));
             let result = mesh_to_leaf_payloads(
                 LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
+                    .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                        crate::mesh_large::hlod::TRIANGLE_CAP,
+                    ))
                     .with_jobs(NonZeroUsize::new(jobs).unwrap()),
                 &RunControl::default(),
             )
@@ -1687,6 +1707,9 @@ mod tests {
         );
         let failure = mesh_to_leaf_payloads(
             LeafOutputRequest::new(&input, work.path().join("out"), LeafProfile::Balanced)
+                .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                    crate::mesh_large::hlod::TRIANGLE_CAP,
+                ))
                 .with_jobs(NonZeroUsize::new(2).unwrap()),
             &RunControl::default(),
         )
@@ -1791,6 +1814,9 @@ mod tests {
             let output = work.path().join(format!("out{jobs}"));
             let result = mesh_to_leaf_payloads(
                 LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
+                    .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                        crate::mesh_large::hlod::TRIANGLE_CAP,
+                    ))
                     .with_jobs(NonZeroUsize::new(jobs).unwrap()),
                 &RunControl::default(),
             )
@@ -1880,6 +1906,9 @@ mod tests {
         let output = work.path().join("out");
         let result = mesh_to_leaf_payloads(
             LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
+                .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                    crate::mesh_large::hlod::TRIANGLE_CAP,
+                ))
                 .with_jobs(NonZeroUsize::new(2).unwrap()),
             &RunControl::default(),
         )

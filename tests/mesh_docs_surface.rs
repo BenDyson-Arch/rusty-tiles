@@ -234,8 +234,12 @@ fn certified_proxy_and_ledger_claims_are_gone_from_the_guide() {
         .replace("not certified", "")
         .replace("not-certified", "")
         .replace("not certification", "")
+        // D11 certifies source-parameter border displacement, not surface error.
+        .replace("displacement certified against those arcs", "")
         // A real report field whose name predates HLOD.
-        .replace("unique_proxies", "");
+        .replace("unique_proxies", "")
+        // D11's public omission count, not the removed proxy-bake surface.
+        .replace("omitted_proxies", "");
     for forbidden in [
         "certified",
         "ledger",
@@ -305,12 +309,26 @@ fn policy_statements_match_the_implementation() {
     let omission = section(&guide, "### Hierarchy and cracks", false);
     assert!(omission.contains("**Omission, not refusal.**"));
     assert!(omission.contains("omitted"), "omission must be described");
+    for field in [
+        "diagnostics.hlod",
+        "omitted_proxies",
+        "omission_sources",
+        "omitted_by_depth",
+        "borders_by_depth",
+        "including zeros",
+    ] {
+        assert!(
+            omission.contains(field),
+            "missing public omission summary: {field}"
+        );
+    }
+    assert!(!omission.contains("not in `tilerReport` or `diagnostics`"));
     assert!(
         !omission.contains("the run is `unsupported`"),
         "a cap-infeasible parent is omitted, not refused"
     );
     assert!(
-        read("src/mesh_large/hlod/geometry.rs").contains("omit"),
+        read("src/mesh_large/hlod/geometry.rs").contains("capped frontier"),
         "the guide describes omission; the geometry stage must implement it"
     );
     // Coarse pages publish their own atlas samplers and always have the PNG fallback.

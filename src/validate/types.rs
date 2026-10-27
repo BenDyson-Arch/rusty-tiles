@@ -287,6 +287,10 @@ pub struct InterfaceCensus {
     /// Tiles of the first renderable cover and the renderable leaves it covers once.
     pub frontier_tiles: u64,
     pub frontier_leaves: u64,
+    /// D11 contracted borders: arcs delivered as one chord over two or more leaf
+    /// edges, counted per tile, and the leaf border vertices those chords contract.
+    pub contracted_border_arcs: u64,
+    pub contracted_border_vertices: u64,
 }
 /// The validation's scratch use, reported whenever any spill file was written.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]

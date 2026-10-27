@@ -1189,6 +1189,9 @@ fn real_leaves_from_h8_publish_deterministically_and_validate() {
         let leaves = work.path().join(format!("leaves-{tag}"));
         crate::mesh_large::leaves::producer::mesh_to_leaf_payloads(
             LeafOutputRequest::new(input, &leaves, LeafProfile::Balanced)
+                .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                    crate::mesh_large::hlod::TRIANGLE_CAP,
+                ))
                 .with_jobs(NonZeroUsize::new(jobs).unwrap())
                 .with_scratch_dir(&scratch),
             &RunControl::default(),
@@ -1260,6 +1263,9 @@ fn real_h8_leaves_under_low_limits_publish_implicit_roots_and_reject_corruption(
     let leaves = work.path().join("leaves");
     crate::mesh_large::leaves::producer::mesh_to_leaf_payloads(
         LeafOutputRequest::new(&textured, &leaves, LeafProfile::Balanced)
+            .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                crate::mesh_large::hlod::TRIANGLE_CAP,
+            ))
             .with_scratch_dir(&scratch),
         &RunControl::default(),
     )

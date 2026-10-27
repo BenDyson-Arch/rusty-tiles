@@ -155,18 +155,18 @@ has no selector, and a plain `mesh` run uses it.
 - **Coarse tiles are bounded.** A parent welds its children's vertices by decoded
   position and reduces them with meshopt to at most 8,192 triangles. The triangle
   cap leads; there is no error target.
-- **Crack-free by construction.** The vertices, segments and points on a tile's
-  *outer interface*, where its surface meets geometry outside its own subtree, are
-  locked: simplification never moves or deletes them, and every tile that carries
-  one decodes it to the same position at every depth. Edges between children inside
-  the parent are free to collapse. An interface is never thinned. Published bytes are decoded and
-  checked before publication, and the acceptance campaign counts decoded interface
-  segments independently. Crack-free means no gap along a locked interface between
-  tiles of any depth mix; it does not make a coarse level watertight or hide its
-  silhouette change.
+- **Shared borders by construction.** Every owner at a given depth uses the same
+  canonical border vertices and edges. Coarser levels may contract source arcs,
+  with displacement certified against those arcs at no more than `E_d/16`;
+  published geometric error is at least that depth's budget `E_d`. Same-depth
+  gaps are zero and mixed-depth gaps are at most one eighth of the larger
+  geometric error. Junctions and contacts with exact leaves stay fixed. Source
+  defects and T-junctions are counted, never matched with a tolerance. Adjacent
+  faces may be retriangulated, but delivered border edges and border-connected
+  components survive. This does not make the source watertight.
 - **Omission, not refusal.** 8,192 triangles stays the hard published cap. If a
-  parent still needs more triangles than the cap after simplification (its exact locked
-  interface, or topology that simplification cannot reduce, is too large), its coarse
+  parent still needs more triangles than the cap after shared-border reconstruction,
+  simplification and bounded interior remeshing, its coarse
   tile is **omitted**; the run does not fail. Omission propagates upward: every ancestor to the root is omitted
   too, because a parent cannot be built with a hole where the omitted tile was. An
   omitted cell publishes no content and holds no geometry, and the capped descendant
@@ -174,9 +174,12 @@ has no selector, and a plain `mesh` run uses it.
   omitted cell takes the empty-parent error (at least 16 times its box diagonal), so it
   refines whenever it is visible and no content-bearing ancestor sits above a
   content-less one, and delivery and `validate` refuse a coarse tile above an omitted
-  cell. Omission shows as content-less tiles in the published tileset; its counts are
-  kept in the internal leaf manifest, not in `tilerReport` or `diagnostics`. Omission
-  is a bounded last resort and costs client requests near the omitted region (about 8
+  cell. Omission shows as content-less tiles in the published tileset.
+  `diagnostics.hlod` reports `omitted_proxies`, `omission_sources` and
+  `omitted_by_depth`, including zeros at every tree depth. Its `borders_by_depth`
+  summary also reports border displacement, terminal locks, topology changes by
+  kind, omission sources and capped-frontier uses, including zeros. The internal
+  leaf manifest carries the same counts. Omission is a bounded last resort and costs client requests near the omitted region (about 8
   times the depth in content-less cells plus the children's tiles). It is distinct from resource refusals: a budget or scratch/disk shortfall is
   still `resource_limit`, and an unreadable or unsupported source is still refused.
 - **Single-child chains.** A cell whose only child is a coarse tile publishes that
@@ -441,6 +444,13 @@ subvolumes of one pool report different ids, so their demands are checked
 separately against the same free space. Memory-backed (tmpfs) scratch, work
 directory and output staging are charged to the memory budget
 ([Memory budget](#memory-budget)).
+
+The internal opt-in HLOD audit (`RT_HLOD_AUDIT_DIR`) reserves at most 64 MiB
+for evidence on a memory-backed destination, shared by its memory-plan reservation
+and actual write budget. Exceeding that budget refuses the run with `resource_limit`;
+it never truncates evidence or skips operations. On ordinary disk, the audit keeps
+its conservative logical bound and checks free space as the file grows.
+
 Each capture stage rechecks free space for its own working set on entry and
 fails closed if its measured peak exceeds its declared bound; the diagnostics
 report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). The HLOD

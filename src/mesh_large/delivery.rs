@@ -536,6 +536,7 @@ fn plan_pass(
         builder.push(row, bounds)?;
     }
     let shape = builder.finish()?;
+    leaves.check_omissions(&shape)?;
     if shape.leaves != leaves.totals.leaves || triangles != leaves.totals.triangles {
         return Err(source::input(format!(
             "leaves.jsonl holds {} leaves and {triangles} triangles; manifest.json reports {} \
