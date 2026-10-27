@@ -22,8 +22,8 @@ mod source_crs;
 mod tree;
 pub use hlod::{HlodDiagnostics, HlodMemoryPlan};
 pub use pipeline::{
-    mesh_to_tileset, MemoryDiagnostics, TilerDiagnostics, TilerJobs, TilerProfile, TilerReport,
-    TilerRequest, TilerResult,
+    mesh_to_tileset, MemoryDiagnostics, StorageDiagnostics, TilerDiagnostics, TilerJobs,
+    TilerProfile, TilerReport, TilerRequest, TilerResult,
 };
 pub use resources::{parse_memory_budget, BudgetSource, MemoryBudget};
 pub use source_crs::{MeshSourceCrs, MeshSourceCrsReport};

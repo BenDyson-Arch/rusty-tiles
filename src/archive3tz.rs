@@ -176,6 +176,21 @@ pub(crate) fn central_header(
 
 /// The end records after a central directory of `count` headers spanning `start..end`:
 /// ZIP64 end record and locator when any field needs them, then the classic end record.
+/// Bytes [`end_records`] writes for the same arguments.
+pub(crate) fn end_records_len(start: u64, end: u64, count: u64) -> u64 {
+    if zip64_end(start, end, count) {
+        56 + 20 + 22
+    } else {
+        22
+    }
+}
+
+fn zip64_end(start: u64, end: u64, count: u64) -> bool {
+    count >= u64::from(u16::MAX)
+        || end - start >= u64::from(u32::MAX)
+        || start >= u64::from(u32::MAX)
+}
+
 pub(crate) fn end_records(
     writer: &mut impl Write,
     start: u64,
@@ -183,7 +198,7 @@ pub(crate) fn end_records(
     count: u64,
 ) -> std::io::Result<()> {
     let size = end - start;
-    if count >= u64::from(u16::MAX) || size >= u64::from(u32::MAX) || start >= u64::from(u32::MAX) {
+    if zip64_end(start, end, count) {
         let mut record = [0u8; 56];
         put32(&mut record, 0, 0x06064b50);
         put64(&mut record, 4, 44);

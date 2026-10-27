@@ -1257,8 +1257,12 @@ impl TilesetExtension {
 
 #[derive(Clone, Debug, PartialEq)]
 enum DocumentKind {
-    /// `tileset.json`, optionally with the producer's build-state digest in `asset.extras`.
-    Root { build_state: Option<[u8; 32]> },
+    /// `tileset.json`, optionally with the producer's build-state digest and its HLOD
+    /// declaration (`rustyTiles.lod`) in `asset.extras`.
+    Root {
+        build_state: Option<[u8; 32]>,
+        hlod: bool,
+    },
     /// An external document `tileset-d{m}.json`.
     External,
 }
@@ -1285,7 +1289,10 @@ impl TilesetDocument {
         extensions_used: impl IntoIterator<Item = TilesetExtension>,
     ) -> Self {
         Self {
-            kind: DocumentKind::Root { build_state: None },
+            kind: DocumentKind::Root {
+                build_state: None,
+                hlod: false,
+            },
             geometric_error,
             extensions_used: extensions_used.into_iter().collect(),
             schema: false,
@@ -1314,9 +1321,21 @@ impl TilesetDocument {
     /// Record the producer's build state digest as `asset.extras.vectorBuildStateSha256`.
     pub(crate) fn with_build_state(mut self, sha256: [u8; 32]) -> Result<Self, Error> {
         match &mut self.kind {
-            DocumentKind::Root { build_state } => *build_state = Some(sha256),
+            DocumentKind::Root { build_state, .. } => *build_state = Some(sha256),
             DocumentKind::External => {
                 return Err(invalid("only tileset.json records the build state"))
+            }
+        }
+        Ok(self)
+    }
+
+    /// Declare the archive an HLOD delivery (`asset.extras.rustyTiles.lod = "hlod"`), which
+    /// makes a validator hold every payload to HLOD identity and continuity.
+    pub(crate) fn declaring_hlod(mut self) -> Result<Self, Error> {
+        match &mut self.kind {
+            DocumentKind::Root { hlod, .. } => *hlod = true,
+            DocumentKind::External => {
+                return Err(invalid("only tileset.json declares the archive's LOD"))
             }
         }
         Ok(self)
@@ -1333,7 +1352,7 @@ impl TilesetDocument {
 
     pub(crate) fn build_state(&self) -> Option<&[u8; 32]> {
         match &self.kind {
-            DocumentKind::Root { build_state } => build_state.as_ref(),
+            DocumentKind::Root { build_state, .. } => build_state.as_ref(),
             DocumentKind::External => None,
         }
     }
@@ -1346,13 +1365,17 @@ impl TilesetDocument {
     pub(crate) fn head(&self) -> Map<String, Value> {
         let mut asset = Map::new();
         asset.insert("version".into(), Value::from("1.1"));
-        if let DocumentKind::Root {
-            build_state: Some(sha256),
-        } = &self.kind
-        {
+        if let DocumentKind::Root { build_state, hlod } = &self.kind {
             let mut extras = Map::new();
-            extras.insert("vectorBuildStateSha256".into(), Value::from(hex(sha256)));
-            asset.insert("extras".into(), Value::Object(extras));
+            if *hlod {
+                extras.insert("rustyTiles".into(), serde_json::json!({"lod": "hlod"}));
+            }
+            if let Some(sha256) = build_state {
+                extras.insert("vectorBuildStateSha256".into(), Value::from(hex(sha256)));
+            }
+            if !extras.is_empty() {
+                asset.insert("extras".into(), Value::Object(extras));
+            }
         }
         let mut head = Map::new();
         head.insert("asset".into(), Value::Object(asset));
@@ -1739,7 +1762,13 @@ mod record_tests {
             serde_json::to_value(crate::metadata::tile_schema()).unwrap()
         );
         assert_eq!(head["geometricError"].to_string(), "2.5");
-        assert!(is_data(external.with_build_state([0; 32])).contains("build state"));
+        assert!(is_data(external.clone().with_build_state([0; 32])).contains("build state"));
+        let declared = document.clone().declaring_hlod().unwrap();
+        assert_eq!(
+            Value::Object(declared.head())["asset"].to_string(),
+            r#"{"extras":{"rustyTiles":{"lod":"hlod"}},"version":"1.1"}"#
+        );
+        assert!(is_data(external.declaring_hlod()).contains("declares"));
         let empty = TilesetDocument::root(GeometricError::new(1.).unwrap(), []);
         assert!(!empty.head().contains_key("extensionsUsed"));
     }
