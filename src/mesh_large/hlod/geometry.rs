@@ -9,6 +9,7 @@ mod fold_probe;
 pub(crate) mod folds;
 pub(crate) mod locations;
 pub(crate) mod measurement;
+mod sheets;
 mod topology;
 pub(crate) use topology::Receipt as TopologyReceipt;
 
@@ -56,6 +57,7 @@ pub(crate) struct Built {
 
 pub(crate) struct Outcome {
     pub built: Option<Built>,
+    pub contraction_failed: bool,
     /// All measured proposals, including rejected candidates and the accepted publication.
     pub attempted_topology: TopologyReceipt,
     pub construction_dropped: Vec<[[f32; 3]; 3]>,
@@ -162,10 +164,20 @@ fn simplify(
     locked: &dyn Fn(u32) -> bool,
     target: usize,
 ) -> (Vec<[u32; 3]>, f64) {
+    let mut local = vec![u32::MAX; merged.positions.len()];
+    simplify_mapped(merged, faces, locked, target, &mut local)
+}
+
+fn simplify_mapped(
+    merged: &Merged,
+    faces: &[[u32; 3]],
+    locked: &dyn Fn(u32) -> bool,
+    target: usize,
+    local: &mut [u32],
+) -> (Vec<[u32; 3]>, f64) {
     let _cpu = super::cpu_profile::start(super::cpu_profile::Stage::Simplify, faces.len());
     // Merged indices are dense and bounded to eight capped children. Preserve first-use
     // order without hashing each corner, including when simplifying a protected subset.
-    let mut local = vec![u32::MAX; merged.positions.len()];
     let mut global = Vec::new();
     let mut indices = Vec::with_capacity(faces.len() * 3);
     for f in faces {
@@ -216,6 +228,9 @@ fn simplify(
         .iter()
         .map(|t| t.map(|v| global[v as usize]))
         .collect();
+    for &v in &global {
+        local[v as usize] = u32::MAX;
+    }
     (triangles, f64::from(error))
 }
 
@@ -237,6 +252,9 @@ pub(crate) fn build_parent(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<Outcome, JobError> {
     check()?;
+    if caps.is_empty() {
+        return Err(state("a parent build needs at least one cap"));
+    }
     #[cfg(test)]
     fold_probe::capture(tile, children, contract, caps);
     let mut merged = merge(children);
@@ -264,30 +282,43 @@ pub(crate) fn build_parent(
             .collect();
         let child_border: HashSet<Key> =
             previous_interface.iter().flat_map(|r| [r.a, r.b]).collect();
+        let lookup = |k| {
+            if child_border.contains(&k) {
+                mapping(k)
+            } else {
+                Ok(None)
+            }
+        };
         if !topology::contract(
             &mut merged,
             interface,
             &previous_interface,
-            &|k| {
-                if child_border.contains(&k) {
-                    mapping(k)
-                } else {
-                    Ok(None)
-                }
-            },
+            &lookup,
             &mut topology,
         )? {
-            return Ok(Outcome {
-                built: None,
-                attempted_topology: topology,
-                construction_dropped: Vec::new(),
-            });
+            attempted.add(topology);
+            topology = Default::default();
+            if !recover_contraction(
+                &mut merged,
+                &reference,
+                interface,
+                &previous_interface,
+                &lookup,
+                caps,
+                &mut topology,
+                check,
+            )? {
+                attempted.add(topology);
+                return Ok(Outcome {
+                    built: None,
+                    contraction_failed: true,
+                    attempted_topology: attempted,
+                    construction_dropped: Vec::new(),
+                });
+            }
         }
     }
     let contracted_faces = merged.triangles.clone();
-    if caps.is_empty() {
-        return Err(state("a parent build needs at least one cap"));
-    }
     let floor = contract.scale.max(children_error);
     let mut opening_pins = HashSet::default();
     for (i, &cap) in caps.iter().enumerate() {
@@ -314,6 +345,7 @@ pub(crate) fn build_parent(
                 b.topology.add(topology);
                 return Ok(Outcome {
                     built: Some(b),
+                    contraction_failed: false,
                     attempted_topology: attempted,
                     construction_dropped: Vec::new(),
                 });
@@ -355,6 +387,7 @@ pub(crate) fn build_parent(
                 b.topology.add(topology);
                 return Ok(Outcome {
                     built: Some(b),
+                    contraction_failed: false,
                     attempted_topology: attempted,
                     construction_dropped: Vec::new(),
                 });
@@ -364,9 +397,73 @@ pub(crate) fn build_parent(
     attempted.add(topology);
     Ok(Outcome {
         built: None,
+        contraction_failed: false,
         attempted_topology: attempted,
         construction_dropped,
     })
+}
+
+/// Failed contraction is not an omission decision. Preserve the old border samples
+/// while reducing separate sheets at both caps, then try constructive and six bounded
+/// interior remeshes. Every final contraction is checked against the original faces.
+fn recover_contraction(
+    merged: &mut Merged,
+    reference: &Merged,
+    interface: &[InterfaceRow],
+    previous: &[InterfaceRow],
+    mapping: &BorderMap<'_>,
+    caps: &[usize],
+    receipt: &mut TopologyReceipt,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+) -> Result<bool, JobError> {
+    let border: HashSet<_> = previous.iter().flat_map(|r| [r.a, r.b]).collect();
+    let locked: Vec<_> = merged.keys.iter().map(|k| border.contains(k)).collect();
+    drop(border);
+    for round in 0..caps.len() + 7 {
+        check()?;
+        merged.triangles.clone_from(&reference.triangles);
+        merged.representative.clone_from(&reference.representative);
+        let mut attempt = TopologyReceipt::default();
+        if round < caps.len() {
+            if caps[..round].contains(&caps[round]) {
+                continue;
+            }
+            let (faces, _) = sheets::simplify(
+                merged,
+                &merged.triangles,
+                &|v| locked[v as usize],
+                caps[round],
+            );
+            if faces == merged.triangles {
+                continue;
+            }
+            merged.triangles = faces;
+            merged
+                .representative
+                .resize(merged.triangles.len(), reference.representative[0]);
+        } else if round == caps.len() {
+            let Some(r) = constrained::remesh(merged, previous, reference.triangles.len()) else {
+                continue;
+            };
+            attempt.add(r);
+        } else if !topology::remesh(merged, previous, (round - caps.len()) as u32, &mut attempt) {
+            receipt.rejected_remesh_rounds += attempt.rejected_remesh_rounds;
+            continue;
+        }
+        if topology::contract_from(
+            merged,
+            interface,
+            previous,
+            mapping,
+            &mut attempt,
+            Some(&reference.triangles),
+        )? {
+            receipt.add(attempt);
+            return Ok(true);
+        }
+        receipt.rejected_remesh_rounds += attempt.rejected_remesh_rounds;
+    }
+    Ok(false)
 }
 
 /// Keep the source face ring around a rejected new hole before considering omission.
@@ -388,7 +485,7 @@ fn assessed_attempt(
 ) -> Result<Option<Built>, JobError> {
     for round in 0..=RETRIES {
         check()?;
-        let mut b = match attempt(
+        let ordinary = attempt(
             tile,
             merged,
             interface,
@@ -399,7 +496,27 @@ fn assessed_attempt(
             floor,
             preserve_holes,
             opening_pins,
-        ) {
+        );
+        // An overprotected ring is a failed strategy, not a cap lower bound. Split
+        // independent surface sheets before accepting omission; all proposal guards
+        // and the same pre-contraction topology reference remain in force.
+        let proposal = match ordinary {
+            Err(e) if e.kind() == JobErrorKind::Unsupported => attempt_mode(
+                tile,
+                merged,
+                interface,
+                cap,
+                children_error,
+                reference,
+                contracted_faces,
+                floor,
+                preserve_holes,
+                opening_pins,
+                true,
+            ),
+            result => result,
+        };
+        let mut b = match proposal {
             Ok(b) => b,
             Err(e) if e.kind() == JobErrorKind::Unsupported => {
                 #[cfg(test)]
@@ -458,6 +575,34 @@ fn attempt(
     preserve_holes: bool,
     opening_pins: &HashSet<Key>,
 ) -> Result<Built, JobError> {
+    attempt_mode(
+        tile,
+        merged,
+        interface,
+        cap,
+        children_error,
+        reference,
+        contracted_faces,
+        floor,
+        preserve_holes,
+        opening_pins,
+        false,
+    )
+}
+
+fn attempt_mode(
+    tile: TileKey,
+    merged: &Merged,
+    interface: &[InterfaceRow],
+    cap: usize,
+    children_error: f64,
+    reference: &Merged,
+    contracted_faces: &[[u32; 3]],
+    floor: f64,
+    preserve_holes: bool,
+    opening_pins: &HashSet<Key>,
+    separate_sheets: bool,
+) -> Result<Built, JobError> {
     let _cpu =
         super::cpu_profile::start(super::cpu_profile::Stage::Attempt, merged.triangles.len());
     let required = || {
@@ -515,8 +660,14 @@ fn attempt(
             StoppingBound::TriangleBudget,
         )
     } else {
-        let (mut output, mut error) =
-            simplify(merged, &merged.triangles, &|v| locked[v as usize], cap);
+        let reduce = |faces: &[[u32; 3]], lock: &dyn Fn(u32) -> bool, target| {
+            if separate_sheets {
+                sheets::simplify(merged, faces, lock, target)
+            } else {
+                simplify(merged, faces, lock, target)
+            }
+        };
+        let (mut output, mut error) = reduce(&merged.triangles, &|v| locked[v as usize], cap);
         let mut topology_protected = false;
         let mut fold_retries = 0;
         // Only one immutable post-contraction source per retry sequence. Release
@@ -581,6 +732,11 @@ fn attempt(
             retries += 1;
             let edges: HashSet<(Key, Key)> = edges.into_iter().collect();
             let points: HashSet<Key> = points.into_iter().collect();
+            let mut carried = if separate_sheets {
+                vec![false; invalid.len()]
+            } else {
+                Vec::new()
+            };
             for (i, t) in merged.triangles.iter().enumerate() {
                 let o = t.map(|v| merged.keys[v as usize]);
                 if (0..3)
@@ -588,10 +744,22 @@ fn attempt(
                 {
                     protected[i] = true;
                 }
-                if t.iter().any(|&v| invalid[v as usize]) {
+                // A full vertex star can consume the cap even on a two-sided plate.
+                // The sheet retry retains one fresh local carrier per offending
+                // corner per round; all failures are rechecked on the next proposal.
+                let needed = t
+                    .iter()
+                    .any(|&v| invalid[v as usize] && (!separate_sheets || !carried[v as usize]));
+                if needed && (!separate_sheets || !protected[i]) {
                     protected[i] = true;
+                    if separate_sheets {
+                        for &v in t {
+                            carried[v as usize] = true;
+                        }
+                    }
                 }
             }
+            drop(carried);
             if protected.iter().filter(|p| **p).count() == previously_protected {
                 return Err(JobError::new(
                     JobErrorKind::Unsupported,
@@ -601,6 +769,11 @@ fn attempt(
             drop(edges);
             drop(points);
             drop(invalid);
+            if separate_sheets {
+                // Partition incidence workspace and the cached Source must not
+                // overlap; the regular path keeps its established retry cache.
+                fold_source = None;
+            }
             let keep: Vec<[u32; 3]> = merged
                 .triangles
                 .iter()
@@ -619,8 +792,7 @@ fn attempt(
             let (mut reduced, e) = if rest.is_empty() {
                 (Vec::new(), 0.)
             } else {
-                simplify(
-                    merged,
+                reduce(
                     &rest,
                     &|v| locked[v as usize] || kept.contains(&v),
                     cap.saturating_sub(keep.len()),

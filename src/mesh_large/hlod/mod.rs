@@ -616,6 +616,7 @@ type Done = Result<(Option<TileGeometry>, Finished, appearance::Timing), JobErro
 #[serde(rename_all = "snake_case")]
 enum OmissionReason {
     ContractLowerBound,
+    ContractionStalled,
     RemeshStalled,
     DescendantOmission,
 }
@@ -1365,6 +1366,7 @@ fn build_tile(
     } else {
         geometry::Outcome {
             built: None,
+            contraction_failed: false,
             attempted_topology: Default::default(),
             construction_dropped: Vec::new(),
         }
@@ -1377,7 +1379,9 @@ fn build_tile(
             .transpose()?;
         let omitted = Finished::Omitted {
             key: closed.key,
-            reason: if contract.is_some() {
+            reason: if outcome.contraction_failed {
+                OmissionReason::ContractionStalled
+            } else if contract.is_some() {
                 OmissionReason::RemeshStalled
             } else {
                 OmissionReason::ContractLowerBound

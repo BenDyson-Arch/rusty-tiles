@@ -183,6 +183,41 @@ fn book() -> Vec<Mesh> {
     vec![left, right, page]
 }
 
+fn collinear() -> Vec<Mesh> {
+    let flat = |_: f32, _: f32| 2.;
+    vec![
+        grid(
+            (1, 40),
+            (0., T_LINE),
+            (0., 100.),
+            &flat,
+            [0.6, 0.5, 0.4, 1.],
+        ),
+        grid(
+            (30, 400),
+            (T_LINE, 100.),
+            (0., 100.),
+            &flat,
+            [0.3, 0.6, 0.3, 1.],
+        ),
+    ]
+}
+
+fn back_to_back() -> Vec<Mesh> {
+    let top = grid(
+        (40, 80),
+        (0., 100.),
+        (0., 100.),
+        &|x, z| bump(x, z) + 1e-3 * (x / 100.),
+        [0.6, 0.5, 0.4, 1.],
+    );
+    let mut bottom = grid((40, 80), (0., 100.), (0., 100.), &bump, [0.3, 0.6, 0.3, 1.]);
+    for t in bottom.indices.chunks_mut(3) {
+        t.swap(1, 2);
+    }
+    vec![top, bottom]
+}
+
 /// Thin islands: long 4 cm wide strips hovering over a sheet, crossing every cell, plus
 /// single-triangle specks.
 fn thin_islands() -> Vec<Mesh> {
@@ -1052,6 +1087,15 @@ fn s2_run() -> Run {
     }
 }
 
+/// Omission controls need the production search budget: the cheap test search can
+/// itself stall the collinear root. Area sampling remains cheap unless explicitly set.
+fn production_nearest_run() -> Run {
+    Run {
+        nearest_steps: super::error::NEAREST_STEPS,
+        ..Run::default()
+    }
+}
+
 impl Default for Run {
     fn default() -> Self {
         Self {
@@ -1091,6 +1135,39 @@ fn stage(input: &Path, out: &Path, run: &Run) -> Result<PathBuf, crate::JobFailu
         "scratch is cleaned up"
     );
     result
+}
+
+/// Return coverage truth separately from the legacy archive validator. Breadth probes
+/// collect every failing case before asserting, so their log contains all 28 receipts.
+fn omission_receipt(name: &str, dir: &Path) -> bool {
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let h = &manifest["hlod"];
+    eprintln!(
+        "OMISSION {name}: tiles={} omitted={} sources={} by_depth={}",
+        h["tiles"], h["omittedProxies"], h["omissionSources"], h["omittedByDepth"]
+    );
+    assert!(h["tiles"].as_u64().unwrap() > 0, "{name}: {h}");
+    let omitted = h["omittedProxies"].as_u64().unwrap();
+    let sources = h["omissionSources"].as_u64().unwrap();
+    let depths: Vec<u64> = serde_json::from_value(h["omittedByDepth"].clone()).unwrap();
+    assert!(!depths.is_empty(), "{name}: {h}");
+    assert_eq!(depths.iter().sum::<u64>(), omitted, "{name}: {h}");
+    omitted == 0 && sources == 0 && depths.iter().all(|&n| n == 0)
+}
+
+fn assert_directed_census(name: &str, c: &Census, cap: usize) {
+    eprintln!("D11 {name}: {c:?}");
+    assert!(c.coarse >= 3, "{name}: {c:?}");
+    assert_eq!(c.unsupported_same_direction_edges, 0, "{name}: {c:?}");
+    assert_eq!(c.unsupported_coincident_face_groups, 0, "{name}: {c:?}");
+    assert_eq!(c.reversed_coarse_faces, 0, "{name}: {c:?}");
+    assert_eq!(c.duplicate_chain_tiles, 0, "{name}: {c:?}");
+    assert_eq!(c.certificate_winding_failures, 0, "{name}: {c:?}");
+    assert_eq!(c.certificate_failures, 0, "{name}: {c:?}");
+    assert_eq!(c.missing_segments + c.missing_vertices, 0, "{name}: {c:?}");
+    assert_eq!(c.max_same_depth_gap_m, 0., "{name}: {c:?}");
+    assert!(c.max_coarse_triangles <= cap, "{name}: {c:?}");
 }
 
 fn files(dir: &Path, sub: &str) -> BTreeMap<String, Vec<u8>> {
@@ -2452,18 +2529,7 @@ fn float_profiles_are_crack_free() {
 /// orientation (the census's exact reversal check, independent of the producer's).
 #[test]
 fn back_to_back_sheets_keep_their_source_orientation() {
-    let top = grid(
-        (40, 80),
-        (0., 100.),
-        (0., 100.),
-        &|x, z| bump(x, z) + 1e-3 * (x / 100.),
-        [0.6, 0.5, 0.4, 1.],
-    );
-    let mut bottom = grid((40, 80), (0., 100.), (0., 100.), &bump, [0.3, 0.6, 0.3, 1.]);
-    for t in bottom.indices.chunks_mut(3) {
-        t.swap(1, 2);
-    }
-    let census = accept("back-to-back plate", &[top, bottom], Run::default());
+    let census = accept("back-to-back plate", &back_to_back(), Run::default());
     assert_eq!(census.reversed_coarse_faces, 0, "{census:?}");
 }
 
@@ -2973,13 +3039,18 @@ fn omitted_cells_refine_whenever_they_are_visible() {
 /// Output is identical for any job count, any admitted budget and spilled sorts.
 #[test]
 fn output_is_identical_across_jobs_and_budgets() {
+    assert_output_identity(&thin_islands(), TEST_NEAREST_STEPS, false);
+}
+
+fn assert_output_identity(source: &[Mesh], nearest_steps: u64, require_contraction: bool) {
     let work = tempfile::tempdir().unwrap();
-    let input = write_gltf(&work.path().join("src"), &thin_islands());
+    let input = write_gltf(&work.path().join("src"), source);
     let one = stage(
         &input,
         &work.path().join("one"),
         &Run {
             jobs: 1,
+            nearest_steps,
             ..Run::default()
         },
     )
@@ -2990,6 +3061,7 @@ fn output_is_identical_across_jobs_and_budgets() {
         &Run {
             jobs: 4,
             budget: Some(64 << 30),
+            nearest_steps,
             ..Run::default()
         },
     )
@@ -3002,6 +3074,7 @@ fn output_is_identical_across_jobs_and_budgets() {
         &Run {
             jobs: 2,
             mutation: Mutation::ForceSpill,
+            nearest_steps,
             ..Run::default()
         },
     )
@@ -3016,6 +3089,14 @@ fn output_is_identical_across_jobs_and_budgets() {
     );
     assert!(published(&one) == published(&spilled));
     assert!(audit_semantics(&one) == audit_semantics(&spilled));
+    if require_contraction {
+        for (name, dir) in [("one", &one), ("many", &many), ("spilled", &spilled)] {
+            assert!(omission_receipt(name, dir), "{name}: omitted coverage");
+        }
+        let c = census(&one);
+        assert_directed_census("determinism", &c, Run::default().cap);
+        assert!(c.contracted_source_segments > 0, "{c:?}");
+    }
     let mut reference = None;
     for (label, stage) in [("one", &one), ("many", &many), ("spilled", &spilled)] {
         let output = work.path().join(format!("{label}.3tz"));
@@ -4353,14 +4434,8 @@ fn tmpfs_exhaustion_is_admitted_before_border_or_frontier_writes() {
 /// the separately maintained validator's original-point rule. A bit mask cannot see folds.
 #[test]
 fn contracted_borders_do_not_fold_collinear_book_or_sheet_surfaces() {
-    let c = T_LINE;
-    let flat = |_: f32, _: f32| 2.;
-    let collinear = vec![
-        grid((1, 40), (0., c), (0., 100.), &flat, [0.6, 0.5, 0.4, 1.]),
-        grid((30, 400), (c, 100.), (0., 100.), &flat, [0.3, 0.6, 0.3, 1.]),
-    ];
     for (name, source, profile) in [
-        ("collinear", collinear, LeafProfile::Balanced),
+        ("collinear", collinear(), LeafProfile::Balanced),
         ("book", book(), LeafProfile::Balanced),
         ("sheet", sheet(), LeafProfile::Lossless),
     ] {
@@ -4371,35 +4446,13 @@ fn contracted_borders_do_not_fold_collinear_book_or_sheet_surfaces() {
             &work.path().join("hlod"),
             &Run {
                 profile,
-                nearest_steps: super::error::NEAREST_STEPS,
-                ..Run::default()
+                ..production_nearest_run()
             },
         )
         .unwrap();
+        assert!(omission_receipt(name, &dir), "{name}: omitted coverage");
         let census = census(&dir);
-        eprintln!("R1 {name}: {census:?}");
-        let manifest: Value =
-            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
-        eprintln!(
-            "R1 {name} publication: omitted={}, by_depth={}, pass_through={}",
-            manifest["hlod"]["omittedProxies"],
-            manifest["hlod"]["omittedByDepth"],
-            manifest["hlod"]["passThrough"],
-        );
-        assert_eq!(manifest["hlod"]["omittedProxies"], 0, "{name}: {manifest}");
-        assert!(census.coarse >= 3);
-        assert_eq!(
-            census.unsupported_coincident_face_groups, 0,
-            "{name}: {census:?}"
-        );
-        assert_eq!(
-            census.unsupported_same_direction_edges, 0,
-            "{name}: {census:?}"
-        );
-        assert_eq!(census.certificate_winding_failures, 0, "{name}: {census:?}");
-        assert_eq!(census.certificate_failures, 0);
-        assert_eq!(census.missing_segments + census.missing_vertices, 0);
-        assert_eq!(census.max_same_depth_gap_m, 0.);
+        assert_directed_census(name, &census, Run::default().cap);
         let mut errors = BTreeMap::<u64, f64>::new();
         for row in rows(&dir.join("proxies.jsonl")) {
             let g = row["geometricError"].as_f64().unwrap();
@@ -4444,5 +4497,102 @@ fn contracted_borders_do_not_fold_collinear_book_or_sheet_surfaces() {
                 );
             }
         }
+    }
+}
+
+/// These controls are independently filterable: legacy S5 archive validation must not
+/// prevent the production-nearest omission and directed-incidence assertions from running.
+fn d11_coverage_control(name: &str, source: &[Mesh], scale: f32) {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf_scaled(
+        &work.path().join("src"),
+        source,
+        &vec![[scale; 3]; source.len()],
+    );
+    let run = production_nearest_run();
+    let dir = stage(&input, &work.path().join("hlod"), &run).unwrap();
+    assert!(omission_receipt(name, &dir), "{name}: omitted coverage");
+    assert_directed_census(name, &census(&dir), run.cap);
+}
+
+#[test]
+fn d11_back_to_back_has_zero_omissions_and_no_folds() {
+    d11_coverage_control("back-to-back x1", &back_to_back(), 1.);
+}
+
+#[test]
+fn d11_t_junction_has_zero_omissions_and_no_folds() {
+    d11_coverage_control("t-junction x1", &t_junction(), 1.);
+}
+
+#[test]
+fn d11_book_scaled_40_has_zero_omissions_and_no_folds() {
+    d11_coverage_control("book x40", &book(), 40.);
+}
+
+/// Review r2's exact seven fixtures and four node scales. Always production nearest;
+/// set RT_HLOD_OMISSION_FULL_SAMPLING=1 for production area sampling as well.
+#[test]
+#[ignore = "28 staged runs; coordinator runs explicitly and captures OMISSION receipts"]
+fn omission_breadth_production_nearest() {
+    let mut run = production_nearest_run();
+    match std::env::var_os("RT_HLOD_OMISSION_FULL_SAMPLING") {
+        None => {}
+        Some(value) if value == "1" => run.sampling = Schedule::PRODUCTION,
+        Some(_) => panic!("RT_HLOD_OMISSION_FULL_SAMPLING must be unset or 1"),
+    }
+    eprintln!(
+        "OMISSION settings: nearest_steps={} sampling={:?}",
+        run.nearest_steps, run.sampling
+    );
+    let fixtures: [(&str, fn() -> Vec<Mesh>); 7] = [
+        ("sheet", sheet),
+        ("book", book),
+        ("collinear", collinear),
+        ("back-to-back", back_to_back),
+        ("thin islands", thin_islands),
+        ("cluster", cluster),
+        ("t-junction", t_junction),
+    ];
+    let mut failures = Vec::new();
+    let mut checked = 0;
+    for scale in [1f32, 4., 40., 0.25] {
+        for (name, fixture) in fixtures {
+            let name = format!("{name} x{scale}");
+            let work = tempfile::tempdir().unwrap();
+            let source = fixture();
+            let input = write_gltf_scaled(
+                &work.path().join("src"),
+                &source,
+                &vec![[scale; 3]; source.len()],
+            );
+            match stage(&input, &work.path().join("hlod"), &run) {
+                Ok(dir) => {
+                    if !omission_receipt(&name, &dir) {
+                        failures.push(name);
+                    }
+                }
+                Err(error) => {
+                    eprintln!("OMISSION {name}: stage failed {error:?}");
+                    failures.push(name);
+                }
+            }
+            checked += 1;
+        }
+    }
+    eprintln!(
+        "OMISSION summary: checked={checked} failed={}",
+        failures.len()
+    );
+    assert_eq!(checked, 28);
+    assert!(failures.is_empty(), "coverage failures: {failures:?}");
+}
+
+#[test]
+#[ignore = "six staged runs plus archives; coordinator runs contraction determinism explicitly"]
+fn contraction_output_is_identical_across_jobs_and_budgets() {
+    for (name, source) in [("collinear", collinear()), ("book", book())] {
+        eprintln!("CONTRACTION DETERMINISM {name}");
+        assert_output_identity(&source, super::error::NEAREST_STEPS, true);
     }
 }

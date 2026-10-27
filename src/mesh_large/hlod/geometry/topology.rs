@@ -170,6 +170,18 @@ pub(super) fn contract(
     mapping: &super::BorderMap<'_>,
     receipt: &mut Receipt,
 ) -> Result<bool, JobError> {
+    contract_from(m, interface, previous_interface, mapping, receipt, None)
+}
+
+/// Keep the licenses of the original merged children across recovery proposals.
+pub(super) fn contract_from(
+    m: &mut Merged,
+    interface: &[InterfaceRow],
+    previous_interface: &[InterfaceRow],
+    mapping: &super::BorderMap<'_>,
+    receipt: &mut Receipt,
+    original_faces: Option<&[[u32; 3]]>,
+) -> Result<bool, JobError> {
     let _cpu = super::super::cpu_profile::start(
         super::super::cpu_profile::Stage::Contract,
         m.triangles.len(),
@@ -189,11 +201,15 @@ pub(super) fn contract(
         if let Some((a, b, t, _)) = mapped {
             let k = if t <= 0.5 { a } else { b };
             let Some(&id) = ids.get(&k) else {
-                return Ok(false);
+                return Err(super::state(
+                    "a nested border chord endpoint is absent from its merged children",
+                ));
             };
             if id != v as u32 {
                 let (Some(&a), Some(&b)) = (ids.get(&a), ids.get(&b)) else {
-                    return Ok(false);
+                    return Err(super::state(
+                        "a nested border chord endpoint is absent from its merged children",
+                    ));
                 };
                 endpoints.extend([a, b]);
                 receipt.contracted_vertices += 1;
@@ -206,7 +222,7 @@ pub(super) fn contract(
     }
     let guard = super::folds::Source::for_contraction(
         &m.positions,
-        &m.triangles,
+        original_faces.unwrap_or(&m.triangles),
         interface,
         previous_interface,
         &mapping_by_vertex,
@@ -240,13 +256,20 @@ pub(super) fn contract(
         && lost.0.is_empty()
         && lost.1.is_empty()
         && !guard.violations(&m.positions, &output).iter().any(|v| *v)
+        && changes(m, &output, interface, 0.).is_some()
     {
         m.triangles = output;
         m.representative = representatives;
         return Ok(true);
     }
-    if let Some(r) = super::constrained::contract(m, interface, &map, &endpoints, &guard) {
-        receipt.reconstructed_faces += m.triangles.len() as u64;
+    if let Some(r) = super::constrained::contract(
+        m,
+        interface,
+        &map,
+        &endpoints,
+        original_faces.map_or(m.triangles.len(), <[_]>::len),
+        &guard,
+    ) {
         receipt.add(r);
         Ok(true)
     } else {
@@ -922,6 +945,25 @@ pub(super) fn remesh(
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
+
+    #[test]
+    fn a_missing_nested_chord_endpoint_is_an_invariant_error() {
+        let mut m = mesh(
+            vec![[0., 0., 0.], [0.5, 0., 0.], [0., 1., 0.]],
+            vec![[0, 1, 2]],
+        );
+        let (a, b, middle) = (m.keys[0], super::super::key([1., 0., 0.]), m.keys[1]);
+        let error = contract(
+            &mut m,
+            &[],
+            &[],
+            &|k| Ok((k == middle).then_some((a, b, 0.75, 0))),
+            &mut Receipt::default(),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), crate::JobErrorKind::InvalidState);
+        assert_eq!(m.triangles, [[0, 1, 2]]);
+    }
 
     fn mesh(positions: Vec<[f32; 3]>, triangles: Vec<[u32; 3]>) -> Merged {
         Merged {
