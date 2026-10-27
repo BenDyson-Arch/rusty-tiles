@@ -4690,10 +4690,11 @@ fn closed_box() -> Vec<Mesh> {
 
 /// Tracked, not yet passing: about 50 holes per depth-1 cell cannot all stay open
 /// under the 300 cap (Euler), and every closure is rejected because closure loss is
-/// measured over the whole changed component, not the hole. Coordinator decision
-/// pending (FINAL report); run explicitly to see the current omission receipt.
+/// measured over the whole changed component, not the hole. Follow-up before 0.4.0:
+/// measure closure loss on the closed cycle's local domain, as the S5 oracle does.
+/// Run explicitly to see the current omission receipt.
 #[test]
-#[ignore = "holey cap fit needs hole closures; closure-domain decision pending"]
+#[ignore = "holey cap fit needs local-domain hole closures (0.4.0 follow-up)"]
 fn d11_holey_sheet_has_zero_omissions_and_no_folds() {
     for scale in [1., 40., 0.25] {
         d11_coverage_control(&format!("holey x{scale}"), &holey_sheet(), scale);
