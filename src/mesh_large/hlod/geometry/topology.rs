@@ -1399,7 +1399,7 @@ pub(super) mod tests {
             .iter()
             .filter(|t| t.iter().all(|&w| w > n))
             .map(|t| t.map(|w| if w == v { u } else { w }))
-            .filter(|t| super::surface(t))
+            .filter(super::surface)
             .collect();
         let change = changes(&m, &output, &[], 0.5).unwrap();
         assert_eq!(
@@ -1419,7 +1419,7 @@ pub(super) mod tests {
             .triangles
             .iter()
             .map(|t| t.map(|w| if w == at(4, 5) { at(4, 4) } else { w }))
-            .filter(|t| super::surface(t))
+            .filter(super::surface)
             .collect();
         let change = changes(&m, &interior, &[], 0.5).unwrap();
         assert!(change.strip.lost_points.is_empty() && change.strip.added_edges.is_empty());
