@@ -11,6 +11,7 @@
 - The mesh memory budget now charges memory-backed (tmpfs) output and
   intermediate storage: the private work directory and the staged archive each
   take one copy of the output reservation plus 32 MiB from the budget when they
-  live on tmpfs, and a measured owner past its charge is a `resource_limit`
-  refusal. `diagnostics.memory.memory_backed_storage` reports the charges and
+  live on tmpfs (or on an overlay whose upper layer is tmpfs or cannot be
+  resolved). Every write into them is admitted before it lands; one that would
+  pass the charge is a `resource_limit` refusal. `diagnostics.memory.memory_backed_storage` reports the charges and
   measurements; `budget.memory_backed_storage_bytes` is their sum.

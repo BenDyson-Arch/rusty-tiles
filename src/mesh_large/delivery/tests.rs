@@ -1608,30 +1608,32 @@ fn repeated_chain_content_stays_inside_its_tile() {
     }
 }
 
-/// D8: a work directory on memory-backed storage is measured once (hard-linked forest
-/// members count once) and admitted up to its measure, refused one byte below it before the
-/// archive is written, leaving no staging; a charged archive is refused below its length.
+/// D8: every entry staged under a metered work directory is admitted before it is written.
+/// A run within its charge passes, and its stored model (hard-linked members counted once) is
+/// within what was admitted; a tight charge is refused at the write, never past it; a write
+/// that bypasses the meter is caught by the stored-model cross-check; and a charged archive
+/// is admitted to its exact length.
 #[test]
-fn memory_backed_work_and_archive_charges_admit_their_measure_and_refuse_one_below() {
+fn memory_backed_work_is_admitted_before_it_is_written() {
+    use crate::storage_meter::{register, stored_bytes, Meter};
     let work = tempfile::tempdir().unwrap();
-    // The link-aware measure: a payload and its forest link count once.
-    let probe = work.path().join("probe");
-    std::fs::create_dir_all(probe.join("forest/sub")).unwrap();
-    std::fs::write(probe.join("payload.glb"), [1u8; 100]).unwrap();
-    std::fs::hard_link(
-        probe.join("payload.glb"),
-        probe.join("forest/sub/payload.glb"),
-    )
-    .unwrap();
-    std::fs::write(probe.join("forest/tileset.json"), [2u8; 10]).unwrap();
-    assert_eq!(stored_bytes(&probe, &probe.join("forest")).unwrap(), 110);
     let dir = leaf_dir(work.path(), &mixed_tree(23));
-    let attempt = |name: &str, charges: StorageCharges| {
+    let attempt = |name: &str, work_limit: u64, archive: Option<u64>| {
+        let meter = Meter::new("the work directory", "test", work_limit, 4096);
+        // The leaf stage's files were written before this registration: admit them.
+        meter
+            .admit(stored_bytes(&meter, &dir, &dir.join("none")).unwrap())
+            .unwrap();
+        let _registration = register(&dir, meter.clone());
+        let charges = StorageCharges {
+            work: Some(meter.clone()),
+            archive: archive.map(|limit| Meter::new("the archive staged", "test", limit, 1)),
+        };
         let output = work.path().join(name);
         let mut file = File::create(&output).unwrap();
         let request = MeshTilesetRequest::new(&dir, &output);
         let prepared = prepare(&request, LIMITS, &mut || Ok(()), false).unwrap();
-        let result = write_prepared(prepared, &mut || Ok(()), &mut file, &dir, charges);
+        let result = write_prepared(prepared, &mut || Ok(()), &mut file, &dir, &charges);
         assert!(
             !std::fs::read_dir(&dir).unwrap().any(|e| e
                 .unwrap()
@@ -1640,57 +1642,56 @@ fn memory_backed_work_and_archive_charges_admit_their_measure_and_refuse_one_bel
                 .starts_with(".tiles-h16-")),
             "{name}: forest staging left behind"
         );
-        result.map(|(report, length, measured)| {
-            (
-                std::fs::read(&output).unwrap(),
-                length,
-                measured,
-                report.members,
-            )
-        })
+        assert!(meter.used() <= work_limit, "{name}");
+        (
+            result,
+            meter,
+            charges.archive,
+            std::fs::read(&output).unwrap(),
+        )
     };
-    let unlimited = StorageCharges {
-        work: Some(u64::MAX),
-        archive: Some(u64::MAX),
-    };
-    let (bytes, length, measured, members) = attempt("free.3tz", unlimited).unwrap();
+    let (result, meter, _, bytes) = attempt("free.3tz", u64::MAX, None);
+    let (_, length, measured) = result.unwrap();
     let measured = measured.unwrap();
+    let admitted = meter.used();
     let payloads: u64 = std::fs::read_dir(dir.join("leaves"))
         .unwrap()
-        .map(|e| e.unwrap().metadata().unwrap().len())
+        .map(|e| meter.file_bytes(e.unwrap().metadata().unwrap().len()))
         .sum();
-    // Payloads, manifests and forest documents, plus the archive's declared scratch.
+    // Payloads once (their forest links are entries), manifests and forest documents.
     assert!(
-        measured > payloads + archive::scratch_need(members).unwrap(),
-        "{measured} {payloads}"
+        measured > payloads && measured <= admitted,
+        "{measured} {admitted}"
     );
-    let exact = StorageCharges {
-        work: Some(measured),
-        archive: Some(length),
-    };
-    assert_eq!(attempt("exact.3tz", exact).unwrap().0, bytes);
-    assert_eq!(
-        attempt("disk.3tz", StorageCharges::default()).unwrap().2,
-        None
-    );
-    for (charges, what) in [
-        (
-            StorageCharges {
-                work: Some(measured - 1),
-                ..exact
-            },
-            "work directory",
-        ),
-        (
-            StorageCharges {
-                archive: Some(length - 1),
-                ..exact
-            },
-            "archive staged",
-        ),
-    ] {
-        let error = attempt("over.3tz", charges).unwrap_err();
-        assert_eq!(error.kind(), JobErrorKind::ResourceLimit, "{error}");
-        assert!(error.to_string().contains(what), "{error}");
+    let exact = Meter::new("x", "x", 0, 1).file_bytes(length);
+    let (result, _, archive, again) = attempt("exact.3tz", admitted, Some(exact));
+    assert_eq!(result.unwrap().1, length);
+    assert_eq!((again, archive.unwrap().used()), (bytes.clone(), exact));
+    // Tight charges: refused at the write that would pass them.
+    for limit in [admitted - 1, measured - 4096] {
+        let (result, meter, _, _) = attempt("tight.3tz", limit, None);
+        assert!(result.is_err());
+        let refusal = meter.refusal().expect("the meter refused");
+        assert_eq!(refusal.kind(), JobErrorKind::ResourceLimit);
+        assert!(refusal.to_string().contains("memory-backed"), "{refusal}");
     }
+    let (result, _, _, _) = attempt("archive.3tz", admitted, Some(exact - 1));
+    assert_eq!(result.unwrap_err().kind(), JobErrorKind::ResourceLimit);
+    // Sensitivity: a file written around the meter is caught by the cross-check.
+    let meter = Meter::new("the work directory", "test", u64::MAX, 4096);
+    meter
+        .admit(stored_bytes(&meter, &dir, &dir.join("none")).unwrap())
+        .unwrap();
+    let _registration = register(&dir, meter.clone());
+    std::fs::write(dir.join("unmetered.bin"), vec![0u8; 1 << 20]).unwrap();
+    let output = work.path().join("bypass.3tz");
+    let mut file = File::create(&output).unwrap();
+    let request = MeshTilesetRequest::new(&dir, &output);
+    let prepared = prepare(&request, LIMITS, &mut || Ok(()), false).unwrap();
+    let charges = StorageCharges {
+        work: Some(meter),
+        archive: None,
+    };
+    let error = write_prepared(prepared, &mut || Ok(()), &mut file, &dir, &charges).unwrap_err();
+    assert!(error.to_string().contains("bypassed the meter"), "{error}");
 }

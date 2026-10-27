@@ -268,7 +268,7 @@ struct WriteSink<'a> {
     staging: &'a Path,
     leaves: &'a LeafDirectory,
     placement: NodePlacement,
-    names: BufWriter<File>,
+    names: BufWriter<crate::storage_meter::Metered<File>>,
     names_path: PathBuf,
     members: u64,
     top: Option<serde_json::Value>,
@@ -318,15 +318,15 @@ impl WriteSink<'_> {
         drop(bytes);
         let target = self.staging.join(member);
         if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)
+            crate::storage_meter::create_dir_all(parent)
                 .map_err(|e| JobError::io("create staging folder", parent, e))?;
         }
-        match std::fs::hard_link(&source, &target) {
+        match crate::storage_meter::hard_link(&source, &target) {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 Err(state(format!("member {member} is staged twice")))
             }
-            Err(_) => std::fs::copy(&source, &target)
+            Err(_) => crate::storage_meter::copy(&source, &target)
                 .map(|_| ())
                 .map_err(|e| JobError::io("copy leaf payload", &source, e)),
         }
@@ -593,52 +593,24 @@ fn publish_with(
     work_parent: &Path,
 ) -> Result<(MeshTilesetReport, u64), JobError> {
     let prepared = prepare(request, limits, check, false)?;
-    write_prepared(prepared, check, out, work_parent, StorageCharges::default())
-        .map(|(report, bytes, _)| (report, bytes))
+    write_prepared(
+        prepared,
+        check,
+        out,
+        work_parent,
+        &StorageCharges::default(),
+    )
+    .map(|(report, bytes, _)| (report, bytes))
 }
 
-/// D8 charges of the publication's memory-backed (tmpfs) storage, `None` for an owner on
-/// disk: the private work directory (leaf and coarse payloads, forest documents and the
-/// archive's scratch) and the archive staged beside the output.
-#[derive(Clone, Copy, Debug, Default)]
+/// D8 meters of the publication's memory-backed (tmpfs) storage, `None` for an owner on
+/// disk: the private work directory (registered over `work_parent` by the caller, so leaf
+/// and coarse payloads, forest staging and archive scratch are admitted as they are
+/// written) and the archive staged beside the output (admitted by the archive writer).
+#[derive(Clone, Debug, Default)]
 pub(crate) struct StorageCharges {
-    pub work: Option<u64>,
-    pub archive: Option<u64>,
-}
-
-/// Bytes of the regular files under `dir`, a hard-linked file counted once: inside `links`
-/// (the forest staging, whose payload members are links to the leaf directory's files) a
-/// file with more than one link is skipped. Depth-first; resident state is one open
-/// directory per level.
-fn stored_bytes(dir: &Path, links: &Path) -> Result<u64, JobError> {
-    let entries = std::fs::read_dir(dir).map_err(|e| JobError::io("measure work files", dir, e))?;
-    let mut total = 0u64;
-    for entry in entries {
-        let entry = entry.map_err(|e| JobError::io("measure work files", dir, e))?;
-        let path = entry.path();
-        let metadata = std::fs::symlink_metadata(&path)
-            .map_err(|e| JobError::io("measure work files", &path, e))?;
-        let bytes = if metadata.is_dir() {
-            stored_bytes(&path, links)?
-        } else if metadata.is_file() && !(linked(&metadata) && path.starts_with(links)) {
-            metadata.len()
-        } else {
-            0
-        };
-        total = total
-            .checked_add(bytes)
-            .ok_or_else(|| state("work file bytes overflow"))?;
-    }
-    Ok(total)
-}
-
-#[cfg(unix)]
-fn linked(metadata: &std::fs::Metadata) -> bool {
-    std::os::unix::fs::MetadataExt::nlink(metadata) > 1
-}
-#[cfg(not(unix))]
-fn linked(_: &std::fs::Metadata) -> bool {
-    false
+    pub work: Option<std::sync::Arc<crate::storage_meter::Meter>>,
+    pub archive: Option<std::sync::Arc<crate::storage_meter::Meter>>,
 }
 
 /// Semantic delivery facts known before archive serialization. No runtime measurements.
@@ -757,17 +729,18 @@ pub(crate) fn prepare_tiler(
     Ok(prepared)
 }
 
-/// Stage the forest under `work_parent` and write the archive into `out`. A charged work
-/// directory is measured once everything but the archive's scratch is staged (its declared
-/// need is added) and refused past its charge before the archive is written; a charged
-/// archive is refused before it grows past its charge. Returns the measured work bytes of a
-/// charged work directory.
+/// Stage the forest under `work_parent` and write the archive into `out`. Every staged
+/// entry goes through [`crate::storage_meter`], so a charged work directory admits it before
+/// it is written. Once the forest is staged, the stored model of a charged work directory is
+/// measured and must be within what its meter admitted (a larger figure is a write that
+/// bypassed the meter); that measure is returned. A charged archive is admitted by the
+/// archive writer before each part of it is written.
 pub(crate) fn write_prepared(
     prepared: PreparedDelivery,
     check: &mut dyn FnMut() -> Result<(), JobError>,
     out: &mut File,
     work_parent: &Path,
-    charges: StorageCharges,
+    charges: &StorageCharges,
 ) -> Result<(MeshTilesetReport, u64, Option<u64>), JobError> {
     let PreparedDelivery {
         limits,
@@ -780,16 +753,14 @@ pub(crate) fn write_prepared(
         conversion,
     } = prepared;
     check()?;
-    let work = tempfile::Builder::new()
-        .prefix(".tiles-h16-")
-        .tempdir_in(work_parent)
+    let work = crate::storage_meter::tempdir_in(work_parent, ".tiles-h16-")
         .map_err(|e| JobError::io("create forest staging", work_parent, e))?;
     let staging = work.path().join("forest");
-    std::fs::create_dir(&staging)
+    crate::storage_meter::create_dir(&staging)
         .map_err(|e| JobError::io("create forest staging", &staging, e))?;
     let names_path = work.path().join("members.txt");
     let names = BufWriter::new(
-        File::create(&names_path)
+        crate::storage_meter::create(&names_path)
             .map_err(|e| JobError::io("create member list", &names_path, e))?,
     );
     let mut document = TilesetDocument::root(
@@ -839,7 +810,7 @@ pub(crate) fn write_prepared(
     } = sink;
     if let Some(bytes) = conversion {
         let member = staging.join("conversion.json");
-        std::fs::write(&member, bytes)
+        crate::storage_meter::write(&member, &bytes)
             .map_err(|e| JobError::io("write conversion.json", &member, e))?;
         writeln!(names, "conversion.json")
             .map_err(|e| JobError::io("write member list", &names_path, e))?;
@@ -854,25 +825,26 @@ pub(crate) fn write_prepared(
     let top = top.ok_or_else(|| state("tileset.json was not written"))?;
     let bytes = serde_json::to_vec(&top).map_err(|e| state(e.to_string()))?;
     let tileset = staging.join("tileset.json");
-    std::fs::write(&tileset, bytes).map_err(|e| JobError::io("write tileset.json", &tileset, e))?;
+    crate::storage_meter::write(&tileset, &bytes)
+        .map_err(|e| JobError::io("write tileset.json", &tileset, e))?;
     let scratch_need =
         archive::scratch_need(members).ok_or_else(|| state("archive scratch overflow"))?;
-    let work_bytes = match charges.work {
-        Some(charge) => {
-            let bytes = stored_bytes(work_parent, &staging)?
-                .checked_add(scratch_need)
-                .ok_or_else(|| state("work file bytes overflow"))?;
-            if bytes > charge {
-                return Err(JobError::new(
-                    JobErrorKind::ResourceLimit,
-                    format!(
-                        "the work directory on memory-backed storage needs {bytes} bytes \
-                         (payloads, forest documents and archive scratch), past the {charge} \
-                         charged to the memory budget; use a disk-backed scratch directory"
-                    ),
-                ));
+    let work_bytes = match &charges.work {
+        Some(meter) => {
+            let stored = crate::storage_meter::stored_bytes(meter, work_parent, &staging)
+                .map_err(|e| JobError::io("measure work files", work_parent, e))?;
+            if stored > meter.used() {
+                return Err(state(format!(
+                    "the work directory stores {stored} bytes but its D8 meter admitted only {}: \
+                     a write bypassed the meter",
+                    meter.used()
+                )));
             }
-            Some(bytes)
+            // The archive's scratch directory entry; its files are admitted as written.
+            meter
+                .admit(crate::storage_meter::ENTRY_BYTES)
+                .map_err(|e| JobError::io("create archive scratch", work.path(), e))?;
+            Some(stored)
         }
         None => None,
     };
@@ -884,7 +856,7 @@ pub(crate) fn write_prepared(
         &scratch,
         out,
         check,
-        charges.archive,
+        charges.archive.as_deref(),
     )?;
     scratch.close()?;
     work.close()

@@ -493,10 +493,15 @@ One declared ceiling governs the whole run, with one rule on every surface:
   admission above) plus 32 MiB for manifests, documents and archive scratch that do
   not scale with triangles: the private work directory (leaf and coarse payloads, forest
   staging and the archive's scratch) and the archive staged beside the output. Every
-  later stage plans against the budget less that charge. The work directory is
-  measured before the archive is written, and the staged archive as it is written;
-  either past its charge is a `resource_limit` refusal (`use a disk-backed scratch
-  directory` or `stage the output on disk`). The estimate is generous for textured
+  later stage plans against the budget less that charge. Every write into a charged
+  owner is admitted before it lands, in whole allocation units plus 1 KiB per file,
+  link or directory (the archive's index, central directory and end records are
+  admitted together, at their exact size, before any of them is written); a write
+  that would pass the charge is a `resource_limit` refusal (`use a disk-backed scratch
+  directory` or `stage the output on disk`), so tmpfs never holds more than was
+  charged. An overlay filesystem is classified by its writable upper layer (read from
+  `/proc/self/mountinfo`); one whose upper layer cannot be resolved, as inside most
+  containers, is charged as memory-backed and reported as `memory_backed_assumed`. The estimate is generous for textured
   sources and tighter for untextured ones (about 1.4× a measured untextured
   0.79M-triangle crop), so disk remains the better place for large outputs.
 - **Pressure never changes output.** It serializes work (`--jobs` stays a maximum

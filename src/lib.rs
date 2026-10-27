@@ -31,6 +31,7 @@ mod raster_directory;
 mod runtime;
 mod spill;
 mod stage_timing;
+mod storage_meter;
 pub mod terrain;
 #[cfg(test)]
 mod test_alloc;

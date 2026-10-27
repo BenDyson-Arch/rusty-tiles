@@ -781,3 +781,63 @@ fn published_textures_match_their_samplers_and_the_archive_declares_hlod() {
         .to_string();
     assert!(error.contains("hlodFeatureIds"), "{error}");
 }
+
+/// D8 through the public operation with a metered work directory (simulated memory-backed
+/// storage, so the control runs on any filesystem): a charge that holds the run admits it
+/// with every stored file inside what was admitted, and the same archive results; a tight
+/// charge is refused as `resource_limit` at the write that would pass it, publishing nothing
+/// and leaving no work files.
+#[test]
+fn tight_memory_backed_work_charge_is_refused_before_it_is_exceeded() {
+    let work = tempfile::tempdir().unwrap();
+    let input = textured_sheet(&work.path().join("src"), 24);
+    let run = |name: &str, charge: Option<u64>| {
+        let scratch = work.path().join(format!("scratch-{name}"));
+        fs::create_dir_all(&scratch).unwrap();
+        let mut request = TilerRequest::new(&input, work.path().join(name))
+            .with_test_leaf_triangles(256)
+            .with_scratch_dir(&scratch);
+        if let Some(charge) = charge {
+            request = request.with_test_work_charge(charge);
+        }
+        let result = mesh_to_tileset(request, &crate::RunControl::default());
+        assert_eq!(
+            fs::read_dir(&scratch).unwrap().count(),
+            0,
+            "{name}: work files left"
+        );
+        result
+    };
+    let plain = run("plain.3tz", None).unwrap();
+    let metered = run("metered.3tz", Some(64 << 20)).unwrap();
+    let storage = &metered.diagnostics.memory.memory_backed_storage;
+    let (admitted, stored) = (
+        storage.work_admitted_bytes.unwrap(),
+        storage.work_bytes.unwrap(),
+    );
+    assert!(
+        stored <= admitted && admitted <= 64 << 20,
+        "{stored} {admitted}"
+    );
+    assert_eq!(
+        fs::read(work.path().join("plain.3tz")).unwrap(),
+        fs::read(work.path().join("metered.3tz")).unwrap()
+    );
+    assert_eq!(plain.report.leaves, metered.report.leaves);
+    for charge in [admitted - 1, admitted / 2, 64 << 10] {
+        let failure = run("tight.3tz", Some(charge)).unwrap_err();
+        assert_eq!(
+            failure.error.kind(),
+            JobErrorKind::ResourceLimit,
+            "{}",
+            failure.error
+        );
+        let message = failure.error.to_string();
+        assert!(
+            message.contains("work directory on memory-backed storage")
+                && message.contains(&format!("the {charge} bytes charged")),
+            "{message}"
+        );
+        assert!(!work.path().join("tight.3tz").exists());
+    }
+}

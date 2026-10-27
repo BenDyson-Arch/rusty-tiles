@@ -87,6 +87,10 @@ pub struct TilerRequest {
     /// Test seam: sort configuration and largest spill chunk, so small inputs spill.
     #[cfg(test)]
     test_spill: Option<(crate::spill::SortConfig, usize)>,
+    /// Test seam: meter the work directory with this charge whatever its filesystem, as if
+    /// it were memory-backed.
+    #[cfg(test)]
+    test_work_charge: Option<u64>,
 }
 impl TilerRequest {
     pub fn new(input: impl Into<PathBuf>, output: impl Into<PathBuf>) -> Self {
@@ -106,6 +110,8 @@ impl TilerRequest {
             leaf_triangles: None,
             #[cfg(test)]
             test_spill: None,
+            #[cfg(test)]
+            test_work_charge: None,
         }
     }
     /// Declared memory budget in bytes, a ceiling for every stage of the run: never raised,
@@ -125,6 +131,11 @@ impl TilerRequest {
     #[cfg(test)]
     pub(crate) fn with_test_leaf_triangles(mut self, leaf_triangles: u64) -> Self {
         self.leaf_triangles = Some(leaf_triangles);
+        self
+    }
+    #[cfg(test)]
+    pub(crate) fn with_test_work_charge(mut self, bytes: u64) -> Self {
+        self.test_work_charge = Some(bytes);
         self
     }
     #[cfg(test)]
@@ -322,19 +333,29 @@ pub struct MemoryDiagnostics {
 /// Each owner is charged one copy of capture's output reservation (`output_reserve_bytes`
 /// holds three: leaf staging, archive staging and a replaced destination, whose existing
 /// bytes the detected headroom already excludes) plus a fixed 32 MiB for files that do not
-/// scale with triangles. A measured owner past its charge is a `resource_limit` refusal, so
-/// the budget bounds the run.
+/// scale with triangles. Every write into a charged owner is admitted against its charge
+/// before it lands (whole allocation units plus 1 KiB per file, link or directory); a write
+/// that would pass it is a `resource_limit` refusal, so the budget bounds the run.
 #[derive(Clone, Debug, Serialize)]
 pub struct StorageDiagnostics {
+    /// How each owner's filesystem was classified: `disk`, `memory_backed`, or
+    /// `memory_backed_assumed` (an overlay whose writable upper layer could not be resolved,
+    /// charged as memory-backed to fail safe).
+    pub work_storage: &'static str,
+    pub archive_storage: &'static str,
     /// The private work directory: leaf and coarse payloads, forest staging and the
     /// archive's scratch.
     pub work_charge_bytes: Option<u64>,
     /// The archive staged beside the output.
     pub archive_charge_bytes: Option<u64>,
-    /// The charged work directory's measured files plus the archive's declared scratch,
-    /// checked before the archive is written.
+    /// What the work directory's meter admitted over the run.
+    pub work_admitted_bytes: Option<u64>,
+    /// The charged work directory's stored files (in the meter's allocation model), measured
+    /// once the forest is staged; never above what was admitted.
     pub work_bytes: Option<u64>,
-    /// The charged staged archive's length, checked as it is written.
+    /// What the staged archive's meter admitted: its length in allocation units plus its entry.
+    pub archive_admitted_bytes: Option<u64>,
+    /// The charged staged archive's length.
     pub archive_bytes: Option<u64>,
 }
 
@@ -343,22 +364,36 @@ pub struct StorageDiagnostics {
 /// not scale with triangles and dominate a small source's files.
 const STORAGE_FIXED_BYTES: u64 = 32 << 20;
 
-/// One copy of the output reservation, plus [`STORAGE_FIXED_BYTES`], for each of the work
-/// directory and the output parent that is memory-backed.
+/// A meter of one copy of the output reservation, plus [`STORAGE_FIXED_BYTES`], for each of
+/// the work directory and the output parent that is memory-backed, with each owner's class.
 fn storage_charges(
     work: &Path,
     output_parent: &Path,
     scratch: &super::full::FullScratchNeed,
-) -> Result<delivery::StorageCharges, JobError> {
+) -> Result<(delivery::StorageCharges, [&'static str; 2]), JobError> {
+    use crate::storage_meter::Meter;
     let copy = (scratch.output_reserve_bytes / 3).saturating_add(STORAGE_FIXED_BYTES);
-    let charge = |path: &Path| -> Result<Option<u64>, JobError> {
+    let charge = |path: &Path, what, advice| -> Result<_, JobError> {
         let volume = crate::spill::inspect_volume(path).map_err(JobError::from)?;
-        Ok(volume.memory_backed.then_some(copy))
+        let meter = volume
+            .memory_backed
+            .then(|| Meter::new(what, advice, copy, volume.allocation_unit_bytes));
+        Ok((meter, volume.class()))
     };
-    Ok(delivery::StorageCharges {
-        work: charge(work)?,
-        archive: charge(output_parent)?,
-    })
+    let (work, work_class) = charge(
+        work,
+        "the work directory",
+        "use a disk-backed scratch directory",
+    )?;
+    let (archive, archive_class) = charge(
+        output_parent,
+        "the archive staged beside the output",
+        "stage the output on disk",
+    )?;
+    Ok((
+        delivery::StorageCharges { work, archive },
+        [work_class, archive_class],
+    ))
 }
 #[derive(Debug)]
 pub struct TilerResult {
@@ -515,12 +550,38 @@ pub fn mesh_to_tileset(
         phases.finished(Phase::Capture, capture_started.elapsed().as_secs_f64())?;
         // D8: memory-backed storage written from here on is charged before any later stage
         // plans, so every stage (leaf, HLOD, archive) sees the budget it leaves.
-        let charges = storage_charges(work.path(), parent, &captured.report.scratch)?;
-        let storage = charges
-            .work
+        #[allow(unused_mut)]
+        let (mut charges, [work_storage, archive_storage]) =
+            storage_charges(work.path(), parent, &captured.report.scratch)?;
+        #[cfg(test)]
+        if let Some(limit) = request.test_work_charge {
+            charges.work = Some(crate::storage_meter::Meter::new(
+                "the work directory",
+                "use a disk-backed scratch directory",
+                limit,
+                4096,
+            ));
+        }
+        let limit = |meter: &Option<std::sync::Arc<crate::storage_meter::Meter>>| {
+            meter.as_ref().map(|m| m.limit())
+        };
+        let storage = limit(&charges.work)
             .unwrap_or(0)
-            .checked_add(charges.archive.unwrap_or(0))
+            .checked_add(limit(&charges.archive).unwrap_or(0))
             .ok_or_else(|| JobError::new(JobErrorKind::ResourceLimit, "storage charge overflow"))?;
+        // Every entry written under the work directory from here on is admitted first.
+        let _work_meter = charges
+            .work
+            .clone()
+            .map(|meter| crate::storage_meter::register(work.path(), meter));
+        // A write the meters refused surfaces as the refusal, not its writer's I/O error.
+        let refused = |error: JobError| {
+            [&charges.work, &charges.archive]
+                .into_iter()
+                .flatten()
+                .find_map(|meter| meter.refusal())
+                .unwrap_or(error)
+        };
         let budget = MemoryBudget {
             memory_backed_storage_bytes: storage,
             ..budget
@@ -581,9 +642,13 @@ pub fn mesh_to_tileset(
             leaf_bound_bytes: plan.bound_bytes(),
             hlod: hlod.clone(),
             memory_backed_storage: StorageDiagnostics {
-                work_charge_bytes: charges.work,
-                archive_charge_bytes: charges.archive,
+                work_storage,
+                archive_storage,
+                work_charge_bytes: limit(&charges.work),
+                archive_charge_bytes: limit(&charges.archive),
+                work_admitted_bytes: None,
                 work_bytes: None,
+                archive_admitted_bytes: None,
                 archive_bytes: None,
             },
         };
@@ -599,7 +664,8 @@ pub fn mesh_to_tileset(
             },
             &phases,
             &|| attempt.check(),
-        )?;
+        )
+        .map_err(refused)?;
         attempt.emit(&RunEvent::Progress {
             phase: "leaf_payloads",
             done: leaf.report.leaves,
@@ -629,10 +695,14 @@ pub fn mesh_to_tileset(
             &mut || attempt.check(),
             staging.writer(),
             work.path(),
-            charges,
-        )?;
-        memory.memory_backed_storage.work_bytes = work_bytes;
-        memory.memory_backed_storage.archive_bytes = charges.archive.map(|_| archive_bytes);
+            &charges,
+        )
+        .map_err(refused)?;
+        let storage_diagnostics = &mut memory.memory_backed_storage;
+        storage_diagnostics.work_bytes = work_bytes;
+        storage_diagnostics.work_admitted_bytes = charges.work.as_ref().map(|m| m.used());
+        storage_diagnostics.archive_admitted_bytes = charges.archive.as_ref().map(|m| m.used());
+        storage_diagnostics.archive_bytes = charges.archive.as_ref().map(|_| archive_bytes);
         phases.progress(Phase::Archive, 1, Some(1))?;
         phases.finished(Phase::Archive, archive_started.elapsed().as_secs_f64())?;
         let c = &captured.report;

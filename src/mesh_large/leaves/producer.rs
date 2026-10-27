@@ -23,7 +23,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
-    fs::{self, File},
+    fs::File,
     io::{BufWriter, Write},
     num::NonZeroUsize,
     path::{Path, PathBuf},
@@ -427,7 +427,8 @@ impl StagePlan {
     }
 }
 fn write_file(path: &Path, bytes: &[u8]) -> Result<(), JobError> {
-    let mut file = File::create(path).map_err(|e| JobError::io("create leaf member", path, e))?;
+    let mut file = crate::storage_meter::create(path)
+        .map_err(|e| JobError::io("create leaf member", path, e))?;
     file.write_all(bytes)
         .and_then(|_| file.sync_all())
         .map_err(|e| JobError::io("write leaf member", path, e))
@@ -648,9 +649,10 @@ pub(crate) fn produce(
     let total_leaves = captured.tree.stats.leaves;
     phases.progress(Phase::LeafBuild, 0, Some(total_leaves))?;
     let leaves = path.join("leaves");
-    fs::create_dir(&leaves).map_err(|e| JobError::io("create leaf directory", &leaves, e))?;
+    crate::storage_meter::create_dir(&leaves)
+        .map_err(|e| JobError::io("create leaf directory", &leaves, e))?;
     let manifest_path = path.join("leaves.jsonl");
-    let file = File::create(&manifest_path)
+    let file = crate::storage_meter::create(&manifest_path)
         .map_err(|e| JobError::io("create leaf manifest", &manifest_path, e))?;
     let mut manifest = BufWriter::new(file);
     let mut triangles = captured.triangles.reader()?;
@@ -888,7 +890,7 @@ pub(crate) struct Coarse<'a> {
 }
 
 fn write_leaf(
-    manifest: &mut BufWriter<File>,
+    manifest: &mut BufWriter<crate::storage_meter::Metered<File>>,
     manifest_path: &Path,
     report: &mut LeafOutputReport,
     input: &LeafInput,
@@ -1109,6 +1111,7 @@ pub fn mesh_to_leaf_payloads(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     #[test]
     fn fidelity_failure_never_retries_but_physical_budget_advances_density() {
         let mut attempts = Vec::new();
