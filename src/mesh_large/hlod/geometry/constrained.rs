@@ -17,7 +17,7 @@ pub(super) fn remesh(
     cap: usize,
 ) -> Option<topology::Receipt> {
     let guard = super::folds::Source::new(&m.positions, &m.triangles).with_boundary(interface);
-    triangulate(m, interface, cap, None, &[], &guard)
+    triangulate(m, interface, cap, None, &[], &guard, false)
 }
 
 /// Reconstruct contracted patches with all unaffected interior samples. In particular,
@@ -28,9 +28,14 @@ pub(super) fn contract(
     interface: &[InterfaceRow],
     map: &[u32],
     endpoints: &[u32],
+    cap: usize,
     guard: &super::folds::Source,
 ) -> Option<topology::Receipt> {
-    triangulate(m, interface, usize::MAX, Some(map), endpoints, guard)
+    // Both constructions consume the same pre-contraction source. A stricter chart
+    // partition may separate book pages that reconnect around a nonmanifold spine;
+    // it cannot confer any new face or edge license.
+    triangulate(m, interface, cap, Some(map), endpoints, guard, false)
+        .or_else(|| triangulate(m, interface, cap, Some(map), endpoints, guard, true))
 }
 
 fn triangulate(
@@ -40,6 +45,7 @@ fn triangulate(
     mapping: Option<&[u32]>,
     endpoints: &[u32],
     guard: &super::folds::Source,
+    separate_sheets: bool,
 ) -> Option<topology::Receipt> {
     let components = topology::components(m);
     let mut patches: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
@@ -64,7 +70,7 @@ fn triangulate(
         .map(|t| t.iter().any(|&v| touched[v as usize]))
         .collect();
     let face_patches = if mapping.is_some() {
-        manifold_patches(m, &affected)
+        manifold_patches(m, &affected, separate_sheets)
     } else {
         Vec::new()
     };
@@ -87,19 +93,25 @@ fn triangulate(
     if patches.len() > cap {
         return None;
     }
-    let mut required = Vec::new();
+    let mut required = Required::default();
     for r in interface {
         let (a, b) = (*ids.get(&r.a)?, *ids.get(&r.b)?);
         if mapping.is_none() && components[a as usize] != components[b as usize] {
             return None;
         }
-        required.push((a, b));
+        required.points.extend([a, b]);
+        if a != b {
+            required.segments.insert(edge(a, b));
+        }
     }
     let mut output = Vec::new();
     let mut representatives = Vec::new();
     let mut count = 0;
     for (_, faces) in patches {
         if mapping.is_some() && faces.iter().all(|&i| !affected[i]) {
+            if output.len().checked_add(faces.len())? > cap {
+                return None;
+            }
             output.extend(faces.iter().map(|&i| m.triangles[i]));
             representatives.extend(faces.iter().map(|&i| m.representative[i]));
             continue;
@@ -144,20 +156,38 @@ fn triangulate(
             .map(|(e, _)| *e)
             .collect();
         if let Some(map) = mapping {
-            let mut mapped = BTreeMap::<(u32, u32), usize>::new();
+            let mut mapped = BTreeMap::<(u32, u32), i32>::new();
             for &(a, b) in &boundary {
+                let direction = edges[&(a, b)].1;
                 let (a, b) = (map[a as usize], map[b as usize]);
                 if a != b {
-                    *mapped.entry(edge(a, b)).or_default() += 1;
+                    *mapped.entry(edge(a, b)).or_default() +=
+                        direction * if a < b { 1 } else { -1 };
                 }
             }
-            // A multiply covered boundary is not a simple projected patch.
-            if mapped.values().any(|&n| n != 1) {
+            // Opposite incidences cancel when a thin neck collapses to an interior
+            // edge. Same-direction multiplicity still cannot be a single sheet.
+            if mapped.values().any(|&n| n.abs() > 1) {
                 return None;
             }
-            boundary = mapped.into_keys().collect();
+            boundary = mapped
+                .into_iter()
+                .filter_map(|(e, n)| (n != 0).then_some(e))
+                .collect();
         }
         if boundary.is_empty() {
+            // A source strip may collapse completely. Retain no invented support;
+            // the unchanged global topology comparison and source guard below still
+            // decide whether the entire construction is admissible.
+            if mapping.is_some_and(|map| {
+                faces.iter().all(|&i| {
+                    topology::normal(&m.positions, m.triangles[i].map(|v| map[v as usize]))
+                        .iter()
+                        .all(|&n| n == 0.)
+                })
+            }) {
+                continue;
+            }
             return None;
         }
         let mut adjacent: HashMap<u32, Vec<u32>> = HashMap::default();
@@ -165,48 +195,39 @@ fn triangulate(
             adjacent.entry(a).or_default().push(b);
             adjacent.entry(b).or_default().push(a);
         }
-        if adjacent.values().any(|v| v.len() != 2) {
+        // A contracted boundary may have several simple loops meeting at one
+        // vertex. An even-degree planar boundary still defines its interior by
+        // parity; do not walk it as though each vertex had a unique successor.
+        // The non-contracting cap fit retains its simple-loop Euler identity.
+        if adjacent
+            .values()
+            .any(|v| v.len() < 2 || v.len() % 2 != 0 || (mapping.is_none() && v.len() != 2))
+        {
             return None;
         }
         let mut visited = HashSet::default();
         let mut loops = 0;
         for &start in adjacent.keys() {
-            if visited.contains(&start) {
+            if !visited.insert(start) {
                 continue;
             }
             loops += 1;
-            let (mut previous, mut at) = (u32::MAX, start);
-            loop {
-                if !visited.insert(at) {
-                    if at != start {
-                        return None;
+            let mut stack = vec![start];
+            while let Some(at) = stack.pop() {
+                for &next in &adjacent[&at] {
+                    if visited.insert(next) {
+                        stack.push(next);
                     }
-                    break;
                 }
-                let n = &adjacent[&at];
-                let next = if n[0] == previous { n[1] } else { n[0] };
-                previous = at;
-                at = next;
             }
         }
         let mut vertices: BTreeSet<u32> = adjacent.keys().copied().collect();
         let mut constraints = boundary.clone();
-        let present: HashSet<u32> = faces
-            .iter()
-            .flat_map(|&i| m.triangles[i])
-            .map(|v| mapping.map_or(v, |map| map[v as usize]))
-            .collect();
-        for &(a, b) in required
-            .iter()
-            .filter(|&&(a, b)| present.contains(&a) && present.contains(&b))
-        {
-            vertices.extend([a, b]);
-            if a != b {
-                constraints.insert(edge(a, b));
-            }
-        }
+        required.patch(m, &faces, mapping, &mut vertices, &mut constraints);
+        // Only degree-two boundaries admit this formula. Touching mapped loops
+        // are capped using the actual emitted faces below, including retained input.
         let mut predicted = 2 * (vertices.len() - adjacent.len()) + adjacent.len() + 2 * loops - 4;
-        if output.len() + predicted > cap {
+        if mapping.is_none() && output.len().checked_add(predicted)? > cap {
             return None;
         }
         let mut cdt = ConstrainedDelaunayTriangulation::<Point2<f64>>::new();
@@ -299,6 +320,9 @@ fn triangulate(
                 t.swap(1, 2);
             }
             area += normal.abs();
+            if output.len() == cap {
+                return None;
+            }
             output.push(t);
             representatives.push(m.representative[faces[0]]);
         }
@@ -327,6 +351,20 @@ fn triangulate(
     }
     let mut receipt = change.receipt;
     receipt.constrained_remeshes = count;
+    if mapping.is_some() {
+        // Count new oriented output faces with multiplicity. Rebuilt patches may
+        // also contain unchanged faces; neither those nor frozen input are repairs.
+        let mut old = HashMap::<[u32; 3], usize>::default();
+        for t in &m.triangles {
+            *old.entry(super::oriented(t)).or_default() += 1;
+        }
+        for t in &output {
+            match old.get_mut(&super::oriented(t)) {
+                Some(n) if *n > 0 => *n -= 1,
+                _ => receipt.reconstructed_faces += 1,
+            }
+        }
+    }
     if guard.violations(&m.positions, &output).iter().any(|v| *v) {
         return None;
     }
@@ -335,7 +373,48 @@ fn triangulate(
     Some(receipt)
 }
 
-fn manifold_patches(m: &Merged, affected: &[bool]) -> Vec<usize> {
+/// Source-edge join, rather than patch x interface-row endpoint matching. Every
+/// delivered chord has a carrier among mapped source edges (the crossing of its
+/// certified old arc); ordinary remesh segments are already source edges. Points
+/// are pinned on each incident patch. Total probes are three edges/vertices per
+/// input face, including high-valence shared endpoints and duplicate rows.
+#[derive(Default)]
+struct Required {
+    segments: HashSet<(u32, u32)>,
+    points: HashSet<u32>,
+    #[cfg(test)]
+    probes: usize,
+}
+impl Required {
+    fn patch(
+        &mut self,
+        m: &Merged,
+        faces: &[usize],
+        mapping: Option<&[u32]>,
+        vertices: &mut BTreeSet<u32>,
+        constraints: &mut BTreeSet<(u32, u32)>,
+    ) {
+        for &i in faces {
+            let t = m.triangles[i].map(|v| mapping.map_or(v, |map| map[v as usize]));
+            for k in 0..3 {
+                #[cfg(test)]
+                {
+                    self.probes += 1;
+                }
+                if self.points.contains(&t[k]) {
+                    vertices.insert(t[k]);
+                }
+                let e = edge(t[k], t[(k + 1) % 3]);
+                if self.segments.contains(&e) {
+                    vertices.extend([e.0, e.1]);
+                    constraints.insert(e);
+                }
+            }
+        }
+    }
+}
+
+fn manifold_patches(m: &Merged, affected: &[bool], separate_sheets: bool) -> Vec<usize> {
     let faces = &m.triangles;
     fn root(parent: &mut [usize], mut i: usize) -> usize {
         while parent[i] != i {
@@ -363,7 +442,24 @@ fn manifold_patches(m: &Merged, affected: &[bool]) -> Vec<usize> {
             let axis = (0..3)
                 .max_by(|&a, &b| n[a].abs().total_cmp(&n[b].abs()))
                 .unwrap();
-            (axis, n[axis] > 0.)
+            // The first pass is the original dominant-axis chart. The second
+            // keeps coplanar source panels separate, even if a curved connection
+            // elsewhere would reunite pages around a spine. Adjacent faces with
+            // the same normal ray share a plane. No angular tolerance, position
+            // snapping, or extra source license is introduced by this partition.
+            let panel = if separate_sheets && n[axis] != 0. {
+                std::array::from_fn(|a| {
+                    let ratio = n[a] / n[axis].abs();
+                    if ratio == 0. {
+                        0
+                    } else {
+                        ratio.to_bits()
+                    }
+                })
+            } else {
+                [0; 3]
+            };
+            (axis, n[axis] > 0., panel)
         };
         if count == 2 && direction == 0 && affected[a] && affected[b] && chart(a) == chart(b) {
             let (a, b) = (root(&mut parent, a), root(&mut parent, b));
@@ -403,7 +499,8 @@ mod tests {
             &previous,
             &mapping,
         );
-        contract(m, interface, map, endpoints, &guard)
+        let cap = m.triangles.len();
+        contract(m, interface, map, endpoints, cap, &guard)
     }
     fn sheet(n: u32, hole: bool) -> Merged {
         let positions: Vec<_> = (0..=n)
@@ -436,6 +533,108 @@ mod tests {
             triangles,
         }
     }
+    #[test]
+    fn required_rows_join_source_edges_once_even_with_shared_spine_vertices() {
+        for n in [64, 256, 1024, 4096] {
+            // Every patch shares both spine endpoints. Endpoint/patch joins scan
+            // n rows per patch even though only one non-spine row belongs to it.
+            let mut m = sheet(1, false);
+            m.positions = vec![[0., 0., 0.]; n + 2];
+            m.triangles = (0..n).map(|i| [0, 1, (i + 2) as u32]).collect();
+            let mut required = Required::default();
+            required.segments.insert((0, 1));
+            for i in 0..n {
+                required.segments.insert((1, (i + 2) as u32));
+                required.points.insert((i + 2) as u32);
+            }
+            for i in 0..n {
+                let mut vertices = BTreeSet::new();
+                let mut constraints = BTreeSet::new();
+                required.patch(&m, &[i], None, &mut vertices, &mut constraints);
+                assert_eq!(constraints, BTreeSet::from([(0, 1), (1, (i + 2) as u32)]));
+                assert_eq!(vertices, BTreeSet::from([0, 1, (i + 2) as u32]));
+            }
+            assert_eq!(required.probes, 3 * n);
+        }
+    }
+
+    #[test]
+    fn contraction_cap_includes_frozen_faces_and_failure_is_atomic() {
+        let positions = vec![
+            [0., 0., 0.],
+            [1., 0., 0.],
+            [3., 0., 0.],
+            [0.5, 0.1, 0.],
+            [2., 1., 0.],
+            [1., 2., 3.],
+        ];
+        let triangles = vec![[0, 1, 3], [1, 4, 3], [1, 2, 4], [3, 4, 5]];
+        let mut m = Merged {
+            keys: positions.iter().copied().map(key).collect(),
+            ells: vec![0; positions.len()],
+            representative: vec![sheet(1, false).representative[0]; triangles.len()],
+            positions,
+            triangles,
+        };
+        let before = m.triangles.clone();
+        let representatives = m.representative.clone();
+        let guard = super::super::folds::Source::new(&m.positions, &m.triangles);
+        // Two reconstructed faces plus the unchanged curved face need three slots.
+        assert!(contract(&mut m, &[], &[0, 0, 2, 3, 4, 5], &[0, 2], 2, &guard).is_none());
+        assert_eq!(m.triangles, before);
+        assert_eq!(m.representative, representatives);
+        let result = contract(&mut m, &[], &[0, 0, 2, 3, 4, 5], &[0, 2], 3, &guard).unwrap();
+        assert_eq!(m.triangles.len(), 3);
+        assert_eq!(result.reconstructed_faces, 2);
+    }
+
+    #[test]
+    fn back_to_back_contracted_strips_keep_separate_source_sheets() {
+        let base = vec![
+            [0., 0., 0.],
+            [1., 0., 0.],
+            [3., 0., 0.],
+            [0.5, 0.1, 0.],
+            [2., 1., 0.],
+            [1., 2., 3.],
+        ];
+        let mut positions = base.clone();
+        positions.extend(base.iter().map(|p| [p[0], p[1], p[2] + 0.001]));
+        let mut triangles = vec![[0, 1, 3], [1, 4, 3], [1, 2, 4], [3, 4, 5]];
+        let back: Vec<_> = triangles
+            .iter()
+            .map(|t| [t[0] + 6, t[2] + 6, t[1] + 6])
+            .collect();
+        triangles.extend(back);
+        let mut m = Merged {
+            keys: positions.iter().copied().map(key).collect(),
+            ells: vec![0; positions.len()],
+            representative: vec![sheet(1, false).representative[0]; triangles.len()],
+            positions,
+            triangles,
+        };
+        let guard = super::super::folds::Source::new(&m.positions, &m.triangles);
+        let r = contract(
+            &mut m,
+            &[],
+            &[0, 0, 2, 3, 4, 5, 6, 6, 8, 9, 10, 11],
+            &[0, 2, 6, 8],
+            8,
+            &guard,
+        )
+        .unwrap();
+        assert_eq!(r.reconstructed_faces, 4);
+        assert_eq!(m.triangles.len(), 6);
+        assert!(m
+            .triangles
+            .iter()
+            .all(|t| t.iter().all(|&v| v < 6) || t.iter().all(|&v| v >= 6)));
+        assert!(!guard
+            .violations(&m.positions, &m.triangles)
+            .iter()
+            .any(|v| *v));
+    }
+
     #[test]
     fn contracted_strip_workspace_fits_the_parent_charge() {
         let mut m = sheet(181, false); // 65,522 faces: almost eight capped children.
@@ -513,6 +712,10 @@ mod tests {
         let receipt =
             contract_path(&mut m, &interface, &[0, 0, 2, 3, 4, 5], &[0, 2], &[0, 1, 2]).unwrap();
         assert!(receipt.constrained_remeshes > 0);
+        assert_eq!(
+            receipt.reconstructed_faces, 2,
+            "frozen interior was counted"
+        );
         assert!(m.triangles.contains(&[3, 4, 5]), "curved interior moved");
         let strip: Vec<_> = m
             .triangles
