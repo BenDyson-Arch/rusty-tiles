@@ -21,8 +21,9 @@ pub(super) enum Stage {
     Contacts,
     Topology,
     Measurement,
+    FineLoad,
 }
-const NAMES: [&str; 14] = [
+const NAMES: [&str; 15] = [
     "merge",
     "contract",
     "attempt",
@@ -37,11 +38,12 @@ const NAMES: [&str; 14] = [
     "contacts",
     "topology",
     "measurement",
+    "fine_load",
 ];
 static ENABLED: OnceLock<bool> = OnceLock::new();
-static CPU: [AtomicU64; 14] = [const { AtomicU64::new(0) }; 14];
-static CALLS: [AtomicU64; 14] = [const { AtomicU64::new(0) }; 14];
-static WORK: [AtomicU64; 14] = [const { AtomicU64::new(0) }; 14];
+static CPU: [AtomicU64; 15] = [const { AtomicU64::new(0) }; 15];
+static CALLS: [AtomicU64; 15] = [const { AtomicU64::new(0) }; 15];
+static WORK: [AtomicU64; 15] = [const { AtomicU64::new(0) }; 15];
 
 pub(super) struct Timer {
     stage: Stage,

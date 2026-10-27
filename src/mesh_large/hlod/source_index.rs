@@ -994,6 +994,7 @@ impl SourceQuery<'_> {
         if self.blocks.contains_key(&n.first) {
             return Ok(());
         }
+        let _cpu = super::cpu_profile::start(super::cpu_profile::Stage::FineLoad, n.count as usize);
         self.nodes.read(
             n.left,
             n.right as usize,
