@@ -1063,23 +1063,32 @@ fn encode_page(
             linear,
             min_linear,
         });
-        let delivered = delivery::encode_islands(
-            [page.width, page.height],
-            &rgba,
-            &support,
-            mipmapped.then_some(labels.as_slice()),
-            if mipmapped {
-                LEAF_ISLAND_ISOLATED_LEVELS
-            } else {
-                0
-            },
-            page.slot,
-            profile,
-            memory,
-            mask,
-            ladder,
-        )?;
-        delivered
+        // The published sampler is the source's: a chain only where it mipmaps.
+        if mipmapped {
+            delivery::encode_islands(
+                [page.width, page.height],
+                &rgba,
+                &support,
+                Some(&labels),
+                LEAF_ISLAND_ISOLATED_LEVELS,
+                page.slot,
+                profile,
+                memory,
+                mask,
+                ladder,
+            )?
+        } else {
+            delivery::encode_base(
+                [page.width, page.height],
+                &rgba,
+                &support,
+                page.slot,
+                profile,
+                memory,
+                mask,
+                ladder,
+            )?
+        }
     };
     timing::count(Counter::Pages, 1);
     timing::count(

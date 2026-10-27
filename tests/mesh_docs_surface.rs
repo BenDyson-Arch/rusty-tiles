@@ -319,7 +319,19 @@ fn policy_statements_match_the_implementation() {
     assert!(appearance.contains("newly\nauthored atlas samplers"));
     assert!(appearance.contains("never fails the run"));
     assert!(read("src/mesh_large/hlod/appearance.rs").contains("level0_sampled: true"));
-    // The budget does not cover output or intermediates on memory-backed storage.
+    // D8: output and intermediates on memory-backed storage are charged and measured.
     let budget = section(&guide, "### Memory budget", false);
-    assert!(budget.contains("**Not charged:**") && budget.contains("tmpfs"));
+    assert!(!budget.contains("**Not charged:**"));
+    assert!(budget.contains("**Memory-backed storage.**") && budget.contains("tmpfs"));
+    assert!(budget.contains("`memory_backed_storage`"));
+    // Containers: the fail-safe charge and its documented declaration.
+    assert!(budget.contains("**Containers.**") && budget.contains("`memory_backed_assumed`"));
+    assert!(budget.contains("`RUSTY_TILES_STORAGE_DISK=1`") && budget.contains("`disk_declared`"));
+    assert!(read("src/spill/volume.rs").contains("\"RUSTY_TILES_STORAGE_DISK\""));
+    assert!(read("docs/CLI.md").contains("`RUSTY_TILES_STORAGE_DISK=1`"));
+    let pipeline = read("src/mesh_large/pipeline.rs");
+    assert!(pipeline.contains("fn storage_charges") && pipeline.contains("charges.archive"));
+    // The producer declares HLOD, so validation needs no flag.
+    assert!(guide.contains("`asset.extras.rustyTiles.lod`"));
+    assert!(read("src/mesh_large/delivery.rs").contains(".declaring_hlod()"));
 }

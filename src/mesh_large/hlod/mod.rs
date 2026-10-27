@@ -606,11 +606,12 @@ pub(crate) fn produce(
         ..Default::default()
     };
     let proxies_dir = input.stage.join("proxies");
-    fs::create_dir_all(&proxies_dir)
+    crate::storage_meter::create_dir_all(&proxies_dir)
         .map_err(|e| JobError::io("create coarse tile folder", &proxies_dir, e))?;
     let rows_path = input.stage.join("proxies.jsonl");
     if captured.tree.stats.internal == 0 {
-        fs::write(&rows_path, b"").map_err(|e| JobError::io("write coarse rows", &rows_path, e))?;
+        crate::storage_meter::write(&rows_path, b"")
+            .map_err(|e| JobError::io("write coarse rows", &rows_path, e))?;
         diagnostics.wall_seconds = started.elapsed().as_secs_f64();
         return Ok((report, diagnostics));
     }
@@ -1095,8 +1096,8 @@ fn build_tile(job: &Job<'_, '_>, closed: &Closed, children: Vec<TileGeometry>) -
     }
     let uri = tile.key.uri();
     let path = job.input.stage.join(&uri);
-    let mut file =
-        fs::File::create(&path).map_err(|e| JobError::io("create coarse tile", &path, e))?;
+    let mut file = crate::storage_meter::create(&path)
+        .map_err(|e| JobError::io("create coarse tile", &path, e))?;
     file.write_all(&encoded.glb)
         .and_then(|_| file.sync_all())
         .map_err(|e| JobError::io("write coarse tile", &path, e))?;
@@ -1277,7 +1278,7 @@ fn walk(
         .lines(),
         path: leaf_rows_path.clone(),
     };
-    let file = fs::File::create(rows_path)
+    let file = crate::storage_meter::create(rows_path)
         .map_err(|e| JobError::io("create coarse rows", rows_path, e))?;
     let mut writer = BufWriter::new(file);
     let mut nodes = captured.tree.nodes.reader()?;
