@@ -1976,13 +1976,13 @@ fn walk(
                 [only] if matches!(kinds.get(&only), Some(Child::Leaf))
             );
             // The cell publishes its own tile, so its children's published depths are final
-            // (a single coarse child it cannot collapse onto included).
+            // (a single coarse child it cannot collapse onto included). A row already
+            // final may already be written.
             for c in &frame.children {
                 if let Some(Child::Coarse(seq)) = kinds.remove(c) {
-                    publish
-                        .get_mut(&seq)
-                        .ok_or_else(|| state("a coarse child without its row"))?
-                        .done = true;
+                    if let Some(p) = publish.get_mut(&seq) {
+                        p.done = true;
+                    }
                 }
             }
             let closed = Closed {
