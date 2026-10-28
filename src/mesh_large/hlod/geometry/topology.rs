@@ -9,6 +9,10 @@ use crate::{
 };
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
+fn is_zero(n: &u64) -> bool {
+    *n == 0
+}
+
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Receipt {
@@ -24,6 +28,10 @@ pub(crate) struct Receipt {
     pub rejected_remesh_rounds: u64,
     pub rejected_hole_closures: u64,
     pub rejected_hole_openings: u64,
+    /// Coarse drops (D11 amendment 2026-10-28): dropped components at or above the
+    /// tile's G floor, licensed only once no other strategy fits the cap.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub coarse_dropped_components: u64,
     pub max_dropped_component_diameter: f64,
     pub hole_patch_to_source: f64,
     pub hole_boundary_to_patch: f64,
@@ -43,6 +51,7 @@ impl Receipt {
         self.reconstructed_faces += r.reconstructed_faces;
         self.duplicate_faces += r.duplicate_faces;
         self.dropped_components += r.dropped_components;
+        self.coarse_dropped_components += r.coarse_dropped_components;
         self.closed_holes += r.closed_holes;
         self.opened_holes += r.opened_holes;
         self.remeshed_vertices += r.remeshed_vertices;

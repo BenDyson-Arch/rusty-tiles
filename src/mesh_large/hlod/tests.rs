@@ -1861,6 +1861,7 @@ fn parent_jobs_allocate_within_their_charge() {
             &built.locked,
             positions,
             &plain_appearance(g),
+            0,
             Mutation::None,
         )?;
         encode::check(g, &built.locked, &encoded)
@@ -1928,7 +1929,8 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
     let positions = lattice
         .encode_coarse(&tile.positions, &tile.ells, &fixed, tile.key.depth)
         .unwrap();
-    let encoded = encode::encode(&tile, &locked, positions, &appearance, Mutation::None).unwrap();
+    let encoded =
+        encode::encode(&tile, &locked, positions, &appearance, 0, Mutation::None).unwrap();
     encode::check(&tile, &locked, &encoded).unwrap();
     let decoded = decode(&encoded.glb);
     let mut seen = 0;
@@ -5030,4 +5032,95 @@ fn staircase_walls_contract_their_borders_without_omission() {
         .map(|b| b["topology"]["contractedVertices"].as_u64().unwrap())
         .sum();
     assert!(contracted > 0, "{}", manifest["hlod"]["bordersByDepth"]);
+}
+
+/// An open-bottom box (four walls and a roof, welded at its edges) standing on `y = 0`:
+/// a synthetic city building, one component.
+fn building(x: f32, z: f32, half: f32, height: f32) -> Mesh {
+    let mut positions = Vec::new();
+    for y in [0., height] {
+        for (dx, dz) in [(-half, -half), (half, -half), (half, half), (-half, half)] {
+            positions.push([x + dx, y, z + dz]);
+        }
+    }
+    let mut indices = Vec::new();
+    for k in 0..4u32 {
+        let (a, b) = (k, (k + 1) % 4);
+        indices.extend([a, b, b + 4, a, b + 4, a + 4]);
+    }
+    indices.extend([4, 6, 5, 4, 7, 6]);
+    Mesh {
+        positions,
+        indices,
+        color: [0.7, 0.6, 0.5, 1.],
+    }
+}
+
+/// A terrain sheet with `n` x `n` buildings of growing size on it, none touching it.
+fn city(n: usize) -> Vec<Mesh> {
+    let mut source = vec![grid(
+        (8, 8),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| -0.5,
+        [0.4, 0.5, 0.3, 1.],
+    )];
+    for i in 0..n {
+        for j in 0..n {
+            let step = 100. / n as f32;
+            let k = (i * n + j) as f32;
+            let half = 0.5 + 1.5 * k / (n * n) as f32;
+            source.push(building(
+                step * (i as f32 + 0.5),
+                step * (j as f32 + 0.5),
+                half.min(0.4 * step),
+                2. + 4. * half,
+            ));
+        }
+    }
+    source
+}
+
+/// A city of open-bottom boxes on a terrain sheet: no box may go below its cell's G floor
+/// and each costs about ten triangles under the guards, so at the test cap the coarse
+/// cells, and the root, could not fit (all omitted before D11 coarse drops). Now border-free
+/// buildings go smallest first, each payload declares its drops, published G covers
+/// every dropped key, and the archive validates. Understated G or an undeclared drop is
+/// refused by the validator.
+#[test]
+fn a_city_too_dense_for_the_cap_keeps_its_root_through_coarse_drops() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &city(12));
+    let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+    assert!(omission_receipt("city", &dir));
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let coarse: u64 = manifest["hlod"]["bordersByDepth"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|b| b["topology"]["coarseDroppedComponents"].as_u64())
+        .sum();
+    assert!(coarse > 0, "{}", manifest["hlod"]["bordersByDepth"]);
+    let archive = work.path().join("city.3tz");
+    public(&input, &archive, None, 2).unwrap();
+    let checked = inspect(ValidationRequest::new(&archive)).unwrap();
+    let census = checked.interface_census.unwrap();
+    assert!(census.dropped_components > 0, "{census:?}");
+    assert_eq!(census.omitted_cells, 0, "{census:?}");
+    for mutation in [Mutation::UnderstateDropError, Mutation::UndeclaredDrop] {
+        let output = work.path().join(format!("{mutation:?}.3tz"));
+        let request = TilerRequest::new(&input, &output)
+            .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(2).unwrap()))
+            .with_test_leaf_triangles(256)
+            .with_hlod_settings(Settings {
+                mutation,
+                ..test_settings(300)
+            });
+        crate::mesh_large::mesh_to_tileset(request, &RunControl::default()).unwrap();
+        let e = inspect(ValidationRequest::new(&output))
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("coarseDrops"), "{mutation:?}: {e}");
+    }
 }

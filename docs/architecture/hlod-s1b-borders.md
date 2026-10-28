@@ -129,6 +129,32 @@ status only grows with depth and shared edges are fixed, so retained sets stay n
 (checked in test builds). Contraction then moves each removed vertex to the chord
 endpoint more of its faces already hold with an interface or removed third corner,
 collapsing those faces; each side remaps only its own faces of the same chord.
+## Coarse drops (owner decision 2026-10-28)
+
+Only after every strategy above leaves the cell over its cap. Candidates are the
+merged children's components with no interface point whose bounding-box diagonal is
+at least the G floor max(E, child G), in order (diagonal, triangle count, least key):
+one component pass and one sort. A prefix of k candidates licenses drops below the
+next float above the k-th diagonal (ties included): cleanup removes them, constrained
+and ordinary attempts run as before with that license, and S2 measures the result.
+Prefixes double until one fits, then bisect to the least fitting one (each proposal
+bounded by the eight-child input). The published topology counts the coarse share in
+`coarseDroppedComponents` (candidates no output face still holds).
+
+Format: a coarse payload with dropped child components declares their number in
+glTF `asset.extras.rustyTiles.droppedComponents` (absent when zero). A component
+is a set of a payload's faces joined by shared canonical keys; coarse vertices are
+always source keys, so a child component is dropped exactly when its parent payload
+holds none of its keys. The native validator and the oracle (`s5/drops.py`) recount
+this from the decoded children's faces (copies down a single-child chain are the same
+cell), refuse a count different from the declaration (`coarseDrops`), and refuse a
+dropped key farther than the parent's geometricError (with 1e-6 relative rounding)
+from its decoded surface. That is a lower bound on the loss, which S2 already covers
+with fixed controls on every dropped triangle; G also stays at least the children's
+G. The native recount reads the face tables the delivery replays fill and decodes
+nothing again; it charges the shared payload-element budget per face read and point
+checked. The sidecar oracle additionally checks the receipt's coarse count against
+the re-derived drops at or above the floor.
 
 ## Durable audit format (v1)
 

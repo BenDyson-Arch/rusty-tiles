@@ -16,6 +16,11 @@ permanent independent controls. The census harvests E2 `816d0670`'s decoded leaf
 incidence/ancestor cross-product with exact shared corner and edge keys. No
 producer facts, lock files, reports or producer imports supply independent truth.
 
+D11 coarse drops (2026-10-28): `drops.py` recounts each coarse payload's dropped
+child components from published keys, against its `droppedComponents` declaration
+and its geometricError (exact distances); `drop_controls.py` pins an honest drop and
+its undeclared, understated and border-touching refusals for both validators.
+
 ## Archive validation
 
 `src/validate/identity.rs` projects only owned C1-admitted raw JSON, preserving

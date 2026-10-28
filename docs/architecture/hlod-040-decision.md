@@ -471,6 +471,23 @@ coverage, displacement certificates, E/G inequalities, terminal locks, bounds,
 leaf identity, source-defect reports and frontier continuity; producer hashes
 alone are insufficient. Audit topology-loss and safety-net counts in receipts.
 
+**Owner amendment, 2026-10-28 — coarse drops.** The mesh-1e7 city (9,527 open
+buildings, each at least 8 m, over E_0 = 1.75 m) omitted its root and all of depths
+0–3: no building can go below max(E_d, child G), and about ten triangles each
+exceed the cap (cap-infeasible by geometry, as with the holey sheet). A coarse cell
+that no other strategy fits may now drop whole connected components with no border
+contact even when they exceed that floor. Smallest first by bounding-box diagonal,
+then triangle count, then least key; the least fitting prefix is found by doubling
+then bisection, so at most 2·log₂C + 2 bounded proposals. Every drop of a payload,
+small or coarse, is declared in its `asset.extras.rustyTiles.droppedComponents` and
+counted per depth (`coarseDroppedComponents` in topology receipts; `droppedComponents`
+and `droppedByDepth` in the validation census). G still covers each dropped triangle's
+fixed S2 controls and stays at least the children's G. Border protection and D11
+certification are unchanged: a border-touching component is never a candidate and
+its loss is refused by the exact retention checks. Validators recount drops from
+decoded keys and refuse a count that differs from the declaration, or a dropped key
+farther than G from the payload (S1b doc, "Coarse drops").
+
 ## Numeric acceptance contract (proposed, not measured passes)
 
 One source Mtri is one million **input** triangles; CPU is whole-process user+sys,

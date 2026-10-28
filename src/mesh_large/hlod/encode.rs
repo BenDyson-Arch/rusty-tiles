@@ -39,6 +39,12 @@ pub(crate) enum Mutation {
     /// Exercise the real sibling spill/reload path independently of available RAM.
     #[cfg(test)]
     ForceSpill,
+    /// Leave dropped surface out of S2's controls, so G may not cover it.
+    #[cfg(test)]
+    UnderstateDropError,
+    /// Publish a coarse-drop tile without its drop declaration.
+    #[cfg(test)]
+    UndeclaredDrop,
 }
 
 pub(crate) struct Encoded {
@@ -179,6 +185,7 @@ pub(crate) fn encode(
     locked: &[bool],
     mut positions: CoarsePositions,
     appearance: &Appearance,
+    dropped: u64,
     mutation: Mutation,
 ) -> Result<Encoded, JobError> {
     let rows = tile.primitives.len();
@@ -414,6 +421,11 @@ pub(crate) fn encode(
         "accessors":accessors,"extensionsUsed":["EXT_mesh_features","EXT_structural_metadata"],
         "extensions":{"EXT_structural_metadata":{"schema":{"id":"rusty_tiles_large_hlod_v1",
         "classes":classes_json},"propertyTables":[table_json]}}});
+    // D11 drop declaration: the components of the immediate children this payload no
+    // longer holds (validators recount them and check G against each).
+    if dropped > 0 {
+        document["asset"]["extras"] = json!({"rustyTiles": {"droppedComponents": dropped}});
+    }
     if images.is_empty() {
         for field in ["images", "textures", "samplers"] {
             if let Some(o) = document.as_object_mut() {

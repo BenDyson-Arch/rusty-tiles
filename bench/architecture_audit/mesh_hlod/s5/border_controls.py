@@ -278,6 +278,10 @@ def build(case):
     b = fx.coarse('B', keep_b)
     files = {f'{n}.glb': glb(leaves[n], rows[n], leaf=True) for n in leaves}
     files['A.glb'] = glb(a, identities(a), leaf=False)
+    if drop_a:
+        # D11 coarse drops: every payload declares the child components it drops.
+        from drop_controls import declare
+        files['A.glb'] = declare(files['A.glb'], len(drop_a))
     files['B.glb'] = glb(b, identities(b), leaf=False)
     box = {'box': [4, -2, 0, 10, 0, 0, 0, 10, 0, 0, 0, 10]}
 
@@ -626,7 +630,8 @@ def review2(name):
         finally:
             EXTENT = 8.0
         out = [f for f in case.fx.coarse('A') if f != drop]
-        files['A.glb'] = glb(out, identities(out), leaf=False)
+        from drop_controls import declare
+        files['A.glb'] = declare(glb(out, identities(out), leaf=False), 1)
         diameter = math.sqrt(sum((max(p[k] for p in drop) - min(p[k] for p in drop)) ** 2 for k in range(3)))
         e = 1000. / 1024 / 2 if name == 'remote-drop' else scale(1)
         if name == 'remote-drop':
@@ -738,7 +743,8 @@ REVIEW2 = [
 
 
 REVIEW = [
-    ('drop-loss-lie', 'topologyReceipt', None),
+    # G omits the drop's loss: archive-visible since D11 coarse drops (2026-10-28).
+    ('drop-loss-lie', 'topologyReceipt', 'coarseDrops'),
     ('shared-corner-hole', 'holeClosure', None),
     ('unrelated-license', 'interfaceWinding', 'interfaceWinding'),
     ('unlicensed-twins', 'interfaceWinding', 'interfaceWinding'),
