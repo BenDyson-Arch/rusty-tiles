@@ -1373,8 +1373,13 @@ fn build_tile(
                         tile.representative.remove(t);
                     }
                 }
-                prepared = prepare(job, built, contract, &mut query, &mut nearest)?;
-                let accepted = prepared.is_some();
+                // Keep the last accepted measurement: the coarse-drop bisection may
+                // try smaller prefixes after its fitting one.
+                let candidate = prepare(job, built, contract, &mut query, &mut nearest)?;
+                let accepted = candidate.is_some();
+                if accepted {
+                    prepared = candidate;
+                }
                 if let Some(audit) = audit {
                     topology_attempts += 1;
                     let index = audit.topology_attempt(built, topology_attempts, accepted)?;
