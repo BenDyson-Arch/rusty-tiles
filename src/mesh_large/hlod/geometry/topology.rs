@@ -1127,6 +1127,91 @@ fn cycle_centroids(m: &Merged, edges: &HashMap<(u32, u32), u32>, seed: &[bool]) 
 }
 
 /// Flat adjacency keeps graph traversal linear without a Vec allocation per vertex.
+/// Vertices to keep so that reduction cannot merge anchored paths of a boundary that
+/// touches the parent interface (`changes` compares that multigraph exactly). Two paths
+/// between the same anchors that both shrink to their direct edge cancel into an interior
+/// edge (a building's wall top and its one-quad roof edge, say), and a loop at one anchor
+/// vanishes once it has fewer than two interior vertices. So each path of a parallel
+/// group keeps its middle interior vertex, and each loop its first two. O(boundary).
+pub(super) fn touching_pins(m: &Merged, interface: &[InterfaceRow]) -> Vec<bool> {
+    let mut pins = vec![false; m.keys.len()];
+    let mut edges: HashMap<(u32, u32), u32> = HashMap::default();
+    for t in &m.triangles {
+        for i in 0..3 {
+            let (a, b) = (t[i], t[(i + 1) % 3]);
+            if a != b {
+                *edges.entry((a.min(b), a.max(b))).or_default() += 1;
+            }
+        }
+    }
+    edges.retain(|_, n| *n == 1);
+    let border = points(interface);
+    let mut groups = Components::new(m.keys.len());
+    let mut degree = vec![0u32; m.keys.len()];
+    for &(a, b) in edges.keys() {
+        groups.join(a, b);
+        degree[a as usize] += 1;
+        degree[b as usize] += 1;
+    }
+    let mut touching = HashSet::default();
+    for v in 0..m.keys.len() {
+        if degree[v] > 0 && border.contains(&m.keys[v]) {
+            touching.insert(groups.root(v));
+        }
+    }
+    if touching.is_empty() {
+        return pins;
+    }
+    let anchor: Vec<bool> = (0..m.keys.len())
+        .map(|v| {
+            degree[v] > 0
+                && touching.contains(&groups.root(v))
+                && (degree[v] != 2 || border.contains(&m.keys[v]))
+        })
+        .collect();
+    let (offset, adjacent) = boundary_adjacency(m.keys.len(), &edges);
+    let neighbors = |v: u32| &adjacent[offset[v as usize]..offset[v as usize + 1]];
+    // Interior vertices of each anchored path, grouped by its anchor pair.
+    let mut paths: HashMap<(u32, u32), Vec<Vec<u32>>> = HashMap::default();
+    for a in (0..m.keys.len() as u32).filter(|&v| anchor[v as usize]) {
+        for &first in neighbors(a) {
+            let (mut previous, mut at, mut interior) = (a, first, Vec::new());
+            while !anchor[at as usize] {
+                let next = neighbors(at);
+                if next.len() != 2 {
+                    break;
+                }
+                interior.push(at);
+                let next = if next[0] == previous {
+                    next[1]
+                } else {
+                    next[0]
+                };
+                previous = at;
+                at = next;
+            }
+            if anchor[at as usize] && (a, first) < (at, previous) {
+                paths
+                    .entry((a.min(at), a.max(at)))
+                    .or_default()
+                    .push(interior);
+            }
+        }
+    }
+    for ((a, b), group) in paths {
+        for interior in &group {
+            if a == b {
+                for &v in interior.iter().take(2) {
+                    pins[v as usize] = true;
+                }
+            } else if group.len() > 1 && !interior.is_empty() {
+                pins[interior[interior.len() / 2] as usize] = true;
+            }
+        }
+    }
+    pins
+}
+
 fn boundary_adjacency(n: usize, edges: &HashMap<(u32, u32), u32>) -> (Vec<usize>, Vec<u32>) {
     let mut offsets = vec![0usize; n + 1];
     for (&(a, b), &count) in edges {
