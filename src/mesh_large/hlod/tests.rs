@@ -5443,7 +5443,9 @@ fn generated_building(
 /// of 1-24 floors and 4-15 m half sides on 40 m lots, one rational rotation for all, walls
 /// run either way round, on a flat terrain sheet.
 fn city_block(layout: u64) -> Vec<Mesh> {
-    let mut rng = layout * 0x9e37_79b9_7f4a_7c15 + 12345;
+    let mut rng = layout
+        .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        .wrapping_add(12345);
     let mut next = || {
         rng ^= rng << 13;
         rng ^= rng >> 7;

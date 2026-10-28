@@ -1170,8 +1170,8 @@ pub(super) fn touching_pins(m: &Merged, interface: &[InterfaceRow]) -> Vec<bool>
         degree[b as usize] += 1;
     }
     let mut touching = HashSet::default();
-    for v in 0..m.keys.len() {
-        if degree[v] > 0 && border.contains(&m.keys[v]) {
+    for (v, (&d, k)) in degree.iter().zip(&m.keys).enumerate() {
+        if d > 0 && border.contains(k) {
             touching.insert(groups.root(v));
         }
     }

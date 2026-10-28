@@ -94,6 +94,7 @@ pub(super) fn contract(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn triangulate(
     m: &mut Merged,
     interface: &[InterfaceRow],
