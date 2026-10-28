@@ -93,10 +93,14 @@ impl Receipt {
 #[derive(Debug, Default)]
 pub(crate) struct Change {
     pub receipt: Receipt,
+    /// Changed faces on the closing clusters' boundary vertices (the oracle's domain).
     pub patch_faces: Vec<usize>,
-    /// Unchanged faces in the closure's component. A branching boundary can include
-    /// retained loops; their source points must still see their existing surface.
+    /// The rest of the closure's component. A branching boundary can include retained
+    /// loops; their source points must still see their existing surface.
     pub closure_carriers: Vec<usize>,
+    /// Vertex centroids of a fundamental cycle basis of each closing cluster's old
+    /// boundary; measured where they project onto the proxy, as the oracle does.
+    pub closure_centroids: Vec<[f64; 3]>,
     pub boundary: Vec<[[f32; 3]; 2]>,
     pub dropped: Vec<[[f32; 3]; 3]>,
     pub opening_reference: Vec<([[f32; 3]; 3], bool)>,
@@ -575,40 +579,72 @@ pub(super) fn changes(
     receipt.opened_holes = opened_count as u64;
     debug_assert_eq!(before_count + opened_count, after_count + closed_count);
     let affected: HashSet<usize> = closed.iter().map(|&r| component[r]).collect();
+    let mut patch_faces = Vec::new();
     let mut closure_carriers = Vec::new();
-    let patch_faces = if receipt.closed_holes > 0 {
-        let old_faces: HashSet<_> = m.triangles.iter().map(oriented).collect();
-        output
-            .iter()
-            .enumerate()
-            .filter_map(|(i, t)| {
-                if !affected.contains(&component[t[0] as usize]) {
-                    None
-                } else if old_faces.contains(&oriented(t)) {
-                    closure_carriers.push(i);
-                    None
-                } else {
-                    Some(i)
-                }
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
-    let boundary = if receipt.closed_holes > 0 {
+    let mut closure_centroids = Vec::new();
+    let mut boundary = Vec::new();
+    if receipt.closed_holes > 0 {
+        // The S5 oracle's closure domain: changed output faces touching a boundary
+        // vertex of a cluster (component of old and new boundary edges) that lost a
+        // cycle. Output vertices are input vertices: no Steiner point to pass through.
+        let mut cluster = Components::new(m.keys.len());
+        for &(a, b) in old_edges.keys().chain(new_edges.keys()) {
+            cluster.join(a, b);
+        }
+        let mut closing = vec![false; m.keys.len()];
+        for &(a, _) in old_edges.keys() {
+            if closed.contains(&old_root[a as usize]) {
+                closing[cluster.root(a as usize)] = true;
+            }
+        }
+        let mut seed = vec![false; m.keys.len()];
+        for &(a, b) in old_edges.keys().chain(new_edges.keys()) {
+            if closing[cluster.root(a as usize)] {
+                seed[a as usize] = true;
+                seed[b as usize] = true;
+            }
+        }
+        drop((cluster, closing));
+        // As the oracle: a cluster that lost a cycle may not touch a delivered border
+        // anywhere, including where its moved boundary reaches a formerly interior point.
+        if (0..m.keys.len()).any(|v| seed[v] && border.contains(&m.keys[v])) {
+            return rejected("a closing boundary cluster touches a delivered border");
+        }
+        closure_centroids = cycle_centroids(m, &old_edges, &seed);
+        // Changed by multiset, as the oracle counts: a repeated face is changed once
+        // its input copies are used up. The patch is selected over the whole output, as
+        // the oracle does; carriers are per affected component, which is sound because no
+        // output face spans two input components (simplification collapses edges, and
+        // remesh cells and repairs are keyed by component).
+        debug_assert!(output.iter().all(|t| {
+            t.iter()
+                .all(|&v| component[v as usize] == component[t[0] as usize])
+        }));
+        let mut old_faces: HashMap<[u32; 3], u32> = HashMap::default();
+        for t in &m.triangles {
+            *old_faces.entry(oriented(t)).or_default() += 1;
+        }
+        for (i, t) in output.iter().enumerate() {
+            let kept = old_faces
+                .get_mut(&oriented(t))
+                .is_some_and(|n| std::mem::replace(n, n.saturating_sub(1)) > 0);
+            if !kept && t.iter().any(|&v| seed[v as usize]) {
+                patch_faces.push(i);
+            } else if affected.contains(&component[t[0] as usize]) {
+                closure_carriers.push(i);
+            }
+        }
         let mut edges: Vec<_> = old_edges
-            .iter()
-            .filter(|((a, _), n)| **n == 1 && closed.contains(&old_root[*a as usize]))
-            .map(|(&(a, b), _)| (a, b))
+            .keys()
+            .filter(|(a, _)| closed.contains(&old_root[*a as usize]))
+            .copied()
             .collect();
         edges.sort_unstable();
-        edges
+        boundary = edges
             .into_iter()
             .map(|(a, b)| [m.positions[a as usize], m.positions[b as usize]])
-            .collect()
-    } else {
-        Vec::new()
-    };
+            .collect();
+    }
     let dropped = m
         .triangles
         .iter()
@@ -666,6 +702,7 @@ pub(super) fn changes(
         receipt,
         patch_faces,
         closure_carriers,
+        closure_centroids,
         boundary,
         dropped,
         opening_reference,
@@ -825,6 +862,119 @@ fn strip(
             .collect(),
         added_faces,
     }
+}
+
+/// The oracle's closure centroids: a depth-first spanning forest of the boundary edges
+/// on `seed` vertices, iterating start points and adjacency in sorted position order as
+/// the oracle does, so both build the same basis; each non-tree edge closes one cycle.
+/// A cycle's vertex sum comes from root-relative prefix sums and a binary-lifting lowest
+/// common ancestor, so B boundary edges cost O(B log B), not one walk per cycle.
+fn cycle_centroids(m: &Merged, edges: &HashMap<(u32, u32), u32>, seed: &[bool]) -> Vec<[f64; 3]> {
+    let position = |v: u32| m.positions[v as usize].map(f64::from);
+    let order = |a: u32, b: u32| {
+        position(a)
+            .partial_cmp(&position(b))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    };
+    let mut list: Vec<(u32, u32)> = edges
+        .keys()
+        .filter(|&&(a, _)| seed[a as usize])
+        .map(|&(a, b)| if order(b, a).is_lt() { (b, a) } else { (a, b) })
+        .collect();
+    list.sort_unstable_by(|x, y| order(x.0, y.0).then(order(x.1, y.1)));
+    let mut points: Vec<u32> = list.iter().flat_map(|&(a, b)| [a, b]).collect();
+    points.sort_unstable_by(|&a, &b| order(a, b));
+    points.dedup();
+    let n = points.len();
+    let mut local = vec![u32::MAX; m.keys.len()];
+    for (i, &v) in points.iter().enumerate() {
+        local[v as usize] = i as u32;
+    }
+    let list: Vec<(usize, usize)> = list
+        .into_iter()
+        .map(|(a, b)| (local[a as usize] as usize, local[b as usize] as usize))
+        .collect();
+    drop(local);
+    // Adjacency in sorted edge order.
+    let mut offset = vec![0usize; n + 1];
+    for &(a, b) in &list {
+        offset[a + 1] += 1;
+        offset[b + 1] += 1;
+    }
+    for v in 0..n {
+        offset[v + 1] += offset[v];
+    }
+    let mut adjacent = vec![0usize; offset[n]];
+    let mut cursor = offset[..n].to_vec();
+    for &(a, b) in &list {
+        adjacent[cursor[a]] = b;
+        cursor[a] += 1;
+        adjacent[cursor[b]] = a;
+        cursor[b] += 1;
+    }
+    drop(cursor);
+    let mut parent = vec![usize::MAX; n];
+    let mut depth = vec![0u32; n];
+    let mut root = vec![0usize; n];
+    let mut sum = vec![[0f64; 3]; n];
+    let mut stack = Vec::new();
+    for start in 0..n {
+        if parent[start] != usize::MAX {
+            continue;
+        }
+        (parent[start], root[start]) = (start, start);
+        stack.push(start);
+        while let Some(v) = stack.pop() {
+            for &w in &adjacent[offset[v]..offset[v + 1]] {
+                if parent[w] == usize::MAX {
+                    let (p, r) = (position(points[w]), position(points[root[v]]));
+                    (parent[w], depth[w], root[w]) = (v, depth[v] + 1, root[v]);
+                    sum[w] = std::array::from_fn(|i| sum[v][i] + (p[i] - r[i]));
+                    stack.push(w);
+                }
+            }
+        }
+    }
+    drop((offset, adjacent, stack));
+    let levels = (32 - depth.iter().max().map_or(0, |d| d.leading_zeros())).max(1) as usize;
+    let mut up = parent.clone();
+    for j in 1..levels {
+        for v in 0..n {
+            let half = up[(j - 1) * n + v];
+            up.push(up[(j - 1) * n + half]);
+        }
+    }
+    let ancestor = |mut a: usize, mut b: usize| {
+        if depth[a] < depth[b] {
+            std::mem::swap(&mut a, &mut b);
+        }
+        let lift = depth[a] - depth[b];
+        for j in (0..levels).filter(|&j| lift >> j & 1 == 1) {
+            a = up[j * n + a];
+        }
+        if a == b {
+            return a;
+        }
+        for j in (0..levels).rev() {
+            if up[j * n + a] != up[j * n + b] {
+                (a, b) = (up[j * n + a], up[j * n + b]);
+            }
+        }
+        parent[a]
+    };
+    let mut out = Vec::new();
+    for &(a, b) in &list {
+        if parent[a] == b || parent[b] == a {
+            continue;
+        }
+        let c = ancestor(a, b);
+        let count = (depth[a] + depth[b] - 2 * depth[c] + 1) as f64;
+        let (r, l) = (position(points[root[a]]), position(points[c]));
+        out.push(std::array::from_fn(|i| {
+            r[i] + (sum[a][i] + sum[b][i] - 2. * sum[c][i] + (l[i] - r[i])) / count
+        }));
+    }
+    out
 }
 
 /// Flat adjacency keeps graph traversal linear without a Vec allocation per vertex.
@@ -1129,13 +1279,54 @@ pub(super) fn remesh(
         map.push(id);
     }
     r.remesh_rounds += 1;
-    // A clustered face that flips, or a fold, condemns its clusters, not the round:
-    // split those clusters (their vertices keep their own positions) and check again.
-    // Splitting only moves towards the unchanged input, so a bounded number of passes
-    // either finds a clustering every face of which passes, or rejects the round.
-    let guard = super::folds::Source::new(&m.positions, &m.triangles).with_boundary(interface);
+    let Some(Split {
+        output,
+        keep,
+        change,
+        passes,
+    }) = split_clusters(m, interface, &mut map, REMESH_SPLITS)
+    else {
+        r.rejected_remesh_rounds += 1;
+        return false;
+    };
+    r.add(change.receipt);
+    let changed = m.triangles != output;
+    // Splits that dissolved every cluster leave nothing: the round failed.
+    r.rejected_remesh_rounds += u64::from(passes > 0 && !changed);
+    r.remeshed_vertices += map
+        .iter()
+        .enumerate()
+        .filter(|(v, to)| *v != **to as usize)
+        .count() as u64;
+    retain(m, &keep);
+    m.triangles = output;
+    changed
+}
+
+/// An accepted clustering: its output, the kept input faces, its topology change and
+/// the number of splits it took.
+struct Split {
+    output: Vec<[u32; 3]>,
+    keep: Vec<bool>,
+    change: Change,
+    passes: u32,
+}
+
+/// A clustered face that flips, or a fold, condemns its clusters, not the round: split
+/// those clusters (their vertices keep their own positions) and check again. Splitting
+/// only moves towards the unchanged input, so at most `limit` splits either find a
+/// clustering every face of which passes, or reject (None).
+fn split_clusters(
+    m: &Merged,
+    interface: &[InterfaceRow],
+    map: &mut [u32],
+    limit: u32,
+) -> Option<Split> {
+    // Built per pass that reaches the fold check and dropped before `changes()`, so
+    // the two never overlap; only a topology split pays to rebuild it.
+    let mut guard = None;
     let mut passes = 0;
-    let (output, keep, change) = loop {
+    loop {
         let mut output: Vec<[u32; 3]> = m
             .triangles
             .iter()
@@ -1155,7 +1346,11 @@ pub(super) fn remesh(
                 .collect();
             let mut i = 0;
             output.retain(|_| (keep[i], i += 1).0);
-            let invalid = guard.violations(&m.positions, &output);
+            let invalid = guard
+                .get_or_insert_with(|| {
+                    super::folds::Source::new(&m.positions, &m.triangles).with_boundary(interface)
+                })
+                .violations(&m.positions, &output);
             split.extend(
                 invalid
                     .iter()
@@ -1164,10 +1359,16 @@ pub(super) fn remesh(
                     .map(|(v, _)| v as u32),
             );
             if split.is_empty() {
+                drop((invalid, guard.take()));
                 let change = changes(m, &output, interface, 0.)
                     .filter(|c| c.receipt.closed_holes == 0 && c.receipt.opened_holes == 0);
                 if let Some(change) = change {
-                    break (output, keep, change);
+                    return Some(Split {
+                        output,
+                        keep,
+                        change,
+                        passes,
+                    });
                 }
                 // A boundary cycle closed or opened: split every cluster on an input
                 // boundary edge that no longer maps to an output boundary edge, and on
@@ -1198,19 +1399,17 @@ pub(super) fn remesh(
                     }
                 }
                 let mut size = vec![0u32; map.len()];
-                for &to in &map {
+                for &to in map.iter() {
                     size[to as usize] += 1;
                 }
                 split.retain(|&x| size[x as usize] > 1);
                 if split.is_empty() {
-                    r.rejected_remesh_rounds += 1;
-                    return false;
+                    return None;
                 }
             }
         }
-        if passes == REMESH_SPLITS {
-            r.rejected_remesh_rounds += 1;
-            return false;
+        if passes == limit {
+            return None;
         }
         passes += 1;
         for (v, to) in map.iter_mut().enumerate() {
@@ -1218,18 +1417,7 @@ pub(super) fn remesh(
                 *to = v as u32;
             }
         }
-    };
-    drop(guard);
-    r.add(change.receipt);
-    let changed = m.triangles != output;
-    r.remeshed_vertices += map
-        .iter()
-        .enumerate()
-        .filter(|(v, to)| *v != **to as usize)
-        .count() as u64;
-    retain(m, &keep);
-    m.triangles = output;
-    changed
+    }
 }
 
 #[cfg(test)]
@@ -1561,6 +1749,108 @@ pub(super) mod tests {
         assert_eq!(change.receipt.opened_holes, 1);
         assert_eq!(change.patch_faces.len(), 2);
         assert_eq!(change.boundary.len(), 4);
+    }
+
+    /// `n`×`n` unit quads in z=0, counter-clockwise, without the quads in `holes`.
+    fn grid(n: u32, holes: &[(u32, u32)]) -> Merged {
+        let mut m = ring();
+        m.positions = (0..=n)
+            .flat_map(|y| (0..=n).map(move |x| [x as f32, y as f32, 0.]))
+            .collect();
+        m.keys = m.positions.iter().map(|p| p.map(f32::to_bits)).collect();
+        m.triangles = (0..n * n)
+            .filter(|&q| !holes.contains(&(q % n, q / n)))
+            .flat_map(|q| {
+                let a = q / n * (n + 1) + q % n;
+                [[a, a + 1, a + n + 2], [a, a + n + 2, a + n + 1]]
+            })
+            .collect();
+        m.representative = vec![m.representative[0]; m.triangles.len()];
+        m
+    }
+
+    #[test]
+    fn a_closure_is_measured_on_its_own_cluster_not_the_whole_changed_component() {
+        // One hole closes; a far quad is retriangulated in the same component.
+        let m = grid(6, &[(1, 1)]);
+        let mut output = grid(6, &[]).triangles;
+        let a = 4 * 7 + 4;
+        let far = [[a, a + 1, a + 8], [a, a + 8, a + 7]];
+        output.retain(|t| !far.contains(t));
+        output.extend([[a, a + 1, a + 7], [a + 1, a + 8, a + 7]]);
+        let change = changes(&m, &output, &[], 0.).unwrap();
+        assert_eq!(change.receipt.closed_holes, 1);
+        let patch: Vec<_> = change.patch_faces.iter().map(|&i| output[i]).collect();
+        assert_eq!(patch, [[8, 9, 16], [8, 16, 15]]);
+        assert_eq!(change.closure_carriers.len(), output.len() - 2);
+        assert_eq!(change.closure_centroids, [[1.5, 1.5, 0.]]);
+    }
+
+    #[test]
+    fn a_closing_cluster_whose_moved_boundary_reaches_a_border_point_is_rejected() {
+        // Review S1c r1 P2-1: holes (2,2) and (3,3) pinch at vertex (3,3). The output fills
+        // (3,3) and removes quad (1,2), so the other hole's boundary moves onto vertex
+        // (1,2): interior before, a border point. The cluster lost a cycle and touches the
+        // border, which the S5 oracle refuses.
+        let m = grid(8, &[(2, 2), (3, 3)]);
+        let output = grid(8, &[(1, 2), (2, 2)]).triangles;
+        let k = m.keys[2 * 9 + 1];
+        let border = [InterfaceRow::new(0, k, k, 0, 1)];
+        assert!(changes(&m, &output, &border, 0.).is_none());
+        let free = changes(&m, &output, &[], 0.).unwrap();
+        assert_eq!(
+            (free.receipt.closed_holes, free.receipt.opened_holes),
+            (1, 0)
+        );
+    }
+
+    #[test]
+    fn a_rank_three_closing_cluster_has_the_oracles_centroid_basis() {
+        // Review S1c r1 P3-1: two L-shaped holes pinched at two vertices around an island.
+        // Expected: the S5 oracle's `_cycle_centroids` on the same edges.
+        let holes = [
+            (1, 1),
+            (2, 1),
+            (3, 1),
+            (1, 2),
+            (1, 3),
+            (4, 2),
+            (4, 3),
+            (4, 4),
+            (3, 4),
+            (2, 4),
+        ];
+        let m = grid(7, &holes);
+        let change = changes(&m, &grid(7, &[]).triangles, &[], 0.).unwrap();
+        assert_eq!(change.receipt.closed_holes, 3);
+        let oracle = [[3., 3., 0.], [3.5, 3.5, 0.], [23. / 6., 23. / 6., 0.]];
+        assert_eq!(change.closure_centroids.len(), oracle.len());
+        for (c, o) in change.closure_centroids.iter().zip(oracle) {
+            assert!(
+                (0..3).all(|i| (c[i] - o[i]).abs() < 1e-12),
+                "{c:?} vs {o:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_flipping_cluster_is_split_while_a_valid_one_survives() {
+        let m = grid(6, &[]);
+        let id = |x: u32, y: u32| y * 7 + x;
+        let mut map: Vec<u32> = (0..m.keys.len() as u32).collect();
+        // A valid collapse across a diagonal, and a vertex thrown outside its star.
+        map[id(1, 1) as usize] = id(2, 2);
+        map[id(4, 4) as usize] = id(5, 2);
+        assert!(m
+            .triangles
+            .iter()
+            .any(|&t| { !preserves_orientation(&m.positions, t, t.map(|v| map[v as usize])) }));
+        assert!(split_clusters(&m, &[], &mut map.clone(), 0).is_none());
+        let split = split_clusters(&m, &[], &mut map, 1).unwrap();
+        assert_eq!((split.passes, split.change.receipt.closed_holes), (1, 0));
+        assert_eq!(map[id(1, 1) as usize], id(2, 2));
+        assert_eq!(map[id(4, 4) as usize], id(4, 4));
+        assert_eq!(split.output.len(), m.triangles.len() - 2);
     }
 
     #[test]

@@ -768,15 +768,18 @@ class _Domain:
 
 
 def _cycle_centroids(components):
-    """Vertex centroids of a fundamental cycle basis of boundary components."""
+    """Vertex centroids of a fundamental cycle basis of boundary components. Start points
+    and adjacency follow sorted point order, as in S1b's producer, so the basis is one
+    canonical basis rather than an artefact of set order."""
     out = []
     for points, edges in components:
+        edges = sorted(edges)
         adjacency = collections.defaultdict(list)
         for a, b in edges:
             adjacency[a].append(b)
             adjacency[b].append(a)
         parent, depth, order = {}, {}, []
-        for start in points:
+        for start in sorted(points):
             if start in parent:
                 continue
             parent[start], depth[start] = None, 0

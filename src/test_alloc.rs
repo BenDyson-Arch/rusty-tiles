@@ -5,6 +5,7 @@ use std::{
     alloc::{GlobalAlloc, Layout, System},
     cell::Cell,
     ffi::c_void,
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 thread_local! {
@@ -30,6 +31,7 @@ pub(crate) struct Counting;
 // SAFETY: every call forwards to `System` unchanged; the bookkeeping only reads sizes.
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        route_meshopt();
         let p = unsafe { System.alloc(layout) };
         if !p.is_null() {
             note(layout.size() as isize);
@@ -91,12 +93,18 @@ unsafe extern "C" fn meshopt_free(p: *mut c_void) {
     }
 }
 
-/// Route meshoptimizer's temporary allocations through the counting allocator (process
-/// wide; harmless for other tests).
-pub(crate) fn route_meshopt() {
-    // SAFETY: both callbacks match meshopt's allocator contract (size in, pointer out; free
-    // of a pointer it returned or null).
-    unsafe { meshopt::ffi::meshopt_setAllocator(Some(meshopt_alloc), Some(meshopt_free)) };
+static ROUTED: AtomicBool = AtomicBool::new(false);
+
+/// Route meshoptimizer's temporary allocations through the counting allocator. Its
+/// allocator is process wide and a block must be freed by the allocator that made it,
+/// so this happens on the harness's first allocation, before any test thread exists.
+fn route_meshopt() {
+    if !ROUTED.load(Ordering::Relaxed) {
+        ROUTED.store(true, Ordering::Relaxed);
+        // SAFETY: both callbacks match meshopt's allocator contract (size in, pointer
+        // out; free of a pointer it returned or null). Setting them allocates nothing.
+        unsafe { meshopt::ffi::meshopt_setAllocator(Some(meshopt_alloc), Some(meshopt_free)) };
+    }
 }
 
 /// `f`'s result and the peak bytes it held live on this thread (net of its frees).
