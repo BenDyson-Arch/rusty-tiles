@@ -488,6 +488,15 @@ its loss is refused by the exact retention checks. Validators recount drops from
 decoded keys and refuse a count that differs from the declaration, or a dropped key
 farther than G from the payload (S1b doc, "Coarse drops").
 
+Review r1 (2026-10-28): the stage runs only under cap pressure (the contracted input
+exceeds the cap). Validators check that part of the rule and the order from the
+archive: a drop at or above the children's largest G needs more than 8,192 child faces
+and no smaller border-free child component may stay, and S2's fixed sample points on
+every dropped face must lie within G. One coarse drop raises its tile's G (mesh-1e7:
+up to about 27 m); ancestors' floor max(E, child G) then admits ordinary drops of
+border-free components below that size without cap pressure. That is the existing
+rule applied honestly, and it is how one tile's drop shows further up.
+
 ## Numeric acceptance contract (proposed, not measured passes)
 
 One source Mtri is one million **input** triangles; CPU is whole-process user+sys,

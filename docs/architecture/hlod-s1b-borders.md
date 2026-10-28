@@ -131,7 +131,8 @@ endpoint more of its faces already hold with an interface or removed third corne
 collapsing those faces; each side remaps only its own faces of the same chord.
 ## Coarse drops (owner decision 2026-10-28)
 
-Only after every strategy above leaves the cell over its cap. Candidates are the
+Only after every strategy above has failed, and only when the contracted input
+exceeds the cap. Candidates are the
 merged children's components with no interface point whose bounding-box diagonal is
 at least the G floor max(E, child G), in order (diagonal, triangle count, least key):
 one component pass and one sort. A prefix of k candidates licenses drops below the
@@ -148,13 +149,22 @@ always source keys, so a child component is dropped exactly when its parent payl
 holds none of its keys. The native validator and the oracle (`s5/drops.py`) recount
 this from the decoded children's faces (copies down a single-child chain are the same
 cell), refuse a count different from the declaration (`coarseDrops`), and refuse a
-dropped key farther than the parent's geometricError (with 1e-6 relative rounding)
-from its decoded surface. That is a lower bound on the loss, which S2 already covers
-with fixed controls on every dropped triangle; G also stays at least the children's
-G. The native recount reads the face tables the delivery replays fill and decodes
-nothing again; it charges the shared payload-element budget per face read and point
-checked. The sidecar oracle additionally checks the receipt's coarse count against
-the re-derived drops at or above the floor.
+dropped key, or one of S2's fixed sample points (quarter grid and centroid) on a
+dropped face, farther than the parent's geometricError (with 1e-6 relative rounding;
+off a face's vertices its child's G is added) from its decoded surface: lower bounds
+on the loss, which S2 covers with the same controls. G also stays at least the
+children's G. A drop at or above the children's largest G must have cap pressure (the
+children's faces, counted with multiplicity as the producer merges them, exceed
+8,192) and go smallest first: no kept child component without a key held by a leaf
+outside the tile may be smaller. Without any border component the largest candidate
+is never licensed, so cleanup never keeps a smaller one arbitrarily. Drops below the
+children's G (ordinary drops under an E floor above it) are checked for count and G
+only: E is not recoverable from the archive. The native recount reads the face
+tables the delivery replays fill and decodes nothing again; it charges the shared
+payload-element budget per face read, point checked and distance-grid insertion. The
+sidecar oracle, which knows E, requires cap pressure (merged child faces
+above 8,192) for any drop at or above max(E, child G), independently of the receipt,
+and checks the receipt's coarse count against those drops.
 
 ## Durable audit format (v1)
 

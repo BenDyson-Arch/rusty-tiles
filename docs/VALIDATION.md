@@ -17,6 +17,15 @@ Python `expect_profile="hlod"`) requires that profile whatever the archive's lab
 an archive stripped of its labels cannot pass as a plain one. `hlod` is the only value; any
 other is refused as `usage` (Python `ValueError`) before the archive is opened. The checks
 are listed in the [HLOD acceptance record](../bench/architecture_audit/mesh_hlod/s5/README.md).
+A coarse payload that drops whole components of its children declares how many in glTF
+`asset.extras.rustyTiles.droppedComponents`. Validation recounts the drops from decoded keys
+and fails `coarseDrops` (`invalid_input`) when the count differs from the declaration; when a
+dropped point, or a fixed sample point of a dropped face, lies farther than the payload's
+geometricError from its surface; or when a drop at or above the children's largest
+geometricError comes without cap pressure (the children's faces fit 8,192) or while a
+smaller border-free child component is kept. HLOD archives from before this check, whose
+small drops are undeclared, fail it. The report's `interfaceCensus` gives
+`droppedComponents` and `droppedByDepth` (by delivered cell depth).
 
 Supported payloads are GLB 2.0 and archive-local glTF 2.0. Unavailable versions
 or legacy interpretations do not receive an opaque successful pass.

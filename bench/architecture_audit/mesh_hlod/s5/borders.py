@@ -1265,8 +1265,9 @@ class Audit:
             hi = [max(p[k] for p in members) for k in range(3)]
             diameter = math.sqrt(sum((hi[k] - lo[k]) ** 2 for k in range(3)))
             diameter_max = max(diameter_max, diameter)
-            # D11 coarse drops (2026-10-28): a counted drop may exceed the floor; its
-            # loss below still bounds G.
+            # D11 coarse drops (2026-10-28): a drop may exceed the floor only under cap
+            # pressure (checked below, independently of the receipt); its loss below
+            # still bounds G.
             coarse[0] += diameter >= floor + slack
             coarse[1] += diameter >= floor - slack
             # Its loss: S1b's fixed controls on every face, exactly to the delivered proxy.
@@ -1285,6 +1286,10 @@ class Audit:
             require(abs(published['maxDroppedComponentDiameter'] - diameter_max) <= slack + 1e-12 * diameter_max,
                     'topologyReceipt', f'tile {tid}: audit maxDroppedComponentDiameter '
                     f'{published["maxDroppedComponentDiameter"]} != re-derived {diameter_max}')
+        merged = sum(1 for f in source if len({tuple(p) for p in f}) == 3)
+        require(not coarse[0] or merged > 8192, 'droppedComponent',
+                f'tile {tid}: {coarse[0]} dropped components at or above max(E, child G) {floor} '
+                f'though the {merged} merged child faces fit the 8192 cap')
         counted = published.get('coarseDroppedComponents', 0)
         require(coarse[0] <= counted <= coarse[1], 'droppedComponent',
                 f'tile {tid}: {coarse[0]} to {coarse[1]} dropped components at or above max(E, child G) '

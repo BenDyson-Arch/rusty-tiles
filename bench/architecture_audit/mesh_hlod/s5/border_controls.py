@@ -415,7 +415,10 @@ def mutate(name, records):
 CASES = [
     # Positives: honest contraction, closure accounting and exact terminal locks.
     ('contracted', None, None), ('mixed-within', None, None), ('terminal-exact', None, None),
-    ('closure-small', None, None), ('dropped-small', None, None),
+    ('closure-small', None, None),
+    # D11 coarse drops (2026-10-28): a drop at or above the children's G needs cap
+    # pressure, which these few-face cells lack, so both archive validators refuse it.
+    ('dropped-small', 'coarseDrops', 'coarseDrops'),
     # Geometry mutants: both validators where the archive alone shows them.
     ('same-depth-gap', 'sameDepthBorderGap', 'sameDepthBorderGap'),
     ('mixed-beyond-g8', 'mixedDepthBorderGap', 'mixedDepthBorderGap'),
@@ -428,7 +431,7 @@ CASES = [
     ('overlap-with-reverse', 'interfaceWinding', 'interfaceWinding'),
     ('coincident-twin', 'interfaceWinding', 'interfaceWinding'),
     ('dropped-border', 'interfacePoints', 'interfacePoints'),
-    ('dropped-large', 'droppedComponent', None),
+    ('dropped-large', 'droppedComponent', 'coarseDrops'),
     ('closure-loss-hidden', 'holeClosure', None),
     ('closure-loss-reported', 'topologyReceipt', None),
     # Sidecar lies: the oracle re-derives and refuses; native never reads the sidecar.
@@ -437,7 +440,8 @@ CASES = [
     ('wrong-scale', 'borderScale', None), ('depth-label-lie', 'borderScale', None),
     ('lock-claim-contracted', 'terminalBorderLock', None), ('terminal-unclaimed', 'terminalBorderLock', None),
     ('unknown-payload', 'borderAudit', None), ('omission-unreported', 'omissionReport', None),
-    ('dropped-unreported', 'topologyReceipt', None), ('dropped-tampered-g', 'topologyReceipt', None),
+    ('dropped-unreported', 'topologyReceipt', 'coarseDrops'),
+    ('dropped-tampered-g', 'topologyReceipt', 'coarseDrops'),
 ]
 OFFSETS = {'mixed-beyond-g8': 0.001}
 
@@ -731,8 +735,8 @@ REVIEW2 = [
     ('page-retained', None, None),
     ('rim-vertex-removed', 'holeClosure', None),
     ('simultaneous-close-open', 'topologyReceipt', None),
-    ('remote-drop', None, None),
-    ('loss-between-samples', 'topologyReceipt', None),
+    ('remote-drop', 'coarseDrops', 'coarseDrops'),
+    ('loss-between-samples', 'topologyReceipt', 'coarseDrops'),
     ('depth-fraction', 'borderDepth', None),
     ('depth-boolean', 'borderDepth', None),
     ('depth-ancestor', 'borderDepth', None),

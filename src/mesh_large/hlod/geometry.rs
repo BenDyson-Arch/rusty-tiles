@@ -406,6 +406,11 @@ pub(crate) fn build_parent(
     let contracted_faces = merged.triangles.clone();
     let contracted_representative = merged.representative.clone();
     let floor = contract.scale.max(children_error);
+    // Components may go only under cap pressure: the contracted input exceeds the hard
+    // cap (validators refuse a drop whose children fit it). Below it, a zero floor
+    // licenses no drop, even for a smaller D11 target.
+    let pressure = contracted_faces.len() > *caps.last().unwrap();
+    let drops = if pressure { floor } else { 0. };
     let mut opening_pins = HashSet::default();
     for (i, &cap) in caps.iter().enumerate() {
         if caps[..i].contains(&cap) {
@@ -420,7 +425,7 @@ pub(crate) fn build_parent(
                 children_error,
                 &reference,
                 &contracted_faces,
-                floor,
+                drops,
                 preserve_holes,
                 &mut opening_pins,
                 &mut attempted,
@@ -440,7 +445,7 @@ pub(crate) fn build_parent(
     }
     // D11: simplifier stagnation alone is not cap infeasibility. Deduplicate and remove
     // eligible interior components, then remesh with increasingly coarse interior cells.
-    let construction_dropped = topology::cleanup(&mut merged, interface, floor, &mut topology);
+    let construction_dropped = topology::cleanup(&mut merged, interface, drops, &mut topology);
     if let Some(receipt) = constrained::remesh(&mut merged, interface, *caps.last().unwrap()) {
         topology.add(receipt);
     }
@@ -458,7 +463,7 @@ pub(crate) fn build_parent(
                 children_error,
                 &reference,
                 &contracted_faces,
-                floor,
+                drops,
                 preserve_holes,
                 &mut opening_pins,
                 &mut attempted,
@@ -481,14 +486,20 @@ pub(crate) fn build_parent(
         }
     }
     // D11 coarse drops (owner decision 2026-10-28): only once every strategy above has
-    // failed. Whole components with no border contact go smallest first: the least
-    // prefix that fits, found by doubling and then bisection (at most 2 log2(C) + 2
-    // proposals; each prefix licenses drops below its last diagonal). S2's fixed
-    // controls on every dropped triangle carry their loss into the published G.
+    // failed, and only for cap pressure: the contracted input exceeds the cap (validators
+    // refuse a coarse drop whose children fit it). Whole components with no border
+    // contact go smallest first: the least prefix that fits, found by doubling and then
+    // bisection (at most 2 log2(C) + 2 proposals; each prefix licenses drops below its
+    // last diagonal). S2's fixed controls on every dropped triangle carry their loss into
+    // the published G.
     let mut base = merged.clone();
     base.triangles = contracted_faces.clone();
     base.representative = contracted_representative;
-    let candidates = coarse_candidates(&base, interface, floor);
+    let candidates = if pressure {
+        coarse_candidates(&base, interface, floor)
+    } else {
+        Vec::new()
+    };
     let n = candidates.len();
     let (mut failed, mut fitted) = (0, None);
     let mut next = (n > 0).then_some(1);
@@ -615,6 +626,7 @@ fn coarse_candidates(m: &Merged, interface: &[InterfaceRow], floor: f64) -> Vec<
             }
         }
     }
+    let border_contact = components.values().any(|c| c.touch);
     let mut candidates: Vec<(f64, u64, Key, Vec<Key>)> = components
         .into_values()
         .filter_map(|mut c| {
@@ -627,6 +639,13 @@ fn coarse_candidates(m: &Merged, interface: &[InterfaceRow], floor: f64) -> Vec<
         })
         .collect();
     candidates.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+    // Without a border component, licensing every component would make cleanup keep an
+    // arbitrary one: the largest diagonal always stays, so kept ones are never smaller.
+    if !border_contact {
+        if let Some(largest) = candidates.last().map(|c| c.0) {
+            candidates.retain(|c| c.0 < largest);
+        }
+    }
     candidates
         .into_iter()
         .map(|(diagonal, _, _, keys)| Candidate { diagonal, keys })
