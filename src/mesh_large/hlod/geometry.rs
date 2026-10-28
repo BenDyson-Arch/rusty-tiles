@@ -581,38 +581,49 @@ struct Candidate {
 /// Coarse-drop candidates in drop order: bounding-box diagonal, then triangle count, then
 /// least key. One component pass and one sort: O(F + C log C).
 fn coarse_candidates(m: &Merged, interface: &[InterfaceRow], floor: f64) -> Vec<Candidate> {
+    #[derive(Default)]
+    struct Component {
+        lo: [f64; 3],
+        hi: [f64; 3],
+        touch: bool,
+        triangles: u64,
+        keys: Vec<Key>,
+    }
     let component = topology::components(m);
     let border = interface_points(interface);
-    let mut boxes: HashMap<usize, ([f64; 3], [f64; 3], bool, u64, Vec<Key>)> = HashMap::default();
+    let mut components: HashMap<usize, Component> = HashMap::default();
     let mut seen = vec![false; m.keys.len()];
     for t in &m.triangles {
-        let b = boxes.entry(component[t[0] as usize]).or_insert((
-            [f64::MAX; 3],
-            [f64::MIN; 3],
-            false,
-            0,
-            Vec::new(),
-        ));
-        b.3 += 1;
+        let c = components
+            .entry(component[t[0] as usize])
+            .or_insert_with(|| Component {
+                lo: [f64::MAX; 3],
+                hi: [f64::MIN; 3],
+                ..Default::default()
+            });
+        c.triangles += 1;
         for &v in t {
             let p = m.positions[v as usize].map(f64::from);
-            for a in 0..3 {
-                b.0[a] = b.0[a].min(p[a]);
-                b.1[a] = b.1[a].max(p[a]);
+            for ((lo, hi), x) in c.lo.iter_mut().zip(&mut c.hi).zip(p) {
+                *lo = lo.min(x);
+                *hi = hi.max(x);
             }
             let k = m.keys[v as usize];
-            b.2 |= border.contains(&k);
+            c.touch |= border.contains(&k);
             if !std::mem::replace(&mut seen[v as usize], true) {
-                b.4.push(k);
+                c.keys.push(k);
             }
         }
     }
-    let mut candidates: Vec<(f64, u64, Key, Vec<Key>)> = boxes
+    let mut candidates: Vec<(f64, u64, Key, Vec<Key>)> = components
         .into_values()
-        .filter_map(|(lo, hi, touch, triangles, mut keys)| {
-            let diagonal = (0..3).map(|a| (hi[a] - lo[a]).powi(2)).sum::<f64>().sqrt();
-            keys.sort_unstable();
-            (!touch && diagonal >= floor).then(|| (diagonal, triangles, keys[0], keys))
+        .filter_map(|mut c| {
+            let diagonal = (0..3)
+                .map(|a| (c.hi[a] - c.lo[a]).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            c.keys.sort_unstable();
+            (!c.touch && diagonal >= floor).then(|| (diagonal, c.triangles, c.keys[0], c.keys))
         })
         .collect();
     candidates.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
