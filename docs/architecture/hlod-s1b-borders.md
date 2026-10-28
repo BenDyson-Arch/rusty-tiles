@@ -262,7 +262,12 @@ multiset) touching a boundary vertex of a closing cluster, a component of old an
 new boundary edges that lost a cycle, plus the original affected boundary edges.
 Each patch face gets the oracle's eighth grid, and each cycle centroid of the
 cluster's old boundary (a depth-first fundamental basis) is measured where it
-projects onto the proxy. Other changes in the same component are not closure loss;
+projects onto the proxy. Producer and oracle build that basis canonically: start
+points, edges and adjacency are taken in sorted position order, not vertex-index
+order, so both choose the same cycles when a cluster has more than one. A closing
+cluster may not touch a delivered border anywhere: neither its old boundary nor its
+new one, including where the moved boundary reaches a formerly interior border
+point. Such a proposal is refused. Other changes in the same component are not closure loss;
 they reach G through S2 and the moved-boundary witnesses. This avoids assuming a
 planar hole or treating planarity as loss. For the boundary-to-surface direction,
 retain the rest of the affected component as witnesses too: a branching boundary

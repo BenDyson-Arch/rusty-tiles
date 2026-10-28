@@ -871,6 +871,10 @@ fn strip(
 /// common ancestor, so B boundary edges cost O(B log B), not one walk per cycle.
 fn cycle_centroids(m: &Merged, edges: &HashMap<(u32, u32), u32>, seed: &[bool]) -> Vec<[f64; 3]> {
     let position = |v: u32| m.positions[v as usize].map(f64::from);
+    // -0.0 and +0.0 compare Equal, so two distinct vertices differing only in a zero's
+    // sign tie and `sort_unstable` may order them either way, where the oracle's stable
+    // sort keeps input order. A tie can at worst leave a duplicate start point or a
+    // different basis, not an unsound witness; welded vertices should never differ so.
     let order = |a: u32, b: u32| {
         position(a)
             .partial_cmp(&position(b))
@@ -937,10 +941,12 @@ fn cycle_centroids(m: &Merged, edges: &HashMap<(u32, u32), u32>, seed: &[bool]) 
     }
     drop((offset, adjacent, stack));
     let levels = (32 - depth.iter().max().map_or(0, |d| d.leading_zeros())).max(1) as usize;
-    let mut up = parent.clone();
+    // Local indices are u32 (`local`), so the n x levels table holds u32, allocated once.
+    let mut up: Vec<u32> = Vec::with_capacity(n * levels);
+    up.extend(parent.iter().map(|&p| p as u32));
     for j in 1..levels {
         for v in 0..n {
-            let half = up[(j - 1) * n + v];
+            let half = up[(j - 1) * n + v] as usize;
             up.push(up[(j - 1) * n + half]);
         }
     }
@@ -950,14 +956,14 @@ fn cycle_centroids(m: &Merged, edges: &HashMap<(u32, u32), u32>, seed: &[bool]) 
         }
         let lift = depth[a] - depth[b];
         for j in (0..levels).filter(|&j| lift >> j & 1 == 1) {
-            a = up[j * n + a];
+            a = up[j * n + a] as usize;
         }
         if a == b {
             return a;
         }
         for j in (0..levels).rev() {
             if up[j * n + a] != up[j * n + b] {
-                (a, b) = (up[j * n + a], up[j * n + b]);
+                (a, b) = (up[j * n + a] as usize, up[j * n + b] as usize);
             }
         }
         parent[a]
@@ -1806,26 +1812,28 @@ pub(super) mod tests {
 
     #[test]
     fn a_rank_three_closing_cluster_has_the_oracles_centroid_basis() {
-        // Review S1c r1 P3-1: two L-shaped holes pinched at two vertices around an island.
+        // Review S1c r2 P3-A: an asymmetric layout, so index order (y-major) and sorted
+        // position order (x-major) pick different bases; a mirror-symmetric one cannot
+        // tell them apart. The pre-fix order gives (2.0, 2.227..), (4, 4), (3.5, 3.5).
+        // It touches the grid edge, so measure the whole boundary directly.
         // Expected: the S5 oracle's `_cycle_centroids` on the same edges.
-        let holes = [
-            (1, 1),
-            (2, 1),
-            (3, 1),
-            (1, 2),
-            (1, 3),
-            (4, 2),
-            (4, 3),
-            (4, 4),
-            (3, 4),
-            (2, 4),
+        let m = grid(5, &[(3, 0), (4, 0), (0, 1), (4, 2), (3, 3), (2, 4)]);
+        let mut edges: HashMap<(u32, u32), u32> = HashMap::default();
+        for t in &m.triangles {
+            for i in 0..3 {
+                let (a, b) = (t[i], t[(i + 1) % 3]);
+                *edges.entry((a.min(b), a.max(b))).or_default() += 1;
+            }
+        }
+        edges.retain(|_, n| *n == 1);
+        let centroids = cycle_centroids(&m, &edges, &vec![true; m.keys.len()]);
+        let oracle = [
+            [2.423076923076923, 2.6153846153846154, 0.],
+            [4., 4., 0.],
+            [4.125, 4.125, 0.],
         ];
-        let m = grid(7, &holes);
-        let change = changes(&m, &grid(7, &[]).triangles, &[], 0.).unwrap();
-        assert_eq!(change.receipt.closed_holes, 3);
-        let oracle = [[3., 3., 0.], [3.5, 3.5, 0.], [23. / 6., 23. / 6., 0.]];
-        assert_eq!(change.closure_centroids.len(), oracle.len());
-        for (c, o) in change.closure_centroids.iter().zip(oracle) {
+        assert_eq!(centroids.len(), oracle.len());
+        for (c, o) in centroids.iter().zip(oracle) {
             assert!(
                 (0..3).all(|i| (c[i] - o[i]).abs() < 1e-12),
                 "{c:?} vs {o:?}"
