@@ -2021,6 +2021,67 @@ fn single_child_chains_publish_their_content_once() {
     assert!(shape.skipped_levels > 0, "{shape:?}");
 }
 
+/// A chain whose border with the rest of the scene simplifies differently one level down:
+/// a sheet straddling the root's x split, its shared column wavy in y. Below the split each
+/// half is a single-child chain, and where two chain depths' border contracts differ the
+/// cell cannot collapse onto its child: it builds its own tile over its single coarse child.
+/// That child's published depth is final when the cell closes, so every coarse row of the
+/// tree is written and the archive validates.
+#[test]
+fn chain_cells_that_cannot_collapse_publish_their_coarse_child() {
+    let pin = |p: [f32; 3]| Mesh {
+        positions: vec![p, [p[0] + 1., p[1], p[2]], [p[0], p[1], p[2] + 1.]],
+        indices: vec![0, 2, 1],
+        color: [0.5, 0.5, 0.5, 1.],
+    };
+    let source = vec![
+        grid(
+            (48, 24),
+            (2045., 2051.),
+            (0., 3.),
+            &|_, z| (z * 8.).sin(),
+            [0.6, 0.5, 0.4, 1.],
+        ),
+        pin([0., 0., 0.]),
+        pin([4095., 4096., 4095.]),
+    ];
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+    let proxies = rows(&dir.join("proxies.jsonl"));
+    let mut depths: HashMap<(u64, u64), Vec<u64>> = HashMap::new();
+    for r in &proxies {
+        let range = (r["first"].as_u64().unwrap(), r["end"].as_u64().unwrap());
+        depths
+            .entry(range)
+            .or_default()
+            .push(r["depth"].as_u64().unwrap());
+    }
+    // Chain cells published over the same ranks as their coarse child: not collapsed.
+    let stacked = depths.values().filter(|d| d.len() > 1).count();
+    assert!(stacked >= 1, "{depths:?}");
+    let census = census(&dir);
+    assert_eq!(census.duplicate_chain_tiles, 0, "{census:?}");
+    assert_eq!(census.reversed_coarse_faces, 0, "{census:?}");
+    assert_eq!(
+        census.missing_segments + census.missing_vertices + census.certificate_failures,
+        0,
+        "{census:?}"
+    );
+    let archive = work.path().join("chain.3tz");
+    let result = public(&input, &archive, None, 2).unwrap();
+    assert_eq!(result.diagnostics.hlod.tiles, proxies.len() as u64);
+    let checked = inspect(ValidationRequest::new(&archive)).unwrap();
+    assert!(checked.checks.iter().any(|c| c == "interfaceSegments"));
+    check_errors(&expand_archive(&archive).0);
+    let shape = refinement_shape(&archive);
+    assert_eq!(
+        shape.empty_below_content + shape.error_inversions,
+        0,
+        "{shape:?}"
+    );
+}
+
 /// Where the layout cannot skip a cell (implicit trees and document roots, forced here by
 /// tight fragment caps), a chain cell repeats its coarse tile instead of publishing empty;
 /// under the default caps every chain cell is spliced out and nothing repeats.
