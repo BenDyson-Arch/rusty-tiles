@@ -11,6 +11,7 @@ pub(super) fn memory_need(sorter: SortConfig) -> u64 {
         + 8 * sorter.buffer_bytes as u64
         + (1 << 16)
         + 12 * disk::CACHE_BYTES
+        + 8 * graph::FILTER_WORDS as u64
         // Chain reuse compares two live contracts before the geometry stage.
         + 2 * contract_workspace_bytes(6 * super::TRIANGLE_CAP as u64)
 }
@@ -156,11 +157,12 @@ impl Borders {
         nodes: &Sequence<NodeRecord>,
         rows: impl Iterator<Item = Result<InterfaceRow, crate::spill::SpillError>>,
         open_ends: impl Iterator<Item = Result<super::interfaces::KeyRecord, crate::spill::SpillError>>,
+        faces: impl Iterator<Item = Result<[Key; 3], JobError>>,
         extent: f64,
         lease: &ComponentLease<'_, '_>,
         check: &(dyn Fn() -> Result<(), JobError> + Sync),
     ) -> Result<Self, JobError> {
-        let source = Source::build(
+        let mut source = Source::build(
             scratch,
             sorter,
             nodes,
@@ -169,6 +171,7 @@ impl Borders {
             &|| lease.charge(0),
             check,
         )?;
+        source.retain_faces(faces, check)?;
         let mut borders = Self {
             source,
             maps: Disk::new(scratch, "border-maps")?,
@@ -183,6 +186,8 @@ impl Borders {
             borders.level(scratch, depth, check)?;
             lease.charge(borders.bytes())?;
         }
+        #[cfg(test)]
+        borders.check_retention()?;
         let mut ancestors = [(0u64, 0u64, 0u32); 32];
         for id in 0..borders.source.nodes.len {
             let mut node = borders.source.nodes.get(id)?;
@@ -206,6 +211,32 @@ impl Borders {
         borders.refs.flush()?;
         lease.charge(borders.bytes())?;
         Ok(borders)
+    }
+    /// Test builds: an external vertex retained at a depth is retained one level finer
+    /// (nested endpoints), and face retention keeps its vertex at and below its depth.
+    #[cfg(test)]
+    fn check_retention(&self) -> Result<(), JobError> {
+        let n = self.source.vertices.len;
+        for v in 0..n {
+            let r = self.source.vertices.get(v)?;
+            for depth in 0..=self.source.depth {
+                let m = self.maps.get(u64::from(depth) * n + v)?;
+                let retained = m[0] == m[1];
+                if Source::face_retained(&r, depth) && !retained {
+                    return Err(state("a face-retained vertex was contracted"));
+                }
+                if depth < self.source.depth
+                    && retained
+                    && self.source.external(r[3], r[4], depth)?
+                {
+                    let finer = self.maps.get(u64::from(depth + 1) * n + v)?;
+                    if finer[0] != finer[1] {
+                        return Err(state("retained border vertices are not nested"));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
     pub(super) fn audit_bound(&self, source_triangle_depths: u64) -> Option<u64> {
         super::audit::bound(self.refs.len, self.source.nodes.len, source_triangle_depths)
@@ -302,7 +333,11 @@ impl Borders {
                 edge = if e[0] == v { e[4] } else { e[5] };
             }
             let mut kind = u64::from(external);
-            if degree == 2 && !terminal && vertex[7] >> 32 == 0 {
+            if degree == 2
+                && !terminal
+                && vertex[7] >> 32 & 1 == 0
+                && !Source::face_retained(&vertex, depth)
+            {
                 let a = self.source.edges.get(two[0])?;
                 let b = self.source.edges.get(two[1])?;
                 if self.source.same_owners([a[2], a[3]], [b[2], b[3]], depth)?
@@ -825,6 +860,7 @@ mod tests {
                 &tree,
                 rows.into_iter().map(Ok),
                 std::iter::empty(),
+                std::iter::empty(),
                 4096.,
                 &lease,
                 &|| Ok(()),
@@ -942,6 +978,7 @@ mod tests {
             &tree,
             rows.iter().copied().map(Ok),
             std::iter::empty(),
+            std::iter::empty(),
             4096.,
             &lease,
             &|| Ok(()),
@@ -997,6 +1034,7 @@ mod tests {
             &tree,
             rows.into_iter().map(Ok),
             [Ok(super::super::interfaces::KeyRecord(points[2]))].into_iter(),
+            std::iter::empty(),
             4096.,
             &lease,
             &|| Ok(()),

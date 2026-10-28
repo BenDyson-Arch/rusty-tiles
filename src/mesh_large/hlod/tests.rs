@@ -4956,3 +4956,78 @@ fn contraction_output_is_identical_across_jobs_and_budgets() {
         assert_output_identity(&source, super::error::NEAREST_STEPS, true);
     }
 }
+
+/// A vertical planar quad grid from `origin` along `along` (`bays` columns) and `floors`
+/// rows of `floor` metres: the synthetic city's wall panels.
+fn wall(origin: [f32; 3], along: [f32; 2], bays: usize, floors: usize, floor: f32) -> Mesh {
+    let mut m = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.7, 0.6, 0.5, 1.],
+    };
+    for i in 0..=bays {
+        for j in 0..=floors {
+            let u = i as f32 / bays as f32;
+            m.positions.push([
+                origin[0] + u * along[0],
+                origin[1] + j as f32 * floor,
+                origin[2] + u * along[1],
+            ]);
+        }
+    }
+    let w = floors + 1;
+    for i in 0..bays {
+        for j in 0..floors {
+            let v = |a: usize, c: usize| (a * w + c) as u32;
+            m.indices.extend([
+                v(i, j),
+                v(i + 1, j),
+                v(i, j + 1),
+                v(i + 1, j),
+                v(i + 1, j + 1),
+                v(i, j + 1),
+            ]);
+        }
+    }
+    m
+}
+
+/// Six rotated planar wall grids (the synthetic city's panels) cut by the octree planes
+/// into staircase borders whose collinear runs S1b contracts. Where a run vertex's face
+/// has its two other corners on the border, moving it leaves a face of interface points
+/// only, which the proposal guard refuses: before face retention and endpoint choice this
+/// omitted three cells with `contraction_stalled`. Contraction still runs elsewhere.
+#[test]
+fn staircase_walls_contract_their_borders_without_omission() {
+    // Rational rotation (IEEE + - * / only): tan(theta / 2) = 3/16.
+    let t = 3. / 16.;
+    let (c, s) = ((1. - t * t) / (1. + t * t), 2. * t / (1. + t * t));
+    let mut source: Vec<Mesh> = (0..6)
+        .map(|k| {
+            let x = 40. + 7. * k as f32;
+            wall([x, 0., 50. - 20. * s], [40. * c, 40. * s], 12, 12, 3.2)
+        })
+        .collect();
+    source.push(grid(
+        (2, 2),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| -1.,
+        [0.4, 0.5, 0.3, 1.],
+    ));
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let run = Run::default();
+    let dir = stage(&input, &work.path().join("hlod"), &run).unwrap();
+    assert!(omission_receipt("staircase walls", &dir));
+    assert_directed_census("staircase walls", &census(&dir), run.cap);
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let contracted: u64 = manifest["hlod"]["bordersByDepth"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b["topology"]["contractedVertices"].as_u64().unwrap())
+        .sum();
+    assert!(contracted > 0, "{}", manifest["hlod"]["bordersByDepth"]);
+}

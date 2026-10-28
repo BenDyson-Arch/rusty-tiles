@@ -17,8 +17,13 @@ use crate::{
     JobError,
 };
 
+/// The face-retention membership filter (1 MiB, charged in `memory_need`). False
+/// positives only cost an exact lookup.
+pub(super) const FILTER_WORDS: usize = 1 << 17;
+
 pub(super) struct Source {
-    /// key x/y/z, owner first/end, incident head/count, minimum terminal leaf depth.
+    /// key x/y/z, owner first/end, incident head/count, minimum terminal leaf depth
+    /// (bit 32: source open end; bits 40..48: face retention depth + 1).
     pub(super) vertices: Disk<8>,
     /// endpoints, owner first/end, next at a/b, minimum terminal leaf depth.
     pub(super) edges: Disk<7>,
@@ -210,6 +215,7 @@ impl Source {
             depth,
             leaf_rows,
         };
+        let mut previous = None;
         for i in 0..raw_edges.len {
             if i.is_multiple_of(4096) {
                 check()?;
@@ -221,6 +227,11 @@ impl Source {
             let b = source
                 .vertex([e[3] as u32, e[4] as u32, e[5] as u32])?
                 .ok_or_else(|| state("shared edge has no second source vertex"))?;
+            // `shared_edge` searches edges by their ascending endpoint ids.
+            if a >= b || previous.is_some_and(|p| p >= [a, b]) {
+                return Err(state("shared edges are not in endpoint order"));
+            }
+            previous = Some([a, b]);
             let mut va = source.vertices.get(a)?;
             let mut vb = source.vertices.get(b)?;
             let id = source.edges.push([a, b, e[6], e[7], va[5], vb[5], e[8]])?;
@@ -246,6 +257,112 @@ impl Source {
         }
         admitted()?;
         Ok(source)
+    }
+
+    /// S1b face retention. Take a source face whose three corners are all shared, and a
+    /// corner `v` whose two edges in it are interior (not shared): from the shallowest
+    /// depth at which all three corners are external, removing `v` would carry this face
+    /// onto one spanning interface points only (its chord endpoint and the two others),
+    /// which the proposal guard must refuse (`folds`), so the contraction has no
+    /// realization. Such a corner records that depth (+1, in bits 40..48; 0: never) and
+    /// stays a live point there and below. External at d implies external at d+1 and the
+    /// shared edges are fixed, so the retained sets stay nested. One pass over the faces:
+    /// a fixed membership filter, then exact O(log V) vertex and edge lookups.
+    pub(super) fn retain_faces(
+        &mut self,
+        faces: impl Iterator<Item = Result<[Key; 3], JobError>>,
+        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    ) -> Result<(), JobError> {
+        let mut filter = vec![0u64; FILTER_WORDS];
+        let probes = |k: &Key| {
+            let mut h = (u64::from(k[0]) | u64::from(k[1]) << 32) ^ u64::from(k[2]) << 17;
+            h = (h ^ (h >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            h = (h ^ (h >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            h ^= h >> 31;
+            let bits = (FILTER_WORDS * 64) as u64;
+            [h % bits, h.rotate_left(21) % bits, h.rotate_left(42) % bits]
+        };
+        for v in 0..self.vertices.len {
+            if v.is_multiple_of(4096) {
+                check()?;
+            }
+            for bit in probes(&self.key(v)?) {
+                filter[(bit / 64) as usize] |= 1 << (bit % 64);
+            }
+        }
+        for (i, face) in faces.enumerate() {
+            if i.is_multiple_of(4096) {
+                check()?;
+            }
+            let face = face?;
+            if !face.iter().all(|k| {
+                probes(k)
+                    .iter()
+                    .all(|&bit| filter[(bit / 64) as usize] & 1 << (bit % 64) != 0)
+            }) {
+                continue;
+            }
+            let mut ids = [0; 3];
+            let mut depth = 0;
+            for (id, k) in ids.iter_mut().zip(&face) {
+                let Some(v) = self.vertex(*k)? else {
+                    depth = NONE;
+                    break;
+                };
+                *id = v;
+                let r = self.vertices.get(v)?;
+                let external = (0..=self.depth)
+                    .find_map(|d| match self.external(r[3], r[4], d) {
+                        Ok(true) => Some(Ok(u64::from(d))),
+                        Ok(false) => None,
+                        Err(e) => Some(Err(e)),
+                    })
+                    .transpose()?
+                    .ok_or_else(|| state("a shared source vertex is never external"))?;
+                depth = depth.max(external);
+            }
+            if depth == NONE {
+                continue;
+            }
+            let shared = [
+                self.shared_edge(ids[0], ids[1])?,
+                self.shared_edge(ids[1], ids[2])?,
+                self.shared_edge(ids[2], ids[0])?,
+            ];
+            for (c, id) in ids.into_iter().enumerate() {
+                // Corner c's edges in the face are c-(c+1) and (c+2)-c.
+                if shared[c] || shared[(c + 2) % 3] {
+                    continue;
+                }
+                let mut v = self.vertices.get(id)?;
+                let old = v[7] >> 40 & 0xff;
+                if old == 0 || depth + 1 < old {
+                    v[7] = v[7] & !(0xff << 40) | (depth + 1) << 40;
+                    self.vertices.set(id, v)?;
+                }
+            }
+        }
+        Ok(())
+    }
+    /// Edges are stored in key order of their endpoints, and vertex ids follow key order.
+    fn shared_edge(&self, a: u64, b: u64) -> Result<bool, JobError> {
+        let want = [a.min(b), a.max(b)];
+        let (mut lo, mut hi) = (0, self.edges.len);
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            let e = self.edges.get(mid)?;
+            match [e[0], e[1]].cmp(&want) {
+                std::cmp::Ordering::Less => lo = mid + 1,
+                std::cmp::Ordering::Greater => hi = mid,
+                std::cmp::Ordering::Equal => return Ok(true),
+            }
+        }
+        Ok(false)
+    }
+    /// Whether face retention keeps this vertex record live at `depth`.
+    pub(super) fn face_retained(record: &[u64; 8], depth: u32) -> bool {
+        let from = record[7] >> 40 & 0xff;
+        from != 0 && u64::from(depth) + 1 >= from
     }
 
     pub(super) fn vertex(&self, key: Key) -> Result<Option<u64>, JobError> {
