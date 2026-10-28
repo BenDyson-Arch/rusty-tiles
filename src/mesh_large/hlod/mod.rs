@@ -576,7 +576,8 @@ enum Child {
 }
 
 /// A coarse row's published depth: its own cell's, or the top of the pass-through chain
-/// above it (final once its parent cell has a second child or the walk ends).
+/// above it (final once its parent cell has a second child, closes without passing it
+/// through, or the walk ends).
 #[derive(Clone)]
 struct Publish {
     depth: u32,
@@ -1974,8 +1975,15 @@ fn walk(
                 frame.children[..],
                 [only] if matches!(kinds.get(&only), Some(Child::Leaf))
             );
+            // The cell publishes its own tile, so its children's published depths are final
+            // (a single coarse child it cannot collapse onto included). A row already
+            // final may already be written.
             for c in &frame.children {
-                kinds.remove(c);
+                if let Some(Child::Coarse(seq)) = kinds.remove(c) {
+                    if let Some(p) = publish.get_mut(&seq) {
+                        p.done = true;
+                    }
+                }
             }
             let closed = Closed {
                 id: frame.id,
