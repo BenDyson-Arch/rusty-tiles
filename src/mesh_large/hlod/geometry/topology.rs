@@ -384,29 +384,15 @@ pub(super) fn cleanup(
         .collect();
     r.duplicate_faces += keep.iter().filter(|k| !**k).count() as u64;
     retain(m, &keep);
-    let component = Components::mesh(m);
-    let border = points(interface);
-    let mut boxes: HashMap<usize, ([f64; 3], [f64; 3], bool)> = HashMap::default();
-    for t in &m.triangles {
-        for &v in t {
-            let p = m.positions[v as usize].map(f64::from);
-            let b = boxes.entry(component[v as usize]).or_insert((p, p, false));
-            for (a, x) in p.into_iter().enumerate() {
-                b.0[a] = b.0[a].min(x);
-                b.1[a] = b.1[a].max(x);
-            }
-            b.2 |= border.contains(&m.keys[v as usize]);
-        }
-    }
-    let mut dropped: HashSet<usize> = boxes
+    let (component, parts) = parts(m, interface);
+    let mut dropped: HashSet<usize> = parts
         .iter()
-        .filter(|(_, (lo, hi, touch))| {
-            !touch && (0..3).map(|a| (hi[a] - lo[a]).powi(2)).sum::<f64>().sqrt() < g
-        })
+        .filter(|(_, p)| !p.touch && p.diagonal < g)
         .map(|(c, _)| *c)
         .collect();
-    if dropped.len() == boxes.len() {
-        if let Some(c) = dropped.iter().min().copied() {
+    if dropped.len() == parts.len() {
+        // Keep the largest (drops go smallest first, as validators check).
+        if let Some(c) = parts.iter().max_by(|a, b| a.1.order(b.1)).map(|(c, _)| *c) {
             dropped.remove(&c);
         }
     }
@@ -425,6 +411,95 @@ pub(super) fn cleanup(
         .collect();
     retain(m, &keep);
     removed
+}
+
+/// One component of a merged mesh's faces.
+pub(super) struct Part {
+    pub diagonal: f64,
+    pub triangles: u64,
+    pub least: Key,
+    /// A key on the parent's interface.
+    pub touch: bool,
+}
+impl Part {
+    /// Drop order: bounding-box diagonal, then triangle count, then least key.
+    pub(super) fn order(&self, other: &Self) -> std::cmp::Ordering {
+        self.diagonal
+            .total_cmp(&other.diagonal)
+            .then(self.triangles.cmp(&other.triangles))
+            .then(self.least.cmp(&other.least))
+    }
+}
+
+/// Each vertex's component and every component's part, over `m`'s faces.
+pub(super) fn parts(m: &Merged, interface: &[InterfaceRow]) -> (Vec<usize>, HashMap<usize, Part>) {
+    let component = Components::mesh(m);
+    let border = points(interface);
+    let mut boxes: HashMap<usize, ([f64; 3], [f64; 3], Part)> = HashMap::default();
+    for t in &m.triangles {
+        let b = boxes.entry(component[t[0] as usize]).or_insert((
+            [f64::MAX; 3],
+            [f64::MIN; 3],
+            Part {
+                diagonal: 0.,
+                triangles: 0,
+                least: m.keys[t[0] as usize],
+                touch: false,
+            },
+        ));
+        b.2.triangles += 1;
+        for &v in t {
+            let p = m.positions[v as usize].map(f64::from);
+            for (a, x) in p.into_iter().enumerate() {
+                b.0[a] = b.0[a].min(x);
+                b.1[a] = b.1[a].max(x);
+            }
+            let k = m.keys[v as usize];
+            b.2.least = b.2.least.min(k);
+            b.2.touch |= border.contains(&k);
+        }
+    }
+    let parts = boxes
+        .into_iter()
+        .map(|(c, (lo, hi, mut part))| {
+            part.diagonal = (0..3).map(|a| (hi[a] - lo[a]).powi(2)).sum::<f64>().sqrt();
+            (c, part)
+        })
+        .collect();
+    (component, parts)
+}
+
+/// Drops go smallest first, as validators check from the archive: once `output` drops a
+/// component of `m` with no border contact and a diagonal of at least `from` (the
+/// children's G), every kept border-free component smaller than the largest drop goes
+/// too. Each lies below that drop's diagonal, hence below its licence, and only shrinks
+/// the output. Returns whether `output` changed.
+pub(super) fn order_drops(
+    m: &Merged,
+    output: &mut Vec<[u32; 3]>,
+    interface: &[InterfaceRow],
+    from: f64,
+) -> bool {
+    let (component, parts) = parts(m, interface);
+    let kept: HashSet<usize> = output.iter().map(|t| component[t[0] as usize]).collect();
+    let largest = parts
+        .iter()
+        .filter(|(c, p)| !p.touch && !kept.contains(c))
+        .map(|(_, p)| p.diagonal)
+        .fold(f64::MIN, f64::max);
+    if largest < from {
+        return false;
+    }
+    let smaller: HashSet<usize> = parts
+        .iter()
+        .filter(|(c, p)| !p.touch && kept.contains(c) && p.diagonal < largest)
+        .map(|(c, _)| *c)
+        .collect();
+    if smaller.is_empty() {
+        return false;
+    }
+    output.retain(|t| !smaller.contains(&component[t[0] as usize]));
+    true
 }
 
 /// Compare the actual output topology, including changes made by meshopt itself. A
@@ -1515,6 +1590,38 @@ pub(super) mod tests {
         .unwrap_err();
         assert_eq!(error.kind(), crate::JobErrorKind::InvalidState);
         assert_eq!(m.triangles, [[0, 1, 2]]);
+    }
+
+    /// Separate triangles at x = 20i, each `size` across.
+    fn islands(sizes: &[f32]) -> Merged {
+        let mut positions = Vec::new();
+        for (i, &s) in sizes.iter().enumerate() {
+            let x = 20. * i as f32;
+            positions.extend([[x, 0., 0.], [x + s, 0., 0.], [x, s, 0.]]);
+        }
+        let triangles = (0..sizes.len() as u32)
+            .map(|i| [3 * i, 3 * i + 1, 3 * i + 2])
+            .collect();
+        mesh(positions, triangles)
+    }
+
+    /// Review r2 P1-1: cleanup that licenses every component keeps the largest.
+    #[test]
+    fn cleanup_keeps_the_largest_component_when_every_one_is_eligible() {
+        let mut m = islands(&[1., 3., 2.]);
+        cleanup(&mut m, &[], 100., &mut Receipt::default());
+        assert_eq!(m.triangles, [[3, 4, 5]]);
+    }
+
+    /// Review r2 P1-1: once a drop reaches the children's G, every kept border-free
+    /// component smaller than it goes too; below that G nothing changes.
+    #[test]
+    fn drops_at_or_above_child_error_go_smallest_first() {
+        let m = islands(&[8., 5., 3.]);
+        let mut output = vec![m.triangles[0], m.triangles[2]];
+        assert!(!order_drops(&m, &mut output, &[], 7.1));
+        assert!(order_drops(&m, &mut output, &[], 0.));
+        assert_eq!(output, [m.triangles[0]]);
     }
 
     fn mesh(positions: Vec<[f32; 3]>, triangles: Vec<[u32; 3]>) -> Merged {

@@ -896,6 +896,13 @@ def native(binary, folder, archive):
     return checked.returncode, json.loads(checked.stdout)
 
 
+# Drop cases refused for lack of cap pressure: the refusal must say so (`coarseDrops`
+# alone would also match a count mismatch). The oracle reaches it only after its sidecar
+# stage accepted the drop.
+CAP_REFUSALS = ('dropped-small', 'dropped-large', 'dropped-unreported', 'dropped-tampered-g',
+                'remote-drop', 'loss-between-samples')
+
+
 def run(root, binary=None, sheet_n=120):
     from oracle import audit, Failure
     root = Path(root)
@@ -909,6 +916,8 @@ def run(root, binary=None, sheet_n=120):
         except Failure as e:
             got, result = e.check, dict(detail=e.detail)
         assert got == case['oracleCheck'], (name, case['oracleCheck'], got, result.get('detail'))
+        if name in CAP_REFUSALS and got == 'coarseDrops':
+            assert 'cap' in result['detail'], (name, result['detail'])
         entry = dict(name=name, oracle=got)
         if name in ('contracted', 'mixed-within', 'same-depth-gap'):
             assert result.get('contractedBorderArcs', 0) > 0 or got, (name, result)
@@ -921,6 +930,8 @@ def run(root, binary=None, sheet_n=120):
                         'mixedDepthBorderGap'} <= set(report['checks']), name
             else:
                 assert code == 3 and label in report['error']['message'], (name, label, report)
+                if name in CAP_REFUSALS:
+                    assert 'cap' in report['error']['message'], (name, report)
             entry['native'] = label
         results.append(entry)
     if binary is not None:

@@ -493,9 +493,18 @@ exceeds the cap). Validators check that part of the rule and the order from the
 archive: a drop at or above the children's largest G needs more than 8,192 child faces
 and no smaller border-free child component may stay, and S2's fixed sample points on
 every dropped face must lie within G. One coarse drop raises its tile's G (mesh-1e7:
-up to about 27 m); ancestors' floor max(E, child G) then admits ordinary drops of
-border-free components below that size without cap pressure. That is the existing
-rule applied honestly, and it is how one tile's drop shows further up.
+up to about 27 m); an ancestor under cap pressure then admits ordinary drops of
+border-free components below that size, since its floor max(E, child G) rose. That is
+the existing rule applied honestly, and it is how one tile's drop shows further up.
+Without cap pressure no component goes, ordinary or coarse.
+
+Review r2 (2026-10-28): the archive cannot recover E, so it treats every drop at or
+above the children's G as checkable: ordinary drops in [child G, E) also need cap
+pressure and go smallest first. The producer keeps its output to that rule (an output
+dropping such a component loses every kept border-free component smaller than it, all
+licensed; cleanup's keep-one keeps the largest). Every independent layer counts cap
+pressure on the children's faces before S1b contraction; that the contracted input
+exceeds the cap is enforced by the producer alone.
 
 ## Numeric acceptance contract (proposed, not measured passes)
 

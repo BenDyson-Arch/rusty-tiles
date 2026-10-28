@@ -5,4 +5,6 @@
 
 ### Changed
 
+- HLOD: a coarse cell drops no component, ordinary (below its G floor) or coarse, unless its input exceeds the cap, and drops at or above the children's geometricError go smallest first. Before, ordinary drops could happen at any cell that failed another strategy, in any order.
+
 - An HLOD archive whose coarse payload omits child components without declaring them, or whose geometricError does not cover them, now fails validation (`coarseDrops`). Archives from this release declare every drop, including small drops below the G floor, so a coarse payload holding such a drop gains the declaration.
