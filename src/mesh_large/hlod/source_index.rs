@@ -811,7 +811,7 @@ pub(crate) struct SourceQuery<'a> {
     full_buf: Vec<FullTriangle>,
     block_bytes: usize,
     /// Reused frontier entries of [`SourceQuery::nearest_budget`].
-    frontier_entries: Vec<(Node, Option<[Visit; 2]>)>,
+    frontier_entries: Vec<Visit>,
     region: Vec<Region>,
     region_root: u32,
     block_limit: usize,
@@ -1107,16 +1107,19 @@ impl SourceQuery<'_> {
         } else {
             winning = self.seed(p, &mut best, budget)?;
         }
+        // Entries are visit handles; a node is re-read from the resident region (or the
+        // node cache) when popped, rather than copying it through the frontier.
         let mut entries = std::mem::take(&mut self.frontier_entries);
         entries.clear();
-        entries.push(self.visit(Visit::Resident(self.region_root))?);
+        let root = Visit::Resident(self.region_root);
+        entries.push(root);
         frontier.clear();
-        let mut next = Some((entries[0].0.distance(p).to_bits(), 0));
+        let mut next = Some((self.visit(root)?.0.distance(p).to_bits(), 0));
         while let Some((d, e)) = pop(&mut next, frontier) {
             if f64::from_bits(d) > best.distance2 || !budget.spend() {
                 break;
             }
-            let (n, children) = entries[e as usize];
+            let (n, children) = self.visit(entries[e as usize])?;
             if !n.intersects(self.key) {
                 continue;
             }
@@ -1133,11 +1136,11 @@ impl SourceQuery<'_> {
                 let [left, right] =
                     children.ok_or_else(|| state("source branch without children"))?;
                 for v in [left, right] {
-                    let child = self.visit(v)?;
-                    let d = child.0.distance(p);
-                    if child.0.intersects(self.key) && d <= best.distance2 {
+                    let child = self.visit(v)?.0;
+                    let d = child.distance(p);
+                    if child.intersects(self.key) && d <= best.distance2 {
                         push(&mut next, frontier, (d.to_bits(), entries.len() as u64));
-                        entries.push(child);
+                        entries.push(v);
                     }
                 }
             }
