@@ -68,7 +68,14 @@ impl Source {
         self
     }
 
-    fn bad_faces(&self, positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> (Vec<bool>, Vec<bool>) {
+    /// `canonical` gives each corner the first vertex index with its Key, so equal
+    /// sorted canonical triples are exactly equal faces (`face` is the sorted Key triple).
+    fn bad_faces(
+        &self,
+        positions: &[[f32; 3]],
+        triangles: &[[u32; 3]],
+        canonical: &[[u32; 3]],
+    ) -> (Vec<bool>, Vec<bool>) {
         let _cpu = super::super::cpu_profile::start(
             super::super::cpu_profile::Stage::Faces,
             triangles.len(),
@@ -76,7 +83,7 @@ impl Source {
         let mut invalid = vec![false; triangles.len()];
         let mut original = vec![false; triangles.len()];
         let mut faces = Vec::with_capacity(triangles.len());
-        for (i, t) in triangles.iter().enumerate() {
+        for (i, (t, ids)) in triangles.iter().zip(canonical).enumerate() {
             let (f, d) = face(t.map(|v| key(positions[v as usize])));
             let source = self.faces.get(&f).copied().unwrap_or_default();
             // A source face license is independent of proposal validity below.
@@ -91,21 +98,26 @@ impl Source {
                     && super::topology::normal(positions, *t)
                         .iter()
                         .all(|&n| n == 0.));
-            faces.push((f, d, i));
+            let mut group = *ids;
+            group.sort_unstable();
+            faces.push((group, d as u8, i as u32));
         }
-        faces.sort_unstable();
+        // Grouping only: counts and marks are the same in any order within a group.
+        faces.sort_unstable_by_key(|r| r.0);
         let mut at = 0;
         while at < faces.len() {
             let end = at + faces[at..].partition_point(|r| r.0 == faces[at].0);
             if end - at > 1 {
                 let mut counts = [0; 2];
                 for &(_, d, _) in &faces[at..end] {
-                    counts[d] += 1;
+                    counts[d as usize] += 1;
                 }
-                let source = self.faces.get(&faces[at].0).copied().unwrap_or_default();
+                let i = faces[at].2 as usize;
+                let (f, _) = face(triangles[i].map(|v| key(positions[v as usize])));
+                let source = self.faces.get(&f).copied().unwrap_or_default();
                 if counts[0] > source[0] || counts[1] > source[1] {
                     for &(_, _, i) in &faces[at..end] {
-                        invalid[i] = true;
+                        invalid[i as usize] = true;
                     }
                 }
             }
@@ -137,7 +149,6 @@ impl Source {
         triangles: &[[u32; 3]],
         changed_boundary: bool,
     ) -> Vec<bool> {
-        let (mut invalid, original) = self.bad_faces(positions, triangles);
         let incidence_cpu = super::super::cpu_profile::start(
             super::super::cpu_profile::Stage::Incidence,
             triangles.len(),
@@ -157,6 +168,12 @@ impl Source {
             }
             canonical
         };
+        drop(incidence_cpu);
+        let (mut invalid, original) = self.bad_faces(positions, triangles, &canonical);
+        let incidence_cpu = super::super::cpu_profile::start(
+            super::super::cpu_profile::Stage::Incidence,
+            triangles.len(),
+        );
         let mut edges = Vec::<((u32, u32), Incidence)>::with_capacity(triangles.len() * 3);
         for (i, ids) in canonical.iter().enumerate() {
             let keys = ids.map(|v| key(positions[v as usize]));
@@ -170,7 +187,10 @@ impl Source {
             }
         }
         drop(canonical);
-        edges.sort_unstable();
+        // Grouping only: every per-edge decision below (direction counts, unchanged
+        // licences, `distinct_sides`, which fails on a fifth wing, a zero normal or any
+        // acute pair) is independent of the order within a group.
+        edges.sort_unstable_by_key(|e| e.0);
         drop(incidence_cpu);
         let _cpu =
             super::super::cpu_profile::start(super::super::cpu_profile::Stage::Fans, edges.len());

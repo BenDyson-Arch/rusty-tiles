@@ -160,13 +160,44 @@ fn missing(
 fn missing_owned(
     triangles: &[[u32; 3]],
     keys: &[Key],
+    missing_edges: HashSet<(Key, Key)>,
+    missing_points: HashSet<Key>,
+) -> (Vec<(Key, Key)>, Vec<Key>) {
+    missing_among(triangles, keys, missing_edges, missing_points, &|_| true)
+}
+
+/// Vertices whose Key is a required point or a required segment's endpoint: only
+/// their corners and edges can match a query, so the scan skips every other probe.
+fn required_corners(
+    keys: &[Key],
+    segments: &HashSet<(Key, Key)>,
+    points: &HashSet<Key>,
+) -> Vec<bool> {
+    let ends: HashSet<Key> = segments.iter().flat_map(|&(a, b)| [a, b]).collect();
+    keys.iter()
+        .map(|k| ends.contains(k) || points.contains(k))
+        .collect()
+}
+
+/// [`missing_owned`], probing only corners for which `relevant` holds. Exact when
+/// `relevant` covers every required point and both endpoints of every segment.
+fn missing_among(
+    triangles: &[[u32; 3]],
+    keys: &[Key],
     mut missing_edges: HashSet<(Key, Key)>,
     mut missing_points: HashSet<Key>,
+    relevant: &dyn Fn(u32) -> bool,
 ) -> (Vec<(Key, Key)>, Vec<Key>) {
     for t in triangles {
         for k in 0..3 {
-            let (a, b) = (keys[t[k] as usize], keys[t[(k + 1) % 3] as usize]);
-            missing_edges.remove(&edge(a, b));
+            let (u, w) = (t[k], t[(k + 1) % 3]);
+            if !relevant(u) {
+                continue;
+            }
+            let a = keys[u as usize];
+            if relevant(w) {
+                missing_edges.remove(&edge(a, keys[w as usize]));
+            }
             missing_points.remove(&a);
         }
         if missing_edges.is_empty() && missing_points.is_empty() {
@@ -692,6 +723,7 @@ fn attempt_mode(
             lost_points.len()
         )));
     }
+    let corners = required_corners(&merged.keys, &segments, &vertices);
     let mut locked: Vec<bool> = if preserve_holes {
         topology::protected(merged, interface, true).0
     } else {
@@ -745,7 +777,9 @@ fn attempt_mode(
         let mut fold_source = None;
         loop {
             let (segments, vertices) = required();
-            let (edges, points) = missing_owned(&output, &merged.keys, segments, vertices);
+            let (edges, points) = missing_among(&output, &merged.keys, segments, vertices, &|v| {
+                corners[v as usize]
+            });
             let invalid = fold_source
                 .get_or_insert_with(|| {
                     folds::Source::new(&merged.positions, contracted_faces).with_boundary(interface)
