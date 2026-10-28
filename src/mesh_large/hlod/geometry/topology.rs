@@ -1132,8 +1132,11 @@ fn cycle_centroids(m: &Merged, edges: &HashMap<(u32, u32), u32>, seed: &[bool]) 
 /// touches the parent interface (`changes` compares that multigraph exactly). Two paths
 /// between the same anchors that both shrink to their direct edge cancel into an interior
 /// edge (a building's wall top and its one-quad roof edge, say), and a loop at one anchor
-/// vanishes once it has fewer than two interior vertices. So each path of a parallel
-/// group keeps its middle interior vertex, and each loop its first two. O(boundary).
+/// vanishes once it has fewer than two interior vertices. A branch anchor (a pinch off
+/// the interface) must not be reduced away, and the paths leaving it must not zip shut.
+/// So branch anchors and the first vertex of each path at a branch stay, each path of a
+/// parallel group keeps its middle interior vertex, and each loop its first two.
+/// O(boundary).
 pub(super) fn touching_pins(m: &Merged, interface: &[InterfaceRow]) -> Vec<bool> {
     let mut pins = vec![false; m.keys.len()];
     let mut edges: HashMap<(u32, u32), u32> = HashMap::default();
@@ -1170,6 +1173,11 @@ pub(super) fn touching_pins(m: &Merged, interface: &[InterfaceRow]) -> Vec<bool>
                 && (degree[v] != 2 || border.contains(&m.keys[v]))
         })
         .collect();
+    // A branch (a pinch where boundaries meet) is an anchor the comparison needs; the
+    // interface anchors are locked already.
+    for (pin, &a) in pins.iter_mut().zip(&anchor) {
+        *pin |= a;
+    }
     let (offset, adjacent) = boundary_adjacency(m.keys.len(), &edges);
     let neighbors = |v: u32| &adjacent[offset[v as usize]..offset[v as usize + 1]];
     // Interior vertices of each anchored path, grouped by its anchor pair.
@@ -1201,6 +1209,17 @@ pub(super) fn touching_pins(m: &Merged, interface: &[InterfaceRow]) -> Vec<bool>
     }
     for ((a, b), group) in paths {
         for interior in &group {
+            // At a branch the two sides of a pinch zip shut once their first vertices
+            // merge: keep the first vertex of every path leaving a branch.
+            let branch = |v: u32| !border.contains(&m.keys[v as usize]);
+            if let (Some(&first), Some(&last)) = (interior.first(), interior.last()) {
+                if branch(a) {
+                    pins[first as usize] = true;
+                }
+                if branch(b) {
+                    pins[last as usize] = true;
+                }
+            }
             if a == b {
                 for &v in interior.iter().take(2) {
                     pins[v as usize] = true;
