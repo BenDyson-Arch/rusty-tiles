@@ -1676,6 +1676,208 @@ fn split_clusters(
 
 #[cfg(test)]
 pub(super) mod tests {
+
+    /// Fix 2 C1, cut from a real mesh-1e7 parent (f3259578-d4): a child's near-degenerate
+    /// face lies beside the chord. Its noise normal makes it a CDT patch of its own whose
+    /// rebuild overlaps its neighbour's (a twin face), so every chart plan fails until the
+    /// sliver joins its neighbour's patch.
+    #[test]
+    fn a_sliver_beside_a_chord_joins_its_neighbours_patch() {
+        const SLIVER_KEYS: [[u32; 3]; 23] = [
+            [0x448b7140, 0xc14d0000, 0x4313c300],
+            [0x448bb680, 0xc119d000, 0x4317e700],
+            [0x448b7140, 0xc119d000, 0x4313c300],
+            [0x448b7140, 0xc0cd4000, 0x4313c300],
+            [0x448be2e0, 0xc14d0000, 0x4311e800],
+            [0x448bfbc0, 0xbc400000, 0x431c0a00],
+            [0x448b7140, 0xbc400000, 0x4313c300],
+            [0x448be2e0, 0xc0cd4000, 0x4311e800],
+            [0x448bb680, 0xc04d8000, 0x4317e700],
+            [0x448bb680, 0xbc400000, 0x4317e700],
+            [0x448bb680, 0x40cc6000, 0x4317e700],
+            [0x448b7140, 0x40cc6000, 0x4313c300],
+            [0x448bfbc0, 0x40cc6000, 0x431c0a00],
+            [0x448bb680, 0x41196000, 0x4317e700],
+            [0x448b7140, 0x41196000, 0x4313c300],
+            [0x448b7140, 0x414ca000, 0x4313c400],
+            [0x448bfbc0, 0x414ca000, 0x431c0a00],
+            [0x448bb680, 0x414ca000, 0x4317e600],
+            [0x448bb680, 0xc14d0000, 0x4317e700],
+            [0x448bfbc0, 0xc14d0000, 0x431c0a00],
+            [0x448bb680, 0x417fc000, 0x4317e600],
+            [0x448bfbc0, 0x417fc000, 0x431c0a00],
+            [0x448bfbc0, 0x41998000, 0x431c0a00],
+        ];
+        const SLIVER_FACES: [[u32; 3]; 29] = [
+            [0, 1, 2],
+            [2, 3, 4],
+            [1, 5, 2],
+            [2, 5, 3],
+            [3, 6, 7],
+            [5, 8, 3],
+            [8, 9, 3],
+            [3, 9, 6],
+            [6, 10, 11],
+            [8, 5, 9],
+            [9, 10, 6],
+            [9, 12, 10],
+            [11, 13, 14],
+            [10, 13, 11],
+            [10, 16, 13],
+            [13, 17, 14],
+            [4, 3, 7],
+            [0, 2, 4],
+            [18, 1, 0],
+            [18, 19, 1],
+            [14, 17, 15],
+            [13, 16, 17],
+            [19, 5, 1],
+            [5, 12, 9],
+            [12, 16, 10],
+            [17, 20, 15],
+            [17, 21, 20],
+            [16, 21, 17],
+            [21, 22, 20],
+        ];
+        const SLIVER_INTERFACE: [(u32, usize, usize, u32, u32); 10] = [
+            (579, 4, 4, 582, 602),
+            (579, 16, 16, 583, 608),
+            (579, 16, 21, 583, 608),
+            (579, 16, 19, 583, 608),
+            (579, 21, 21, 583, 608),
+            (579, 19, 19, 583, 608),
+            (580, 7, 7, 582, 602),
+            (580, 7, 4, 582, 602),
+            (583, 21, 22, 583, 608),
+            (583, 22, 22, 583, 608),
+        ];
+        const SLIVER_PREVIOUS: [(u32, usize, usize, u32, u32); 18] = [
+            (580, 15, 15, 582, 583),
+            (580, 15, 17, 582, 583),
+            (580, 17, 17, 582, 583),
+            (583, 17, 16, 582, 583),
+            (580, 7, 7, 582, 602),
+            (580, 7, 4, 582, 602),
+            (580, 4, 4, 582, 602),
+            (580, 12, 12, 582, 603),
+            (580, 12, 16, 582, 603),
+            (580, 12, 5, 582, 603),
+            (580, 16, 16, 582, 608),
+            (583, 16, 21, 583, 608),
+            (583, 21, 21, 583, 608),
+            (583, 21, 22, 583, 608),
+            (583, 22, 22, 583, 608),
+            (580, 5, 5, 582, 603),
+            (580, 5, 19, 582, 603),
+            (580, 19, 19, 582, 603),
+        ];
+        const SLIVER_MAPPING: [(usize, usize, usize, f64, u8); 8] = [
+            (4, 4, 4, 0.0, 6),
+            (5, 16, 19, 0.5, 6),
+            (12, 16, 19, 0.25, 6),
+            (15, 15, 15, 0.0, 5),
+            (16, 16, 16, 0.0, 5),
+            (17, 17, 17, 0.0, 5),
+            (19, 19, 19, 0.0, 6),
+            (21, 21, 21, 0.0, 5),
+        ];
+        let keys: Vec<Key> = SLIVER_KEYS.to_vec();
+        let positions = keys.iter().map(|k| k.map(f32::from_bits)).collect();
+        let triangles = SLIVER_FACES.to_vec();
+        let rep = crate::mesh_large::hlod::store::SourcePrimitive {
+            node: 0,
+            mesh: 0,
+            primitive: 0,
+            expanded_ordinal: 0,
+            material: u32::MAX,
+        };
+        let mut m = Merged {
+            ells: vec![0; keys.len()],
+            representative: vec![rep; triangles.len()],
+            keys: keys.clone(),
+            positions,
+            triangles,
+        };
+        let rows = |r: &[(u32, usize, usize, u32, u32)]| -> Vec<InterfaceRow> {
+            r.iter()
+                .map(|&(leaf, a, b, lo, hi)| InterfaceRow::new(leaf, keys[a], keys[b], lo, hi))
+                .collect()
+        };
+        let (interface, previous) = (rows(&SLIVER_INTERFACE), rows(&SLIVER_PREVIOUS));
+        let mapping: HashMap<Key, (Key, Key, f64, u8)> = SLIVER_MAPPING
+            .iter()
+            .map(|&(v, a, b, t, kind)| (keys[v], (keys[a], keys[b], t, kind)))
+            .collect();
+        let map = |k: Key| Ok(mapping.get(&k).copied());
+        let mut receipt = Receipt::default();
+        assert!(contract(&mut m, &interface, &previous, &map, &mut receipt).unwrap());
+        assert!(receipt.contracted_vertices > 0);
+    }
+
+    /// Fix 2 C3: removing chord vertex `m` leaves link e0, i1, b1, b2, i2, e1 with b1-b2 an
+    /// interface edge. Either endpoint snap closes b1, b2 and an endpoint into a face of
+    /// interface points only, and so does the Delaunay ear of the rebuild; a flip towards
+    /// the interior sample i1 or i2 gives the only admissible faces.
+    #[test]
+    fn a_rebuilt_ear_of_interface_points_flips_to_an_interior_sample() {
+        let positions: Vec<[f32; 3]> = vec![
+            [1., 0., 0.],    // 0 e0
+            [1., 1.6, 0.],   // 1 m
+            [1., 3.2, 0.],   // 2 e1
+            [0.05, 0.2, 0.], // 3 i1
+            [0., 1., 0.],    // 4 b1
+            [0., 2., 0.],    // 5 b2
+            [0.05, 2.8, 0.], // 6 i2
+        ];
+        let keys: Vec<Key> = positions.iter().map(|&p| super::super::key(p)).collect();
+        let triangles = vec![[1, 0, 3], [1, 3, 4], [1, 4, 5], [1, 5, 6], [1, 6, 2]];
+        let rep = crate::mesh_large::hlod::store::SourcePrimitive {
+            node: 0,
+            mesh: 0,
+            primitive: 0,
+            expanded_ordinal: 0,
+            material: u32::MAX,
+        };
+        let mut m = Merged {
+            ells: vec![0; keys.len()],
+            representative: vec![rep; triangles.len()],
+            keys: keys.clone(),
+            positions,
+            triangles,
+        };
+        let row = |a: usize, b: usize| {
+            let (a, b) = (keys[a].min(keys[b]), keys[a].max(keys[b]));
+            InterfaceRow::new(0, a, b, 0, 1)
+        };
+        let mut interface = vec![row(0, 2), row(4, 5)];
+        let mut previous = vec![row(0, 1), row(1, 2), row(4, 5)];
+        for v in [0, 2, 4, 5] {
+            interface.push(row(v, v));
+            previous.push(row(v, v));
+        }
+        previous.push(row(1, 1));
+        interface.sort_unstable();
+        previous.sort_unstable();
+        let (e0, e1, mid) = (keys[0], keys[2], keys[1]);
+        let map = |k: Key| {
+            Ok(if k == mid {
+                Some((e0, e1, 0.5, 0))
+            } else if k == e0 || k == e1 {
+                Some((k, k, 0., 0))
+            } else {
+                None
+            })
+        };
+        let mut receipt = Receipt::default();
+        assert!(contract(&mut m, &interface, &previous, &map, &mut receipt).unwrap());
+        let boundary = |v: u32| [0, 2, 4, 5].contains(&v);
+        assert!(
+            m.triangles.iter().all(|t| !t.iter().all(|&v| boundary(v))),
+            "{:?}",
+            m.triangles
+        );
+    }
+
     use super::*;
 
     #[test]

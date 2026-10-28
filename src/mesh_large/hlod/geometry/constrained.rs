@@ -446,12 +446,13 @@ fn triangulate(
             output.push(t);
             representatives.push(m.representative[faces[0]]);
         }
-        flip_interface_ears(
+        flip_interface_edges(
             &m.positions,
             &mut output[start..],
             axis,
             &|v| required.points.contains(&v),
             &|t| guard.licensed(&m.positions, t),
+            &|a, b| guard.licensed_edge(&m.positions, a, b),
             &constraints,
         );
         // Positive input Jacobians plus a simple boundary of degree one establish the
@@ -486,18 +487,20 @@ fn triangulate(
     )
 }
 
-/// The CDT may close three interface points into a new face where the patch also has an
-/// interior sample: the source guard refuses such a face (either neighbour could build
-/// it). Flip one of its unconstrained edges towards an interior apex where the quad is
-/// strictly convex in the patch projection. A flip removes one such face and creates
-/// none; a source face (licensed) is left as it is. Work is linear: every flip re-queues
-/// at most the four faces across the new pair's outer edges.
-fn flip_interface_ears(
+/// The source guard refuses a new edge joining two interface points (either neighbour could
+/// build it) and a new face of interface points only, yet the CDT picks such diagonals
+/// where the patch also has an interior sample. Flip each unconstrained interface-to-
+/// interface edge that is unlicensed, or borders such a face, where the apex across it on
+/// one side is interior and the quad is strictly convex in the patch projection. A flip
+/// removes that edge and adds a diagonal with an interior end, so there is at most one
+/// flip per edge; source edges and faces are kept. Linear worklist.
+fn flip_interface_edges(
     positions: &[[f32; 3]],
     faces: &mut [[u32; 3]],
     axis: usize,
     boundary: &dyn Fn(u32) -> bool,
     licensed: &dyn Fn([u32; 3]) -> bool,
+    licensed_edge: &dyn Fn(u32, u32) -> bool,
     constraints: &BTreeSet<(u32, u32)>,
 ) {
     let q = |v: u32| {
@@ -508,65 +511,68 @@ fn flip_interface_ears(
         let (a, b, c) = (q(a), q(b), q(c));
         ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])).signum()
     };
-    let bad = |t: &[u32; 3]| t.iter().all(|&v| boundary(v)) && !licensed(*t);
-    let mut queue: VecDeque<usize> = (0..faces.len()).filter(|&i| bad(&faces[i])).collect();
-    if queue.is_empty() {
-        return;
-    }
+    let all = |t: &[u32; 3]| t.iter().all(|&v| boundary(v)) && !licensed(*t);
     let mut directed: HashMap<(u32, u32), usize> = HashMap::default();
     for (i, t) in faces.iter().enumerate() {
         for k in 0..3 {
             directed.insert((t[k], t[(k + 1) % 3]), i);
         }
     }
-    while let Some(i) = queue.pop_front() {
-        let f = faces[i];
-        if !bad(&f) {
+    let bad = |faces: &[[u32; 3]], directed: &HashMap<(u32, u32), usize>, a: u32, b: u32| {
+        boundary(a)
+            && boundary(b)
+            && !constraints.contains(&edge(a, b))
+            && (!licensed_edge(a, b)
+                || [(a, b), (b, a)]
+                    .iter()
+                    .any(|e| directed.get(e).is_some_and(|&f| all(&faces[f]))))
+    };
+    let mut queue: VecDeque<(u32, u32)> = directed
+        .keys()
+        .filter(|&&(a, b)| a < b && bad(faces, &directed, a, b))
+        .copied()
+        .collect();
+    while let Some((a, b)) = queue.pop_front() {
+        let (Some(&i), Some(&j)) = (directed.get(&(a, b)), directed.get(&(b, a))) else {
+            continue;
+        };
+        if !bad(faces, &directed, a, b) {
             continue;
         }
-        for k in 0..3 {
-            let (a, b, c) = (f[k], f[(k + 1) % 3], f[(k + 2) % 3]);
-            if constraints.contains(&edge(a, b)) {
-                continue;
+        let (f, g) = (faces[i], faces[j]);
+        let Some(c) = f.into_iter().find(|&v| v != a && v != b) else {
+            continue;
+        };
+        let Some(x) = g.into_iter().find(|&v| v != a && v != b) else {
+            continue;
+        };
+        let s = orient(a, b, c);
+        // Strictly convex quad a-x-b-c, both new faces in the patch orientation, and
+        // the new diagonal has an interior end.
+        if (boundary(c) && boundary(x))
+            || s == 0.
+            || orient(a, b, x) != -s
+            || orient(a, x, c) != s
+            || orient(x, b, c) != s
+        {
+            continue;
+        }
+        for t in [f, g] {
+            for n in 0..3 {
+                directed.remove(&(t[n], t[(n + 1) % 3]));
             }
-            let Some(&j) = directed.get(&(b, a)) else {
-                continue;
-            };
-            let g = faces[j];
-            let Some(x) = g.into_iter().find(|&v| v != a && v != b) else {
-                continue;
-            };
-            let s = orient(a, b, c);
-            // Strictly convex quad a-x-b-c: x and c on opposite sides of ab, a and b on
-            // opposite sides of cx, and both new faces keep the patch orientation.
-            if boundary(x)
-                || s == 0.
-                || orient(a, b, x) != -s
-                || orient(a, x, c) != s
-                || orient(x, b, c) != s
-            {
-                continue;
+        }
+        faces[i] = [a, x, c];
+        faces[j] = [x, b, c];
+        for (id, t) in [(i, faces[i]), (j, faces[j])] {
+            for n in 0..3 {
+                directed.insert((t[n], t[(n + 1) % 3]), id);
             }
-            for t in [f, g] {
-                for n in 0..3 {
-                    directed.remove(&(t[n], t[(n + 1) % 3]));
-                }
+        }
+        for (u, v) in [(a, c), (c, b), (b, x), (x, a)] {
+            if bad(faces, &directed, u, v) {
+                queue.push_back((u, v));
             }
-            faces[i] = [a, x, c];
-            faces[j] = [x, b, c];
-            for (id, t) in [(i, faces[i]), (j, faces[j])] {
-                for n in 0..3 {
-                    directed.insert((t[n], t[(n + 1) % 3]), id);
-                }
-            }
-            for (u, v) in [(x, a), (c, x), (b, x), (x, c)] {
-                if let Some(&h) = directed.get(&(v, u)) {
-                    if h != i && h != j {
-                        queue.push_back(h);
-                    }
-                }
-            }
-            break;
         }
     }
 }

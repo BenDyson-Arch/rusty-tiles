@@ -5382,3 +5382,116 @@ fn islands_without_a_border_bake_to_an_archive_that_validates() {
     public(&input, &archive, None, 2).unwrap();
     inspect(ValidationRequest::new(&archive)).unwrap();
 }
+
+/// The synthetic city's building (bench/scale_gates/generate.py `add_building`): four
+/// planar wall grids of `bays` x `floors` 3.2 m quads around a rotated rectangle, and a
+/// one-quad roof welded to the walls at its corners only (T-junctions along the top).
+/// `reverse` runs every wall the other way round.
+fn generated_building(
+    centre: [f32; 2],
+    half: [f32; 2],
+    rotation: f32,
+    bays: [usize; 2],
+    floors: usize,
+    reverse: bool,
+) -> Vec<Mesh> {
+    let (c, s) = (
+        (1. - rotation * rotation) / (1. + rotation * rotation),
+        2. * rotation / (1. + rotation * rotation),
+    );
+    let at = |dx: f32, dz: f32| {
+        [
+            centre[0] + c * dx - s * dz,
+            -0.5,
+            centre[1] + s * dx + c * dz,
+        ]
+    };
+    let mut corners = [
+        at(-half[0], -half[1]),
+        at(half[0], -half[1]),
+        at(half[0], half[1]),
+        at(-half[0], half[1]),
+    ];
+    if reverse {
+        corners.reverse();
+    }
+    let mut out = Vec::new();
+    for k in 0..4 {
+        let (a, b) = (corners[k], corners[(k + 1) % 4]);
+        out.push(wall(
+            a,
+            [b[0] - a[0], b[2] - a[2]],
+            bays[k % 2],
+            floors,
+            3.2,
+        ));
+    }
+    let top = floors as f32 * 3.2 - 0.5;
+    let mut roof = Mesh {
+        positions: corners.iter().map(|p| [p[0], top, p[2]]).collect(),
+        indices: vec![0, 2, 1, 0, 3, 2],
+        color: [0.5, 0.5, 0.5, 1.],
+    };
+    if reverse {
+        roof.indices = vec![0, 1, 2, 0, 2, 3];
+    }
+    out.push(roof);
+    out
+}
+
+/// A synthetic-city block (`layout` seeds the generator's shapes): `n` x `n` buildings
+/// of 1-24 floors and 4-15 m half sides on 40 m lots, one rational rotation for all, walls
+/// run either way round, on a flat terrain sheet.
+fn city_block(layout: u64) -> Vec<Mesh> {
+    let mut rng = layout * 0x9e37_79b9_7f4a_7c15 + 12345;
+    let mut next = || {
+        rng ^= rng << 13;
+        rng ^= rng >> 7;
+        rng ^= rng << 17;
+        (rng >> 11) as f64 / (1u64 << 53) as f64
+    };
+    let n = 3 + (next() * 4.) as usize;
+    let extent = 40. * n as f32;
+    let rotation =
+        [3. / 16., -3. / 16., 5. / 32., -5. / 32., 1. / 8., -1. / 8.][(next() * 6.) as usize];
+    let reverse = next() < 0.5;
+    let mut source = vec![grid(
+        (8, 8),
+        (0., extent),
+        (0., extent),
+        &|_, _| 0.,
+        [0.4, 0.5, 0.3, 1.],
+    )];
+    for i in 0..n {
+        for j in 0..n {
+            let centre = [
+                20. + 40. * i as f32 + (next() * 6.) as f32,
+                20. + 40. * j as f32 + (next() * 6.) as f32,
+            ];
+            let half = [4. + (next() * 11.) as f32, 4. + (next() * 11.) as f32];
+            let bays = [
+                ((half[0] / 2.) as usize).max(1),
+                ((half[1] / 2.) as usize).max(1),
+            ];
+            let floors = 1 + (next() * 24.) as usize;
+            source.extend(generated_building(
+                centre, half, rotation, bays, floors, reverse,
+            ));
+        }
+    }
+    source
+}
+
+/// Fix 2 end-to-end controls, each omitting a coarse tile before it:
+/// - layout 26 (rotation -3/16): a border contraction stalled on a rebuilt patch;
+/// - layouts 74 (+5/32) and 77 (-5/32, walls run the other way): a reduction merged the
+///   anchored paths of a boundary touching the interface (wall top and one-quad roof).
+#[test]
+fn city_blocks_contract_and_reduce_without_omission() {
+    for layout in [26, 74, 77] {
+        let work = tempfile::tempdir().unwrap();
+        let input = write_gltf(&work.path().join("src"), &city_block(layout));
+        let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+        assert!(omission_receipt(&format!("city block {layout}"), &dir));
+    }
+}
