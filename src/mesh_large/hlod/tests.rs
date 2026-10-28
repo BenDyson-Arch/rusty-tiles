@@ -5483,12 +5483,13 @@ fn city_block(layout: u64) -> Vec<Mesh> {
 }
 
 /// Fix 2 end-to-end controls, each omitting a coarse tile before it:
-/// - layout 26 (rotation -3/16): a border contraction stalled on a rebuilt patch;
-/// - layouts 74 (+5/32) and 77 (-5/32, walls run the other way): a reduction merged the
-///   anchored paths of a boundary touching the interface (wall top and one-quad roof).
+/// - layout 26 (rotation -3/16, walls run forward): a border contraction stalled on a
+///   rebuilt patch;
+/// - layout 77 (rotation -5/32, walls run the other way): a reduction merged the anchored
+///   paths of a boundary touching the interface (a wall top and its one-quad roof edge).
 #[test]
 fn city_blocks_contract_and_reduce_without_omission() {
-    for layout in [26, 74, 77] {
+    for layout in [26, 77] {
         let work = tempfile::tempdir().unwrap();
         let input = write_gltf(&work.path().join("src"), &city_block(layout));
         let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();

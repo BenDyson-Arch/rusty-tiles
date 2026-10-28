@@ -801,6 +801,7 @@ fn attempt(
     opening_pins: &HashSet<Key>,
 ) -> Result<Built, JobError> {
     let mut remaining = REDUCTION_PASSES;
+    topology::take_touching_refusal();
     let ordinary = attempt_mode(
         tile,
         merged,
@@ -834,22 +835,18 @@ fn attempt(
         ),
         result => return result,
     };
-    // Only when both fail: the touching-boundary comparison refuses a reduction that
-    // merges the anchored paths of a boundary touching the interface, and the
-    // whole-support protection that follows can exceed the cap. Reduce once more with
-    // those paths locked (`topology::touching_pins`). A proposal either strategy accepts
-    // is unchanged.
+    // Only when both fail after the touching-boundary comparison refused a proposal of
+    // this attempt: reduce once more with those paths locked (`topology::touching_pins`).
     match sheets {
-        Err(e) if e.kind() == JobErrorKind::Unsupported => {
+        Err(e) if e.kind() == JobErrorKind::Unsupported && topology::take_touching_refusal() => {
             let border = interface_points(interface);
-            let pins = topology::touching_pins(merged, interface);
             let mut locked = opening_pins.clone();
             let before = locked.len();
             locked.extend(
                 merged
                     .keys
                     .iter()
-                    .zip(pins)
+                    .zip(topology::touching_pins(merged, interface))
                     .filter(|(k, pin)| *pin && !border.contains(*k))
                     .map(|(k, _)| *k),
             );
@@ -966,7 +963,6 @@ fn attempt_mode(
         };
         let (mut output, mut error) = reduce(&merged.triangles, &|v| locked[v as usize], cap)?;
         let mut topology_protected = false;
-        let mut touching_pinned = false;
         let mut fold_retries = 0;
         // Only one immutable post-contraction source per retry sequence. Release
         // the interface query sets before the guard, and all repair sets before
@@ -1001,48 +997,6 @@ fn attempt_mode(
                 accepted_change = topology::changes(reference, &output, interface, floor);
                 if accepted_change.is_some() {
                     break;
-                }
-            }
-            // A topology refusal of a valid proposal: before protecting whole support,
-            // keep the anchored paths of interface-touching boundaries apart and reduce
-            // again with the same protected faces.
-            if valid && !touching_pinned {
-                touching_pinned = true;
-                let pins = topology::touching_pins(merged, interface);
-                if pins.iter().zip(&locked).any(|(p, l)| *p && !*l) {
-                    for (lock, pin) in locked.iter_mut().zip(pins) {
-                        *lock |= pin;
-                    }
-                    fold_source = None;
-                    retries += 1;
-                    let keep: Vec<[u32; 3]> = merged
-                        .triangles
-                        .iter()
-                        .zip(&protected)
-                        .filter(|(_, p)| **p)
-                        .map(|(t, _)| *t)
-                        .collect();
-                    let rest: Vec<[u32; 3]> = merged
-                        .triangles
-                        .iter()
-                        .zip(&protected)
-                        .filter(|(_, p)| !**p)
-                        .map(|(t, _)| *t)
-                        .collect();
-                    let kept: HashSet<u32> = keep.iter().flatten().copied().collect();
-                    let (mut reduced, e) = if rest.is_empty() {
-                        (Vec::new(), 0.)
-                    } else {
-                        reduce(
-                            &rest,
-                            &|v| locked[v as usize] || kept.contains(&v),
-                            cap.saturating_sub(keep.len()),
-                        )?
-                    };
-                    reduced.extend(keep);
-                    output = reduced;
-                    error = e;
-                    continue;
                 }
             }
             let previously_protected = protected.iter().filter(|p| **p).count();

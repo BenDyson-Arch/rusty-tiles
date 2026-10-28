@@ -503,6 +503,17 @@ pub(super) fn order_drops(
     true
 }
 
+thread_local! {
+    /// Set when `changes` refuses a proposal for its touching-boundary multigraph; read and
+    /// cleared by `take_touching_refusal` (one reduction attempt runs on one thread).
+    static TOUCHING_REFUSED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether `changes` refused a touching boundary since the last call; clears the flag.
+pub(super) fn take_touching_refusal() -> bool {
+    TOUCHING_REFUSED.with(|r| r.replace(false))
+}
+
 /// Compare the actual output topology, including changes made by meshopt itself. A
 /// boundary cycle touching the interface must survive as a distinct boundary cycle with
 /// its border contacts. Interior component loss is eligible only below the existing G floor.
@@ -680,6 +691,7 @@ pub(super) fn changes(
     };
     let old_signature = signature(&old_edges)?;
     if signature(&new_edges).as_ref() != Some(&old_signature) {
+        TOUCHING_REFUSED.with(|r| r.set(true));
         return rejected("touching boundary graph changed after suppressing degree-two vertices");
     }
     drop((old_signature, anchors, touching));
