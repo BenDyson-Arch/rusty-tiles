@@ -758,6 +758,11 @@ pub(crate) fn produce(
         &captured.tree.nodes,
         rows,
         source_open_ends.reader()?,
+        interfaces::faces(
+            &captured.triangles,
+            &captured.corner_depths,
+            &captured.lattice,
+        )?,
         captured.tree.stats.per_depth[0].maximum_extent,
         &border_lease,
         check,

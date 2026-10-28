@@ -339,6 +339,28 @@ pub(crate) fn canonical_corners(
     Ok((k[0] != k[1] && k[1] != k[2] && k[0] != k[2]).then_some(c))
 }
 
+/// Every surface triangle's canonical corner keys in rank order: a second read of the
+/// captured streams, holding nothing (S1b's face retention, `Borders::build`).
+pub(crate) fn faces<'a>(
+    triangles: &'a Sequence<FullTriangle>,
+    depths: &'a Sequence<CornerDepth>,
+    lattice: &'a LatticePlan,
+) -> Result<impl Iterator<Item = Result<[Key; 3], JobError>> + 'a, JobError> {
+    let mut ells = depths.reader()?;
+    Ok(triangles.reader()?.filter_map(move |t| {
+        let face = (|| {
+            let t = t?;
+            let ell = ells
+                .next()
+                .transpose()?
+                .ok_or_else(|| state("corner depths end before the triangles"))?
+                .depths;
+            canonical_corners(lattice, &t, ell)
+        })();
+        face.map(|c| c.map(|c| c.map(key))).transpose()
+    }))
+}
+
 /// One leaf's items from its surface triangles' canonical keys (`buffer` is replaced; the
 /// faces' segments go through `segments`).
 fn leaf_items(

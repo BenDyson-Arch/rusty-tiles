@@ -190,6 +190,64 @@ pub(super) fn contract(
     contract_from(m, interface, previous_interface, mapping, receipt, None)
 }
 
+/// A removed border vertex goes to its nearer chord endpoint, unless more of its faces
+/// already hold the farther one with an interface or removed third corner. Such a face
+/// keeps only interface points after the move, a face the guard refuses unless it
+/// collapses; moving to the endpoint it holds collapses it. The shared contract is
+/// unchanged: each side remaps only its own faces, and both keep the same chord.
+fn choose_targets(
+    m: &Merged,
+    interface: &[InterfaceRow],
+    ids: &HashMap<Key, u32>,
+    mapping: &[Option<(Key, Key, f64, u8)>],
+    map: &mut [u32],
+) {
+    let required = points(interface);
+    let held = |v: u32| map[v as usize] != v || required.contains(&m.keys[v as usize]);
+    // Per moved vertex: votes for its nearer and farther endpoint.
+    let mut votes: HashMap<u32, [u32; 2]> = HashMap::default();
+    for t in &m.triangles {
+        for c in 0..3 {
+            let v = t[c];
+            if map[v as usize] == v {
+                continue;
+            }
+            let Some((a, b, _, _)) = mapping[v as usize] else {
+                continue;
+            };
+            let (Some(&a), Some(&b)) = (ids.get(&a), ids.get(&b)) else {
+                continue;
+            };
+            let near = map[v as usize];
+            let far = if near == a { b } else { a };
+            let (p, q) = (t[(c + 1) % 3], t[(c + 2) % 3]);
+            for (e, side) in [(near, 0), (far, 1)] {
+                let other = if p == e {
+                    q
+                } else if q == e {
+                    p
+                } else {
+                    continue;
+                };
+                if other != a && other != b && held(other) {
+                    votes.entry(v).or_default()[side] += 1;
+                }
+            }
+        }
+    }
+    for (v, [near, far]) in votes {
+        if far > near {
+            let Some((a, b, _, _)) = mapping[v as usize] else {
+                continue;
+            };
+            let (Some(&a), Some(&b)) = (ids.get(&a), ids.get(&b)) else {
+                continue;
+            };
+            map[v as usize] = if map[v as usize] == a { b } else { a };
+        }
+    }
+}
+
 /// Keep the licenses of the original merged children across recovery proposals.
 pub(super) fn contract_from(
     m: &mut Merged,
@@ -237,6 +295,7 @@ pub(super) fn contract_from(
     if receipt.contracted_vertices == 0 {
         return Ok(true);
     }
+    choose_targets(m, interface, &ids, &mapping_by_vertex, &mut map);
     drop(ids);
     let mut output = Vec::with_capacity(m.triangles.len());
     let mut representatives = Vec::with_capacity(m.triangles.len());

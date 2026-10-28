@@ -118,6 +118,18 @@ uses atomic addition because worker loads can release older files concurrently.
 Spill statistics are evidence; geometry and identity cannot depend on spilling.
 The forced-spill test compares actual published bytes across these paths.
 
+Face retention (2026-10-28). Planar grids cut by octree planes give staircase
+borders whose collinear runs shortcut at every depth. Where a source face has all
+three corners shared and a corner `v` whose two edges in it are interior, removing
+`v` at a depth where all three are external carries that face onto interface points
+only, a new face the proposal guard refuses. Such a `v` stays live from the shallowest
+such depth down: one extra pass over the leaf faces (a fixed 1 MiB membership filter,
+then exact vertex and edge lookups), its depth in spare vertex-record bits. External
+status only grows with depth and shared edges are fixed, so retained sets stay nested
+(checked in test builds). Contraction then moves each removed vertex to the chord
+endpoint more of its faces already hold with an interface or removed third corner,
+collapsing those faces; each side remaps only its own faces of the same chord.
+
 ## Durable audit format (v1)
 
 The internal `RT_HLOD_AUDIT_DIR` enables an exclusive sidecar outside the archive.
