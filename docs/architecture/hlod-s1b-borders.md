@@ -156,10 +156,15 @@ on the loss, which S2 covers with the same controls. G also stays at least the
 children's G. A drop at or above the children's largest G must have cap pressure (the
 children's faces, counted with multiplicity as the producer merges them, exceed
 8,192) and go smallest first: no kept child component without a key held by a leaf
-outside the tile may be smaller. Without any border component the largest candidate
-is never licensed, so cleanup never keeps a smaller one arbitrarily. Drops below the
-children's G (ordinary drops under an E floor above it) are checked for count and G
-only: E is not recoverable from the archive. The native recount reads the face
+outside the tile may be smaller. E is not recoverable from the archive, so ordinary
+drops in [child G, E) get the same pressure and order checks; only drops strictly
+below the children's G are checked for count and G alone. The producer keeps every
+output to that rule: once it drops a border-free component at or above the children's
+G, every kept border-free component smaller than it goes too (all licensed), and
+cleanup's keep-one keeps the largest in drop order. A coarse child's dropped faces are
+admitted up to the parent's G plus that child's G off their vertices, so an
+understatement of up to that child's G there is seen only by the sidecar oracle, which
+samples the source. The native recount reads the face
 tables the delivery replays fill and decodes nothing again; it charges the shared
 payload-element budget per face read, point checked and distance-grid insertion. The
 sidecar oracle, which knows E, requires cap pressure (merged child faces

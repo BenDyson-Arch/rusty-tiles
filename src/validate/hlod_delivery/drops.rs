@@ -32,7 +32,9 @@ struct Content {
 }
 
 /// Library tests bake at a 300-triangle cap (`hlod::tests::test_settings`); validation of
-/// their archives applies cap pressure at the same cap.
+/// their archives applies cap pressure at the same cap. This holds for the whole lib test
+/// binary, so the few tests baking at 8,192 get a laxer pressure check (never a false
+/// refusal); `at` in the unit tests below sets it per case.
 #[cfg(test)]
 pub(crate) const TEST_DEFAULT_CAP: u64 = 300;
 #[cfg(test)]

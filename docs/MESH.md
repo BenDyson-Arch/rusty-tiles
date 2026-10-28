@@ -186,7 +186,9 @@ has no selector, and a plain `mesh` run uses it.
   the producer drops whole border-free components smallest first (bounding-box
   diagonal), even above the cell's G floor, until it fits. G covers the dropped surface
   and stays at least the children's G; an ancestor may then drop smaller components
-  under that larger G as ordinary drops. Every coarse payload that drops child
+  under that larger G as ordinary drops. Any drop, ordinary or coarse, now needs cap
+  pressure (the cell's input above the cap), and drops at or above the children's G go
+  smallest first. Every coarse payload that drops child
   components says how many in glTF `asset.extras.rustyTiles.droppedComponents` (absent
   when none), which `validate` recounts. `borders_by_depth[].topology` reports
   `droppedComponents` and, when nonzero, `coarseDroppedComponents`.

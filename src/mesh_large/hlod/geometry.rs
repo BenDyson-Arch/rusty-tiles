@@ -626,7 +626,6 @@ fn coarse_candidates(m: &Merged, interface: &[InterfaceRow], floor: f64) -> Vec<
             }
         }
     }
-    let border_contact = components.values().any(|c| c.touch);
     let mut candidates: Vec<(f64, u64, Key, Vec<Key>)> = components
         .into_values()
         .filter_map(|mut c| {
@@ -639,13 +638,6 @@ fn coarse_candidates(m: &Merged, interface: &[InterfaceRow], floor: f64) -> Vec<
         })
         .collect();
     candidates.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
-    // Without a border component, licensing every component would make cleanup keep an
-    // arbitrary one: the largest diagonal always stays, so kept ones are never smaller.
-    if !border_contact {
-        if let Some(largest) = candidates.last().map(|c| c.0) {
-            candidates.retain(|c| c.0 < largest);
-        }
-    }
     candidates
         .into_iter()
         .map(|(diagonal, _, _, keys)| Candidate { diagonal, keys })
@@ -908,7 +900,7 @@ fn attempt_mode(
         .iter()
         .all(|t| t[0] == t[1] || t[1] == t[2] || t[0] == t[2]);
     let mut accepted_change = None;
-    let (output, simplifier_error, stopping) = if input <= cap {
+    let (mut output, simplifier_error, stopping) = if input <= cap {
         (merged.triangles.clone(), 0., StoppingBound::Input)
     } else if degenerate_only {
         (
@@ -1106,6 +1098,11 @@ fn attempt_mode(
                 tile.first, tile.depth
             ),
         ));
+    }
+    // Drops go smallest first (validators check it): extra smaller drops, all licensed,
+    // invalidate the loop's comparison.
+    if topology::order_drops(reference, &mut output, interface, children_error) {
+        accepted_change = None;
     }
     // The successful loop check used these same immutable inputs. Preserve its
     // witnesses before compaction; input/degenerate-only paths still compare here.

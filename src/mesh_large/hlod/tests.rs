@@ -5124,3 +5124,155 @@ fn a_city_too_dense_for_the_cap_keeps_its_root_through_coarse_drops() {
         assert!(e.contains("coarseDrops"), "{mutation:?}: {e}");
     }
 }
+
+/// Review r2 P1-1: below max(E, child G) meshopt drops whatever collapses first, here a
+/// 6 m sliver beside a kept 4.7 m tetrahedron (leaf child, G 0). Drops at or above the
+/// children's G must go smallest first, so the tetrahedron may not stay.
+#[test]
+fn ordinary_drops_under_pressure_go_smallest_first() {
+    use super::{borders::Contract, store::*};
+    let (mut positions, mut triangles) = (Vec::new(), Vec::new());
+    let n = 24u32;
+    for y in 0..=n {
+        for x in 0..=n {
+            let (fx, fy) = (x as f32, y as f32);
+            positions.push([fx, fy, 3. * (fx * 0.7).sin() * (fy * 0.6).cos()]);
+        }
+    }
+    for y in 0..n {
+        for x in 0..n {
+            let a = y * (n + 1) + x;
+            triangles.extend([[a, a + 1, a + n + 2], [a, a + n + 2, a + n + 1]]);
+        }
+    }
+    let s = positions.len() as u32;
+    positions.extend([
+        [0., 0., 50.],
+        [6., 0., 50.],
+        [6., 0.002, 50.],
+        [0., 0.002, 50.],
+    ]);
+    triangles.extend([[s, s + 1, s + 2], [s, s + 2, s + 3]]);
+    let t = positions.len() as u32;
+    positions.extend([
+        [40., 40., 0.],
+        [43., 40., 0.],
+        [41.5, 42.6, 0.],
+        [41.5, 41., 2.5],
+    ]);
+    triangles.extend([
+        [t, t + 2, t + 1],
+        [t, t + 1, t + 3],
+        [t + 1, t + 2, t + 3],
+        [t + 2, t, t + 3],
+    ]);
+    let faces = triangles.len();
+    let key = |depth| TileKey {
+        first: 0,
+        end: 1,
+        depth,
+        leaf_begin: 0,
+        leaf_end: 1,
+    };
+    let child = TileGeometry {
+        key: key(3),
+        ells: vec![4; positions.len()],
+        positions: positions.clone(),
+        triangles,
+        representative: vec![0; faces],
+        primitives: vec![SourcePrimitive {
+            node: 0,
+            mesh: 0,
+            primitive: 0,
+            expanded_ordinal: 0,
+            material: u32::MAX,
+        }],
+        interface: vec![],
+        geometric_error: 0.,
+        lease: None,
+    };
+    let contract = Contract {
+        depth: 2,
+        scale: 10.,
+        certificates: vec![],
+        terminal_vertices: vec![],
+        interface: vec![],
+    };
+    for cap in [faces - 20, faces - 60, faces - 150] {
+        let b = super::geometry::build_parent(
+            key(2),
+            std::slice::from_ref(&child),
+            &[cap, cap],
+            &contract,
+            &|_| Ok(None),
+            &mut |_| Ok(true),
+            &|| Ok(()),
+        )
+        .unwrap()
+        .built
+        .unwrap();
+        let used: HashSet<[u32; 3]> = b
+            .geometry
+            .triangles
+            .iter()
+            .flatten()
+            .map(|&v| b.geometry.positions[v as usize].map(f32::to_bits))
+            .collect();
+        let kept = |v: u32| used.contains(&positions[v as usize].map(f32::to_bits));
+        let sliver = (s..s + 4).any(kept);
+        let tetra = (t..t + 4).any(kept);
+        assert!(
+            sliver || !tetra,
+            "cap {cap}: sliver dropped, smaller tetrahedron kept"
+        );
+    }
+}
+
+/// Review r2 P1-1 end to end: slivers beside smaller closed tetrahedra over a bumpy sheet
+/// bake at the test cap with ordinary drops, and the archive validates.
+#[test]
+fn a_sliver_city_bakes_to_an_archive_that_validates() {
+    let mut source = vec![grid(
+        (40, 40),
+        (0., 100.),
+        (0., 100.),
+        &|x, z| 0.012 * (0.3 * x).sin() * (0.25 * z).cos(),
+        [0.4, 0.5, 0.3, 1.],
+    )];
+    for i in 0..4 {
+        for j in 0..4 {
+            let l = [0.04f32, 0.04, 0.03, 0.045][(i + j) % 4];
+            let (x, z) = (5. + 25. * i as f32, 5. + 25. * j as f32);
+            source.push(Mesh {
+                positions: vec![
+                    [x, 10., z],
+                    [x + l, 10., z],
+                    [x + l, 10., z + 0.001],
+                    [x, 10., z + 0.001],
+                ],
+                indices: vec![0, 1, 2, 0, 2, 3],
+                color: [0.7, 0.6, 0.5, 1.],
+            });
+            let (s, tz) = (0.6 * l, z + 1.);
+            source.push(Mesh {
+                positions: vec![
+                    [x, 10., tz],
+                    [x + s, 10., tz],
+                    [x + 0.5 * s, 10., tz + 0.87 * s],
+                    [x + 0.5 * s, 10. + 0.8 * s, tz + 0.3 * s],
+                ],
+                indices: vec![0, 2, 1, 0, 1, 3, 1, 2, 3, 2, 0, 3],
+                color: [0.7, 0.6, 0.5, 1.],
+            });
+        }
+    }
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let archive = work.path().join("slivers.3tz");
+    public(&input, &archive, None, 2).unwrap();
+    let census = inspect(ValidationRequest::new(&archive))
+        .unwrap()
+        .interface_census
+        .unwrap();
+    assert!(census.dropped_components > 0, "{census:?}");
+}
