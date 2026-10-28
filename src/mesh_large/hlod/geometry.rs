@@ -411,192 +411,167 @@ pub(crate) fn build_parent(
     // licenses no drop, even for a smaller D11 target.
     let pressure = contracted_faces.len() > *caps.last().unwrap();
     let drops = if pressure { floor } else { 0. };
-    let mut construction_dropped = Vec::new();
-    // A second pass only for a parent that would otherwise be omitted: every strategy
-    // again, with the anchored paths of interface-touching boundaries locked
-    // (`topology::touching_pins`). The touching-boundary comparison refuses a reduction
-    // that merges them, and its whole-support fallback can exceed the cap. Parents that
-    // fit today never reach it, so their output is unchanged.
-    for touching in [false, true] {
-        let mut opening_pins = HashSet::default();
-        if touching {
-            merged.triangles.clone_from(&contracted_faces);
-            merged.representative.clone_from(&contracted_representative);
-            let border = interface_points(interface);
-            let pins = topology::touching_pins(&merged, interface);
-            opening_pins.extend(
-                merged
-                    .keys
-                    .iter()
-                    .zip(pins)
-                    .filter(|(k, pin)| *pin && !border.contains(*k))
-                    .map(|(k, _)| *k),
-            );
-            if opening_pins.is_empty() {
+    let mut opening_pins = HashSet::default();
+    for (i, &cap) in caps.iter().enumerate() {
+        if caps[..i].contains(&cap) {
+            continue;
+        }
+        for preserve_holes in [false, true] {
+            if let Some(mut b) = assessed_attempt(
+                tile,
+                &merged,
+                interface,
+                cap,
+                children_error,
+                &reference,
+                &contracted_faces,
+                drops,
+                preserve_holes,
+                &mut opening_pins,
+                &mut attempted,
+                assess,
+                check,
+            )? {
+                attempted.add(topology);
+                b.topology.add(topology);
+                return Ok(Outcome {
+                    built: Some(b),
+                    contraction_failed: false,
+                    attempted_topology: attempted,
+                    construction_dropped: Vec::new(),
+                });
+            }
+        }
+    }
+    // D11: simplifier stagnation alone is not cap infeasibility. Deduplicate and remove
+    // eligible interior components, then remesh with increasingly coarse interior cells.
+    let construction_dropped = topology::cleanup(&mut merged, interface, drops, &mut topology);
+    if let Some(receipt) = constrained::remesh(&mut merged, interface, *caps.last().unwrap()) {
+        topology.add(receipt);
+    }
+    for round in 0..=6 {
+        check()?;
+        if round != 0 && !topology::remesh(&mut merged, interface, round, &mut topology) {
+            continue;
+        }
+        for preserve_holes in [false, true] {
+            if let Some(mut b) = assessed_attempt(
+                tile,
+                &merged,
+                interface,
+                *caps.last().unwrap(),
+                children_error,
+                &reference,
+                &contracted_faces,
+                drops,
+                preserve_holes,
+                &mut opening_pins,
+                &mut attempted,
+                assess,
+                check,
+            )? {
+                // Final comparison already counts actual changes against the reference.
+                topology.dropped_components = 0;
+                topology.closed_holes = 0;
+                topology.opened_holes = 0;
+                attempted.add(topology);
+                b.topology.add(topology);
+                return Ok(Outcome {
+                    built: Some(b),
+                    contraction_failed: false,
+                    attempted_topology: attempted,
+                    construction_dropped: Vec::new(),
+                });
+            }
+        }
+    }
+    // D11 coarse drops (owner decision 2026-10-28): only once every strategy above has
+    // failed, and only for cap pressure: the contracted input exceeds the cap (validators
+    // refuse a coarse drop whose children fit it). Whole components with no border
+    // contact go smallest first: the least prefix that fits, found by doubling and then
+    // bisection (at most 2 log2(C) + 2 proposals; each prefix licenses drops below its
+    // last diagonal). S2's fixed controls on every dropped triangle carry their loss into
+    // the published G.
+    let mut base = merged.clone();
+    base.triangles = contracted_faces.clone();
+    base.representative = contracted_representative;
+    let candidates = if pressure {
+        coarse_candidates(&base, interface, floor)
+    } else {
+        Vec::new()
+    };
+    let n = candidates.len();
+    let (mut failed, mut fitted) = (0, None);
+    let mut next = (n > 0).then_some(1);
+    while let Some(k) = next {
+        check()?;
+        let license = candidates[k - 1].diagonal.next_up();
+        merged.triangles.clone_from(&base.triangles);
+        merged.representative.clone_from(&base.representative);
+        let mut receipt = topology::Receipt::default();
+        topology::cleanup(&mut merged, interface, license, &mut receipt);
+        if let Some(r) = constrained::remesh(&mut merged, interface, *caps.last().unwrap()) {
+            receipt.add(r);
+        }
+        let mut built = None;
+        for preserve_holes in [false, true] {
+            built = assessed_attempt(
+                tile,
+                &merged,
+                interface,
+                *caps.last().unwrap(),
+                children_error,
+                &reference,
+                &contracted_faces,
+                license,
+                preserve_holes,
+                &mut opening_pins,
+                &mut attempted,
+                assess,
+                check,
+            )?;
+            if built.is_some() {
                 break;
             }
         }
-        for (i, &cap) in caps.iter().enumerate() {
-            if caps[..i].contains(&cap) {
-                continue;
-            }
-            for preserve_holes in [false, true] {
-                if let Some(mut b) = assessed_attempt(
-                    tile,
-                    &merged,
-                    interface,
-                    cap,
-                    children_error,
-                    &reference,
-                    &contracted_faces,
-                    drops,
-                    preserve_holes,
-                    &mut opening_pins,
-                    &mut attempted,
-                    assess,
-                    check,
-                )? {
-                    attempted.add(topology);
-                    b.topology.add(topology);
-                    return Ok(Outcome {
-                        built: Some(b),
-                        contraction_failed: false,
-                        attempted_topology: attempted,
-                        construction_dropped: Vec::new(),
-                    });
-                }
-            }
+        // The final comparison counts every published change against the reference.
+        receipt.dropped_components = 0;
+        receipt.closed_holes = 0;
+        receipt.opened_holes = 0;
+        topology.add(receipt);
+        match built {
+            Some(b) => fitted = Some((k, b)),
+            None => failed = k,
         }
-        // D11: simplifier stagnation alone is not cap infeasibility. Deduplicate and remove
-        // eligible interior components, then remesh with increasingly coarse interior cells.
-        construction_dropped = topology::cleanup(&mut merged, interface, drops, &mut topology);
-        if let Some(receipt) = constrained::remesh(&mut merged, interface, *caps.last().unwrap()) {
-            topology.add(receipt);
-        }
-        for round in 0..=6 {
-            check()?;
-            if round != 0 && !topology::remesh(&mut merged, interface, round, &mut topology) {
-                continue;
-            }
-            for preserve_holes in [false, true] {
-                if let Some(mut b) = assessed_attempt(
-                    tile,
-                    &merged,
-                    interface,
-                    *caps.last().unwrap(),
-                    children_error,
-                    &reference,
-                    &contracted_faces,
-                    drops,
-                    preserve_holes,
-                    &mut opening_pins,
-                    &mut attempted,
-                    assess,
-                    check,
-                )? {
-                    // Final comparison already counts actual changes against the reference.
-                    topology.dropped_components = 0;
-                    topology.closed_holes = 0;
-                    topology.opened_holes = 0;
-                    attempted.add(topology);
-                    b.topology.add(topology);
-                    return Ok(Outcome {
-                        built: Some(b),
-                        contraction_failed: false,
-                        attempted_topology: attempted,
-                        construction_dropped: Vec::new(),
-                    });
-                }
-            }
-        }
-        // D11 coarse drops (owner decision 2026-10-28): only once every strategy above has
-        // failed, and only for cap pressure: the contracted input exceeds the cap (validators
-        // refuse a coarse drop whose children fit it). Whole components with no border
-        // contact go smallest first: the least prefix that fits, found by doubling and then
-        // bisection (at most 2 log2(C) + 2 proposals; each prefix licenses drops below its
-        // last diagonal). S2's fixed controls on every dropped triangle carry their loss into
-        // the published G.
-        let mut base = merged.clone();
-        base.triangles = contracted_faces.clone();
-        base.representative.clone_from(&contracted_representative);
-        let candidates = if pressure {
-            coarse_candidates(&base, interface, floor)
-        } else {
-            Vec::new()
+        next = match &fitted {
+            None if k < n => Some((2 * k).min(n)),
+            Some((fit, _)) if fit - failed > 1 => Some(failed + (fit - failed) / 2),
+            _ => None,
         };
-        let n = candidates.len();
-        let (mut failed, mut fitted) = (0, None);
-        let mut next = (n > 0).then_some(1);
-        while let Some(k) = next {
-            check()?;
-            let license = candidates[k - 1].diagonal.next_up();
-            merged.triangles.clone_from(&base.triangles);
-            merged.representative.clone_from(&base.representative);
-            let mut receipt = topology::Receipt::default();
-            topology::cleanup(&mut merged, interface, license, &mut receipt);
-            if let Some(r) = constrained::remesh(&mut merged, interface, *caps.last().unwrap()) {
-                receipt.add(r);
-            }
-            let mut built = None;
-            for preserve_holes in [false, true] {
-                built = assessed_attempt(
-                    tile,
-                    &merged,
-                    interface,
-                    *caps.last().unwrap(),
-                    children_error,
-                    &reference,
-                    &contracted_faces,
-                    license,
-                    preserve_holes,
-                    &mut opening_pins,
-                    &mut attempted,
-                    assess,
-                    check,
-                )?;
-                if built.is_some() {
-                    break;
-                }
-            }
-            // The final comparison counts every published change against the reference.
-            receipt.dropped_components = 0;
-            receipt.closed_holes = 0;
-            receipt.opened_holes = 0;
-            topology.add(receipt);
-            match built {
-                Some(b) => fitted = Some((k, b)),
-                None => failed = k,
-            }
-            next = match &fitted {
-                None if k < n => Some((2 * k).min(n)),
-                Some((fit, _)) if fit - failed > 1 => Some(failed + (fit - failed) / 2),
-                _ => None,
-            };
-        }
-        if let Some((_, mut b)) = fitted {
-            let kept: HashSet<Key> = b
-                .geometry
-                .triangles
-                .iter()
-                .flatten()
-                .map(|&v| key(b.geometry.positions[v as usize]))
-                .collect();
-            b.topology.coarse_dropped_components = candidates
-                .iter()
-                .filter(|c| !c.keys.iter().any(|k| kept.contains(k)))
-                .count() as u64;
-            attempted.add(topology);
-            topology.dropped_components = 0;
-            topology.closed_holes = 0;
-            topology.opened_holes = 0;
-            b.topology.add(topology);
-            return Ok(Outcome {
-                built: Some(b),
-                contraction_failed: false,
-                attempted_topology: attempted,
-                construction_dropped: Vec::new(),
-            });
-        }
+    }
+    if let Some((_, mut b)) = fitted {
+        let kept: HashSet<Key> = b
+            .geometry
+            .triangles
+            .iter()
+            .flatten()
+            .map(|&v| key(b.geometry.positions[v as usize]))
+            .collect();
+        b.topology.coarse_dropped_components = candidates
+            .iter()
+            .filter(|c| !c.keys.iter().any(|k| kept.contains(k)))
+            .count() as u64;
+        attempted.add(topology);
+        topology.dropped_components = 0;
+        topology.closed_holes = 0;
+        topology.opened_holes = 0;
+        b.topology.add(topology);
+        return Ok(Outcome {
+            built: Some(b),
+            contraction_failed: false,
+            attempted_topology: attempted,
+            construction_dropped: Vec::new(),
+        });
     }
     attempted.add(topology);
     Ok(Outcome {
@@ -842,7 +817,7 @@ fn attempt(
     );
     // An overprotected ring is a failed strategy, not a cap lower bound. Both
     // strategies retain the same source guards and pre-contraction reference.
-    match ordinary {
+    let sheets = match ordinary {
         Err(e) if e.kind() == JobErrorKind::Unsupported => attempt_mode(
             tile,
             merged,
@@ -857,6 +832,46 @@ fn attempt(
             true,
             &mut remaining,
         ),
+        result => return result,
+    };
+    // Only when both fail: the touching-boundary comparison refuses a reduction that
+    // merges the anchored paths of a boundary touching the interface, and the
+    // whole-support protection that follows can exceed the cap. Reduce once more with
+    // those paths locked (`topology::touching_pins`). A proposal either strategy accepts
+    // is unchanged.
+    match sheets {
+        Err(e) if e.kind() == JobErrorKind::Unsupported => {
+            let border = interface_points(interface);
+            let pins = topology::touching_pins(merged, interface);
+            let mut locked = opening_pins.clone();
+            let before = locked.len();
+            locked.extend(
+                merged
+                    .keys
+                    .iter()
+                    .zip(pins)
+                    .filter(|(k, pin)| *pin && !border.contains(*k))
+                    .map(|(k, _)| *k),
+            );
+            if locked.len() == before {
+                return Err(e);
+            }
+            let mut remaining = REDUCTION_PASSES;
+            attempt_mode(
+                tile,
+                merged,
+                interface,
+                cap,
+                children_error,
+                reference,
+                contracted_faces,
+                floor,
+                preserve_holes,
+                &locked,
+                false,
+                &mut remaining,
+            )
+        }
         result => result,
     }
 }
@@ -951,6 +966,7 @@ fn attempt_mode(
         };
         let (mut output, mut error) = reduce(&merged.triangles, &|v| locked[v as usize], cap)?;
         let mut topology_protected = false;
+        let mut touching_pinned = false;
         let mut fold_retries = 0;
         // Only one immutable post-contraction source per retry sequence. Release
         // the interface query sets before the guard, and all repair sets before
@@ -985,6 +1001,48 @@ fn attempt_mode(
                 accepted_change = topology::changes(reference, &output, interface, floor);
                 if accepted_change.is_some() {
                     break;
+                }
+            }
+            // A topology refusal of a valid proposal: before protecting whole support,
+            // keep the anchored paths of interface-touching boundaries apart and reduce
+            // again with the same protected faces.
+            if valid && !touching_pinned {
+                touching_pinned = true;
+                let pins = topology::touching_pins(merged, interface);
+                if pins.iter().zip(&locked).any(|(p, l)| *p && !*l) {
+                    for (lock, pin) in locked.iter_mut().zip(pins) {
+                        *lock |= pin;
+                    }
+                    fold_source = None;
+                    retries += 1;
+                    let keep: Vec<[u32; 3]> = merged
+                        .triangles
+                        .iter()
+                        .zip(&protected)
+                        .filter(|(_, p)| **p)
+                        .map(|(t, _)| *t)
+                        .collect();
+                    let rest: Vec<[u32; 3]> = merged
+                        .triangles
+                        .iter()
+                        .zip(&protected)
+                        .filter(|(_, p)| !**p)
+                        .map(|(t, _)| *t)
+                        .collect();
+                    let kept: HashSet<u32> = keep.iter().flatten().copied().collect();
+                    let (mut reduced, e) = if rest.is_empty() {
+                        (Vec::new(), 0.)
+                    } else {
+                        reduce(
+                            &rest,
+                            &|v| locked[v as usize] || kept.contains(&v),
+                            cap.saturating_sub(keep.len()),
+                        )?
+                    };
+                    reduced.extend(keep);
+                    output = reduced;
+                    error = e;
+                    continue;
                 }
             }
             let previously_protected = protected.iter().filter(|p| **p).count();
