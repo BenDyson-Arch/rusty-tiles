@@ -33,3 +33,12 @@ equivalence, artifacts, memory proof and final checks, and retains the CPU failu
 The CI-like library lane has 1093 passes and the same 12 legacy D1/S5 failures
 as frozen S1b (no new failures); test execution is 515.31 s versus 548.44 s.
 Clippy, fmt, tree and changelog pass. This is not full integration or release acceptance.
+
+## Second pass, after S1c (2026-10-28, PR #290)
+
+Measured producer `3661e713`, base develop `e3ee6045`; tex3/crop3 archives byte-identical
+to develop. Ten interleaved pairs vs `9af55ee1` (slot 1): tex3 whole x1.041, coarse x1.055;
+crop3 whole x1.085, coarse x1.108 (ratio of medians). S2, D4 and witness searches are now
+cheaper than in 9af55ee1; the remaining crop3 excess is S1b's fold-retry passes, fold source
+rebuilds and witnesses. Bulk evidence: `~/.cache/rusty-tiles-evidence/hlod-cpu-20261028/`,
+never committed. `FINAL-3661e713.md` SHA-256: `1c713cb9f3ee24f4ade7270dfb30167aa459854ad9e8a6ea89c69e93487ab39d`.
