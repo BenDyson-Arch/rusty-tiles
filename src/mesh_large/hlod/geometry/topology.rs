@@ -473,7 +473,8 @@ pub(super) fn parts(m: &Merged, interface: &[InterfaceRow]) -> (Vec<usize>, Hash
 /// component of `m` with no border contact and a diagonal of at least `from` (the
 /// children's G), every kept border-free component smaller than the largest drop goes
 /// too. Each lies below that drop's diagonal, hence below its licence, and only shrinks
-/// the output. Returns whether `output` changed.
+/// the output; the caller fails the attempt if nothing is left. Returns whether `output`
+/// changed.
 pub(super) fn order_drops(
     m: &Merged,
     output: &mut Vec<[u32; 3]>,

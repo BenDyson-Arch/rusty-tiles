@@ -5276,3 +5276,109 @@ fn a_sliver_city_bakes_to_an_archive_that_validates() {
         .unwrap();
     assert!(census.dropped_components > 0, "{census:?}");
 }
+
+/// Review r3 P2-1: with no border component, meshopt may keep only a smaller island than
+/// one it dropped; the drop order would empty the tile. The attempt fails instead, and
+/// a later strategy publishes a nonempty tile or the cell is omitted.
+#[test]
+fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
+    use super::{borders::Contract, store::*};
+    let positions = vec![
+        [0., 0., 50.],
+        [6., 0., 50.],
+        [6., 0.002, 50.],
+        [0., 0.002, 50.],
+        [40., 40., 0.],
+        [43., 40., 0.],
+        [41.5, 42.6, 0.],
+        [41.5, 41., 2.5],
+    ];
+    let triangles = vec![
+        [0, 1, 2],
+        [0, 2, 3],
+        [4, 6, 5],
+        [4, 5, 7],
+        [5, 6, 7],
+        [6, 4, 7],
+    ];
+    let key = |depth| TileKey {
+        first: 0,
+        end: 1,
+        depth,
+        leaf_begin: 0,
+        leaf_end: 1,
+    };
+    let child = TileGeometry {
+        key: key(3),
+        ells: vec![4; positions.len()],
+        positions,
+        representative: vec![0; triangles.len()],
+        triangles,
+        primitives: vec![SourcePrimitive {
+            node: 0,
+            mesh: 0,
+            primitive: 0,
+            expanded_ordinal: 0,
+            material: u32::MAX,
+        }],
+        interface: vec![],
+        geometric_error: 0.,
+        lease: None,
+    };
+    let contract = Contract {
+        depth: 2,
+        scale: 10.,
+        certificates: vec![],
+        terminal_vertices: vec![],
+        interface: vec![],
+    };
+    for cap in [2, 3, 4, 5] {
+        let outcome = super::geometry::build_parent(
+            key(2),
+            std::slice::from_ref(&child),
+            &[cap, cap],
+            &contract,
+            &|_| Ok(None),
+            &mut |_| Ok(true),
+            &|| Ok(()),
+        )
+        .unwrap();
+        if let Some(b) = outcome.built {
+            assert!(!b.geometry.triangles.is_empty(), "cap {cap}: empty tile");
+        }
+    }
+}
+
+/// Review r3 P2-1 end to end: two small bumpy blobs and a longer sliver, no border at
+/// the root. The bake succeeds and the archive validates.
+#[test]
+fn islands_without_a_border_bake_to_an_archive_that_validates() {
+    let mut source: Vec<Mesh> = [(10f32, 10f32), (90., 90.)]
+        .into_iter()
+        .map(|(x, z)| {
+            grid(
+                (11, 11),
+                (x, x + 0.025),
+                (z, z + 0.025),
+                &|x, z| 0.004 * (400. * x).sin() * (500. * z).cos(),
+                [0.4, 0.5, 0.3, 1.],
+            )
+        })
+        .collect();
+    let (x, z, l) = (50f32, 50f32, 0.046f32);
+    source.push(Mesh {
+        positions: vec![
+            [x, 10., z],
+            [x + l, 10., z],
+            [x + l, 10., z + 0.001],
+            [x, 10., z + 0.001],
+        ],
+        indices: vec![0, 1, 2, 0, 2, 3],
+        color: [0.7, 0.6, 0.5, 1.],
+    });
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let archive = work.path().join("islands.3tz");
+    public(&input, &archive, None, 2).unwrap();
+    inspect(ValidationRequest::new(&archive)).unwrap();
+}
