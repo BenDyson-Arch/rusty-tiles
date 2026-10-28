@@ -61,6 +61,7 @@ impl Triangle {
             ),
         }
     }
+    #[inline(always)]
     pub(crate) fn positions(self) -> [V3; 3] {
         self.bits.map(|p| p.map(|x| f64::from(f32::from_bits(x))))
     }
@@ -174,23 +175,28 @@ impl Node {
     fn area(&self) -> f64 {
         f64::from_bits(self.area_bits)
     }
+    #[inline(always)]
     fn bounds(&self) -> Bounds {
         Bounds {
             min: self.lo.map(f32::from_bits),
             max: self.hi.map(f32::from_bits),
         }
     }
+    #[inline(always)]
     fn distance(&self, p: V3) -> f64 {
         let b = self.bounds();
-        (0..3)
-            .map(|i| {
-                let d = (f64::from(b.min[i]) - p[i])
-                    .max(p[i] - f64::from(b.max[i]))
-                    .max(0.);
-                d * d
-            })
-            .sum()
+        // max(below, above, 0) ignoring NaN, as f64::max computes it, without its NaN
+        // fix-ups: a NaN operand never wins a `>`. Only a zero's sign may differ, which
+        // squaring removes; the terms are added in the same order.
+        let axis = |i: usize| {
+            let (below, above) = (f64::from(b.min[i]) - p[i], p[i] - f64::from(b.max[i]));
+            let d = if below > 0. { below } else { 0. };
+            let d = if above > d { above } else { d };
+            d * d
+        };
+        axis(0) + axis(1) + axis(2)
     }
+    #[inline(always)]
     fn intersects(&self, k: TileKey) -> bool {
         self.first < k.end && k.first < self.end
     }
@@ -321,11 +327,10 @@ impl Surface {
         budget: &mut Budget,
         frontier: &mut Frontier,
     ) -> bool {
-        use std::cmp::Reverse;
         let mut changed = false;
         frontier.clear();
-        frontier.push(Reverse((self.nodes[0].distance(p).to_bits(), 0)));
-        while let Some(Reverse((d, i))) = frontier.pop() {
+        let mut next = Some((self.nodes[0].distance(p).to_bits(), 0));
+        while let Some((d, i)) = pop(&mut next, frontier) {
             if f64::from_bits(d) > best.distance2 || !budget.spend() {
                 break;
             }
@@ -367,7 +372,7 @@ impl Surface {
                     // A box farther than the best so far could never be explored.
                     let d = child.distance(p);
                     if child.intersects(key) && d <= best.distance2 {
-                        frontier.push(Reverse((d.to_bits(), c)));
+                        push(&mut next, frontier, (d.to_bits(), c));
                     }
                 }
             }
@@ -512,6 +517,7 @@ impl Budget {
             seeded: false,
         }
     }
+    #[inline(always)]
     fn spend(&mut self) -> bool {
         if self.left == 0 {
             self.exhausted = true;
@@ -526,6 +532,28 @@ impl Budget {
 /// Best-first frontier: (squared box distance bits, node or entry index); ties in index
 /// order, so the search order is a pure function of the query point.
 pub(crate) type Frontier = std::collections::BinaryHeap<std::cmp::Reverse<(u64, u64)>>;
+
+/// Keys are distinct (each node or entry is pushed once), so the pop sequence is the
+/// sorted order of what was pushed, however it is stored. `next` holds a pushed key
+/// smaller than every queued one: the heap would return it at once, so it skips the
+/// push and pop. The searches visit, prune and spend their budget exactly as before.
+#[inline(always)]
+fn push(next: &mut Option<(u64, u64)>, frontier: &mut Frontier, k: (u64, u64)) {
+    use std::cmp::Reverse;
+    match *next {
+        Some(held) if k < held => {
+            frontier.push(Reverse(held));
+            *next = Some(k);
+        }
+        Some(_) => frontier.push(Reverse(k)),
+        None if frontier.peek().is_none_or(|Reverse(top)| k < *top) => *next = Some(k),
+        None => frontier.push(Reverse(k)),
+    }
+}
+#[inline(always)]
+fn pop(next: &mut Option<(u64, u64)>, frontier: &mut Frontier) -> Option<(u64, u64)> {
+    next.take().or_else(|| frontier.pop().map(|k| k.0))
+}
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Hit {
@@ -783,7 +811,7 @@ pub(crate) struct SourceQuery<'a> {
     full_buf: Vec<FullTriangle>,
     block_bytes: usize,
     /// Reused frontier entries of [`SourceQuery::nearest_budget`].
-    frontier_entries: Vec<(Node, Option<[Visit; 2]>)>,
+    frontier_entries: Vec<Visit>,
     region: Vec<Region>,
     region_root: u32,
     block_limit: usize,
@@ -1068,7 +1096,6 @@ impl SourceQuery<'_> {
         frontier: &mut Frontier,
         inner: &mut Frontier,
     ) -> Result<Hit, JobError> {
-        use std::cmp::Reverse;
         let mut winning = self
             .last
             .filter(|t| t.rank >= self.key.first && t.rank < self.key.end);
@@ -1080,16 +1107,19 @@ impl SourceQuery<'_> {
         } else {
             winning = self.seed(p, &mut best, budget)?;
         }
+        // Entries are visit handles; a node is re-read from the resident region (or the
+        // node cache) when popped, rather than copying it through the frontier.
         let mut entries = std::mem::take(&mut self.frontier_entries);
         entries.clear();
-        entries.push(self.visit(Visit::Resident(self.region_root))?);
+        let root = Visit::Resident(self.region_root);
+        entries.push(root);
         frontier.clear();
-        frontier.push(Reverse((entries[0].0.distance(p).to_bits(), 0)));
-        while let Some(Reverse((d, e))) = frontier.pop() {
+        let mut next = Some((self.visit(root)?.0.distance(p).to_bits(), 0));
+        while let Some((d, e)) = pop(&mut next, frontier) {
             if f64::from_bits(d) > best.distance2 || !budget.spend() {
                 break;
             }
-            let (n, children) = entries[e as usize];
+            let (n, children) = self.visit(entries[e as usize])?;
             if !n.intersects(self.key) {
                 continue;
             }
@@ -1106,11 +1136,11 @@ impl SourceQuery<'_> {
                 let [left, right] =
                     children.ok_or_else(|| state("source branch without children"))?;
                 for v in [left, right] {
-                    let child = self.visit(v)?;
-                    let d = child.0.distance(p);
-                    if child.0.intersects(self.key) && d <= best.distance2 {
-                        frontier.push(Reverse((d.to_bits(), entries.len() as u64)));
-                        entries.push(child);
+                    let child = self.visit(v)?.0;
+                    let d = child.distance(p);
+                    if child.intersects(self.key) && d <= best.distance2 {
+                        push(&mut next, frontier, (d.to_bits(), entries.len() as u64));
+                        entries.push(v);
                     }
                 }
             }
@@ -1174,18 +1204,23 @@ thread_local! {
     /// Calls of [`closest`] on this thread: the work counter of the bounded-search tests.
     pub(crate) static CLOSEST_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
+#[inline(always)]
 pub(crate) fn add(a: V3, b: V3) -> V3 {
     std::array::from_fn(|i| a[i] + b[i])
 }
+#[inline(always)]
 pub(crate) fn sub(a: V3, b: V3) -> V3 {
     std::array::from_fn(|i| a[i] - b[i])
 }
+#[inline(always)]
 pub(crate) fn mul(a: V3, k: f64) -> V3 {
     a.map(|v| v * k)
 }
+#[inline(always)]
 pub(crate) fn dot(a: V3, b: V3) -> f64 {
     a.iter().zip(b).map(|(a, b)| a * b).sum()
 }
+#[inline(always)]
 pub(crate) fn cross(a: V3, b: V3) -> V3 {
     [
         a[1] * b[2] - a[2] * b[1],
@@ -1206,6 +1241,7 @@ pub(crate) fn unit(a: V3) -> Option<V3> {
     let n = dot(q, q).sqrt();
     (n > 0.0 && n.is_finite()).then(|| q.map(|v| v / n))
 }
+#[inline(always)]
 pub(crate) fn bary(p: [V3; 3], w: V3) -> V3 {
     std::array::from_fn(|i| p[0][i] * w[0] + p[1][i] * w[1] + p[2][i] * w[2])
 }
@@ -1221,6 +1257,9 @@ fn segment(q: V3, a: V3, b: V3) -> (V3, f64) {
 }
 /// Returns an actual barycentric source-surface witness, including degenerates.
 /// Its distance is appearance correspondence, never a geometric certificate.
+// Inlined into the nearest searches: this is their inner loop, and returning the
+// weights through memory stalled the caller. Inlining changes no floating-point operation.
+#[inline(always)]
 pub(crate) fn closest(q: V3, p: [V3; 3]) -> V3 {
     #[cfg(test)]
     CLOSEST_CALLS.with(|c| c.set(c.get() + 1));
@@ -1295,6 +1334,7 @@ fn closest_edges(q: V3, p: [V3; 3]) -> V3 {
     }
     best.1
 }
+#[inline(always)]
 pub(crate) fn distance2(a: V3, b: V3) -> f64 {
     let d = sub(a, b);
     dot(d, d)
@@ -1303,6 +1343,80 @@ pub(crate) fn distance2(a: V3, b: V3) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn node_distance_matches_the_f64_max_formulation_bit_for_bit() {
+        let reference = |n: &Node, p: V3| -> f64 {
+            let b = n.bounds();
+            (0..3)
+                .map(|i| {
+                    let d = (f64::from(b.min[i]) - p[i])
+                        .max(p[i] - f64::from(b.max[i]))
+                        .max(0.);
+                    d * d
+                })
+                .sum()
+        };
+        let special = [
+            0.,
+            -0.,
+            1.,
+            -1.,
+            1e-300,
+            -1e-300,
+            3e38,
+            -3e38,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NAN,
+        ];
+        let mut state = 0x9e3779b97f4a7c15u64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for round in 0..200_000 {
+            let mut coordinate = |special_ok: bool| -> f64 {
+                let r = next();
+                if special_ok && r % 4 == 0 {
+                    special[(r >> 8) as usize % special.len()]
+                } else {
+                    ((r >> 11) as f64 / (1u64 << 53) as f64 - 0.5) * 2f64.powi((r % 40) as i32 - 20)
+                }
+            };
+            let (lo, hi): (Vec<f32>, Vec<f32>) = (0..3)
+                .map(|_| {
+                    let (a, b) = (
+                        coordinate(round % 2 == 0) as f32,
+                        coordinate(round % 2 == 0) as f32,
+                    );
+                    if a <= b {
+                        (a, b)
+                    } else {
+                        (b, a)
+                    }
+                })
+                .unzip();
+            let node = Node {
+                lo: std::array::from_fn(|i| lo[i].to_bits()),
+                hi: std::array::from_fn(|i| hi[i].to_bits()),
+                first: 0,
+                end: 1,
+                left: 0,
+                right: 0,
+                start: 0,
+                count: 1,
+                area_bits: 0,
+            };
+            let p: V3 = std::array::from_fn(|_| coordinate(true));
+            let (a, b) = (node.distance(p), reference(&node, p));
+            assert!(
+                a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan()),
+                "{p:?} {lo:?} {hi:?}: {a} vs {b}"
+            );
+        }
+    }
     #[test]
     fn complete_query_cache_fits_its_fixed_charge() {
         let block = Surface::new(
