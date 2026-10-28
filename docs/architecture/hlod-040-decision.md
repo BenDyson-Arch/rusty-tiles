@@ -502,7 +502,8 @@ Review r2 (2026-10-28): the archive cannot recover E, so it treats every drop at
 above the children's G as checkable: ordinary drops in [child G, E) also need cap
 pressure and go smallest first. The producer keeps its output to that rule (an output
 dropping such a component loses every kept border-free component smaller than it, all
-licensed; cleanup's keep-one keeps the largest). Every independent layer counts cap
+licensed; if that would leave the tile empty the attempt fails and the next strategy
+runs; cleanup's keep-one keeps the largest). Every independent layer counts cap
 pressure on the children's faces before S1b contraction; that the contracted input
 exceeds the cap is enforced by the producer alone.
 

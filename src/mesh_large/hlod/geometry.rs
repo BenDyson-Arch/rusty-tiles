@@ -1146,6 +1146,18 @@ fn attempt_mode(
     // invalidate the loop's comparison.
     if topology::order_drops(reference, &mut output, interface, children_error) {
         accepted_change = None;
+        // Meshopt kept only smaller border-free components than one it dropped: this
+        // strategy fails, and the next cap, remesh or D11 stage runs (its cleanup keeps
+        // the largest).
+        if output.is_empty() {
+            return Err(JobError::new(
+                JobErrorKind::Unsupported,
+                format!(
+                    "coarse tile f{}-d{}: drop order would empty the tile",
+                    tile.first, tile.depth
+                ),
+            ));
+        }
     }
     // The successful loop check used these same immutable inputs. Preserve its
     // witnesses before compaction; input/degenerate-only paths still compare here.
