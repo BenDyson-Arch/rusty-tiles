@@ -22,8 +22,12 @@ D, E, F = [0,-2,0], [0,0,2], [0,0,-2]
 T, DETOUR = [1,0,0], [.5,-.5,0]
 
 
-def payload(triangles, *, leaf, first=0, primitive=0):
-    """One core primitive and one primitive identity row, with literal bytes."""
+def payload(triangles, *, leaf, first=0, primitive=0, extra=()):
+    """One core primitive and one primitive identity row, with literal bytes. A coarse
+    payload may append `extra` (triangle, primitive) pairs naming their own rows."""
+    names=[primitive]*len(triangles)+[p for _,p in extra]
+    triangles=list(triangles)+[t for t,_ in extra]
+    rows_of=sorted(set(names))
     binary=bytearray();views=[];accessors=[]
     def view(data):
         binary.extend(bytes(-len(binary)%8))
@@ -41,16 +45,16 @@ def payload(triangles, *, leaf, first=0, primitive=0):
     attrs=dict(POSITION=acc((x for p in vertices for x in p),5126,3),
         NORMAL=acc((x for _ in triangles for n in controls.NORMALS for x in n),5126,3),
         TEXCOORD_0=acc((x for _ in triangles for uv in controls.UVS for x in uv),5126,2),
-        _FEATURE_ID_0=acc((0 for _ in vertices),5126,1))
+        _FEATURE_ID_0=acc((rows_of.index(n) for n in names for _ in range(3)),5126,1))
     position=accessors[attrs['POSITION']]
     position.update(min=[min(p[k] for p in vertices) for k in range(3)],
                     max=[max(p[k] for p in vertices) for k in range(3)])
     indices=acc(range(len(vertices)),5125,1)
     classes={};tables=[];sets=[]
     for slot,label in enumerate(('source_primitive','source_triangle') if leaf else ('source_primitive',)):
-        rows=count if slot else 1
+        rows=count if slot else len(rows_of)
         columns={key:[0]*rows for key in ('node_index','mesh_index','primitive_index','expanded_ordinal','material_index')}
-        columns['primitive_index']=columns['expanded_ordinal']=[primitive]*rows
+        columns['primitive_index']=columns['expanded_ordinal']=[primitive]*rows if slot else list(rows_of)
         if slot:
             attrs['_FEATURE_ID_1']=acc((rank for rank in range(count) for _ in range(3)),5126,1)
             columns['triangle_index']=list(range(first,first+count))
@@ -196,7 +200,11 @@ def generate(root):
             ('positive-excess-reported',far(6400000.0),near(6400000.0),0,None,big,query(6400000.0),
              dict(exactTies=0,positiveExcess=True))):
         folder=root/name;folder.mkdir(exist_ok=True)
-        (folder/'coarse.glb').write_bytes(payload([coarse],leaf=False,primitive=named))
+        # The remote query face holds neither leaf's keys. Exact copies of both leaf
+        # faces, each naming its own primitive, keep every child component (a D11 drop
+        # needs cap pressure) without changing the query's nearest source or tau.
+        kept=() if coarse is zero else ((first,0),(second,1))
+        (folder/'coarse.glb').write_bytes(payload([coarse],leaf=False,primitive=named,extra=kept))
         (folder/'left.glb').write_bytes(payload([first],leaf=True))
         (folder/'right.glb').write_bytes(payload([second],leaf=True,primitive=1))
         (folder/'tileset.json').write_text(json.dumps(dict(asset={'version':'1.1'},geometricError=0,
@@ -218,7 +226,11 @@ def generate(root):
             ('ecef-sliver-wrong',ecef[0],ecef[2],1,'representativeIdentity',big),
             ('ecef-sliver-correct',ecef[0],ecef[1],0,None,big)):
         folder=root/name;folder.mkdir(exist_ok=True)
-        (folder/'coarse.glb').write_bytes(payload([first],leaf=False,primitive=named))
+        # A second face sharing no f32 key with the first stays as an exact copy naming
+        # its own primitive (a D11 drop needs cap pressure).
+        f32=lambda f:{tuple(struct.unpack('<3f',struct.pack('<3f',*p))) for p in f}
+        kept=() if f32(first)&f32(second) else ((second,1),)
+        (folder/'coarse.glb').write_bytes(payload([first],leaf=False,primitive=named,extra=kept))
         (folder/'left.glb').write_bytes(payload([first],leaf=True))
         (folder/'right.glb').write_bytes(payload([second],leaf=True,primitive=1))
         (folder/'tileset.json').write_text(json.dumps(dict(asset={'version':'1.1'},geometricError=0,

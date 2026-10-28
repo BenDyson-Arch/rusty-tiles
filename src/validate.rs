@@ -3554,6 +3554,8 @@ fn inspect_run(
             frontier_leaves: c.omission.frontier_leaves,
             contracted_border_arcs: c.contracted_border_arcs,
             contracted_border_vertices: c.contracted_border_vertices,
+            dropped_components: c.dropped_by_depth.iter().sum(),
+            dropped_by_depth: c.dropped_by_depth,
         }),
         scratch: scratch.is_created().then(|| ScratchReport {
             memory_backed: scratch.memory_backed(),

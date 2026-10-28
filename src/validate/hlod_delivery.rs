@@ -33,6 +33,7 @@
 //! interfaces/local contradictory pairs.
 use super::{identity, invalid, spill_failure, Budget, Error, ScratchRefusal};
 mod borders;
+mod drops;
 use crate::spill::{Scratch, SlotFile};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{value::RawValue, Value};
@@ -558,6 +559,23 @@ fn read_edge(bytes: &[u8]) -> Result<CanonicalEdge, Error> {
     }
     Ok((read_point(&bytes[..12])?, read_point(&bytes[12..])?))
 }
+/// A coarse payload's declared count of dropped child components (D11 coarse drops),
+/// `asset.extras.rustyTiles.droppedComponents`; absent is zero.
+fn declared_drops(raw: &RawValue) -> Result<u64, Error> {
+    let value = identity::field(raw, "asset")
+        .and_then(|r| identity::field(r, "extras"))
+        .and_then(|r| identity::field(r, "rustyTiles"))
+        .and_then(|r| identity::field(r, "droppedComponents"));
+    match value {
+        None => Ok(0),
+        Some(v) => serde_json::from_str::<u64>(v.get()).map_err(|_| {
+            bad(
+                "coarseDrops",
+                "droppedComponents is not an unsigned integer",
+            )
+        }),
+    }
+}
 fn add_count(value: &mut u64, n: u64) -> Result<(), Error> {
     *value = value
         .checked_add(n)
@@ -681,6 +699,9 @@ pub(super) struct DecodedInterfaceCensus {
     /// tile, and the leaf border vertices they contract.
     pub(super) contracted_border_arcs: u64,
     pub(super) contracted_border_vertices: u64,
+    /// D11 coarse drops: child components a coarse payload no longer holds, recounted
+    /// and checked against its declaration and geometricError, by cell depth.
+    pub(super) dropped_by_depth: Vec<u64>,
 }
 /// Hard published triangle cap of every HLOD payload (D1), leaf or coarse.
 pub(super) const TRIANGLE_CAP: u64 = 8192;
@@ -861,7 +882,7 @@ impl Store {
             CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER);
             CREATE INDEX tile_parent ON tiles(parent);
             CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL); CREATE INDEX refs_tile ON refs(tile); CREATE INDEX refs_rank ON refs(rank);
-            CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL);
+            CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL,dropped INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE placements(id INTEGER PRIMARY KEY,tile INTEGER NOT NULL,rank INTEGER NOT NULL,frame BLOB NOT NULL,leaf INTEGER NOT NULL);
             CREATE INDEX placement_rank ON placements(rank,leaf,id);
             CREATE TABLE originals(source BLOB NOT NULL,vertex BLOB NOT NULL,rank INTEGER NOT NULL,point BLOB NOT NULL,PRIMARY KEY(source,vertex,rank)) WITHOUT ROWID;
@@ -870,6 +891,8 @@ impl Store {
             CREATE TABLE shared_point_keys(key BLOB PRIMARY KEY) WITHOUT ROWID;
             CREATE TABLE requirements(tile INTEGER NOT NULL,kind INTEGER NOT NULL,key BLOB NOT NULL,directions INTEGER NOT NULL,PRIMARY KEY(tile,kind,key)) WITHOUT ROWID;
             CREATE TABLE leaf_faces(corners BLOB NOT NULL,tile INTEGER NOT NULL,n INTEGER NOT NULL,PRIMARY KEY(corners,tile)) WITHOUT ROWID;
+            CREATE TABLE coarse_faces(tile INTEGER NOT NULL,corners BLOB NOT NULL);
+            CREATE INDEX coarse_faces_tile ON coarse_faces(tile);
             CREATE TABLE multi_edges(key BLOB PRIMARY KEY) WITHOUT ROWID;
             CREATE TABLE edge_faces(key BLOB NOT NULL,tile INTEGER NOT NULL,third BLOB NOT NULL,dir INTEGER NOT NULL);
             CREATE INDEX edge_faces_key ON edge_faces(key,tile);
@@ -1081,6 +1104,15 @@ impl Store {
             .as_array()
             .is_some_and(|ts| ts.iter().any(|t| t["class"] == "source_triangle"));
         self.payload_bytes(rank, true, has_triangles, &digest)?;
+        let dropped = declared_drops(raw)?;
+        if dropped > 0 {
+            self.connection
+                .execute(
+                    "UPDATE payloads SET dropped=? WHERE rank=?",
+                    params![integer(dropped)?, integer(rank)?],
+                )
+                .map_err(sql)?;
+        }
         let bin = identity::slice(
             bytes,
             28 + length,
@@ -1434,6 +1466,7 @@ impl Store {
         self.point_requirements(&mut census, effort)?;
         self.segment_requirements(&mut census, effort)?;
         self.check_coarse(&mut census, effort, read)?;
+        self.coarse_drops(&mut census.dropped_by_depth, effort)?;
         self.border_pairs(effort)?;
         Ok(Some(census))
     }
@@ -2090,6 +2123,16 @@ impl Store {
             let tile: Option<i64> = row.map(|r| r.get(0)).transpose().map_err(sql)?;
             if current.as_ref().map(|c| c.0) != tile {
                 if let Some((tile, surface)) = current.take() {
+                    // The merged coarse faces, for the coarse-drop recount (drops.rs).
+                    let mut face = self
+                        .connection
+                        .prepare_cached("INSERT INTO coarse_faces VALUES(?,?)")
+                        .map_err(sql)?;
+                    for f in &surface.faces {
+                        effort.charge(1)?;
+                        let bytes: Vec<u8> = f.iter().flat_map(|p| point_bytes(*p)).collect();
+                        face.execute(params![tile, bytes]).map_err(sql)?;
+                    }
                     let contracted = self.border(tile, &surface, effort)?;
                     self.equal_directions(tile, &surface, &contracted, effort)?;
                     for path in contracted.values() {
@@ -2540,7 +2583,8 @@ mod tests {
     #[test]
     fn t_junction_and_partial_overlap_create_no_interface_obligation() {
         let left = [[[0., 0., 0.], [2., 0., 0.], [0., 2., 0.]]];
-        let coarse = [[[20., 20., 0.], [22., 20., 0.], [20., 22., 0.]]];
+        // The coarse tile keeps its leaf: a lost child component is a declared drop.
+        let coarse = left;
         for right in [
             [[[1., 0., 0.], [1., -1., 1.], [1., -1., -1.]]],
             [[[0.5, 0., 0.], [1.5, 0., 0.], [1., -1., 0.]]],

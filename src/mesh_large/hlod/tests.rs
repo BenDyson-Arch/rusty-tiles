@@ -1861,6 +1861,7 @@ fn parent_jobs_allocate_within_their_charge() {
             &built.locked,
             positions,
             &plain_appearance(g),
+            0,
             Mutation::None,
         )?;
         encode::check(g, &built.locked, &encoded)
@@ -1928,7 +1929,8 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
     let positions = lattice
         .encode_coarse(&tile.positions, &tile.ells, &fixed, tile.key.depth)
         .unwrap();
-    let encoded = encode::encode(&tile, &locked, positions, &appearance, Mutation::None).unwrap();
+    let encoded =
+        encode::encode(&tile, &locked, positions, &appearance, 0, Mutation::None).unwrap();
     encode::check(&tile, &locked, &encoded).unwrap();
     let decoded = decode(&encoded.glb);
     let mut seen = 0;
@@ -5030,4 +5032,353 @@ fn staircase_walls_contract_their_borders_without_omission() {
         .map(|b| b["topology"]["contractedVertices"].as_u64().unwrap())
         .sum();
     assert!(contracted > 0, "{}", manifest["hlod"]["bordersByDepth"]);
+}
+
+/// An open-bottom box (four walls and a roof, welded at its edges) standing on `y = 0`:
+/// a synthetic city building, one component.
+fn building(x: f32, z: f32, half: f32, height: f32) -> Mesh {
+    let mut positions = Vec::new();
+    for y in [0., height] {
+        for (dx, dz) in [(-half, -half), (half, -half), (half, half), (-half, half)] {
+            positions.push([x + dx, y, z + dz]);
+        }
+    }
+    let mut indices = Vec::new();
+    for k in 0..4u32 {
+        let (a, b) = (k, (k + 1) % 4);
+        indices.extend([a, b, b + 4, a, b + 4, a + 4]);
+    }
+    indices.extend([4, 6, 5, 4, 7, 6]);
+    Mesh {
+        positions,
+        indices,
+        color: [0.7, 0.6, 0.5, 1.],
+    }
+}
+
+/// A terrain sheet with `n` x `n` buildings of growing size on it, none touching it.
+fn city(n: usize) -> Vec<Mesh> {
+    let mut source = vec![grid(
+        (8, 8),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| -0.5,
+        [0.4, 0.5, 0.3, 1.],
+    )];
+    for i in 0..n {
+        for j in 0..n {
+            let step = 100. / n as f32;
+            let k = (i * n + j) as f32;
+            let half = 0.5 + 1.5 * k / (n * n) as f32;
+            source.push(building(
+                step * (i as f32 + 0.5),
+                step * (j as f32 + 0.5),
+                half.min(0.4 * step),
+                2. + 4. * half,
+            ));
+        }
+    }
+    source
+}
+
+/// A city of open-bottom boxes on a terrain sheet: no box may go below its cell's G floor
+/// and each costs about ten triangles under the guards, so at the test cap the coarse
+/// cells, and the root, could not fit (all omitted before D11 coarse drops). Now border-free
+/// buildings go smallest first, each payload declares its drops, published G covers
+/// every dropped key, and the archive validates. Understated G or an undeclared drop is
+/// refused by the validator.
+#[test]
+fn a_city_too_dense_for_the_cap_keeps_its_root_through_coarse_drops() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &city(12));
+    let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+    assert!(omission_receipt("city", &dir));
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let coarse: u64 = manifest["hlod"]["bordersByDepth"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|b| b["topology"]["coarseDroppedComponents"].as_u64())
+        .sum();
+    assert!(coarse > 0, "{}", manifest["hlod"]["bordersByDepth"]);
+    let archive = work.path().join("city.3tz");
+    public(&input, &archive, None, 2).unwrap();
+    let checked = inspect(ValidationRequest::new(&archive)).unwrap();
+    let census = checked.interface_census.unwrap();
+    assert!(census.dropped_components > 0, "{census:?}");
+    assert_eq!(census.omitted_cells, 0, "{census:?}");
+    for mutation in [Mutation::UnderstateDropError, Mutation::UndeclaredDrop] {
+        let output = work.path().join(format!("{mutation:?}.3tz"));
+        let request = TilerRequest::new(&input, &output)
+            .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(2).unwrap()))
+            .with_test_leaf_triangles(256)
+            .with_hlod_settings(Settings {
+                mutation,
+                ..test_settings(300)
+            });
+        crate::mesh_large::mesh_to_tileset(request, &RunControl::default()).unwrap();
+        let e = inspect(ValidationRequest::new(&output))
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("coarseDrops"), "{mutation:?}: {e}");
+    }
+}
+
+/// Review r2 P1-1: below max(E, child G) meshopt drops whatever collapses first, here a
+/// 6 m sliver beside a kept 4.7 m tetrahedron (leaf child, G 0). Drops at or above the
+/// children's G must go smallest first, so the tetrahedron may not stay.
+#[test]
+fn ordinary_drops_under_pressure_go_smallest_first() {
+    use super::{borders::Contract, store::*};
+    let (mut positions, mut triangles) = (Vec::new(), Vec::new());
+    let n = 24u32;
+    for y in 0..=n {
+        for x in 0..=n {
+            let (fx, fy) = (x as f32, y as f32);
+            positions.push([fx, fy, 3. * (fx * 0.7).sin() * (fy * 0.6).cos()]);
+        }
+    }
+    for y in 0..n {
+        for x in 0..n {
+            let a = y * (n + 1) + x;
+            triangles.extend([[a, a + 1, a + n + 2], [a, a + n + 2, a + n + 1]]);
+        }
+    }
+    let s = positions.len() as u32;
+    positions.extend([
+        [0., 0., 50.],
+        [6., 0., 50.],
+        [6., 0.002, 50.],
+        [0., 0.002, 50.],
+    ]);
+    triangles.extend([[s, s + 1, s + 2], [s, s + 2, s + 3]]);
+    let t = positions.len() as u32;
+    positions.extend([
+        [40., 40., 0.],
+        [43., 40., 0.],
+        [41.5, 42.6, 0.],
+        [41.5, 41., 2.5],
+    ]);
+    triangles.extend([
+        [t, t + 2, t + 1],
+        [t, t + 1, t + 3],
+        [t + 1, t + 2, t + 3],
+        [t + 2, t, t + 3],
+    ]);
+    let faces = triangles.len();
+    let key = |depth| TileKey {
+        first: 0,
+        end: 1,
+        depth,
+        leaf_begin: 0,
+        leaf_end: 1,
+    };
+    let child = TileGeometry {
+        key: key(3),
+        ells: vec![4; positions.len()],
+        positions: positions.clone(),
+        triangles,
+        representative: vec![0; faces],
+        primitives: vec![SourcePrimitive {
+            node: 0,
+            mesh: 0,
+            primitive: 0,
+            expanded_ordinal: 0,
+            material: u32::MAX,
+        }],
+        interface: vec![],
+        geometric_error: 0.,
+        lease: None,
+    };
+    let contract = Contract {
+        depth: 2,
+        scale: 10.,
+        certificates: vec![],
+        terminal_vertices: vec![],
+        interface: vec![],
+    };
+    for cap in [faces - 20, faces - 60, faces - 150] {
+        let b = super::geometry::build_parent(
+            key(2),
+            std::slice::from_ref(&child),
+            &[cap, cap],
+            &contract,
+            &|_| Ok(None),
+            &mut |_| Ok(true),
+            &|| Ok(()),
+        )
+        .unwrap()
+        .built
+        .unwrap();
+        let used: HashSet<[u32; 3]> = b
+            .geometry
+            .triangles
+            .iter()
+            .flatten()
+            .map(|&v| b.geometry.positions[v as usize].map(f32::to_bits))
+            .collect();
+        let kept = |v: u32| used.contains(&positions[v as usize].map(f32::to_bits));
+        let sliver = (s..s + 4).any(kept);
+        let tetra = (t..t + 4).any(kept);
+        assert!(
+            sliver || !tetra,
+            "cap {cap}: sliver dropped, smaller tetrahedron kept"
+        );
+    }
+}
+
+/// Review r2 P1-1 end to end: slivers beside smaller closed tetrahedra over a bumpy sheet
+/// bake at the test cap with ordinary drops, and the archive validates.
+#[test]
+fn a_sliver_city_bakes_to_an_archive_that_validates() {
+    let mut source = vec![grid(
+        (40, 40),
+        (0., 100.),
+        (0., 100.),
+        &|x, z| 0.012 * (0.3 * x).sin() * (0.25 * z).cos(),
+        [0.4, 0.5, 0.3, 1.],
+    )];
+    for i in 0..4 {
+        for j in 0..4 {
+            let l = [0.04f32, 0.04, 0.03, 0.045][(i + j) % 4];
+            let (x, z) = (5. + 25. * i as f32, 5. + 25. * j as f32);
+            source.push(Mesh {
+                positions: vec![
+                    [x, 10., z],
+                    [x + l, 10., z],
+                    [x + l, 10., z + 0.001],
+                    [x, 10., z + 0.001],
+                ],
+                indices: vec![0, 1, 2, 0, 2, 3],
+                color: [0.7, 0.6, 0.5, 1.],
+            });
+            let (s, tz) = (0.6 * l, z + 1.);
+            source.push(Mesh {
+                positions: vec![
+                    [x, 10., tz],
+                    [x + s, 10., tz],
+                    [x + 0.5 * s, 10., tz + 0.87 * s],
+                    [x + 0.5 * s, 10. + 0.8 * s, tz + 0.3 * s],
+                ],
+                indices: vec![0, 2, 1, 0, 1, 3, 1, 2, 3, 2, 0, 3],
+                color: [0.7, 0.6, 0.5, 1.],
+            });
+        }
+    }
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let archive = work.path().join("slivers.3tz");
+    public(&input, &archive, None, 2).unwrap();
+    let census = inspect(ValidationRequest::new(&archive))
+        .unwrap()
+        .interface_census
+        .unwrap();
+    assert!(census.dropped_components > 0, "{census:?}");
+}
+
+/// Review r3 P2-1: with no border component, meshopt may keep only a smaller island than
+/// one it dropped; the drop order would empty the tile. The attempt fails instead, and
+/// a later strategy publishes a nonempty tile or the cell is omitted.
+#[test]
+fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
+    use super::{borders::Contract, store::*};
+    let positions = vec![
+        [0., 0., 50.],
+        [6., 0., 50.],
+        [6., 0.002, 50.],
+        [0., 0.002, 50.],
+        [40., 40., 0.],
+        [43., 40., 0.],
+        [41.5, 42.6, 0.],
+        [41.5, 41., 2.5],
+    ];
+    let triangles = vec![
+        [0, 1, 2],
+        [0, 2, 3],
+        [4, 6, 5],
+        [4, 5, 7],
+        [5, 6, 7],
+        [6, 4, 7],
+    ];
+    let key = |depth| TileKey {
+        first: 0,
+        end: 1,
+        depth,
+        leaf_begin: 0,
+        leaf_end: 1,
+    };
+    let child = TileGeometry {
+        key: key(3),
+        ells: vec![4; positions.len()],
+        positions,
+        representative: vec![0; triangles.len()],
+        triangles,
+        primitives: vec![SourcePrimitive {
+            node: 0,
+            mesh: 0,
+            primitive: 0,
+            expanded_ordinal: 0,
+            material: u32::MAX,
+        }],
+        interface: vec![],
+        geometric_error: 0.,
+        lease: None,
+    };
+    let contract = Contract {
+        depth: 2,
+        scale: 10.,
+        certificates: vec![],
+        terminal_vertices: vec![],
+        interface: vec![],
+    };
+    for cap in [2, 3, 4, 5] {
+        let outcome = super::geometry::build_parent(
+            key(2),
+            std::slice::from_ref(&child),
+            &[cap, cap],
+            &contract,
+            &|_| Ok(None),
+            &mut |_| Ok(true),
+            &|| Ok(()),
+        )
+        .unwrap();
+        if let Some(b) = outcome.built {
+            assert!(!b.geometry.triangles.is_empty(), "cap {cap}: empty tile");
+        }
+    }
+}
+
+/// Review r3 P2-1 end to end: two small bumpy blobs and a longer sliver, no border at
+/// the root. The bake succeeds and the archive validates.
+#[test]
+fn islands_without_a_border_bake_to_an_archive_that_validates() {
+    let mut source: Vec<Mesh> = [(10f32, 10f32), (90., 90.)]
+        .into_iter()
+        .map(|(x, z)| {
+            grid(
+                (11, 11),
+                (x, x + 0.025),
+                (z, z + 0.025),
+                &|x, z| 0.004 * (400. * x).sin() * (500. * z).cos(),
+                [0.4, 0.5, 0.3, 1.],
+            )
+        })
+        .collect();
+    let (x, z, l) = (50f32, 50f32, 0.046f32);
+    source.push(Mesh {
+        positions: vec![
+            [x, 10., z],
+            [x + l, 10., z],
+            [x + l, 10., z + 0.001],
+            [x, 10., z + 0.001],
+        ],
+        indices: vec![0, 1, 2, 0, 2, 3],
+        color: [0.7, 0.6, 0.5, 1.],
+    });
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let archive = work.path().join("islands.3tz");
+    public(&input, &archive, None, 2).unwrap();
+    inspect(ValidationRequest::new(&archive)).unwrap();
 }

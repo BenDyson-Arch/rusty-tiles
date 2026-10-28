@@ -278,6 +278,10 @@ def build(case):
     b = fx.coarse('B', keep_b)
     files = {f'{n}.glb': glb(leaves[n], rows[n], leaf=True) for n in leaves}
     files['A.glb'] = glb(a, identities(a), leaf=False)
+    if drop_a:
+        # D11 coarse drops: every payload declares the child components it drops.
+        from drop_controls import declare
+        files['A.glb'] = declare(files['A.glb'], len(drop_a))
     files['B.glb'] = glb(b, identities(b), leaf=False)
     box = {'box': [4, -2, 0, 10, 0, 0, 0, 10, 0, 0, 0, 10]}
 
@@ -411,7 +415,10 @@ def mutate(name, records):
 CASES = [
     # Positives: honest contraction, closure accounting and exact terminal locks.
     ('contracted', None, None), ('mixed-within', None, None), ('terminal-exact', None, None),
-    ('closure-small', None, None), ('dropped-small', None, None),
+    ('closure-small', None, None),
+    # D11 coarse drops (2026-10-28): a drop at or above the children's G needs cap
+    # pressure, which these few-face cells lack, so both archive validators refuse it.
+    ('dropped-small', 'coarseDrops', 'coarseDrops'),
     # Geometry mutants: both validators where the archive alone shows them.
     ('same-depth-gap', 'sameDepthBorderGap', 'sameDepthBorderGap'),
     ('mixed-beyond-g8', 'mixedDepthBorderGap', 'mixedDepthBorderGap'),
@@ -424,7 +431,7 @@ CASES = [
     ('overlap-with-reverse', 'interfaceWinding', 'interfaceWinding'),
     ('coincident-twin', 'interfaceWinding', 'interfaceWinding'),
     ('dropped-border', 'interfacePoints', 'interfacePoints'),
-    ('dropped-large', 'droppedComponent', None),
+    ('dropped-large', 'droppedComponent', 'coarseDrops'),
     ('closure-loss-hidden', 'holeClosure', None),
     ('closure-loss-reported', 'topologyReceipt', None),
     # Sidecar lies: the oracle re-derives and refuses; native never reads the sidecar.
@@ -433,7 +440,8 @@ CASES = [
     ('wrong-scale', 'borderScale', None), ('depth-label-lie', 'borderScale', None),
     ('lock-claim-contracted', 'terminalBorderLock', None), ('terminal-unclaimed', 'terminalBorderLock', None),
     ('unknown-payload', 'borderAudit', None), ('omission-unreported', 'omissionReport', None),
-    ('dropped-unreported', 'topologyReceipt', None), ('dropped-tampered-g', 'topologyReceipt', None),
+    ('dropped-unreported', 'topologyReceipt', 'coarseDrops'),
+    ('dropped-tampered-g', 'topologyReceipt', 'coarseDrops'),
 ]
 OFFSETS = {'mixed-beyond-g8': 0.001}
 
@@ -626,7 +634,8 @@ def review2(name):
         finally:
             EXTENT = 8.0
         out = [f for f in case.fx.coarse('A') if f != drop]
-        files['A.glb'] = glb(out, identities(out), leaf=False)
+        from drop_controls import declare
+        files['A.glb'] = declare(glb(out, identities(out), leaf=False), 1)
         diameter = math.sqrt(sum((max(p[k] for p in drop) - min(p[k] for p in drop)) ** 2 for k in range(3)))
         e = 1000. / 1024 / 2 if name == 'remote-drop' else scale(1)
         if name == 'remote-drop':
@@ -726,8 +735,8 @@ REVIEW2 = [
     ('page-retained', None, None),
     ('rim-vertex-removed', 'holeClosure', None),
     ('simultaneous-close-open', 'topologyReceipt', None),
-    ('remote-drop', None, None),
-    ('loss-between-samples', 'topologyReceipt', None),
+    ('remote-drop', 'coarseDrops', 'coarseDrops'),
+    ('loss-between-samples', 'topologyReceipt', 'coarseDrops'),
     ('depth-fraction', 'borderDepth', None),
     ('depth-boolean', 'borderDepth', None),
     ('depth-ancestor', 'borderDepth', None),
@@ -738,7 +747,8 @@ REVIEW2 = [
 
 
 REVIEW = [
-    ('drop-loss-lie', 'topologyReceipt', None),
+    # G omits the drop's loss: archive-visible since D11 coarse drops (2026-10-28).
+    ('drop-loss-lie', 'topologyReceipt', 'coarseDrops'),
     ('shared-corner-hole', 'holeClosure', None),
     ('unrelated-license', 'interfaceWinding', 'interfaceWinding'),
     ('unlicensed-twins', 'interfaceWinding', 'interfaceWinding'),
@@ -886,6 +896,13 @@ def native(binary, folder, archive):
     return checked.returncode, json.loads(checked.stdout)
 
 
+# Drop cases refused for lack of cap pressure: the refusal must say so (`coarseDrops`
+# alone would also match a count mismatch). The oracle reaches it only after its sidecar
+# stage accepted the drop.
+CAP_REFUSALS = ('dropped-small', 'dropped-large', 'dropped-unreported', 'dropped-tampered-g',
+                'remote-drop', 'loss-between-samples')
+
+
 def run(root, binary=None, sheet_n=120):
     from oracle import audit, Failure
     root = Path(root)
@@ -899,6 +916,8 @@ def run(root, binary=None, sheet_n=120):
         except Failure as e:
             got, result = e.check, dict(detail=e.detail)
         assert got == case['oracleCheck'], (name, case['oracleCheck'], got, result.get('detail'))
+        if name in CAP_REFUSALS and got == 'coarseDrops':
+            assert 'cap' in result['detail'], (name, result['detail'])
         entry = dict(name=name, oracle=got)
         if name in ('contracted', 'mixed-within', 'same-depth-gap'):
             assert result.get('contractedBorderArcs', 0) > 0 or got, (name, result)
@@ -911,6 +930,8 @@ def run(root, binary=None, sheet_n=120):
                         'mixedDepthBorderGap'} <= set(report['checks']), name
             else:
                 assert code == 3 and label in report['error']['message'], (name, label, report)
+                if name in CAP_REFUSALS:
+                    assert 'cap' in report['error']['message'], (name, report)
             entry['native'] = label
         results.append(entry)
     if binary is not None:

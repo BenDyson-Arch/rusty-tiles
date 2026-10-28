@@ -1248,6 +1248,7 @@ class Audit:
         out_points = _Near({p for f in output for p in f}, reach)
         mesh = _Mesh(output)
         dropped, ambiguous, lost = 0, False, set()
+        coarse = [0, 0]  # surely and possibly at or above the floor (D11 coarse drops)
         floor = max(e, child_g)
         loss = diameter_max = 0.0
         for key, members in groups.items():
@@ -1264,8 +1265,11 @@ class Audit:
             hi = [max(p[k] for p in members) for k in range(3)]
             diameter = math.sqrt(sum((hi[k] - lo[k]) ** 2 for k in range(3)))
             diameter_max = max(diameter_max, diameter)
-            require(diameter < floor + slack and diameter < t['g'] + slack, 'droppedComponent',
-                    f'tile {tid}: dropped component diameter {diameter} not below max(E, child G) {floor}')
+            # D11 coarse drops (2026-10-28): a drop may exceed the floor only under cap
+            # pressure (checked below, independently of the receipt); its loss below
+            # still bounds G.
+            coarse[0] += diameter >= floor + slack
+            coarse[1] += diameter >= floor - slack
             # Its loss: S1b's fixed controls on every face, exactly to the delivered proxy.
             for f in faces_of[key]:
                 for q in _samples(f):
@@ -1282,6 +1286,14 @@ class Audit:
             require(abs(published['maxDroppedComponentDiameter'] - diameter_max) <= slack + 1e-12 * diameter_max,
                     'topologyReceipt', f'tile {tid}: audit maxDroppedComponentDiameter '
                     f'{published["maxDroppedComponentDiameter"]} != re-derived {diameter_max}')
+        merged = sum(1 for f in source if len({tuple(p) for p in f}) == 3)
+        require(not coarse[0] or merged > 8192, 'droppedComponent',
+                f'tile {tid}: {coarse[0]} dropped components at or above max(E, child G) {floor} '
+                f'though the {merged} merged child faces fit the 8192 cap')
+        counted = published.get('coarseDroppedComponents', 0)
+        require(coarse[0] <= counted <= coarse[1], 'droppedComponent',
+                f'tile {tid}: {coarse[0]} to {coarse[1]} dropped components at or above max(E, child G) '
+                f'{floor}, audit counts {counted} coarse drops')
         if dropped != published['droppedComponents']:
             require(ambiguous and dropped < published['droppedComponents'], 'topologyReceipt',
                     f'tile {tid}: {dropped} dropped components re-derived, audit reports {published["droppedComponents"]}')

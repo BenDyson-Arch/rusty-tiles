@@ -129,6 +129,47 @@ status only grows with depth and shared edges are fixed, so retained sets stay n
 (checked in test builds). Contraction then moves each removed vertex to the chord
 endpoint more of its faces already hold with an interface or removed third corner,
 collapsing those faces; each side remaps only its own faces of the same chord.
+## Coarse drops (owner decision 2026-10-28)
+
+Only after every strategy above has failed, and only when the contracted input
+exceeds the cap. Candidates are the
+merged children's components with no interface point whose bounding-box diagonal is
+at least the G floor max(E, child G), in order (diagonal, triangle count, least key):
+one component pass and one sort. A prefix of k candidates licenses drops below the
+next float above the k-th diagonal (ties included): cleanup removes them, constrained
+and ordinary attempts run as before with that license, and S2 measures the result.
+Prefixes double until one fits, then bisect to the least fitting one (each proposal
+bounded by the eight-child input). The published topology counts the coarse share in
+`coarseDroppedComponents` (candidates no output face still holds).
+
+Format: a coarse payload with dropped child components declares their number in
+glTF `asset.extras.rustyTiles.droppedComponents` (absent when zero). A component
+is a set of a payload's faces joined by shared canonical keys; coarse vertices are
+always source keys, so a child component is dropped exactly when its parent payload
+holds none of its keys. The native validator and the oracle (`s5/drops.py`) recount
+this from the decoded children's faces (copies down a single-child chain are the same
+cell), refuse a count different from the declaration (`coarseDrops`), and refuse a
+dropped key, or one of S2's fixed sample points (quarter grid and centroid) on a
+dropped face, farther than the parent's geometricError (with 1e-6 relative rounding;
+off a face's vertices its child's G is added) from its decoded surface: lower bounds
+on the loss, which S2 covers with the same controls. G also stays at least the
+children's G. A drop at or above the children's largest G must have cap pressure (the
+children's faces, counted with multiplicity as the producer merges them, exceed
+8,192) and go smallest first: no kept child component without a key held by a leaf
+outside the tile may be smaller. E is not recoverable from the archive, so ordinary
+drops in [child G, E) get the same pressure and order checks; only drops strictly
+below the children's G are checked for count and G alone. The producer keeps every
+output to that rule: once it drops a border-free component at or above the children's
+G, every kept border-free component smaller than it goes too (all licensed), and
+cleanup's keep-one keeps the largest in drop order. A coarse child's dropped faces are
+admitted up to the parent's G plus that child's G off their vertices, so an
+understatement of up to that child's G there is seen only by the sidecar oracle, which
+samples the source. The native recount reads the face
+tables the delivery replays fill and decodes nothing again; it charges the shared
+payload-element budget per face read, point checked and distance-grid insertion. The
+sidecar oracle, which knows E, requires cap pressure (merged child faces
+above 8,192) for any drop at or above max(E, child G), independently of the receipt,
+and checks the receipt's coarse count against those drops.
 
 ## Durable audit format (v1)
 

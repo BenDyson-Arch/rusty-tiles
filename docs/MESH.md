@@ -182,6 +182,16 @@ has no selector, and a plain `mesh` run uses it.
   leaf manifest carries the same counts. Omission is a bounded last resort and costs client requests near the omitted region (about 8
   times the depth in content-less cells plus the children's tiles). It is distinct from resource refusals: a budget or scratch/disk shortfall is
   still `resource_limit`, and an unreadable or unsupported source is still refused.
+- **Coarse drops.** Before omitting a cell whose contracted children exceed the cap,
+  the producer drops whole border-free components smallest first (bounding-box
+  diagonal), even above the cell's G floor, until it fits. G covers the dropped surface
+  and stays at least the children's G; an ancestor may then drop smaller components
+  under that larger G as ordinary drops. Any drop, ordinary or coarse, now needs cap
+  pressure (the cell's input above the cap), and drops at or above the children's G go
+  smallest first. Every coarse payload that drops child
+  components says how many in glTF `asset.extras.rustyTiles.droppedComponents` (absent
+  when none), which `validate` recounts. `borders_by_depth[].topology` reports
+  `droppedComponents` and, when nonzero, `coarseDroppedComponents`.
 - **Single-child chains.** A cell whose only child is a coarse tile publishes that
   tile once, at the top of the chain; the cells below carry no content and the same
   error, so refinement stays monotone. A cell whose only child is a leaf publishes

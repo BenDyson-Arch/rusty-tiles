@@ -1204,6 +1204,11 @@ fn prepare(
             return Ok(None);
         }
     }
+    // A consistent but dishonest S2: dropped surface goes unmeasured.
+    #[cfg(test)]
+    if job.input.settings.mutation == Mutation::UnderstateDropError {
+        built.change.dropped.clear();
+    }
     let Some(controls) = geometry::measurement::assess(
         &mut built.change,
         &positions.decoded,
@@ -1368,8 +1373,13 @@ fn build_tile(
                         tile.representative.remove(t);
                     }
                 }
-                prepared = prepare(job, built, contract, &mut query, &mut nearest)?;
-                let accepted = prepared.is_some();
+                // Keep the last accepted measurement: the coarse-drop bisection may
+                // try smaller prefixes after its fitting one.
+                let candidate = prepare(job, built, contract, &mut query, &mut nearest)?;
+                let accepted = candidate.is_some();
+                if accepted {
+                    prepared = candidate;
+                }
                 if let Some(audit) = audit {
                     topology_attempts += 1;
                     let index = audit.topology_attempt(built, topology_attempts, accepted)?;
@@ -1429,6 +1439,7 @@ fn build_tile(
         error_cpu,
         error_cpu_seconds,
     } = prepared.ok_or_else(|| state("accepted geometry has no final decoded measurement"))?;
+
     let tile = &built.geometry;
     let contract = contract.as_ref().expect("built tile has contract");
     // S3: fresh charts and a cheap source bake on the final decoded positions, through
@@ -1447,11 +1458,21 @@ fn build_tile(
             geometric_error: error.geometric_error,
         },
     )?;
+    let declared = built.topology.dropped_components;
+    #[cfg(test)]
+    let declared = if settings.mutation == Mutation::UndeclaredDrop
+        && built.topology.coarse_dropped_components > 0
+    {
+        0
+    } else {
+        declared
+    };
     let encoded = encode::encode(
         tile,
         &built.locked,
         positions,
         &appearance,
+        declared,
         settings.mutation,
     )?;
     drop(appearance.groups);

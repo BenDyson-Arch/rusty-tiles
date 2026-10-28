@@ -404,7 +404,13 @@ pub(crate) fn build_parent(
         }
     }
     let contracted_faces = merged.triangles.clone();
+    let contracted_representative = merged.representative.clone();
     let floor = contract.scale.max(children_error);
+    // Components may go only under cap pressure: the contracted input exceeds the hard
+    // cap (validators refuse a drop whose children fit it). Below it, a zero floor
+    // licenses no drop, even for a smaller D11 target.
+    let pressure = contracted_faces.len() > *caps.last().unwrap();
+    let drops = if pressure { floor } else { 0. };
     let mut opening_pins = HashSet::default();
     for (i, &cap) in caps.iter().enumerate() {
         if caps[..i].contains(&cap) {
@@ -419,7 +425,7 @@ pub(crate) fn build_parent(
                 children_error,
                 &reference,
                 &contracted_faces,
-                floor,
+                drops,
                 preserve_holes,
                 &mut opening_pins,
                 &mut attempted,
@@ -439,7 +445,7 @@ pub(crate) fn build_parent(
     }
     // D11: simplifier stagnation alone is not cap infeasibility. Deduplicate and remove
     // eligible interior components, then remesh with increasingly coarse interior cells.
-    let construction_dropped = topology::cleanup(&mut merged, interface, floor, &mut topology);
+    let construction_dropped = topology::cleanup(&mut merged, interface, drops, &mut topology);
     if let Some(receipt) = constrained::remesh(&mut merged, interface, *caps.last().unwrap()) {
         topology.add(receipt);
     }
@@ -457,7 +463,7 @@ pub(crate) fn build_parent(
                 children_error,
                 &reference,
                 &contracted_faces,
-                floor,
+                drops,
                 preserve_holes,
                 &mut opening_pins,
                 &mut attempted,
@@ -479,6 +485,94 @@ pub(crate) fn build_parent(
             }
         }
     }
+    // D11 coarse drops (owner decision 2026-10-28): only once every strategy above has
+    // failed, and only for cap pressure: the contracted input exceeds the cap (validators
+    // refuse a coarse drop whose children fit it). Whole components with no border
+    // contact go smallest first: the least prefix that fits, found by doubling and then
+    // bisection (at most 2 log2(C) + 2 proposals; each prefix licenses drops below its
+    // last diagonal). S2's fixed controls on every dropped triangle carry their loss into
+    // the published G.
+    let mut base = merged.clone();
+    base.triangles = contracted_faces.clone();
+    base.representative = contracted_representative;
+    let candidates = if pressure {
+        coarse_candidates(&base, interface, floor)
+    } else {
+        Vec::new()
+    };
+    let n = candidates.len();
+    let (mut failed, mut fitted) = (0, None);
+    let mut next = (n > 0).then_some(1);
+    while let Some(k) = next {
+        check()?;
+        let license = candidates[k - 1].diagonal.next_up();
+        merged.triangles.clone_from(&base.triangles);
+        merged.representative.clone_from(&base.representative);
+        let mut receipt = topology::Receipt::default();
+        topology::cleanup(&mut merged, interface, license, &mut receipt);
+        if let Some(r) = constrained::remesh(&mut merged, interface, *caps.last().unwrap()) {
+            receipt.add(r);
+        }
+        let mut built = None;
+        for preserve_holes in [false, true] {
+            built = assessed_attempt(
+                tile,
+                &merged,
+                interface,
+                *caps.last().unwrap(),
+                children_error,
+                &reference,
+                &contracted_faces,
+                license,
+                preserve_holes,
+                &mut opening_pins,
+                &mut attempted,
+                assess,
+                check,
+            )?;
+            if built.is_some() {
+                break;
+            }
+        }
+        // The final comparison counts every published change against the reference.
+        receipt.dropped_components = 0;
+        receipt.closed_holes = 0;
+        receipt.opened_holes = 0;
+        topology.add(receipt);
+        match built {
+            Some(b) => fitted = Some((k, b)),
+            None => failed = k,
+        }
+        next = match &fitted {
+            None if k < n => Some((2 * k).min(n)),
+            Some((fit, _)) if fit - failed > 1 => Some(failed + (fit - failed) / 2),
+            _ => None,
+        };
+    }
+    if let Some((_, mut b)) = fitted {
+        let kept: HashSet<Key> = b
+            .geometry
+            .triangles
+            .iter()
+            .flatten()
+            .map(|&v| key(b.geometry.positions[v as usize]))
+            .collect();
+        b.topology.coarse_dropped_components = candidates
+            .iter()
+            .filter(|c| !c.keys.iter().any(|k| kept.contains(k)))
+            .count() as u64;
+        attempted.add(topology);
+        topology.dropped_components = 0;
+        topology.closed_holes = 0;
+        topology.opened_holes = 0;
+        b.topology.add(topology);
+        return Ok(Outcome {
+            built: Some(b),
+            contraction_failed: false,
+            attempted_topology: attempted,
+            construction_dropped: Vec::new(),
+        });
+    }
     attempted.add(topology);
     Ok(Outcome {
         built: None,
@@ -486,6 +580,68 @@ pub(crate) fn build_parent(
         attempted_topology: attempted,
         construction_dropped,
     })
+}
+
+/// A component with no border contact at or above the G floor, which only a coarse drop
+/// can remove.
+struct Candidate {
+    diagonal: f64,
+    keys: Vec<Key>,
+}
+
+/// Coarse-drop candidates in drop order: bounding-box diagonal, then triangle count, then
+/// least key. One component pass and one sort: O(F + C log C).
+fn coarse_candidates(m: &Merged, interface: &[InterfaceRow], floor: f64) -> Vec<Candidate> {
+    #[derive(Default)]
+    struct Component {
+        lo: [f64; 3],
+        hi: [f64; 3],
+        touch: bool,
+        triangles: u64,
+        keys: Vec<Key>,
+    }
+    let component = topology::components(m);
+    let border = interface_points(interface);
+    let mut components: HashMap<usize, Component> = HashMap::default();
+    let mut seen = vec![false; m.keys.len()];
+    for t in &m.triangles {
+        let c = components
+            .entry(component[t[0] as usize])
+            .or_insert_with(|| Component {
+                lo: [f64::MAX; 3],
+                hi: [f64::MIN; 3],
+                ..Default::default()
+            });
+        c.triangles += 1;
+        for &v in t {
+            let p = m.positions[v as usize].map(f64::from);
+            for ((lo, hi), x) in c.lo.iter_mut().zip(&mut c.hi).zip(p) {
+                *lo = lo.min(x);
+                *hi = hi.max(x);
+            }
+            let k = m.keys[v as usize];
+            c.touch |= border.contains(&k);
+            if !std::mem::replace(&mut seen[v as usize], true) {
+                c.keys.push(k);
+            }
+        }
+    }
+    let mut candidates: Vec<(f64, u64, Key, Vec<Key>)> = components
+        .into_values()
+        .filter_map(|mut c| {
+            let diagonal = (0..3)
+                .map(|a| (c.hi[a] - c.lo[a]).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            c.keys.sort_unstable();
+            (!c.touch && diagonal >= floor).then(|| (diagonal, c.triangles, c.keys[0], c.keys))
+        })
+        .collect();
+    candidates.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+    candidates
+        .into_iter()
+        .map(|(diagonal, _, _, keys)| Candidate { diagonal, keys })
+        .collect()
 }
 
 /// Failed contraction is not an omission decision. Preserve the old border samples
@@ -744,7 +900,7 @@ fn attempt_mode(
         .iter()
         .all(|t| t[0] == t[1] || t[1] == t[2] || t[0] == t[2]);
     let mut accepted_change = None;
-    let (output, simplifier_error, stopping) = if input <= cap {
+    let (mut output, simplifier_error, stopping) = if input <= cap {
         (merged.triangles.clone(), 0., StoppingBound::Input)
     } else if degenerate_only {
         (
@@ -942,6 +1098,23 @@ fn attempt_mode(
                 tile.first, tile.depth
             ),
         ));
+    }
+    // Drops go smallest first (validators check it): extra smaller drops, all licensed,
+    // invalidate the loop's comparison.
+    if topology::order_drops(reference, &mut output, interface, children_error) {
+        accepted_change = None;
+        // Meshopt kept only smaller border-free components than one it dropped: this
+        // strategy fails, and the next cap, remesh or D11 stage runs (its cleanup keeps
+        // the largest).
+        if output.is_empty() {
+            return Err(JobError::new(
+                JobErrorKind::Unsupported,
+                format!(
+                    "coarse tile f{}-d{}: drop order would empty the tile",
+                    tile.first, tile.depth
+                ),
+            ));
+        }
     }
     // The successful loop check used these same immutable inputs. Preserve its
     // witnesses before compaction; input/degenerate-only paths still compare here.

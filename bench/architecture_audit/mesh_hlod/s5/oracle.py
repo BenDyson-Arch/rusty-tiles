@@ -398,6 +398,9 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                         want=hit[1]
                     representatives+=1
                     require(material_class(f['material'])==material_class(want['material']),'representativeMaterialClass',t['id'])
+            # D11 coarse drops: declared, recounted and within geometricError (drops.py).
+            import drops
+            result['coarseDrops']=drops.inspect(store,tiles,archive,require,distance2)
             # Upward omission, single first-renderable cover and empty-cell
             # refinement, from the same independent expansion (omission.py).
             from omission import inspect as inspect_omission, Failure as OmissionFailure

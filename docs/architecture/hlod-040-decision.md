@@ -471,6 +471,42 @@ coverage, displacement certificates, E/G inequalities, terminal locks, bounds,
 leaf identity, source-defect reports and frontier continuity; producer hashes
 alone are insufficient. Audit topology-loss and safety-net counts in receipts.
 
+**Owner amendment, 2026-10-28 — coarse drops.** The mesh-1e7 city (9,527 open
+buildings, each at least 8 m, over E_0 = 1.75 m) omitted its root and all of depths
+0–3: no building can go below max(E_d, child G), and about ten triangles each
+exceed the cap (cap-infeasible by geometry, as with the holey sheet). A coarse cell
+that no other strategy fits may now drop whole connected components with no border
+contact even when they exceed that floor. Smallest first by bounding-box diagonal,
+then triangle count, then least key; the least fitting prefix is found by doubling
+then bisection, so at most 2·log₂C + 2 bounded proposals. Every drop of a payload,
+small or coarse, is declared in its `asset.extras.rustyTiles.droppedComponents` and
+counted per depth (`coarseDroppedComponents` in topology receipts; `droppedComponents`
+and `droppedByDepth` in the validation census). G still covers each dropped triangle's
+fixed S2 controls and stays at least the children's G. Border protection and D11
+certification are unchanged: a border-touching component is never a candidate and
+its loss is refused by the exact retention checks. Validators recount drops from
+decoded keys and refuse a count that differs from the declaration, or a dropped key
+farther than G from the payload (S1b doc, "Coarse drops").
+
+Review r1 (2026-10-28): the stage runs only under cap pressure (the contracted input
+exceeds the cap). Validators check that part of the rule and the order from the
+archive: a drop at or above the children's largest G needs more than 8,192 child faces
+and no smaller border-free child component may stay, and S2's fixed sample points on
+every dropped face must lie within G. One coarse drop raises its tile's G (mesh-1e7:
+up to about 27 m); an ancestor under cap pressure then admits ordinary drops of
+border-free components below that size, since its floor max(E, child G) rose. That is
+the existing rule applied honestly, and it is how one tile's drop shows further up.
+Without cap pressure no component goes, ordinary or coarse.
+
+Review r2 (2026-10-28): the archive cannot recover E, so it treats every drop at or
+above the children's G as checkable: ordinary drops in [child G, E) also need cap
+pressure and go smallest first. The producer keeps its output to that rule (an output
+dropping such a component loses every kept border-free component smaller than it, all
+licensed; if that would leave the tile empty the attempt fails and the next strategy
+runs; cleanup's keep-one keeps the largest). Every independent layer counts cap
+pressure on the children's faces before S1b contraction; that the contracted input
+exceeds the cap is enforced by the producer alone.
+
 ## Numeric acceptance contract (proposed, not measured passes)
 
 One source Mtri is one million **input** triangles; CPU is whole-process user+sys,

@@ -291,6 +291,10 @@ pub struct InterfaceCensus {
     /// edges, counted per tile, and the leaf border vertices those chords contract.
     pub contracted_border_arcs: u64,
     pub contracted_border_vertices: u64,
+    /// D11 coarse drops: child components coarse payloads no longer hold, by cell depth.
+    /// Each matches its payload's declaration and lies within its geometricError.
+    pub dropped_components: u64,
+    pub dropped_by_depth: Vec<u64>,
 }
 /// The validation's scratch use, reported whenever any spill file was written.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
