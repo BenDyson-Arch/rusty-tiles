@@ -4801,7 +4801,9 @@ fn d11_holey_sheet_reports_its_cap_infeasible_omissions_upward() {
                 &h["omissionSources"],
                 &h["omittedByDepth"]
             ),
-            (&json!(5), &json!(4), &json!([1, 4, 0, 0])),
+            // The four depth-1 cells pass their input up; the root then fails on its
+            // own (about 200 holes against the cap), so it is a source too.
+            (&json!(5), &json!(5), &json!([1, 4, 0, 0])),
             "{name}: {h}"
         );
         assert_directed_census(&name, &census(&dir), run.cap);

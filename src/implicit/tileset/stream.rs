@@ -516,12 +516,11 @@ impl<'a> ForestWriter<'a> {
                 "document level {depth}: a child transform must be a translation"
             )));
         }
-        if children.len() > self.scheme.branches() {
+        let most = self.scheme.branches().max(super::MAX_EXPLICIT_CHILDREN);
+        if children.len() > most {
             return Err(data(format!(
-                "document level {depth}: {} children exceed the {} scheme's {}",
+                "document level {depth}: {} children exceed an explicit tile's {most}",
                 children.len(),
-                self.scheme.as_str(),
-                self.scheme.branches()
             )));
         }
         self.check_vector(record)?;

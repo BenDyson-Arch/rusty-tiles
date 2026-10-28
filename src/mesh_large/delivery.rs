@@ -225,11 +225,14 @@ impl Sink for PlanSink {
 /// Explicit children with every chain or omitted cell replaced by its children
 /// (recursively): a coarse tile's children are then its renderable replacements, each with
 /// its own box and error (no greater than the coarse tile's).
-fn spliced(children: Vec<Node>) -> Vec<Node> {
+///
+/// Below content (`under`), a content-less explicit cell is spliced out as well (see
+/// `Node::barrier`); its children then sit below that content too.
+fn spliced(children: Vec<Node>, under: bool) -> Vec<Node> {
     let mut out = Vec::with_capacity(children.len());
     for child in children {
-        if child.is_chain_cell() && !child.is_implicit_root() {
-            out.extend(spliced(child.children));
+        if (child.is_chain_cell() || child.is_spliced_barrier(under)) && !child.is_implicit_root() {
+            out.extend(spliced(child.children, true));
         } else {
             out.push(child);
         }
@@ -361,9 +364,10 @@ impl WriteSink<'_> {
             &format!("content/f{}-d{}.glb", node.first, node.depth),
             root,
         )?;
+        let under = !contents.is_empty();
         let own = record(&node, contents)?;
         let mut children = Vec::with_capacity(node.children.len());
-        for child in spliced(node.children) {
+        for child in spliced(node.children, under) {
             children.push(self.tile_in(child, false)?);
         }
         Ok(ForestTile::explicit(own, children))
@@ -432,6 +436,12 @@ impl WriteSink<'_> {
         let contents = self.stage_proxy(&node, &member, true)?;
         if !contents.is_empty() {
             planned.contents[0].push(c);
+        }
+        if !contents.is_empty() && node.children.iter().any(Node::is_content_less) {
+            // Cesium would let this tile stop drawing before that child's content loads.
+            return Err(state(
+                "a content-less tile sits below content inside an implicit tree",
+            ));
         }
         let own = record(&node, contents)?;
         let mut children = Vec::with_capacity(node.children.len());

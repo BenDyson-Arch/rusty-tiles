@@ -112,13 +112,25 @@ pub(crate) struct Node {
     /// empty: explicit output splices it out (its child replaces it), and where the layout
     /// cannot skip a cell (an implicit tree, a document's root) it repeats the coarse tile.
     pub chain: Option<Box<ProxyRow>>,
-    /// An HLOD cell whose coarse tile was omitted: it, or a descendant, could not keep its
-    /// exact interface within the cap, and omission propagates to the root. It publishes no
-    /// content, and every ancestor is omitted too, so it never sits between content levels
-    /// (no coarse tile above it can stop drawing on reaching it); it is plain availability,
-    /// explicit or implicit, and may be a document's root. Checked: a coarse tile above an
-    /// omitted cell is refused.
+    /// An HLOD cell whose coarse tile was omitted: it could not keep its exact interface
+    /// within the cap, and passed its input to its parent instead (or a descendant passed
+    /// too much, and omission reached it). It publishes no content.
     pub omitted: bool,
+    /// The largest error of the content this tile stands for: its own (a tile with content)
+    /// or its children's (a content-less tile). A coarse tile's error is at least its
+    /// children's content error, so it is monotone over content.
+    pub content_error: f64,
+    /// A content-less tile whose parent has content. CesiumJS's base traversal lets that
+    /// parent stop drawing as soon as its content children load, without waiting for this
+    /// tile's descendants, when this tile is an ordinary child
+    /// (`Cesium3DTilesetBaseTraversal.executeEmptyTraversal` returns `hasEmptyContent`).
+    /// So it is never one: explicit output splices it out (its children replace it), or it
+    /// is reached through a placeholder (an implicit root or a document link), which
+    /// Cesium's empty traversal walks through to the content below.
+    pub barrier: bool,
+    /// A barrier below this tile in its own fragment: the tree cannot become one implicit
+    /// tree (the barrier would be an ordinary implicit tile).
+    pub inner_barrier: bool,
     /// Inline children in slot order (empty for leaves and links).
     pub children: Vec<Node>,
     /// Set when this skeleton tile was written as an external document.
@@ -143,6 +155,37 @@ impl Node {
         self.chain.is_some() && self.proxy.is_none() && self.leaf.is_none() && self.link.is_none()
     }
 
+    /// No content of its own, not even through a link.
+    pub(crate) fn is_content_less(&self) -> bool {
+        self.leaf.is_none() && self.proxy.is_none() && self.chain.is_none() && self.link.is_none()
+    }
+
+    /// A content-less explicit tile below content (`under`: its parent has content, or is
+    /// itself spliced below content): spliced out (see `barrier`).
+    pub(crate) fn is_spliced_barrier(&self, under: bool) -> bool {
+        under && self.is_content_less() && !self.is_implicit_root()
+    }
+
+    /// Mark this tile a barrier if it is content-less, with the content-less tiles that
+    /// replace it once spliced; a marked tree is never demoted or moved as a whole.
+    fn mark_barrier(&mut self) {
+        if self.link.is_some() && self.omitted {
+            // A document whose root is content-less: a placeholder already.
+            self.barrier = true;
+            return;
+        }
+        if !self.is_content_less() {
+            return;
+        }
+        self.barrier = true;
+        let mut inner = false;
+        for c in &mut self.children {
+            c.mark_barrier();
+            inner |= c.link.is_none() && (c.barrier || c.inner_barrier);
+        }
+        self.inner_barrier |= inner;
+    }
+
     /// A skeleton tile whose fragment is still inline (not a link).
     fn is_inline_skeleton(&self) -> bool {
         self.is_skeleton() && self.link.is_none()
@@ -162,7 +205,13 @@ impl Node {
         fn visit(node: &Node, path: &mut Vec<usize>, best: &mut Best) {
             for (i, child) in node.children.iter().enumerate() {
                 path.push(i);
-                if child.is_inline_skeleton() {
+                // A shallow tree with a barrier inside stays explicit; its own shallow
+                // trees may still be demoted.
+                if child.is_inline_skeleton()
+                    || ((child.barrier || child.inner_barrier)
+                        && child.link.is_none()
+                        && !child.implicit)
+                {
                     visit(child, path, best);
                 } else if child.leaf.is_none() && child.link.is_none() && !child.implicit {
                     let key = (child.records, child.height, std::cmp::Reverse(child.first));
@@ -200,7 +249,7 @@ impl Node {
 
 /// Add the published roles of one document's fragment to `shape`.
 fn tally(shape: &mut Shape, node: &Node) {
-    fn visit(shape: &mut Shape, node: &Node, root: bool) {
+    fn visit(shape: &mut Shape, node: &Node, root: bool, under: bool) {
         if node.link.is_some() {
             return;
         }
@@ -209,18 +258,25 @@ fn tally(shape: &mut Shape, node: &Node) {
             shape.implicit_tiles += node.records;
             return;
         }
+        let mut below = node.proxy.is_some() || (root && node.chain.is_some());
         if node.is_chain_cell() && !root {
             // Spliced out: its child takes its place.
             shape.tiles -= 1;
             shape.spliced_chain_cells += 1;
+            below = true;
+        } else if node.is_spliced_barrier(under) && !root {
+            // Spliced out: its children take its place.
+            shape.tiles -= 1;
+            shape.spliced_barriers += 1;
+            below = true;
         } else {
             shape.explicit_tiles += 1;
         }
         for child in &node.children {
-            visit(shape, child, false);
+            visit(shape, child, false, below);
         }
     }
-    visit(shape, node, true);
+    visit(shape, node, true, false);
 }
 
 /// Where closed fragments go: counted while planning, written while publishing.
@@ -255,7 +311,7 @@ pub(crate) fn document_members(node: &Node) -> u64 {
         } else if node.is_implicit_root() {
             // Its payloads and its subtree.
             payloads(node, true) + 1
-        } else if !node.is_skeleton() {
+        } else if !node.is_skeleton() && !node.inner_barrier {
             // A shallow tree written as explicit tiles: its payloads only.
             u64::from(root && node.is_chain_cell()) + payloads(node, false)
         } else {
@@ -282,6 +338,11 @@ pub(crate) struct Shape {
     pub proxies: u64,
     /// HLOD chain cells spliced out of explicit output (not in `tiles`).
     pub spliced_chain_cells: u64,
+    /// Content-less cells below content spliced out of explicit output (not in `tiles`).
+    pub spliced_barriers: u64,
+    /// Content-less cells below content published as placeholders instead (a document
+    /// root written before its parent closed, or an implicit root demoted below it).
+    pub barrier_placeholders: u64,
     /// HLOD cells whose coarse tile was omitted (content-less, every ancestor too).
     pub omitted_cells: u64,
     /// Logical omitted cells, including pass-through cells, by ownership depth.
@@ -456,10 +517,13 @@ impl<'s, S: Sink> Builder<'s, S> {
             error: row.geometry_error,
             height: 0,
             implicit: false,
+            content_error: row.geometry_error,
             leaf: Some(Box::new(row)),
             proxy: None,
             chain: None,
             omitted: false,
+            barrier: false,
+            inner_barrier: false,
             children: Vec::new(),
             link: None,
             objects: 1,
@@ -491,6 +555,11 @@ impl<'s, S: Sink> Builder<'s, S> {
             .reduce(Aabb::union)
             .unwrap();
         let children_error = frame.children.iter().map(|c| c.error).fold(0., f64::max);
+        let children_content = frame
+            .children
+            .iter()
+            .map(|c| c.content_error)
+            .fold(0., f64::max);
         // An HLOD cell without content sits below its single-child chain's coarse tile.
         let mut chain_error = None;
         let mut chain = None;
@@ -504,7 +573,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             let key = (frame.first, self.next_rank, frame.depth);
             match next {
                 Some((row, bounds)) if (row.first, row.end, row.depth) == key => {
-                    if row.geometric_error < children_error {
+                    if row.geometric_error < children_content {
                         return Err(bad(format!(
                             "proxy {} has a geometric error below its children's",
                             row.uri
@@ -547,23 +616,39 @@ impl<'s, S: Sink> Builder<'s, S> {
         } else {
             None
         };
-        // Omission reaches the root: no coarse content above an omitted cell.
-        if (proxy.is_some() || chain.is_some()) && frame.children.iter().any(|c| c.omitted) {
-            return Err(JobError::new(
-                JobErrorKind::InvalidInput,
-                format!(
-                    "coarse content of f{}-d{} sits above an omitted cell (omission must reach \
-                     the root)",
-                    frame.first, frame.depth
-                ),
-            ));
+        // A content-less child of a coarse tile is a barrier (see `Node::barrier`), and so
+        // is every content-less tile that replaces it once it is spliced out.
+        let content = proxy.is_some() || chain.is_some();
+        let mut children = frame.children;
+        if content {
+            for c in &mut children {
+                c.mark_barrier();
+            }
+        }
+        let inner_barrier = children
+            .iter()
+            .any(|c| c.link.is_none() && (c.barrier || c.inner_barrier));
+        if content {
+            // Fallbacks: a barrier already written as a placeholder (a document root, or an
+            // implicit root demoted below it) is not spliced; Cesium's empty traversal
+            // walks through the placeholder, but its error exceeds its content parent's.
+            fn placeholders(node: &Node) -> u64 {
+                if !node.barrier {
+                    return 0;
+                }
+                if node.link.is_some() || node.is_implicit_root() {
+                    return 1;
+                }
+                node.children.iter().map(placeholders).sum()
+            }
+            self.shape.barrier_placeholders += children.iter().map(placeholders).sum::<u64>();
         }
         let (tile, extent) = tile_box(extent)?;
-        let height = 1 + frame.children.iter().map(|c| c.height).max().unwrap();
+        let height = 1 + children.iter().map(|c| c.height).max().unwrap();
         let diagonal = tile.diagonal();
         let error = match (&proxy, chain_error) {
             (Some(row), _) => row.geometric_error,
-            (None, Some(error)) if error >= children_error => error,
+            (None, Some(error)) if error >= children_content => error,
             (None, Some(_)) => {
                 return Err(JobError::new(
                     JobErrorKind::InvalidInput,
@@ -599,7 +684,10 @@ impl<'s, S: Sink> Builder<'s, S> {
             proxy,
             chain,
             omitted,
-            children: frame.children,
+            content_error: if content { error } else { children_content },
+            barrier: false,
+            inner_barrier,
+            children,
             link: None,
             objects: 0,
             records: 0,
@@ -610,7 +698,10 @@ impl<'s, S: Sink> Builder<'s, S> {
         if frame.depth == 0 {
             if skeleton {
                 self.fit(&mut node)?;
-            } else if node.objects > self.limits.objects || node.levels > self.limits.levels {
+            } else if (node.objects > self.limits.objects || node.levels > self.limits.levels)
+                && !node.inner_barrier
+                && !node.barrier
+            {
                 node.implicit = true;
             }
             tally(&mut self.shape, &node);
@@ -657,7 +748,13 @@ impl<'s, S: Sink> Builder<'s, S> {
                     .map(|(i, _)| i)
             };
             let index = if node.levels > limits.levels {
-                let shallow = |c: &Node| c.leaf.is_none() && c.link.is_none() && !c.implicit;
+                let shallow = |c: &Node| {
+                    c.leaf.is_none()
+                        && c.link.is_none()
+                        && !c.implicit
+                        && !c.barrier
+                        && !c.inner_barrier
+                };
                 match largest(&|c| u64::from(c.levels), &shallow) {
                     Some(i) if !node.children[i].is_skeleton() => {
                         node.demote(&[i]);
@@ -666,9 +763,9 @@ impl<'s, S: Sink> Builder<'s, S> {
                     found => found,
                 }
             } else if node.objects > limits.objects {
-                largest(&|c| c.objects, &Node::is_inline_skeleton)
+                largest(&|c| c.objects, &|c| c.is_inline_skeleton() && !c.barrier)
             } else {
-                largest(&|c| c.records, &Node::is_inline_skeleton)
+                largest(&|c| c.records, &|c| c.is_inline_skeleton() && !c.barrier)
             };
             let Some(index) = index else {
                 break;
@@ -687,7 +784,7 @@ impl<'s, S: Sink> Builder<'s, S> {
         self.shape.documents += 1;
         // The link keeps its document root's omission, so the content-above-omitted rule
         // holds across documents too.
-        let omitted = node.omitted;
+        let (omitted, content_error, barrier) = (node.omitted, node.content_error, node.barrier);
         let (first, depth, slot, axes, tile, extent, error, height) = (
             node.first,
             node.depth,
@@ -714,6 +811,9 @@ impl<'s, S: Sink> Builder<'s, S> {
             proxy: None,
             chain: None,
             omitted,
+            content_error,
+            barrier,
+            inner_barrier: false,
             children: Vec::new(),
             link: Some(link),
             objects: 1,
@@ -870,10 +970,11 @@ mod omission_tests {
         }
     }
 
-    /// No content-less cell has a content ancestor: a coarse tile above an omitted cell is
-    /// refused (omission must reach the root).
+    /// A coarse tile above omitted cells (they passed their input up to it) is accepted, and
+    /// the content-less cells below it are barriers: spliced out of explicit output, never
+    /// demoted into an implicit tree or written as a placeholder.
     #[test]
-    fn a_coarse_tile_above_an_omitted_cell_is_refused() {
+    fn a_coarse_tile_above_omitted_cells_splices_them() {
         let root = ProxyRow {
             uri: "proxies/f0-d0.glb".into(),
             sha256: [0; 32],
@@ -887,15 +988,52 @@ mod omission_tests {
             encoded_depth: 0,
         };
         let (shape, _) = plan(2, vec![root]);
-        let err = shape.unwrap_err();
-        assert!(err.to_string().contains("above an omitted cell"), "{err}");
+        let shape = shape.unwrap();
+        assert_eq!(shape.omitted_cells, 8, "{shape:?}");
+        assert_eq!(shape.spliced_barriers, 8, "{shape:?}");
+        assert_eq!(shape.barrier_placeholders, 0, "{shape:?}");
+        // The root and its 64 leaves remain.
+        assert_eq!(shape.tiles, 1 + 64, "{shape:?}");
     }
 
-    /// Round 9: the rule holds across documents. Tight caps write omitted skeleton cells
-    /// below the root as external documents; a coarse root above those links is refused (a
-    /// link keeps its document root's omission).
+    /// A coarse tile's error is checked against its children's content: an omitted child's
+    /// content error is its own children's, not its empty-parent error.
     #[test]
-    fn a_coarse_tile_above_an_omitted_document_root_is_refused() {
+    fn a_coarse_tile_below_its_spliced_content_error_is_refused() {
+        let root = ProxyRow {
+            uri: "proxies/f0-d0.glb".into(),
+            sha256: [0; 32],
+            bytes: 100,
+            first: 0,
+            end: 64 * 8192,
+            depth: 0,
+            geometric_error: 0.5,
+            primitives: 1,
+            sampling: (0, 0, crate::mesh_large::hlod::error::Schedule::PRODUCTION),
+            encoded_depth: 0,
+        };
+        // 0.5 is far below the omitted cells' empty-parent error, above their leaves'.
+        let (shape, _) = plan(2, vec![root.clone()]);
+        assert!(shape.is_ok(), "{shape:?}");
+        // Below the leaves' error (0): refused.
+        let (shape, _) = plan(
+            2,
+            vec![ProxyRow {
+                geometric_error: -1.,
+                ..root
+            }],
+        );
+        assert!(shape
+            .unwrap_err()
+            .to_string()
+            .contains("below its children"));
+    }
+
+    /// Tight caps write omitted skeleton cells as external documents before their coarse
+    /// parent closes: they stay placeholders (Cesium walks through a link to the content
+    /// below) and are counted as such; nothing below content is an ordinary empty tile.
+    #[test]
+    fn a_coarse_tile_above_an_omitted_document_root_keeps_it_a_placeholder() {
         let depth = 5;
         let root = ProxyRow {
             uri: "proxies/f0-d0.glb".into(),
@@ -916,7 +1054,7 @@ mod omission_tests {
         };
         let (shape, sink) = plan_with(depth, vec![root], tight);
         assert!(!sink.docs.is_empty(), "external documents were written");
-        let err = shape.unwrap_err();
-        assert!(err.to_string().contains("above an omitted cell"), "{err}");
+        let shape = shape.unwrap();
+        assert!(shape.barrier_placeholders > 0, "{shape:?}");
     }
 }

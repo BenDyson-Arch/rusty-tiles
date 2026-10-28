@@ -44,7 +44,8 @@ pub(crate) fn bound(
         .checked_add(limit.checked_mul(256 + allocation.checked_mul(2)?)?)
 }
 pub(crate) fn limit(height: u32) -> usize {
-    8 * (height as usize + 1) + 32
+    // Each open level holds at most `PASS_INPUTS` tiles: capped children and passed-up input.
+    super::super::PASS_INPUTS as usize * (height as usize + 1) + 32
 }
 
 pub(crate) enum Held {
@@ -248,6 +249,10 @@ impl<'l, 's> Manager<'l, 's> {
             triangles: tile.triangles.len() as u64,
             live: self.live.clone(),
         })
+    }
+    /// Hold `tile` on disk (a passed-up input with no lease of its own).
+    pub(crate) fn hold_on_disk(&mut self, tile: TileGeometry) -> Result<Held, JobError> {
+        Ok(Held::Disk(self.spill(tile)?))
     }
     /// Oldest resident sibling first, independent of HashMap iteration and worker timing.
     pub(crate) fn spill_one(

@@ -110,6 +110,12 @@ const JOB_BYTES_PER_TRIANGLE: u64 = 1700;
 const ROW_WINDOW: usize = 1024;
 /// Encoded GLB, compression scratch and decoded check copy of one coarse tile.
 const JOB_ENCODE_BYTES: u64 = 16 << 20;
+/// The most tiles one parent job merges. A cell that cannot fit its cap publishes no
+/// content and passes its own input (its capped children) to its parent in its place, so a
+/// parent merges at most seven capped children plus what an omitted child passed up. Past
+/// this many inputs the parent is omitted too and passes nothing (omission then reaches
+/// the root, as before).
+pub(crate) const PASS_INPUTS: u64 = 24;
 
 /// One parent job's admission for `merged` input triangles: its workspace, encode allowance,
 /// S2's source query, measurement and nearest-search workspace, and a cap-sized output.
@@ -297,12 +303,15 @@ pub(crate) fn plan(
     // S3's donor search (its resolve state and a local surface) and appearance workspace
     // ride on S1/S2's job.
     let appearance = appearance_plan(captured, config.profile, cap)?;
-    let job = job_charge(leaf_cap.max(cap as u64).saturating_mul(8), settings)
-        .saturating_add(held.saturating_mul(8))
-        .saturating_add(bake::RESOLVE_BYTES)
-        .saturating_add(bake::LOCAL_BYTES)
-        .saturating_add(appearance.texture)
-        .saturating_add(appearance.color);
+    let job = job_charge(
+        leaf_cap.max(cap as u64).saturating_mul(PASS_INPUTS),
+        settings,
+    )
+    .saturating_add(held.saturating_mul(PASS_INPUTS))
+    .saturating_add(bake::RESOLVE_BYTES)
+    .saturating_add(bake::LOCAL_BYTES)
+    .saturating_add(appearance.texture)
+    .saturating_add(appearance.color);
     let sorter = config.sorter(1);
     let incidence = interfaces::memory_need(sorter, leaf_cap, captured.tree.stats.leaves)
         .max(borders::memory_need(sorter));
@@ -438,8 +447,10 @@ pub(crate) struct HlodReport {
     pub omitted_proxies: u64,
     pub omission_sources: u64,
     pub omitted_by_depth: Vec<u64>,
-    /// The largest merged input of any parent job (at most eight capped children).
+    /// The largest merged input of any parent job (at most `PASS_INPUTS` capped tiles).
     pub max_job_input_triangles: u64,
+    /// The most tiles any parent job merged (capped children and passed-up input).
+    pub max_job_inputs: u64,
     /// Simplified faces kept on their source orientation (`geometry::orient`).
     pub reoriented_faces: u64,
     pub interface_segments: u64,
@@ -621,8 +632,17 @@ struct Frame {
 }
 
 /// A finished parent: its geometry (held for its own parent) and its published row, or
-/// neither when its coarse tile is omitted.
-type Done = Result<(Option<TileGeometry>, Finished, appearance::Timing), JobError>;
+/// neither when its coarse tile is omitted; then its input, passed to its parent in its
+/// place (empty when nothing passes).
+type Done = Result<
+    (
+        Option<TileGeometry>,
+        Vec<TileGeometry>,
+        Finished,
+        appearance::Timing,
+    ),
+    JobError,
+>;
 
 #[derive(Clone, Copy, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -631,10 +651,12 @@ enum OmissionReason {
     ContractionStalled,
     RemeshStalled,
     DescendantOmission,
+    /// Its input with what omitted children passed up exceeds `PASS_INPUTS` tiles.
+    InputBound,
 }
 impl OmissionReason {
     fn source(self) -> bool {
-        !matches!(self, Self::DescendantOmission)
+        !matches!(self, Self::DescendantOmission | Self::InputBound)
     }
 }
 
@@ -1427,7 +1449,8 @@ fn build_tile(
             topology_attempts,
             construction_topology,
         };
-        return Ok((None, omitted, appearance::Timing::default()));
+        // Its input passes to its parent in its place.
+        return Ok((None, children, omitted, appearance::Timing::default()));
     };
     drop(children);
     built.change = Default::default();
@@ -1546,6 +1569,7 @@ fn build_tile(
     shrink(&mut geometry);
     Ok((
         Some(geometry),
+        Vec::new(),
         Finished::Row(Box::new(row)),
         appearance.timing,
     ))
@@ -1666,12 +1690,14 @@ fn walk(
     let settings = input.settings;
     let ledger = Ledger::new(plan.ledger_bytes);
     let job_bytes = plan.job_bytes;
-    // The most a job merges: eight capped children (an omitted child is never merged).
+    // The most a job merges: `PASS_INPUTS` capped tiles (its capped children and what its
+    // omitted children passed up).
     let job_inputs = input
         .config
         .leaf_triangles()
         .max(settings.cap as u64)
-        .saturating_mul(8);
+        .saturating_mul(PASS_INPUTS);
+    let input_peak = std::cell::Cell::new(0usize);
     let out_bytes = TileGeometry::charge(settings.cap as u64);
     let job_peak = std::cell::Cell::new(0u64);
     let mut timings = appearance::Timing::default();
@@ -1714,6 +1740,11 @@ fn walk(
         let mut stack: Vec<Frame> = Vec::new();
         // Finished children: their geometry, or none when omitted.
         let mut ready: HashMap<u64, Option<store::spill::Held>> = HashMap::new();
+        // An omitted child's passed-up input: the `ready` ids of the tiles it passes (held
+        // there, so spillable, under ids past every node id). An omitted child absent here
+        // passes nothing, and omission propagates from it to the root.
+        let mut handed: HashMap<u64, Vec<u64>> = HashMap::new();
+        let mut next_passed = 1u64 << 62;
         let mut pending: Vec<Closed> = Vec::new();
         let mut finished_rows: BTreeMap<u64, Finished> = BTreeMap::new();
         let (mut next_id, mut next_seq, mut written, mut inflight) = (0u64, 0u64, 0u64, 0usize);
@@ -1723,6 +1754,7 @@ fn walk(
         // and the ledger admit its job.
         let spawn = |pending: &mut Vec<Closed>,
                      ready: &mut HashMap<u64, Option<store::spill::Held>>,
+                     handed: &mut HashMap<u64, Vec<u64>>,
                      inflight: &mut usize|
          -> Result<(), JobError> {
             let mut i = 0;
@@ -1731,12 +1763,25 @@ fn walk(
                     i += 1;
                     continue;
                 }
-                // An omitted child omits this cell too, before any merge: nothing to build,
-                // its other children's geometry released (omission reaches the root).
-                if pending[i].children.iter().any(|c| ready[c].is_none()) {
+                // The job's inputs: each capped child, and in an omitted child's place the
+                // tiles it passed up.
+                let mut inputs = Vec::new();
+                let mut dead = false;
+                for c in &pending[i].children {
+                    match (ready[c].is_some(), handed.get(c)) {
+                        (true, _) => inputs.push(*c),
+                        (false, Some(ids)) => inputs.extend_from_slice(ids),
+                        (false, None) => dead = true,
+                    }
+                }
+                let over = inputs.len() as u64 > PASS_INPUTS;
+                // A child that passed nothing omits this cell too, before any merge, as does
+                // input past `PASS_INPUTS` tiles: nothing to build, every input released
+                // (omission reaches the root).
+                if dead || over {
                     let closed = pending.remove(i);
                     let mut frontier = Vec::new();
-                    for c in &closed.children {
+                    for c in &inputs {
                         if let Some(geometry) = ready.remove(c).flatten() {
                             frontier.push(TileKey {
                                 depth: job.borders.publication_depth(geometry.key())?,
@@ -1744,10 +1789,18 @@ fn walk(
                             });
                         }
                     }
+                    for c in &closed.children {
+                        ready.remove(c);
+                        handed.remove(c);
+                    }
                     *inflight += 1;
                     let omitted = Finished::Omitted {
                         key: closed.key,
-                        reason: OmissionReason::DescendantOmission,
+                        reason: if dead {
+                            OmissionReason::DescendantOmission
+                        } else {
+                            OmissionReason::InputBound
+                        },
                         frontier,
                         topology: Default::default(),
                         topology_attempts: 0,
@@ -1756,14 +1809,13 @@ fn walk(
                     let _ = sender.send((
                         closed.id,
                         closed.seq,
-                        Ok((None, omitted, appearance::Timing::default())),
+                        Ok((None, Vec::new(), omitted, appearance::Timing::default())),
                     ));
                     continue;
                 }
-                // Children are capped (an omitted child propagates instead of merging), so
-                // every job is within its planned charge.
-                let merged: u64 = pending[i]
-                    .children
+                // Inputs are capped tiles, at most `PASS_INPUTS`, so every job is within its
+                // planned charge.
+                let merged: u64 = inputs
                     .iter()
                     .map(|c| ready[c].as_ref().map_or(0, |g| g.triangles()))
                     .sum();
@@ -1773,6 +1825,7 @@ fn walk(
                     )));
                 }
                 job_peak.set(job_peak.get().max(merged));
+                input_peak.set(input_peak.get().max(inputs.len()));
                 let job_lease = loop {
                     if let Some(lease) = ledger.try_lease(job_bytes, 0) {
                         break Some(lease);
@@ -1785,8 +1838,13 @@ fn walk(
                     break;
                 };
                 let closed = pending.remove(i);
-                let children: Vec<TileGeometry> = closed
-                    .children
+                for c in &closed.children {
+                    handed.remove(c);
+                    if ready.get(c).is_some_and(Option::is_none) {
+                        ready.remove(c);
+                    }
+                }
+                let children: Vec<TileGeometry> = inputs
                     .iter()
                     .map(|c| ready.remove(c).flatten().unwrap().load())
                     .collect::<Result<_, JobError>>()?;
@@ -1798,6 +1856,8 @@ fn walk(
                         let mut built = build_tile(job, &closed, children, audit)?;
                         // The job's admission includes its output: keep that part while the
                         // tile is held for its parent, release the workspace.
+                        // A passed-up input keeps the lease it was held under; one reloaded
+                        // from disk had only this job's, and is spilled again on receipt.
                         if let Some(tile) = built.0.as_mut() {
                             let mut lease = job_lease;
                             let held = tile.check_charge()?;
@@ -1817,6 +1877,7 @@ fn walk(
         };
         let mut receive = |pending: &mut Vec<Closed>,
                            ready: &mut HashMap<u64, Option<store::spill::Held>>,
+                           handed: &mut HashMap<u64, Vec<u64>>,
                            inflight: &mut usize,
                            finished_rows: &mut BTreeMap<u64, Finished>|
          -> Result<(), JobError> {
@@ -1829,19 +1890,38 @@ fn walk(
                 .recv()
                 .map_err(|_| state("HLOD worker ended without a result"))?;
             *inflight -= 1;
-            let (geometry, row, timing) = done?;
+            let (geometry, passing, row, timing) = done?;
             timings.surface += timing.surface;
             timings.charts += timing.charts;
             timings.query += timing.query;
             timings.sample += timing.sample;
             timings.encode += timing.encode;
+            if geometry.is_none()
+                && matches!(&row, Finished::Omitted { reason, .. } if reason.source())
+            {
+                // An omitted source cell passes its input up in its place.
+                let mut ids = Vec::with_capacity(passing.len());
+                for tile in passing {
+                    let held = if tile.lease.is_some() {
+                        store::spill::Held::Resident(tile)
+                    } else {
+                        spill.borrow_mut().hold_on_disk(tile)?
+                    };
+                    ready.insert(next_passed, Some(held));
+                    ids.push(next_passed);
+                    next_passed += 1;
+                }
+                handed.insert(id, ids);
+            } else if !passing.is_empty() {
+                return Err(state("only an omitted source cell passes its input"));
+            }
             ready.insert(id, geometry.map(store::spill::Held::Resident));
             #[cfg(test)]
             if settings.mutation == Mutation::ForceSpill {
                 while spill.borrow_mut().spill_one(ready)? {}
             }
             finished_rows.insert(seq, row);
-            spawn(pending, ready, inflight)
+            spawn(pending, ready, handed, inflight)
         };
         // Write finished rows in postorder once their published depth is final.
         let mut flush = |finished_rows: &mut BTreeMap<u64, Finished>,
@@ -2051,7 +2131,13 @@ fn walk(
                     || ready.len() + pending.len() + inflight >= ready_limit)
                     && inflight > 0
                 {
-                    receive(&mut pending, &mut ready, &mut inflight, &mut finished_rows)?;
+                    receive(
+                        &mut pending,
+                        &mut ready,
+                        &mut handed,
+                        &mut inflight,
+                        &mut finished_rows,
+                    )?;
                     flush(&mut finished_rows, &mut publish, &mut written)?;
                 }
                 while stack.last().is_some_and(|f| f.node.end <= node.first) {
@@ -2065,7 +2151,7 @@ fn walk(
                         passed,
                     )?;
                     flush(&mut finished_rows, &mut publish, &mut written)?;
-                    spawn(&mut pending, &mut ready, &mut inflight)?;
+                    spawn(&mut pending, &mut ready, &mut handed, &mut inflight)?;
                 }
                 let id = next_id;
                 next_id += 1;
@@ -2095,7 +2181,13 @@ fn walk(
                     if inflight == 0 && spill.borrow_mut().spill_one(&mut ready)? {
                         continue;
                     }
-                    receive(&mut pending, &mut ready, &mut inflight, &mut finished_rows)?;
+                    receive(
+                        &mut pending,
+                        &mut ready,
+                        &mut handed,
+                        &mut inflight,
+                        &mut finished_rows,
+                    )?;
                     flush(&mut finished_rows, &mut publish, &mut written)?;
                 };
                 let error = leaf_errors.next(node.first)?;
@@ -2131,9 +2223,15 @@ fn walk(
                     passed,
                 )?;
             }
-            spawn(&mut pending, &mut ready, &mut inflight)?;
+            spawn(&mut pending, &mut ready, &mut handed, &mut inflight)?;
             while !pending.is_empty() || inflight > 0 {
-                receive(&mut pending, &mut ready, &mut inflight, &mut finished_rows)?;
+                receive(
+                    &mut pending,
+                    &mut ready,
+                    &mut handed,
+                    &mut inflight,
+                    &mut finished_rows,
+                )?;
                 flush(&mut finished_rows, &mut publish, &mut written)?;
             }
             flush(&mut finished_rows, &mut publish, &mut written)?;
@@ -2156,6 +2254,7 @@ fn walk(
     outcome?;
     report.pass_through = passed;
     report.max_job_input_triangles = job_peak.get();
+    report.max_job_inputs = input_peak.get() as u64;
     if passed > 0 {
         // Pass-through cells complete with their child.
         input

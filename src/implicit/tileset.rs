@@ -38,6 +38,10 @@ pub(crate) use stream::{
 const SKELETON_HEIGHT: u32 = 4;
 /// P9: the writer refuses hierarchies with more levels than this.
 pub(crate) const MAX_LEVELS: u32 = 32;
+/// Children of one explicit tile. Implicit trees keep the scheme's branching; an explicit
+/// HLOD coarse tile's children are its job inputs once the content-less cells between them
+/// are spliced out (at most `mesh_large::hlod::PASS_INPUTS`).
+pub(crate) const MAX_EXPLICIT_CHILDREN: usize = 24;
 /// P8: value nodes per JSON document (validator semantics: the root, containers and scalars).
 pub(crate) const DOC_NODES: usize = 16_384;
 /// P8: compact serialized bytes per JSON document.
@@ -4700,14 +4704,15 @@ mod records_tests {
             ),
             "explicit tile",
         );
-        let children = (0..5).map(|_| explicit(Vec::new())).collect();
+        let many = MAX_EXPLICIT_CHILDREN + 1;
+        let children = (0..many).map(|_| explicit(Vec::new())).collect();
         refused(
             writer.external(
                 MemberName::new("d-five.json").unwrap(),
                 explicit(children),
                 none,
             ),
-            "5 children exceed",
+            &format!("{many} children exceed"),
         );
         refused(
             writer.root(ForestTile::<Extras>::Link(link), none),
