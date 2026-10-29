@@ -446,8 +446,8 @@ pub(crate) fn build_parent(
     let mut touching = false;
     let mut construction_dropped = Vec::new();
     // Last resort, once every strategy failed and the touching-boundary comparison refused
-    // a proposal: all of them again from the contracted faces, with the anchored paths of
-    // touching boundaries locked (`topology::touching_pins`).
+    // a proposal: all of them again from the contracted faces, each attempt that both
+    // modes fail after such a refusal retried with touching paths pinned (`attempt`).
     for pins in [false, true] {
         if pins {
             if !(touching && last_resorts) {
@@ -455,6 +455,7 @@ pub(crate) fn build_parent(
             }
             merged.triangles.clone_from(&contracted_faces);
             merged.representative.clone_from(&contracted_representative);
+            opening_pins.clear();
         }
         for (i, &cap) in caps.iter().enumerate() {
             if caps[..i].contains(&cap) {
@@ -848,9 +849,10 @@ fn assessed_attempt(
 }
 
 /// One bounded parent proposal. Unsupported means its protected repair did not
-/// produce an eligible capped result; it is not a proof of cap infeasibility. `pins`
-/// also locks the anchored paths of touching boundaries (`topology::touching_pins`);
-/// `touching` is set when the touching-boundary comparison refuses a proposal.
+/// produce an eligible capped result; it is not a proof of cap infeasibility. `touching`
+/// is set when the touching-boundary comparison refuses a proposal. With `pins`, when
+/// both modes fail after such a refusal, reduce once more with the anchored paths of
+/// touching boundaries locked (`topology::touching_pins`).
 #[allow(clippy::too_many_arguments)]
 fn attempt(
     tile: TileKey,
@@ -866,48 +868,10 @@ fn attempt(
     pins: bool,
     touching: &mut bool,
 ) -> Result<Built, JobError> {
-    let mut locked = None;
-    if pins {
-        let border = interface_points(interface);
-        let mut set = opening_pins.clone();
-        let before = set.len();
-        set.extend(
-            merged
-                .keys
-                .iter()
-                .zip(topology::touching_pins(merged, interface))
-                .filter(|(k, pin)| *pin && !border.contains(*k))
-                .map(|(k, _)| *k),
-        );
-        if set.len() == before {
-            return Err(JobError::new(
-                JobErrorKind::Unsupported,
-                "no touching path to pin",
-            ));
-        }
-        locked = Some(set);
-    }
-    let opening_pins = locked.as_ref().unwrap_or(opening_pins);
+    let mut refused = false;
     let mut remaining = REDUCTION_PASSES;
-    let ordinary = attempt_mode(
-        tile,
-        merged,
-        interface,
-        cap,
-        children_error,
-        reference,
-        contracted_faces,
-        floor,
-        preserve_holes,
-        opening_pins,
-        false,
-        &mut remaining,
-        touching,
-    );
-    // An overprotected ring is a failed strategy, not a cap lower bound. Both
-    // strategies retain the same source guards and pre-contraction reference.
-    match ordinary {
-        Err(e) if e.kind() == JobErrorKind::Unsupported => attempt_mode(
+    let reduce = |locked: &HashSet<Key>, sheets, remaining: &mut u32, refused: &mut bool| {
+        attempt_mode(
             tile,
             merged,
             interface,
@@ -917,13 +881,42 @@ fn attempt(
             contracted_faces,
             floor,
             preserve_holes,
-            opening_pins,
-            true,
-            &mut remaining,
-            touching,
-        ),
+            locked,
+            sheets,
+            remaining,
+            refused,
+        )
+    };
+    // An overprotected ring is a failed strategy, not a cap lower bound. Both
+    // strategies retain the same source guards and pre-contraction reference.
+    let result = match reduce(opening_pins, false, &mut remaining, &mut refused) {
+        Err(e) if e.kind() == JobErrorKind::Unsupported => {
+            reduce(opening_pins, true, &mut remaining, &mut refused)
+        }
         result => result,
-    }
+    };
+    let result = match result {
+        Err(e) if e.kind() == JobErrorKind::Unsupported && pins && refused => {
+            let border = interface_points(interface);
+            let mut locked = opening_pins.clone();
+            locked.extend(
+                merged
+                    .keys
+                    .iter()
+                    .zip(topology::touching_pins(merged, interface))
+                    .filter(|(k, pin)| *pin && !border.contains(*k))
+                    .map(|(k, _)| *k),
+            );
+            if locked.len() == opening_pins.len() {
+                Err(e)
+            } else {
+                reduce(&locked, false, &mut { REDUCTION_PASSES }, &mut false)
+            }
+        }
+        result => result,
+    };
+    *touching |= refused;
+    result
 }
 
 #[allow(clippy::too_many_arguments)]
