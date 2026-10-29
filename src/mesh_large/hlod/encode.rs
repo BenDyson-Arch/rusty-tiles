@@ -45,6 +45,19 @@ pub(crate) enum Mutation {
     /// Publish a coarse-drop tile without its drop declaration.
     #[cfg(test)]
     UndeclaredDrop,
+    /// Build without the last resorts after develop's strategies (identity reference).
+    #[cfg(test)]
+    Develop,
+}
+
+impl Mutation {
+    pub(crate) fn last_resorts(self) -> bool {
+        #[cfg(test)]
+        if self == Self::Develop {
+            return false;
+        }
+        true
+    }
 }
 
 pub(crate) struct Encoded {

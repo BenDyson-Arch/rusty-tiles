@@ -1828,6 +1828,7 @@ fn parent_jobs_allocate_within_their_charge() {
                 &|_| Ok(None),
                 &mut |_| Ok(true),
                 &|| Ok(()),
+                true,
             )
         });
         eprintln!(
@@ -4411,6 +4412,7 @@ fn evidence_replay_topology() {
             &|_| Ok(None),
             &mut |_| Ok(true),
             &|| Ok(()),
+            true,
         )
         .unwrap();
         eprintln!(
@@ -5207,6 +5209,7 @@ fn ordinary_drops_under_pressure_go_smallest_first() {
             &|_| Ok(None),
             &mut |_| Ok(true),
             &|| Ok(()),
+            true,
         )
         .unwrap()
         .built
@@ -5341,6 +5344,7 @@ fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
             &|_| Ok(None),
             &mut |_| Ok(true),
             &|| Ok(()),
+            true,
         )
         .unwrap();
         if let Some(b) = outcome.built {
@@ -5496,5 +5500,30 @@ fn city_blocks_contract_and_reduce_without_omission() {
         let input = write_gltf(&work.path().join("src"), &city_block(layout));
         let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
         assert!(omission_receipt(&format!("city block {layout}"), &dir));
+    }
+}
+
+/// Review r1 P1: the fix 2 last resorts run only once develop's strategies failed, so
+/// blocks develop builds without omission publish the same bytes as without them.
+#[test]
+fn city_blocks_develop_builds_are_unchanged_by_the_last_resorts() {
+    for layout in [1, 13, 93, 111, 159] {
+        let work = tempfile::tempdir().unwrap();
+        let input = write_gltf(&work.path().join("src"), &city_block(layout));
+        let [a, b] = [Mutation::None, Mutation::Develop].map(|mutation| {
+            let out = work.path().join(format!("{mutation:?}/hlod"));
+            published(
+                &stage(
+                    &input,
+                    &out,
+                    &Run {
+                        mutation,
+                        ..Run::default()
+                    },
+                )
+                .unwrap(),
+            )
+        });
+        assert!(a == b, "city block {layout}");
     }
 }

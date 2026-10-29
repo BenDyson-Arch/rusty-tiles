@@ -168,7 +168,7 @@ fn replay(path: &Path) {
             built.geometry.triangles.len(), built.protected_faces, built.retries, built.stopping, built.topology);
         Ok(std::env::var_os("RT_HLOD_FOLD_REJECT_HOLES").is_none()
             || (built.change.receipt.closed_holes == 0 && built.change.receipt.opened_holes == 0))
-    }, &|| Ok(())).unwrap();
+    }, &|| Ok(()), true).unwrap();
     if let Some(built) = outcome.built {
         eprintln!("fold replay result parent={key:?} omitted=false output={} protected={} retries={} assessed={assessed}",
             built.geometry.triangles.len(), built.protected_faces, built.retries);

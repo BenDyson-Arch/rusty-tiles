@@ -21,7 +21,7 @@ fn edge(a: u32, b: u32) -> (u32, u32) {
     (a.min(b), a.max(b))
 }
 
-/// A face whose height over its longest edge is below 1/500 of that edge: its normal is
+/// A face whose height over its longest edge is below 1/250 of that edge: its normal is
 /// rounding noise, so its chart says nothing about the sheet it belongs to. This only
 /// steers which faces one CDT rebuilds together; it licenses nothing.
 fn sliver(positions: &[[f32; 3]], t: [u32; 3]) -> bool {
@@ -52,6 +52,7 @@ pub(super) fn remesh(
         &guard,
         PatchPlan::Charts,
         false,
+        false,
     )
     .or_else(|| fan::remesh(m, interface, cap, &guard))
 }
@@ -66,6 +67,7 @@ pub(super) fn contract(
     endpoints: &[u32],
     cap: usize,
     guard: &super::folds::Source,
+    fallbacks: bool,
 ) -> Option<topology::Receipt> {
     // All three constructions consume the same pre-contraction source. A stricter chart
     // partition may separate book pages that reconnect around a nonmanifold spine;
@@ -73,25 +75,29 @@ pub(super) fn contract(
     // A deterministic CDT can select the same new ear on opposite sheets.
     // One fixed endpoint-rooted partition changes those interior diagonals,
     // retaining every source sample and the same original-source checks.
-    // Only when all three fail, repeat them with slivers joined to their neighbours'
-    // patches: a near-degenerate child face beside a chord otherwise forms a patch of
-    // its own, and its rebuild overlaps the neighbouring one.
-    [false, true].into_iter().find_map(|slivers| {
-        [PatchPlan::Charts, PatchPlan::Planes, PatchPlan::ChordSpokes]
-            .into_iter()
-            .find_map(|plan| {
-                triangulate(
-                    m,
-                    interface,
-                    cap,
-                    Some(map),
-                    endpoints,
-                    guard,
-                    plan,
-                    slivers,
-                )
-            })
-    })
+    // `fallbacks` (only once the caller's ordinary contraction recovery failed): flip
+    // interface diagonals, and when all three plans fail, repeat them with slivers joined
+    // to their neighbours' patches. A near-degenerate child face beside a chord otherwise
+    // forms a patch of its own, and its rebuild overlaps the neighbouring one.
+    [false, true][..1 + usize::from(fallbacks)]
+        .iter()
+        .find_map(|&slivers| {
+            [PatchPlan::Charts, PatchPlan::Planes, PatchPlan::ChordSpokes]
+                .into_iter()
+                .find_map(|plan| {
+                    triangulate(
+                        m,
+                        interface,
+                        cap,
+                        Some(map),
+                        endpoints,
+                        guard,
+                        plan,
+                        slivers,
+                        fallbacks,
+                    )
+                })
+        })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -104,6 +110,7 @@ fn triangulate(
     guard: &super::folds::Source,
     plan: PatchPlan,
     slivers: bool,
+    flips: bool,
 ) -> Option<topology::Receipt> {
     let components = topology::components(m);
     let mut patches: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
@@ -447,15 +454,17 @@ fn triangulate(
             output.push(t);
             representatives.push(m.representative[faces[0]]);
         }
-        flip_interface_edges(
-            &m.positions,
-            &mut output[start..],
-            axis,
-            &|v| required.points.contains(&v),
-            &|t| guard.licensed(&m.positions, t),
-            &|a, b| guard.licensed_edge(&m.positions, a, b),
-            &constraints,
-        );
+        if flips {
+            flip_interface_edges(
+                &m.positions,
+                &mut output[start..],
+                axis,
+                &|v| required.points.contains(&v),
+                &|t| guard.licensed(&m.positions, t),
+                &|a, b| guard.licensed_edge(&m.positions, a, b),
+                &constraints,
+            );
+        }
         // Positive input Jacobians plus a simple boundary of degree one establish the
         // height-field domain. The area identity detects inconsistent ring orientation.
         if (mapping.is_none() && output.len() - start != predicted)
@@ -494,7 +503,8 @@ fn triangulate(
 /// interface edge that is unlicensed, or borders such a face, where the apex across it on
 /// one side is interior and the quad is strictly convex in the patch projection. A flip
 /// removes that edge and adds a diagonal with an interior end, so there is at most one
-/// flip per edge; source edges and faces are kept. Linear worklist.
+/// flip per edge. A licensed source edge beside such a face is flipped too, with the
+/// source face on its other side; the guard judges the result. Linear worklist.
 fn flip_interface_edges(
     positions: &[[f32; 3]],
     faces: &mut [[u32; 3]],
@@ -510,7 +520,9 @@ fn flip_interface_edges(
     };
     let orient = |a: u32, b: u32, c: u32| {
         let (a, b, c) = (q(a), q(b), q(c));
-        ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])).signum()
+        let d = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        // Three-valued: `f64::signum(0.0)` is 1, which would pass a collinear apex.
+        f64::from(i8::from(d > 0.) - i8::from(d < 0.))
     };
     let all = |t: &[u32; 3]| t.iter().all(|&v| boundary(v)) && !licensed(*t);
     let mut directed: HashMap<(u32, u32), usize> = HashMap::default();
@@ -780,7 +792,7 @@ mod tests {
             &mapping,
         );
         let cap = m.triangles.len();
-        contract(m, interface, map, endpoints, cap, &guard)
+        contract(m, interface, map, endpoints, cap, &guard, false)
     }
     fn sheet(n: u32, hole: bool) -> Merged {
         let positions: Vec<_> = (0..=n)
@@ -860,10 +872,10 @@ mod tests {
         let representatives = m.representative.clone();
         let guard = super::super::folds::Source::new(&m.positions, &m.triangles);
         // Two reconstructed faces plus the unchanged curved face need three slots.
-        assert!(contract(&mut m, &[], &[0, 0, 2, 3, 4, 5], &[0, 2], 2, &guard).is_none());
+        assert!(contract(&mut m, &[], &[0, 0, 2, 3, 4, 5], &[0, 2], 2, &guard, false).is_none());
         assert_eq!(m.triangles, before);
         assert_eq!(m.representative, representatives);
-        let result = contract(&mut m, &[], &[0, 0, 2, 3, 4, 5], &[0, 2], 3, &guard).unwrap();
+        let result = contract(&mut m, &[], &[0, 0, 2, 3, 4, 5], &[0, 2], 3, &guard, false).unwrap();
         assert_eq!(m.triangles.len(), 3);
         assert_eq!(result.reconstructed_faces, 2);
     }
@@ -901,6 +913,7 @@ mod tests {
             &[0, 2, 6, 8],
             8,
             &guard,
+            false,
         )
         .unwrap();
         assert_eq!(r.reconstructed_faces, 4);
@@ -1023,6 +1036,7 @@ mod tests {
                     &guard,
                     PatchPlan::ChordSpokes,
                     false,
+                    false,
                 )
                 .unwrap()
             } else {
@@ -1035,10 +1049,11 @@ mod tests {
                     &guard,
                     PatchPlan::Charts,
                     false,
+                    false,
                 )
                 .is_none());
                 assert_eq!(m.triangles, before);
-                contract(&mut m, &interface, &map, &endpoints, cap, &guard).unwrap()
+                contract(&mut m, &interface, &map, &endpoints, cap, &guard, false).unwrap()
             };
             assert!(receipt.reconstructed_faces > 0);
             assert!(m.triangles.len() <= cap);
@@ -1228,5 +1243,68 @@ mod tests {
         let before = m.triangles.clone();
         assert!(remesh(&mut m, &[], 8192).is_none());
         assert_eq!(m.triangles, before);
+    }
+
+    fn flip(p: &[[f32; 3]], faces: &mut [[u32; 3]], interface: &dyn Fn(u32) -> bool) {
+        let no = BTreeSet::new();
+        flip_interface_edges(p, faces, 2, interface, &|_| false, &|_, _| false, &no);
+    }
+    fn area(p: &[[f32; 3]], t: [u32; 3]) -> f64 {
+        topology::normal(p, t)[2]
+    }
+
+    /// Review r1 P2: apex b of edge a-b is collinear with x and c in the projection, so
+    /// the quad is not strictly convex and the flip (which would emit a vertical fin
+    /// x, b, c) must not happen.
+    #[test]
+    fn a_collinear_quad_is_not_flipped() {
+        let p = [[0., 0., 0.], [2., 0., 1.], [3., 1., 0.], [1., -1., 0.]];
+        let mut faces = [[0, 1, 2], [1, 0, 3]];
+        flip(&p, &mut faces, &|v| v < 2);
+        assert_eq!(faces, [[0, 1, 2], [1, 0, 3]]);
+    }
+
+    /// Flips on CDTs of a coarse lattice (many collinear and cocircular cases) keep every
+    /// face positive and the area, and never add an interface-to-interface edge.
+    #[test]
+    fn flips_keep_orientation_and_area_on_lattice_triangulations() {
+        let mut rng = 0x1234_5678_9abc_def0u64;
+        let mut next = || {
+            rng ^= rng << 13;
+            rng ^= rng >> 7;
+            rng ^= rng << 17;
+            rng
+        };
+        for _ in 0..500 {
+            let mut cdt = ConstrainedDelaunayTriangulation::<Point2<f64>>::new();
+            for _ in 0..4 + next() % 40 {
+                let (x, y) = ((next() % 9) as f64, (next() % 9) as f64);
+                cdt.insert(Point2::new(x, y)).unwrap();
+            }
+            let p: Vec<[f32; 3]> = cdt
+                .vertices()
+                .map(|v| [v.position().x as f32, v.position().y as f32, 0.])
+                .collect();
+            let mut faces: Vec<[u32; 3]> = cdt
+                .inner_faces()
+                .map(|f| f.vertices().map(|v| v.fix().index() as u32))
+                .collect();
+            let interface: Vec<bool> = p.iter().map(|_| next() % 3 != 0).collect();
+            let pairs = |faces: &[[u32; 3]]| -> BTreeSet<(u32, u32)> {
+                let both = |&(a, b): &(u32, u32)| interface[a as usize] && interface[b as usize];
+                let edges = faces
+                    .iter()
+                    .flat_map(|t| (0..3).map(|k| edge(t[k], t[(k + 1) % 3])));
+                edges.filter(both).collect()
+            };
+            let (before, total) = (
+                pairs(&faces),
+                faces.iter().map(|&t| area(&p, t)).sum::<f64>(),
+            );
+            flip(&p, &mut faces, &|v| interface[v as usize]);
+            assert!(faces.iter().all(|&t| area(&p, t) > 0.), "{faces:?}");
+            assert!(pairs(&faces).is_subset(&before));
+            assert!((faces.iter().map(|&t| area(&p, t)).sum::<f64>() - total).abs() < 1e-9);
+        }
     }
 }
