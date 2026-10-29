@@ -229,7 +229,7 @@ fn points(input: &Path, output: &Path) -> Result<Value> {
         let table = &metadata["propertyTables"][0];
         let properties = table["properties"]
             .as_object()
-            .ok_or("missing point metadata")?;
+            .ok_or("missing point metadata; the points audit needs --metadata output")?;
         if properties.keys().collect::<BTreeSet<_>>() != expected.keys().collect::<BTreeSet<_>>() {
             return Err(format!("point metadata schema differs from LAS in {name}").into());
         }

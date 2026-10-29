@@ -328,7 +328,7 @@ fn point_archive_and_feature_attributes_use_valid_core_types() {
         .arg(&source)
         .arg("-o")
         .arg(&out)
-        .args(["--sourceCrs", "local", "--maxPoints", "10"])
+        .args(["--sourceCrs", "local", "--maxPoints", "10", "--metadata"])
         .output()
         .unwrap();
     assert!(

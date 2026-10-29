@@ -410,7 +410,7 @@ Public data downloads are opt-in and stay outside the repository. The helper rec
 ```sh
 python3 bench/public_data.py autzen /path/to/cache
 rusty-tiles point-cloud -i /path/to/cache/autzen-local-metres.las \
-  -o /path/to/cache/autzen.3tz --source-crs local
+  -o /path/to/cache/autzen.3tz --source-crs local --metadata
 python3 bench/audit_point_cloud.py /path/to/cache/autzen-local-metres.las /path/to/cache/autzen.3tz
 python3 bench/public_data.py roads /path/to/cache
 rusty-tiles vector -i /path/to/cache/natural-earth-roads.gpkg -o /path/to/roads.3tz \
