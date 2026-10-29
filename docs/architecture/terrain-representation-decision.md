@@ -156,6 +156,16 @@ the stored leaf vertices", "byte-identical leaf surface primitives" and
 
 The report moves to schema 3 with `quantizationStepMetres`.
 
+## Owner amendment, 2026-10-29 — NoData holes
+
+NoData holes replace fill (`--fill-height` and `fillHeightMetres` are
+removed): only triangles of three valid nodes are emitted, and all-NoData
+tiles are unavailable. Errors are measured where both levels have a surface;
+a cell whose coverage may differ adds one coarse-cell diagonal, and a
+content-less tile above content takes its surfaces' box diagonal. Skirts drop
+`max(e + e_beside, 1 m)` (see the terrain guide) instead of `e + e_root`, and
+none hang along NoData. The default `--cells-per-leaf` is 128.
+
 ## Acceptance before retaining the replacement
 
 Independent literal/analytic sources must verify every lattice coordinate, height,

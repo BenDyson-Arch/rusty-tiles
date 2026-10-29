@@ -576,7 +576,6 @@ mod tests {
                 &output,
                 crate::terrain::TerrainHeights::RawMetres {
                     height_offset_metres: 0.,
-                    fill_height_metres: 0.,
                 },
                 crate::terrain::TerrainOptions::new(16),
             )

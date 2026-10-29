@@ -302,7 +302,7 @@ The point-cloud stress option delays the first rendered frame after moving to fi
 | --- | --- |
 | `preview_layers.cjs` | Mounts, toggles, mesh picking, imagery decoding and zero external requests |
 | `point_cloud.cjs` | Coarse-to-full refinement and picked LAS properties |
-| `terrain.cjs` | Cesium terrain loading and sampled heights. Expects a 32 by 32 EPSG:4326 DEM at 123.5 m, NoData rows 12 to 19, `--height-offset 10.25 --fill-height -999.125`, zoom 9. |
+| `terrain.cjs` | Cesium terrain loading and sampled heights. Expects a 32 by 32 EPSG:4326 DEM at 123.5 m, a NoData hole in rows and columns 12 to 19, rows 20 to 31 at −500 m, `--height-offset 10.25`, zoom 9. |
 | `vector_compat.cjs` | Native vector rendering, LOD, holes, fragment boundaries, picking and aggregates |
 | `vector_metadata.cjs` | Property styling, visibility, source identity, exact INT64 and missing values |
 | `implicit_levels.cjs` | Deep implicit mesh/cloud traversal across every level and boundary, full leaf counts and picking |

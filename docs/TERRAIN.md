@@ -10,8 +10,7 @@ before opening the DEM; malformed DEM data with the reader available remains
 `InvalidInput`.
 
 ```sh
-rusty-tiles terrain -i elevation.tif -o output/terrain \
-  --cells-per-leaf 64 --height-offset 0 --fill-height -1000
+rusty-tiles terrain -i elevation.tif -o output/terrain --height-offset 0
 rusty-tiles preview --cesium <Build/Cesium> --terrain output/terrain \
   --imagery output/imagery
 ```
@@ -28,13 +27,13 @@ must be finite and at least one sample must be valid.
 
 The sampling lattice spans the closed source footprint, with one cell per source
 pixel. Bilinear interpolation uses pixel centres and clamps within outer pixel
-edges. Only contributors with nonzero weight must be valid. Missing lattice
-samples use the supplied **ellipsoidal** fill height directly; the offset is
-not added to fill. Only footprint lattice nodes and their triangles are generated; there are no
-additional geographic tiles or global fill roots. Cartesian boundary chords can
-project slightly beyond the geographic rectangle.
+edges. A lattice node is valid when every contributor with nonzero weight is.
+**NoData is a hole:** only triangles of three valid nodes are generated, so
+there is no fill geometry, and tiles without any triangle at or below them
+are not published. There are no additional geographic tiles or global roots.
+Cartesian boundary chords can project slightly beyond the geographic rectangle.
 
-Sampled and filled vertex heights must be −10,000…8,000 metres. The finite
+Sampled vertex heights must be −10,000…8,000 metres. The finite
 profile supports public Cesium surface queries whose downward rays start at
 9,000 metres. These bounds are checked before staging output. They do not
 imply that triangle interiors equal the original raster surface: triangles
@@ -49,7 +48,8 @@ are Cartesian chords between samples.
 | `implicit-content/*.glb`, `tiles/{level}/{row}/{column}.glb` | Opaque triangle mesh tiles, one primitive each: implicit tiles, and the explicit coarse levels of large pyramids |
 | `conversion.json` | Typed source, sampling, height, level, error, placement and output receipt report |
 
-`--cells-per-leaf` accepts 16, 32, 64 or 128, with smaller boundary patches.
+`--cells-per-leaf` accepts 16, 32, 64 or 128 (the default), with smaller
+boundary patches.
 The full-detail leaves are these patches. A shared local ENU frame places the
 mesh in WGS84 ECEF. There are no encoded normals.
 
@@ -80,7 +80,7 @@ Level `L` keeps every `2^(D−L)`-th node of the leaf lattice, plus the clipped
 far edge of the footprint, in tiles of at most `cells-per-leaf` cells. Coarse
 vertices are the leaf lattice nodes on the level's grid: there is no
 resampling, filtering or simplification. Each tile has up to four
-children, one per quadrant that meets the footprint. Leaves keep exactly the
+children, one per quadrant with a triangle at or below it. Leaves keep exactly the
 flat-profile surface triangles, diagonal and order.
 
 Leaf geometric error is zero relative to the decoded leaf mesh. A coarser
@@ -88,22 +88,27 @@ tile's error is a **certified bound** on the distance from its decoded surface
 (as stored: quantized positions after dequantization) to the decoded leaf
 surface at the same lattice parameters, with outward rounding: the exact maximum distance
 to the next finer level, including where a clipped edge cell's diagonal crosses
-finer triangles, plus the largest child error. Errors never increase toward the
-leaves. Over smooth terrain the value is close to the vertical error plus
+finer triangles, plus the largest child error. Distances are measured where
+both levels have a surface; a cell whose coverage may differ adds its
+horizontal diagonal, and a tile without triangles takes the diagonal of the
+surfaces below it. Errors never increase toward the leaves. Over smooth terrain the value is close to the vertical error plus
 the grid errors of the levels below, a few 65,535ths of the tile size. The
 tileset error leaves an interval in which the root renders. These errors do
 not bound the distance to the continuous DEM.
 
 Neighbours at different levels meet with T-junctions. Each tile edge shared
 with another tile of its level carries a **skirt**: a vertical curtain from
-each edge vertex down to its height minus `max(e + e_root, 1 m)`, where `e` is
-the tile's error and `e_root` the root's. The skirt shares the surface's
+each edge vertex down to its height minus `max(e + e_beside, 1 m)`, where `e`
+is the tile's error and `e_beside` the error of the coarsest tile that can be
+drawn across that edge: the neighbour-side child of their lowest common
+ancestor. Only segments with a triangle on both sides are skirted, so NoData
+edges stay open. The skirt shares the surface's
 primitive and material, so each tile is one draw call: its triangles follow
 the surface triangles, its tops are the surface vertices, and its bottoms
 follow the surface vertices. Each skirt is deepened by twice its level's
 worst storage error, so the decoded bottoms are at least that far below the
 decoded surface. Any gap between two such neighbours is at most the sum of
-their errors, so the skirt covers it vertically. Horizontal offsets, from
+their errors, so either skirt covers it vertically. Horizontal offsets, from
 Cartesian chords and from coarse levels rounding shared nodes to their own
 grid (under a step), are not closed by vertical curtains. Skirts face outward
 under the opaque single-sided material. Outer footprint edges have no skirts.
@@ -172,7 +177,8 @@ hit the surface above any skirt. Other height queries and
 `HeightReference.CLAMP_TO_3D_TILE` use the tiles currently rendered, which lie
 within their geometric error of the leaves.
 
-Queries intersect the decoded triangle mesh, including fill geometry. They
+Queries intersect the decoded triangle mesh; over a NoData hole they find no
+terrain. They
 require 3D mode and depth texture support. Public scene methods can query other
 scene geometry too: isolate the terrain by excluding unrelated primitives and
 hiding the globe. Normalize query positions to ellipsoid height zero before

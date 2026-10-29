@@ -333,9 +333,9 @@ class Patch:
         self.node = {position: decoded[position][1] for position in surface}
         self.surface_triangles = [tuple(self.node[p] for p in triangle) for triangle in self.triangles]
         nodes = [point[1] for point in self.points]
-        self.xs = sorted({n[0] for n in nodes})
-        self.ys = sorted({n[1] for n in nodes})
-        assert len(nodes) == len(self.xs) * len(self.ys) == len(set(nodes)), 'surface vertices form one lattice'
+        assert len(nodes) == len(set(nodes)), 'surface vertices form one lattice'
+        # check_directory replaces these with the full lattice when holes drop nodes.
+        self.xs, self.ys = sorted({n[0] for n in nodes}), sorted({n[1] for n in nodes})
         self.footprint = (self.xs[0], self.ys[0], self.xs[-1], self.ys[-1])
         self.position = {point[1]: point[0] for point in self.points}
         self.height = {point[1]: point[2] for point in self.points}
@@ -347,7 +347,7 @@ class Patch:
             self.cells.setdefault(key, []).append(triangle)
 
     def at(self, x, y):
-        """The surface point at lattice parameters (x, y), on the stored triangles."""
+        """The surface point at lattice parameters (x, y) on the stored triangles, or None."""
         import bisect
         column = min(max(bisect.bisect_right(self.xs, x) - 1, 0), len(self.xs) - 2)
         row = min(max(bisect.bisect_right(self.ys, y) - 1, 0), len(self.ys) - 2)
@@ -359,7 +359,7 @@ class Patch:
             if min(u, v, w) >= -1e-12:
                 pa, pb, pc = self.position[a], self.position[b], self.position[c]
                 return tuple(u * pa[i] + v * pb[i] + w * pc[i] for i in range(3))
-        raise AssertionError('surface does not cover its footprint')
+        return None
 
 
 def check_directory(directory, samples=4):
@@ -370,6 +370,16 @@ def check_directory(directory, samples=4):
     frame = root['transform']
     width, height = report['width'], report['height']
     patches = {id(node): Patch(directory, node, report, frame) for node in tiles}
+    # Footprints and lattices are quadrants of the parent's, whatever NoData removed.
+    def place(node, f):
+        patch, stride = patches[id(node)], 2 ** (report['levels'] - 1 - node['depth'])
+        patch.footprint, half = f, report['cellsPerLeaf'] * stride // 2
+        patch.xs, patch.ys = (sorted(set(range(f[a], f[a + 2], stride)) | {f[a + 2]}) for a in (0, 1))
+        for child in node['children']:
+            nodes = list(patches[id(child)].node.values())
+            x, y = (f[a] + half * (sum(n[a] for n in nodes) / len(nodes) > f[a] + half) for a in (0, 1))
+            place(child, (x, y, min(x + half, width), min(y + half, height)))
+    place(tiles[0], (0, 0, width, height))
     leaves = [node for node in tiles if not node['children']]
     depth = leaves[0]['depth']
     assert all(leaf['depth'] == depth and leaf['error'] == 0 for leaf in leaves), 'uniform full-detail leaves'
@@ -400,7 +410,7 @@ def check_directory(directory, samples=4):
         if node['children']:
             assert all(node['error'] >= child['error'] for child in node['children']), 'geometricErrorOrder'
             area = sum((c[2] - c[0]) * (c[3] - c[1]) for c in (patches[id(child)].footprint for child in node['children']))
-            assert area == (x1 - x0) * (y1 - y0), 'children partition the parent footprint'
+            assert area <= (x1 - x0) * (y1 - y0), 'children partition the parent footprint'
             assert all(x0 <= c[0] and c[2] <= x1 and y0 <= c[1] and c[3] <= y1
                        for c in (patches[id(child)].footprint for child in node['children'])), 'child footprint outside parent'
             for child in node['children']:
@@ -411,12 +421,14 @@ def check_directory(directory, samples=4):
         # A count and outward winding alone permit a duplicated face plus a
         # hole. Census the exact oriented two-triangle stencil of every cell,
         # including clipped coarse cells, for all source-height fixtures.
+        # A cell triangle is present exactly when its three nodes are.
         rotate = lambda t: min(t[k:]+t[:k] for k in range(3))
         expected = Counter()
         for y0, y1 in zip(patch.ys, patch.ys[1:]):
             for x0, x1 in zip(patch.xs, patch.xs[1:]):
-                expected[rotate(((x0,y0),(x1,y0),(x0,y1)))] += 1
-                expected[rotate(((x1,y0),(x1,y1),(x0,y1)))] += 1
+                for t in (((x0,y0),(x1,y0),(x0,y1)), ((x1,y0),(x1,y1),(x0,y1))):
+                    expected[rotate(t)] += all(n in patch.position for n in t)
+        expected = +expected
         assert Counter(rotate(t) for t in patch.surface_triangles) == expected, 'missing/duplicated/reversed terrain cells'
     # Certified error: dense parametric distance from each tile to the leaf mesh.
     for node in tiles:
@@ -433,31 +445,47 @@ def check_directory(directory, samples=4):
                 for i in range((lx1 - lx0) * samples + 1):
                     x, y = lx0 + i / samples, ly0 + j / samples
                     a, b = patch.at(x, y), fine.at(x, y)
-                    measured = max(measured, math.dist(a, b))
+                    if a and b: measured = max(measured, math.dist(a, b))
         node['measured'] = measured
         assert node['error'] >= measured - 1e-9, f'understated geometric error {node["error"]} < {measured}'
     # Skirts: on interior edges only, outward, and their decoded bottoms at least
-    # e(t) + e(root) and 1 m below the decoded surface (only geodetic arithmetic
-    # is tolerated: the producer deepens skirts by their storage error).
+    # max(e(t) + e(beside), 1) below the decoded surface, e(beside) being the
+    # largest error of a non-ancestor across the edge (only geodetic arithmetic
+    # is tolerated). Only segments with a triangle in t and its same-level
+    # neighbour are skirted.
     root_error = tiles[0]['error']
     tolerance = 1e-6
+    def across(node, axis, value, low, high, same_level=False):
+        lineage, n = set(), node
+        while n: lineage.add(id(n)); n = n['parent']
+        a = 0 if axis == 'x' else 1
+        far = a + 2 if value == patches[id(node)].footprint[a] else a
+        for m in tiles:
+            f = patches[id(m)].footprint
+            if (id(m) not in lineage and f[far] == value and f[1 - a] < high and low < f[3 - a]
+                    and (not same_level or m['depth'] == node['depth'])):
+                yield m
+    edges = lambda p: {frozenset(pair) for t in p.surface_triangles for pair in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0]))}
     for node in tiles:
         patch = patches[id(node)]
         x0, y0, x1, y1 = patch.footprint
         lines = [('x', x0, x0 > 0), ('x', x1, x1 < width), ('y', y0, y0 > 0), ('y', y1, y1 < height)]
         interior = [(axis, value) for axis, value, inside in lines if inside]
+        span = {'x': (y0, y1), 'y': (x0, x1)}
+        beside = {(axis, value): max((m['error'] for m in across(node, axis, value, *span[axis])), default=None)
+                  for axis, value in interior}
         covered = set()
         centre = [sum(p[i] for p in patch.local) / len(patch.local) for i in range(3)]
         for triangle in patch.skirt:
             nodes = {point[1] for point in triangle}
             edge = [(axis, value) for axis, value in interior
                     if all(n[0 if axis == 'x' else 1] == value for n in nodes)]
-            assert edge and len(nodes) == 2, 'skirt triangle off an interior edge'
+            assert edge and len(nodes) == 2 and beside[edge[0]] is not None, 'skirt triangle off an interior edge'
             tops = [p for p in triangle if p[1] in patch.height and p[2] == patch.height[p[1]]]
             assert all(p[0] == patch.position[p[1]] for p in tops), 'skirt top is not the surface vertex'
             for point in triangle:
                 drop = patch.height[point[1]] - point[2]
-                assert drop == 0 or drop >= max(node['error'] + root_error, 1.) - tolerance, 'skirt depth rule'
+                assert drop == 0 or drop >= max(node['error'] + beside[edge[0]], 1.) - tolerance, 'skirt depth rule'
             a, b, c = (p[0] for p in triangle)
             u, v = [b[i] - a[i] for i in range(3)], [c[i] - a[i] for i in range(3)]
             normal = (u[1]*v[2] - u[2]*v[1], u[2]*v[0] - u[0]*v[2])
@@ -467,11 +495,16 @@ def check_directory(directory, samples=4):
                 covered.add((edge[0], tuple(sorted(nodes))))
             elif len(tops) == 1:
                 covered.add((edge[0], tuple(sorted(nodes)), 'lower'))
+        mine = edges(patch)
         for axis, value in interior:
             along = patch.ys if axis == 'x' else patch.xs
+            theirs = set().union(*(edges(patches[id(m)]) for m in across(node, axis, value, *span[axis], True)))
             for a, b in zip(along, along[1:]):
                 segment = tuple(sorted([(value, a), (value, b)] if axis == 'x' else [(a, value), (b, value)]))
-                assert ((axis, value), segment) in covered and ((axis, value), segment, 'lower') in covered, 'missing skirt'
+                if frozenset(segment) in mine and frozenset(segment) in theirs:
+                    assert ((axis, value), segment) in covered and ((axis, value), segment, 'lower') in covered, 'missing skirt'
+                else:
+                    assert ((axis, value), segment) not in covered, 'skirt along NoData'
     # Receipt.
     actual = {p.relative_to(directory).as_posix() for p in directory.rglob('*.glb')}
     assert inventory == actual, 'manifest GLB inventory'
@@ -481,7 +514,7 @@ def check_directory(directory, samples=4):
     assert report['vertices'] == sum(len(p.local) for p in patches.values()), 'report geometry inventory'
     assert report['skirtVertices'] == sum(len(p.skirt_points) for p in patches.values()), 'report skirt inventory'
     triangles = sum(len(patches[id(leaf)].surface_triangles) for leaf in leaves)
-    assert triangles == 2 * width * height, 'report source-cell inventory'
+    assert triangles <= 2 * width * height, 'report source-cell inventory'
     assert report['rootGeometricErrorMetres'] == root['geometricError'] == root_error, 'root error report'
     assert report['tilesetGeometricErrorMetres'] == manifest['geometricError'] >= 2 * root_error, 'tileset error report'
     members = {p.relative_to(directory).as_posix() for p in directory.rglob('*') if p.is_file()}
@@ -630,7 +663,7 @@ def corruption_controls(directory, plane=True, **plane_spec):
               'position':('source elevation/position','understated geometric error'),
               'winding':('missing/duplicated/reversed terrain cells','reversed or collapsed surface triangle'),
               'row':('missing/duplicated/reversed terrain cells','surface vertices form one lattice'),
-              'missing-triangle':('surface vertices form one lattice',),
+              'missing-triangle':('missing/duplicated/reversed terrain cells','skirt triangle off an interior edge'),
               'duplicate-triangle':('missing/duplicated/reversed terrain cells',),
               'seam':('shared seam changed stored coordinates','shared node changed stored coordinates')}
     def patch_of(node,manifest):
@@ -786,11 +819,15 @@ def browser_oracle(directory, destination):
     west,south,east,north=report['bounds']
     triangles=decoded_ecef_triangles(directory)
     samples=[]
-    # Interior irrational fractions exercise triangles rather than just vertices.
+    outside=[dict(longitude=west-(east-west)*.25,latitude=(south+north)/2)]
+    # Interior irrational fractions exercise triangles rather than just vertices;
+    # one over a NoData hole has no surface.
     for u,v in [(0.173,0.237),(0.503,0.507),(0.431,0.823)]:
         lon,lat=west+(east-west)*u,south+(north-south)*v
-        samples.append(dict(longitude=lon,latitude=lat,height=ray_height(triangles,lon,lat),tolerance=.05))
-    outside=[dict(longitude=west-(east-west)*.25,latitude=(south+north)/2)]
+        try:
+            samples.append(dict(longitude=lon,latitude=lat,height=ray_height(triangles,lon,lat),tolerance=.05))
+        except AssertionError:
+            outside.append(dict(longitude=lon,latitude=lat))
     # Constant-latitude Cartesian boundary chords bow poleward. A source ROI
     # guard must reject this point even though a raw decoded-mesh ray hits it.
     # The spherical expression chooses an interior fraction of the bow; the

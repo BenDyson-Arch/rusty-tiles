@@ -2466,8 +2466,6 @@
         "--cells-per-leaf",
         "64",
         "--height-offset",
-        "0",
-        "--fill-height",
         "0"
       ],
       "audit": "terrain",
@@ -2609,8 +2607,6 @@
         "--cells-per-leaf",
         "64",
         "--height-offset",
-        "0",
-        "--fill-height",
         "0"
       ],
       "audit": "terrain",
@@ -2627,8 +2623,6 @@
         "--cells-per-leaf",
         "64",
         "--height-offset",
-        "0",
-        "--fill-height",
         "0"
       ],
       "audit": "terrain",

@@ -20,8 +20,8 @@ CASES = [  # name, argv after the binary ({in}/{out} substituted), doctor comman
     ('glb-wrap', ['glb-to-3tz', '-i', '{in}/mesh.glb', '-o', '{out}.3tz', '--anchor', *ANCHOR], 'glb-to-3tz'),
     ('mesh', ['mesh', '-i', '{in}/mesh.glb', '-o', '{out}.3tz', '--anchor', *ANCHOR], 'mesh'),
     ('terrain-fixture', ['terrain', '-i', '{repo}/tests/fixtures/t1-multipatch-plane.tif', '-o', '{out}',
-                         '--cells-per-leaf', '16', '--height-offset', '10', '--fill-height', '-999'], 'terrain'),
-    ('terrain', ['terrain', '-i', '{in}/dem.tif', '-o', '{out}', '--height-offset', '0', '--fill-height', '0'], 'terrain'),
+                         '--cells-per-leaf', '16', '--height-offset', '10'], 'terrain'),
+    ('terrain', ['terrain', '-i', '{in}/dem.tif', '-o', '{out}', '--height-offset', '0'], 'terrain'),
     ('raster', ['raster', '-i', '{in}/rgba.tif', '-o', '{out}', '--minZoom', '10', '--maxZoom', '16', '--jobs', '2'], 'raster'),
 ]
 CONTENT = {'.glb', '.b3dm', '.pnts', '.i3dm', '.cmpt', '.png', '.subtree'}

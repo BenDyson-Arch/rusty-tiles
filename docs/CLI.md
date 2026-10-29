@@ -177,9 +177,8 @@ pyramid over full-detail leaves. See the [terrain guide](TERRAIN.md).
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `--cells-per-leaf` | `64` | Source-pixel cells per patch edge: 16, 32, 64 or 128 |
+| `--cells-per-leaf` | `128` | Source-pixel cells per patch edge: 16, 32, 64 or 128 |
 | `--height-offset` | required | Metres added to raw DEM samples to obtain ellipsoidal height |
-| `--fill-height` | required | Ellipsoidal height for missing lattice samples inside the footprint |
 
 Level of detail is always on: coarser levels decimate the leaf lattice, carry
 certified geometric errors and have skirts on shared edges. There is no flat
