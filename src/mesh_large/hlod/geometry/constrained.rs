@@ -15,6 +15,8 @@ enum PatchPlan {
     Charts,
     Planes,
     ChordSpokes,
+    /// No contraction: every exactly coplanar chart is rebuilt from its boundary alone.
+    Panels,
 }
 
 fn edge(a: u32, b: u32) -> (u32, u32) {
@@ -55,6 +57,28 @@ pub(super) fn remesh(
         false,
     )
     .or_else(|| fan::remesh(m, interface, cap, &guard))
+}
+
+/// Rebuild every exactly coplanar chart from its boundary (and required points) alone;
+/// a chart that cannot be rebuilt, or whose rebuild the source guard refuses, keeps its
+/// faces. Geometry is unchanged; only interior samples of planar charts go.
+pub(super) fn remesh_panels(
+    m: &mut Merged,
+    interface: &[InterfaceRow],
+) -> Option<topology::Receipt> {
+    let guard = super::folds::Source::new(&m.positions, &m.triangles).with_boundary(interface);
+    let cap = m.triangles.len();
+    triangulate(
+        m,
+        interface,
+        cap,
+        None,
+        &[],
+        &guard,
+        PatchPlan::Panels,
+        false,
+        false,
+    )
 }
 
 /// Reconstruct contracted patches with all unaffected interior samples. In particular,
@@ -165,14 +189,17 @@ fn triangulate(
         .iter()
         .map(|t| t.iter().any(|&v| touched[v as usize]))
         .collect();
-    let face_patches = if mapping.is_some() {
+    let panels = plan == PatchPlan::Panels;
+    let face_patches = if panels {
+        manifold_patches(m, &vec![true; m.triangles.len()], true, false)
+    } else if mapping.is_some() {
         manifold_patches(m, &affected, plan == PatchPlan::Planes, slivers)
     } else {
         Vec::new()
     };
     for (i, t) in m.triangles.iter().enumerate() {
         patches
-            .entry(if mapping.is_some() {
+            .entry(if mapping.is_some() || panels {
                 face_patches[i]
             } else {
                 components[t[0] as usize]
@@ -200,10 +227,34 @@ fn triangulate(
             required.segments.insert(edge(a, b));
         }
     }
+    // Panels keep vertices other panels use (point contacts) and edges of over two faces
+    // (welds), so neither becomes a T-vertex or free edges.
+    let mut owner = vec![usize::MAX; if panels { m.positions.len() } else { 0 }];
+    let mut shared = vec![false; owner.len()];
+    let mut welds = HashMap::<(u32, u32), u32>::default();
+    if panels {
+        for (&p, faces) in &patches {
+            for &i in faces {
+                let t = m.triangles[i];
+                for k in 0..3 {
+                    let v = t[k] as usize;
+                    shared[v] |= owner[v] != usize::MAX && owner[v] != p;
+                    owner[v] = p;
+                    *welds.entry(edge(t[k], t[(k + 1) % 3])).or_default() += 1;
+                }
+            }
+        }
+        welds.retain(|_, n| *n > 2);
+    }
     let mut output = Vec::new();
     let mut representatives = Vec::new();
     let mut count = 0;
     for (_, faces) in patches {
+        if panels && faces.len() == 1 {
+            output.push(m.triangles[faces[0]]);
+            representatives.push(m.representative[faces[0]]);
+            continue;
+        }
         if mapping.is_some() && faces.iter().all(|&i| !affected[i]) {
             if output.len().checked_add(faces.len())? > cap {
                 return rejected("CDT", concat!(file!(), ":", line!()));
@@ -212,267 +263,303 @@ fn triangulate(
             representatives.extend(faces.iter().map(|&i| m.representative[i]));
             continue;
         }
-        let mut edges: BTreeMap<(u32, u32), (u32, i32)> = BTreeMap::new();
-        let mut sum = [0f64; 3];
-        for &i in &faces {
-            let t = m.triangles[i];
-            let normal = topology::normal(&m.positions, t);
-            for a in 0..3 {
-                sum[a] += normal[a];
+        let start = output.len();
+        let mut rebuild = |output: &mut Vec<[u32; 3]>,
+                           representatives: &mut Vec<SourcePrimitive>|
+         -> Option<()> {
+            let mut edges: BTreeMap<(u32, u32), (u32, i32)> = BTreeMap::new();
+            let mut sum = [0f64; 3];
+            for &i in &faces {
+                let t = m.triangles[i];
+                let normal = topology::normal(&m.positions, t);
+                for a in 0..3 {
+                    sum[a] += normal[a];
+                }
+                for a in 0..3 {
+                    let (v, w) = (t[a], t[(a + 1) % 3]);
+                    if v == w {
+                        return rejected("CDT", concat!(file!(), ":", line!()));
+                    }
+                    let (n, sign) = edges.entry(edge(v, w)).or_default();
+                    *n += 1;
+                    *sign += if v < w { 1 } else { -1 };
+                }
             }
-            for a in 0..3 {
-                let (v, w) = (t[a], t[(a + 1) % 3]);
-                if v == w {
+            if edges
+                .values()
+                .any(|&(n, sign)| n > 2 || (n == 2 && sign != 0))
+            {
+                return rejected("CDT", concat!(file!(), ":", line!()));
+            }
+            let axis = (0..3).max_by(|&a, &b| sum[a].abs().total_cmp(&sum[b].abs()))?;
+            if sum[axis] == 0. {
+                return rejected("CDT", concat!(file!(), ":", line!()));
+            }
+            // A joined sliver may face either way in the projection; the CDT replaces it and
+            // the source guard and topology comparison still judge the whole proposal.
+            if faces.iter().any(|&i| {
+                !(slivers && sliver(&m.positions, m.triangles[i]))
+                    && topology::normal(&m.positions, m.triangles[i])[axis] * sum[axis] <= 0.
+            }) {
+                return rejected("CDT", concat!(file!(), ":", line!()));
+            }
+            let mut boundary: BTreeSet<_> = edges
+                .iter()
+                .filter(|(_, v)| v.0 == 1)
+                .map(|(e, _)| *e)
+                .collect();
+            let mut directed_boundary = Vec::new();
+            if let Some(map) = mapping {
+                let mut mapped = BTreeMap::<(u32, u32), i32>::new();
+                for &(a, b) in &boundary {
+                    let direction = edges[&(a, b)].1;
+                    let (a, b) = (map[a as usize], map[b as usize]);
+                    if a != b {
+                        *mapped.entry(edge(a, b)).or_default() +=
+                            direction * if a < b { 1 } else { -1 };
+                    }
+                }
+                // Opposite incidences cancel when a thin neck collapses to an interior
+                // edge. Same-direction multiplicity still cannot be a single sheet.
+                if mapped.values().any(|&n| n.abs() > 1) {
                     return rejected("CDT", concat!(file!(), ":", line!()));
                 }
-                let (n, sign) = edges.entry(edge(v, w)).or_default();
-                *n += 1;
-                *sign += if v < w { 1 } else { -1 };
+                if plan == PatchPlan::ChordSpokes {
+                    directed_boundary.extend(mapped.iter().filter_map(|(&(a, b), &n)| {
+                        (n != 0).then_some(if n > 0 { (a, b) } else { (b, a) })
+                    }));
+                }
+                boundary = mapped
+                    .into_iter()
+                    .filter_map(|(e, n)| (n != 0).then_some(e))
+                    .collect();
             }
-        }
-        if edges
-            .values()
-            .any(|&(n, sign)| n > 2 || (n == 2 && sign != 0))
-        {
-            return rejected("CDT", concat!(file!(), ":", line!()));
-        }
-        let axis = (0..3).max_by(|&a, &b| sum[a].abs().total_cmp(&sum[b].abs()))?;
-        if sum[axis] == 0. {
-            return rejected("CDT", concat!(file!(), ":", line!()));
-        }
-        // A joined sliver may face either way in the projection; the CDT replaces it and
-        // the source guard and topology comparison still judge the whole proposal.
-        if faces.iter().any(|&i| {
-            !(slivers && sliver(&m.positions, m.triangles[i]))
-                && topology::normal(&m.positions, m.triangles[i])[axis] * sum[axis] <= 0.
-        }) {
-            return rejected("CDT", concat!(file!(), ":", line!()));
-        }
-        let mut boundary: BTreeSet<_> = edges
-            .iter()
-            .filter(|(_, v)| v.0 == 1)
-            .map(|(e, _)| *e)
-            .collect();
-        let mut directed_boundary = Vec::new();
-        if let Some(map) = mapping {
-            let mut mapped = BTreeMap::<(u32, u32), i32>::new();
+            if boundary.is_empty() {
+                // A source strip may collapse completely. Retain no invented support;
+                // the unchanged global topology comparison and source guard below still
+                // decide whether the entire construction is admissible.
+                if mapping.is_some_and(|map| {
+                    faces.iter().all(|&i| {
+                        topology::normal(&m.positions, m.triangles[i].map(|v| map[v as usize]))
+                            .iter()
+                            .all(|&n| n == 0.)
+                    })
+                }) {
+                    return Some(());
+                }
+                return rejected("CDT", concat!(file!(), ":", line!()));
+            }
+            let mut adjacent: HashMap<u32, Vec<u32>> = HashMap::default();
             for &(a, b) in &boundary {
-                let direction = edges[&(a, b)].1;
-                let (a, b) = (map[a as usize], map[b as usize]);
-                if a != b {
-                    *mapped.entry(edge(a, b)).or_default() +=
-                        direction * if a < b { 1 } else { -1 };
+                adjacent.entry(a).or_default().push(b);
+                adjacent.entry(b).or_default().push(a);
+            }
+            // A contracted boundary may have several simple loops meeting at one
+            // vertex. An even-degree planar boundary still defines its interior by
+            // parity; do not walk it as though each vertex had a unique successor.
+            // The non-contracting cap fit retains its simple-loop Euler identity.
+            if adjacent
+                .values()
+                .any(|v| v.len() < 2 || v.len() % 2 != 0 || (mapping.is_none() && v.len() != 2))
+            {
+                return rejected("CDT", concat!(file!(), ":", line!()));
+            }
+            let mut visited = HashSet::default();
+            let mut loops = 0;
+            for &start in adjacent.keys() {
+                if !visited.insert(start) {
+                    continue;
+                }
+                loops += 1;
+                let mut stack = vec![start];
+                while let Some(at) = stack.pop() {
+                    for &next in &adjacent[&at] {
+                        if visited.insert(next) {
+                            stack.push(next);
+                        }
+                    }
                 }
             }
-            // Opposite incidences cancel when a thin neck collapses to an interior
-            // edge. Same-direction multiplicity still cannot be a single sheet.
-            if mapped.values().any(|&n| n.abs() > 1) {
-                return rejected("CDT", concat!(file!(), ":", line!()));
+            let mut vertices: BTreeSet<u32> = adjacent.keys().copied().collect();
+            let mut constraints = boundary.clone();
+            required.patch(m, &faces, mapping, &mut vertices, &mut constraints);
+            if panels {
+                for &i in &faces {
+                    let t = m.triangles[i];
+                    vertices.extend(t.iter().filter(|&&v| shared[v as usize]));
+                    for k in 0..3 {
+                        let e = edge(t[k], t[(k + 1) % 3]);
+                        if welds.contains_key(&e) {
+                            vertices.extend([e.0, e.1]);
+                            constraints.insert(e);
+                        }
+                    }
+                }
             }
             if plan == PatchPlan::ChordSpokes {
-                directed_boundary.extend(mapped.iter().filter_map(|(&(a, b), &n)| {
-                    (n != 0).then_some(if n > 0 { (a, b) } else { (b, a) })
-                }));
-            }
-            boundary = mapped
-                .into_iter()
-                .filter_map(|(e, n)| (n != 0).then_some(e))
-                .collect();
-        }
-        if boundary.is_empty() {
-            // A source strip may collapse completely. Retain no invented support;
-            // the unchanged global topology comparison and source guard below still
-            // decide whether the entire construction is admissible.
-            if mapping.is_some_and(|map| {
-                faces.iter().all(|&i| {
-                    topology::normal(&m.positions, m.triangles[i].map(|v| map[v as usize]))
-                        .iter()
-                        .all(|&n| n == 0.)
-                })
-            }) {
-                continue;
-            }
-            return rejected("CDT", concat!(file!(), ":", line!()));
-        }
-        let mut adjacent: HashMap<u32, Vec<u32>> = HashMap::default();
-        for &(a, b) in &boundary {
-            adjacent.entry(a).or_default().push(b);
-            adjacent.entry(b).or_default().push(a);
-        }
-        // A contracted boundary may have several simple loops meeting at one
-        // vertex. An even-degree planar boundary still defines its interior by
-        // parity; do not walk it as though each vertex had a unique successor.
-        // The non-contracting cap fit retains its simple-loop Euler identity.
-        if adjacent
-            .values()
-            .any(|v| v.len() < 2 || v.len() % 2 != 0 || (mapping.is_none() && v.len() != 2))
-        {
-            return rejected("CDT", concat!(file!(), ":", line!()));
-        }
-        let mut visited = HashSet::default();
-        let mut loops = 0;
-        for &start in adjacent.keys() {
-            if !visited.insert(start) {
-                continue;
-            }
-            loops += 1;
-            let mut stack = vec![start];
-            while let Some(at) = stack.pop() {
-                for &next in &adjacent[&at] {
-                    if visited.insert(next) {
-                        stack.push(next);
-                    }
+                // Change only patches with a proven endpoint-rooted alternative. A
+                // longer collinear strip may need its ordinary CDT unchanged while
+                // another sheet's new ear is repaired. The original global guard
+                // still judges their complete union below.
+                let spokes = fan::chord_spokes(
+                    m,
+                    &directed_boundary,
+                    &chord_endpoints,
+                    &vertex_charts,
+                    axis,
+                    sum[axis] > 0.,
+                );
+                if let Some(spokes) = spokes {
+                    constraints.extend(spokes);
                 }
             }
-        }
-        let mut vertices: BTreeSet<u32> = adjacent.keys().copied().collect();
-        let mut constraints = boundary.clone();
-        required.patch(m, &faces, mapping, &mut vertices, &mut constraints);
-        if plan == PatchPlan::ChordSpokes {
-            // Change only patches with a proven endpoint-rooted alternative. A
-            // longer collinear strip may need its ordinary CDT unchanged while
-            // another sheet's new ear is repaired. The original global guard
-            // still judges their complete union below.
-            let spokes = fan::chord_spokes(
-                m,
-                &directed_boundary,
-                &chord_endpoints,
-                &vertex_charts,
-                axis,
-                sum[axis] > 0.,
-            );
-            if let Some(spokes) = spokes {
-                constraints.extend(spokes);
-            }
-        }
-        // Only degree-two boundaries admit this formula. Touching mapped loops
-        // are capped using the actual emitted faces below, including retained input.
-        let mut predicted = 2 * (vertices.len() - adjacent.len()) + adjacent.len() + 2 * loops - 4;
-        if mapping.is_none() && output.len().checked_add(predicted)? > cap {
-            return rejected("CDT", concat!(file!(), ":", line!()));
-        }
-        let mut cdt = ConstrainedDelaunayTriangulation::<Point2<f64>>::new();
-        let mut handles = HashMap::default();
-        let mut reverse = HashMap::default();
-        for v in vertices {
-            let p = m.positions[v as usize];
-            let handle = cdt
-                .insert(Point2::new(
-                    f64::from(p[(axis + 1) % 3]),
-                    f64::from(p[(axis + 2) % 3]),
-                ))
-                .ok()?;
-            if reverse.insert(handle, v).is_some() {
+            // Only degree-two boundaries admit this formula. Touching mapped loops
+            // are capped using the actual emitted faces below, including retained input.
+            let mut predicted =
+                2 * (vertices.len() - adjacent.len()) + adjacent.len() + 2 * loops - 4;
+            if mapping.is_none() && output.len().checked_add(predicted)? > cap {
                 return rejected("CDT", concat!(file!(), ":", line!()));
             }
-            handles.insert(v, handle);
-        }
-        for &(a, b) in &constraints {
-            if !cdt.can_add_constraint(handles[&a], handles[&b]) {
-                return rejected("CDT", concat!(file!(), ":", line!()));
-            }
-            cdt.add_constraint(handles[&a], handles[&b]);
-        }
-        if let Some(map) = mapping {
-            let interior: BTreeSet<u32> = faces
-                .iter()
-                .flat_map(|&i| m.triangles[i])
-                .filter(|&v| map[v as usize] == v && !handles.contains_key(&v))
-                .collect();
-            for v in interior {
+            let mut cdt = ConstrainedDelaunayTriangulation::<Point2<f64>>::new();
+            let mut handles = HashMap::default();
+            let mut reverse = HashMap::default();
+            for v in vertices {
                 let p = m.positions[v as usize];
-                let p = Point2::new(f64::from(p[(axis + 1) % 3]), f64::from(p[(axis + 2) % 3]));
-                // A collinear interior sample must not split a delivered border chord.
-                if let PositionInTriangulation::OnEdge(e) = cdt.locate(p) {
-                    let e = cdt.directed_edge(e);
-                    let endpoints = edge(reverse[&e.from().fix()], reverse[&e.to().fix()]);
-                    if e.is_constraint_edge()
-                        && (boundary.contains(&endpoints) || required.segments.contains(&endpoints))
-                    {
-                        continue;
-                    }
-                    // An auxiliary spoke is not a delivered chord. Insert a source
-                    // sample on it normally, splitting that spoke rather than dropping
-                    // the mandatory unmoved interior sample.
-                }
-                let handle = cdt.insert(p).ok()?;
+                let handle = cdt
+                    .insert(Point2::new(
+                        f64::from(p[(axis + 1) % 3]),
+                        f64::from(p[(axis + 2) % 3]),
+                    ))
+                    .ok()?;
                 if reverse.insert(handle, v).is_some() {
                     return rejected("CDT", concat!(file!(), ":", line!()));
                 }
-                predicted += 2;
+                handles.insert(v, handle);
             }
-        }
-        let mut flags = HashMap::default();
-        let mut queue = VecDeque::new();
-        for e in cdt.directed_edges().filter(|e| e.face().is_outer()) {
-            if let Some(face) = e.rev().face().as_inner() {
-                let h = face.fix();
-                let inside =
-                    boundary.contains(&edge(reverse[&e.from().fix()], reverse[&e.to().fix()]));
-                if let Some(old) = flags.insert(h, inside) {
-                    if old != inside {
+            for &(a, b) in &constraints {
+                if !cdt.can_add_constraint(handles[&a], handles[&b]) {
+                    return rejected("CDT", concat!(file!(), ":", line!()));
+                }
+                cdt.add_constraint(handles[&a], handles[&b]);
+            }
+            if let Some(map) = mapping {
+                let interior: BTreeSet<u32> = faces
+                    .iter()
+                    .flat_map(|&i| m.triangles[i])
+                    .filter(|&v| map[v as usize] == v && !handles.contains_key(&v))
+                    .collect();
+                for v in interior {
+                    let p = m.positions[v as usize];
+                    let p = Point2::new(f64::from(p[(axis + 1) % 3]), f64::from(p[(axis + 2) % 3]));
+                    // A collinear interior sample must not split a delivered border chord.
+                    if let PositionInTriangulation::OnEdge(e) = cdt.locate(p) {
+                        let e = cdt.directed_edge(e);
+                        let endpoints = edge(reverse[&e.from().fix()], reverse[&e.to().fix()]);
+                        if e.is_constraint_edge()
+                            && (boundary.contains(&endpoints)
+                                || required.segments.contains(&endpoints))
+                        {
+                            continue;
+                        }
+                        // An auxiliary spoke is not a delivered chord. Insert a source
+                        // sample on it normally, splitting that spoke rather than dropping
+                        // the mandatory unmoved interior sample.
+                    }
+                    let handle = cdt.insert(p).ok()?;
+                    if reverse.insert(handle, v).is_some() {
                         return rejected("CDT", concat!(file!(), ":", line!()));
                     }
-                } else {
-                    queue.push_back(h);
+                    predicted += 2;
                 }
             }
-        }
-        while let Some(h) = queue.pop_front() {
-            let inside = flags[&h];
-            for e in cdt.face(h).adjacent_edges() {
-                if let Some(f) = e.rev().face().as_inner() {
-                    let next = f.fix();
-                    let value = inside
-                        ^ boundary
-                            .contains(&edge(reverse[&e.from().fix()], reverse[&e.to().fix()]));
-                    if let Some(old) = flags.insert(next, value) {
-                        if old != value {
+            let mut flags = HashMap::default();
+            let mut queue = VecDeque::new();
+            for e in cdt.directed_edges().filter(|e| e.face().is_outer()) {
+                if let Some(face) = e.rev().face().as_inner() {
+                    let h = face.fix();
+                    let inside =
+                        boundary.contains(&edge(reverse[&e.from().fix()], reverse[&e.to().fix()]));
+                    if let Some(old) = flags.insert(h, inside) {
+                        if old != inside {
                             return rejected("CDT", concat!(file!(), ":", line!()));
                         }
                     } else {
-                        queue.push_back(next);
+                        queue.push_back(h);
                     }
                 }
             }
-        }
-        let start = output.len();
-        let mut area = 0.;
-        for f in cdt
-            .inner_faces()
-            .filter(|f| flags.get(&f.fix()) == Some(&true))
-        {
-            let mut t = f.vertices().map(|v| reverse[&v.fix()]);
-            let normal = topology::normal(&m.positions, t)[axis];
-            if normal * sum[axis] < 0. {
-                t.swap(1, 2);
+            while let Some(h) = queue.pop_front() {
+                let inside = flags[&h];
+                for e in cdt.face(h).adjacent_edges() {
+                    if let Some(f) = e.rev().face().as_inner() {
+                        let next = f.fix();
+                        let value = inside
+                            ^ boundary
+                                .contains(&edge(reverse[&e.from().fix()], reverse[&e.to().fix()]));
+                        if let Some(old) = flags.insert(next, value) {
+                            if old != value {
+                                return rejected("CDT", concat!(file!(), ":", line!()));
+                            }
+                        } else {
+                            queue.push_back(next);
+                        }
+                    }
+                }
             }
-            area += normal.abs();
-            if output.len() == cap {
+            let start = output.len();
+            let mut area = 0.;
+            for f in cdt
+                .inner_faces()
+                .filter(|f| flags.get(&f.fix()) == Some(&true))
+            {
+                let mut t = f.vertices().map(|v| reverse[&v.fix()]);
+                let normal = topology::normal(&m.positions, t)[axis];
+                if normal * sum[axis] < 0. {
+                    t.swap(1, 2);
+                }
+                area += normal.abs();
+                if output.len() == cap {
+                    return rejected("CDT", concat!(file!(), ":", line!()));
+                }
+                output.push(t);
+                representatives.push(m.representative[faces[0]]);
+            }
+            if flips {
+                flip_interface_edges(
+                    &m.positions,
+                    &mut output[start..],
+                    axis,
+                    &|v| required.points.contains(&v),
+                    &|t| guard.licensed(&m.positions, t),
+                    &|a, b| guard.licensed_edge(&m.positions, a, b),
+                    &constraints,
+                );
+            }
+            // Positive input Jacobians plus a simple boundary of degree one establish the
+            // height-field domain. The area identity detects inconsistent ring orientation.
+            if (mapping.is_none() && output.len() - start != predicted)
+                || (mapping.is_none() && (area - sum[axis].abs()).abs() > 1e-10 * area.max(1.))
+            {
                 return rejected("CDT", concat!(file!(), ":", line!()));
             }
-            output.push(t);
-            representatives.push(m.representative[faces[0]]);
+
+            if panels && guard.rejects(&m.positions, &output[start..]) {
+                return rejected("CDT", "a rebuilt panel needs a guarded face");
+            }
+            count += 1;
+            Some(())
+        };
+        if rebuild(&mut output, &mut representatives).is_none() {
+            if !panels {
+                return None;
+            }
+            // A panel that cannot be rebuilt keeps its faces.
+            output.truncate(start);
+            representatives.truncate(start);
+            output.extend(faces.iter().map(|&i| m.triangles[i]));
+            representatives.extend(faces.iter().map(|&i| m.representative[i]));
+            continue;
         }
-        if flips {
-            flip_interface_edges(
-                &m.positions,
-                &mut output[start..],
-                axis,
-                &|v| required.points.contains(&v),
-                &|t| guard.licensed(&m.positions, t),
-                &|a, b| guard.licensed_edge(&m.positions, a, b),
-                &constraints,
-            );
-        }
-        // Positive input Jacobians plus a simple boundary of degree one establish the
-        // height-field domain. The area identity detects inconsistent ring orientation.
-        if (mapping.is_none() && output.len() - start != predicted)
-            || (mapping.is_none() && (area - sum[axis].abs()).abs() > 1e-10 * area.max(1.))
-        {
-            return rejected("CDT", concat!(file!(), ":", line!()));
-        }
-        count += 1;
     }
     // The patch iterator and each CDT have finished. Release their shared indexes
     // before missing/topology/Source work adds its own validation workspace.
@@ -1306,5 +1393,80 @@ mod tests {
             assert!(pairs(&faces).is_subset(&before));
             assert!((faces.iter().map(|&t| area(&p, t)).sum::<f64>() - total).abs() < 1e-9);
         }
+    }
+
+    /// `sheet(n)` at heights `z`, plus faces over added points.
+    fn field(n: u32, z: fn([f32; 3]) -> f32, points: &[[f32; 3]], faces: &[[u32; 3]]) -> Merged {
+        let mut m = sheet(n, false);
+        m.positions.iter_mut().for_each(|p| p[2] = z(*p));
+        m.positions.extend(points);
+        m.keys = m.positions.iter().copied().map(key).collect();
+        m.ells.resize(m.positions.len(), 0);
+        m.triangles.extend(faces);
+        m.representative
+            .resize(m.triangles.len(), m.representative[0]);
+        m
+    }
+
+    /// #296 r1 (M2): a tent's floor contact 24 and a welded wall's three-face edges stay
+    /// while the floor is rebuilt; lifted samples stay; one-face panels are untouched;
+    /// guard work is per panel, not per vertex.
+    #[test]
+    fn panels_keep_contacts_welds_and_lifts_in_linear_work() {
+        let flat = |_: [f32; 3]| 0.;
+        let floor = |m: &Merged| {
+            m.triangles
+                .iter()
+                .filter(|t| t.iter().all(|&v| v < 49))
+                .count()
+        };
+        let mut tent = field(
+            6,
+            flat,
+            &[[2.5, 2.5, 1.], [3.5, 2.5, 1.], [3., 3.5, 1.]],
+            &[[24, 50, 49], [24, 51, 50], [24, 49, 51]],
+        );
+        remesh_panels(&mut tent, &[]).unwrap();
+        let contact = tent.triangles.iter().filter(|t| t.contains(&24)).count();
+        assert!(floor(&tent) < 72 && contact > 3);
+        let mut wall = field(
+            6,
+            flat,
+            &[[2., 2., 1.], [3., 2., 1.], [4., 2., 1.]],
+            &[[16, 17, 50], [16, 50, 49], [17, 18, 51], [17, 51, 50]],
+        );
+        remesh_panels(&mut wall, &[]).unwrap();
+        let weld = wall
+            .triangles
+            .iter()
+            .filter(|t| t.contains(&16) && t.contains(&17))
+            .count();
+        assert!(floor(&wall) < 72 && weld == 3);
+        for dz in [f32::from_bits(1), 1e-3] {
+            let mut m = field(6, flat, &[], &[]);
+            m.positions[24][2] = dz;
+            m.keys[24] = key(m.positions[24]);
+            remesh_panels(&mut m, &[]).unwrap();
+            assert!(m.triangles.iter().any(|t| t.contains(&24)));
+        }
+        let mut curved = field(
+            6,
+            |p| ((p[1] * 7. + p[0]).powi(2) * 7. % 11.) * 0.37,
+            &[],
+            &[],
+        );
+        let before = curved.triangles.clone();
+        remesh_panels(&mut curved, &[]).unwrap();
+        assert_eq!(curved.triangles, before);
+        let mut quads = field(
+            64,
+            |p| ((p[0] * p[0]) as u32 % 7 + (p[1] * p[1]) as u32 % 5) as f32,
+            &[],
+            &[],
+        );
+        let flags = || super::super::folds::VERTEX_FLAGS.with(|n| n.get());
+        let start = flags();
+        remesh_panels(&mut quads, &[]).unwrap();
+        assert!(flags() - start <= 4 * quads.positions.len());
     }
 }

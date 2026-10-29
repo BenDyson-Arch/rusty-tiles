@@ -60,6 +60,8 @@ pub(crate) struct Built {
     pub input_triangles: u32,
     pub protected_faces: u32,
     pub retries: u32,
+    /// Published by the last-resort build (`build_parent`).
+    pub last_resort: bool,
     pub interface_vertices: u32,
     pub interface_segments: u32,
     /// Historical receipt field; proposals are rejected rather than reoriented.
@@ -343,6 +345,9 @@ pub(crate) fn build_parent(
         return Ok(first);
     }
     let mut last = build(tile, children, caps, contract, mapping, assess, check, true)?;
+    if let Some(b) = &mut last.built {
+        b.last_resort = true;
+    }
     last.attempted_topology.add(first.attempted_topology);
     Ok(last)
 }
@@ -578,6 +583,90 @@ fn build(
             Some((fit, _)) if fit - failed > 1 => Some(failed + (fit - failed) / 2),
             _ => None,
         };
+    }
+    // In the last-resort build, once every strategy above failed (a parent that fits in
+    // either build never reaches this). Panels: every exactly coplanar chart rebuilt from its boundary
+    // (exact geometry, fewer interior samples), then the remesh rounds. Then, under cap
+    // pressure, coarse-drop prefixes followed by the same sequence: all candidates are
+    // probed first, so a parent no drop can fit costs one sequence; if they fit, bisect
+    // for the least prefix (at most log2(C) + 1 more sequences).
+    if fitted.is_none() && last_resorts {
+        let mut sequence = |merged: &mut Merged,
+                            license: f64,
+                            rounds: u32,
+                            receipt: &mut topology::Receipt,
+                            attempted: &mut TopologyReceipt|
+         -> Result<Option<(Built, u32)>, JobError> {
+            merged.triangles.clone_from(&base.triangles);
+            merged.representative.clone_from(&base.representative);
+            topology::cleanup(merged, interface, license, receipt);
+            if let Some(r) = constrained::remesh_panels(merged, interface) {
+                receipt.add(r);
+            }
+            for round in 0..=rounds {
+                check()?;
+                if round != 0 && !topology::remesh(merged, interface, round, receipt) {
+                    continue;
+                }
+                for preserve_holes in [false, true] {
+                    if let Some(b) = assessed_attempt(
+                        tile,
+                        merged,
+                        interface,
+                        *caps.last().unwrap(),
+                        children_error,
+                        &reference,
+                        &contracted_faces,
+                        license,
+                        preserve_holes,
+                        &mut opening_pins,
+                        true,
+                        attempted,
+                        assess,
+                        check,
+                    )? {
+                        return Ok(Some((b, round)));
+                    }
+                }
+            }
+            Ok(None)
+        };
+        let mut run =
+            |merged: &mut Merged, license: f64, rounds: u32, attempted: &mut TopologyReceipt| {
+                let mut receipt = topology::Receipt::default();
+                let built = sequence(merged, license, rounds, &mut receipt, attempted);
+                receipt.dropped_components = 0;
+                receipt.closed_holes = 0;
+                receipt.opened_holes = 0;
+                built.map(|b| (b, receipt))
+            };
+        let (b, receipt) = run(&mut merged, drops, 6, &mut attempted)?;
+        topology.add(receipt);
+        if let Some((b, _)) = b {
+            fitted = Some((0, b));
+        } else if n > 0 {
+            let license = |k: usize| candidates[k - 1].diagonal.next_up();
+            let (b, receipt) = run(&mut merged, license(n), 6, &mut attempted)?;
+            topology.add(receipt);
+            // The bisection stops each prefix at the remesh round all candidates needed
+            // (a bound on work; the prefix it finds fits by construction).
+            if let Some((b, rounds)) = b {
+                let (mut failed, mut fit) = (0, n);
+                fitted = Some((n, b));
+                while fit - failed > 1 {
+                    let k = failed + (fit - failed) / 2;
+                    let (b, receipt) = run(&mut merged, license(k), rounds, &mut attempted)?;
+                    topology.add(receipt);
+                    match b {
+                        Some((b, _)) => {
+                            fit = k;
+                            fitted = Some((k, b));
+                        }
+                        None => failed = k,
+                    }
+                }
+            }
+        }
     }
     if let Some((_, mut b)) = fitted {
         let kept: HashSet<Key> = b
@@ -1208,6 +1297,7 @@ fn attempt_mode(
         input_triangles: input as u32,
         protected_faces: protected.iter().filter(|p| **p).count() as u32,
         retries,
+        last_resort: false,
         interface_vertices: interface_vertices as u32,
         interface_segments: interface_segments as u32,
         reoriented: 0,

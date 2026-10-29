@@ -429,6 +429,8 @@ pub(crate) struct HlodReport {
     pub tiles_with_protected_faces: u64,
     pub protected_faces: u64,
     pub retries: u64,
+    #[serde(skip)]
+    pub last_resort_tiles: u64,
     /// Content-less cells (omitted coarse tiles), by cell depth, and of them the sources:
     /// cells whose exact interface (or topology plain simplification cannot reduce) needs
     /// more triangles than the cap. Omission propagates to every ancestor (no content above a
@@ -512,6 +514,8 @@ pub struct HlodDiagnostics {
     /// One entry per captured tree depth, including depths with no omissions.
     pub omitted_by_depth: Vec<u64>,
     pub tiles: u64,
+    /// Tiles only the last-resort build fit (`geometry::build_parent`).
+    pub last_resort_tiles: u64,
     pub jobs: u64,
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
     pub cpu_seconds: Option<f64>,
@@ -881,6 +885,7 @@ pub(crate) fn produce(
         .finished(Phase::HlodGeometry, walk_started.elapsed().as_secs_f64())?;
     diagnostics.error_measurement = report.error_measurement.clone();
     diagnostics.tiles = report.tiles;
+    diagnostics.last_resort_tiles = report.last_resort_tiles;
     diagnostics.omitted_proxies = report.omitted_proxies;
     diagnostics.omission_sources = report.omission_sources;
     diagnostics.omitted_by_depth = report.omitted_by_depth.clone();
@@ -1523,6 +1528,7 @@ fn build_tile(
         stopping_bound: built.stopping,
         protected_faces: built.protected_faces,
         retries: built.retries,
+        last_resort: built.last_resort,
         interface_vertices: built.interface_vertices,
         interface_segments: built.interface_segments,
         reoriented_faces: built.reoriented,
@@ -1574,6 +1580,7 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     report.tiles_with_protected_faces += u64::from(row.protected_faces > 0);
     report.protected_faces += u64::from(row.protected_faces);
     report.retries += u64::from(row.retries);
+    report.last_resort_tiles += u64::from(row.last_resort);
     report.reoriented_faces += u64::from(row.reoriented_faces);
 
     report.interface_segments += u64::from(row.interface_segments);
