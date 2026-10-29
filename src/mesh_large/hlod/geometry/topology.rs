@@ -1596,6 +1596,22 @@ fn split_clusters(
     let mut guard = None;
     let mut passes = 0;
     let required = points(interface);
+    // A required point held only by index-degenerate faces has no face to restore, and
+    // every round would drop it: refuse.
+    let held: HashSet<u32> = m
+        .triangles
+        .iter()
+        .filter(|t| surface(t))
+        .flatten()
+        .copied()
+        .collect();
+    if m.triangles
+        .iter()
+        .flatten()
+        .any(|&v| !held.contains(&v) && required.contains(&m.keys[v as usize]))
+    {
+        return None;
+    }
     loop {
         let mut output: Vec<[u32; 3]> = m
             .triangles
@@ -2318,9 +2334,16 @@ pub(super) mod tests {
             })
             .collect();
         border.push(InterfaceRow::new(0, key[8], key[8], 0, 1));
-        for round in 1..=6 {
-            remesh(&mut m, &border, round, &mut Receipt::default());
-            assert!(m.triangles.iter().any(|t| t.contains(&8)), "round {round}");
+        // Review r1: with K held only by index-degenerate faces the round is refused.
+        let mut degenerate = m.clone();
+        for t in degenerate.triangles.iter_mut().filter(|t| t[0] == 8) {
+            t[2] = t[1];
+        }
+        for m in [&mut m, &mut degenerate] {
+            for round in 1..=6 {
+                remesh(m, &border, round, &mut Receipt::default());
+                assert!(m.triangles.iter().any(|t| t.contains(&8)), "round {round}");
+            }
         }
     }
     #[test]
