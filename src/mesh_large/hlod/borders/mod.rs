@@ -66,6 +66,7 @@ pub(super) fn scratch_need(
         .checked_add(sort.finish_peak)?
         .checked_add(sort.stream_slack)?
         .checked_add(edges.checked_mul(72 + 8 + 96)?)?
+        .checked_add(nodes.checked_mul(8)?)?
         .checked_add(vertices.checked_mul(24)?)
         .and_then(|v| v.checked_add(1 << 20))
 }
@@ -311,6 +312,11 @@ impl Borders {
         }
         // State 0: internal; 1: live junction/point; 2: removable degree-two source vertex.
         let mut live = Disk::<3>::new(scratch, "border-live-vertices")?;
+        // Per node: 1 + the last vertex one of whose live edges it holds (sparse, zero).
+        let mut reached = Disk::<1>::new(scratch, "border-point-contacts")?;
+        if self.source.nodes.len > 0 {
+            reached.set(self.source.nodes.len - 1, [0])?;
+        }
         for v in 0..self.source.vertices.len {
             if v.is_multiple_of(4096) {
                 check()?;
@@ -349,6 +355,9 @@ impl Borders {
                 }
             }
             live.push([two[0], two[1], kind])?;
+            if external && degree > 0 && kind == 1 {
+                self.point_contacts(v, &vertex, depth, &active, &mut reached)?;
+            }
             if external && degree == 0 {
                 self.emit_segment([
                     v,
@@ -604,6 +613,61 @@ impl Borders {
                 Ok(())
             },
         )?;
+        Ok(())
+    }
+    /// Owners of a live vertex holding none of its live edges get the point, as for a
+    /// degree-zero contact. Live edges stamp their depth owners first: one owner read
+    /// per run, as segment emission costs.
+    fn point_contacts(
+        &mut self,
+        v: u64,
+        vertex: &[u64; 8],
+        depth: u32,
+        active: &Disk<1>,
+        reached: &mut Disk<1>,
+    ) -> Result<(), JobError> {
+        let mut edge = vertex[5];
+        while edge != NONE {
+            let e = self.source.edges.get(edge)?;
+            let mut at = if active.get(edge)?[0] != 0 {
+                e[2]
+            } else {
+                e[3]
+            };
+            while at < e[3] {
+                let owner = self.source.owner(at, depth)?;
+                reached.set(owner, [v + 1])?;
+                let end = self.source.nodes.get(owner)?[4];
+                at = graph::next_owner(&self.source.owners, at, e[3], end)?;
+            }
+            edge = if e[0] == v { e[4] } else { e[5] };
+        }
+        let (mut at, mut segment) = (vertex[3], NONE);
+        while at < vertex[4] {
+            let owner = self.source.owner(at, depth)?;
+            let mut node = self.source.nodes.get(owner)?;
+            if reached.get(owner)?[0] != v + 1 {
+                if segment == NONE {
+                    let s = [
+                        v,
+                        v,
+                        NONE,
+                        v,
+                        0,
+                        0,
+                        0,
+                        u64::from(depth),
+                        vertex[3],
+                        vertex[4],
+                    ];
+                    segment = self.segments.push(s)?;
+                }
+                node[6] = self.refs.push([node[6], segment])?;
+                node[7] += 1;
+                self.source.nodes.set(owner, node)?;
+            }
+            at = graph::next_owner(&self.source.owners, at, vertex[4], node[4])?;
+        }
         Ok(())
     }
     fn emit_segment(&mut self, segment: [u64; 10]) -> Result<(), JobError> {

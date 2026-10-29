@@ -5527,3 +5527,19 @@ fn city_blocks_develop_builds_are_unchanged_by_the_last_resorts() {
         assert!(a == b, "city block {layout}");
     }
 }
+
+/// Layout 95: a wall tile touches a roof chain at a corner only; without that point it
+/// closed its T-junction top onto the roof edge, and the root folded both one way.
+#[test]
+fn city_block_point_contacts_on_shared_chains_stay_in_contracts() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &city_block(95));
+    let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+    assert_eq!(census(&dir).unsupported_same_direction_edges, 0);
+    let archive = work.path().join("out.3tz");
+    public(&input, &archive, None, 2).unwrap();
+    inspect(
+        ValidationRequest::new(&archive).expect_profile(crate::validate::ExpectedProfile::Hlod),
+    )
+    .unwrap();
+}
