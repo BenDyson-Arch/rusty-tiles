@@ -541,16 +541,7 @@ pub(super) fn changes_noting(
     if output == m.triangles {
         return Some(Change::default());
     }
-    let rejected = |reason: &str| {
-        #[cfg(test)]
-        if std::env::var_os("RT_HLOD_REPLAY_DIR").is_some()
-            || std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some()
-        {
-            eprintln!("TOPOLOGY: {reason}");
-        }
-        let _ = reason;
-        None
-    };
+    let rejected = |_reason: &str| None;
     let component = Components::mesh(m);
     let border = points(interface);
     let mut surviving = HashSet::default();

@@ -6,8 +6,6 @@ mod combined_controls;
 mod constrained;
 #[cfg(test)]
 mod contraction_memory;
-#[cfg(test)]
-mod fold_probe;
 pub(crate) mod folds;
 pub(crate) mod locations;
 pub(crate) mod measurement;
@@ -338,8 +336,6 @@ pub(crate) fn build_parent(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
     last_resorts: bool,
 ) -> Result<Outcome, JobError> {
-    #[cfg(test)]
-    fold_probe::capture(tile, children, contract, caps);
     let first = build(
         tile, children, caps, contract, mapping, assess, check, false,
     )?;
@@ -780,13 +776,7 @@ fn assessed_attempt(
         );
         let mut b = match proposal {
             Ok(b) => b,
-            Err(e) if e.kind() == JobErrorKind::Unsupported => {
-                #[cfg(test)]
-                if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
-                    eprintln!("replay unsupported f{}-d{} cap={cap} preserve_holes={preserve_holes} round={round}: {e}", tile.first, tile.depth);
-                }
-                return Ok(None);
-            }
+            Err(e) if e.kind() == JobErrorKind::Unsupported => return Ok(None),
             Err(e) => return Err(e),
         };
         b.retries += round;
@@ -997,17 +987,6 @@ fn attempt_mode(
                     folds::Source::new(&merged.positions, contracted_faces).with_boundary(interface)
                 })
                 .violations(&merged.positions, &output);
-            #[cfg(test)]
-            if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
-                eprintln!(
-                    "replay retry={retries} faces={} invalid={} protected={} missing={}/{}",
-                    output.len(),
-                    invalid.iter().filter(|v| **v).count(),
-                    protected.iter().filter(|v| **v).count(),
-                    edges.len(),
-                    points.len()
-                );
-            }
             let valid = edges.is_empty() && points.is_empty() && !invalid.iter().any(|v| *v);
             if valid {
                 // Topology comparison has its own tables; do not overlap them
