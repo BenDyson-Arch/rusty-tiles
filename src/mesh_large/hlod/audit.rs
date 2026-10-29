@@ -378,6 +378,7 @@ mod tests {
             input_triangles: 3,
             protected_faces: 0,
             retries: 0,
+            last_resort: false,
             interface_vertices: 0,
             interface_segments: 0,
             reoriented: 0,

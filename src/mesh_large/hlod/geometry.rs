@@ -60,6 +60,8 @@ pub(crate) struct Built {
     pub input_triangles: u32,
     pub protected_faces: u32,
     pub retries: u32,
+    /// Published by the last-resort build (`build_parent`).
+    pub last_resort: bool,
     pub interface_vertices: u32,
     pub interface_segments: u32,
     /// Historical receipt field; proposals are rejected rather than reoriented.
@@ -343,6 +345,9 @@ pub(crate) fn build_parent(
         return Ok(first);
     }
     let mut last = build(tile, children, caps, contract, mapping, assess, check, true)?;
+    if let Some(b) = &mut last.built {
+        b.last_resort = true;
+    }
     last.attempted_topology.add(first.attempted_topology);
     Ok(last)
 }
@@ -1292,6 +1297,7 @@ fn attempt_mode(
         input_triangles: input as u32,
         protected_faces: protected.iter().filter(|p| **p).count() as u32,
         retries,
+        last_resort: false,
         interface_vertices: interface_vertices as u32,
         interface_segments: interface_segments as u32,
         reoriented: 0,

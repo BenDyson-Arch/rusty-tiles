@@ -212,6 +212,8 @@ pub(crate) struct HlodRow {
     pub stopping_bound: StoppingBound,
     pub protected_faces: u32,
     pub retries: u32,
+    #[serde(skip)]
+    pub last_resort: bool,
     pub interface_vertices: u32,
     pub interface_segments: u32,
     /// Simplified faces that landed exactly on an opposite-facing source face (a collapse
