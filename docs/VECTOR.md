@@ -244,7 +244,7 @@ Points are grouped by layer and 3D voxel, using the same grid as the point-cloud
 
 Aggregates use the metadata class `pointAggregate` and have no `_source_id`. Styles for distant tiles must use these properties, not the original fields. A MultiPoint counts once per coordinate.
 
-Aggregation falls back to the original content when it gives no reduction, breaks a budget, or exceeds the tolerance. If the original content does not fit either, the tile routes to its children. The parent's geometric error is at least the tolerance, so aggregates always refine to originals up close. `extras.pointAggregation` and `conversion.json.pointAggregation` record what happened.
+Aggregation falls back to the original content when it gives no reduction, breaks a budget, or exceeds the tolerance. Coarse tolerances scale with tile extent, so points spread wider than a tile's tolerance keep their originals; raise `--lod-tolerance` for coarser aggregates. If the original content does not fit either, the tile routes to its children. The parent's geometric error is at least the tolerance, so aggregates always refine to originals up close. `extras.pointAggregation` and `conversion.json.pointAggregation` record what happened.
 
 ## Encoding
 
