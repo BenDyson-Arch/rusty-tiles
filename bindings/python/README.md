@@ -57,7 +57,7 @@ required reports and cleanup diagnostics, as described below.
 | `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `memory_budget_bytes=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
 | `model_to_manifest(input, ...)` | Same rigid placement/policy/callback keywords; returns `ModelManifestResult` with fixed sibling output |
-| `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=8192` (at most 8192), `chunk_points=100000`, `metadata_attributes=False`, `callback=None` |
+| `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=8192` (at most 8192), `chunk_points=100000`, `metadata=False`, `metadata_attributes=False`, `callback=None` |
 | `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage; returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; returns `PackageResult` |
 | `validate(input, *, lazy_payloads=False, max_volume=None, scratch_dir=None, expect_profile=None, callback=None)` | Returns the bounded [validation report](../../docs/VALIDATION.md), including completed checks, inspection gaps, `storedBytes`, the effective `limits` and their `limitDerivation`. `max_volume` maps limit keys to ints (opt-in volume caps such as `sourceArchiveBytes`, or replaced budgets such as `hierarchyVisits`); a bad key or value raises `InvalidRequestError` before any I/O. `scratch_dir` places scratch in an existing directory. `expect_profile="hlod"` requires the HLOD profile whatever the archive's labels say (every payload must carry source identity and every HLOD check runs; an archive that declares HLOD itself is held to it anyway); any other value raises `ValueError` before the archive is opened. `callback` receives progress events; raising from it, or Ctrl-C, stops the validation. A limit refusal's `ResourceLimitError.limit` is `{"limit", "value", "observed", "derivation"}` |
@@ -147,9 +147,9 @@ Exact wrapping through `glb_to_3tz` and sibling `model_to_manifest` remains a
 separate product. `point_cloud_to_3tz` and `vector_to_3tz` write implicit
 tiling only; their `explicit` keyword was removed in 0.4.0 and now raises
 `TypeError`.
-`metadata_attributes=True` adds point property attributes named
-`vertex_classification`, `vertex_intensity` and `vertex_return_number`, retaining
-the original LAS property tables for picking and table styling.
+`metadata=True` keeps every source field in a per-point property table (off by
+default: position and colour only). `metadata_attributes=True` adds point property
+attributes named `vertex_classification`, `vertex_intensity` and `vertex_return_number`.
 
 ### Rigid placement
 

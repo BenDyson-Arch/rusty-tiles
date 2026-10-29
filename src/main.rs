@@ -404,6 +404,9 @@ struct RasterArgs {
 struct PointCloudArgs {
     #[command(flatten)]
     io: IoArgs,
+    /// Keep every source field per point in a property table (off: position and colour only)
+    #[arg(long)]
+    metadata: bool,
     /// Expose classification, intensity and return number as vertex property attributes
     #[arg(long = "metadataAttributes", visible_alias = "metadata-attributes")]
     metadata_attributes: bool,
@@ -1317,6 +1320,7 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
                 }
             };
             let options = PointCloudOptions {
+                metadata: a.metadata,
                 metadata_attributes: a.metadata_attributes,
                 max_points: a.max_points,
                 chunk_points: a.chunk_points,

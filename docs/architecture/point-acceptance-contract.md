@@ -28,8 +28,8 @@ tests use analytical WGS84 coordinates or frozen references with provenance.
 The admitted decompressed LAS point formats are 0, 1, 2, 3, 6, 7 and 8, including
 LAS and LAZ delivery. Waveforms, array/untyped Extra Bytes and undocumented record
 tails are unsupported. Source XYZ scales must be positive finite and offsets
-finite. Required standard dimensions, raw X/Y/Z, scaled source XYZ, source ordinal
-and declared scalar Extra Bytes are retained. Empty sources, ambiguous CRS/field
+finite. With `metadata`, required standard dimensions, raw X/Y/Z, scaled source XYZ,
+source ordinal and declared scalar Extra Bytes are retained. Empty sources, ambiguous CRS/field
 declarations, reserved field collisions and nonfinite admitted numeric values are
 refused. Metadata declarations receive finite allocation/extent checks before
 the LAS library materializes them. The admitted metadata profile permits at most
@@ -58,6 +58,12 @@ mandatory in Rust, CLI and Python. Python retains one `point_cloud_to_3tz` adapt
 spelling and requires the `source_crs` keyword; the two old Rust overloads and
 producer-owned publication options are removed after caller migration.
 
+Owner amendment, 2026-10-29: output keeps only position (16-bit per tile axis) and
+8-bit colour unless `metadata` restores the table and the guarantees above. Leaf error
+stays 0 (nothing is omitted below); leaf positions differ from source by at most half
+a step per axis, as reported. The oracle checks this per point, and that default
+output equals `metadata` output without metadata.
+
 ## Acceptance, sampling and inventory
 
 Every admitted source record has a stable source ordinal for that run. Identical
@@ -69,9 +75,10 @@ tileset transforms and compared with independent source coordinates. Source XYZ
 metadata alone cannot prove placement.
 
 Leaf contents retain full detail. Parent representatives select the first source
-record per voxel, ordered by voxel key; source reorder invariance is not promised.
+record per voxel, ordered by voxel key, on the finest root-anchored cubic grid of the
+parent-edge ladder that fits the budget; source reorder invariance is not promised.
 The stated cell-diagonal distance bound is checked against every descendant point
-in adversarial fixtures. Float32 position rounding is measured per tile and
+in adversarial fixtures. Position quantization error is measured per tile and
 included where required by emitted bounds/error. Triangle-style surface error or
 general optimal point sampling is not a claim of this profile.
 

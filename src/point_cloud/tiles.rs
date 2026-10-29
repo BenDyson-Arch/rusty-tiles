@@ -5,6 +5,7 @@ use super::PointCloudOptions;
 use super::{checkpoint, progress, ProducerIo};
 use crate::runtime::Attempt;
 use crate::{
+    glb,
     metadata::MetadataGlb,
     tileset_node::{
         box_half, box_json, enclose_children, top_level_error, translation, translation_offset,
@@ -14,7 +15,7 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     fs::File,
     io::{BufReader, BufWriter, Read, Write},
     path::Path,
@@ -72,6 +73,8 @@ pub(super) struct Tree<'a, O: ProducerIo> {
     pub max_rounding: f64,
     pub total_points: u64,
     pub leaf_points: u64,
+    /// The root's minimum, the origin of every sampling grid.
+    pub anchor: [f64; 3],
 }
 
 impl<O: ProducerIo> Tree<'_, O> {
@@ -81,6 +84,7 @@ impl<O: ProducerIo> Tree<'_, O> {
         parent_center: [f64; 3],
         depth: usize,
         cell: Option<([f64; 3], [f64; 3])>,
+        edge: Option<f64>,
     ) -> Result<Value, Error> {
         checkpoint(self.attempt)?;
         let mut records = Records::new(path, self.layout.record_len, self.options.chunk_points)?;
@@ -114,10 +118,13 @@ impl<O: ProducerIo> Tree<'_, O> {
         }
         let center: [f64; 3] = std::array::from_fn(|i| lo[i] + extent[i] / 2.);
         let leaf = count <= self.options.max_points as u64;
-        let (rows, error) = if leaf {
-            (std::fs::read(path)?, 0.)
+        if cell.is_none() {
+            self.anchor = lo;
+        }
+        let (rows, error, edge) = if leaf {
+            (std::fs::read(path)?, 0., 0.)
         } else {
-            self.sample(path, lo, extent)?
+            self.sample(path, extent, edge)?
         };
         let index = self.tiles;
         self.tiles += 1;
@@ -126,15 +133,14 @@ impl<O: ProducerIo> Tree<'_, O> {
             &rows,
             center,
             self.layout,
-            self.options.metadata_attributes,
+            self.options,
             &self.output.join(&uri),
             self.attempt,
             self.operations,
         )?;
         self.max_rounding = self.max_rounding.max(rounding);
         drop(rows);
-        // The padded estimate can sit an ulp inside the f32 positions actually written;
-        // `reach` is their exact extent about the tile origin, so the own box always
+        // `reach` bounds the decoded positions about the tile origin, so the own box
         // contains every decoded vertex (C2 decodedContentContainment, exact arithmetic).
         let mut half = std::array::from_fn(|i| (extent[i] / 2. + rounding).max(1e-6).max(reach[i]));
         let mut node = json!({"boundingVolume":{"box":box_json(0., half)},
@@ -156,9 +162,26 @@ impl<O: ProducerIo> Tree<'_, O> {
             )));
         }
         let branches = 8;
-        let (cell_lo, cell_hi) = cell.unwrap_or((lo, hi));
-        let midpoint: [f64; 3] =
-            std::array::from_fn(|i| cell_lo[i] + (cell_hi[i] - cell_lo[i]) / 2.);
+        let (mut cell_lo, mut cell_hi) = cell.unwrap_or((lo, hi));
+        let half_way =
+            |lo: [f64; 3], hi: [f64; 3]| std::array::from_fn(|i| lo[i] + (hi[i] - lo[i]) / 2.);
+        let mut midpoint: [f64; 3] = half_way(cell_lo, cell_hi);
+        // While every point lies in one octant, that child would repeat this tile: halve
+        // the cell toward it. Tiles record actual boxes, so addressing is unaffected.
+        while extent != [0.; 3] && (0..3).all(|i| hi[i] < midpoint[i] || lo[i] >= midpoint[i]) {
+            let before = (cell_lo, cell_hi);
+            for i in 0..3 {
+                *if lo[i] >= midpoint[i] {
+                    &mut cell_lo[i]
+                } else {
+                    &mut cell_hi[i]
+                } = midpoint[i];
+            }
+            if (cell_lo, cell_hi) == before {
+                break;
+            }
+            midpoint = half_way(cell_lo, cell_hi);
+        }
         let paths: Vec<_> = (0..branches)
             .map(|branch| self.output.join(format!("scratch/{index}-{branch}.bin")))
             .collect();
@@ -218,7 +241,7 @@ impl<O: ProducerIo> Tree<'_, O> {
                     }
                 }),
             );
-            let mut child = self.build(path, center, depth + 1, Some(child_cell))?;
+            let mut child = self.build(path, center, depth + 1, Some(child_cell), Some(edge))?;
             child["extras"] = json!({"implicitChildIndex":branch});
             children.push(child);
         }
@@ -235,27 +258,71 @@ impl<O: ProducerIo> Tree<'_, O> {
         Ok(node)
     }
 
-    fn sample(&self, path: &Path, lo: [f64; 3], extent: [f64; 3]) -> Result<(Vec<u8>, f64), Error> {
-        let grid = crate::point_sampling::VoxelGrid::new(lo, extent, self.options.max_points);
-        let mut representatives = BTreeMap::new();
-        checkpoint(self.attempt)?;
-        let mut records = Records::new(path, self.layout.record_len, self.options.chunk_points)?;
-        loop {
-            checkpoint(self.attempt)?;
-            let batch = records.next()?;
-            if batch.is_empty() {
-                break;
+    /// Parent representatives: the first source record per occupied cubic voxel, in key
+    /// order, on the finest grid that fits `max_points`. Grids are anchored at the root's
+    /// minimum and a child's ladder starts at its parent's edge, which the child's subset
+    /// always fits: a child's voxels are never coarser than its parent's.
+    fn sample(
+        &self,
+        path: &Path,
+        extent: [f64; 3],
+        parent_edge: Option<f64>,
+    ) -> Result<(Vec<u8>, f64, f64), Error> {
+        let budget = self.options.max_points;
+        let longest = extent.into_iter().fold(0., f64::max);
+        let side = (1..=budget).take_while(|s| s * s * s <= budget).count();
+        // At most `side` root voxels per axis, including points on the upper bound.
+        let top = parent_edge.unwrap_or(longest.max(f64::MIN_POSITIVE) / (side as f64 - 0.5));
+        // Two chains of edges `top / 2^j` and `top / (2^j √2)`, down to `budget` voxels along
+        // the longest axis. Halving is exact, so each grid nests in the coarser one.
+        let mut chains = [top, top / std::f64::consts::SQRT_2].map(|mut edge| {
+            let mut grids = vec![(edge, HashSet::new())];
+            while longest > 0. && longest / edge < budget as f64 && edge / 2. > 0. {
+                edge /= 2.;
+                grids.push((edge, HashSet::new()));
             }
-            for row in batch.chunks_exact(self.layout.record_len) {
-                let key = grid.key(position(row));
-                representatives.entry(key).or_insert_with(|| row.to_vec());
+            grids
+        });
+        let key = |row: &[u8], edge: f64| -> [u64; 3] {
+            let p = position(row);
+            std::array::from_fn(|i| ((p[i] - self.anchor[i]) / edge) as u64)
+        };
+        // Pass one counts occupied voxels; pass two keeps the chosen grid's first records.
+        let (mut edge, mut voxels) = (top, BTreeMap::new());
+        for pass in 0..2 {
+            let mut records =
+                Records::new(path, self.layout.record_len, self.options.chunk_points)?;
+            loop {
+                checkpoint(self.attempt)?;
+                let batch = records.next()?;
+                if batch.is_empty() {
+                    break;
+                }
+                for row in batch.chunks_exact(self.layout.record_len) {
+                    if pass == 1 {
+                        voxels.entry(key(row, edge)).or_insert_with(|| row.to_vec());
+                        continue;
+                    }
+                    for chain in &mut chains {
+                        // Finest first: once a voxel is occupied, so are its coarser ones.
+                        for (edge, occupied) in chain.iter_mut().rev() {
+                            if !occupied.insert(key(row, *edge)) {
+                                break;
+                            }
+                        }
+                        // Overflow trims the finer tail; the even chain's coarsest grid
+                        // (the parent's, or at most side³ root voxels) always fits.
+                        while chain.last().is_some_and(|(_, v)| v.len() > budget) {
+                            chain.pop();
+                        }
+                    }
+                }
             }
+            edge = (chains.iter().flatten().map(|grid| grid.0)).fold(top, f64::min);
         }
-        // First source record in each voxel, sorted by voxel key for stable output.
-        Ok((
-            representatives.into_values().flatten().collect(),
-            grid.error_bound(),
-        ))
+        // A voxel's points differ by under its edge, and by at most the tile extent.
+        let error = norm(std::array::from_fn(|i| edge.min(extent[i])));
+        Ok((voxels.into_values().flatten().collect(), error, edge))
     }
 }
 
@@ -263,7 +330,7 @@ fn emit(
     rows: &[u8],
     center: [f64; 3],
     layout: &Layout,
-    metadata_attributes: bool,
+    options: &PointCloudOptions,
     path: &Path,
     attempt: &Attempt,
     operations: &mut impl ProducerIo,
@@ -276,56 +343,76 @@ fn emit(
         ));
     }
     let mut glb = MetadataGlb::new("rusty-tiles native point cloud");
-    let mut positions = Vec::with_capacity(count * 12);
-    let mut ids = Vec::with_capacity(count * 4);
-    let mut colors = Vec::new();
-    let mut lo = [f32::INFINITY; 3];
-    let mut hi = [f32::NEG_INFINITY; 3];
+    // Tile-local glTF (Y-up) positions as KHR_mesh_quantization 16-bit codes, dequantized
+    // by the content node's translation (the minimum) and scale (the extent).
+    let local = |row| {
+        let p = position(row);
+        [p[0] - center[0], p[2] - center[2], -(p[1] - center[1])]
+    };
+    let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+    for p in rows.chunks_exact(layout.record_len).map(local) {
+        lo = std::array::from_fn(|i| lo[i].min(p[i]));
+        hi = std::array::from_fn(|i| hi[i].max(p[i]));
+    }
+    let scale: [f64; 3] = std::array::from_fn(|i| if hi[i] > lo[i] { hi[i] - lo[i] } else { 1. });
+    if !scale.iter().chain(&lo).all(|v| v.is_finite()) {
+        return Err(Error::Data("tile positions exceed finite range".into()));
+    }
+    let mut positions = Vec::with_capacity(count * 8);
     let mut rounding: f64 = 0.;
-    for (index, row) in rows.chunks_exact(layout.record_len).enumerate() {
+    for (index, p) in rows.chunks_exact(layout.record_len).map(local).enumerate() {
         if index % 4096 == 0 {
             checkpoint(attempt)?;
         }
-        let p = position(row);
-        let local = [p[0] - center[0], p[2] - center[2], -(p[1] - center[1])];
-        let encoded = local.map(|v| v as f32);
-        if !encoded.iter().all(|v| v.is_finite()) {
-            return Err(Error::Data(
-                "tile positions exceed finite float32 range".into(),
-            ));
-        }
-        rounding = rounding.max(norm(sub(local, encoded.map(f64::from))));
-        for i in 0..3 {
-            lo[i] = lo[i].min(encoded[i]);
-            hi[i] = hi[i].max(encoded[i]);
-            positions.extend_from_slice(&encoded[i].to_le_bytes());
-        }
-        ids.extend_from_slice(&(index as u16).to_le_bytes());
-        ids.extend_from_slice(&[0, 0]);
-        if let Some(at) = layout.rgb {
-            colors.extend_from_slice(&row[RAW + at..RAW + at + 6]);
-            colors.extend_from_slice(&65535_u16.to_le_bytes());
-        }
+        let code: [u16; 3] = std::array::from_fn(|i| {
+            ((p[i] - lo[i]) / scale[i] * 65535.).round().min(65535.) as u16
+        });
+        let decoded = std::array::from_fn(|i| lo[i] + scale[i] * (f64::from(code[i]) / 65535.));
+        rounding = rounding.max(norm(sub(p, decoded)));
+        positions.extend(code.into_iter().chain([0]).flat_map(u16::to_le_bytes));
     }
     let view = glb.view(&positions);
-    let position_accessor = glb.accessor(json!({"bufferView":view,"componentType":5126,"count":count,"type":"VEC3","min":lo,"max":hi}));
-    drop(positions);
-    let view = glb.view(&ids);
-    glb.document["bufferViews"][view]["byteStride"] = 4.into();
-    let feature_accessor =
-        glb.accessor(json!({"bufferView":view,"componentType":5123,"count":count,"type":"SCALAR"}));
-    drop(ids);
-    let mut attributes = json!({"POSITION":position_accessor,"_FEATURE_ID_0":feature_accessor});
-    if layout.rgb.is_some() {
+    glb.document["bufferViews"][view]["byteStride"] = 8.into();
+    let high: [u16; 3] = std::array::from_fn(|i| if hi[i] > lo[i] { 65535 } else { 0 });
+    let mut attributes = json!({"POSITION":glb.accessor(json!({"bufferView":view,
+        "componentType":5123,"normalized":true,"count":count,"type":"VEC3","min":[0,0,0],"max":high}))});
+    glb.document["nodes"][0]["translation"] = json!(lo);
+    glb.document["nodes"][0]["scale"] = json!(scale);
+    if let Some(at) = layout.rgb {
+        // One display colour: 8-bit, round(v / 257); exact 16-bit values are metadata.
+        let mut colors = Vec::with_capacity(count * 4);
+        for row in rows.chunks_exact(layout.record_len) {
+            for c in row[RAW + at..RAW + at + 6].as_chunks::<2>().0 {
+                colors.push(((u32::from(u16::from_le_bytes(*c)) + 128) / 257) as u8);
+            }
+            colors.push(0);
+        }
         let view = glb.view(&colors);
-        attributes["COLOR_0"] = glb.accessor(json!({"bufferView":view,"componentType":5123,"count":count,"type":"VEC4","normalized":true})).into();
+        glb.document["bufferViews"][view]["byteStride"] = 4.into();
+        attributes["COLOR_0"] = glb.accessor(json!({"bufferView":view,"componentType":5121,"count":count,"type":"VEC3","normalized":true})).into();
+    }
+    if options.metadata {
+        let ids: Vec<u8> = (0..count as u32).flat_map(u32::to_le_bytes).collect();
+        let view = glb.view(&ids);
+        glb.document["bufferViews"][view]["byteStride"] = 4.into();
+        attributes["_FEATURE_ID_0"] = glb
+            .accessor(json!({"bufferView":view,"componentType":5123,"count":count,"type":"SCALAR"}))
+            .into();
     }
     let mut schema = serde_json::Map::new();
     let mut columns = serde_json::Map::new();
     let mut values = Vec::new();
-    let mut property_attributes = BTreeMap::new();
+    let mut property_attributes = serde_json::Map::new();
     let mut attribute_schema = serde_json::Map::new();
     for dim in &layout.dimensions {
+        let attribute = options.metadata_attributes
+            && matches!(
+                dim.name.as_str(),
+                "classification" | "intensity" | "return_number"
+            );
+        if !options.metadata && !attribute {
+            continue;
+        }
         checkpoint(attempt)?;
         values.clear();
         for (index, row) in rows.chunks_exact(layout.record_len).enumerate() {
@@ -334,14 +421,11 @@ fn emit(
             }
             dim.append(row, &mut values);
         }
-        schema.insert(dim.name.clone(), dim.schema());
-        columns.insert(dim.name.clone(), json!({"values":glb.view(&values)}));
-        if metadata_attributes
-            && matches!(
-                dim.name.as_str(),
-                "classification" | "intensity" | "return_number"
-            )
-        {
+        if options.metadata {
+            schema.insert(dim.name.clone(), dim.schema());
+            columns.insert(dim.name.clone(), json!({"values":glb.view(&values)}));
+        }
+        if attribute {
             let semantic = format!("_{}", dim.name.to_ascii_uppercase());
             let width = dim.kind.width();
             let padded: Vec<u8> = values
@@ -369,54 +453,45 @@ fn emit(
                 property.clone(),
                 json!({"type":"SCALAR","componentType":dim.kind.component()}),
             );
-            property_attributes.insert(
-                property,
-                crate::metadata::PropertyAttributeProperty {
-                    attribute: semantic,
-                    ..Default::default()
-                },
-            );
+            property_attributes.insert(property, json!({ "attribute": semantic }));
         }
     }
-    glb.document["extensionsUsed"] = json!([
-        "EXT_mesh_features",
-        "EXT_structural_metadata",
-        "KHR_materials_unlit"
-    ]);
-    let mut metadata: crate::metadata::StructuralMetadata = serde_json::from_value(json!({
-        "schema":{"id":"rusty_tiles_point_cloud","classes":{"point":{"properties":schema}}},
-        "propertyTables":[{"name":"points","class":"point","count":count,"properties":columns}]}))?;
-    if metadata_attributes {
-        metadata.schema.as_mut().unwrap().classes.insert(
-            "pointAttribute".into(),
-            serde_json::from_value(json!({"properties":attribute_schema}))?,
-        );
-        metadata
-            .property_attributes
-            .push(crate::metadata::PropertyAttribute {
-                class: "pointAttribute".into(),
-                properties: property_attributes,
-                ..Default::default()
-            });
+    glb::add_extension(&mut glb.document, "KHR_materials_unlit", false)?;
+    glb::add_extension(&mut glb.document, "KHR_mesh_quantization", true)?;
+    let mut extensions = json!({});
+    let mut metadata = json!({"schema":{"id":"rusty_tiles_point_cloud","classes":{}}});
+    if options.metadata {
+        metadata["schema"]["classes"]["point"] = json!({ "properties": schema });
+        metadata["propertyTables"] =
+            json!([{"name":"points","class":"point","count":count,"properties":columns}]);
+        extensions[crate::metadata::MESH_FEATURES] =
+            serde_json::to_value(crate::metadata::MeshFeatures::attribute(count, 0, Some(0)))?;
+        glb::add_extension(&mut glb.document, crate::metadata::MESH_FEATURES, false)?;
     }
-    metadata.attach(&mut glb.document)?;
+    if options.metadata_attributes {
+        metadata["schema"]["classes"]["pointAttribute"] = json!({ "properties": attribute_schema });
+        metadata["propertyAttributes"] =
+            json!([{"class":"pointAttribute","properties":property_attributes}]);
+        extensions[crate::metadata::STRUCTURAL_METADATA] = json!({"propertyAttributes":[0]});
+    }
+    if options.metadata || options.metadata_attributes {
+        serde_json::from_value::<crate::metadata::StructuralMetadata>(metadata)?
+            .attach(&mut glb.document)?;
+    }
     glb.document["materials"] = json!([{"extensions":{"KHR_materials_unlit":{}},"pbrMetallicRoughness":{"metallicFactor":0,"roughnessFactor":1}}]);
-    glb.document["meshes"] = json!([{"primitives":[{"mode":0,"attributes":attributes,"material":0,
-        "extensions":{"EXT_mesh_features":crate::metadata::MeshFeatures::attribute(count, 0, Some(0))}}]}]);
-    if metadata_attributes {
-        glb.document["meshes"][0]["primitives"][0]["extensions"]
-            [crate::metadata::STRUCTURAL_METADATA] = json!({"propertyAttributes":[0]});
+    glb.document["meshes"] =
+        json!([{"primitives":[{"mode":0,"attributes":attributes,"material":0}]}]);
+    if extensions != json!({}) {
+        glb.document["meshes"][0]["primitives"][0]["extensions"] = extensions;
     }
     checkpoint(attempt)?;
     operations.member(path, &glb.finish()?)?;
-    Ok((rounding, glb_reach(lo, hi)))
-}
-
-/// The largest absolute f32 position per z-up box axis, widened exactly. glTF stores
-/// `(x, z, -y)`, so box axis 1 reads glTF axis 2 and box axis 2 reads glTF axis 1.
-fn glb_reach(lo: [f32; 3], hi: [f32; 3]) -> [f64; 3] {
-    let reach = |i: usize| f64::from(lo[i].abs().max(hi[i].abs()));
-    [reach(0), reach(2), reach(1)]
+    // Decoded positions lie in [lo, lo + scale] exactly; widen the rounded sum.
+    let reach = |i: usize| {
+        lo[i].abs().max((lo[i] + scale[i]).abs()) + 4. * f64::EPSILON * (lo[i].abs() + scale[i])
+    };
+    // glTF stores (x, z, -y): box axis 1 reads glTF axis 2 and box axis 2 reads axis 1.
+    Ok((rounding, [reach(0), reach(2), reach(1)]))
 }
 
 /// Tileset-level error; NaN (reported by the caller as a nonfinite extent)

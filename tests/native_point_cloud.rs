@@ -6,7 +6,7 @@ mod support;
 
 fn call(input: &Path, output: &Path, options: &[&str]) -> std::process::Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"));
-    command.args(["--json", "point-cloud"]);
+    command.args(["--json", "point-cloud", "--metadata"]);
     command
         .arg("-i")
         .arg(input)
@@ -95,20 +95,8 @@ fn implicit_las_laz_keep_every_record_and_placement_across_the_bounded_forest() 
             }
             let glb = Glb::read(zip, node["content"]["uri"].as_str().unwrap());
             let id = u64::from_le_bytes(glb.column("source_index").try_into().unwrap()) as usize;
-            let accessor = &glb.doc["accessors"][glb.doc["meshes"][0]["primitives"][0]["attributes"]
-                ["POSITION"]
-                .as_u64()
-                .unwrap() as usize];
-            let bytes = glb.view(accessor["bufferView"].as_u64().unwrap() as usize);
-            let p: [f64; 3] = std::array::from_fn(|i| {
-                f64::from(f32::from_le_bytes(
-                    bytes[i * 4..i * 4 + 4].try_into().unwrap(),
-                ))
-            });
-            let t: [f64; 3] = glb.doc["nodes"][0]
-                .get("translation")
-                .map(|v| serde_json::from_value(v.clone()).unwrap())
-                .unwrap_or([0.; 3]);
+            let (positions, t) = glb.positions();
+            let p = positions[0];
             let actual = [
                 root[0] + p[0] + t[0],
                 root[1] - p[2] - t[2],
@@ -220,6 +208,22 @@ impl Glb {
         let at = view["byteOffset"].as_u64().unwrap() as usize;
         assert_eq!(at % 8, 0);
         &self.binary[at..at + view["byteLength"].as_u64().unwrap() as usize]
+    }
+
+    /// Quantized POSITION scaled by the scene root (glTF frame), and its translation.
+    fn positions(&self) -> (Vec<[f64; 3]>, [f64; 3]) {
+        let node = &self.doc["nodes"][0];
+        let scale: [f64; 3] = serde_json::from_value(node["scale"].clone()).unwrap();
+        let codes = self.view(self.doc["accessors"][0]["bufferView"].as_u64().unwrap() as usize);
+        let positions = codes.as_chunks::<8>().0.iter().map(|c| {
+            std::array::from_fn(|i| {
+                scale[i] * f64::from(u16::from_le_bytes([c[2 * i], c[2 * i + 1]])) / 65535.
+            })
+        });
+        (
+            positions.collect(),
+            serde_json::from_value(node["translation"].clone()).unwrap(),
+        )
     }
 
     fn column(&self, name: &str) -> &[u8] {
@@ -718,9 +722,8 @@ impl Level {
     }
 }
 
-/// C2 decoded-content containment for axis-aligned point archives, in exact arithmetic:
-/// every written position, placed by its GLB scene-root translation and the tile
-/// transforms, lies in its own tile's box and in every ancestor's. Returns the
+/// C2 decoded-content containment for axis-aligned point archives: every decoded position,
+/// placed by its GLB scene-root translation and scale and the tile transforms, lies in its own tile's box and in every ancestor's. Returns the
 /// vertices checked.
 fn contained(
     zip: &mut zip::ZipArchive<std::fs::File>,
@@ -731,21 +734,10 @@ fn contained(
     let mut checked = 0;
     if let Some(uri) = tile["content"]["uri"].as_str() {
         let glb = Glb::read(zip, uri);
-        let root: [f64; 3] = glb.doc["nodes"][0]
-            .get("translation")
-            .map(|v| serde_json::from_value(v.clone()).unwrap())
-            .unwrap_or([0.; 3]);
+        let (positions, root) = glb.positions();
         // glTF (x, y, z) is z-up (x, -z, y).
         let root = [root[0], -root[2], root[1]];
-        let accessor = &glb.doc["accessors"][glb.doc["meshes"][0]["primitives"][0]["attributes"]
-            ["POSITION"]
-            .as_u64()
-            .unwrap() as usize];
-        let bytes = glb.view(accessor["bufferView"].as_u64().unwrap() as usize);
-        for (vertex, p) in bytes.as_chunks::<12>().0.iter().enumerate() {
-            let p: [f64; 3] = std::array::from_fn(|i| {
-                f64::from(f32::from_le_bytes(p[i * 4..i * 4 + 4].try_into().unwrap()))
-            });
+        for (vertex, p) in positions.into_iter().enumerate() {
             let p = [p[0], -p[2], p[1]];
             for i in 0..3 {
                 // In the frame of path[k]: p + root + the translations of the tiles below k.
@@ -780,7 +772,7 @@ fn uniform(state: &mut u64) -> f64 {
 }
 
 /// Point bounds are rounded outward wherever f64 rounding could put a box inside what it
-/// must contain: a tile's half extent covers its written f32 positions (a thin cloud's tile
+/// must contain: a tile's half extent covers its decoded positions (a thin cloud's tile
 /// 2/1/1/3 sat 2^-52 inside its vertex 0), a parent encloses each child's box exactly, and
 /// implicit rows grow by the drift of their accumulated f64 translations. Fixed clouds,
 /// sequential and random, are converted and checked as C2
@@ -1761,4 +1753,75 @@ fn metadata_attributes_decode_legacy_classification_flags_and_extended_returns()
             }
         }
     }
+}
+
+/// Structure-audit controls at the defaults on a tilted plane with one far point:
+/// rendering-only payload, parents filled to the budget, and refinement that always
+/// lowers the error (the far point once made chains of one-child duplicate tiles).
+#[test]
+fn default_surface_payload_parent_fill_and_strict_error_ladder() {
+    use rusty_tiles::point_cloud::*;
+    let work = tempfile::tempdir().unwrap();
+    let (input, output) = (
+        work.path().join("surface.las"),
+        work.path().join("surface.3tz"),
+    );
+    let mut writer = las::Writer::from_path(&input, Default::default()).unwrap();
+    for i in 0..40_001u32 {
+        let (x, y) = (f64::from(i % 200), f64::from(i / 200));
+        let (x, y, z) = match i {
+            40_000 => (2000., 2000., 500.),
+            _ => (x, y, 0.05 * x + 0.2 * (y / 7.).sin()),
+        };
+        let point = las::Point {
+            x,
+            y,
+            z,
+            ..Default::default()
+        };
+        writer.write_point(point).unwrap();
+    }
+    writer.close().unwrap();
+    let options = PointCloudOptions {
+        max_points: 1024,
+        ..Default::default()
+    };
+    let request =
+        PointCloudRequest::new(&input, &output, PointCloudCoordinates::LocalMetres, options);
+    point_cloud_to_archive(request, &rusty_tiles::RunControl::default()).unwrap();
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+    let (mut bytes, mut points, mut fill, mut failures) = (0, 0, vec![], vec![]);
+    let mut stack = vec![expanded_root(&mut zip)];
+    while let Some(tile) = stack.pop() {
+        let uri = tile["content"]["uri"].as_str().unwrap();
+        let glb = Glb::read(&mut zip, uri);
+        let count = glb.doc["accessors"][0]["count"].as_u64().unwrap();
+        bytes += zip.by_name(uri).unwrap().size();
+        points += count;
+        if glb.doc.get("extensions").is_some() {
+            failures.push(format!("{uri}: metadata in default output"));
+        }
+        let children = tile["children"].as_array().cloned().unwrap_or_default();
+        if !children.is_empty() {
+            fill.push(count);
+        }
+        for child in &children {
+            if child["geometricError"].as_f64() >= tile["geometricError"].as_f64() {
+                failures.push(format!("{uri}: child error is not below its parent's"));
+            }
+        }
+        stack.extend(children);
+    }
+    fill.sort_unstable();
+    if bytes > 16 * points {
+        failures.push(format!("{} bytes per point", bytes as f64 / points as f64));
+    }
+    if fill[fill.len() / 2] < 512 {
+        failures.push(format!(
+            "median parent holds {} of 1024 points",
+            fill[fill.len() / 2]
+        ));
+    }
+    failures.dedup_by(|a, b| a.split(": ").last() == b.split(": ").last());
+    assert!(failures.is_empty(), "{failures:#?}");
 }

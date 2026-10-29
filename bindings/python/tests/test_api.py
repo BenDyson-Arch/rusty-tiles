@@ -1098,6 +1098,7 @@ class WheelAPI(unittest.TestCase):
             source, output, max_points=2, chunk_points=1, callback=events.append,
          source_crs="local",)
         self.assertEqual(result.report["points"], 4)
+        self.assertEqual((result.report["metadata"], result.report["properties"]), (False, []))
         self.assertTrue(rusty_tiles.validate(output)["ok"])
         phases = {e["phase"] for e in events if e["event"] == "progress"}
         self.assertTrue({"ingestion", "tiling"}.issubset(phases))
@@ -1235,7 +1236,7 @@ class WheelAPI(unittest.TestCase):
         source = self.root / "points.las"
         write_las(source)
         output = self.root / "attributes.3tz"
-        rusty_tiles.point_cloud_to_3tz(source, output, max_points=2,
+        rusty_tiles.point_cloud_to_3tz(source, output, max_points=2, metadata=True,
                                      metadata_attributes=True, source_crs="local")
         self.assertTrue(rusty_tiles.validate(output)["ok"])
         with zipfile.ZipFile(output) as archive:

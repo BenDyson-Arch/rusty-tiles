@@ -40,6 +40,9 @@ pub const MAX_POINTS_PER_TILE: usize = 8192;
 
 #[derive(Clone, Debug)]
 pub struct PointCloudOptions {
+    /// Keep the complete source record per point (the P1 property table);
+    /// off by default, when tiles carry only position and colour.
+    pub metadata: bool,
     pub metadata_attributes: bool,
     pub max_points: usize,
     pub chunk_points: usize,
@@ -47,6 +50,7 @@ pub struct PointCloudOptions {
 impl Default for PointCloudOptions {
     fn default() -> Self {
         Self {
+            metadata: false,
             metadata_attributes: false,
             max_points: MAX_POINTS_PER_TILE,
             chunk_points: 100_000,
@@ -91,6 +95,7 @@ pub struct PointCloudReport {
     pub source_scales: [f64; 3],
     pub source_offsets: [f64; 3],
     pub height_offset: Option<f64>,
+    pub metadata: bool,
     pub properties: Vec<String>,
     pub max_position_rounding_metres: f64,
     pub sampling: String,
@@ -597,9 +602,10 @@ fn convert(
         max_rounding: 0.,
         total_points: count,
         leaf_points: 0,
+        anchor: [0.; 3],
     };
     progress(attempt, "tiling", 0, count)?;
-    let mut root = tree.build(&path, [0.; 3], 0, None)?;
+    let mut root = tree.build(&path, [0.; 3], 0, None, None)?;
     for i in 0..3 {
         let value = root["transform"][12 + i].as_f64().unwrap() + origin[i];
         if !value.is_finite() {
@@ -647,11 +653,12 @@ fn convert(
     let report = PointCloudReport {
         points: count, tiles: tree.tiles, source_crs, resolved_crs: resolved,
         source_scales: scales, source_offsets: offsets, height_offset,
-        properties: layout.dimensions.iter().map(|d| d.name.clone()).collect(),
+        metadata: options.metadata,
+        properties: if options.metadata { layout.dimensions.iter().map(|d| d.name.clone()).collect() } else { Vec::new() },
         max_position_rounding_metres: tree.max_rounding,
-        sampling: "first source point per voxel; cell diagonal bounds source-to-sample distance".into(),
+        sampling: "first source point per cubic voxel, finest grid fitting maxPoints; cell diagonal bounds source-to-sample distance".into(),
         max_points: options.max_points, chunk_points: options.chunk_points,
-        encoder: "rusty-tiles-native-las-implicit-v3".into(),
+        encoder: "rusty-tiles-native-las-implicit-v4".into(),
         tiling: "implicit".into(),
         coordinate_profile: "local metres or admitted strict horizontal CRS subset; explicit ellipsoidal metre offset".into(),
         scaled_extra_bytes_tolerance: "FLOAT64 multiply then add; absolute error <= 2*EPSILON*(abs(raw*scale)+abs(offset))+2*MIN_POSITIVE; scaled INT64/UINT64 unsupported".into(),

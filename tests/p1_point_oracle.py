@@ -80,9 +80,9 @@ def fixture(path, count=257, fmt=3, variant='spread', extras=True, metadata=Fals
             xyz=[(i%17)*713,(i//17)*627,((i*17)%29-14)*113]
             if variant=='outlier' and index==count-1:xyz=[600000,-400000,300000]
         if variant=='deep':
-            # A millimetre cluster and one far point: about 19 single-child
-            # octree levels above the cluster, beyond one document's skeleton.
-            xyz=[2000000,-1500000,1000000] if index==count-1 else [i%5,(i//5)%5,(i//25)%5]
+            # A millimetre cluster and points at doubling distances: about 20 octree
+            # levels with two children each, beyond one document's skeleton.
+            k=index-count+20;xyz=[8<<k]*3 if k>=0 else [i%5,(i//5)%5,(i//25)%5]
         raw=bytearray(length);struct.pack_into('<iiiH',raw,0,*xyz,(i*251)%65536)
         if extended:
             raw[14]=(i%14+1)|((i%14+1)<<4)
@@ -193,7 +193,7 @@ def glb(data):
         chunks.append((kind,data[at:at+n]));at+=n
     require([k for k,_ in chunks]==[b'JSON',b'BIN\0'],'GLB admitted JSON/BIN chunks')
     doc=json.loads(chunks[0][1]);binary=chunks[1][1]
-    require(set(doc.get('extensionsRequired',[]))<= {'EXT_structural_metadata','EXT_mesh_features','KHR_materials_unlit'},'unsupported required GLB extension')
+    require(set(doc.get('extensionsRequired',[]))<= {'EXT_structural_metadata','EXT_mesh_features','KHR_materials_unlit','KHR_mesh_quantization'},'unsupported required GLB extension')
     require(len(doc['buffers'])==1 and 'uri' not in doc['buffers'][0],'embedded buffer profile')
     declared=doc['buffers'][0]['byteLength']
     require(0<=len(binary)-declared<=3,'actual BIN length')
@@ -236,7 +236,7 @@ def decoded_points(data):
         declaration=schema[name];code=KINDS[declaration['componentType']]
         raw=view_bytes(doc,binary,column['values']);require(len(raw)==table['count']*struct.calcsize('<'+code),'metadata scalar count')
         columns[name]=[v[0] for v in struct.iter_unpack('<'+code,raw)]
-    result=[]
+    result=[];steps=[]
     scenes=doc.get('scenes',[]);require(scenes,'GLB selected scene')
     active=set()
     def visit(index,parent):
@@ -247,8 +247,11 @@ def decoded_points(data):
                 require(primitive.get('mode',4)==0 and 'indices' not in primitive,'nonindexed POINTS profile')
                 require('KHR_draco_mesh_compression' not in primitive.get('extensions',{}),'unsupported compressed primitive')
                 a=doc['accessors'][primitive['attributes']['POSITION']]
-                require(a['componentType']==5126 and a['type']=='VEC3' and not a.get('normalized',False),'POSITION float32')
-                points=accessor_values(doc,binary,a);require(len(points)==table['count'],'POSITION/table cardinality')
+                quantized=(a['componentType'],a.get('normalized'))==(5123,True) and 'KHR_mesh_quantization' in doc['extensionsRequired']
+                require(a['type']=='VEC3' and (quantized or (a['componentType']==5126 and not a.get('normalized',False))),'POSITION float32 or quantized UNSIGNED_SHORT')
+                points=[tuple(v/65535 for v in p) if quantized else p for p in accessor_values(doc,binary,a)];require(len(points)==table['count'],'POSITION/table cardinality')
+                # Half a quantization step per axis, through the node scale.
+                step=.5/65535*math.sqrt(sum(m[i]**2 for i in range(11) if i%4<3)) if quantized else 0.
                 if '_FEATURE_ID_0' in primitive['attributes']:
                     feature=doc['accessors'][primitive['attributes']['_FEATURE_ID_0']]
                     require(not feature.get('normalized',False),'feature IDs unnormalized')
@@ -258,12 +261,12 @@ def decoded_points(data):
                     require(definition['attribute']==0 and definition['propertyTable']==0 and definition['featureCount']==table['count'],'feature table mapping')
                 if 'red' in columns:
                     color=doc['accessors'][primitive['attributes']['COLOR_0']]
-                    require(color['componentType']==5123 and color['type']=='VEC4' and color.get('normalized') is True,'RGB render encoding')
+                    require(color['componentType']==5121 and color['type']=='VEC3' and color.get('normalized') is True,'RGB render encoding')
                     colors=accessor_values(doc,binary,color)
-                    require(colors==list(zip(columns['red'],columns['green'],columns['blue'],[65535]*table['count'])),'rendered COLOR_0 preserves source RGB')
+                    require(colors==[tuple((v+128)//257 for v in rgb) for rgb in zip(columns['red'],columns['green'],columns['blue'])],'rendered COLOR_0 is source RGB rounded to 8 bits')
                 local=[transform(m,p) for p in points]
                 # glTF Y up -> 3D Tiles Z up, per 3D Tiles glTF axis convention.
-                result.extend((p[0],-p[2],p[1]) for p in local)
+                result.extend((p[0],-p[2],p[1]) for p in local);steps.extend([step]*len(local))
                 for field,attribute in [('classification','_CLASSIFICATION'),('intensity','_INTENSITY'),('return_number','_RETURN_NUMBER')]:
                     if attribute in primitive['attributes']:
                         values=accessor_values(doc,binary,doc['accessors'][primitive['attributes'][attribute]])
@@ -272,7 +275,7 @@ def decoded_points(data):
         active.remove(index)
     for node in scenes[doc.get('scene',0)]['nodes']:visit(node,IDENTITY)
     require(len(result)==table['count'],'rendered point cardinality')
-    return result,columns,schema
+    return result,columns,schema,steps
 
 
 def morton_xyz(index,level):
@@ -390,6 +393,25 @@ def box_contains(box,p,tolerance=2e-5):
     return all(abs(p[a]-box[a])<=abs(box[3+a*3+a])+tolerance for a in range(3))
 
 
+def voxel(p,anchor,edge):
+    return tuple(math.floor((p[a]-anchor[a])/edge) for a in range(3))
+
+
+def voxels(descendants,positions,anchor,parent_edge,budget):
+    """Edge of the finest fitting cubic grid: two halving chains from the parent edge (or
+    longest/(side-.5)) and its /sqrt(2), to `budget` voxels along the longest axis."""
+    longest=max(max(positions[i][a] for i in descendants)-min(positions[i][a] for i in descendants) for a in range(3))
+    side=1
+    while (side+1)**3<=budget:side+=1
+    top=parent_edge or max(longest,2.2250738585072014e-308)/(side-.5);edges=[]
+    for edge in (top,top/math.sqrt(2)):
+        while True:
+            edges.append(edge)
+            if longest==0 or longest/edge>=budget or not edge/2>0:break
+            edge/=2
+    return next(e for e in sorted(edges) if len({voxel(positions[i],anchor,e) for i in descendants})<=budget)
+
+
 def check_index(z, raw):
     """3TZ index is MD5 name -> little-endian local ZIP header offset."""
     infos=z.infolist()
@@ -454,7 +476,7 @@ def audit(source,archive,max_points,geographic=False,height=0.,require_multileaf
         m=multiply(parent,node.get('transform',IDENTITY));error=node['geometricError'];require(math.isfinite(error) and error>=0,'finite geometric error')
         box=node['boundingVolume']['box'];require(all(math.isfinite(v) for v in box),'finite bounds')
         uri=node['content']['uri'];require(uri in members,'reachable content resource');used.add(uri)
-        positions,columns,schema=decoded_points(members[uri]);ids=columns['source_index'];tiles+=1
+        positions,columns,schema,steps=decoded_points(members[uri]);ids=columns['source_index'];tiles+=1
         if check_extra_metadata:source_extra_schema(expected,schema)
         require(len(ids)<=max_points and len(ids)>0,'point budget')
         required=set(rows[0]);require(required<=set(columns),'missing required source field: '+str(sorted(required-set(columns))))
@@ -463,9 +485,11 @@ def audit(source,archive,max_points,geographic=False,height=0.,require_multileaf
             require(isinstance(index,int) and 0<=index<len(rows),'source index range')
             for name,value in rows[index].items():require(columns[name][at]==value,f'{uri}: {name} differs at source {index}: {columns[name][at]} != {value}')
             delta=math.dist(world[at],expected_positions[index]);rounding=max(rounding,delta)
-            # Float32 relative storage, with geospatial reference evaluation allowance.
-            allowance=max(3e-6,math.sqrt(sum((abs(v)*2**-24)**2 for v in positions[at])))+(2e-8 if geographic else 0.)
-            require(delta<=allowance,f'{uri}: rendered POSITION differs ({delta} > {allowance})')
+            # Half a 16-bit quantization step, float32-scale evaluation and geospatial
+            # reference allowances. Leaf error 0 states that nothing is omitted below.
+            slack=max(3e-6,math.sqrt(sum((abs(v)*2**-24)**2 for v in positions[at])))+(2e-8 if geographic else 0.)
+            require(delta<=steps[at]+slack,f'{uri}: rendered POSITION differs ({delta} > {steps[at]+slack})')
+            require(delta<=report['maxPositionRoundingMetres']+slack,f'{uri}: position error exceeds the reported rounding')
             require(box_contains(box,positions[at]),f'{uri}: rendered position escapes bounds')
         descendants=[];children=node.get('children',[])
         if children:
@@ -473,15 +497,7 @@ def audit(source,archive,max_points,geographic=False,height=0.,require_multileaf
                 require(error+1e-8>=child['geometricError'],'nonmonotonic geometric error')
                 descendants.extend(visit(child,m))
             require(len(descendants)>max_points,'unneeded parent sampling')
-            side=1
-            while (side+1)**3<=max_points:side+=1
-            lo=[min(expected_positions[i][a] for i in descendants) for a in range(3)]
-            extent=[max(expected_positions[i][a] for i in descendants)-lo[a] for a in range(3)]
-            selected={}
-            for i in sorted(descendants):
-                key=tuple(min(side-1,int((expected_positions[i][a]-lo[a])/extent[a]*side)) if extent[a] else 0 for a in range(3))
-                selected.setdefault(key,i)
-            require(collections.Counter(ids)==collections.Counter(selected.values()),'parent first-point voxel representatives')
+            samples[id(node)]=ids,descendants
             distance=max(min(math.dist(expected_positions[i],p) for p in world) for i in descendants)
             require(distance<=error+3e-6,'parent nearest-representative error claim')
         else:
@@ -492,13 +508,37 @@ def audit(source,archive,max_points,geographic=False,height=0.,require_multileaf
         for index in descendants:
             require(box_contains(box,tuple(expected_positions[index][a]-m[12+a] for a in range(3))),'descendant source escapes transformed bounds')
         return descendants
-    visit(root,IDENTITY)
+    samples={};visit(root,IDENTITY)
+    anchor=[min(p[a] for p in expected_positions) for a in range(3)]
+    def sampled(node,parent_edge):
+        if id(node) not in samples:return
+        ids,descendants=samples[id(node)]
+        edge=voxels(descendants,expected_positions,anchor,parent_edge,max_points)
+        selected={}
+        for i in sorted(descendants):selected.setdefault(voxel(expected_positions[i],anchor,edge),i)
+        require(collections.Counter(ids)==collections.Counter(selected.values()),'parent first-point voxel representatives')
+        for child in node['children']:sampled(child,edge)
+    sampled(root,None)
     require(collections.Counter(leaves)==collections.Counter(range(len(rows))),'leaf source multiplicity/full coverage')
     require(not require_multileaf or tiles>1,'forced multileaf')
     require(report['points']==len(rows) and report['maxPoints']==max_points and report['tiles']==tiles,'required report point metrics')
     require(set(report['properties'])>=set(rows[0]),'required report fields')
     require(set(members)<=used,'unreachable resource inventory: '+str(sorted(set(members)-used)))
     return {'source_points':len(rows),'leaf_records':len(leaves),'tiles':tiles,'implicit':implicit,'forest':forest,'max_world_position_difference_metres':rounding,'required_fields':sorted(rows[0]),'source_multiplicity':'exact','resource_closure':'exact'}
+
+
+def lean_equivalent(full,lean):
+    """Default output is the audited --metadata output without metadata."""
+    with zipfile.ZipFile(full) as a,zipfile.ZipFile(lean) as b:
+        require(a.namelist()==b.namelist(),'default member inventory')
+        for name in a.namelist():
+            x,y=a.read(name),b.read(name)
+            if name.endswith('.glb'):
+                (dx,bx),(dy,by)=glb(x),glb(y);px,py=(d['meshes'][0]['primitives'][0]['attributes'] for d in (dx,dy))
+                require('extensions' not in dy and not {'EXT_mesh_features','EXT_structural_metadata'}&set(dy['extensionsUsed']),'default tile has no metadata')
+                require(set(py)=={'POSITION','COLOR_0'}&set(px) and dx['nodes']==dy['nodes'],'default attributes and placement')
+                for key in py:require(accessor_values(dx,bx,dx['accessors'][px[key]])==accessor_values(dy,by,dy['accessors'][py[key]]),'default '+key)
+            elif name not in ('conversion.json','@3dtilesIndex1@'):require(x==y,'default '+name)
 
 
 def pack_glb(doc,binary):
@@ -602,23 +642,26 @@ def run(binary,output_dir,quick=False,baseline=False):
     for number,case in enumerate(cases):
         fmt,variant,chunk=case[:3];budget=case[3] if len(case)>3 else 16
         source=directory/f'{number}-{fmt}-{variant}.las';archive=source.with_suffix('.3tz');fixture(source,fmt=fmt,variant=variant)
-        command=[str(binary),'--json','point-cloud','-i',str(source),'-o',str(archive),'--sourceCrs','local','--maxPoints',str(budget),'--chunkPoints',str(chunk)]
+        command=[str(binary),'--json','point-cloud','-i',str(source),'-o',str(archive),'--sourceCrs','local','--maxPoints',str(budget),'--chunkPoints',str(chunk),'--metadata']
         completed=subprocess.run(command,capture_output=True,text=True)
         require(completed.returncode==0,'conversion failed: '+completed.stdout+completed.stderr)
         result=audit(source,archive,budget);result.update(format=fmt,variant=variant,chunk_points=chunk,max_points=budget);results.append(result)
-        if number==0:controls_result=controls(source,archive,16)
+        if number==0:
+            controls_result=controls(source,archive,16);lean=source.with_suffix('.lean.3tz')
+            require(subprocess.run(command[:6]+[str(lean)]+command[7:-1],capture_output=True).returncode==0,'default conversion')
+            lean_equivalent(archive,lean)
         if variant=='deep':controls_result=controls_result+forest_controls(source,archive,budget)
     forests=[r['forest'] for r in results if r['implicit']]
     require(any(f['explicit'] and f['implicit_roots']>1 for f in forests),'implicit roots below an explicit skeleton were exercised')
     require(any(f['documents']>1 for f in forests),'explicit external documents were exercised')
     profile=profile_controls(binary,directory,baseline)
     repeated=concurrent_controls(binary,directory)
-    return {'binary':str(binary),'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'cases':results,'negative_controls':controls_result,'profile_controls':profile,'concurrent_repeated_controls':repeated,'oracle_sha256':hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest()}
+    return {'binary':str(binary),'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'cases':results,'negative_controls':controls_result,'default_output':'lean_equivalent','profile_controls':profile,'concurrent_repeated_controls':repeated,'oracle_sha256':hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest()}
 
 
 
 def invoke(binary,source,archive,options=()):
-    result=subprocess.run([str(binary),'--json','point-cloud','-i',str(source),'-o',str(archive),*options],capture_output=True,text=True)
+    result=subprocess.run([str(binary),'--json','point-cloud','--metadata','-i',str(source),'-o',str(archive),*options],capture_output=True,text=True)
     try:response=json.loads(result.stdout)
     except ValueError:raise AssertionError('non-JSON CLI response: '+result.stdout+result.stderr)
     return result,response
@@ -745,7 +788,7 @@ def self_test():
         'nodes':[{'translation':[5,7,11],'scale':[2,3,4],'children':[1]},{'rotation':[0,0,math.sqrt(.5),math.sqrt(.5)],'mesh':0}],
         'scenes':[{'nodes':[0]}],'scene':0,
         'extensions':{'EXT_structural_metadata':{'schema':{'classes':{'point':{'properties':{'source_index':{'type':'SCALAR','componentType':'UINT64'}}}}},'propertyTables':[{'class':'point','count':1,'properties':{'source_index':{'values':1}}}]}}}
-    positions,columns,_=decoded_points(pack_glb(doc,binary))
+    positions,columns,_,_=decoded_points(pack_glb(doc,binary))
     require(math.dist(positions[0],(1.,-23.,10.))<1e-12,'literal nested scene transform and axis conversion')
     require(columns['source_index']==[9007199254740993],'literal decoded UINT64 metadata')
     controls=[]
