@@ -140,7 +140,6 @@ fn fold_repairs_and_component_carriers_share_one_protected_partition() {
         false,
         &opening_pins,
         false,
-        &mut false,
     )
     .expect("combined fold and topology protection must fit the cap");
     assert!(built.retries >= 2, "both protection stages must run");
