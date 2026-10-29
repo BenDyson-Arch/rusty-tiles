@@ -507,6 +507,12 @@ runs; cleanup's keep-one keeps the largest). Every independent layer counts cap
 pressure on the children's faces before S1b contraction; that the contracted input
 exceeds the cap is enforced by the producer alone.
 
+Fix 2 (2026-10-29): a cell first runs the strategies above unchanged, coarse drops
+included. Only if that publishes nothing is the cell rebuilt with the last resorts
+(contraction fallbacks, touching-path pins), so every tile the strategies build is
+unchanged. A cell those strategies fit only by dropping keeps its drops even where a
+last resort would fit without them: one such cell in 160 synthetic city blocks.
+
 ## Numeric acceptance contract (proposed, not measured passes)
 
 One source Mtri is one million **input** triangles; CPU is whole-process user+sys,
