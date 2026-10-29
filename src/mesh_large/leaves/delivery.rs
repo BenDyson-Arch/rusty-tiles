@@ -42,8 +42,9 @@ pub(crate) enum Step {
     /// about 16 times the cost of level 3 and 40 times level 2, for about
     /// 0.5 dB, so the ladder goes to exact PNG instead.
     UastcLevel3,
-    /// Exact level-0 PNG. Only for pages whose sampler never reads a coarser
-    /// level, so dropping the authored coarse levels changes nothing sampled.
+    /// Exact level-0 PNG, the last step of every page. A mip-sampled page keeps its
+    /// sampler and the viewer generates its coarser levels, outside the decoded
+    /// guarantee, as in the lossless profile.
     LosslessPng,
 }
 impl Step {
@@ -97,11 +98,6 @@ pub(crate) struct Escalation {
 /// Page-owned ladder facts, resolved by the atlas.
 #[derive(Clone, Copy)]
 pub(in crate::mesh_large) struct Ladder<'a> {
-    /// The page sampler has no mipmap minification filter, so it reads level
-    /// 0 only and an exact level-0 PNG is a complete lossless substitute that
-    /// keeps the sampler. Mip-sampled pages end the ladder at UASTC level 3:
-    /// glTF PNG cannot carry their class-correct authored levels.
-    pub level0_sampled: bool,
     /// Run cancellation, polled before every re-encode.
     pub check: &'a dyn Fn() -> Result<(), JobError>,
 }
@@ -109,12 +105,9 @@ pub(in crate::mesh_large) struct Ladder<'a> {
 fn no_check() -> Result<(), JobError> {
     Ok(())
 }
-/// Tests: a level-0-sampled page that is never cancelled.
+/// Tests: a page that is never cancelled.
 #[cfg(test)]
-pub(super) const LADDER: Ladder<'static> = Ladder {
-    level0_sampled: true,
-    check: &no_check,
-};
+pub(super) const LADDER: Ladder<'static> = Ladder { check: &no_check };
 /// A typed gate refusal becomes a ladder miss; every other error stays hard.
 fn missed(error: JobError, step: Step, mip: Option<usize>) -> Result<GateMiss, JobError> {
     if error.kind() == JobErrorKind::Unsupported {
@@ -961,27 +954,30 @@ fn escalate(
             Err(miss) => misses.push(miss),
         }
     }
-    if ladder.level0_sampled {
-        (ladder.check)()?;
-        match png_step(
-            chain,
-            &prepared,
-            slot,
-            profile,
-            mask,
-            charge,
-            &mut validate,
-            tamper,
-        )? {
-            Ok(mut delivery) => {
-                delivery.escalation = Some(Escalation {
-                    step: Step::LosslessPng,
-                    misses,
-                });
-                return Ok(delivery);
-            }
-            Err(miss) => misses.push(miss),
+    // Every page ends in its exact level 0, so one page that no codec step can deliver
+    // within its gates never fails the run. A mip-sampled page keeps its sampler: its
+    // islands sit whole on the 2^K grid with real-source gutters, so a viewer's box
+    // filter matches the authored data-class levels through K, but those levels are the
+    // viewer's, outside the decoded guarantee (as in the lossless profile).
+    (ladder.check)()?;
+    match png_step(
+        chain,
+        &prepared,
+        slot,
+        profile,
+        mask,
+        charge,
+        &mut validate,
+        tamper,
+    )? {
+        Ok(mut delivery) => {
+            delivery.escalation = Some(Escalation {
+                step: Step::LosslessPng,
+                misses,
+            });
+            return Ok(delivery);
         }
+        Err(miss) => misses.push(miss),
     }
     let tried: Vec<String> = misses
         .iter()
@@ -996,12 +992,7 @@ fn escalate(
         })
         .collect();
     Err(fidelity(format!(
-        "texture {slot:?} {profile:?}: every encoder step missed its gate{}; {}",
-        if ladder.level0_sampled {
-            ""
-        } else {
-            " (mip-sampled page: no lossless PNG step)"
-        },
+        "texture {slot:?} {profile:?}: every encoder step missed its gate; {}",
         tried.join("; ")
     )))
 }
@@ -1293,7 +1284,7 @@ fn png_step(
         Ok(receipt) => receipts.push(receipt),
         Err(e) => return missed(e, step, None).map(Err),
     }
-    receipts.push(json!({"charged_bytes":charge,"step":step.name(),"level0_rgba_exact":true,"mips":"page sampler reads level 0 only; authored coarser levels not delivered","caller_levels":chain.levels.len()}));
+    receipts.push(json!({"charged_bytes":charge,"step":step.name(),"level0_rgba_exact":true,"mips":if chain.levels.len() > 1 {"viewer generated outside guarantee"} else {"page sampler reads level 0 only"},"caller_levels":chain.levels.len()}));
     Ok(Ok(Delivery {
         bytes,
         mime: "image/png",
@@ -2553,32 +2544,26 @@ mod tests {
         let profile = Profile::Balanced;
         let rgba = hard_block_page(128, 10);
         let chain = chain(&rgba, 128);
-        let run = |steps: &[Step], level0_sampled: bool| {
+        let run = |steps: &[Step]| {
             escalate(
                 &chain,
                 TextureSlot::BaseColor,
                 profile,
                 MEMORY,
                 None,
-                Ladder {
-                    level0_sampled,
-                    check: &no_check,
-                },
+                LADDER,
                 |_| Ok(Value::Null),
                 &corrupt_at(steps),
             )
         };
         // Unmodified: delivered at level 2.
-        assert_eq!(
-            run(&[], true).unwrap().escalation.unwrap().step,
-            UastcLevel2
-        );
+        assert_eq!(run(&[]).unwrap().escalation.unwrap().step, UastcLevel2);
         // A corrupted level-2 decode is refused and the ladder climbs on.
         for (steps, delivered) in [
             (&[UastcLevel2][..], UastcLevel3),
             (&[UastcLevel2, UastcLevel3][..], LosslessPng),
         ] {
-            let out = run(steps, true).unwrap();
+            let out = run(steps).unwrap();
             let escalation = out.escalation.as_ref().unwrap();
             assert_eq!(escalation.step, delivered);
             for &step in steps {
@@ -2590,20 +2575,9 @@ mod tests {
         }
         // A PNG that does not decode to its input is a hard failure, never
         // delivered, and names the level.
-        let error = run(&[UastcLevel2, UastcLevel3, LosslessPng], true).unwrap_err();
+        let error = run(&[UastcLevel2, UastcLevel3, LosslessPng]).unwrap_err();
         assert_eq!(error.kind(), JobErrorKind::InvalidState);
         assert!(error.message().contains("mip0"), "{error}");
-        // Mip-sampled pages have no PNG step: the refusal names every step.
-        let error = run(&[UastcLevel2, UastcLevel3], false).unwrap_err();
-        assert_eq!(error.kind(), JobErrorKind::Unsupported);
-        for text in [
-            "profile mip0",
-            "uastc_level2 mip0",
-            "uastc_level3 mip0",
-            "no lossless PNG step",
-        ] {
-            assert!(error.message().contains(text), "{text}: {error}");
-        }
     }
     #[test]
     fn escalation_polls_cancellation_before_every_re_encode() {
@@ -2612,10 +2586,7 @@ mod tests {
             polls.set(polls.get() + 1);
             Err(JobError::new(JobErrorKind::Cancelled, "cancelled"))
         };
-        let ladder = Ladder {
-            level0_sampled: true,
-            check: &cancelled,
-        };
+        let ladder = Ladder { check: &cancelled };
         let rgba = hard_block_page(128, 10);
         let error = encode(
             [128; 2],
@@ -2729,47 +2700,37 @@ mod tests {
         independently_gated(&out, &chain, profile);
     }
     #[test]
-    fn exhausted_mip_sampled_ladder_names_every_step_and_reason() {
+    fn exhausted_mip_sampled_ladder_ends_in_exact_level0_png() {
         use Step::{LosslessPng, UastcLevel2, UastcLevel3};
         let profile = Profile::Balanced;
+        // A data page with an authored chain (texture-1e5's metallicRoughness): every
+        // lossy step misses, so the page ships as its exact level 0 instead of failing.
         let rgba = sharp_page(64);
-        let chain = chain(&rgba, 64);
-        let run = |level0_sampled: bool| {
-            escalate(
-                &chain,
-                TextureSlot::BaseColor,
-                profile,
-                MEMORY,
-                None,
-                Ladder {
-                    level0_sampled,
-                    check: &no_check,
-                },
-                |_| Ok(Value::Null),
-                &corrupt_at(&[UastcLevel2, UastcLevel3]),
-            )
-        };
-        let error = run(false).unwrap_err();
-        assert_eq!(error.kind(), JobErrorKind::Unsupported);
-        for text in [
-            "profile mip0 (gate)",
-            "uastc_level2 mip0 (gate)",
-            "uastc_level3 mip0 (gate)",
-            "no lossless PNG step",
-        ] {
-            assert!(error.message().contains(text), "{text}: {error}");
-        }
-        // Where the sampler reads level 0 only, the same misses end in exact PNG.
-        let out = run(true).unwrap();
+        let chain = sparse_mips::build(64, 64, &rgba, &[1; 64 * 64], Class::Data, MEMORY).unwrap();
+        assert!(chain.levels.len() > 1);
+        let out = escalate(
+            &chain,
+            TextureSlot::MetallicRoughness,
+            profile,
+            MEMORY,
+            None,
+            LADDER,
+            |_| Ok(Value::Null),
+            &corrupt_at(&[Step::Profile, UastcLevel2, UastcLevel3]),
+        )
+        .unwrap();
+        assert_eq!((out.mime, out.mip_count), ("image/png", 1));
         let escalation = out.escalation.unwrap();
         assert_eq!(escalation.step, LosslessPng);
         assert_eq!(
-            escalation
-                .misses
-                .iter()
-                .map(|m| m.reason)
-                .collect::<Vec<_>>(),
-            [MissReason::Gate, MissReason::Gate, MissReason::Gate]
+            escalation.misses.iter().map(|m| m.step).collect::<Vec<_>>(),
+            [Step::Profile, UastcLevel2, UastcLevel3]
         );
+        let decoded = image::load_from_memory(&out.bytes).unwrap().into_rgba8();
+        assert_eq!(decoded.into_raw(), chain.levels[0].rgba);
+        assert!(out
+            .receipts
+            .iter()
+            .any(|r| r["mips"] == "viewer generated outside guarantee"));
     }
 }

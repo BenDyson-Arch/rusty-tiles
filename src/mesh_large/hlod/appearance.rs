@@ -1049,10 +1049,7 @@ pub(crate) fn deliver(
         mask,
         // A chain that misses its gates on every codec step is delivered as the exact
         // level-0 PNG and sampled without mips, rather than refusing the run.
-        delivery::Ladder {
-            level0_sampled: true,
-            check,
-        },
+        delivery::Ladder { check },
     )?;
     Ok(DeliveredPage {
         slot: page.slot,

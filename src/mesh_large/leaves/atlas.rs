@@ -946,9 +946,7 @@ fn encode_page(
     let memory = services.memory;
     let check = &mut || (services.check)();
     check()?;
-    // Mipmap minification is the only way a sampler reads a coarser level.
     let ladder = delivery::Ladder {
-        level0_sampled: !matches!(page.sampler.min_filter, 9984..=9987),
         check: services.check,
     };
     let _permit = services.gate.acquire(page_charge(

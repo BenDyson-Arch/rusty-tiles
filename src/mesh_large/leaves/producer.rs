@@ -1692,11 +1692,11 @@ mod tests {
             }
         }
     }
-    /// A mip-sampled page has no lossless step; when every lossy step misses,
-    /// the refusal names the leaf, page, slot, source image and material, and
-    /// each step's missed level.
+    /// A mip-sampled page that misses every lossy step ships as its exact level-0 PNG
+    /// with the source's mipmap sampler (viewer-generated mips, as in the lossless
+    /// profile) instead of failing the run; the report names its leaf, page and misses.
     #[test]
-    fn unrecoverable_page_failure_names_leaf_page_slot_sources_and_level() {
+    fn unrecoverable_mip_sampled_page_falls_back_to_exact_png() {
         let work = tempfile::tempdir().unwrap();
         let input = textured_fixture(
             &work.path().join("source"),
@@ -1705,26 +1705,30 @@ mod tests {
             Texture::Hard(1),
             256,
         );
-        let failure = mesh_to_leaf_payloads(
-            LeafOutputRequest::new(&input, work.path().join("out"), LeafProfile::Balanced)
+        let output = work.path().join("out");
+        let result = mesh_to_leaf_payloads(
+            LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
                 .with_hlod_settings(crate::mesh_large::hlod::test_settings(
                     crate::mesh_large::hlod::TRIANGLE_CAP,
                 ))
                 .with_jobs(NonZeroUsize::new(2).unwrap()),
             &RunControl::default(),
         )
-        .unwrap_err();
-        let message = failure.error.to_string();
-        assert_eq!(failure.error.kind(), JobErrorKind::Unsupported, "{message}");
-        for text in [
-            "leaf 000000000000 (first 0, depth ",
-            "page 0 baseColorTexture (source image 0 material 0)",
-            "profile mip",
-            "uastc_level3 mip",
-            "no lossless PNG step",
-        ] {
-            assert!(message.contains(text), "{text}: {message}");
-        }
+        .unwrap();
+        let report = &result.report;
+        assert!(report.lossless_fallback_pages > 0, "{report:?}");
+        let diagnostic = report
+            .escalation_diagnostics
+            .iter()
+            .find(|d| d.step == "lossless_png")
+            .unwrap();
+        assert_eq!((diagnostic.slot, diagnostic.page), ("baseColorTexture", 0));
+        assert!(diagnostic.misses.iter().any(|m| m.step == "uastc_level3"));
+        let leaf = fs::read(output.join("leaves/000000000000.glb")).unwrap();
+        let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
+        let document: serde_json::Value = serde_json::from_slice(&leaf[20..20 + json_len]).unwrap();
+        assert_eq!(document["images"][0]["mimeType"], "image/png");
+        assert_eq!(document["samplers"][0]["minFilter"], 9987);
     }
 
     /// Several cropped mip-sampled noise pages (one per distinct sampler) that miss a

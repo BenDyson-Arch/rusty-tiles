@@ -294,7 +294,9 @@ and acceptance progress. Do not build scripts around today's numerical constants
 Every present PBR slot follows its colour/data class and the chosen policy.
 Lossy output uses in-process KTX2/Basis; lossless leaf textures use PNG.
 `lossless` describes the agreed leaf texel policy, not exact source GLB bytes,
-arbitrary viewer filtering, or lossless coarse geometry. Leaf coordinate
+arbitrary viewer filtering, or lossless coarse geometry. A lossy leaf page that no
+codec step can deliver within its gates falls back to the same exact PNG, with
+viewer-generated mips outside the guarantee (see the encoder ladder below). Leaf coordinate
 encoding and provenance still follow the tiler contract.
 
 Colour-class pages (base colour and emissive), in **both leaves and coarse
@@ -401,11 +403,14 @@ In a lossy profile, a **leaf** texture page that misses any decoded-image gate a
 profile's own encoder setting (per-level channel and normal floors, MASK
 coverage, the source-sampler check) is re-encoded one step stronger instead of
 failing the run: UASTC pack level 2, then UASTC level 3. Every step is checked
-again by the same gates; gates are never loosened. If level 3 also misses and
-the page's sampler reads level 0 only (no mipmap minification), the page is
-delivered as an exact level-0 PNG, which keeps the sampler. A mip-sampled page
-that still misses at level 3 fails the run, because glTF PNG cannot carry its
-authored coarse levels. (Coarse pages never fail this way; see
+again by the same gates; gates are never loosened. If level 3 also misses, the
+page is delivered as an exact level-0 PNG, which keeps the sampler, so one page
+never fails the run. glTF PNG cannot carry authored coarse levels: on a
+mip-sampled page the viewer generates them, outside the decoded guarantee, as for
+`lossless` PNG pages. Its islands sit whole on the 8-texel grid with real-source
+gutters, so a box-filtering viewer reproduces the authored data averages through
+level 3; colour and normal mips are the viewer's own filter. The report counts
+these pages as `lossless_fallback_pages`. (Coarse PNG pages are sampled without mips; see
 [coarse appearance](#coarse-appearance).) Escalation costs output size: an ETC1S page re-encoded
 as UASTC is several times larger, and a PNG fallback page is typically the
 largest form of the page (up to 4 bytes per texel). The ladder depends only on
