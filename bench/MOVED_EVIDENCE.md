@@ -33,3 +33,18 @@ checks one digest per family (`controls-digest.json`) over the same sorted
 | --- | ---: | --- |
 | `bench/architecture_audit/mesh_hlod/s5/controls-sha256.json` | 50276 | `d8f04095256266611909891bdd3309e0f710d91c4f26c49b6ad6d7b474089da9` |
 | `bench/architecture_audit/mesh_hlod/s5/revision-controls-sha256.json` | 30316 | `e3d6d3cd51d4e68b5711b1c10fa2d783942f756b12ddd84a0eb9363cfd5e88a0` |
+
+## Mutation-run reports and 0.4 review results (2026-10-29)
+
+Generated outputs that nothing in CI, the tests or the build reads (the mutant scripts rewrite
+the three reports when run; the two `bench/*.json` files are dated 2026-10-09 run results). Kept
+unchanged under `~/.cache/rusty-tiles-evidence/tree-trim-ci-time-20261029/` at the same relative
+path and last held by commit `e5c475f3`.
+
+| Path | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `bench/architecture_audit/c1_payload_integrity/production_controls/ktx2_basisu_amendment/2026-10-13/mutants/production-report.json` | 34282 | `aa96959e35cf908a4360db15314bee940f9264f14f8c3f1e8206841c3bf4c46d` |
+| `bench/architecture_audit/c1_payload_integrity/production_controls/ktx2_basisu_amendment/2026-10-13/mutants/oracle-report.json` | 11554 | `4430c89561222c184198a976524f4a82361ceb8974c3e7fbf9435eb45ab83f64` |
+| `bench/architecture_audit/c2_decoded_containment/oracle/mutants/slice3-report.json` | 12274 | `19b0937499aa82014e0546bfb365efeb0613c28cc212885018f2b40f90cfdbf7` |
+| `bench/release_04_review_results.json` | 6259 | `cf37f6aa9801b867c698869c28a1a71ee06563ca0b5dd1bd4435c0acaccfcfdd` |
+| `bench/release_readiness_results.json` | 3205 | `2a6dfd036d5e1493a53d221c79a88b8e94210165a1f101e4667e6cbc7d13c972` |
