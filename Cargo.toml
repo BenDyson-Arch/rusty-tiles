@@ -34,6 +34,17 @@ name = "demodata-suite"
 path = "bench/demodata_suite.rs"
 required-features = ["native-geospatial"]
 
+# CI runs the whole test suite on this profile. At opt-level 0 the geometry-heavy HLOD tests
+# dominate the Rust job, so the crate is built at opt-level 1 and the dependencies at 2.
+# Debug assertions and overflow checks stay on, so tests still trap arithmetic overflow.
+[profile.dev]
+opt-level = 1
+debug-assertions = true
+overflow-checks = true
+
+[profile.dev.package."*"]
+opt-level = 2
+
 [features]
 # `cli` is what the binary needs beyond the library (signal handling); the Python
 # bindings depend on the library with default features off.
