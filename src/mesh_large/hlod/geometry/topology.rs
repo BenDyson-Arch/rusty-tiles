@@ -195,8 +195,17 @@ pub(super) fn contract(
     previous_interface: &[InterfaceRow],
     mapping: &super::BorderMap<'_>,
     receipt: &mut Receipt,
+    fallbacks: bool,
 ) -> Result<bool, JobError> {
-    contract_from(m, interface, previous_interface, mapping, receipt, None)
+    contract_from(
+        m,
+        interface,
+        previous_interface,
+        mapping,
+        receipt,
+        None,
+        fallbacks,
+    )
 }
 
 /// A removed border vertex goes to its nearer chord endpoint, unless more of its faces
@@ -258,6 +267,7 @@ fn choose_targets(
 }
 
 /// Keep the licenses of the original merged children across recovery proposals.
+/// `fallbacks`: see `constrained::contract`.
 pub(super) fn contract_from(
     m: &mut Merged,
     interface: &[InterfaceRow],
@@ -265,6 +275,7 @@ pub(super) fn contract_from(
     mapping: &super::BorderMap<'_>,
     receipt: &mut Receipt,
     original_faces: Option<&[[u32; 3]]>,
+    fallbacks: bool,
 ) -> Result<bool, JobError> {
     let _cpu = super::super::cpu_profile::start(
         super::super::cpu_profile::Stage::Contract,
@@ -358,6 +369,7 @@ pub(super) fn contract_from(
         &endpoints,
         original_faces.map_or(m.triangles.len(), <[_]>::len),
         &guard,
+        fallbacks,
     ) {
         receipt.add(r);
         Ok(true)
@@ -513,21 +525,23 @@ pub(super) fn changes(
     interface: &[InterfaceRow],
     g: f64,
 ) -> Option<Change> {
+    changes_noting(m, output, interface, g, &mut false)
+}
+
+/// `changes`, also setting `refused` when it refuses the touching-boundary multigraph.
+pub(super) fn changes_noting(
+    m: &Merged,
+    output: &[[u32; 3]],
+    interface: &[InterfaceRow],
+    g: f64,
+    refused: &mut bool,
+) -> Option<Change> {
     let _cpu =
         super::super::cpu_profile::start(super::super::cpu_profile::Stage::Topology, output.len());
     if output == m.triangles {
         return Some(Change::default());
     }
-    let rejected = |reason: &str| {
-        #[cfg(test)]
-        if std::env::var_os("RT_HLOD_REPLAY_DIR").is_some()
-            || std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some()
-        {
-            eprintln!("TOPOLOGY: {reason}");
-        }
-        let _ = reason;
-        None
-    };
+    let rejected = |_reason: &str| None;
     let component = Components::mesh(m);
     let border = points(interface);
     let mut surviving = HashSet::default();
@@ -680,6 +694,7 @@ pub(super) fn changes(
     };
     let old_signature = signature(&old_edges)?;
     if signature(&new_edges).as_ref() != Some(&old_signature) {
+        *refused = true;
         return rejected("touching boundary graph changed after suppressing degree-two vertices");
     }
     drop((old_signature, anchors, touching));
@@ -1128,6 +1143,110 @@ fn cycle_centroids(m: &Merged, edges: &HashMap<(u32, u32), u32>, seed: &[bool]) 
 }
 
 /// Flat adjacency keeps graph traversal linear without a Vec allocation per vertex.
+/// Vertices to keep so that reduction cannot merge anchored paths of a boundary that
+/// touches the parent interface (`changes` compares that multigraph exactly). Two paths
+/// between the same anchors that both shrink to their direct edge cancel into an interior
+/// edge (a building's wall top and its one-quad roof edge, say), and a loop at one anchor
+/// vanishes once it has fewer than two interior vertices. A branch anchor (a pinch off
+/// the interface) must not be reduced away, and the paths leaving it must not zip shut.
+/// So branch anchors and the first vertex of each path at a branch stay, each path of a
+/// parallel group keeps its middle interior vertex, and each loop its first two.
+/// O(boundary).
+pub(super) fn touching_pins(m: &Merged, interface: &[InterfaceRow]) -> Vec<bool> {
+    let mut pins = vec![false; m.keys.len()];
+    let mut edges: HashMap<(u32, u32), u32> = HashMap::default();
+    for t in &m.triangles {
+        for i in 0..3 {
+            let (a, b) = (t[i], t[(i + 1) % 3]);
+            if a != b {
+                *edges.entry((a.min(b), a.max(b))).or_default() += 1;
+            }
+        }
+    }
+    edges.retain(|_, n| *n == 1);
+    let border = points(interface);
+    let mut groups = Components::new(m.keys.len());
+    let mut degree = vec![0u32; m.keys.len()];
+    for &(a, b) in edges.keys() {
+        groups.join(a, b);
+        degree[a as usize] += 1;
+        degree[b as usize] += 1;
+    }
+    let mut touching = HashSet::default();
+    for (v, (&d, k)) in degree.iter().zip(&m.keys).enumerate() {
+        if d > 0 && border.contains(k) {
+            touching.insert(groups.root(v));
+        }
+    }
+    if touching.is_empty() {
+        return pins;
+    }
+    let anchor: Vec<bool> = (0..m.keys.len())
+        .map(|v| {
+            degree[v] > 0
+                && touching.contains(&groups.root(v))
+                && (degree[v] != 2 || border.contains(&m.keys[v]))
+        })
+        .collect();
+    // A branch (a pinch where boundaries meet) is an anchor the comparison needs; the
+    // interface anchors are locked already.
+    for (pin, &a) in pins.iter_mut().zip(&anchor) {
+        *pin |= a;
+    }
+    let (offset, adjacent) = boundary_adjacency(m.keys.len(), &edges);
+    let neighbors = |v: u32| &adjacent[offset[v as usize]..offset[v as usize + 1]];
+    // Interior vertices of each anchored path, grouped by its anchor pair.
+    let mut paths: HashMap<(u32, u32), Vec<Vec<u32>>> = HashMap::default();
+    for a in (0..m.keys.len() as u32).filter(|&v| anchor[v as usize]) {
+        for &first in neighbors(a) {
+            let (mut previous, mut at, mut interior) = (a, first, Vec::new());
+            while !anchor[at as usize] {
+                let next = neighbors(at);
+                if next.len() != 2 {
+                    break;
+                }
+                interior.push(at);
+                let next = if next[0] == previous {
+                    next[1]
+                } else {
+                    next[0]
+                };
+                previous = at;
+                at = next;
+            }
+            if anchor[at as usize] && (a, first) < (at, previous) {
+                paths
+                    .entry((a.min(at), a.max(at)))
+                    .or_default()
+                    .push(interior);
+            }
+        }
+    }
+    for ((a, b), group) in paths {
+        for interior in &group {
+            // At a branch the two sides of a pinch zip shut once their first vertices
+            // merge: keep the first vertex of every path leaving a branch.
+            let branch = |v: u32| !border.contains(&m.keys[v as usize]);
+            if let (Some(&first), Some(&last)) = (interior.first(), interior.last()) {
+                if branch(a) {
+                    pins[first as usize] = true;
+                }
+                if branch(b) {
+                    pins[last as usize] = true;
+                }
+            }
+            if a == b {
+                for &v in interior.iter().take(2) {
+                    pins[v as usize] = true;
+                }
+            } else if group.len() > 1 && !interior.is_empty() {
+                pins[interior[interior.len() / 2] as usize] = true;
+            }
+        }
+    }
+    pins
+}
+
 fn boundary_adjacency(n: usize, edges: &HashMap<(u32, u32), u32>) -> (Vec<usize>, Vec<u32>) {
     let mut offsets = vec![0usize; n + 1];
     for (&(a, b), &count) in edges {
@@ -1574,6 +1693,57 @@ fn split_clusters(
 pub(super) mod tests {
     use super::*;
 
+    /// Fix 2 C3: removing chord vertex `m` leaves link e0, i1, b1, b2, i2, e1 with b1-b2 an
+    /// interface edge. Either endpoint snap closes b1, b2 and an endpoint into a face of
+    /// interface points only, and so does the Delaunay ear of the rebuild; a flip towards
+    /// the interior sample i1 or i2 gives the only admissible faces.
+    #[test]
+    fn a_rebuilt_ear_of_interface_points_flips_to_an_interior_sample() {
+        let positions: Vec<[f32; 3]> = vec![
+            [1., 0., 0.],    // 0 e0
+            [1., 1.6, 0.],   // 1 m
+            [1., 3.2, 0.],   // 2 e1
+            [0.05, 0.2, 0.], // 3 i1
+            [0., 1., 0.],    // 4 b1
+            [0., 2., 0.],    // 5 b2
+            [0.05, 2.8, 0.], // 6 i2
+        ];
+        let triangles = vec![[1, 0, 3], [1, 3, 4], [1, 4, 5], [1, 5, 6], [1, 6, 2]];
+        let mut m = mesh(positions, triangles);
+        let keys = m.keys.clone();
+        let row = |a: usize, b: usize| {
+            let (a, b) = (keys[a].min(keys[b]), keys[a].max(keys[b]));
+            InterfaceRow::new(0, a, b, 0, 1)
+        };
+        let mut interface = vec![row(0, 2), row(4, 5)];
+        let mut previous = vec![row(0, 1), row(1, 2), row(4, 5)];
+        for v in [0, 2, 4, 5] {
+            interface.push(row(v, v));
+            previous.push(row(v, v));
+        }
+        previous.push(row(1, 1));
+        interface.sort_unstable();
+        previous.sort_unstable();
+        let (e0, e1, mid) = (keys[0], keys[2], keys[1]);
+        let map = |k: Key| {
+            Ok(if k == mid {
+                Some((e0, e1, 0.5, 0))
+            } else if k == e0 || k == e1 {
+                Some((k, k, 0., 0))
+            } else {
+                None
+            })
+        };
+        let mut receipt = Receipt::default();
+        assert!(contract(&mut m, &interface, &previous, &map, &mut receipt, true).unwrap());
+        let boundary = |v: u32| [0, 2, 4, 5].contains(&v);
+        assert!(
+            m.triangles.iter().all(|t| !t.iter().all(|&v| boundary(v))),
+            "{:?}",
+            m.triangles
+        );
+    }
+
     #[test]
     fn a_missing_nested_chord_endpoint_is_an_invariant_error() {
         let mut m = mesh(
@@ -1587,6 +1757,7 @@ pub(super) mod tests {
             &[],
             &|k| Ok((k == middle).then_some((a, b, 0.75, 0))),
             &mut Receipt::default(),
+            false,
         )
         .unwrap_err();
         assert_eq!(error.kind(), crate::JobErrorKind::InvalidState);
@@ -1699,6 +1870,7 @@ pub(super) mod tests {
             &previous,
             &|p| Ok((p == middle).then_some((a, q, 0.5, 0))),
             &mut receipt,
+            false,
         )
         .unwrap();
         if accepted {
@@ -1761,7 +1933,8 @@ pub(super) mod tests {
             &interface,
             &previous,
             &|p| Ok((p == middle).then_some((a, b, 0.5, 0))),
-            &mut receipt
+            &mut receipt,
+            false,
         )
         .unwrap());
         assert_eq!(m.triangles, [[0, 2, 3], [0, 2, 4], [2, 0, 5]]);
@@ -2063,6 +2236,7 @@ pub(super) mod tests {
             ],
             &|p| Ok((p == middle).then_some((a, b, 0.5, 0))),
             &mut receipt,
+            false,
         )
         .unwrap();
         let segments = [(a, b)].into_iter().collect();

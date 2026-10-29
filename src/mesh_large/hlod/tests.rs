@@ -1828,6 +1828,7 @@ fn parent_jobs_allocate_within_their_charge() {
                 &|_| Ok(None),
                 &mut |_| Ok(true),
                 &|| Ok(()),
+                true,
             )
         });
         eprintln!(
@@ -4319,114 +4320,6 @@ fn s2_measurement_is_bounded_on_an_oblique_source() {
     assert!(exhausted > 0, "the adversary exhausts some searches");
 }
 
-/// Replays bounded parent jobs from immutable archive evidence; never performs a bake.
-#[test]
-#[ignore = "evidence lane: RT_HLOD_REPLAY_DIR"]
-fn evidence_replay_topology() {
-    use super::{borders::Contract, interfaces::InterfaceRow, store::*};
-    let root = PathBuf::from(std::env::var("RT_HLOD_REPLAY_DIR").unwrap());
-    let old = rows(&root.join("candidate-c053-tex3/out.hlod-audit/borders.jsonl"));
-    let current = rows(&root.join("candidate-bbbe-tex3/out.hlod-audit/borders.jsonl"));
-    let mut archive =
-        zip::ZipArchive::new(fs::File::open(root.join("candidate-bbbe-tex3/out.3tz")).unwrap())
-            .unwrap();
-    let point = |v: &Value| std::array::from_fn(|i| v[i].as_u64().unwrap() as u32);
-    let key = |v: &Value| TileKey {
-        first: v["first"].as_u64().unwrap(),
-        end: v["end"].as_u64().unwrap(),
-        depth: v["depth"].as_u64().unwrap() as u32,
-        leaf_begin: v["leafBegin"].as_u64().unwrap() as u32,
-        leaf_end: v["leafEnd"].as_u64().unwrap() as u32,
-    };
-    for omitted in current
-        .iter()
-        .filter(|r| r["kind"] == "omitted" && r["source"] == true)
-    {
-        let tile = key(&omitted["key"]);
-        let row = old
-            .iter()
-            .find(|r| r["tile"]["first"] == tile.first && r["tile"]["depth"] == tile.depth)
-            .unwrap();
-        let c = &row["contract"];
-        let contract = Contract {
-            depth: tile.depth,
-            scale: c["scale"].as_f64().unwrap(),
-            certificates: vec![],
-            terminal_vertices: vec![],
-            interface: c["interface"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|r| {
-                    InterfaceRow::new(
-                        r["leaf"].as_u64().unwrap() as u32,
-                        point(&r["a"]),
-                        point(&r["b"]),
-                        r["lo"].as_u64().unwrap() as u32,
-                        r["hi"].as_u64().unwrap() as u32,
-                    )
-                })
-                .collect(),
-        };
-        let children: Vec<_> = omitted["frontier"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| {
-                let k = key(v);
-                let mut bytes = Vec::new();
-                archive
-                    .by_name(&format!("content/f{}-d{}.glb", k.first, k.depth))
-                    .unwrap()
-                    .read_to_end(&mut bytes)
-                    .unwrap();
-                let faces = decode(&bytes).faces;
-                let n = faces.len();
-                TileGeometry {
-                    key: k,
-                    positions: faces.into_iter().flatten().collect(),
-                    ells: vec![k.depth as u8; n * 3],
-                    triangles: (0..n as u32)
-                        .map(|i| [i * 3, i * 3 + 1, i * 3 + 2])
-                        .collect(),
-                    representative: vec![0; n],
-                    primitives: vec![SourcePrimitive {
-                        node: 0,
-                        mesh: 0,
-                        primitive: 0,
-                        expanded_ordinal: 0,
-                        material: u32::MAX,
-                    }],
-                    interface: vec![],
-                    geometric_error: 0.,
-                    lease: None,
-                }
-            })
-            .collect();
-        let built = super::geometry::build_parent(
-            tile,
-            &children,
-            &[8192],
-            &contract,
-            &|_| Ok(None),
-            &mut |_| Ok(true),
-            &|| Ok(()),
-        )
-        .unwrap();
-        eprintln!(
-            "REPLAY {}: built={} attempts={:?}",
-            tile.first,
-            built.built.is_some(),
-            built.attempted_topology
-        );
-        assert!(
-            built.built.is_some(),
-            "bounded real parent {} must fit",
-            tile.first
-        );
-    }
-}
-
 /// Inject a memory-backed volume instead of allocating a large tmpfs. Both memory
 /// exhaustion and free-space exhaustion must refuse before any HLOD/audit write.
 #[test]
@@ -5207,6 +5100,7 @@ fn ordinary_drops_under_pressure_go_smallest_first() {
             &|_| Ok(None),
             &mut |_| Ok(true),
             &|| Ok(()),
+            true,
         )
         .unwrap()
         .built
@@ -5341,6 +5235,7 @@ fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
             &|_| Ok(None),
             &mut |_| Ok(true),
             &|| Ok(()),
+            true,
         )
         .unwrap();
         if let Some(b) = outcome.built {
@@ -5482,6 +5377,46 @@ fn city_block(layout: u64) -> Vec<Mesh> {
         }
     }
     source
+}
+
+/// Fix 2 end-to-end controls, each omitting a coarse tile before it:
+/// - layout 26 (rotation -3/16, walls run forward): a border contraction stalled on a
+///   rebuilt patch;
+/// - layout 77 (rotation -5/32, walls run the other way): a reduction merged the anchored
+///   paths of a boundary touching the interface (a wall top and its one-quad roof edge).
+#[test]
+fn city_blocks_contract_and_reduce_without_omission() {
+    for layout in [26, 77] {
+        let work = tempfile::tempdir().unwrap();
+        let input = write_gltf(&work.path().join("src"), &city_block(layout));
+        let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+        assert!(omission_receipt(&format!("city block {layout}"), &dir));
+    }
+}
+
+/// Review r1 P1: the fix 2 last resorts run only once develop's strategies failed, so
+/// blocks develop builds without omission publish the same bytes as without them.
+#[test]
+fn city_blocks_develop_builds_are_unchanged_by_the_last_resorts() {
+    for layout in [1, 13, 93, 111, 159] {
+        let work = tempfile::tempdir().unwrap();
+        let input = write_gltf(&work.path().join("src"), &city_block(layout));
+        let [a, b] = [Mutation::None, Mutation::Develop].map(|mutation| {
+            let out = work.path().join(format!("{mutation:?}/hlod"));
+            published(
+                &stage(
+                    &input,
+                    &out,
+                    &Run {
+                        mutation,
+                        ..Run::default()
+                    },
+                )
+                .unwrap(),
+            )
+        });
+        assert!(a == b, "city block {layout}");
+    }
 }
 
 /// Layout 95: a wall tile touches a roof chain at a corner only; without that point it

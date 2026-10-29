@@ -978,6 +978,132 @@ mod tests {
         assert_eq!(c.minimum_triangles(), 8193);
         assert!(c.minimum_triangles() > super::super::TRIANGLE_CAP);
     }
+    /// A one-bay wall strip between two depth-1 border lines L and R, split along its
+    /// diagonals between the two leaves of cell A: the diagonals are leaf-level borders,
+    /// interior at depth 1. Removing L1 there leaves faces of interface points only (no
+    /// realization), so face retention must keep it although its face edges are shared at
+    /// a deeper depth.
+    #[test]
+    fn a_strip_between_two_borders_retains_its_run_vertex_across_depths() {
+        let work = tempfile::tempdir().unwrap();
+        let scratch = Scratch::create(Some(work.path()), 0).unwrap();
+        let sorter = SortConfig {
+            run_bytes: 4096,
+            fan_in: 2,
+            buffer_bytes: 1024,
+            jobs: 1,
+        };
+        let mut tree = SequenceWriter::new(&scratch, "tree", 1024).unwrap();
+        // Cells A and B are chains to depth 2, each with two depth-3 leaves; A's split
+        // the strip.
+        for (first, end, depth, internal, children) in [
+            (0, 4, 0, true, 2),
+            (0, 2, 1, true, 1),
+            (0, 2, 2, true, 2),
+            (0, 1, 3, false, 0),
+            (1, 2, 3, false, 0),
+            (2, 4, 1, true, 1),
+            (2, 4, 2, true, 2),
+            (2, 3, 3, false, 0),
+            (3, 4, 3, false, 0),
+        ] {
+            tree.push(&NodeRecord {
+                first,
+                end,
+                cell_depth: depth,
+                cell: 0,
+                path_len: 0,
+                path: 0,
+                last_octant: 0,
+                kind: if internal {
+                    NodeKind::Internal
+                } else {
+                    NodeKind::Leaf
+                },
+                children,
+                bytes: 0,
+                bounds: Bounds::EMPTY,
+            })
+            .unwrap();
+        }
+        let tree = tree.finish().unwrap();
+        // Four floors: lines L and R (the strip), X left of L, Y right of R.
+        let line = |x: f32| -> Vec<Key> { (0..5).map(|j| k(x, j as f32)).collect() };
+        let (l, r, x, y) = (line(0.), line(1.), line(-1.), line(2.));
+        let mut leaves: [Vec<[Key; 3]>; 4] = Default::default();
+        for j in 0..4 {
+            // Leaves 0 and 1 (cell A) split each strip quad on its diagonal; leaf 2 (cell
+            // B) is left of L, leaf 3 (cell B) right of R.
+            leaves[0].push([l[j], r[j], l[j + 1]]);
+            leaves[1].push([r[j], r[j + 1], l[j + 1]]);
+            leaves[2].extend([[x[j], l[j], x[j + 1]], [l[j], l[j + 1], x[j + 1]]]);
+            leaves[3].extend([[r[j], y[j], r[j + 1]], [y[j], y[j + 1], r[j + 1]]]);
+        }
+        // Every point and edge held by more than one leaf, with its leaf span.
+        let mut held: std::collections::BTreeMap<(Key, Key), Vec<u32>> = Default::default();
+        for (leaf, faces) in leaves.iter().enumerate() {
+            let mut items = std::collections::BTreeSet::new();
+            for f in faces {
+                for i in 0..3 {
+                    let (a, b) = (f[i], f[(i + 1) % 3]);
+                    items.insert((a, a));
+                    items.insert((a.min(b), a.max(b)));
+                }
+            }
+            for item in items {
+                held.entry(item).or_default().push(leaf as u32);
+            }
+        }
+        let mut rows = Vec::new();
+        for ((a, b), holders) in &held {
+            if holders.len() > 1 {
+                for &leaf in holders {
+                    rows.push(InterfaceRow::new(
+                        leaf,
+                        *a,
+                        *b,
+                        holders[0],
+                        *holders.last().unwrap(),
+                    ));
+                }
+            }
+        }
+        rows.sort_unstable();
+        let faces: Vec<[Key; 3]> = leaves.iter().flatten().copied().collect();
+        let ledger = ScratchLedger::new(&scratch, scratch.live_bytes(), &|_| Ok(()));
+        let lease = ledger.admit(Borders::COMPONENT, 8 << 20).unwrap();
+        let borders = Borders::build(
+            &scratch,
+            sorter,
+            &tree,
+            rows.into_iter().map(Ok),
+            std::iter::empty(),
+            faces.into_iter().map(Ok),
+            4096.,
+            &lease,
+            &|| Ok(()),
+        )
+        .unwrap();
+        let cell_a = borders
+            .contract(
+                TileKey {
+                    first: 0,
+                    end: 2,
+                    depth: 2,
+                    leaf_begin: 0,
+                    leaf_end: 2,
+                },
+                100,
+            )
+            .unwrap()
+            .unwrap();
+        let points: std::collections::BTreeSet<Key> =
+            cell_a.interface.iter().flat_map(|r| [r.a, r.b]).collect();
+        // L2 is the open path's witness; L1 and L3 have only interface neighbours in A.
+        for v in [&l[1], &l[3]] {
+            assert!(points.contains(v), "{v:?} contracted away: {points:?}");
+        }
+    }
     #[test]
     fn all_owners_share_certified_chords_and_terminal_leaves_stay_exact() {
         let work = tempfile::tempdir().unwrap();

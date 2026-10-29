@@ -1390,6 +1390,7 @@ fn build_tile(
                 Ok(accepted)
             },
             check,
+            settings.mutation.last_resorts(),
         )?
     } else {
         geometry::Outcome {

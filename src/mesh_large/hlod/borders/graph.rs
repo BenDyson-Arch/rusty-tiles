@@ -324,10 +324,13 @@ impl Source {
             if depth == NONE {
                 continue;
             }
+            // An edge counts as shared only where it is a border at that depth: a
+            // deeper border between two cells of one owner is interior there.
+            let at = depth as u32;
             let shared = [
-                self.shared_edge(ids[0], ids[1])?,
-                self.shared_edge(ids[1], ids[2])?,
-                self.shared_edge(ids[2], ids[0])?,
+                self.edge_external(ids[0], ids[1], at)?,
+                self.edge_external(ids[1], ids[2], at)?,
+                self.edge_external(ids[2], ids[0], at)?,
             ];
             for (c, id) in ids.into_iter().enumerate() {
                 // Corner c's edges in the face are c-(c+1) and (c+2)-c.
@@ -344,8 +347,9 @@ impl Source {
         }
         Ok(())
     }
+    /// Whether edge `a`-`b` is shared and external (a border between owners) at `depth`.
     /// Edges are stored in key order of their endpoints, and vertex ids follow key order.
-    fn shared_edge(&self, a: u64, b: u64) -> Result<bool, JobError> {
+    fn edge_external(&self, a: u64, b: u64, depth: u32) -> Result<bool, JobError> {
         let want = [a.min(b), a.max(b)];
         let (mut lo, mut hi) = (0, self.edges.len);
         while lo < hi {
@@ -354,7 +358,7 @@ impl Source {
             match [e[0], e[1]].cmp(&want) {
                 std::cmp::Ordering::Less => lo = mid + 1,
                 std::cmp::Ordering::Greater => hi = mid,
-                std::cmp::Ordering::Equal => return Ok(true),
+                std::cmp::Ordering::Equal => return self.external(e[2], e[3], depth),
             }
         }
         Ok(false)

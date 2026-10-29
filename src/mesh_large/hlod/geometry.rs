@@ -6,8 +6,6 @@ mod combined_controls;
 mod constrained;
 #[cfg(test)]
 mod contraction_memory;
-#[cfg(test)]
-mod fold_probe;
 pub(crate) mod folds;
 pub(crate) mod locations;
 pub(crate) mod measurement;
@@ -325,6 +323,9 @@ fn oriented(t: &[u32; 3]) -> [u32; 3] {
 /// Reconstruct the common contracted boundary before ordinary reduction. Only capped
 /// immediate children enter this job. After a stalled reduction, explicitly remesh the
 /// interior; omission is the reported last resort and propagates upwards in the walk.
+/// Only when that fails, and with `last_resorts` (production: always), the whole build
+/// runs again with fix 2's last resorts (`build`), so no tile it builds changes.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_parent(
     tile: TileKey,
     children: &[TileGeometry],
@@ -333,13 +334,37 @@ pub(crate) fn build_parent(
     mapping: &BorderMap<'_>,
     assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    last_resorts: bool,
+) -> Result<Outcome, JobError> {
+    let first = build(
+        tile, children, caps, contract, mapping, assess, check, false,
+    )?;
+    if first.built.is_some() || !last_resorts {
+        return Ok(first);
+    }
+    let mut last = build(tile, children, caps, contract, mapping, assess, check, true)?;
+    last.attempted_topology.add(first.attempted_topology);
+    Ok(last)
+}
+
+/// One build. `last_resorts`: contraction rebuilds also flip interface diagonals and
+/// join slivers (`constrained::contract`), and an attempt also pins touching paths
+/// (`attempt`).
+#[allow(clippy::too_many_arguments)]
+fn build(
+    tile: TileKey,
+    children: &[TileGeometry],
+    caps: &[usize],
+    contract: &Contract,
+    mapping: &BorderMap<'_>,
+    assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    last_resorts: bool,
 ) -> Result<Outcome, JobError> {
     check()?;
     if caps.is_empty() {
         return Err(state("a parent build needs at least one cap"));
     }
-    #[cfg(test)]
-    fold_probe::capture(tile, children, contract, caps);
     let mut merged = merge(children);
     let reference = merged.clone();
     if merged.triangles.is_empty() {
@@ -380,6 +405,7 @@ pub(crate) fn build_parent(
             &previous_interface,
             &lookup,
             &mut topology,
+            last_resorts,
         )? {
             attempted.add(topology);
             topology = Default::default();
@@ -392,6 +418,7 @@ pub(crate) fn build_parent(
                 caps,
                 &mut topology,
                 check,
+                last_resorts,
             )? {
                 attempted.add(topology);
                 return Ok(Outcome {
@@ -428,6 +455,7 @@ pub(crate) fn build_parent(
                 drops,
                 preserve_holes,
                 &mut opening_pins,
+                last_resorts,
                 &mut attempted,
                 assess,
                 check,
@@ -466,6 +494,7 @@ pub(crate) fn build_parent(
                 drops,
                 preserve_holes,
                 &mut opening_pins,
+                last_resorts,
                 &mut attempted,
                 assess,
                 check,
@@ -526,6 +555,7 @@ pub(crate) fn build_parent(
                 license,
                 preserve_holes,
                 &mut opening_pins,
+                last_resorts,
                 &mut attempted,
                 assess,
                 check,
@@ -657,6 +687,7 @@ fn recover_contraction(
     caps: &[usize],
     receipt: &mut TopologyReceipt,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    fallbacks: bool,
 ) -> Result<bool, JobError> {
     let border = interface_points(previous);
     let locked: Vec<_> = merged.keys.iter().map(|k| border.contains(k)).collect();
@@ -699,6 +730,7 @@ fn recover_contraction(
             mapping,
             &mut attempt,
             Some(&reference.triangles),
+            fallbacks,
         )? {
             receipt.add(attempt);
             return Ok(true);
@@ -722,6 +754,7 @@ fn assessed_attempt(
     floor: f64,
     preserve_holes: bool,
     opening_pins: &mut HashSet<Key>,
+    pins: bool,
     attempted: &mut TopologyReceipt,
     assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
@@ -739,16 +772,11 @@ fn assessed_attempt(
             floor,
             preserve_holes,
             opening_pins,
+            pins,
         );
         let mut b = match proposal {
             Ok(b) => b,
-            Err(e) if e.kind() == JobErrorKind::Unsupported => {
-                #[cfg(test)]
-                if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
-                    eprintln!("replay unsupported f{}-d{} cap={cap} preserve_holes={preserve_holes} round={round}: {e}", tile.first, tile.depth);
-                }
-                return Ok(None);
-            }
+            Err(e) if e.kind() == JobErrorKind::Unsupported => return Ok(None),
             Err(e) => return Err(e),
         };
         b.retries += round;
@@ -786,7 +814,10 @@ fn assessed_attempt(
 }
 
 /// One bounded parent proposal. Unsupported means its protected repair did not
-/// produce an eligible capped result; it is not a proof of cap infeasibility.
+/// produce an eligible capped result; it is not a proof of cap infeasibility. With `pins`,
+/// when both modes fail after the touching-boundary comparison refused a proposal, reduce
+/// once more with the anchored paths of touching boundaries locked
+/// (`topology::touching_pins`).
 #[allow(clippy::too_many_arguments)]
 fn attempt(
     tile: TileKey,
@@ -799,26 +830,12 @@ fn attempt(
     floor: f64,
     preserve_holes: bool,
     opening_pins: &HashSet<Key>,
+    pins: bool,
 ) -> Result<Built, JobError> {
+    let mut refused = false;
     let mut remaining = REDUCTION_PASSES;
-    let ordinary = attempt_mode(
-        tile,
-        merged,
-        interface,
-        cap,
-        children_error,
-        reference,
-        contracted_faces,
-        floor,
-        preserve_holes,
-        opening_pins,
-        false,
-        &mut remaining,
-    );
-    // An overprotected ring is a failed strategy, not a cap lower bound. Both
-    // strategies retain the same source guards and pre-contraction reference.
-    match ordinary {
-        Err(e) if e.kind() == JobErrorKind::Unsupported => attempt_mode(
+    let reduce = |locked: &HashSet<Key>, sheets, remaining: &mut u32, refused: &mut bool| {
+        attempt_mode(
             tile,
             merged,
             interface,
@@ -828,10 +845,38 @@ fn attempt(
             contracted_faces,
             floor,
             preserve_holes,
-            opening_pins,
-            true,
-            &mut remaining,
-        ),
+            locked,
+            sheets,
+            remaining,
+            refused,
+        )
+    };
+    // An overprotected ring is a failed strategy, not a cap lower bound. Both
+    // strategies retain the same source guards and pre-contraction reference.
+    let result = match reduce(opening_pins, false, &mut remaining, &mut refused) {
+        Err(e) if e.kind() == JobErrorKind::Unsupported => {
+            reduce(opening_pins, true, &mut remaining, &mut refused)
+        }
+        result => result,
+    };
+    match result {
+        Err(e) if e.kind() == JobErrorKind::Unsupported && pins && refused => {
+            let border = interface_points(interface);
+            let mut locked = opening_pins.clone();
+            locked.extend(
+                merged
+                    .keys
+                    .iter()
+                    .zip(topology::touching_pins(merged, interface))
+                    .filter(|(k, pin)| *pin && !border.contains(*k))
+                    .map(|(k, _)| *k),
+            );
+            if locked.len() == opening_pins.len() {
+                Err(e)
+            } else {
+                reduce(&locked, false, &mut { REDUCTION_PASSES }, &mut false)
+            }
+        }
         result => result,
     }
 }
@@ -850,6 +895,7 @@ fn attempt_mode(
     opening_pins: &HashSet<Key>,
     separate_sheets: bool,
     remaining: &mut u32,
+    touching: &mut bool,
 ) -> Result<Built, JobError> {
     let _cpu =
         super::cpu_profile::start(super::cpu_profile::Stage::Attempt, merged.triangles.len());
@@ -941,23 +987,13 @@ fn attempt_mode(
                     folds::Source::new(&merged.positions, contracted_faces).with_boundary(interface)
                 })
                 .violations(&merged.positions, &output);
-            #[cfg(test)]
-            if std::env::var_os("RT_HLOD_FOLD_REPLAY").is_some() {
-                eprintln!(
-                    "replay retry={retries} faces={} invalid={} protected={} missing={}/{}",
-                    output.len(),
-                    invalid.iter().filter(|v| **v).count(),
-                    protected.iter().filter(|v| **v).count(),
-                    edges.len(),
-                    points.len()
-                );
-            }
             let valid = edges.is_empty() && points.is_empty() && !invalid.iter().any(|v| *v);
             if valid {
                 // Topology comparison has its own tables; do not overlap them
                 // with a retained fold source. Rebuild only if it rejects.
                 fold_source = None;
-                accepted_change = topology::changes(reference, &output, interface, floor);
+                accepted_change =
+                    topology::changes_noting(reference, &output, interface, floor, touching);
                 if accepted_change.is_some() {
                     break;
                 }
@@ -1118,8 +1154,8 @@ fn attempt_mode(
     }
     // The successful loop check used these same immutable inputs. Preserve its
     // witnesses before compaction; input/degenerate-only paths still compare here.
-    let topology_change =
-        accepted_change.or_else(|| topology::changes(reference, &output, interface, floor));
+    let topology_change = accepted_change
+        .or_else(|| topology::changes_noting(reference, &output, interface, floor, touching));
     let Some(change) = topology_change else {
         return Err(JobError::new(
             JobErrorKind::Unsupported,
@@ -1316,6 +1352,7 @@ mod tests {
             },
             &mut |_| Ok(true),
             &|| Ok(()),
+            true,
         )
         .unwrap()
         .built
@@ -1398,7 +1435,8 @@ mod tests {
             &merged.triangles,
             1.,
             false,
-            &pins
+            &pins,
+            false,
         )
         .is_err());
         let built = attempt(
@@ -1412,6 +1450,7 @@ mod tests {
             1.,
             false,
             &pins,
+            false,
         )
         .unwrap();
         assert_eq!(built.geometry.triangles.len(), 6);

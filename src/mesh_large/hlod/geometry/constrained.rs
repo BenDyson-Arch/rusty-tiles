@@ -21,14 +21,40 @@ fn edge(a: u32, b: u32) -> (u32, u32) {
     (a.min(b), a.max(b))
 }
 
+/// A face whose height over its longest edge is below 1/250 of that edge: its normal is
+/// rounding noise, so its chart says nothing about the sheet it belongs to. This only
+/// steers which faces one CDT rebuilds together; it licenses nothing.
+fn sliver(positions: &[[f32; 3]], t: [u32; 3]) -> bool {
+    let p = t.map(|v| positions[v as usize].map(f64::from));
+    let n = topology::normal(positions, t);
+    let twice_area = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+    let longest = (0..3)
+        .map(|k| {
+            let (a, b) = (p[k], p[(k + 1) % 3]);
+            (a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)
+        })
+        .fold(0., f64::max);
+    twice_area < longest / 250.
+}
+
 pub(super) fn remesh(
     m: &mut Merged,
     interface: &[InterfaceRow],
     cap: usize,
 ) -> Option<topology::Receipt> {
     let guard = super::folds::Source::new(&m.positions, &m.triangles).with_boundary(interface);
-    triangulate(m, interface, cap, None, &[], &guard, PatchPlan::Charts)
-        .or_else(|| fan::remesh(m, interface, cap, &guard))
+    triangulate(
+        m,
+        interface,
+        cap,
+        None,
+        &[],
+        &guard,
+        PatchPlan::Charts,
+        false,
+        false,
+    )
+    .or_else(|| fan::remesh(m, interface, cap, &guard))
 }
 
 /// Reconstruct contracted patches with all unaffected interior samples. In particular,
@@ -41,46 +67,40 @@ pub(super) fn contract(
     endpoints: &[u32],
     cap: usize,
     guard: &super::folds::Source,
+    fallbacks: bool,
 ) -> Option<topology::Receipt> {
     // All three constructions consume the same pre-contraction source. A stricter chart
     // partition may separate book pages that reconnect around a nonmanifold spine;
     // it cannot confer any new face or edge license.
-    triangulate(
-        m,
-        interface,
-        cap,
-        Some(map),
-        endpoints,
-        guard,
-        PatchPlan::Charts,
-    )
-    .or_else(|| {
-        triangulate(
-            m,
-            interface,
-            cap,
-            Some(map),
-            endpoints,
-            guard,
-            PatchPlan::Planes,
-        )
-    })
     // A deterministic CDT can select the same new ear on opposite sheets.
     // One fixed endpoint-rooted partition changes those interior diagonals,
     // retaining every source sample and the same original-source checks.
-    .or_else(|| {
-        triangulate(
-            m,
-            interface,
-            cap,
-            Some(map),
-            endpoints,
-            guard,
-            PatchPlan::ChordSpokes,
-        )
-    })
+    // `fallbacks` (only once the caller's ordinary contraction recovery failed): flip
+    // interface diagonals, and when all three plans fail, repeat them with slivers joined
+    // to their neighbours' patches. A near-degenerate child face beside a chord otherwise
+    // forms a patch of its own, and its rebuild overlaps the neighbouring one.
+    [false, true][..1 + usize::from(fallbacks)]
+        .iter()
+        .find_map(|&slivers| {
+            [PatchPlan::Charts, PatchPlan::Planes, PatchPlan::ChordSpokes]
+                .into_iter()
+                .find_map(|plan| {
+                    triangulate(
+                        m,
+                        interface,
+                        cap,
+                        Some(map),
+                        endpoints,
+                        guard,
+                        plan,
+                        slivers,
+                        fallbacks,
+                    )
+                })
+        })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn triangulate(
     m: &mut Merged,
     interface: &[InterfaceRow],
@@ -89,6 +109,8 @@ fn triangulate(
     endpoints: &[u32],
     guard: &super::folds::Source,
     plan: PatchPlan,
+    slivers: bool,
+    flips: bool,
 ) -> Option<topology::Receipt> {
     let components = topology::components(m);
     let mut patches: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
@@ -144,7 +166,7 @@ fn triangulate(
         .map(|t| t.iter().any(|&v| touched[v as usize]))
         .collect();
     let face_patches = if mapping.is_some() {
-        manifold_patches(m, &affected, plan == PatchPlan::Planes)
+        manifold_patches(m, &affected, plan == PatchPlan::Planes, slivers)
     } else {
         Vec::new()
     };
@@ -218,10 +240,12 @@ fn triangulate(
         if sum[axis] == 0. {
             return rejected("CDT", concat!(file!(), ":", line!()));
         }
-        if faces
-            .iter()
-            .any(|&i| topology::normal(&m.positions, m.triangles[i])[axis] * sum[axis] <= 0.)
-        {
+        // A joined sliver may face either way in the projection; the CDT replaces it and
+        // the source guard and topology comparison still judge the whole proposal.
+        if faces.iter().any(|&i| {
+            !(slivers && sliver(&m.positions, m.triangles[i]))
+                && topology::normal(&m.positions, m.triangles[i])[axis] * sum[axis] <= 0.
+        }) {
             return rejected("CDT", concat!(file!(), ":", line!()));
         }
         let mut boundary: BTreeSet<_> = edges
@@ -430,6 +454,17 @@ fn triangulate(
             output.push(t);
             representatives.push(m.representative[faces[0]]);
         }
+        if flips {
+            flip_interface_edges(
+                &m.positions,
+                &mut output[start..],
+                axis,
+                &|v| required.points.contains(&v),
+                &|t| guard.licensed(&m.positions, t),
+                &|a, b| guard.licensed_edge(&m.positions, a, b),
+                &constraints,
+            );
+        }
         // Positive input Jacobians plus a simple boundary of degree one establish the
         // height-field domain. The area identity detects inconsistent ring orientation.
         if (mapping.is_none() && output.len() - start != predicted)
@@ -460,6 +495,99 @@ fn triangulate(
         count,
         mapping.is_some(),
     )
+}
+
+/// The source guard refuses a new edge joining two interface points (either neighbour could
+/// build it) and a new face of interface points only, yet the CDT picks such diagonals
+/// where the patch also has an interior sample. Flip each unconstrained interface-to-
+/// interface edge that is unlicensed, or borders such a face, where the apex across it on
+/// one side is interior and the quad is strictly convex in the patch projection. A flip
+/// removes that edge and adds a diagonal with an interior end, so there is at most one
+/// flip per edge. A licensed source edge beside such a face is flipped too, with the
+/// source face on its other side; the guard judges the result. Linear worklist.
+fn flip_interface_edges(
+    positions: &[[f32; 3]],
+    faces: &mut [[u32; 3]],
+    axis: usize,
+    boundary: &dyn Fn(u32) -> bool,
+    licensed: &dyn Fn([u32; 3]) -> bool,
+    licensed_edge: &dyn Fn(u32, u32) -> bool,
+    constraints: &BTreeSet<(u32, u32)>,
+) {
+    let q = |v: u32| {
+        let p = positions[v as usize];
+        [f64::from(p[(axis + 1) % 3]), f64::from(p[(axis + 2) % 3])]
+    };
+    let orient = |a: u32, b: u32, c: u32| {
+        let (a, b, c) = (q(a), q(b), q(c));
+        let d = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        // Three-valued: `f64::signum(0.0)` is 1, which would pass a collinear apex.
+        f64::from(i8::from(d > 0.) - i8::from(d < 0.))
+    };
+    let all = |t: &[u32; 3]| t.iter().all(|&v| boundary(v)) && !licensed(*t);
+    let mut directed: HashMap<(u32, u32), usize> = HashMap::default();
+    for (i, t) in faces.iter().enumerate() {
+        for k in 0..3 {
+            directed.insert((t[k], t[(k + 1) % 3]), i);
+        }
+    }
+    let bad = |faces: &[[u32; 3]], directed: &HashMap<(u32, u32), usize>, a: u32, b: u32| {
+        boundary(a)
+            && boundary(b)
+            && !constraints.contains(&edge(a, b))
+            && (!licensed_edge(a, b)
+                || [(a, b), (b, a)]
+                    .iter()
+                    .any(|e| directed.get(e).is_some_and(|&f| all(&faces[f]))))
+    };
+    let mut queue: VecDeque<(u32, u32)> = directed
+        .keys()
+        .filter(|&&(a, b)| a < b && bad(faces, &directed, a, b))
+        .copied()
+        .collect();
+    while let Some((a, b)) = queue.pop_front() {
+        let (Some(&i), Some(&j)) = (directed.get(&(a, b)), directed.get(&(b, a))) else {
+            continue;
+        };
+        if !bad(faces, &directed, a, b) {
+            continue;
+        }
+        let (f, g) = (faces[i], faces[j]);
+        let Some(c) = f.into_iter().find(|&v| v != a && v != b) else {
+            continue;
+        };
+        let Some(x) = g.into_iter().find(|&v| v != a && v != b) else {
+            continue;
+        };
+        let s = orient(a, b, c);
+        // Strictly convex quad a-x-b-c, both new faces in the patch orientation, and
+        // the new diagonal has an interior end.
+        if (boundary(c) && boundary(x))
+            || s == 0.
+            || orient(a, b, x) != -s
+            || orient(a, x, c) != s
+            || orient(x, b, c) != s
+        {
+            continue;
+        }
+        for t in [f, g] {
+            for n in 0..3 {
+                directed.remove(&(t[n], t[(n + 1) % 3]));
+            }
+        }
+        faces[i] = [a, x, c];
+        faces[j] = [x, b, c];
+        for (id, t) in [(i, faces[i]), (j, faces[j])] {
+            for n in 0..3 {
+                directed.insert((t[n], t[(n + 1) % 3]), id);
+            }
+        }
+        for (u, v) in [(a, c), (c, b), (b, x), (x, a)] {
+            if bad(faces, &directed, u, v) {
+                queue.push_back((u, v));
+            }
+        }
+    }
 }
 
 // A declined construction step; `stage` and `reason` name the rejected case at the call site.
@@ -566,7 +694,12 @@ impl Required {
     }
 }
 
-fn manifold_patches(m: &Merged, affected: &[bool], separate_sheets: bool) -> Vec<usize> {
+fn manifold_patches(
+    m: &Merged,
+    affected: &[bool],
+    separate_sheets: bool,
+    slivers: bool,
+) -> Vec<usize> {
     let faces = &m.triangles;
     fn root(parent: &mut [usize], mut i: usize) -> usize {
         while parent[i] != i {
@@ -613,7 +746,14 @@ fn manifold_patches(m: &Merged, affected: &[bool], separate_sheets: bool) -> Vec
             };
             (axis, n[axis] > 0., panel)
         };
-        if count == 2 && direction == 0 && affected[a] && affected[b] && chart(a) == chart(b) {
+        // A sliver's normal is noise: in the sliver pass it joins its neighbour's patch.
+        let sliver = |i: usize| slivers && sliver(&m.positions, faces[i]);
+        if count == 2
+            && direction == 0
+            && affected[a]
+            && affected[b]
+            && (chart(a) == chart(b) || sliver(a) || sliver(b))
+        {
             let (a, b) = (root(&mut parent, a), root(&mut parent, b));
             parent[a.max(b)] = a.min(b);
         }
@@ -652,7 +792,7 @@ mod tests {
             &mapping,
         );
         let cap = m.triangles.len();
-        contract(m, interface, map, endpoints, cap, &guard)
+        contract(m, interface, map, endpoints, cap, &guard, false)
     }
     fn sheet(n: u32, hole: bool) -> Merged {
         let positions: Vec<_> = (0..=n)
@@ -732,10 +872,10 @@ mod tests {
         let representatives = m.representative.clone();
         let guard = super::super::folds::Source::new(&m.positions, &m.triangles);
         // Two reconstructed faces plus the unchanged curved face need three slots.
-        assert!(contract(&mut m, &[], &[0, 0, 2, 3, 4, 5], &[0, 2], 2, &guard).is_none());
+        assert!(contract(&mut m, &[], &[0, 0, 2, 3, 4, 5], &[0, 2], 2, &guard, false).is_none());
         assert_eq!(m.triangles, before);
         assert_eq!(m.representative, representatives);
-        let result = contract(&mut m, &[], &[0, 0, 2, 3, 4, 5], &[0, 2], 3, &guard).unwrap();
+        let result = contract(&mut m, &[], &[0, 0, 2, 3, 4, 5], &[0, 2], 3, &guard, false).unwrap();
         assert_eq!(m.triangles.len(), 3);
         assert_eq!(result.reconstructed_faces, 2);
     }
@@ -773,6 +913,7 @@ mod tests {
             &[0, 2, 6, 8],
             8,
             &guard,
+            false,
         )
         .unwrap();
         assert_eq!(r.reconstructed_faces, 4);
@@ -894,6 +1035,8 @@ mod tests {
                     &endpoints,
                     &guard,
                     PatchPlan::ChordSpokes,
+                    false,
+                    false,
                 )
                 .unwrap()
             } else {
@@ -904,11 +1047,13 @@ mod tests {
                     Some(&map),
                     &endpoints,
                     &guard,
-                    PatchPlan::Charts
+                    PatchPlan::Charts,
+                    false,
+                    false,
                 )
                 .is_none());
                 assert_eq!(m.triangles, before);
-                contract(&mut m, &interface, &map, &endpoints, cap, &guard).unwrap()
+                contract(&mut m, &interface, &map, &endpoints, cap, &guard, false).unwrap()
             };
             assert!(receipt.reconstructed_faces > 0);
             assert!(m.triangles.len() <= cap);
@@ -1098,5 +1243,68 @@ mod tests {
         let before = m.triangles.clone();
         assert!(remesh(&mut m, &[], 8192).is_none());
         assert_eq!(m.triangles, before);
+    }
+
+    fn flip(p: &[[f32; 3]], faces: &mut [[u32; 3]], interface: &dyn Fn(u32) -> bool) {
+        let no = BTreeSet::new();
+        flip_interface_edges(p, faces, 2, interface, &|_| false, &|_, _| false, &no);
+    }
+    fn area(p: &[[f32; 3]], t: [u32; 3]) -> f64 {
+        topology::normal(p, t)[2]
+    }
+
+    /// Review r1 P2: apex b of edge a-b is collinear with x and c in the projection, so
+    /// the quad is not strictly convex and the flip (which would emit a vertical fin
+    /// x, b, c) must not happen.
+    #[test]
+    fn a_collinear_quad_is_not_flipped() {
+        let p = [[0., 0., 0.], [2., 0., 1.], [3., 1., 0.], [1., -1., 0.]];
+        let mut faces = [[0, 1, 2], [1, 0, 3]];
+        flip(&p, &mut faces, &|v| v < 2);
+        assert_eq!(faces, [[0, 1, 2], [1, 0, 3]]);
+    }
+
+    /// Flips on CDTs of a coarse lattice (many collinear and cocircular cases) keep every
+    /// face positive and the area, and never add an interface-to-interface edge.
+    #[test]
+    fn flips_keep_orientation_and_area_on_lattice_triangulations() {
+        let mut rng = 0x1234_5678_9abc_def0u64;
+        let mut next = || {
+            rng ^= rng << 13;
+            rng ^= rng >> 7;
+            rng ^= rng << 17;
+            rng
+        };
+        for _ in 0..500 {
+            let mut cdt = ConstrainedDelaunayTriangulation::<Point2<f64>>::new();
+            for _ in 0..4 + next() % 40 {
+                let (x, y) = ((next() % 9) as f64, (next() % 9) as f64);
+                cdt.insert(Point2::new(x, y)).unwrap();
+            }
+            let p: Vec<[f32; 3]> = cdt
+                .vertices()
+                .map(|v| [v.position().x as f32, v.position().y as f32, 0.])
+                .collect();
+            let mut faces: Vec<[u32; 3]> = cdt
+                .inner_faces()
+                .map(|f| f.vertices().map(|v| v.fix().index() as u32))
+                .collect();
+            let interface: Vec<bool> = p.iter().map(|_| next() % 3 != 0).collect();
+            let pairs = |faces: &[[u32; 3]]| -> BTreeSet<(u32, u32)> {
+                let both = |&(a, b): &(u32, u32)| interface[a as usize] && interface[b as usize];
+                let edges = faces
+                    .iter()
+                    .flat_map(|t| (0..3).map(|k| edge(t[k], t[(k + 1) % 3])));
+                edges.filter(both).collect()
+            };
+            let (before, total) = (
+                pairs(&faces),
+                faces.iter().map(|&t| area(&p, t)).sum::<f64>(),
+            );
+            flip(&p, &mut faces, &|v| interface[v as usize]);
+            assert!(faces.iter().all(|&t| area(&p, t) > 0.), "{faces:?}");
+            assert!(pairs(&faces).is_subset(&before));
+            assert!((faces.iter().map(|&t| area(&p, t)).sum::<f64>() - total).abs() < 1e-9);
+        }
     }
 }

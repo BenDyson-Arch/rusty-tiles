@@ -565,6 +565,7 @@ fn complete_parent(n: usize, third_contact: bool) {
                 checks.fetch_add(1, Ordering::Relaxed);
                 Ok(())
             },
+            true,
         );
         // Read and retain both metadata vectors after the complete builder.
         let metadata = Metadata::of(std::hint::black_box(&contract));
@@ -693,6 +694,7 @@ fn complete_parent_constrained_contraction_dense_rows_fit_charge() {
                 Ok(true)
             },
             &|| Ok(()),
+            true,
         );
         let metadata = Metadata::of(std::hint::black_box(&contract));
         (result, metadata)

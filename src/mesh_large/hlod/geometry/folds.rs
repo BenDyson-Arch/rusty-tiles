@@ -126,6 +126,18 @@ impl Source {
         (invalid, original)
     }
 
+    /// Whether this edge (in either direction) is a source edge.
+    pub(crate) fn licensed_edge(&self, positions: &[[f32; 3]], a: u32, b: u32) -> bool {
+        let (a, b) = (key(positions[a as usize]), key(positions[b as usize]));
+        self.edges.contains_key(&(a.min(b), a.max(b)))
+    }
+
+    /// Whether this face (in either orientation) is a source face.
+    pub(crate) fn licensed(&self, positions: &[[f32; 3]], t: [u32; 3]) -> bool {
+        let (f, _) = face(t.map(|v| key(positions[v as usize])));
+        self.faces.get(&f).is_some_and(|s| *s != [0, 0])
+    }
+
     /// Corners of rejected faces, in vertex order. One flat sorted incidence array
     /// avoids an allocation for every edge. More than four wings cannot be pairwise
     /// nonacute in their plane, so the fallback never enumerates high-valence pairs.
