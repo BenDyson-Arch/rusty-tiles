@@ -47,6 +47,10 @@ class ParentFeatureBudgetTests(unittest.TestCase):
                 node=json.loads((out/'tileset.json').read_text())['root']
                 self.assertNotIn('content',node)
                 self.assertEqual(node['extras']['routingReason'],reason)
+                # CesiumJS draws nothing at an empty REPLACE tile within its error:
+                # a routing tile refines until its whole box is about a pixel.
+                diagonal=2*math.sqrt(sum(v*v for v in node['boundingVolume']['box'][3:]))
+                self.assertGreaterEqual(node['geometricError'],16*diagonal*(1-1e-12))
 
     @requires_bin('set RUSTY_TILES_BIN for CLI acceptance')
     def test_cli_parent_budget_option_is_wired_and_zero_is_rejected(self):

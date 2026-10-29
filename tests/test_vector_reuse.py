@@ -134,7 +134,8 @@ class ReuseTests(unittest.TestCase):
                     _,pos,ids=read(f);result.setdefault(ids[0],[]).append(sum(map(len,pos)))
                 return result
             self.assertEqual(all_content_ids(a)['1'],[3])
-            self.assertEqual(sorted(all_content_ids(b)['1']),[2,3])
+            # Released, the vertex lets coarse tiles (now including the root) reduce the line.
+            self.assertEqual(sorted(set(all_content_ids(b)['1'])),[2,3])
             self.assertGreater(report(b)['reuse']['reusedContents'],0)
 
     def test_settings_changes_and_corrupt_previous_content_fail(self):
