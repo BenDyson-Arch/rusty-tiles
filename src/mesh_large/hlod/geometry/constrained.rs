@@ -227,10 +227,34 @@ fn triangulate(
             required.segments.insert(edge(a, b));
         }
     }
+    // Panels keep vertices other panels use (point contacts) and edges of over two faces
+    // (welds), so neither becomes a T-vertex or free edges.
+    let mut owner = vec![usize::MAX; if panels { m.positions.len() } else { 0 }];
+    let mut shared = vec![false; owner.len()];
+    let mut welds = HashMap::<(u32, u32), u32>::default();
+    if panels {
+        for (&p, faces) in &patches {
+            for &i in faces {
+                let t = m.triangles[i];
+                for k in 0..3 {
+                    let v = t[k] as usize;
+                    shared[v] |= owner[v] != usize::MAX && owner[v] != p;
+                    owner[v] = p;
+                    *welds.entry(edge(t[k], t[(k + 1) % 3])).or_default() += 1;
+                }
+            }
+        }
+        welds.retain(|_, n| *n > 2);
+    }
     let mut output = Vec::new();
     let mut representatives = Vec::new();
     let mut count = 0;
     for (_, faces) in patches {
+        if panels && faces.len() == 1 {
+            output.push(m.triangles[faces[0]]);
+            representatives.push(m.representative[faces[0]]);
+            continue;
+        }
         if mapping.is_some() && faces.iter().all(|&i| !affected[i]) {
             if output.len().checked_add(faces.len())? > cap {
                 return rejected("CDT", concat!(file!(), ":", line!()));
@@ -359,6 +383,19 @@ fn triangulate(
             let mut vertices: BTreeSet<u32> = adjacent.keys().copied().collect();
             let mut constraints = boundary.clone();
             required.patch(m, &faces, mapping, &mut vertices, &mut constraints);
+            if panels {
+                for &i in &faces {
+                    let t = m.triangles[i];
+                    vertices.extend(t.iter().filter(|&&v| shared[v as usize]));
+                    for k in 0..3 {
+                        let e = edge(t[k], t[(k + 1) % 3]);
+                        if welds.contains_key(&e) {
+                            vertices.extend([e.0, e.1]);
+                            constraints.insert(e);
+                        }
+                    }
+                }
+            }
             if plan == PatchPlan::ChordSpokes {
                 // Change only patches with a proven endpoint-rooted alternative. A
                 // longer collinear strip may need its ordinary CDT unchanged while
@@ -506,12 +543,7 @@ fn triangulate(
                 return rejected("CDT", concat!(file!(), ":", line!()));
             }
 
-            if panels
-                && guard
-                    .violations(&m.positions, &output[start..])
-                    .iter()
-                    .any(|v| *v)
-            {
+            if panels && guard.rejects(&m.positions, &output[start..]) {
                 return rejected("CDT", "a rebuilt panel needs a guarded face");
             }
             count += 1;
@@ -1361,5 +1393,80 @@ mod tests {
             assert!(pairs(&faces).is_subset(&before));
             assert!((faces.iter().map(|&t| area(&p, t)).sum::<f64>() - total).abs() < 1e-9);
         }
+    }
+
+    /// `sheet(n)` at heights `z`, plus faces over added points.
+    fn field(n: u32, z: fn([f32; 3]) -> f32, points: &[[f32; 3]], faces: &[[u32; 3]]) -> Merged {
+        let mut m = sheet(n, false);
+        m.positions.iter_mut().for_each(|p| p[2] = z(*p));
+        m.positions.extend(points);
+        m.keys = m.positions.iter().copied().map(key).collect();
+        m.ells.resize(m.positions.len(), 0);
+        m.triangles.extend(faces);
+        m.representative
+            .resize(m.triangles.len(), m.representative[0]);
+        m
+    }
+
+    /// #296 r1 (M2): a tent's floor contact 24 and a welded wall's three-face edges stay
+    /// while the floor is rebuilt; lifted samples stay; one-face panels are untouched;
+    /// guard work is per panel, not per vertex.
+    #[test]
+    fn panels_keep_contacts_welds_and_lifts_in_linear_work() {
+        let flat = |_: [f32; 3]| 0.;
+        let floor = |m: &Merged| {
+            m.triangles
+                .iter()
+                .filter(|t| t.iter().all(|&v| v < 49))
+                .count()
+        };
+        let mut tent = field(
+            6,
+            flat,
+            &[[2.5, 2.5, 1.], [3.5, 2.5, 1.], [3., 3.5, 1.]],
+            &[[24, 50, 49], [24, 51, 50], [24, 49, 51]],
+        );
+        remesh_panels(&mut tent, &[]).unwrap();
+        let contact = tent.triangles.iter().filter(|t| t.contains(&24)).count();
+        assert!(floor(&tent) < 72 && contact > 3);
+        let mut wall = field(
+            6,
+            flat,
+            &[[2., 2., 1.], [3., 2., 1.], [4., 2., 1.]],
+            &[[16, 17, 50], [16, 50, 49], [17, 18, 51], [17, 51, 50]],
+        );
+        remesh_panels(&mut wall, &[]).unwrap();
+        let weld = wall
+            .triangles
+            .iter()
+            .filter(|t| t.contains(&16) && t.contains(&17))
+            .count();
+        assert!(floor(&wall) < 72 && weld == 3);
+        for dz in [f32::from_bits(1), 1e-3] {
+            let mut m = field(6, flat, &[], &[]);
+            m.positions[24][2] = dz;
+            m.keys[24] = key(m.positions[24]);
+            remesh_panels(&mut m, &[]).unwrap();
+            assert!(m.triangles.iter().any(|t| t.contains(&24)));
+        }
+        let mut curved = field(
+            6,
+            |p| ((p[1] * 7. + p[0]).powi(2) * 7. % 11.) * 0.37,
+            &[],
+            &[],
+        );
+        let before = curved.triangles.clone();
+        remesh_panels(&mut curved, &[]).unwrap();
+        assert_eq!(curved.triangles, before);
+        let mut quads = field(
+            64,
+            |p| ((p[0] * p[0]) as u32 % 7 + (p[1] * p[1]) as u32 % 5) as f32,
+            &[],
+            &[],
+        );
+        let flags = || super::super::folds::VERTEX_FLAGS.with(|n| n.get());
+        let start = flags();
+        remesh_panels(&mut quads, &[]).unwrap();
+        assert!(flags() - start <= 4 * quads.positions.len());
     }
 }

@@ -155,7 +155,33 @@ impl Source {
         self.check(positions, triangles, true)
     }
 
+    /// Any face rejected; no vertex-sized work.
+    pub(super) fn rejects(&self, positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> bool {
+        self.rejected_faces(positions, triangles, false)
+            .contains(&true)
+    }
+
     fn check(
+        &self,
+        positions: &[[f32; 3]],
+        triangles: &[[u32; 3]],
+        changed_boundary: bool,
+    ) -> Vec<bool> {
+        let invalid = self.rejected_faces(positions, triangles, changed_boundary);
+        #[cfg(test)]
+        VERTEX_FLAGS.with(|n| n.set(n.get() + positions.len()));
+        let mut vertices = vec![false; positions.len()];
+        for (t, invalid) in triangles.iter().zip(invalid) {
+            if invalid {
+                for &v in t {
+                    vertices[v as usize] = true;
+                }
+            }
+        }
+        vertices
+    }
+
+    fn rejected_faces(
         &self,
         positions: &[[f32; 3]],
         triangles: &[[u32; 3]],
@@ -260,16 +286,13 @@ impl Source {
             }
             at = end;
         }
-        let mut vertices = vec![false; positions.len()];
-        for (t, invalid) in triangles.iter().zip(invalid) {
-            if invalid {
-                for &v in t {
-                    vertices[v as usize] = true;
-                }
-            }
-        }
-        vertices
+        invalid
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    pub(super) static VERTEX_FLAGS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]

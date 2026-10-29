@@ -5386,14 +5386,25 @@ fn city_block(layout: u64) -> Vec<Mesh> {
 ///   paths of a boundary touching the interface (a wall top and its one-quad roof edge).
 ///
 /// Cap reduction: layout 2 fits only with coarse drops ahead of whole-support protection,
-/// layout 113 only with its wall panels rebuilt from their boundary.
+/// layout 113 only with its wall panels rebuilt from their boundary. All validate.
 #[test]
 fn city_blocks_contract_and_reduce_without_omission() {
+    use crate::{mesh_large::delivery, validate::ExpectedProfile};
     for layout in [26, 77, 2, 113] {
         let work = tempfile::tempdir().unwrap();
         let input = write_gltf(&work.path().join("src"), &city_block(layout));
         let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
         assert!(omission_receipt(&format!("city block {layout}"), &dir));
+        let output = work.path().join("out.3tz");
+        let mut file = fs::File::create(&output).unwrap();
+        delivery::publish_with_limits(
+            &MeshTilesetRequest::new(&dir, &output),
+            delivery::plan::LIMITS,
+            &mut file,
+            work.path(),
+        )
+        .unwrap();
+        inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod)).unwrap();
     }
 }
 
