@@ -733,8 +733,9 @@ impl<'a> Pyramid<'a> {
                 .fold(0., f64::max);
             let mut sum = deviation(&patch, &sheet, &children, self.cells) + below;
             if !patch.content {
-                // Drawing nothing is at most this far from the surfaces below.
-                sum = sum.max(distance(patch.hierarchy[0], patch.hierarchy[1]));
+                // As meshes' `EMPTY_PARENT_SCALE`: Cesium stops at an empty tile
+                // whose error passes, so it refines until its extent is a pixel.
+                sum = sum.max(16. * distance(patch.hierarchy[0], patch.hierarchy[1]));
             }
             patch.error = if sum > 0. { outward(sum, &sheet) } else { 0. };
         }
@@ -2448,7 +2449,7 @@ mod tests {
         assert!(find(5, 8).is_none() && !empty.content && leaf.content);
         assert_eq!(empty.children.len(), 2);
         let extent = distance(leaf.surface[0], leaf.surface[1]);
-        assert!(empty.error >= extent && plan.root().error >= empty.error);
+        assert!(empty.error >= 16. * extent && plan.root().error >= empty.error);
     }
     /// A tile GLB read back through its own JSON, the meshopt decoders and the
     /// node's translation and scale: the decoded glTF positions and indices.

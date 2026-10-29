@@ -90,8 +90,8 @@ surface at the same lattice parameters, with outward rounding: the exact maximum
 to the next finer level, including where a clipped edge cell's diagonal crosses
 finer triangles, plus the largest child error. Distances are measured where
 both levels have a surface; a cell whose coverage may differ adds its
-horizontal diagonal, and a tile without triangles takes the diagonal of the
-surfaces below it. Errors never increase toward the leaves. Over smooth terrain the value is close to the vertical error plus
+horizontal diagonal, and a tile without triangles takes 16 times the diagonal
+of the surfaces below it, so Cesium refines through it while it is visible. Errors never increase toward the leaves. Over smooth terrain the value is close to the vertical error plus
 the grid errors of the levels below, a few 65,535ths of the tile size. The
 tileset error leaves an interval in which the root renders. These errors do
 not bound the distance to the continuous DEM.
