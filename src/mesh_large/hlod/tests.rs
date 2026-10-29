@@ -3313,6 +3313,23 @@ fn default_public_path_publishes_hlod_coarse_tiles_without_h17_records() {
         } else {
             assert_eq!(classes, ["source_primitive"], "{name}");
             assert!(decoded.faces.iter().all(|f| f.uniform_features), "{name}");
+            // Indexed, with bit-identical corners welded.
+            let jl = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+            let doc: Value = serde_json::from_slice(&bytes[20..20 + jl]).unwrap();
+            let mut vertices = 0;
+            for p in doc["meshes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|m| m["primitives"].as_array().unwrap())
+            {
+                assert!(p.get("indices").is_some(), "{name}");
+                vertices += doc["accessors"]
+                    [p["attributes"]["POSITION"].as_u64().unwrap() as usize]["count"]
+                    .as_u64()
+                    .unwrap();
+            }
+            assert!(vertices < 3 * decoded.faces.len() as u64, "{name}");
             coarse += 1;
         }
     }
