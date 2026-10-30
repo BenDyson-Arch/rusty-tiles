@@ -624,7 +624,7 @@ fn convert(
                 }
             }
             let moved = coordinates.transform(&probes)?;
-            (moved.chunks_exact(4))
+            (moved.as_chunks::<4>().0.iter())
                 .flat_map(|c| c[1..].iter().map(|m| norm(sub(*m, c[0]))))
                 .fold(f64::INFINITY, f64::min)
         }
