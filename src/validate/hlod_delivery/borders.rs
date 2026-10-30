@@ -280,12 +280,19 @@ impl Store {
     /// D11 border check of one coarse tile's decoded surface. Records each border
     /// vertex's image for the pairwise depth rules and returns the contracted arcs
     /// by chord (for the equal-direction multiplicity check).
+    #[allow(clippy::type_complexity)]
     pub(super) fn border(
         &self,
         tile: i64,
         surface: &Surface,
         effort: &Effort,
-    ) -> Result<BTreeMap<CanonicalEdge, Vec<CanonicalPoint>>, Error> {
+    ) -> Result<
+        (
+            BTreeMap<CanonicalEdge, Vec<CanonicalPoint>>,
+            BTreeSet<CanonicalPoint>,
+        ),
+        Error,
+    > {
         let g: Option<f64> = self
             .connection
             .query_row("SELECT error FROM tiles WHERE id=?", [tile], |r| r.get(0))
@@ -385,7 +392,95 @@ impl Store {
                 .execute(params![super::point_bytes(*p), tile, image, d])
                 .map_err(sql)?;
         }
-        Ok(contracted)
+        let shared = border
+            .points
+            .iter()
+            .chain(border.adjacent.keys())
+            .copied()
+            .collect();
+        Ok((contracted, shared))
+    }
+
+    /// D1/D11 amendment A2 (N1): a coarse face on three shared points that no leaf below
+    /// holds, or a coarse edge between two shared points that is neither a leaf edge nor
+    /// a delivered chord, is new on the seam. Only the tile holding the least leaf of
+    /// each of its points may create it, so two same-depth tiles never both do.
+    pub(super) fn least_owner(
+        &self,
+        tile: i64,
+        surface: &Surface,
+        contracted: &BTreeMap<CanonicalEdge, Vec<CanonicalPoint>>,
+        shared: &BTreeSet<CanonicalPoint>,
+        effort: &Effort,
+    ) -> Result<(), Error> {
+        let last: i64 = self
+            .connection
+            .query_row("SELECT last FROM tiles WHERE id=?", [tile], |r| r.get(0))
+            .map_err(sql)?;
+        let mut least = self
+            .connection
+            .prepare_cached("SELECT min(tile) FROM leaf_points WHERE key=?")
+            .map_err(sql)?;
+        let mut owned = |p: CanonicalPoint| -> Result<bool, Error> {
+            effort.charge(1)?;
+            let first: Option<i64> = least
+                .query_row([super::point_bytes(p)], |r| r.get(0))
+                .map_err(sql)?;
+            Ok(first.is_some_and(|f| f > tile && f <= last))
+        };
+        let mut leaf_face = self
+            .connection
+            .prepare_cached(
+                "SELECT EXISTS(SELECT 1 FROM leaf_faces WHERE corners=?1 AND tile>?2 AND tile<=?3)",
+            )
+            .map_err(sql)?;
+        for f in &surface.faces {
+            effort.charge(1)?;
+            if !f.iter().all(|p| shared.contains(p)) {
+                continue;
+            }
+            let mut k = *f;
+            k.sort_unstable();
+            let bytes: Vec<u8> = k.iter().flat_map(|p| super::point_bytes(*p)).collect();
+            let source: bool = leaf_face
+                .query_row(params![bytes, tile, last], |r| r.get(0))
+                .map_err(sql)?;
+            if !source && !(owned(k[0])? && owned(k[1])? && owned(k[2])?) {
+                return Err(bad(
+                    "leastOwner",
+                    &format!(
+                        "a new face on three shared points outside their least owner: tile={tile}"
+                    ),
+                ));
+            }
+        }
+        let mut leaf_edge = self
+            .connection
+            .prepare_cached(
+                "SELECT EXISTS(SELECT 1 FROM leaf_segments WHERE key=?1 AND tile>?2 AND tile<=?3)",
+            )
+            .map_err(sql)?;
+        for edge in surface.edges.keys() {
+            effort.charge(1)?;
+            if !shared.contains(&edge.0)
+                || !shared.contains(&edge.1)
+                || contracted.contains_key(edge)
+            {
+                continue;
+            }
+            let source: bool = leaf_edge
+                .query_row(params![super::edge_bytes(*edge), tile, last], |r| r.get(0))
+                .map_err(sql)?;
+            if !source && !(owned(edge.0)? && owned(edge.1)?) {
+                return Err(bad(
+                    "leastOwner",
+                    &format!(
+                        "a new edge between shared points outside their least owner: tile={tile}"
+                    ),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// One arc between retained vertices: its chord, directions and displacement.

@@ -111,6 +111,22 @@ const ROW_WINDOW: usize = 1024;
 /// Encoded GLB, compression scratch and decoded check copy of one coarse tile.
 const JOB_ENCODE_BYTES: u64 = 16 << 20;
 
+/// A tile declaring `asset.extras.rustyTiles.lastResort` (D1/D11 amendment A2).
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct DeclaredTile {
+    /// The cell's first node and depth (its payload is `proxies/f{first}-d{depth}.glb`).
+    pub first: u64,
+    pub depth: u32,
+    /// The last-resort stage that built it, 0 for a tile keeping admitted folds from below.
+    pub stage: u8,
+    /// Declared fold faces, recounted by the validators.
+    pub fold_faces: u64,
+    /// The widest fold's layer separation against its children, in metres (reported).
+    pub fold_separation: f64,
+    pub geometric_error: f64,
+    pub children_error: f64,
+}
+
 /// One parent job's admission for `merged` input triangles: its workspace, encode allowance,
 /// S2's source query, measurement and nearest-search workspace, and a cap-sized output.
 fn job_charge(merged: u64, settings: &Settings) -> u64 {
@@ -431,6 +447,12 @@ pub(crate) struct HlodReport {
     pub retries: u64,
     #[serde(skip)]
     pub last_resort_tiles: u64,
+    #[serde(skip)]
+    pub last_resort_stages: [u64; 3],
+    #[serde(skip)]
+    pub fold_faces: u64,
+    #[serde(skip)]
+    pub declared_tiles: Vec<DeclaredTile>,
     /// Content-less cells (omitted coarse tiles), by cell depth, and of them the sources:
     /// cells whose exact interface (or topology plain simplification cannot reduce) needs
     /// more triangles than the cap. Omission propagates to every ancestor (no content above a
@@ -516,6 +538,12 @@ pub struct HlodDiagnostics {
     pub tiles: u64,
     /// Tiles only the last-resort build fit (`geometry::build_parent`).
     pub last_resort_tiles: u64,
+    /// Of them, tiles stages N1, N2 and N3 built (D1/D11 amendment A2), and the fold
+    /// faces they declare.
+    pub last_resort_stages: [u64; 3],
+    pub fold_faces: u64,
+    /// Every tile declaring `lastResort` (stage 0: it keeps admitted folds from below).
+    pub declared_tiles: Vec<DeclaredTile>,
     pub jobs: u64,
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
     pub cpu_seconds: Option<f64>,
@@ -568,6 +596,9 @@ struct Closed {
     /// The cell's only child is a leaf (which cannot stand for it): the parent is reduced
     /// to half its input, so it is a genuinely coarser level, not a copy of the leaf.
     single_leaf: bool,
+    /// A child holds folds a last resort admitted (A2): the guard licenses them as input,
+    /// so this tile may keep them and then declares them (stage 0 if it is no last resort).
+    folds_below: bool,
 }
 
 /// What an unconsumed child of the walk is.
@@ -886,6 +917,9 @@ pub(crate) fn produce(
     diagnostics.error_measurement = report.error_measurement.clone();
     diagnostics.tiles = report.tiles;
     diagnostics.last_resort_tiles = report.last_resort_tiles;
+    diagnostics.last_resort_stages = report.last_resort_stages;
+    diagnostics.fold_faces = report.fold_faces;
+    diagnostics.declared_tiles = report.declared_tiles.clone();
     diagnostics.omitted_proxies = report.omitted_proxies;
     diagnostics.omission_sources = report.omission_sources;
     diagnostics.omitted_by_depth = report.omitted_by_depth.clone();
@@ -1188,11 +1222,18 @@ fn prepare(
     // Coarse snapping can collapse an otherwise valid thin surface onto itself.
     // Preserve its existing canonical points in that case; do not delete a twin
     // after decoding or hide the resulting fold by changing winding.
-    if !geometry::folds::decode_valid(
+    let policy = geometry::folds::Policy::last_resort(
+        built.last_resort_stage,
+        built.geometry.key.leaf_begin,
+        built.geometry.key.leaf_end,
+        &built.geometry.interface,
+    );
+    if !geometry::folds::decode_valid_with(
         &built.geometry.positions,
         &positions.decoded,
         &built.geometry.triangles,
         &built.geometry.interface,
+        &policy,
     ) {
         positions = captured.lattice.encode_coarse(
             &built.geometry.positions,
@@ -1200,11 +1241,12 @@ fn prepare(
             &vec![true; fixed.len()],
             built.geometry.key.depth,
         )?;
-        if !geometry::folds::decode_valid(
+        if !geometry::folds::decode_valid_with(
             &built.geometry.positions,
             &positions.decoded,
             &built.geometry.triangles,
             &built.geometry.interface,
+            &policy,
         ) {
             return Ok(None);
         }
@@ -1214,11 +1256,18 @@ fn prepare(
     if job.input.settings.mutation == Mutation::UnderstateDropError {
         built.change.dropped.clear();
     }
+    // N3 licenses any border-free closure or opening (A2): measured into G, not bounded
+    // by E.
+    let licensed = if built.last_resort_stage >= 3 {
+        f64::INFINITY
+    } else {
+        contract.scale
+    };
     let Some(controls) = geometry::measurement::assess(
         &mut built.change,
         &positions.decoded,
         &built.geometry.triangles,
-        contract.scale,
+        licensed,
         contract.scale.max(built.children_error),
         &mut |p, position| {
             let hit = nearest.source(query, p)?;
@@ -1305,7 +1354,8 @@ fn prepare(
         .receipt
         .opened_hole_boundary_to_source
         .max(built.controls.opening_proxy_max);
-    if !built.controls.eligible(contract.scale) {
+    // N3 licenses any border-free closure or opening; S2's G covers it (A2).
+    if built.last_resort_stage < 3 && !built.controls.eligible(contract.scale) {
         return Ok(None);
     }
     built.change.receipt.hole_patch_to_source = built
@@ -1439,6 +1489,28 @@ fn build_tile(
         };
         return Ok((None, omitted, appearance::Timing::default()));
     };
+    // A3: how far apart the layers of its folds lie, against its children (reported).
+    let fold_separation = if built.last_resort_stage >= 2 || closed.folds_below {
+        let reference: Vec<_> = children
+            .iter()
+            .flat_map(|c| {
+                c.triangles.iter().map(|t| {
+                    let p = t.map(|v| c.positions[v as usize]);
+                    (p[0], p[1], p[2])
+                })
+            })
+            .collect();
+        geometry::folds::fold_separation(
+            &built.geometry.positions,
+            &built.geometry.triangles,
+            &reference,
+            4. * built
+                .children_error
+                .max(contract.as_ref().map_or(0., |c| c.scale)),
+        )
+    } else {
+        0.
+    };
     drop(children);
     built.change = Default::default();
     built.controls = Default::default();
@@ -1477,12 +1549,25 @@ fn build_tile(
     } else {
         declared
     };
+    let fold_faces = geometry::folds::fold_faces(&positions.decoded, &tile.triangles);
+    // A2: a last resort declares its stage; a tile over admitted folds that kept some
+    // declares them as stage 0.
+    let carries_folds = fold_faces > 0 && (built.last_resort_stage >= 2 || closed.folds_below);
+    let last_resort = (built.last_resort_stage > 0 || carries_folds)
+        .then_some((built.last_resort_stage, fold_faces));
+    #[cfg(test)]
+    let last_resort = match settings.mutation {
+        Mutation::MiscountFolds => last_resort.map(|(s, f)| (s, f + 1)),
+        Mutation::UndeclaredFolds => None,
+        _ => last_resort,
+    };
     let encoded = encode::encode(
         tile,
         &built.locked,
         positions,
         &appearance,
         declared,
+        last_resort,
         settings.mutation,
     )?;
     drop(appearance.groups);
@@ -1533,6 +1618,15 @@ fn build_tile(
         protected_faces: built.protected_faces,
         retries: built.retries,
         last_resort: built.last_resort,
+        last_resort_stage: built.last_resort_stage,
+        fold_faces: if last_resort.is_some() { fold_faces } else { 0 },
+        declared_folds: last_resort.is_some(),
+        carries_folds,
+        fold_separation: if last_resort.is_some() {
+            fold_separation
+        } else {
+            0.
+        },
         interface_vertices: built.interface_vertices,
         interface_segments: built.interface_segments,
         reoriented_faces: built.reoriented,
@@ -1585,6 +1679,21 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     report.protected_faces += u64::from(row.protected_faces);
     report.retries += u64::from(row.retries);
     report.last_resort_tiles += u64::from(row.last_resort);
+    if row.last_resort_stage > 0 {
+        report.last_resort_stages[row.last_resort_stage as usize - 1] += 1;
+    }
+    report.fold_faces += row.fold_faces;
+    if row.declared_folds {
+        report.declared_tiles.push(DeclaredTile {
+            first: row.first,
+            depth: row.depth,
+            stage: row.last_resort_stage,
+            fold_faces: row.fold_faces,
+            fold_separation: row.fold_separation,
+            geometric_error: row.geometric_error,
+            children_error: row.children_error,
+        });
+    }
     report.reoriented_faces += u64::from(row.reoriented_faces);
 
     report.interface_segments += u64::from(row.interface_segments);
@@ -1726,6 +1835,8 @@ fn walk(
         let mut stack: Vec<Frame> = Vec::new();
         // Finished children: their geometry, or none when omitted.
         let mut ready: HashMap<u64, Option<store::spill::Held>> = HashMap::new();
+        // Finished tiles holding admitted folds (A2), by walk id.
+        let carriers = std::cell::RefCell::new(std::collections::HashSet::<u64>::new());
         let mut pending: Vec<Closed> = Vec::new();
         let mut finished_rows: BTreeMap<u64, Finished> = BTreeMap::new();
         let (mut next_id, mut next_seq, mut written, mut inflight) = (0u64, 0u64, 0u64, 0usize);
@@ -1796,7 +1907,11 @@ fn walk(
                 let Some(job_lease) = job_lease else {
                     break;
                 };
-                let closed = pending.remove(i);
+                let mut closed = pending.remove(i);
+                closed.folds_below = closed
+                    .children
+                    .iter()
+                    .any(|c| carriers.borrow().contains(c));
                 let children: Vec<TileGeometry> = closed
                     .children
                     .iter()
@@ -1842,6 +1957,9 @@ fn walk(
                 .map_err(|_| state("HLOD worker ended without a result"))?;
             *inflight -= 1;
             let (geometry, row, timing) = done?;
+            if matches!(&row, Finished::Row(r) if r.carries_folds) {
+                carriers.borrow_mut().insert(id);
+            }
             timings.surface += timing.surface;
             timings.charts += timing.charts;
             timings.query += timing.query;
@@ -2035,6 +2153,7 @@ fn walk(
                 },
                 children: frame.children,
                 single_leaf,
+                folds_below: false,
             };
             *next_seq += 1;
             kinds.insert(closed.id, Child::Coarse(closed.seq));

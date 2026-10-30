@@ -22,5 +22,9 @@
  "omission": {
   "files": 99,
   "sha256": "dfdbb2e93bd892fe04a3f09ad2af2558fc8dd784307ccbab3b303833265d7c14"
+ },
+ "last_resort": {
+  "files": 35,
+  "sha256": "fff62a656354fe7f0e49a728be56be82d32a8db7b360ff10d8682e79a38fc1e4"
  }
 }

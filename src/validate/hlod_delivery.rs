@@ -580,6 +580,57 @@ fn declared_drops(raw: &RawValue) -> Result<u64, Error> {
         }),
     }
 }
+/// A coarse payload's last-resort declaration (D1/D11 amendment A2),
+/// `asset.extras.rustyTiles.lastResort` {stage 0-3, foldFaces}; absent is none. Stage 0
+/// is a tile that keeps folds admitted below it.
+fn declared_last_resort(raw: &RawValue) -> Result<Option<(u8, u64)>, Error> {
+    let value = identity::field(raw, "asset")
+        .and_then(|r| identity::field(r, "extras"))
+        .and_then(|r| identity::field(r, "rustyTiles"))
+        .and_then(|r| identity::field(r, "lastResort"));
+    let Some(v) = value else { return Ok(None) };
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    struct LastResort {
+        stage: u8,
+        fold_faces: u64,
+    }
+    match serde_json::from_str::<LastResort>(v.get()) {
+        Ok(d) if d.stage <= 3 => Ok(Some((d.stage, d.fold_faces))),
+        _ => Err(bad(
+            "lastResort",
+            "lastResort is not {stage: 0-3, foldFaces: unsigned integer}",
+        )),
+    }
+}
+/// Faces on a fold, from the decoded surface alone (the producer's
+/// `folds::fold_faces`): faces of a coincident group, and faces using an edge that two
+/// or more faces use in the same direction.
+fn fold_faces(surface: &Surface) -> u64 {
+    let mut groups = BTreeMap::<[CanonicalPoint; 3], u64>::new();
+    for f in &surface.faces {
+        let mut k = *f;
+        k.sort_unstable();
+        *groups.entry(k).or_default() += 1;
+    }
+    let directed = |a: CanonicalPoint, b: CanonicalPoint| {
+        let e = &surface.edges[&if a < b { (a, b) } else { (b, a) }];
+        if a < b {
+            e.forward
+        } else {
+            e.reverse
+        }
+    };
+    surface
+        .faces
+        .iter()
+        .filter(|f| {
+            let mut k = **f;
+            k.sort_unstable();
+            groups[&k] > 1 || (0..3).any(|j| directed(f[j], f[(j + 1) % 3]) > 1)
+        })
+        .count() as u64
+}
 fn add_count(value: &mut u64, n: u64) -> Result<(), Error> {
     *value = value
         .checked_add(n)
@@ -974,7 +1025,7 @@ impl Store {
             CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER);
             CREATE INDEX tile_parent ON tiles(parent);
             CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL); CREATE INDEX refs_tile ON refs(tile); CREATE INDEX refs_rank ON refs(rank);
-            CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL,dropped INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL,dropped INTEGER NOT NULL DEFAULT 0,last_stage INTEGER NOT NULL DEFAULT 0,fold_faces INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE placements(id INTEGER PRIMARY KEY,tile INTEGER NOT NULL,rank INTEGER NOT NULL,frame BLOB NOT NULL,leaf INTEGER NOT NULL);
             CREATE INDEX placement_rank ON placements(rank,leaf,id);
             CREATE TABLE leaf_points(key BLOB NOT NULL,tile INTEGER NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
@@ -1195,6 +1246,14 @@ impl Store {
             .as_array()
             .is_some_and(|ts| ts.iter().any(|t| t["class"] == "source_triangle"));
         self.payload_bytes(rank, true, has_triangles, &digest)?;
+        if let Some((stage, folds)) = declared_last_resort(raw)? {
+            self.connection
+                .execute(
+                    "UPDATE payloads SET last_stage=?,fold_faces=? WHERE rank=?",
+                    params![i64::from(stage) + 1, integer(folds)?, integer(rank)?],
+                )
+                .map_err(sql)?;
+        }
         let dropped = declared_drops(raw)?;
         if dropped > 0 {
             self.connection
@@ -2289,8 +2348,42 @@ impl Store {
                         let bytes: Vec<u8> = f.iter().flat_map(|p| point_bytes(*p)).collect();
                         face.execute(params![tile, bytes]).map_err(sql)?;
                     }
-                    let contracted = self.border(tile, &surface, effort)?;
-                    self.equal_directions(tile, &surface, &contracted, effort)?;
+                    let (contracted, shared) = self.border(tile, &surface, effort)?;
+                    // A2: a declared tile holds exactly its declared fold faces. Folds are
+                    // admitted from stage 2, and in a declared tile above such a stage
+                    // (it keeps them as input); otherwise every fold needs source.
+                    // `last_stage` stores stage + 1 (0: undeclared).
+                    let (stored, declared, below): (i64, i64, bool) = self
+                        .connection
+                        .query_row(
+                            "SELECT coalesce(max(p.last_stage),0),coalesce(max(p.fold_faces),0),
+                             EXISTS(SELECT 1 FROM refs d JOIN payloads q ON q.rank=d.rank,tiles t
+                               WHERE t.id=?1 AND d.tile>t.id AND d.tile<=t.last AND q.last_stage>=3)
+                             FROM refs r JOIN payloads p ON p.rank=r.rank WHERE r.tile=?1",
+                            [tile],
+                            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                        )
+                        .map_err(sql)?;
+                    let stage = stored - 1;
+                    if stored > 0 && i64::try_from(fold_faces(&surface)).ok() != Some(declared) {
+                        return Err(bad(
+                            "lastResort",
+                            &format!(
+                                "declared {declared} fold faces, decoded {}: tile={tile}",
+                                fold_faces(&surface)
+                            ),
+                        ));
+                    }
+                    if stage == 0 && !below {
+                        return Err(bad(
+                            "lastResort",
+                            &format!("stage 0 declares folds without a declared fold stage below: tile={tile}"),
+                        ));
+                    }
+                    if !(stage >= 2 || (stored > 0 && below)) {
+                        self.equal_directions(tile, &surface, &contracted, effort)?;
+                    }
+                    self.least_owner(tile, &surface, &contracted, &shared, effort)?;
                     for path in contracted.values() {
                         add_count(&mut census.contracted_border_arcs, 1)?;
                         add_count(

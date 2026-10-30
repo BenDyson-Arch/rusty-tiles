@@ -590,9 +590,13 @@ fn complete_parent(n: usize, third_contact: bool) {
     assert!(outcome.attempted_topology.contracted_vertices > 0);
     if third_contact {
         // The only possible upper strip face is a-b-c, a fresh all-contact face.
-        // No recovery proposal can self-license it against the original source.
-        assert!(outcome.built.is_none());
-        assert!(outcome.contraction_failed);
+        // No recovery proposal can self-license it against the original source; the
+        // A2 last resort admits it here, its least owner, after every strategy failed.
+        let built = outcome
+            .built
+            .as_ref()
+            .expect("the last resort builds the strip");
+        assert!(built.last_resort_stage > 0);
         assert!(outcome.attempted_topology.rejected_remesh_rounds >= 2);
         assert!(
             mapped_mid.get() > 1,
@@ -602,7 +606,11 @@ fn complete_parent(n: usize, third_contact: bool) {
             checks.load(Ordering::Relaxed) > 1,
             "recovery must run after initial contraction rejection"
         );
-        assert_eq!(assessed.get(), 0, "an illegal proposal reached assessment");
+        assert_eq!(
+            assessed.get(),
+            1,
+            "only the last resort's proposal is assessed"
+        );
     } else {
         assert!(!outcome.contraction_failed);
         let built = outcome

@@ -385,6 +385,7 @@ mod tests {
             retries: 0,
             last_resort: false,
             staged: false,
+            last_resort_stage: 0,
             interface_vertices: 0,
             interface_segments: 0,
             reoriented: 0,

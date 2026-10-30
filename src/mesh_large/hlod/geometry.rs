@@ -62,9 +62,12 @@ pub(crate) struct Built {
     pub retries: u32,
     /// Published by the last-resort build (`build_parent`).
     pub last_resort: bool,
-    /// Proposed by the staged build. Only an accepted one is audited: its rejected
-    /// proposals revisit the earlier builds' strategies (`audit::topology_attempt`).
+    /// Proposed by the staged build or the last resort. Only an accepted one is audited:
+    /// its rejected proposals revisit the earlier builds' strategies
+    /// (`audit::topology_attempt`).
     pub staged: bool,
+    /// The last-resort stage (1-3) that proposed it, 0 otherwise (`Resort::N1`..`N3`).
+    pub last_resort_stage: u8,
     pub interface_vertices: u32,
     pub interface_segments: u32,
     /// Historical receipt field; proposals are rejected rather than reoriented.
@@ -234,8 +237,11 @@ fn staged_reduce(
     interface: &[InterfaceRow],
     locked: &[bool],
     cap: usize,
+    policy: &folds::Policy,
 ) -> (Vec<[u32; 3]>, f64) {
-    let guard = folds::Source::new(&merged.positions, source).with_boundary(interface);
+    let guard = folds::Source::new(&merged.positions, source)
+        .with_boundary(interface)
+        .with_policy(policy.clone());
     let segments: HashSet<(Key, Key)> = interface
         .iter()
         .filter(|r| !r.is_vertex())
@@ -307,6 +313,155 @@ fn staged_reduce(
         }
     }
     (current, error)
+}
+
+/// N2/N3: faces the source holds only the other way round are turned; N2 also drops
+/// coincident copies beyond the source's count (`folds::Source::settle`).
+fn settle(
+    merged: &Merged,
+    source: &[[u32; 3]],
+    policy: &folds::Policy,
+    resort: Resort,
+    out: &mut Vec<[u32; 3]>,
+) {
+    if policy.folds {
+        folds::Source::new(&merged.positions, source).settle(
+            &merged.positions,
+            out,
+            resort != Resort::N3,
+        );
+    }
+}
+
+// N3 clustering bounds: cell-size doublings from the shortest edge, then bisections
+// toward the finest cell that fits.
+const CLUSTER_DOUBLINGS: u32 = 64;
+const CLUSTER_BISECTIONS: u32 = 12;
+
+/// N3 (`Resort::N3`): vertex clustering. Every locked vertex (interface points, opening
+/// pins, open boundaries touching the interface) is its own cluster, so a face on a contract edge keeps that edge with its third
+/// corner clustered, and no edge between two locked vertices appears that was not there.
+/// Unlocked vertices merge per input component and grid cell (no face spans two
+/// components, as topology accounting requires) onto the member nearest the cell's mean
+/// (least index on ties); degenerate faces go and the rest settle (`settle`). The cell starts at
+/// the shortest edge, doubles until the output fits, then bisects toward the finest fit.
+/// The error is the largest move onto a representative.
+fn cluster_reduce(
+    merged: &Merged,
+    source: &[[u32; 3]],
+    interface: &[InterfaceRow],
+    locked: &[bool],
+    cap: usize,
+    policy: &folds::Policy,
+) -> (Vec<[u32; 3]>, f64) {
+    let guard = folds::Source::new(&merged.positions, source)
+        .with_boundary(interface)
+        .with_policy(policy.clone());
+    let faces = &merged.triangles;
+    let component = topology::components(merged);
+    let touching = topology::touching_boundary(merged, interface);
+    let locked: Vec<bool> = locked
+        .iter()
+        .zip(&touching)
+        .map(|(a, b)| *a || *b)
+        .collect();
+    let p = |v: u32| merged.positions[v as usize].map(f64::from);
+    let mut free: Vec<u32> = faces
+        .iter()
+        .flatten()
+        .copied()
+        .filter(|&v| !locked[v as usize])
+        .collect();
+    free.sort_unstable();
+    free.dedup();
+    if free.is_empty() {
+        return (faces.clone(), 0.);
+    }
+    let mut lo = [f64::INFINITY; 3];
+    for &v in &free {
+        for (l, x) in lo.iter_mut().zip(p(v)) {
+            *l = l.min(x);
+        }
+    }
+    let shortest = faces
+        .iter()
+        .flat_map(|t| (0..3).map(move |j| (t[j], t[(j + 1) % 3])))
+        .map(|(a, b)| distance(p(a), p(b)))
+        .filter(|d| *d > 0.)
+        .fold(f64::INFINITY, f64::min);
+    let run = |h: f64| -> (Vec<[u32; 3]>, f64) {
+        let cell = |v: u32| {
+            let q = p(v);
+            let c = [0, 1, 2].map(|i| ((q[i] - lo[i]) / h).floor() as i64);
+            (component[v as usize], c)
+        };
+        // Per (component, grid cell): coordinate sum, member count and members.
+        type Cell = ([f64; 3], u32, Vec<u32>);
+        let mut cells: HashMap<(usize, [i64; 3]), Cell> = HashMap::default();
+        for &v in &free {
+            let c = cells.entry(cell(v)).or_insert(([0.; 3], 0, Vec::new()));
+            for (s, x) in c.0.iter_mut().zip(p(v)) {
+                *s += x;
+            }
+            c.1 += 1;
+            c.2.push(v);
+        }
+        let mut map: Vec<u32> = (0..merged.positions.len() as u32).collect();
+        let mut error = 0f64;
+        for (sum, n, members) in cells.values() {
+            let mean = sum.map(|x| x / *n as f64);
+            let rep = *members
+                .iter()
+                .min_by(|a, b| {
+                    distance(p(**a), mean)
+                        .total_cmp(&distance(p(**b), mean))
+                        .then(a.cmp(b))
+                })
+                .unwrap();
+            for &v in members {
+                map[v as usize] = rep;
+                error = error.max(distance(p(v), p(rep)));
+            }
+        }
+        let mut out: Vec<[u32; 3]> = faces
+            .iter()
+            .map(|t| t.map(|v| map[v as usize]))
+            .filter(|t| t[0] != t[1] && t[1] != t[2] && t[0] != t[2])
+            .collect();
+        guard.settle(&merged.positions, &mut out, false);
+        (out, error)
+    };
+    let (mut fine, mut h) = (shortest, shortest);
+    let mut best = run(h);
+    if best.0.len() <= cap || !h.is_finite() {
+        return best;
+    }
+    let mut fit = None;
+    for _ in 0..CLUSTER_DOUBLINGS {
+        h *= 2.;
+        best = run(h);
+        if best.0.len() <= cap {
+            fit = Some(h);
+            break;
+        }
+        fine = h;
+    }
+    if let Some(mut coarse) = fit {
+        for _ in 0..CLUSTER_BISECTIONS {
+            let mid = (fine + coarse) / 2.;
+            let r = run(mid);
+            if r.0.len() <= cap {
+                (coarse, best) = (mid, r);
+            } else {
+                fine = mid;
+            }
+        }
+    }
+    best
+}
+
+fn distance(a: [f64; 3], b: [f64; 3]) -> f64 {
+    (0..3).map(|i| (a[i] - b[i]).powi(2)).sum::<f64>().sqrt()
 }
 
 /// Merge border carriers (unlocked vertices next to an interface point, off free edges)
@@ -569,10 +724,13 @@ pub(crate) fn build_parent(
     }
     let mut last = run(Resort::Fix2)?;
     last.attempted_topology.add(first.attempted_topology);
-    if last.built.is_none() {
-        let mut staged = run(Resort::Staged)?;
-        staged.attempted_topology.add(last.attempted_topology);
-        last = staged;
+    for resort in [Resort::Staged, Resort::N1, Resort::N2, Resort::N3] {
+        if last.built.is_some() {
+            break;
+        }
+        let mut next = run(resort)?;
+        next.attempted_topology.add(last.attempted_topology);
+        last = next;
     }
     if let Some(b) = &mut last.built {
         b.last_resort = true;
@@ -583,12 +741,35 @@ pub(crate) fn build_parent(
 /// A build's last resorts. `Fix2`: contraction rebuilds also flip interface diagonals and
 /// join slivers (`constrained::contract`), an attempt also pins touching paths (`attempt`),
 /// and coarse drops and wall panels follow every strategy. `Staged`: develop's strategies,
-/// each reduction staged against the fold guard (`staged`).
+/// each reduction staged against the fold guard (`staged`). `N1`-`N3` (D1/D11 amendment
+/// A2) replace omission: develop's first strategies only, staged, with the guard relaxed
+/// by `folds::Policy`: N1 admits new shared-point faces and edges in their least owner,
+/// N2 also admits folds, N3 also reduces by clustering with every locked vertex fixed
+/// (`cluster_reduce`).
 #[derive(Clone, Copy, PartialEq)]
 enum Resort {
     None,
     Fix2,
     Staged,
+    N1,
+    N2,
+    N3,
+}
+
+impl Resort {
+    /// The last-resort stage, 0 before it.
+    fn stage(self) -> u8 {
+        match self {
+            Self::N1 => 1,
+            Self::N2 => 2,
+            Self::N3 => 3,
+            _ => 0,
+        }
+    }
+    /// Whether the first reduction is staged or clustered (without contact pins).
+    fn staged(self) -> bool {
+        matches!(self, Self::Staged | Self::N1 | Self::N2 | Self::N3)
+    }
 }
 
 /// One build with the given last resorts.
@@ -621,6 +802,9 @@ fn build(
         .map(|c| c.geometric_error)
         .fold(0., f64::max);
     let interface = &contract.interface;
+    let policy =
+        folds::Policy::last_resort(resort.stage(), tile.leaf_begin, tile.leaf_end, interface);
+    let n3 = (resort == Resort::N3).then_some(&policy);
     let mut topology = topology::Receipt::default();
     let mut attempted = topology::Receipt::default();
     {
@@ -649,6 +833,7 @@ fn build(
             &lookup,
             &mut topology,
             fix2,
+            n3,
         )? {
             attempted.add(topology);
             topology = Default::default();
@@ -662,6 +847,7 @@ fn build(
                 &mut topology,
                 check,
                 fix2,
+                n3,
             )? {
                 attempted.add(topology);
                 return Ok(Outcome {
@@ -680,7 +866,15 @@ fn build(
     // cap (validators refuse a drop whose children fit it). Below it, a zero floor
     // licenses no drop, even for a smaller D11 target.
     let pressure = contracted_faces.len() > *caps.last().unwrap();
-    let drops = if pressure { floor } else { 0. };
+    // N3's clustering may drop or close any border-free component or hole: declared,
+    // ordered smallest first and covered by S2's measured G like every drop.
+    let drops = if resort == Resort::N3 {
+        f64::INFINITY
+    } else if pressure {
+        floor
+    } else {
+        0.
+    };
     let mut opening_pins = HashSet::default();
     for (i, &cap) in caps.iter().enumerate() {
         if caps[..i].contains(&cap) {
@@ -713,6 +907,16 @@ fn build(
                 });
             }
         }
+    }
+    // The last resort runs develop's first strategies only (fixed work per stage).
+    if resort.stage() > 0 {
+        attempted.add(topology);
+        return Ok(Outcome {
+            built: None,
+            contraction_failed: false,
+            attempted_topology: attempted,
+            construction_dropped: Vec::new(),
+        });
     }
     // D11: simplifier stagnation alone is not cap infeasibility. Deduplicate and remove
     // eligible interior components, then remesh with increasingly coarse interior cells.
@@ -1015,6 +1219,7 @@ fn recover_contraction(
     receipt: &mut TopologyReceipt,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
     fallbacks: bool,
+    folds: Option<&folds::Policy>,
 ) -> Result<bool, JobError> {
     let border = interface_points(previous);
     let locked: Vec<_> = merged.keys.iter().map(|k| border.contains(k)).collect();
@@ -1058,6 +1263,7 @@ fn recover_contraction(
             &mut attempt,
             Some(&reference.triangles),
             fallbacks,
+            folds,
         )? {
             receipt.add(attempt);
             return Ok(true);
@@ -1107,7 +1313,8 @@ fn assessed_attempt(
             Err(e) => return Err(e),
         };
         b.retries += round;
-        b.staged = resort == Resort::Staged;
+        b.staged = resort.staged();
+        b.last_resort_stage = resort.stage();
         let accepted = assess(&mut b)?;
         if !accepted {
             b.change.receipt.rejected_hole_closures += b.change.receipt.closed_holes;
@@ -1177,7 +1384,7 @@ fn attempt(
             sheets,
             remaining,
             refused,
-            resort == Resort::Staged,
+            resort,
         )
     };
     // An overprotected ring is a failed strategy, not a cap lower bound. Both
@@ -1225,8 +1432,10 @@ fn attempt_mode(
     separate_sheets: bool,
     remaining: &mut u32,
     touching: &mut bool,
-    staged: bool,
+    resort: Resort,
 ) -> Result<Built, JobError> {
+    let policy =
+        folds::Policy::last_resort(resort.stage(), tile.leaf_begin, tile.leaf_end, interface);
     let _cpu =
         super::cpu_profile::start(super::cpu_profile::Stage::Attempt, merged.triangles.len());
     let required = || {
@@ -1266,7 +1475,7 @@ fn attempt_mode(
         *lock |= opening_pins.contains(&merged.keys[v]);
     }
     // Staged reduction checks every step with the guard, so it needs no contact pins.
-    let staged_lock = (staged && !separate_sheets).then(|| locked.clone());
+    let staged_lock = (resort.staged() && !separate_sheets).then(|| locked.clone());
     for (lock, &pin) in locked.iter_mut().zip(&contact_pins) {
         *lock |= pin;
     }
@@ -1306,9 +1515,13 @@ fn attempt_mode(
             })
         };
         let (mut output, mut error) = match &staged_lock {
-            Some(lock) => staged_reduce(merged, contracted_faces, interface, lock, cap),
+            Some(lock) if resort == Resort::N3 => {
+                cluster_reduce(merged, contracted_faces, interface, lock, cap, &policy)
+            }
+            Some(lock) => staged_reduce(merged, contracted_faces, interface, lock, cap, &policy),
             None => reduce(&merged.triangles, &|v| locked[v as usize], cap)?,
         };
+        settle(merged, contracted_faces, &policy, resort, &mut output);
         let mut topology_protected = false;
         let mut fold_retries = 0;
         // Only one immutable post-contraction source per retry sequence. Release
@@ -1322,7 +1535,9 @@ fn attempt_mode(
             });
             let invalid = fold_source
                 .get_or_insert_with(|| {
-                    folds::Source::new(&merged.positions, contracted_faces).with_boundary(interface)
+                    folds::Source::new(&merged.positions, contracted_faces)
+                        .with_boundary(interface)
+                        .with_policy(policy.clone())
                 })
                 .violations(&merged.positions, &output);
             let valid = edges.is_empty() && points.is_empty() && !invalid.iter().any(|v| *v);
@@ -1431,6 +1646,7 @@ fn attempt_mode(
             };
             reduced.extend(keep);
             output = reduced;
+            settle(merged, contracted_faces, &policy, resort, &mut output);
             error = e;
         }
         if output.len() > cap {
@@ -1455,6 +1671,7 @@ fn attempt_mode(
     if matches!(stopping, StoppingBound::Input)
         && folds::Source::new(&merged.positions, contracted_faces)
             .with_boundary(interface)
+            .with_policy(policy.clone())
             .violations(&merged.positions, &output)
             .iter()
             .any(|v| *v)
@@ -1548,6 +1765,7 @@ fn attempt_mode(
         retries,
         last_resort: false,
         staged: false,
+        last_resort_stage: 0,
         interface_vertices: interface_vertices as u32,
         interface_segments: interface_segments as u32,
         reoriented: 0,

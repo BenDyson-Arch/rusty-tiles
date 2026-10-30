@@ -20,7 +20,7 @@ mod records;
 mod resources;
 mod source_crs;
 mod tree;
-pub use hlod::{HlodDiagnostics, HlodMemoryPlan};
+pub use hlod::{DeclaredTile, HlodDiagnostics, HlodMemoryPlan};
 pub use pipeline::{
     mesh_to_tileset, MemoryDiagnostics, StorageDiagnostics, TilerDiagnostics, TilerJobs,
     TilerProfile, TilerReport, TilerRequest, TilerResult,

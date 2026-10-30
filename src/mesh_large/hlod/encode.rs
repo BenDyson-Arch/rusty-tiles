@@ -52,6 +52,12 @@ pub(crate) enum Mutation {
     /// Weld corners on POSITION and feature ID only (the weld's own check must refuse).
     #[cfg(test)]
     WeldPositionsOnly,
+    /// Declare one fold face more than a last-resort payload holds.
+    #[cfg(test)]
+    MiscountFolds,
+    /// Publish a last-resort payload without its declaration.
+    #[cfg(test)]
+    UndeclaredFolds,
 }
 
 impl Mutation {
@@ -301,6 +307,7 @@ pub(crate) fn encode(
     mut positions: CoarsePositions,
     appearance: &Appearance,
     dropped: u64,
+    last_resort: Option<(u8, u64)>,
     mutation: Mutation,
 ) -> Result<Encoded, JobError> {
     let rows = tile.primitives.len();
@@ -552,9 +559,20 @@ pub(crate) fn encode(
         "extensions":{"EXT_structural_metadata":{"schema":{"id":"rusty_tiles_large_hlod_v1",
         "classes":classes_json},"propertyTables":[table_json]}}});
     // D11 drop declaration: the components of the immediate children this payload no
-    // longer holds (validators recount them and check G against each).
+    // longer holds (validators recount them and check G against each). A2 last-resort
+    // declaration: its stage and fold faces (`folds::fold_faces`, recounted likewise).
+    let mut declared = serde_json::Map::new();
     if dropped > 0 {
-        document["asset"]["extras"] = json!({"rustyTiles": {"droppedComponents": dropped}});
+        declared.insert("droppedComponents".into(), json!(dropped));
+    }
+    if let Some((stage, folds)) = last_resort {
+        declared.insert(
+            "lastResort".into(),
+            json!({"stage": stage, "foldFaces": folds}),
+        );
+    }
+    if !declared.is_empty() {
+        document["asset"]["extras"] = json!({ "rustyTiles": declared });
     }
     if images.is_empty() {
         for field in ["images", "textures", "samplers"] {

@@ -513,10 +513,16 @@ struct Tile {
     end: usize,
     faces: Vec<[Point; 3]>,
     leaf: bool,
+    /// A2: a tile admits declared folds: from stage 2, or declared over such a tile.
+    folds: bool,
+    declared: bool,
 }
 
 #[derive(Debug, Default)]
 struct Census {
+    /// A2 last-resort tiles, and those whose declared fold faces differ from their recount.
+    last_resort_tiles: usize,
+    fold_declaration_mismatches: usize,
     leaves: usize,
     coarse: usize,
     max_depth: u32,
@@ -707,6 +713,8 @@ fn load(dir: &Path) -> Vec<Tile> {
                 end: stop,
                 faces: decoded.faces.iter().map(|f| f.map(bits)).collect(),
                 leaf,
+                folds: r["lastResortStage"].as_u64().unwrap_or(0) >= 2,
+                declared: r["declaredFolds"] == true,
             },
             decoded,
         ));
@@ -716,6 +724,17 @@ fn load(dir: &Path) -> Vec<Tile> {
     }
     for r in rows(&dir.join("proxies.jsonl")) {
         add(&r, false);
+    }
+    let staged: Vec<(usize, usize, u32)> = tiles
+        .iter()
+        .filter(|(t, _)| t.folds)
+        .map(|(t, _)| (t.begin, t.end, t.depth))
+        .collect();
+    for (t, _) in &mut tiles {
+        t.folds |= t.declared
+            && staged
+                .iter()
+                .any(|&(b, e, d)| d > t.depth && t.begin <= b && e <= t.end);
     }
     tiles
         .into_iter()
@@ -742,8 +761,44 @@ fn load(dir: &Path) -> Vec<Tile> {
 /// Pairs are all disjoint (independently refinable) tile pairs over a shared interface.
 fn census(dir: &Path) -> Census {
     let tiles = load(dir);
+    // A2 declarations against an independent recount of the decoded faces.
+    let (mut last_resort_tiles, mut fold_declaration_mismatches) = (0, 0);
+    for r in rows(&dir.join("proxies.jsonl")) {
+        if r["declaredFolds"] != true {
+            continue;
+        }
+        let stage = r["lastResortStage"].as_u64().unwrap_or(0);
+        last_resort_tiles += 1;
+        let t = tiles
+            .iter()
+            .find(|t| t.uri == r["uri"].as_str().unwrap())
+            .unwrap();
+        let faces: Vec<[Point; 3]> = t.faces.iter().copied().filter(|f| !degenerate(f)).collect();
+        let mut groups: HashMap<[Point; 3], usize> = HashMap::new();
+        let mut directed: HashMap<(Point, Point), usize> = HashMap::new();
+        for f in &faces {
+            let mut k = *f;
+            k.sort_unstable();
+            *groups.entry(k).or_default() += 1;
+            for j in 0..3 {
+                *directed.entry((f[j], f[(j + 1) % 3])).or_default() += 1;
+            }
+        }
+        let recount = faces
+            .iter()
+            .filter(|f| {
+                let mut k = **f;
+                k.sort_unstable();
+                groups[&k] > 1 || (0..3).any(|j| directed[&(f[j], f[(j + 1) % 3])] > 1)
+            })
+            .count() as u64;
+        assert!(stage <= 3);
+        fold_declaration_mismatches += usize::from(r["foldFaces"].as_u64().unwrap_or(0) != recount);
+    }
     let leaves: Vec<&Tile> = tiles.iter().filter(|t| t.leaf).collect();
     let mut c = Census {
+        last_resort_tiles,
+        fold_declaration_mismatches,
         leaves: leaves.len(),
         coarse: tiles.len() - leaves.len(),
         packed_leaves: rows(&dir.join("leaves.jsonl"))
@@ -998,7 +1053,7 @@ fn census(dir: &Path) -> Census {
                 .is_some_and(|l| l.iter().any(|&i| (t.begin..t.end).contains(&i)))
         };
         for f in t.faces.iter().filter(|f| !degenerate(f)) {
-            if !within(&rotate(*f)) && within(&rotate([f[0], f[2], f[1]])) {
+            if !t.folds && !within(&rotate(*f)) && within(&rotate([f[0], f[2], f[1]])) {
                 c.reversed_coarse_faces += 1;
             }
         }
@@ -1168,6 +1223,7 @@ fn assert_directed_census(name: &str, c: &Census, cap: usize) {
     assert_eq!(c.missing_segments + c.missing_vertices, 0, "{name}: {c:?}");
     assert_eq!(c.max_same_depth_gap_m, 0., "{name}: {c:?}");
     assert!(c.max_coarse_triangles <= cap, "{name}: {c:?}");
+    assert_eq!(c.fold_declaration_mismatches, 0, "{name}: {c:?}");
 }
 
 fn files(dir: &Path, sub: &str) -> BTreeMap<String, Vec<u8>> {
@@ -1863,6 +1919,7 @@ fn parent_jobs_allocate_within_their_charge() {
             positions,
             &plain_appearance(g),
             0,
+            None,
             Mutation::None,
         )?;
         encode::check(g, &built.locked, &encoded)
@@ -1930,8 +1987,16 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
     let positions = lattice
         .encode_coarse(&tile.positions, &tile.ells, &fixed, tile.key.depth)
         .unwrap();
-    let encoded =
-        encode::encode(&tile, &locked, positions, &appearance, 0, Mutation::None).unwrap();
+    let encoded = encode::encode(
+        &tile,
+        &locked,
+        positions,
+        &appearance,
+        0,
+        None,
+        Mutation::None,
+    )
+    .unwrap();
     encode::check(&tile, &locked, &encoded).unwrap();
     let decoded = decode(&encoded.glb);
     let mut seen = 0;
@@ -2013,6 +2078,7 @@ fn coarse_weld_keeps_uv_and_normal_seams() {
         encoded_positions(),
         &appearance,
         0,
+        None,
         Mutation::None,
     )
     .unwrap();
@@ -2030,6 +2096,7 @@ fn coarse_weld_keeps_uv_and_normal_seams() {
         encoded_positions(),
         &appearance,
         0,
+        None,
         Mutation::WeldPositionsOnly,
     );
     let message = mutant
@@ -2602,20 +2669,28 @@ fn duplicated_soup_is_admitted_and_crack_free() {
         0,
         "{census:?}"
     );
-    // Each isolated triangle has diameter sqrt(2), larger than the existing
-    // G floor. The owner's measured-topology rule protects these components;
-    // tight-cap ancestors use the reported frontier instead of dropping them.
+    // Each isolated triangle has diameter sqrt(2), larger than the existing G floor, so
+    // no strategy before the last resort drops one, and no tight-cap ancestor fits. A2's
+    // clustering stage builds every one: it drops whole border-free triangles smallest
+    // first, declared and covered by G as coarse drops, and keeps both copies of the
+    // duplicated ones as declared fold faces.
     let dir = stage(&input, &work.path().join("capped"), &Run::default()).unwrap();
+    assert!(omission_receipt("capped soup", &dir));
     let manifest: Value =
         serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
-    assert!(manifest["hlod"]["omittedProxies"].as_u64().unwrap() > 0);
     let dropped: u64 = manifest["hlod"]["bordersByDepth"]
         .as_array()
         .unwrap()
         .iter()
         .map(|d| d["topology"]["droppedComponents"].as_u64().unwrap())
         .sum();
-    assert_eq!(dropped, 0, "large interior components must survive");
+    assert!(dropped > 0);
+    let n3 = last_resort_tiles(&dir);
+    assert!(
+        !n3.is_empty() && n3.iter().all(|t| t.2 == 3 && t.3 > 0),
+        "{n3:?}"
+    );
+    assert_eq!(super::tests::census(&dir).fold_declaration_mismatches, 0);
     // Sol round 8: nothing compounds; every job merges at most eight capped children.
     assert_bounded_jobs(&dir, 300);
     for row in rows(&dir.join("proxies.jsonl")) {
@@ -4779,17 +4854,16 @@ fn closed_box() -> Vec<Mesh> {
     out
 }
 
-/// Honest omission: about 50 holes per depth-1 cell cannot all stay open under the 300
-/// cap (Euler: V - 2 + 2h > cap), and closing one loses at least its inradius (0.42 m)
-/// against the source on any domain, far above E (0.049 m at depth 1). Each such cell
-/// (staged reduction fits two of the four with every hole open) and the root are omitted,
-/// reported and counted; content-less tiles lie only under
-/// content-less ancestors; nothing folds; the receipt is scale-invariant at powers of two,
-/// where f32 arithmetic scales exactly and only an absolute tolerance could change it.
-/// x40 rounds every coordinate, which can flip the last resort's marginal fits: it is held
-/// to never omit more than the strategies alone, with the same structural checks.
+/// About 50 holes per depth-1 cell cannot all stay open under the 300 cap (Euler:
+/// V - 2 + 2h > cap), and closing one loses at least its inradius (0.42 m) against the
+/// source on any domain, far above E (0.049 m at depth 1): every strategy before the last
+/// resort fails there (two of the four depth-1 cells at x1, all four at x3, and the root).
+/// D1/D11 amendment A2 builds them instead of omitting: the contract fits, so the last
+/// resort's clustering closes holes within its measured G, declared. Zero omissions at
+/// every scale, with the census, validator and refinement shape intact; x40 rounds every
+/// coordinate, which changes which strategy fits a marginal cell, not the outcome.
 #[test]
-fn d11_holey_sheet_reports_its_cap_infeasible_omissions_upward() {
+fn d11_holey_sheet_builds_every_cell_with_the_last_resort() {
     for scale in [1., 32., 0.25, 40.] {
         let name = format!("holey x{scale}");
         let work = tempfile::tempdir().unwrap();
@@ -4800,27 +4874,10 @@ fn d11_holey_sheet_reports_its_cap_infeasible_omissions_upward() {
         );
         let run = production_nearest_run();
         let dir = stage(&input, &work.path().join("hlod"), &run).unwrap();
-        assert!(!omission_receipt(&name, &dir));
-        let manifest: Value =
-            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
-        let h = &manifest["hlod"];
-        let receipt = (
-            h["omittedProxies"].as_u64().unwrap(),
-            h["omissionSources"].as_u64().unwrap(),
-            h["omittedByDepth"].clone(),
-        );
-        if scale == 40. {
-            // Rounded coordinates: the last resort fits 0-2 cells, never fewer than the
-            // strategies alone (5 omitted, 4 sources).
-            let depth = |d: usize| receipt.2[d].as_u64().unwrap();
-            assert!(
-                receipt.0 <= 5 && receipt.1 <= 4 && depth(0) == 1 && depth(1) <= 4,
-                "{name}: {h}"
-            );
-        } else {
-            assert_eq!(receipt, (3, 2, json!([1, 2, 0, 0])), "{name}: {h}");
-        }
-        assert_directed_census(&name, &census(&dir), run.cap);
+        assert!(omission_receipt(&name, &dir), "{name}");
+        let c = census(&dir);
+        assert!(c.last_resort_tiles > 0, "{name}: {c:?}");
+        assert_directed_census(&name, &c, run.cap);
         published_and_valid(&name, &dir, work.path());
     }
 }
@@ -5582,27 +5639,35 @@ fn city_block_point_contacts_on_shared_chains_stay_in_contracts() {
 /// Photogrammetry-like fold (Walem): a noisy 40 m sheet folded back over itself 2 cm
 /// apart. Every reduction of a coarse cell collapses the two layers onto each other
 /// (twin faces, acute books) and the fold guard refuses it; staged reduction with
-/// carrier merging fits it (`geometry::Resort::Staged`).
-#[test]
-fn a_noisy_folded_sheet_builds_every_coarse_tile() {
-    let (n, w) = (72, 145);
-    let h = |i: u32, j: u32| (i.wrapping_mul(73856093) ^ j.wrapping_mul(19349663)) % 1000;
+/// `layers` noisy sheets folded back and forth over one another, `gap` apart along y,
+/// on an `n`-cell grid 40 units wide; `amp` scales a hashed noise salted by `seed`.
+fn folded_sheet(n: u32, layers: u32, gap: f32, amp: f32, seed: u32) -> Mesh {
+    let w = layers * n + 1;
+    let h = |i: u32, j: u32| {
+        (i.wrapping_mul(73856093) ^ j.wrapping_mul(19349663) ^ seed.wrapping_mul(83492791)) % 1000
+    };
     let mut sheet = Mesh {
         positions: vec![],
         indices: vec![],
         color: [0.5, 0.5, 0.5, 1.],
     };
     for i in 0..=n {
-        for j in 0..=2 * n {
-            let (z, y) = (j.min(2 * n - j), if j <= n { 0. } else { 0.02 });
-            let y = y + h(i, j) as f32 * 0.0003;
+        for j in 0..=layers * n {
+            let layer = j.saturating_sub(1) / n;
+            let local = j - layer * n;
+            let z = if layer.is_multiple_of(2) {
+                local
+            } else {
+                n - local
+            };
+            let y = layer as f32 * gap + h(i, j) as f32 * amp;
             sheet
                 .positions
                 .push([i as f32 * 40. / n as f32, y, z as f32 * 40. / n as f32]);
         }
     }
     for i in 0..n {
-        for j in 0..2 * n {
+        for j in 0..layers * n {
             let v = |a: u32, c: u32| a * w + c;
             sheet.indices.extend([v(i, j), v(i, j + 1), v(i + 1, j)]);
             sheet
@@ -5610,10 +5675,147 @@ fn a_noisy_folded_sheet_builds_every_coarse_tile() {
                 .extend([v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
         }
     }
+    sheet
+}
+
+/// carrier merging fits it (`geometry::Resort::Staged`).
+#[test]
+fn a_noisy_folded_sheet_builds_every_coarse_tile() {
+    let sheet = folded_sheet(72, 2, 0.02, 0.0003, 0);
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &[sheet]);
     let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
     assert!(omission_receipt("noisy folded sheet", &dir));
     assert_directed_census("noisy folded sheet", &census(&dir), Run::default().cap);
     published_and_valid("noisy folded sheet", &dir, work.path());
+}
+
+/// The A2 last-resort tiles of a staged run: `(first, depth, stage, fold faces)`.
+fn last_resort_tiles(dir: &Path) -> Vec<(u64, u64, u64, u64)> {
+    rows(&dir.join("proxies.jsonl"))
+        .iter()
+        .filter_map(|r| {
+            Some((
+                r["first"].as_u64()?,
+                r["depth"].as_u64()?,
+                r["lastResortStage"].as_u64()?,
+                r["foldFaces"].as_u64().unwrap_or(0),
+            ))
+        })
+        .collect()
+}
+
+/// A folded-sheet run on develop's strategies only and on the full build: the coarse cells
+/// develop publishes, and the full run's staged directory.
+fn last_resort_case(name: &str, sheet: Mesh, work: &Path) -> (HashSet<(u64, u64)>, PathBuf) {
+    let input = write_gltf(&work.join("src"), &[sheet]);
+    let develop = stage(
+        &input,
+        &work.join("develop"),
+        &Run {
+            mutation: Mutation::Develop,
+            ..Run::default()
+        },
+    )
+    .unwrap();
+    let built: HashSet<(u64, u64)> = rows(&develop.join("proxies.jsonl"))
+        .iter()
+        .map(|r| (r["first"].as_u64().unwrap(), r["depth"].as_u64().unwrap()))
+        .collect();
+    let dir = stage(&input, &work.join("hlod"), &Run::default()).unwrap();
+    let c = census(&dir);
+    assert_directed_census(name, &c, Run::default().cap);
+    assert!(c.last_resort_tiles > 0, "{name}: {c:?}");
+    published_and_valid(name, &dir, work);
+    (built, dir)
+}
+
+/// D1/D11 amendment A2, stage N1. On three noisy sheets folded onto one another, a
+/// depth-1 cell fits only once it may create new faces and edges on the shared points
+/// whose least holding leaf it contains; no fold is admitted. Develop omits it. The cells
+/// still omitted are border-bound (their contracts leave the cap no room: border relief).
+#[test]
+fn n1_builds_a_seam_bound_cell_in_its_least_owner() {
+    let work = tempfile::tempdir().unwrap();
+    let name = "N1 folded sheets";
+    let (develop, dir) = last_resort_case(name, folded_sheet(96, 3, 0., 0.0001, 23), work.path());
+    let n1: Vec<_> = last_resort_tiles(&dir)
+        .into_iter()
+        .filter(|t| t.2 == 1)
+        .collect();
+    assert!(!n1.is_empty(), "{name}: {:?}", last_resort_tiles(&dir));
+    assert!(n1.iter().all(|t| !develop.contains(&(t.0, t.1))), "{name}");
+}
+
+/// A2 stage N2: three sheets 2 cm apart fold onto one another under every reduction of
+/// two depth-1 cells. Develop omits them (and the root); N2 admits the folds, declares
+/// them, and every cell builds. The validator recounts the declaration from the decoded
+/// payload: one fold face too many in it, or no declaration at all, is refused.
+#[test]
+fn n2_admits_declared_folds_and_the_validator_recounts_them() {
+    use crate::{mesh_large::delivery, validate::ExpectedProfile};
+    let work = tempfile::tempdir().unwrap();
+    let name = "N2 folded sheets";
+    let sheet = folded_sheet(72, 3, 0.02, 0.0001, 4);
+    let (develop, dir) = last_resort_case(name, sheet.clone(), work.path());
+    assert!(omission_receipt(name, &dir));
+    let n2: Vec<_> = last_resort_tiles(&dir)
+        .into_iter()
+        .filter(|t| t.2 == 2)
+        .collect();
+    assert!(
+        !n2.is_empty() && n2.iter().all(|t| t.3 > 0),
+        "{name}: {n2:?}"
+    );
+    assert!(n2.iter().all(|t| !develop.contains(&(t.0, t.1))), "{name}");
+    let input = write_gltf(&work.path().join("src2"), &[sheet]);
+    for (mutation, refusal) in [
+        (Mutation::MiscountFolds, "lastResort"),
+        (Mutation::UndeclaredFolds, "interfaceWinding"),
+    ] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("{mutation:?}")),
+            &Run {
+                mutation,
+                ..Run::default()
+            },
+        )
+        .unwrap();
+        let output = work.path().join(format!("{mutation:?}.3tz"));
+        let mut file = fs::File::create(&output).unwrap();
+        delivery::publish_with_limits(
+            &MeshTilesetRequest::new(&dir, &output),
+            delivery::plan::LIMITS,
+            &mut file,
+            work.path(),
+        )
+        .unwrap();
+        drop(file);
+        let error = inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(refusal), "{mutation:?}: {error}");
+    }
+}
+
+/// A2 stage N3: five sheets 2 cm apart. A depth-1 cell with a shared border cannot fit by
+/// reduction even with folds admitted; clustering with every border point and touching
+/// boundary fixed does. Develop omits it.
+#[test]
+fn n3_clusters_a_border_heavy_fold_cell_to_the_cap() {
+    let work = tempfile::tempdir().unwrap();
+    let name = "N3 folded sheets";
+    let (develop, dir) = last_resort_case(name, folded_sheet(48, 5, 0.02, 0.001, 7), work.path());
+    let rows = rows(&dir.join("proxies.jsonl"));
+    let n3: Vec<_> = rows
+        .iter()
+        .filter(|r| r["lastResortStage"] == 3 && r["depth"].as_u64().unwrap() > 0)
+        .collect();
+    assert!(!n3.is_empty(), "{name}: {:?}", last_resort_tiles(&dir));
+    for r in n3 {
+        assert!(r["interfaceSegments"].as_u64().unwrap() > 0, "{r}");
+        let key = (r["first"].as_u64().unwrap(), r["depth"].as_u64().unwrap());
+        assert!(!develop.contains(&key), "{name}: {key:?}");
+    }
 }

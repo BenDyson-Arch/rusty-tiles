@@ -431,11 +431,14 @@ pub(super) fn check(
                 &source_coincidence,
                 t.begin..t.end,
             );
-            c.unsupported_same_direction_edges += folds.unsupported_edges;
+            // A2: a stage-2/3 last-resort tile admits its declared folds.
+            if !t.folds {
+                c.unsupported_same_direction_edges += folds.unsupported_edges;
+                c.unsupported_coincident_face_groups += folds.unsupported_coincident_groups;
+            }
             c.coincident_coarse_face_groups += folds.coincident_groups;
             c.duplicate_coarse_faces += folds.duplicate_faces;
             c.reversed_twin_face_groups += folds.reversed_twin_groups;
-            c.unsupported_coincident_face_groups += folds.unsupported_coincident_groups;
         }
         for (e, l) in edges {
             if crosses(l) && !covered.contains_key(e) {
