@@ -13,11 +13,12 @@ use crate::{
     vec3::{norm_hypot as norm, sub},
     Error,
 };
+use rustc_hash::FxHashMap;
 use serde_json::{json, Value};
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::hash_map::Entry,
     fs::File,
-    io::{BufReader, BufWriter, Read, Write},
+    io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::Path,
 };
 
@@ -75,6 +76,9 @@ pub(super) struct Tree<'a, O: ProducerIo> {
     pub leaf_points: u64,
     /// The root's minimum, the origin of every sampling grid.
     pub anchor: [f64; 3],
+    /// Output metres of one source coordinate step; coarser leaves keep float32.
+    pub precision: f64,
+    pub float32_tiles: usize,
 }
 
 impl<O: ProducerIo> Tree<'_, O> {
@@ -121,33 +125,12 @@ impl<O: ProducerIo> Tree<'_, O> {
         if cell.is_none() {
             self.anchor = lo;
         }
-        let (rows, error, edge) = if leaf {
-            (std::fs::read(path)?, 0., 0.)
-        } else {
-            self.sample(path, extent, edge)?
-        };
         let index = self.tiles;
         self.tiles += 1;
         let uri = format!("t/{index}.glb");
-        let (rounding, reach) = emit(
-            &rows,
-            center,
-            self.layout,
-            self.options,
-            &self.output.join(&uri),
-            self.attempt,
-            self.operations,
-        )?;
-        self.max_rounding = self.max_rounding.max(rounding);
-        drop(rows);
-        // `reach` bounds the decoded positions about the tile origin, so the own box
-        // contains every decoded vertex (C2 decodedContentContainment, exact arithmetic).
-        let mut half = std::array::from_fn(|i| (extent[i] / 2. + rounding).max(1e-6).max(reach[i]));
-        let mut node = json!({"boundingVolume":{"box":box_json(0., half)},
-            "transform":translation(sub(center, parent_center)),
-            "geometricError":error + if leaf {0.} else {rounding},
-            "refine":"REPLACE","content":{"uri":uri}});
         if leaf {
+            let rows = std::fs::read(path)?;
+            let (node, ..) = self.tile(&rows, &uri, center, parent_center, extent, None)?;
             std::fs::remove_file(path)?;
             self.leaf_points += count;
             progress(self.attempt, "tiling", self.leaf_points, self.total_points)?;
@@ -186,6 +169,8 @@ impl<O: ProducerIo> Tree<'_, O> {
             .map(|branch| self.output.join(format!("scratch/{index}-{branch}.bin")))
             .collect();
         let mut counts = vec![0_u64; branches];
+        // One pass partitions the children and samples this tile.
+        let mut sampler = Sampler::new(self.anchor, extent, edge, self.options.max_points);
         {
             let mut files: Vec<_> = paths
                 .iter()
@@ -201,6 +186,7 @@ impl<O: ProducerIo> Tree<'_, O> {
                     break;
                 }
                 for row in batch.chunks_exact(self.layout.record_len) {
+                    sampler.insert(position(row), seen);
                     let branch = if extent == [0.; 3] {
                         ((seen as u128 * 8 / count as u128) as usize).min(7)
                     } else {
@@ -218,7 +204,11 @@ impl<O: ProducerIo> Tree<'_, O> {
                 file.flush()?;
             }
         }
+        let (rows, error, edge) = sampler.finish(path, self.layout.record_len, extent)?;
         std::fs::remove_file(path)?;
+        let (mut node, mut half, rounding) =
+            self.tile(&rows, &uri, center, parent_center, extent, Some(error))?;
+        drop(rows);
         let mut children = Vec::new();
         for (branch, path) in paths.iter().enumerate() {
             if counts[branch] == 0 {
@@ -258,71 +248,114 @@ impl<O: ProducerIo> Tree<'_, O> {
         Ok(node)
     }
 
-    /// Parent representatives: the first source record per occupied cubic voxel, in key
-    /// order, on the finest grid that fits `max_points`. Grids are anchored at the root's
-    /// minimum and a child's ladder starts at its parent's edge, which the child's subset
-    /// always fits: a child's voxels are never coarser than its parent's.
-    fn sample(
-        &self,
-        path: &Path,
+    /// Write one tile's content; a leaf has no sampling `error`. Returns its node, box
+    /// half extents and position rounding.
+    fn tile(
+        &mut self,
+        rows: &[u8],
+        uri: &str,
+        center: [f64; 3],
+        parent_center: [f64; 3],
         extent: [f64; 3],
-        parent_edge: Option<f64>,
-    ) -> Result<(Vec<u8>, f64, f64), Error> {
-        let budget = self.options.max_points;
+        error: Option<f64>,
+    ) -> Result<(Value, [f64; 3], f64), Error> {
+        let leaf = error.is_none();
+        let (rounding, reach, float32) = emit(
+            rows,
+            center,
+            self.layout,
+            self.options,
+            leaf.then_some(self.precision),
+            &self.output.join(uri),
+            self.attempt,
+            self.operations,
+        )?;
+        self.max_rounding = self.max_rounding.max(rounding);
+        self.float32_tiles += usize::from(float32);
+        // `reach` bounds the decoded positions about the tile origin, so the own box
+        // contains every decoded vertex (C2 decodedContentContainment, exact arithmetic).
+        let half = std::array::from_fn(|i| (extent[i] / 2. + rounding).max(1e-6).max(reach[i]));
+        let node = json!({"boundingVolume":{"box":box_json(0., half)},
+            "transform":translation(sub(center, parent_center)),
+            "geometricError":error.map_or(0., |e| e + rounding),
+            "refine":"REPLACE","content":{"uri":uri}});
+        Ok((node, half, rounding))
+    }
+}
+
+/// Parent representatives: the first source record per occupied cubic voxel, in key
+/// order, on the finest grid that fits the budget. Grids are anchored at the root's
+/// minimum and a child's ladder starts at its parent's edge, which the child's subset
+/// always fits: a child's voxels are never coarser than its parent's. Two chains of
+/// edges `top / 2^j` and `top / (2^j √2)` run down to `budget` voxels along the longest
+/// axis; halving is exact, so each grid nests in the coarser one. Each grid maps a
+/// voxel to its first record ordinal and holds at most `budget + 1` voxels.
+struct Sampler {
+    anchor: [f64; 3],
+    budget: usize,
+    chains: [Vec<(f64, FxHashMap<[u64; 3], u64>)>; 2],
+}
+
+impl Sampler {
+    fn new(anchor: [f64; 3], extent: [f64; 3], parent_edge: Option<f64>, budget: usize) -> Self {
         let longest = extent.into_iter().fold(0., f64::max);
         let side = (1..=budget).take_while(|s| s * s * s <= budget).count();
         // At most `side` root voxels per axis, including points on the upper bound.
         let top = parent_edge.unwrap_or(longest.max(f64::MIN_POSITIVE) / (side as f64 - 0.5));
-        // Two chains of edges `top / 2^j` and `top / (2^j √2)`, down to `budget` voxels along
-        // the longest axis. Halving is exact, so each grid nests in the coarser one.
-        let mut chains = [top, top / std::f64::consts::SQRT_2].map(|mut edge| {
-            let mut grids = vec![(edge, HashSet::new())];
+        let chains = [top, top / std::f64::consts::SQRT_2].map(|mut edge| {
+            let mut grids = vec![(edge, FxHashMap::default())];
             while longest > 0. && longest / edge < budget as f64 && edge / 2. > 0. {
                 edge /= 2.;
-                grids.push((edge, HashSet::new()));
+                grids.push((edge, FxHashMap::default()));
             }
             grids
         });
-        let key = |row: &[u8], edge: f64| -> [u64; 3] {
-            let p = position(row);
-            std::array::from_fn(|i| ((p[i] - self.anchor[i]) / edge) as u64)
-        };
-        // Pass one counts occupied voxels; pass two keeps the chosen grid's first records.
-        let (mut edge, mut voxels) = (top, BTreeMap::new());
-        for pass in 0..2 {
-            let mut records =
-                Records::new(path, self.layout.record_len, self.options.chunk_points)?;
-            loop {
-                checkpoint(self.attempt)?;
-                let batch = records.next()?;
-                if batch.is_empty() {
-                    break;
-                }
-                for row in batch.chunks_exact(self.layout.record_len) {
-                    if pass == 1 {
-                        voxels.entry(key(row, edge)).or_insert_with(|| row.to_vec());
-                        continue;
-                    }
-                    for chain in &mut chains {
-                        // Finest first: once a voxel is occupied, so are its coarser ones.
-                        for (edge, occupied) in chain.iter_mut().rev() {
-                            if !occupied.insert(key(row, *edge)) {
-                                break;
-                            }
-                        }
-                        // Overflow trims the finer tail; the even chain's coarsest grid
-                        // (the parent's, or at most side³ root voxels) always fits.
-                        while chain.last().is_some_and(|(_, v)| v.len() > budget) {
-                            chain.pop();
-                        }
-                    }
-                }
-            }
-            edge = (chains.iter().flatten().map(|grid| grid.0)).fold(top, f64::min);
+        Self {
+            anchor,
+            budget,
+            chains,
         }
-        // A voxel's points differ by under its edge, and by at most the tile extent.
+    }
+
+    fn insert(&mut self, p: [f64; 3], ordinal: u64) {
+        for chain in &mut self.chains {
+            // Finest first: once a voxel is occupied, so are its coarser ones.
+            for (edge, voxels) in chain.iter_mut().rev() {
+                let key = std::array::from_fn(|i| ((p[i] - self.anchor[i]) / *edge) as u64);
+                match voxels.entry(key) {
+                    Entry::Vacant(slot) => slot.insert(ordinal),
+                    Entry::Occupied(_) => break,
+                };
+            }
+            // Overflow trims the finer tail; the even chain's coarsest grid (the parent's,
+            // or at most side³ root voxels) always fits.
+            while chain.last().is_some_and(|(_, v)| v.len() > self.budget) {
+                chain.pop();
+            }
+        }
+    }
+
+    /// The finest fitting grid's records, read by ordinal in key order, its cell diagonal
+    /// (clamped to the extent on single-voxel axes) and its edge.
+    fn finish(
+        self,
+        path: &Path,
+        len: usize,
+        extent: [f64; 3],
+    ) -> Result<(Vec<u8>, f64, f64), Error> {
+        let (edge, voxels) = (self.chains.into_iter().filter_map(|mut chain| chain.pop()))
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .ok_or_else(|| Error::Data("point sample exceeds maxPoints".into()))?;
+        let mut picks: Vec<_> = voxels.into_iter().collect();
+        picks.sort_unstable();
+        let mut file = BufReader::new(File::open(path)?);
+        let mut rows = vec![0; picks.len() * len];
+        for ((_, ordinal), row) in picks.iter().zip(rows.chunks_exact_mut(len)) {
+            file.seek(SeekFrom::Start(ordinal * len as u64))?;
+            file.read_exact(row)?;
+        }
         let error = norm(std::array::from_fn(|i| edge.min(extent[i])));
-        Ok((voxels.into_values().flatten().collect(), error, edge))
+        Ok((rows, error, edge))
     }
 }
 
@@ -331,10 +364,11 @@ fn emit(
     center: [f64; 3],
     layout: &Layout,
     options: &PointCloudOptions,
+    leaf_precision: Option<f64>,
     path: &Path,
     attempt: &Attempt,
     operations: &mut impl ProducerIo,
-) -> Result<(f64, [f64; 3]), Error> {
+) -> Result<(f64, [f64; 3], bool), Error> {
     let count = rows.len() / layout.record_len;
     // Admission caps tiles at MAX_POINTS_PER_TILE, so 16-bit feature IDs are exact.
     if count > super::MAX_POINTS_PER_TILE {
@@ -358,26 +392,59 @@ fn emit(
     if !scale.iter().chain(&lo).all(|v| v.is_finite()) {
         return Err(Error::Data("tile positions exceed finite range".into()));
     }
-    let mut positions = Vec::with_capacity(count * 8);
+    // A leaf keeps float32 when a 16-bit step would be coarser than the source precision.
+    let float32 =
+        leaf_precision.is_some_and(|p| (0..3).any(|i| hi[i] > lo[i] && scale[i] / 65535. > p));
+    let mut positions = Vec::with_capacity(count * 12);
+    let (mut low, mut high) = ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]);
     let mut rounding: f64 = 0.;
     for (index, p) in rows.chunks_exact(layout.record_len).map(local).enumerate() {
         if index % 4096 == 0 {
             checkpoint(attempt)?;
         }
-        let code: [u16; 3] = std::array::from_fn(|i| {
-            ((p[i] - lo[i]) / scale[i] * 65535.).round().min(65535.) as u16
-        });
-        let decoded = std::array::from_fn(|i| lo[i] + scale[i] * (f64::from(code[i]) / 65535.));
+        let decoded: [f64; 3] = if float32 {
+            let value = p.map(|v| v as f32);
+            low = std::array::from_fn(|i| low[i].min(value[i]));
+            high = std::array::from_fn(|i| high[i].max(value[i]));
+            positions.extend(value.into_iter().flat_map(f32::to_le_bytes));
+            value.map(f64::from)
+        } else {
+            let code: [u16; 3] = std::array::from_fn(|i| {
+                ((p[i] - lo[i]) / scale[i] * 65535.).round().min(65535.) as u16
+            });
+            positions.extend(code.into_iter().chain([0]).flat_map(u16::to_le_bytes));
+            std::array::from_fn(|i| lo[i] + scale[i] * (f64::from(code[i]) / 65535.))
+        };
         rounding = rounding.max(norm(sub(p, decoded)));
-        positions.extend(code.into_iter().chain([0]).flat_map(u16::to_le_bytes));
     }
     let view = glb.view(&positions);
-    glb.document["bufferViews"][view]["byteStride"] = 8.into();
-    let high: [u16; 3] = std::array::from_fn(|i| if hi[i] > lo[i] { 65535 } else { 0 });
-    let mut attributes = json!({"POSITION":glb.accessor(json!({"bufferView":view,
-        "componentType":5123,"normalized":true,"count":count,"type":"VEC3","min":[0,0,0],"max":high}))});
-    glb.document["nodes"][0]["translation"] = json!(lo);
-    glb.document["nodes"][0]["scale"] = json!(scale);
+    let (mut position, reach): (Value, [f64; 3]) = if float32 {
+        if !low.iter().chain(&high).all(|v| v.is_finite()) {
+            return Err(Error::Data(
+                "tile positions exceed finite float32 range".into(),
+            ));
+        }
+        let reach = std::array::from_fn(|i| f64::from(low[i].abs().max(high[i].abs())));
+        (json!({"componentType":5126,"min":low,"max":high}), reach)
+    } else {
+        glb.document["bufferViews"][view]["byteStride"] = 8.into();
+        glb.document["nodes"][0]["translation"] = json!(lo);
+        glb.document["nodes"][0]["scale"] = json!(scale);
+        glb::add_extension(&mut glb.document, "KHR_mesh_quantization", true)?;
+        // Decoded positions lie in [lo, lo + scale] exactly; widen the rounded sum.
+        let reach = std::array::from_fn(|i| {
+            lo[i].abs().max((lo[i] + scale[i]).abs()) + 4. * f64::EPSILON * (lo[i].abs() + scale[i])
+        });
+        let high: [u16; 3] = std::array::from_fn(|i| if hi[i] > lo[i] { 65535 } else { 0 });
+        (
+            json!({"componentType":5123,"normalized":true,"min":[0,0,0],"max":high}),
+            reach,
+        )
+    };
+    position["bufferView"] = view.into();
+    position["count"] = count.into();
+    position["type"] = "VEC3".into();
+    let mut attributes = json!({ "POSITION": glb.accessor(position) });
     if let Some(at) = layout.rgb {
         // One display colour: 8-bit, round(v / 257); exact 16-bit values are metadata.
         let mut colors = Vec::with_capacity(count * 4);
@@ -457,7 +524,6 @@ fn emit(
         }
     }
     glb::add_extension(&mut glb.document, "KHR_materials_unlit", false)?;
-    glb::add_extension(&mut glb.document, "KHR_mesh_quantization", true)?;
     let mut extensions = json!({});
     let mut metadata = json!({"schema":{"id":"rusty_tiles_point_cloud","classes":{}}});
     if options.metadata {
@@ -486,12 +552,8 @@ fn emit(
     }
     checkpoint(attempt)?;
     operations.member(path, &glb.finish()?)?;
-    // Decoded positions lie in [lo, lo + scale] exactly; widen the rounded sum.
-    let reach = |i: usize| {
-        lo[i].abs().max((lo[i] + scale[i]).abs()) + 4. * f64::EPSILON * (lo[i].abs() + scale[i])
-    };
     // glTF stores (x, z, -y): box axis 1 reads glTF axis 2 and box axis 2 reads axis 1.
-    Ok((rounding, [reach(0), reach(2), reach(1)]))
+    Ok((rounding, [reach[0], reach[2], reach[1]], float32))
 }
 
 /// Tileset-level error; NaN (reported by the caller as a nonfinite extent)

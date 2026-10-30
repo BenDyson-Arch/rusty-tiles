@@ -1756,10 +1756,10 @@ fn metadata_attributes_decode_legacy_classification_flags_and_extended_returns()
 }
 
 /// Structure-audit controls at the defaults on a tilted plane with one far point:
-/// rendering-only payload, parents filled to the budget, and refinement that always
-/// lowers the error (the far point once made chains of one-child duplicate tiles).
+/// rendering-only payload, parents filled to the budget, and refinement that lowers the
+/// error here (the far point once made chains of one-octant duplicate tiles).
 #[test]
-fn default_surface_payload_parent_fill_and_strict_error_ladder() {
+fn default_surface_payload_parent_fill_and_one_octant_error_ladder() {
     use rusty_tiles::point_cloud::*;
     let work = tempfile::tempdir().unwrap();
     let (input, output) = (

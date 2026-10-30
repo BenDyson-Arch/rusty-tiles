@@ -1,6 +1,7 @@
 //! Bounded LAS/LAZ producer under the F0 file lifecycle.
 use crate::archive3tz::{self, CodecError, WriteFailure};
 use crate::runtime::{Attempt, Staging};
+use crate::vec3::{norm, sub};
 use crate::{crs, Error};
 use crate::{
     CleanupDiagnostic, JobError, JobErrorKind, JobFailure, OutputPolicy, RunControl, RunEvent,
@@ -98,6 +99,8 @@ pub struct PointCloudReport {
     pub metadata: bool,
     pub properties: Vec<String>,
     pub max_position_rounding_metres: f64,
+    pub source_precision_metres: f64,
+    pub float32_tiles: usize,
     pub sampling: String,
     pub max_points: usize,
     pub chunk_points: usize,
@@ -528,6 +531,7 @@ fn convert(
         expected,
     } = prepared;
     let options = &request.options;
+    let mut precision = f64::NAN;
     let (origin, count) = {
         let mut points = las::PointDataBuilder::new().for_header(&header).build();
         let mut origin = None;
@@ -558,6 +562,16 @@ fn convert(
             checkpoint(attempt)?;
             let projected = coordinates.transform(&xyz)?;
             let origin = *origin.get_or_insert(projected[0]);
+            if precision.is_nan() {
+                // Output metres of one source coordinate step, measured at the first point.
+                let steps: Vec<_> = (0..3)
+                    .map(|i| {
+                        std::array::from_fn(|j| xyz[0][j] + if i == j { scales[i] } else { 0. })
+                    })
+                    .collect();
+                let moved = coordinates.transform(&steps)?;
+                precision = (moved.iter()).fold(f64::INFINITY, |p, m| p.min(norm(sub(*m, origin))));
+            }
             for ((raw, source), point) in points
                 .raw_bytes()
                 .chunks_exact(raw_len)
@@ -603,6 +617,8 @@ fn convert(
         total_points: count,
         leaf_points: 0,
         anchor: [0.; 3],
+        precision,
+        float32_tiles: 0,
     };
     progress(attempt, "tiling", 0, count)?;
     let mut root = tree.build(&path, [0.; 3], 0, None, None)?;
@@ -656,6 +672,8 @@ fn convert(
         metadata: options.metadata,
         properties: if options.metadata { layout.dimensions.iter().map(|d| d.name.clone()).collect() } else { Vec::new() },
         max_position_rounding_metres: tree.max_rounding,
+        source_precision_metres: tree.precision,
+        float32_tiles: tree.float32_tiles,
         sampling: "first source point per cubic voxel, finest grid fitting maxPoints; cell diagonal bounds source-to-sample distance".into(),
         max_points: options.max_points, chunk_points: options.chunk_points,
         encoder: "rusty-tiles-native-las-implicit-v4".into(),

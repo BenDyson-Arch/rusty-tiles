@@ -250,8 +250,8 @@ def decoded_points(data):
                 quantized=(a['componentType'],a.get('normalized'))==(5123,True) and 'KHR_mesh_quantization' in doc['extensionsRequired']
                 require(a['type']=='VEC3' and (quantized or (a['componentType']==5126 and not a.get('normalized',False))),'POSITION float32 or quantized UNSIGNED_SHORT')
                 points=[tuple(v/65535 for v in p) if quantized else p for p in accessor_values(doc,binary,a)];require(len(points)==table['count'],'POSITION/table cardinality')
-                # Half a quantization step per axis, through the node scale.
-                step=.5/65535*math.sqrt(sum(m[i]**2 for i in range(11) if i%4<3)) if quantized else 0.
+                # Half a quantization step per glTF axis, through the node scale, in z-up order.
+                h=[.5/65535*math.sqrt(sum(m[4*c+r]**2 for r in range(3))) if quantized else 0. for c in range(3)];step=(h[0],h[2],h[1])
                 if '_FEATURE_ID_0' in primitive['attributes']:
                     feature=doc['accessors'][primitive['attributes']['_FEATURE_ID_0']]
                     require(not feature.get('normalized',False),'feature IDs unnormalized')
@@ -488,7 +488,7 @@ def audit(source,archive,max_points,geographic=False,height=0.,require_multileaf
             # Half a 16-bit quantization step, float32-scale evaluation and geospatial
             # reference allowances. Leaf error 0 states that nothing is omitted below.
             slack=max(3e-6,math.sqrt(sum((abs(v)*2**-24)**2 for v in positions[at])))+(2e-8 if geographic else 0.)
-            require(delta<=steps[at]+slack,f'{uri}: rendered POSITION differs ({delta} > {steps[at]+slack})')
+            require(all(abs(world[at][a]-expected_positions[index][a])<=steps[at][a]+slack for a in range(3)),f'{uri}: rendered POSITION differs by more than half a step on an axis at source {index}')
             require(delta<=report['maxPositionRoundingMetres']+slack,f'{uri}: position error exceeds the reported rounding')
             require(box_contains(box,positions[at]),f'{uri}: rendered position escapes bounds')
         descendants=[];children=node.get('children',[])
@@ -502,12 +502,21 @@ def audit(source,archive,max_points,geographic=False,height=0.,require_multileaf
             require(distance<=error+3e-6,'parent nearest-representative error claim')
         else:
             require(error==0,'leaf geometric error');leaves.extend(ids);descendants=ids
+            # Leaves keep 16-bit codes only where a step is within the source precision.
+            extent=[max(p[a] for p in positions)-min(p[a] for p in positions) for a in range(3)];precision=report['sourcePrecisionMetres']
+            if any(steps[0]):require(all(2*steps[0][a]<=precision*(1+1e-9) for a in range(3) if extent[a]),f'{uri}: 16-bit leaf coarser than the source')
+            else:require(any(e/65535>precision*(1-1e-9) for e in extent),f'{uri}: float32 leaf where 16-bit codes suffice')
         # Invert admitted translation-only tile transforms, composed through
         # skeleton tiles, links and each implicit root's frame.
         require(m[:12]==IDENTITY[:12],'point tile translation profile')
         for index in descendants:
             require(box_contains(box,tuple(expected_positions[index][a]-m[12+a] for a in range(3))),'descendant source escapes transformed bounds')
         return descendants
+    # One source step in output metres, measured independently at the first record.
+    if not expected_positions_override:
+        precision=min(expected['scales'])
+        if geographic:precision=min(math.dist(ecef({**rows[0],n:rows[0][n]+v},height),expected_positions[0]) for n,v in zip(('source_x','source_y','source_z'),expected['scales']))
+        require(math.isclose(report['sourcePrecisionMetres'],precision,rel_tol=1e-6),'reported source precision')
     samples={};visit(root,IDENTITY)
     anchor=[min(p[a] for p in expected_positions) for a in range(3)]
     def sampled(node,parent_edge):
@@ -646,10 +655,10 @@ def run(binary,output_dir,quick=False,baseline=False):
         completed=subprocess.run(command,capture_output=True,text=True)
         require(completed.returncode==0,'conversion failed: '+completed.stdout+completed.stderr)
         result=audit(source,archive,budget);result.update(format=fmt,variant=variant,chunk_points=chunk,max_points=budget);results.append(result)
-        if number==0:
-            controls_result=controls(source,archive,16);lean=source.with_suffix('.lean.3tz')
-            require(subprocess.run(command[:6]+[str(lean)]+command[7:-1],capture_output=True).returncode==0,'default conversion')
-            lean_equivalent(archive,lean)
+        if number==0:controls_result=controls(source,archive,16)
+        lean=source.with_suffix('.lean.3tz')
+        require(subprocess.run(command[:6]+[str(lean)]+command[7:-1],capture_output=True).returncode==0,'default conversion')
+        lean_equivalent(archive,lean)
         if variant=='deep':controls_result=controls_result+forest_controls(source,archive,budget)
     forests=[r['forest'] for r in results if r['implicit']]
     require(any(f['explicit'] and f['implicit_roots']>1 for f in forests),'implicit roots below an explicit skeleton were exercised')
