@@ -236,7 +236,7 @@ def decoded_points(data):
         declaration=schema[name];code=KINDS[declaration['componentType']]
         raw=view_bytes(doc,binary,column['values']);require(len(raw)==table['count']*struct.calcsize('<'+code),'metadata scalar count')
         columns[name]=[v[0] for v in struct.iter_unpack('<'+code,raw)]
-    result=[];steps=[]
+    result=[];steps=[];kinds=set()
     scenes=doc.get('scenes',[]);require(scenes,'GLB selected scene')
     active=set()
     def visit(index,parent):
@@ -250,8 +250,9 @@ def decoded_points(data):
                 quantized=(a['componentType'],a.get('normalized'))==(5123,True) and 'KHR_mesh_quantization' in doc['extensionsRequired']
                 require(a['type']=='VEC3' and (quantized or (a['componentType']==5126 and not a.get('normalized',False))),'POSITION float32 or quantized UNSIGNED_SHORT')
                 points=[tuple(v/65535 for v in p) if quantized else p for p in accessor_values(doc,binary,a)];require(len(points)==table['count'],'POSITION/table cardinality')
-                # Half a quantization step per glTF axis, through the node scale, in z-up order.
-                h=[.5/65535*math.sqrt(sum(m[4*c+r]**2 for r in range(3))) if quantized else 0. for c in range(3)];step=(h[0],h[2],h[1])
+                # Per-axis allowance in z-up order: half a 16-bit step through the node scale,
+                # or the float32 half-ulp bound of each stored value.
+                h=[.5/65535*math.sqrt(sum(m[4*c+r]**2 for r in range(3))) for c in range(3)]
                 if '_FEATURE_ID_0' in primitive['attributes']:
                     feature=doc['accessors'][primitive['attributes']['_FEATURE_ID_0']]
                     require(not feature.get('normalized',False),'feature IDs unnormalized')
@@ -266,7 +267,9 @@ def decoded_points(data):
                     require(colors==[tuple((v+128)//257 for v in rgb) for rgb in zip(columns['red'],columns['green'],columns['blue'])],'rendered COLOR_0 is source RGB rounded to 8 bits')
                 local=[transform(m,p) for p in points]
                 # glTF Y up -> 3D Tiles Z up, per 3D Tiles glTF axis convention.
-                result.extend((p[0],-p[2],p[1]) for p in local);steps.extend([step]*len(local))
+                result.extend((p[0],-p[2],p[1]) for p in local)
+                steps.extend((h[0],h[2],h[1]) if quantized else (abs(p[0])*2**-24,abs(p[2])*2**-24,abs(p[1])*2**-24) for p in points)
+                kinds.add(quantized)
                 for field,attribute in [('classification','_CLASSIFICATION'),('intensity','_INTENSITY'),('return_number','_RETURN_NUMBER')]:
                     if attribute in primitive['attributes']:
                         values=accessor_values(doc,binary,doc['accessors'][primitive['attributes'][attribute]])
@@ -275,7 +278,8 @@ def decoded_points(data):
         active.remove(index)
     for node in scenes[doc.get('scene',0)]['nodes']:visit(node,IDENTITY)
     require(len(result)==table['count'],'rendered point cardinality')
-    return result,columns,schema,steps
+    require(len(kinds)<=1,'one POSITION encoding per tile')
+    return result,columns,schema,(kinds=={True},steps)
 
 
 def morton_xyz(index,level):
@@ -476,7 +480,7 @@ def audit(source,archive,max_points,geographic=False,height=0.,require_multileaf
         m=multiply(parent,node.get('transform',IDENTITY));error=node['geometricError'];require(math.isfinite(error) and error>=0,'finite geometric error')
         box=node['boundingVolume']['box'];require(all(math.isfinite(v) for v in box),'finite bounds')
         uri=node['content']['uri'];require(uri in members,'reachable content resource');used.add(uri)
-        positions,columns,schema,steps=decoded_points(members[uri]);ids=columns['source_index'];tiles+=1
+        positions,columns,schema,(quantized,steps)=decoded_points(members[uri]);ids=columns['source_index'];tiles+=1
         if check_extra_metadata:source_extra_schema(expected,schema)
         require(len(ids)<=max_points and len(ids)>0,'point budget')
         required=set(rows[0]);require(required<=set(columns),'missing required source field: '+str(sorted(required-set(columns))))
@@ -487,7 +491,7 @@ def audit(source,archive,max_points,geographic=False,height=0.,require_multileaf
             delta=math.dist(world[at],expected_positions[index]);rounding=max(rounding,delta)
             # Half a 16-bit quantization step, float32-scale evaluation and geospatial
             # reference allowances. Leaf error 0 states that nothing is omitted below.
-            slack=(max(3e-6,math.sqrt(sum((abs(v)*2**-24)**2 for v in positions[at]))) if not any(steps[at]) else 1e-8)+(2e-8 if geographic or expected_positions_override else 0.)
+            slack=1e-8+(2e-8 if geographic or expected_positions_override else 0.)
             require(all(abs(world[at][a]-expected_positions[index][a])<=steps[at][a]+slack for a in range(3)),f'{uri}: rendered POSITION differs by more than half a step on an axis at source {index}')
             require(delta<=report['maxPositionRoundingMetres']+slack,f'{uri}: position error exceeds the reported rounding')
             require(box_contains(box,positions[at]),f'{uri}: rendered position escapes bounds')
@@ -504,7 +508,7 @@ def audit(source,archive,max_points,geographic=False,height=0.,require_multileaf
             require(error==0,'leaf geometric error');leaves.extend(ids);descendants=ids
             # Leaves keep 16-bit codes only where a step is within the source precision.
             extent=[max(p[a] for p in positions)-min(p[a] for p in positions) for a in range(3)];precision=report['sourcePrecisionMetres']
-            if any(steps[0]):require(all(2*steps[0][a]<=precision*(1+1e-9) for a in range(3) if extent[a]),f'{uri}: 16-bit leaf coarser than the source')
+            if quantized:require(all(2*steps[0][a]<=precision*(1+1e-9) for a in range(3) if extent[a]),f'{uri}: 16-bit leaf coarser than the source')
             else:require(any(e/65535>precision*(1-1e-9) for e in extent),f'{uri}: float32 leaf where 16-bit codes suffice')
         # Invert admitted translation-only tile transforms, composed through
         # skeleton tiles, links and each implicit root's frame.

@@ -297,6 +297,8 @@ struct Sampler {
     anchor: [f64; 3],
     budget: usize,
     chains: [Vec<Grid>; 2],
+    /// Each chain's last finest-grid voxel: coherent input often repeats it.
+    last: [Option<[u64; 3]>; 2],
 }
 
 impl Sampler {
@@ -317,14 +319,18 @@ impl Sampler {
             anchor,
             budget,
             chains,
+            last: [None; 2],
         }
     }
 
     fn insert(&mut self, p: [f64; 3], ordinal: u64) {
-        for chain in &mut self.chains {
+        for (chain, last) in self.chains.iter_mut().zip(&mut self.last) {
             // Finest first: once a voxel is occupied, so are its coarser ones.
-            for (edge, voxels) in chain.iter_mut().rev() {
+            for (finest, (edge, voxels)) in chain.iter_mut().rev().enumerate() {
                 let key = std::array::from_fn(|i| ((p[i] - self.anchor[i]) / *edge) as u64);
+                if finest == 0 && last.replace(key) == Some(key) {
+                    break;
+                }
                 match voxels.entry(key) {
                     Entry::Vacant(slot) => slot.insert(ordinal),
                     Entry::Occupied(_) => break,
@@ -334,6 +340,7 @@ impl Sampler {
             // or at most side³ root voxels) always fits.
             while chain.last().is_some_and(|(_, v)| v.len() > self.budget) {
                 chain.pop();
+                *last = None;
             }
         }
     }
