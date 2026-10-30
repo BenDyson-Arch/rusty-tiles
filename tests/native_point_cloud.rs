@@ -210,20 +210,28 @@ impl Glb {
         &self.binary[at..at + view["byteLength"].as_u64().unwrap() as usize]
     }
 
-    /// Quantized POSITION scaled by the scene root (glTF frame), and its translation.
+    /// POSITION (float32, or quantized through the scene root's scale) in the glTF frame,
+    /// and the scene root's translation.
     fn positions(&self) -> (Vec<[f64; 3]>, [f64; 3]) {
-        let node = &self.doc["nodes"][0];
-        let scale: [f64; 3] = serde_json::from_value(node["scale"].clone()).unwrap();
-        let codes = self.view(self.doc["accessors"][0]["bufferView"].as_u64().unwrap() as usize);
-        let positions = codes.as_chunks::<8>().0.iter().map(|c| {
-            std::array::from_fn(|i| {
-                scale[i] * f64::from(u16::from_le_bytes([c[2 * i], c[2 * i + 1]])) / 65535.
-            })
-        });
-        (
-            positions.collect(),
-            serde_json::from_value(node["translation"].clone()).unwrap(),
-        )
+        let (node, accessor) = (&self.doc["nodes"][0], &self.doc["accessors"][0]);
+        let bytes = self.view(accessor["bufferView"].as_u64().unwrap() as usize);
+        let read = |v: &Value| serde_json::from_value(v.clone()).unwrap_or([0.; 3]);
+        let positions = if accessor["componentType"] == 5126 {
+            let floats = bytes.as_chunks::<4>().0.iter();
+            let floats: Vec<_> = floats.map(|c| f64::from(f32::from_le_bytes(*c))).collect();
+            floats.as_chunks::<3>().0.to_vec()
+        } else {
+            let scale: [f64; 3] = read(&node["scale"]);
+            let codes = bytes.as_chunks::<8>().0.iter();
+            codes
+                .map(|c| {
+                    std::array::from_fn(|i| {
+                        scale[i] * f64::from(u16::from_le_bytes([c[2 * i], c[2 * i + 1]])) / 65535.
+                    })
+                })
+                .collect()
+        };
+        (positions, read(&node["translation"]))
     }
 
     fn column(&self, name: &str) -> &[u8] {
