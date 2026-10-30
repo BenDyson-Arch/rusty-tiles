@@ -278,7 +278,10 @@ adapt original-point requirements to the common D11 contract.
 
 Audit v1 has additive location records. Each `topologyAttempt` has a tile key,
 local attempt ordinal, acceptance flag, measured receipt and `hintOnly: true`
-locations. Final tile/omission records carry `topologyAttempts`; a tile's
+locations. Every measured proposal is recorded except the staged last-resort build's
+rejected ones, which revisit the earlier builds' strategies: that build records only
+its accepted proposal. Final tile/omission records carry `topologyAttempts`, which
+counts every measured proposal, so recorded ordinals may skip; a tile's
 `publishedTopologyAttempt` is its accepted record's byte index. A final omission
 may also reference `constructionTopology` for cleanup drops that never reached an
 assessed proposal. Each operation has a kind, ordinal and location-bank index.
@@ -291,7 +294,8 @@ S5 must re-derive operations from the source and delivered surfaces.
 
 Record serialization is counted before any record bytes are written. A tmpfs
 sidecar has a fixed internal 64 MiB budget included in the memory plan and
-ScratchLedger; exceeding it refuses with ResourceLimit and never drops evidence.
+ScratchLedger; exceeding it refuses with ResourceLimit and never truncates a record.
+Which records exist is fixed by the rule above, never by the budget.
 Ordinary disk uses the conservative logical maximum with actual-growth free-space
 checks. The archive and client request graph never contain these records. Attempt records
 can arrive in worker completion order. Determinism tests compare every audit fact

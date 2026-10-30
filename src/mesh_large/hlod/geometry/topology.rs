@@ -1595,6 +1595,23 @@ fn split_clusters(
     // the two never overlap; only a topology split pays to rebuild it.
     let mut guard = None;
     let mut passes = 0;
+    let required = points(interface);
+    // A required point held only by index-degenerate faces has no face to restore, and
+    // every round would drop it: refuse.
+    let held: HashSet<u32> = m
+        .triangles
+        .iter()
+        .filter(|t| surface(t))
+        .flatten()
+        .copied()
+        .collect();
+    if m.triangles
+        .iter()
+        .flatten()
+        .any(|&v| !held.contains(&v) && required.contains(&m.keys[v as usize]))
+    {
+        return None;
+    }
     loop {
         let mut output: Vec<[u32; 3]> = m
             .triangles
@@ -1627,6 +1644,16 @@ fn split_clusters(
                     .filter(|(_, bad)| **bad)
                     .map(|(v, _)| v as u32),
             );
+            // A required point whose faces all collapse (a point contact off the border
+            // edges) would vanish: split the clusters around it, or refuse the round.
+            let used: HashSet<u32> = output.iter().flatten().copied().collect();
+            for t in m.triangles.iter().filter(|t| surface(t)) {
+                if t.iter()
+                    .any(|&v| !used.contains(&v) && required.contains(&m.keys[v as usize]))
+                {
+                    split.extend(t.map(|v| map[v as usize]));
+                }
+            }
             if split.is_empty() {
                 drop((invalid, guard.take()));
                 let change = changes(m, &output, interface, 0.)
@@ -2264,6 +2291,60 @@ pub(super) mod tests {
         assert_eq!(receipt.dropped_components, 0);
         assert_eq!(change.patch_faces, vec![8, 9]);
         assert_eq!(change.boundary.len(), 4);
+    }
+    /// Walem f8946485-d6: a point contact K (a vertex row off the border edges) inside a
+    /// tiny ring that one remesh cell clusters into a vertex lost every face; the next
+    /// attempt stopped the bake with `invalid_state`. A unit square, corner faces first
+    /// (the locked support face), a diamond strip down to the ring, K's fan.
+    #[test]
+    fn a_remesh_round_keeps_a_point_contact_whose_ring_collapses() {
+        let (a, b) = (0.446, 0.454);
+        let positions = vec![
+            [0., 0., 0.],
+            [0.5, 0., 0.],
+            [1., 0., 0.],
+            [1., 0.5, 0.],
+            [1., 1., 0.],
+            [0.5, 1., 0.],
+            [0., 1., 0.],
+            [0., 0.5, 0.],
+            [0.45, 0.45, 0.],
+            [0.45, a, 0.],
+            [b, 0.45, 0.],
+            [0.45, b, 0.],
+            [a, 0.45, 0.],
+        ];
+        let mut triangles = vec![[0, 1, 7], [1, 2, 3], [3, 4, 5], [5, 6, 7]];
+        let (d, r) = ([1, 3, 5, 7], [9, 10, 11, 12]);
+        for j in 0..4 {
+            let k = (j + 1) % 4;
+            triangles.extend([[d[j], d[k], r[k]], [d[j], r[k], r[j]], [8, r[j], r[k]]]);
+        }
+        let mut m = mesh(positions, triangles);
+        let key = m.keys.clone();
+        let mut border: Vec<_> = (0..8)
+            .map(|v| {
+                InterfaceRow::new(
+                    0,
+                    key[v].min(key[(v + 1) % 8]),
+                    key[v].max(key[(v + 1) % 8]),
+                    0,
+                    1,
+                )
+            })
+            .collect();
+        border.push(InterfaceRow::new(0, key[8], key[8], 0, 1));
+        // Review r1: with K held only by index-degenerate faces the round is refused.
+        let mut degenerate = m.clone();
+        for t in degenerate.triangles.iter_mut().filter(|t| t[0] == 8) {
+            t[2] = t[1];
+        }
+        for m in [&mut m, &mut degenerate] {
+            for round in 1..=6 {
+                remesh(m, &border, round, &mut Receipt::default());
+                assert!(m.triangles.iter().any(|t| t.contains(&8)), "round {round}");
+            }
+        }
     }
     #[test]
     fn interior_remeshing_preserves_a_hole_touching_a_border_junction() {

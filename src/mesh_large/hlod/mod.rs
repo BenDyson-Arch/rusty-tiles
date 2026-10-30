@@ -1387,9 +1387,13 @@ fn build_tile(
                 }
                 if let Some(audit) = audit {
                     topology_attempts += 1;
-                    let index = audit.topology_attempt(built, topology_attempts, accepted)?;
-                    if accepted {
-                        published_topology_attempt = Some(index);
+                    // The staged build's rejected proposals revisit the earlier builds'
+                    // strategies: counted, not recorded again.
+                    if accepted || !built.staged {
+                        let index = audit.topology_attempt(built, topology_attempts, accepted)?;
+                        if accepted {
+                            published_topology_attempt = Some(index);
+                        }
                     }
                 }
                 Ok(accepted)
