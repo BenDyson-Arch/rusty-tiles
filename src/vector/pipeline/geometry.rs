@@ -506,6 +506,12 @@ pub(super) fn simplify_path(
     }
     let mut points = source.to_vec();
     let mut anchors = BTreeSet::from([0, points.len() - 1]);
+    let offset = |points: &[Point], i: usize, a: usize, b: usize| {
+        let ab = sub(points[b], points[a]);
+        let t = (dot(sub(points[i], points[a]), ab) / dot(ab, ab).max(1e-30)).clamp(0., 1.);
+        norm(sub(sub(points[i], points[a]), mul(ab, t)))
+    };
+    let mut far = None;
     if closed {
         let split = (0..points.len())
             .max_by(|a, b| {
@@ -519,6 +525,14 @@ pub(super) fn simplify_path(
         }
         points.push(points[0]);
         anchors = BTreeSet::from([0, split, points.len() - 1]);
+        // A ring within tolerance of its chord keeps the vertex farthest from it: a
+        // triangle, never the unreduced source with an error of zero.
+        far = (1..points.len() - 1)
+            .filter(|i| *i != split)
+            .map(|i| (i, offset(&points, i, 0, split)))
+            .max_by(|(i, a), (j, b)| a.total_cmp(b).then_with(|| j.cmp(i)))
+            .filter(|(_, d)| *d > 0.)
+            .map(|(i, _)| i);
     }
     anchors.extend(
         points
@@ -527,37 +541,41 @@ pub(super) fn simplify_path(
             .filter(|(_, p)| locked.contains(&key(**p)))
             .map(|(i, _)| i),
     );
-    let mut keep = anchors.clone();
-    let a: Vec<_> = anchors.into_iter().collect();
-    let mut pending: Vec<_> = a.windows(2).map(|p| (p[0], p[1])).collect();
-    let mut error: f64 = 0.;
-    while let Some((a, b)) = pending.pop() {
-        if b <= a + 1 {
-            continue;
+    loop {
+        let mut keep = anchors.clone();
+        let a: Vec<_> = anchors.iter().copied().collect();
+        let mut pending: Vec<_> = a.windows(2).map(|p| (p[0], p[1])).collect();
+        let mut error: f64 = 0.;
+        while let Some((a, b)) = pending.pop() {
+            if b <= a + 1 {
+                continue;
+            }
+            let (index, distance) = (a + 1..b)
+                .map(|i| (i, offset(&points, i, a, b)))
+                .max_by(|(i, a), (j, b)| a.total_cmp(b).then_with(|| j.cmp(i)))
+                .unwrap();
+            if distance > tolerance {
+                keep.insert(index);
+                pending.extend([(a, index), (index, b)]);
+            } else {
+                error = error.max(distance);
+            }
         }
-        let ab = sub(points[b], points[a]);
-        let (index, distance) = (a + 1..b)
-            .map(|i| {
-                let t = (dot(sub(points[i], points[a]), ab) / dot(ab, ab).max(1e-30)).clamp(0., 1.);
-                (i, norm(sub(sub(points[i], points[a]), mul(ab, t))))
-            })
-            .max_by(|(i, a), (j, b)| a.total_cmp(b).then_with(|| j.cmp(i)))
-            .unwrap();
-        if distance > tolerance {
-            keep.insert(index);
-            pending.extend([(a, index), (index, b)]);
-        } else {
-            error = error.max(distance);
+        let mut result: Vec<_> = keep.into_iter().map(|i| points[i]).collect();
+        if closed {
+            result.pop();
+            if result.len() < 3 {
+                match far.take() {
+                    Some(far) => {
+                        anchors.insert(far);
+                        continue;
+                    }
+                    None => return (source.to_vec(), 0.),
+                }
+            }
         }
+        return (result, error);
     }
-    let mut result: Vec<_> = keep.into_iter().map(|i| points[i]).collect();
-    if closed {
-        result.pop();
-        if result.len() < 3 {
-            return (source.to_vec(), 0.);
-        }
-    }
-    (result, error)
 }
 
 /// Simplified rings, the measured error, and why simplification was skipped.
@@ -1327,11 +1345,13 @@ mod tests {
             false,
         )
         .unwrap();
-        let Geometry::MultiLineString(lines) = coarse.geometry else {
-            panic!("expected bounded hole outlines")
+        // Rings within tolerance of their chords reduce to triangles rather than
+        // keeping the source with an error of zero.
+        let Geometry::Polygon(rings) = coarse.geometry else {
+            panic!("expected a reduced polygon")
         };
-        assert_eq!(lines.len(), 2);
-        assert!(error <= 6.);
+        assert_eq!(rings.iter().map(Vec::len).collect::<Vec<_>>(), [4, 4]);
+        assert!(error > 0. && error <= 6.);
     }
 }
 

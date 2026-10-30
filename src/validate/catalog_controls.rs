@@ -155,6 +155,8 @@ fn vector_build_digest_and_conversion_marker_survive_the_hash_pass() {
         let mut doc: Value =
             serde_json::from_slice(&tileset(content_tile(&["a.glb".into()]))).unwrap();
         doc["asset"]["extras"] = json!({"vectorBuildStateSha256": expected});
+        // A rusty-tiles vector archive's empty root refines until it is about a pixel.
+        (doc["geometricError"], doc["root"]["geometricError"]) = (json!(64), json!(64));
         serde_json::to_vec(&doc).unwrap()
     };
     let mut files = Files::new();

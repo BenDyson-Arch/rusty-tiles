@@ -58,10 +58,7 @@ pub(crate) fn held_bytes_bound() -> u64 {
 /// Below this height a non-leaf tile is (inside) an implicit root (P-IMPL `S`).
 pub(crate) const SKELETON_HEIGHT: u32 = 4;
 
-/// An empty parent's geometric error is this multiple of its box diagonal: until its whole
-/// box projects below about one pixel at CesiumJS's default maximum screen-space error of
-/// 16, the viewer refines it towards the leaves that hold the geometry.
-pub(crate) const EMPTY_PARENT_SCALE: f64 = 16.;
+pub(crate) use crate::tileset_node::EMPTY_PARENT_SCALE;
 
 pub(crate) fn state(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message.into())

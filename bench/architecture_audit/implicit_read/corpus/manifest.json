@@ -213,6 +213,7 @@
    "expected": "Accepted",
    "path": "/home/bend/.cache/forest-acc/work/head-native/W5-vec-perf.3tz",
    "sha256": "ecf728ee458b04a25b0b96796bd48b3267980f8bf58c729adbd587ea9a6e3c04",
+   "production": "InvalidInput (pre-#301 empty vector root)",
    "ref": "W5 vec-perf: vector default perf (W5u on f2238cd): rusty-tiles --json vector -i perf-vector.geojson --reproducible --jobs 2",
    "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
   },
@@ -221,6 +222,7 @@
    "expected": "Accepted",
    "path": "/home/bend/.cache/forest-acc/work/head-native/W5-vec-perf-quantize.3tz",
    "sha256": "605c7c32b20f76feb3f69b6f8d3f74ccf737f9e4a7ba693b810621849a027e60",
+   "production": "InvalidInput (pre-#301 empty vector root)",
    "ref": "W5 vec-perf --quantize: rusty-tiles --json vector -i perf-vector.geojson --reproducible --jobs 2 --quantize",
    "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
   },
@@ -229,6 +231,7 @@
    "expected": "Accepted",
    "path": "/home/bend/.cache/forest-acc/work/head-native/W5-vec-perf-meshopt.3tz",
    "sha256": "b8a217d750c728c31f4df16818a72d7633d682e7c51a29da075dd9c6d66e1313",
+   "production": "InvalidInput (pre-#301 empty vector root)",
    "ref": "W5 vec-perf --meshopt: rusty-tiles --json vector -i perf-vector.geojson --reproducible --jobs 2 --meshopt",
    "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
   },
@@ -261,6 +264,7 @@
    "expected": "Accepted",
    "path": "/home/bend/.cache/forest-acc/work/head-native/mf2-lod3.3tz",
    "sha256": "f795a4f1ece91c34e124c193789add7cf94c51463fc8ef155d03ad25e3448356",
+   "production": "InvalidInput (pre-#301 empty vector root)",
    "ref": "W11 deep vector LOD chains, 12.5k tiles, 189 documents and 188 links: rusty-tiles --json vector -i perf-vector.geojson --reproducible --jobs 2 --maxFeatures 2 --lodLevels 3",
    "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
   },
@@ -333,6 +337,7 @@
    "expected": "Accepted",
    "path": "/home/bend/.cache/forest-acc/work/head-portable/W5-vec-perf.3tz",
    "sha256": "a533edb9573e2d0a3554ae71532927e2e001a6306153c997e3bb68d461014747",
+   "production": "InvalidInput (pre-#301 empty vector root)",
    "ref": "W10 portable build of W5: rusty-tiles --json vector -i perf-vector.geojson --reproducible --jobs 2",
    "source": "combined head e3a67bf, release portable, rusty-tiles sha256 1ace7782ad6fb6ec0ad3d96fb5971e7ae43da7ccf3f7ca3e3863ef523cff71be"
   },
@@ -341,6 +346,7 @@
    "expected": "Accepted",
    "path": "/home/bend/.cache/forest-acc/work/head-portable/W5-vec-perf-quantize.3tz",
    "sha256": "c31f56e1355c2eb3d07e609009e049345cf831d77fbc4abe2b6ca864bd82846d",
+   "production": "InvalidInput (pre-#301 empty vector root)",
    "ref": "W10 portable build of W5.quantize: rusty-tiles --json vector -i perf-vector.geojson --reproducible --jobs 2 --quantize",
    "source": "combined head e3a67bf, release portable, rusty-tiles sha256 1ace7782ad6fb6ec0ad3d96fb5971e7ae43da7ccf3f7ca3e3863ef523cff71be"
   },
@@ -349,6 +355,7 @@
    "expected": "Accepted",
    "path": "/home/bend/.cache/forest-acc/work/head-portable/W5-vec-perf-meshopt.3tz",
    "sha256": "a0ee4497dfd1521a03627414c6424f4c40c1197ca26b5617322e2ae536470321",
+   "production": "InvalidInput (pre-#301 empty vector root)",
    "ref": "W10 portable build of W5.meshopt: rusty-tiles --json vector -i perf-vector.geojson --reproducible --jobs 2 --meshopt",
    "source": "combined head e3a67bf, release portable, rusty-tiles sha256 1ace7782ad6fb6ec0ad3d96fb5971e7ae43da7ccf3f7ca3e3863ef523cff71be"
   }

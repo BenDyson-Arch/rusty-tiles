@@ -103,7 +103,8 @@ class ReuseTests(unittest.TestCase):
             ds=ogr.Open(str(p),1);layer=ds.GetLayer(0);f=layer.GetFeature(7);f.SetField('name','edited');layer.SetFeature(f);ds=None
             vector.run(self.args(p,b,previous));vector.run(self.args(p,fresh))
             self.assertEqual(previous.read_bytes(),old);self.assert_same_details(b,fresh)
-            r=report(b)['reuse'];self.assertGreaterEqual(r['reusedSubtrees'],3);self.assertLessEqual(r['rebuiltContents'],4)
+            # The edited leaf's chain (4) and the four partition ancestors that may hold it as a stand-in.
+            r=report(b)['reuse'];self.assertGreaterEqual(r['reusedSubtrees'],3);self.assertLessEqual(r['rebuiltContents'],8)
             common=set(payloads(a))&set(payloads(b));self.assertGreater(len(common),len(payloads(a))*.8)
             self.assertTrue(all(payloads(a)[k]==payloads(b)[k] for k in common))
 
@@ -133,8 +134,9 @@ class ReuseTests(unittest.TestCase):
                 for f in (path/'t').iterdir():
                     _,pos,ids=read(f);result.setdefault(ids[0],[]).append(sum(map(len,pos)))
                 return result
-            self.assertEqual(all_content_ids(a)['1'],[3])
-            self.assertEqual(sorted(all_content_ids(b)['1']),[2,3])
+            # Locked, the line never reduces; released, coarse tiles reduce it.
+            self.assertEqual(set(all_content_ids(a)['1']),{3})
+            self.assertEqual(set(all_content_ids(b)['1']),{2,3})
             self.assertGreater(report(b)['reuse']['reusedContents'],0)
 
     def test_settings_changes_and_corrupt_previous_content_fail(self):
