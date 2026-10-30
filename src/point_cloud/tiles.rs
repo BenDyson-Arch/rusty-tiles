@@ -18,7 +18,7 @@ use serde_json::{json, Value};
 use std::{
     collections::hash_map::Entry,
     fs::File,
-    io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
+    io::{BufReader, BufWriter, Read, Write},
     path::Path,
 };
 
@@ -351,11 +351,17 @@ impl Sampler {
             .ok_or_else(|| Error::Data("point sample exceeds maxPoints".into()))?;
         let mut picks: Vec<_> = voxels.into_iter().collect();
         picks.sort_unstable();
-        let mut file = BufReader::new(File::open(path)?);
+        // Read forward in file order, keeping the buffer across short gaps; place each
+        // record at its key-order slot.
+        let mut order: Vec<_> = (0..picks.len()).collect();
+        order.sort_unstable_by_key(|&i| picks[i].1);
+        let (mut file, mut at) = (BufReader::with_capacity(1 << 16, File::open(path)?), 0);
         let mut rows = vec![0; picks.len() * len];
-        for ((_, ordinal), row) in picks.iter().zip(rows.chunks_exact_mut(len)) {
-            file.seek(SeekFrom::Start(ordinal * len as u64))?;
-            file.read_exact(row)?;
+        for i in order {
+            let start = picks[i].1 * len as u64;
+            file.seek_relative((start - at) as i64)?;
+            file.read_exact(&mut rows[i * len..(i + 1) * len])?;
+            at = start + len as u64;
         }
         let error = norm(std::array::from_fn(|i| edge.min(extent[i])));
         Ok((rows, error, edge))
