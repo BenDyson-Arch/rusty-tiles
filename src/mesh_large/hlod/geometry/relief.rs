@@ -15,6 +15,8 @@ use rustc_hash::FxHashMap as HashMap;
 
 /// Rounds of interior relief around vertices every chord collapse refuses.
 const RELIEF_ROUNDS: usize = 8;
+/// Collapse passes per round (a face moves at most once per pass).
+const PASSES: usize = 4;
 
 type Mapping = Option<(Key, Key, f64, u8)>;
 /// A collapse's rewritten faces (index, new corners) and removed faces.
@@ -91,15 +93,33 @@ enum Refusal {
     Wings,
 }
 
+fn edge(a: u32, b: u32) -> (u32, u32) {
+    (a.min(b), a.max(b))
+}
+
+fn corners(mut t: [u32; 3]) -> [u32; 3] {
+    t.sort_unstable();
+    t
+}
+
 struct State<'a> {
     m: &'a Merged,
     faces: Vec<[u32; 3]>,
     alive: Vec<bool>,
+    /// Faces each vertex has held (dead ones are skipped).
     incident: Vec<Vec<u32>>,
+    /// Alive faces per vertex, per edge and per corner set: every check reads these in
+    /// O(1), so a collapse costs the star of the vertex it removes, never the star of
+    /// its target (a chord endpoint gathers a fan as long as its chord).
+    degree: Vec<u32>,
+    edges: HashMap<(u32, u32), u32>,
+    sets: HashMap<[u32; 3], u32>,
     border: Vec<bool>,
     required: Vec<bool>,
     /// Chords each vertex lies on (removed vertices one, endpoints those they end).
     chords: Vec<Vec<u32>>,
+    /// Incident entries visited (the scaling control's work count).
+    work: std::cell::Cell<u64>,
 }
 
 impl State<'_> {
@@ -108,16 +128,40 @@ impl State<'_> {
             .iter()
             .any(|&n| n != 0.)
     }
+    fn count(&mut self, t: [u32; 3], add: bool) {
+        fn step<K: std::hash::Hash + Eq>(map: &mut HashMap<K, u32>, key: K, add: bool) {
+            if add {
+                *map.entry(key).or_default() += 1;
+            } else if let std::collections::hash_map::Entry::Occupied(mut e) = map.entry(key) {
+                *e.get_mut() -= 1;
+                if *e.get() == 0 {
+                    e.remove();
+                }
+            }
+        }
+        for i in 0..3 {
+            let d = &mut self.degree[t[i] as usize];
+            *d = if add { *d + 1 } else { *d - 1 };
+            step(&mut self.edges, edge(t[i], t[(i + 1) % 3]), add);
+        }
+        step(&mut self.sets, corners(t), add);
+    }
+    /// The alive faces of `v`.
+    fn star(&self, v: u32) -> impl Iterator<Item = u32> + '_ {
+        self.incident[v as usize].iter().copied().filter(|&f| {
+            self.work.set(self.work.get() + 1);
+            self.alive[f as usize]
+        })
+    }
     /// The faces `v -> u` rewrites and those it removes (the faces holding both), or the
     /// reason it is refused.
     fn plan(&self, v: u32, u: u32) -> Result<Plan, Refusal> {
         let (mut moved, mut removed) = (Vec::new(), Vec::new());
         let along = self.border[v as usize];
-        for &f in &self.incident[v as usize] {
-            if !self.alive[f as usize] {
-                continue;
-            }
+        let mut lv = Vec::new();
+        for f in self.star(v) {
             let t = self.faces[f as usize];
+            lv.extend(t.into_iter().filter(|&y| y != v));
             if t.contains(&u) {
                 removed.push(f);
                 continue;
@@ -145,34 +189,15 @@ impl State<'_> {
                     }
                 }
             }
-            let mut sorted = after;
-            sorted.sort_unstable();
-            let duplicate = self.incident[u as usize].iter().any(|&g| {
-                self.alive[g as usize] && g != f && {
-                    let mut s = self.faces[g as usize];
-                    s.sort_unstable();
-                    s == sorted
-                }
-            });
-            if duplicate {
+            if self.sets.contains_key(&corners(after)) {
                 return Err(Refusal::Duplicate);
             }
             moved.push((f, after));
         }
         // Link condition: the only common neighbours of `v` and `u` are the third
         // corners of the faces holding both, so the collapse keeps local topology.
-        let link = |x: u32| -> Vec<u32> {
-            let mut l: Vec<u32> = self.incident[x as usize]
-                .iter()
-                .filter(|&&g| self.alive[g as usize])
-                .flat_map(|&g| self.faces[g as usize])
-                .filter(|&y| y != x)
-                .collect();
-            l.sort_unstable();
-            l.dedup();
-            l
-        };
-        let (lv, lu) = (link(v), link(u));
+        lv.sort_unstable();
+        lv.dedup();
         let mut thirds: Vec<u32> = removed
             .iter()
             .flat_map(|&f| self.faces[f as usize])
@@ -182,7 +207,7 @@ impl State<'_> {
         thirds.dedup();
         if lv
             .iter()
-            .filter(|y| **y != u && lu.binary_search(y).is_ok())
+            .filter(|&&y| y != u && self.joined(u, y))
             .ne(thirds.iter())
         {
             return Err(Refusal::Link);
@@ -215,10 +240,11 @@ impl State<'_> {
                 if x == v || (x == u && !moved.is_empty()) {
                     continue;
                 }
-                let keeps = self.incident[x as usize]
+                let lost = removed
                     .iter()
-                    .any(|&g| self.alive[g as usize] && !removed.contains(&g));
-                if !keeps {
+                    .filter(|&&g| self.faces[g as usize].contains(&x))
+                    .count() as u32;
+                if self.degree[x as usize] <= lost {
                     return Err(Refusal::Orphan);
                 }
             }
@@ -234,16 +260,17 @@ impl State<'_> {
     }
     /// Whether an alive face holds both `a` and `b`.
     fn joined(&self, a: u32, b: u32) -> bool {
-        self.incident[a as usize]
-            .iter()
-            .any(|&g| self.alive[g as usize] && self.faces[g as usize].contains(&b))
+        self.edges.contains_key(&edge(a, b))
     }
     fn apply(&mut self, u: u32, (moved, removed): Plan) {
         for f in removed {
             self.alive[f as usize] = false;
+            self.count(self.faces[f as usize], false);
         }
         for (f, after) in moved {
+            self.count(self.faces[f as usize], false);
             self.faces[f as usize] = after;
+            self.count(after, true);
             self.incident[u as usize].push(f);
         }
     }
@@ -255,10 +282,7 @@ impl State<'_> {
         }
         // Only the faces `v -> u` would flip or leave on border points block it.
         let mut blocking = Vec::new();
-        for &f in &self.incident[v as usize] {
-            if !self.alive[f as usize] {
-                continue;
-            }
+        for f in self.star(v) {
             let t = self.faces[f as usize];
             if t.contains(&u) {
                 continue;
@@ -279,12 +303,10 @@ impl State<'_> {
                     continue;
                 }
                 let mut targets: Vec<u32> = Vec::new();
-                for &g in &self.incident[x as usize] {
-                    if self.alive[g as usize] {
-                        for y in self.faces[g as usize] {
-                            if y != x && !targets.contains(&y) {
-                                targets.push(y);
-                            }
+                for g in self.star(x) {
+                    for y in self.faces[g as usize] {
+                        if y != x && !targets.contains(&y) {
+                            targets.push(y);
                         }
                     }
                 }
@@ -322,6 +344,20 @@ pub(super) fn along_border(
     interface: &[InterfaceRow],
     mapping: &[Mapping],
 ) -> Option<(Vec<[u32; 3]>, Vec<u32>)> {
+    collapse(m, interface, mapping).map(|(faces, left, _)| (faces, left))
+}
+
+/// `along_border`, with the incident entries it visited. Each removed vertex collapses
+/// onto its surviving chord neighbour toward its nearer endpoint (the half of a chord
+/// with t <= 0.5 in ascending t, then the other half in descending t), or else onto its
+/// other neighbour. A target is never a vertex this pass has still to visit, so a face
+/// moves at most once per pass and every pass costs the stars of the vertices it
+/// removes: no fan travels along a chord. At most `PASSES` passes per round.
+fn collapse(
+    m: &Merged,
+    interface: &[InterfaceRow],
+    mapping: &[Mapping],
+) -> Option<(Vec<[u32; 3]>, Vec<u32>, u64)> {
     let ids: HashMap<Key, u32> = m
         .keys
         .iter()
@@ -348,10 +384,11 @@ pub(super) fn along_border(
         chords.entry((a, b)).or_default().push((t, v as u32));
     }
     if chords.is_empty() {
-        return Some((m.triangles.clone(), Vec::new()));
+        return Some((m.triangles.clone(), Vec::new(), 0));
     }
     let mut border = required.clone();
     let (mut prev, mut next) = (vec![u32::MAX; n], vec![u32::MAX; n]);
+    let mut toward_b = vec![false; n];
     let mut order: Vec<_> = chords.into_iter().collect();
     order.sort_unstable_by_key(|(k, _)| *k);
     let mut removed = Vec::new();
@@ -362,17 +399,21 @@ pub(super) fn along_border(
         on_chords[b as usize].push(c);
         run.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
         let mut last = a;
-        for &(_, v) in &run {
+        for &(t, v) in &run {
             border[v as usize] = true;
             on_chords[v as usize].push(c);
+            toward_b[v as usize] = t > 0.5;
             prev[v as usize] = last;
             if last != a {
                 next[last as usize] = v;
             }
             last = v;
-            removed.push(v);
         }
         next[last as usize] = b;
+        // Outside in: each half is visited from its endpoint.
+        let half = run.partition_point(|&(t, _)| t <= 0.5);
+        removed.extend(run[..half].iter().map(|&(_, v)| v));
+        removed.extend(run[half..].iter().rev().map(|&(_, v)| v));
     }
     let mut incident = vec![Vec::new(); n];
     for (f, t) in m.triangles.iter().enumerate() {
@@ -385,23 +426,33 @@ pub(super) fn along_border(
         faces: m.triangles.clone(),
         alive: vec![true; m.triangles.len()],
         incident,
+        degree: vec![0; n],
+        edges: HashMap::default(),
+        sets: HashMap::default(),
         border,
         required,
         chords: on_chords,
+        work: std::cell::Cell::new(0),
     };
+    for &t in &m.triangles {
+        s.count(t, true);
+    }
     let mut left: Vec<u32> = removed;
+    let mut pending = vec![false; n];
     for round in 0..=RELIEF_ROUNDS {
-        loop {
+        for _ in 0..PASSES {
             let before = left.len();
+            for &v in &left {
+                pending[v as usize] = true;
+            }
             left.retain(|&v| {
+                pending[v as usize] = false;
                 let (p, q) = (prev[v as usize], next[v as usize]);
-                let pos = |x: u32| m.positions[x as usize].map(f64::from);
-                let d = |x: u32| (0..3).map(|i| (pos(v)[i] - pos(x)[i]).powi(2)).sum::<f64>();
-                let mut targets = [p, q];
-                if d(q) < d(p) {
-                    targets.swap(0, 1);
-                }
+                let targets = if toward_b[v as usize] { [q, p] } else { [p, q] };
                 for u in targets {
+                    if u == u32::MAX || pending[u as usize] {
+                        continue;
+                    }
                     if let Ok(plan) = s.plan(v, u) {
                         s.apply(u, plan);
                         s.border[v as usize] = false;
@@ -433,6 +484,7 @@ pub(super) fn along_border(
             break;
         }
     }
+    let work = s.work.get();
     Some((
         s.faces
             .into_iter()
@@ -440,5 +492,81 @@ pub(super) fn along_border(
             .filter_map(|(t, alive)| alive.then_some(t))
             .collect(),
         left,
+        work,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mesh_large::hlod::store::SourcePrimitive;
+
+    /// A planar strip of k quads and two rows: its bottom row is one chord P0..Pk (both
+    /// retained) whose k - 1 interior vertices are removed.
+    fn strip(k: u32) -> (Merged, Vec<InterfaceRow>, Vec<Mapping>) {
+        let w = k + 1;
+        let positions: Vec<[f32; 3]> = (0..3)
+            .flat_map(|y| (0..=k).map(move |x| [x as f32, y as f32, 0.]))
+            .collect();
+        let mut triangles = Vec::new();
+        for y in 0..2 {
+            for x in 0..k {
+                let a = y * w + x;
+                triangles.push([a, a + 1, a + w]);
+                triangles.push([a + 1, a + w + 1, a + w]);
+            }
+        }
+        let keys: Vec<Key> = positions.iter().map(|p| p.map(f32::to_bits)).collect();
+        let (a, b) = (keys[0], keys[k as usize]);
+        let interface = vec![
+            InterfaceRow::new(0, a, a, 0, 2),
+            InterfaceRow::new(0, b, b, 0, 2),
+            InterfaceRow::new(0, a.min(b), a.max(b), 0, 2),
+        ];
+        let mut mapping: Vec<Mapping> = vec![None; positions.len()];
+        for x in 1..k {
+            mapping[x as usize] = Some((a, b, f64::from(x) / f64::from(k), 0));
+        }
+        let first = SourcePrimitive {
+            node: 0,
+            mesh: 0,
+            primitive: 0,
+            expanded_ordinal: 0,
+            material: u32::MAX,
+        };
+        let merged = Merged {
+            keys,
+            ells: vec![0; positions.len()],
+            positions,
+            representative: vec![first; triangles.len()],
+            triangles,
+        };
+        (merged, interface, mapping)
+    }
+
+    /// Review 1 (P2): a long chord's collapses once marched toward one endpoint, each
+    /// rewriting the growing fan (k = 8,000 took 2.6 s). Now the work per removed vertex
+    /// (incident entries visited) stays flat from k = 1,000 to 32,000, and the chord still
+    /// collapses completely: one face per removed vertex, a fan at each endpoint.
+    #[test]
+    fn chord_collapse_work_grows_linearly_with_chord_length() {
+        let mut first: Option<f64> = None;
+        for k in [1_000u32, 2_000, 8_000, 32_000] {
+            let (m, interface, mapping) = strip(k);
+            let started = std::time::Instant::now();
+            let (faces, left, work) = collapse(&m, &interface, &mapping).unwrap();
+            eprintln!(
+                "RELIEF COLLAPSE k={k} work={work} secs={:.4}",
+                started.elapsed().as_secs_f64()
+            );
+            assert!(left.is_empty(), "k={k}: {} left", left.len());
+            assert_eq!(faces.len(), m.triangles.len() - (k as usize - 1));
+            let per = work as f64 / f64::from(k);
+            let first = *first.get_or_insert(per);
+            assert!(
+                per <= 1.05 * first,
+                "k={k}: {per} visits per vertex, {first} at 1,000"
+            );
+        }
+    }
 }

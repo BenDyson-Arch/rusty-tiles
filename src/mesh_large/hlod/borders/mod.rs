@@ -183,8 +183,8 @@ pub(super) struct Contract {
     pub terminal_vertices: Vec<Key>,
     pub scale: f64,
     /// Border relief floor (A1): 8 x the largest sum of a certificate's displacement and
-    /// the largest finer certified displacement on its subarc. Published G is at least
-    /// this; it never exceeds `scale` without relief.
+    /// the largest finer certified displacement on its subarc, over every member of its
+    /// single-child chain. Published G is at least this; it is 0 without relief.
     #[serde(skip_serializing_if = "is_zero_f64")]
     pub relief_floor: f64,
 }
@@ -354,10 +354,10 @@ impl Borders {
             leaf_begin: 0,
             leaf_end: 0,
         };
-        let Some(a) = self.contract(key(depth), 6 * cap)? else {
+        let Some(a) = self.own_contract(key(depth), 6 * cap)? else {
             return Ok(false);
         };
-        let Some(b) = self.contract(key(depth + 1), 6 * cap)? else {
+        let Some(b) = self.own_contract(key(depth + 1), 6 * cap)? else {
             return Ok(false);
         };
         Ok(a.interface
@@ -444,19 +444,23 @@ impl Borders {
         Ok(())
     }
 
-    /// Drop this level's emission: segments and references from `mark` on, and the
-    /// reference lists of this depth's nodes (only this level writes them).
+    /// Drop this level's emission: segments and references from `mark` on. Every owner's
+    /// list is unlinked back to its first reference before `mark`: a leaf shallower than
+    /// this depth is its own owner here, so its list also holds deeper levels' items.
     fn rewind(&mut self, mark: (u64, u64), depth: u32) -> Result<(), JobError> {
-        self.segments.truncate(mark.0);
-        self.refs.truncate(mark.1);
         for id in 0..self.source.nodes.len {
             let mut n = self.source.nodes.get(id)?;
-            if n[2] == u64::from(depth) {
-                n[6] = NONE;
-                n[7] = 0;
-                self.source.nodes.set(id, n)?;
+            if n[6] == NONE || n[6] < mark.1 {
+                continue;
             }
+            while n[6] != NONE && n[6] >= mark.1 {
+                n[6] = self.refs.get(n[6])?[0];
+                n[7] -= 1;
+            }
+            self.source.nodes.set(id, n)?;
         }
+        self.segments.truncate(mark.0);
+        self.refs.truncate(mark.1);
         self.relief[depth as usize] = ReliefLevel::default();
         Ok(())
     }
@@ -956,11 +960,55 @@ impl Borders {
         Ok(())
     }
 
+    /// The contract of `key`. A member of a single-child chain is published once, at the
+    /// chain's top, for every member: its relief floor is the largest over the chain.
     pub(super) fn contract(
         &self,
         key: TileKey,
         limit: usize,
     ) -> Result<Option<Contract>, JobError> {
+        let Some(mut contract) = self.own_contract(key, limit)? else {
+            return Ok(None);
+        };
+        // Chain members are consecutive in the frozen tree's preorder.
+        let top = self.publication_depth(key)?;
+        let mut id = self.source.node(TileKey { depth: top, ..key })?;
+        for depth in top.. {
+            if id == self.source.nodes.len {
+                break;
+            }
+            let n = self.source.nodes.get(id)?;
+            if (n[0], n[1], n[2]) != (key.first, key.end, u64::from(depth))
+                || n[5] & 1 == 1
+                || (n[5] >> 1) as u32 != top
+            {
+                break;
+            }
+            if depth != key.depth {
+                contract.relief_floor = contract.relief_floor.max(self.relief_floor(n)?);
+            }
+            id += 1;
+        }
+        Ok(Some(contract))
+    }
+
+    /// One node's relief floor (A1): 8 x its largest relieved certificate's own plus finer
+    /// certified displacement.
+    fn relief_floor(&self, n: [u64; 8]) -> Result<f64, JobError> {
+        let (mut at, mut floor) = (n[6], 0f64);
+        while at != NONE {
+            let link = self.refs.get(at)?;
+            let s = self.segments.get(link[1])?;
+            if s[0] != s[1] && s[11] > 0 {
+                floor = floor.max(8. * (f64::from_bits(s[6]) + f64::from_bits(s[10])));
+            }
+            at = link[0];
+        }
+        Ok(floor)
+    }
+
+    /// The contract of `key`'s own node.
+    fn own_contract(&self, key: TileKey, limit: usize) -> Result<Option<Contract>, JobError> {
         let n = self.source.nodes.get(self.source.node(key)?)?;
         if n[7] > limit as u64 {
             return Ok(None);
@@ -1527,5 +1575,171 @@ mod tests {
             4
         );
         ledger.check().unwrap();
+    }
+
+    /// Borders over a frozen tree of (first, end, depth, internal, children) rows, with
+    /// noisy 41-point arcs (x, owning leaves) along y, at `cap`.
+    fn noisy_borders<R>(
+        nodes: &[(u64, u64, u8, bool, u8)],
+        arcs: &[(f32, [u32; 2])],
+        cap: usize,
+        read: impl FnOnce(&Borders) -> R,
+    ) -> R {
+        let work = tempfile::tempdir().unwrap();
+        let scratch = Scratch::create(Some(work.path()), 0).unwrap();
+        let sorter = SortConfig {
+            run_bytes: 4096,
+            fan_in: 2,
+            buffer_bytes: 1024,
+            jobs: 1,
+        };
+        let mut tree = SequenceWriter::new(&scratch, "tree", 1024).unwrap();
+        for &(first, end, depth, internal, children) in nodes {
+            tree.push(&NodeRecord {
+                first,
+                end,
+                cell_depth: depth,
+                cell: 0,
+                path_len: 0,
+                path: 0,
+                last_octant: 0,
+                kind: if internal {
+                    NodeKind::Internal
+                } else {
+                    NodeKind::Leaf
+                },
+                children,
+                bytes: 0,
+                bounds: Bounds::EMPTY,
+            })
+            .unwrap();
+        }
+        let tree = tree.finish().unwrap();
+        let mut rows = Vec::new();
+        for &(x, leaves) in arcs {
+            let p: Vec<Key> = (0..=40)
+                .map(|i| k(x + if i % 2 == 0 { 0.2 } else { -0.2 }, i as f32))
+                .collect();
+            for i in 0..=40 {
+                for leaf in leaves {
+                    rows.push(InterfaceRow::new(leaf, p[i], p[i], leaves[0], leaves[1]));
+                }
+                if i < 40 {
+                    let (a, b) = (p[i].min(p[i + 1]), p[i].max(p[i + 1]));
+                    for leaf in leaves {
+                        rows.push(InterfaceRow::new(leaf, a, b, leaves[0], leaves[1]));
+                    }
+                }
+            }
+        }
+        rows.sort_unstable();
+        let ledger = ScratchLedger::new(&scratch, scratch.live_bytes(), &|_| Ok(()));
+        let lease = ledger.admit(Borders::COMPONENT, 8 << 20).unwrap();
+        let borders = Borders::build(
+            &scratch,
+            sorter,
+            &tree,
+            rows.into_iter().map(Ok),
+            std::iter::empty(),
+            std::iter::empty(),
+            4096.,
+            cap,
+            &lease,
+            &|| Ok(()),
+        )
+        .unwrap();
+        read(&borders)
+    }
+
+    fn tile(first: u64, end: u64, depth: u32, leaf_begin: u32, leaf_end: u32) -> TileKey {
+        TileKey {
+            first,
+            end,
+            depth,
+            leaf_begin,
+            leaf_end,
+        }
+    }
+
+    /// Review 1 (P1): X1 -> X2 is a single-child chain beside Y1 -> Y2, a noisy arc
+    /// between their leaves, relieved at depths 1 and 2. X2 is built and published in
+    /// X1's slot, where Y2 (inside X's cell parent, not a sibling) delivers the same
+    /// chord: G must cover 8 x (own + finer) = 16 x own, X1's floor, not X2's 8 x own.
+    #[test]
+    fn relief_floor_covers_every_member_of_a_single_child_chain() {
+        let nodes = [
+            (0, 5, 0, true, 2),
+            (0, 2, 1, true, 1),
+            (0, 2, 2, true, 2),
+            (0, 1, 3, false, 0),
+            (1, 2, 3, false, 0),
+            (2, 5, 1, true, 2),
+            (2, 4, 2, true, 2),
+            (2, 3, 3, false, 0),
+            (3, 4, 3, false, 0),
+            (4, 5, 2, false, 0),
+        ];
+        noisy_borders(&nodes, &[(0., [0, 2])], 40, |borders| {
+            let (x1, x2) = (tile(0, 2, 1, 0, 2), tile(0, 2, 2, 0, 2));
+            assert_eq!(borders.publication_depth(x2).unwrap(), 1);
+            assert!(borders.relief(1).segments > 0 && borders.relief(2).cells > 0);
+            let top = borders.contract(x1, 1000).unwrap().unwrap();
+            let built = borders.contract(x2, 1000).unwrap().unwrap();
+            let own = built
+                .certificates
+                .iter()
+                .filter(|c| c.step > 0)
+                .map(|c| c.epsilon)
+                .fold(0., f64::max);
+            assert!(own > 0.);
+            assert!(
+                built.relief_floor >= 16. * own,
+                "{} < 16 x {own}",
+                built.relief_floor
+            );
+            assert_eq!(built.relief_floor, top.relief_floor);
+            // Below its chain, Y2 is its own top: its floor is its own.
+            let y2 = borders
+                .contract(tile(2, 4, 2, 2, 4), 1000)
+                .unwrap()
+                .unwrap();
+            assert!(y2.relief_floor < built.relief_floor);
+        });
+    }
+
+    /// Review 1 (P3-2): relief triggers at depth 2 beside a depth-1 leaf A, which owns its
+    /// depth-2 items itself. The level's rewind must unlink A's list too: every node's
+    /// list ends after exactly its count, and A's contract reads the relieved chords.
+    #[test]
+    fn relief_rewind_unlinks_shallower_leaves_owning_deeper_items() {
+        let nodes = [
+            (0, 5, 0, true, 2),
+            (0, 1, 1, false, 0),
+            (1, 5, 1, true, 2),
+            (1, 3, 2, true, 2),
+            (1, 2, 3, false, 0),
+            (2, 3, 3, false, 0),
+            (3, 5, 2, true, 2),
+            (3, 4, 3, false, 0),
+            (4, 5, 3, false, 0),
+        ];
+        noisy_borders(&nodes, &[(0., [0, 1]), (10., [1, 3])], 60, |borders| {
+            assert!(borders.relief(2).cells > 0);
+            for id in 0..borders.source.nodes.len {
+                let n = borders.source.nodes.get(id).unwrap();
+                let (mut at, mut links) = (n[6], 0);
+                while at != NONE && links <= n[7] {
+                    assert!(at < borders.refs.len, "node {id}: reference {at} truncated");
+                    at = borders.refs.get(at).unwrap()[0];
+                    links += 1;
+                }
+                assert_eq!((at, links), (NONE, n[7]), "node {id}: list does not end");
+            }
+            let a = borders
+                .contract(tile(0, 1, 1, 0, 1), 100_000)
+                .unwrap()
+                .unwrap();
+            assert!(a.certificates.iter().any(|c| c.step > 0));
+        });
     }
 }

@@ -139,18 +139,32 @@ See D11's A1 amendment for the rule. Implementation:
     does a counting walk run.
   - The counting walk re-derives the same chains and, for every chain with a triggered
     owner, counts its chords at each of the nine ladder steps.
-  - Then the level's segments and references are truncated, this depth's node lists reset,
-    and the level is emitted again with each chain at its owners' largest request.
+  - Then the level's segments and references are truncated, and the level is emitted again
+    with each chain at its owners' largest request.
+  - Every node's reference list is unlinked back to its first reference before the level.
+    A leaf shallower than the depth is its own owner there, so its list also holds deeper
+    levels' items.
   - Per source edge, the pass keeps the finest level's step and the largest certified
     displacement so far: two disk words, plus three for the level in progress, all charged
     to the border scratch.
   - Segment records gain that finer displacement and the step (twelve words). A contract
     carries `step` per certificate and `reliefFloor`.
+  - `reliefFloor` is the largest floor over the node's single-child chain. Chain members
+    are consecutive in preorder and share their top's publication depth, so the scan reads
+    only the chain.
 - **Ear pins.** Isolated ears are found in the face-retention pass (vertex bits 48..56). A
   relieved piece ends at each one that is still retained one level finer.
 - **Contraction.** `geometry::relief::along_border` collapses each removed vertex of a
   relieved tile onto a neighbour along its own chord.
-  - Collapses are tried nearer neighbour first, in a fixed vertex order.
+  - Each vertex collapses toward its nearer chord endpoint: the t ≤ 0.5 half in ascending
+    t, then the other half in descending t. Its first target is its surviving neighbour on
+    that side; else its other neighbour.
+  - A target is never a vertex the pass has yet to visit. A face therefore moves at most
+    once per pass, and a round makes at most 4 passes.
+  - Alive-face counts per vertex, per edge and per corner set make each check O(1). A
+    collapse costs the star of the vertex it removes, not the fan its endpoint gathers.
+  - A chord of k removed vertices costs O(k). A control counts incident visits per removed
+    vertex and requires the count to stay flat from k = 1,000 to 32,000.
   - Each one is checked against the guard's seam rules (same-chord transients allowed), the
     link condition, orientation, area, duplicates and orphaned corners.
   - Up to eight rounds may first move a blocking face's interior corner onto a neighbour.
@@ -159,9 +173,12 @@ See D11's A1 amendment for the rule. Implementation:
   - Otherwise the leftovers take the ordinary snap and reconstruction on the collapsed mesh.
   - If contraction fails, the primary contraction's `Residue` (never a recovery copy's) is
     returned in `Outcome` for the last resort.
-- **Cost.** Untriggered levels pay one extra pass over their edges (the finer state).
-  Triggered levels pay two more chain walks and at most nine greedy passes per chain of a
-  triggered cell: O(J·n·h) with J fixed.
+- **Cost.**
+  - Untriggered levels pay one extra pass over their edges (the finer state).
+  - Triggered levels pay two more chain walks and at most nine greedy passes per chain of
+    a triggered cell: O(J·n·h) with J fixed. The rewind reads every node once.
+  - Collapse is linear in the removed vertices' stars times (rounds + 1) × passes, plus
+    hashing.
 
 ## Coarse drops (owner decision 2026-10-28)
 

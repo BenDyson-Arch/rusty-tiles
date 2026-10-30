@@ -540,12 +540,20 @@ border alone needs more than 8,192 triangles. Evidence:
   inequality applied directly:
   - same-depth gaps stay zero;
   - a gap between depths is at most d_X + d_Y ≤ G_X/8 for the coarser X;
-  - the floor never exceeds E_d without relief.
+  - the floor is 0 without relief.
+  - A single-child chain publishes one tile, at its top, for all its members. That tile's
+    floor is the largest over the chain. The top's own floor counts the next member's
+    identical chord as d_finer, so it is at least 16·d_own.
 - **Contraction.** A tile with a relieved certificate first removes each relieved vertex by
   collapse along its own chord, under the guard's own checks.
   - Collapses are refused for: flips; faces or new or extra-wing edges on contract points only;
     duplicates; orphaned corners; a failed link condition. A bounded relief of interior
     neighbours is allowed first.
+  - Each vertex collapses onto its surviving chord neighbour toward its nearer endpoint,
+    each half of a chord taken from its endpoint inward, or else onto its other neighbour.
+  - A target is never a vertex the pass has yet to visit, so a face moves at most once per
+    pass, with at most 4 passes per relief round. The work is linear in the stars of the
+    removed vertices: the endpoint fans are never rescanned.
   - Vertices it cannot remove take the ordinary contraction.
   - If the whole contraction fails, the cell's residue (collapsed mesh and stuck vertices, a
     pure function of children, contract and mapping) is the last resort's input. The last
@@ -553,11 +561,24 @@ border alone needs more than 8,192 triangles. Evidence:
   - The relief certificates and the floor stay this rule's; the last resort's folds are
     declared and measured separately.
 - **Validators.**
-  - The native rule `borderDisplacement` becomes d ≤ G/8 per tile (was G/16); the pair rule
-    `mixedDepthBorderGap` and sibling identity are unchanged.
-  - The S5 oracle reads each certificate's `step` and `reliefFloor` from the sidecar and
-    re-derives the steps: trigger, request, owner maximum and monotone tolerance. It checks
-    certified ε against the step's tolerance and mixed gaps against G/8 on relieved arcs.
+  - The native rule `borderDisplacement` becomes d ≤ G/8 per tile (was G/16). Sibling
+    identity is unchanged.
+  - **Pair rule change, for owner sign-off.** `mixedDepthBorderGap` needs
+    (d_X + d_Y)·outward ≤ G_X/8 for each tile Y below X's cell parent. It now skips X's
+    own siblings when it takes the deepest d_Y. Siblings deliver every shared vertex
+    identically, which is checked first, so they add no gap. Before the change, two
+    identical relieved siblings each counted the other's d. That demanded G ≥ 16·d where
+    the gap is 0, which refuses honest relieved siblings at their 8·d floor. Every tile
+    strictly below the siblings still counts.
+  - The S5 oracle reads each certificate's `step` and each tile's `reliefFloor` from the
+    sidecar. It re-derives the steps: trigger, request, owner maximum and monotone
+    tolerance. Collapsed single-child chains are rebuilt from the audit rows' depth and
+    encoded depth.
+  - The oracle checks certified ε against the step's tolerance. For relieved certificates
+    it checks G ≥ 8·ε, or 16·ε on a collapsed chain.
+  - It checks each mixed gap against min(max(E_c, floor_c), G_c)/8 for the coarser tile c.
+    An unrelieved coarser tile keeps E_c/8 even when the deeper chord is relieved, because
+    of the monotone steps.
 - **Receipts.** Per depth: `reliefCells`, `relievedSegments`, `maxReliefStep`,
   `maxReliefFloor`. In topology receipts: `reliefCollapsed`, `reliefStuck`. Per row:
   `reliefFloor`, `reliefStep`.
