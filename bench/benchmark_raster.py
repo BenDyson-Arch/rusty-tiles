@@ -11,7 +11,7 @@ from osgeo import gdal, osr
 
 gdal.UseExceptions(); osr.UseExceptions()
 ROOT=pathlib.Path(__file__).resolve().parents[1]
-spec=importlib.util.spec_from_file_location('timing', ROOT/'bench/benchmark_terrain.py')
+spec=importlib.util.spec_from_file_location('timing', ROOT/'bench/timing.py')
 timing=importlib.util.module_from_spec(spec);spec.loader.exec_module(timing)
 METHODS=['python-default','rust-native','python-one-worker']
 CASES=[

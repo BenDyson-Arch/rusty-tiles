@@ -16,9 +16,9 @@ gdal.UseExceptions()
 
 @requires_bin('set RUSTY_TILES_BIN for native terrain acceptance')
 class NativeTerrainTests(unittest.TestCase):
-    def call(self, source, output, *extra, cells=16, offset=10.25, fill=-999.125):
+    def call(self, source, output, *extra, cells=16, offset=10.25):
         result = subprocess.run([BIN, '--json', 'terrain', '-i', str(source), '-o', str(output),
-            '--cells-per-leaf', str(cells), '--height-offset', str(offset), '--fill-height', str(fill),
+            '--cells-per-leaf', str(cells), '--height-offset', str(offset),
             *extra], capture_output=True, text=True, env=dict(os.environ, PATH=''), timeout=60)
         return result, json.loads(result.stdout)
 
@@ -163,35 +163,31 @@ class NativeTerrainTests(unittest.TestCase):
                 for sibling in root.glob('source.tif.*'): sibling.unlink()
                 self.assertEqual(set(root.iterdir()), {source, output})
 
-    def test_source_nodata_is_filled_only_in_footprint(self):
+    def test_source_nodata_is_a_hole_in_the_mesh(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary); source = root / 'source.tif'
             oracle.write_fixture(source, 'nodata')
             output = root / 'output'; result, summary = self.call(source, output)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            # All decoded positions are checked independently against literal
-            # source contributors; scalar NoData invalidates nonzero weights.
+            # A node is valid when no nonzero-weight contributor is the NoData
+            # pixel (row 1, column 1); only triangles of three valid nodes remain.
             report = summary['terrainReport']; _, root, tiles = oracle.tree(output)
-            observed = []
-            for leaf in tiles:
-                _, primitives = oracle.glb(output/leaf['uri'])
-                observed += [oracle.transform(root['transform'], (p[0],-p[2],p[1]))
-                             for p in primitives[0][0]]
-            def expected(i,j):
-                x=max(0,min(3,i-.5)); y=max(0,min(3,4-j-.5))
-                contributors=[]
-                import math
-                for row, wy in [(math.floor(y),1-y%1),(min(3,math.floor(y)+1),y%1)]:
-                    for col, wx in [(math.floor(x),1-x%1),(min(3,math.floor(x)+1),x%1)]:
-                        if wx*wy: contributors.append((row,col,wx*wy))
-                if any(row==1 and col==1 for row,col,_ in contributors): return -999.125
-                return sum((100+2*col+3*row)*w for row,col,w in contributors)+10.25
-            wanted = [oracle.ecef(10+i*.25,20+j*.25,expected(i,j)) for j in range(5) for i in range(5)]
-            self.assertEqual(len(observed), len(wanted))
-            for point, truth in zip(observed, wanted):
-                self.assertLessEqual(sum((a-b)**2 for a,b in zip(point,truth))**.5, report['positionErrorMetres']+1e-7)
+            def contributors(i, j):
+                x = max(0, min(3, i-.5)); y = max(0, min(3, 4-j-.5))
+                return [(row, col, wx*wy) for row, wy in [(math.floor(y), 1-y%1), (min(3, math.floor(y)+1), y%1)]
+                        for col, wx in [(math.floor(x), 1-x%1), (min(3, math.floor(x)+1), x%1)] if wx*wy]
+            valid = {(i, j) for i in range(5) for j in range(5) if all((r, c) != (1, 1) for r, c, _ in contributors(i, j))}
+            cells = [t for j in range(4) for i in range(4) for t in (((i, j), (i+1, j), (i, j+1)), ((i+1, j), (i+1, j+1), (i, j+1)))]
+            kept = [t for t in cells if set(t) <= valid]
+            patch = oracle.Patch(output, tiles[0], report, root['transform'])
+            self.assertTrue(0 < len(kept) == len(patch.triangles) < len(cells))
+            self.assertEqual(sorted(patch.position), sorted({n for t in kept for n in t}))
+            for local, (i, j), _ in patch.points:
+                truth = oracle.ecef(10+i*.25, 20+j*.25, sum((100+2*c+3*r)*w for r, c, w in contributors(i, j))+10.25)
+                actual = oracle.transform(root['transform'], local)
+                self.assertLessEqual(math.dist(actual, truth), report['positionErrorMetres']+1e-7)
             oracle.check_directory(output)
-            self.assertEqual(report['heightRange'][0], -999.125)
+            self.assertGreater(report['heightRange'][0], 100)
             self.assertFalse((output/'layer.json').exists())
             self.assertFalse(list(output.rglob('*.terrain')))
 

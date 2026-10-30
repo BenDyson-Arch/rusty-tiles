@@ -189,7 +189,7 @@ Every converter takes `-i` for input and `-o` for output. The file names below a
 | Georeferenced point cloud | `rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs header --height-offset 0` | Standard for grid-free CRS; otherwise native; [CRS limits](docs/FORMATS.md#point-clouds) |
 | Vector layer | `rusty-tiles vector -i mapping.gpkg -o output/mapping.3tz --layer roads` | Standard for grid-free CRS; otherwise native; [vector guide](docs/VECTOR.md) |
 | Imagery | `rusty-tiles raster -i orthophoto.tif -o output/imagery --min-zoom 10 --max-zoom 18` | **Native-geospatial only**; [imagery guide](docs/FORMATS.md#imagery) |
-| Terrain | `rusty-tiles terrain -i elevation.tif -o output/terrain --cells-per-leaf 64 --height-offset 0 --fill-height 0` | **Native-geospatial only**; [terrain guide](docs/TERRAIN.md) |
+| Terrain | `rusty-tiles terrain -i elevation.tif -o output/terrain --height-offset 0` | **Native-geospatial only**; [terrain guide](docs/TERRAIN.md) |
 
 A height offset of 0 is correct only when source heights are already ellipsoidal metres. Read [Coordinates and height](#coordinates-and-height) before you choose one.
 
@@ -249,7 +249,7 @@ A file's CRS and height reference decide where its content lands. rusty-tiles ne
 | Mesh | `mesh` takes local source metres/Y-up. Omit `--anchor` for unplaced output, or give `--anchor lon lat ellipsoidal_height`, optional `--orientation-xyzw x y z w` and `--scene-offset x y z`. For a projected or geographic source, declare `--source-crs` (with `--source-axes`, `--source-offset` or `--source-offset-file`, and `--height-offset`) instead; it excludes the anchor options. See [placement](docs/MESH.md#source-and-placement) and [source CRS](docs/MESH.md#source-crs). |
 | Point cloud | `--source-crs local` means metre XYZ with Z up and no globe placement. Geospatial input needs a 2D horizontal CRS and `--height-offset`. |
 | Vector | The layer's CRS is used unless `--source-crs` overrides it. 3D data with only a horizontal CRS needs `--height-offset`. 2D data sits at ellipsoidal height zero. |
-| Terrain | Heights must be metres. `--height-offset` and `--fill-height` are required. |
+| Terrain | Heights must be metres. `--height-offset` is required. NoData is a hole. |
 
 A constant height offset is not a geoid transformation. Mesh, point-cloud and vector CRS routes use the bounded grid-free/native policies described in their guides. Switching builds does not remove converter-specific source, axis or height limits. Native operations use local PROJ resources only; missing required grids and ballpark operations are refused.
 
