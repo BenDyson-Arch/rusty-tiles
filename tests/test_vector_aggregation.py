@@ -118,14 +118,14 @@ class PointAggregationTests(unittest.TestCase):
             self.assertGreater(node['geometricError'], 0)
             self.assertEqual(len(details(output)), 24)
 
-    def test_tight_tolerance_and_mixed_geometries_keep_conservative_routing(self):
+    def test_tight_tolerance_raises_aggregate_error_and_mixed_geometries_keep_originals(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp); source=self.source(root, 16); output=root/'tight'
             args=self.args(source, output); args.lod_tolerance=.0001; args.max_features=4; native_run(args)
-            tree=json.loads((output/'tileset.json').read_text())['root']
-            self.assertTrue(tree['extras']['routing'])
-            self.assertEqual(tree['extras']['routingReason'], 'pointAggregationTolerance')
-            self.assertEqual(report(output)['pointAggregation']['contentTiles'], 0)
+            extras=json.loads((output/'tileset.json').read_text())['root']['extras']
+            distance=extras['pointAggregation']['maximumDistanceMetres']
+            self.assertGreater(distance, .001)
+            self.assertGreaterEqual(extras['toleranceMetres'], distance)
             data=json.loads(source.read_text())
             data['features'].append(dict(type='Feature',id='line',properties=dict(name='line',flag=True,large=2**60+3),
                 geometry=dict(type='LineString',coordinates=[[0,0,0],[20,0,0]])))
@@ -133,6 +133,26 @@ class PointAggregationTests(unittest.TestCase):
             tree=json.loads((output/'tileset.json').read_text())['root']
             self.assertNotIn('pointAggregation',tree['extras'])
             self.assertEqual(len(details(output)),17)
+
+    def test_spread_layer_aggregates_from_the_root_within_a_shrinking_error(self):
+        rng=np.random.default_rng(2); centres=rng.uniform(0, 2000, (20, 2))
+        xy=np.r_[rng.uniform(0, 2000, (4000, 2)), centres[np.arange(4000) % 20]+rng.normal(0, 20, (4000, 2))]
+        with tempfile.TemporaryDirectory() as tmp:
+            source=pathlib.Path(tmp)/'spread.geojson'; output=pathlib.Path(tmp)/'out'
+            source.write_text(json.dumps(dict(type='FeatureCollection', features=[dict(type='Feature', id=i,
+                properties=dict(n=i), geometry=dict(type='Point', coordinates=[*p, 0])) for i, p in enumerate(xy.tolist())])))
+            native_run(types.SimpleNamespace(input=str(source), output=str(output), source_crs='local',
+                max_parent_features=512, aggregate_points=True))
+            def walk(node, depth=0, parent=None):
+                extras=node['extras']; self.assertIn('content', node)
+                if depth <= 3:self.assertIn('pointAggregation', extras)
+                if 'pointAggregation' in extras:
+                    summary=extras['pointAggregation']
+                    self.assertLessEqual(summary['maximumDistanceMetres'], extras['toleranceMetres'])
+                    self.assertLessEqual(summary['aggregateCount'], 512)
+                if parent is not None:self.assertLess(node['geometricError'], parent)
+                for child in node.get('children', []):walk(child, depth+1, node['geometricError'])
+            walk(json.loads((output/'tileset.json').read_text())['root'])
 
     def test_layer_budget_routes_without_combining_unrelated_layers(self):
         with tempfile.TemporaryDirectory() as tmp:

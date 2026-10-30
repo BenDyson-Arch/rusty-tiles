@@ -215,13 +215,13 @@ Parents are built directly from the original features and use `REPLACE` refineme
 
 Levels above a leaf that remove no vertices are omitted. Parent errors never decrease toward the root.
 
-In a coarse tile, a whole unsplit line or polygon whose 3D bounding-box diagonal fits the tolerance is within the tile's error. The `--max-features` largest of these are kept as stand-ins, reduced as far as they validly go (a polygon keeps its exterior, usually a triangle of source vertices); the others are omitted. Either way the tile's error counts the feature's diagonal. A stand-in that cannot be reduced is omitted, unless the tile would otherwise be empty. Points, split fragments and their outlines are always kept, and `--max-parent-features` counts only kept features.
+In a coarse tile, a whole unsplit line or polygon whose 3D bounding-box diagonal fits the tolerance is within the tile's error. The `--max-features` largest of these (ties by source identity) are kept as stand-ins, reduced as far as they validly go (a polygon keeps its exterior, usually a triangle of source vertices); the others are omitted. Either way the tile's error counts the feature's diagonal. A stand-in that cannot be reduced is omitted; if the tile would otherwise be empty, the largest such feature is kept. Points, split fragments and their outlines are always kept, and `--max-parent-features` counts only kept features.
 
 Larger features are simplified. Lines use 3D Ramer-Douglas-Peucker simplification with a conservative error bound; a ring within the tolerance of its chord keeps its farthest vertex as a triangle. A polygon ring simplifies only when its planarity deviation leaves room inside the tolerance and the result stays valid; otherwise it keeps its source vertices, which carry no error. Shared vertices, including fragment seams, are locked. Triangle fill fragments are not simplified. A coarse tile's `geometricError` is its tolerance, which bounds its simplification errors and omitted or stand-in diagonals, plus rounding and quantization. Tolerances grow at every level, so errors strictly shrink toward the leaves.
 
 Leaves keep every source vertex and segment. Their only change is float32 rounding, which is reported. Leaf `geometricError` is zero unless you quantize.
 
-A parent that cannot fit its kept features within the budgets becomes a routing node without content. `extras.routingReason` says why: `parentFeatures`, `vertices`, `bytes` or `estimatedBytes`. Its `geometricError` is at least 16 times its box diagonal, as for empty mesh parents, so CesiumJS refines it rather than drawing nothing.
+A parent that cannot fit its kept features within the budgets retries at a tolerance of its data diagonal, where every unsplit line or polygon is a stand-in or omitted. If that does not fit either, it becomes a routing node without content. `extras.routingReason` says why: `parentFeatures`, `vertices`, `bytes`, `estimatedBytes` or `pointAggregationBudget`. Its `geometricError` is at least 16 times its box diagonal, as for empty mesh parents, so CesiumJS refines it rather than drawing nothing; `validate` refuses vector archives whose content-less tiles fall below this.
 
 By default, every semantic point is kept. Dense point layers get a routing hierarchy rather than sampling.
 
@@ -244,7 +244,7 @@ Points are grouped by layer and 3D voxel, using the same grid as the point-cloud
 
 Aggregates use the metadata class `pointAggregate` and have no `_source_id`. Styles for distant tiles must use these properties, not the original fields. A MultiPoint counts once per coordinate.
 
-Aggregation falls back to the original content when it gives no reduction, breaks a budget, or exceeds the tolerance. Coarse tolerances scale with tile extent, so points spread wider than a tile's tolerance keep their originals; raise `--lod-tolerance` for coarser aggregates. If the original content does not fit either, the tile routes to its children. The parent's geometric error is at least the tolerance, so aggregates always refine to originals up close. `extras.pointAggregation` and `conversion.json.pointAggregation` record what happened.
+Aggregation falls back to the original content when it gives no reduction or breaks a budget. If the original content does not fit either, the tile routes to its children. Where an original point lies farther from its aggregate than the tile's tolerance, the tile's tolerance and geometric error rise to that distance. The parent's geometric error is at least the tolerance, so aggregates always refine to originals up close. `extras.pointAggregation` and `conversion.json.pointAggregation` record what happened.
 
 ## Encoding
 

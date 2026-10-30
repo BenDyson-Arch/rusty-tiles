@@ -298,10 +298,8 @@ def run_forest(binary, evidence):
                                   geometry=dict(type='LineString', coordinates=[[x + 20 + j, y + 20 + j % 3 * .4, 0] for j in range(16)])))
             return items
         def points():
-            # Four points 5 cm apart per site: their voxel spread fits the coarse tolerances,
-            # which scale with tile extent, so the parents above the sites aggregate.
             return [dict(type='Feature', id='q' + str(i), properties=dict(name='pt-' + str(i)),
-                         geometry=dict(type='Point', coordinates=[i % 8 * 40 + i // 64 * .05, i // 8 % 8 * 40, 0]))
+                         geometry=dict(type='Point', coordinates=[i % 8 * 40 + i // 64 * 3, i // 8 % 8 * 40, 0]))
                     for i in range(256)]
         def convert(name, edit, flags=(), items=None):
             source = root / name / 'parcels.geojson'

@@ -222,6 +222,29 @@ class VectorLodTests(unittest.TestCase):
                 return leaves,node
             leaves,_=walk(root,np.zeros(3));self.assertEqual(len(leaves),603)
 
+    def test_no_routing_tile_under_content_and_stand_ins_ignore_input_order(self):
+        def square(x, y, s):
+            c=[[x, y, 0], [x+s, y, 0], [x+s, y+s, 0], [x, y+s, 0]];return dict(type='Polygon', coordinates=[c+c[:1]])
+        rng=np.random.default_rng(3)
+        cluster=[square(*rng.uniform(0, 40, 2), 5.) for _ in range(480)]+[square(*rng.uniform(0, 2000, 2), .5) for _ in range(40)]
+        grid=[square(3*(i % 20), 3*(i//20), 1) for i in range(400)]
+        def bake(tmp, name, geometries, order, **options):
+            source=pathlib.Path(tmp)/f'{name}.geojson';out=pathlib.Path(tmp)/name
+            source.write_text(json.dumps(dict(type='FeatureCollection', features=[dict(type='Feature', id=i,
+                properties=dict(n=i), geometry=geometries[i]) for i in order])))
+            vector.run(types.SimpleNamespace(input=str(source), output=str(out), source_crs='local', max_features=16, **options))
+            def walk(node, above=False):
+                content='content' in node;self.assertTrue(content or not above)
+                if content and node.get('children'):
+                    self.assertLessEqual(node['geometricError'], node['extras']['toleranceMetres']+1e-3)
+                ids=sorted(read(out/node['content']['uri'])[2]) if content else None
+                return [ids]+[x for c in node.get('children', []) for x in walk(c, above or content)]
+            return walk(json.loads((out/'tileset.json').read_text())['root'])
+        with tempfile.TemporaryDirectory() as tmp:
+            bake(tmp, 'cluster', cluster, range(520), max_parent_features=60)
+            shuffled=list(range(400));np.random.default_rng(5).shuffle(shuffled)
+            self.assertEqual(bake(tmp, 'ordered', grid, range(400)), bake(tmp, 'shuffled', grid, shuffled))
+
 
 if __name__=='__main__':
     unittest.main()

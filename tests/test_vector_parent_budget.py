@@ -12,12 +12,12 @@ from test_vector_lod import vector, read
 from cli_bin import BIN, requires_bin
 
 class ParentFeatureBudgetTests(unittest.TestCase):
-    def source(self,root):
+    def source(self,root,points=False):
         features=[]
         for i in range(16):
             ring=[[i*5+math.cos(a),math.sin(a),0] for a in [2*math.pi*j/40 for j in range(40)]]
-            features.append(dict(type='Feature',id=i,properties=dict(name=str(i)),
-                geometry=dict(type='Polygon',coordinates=[ring+[ring[0]]])))
+            geometry=dict(type='Point',coordinates=ring[0]) if points else dict(type='Polygon',coordinates=[ring+[ring[0]]])
+            features.append(dict(type='Feature',id=i,properties=dict(name=str(i)),geometry=geometry))
         source=root/'dense.geojson';source.write_text(json.dumps(dict(type='FeatureCollection',features=features)))
         return source
 
@@ -39,7 +39,8 @@ class ParentFeatureBudgetTests(unittest.TestCase):
 
     def test_separate_parent_feature_and_vertex_limits_report_binding_reason(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root=pathlib.Path(tmp);source=self.source(root)
+            # Points are never omitted, so a parent over budget routes to its children.
+            root=pathlib.Path(tmp);source=self.source(root,points=True)
             for name,options,reason in [('features',dict(max_parent_features=2),'parentFeatures'),
                     ('vertices',dict(max_vertices=8),'vertices')]:
                 out=root/name

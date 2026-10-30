@@ -519,7 +519,7 @@ struct VectorArgs {
         default_value_t = 1000000
     )]
     max_source_vertices: usize,
-    /// Base simplification tolerance in metres; doubles for each coarse level
+    /// Tolerance in metres of the first coarse level above each leaf; doubles at each level above it
     #[arg(
         long = "lodTolerance",
         visible_alias = "lod-tolerance",

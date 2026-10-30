@@ -1098,7 +1098,15 @@ impl Build<'_> {
             .candidates(prefix, center, &[(level.max(1), tolerance)])?
             .pop()
             .unwrap();
-        let (coarse, reason) = self.consume(candidate)?;
+        let (mut coarse, mut reason) = self.consume(candidate)?;
+        let diagonal = norm(sub(stats.hi, stats.lo));
+        if coarse.is_none() && tolerance < diagonal {
+            // At its own diagonal every unsplit line or polygon is a stand-in or omitted:
+            // content there beats a routing tile, whose error would bound every ancestor.
+            let level = level.max(1) + 1;
+            let retry = self.candidates(prefix, center, &[(level, diagonal)])?.pop();
+            (coarse, reason) = self.consume(retry.unwrap())?;
+        }
         let coarse = match coarse {
             Some(coarse) => coarse,
             None => {

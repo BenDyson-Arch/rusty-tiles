@@ -6,6 +6,8 @@ use rusqlite::{params, Connection};
 pub(super) struct Aggregates {
     pub features: Vec<Feature>,
     pub summary: Value,
+    /// Bounds every source point's distance to its aggregate.
+    pub distance: f64,
 }
 
 pub(super) enum Outcome {
@@ -17,7 +19,6 @@ pub(super) enum Outcome {
 pub(super) fn collect(
     db: &Connection,
     prefix: &str,
-    tolerance: f64,
     options: &VectorOptions,
 ) -> Result<Outcome, Error> {
     let end = format!("{prefix}~");
@@ -55,9 +56,6 @@ pub(super) fn collect(
                     unreachable!()
                 };
                 maximum_distance = maximum_distance.max(norm(sub(*point, representative)));
-                if maximum_distance > tolerance {
-                    return Ok(Outcome::Rejected("pointAggregationTolerance"));
-                }
             } else {
                 if cells.len() == budget {
                     return Ok(Outcome::Rejected("pointAggregationBudget"));
@@ -90,9 +88,6 @@ pub(super) fn collect(
     } else {
         maximum_distance + 16. * f64::EPSILON * norm(lo).max(norm(hi)).max(1.)
     };
-    if distance_bound > tolerance {
-        return Ok(Outcome::Rejected("pointAggregationTolerance"));
-    }
     let summary = json!({"method":"voxel","sourcePointCount":points,"aggregateCount":cells.len(),
         "maximumDistanceMetres":distance_bound,"cellDiagonalMetres":grid.error_bound(),
         "sourceProperties":"full-detail leaves only","grouping":"source layer and 3D voxel",
@@ -100,5 +95,6 @@ pub(super) fn collect(
     Ok(Outcome::Ready(Aggregates {
         features: cells.into_values().collect(),
         summary,
+        distance: distance_bound,
     }))
 }
