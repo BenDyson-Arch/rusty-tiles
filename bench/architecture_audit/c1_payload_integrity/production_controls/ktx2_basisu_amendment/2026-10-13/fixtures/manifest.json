@@ -4,7 +4,7 @@
   "rule": "C1 KHR_texture_basisu / KTX2 container amendment (2026-10-13)",
   "generatorSha256": "dd15678267c730208e33fa67a2174d3e16cd3464088a8b6d0d8a136c7610255f",
   "oracleSha256": "767113e56e3e24e96798da02791bb2140394e3ef69e307bf6c45687759884b44",
-  "runnerSha256": "bdef8f934a3552a4c9cf5604f3c541eca46b6b41e135b4ed58323b5bc8c1f723",
+  "runnerSha256": "2d817144ecd7d36b018dd9f1f600a1cf67d91adca216c8314618178396d123d6",
   "referencePins": {
     "files": [
       {

@@ -26,7 +26,7 @@ def main():
         # then the validator-caps amendment (2026-10-11) with the raised limits defaults,
         # then the C2-WB cap amendment (2026-10-12): containmentWorkUnits 2^29,
         # then the VS-C limits amendment (2026-10-14): storedBytes, limitDerivation, null caps,
-        # then the payload-element ratio amendment (2026-10-30): totalPayloadElements 25/byte.
+        # then the payload-element ratio amendment (2026-10-30): totalPayloadElements 77/byte.
         ('stride6', controls / 'payload_element_ratio_amendment/2026-10-30/stride_controls',
          '15ce7e3e98ce92d705ce08059e7a0200c4977af7968d569f721b176ffbe31ff2', 6),
         ('parent1', controls / 'stride_parent_control/2026-10-10',
@@ -45,7 +45,7 @@ def main():
         # VS-C limits amendment (2026-10-14): the runner applies the VS-C report rule to the
         # regenerated cases (production_controls/vs_c_limits_amendment/2026-10-14, --ktx2), then
         # the ratio rule (payload_element_ratio_amendment/2026-10-30, --ktx2).
-        ('ktx2', controls / 'ktx2_basisu_amendment/2026-10-13', '1db021d2a5be07572f203272386b1687688382237519b6c7b377359ab7cf5d9f', 67),
+        ('ktx2', controls / 'ktx2_basisu_amendment/2026-10-13', '5d95e1b6d744877921bc2ee76ff45abffd4c69985742e7ccc049d2a0935f6b46', 67),
     ]
     for _, lane, manifest_hash, _ in lanes:
         assert sha(lane / 'fixtures/manifest.json') == manifest_hash

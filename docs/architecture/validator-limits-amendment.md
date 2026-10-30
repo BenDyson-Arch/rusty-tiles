@@ -128,11 +128,44 @@ host at load average about 43:
 | c4 hlodleaf: 100k-triangle leaves, new originals per triangle | 10.74 | 12.32 |
 | c5 hlodleaf: 600 × 8,192-triangle leaves | 10.11 | 10.92 |
 
-The stated bound is `(16,000,000 + 77·S)·τ` with the worst measured τ (c4): on the P-core
-0.17 s plus 827 s per stored GB, and on the E-core 0.20 s plus 949 s per stored GB. Both are
-within the C2 statement below (1,037 and 1,875 s per stored GB). A new work class, or a
-per-unit cost above 13.4 ns (P-core) or 24.3 ns (E-core), must re-weight its charges or
-revisit the ratio.
+For these five classes, `(16,000,000 + 77·S)·τ` with the worst τ (c4) is 0.17 s plus 827 s per
+stored GB on the P-core, and 0.20 s plus 949 s per stored GB on the E-core. Both are within the
+C2 statement below (1,037 and 1,875 s per stored GB).
+
+**This bound does not hold for every class.** The cost of an SQLite scratch-store row grows with
+the size of the scratch tables, but every row is charged the same constant 128 units. Rows with
+random keys (placed leaf points, edges and faces) miss the 8 MiB page cache more often as the
+B-trees deepen. The five classes above keep those tables tiny, because their positions are
+degenerate. A sixth class, from review 2, does not:
+
+- **c6 leafrand:** N leaves of 8,192 nondegenerate triangles. Every corner is a distinct
+  pseudo-random lattice point, and every leaf has a `source_triangle` table, so each point, edge
+  and face is a random-key row.
+- Generator: `bench/architecture_audit/vs_c_limits/hostile/leafrand.py N 8192 7 OUT.3tz`.
+- Each archive runs to its default budget of 77·S units and is refused there.
+
+| c6 archive | S | P-core ns/unit | P-core s per stored GB | E-core ns/unit | E-core s per stored GB |
+| --- | --- | --- | --- | --- | --- |
+| 10 leaves | 1.52 MB | 7.8 | 598 | 10.1 | 776 |
+| 40 leaves | 6.08 MB | 10.5 | 811 | 13.2 | 1,013 |
+| 150 leaves | 22.8 MB | 18.4 | **1,419** | 22.6 | 1,738 |
+| 400 leaves | 60.8 MB | 26.7 | **2,052** | not run | |
+
+- On the P-core, the 1,037 s per stored GB statement is **exceeded** for this class from about
+  10 MB stored (met at 6.1 MB, exceeded at 22.8 MB). The cost per unit was still rising at
+  60.8 MB.
+- On the E-core the 1,875 s/GB statement held through 22.8 MB, but the trend is the same, and
+  larger archives were not measured.
+- So the GB-scale time statement holds only for the five constant-cost classes. No time bound is
+  claimed for random-key row work above about 10 MB stored.
+- This is not a regression. Before this amendment rows were charged 1 or 2 units, so develop
+  admits more uncharged row work per byte.
+- **Follow-up (0.4.0, "constant-cost scratch rows"):** replace the random-key B-tree inserts
+  with sort-and-merge passes, as the alias pass already does, so that the per-row cost no longer
+  grows with S. Until it lands, this statement stays qualified.
+
+A new work class, or a per-unit cost above 13.4 ns (P-core) or 24.3 ns (E-core), must re-weight
+its charges or revisit the ratio.
 
 **VS-C-2. Opt-in caps and natural bounds (A-C1-1, A-C1-2).** With no Class B cap set, the
 archive is bounded by the format and the file alone, in this order (all VS-A, unchanged):

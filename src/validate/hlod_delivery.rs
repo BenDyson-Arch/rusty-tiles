@@ -38,9 +38,7 @@ use super::{identity, invalid, spill_failure, Budget, Error, ScratchRefusal};
 mod borders;
 mod drops;
 use crate::archive3tz::CatalogConfig;
-use crate::spill::{
-    ExternalSorter, Record, Scratch, Sequence, SequenceWriter, SlotFile, SortConfig,
-};
+use crate::spill::{ExternalSorter, Record, Scratch, SequenceWriter, SlotFile, SortConfig};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{value::RawValue, Value};
 use std::{
@@ -713,6 +711,8 @@ pub(super) struct DecodedInterfaceCensus {
 /// by key (an SQLite B-tree insert, upsert or point query). A row costs far more than an
 /// ordinary payload unit (about 6 ns), so it is weighted to keep every work class within the
 /// stated time per unit (`docs/architecture/validator-limits-amendment.md`, time statement).
+/// Random-key rows get slower as the tables grow, so this constant under-charges them above
+/// about 10 MB stored (class c6 there) until rows become sort-and-merge passes.
 pub(super) const ROW_UNITS: usize = 128;
 /// Units for each original vertex row appended to the spill sequence at ingest.
 pub(super) const ORIGINAL_UNITS: usize = 16;
@@ -936,9 +936,8 @@ pub(super) struct Store {
     profile_exclusion: Option<&'static str>,
     decoded_limit: usize,
     census: Option<DecodedInterfaceCensus>,
-    /// Original vertex rows, appended per payload at ingest, then completed for the scan.
+    /// Original vertex rows, appended per payload at ingest; the alias pass consumes them.
     originals: Option<SequenceWriter<Original>>,
-    recorded: Option<Sequence<Original>>,
     sort: SortConfig,
     buffer_bytes: usize,
 }
@@ -956,7 +955,6 @@ impl Store {
             decoded_limit: 0,
             census: None,
             originals: None,
-            recorded: None,
             sort: config.side_sort,
             buffer_bytes: config.buffer_bytes,
         })
@@ -1659,12 +1657,11 @@ impl Store {
     /// and one ordered scan compares neighbours: each payload is decoded once, never
     /// per pair, and resident memory is the sort configuration plus one frame chunk.
     fn replay_original_aliases(&mut self, effort: &Effort) -> Result<(), Error> {
-        if let Some(writer) = self.originals.take() {
-            self.recorded = Some(writer.finish().map_err(spill_failure)?);
-        }
-        let Some(recorded) = &self.recorded else {
+        // The pass owns the sequence: its spill file is removed when the pass ends.
+        let Some(writer) = self.originals.take() else {
             return Ok(());
         };
+        let recorded = writer.finish().map_err(spill_failure)?;
         let mut sorter =
             ExternalSorter::<Alias>::new(&self._scratch, self.sort).map_err(spill_failure)?;
         let mut emit = |row: &Original, frames: &[(i64, Matrix)]| -> Result<(), Error> {
@@ -1672,6 +1669,8 @@ impl Store {
             for (_, frame) in frames {
                 effort.charge(ALIAS_UNITS)?;
                 let placed = point(*frame, local);
+                // Checked while keys are emitted, before the sorted scan: an archive with both
+                // a non-finite placement and an alias conflict reports the non-finite one.
                 finite(&placed)?;
                 sorter
                     .push(Alias {
@@ -2699,7 +2698,9 @@ mod tests {
             .unwrap_err()
             .exceeded()
             .is_some());
-        s.replay_original_aliases(&effort()).unwrap();
+        original_rows(&rows)
+            .replay_original_aliases(&effort())
+            .unwrap();
     }
 
     fn delivery_case(
