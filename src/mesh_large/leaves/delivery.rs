@@ -373,18 +373,10 @@ pub(in crate::mesh_large) fn check_level(
     {
         return Err(error(JobErrorKind::InvalidState, "delivery decoded shape"));
     }
-    let quality = profile == Profile::Quality;
-    let fast = profile == Profile::Fast;
     let mut metrics = Vec::new();
     let mut rgb_inverse_snr = 0.;
     let mut rgb_texels = 0;
-    let channels: &[usize] = match slot {
-        TextureSlot::Normal => &[0, 1, 2, 3],
-        TextureSlot::Occlusion => &[0, 3],
-        TextureSlot::MetallicRoughness => &[1, 2, 3],
-        _ => &[0, 1, 2, 3],
-    };
-    for &channel in channels {
+    for &channel in gated_channels(slot) {
         let stats = channel_stats(expected, decoded, support, width as usize, channel);
         let gate = channel_gate(slot, profile, channel, stats.texels);
         if channel < 3 {
@@ -473,13 +465,7 @@ pub(in crate::mesh_large) fn check_level(
         }
         let mean = sum / weight_sum;
         let angular = angle_sum / weight_sum;
-        let (mean_cap, max_cap) = if fast {
-            (0.08, 0.20)
-        } else if quality {
-            (0.03, 0.10)
-        } else {
-            (0.05, 0.15)
-        };
+        let (mean_cap, max_cap) = normal_length_caps(profile);
         normals = json!({"length_mean":mean,"length_max":max,"angle_mean":angular,"angle_p99":p99});
         if mean > mean_cap || max > max_cap || angular > 3. || p99 > 12. {
             return Err(fidelity(format!(
@@ -493,6 +479,97 @@ pub(in crate::mesh_large) fn check_level(
     }
     Ok(receipt)
 }
+
+fn gated_channels(slot: TextureSlot) -> &'static [usize] {
+    match slot {
+        TextureSlot::Occlusion => &[0, 3],
+        TextureSlot::MetallicRoughness => &[1, 2, 3],
+        _ => &[0, 1, 2, 3],
+    }
+}
+/// Mean and maximum caps on a decoded normal's length error.
+fn normal_length_caps(profile: Profile) -> (f64, f64) {
+    match profile {
+        Profile::Fast => (0.08, 0.20),
+        Profile::Quality => (0.03, 0.10),
+        _ => (0.05, 0.15),
+    }
+}
+/// The block-local caps of one level: a channel's maximum error and worst-block RMSE
+/// and the normal length cap. One complete 4x4 block over any of them misses the
+/// level's gate whatever every other block decodes to.
+struct BlockCaps {
+    max: Vec<(usize, u8)>,
+    rmse: Vec<(usize, f64)>,
+    normal_length: Option<f64>,
+}
+impl BlockCaps {
+    fn new(level: &sparse_mips::Level, slot: TextureSlot, profile: Profile) -> Self {
+        let texels = level.support.iter().filter(|&&s| s > 0).count() as u64;
+        let gates: Vec<_> = gated_channels(slot)
+            .iter()
+            .map(|&c| (c, channel_gate(slot, profile, c, texels)))
+            .collect();
+        Self {
+            max: gates
+                .iter()
+                .filter_map(|(c, g)| g.max.map(|m| (*c, m)))
+                .collect(),
+            rmse: gates
+                .iter()
+                .filter_map(|(c, g)| g.block_rmse.map(|m| (*c, m)))
+                .collect(),
+            normal_length: (slot == TextureSlot::Normal).then(|| normal_length_caps(profile).1),
+        }
+    }
+    /// Whether the block whose texel `t` (row-major) is `(support, expected, decoded)`
+    /// misses, with `channel_stats`'s and `check_level`'s arithmetic.
+    fn over<'a>(&self, texel: impl Fn(usize) -> (u32, &'a [u8], &'a [u8])) -> bool {
+        let length = |d: &[u8]| {
+            let l = d[..3]
+                .iter()
+                .map(|&v| (f64::from(v) / 127.5 - 1.).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            // check_level refuses a zero or non-finite decoded normal outright.
+            self.normal_length
+                .is_some_and(|cap| l <= 1e-12 || !l.is_finite() || (l - 1.).abs() > cap)
+        };
+        let texel_over = (0..16).any(|t| {
+            let (w, e, d) = texel(t);
+            w > 0 && (self.max.iter().any(|&(c, cap)| e[c].abs_diff(d[c]) > cap) || length(d))
+        });
+        texel_over
+            || self.rmse.iter().any(|&(c, cap)| {
+                let (mut sse, mut weight) = (0., 0.);
+                for t in 0..16 {
+                    let (w, e, d) = texel(t);
+                    if w > 0 {
+                        sse += f64::from(e[c].abs_diff(d[c])).powi(2) * f64::from(w);
+                        weight += f64::from(w);
+                    }
+                }
+                weight > 0. && (sse / weight).sqrt() > cap
+            })
+    }
+    /// Complete 4x4 blocks (row-major index) of a decoded level that miss.
+    fn witnesses(&self, level: &sparse_mips::Level, expected: &[u8], decoded: &[u8]) -> Vec<u32> {
+        let w = level.width as usize;
+        let bw = w / 4;
+        (0..bw * (level.height as usize / 4))
+            .filter(|&b| {
+                self.over(|t| {
+                    let i = (b / bw * 4 + t / 4) * w + b % bw * 4 + t % 4;
+                    (level.support[i], &expected[i * 4..], &decoded[i * 4..])
+                })
+            })
+            .take(WITNESS_BLOCKS)
+            .map(|b| b as u32)
+            .collect()
+    }
+}
+/// Blocks kept per missed level for the next step's block probe.
+const WITNESS_BLOCKS: usize = 16;
 
 /// Whether a slot/profile stores occlusion as scalar ETC1S (R replicated).
 /// Quality is excluded on purpose: its occlusion gate (max <= 8, against 80
@@ -912,6 +989,7 @@ fn escalate(
     let mut prepared = prepare_levels(chain, mask)?;
     let scalar = scalar_occlusion(slot, profile);
     let mut misses = Vec::new();
+    let mut witnesses = Vec::new();
     // Each step runs to completion and drops its encoder output before the
     // next starts, so the page's single lease and charge cover every step.
     for step in Step::LOSSY {
@@ -935,6 +1013,11 @@ fn escalate(
             }
         }
         let rrr = scalar && step == Step::Profile;
+        let earlier = (&misses[..], &witnesses[..]);
+        if let Some(miss) = probe(chain, &prepared, slot, profile, step, mask, earlier)? {
+            misses.push(miss);
+            continue;
+        }
         match lossy_step(
             chain,
             &prepared,
@@ -944,6 +1027,7 @@ fn escalate(
             (mask, rrr, charge),
             &mut validate,
             tamper,
+            &mut witnesses,
         )? {
             Ok(mut delivery) => {
                 if step != Step::Profile {
@@ -1109,6 +1193,7 @@ fn lossy_step(
     (mask, scalar, charge): (Option<MaskDelivery<'_>>, bool, u64),
     validate: &mut impl FnMut(&[mips::Level]) -> Result<Value, JobError>,
     tamper: Tamper<'_>,
+    witnesses: &mut Vec<(usize, Vec<u32>)>,
 ) -> Result<Result<Delivery, GateMiss>, JobError> {
     let mut levels = Vec::new();
     levels
@@ -1176,7 +1261,15 @@ fn lossy_step(
             })
         }) {
             Ok(receipt) => receipts.push(receipt),
-            Err(e) => return missed(e, step, Some(index)).map(Err),
+            Err(e) => {
+                let miss = missed(e, step, Some(index))?;
+                let caps = BlockCaps::new(level, slot, profile);
+                let blocks = caps.witnesses(level, &prepared.expected[index], &decoded);
+                if !blocks.is_empty() {
+                    witnesses.push((index, blocks));
+                }
+                return Ok(Err(miss));
+            }
         }
         if mask.is_some() {
             receipts.push(prepared.guard_receipts[index].clone());
@@ -1215,6 +1308,125 @@ fn lossy_step(
         receipts,
         escalation: None,
     }))
+}
+
+/// Decides a UASTC step from part of its work before encoding the chain. UASTC encodes
+/// every 4x4 block alone, so a block or level encoded on its own decodes to the same
+/// texels as inside the chain (`a_level_alone_decodes_as_in_its_chain`); a probe miss
+/// is the step's miss, exactly. First the blocks where an earlier step put a texel
+/// over a per-texel cap are re-encoded alone (a few blocks). Before UASTC level 3,
+/// every level but 0 is then encoded alone and gated with its codec floors, levels
+/// that missed earlier first. Level 0 (three quarters of the chain) is never probed,
+/// so a step that then passes costs at most a third more, only on a page that
+/// already missed twice.
+#[allow(clippy::too_many_arguments)]
+fn probe(
+    chain: &sparse_mips::Chain,
+    prepared: &Prepared,
+    slot: TextureSlot,
+    profile: Profile,
+    step: Step,
+    mask: Option<MaskDelivery<'_>>,
+    (misses, witnesses): (&[GateMiss], &[(usize, Vec<u32>)]),
+) -> Result<Option<GateMiss>, JobError> {
+    if step == Step::Profile {
+        return Ok(None);
+    }
+    let (mode, params) = step_settings(slot, profile, step)?;
+    for (index, blocks) in witnesses {
+        let level = &chain.levels[*index];
+        let (w, bw) = (level.width as usize, level.width as usize / 4);
+        let texel =
+            |b: u32, t: usize| (b as usize / bw * 4 + t / 4) * w + b as usize % bw * 4 + t % 4;
+        // The witness blocks side by side in one row of blocks.
+        let mut row = vec![0u8; blocks.len() * 64];
+        for (j, &b) in blocks.iter().enumerate() {
+            for t in 0..16 {
+                let at = ((t / 4) * blocks.len() * 4 + j * 4 + t % 4) * 4;
+                row[at..at + 4]
+                    .copy_from_slice(&prepared.delivered[*index][texel(b, t) * 4..][..4]);
+            }
+        }
+        let width = blocks.len() as u32 * 4;
+        let decoded = codec::encode_decoded_unverified(&row, width, 4, mode, params)?;
+        let caps = BlockCaps::new(level, slot, profile);
+        for (j, &b) in blocks.iter().enumerate() {
+            let over = caps.over(|t| {
+                let i = texel(b, t);
+                let at = ((t / 4) * blocks.len() * 4 + j * 4 + t % 4) * 4;
+                (
+                    level.support[i],
+                    &prepared.expected[*index][i * 4..],
+                    &decoded[at..],
+                )
+            });
+            if over {
+                return Ok(Some(GateMiss {
+                    step,
+                    mip: Some(*index),
+                    reason: MissReason::Gate,
+                    gate: format!(
+                        "block probe: texture {slot:?} {profile:?} mip{index} block {b} misses its \
+                         maximum-error, block-RMSE or normal-length cap"
+                    ),
+                }));
+            }
+        }
+    }
+    if step != Step::UastcLevel3 {
+        return Ok(None);
+    }
+    let earlier = misses.iter().filter_map(|m| m.mip).filter(|&m| m > 0);
+    let mut order: Vec<usize> = earlier.chain(1..chain.levels.len()).collect();
+    let mut seen = vec![false; chain.levels.len()];
+    order.retain(|&k| !std::mem::replace(&mut seen[k], true));
+    for index in order {
+        let level = &chain.levels[index];
+        let alone = [codec::MipLevel {
+            rgba: &prepared.delivered[index],
+            width: level.width,
+            height: level.height,
+        }];
+        let decoded = match codec::encode_ktx2_mips_floor_checked(&alone, mode, params)? {
+            Ok((_, mut decoded)) => decoded.pop().ok_or_else(resource)?,
+            Err(miss) => {
+                return Ok(Some(GateMiss {
+                    step,
+                    mip: Some(index),
+                    reason: MissReason::CodecVerify,
+                    gate: format!("level probe: {}", miss.error.message()),
+                }))
+            }
+        };
+        let gate = match check_level(
+            &prepared.expected[index],
+            &decoded,
+            &level.support,
+            level.width,
+            slot,
+            profile,
+            index,
+        ) {
+            Err(e) => Some(e),
+            Ok(_) => match mask_gate(
+                mask,
+                prepared.mask_receipts[index].as_ref(),
+                &decoded,
+                level,
+                index,
+                profile,
+            )? {
+                Some(Err(e)) => Some(e),
+                _ => None,
+            },
+        };
+        if let Some(e) = gate {
+            let mut miss = missed(e, step, Some(index))?;
+            miss.gate = format!("level probe: {}", miss.gate);
+            return Ok(Some(miss));
+        }
+    }
+    Ok(None)
 }
 
 /// The last step: exact PNG of the prepared level 0 (MASK-adjusted and
@@ -2698,6 +2910,93 @@ mod tests {
             step_settings(TextureSlot::BaseColor, profile, Step::UastcLevel2).unwrap();
         codec::verify_ktx2_mips(&out.bytes, &levels, mode, params).unwrap();
         independently_gated(&out, &chain, profile);
+    }
+    #[test]
+    fn doomed_uastc_steps_are_decided_by_block_probes() {
+        // Binary metallic noise: UASTC level 2 misses the data cap at mip1, so level 3 is
+        // decided by re-encoding level 2's witness blocks, not the whole chain.
+        let rgba: Vec<u8> = (0..64 * 64u32)
+            .flat_map(|i| {
+                let bit = |k: u32| {
+                    if (i.wrapping_mul(2_654_435_761) >> k) & 1 == 1 {
+                        230
+                    } else {
+                        0
+                    }
+                };
+                [0, bit(7), bit(13), 255]
+            })
+            .collect();
+        let chain = sparse_mips::build(64, 64, &rgba, &[1; 64 * 64], Class::Data, MEMORY).unwrap();
+        let out = escalate(
+            &chain,
+            TextureSlot::MetallicRoughness,
+            Profile::Balanced,
+            MEMORY,
+            None,
+            LADDER,
+            |_| Ok(Value::Null),
+            &|_, _, _| {},
+        )
+        .unwrap();
+        let escalation = out.escalation.unwrap();
+        assert_eq!(escalation.step, Step::LosslessPng);
+        let probed: Vec<_> = escalation.misses[1..]
+            .iter()
+            .map(|m| (m.step, m.gate.starts_with("block probe: ")))
+            .collect();
+        assert_eq!(
+            probed,
+            [(Step::UastcLevel2, false), (Step::UastcLevel3, true)],
+            "{escalation:?}"
+        );
+    }
+    #[test]
+    fn a_level_alone_decodes_as_in_its_chain() {
+        // The level probe's premise: UASTC encodes each 4x4 block alone, so a level
+        // encoded on its own decodes exactly as inside the complete chain.
+        let rgba = hard_block_page(128, 10);
+        let chain =
+            sparse_mips::build(128, 128, &rgba, &[1; 128 * 128], Class::Data, MEMORY).unwrap();
+        let levels: Vec<_> = chain
+            .levels
+            .iter()
+            .map(|l| codec::MipLevel {
+                rgba: &l.rgba,
+                width: l.width,
+                height: l.height,
+            })
+            .collect();
+        for step in [Step::UastcLevel2, Step::UastcLevel3] {
+            let (mode, params) =
+                step_settings(TextureSlot::MetallicRoughness, Profile::Balanced, step).unwrap();
+            let (_, whole) = codec::encode_ktx2_mips_decoded(&levels, mode, params).unwrap();
+            for (index, level) in levels.iter().enumerate() {
+                let (_, alone) = codec::encode_ktx2_mips_decoded(&[*level], mode, params).unwrap();
+                assert_eq!(alone[0], whole[index], "{step:?} mip{index}");
+            }
+            // Blocks 5, 9 and 30 of level 0 side by side, as the block probe lays them.
+            let (w, blocks) = (128, [5usize, 9, 30]);
+            let texel = |b: usize, t: usize| (b / 32 * 4 + t / 4) * w + b % 32 * 4 + t % 4;
+            let mut row = vec![0u8; blocks.len() * 64];
+            for (j, &b) in blocks.iter().enumerate() {
+                for t in 0..16 {
+                    let at = ((t / 4) * blocks.len() * 4 + j * 4 + t % 4) * 4;
+                    row[at..at + 4].copy_from_slice(&levels[0].rgba[texel(b, t) * 4..][..4]);
+                }
+            }
+            let alone = codec::encode_decoded_unverified(&row, 12, 4, mode, params).unwrap();
+            for (j, &b) in blocks.iter().enumerate() {
+                for t in 0..16 {
+                    let at = ((t / 4) * blocks.len() * 4 + j * 4 + t % 4) * 4;
+                    assert_eq!(
+                        alone[at..at + 4],
+                        whole[0][texel(b, t) * 4..][..4],
+                        "{step:?} block {b}"
+                    );
+                }
+            }
+        }
     }
     #[test]
     fn exhausted_mip_sampled_ladder_ends_in_exact_level0_png() {
