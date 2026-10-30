@@ -846,8 +846,36 @@ pub(crate) fn capture_admitted(
             image_info: &image_info,
         };
         begin_stage(&scratch, &need, stages.leaf_plans)?;
-        let leaf_plans =
-            planning::preflight(&scratch, &triangles, &tree.nodes, resources, config, check)?;
+        // The declared budget (explicit, else the 4 GiB default ceiling; never detected
+        // headroom, so output depends on the request only) left for one leaf job.
+        let leaf_memory = config.memory_budget.map(|budget| {
+            let declared = budget
+                .requested_bytes
+                .unwrap_or(super::resources::DEFAULT_CEILING_BYTES);
+            let tmpfs = if volume.memory_backed {
+                need.need_bytes
+            } else {
+                0
+            };
+            [
+                tmpfs,
+                memory.owned_metadata_bytes,
+                memory.geometry.document_bytes,
+                super::leaves::producer::STAGE_RESERVE,
+                super::leaves::producer::cache_floor(&image_info),
+            ]
+            .iter()
+            .fold(declared, |n, &b| n.saturating_sub(b))
+        });
+        let leaf_plans = planning::preflight(
+            &scratch,
+            &triangles,
+            &tree.nodes,
+            resources,
+            config,
+            leaf_memory,
+            check,
+        )?;
         peaks.leaf_plans = end_stage(&scratch, stages.leaf_plans, "leaf planning")?;
         if leaf_plans.len() != tree.stats.leaves {
             return Err(invariant("leaf plan count differs from immutable tree"));

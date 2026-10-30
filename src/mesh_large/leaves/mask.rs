@@ -77,14 +77,45 @@ fn scaled(a: u8, k: u64) -> u8 {
         .floor()
         .clamp(0.0, 255.0) as u8
 }
-fn sample_alpha(bytes: &[u8], w: u32, h: u32, uv: [f64; 2], linear: bool, k: u64) -> f64 {
-    let (u, v) = (uv[0].clamp(0.0, 1.0), uv[1].clamp(0.0, 1.0));
+/// How a delivered page is sampled: LINEAR or NEAREST taps and the published wrap per
+/// axis. A plain `bool` is a clamped page; a period page repeats or mirrors its whole axes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::mesh_large) struct Taps {
+    pub linear: bool,
+    pub wrap: [u32; 2],
+}
+impl From<bool> for Taps {
+    fn from(linear: bool) -> Self {
+        Self {
+            linear,
+            wrap: [33071; 2],
+        }
+    }
+}
+/// Texel index `i` of an `n`-texel axis under a glTF wrap (as the sampler addresses it).
+fn wrapped(i: i64, n: u32, wrap: u32) -> usize {
+    let n = i64::from(n);
+    (match wrap {
+        10497 => i.rem_euclid(n),
+        33648 => {
+            let p = i.rem_euclid(2 * n);
+            if p < n {
+                p
+            } else {
+                2 * n - 1 - p
+            }
+        }
+        _ => i.clamp(0, n - 1),
+    }) as usize
+}
+fn sample_alpha(bytes: &[u8], w: u32, h: u32, uv: [f64; 2], taps: Taps, k: u64) -> f64 {
+    let clamp = |c: f64, wrap: u32| if wrap == 33071 { c.clamp(0.0, 1.0) } else { c };
+    let (u, v) = (clamp(uv[0], taps.wrap[0]), clamp(uv[1], taps.wrap[1]));
     let tap = |x: i64, y: i64| {
-        let x = x.clamp(0, i64::from(w) - 1) as usize;
-        let y = y.clamp(0, i64::from(h) - 1) as usize;
+        let (x, y) = (wrapped(x, w, taps.wrap[0]), wrapped(y, h, taps.wrap[1]));
         f64::from(scaled(bytes[(y * w as usize + x) * 4 + 3], k)) / 255.0
     };
-    if !linear {
+    if !taps.linear {
         return tap(
             (u * f64::from(w)).floor() as i64,
             (v * f64::from(h)).floor() as i64,
@@ -104,7 +135,7 @@ struct Evaluator<'a> {
     samples: &'a [SurfaceSample],
     factor: f64,
     cutoff: f64,
-    linear: bool,
+    taps: Taps,
     total: f64,
     scans: u32,
 }
@@ -113,9 +144,7 @@ impl Evaluator<'_> {
         self.scans += 1;
         let mut passing = 0.0;
         for s in self.samples {
-            if sample_alpha(self.bytes, self.w, self.h, s.uv, self.linear, k)
-                * self.factor
-                * s.alpha
+            if sample_alpha(self.bytes, self.w, self.h, s.uv, self.taps, k) * self.factor * s.alpha
                 >= self.cutoff
             {
                 passing += s.weight;
@@ -154,7 +183,7 @@ pub(in crate::mesh_large) fn coverage(
     samples: &[SurfaceSample],
     factor: f64,
     cutoff: f64,
-    linear: bool,
+    taps: impl Into<Taps>,
 ) -> Result<f64, JobError> {
     let total = validate(bytes, w, h, samples, factor, cutoff)?;
     if total == 0.0 {
@@ -167,7 +196,7 @@ pub(in crate::mesh_large) fn coverage(
         samples,
         factor,
         cutoff,
-        linear,
+        taps: taps.into(),
         total,
         scans: 0,
     }
@@ -184,9 +213,10 @@ pub(in crate::mesh_large) fn preserves_classifications(
     samples: &[SurfaceSample],
     factor: f64,
     cutoff: f64,
-    linear: bool,
+    taps: impl Into<Taps>,
 ) -> Result<bool, JobError> {
     let [w, h] = dimensions;
+    let taps = taps.into();
     validate(before, w, h, samples, factor, cutoff)?;
     validate(after, w, h, samples, factor, cutoff)?;
     for sample in samples {
@@ -194,7 +224,7 @@ pub(in crate::mesh_large) fn preserves_classifications(
             continue;
         }
         let passes = |bytes: &[u8]| {
-            sample_alpha(bytes, w, h, sample.uv, linear, Q) * factor * sample.alpha >= cutoff
+            sample_alpha(bytes, w, h, sample.uv, taps, Q) * factor * sample.alpha >= cutoff
         };
         if passes(before) != passes(after) {
             return Ok(false);
@@ -210,7 +240,7 @@ pub(in crate::mesh_large) fn adjust(
     samples: &[SurfaceSample],
     factor: f64,
     cutoff: f64,
-    linear: bool,
+    taps: impl Into<Taps>,
 ) -> Result<MaskReceipt, JobError> {
     let total = validate(bytes, w, h, samples, factor, cutoff)?;
     if total == 0.0 {
@@ -235,7 +265,7 @@ pub(in crate::mesh_large) fn adjust(
             samples,
             factor,
             cutoff,
-            linear,
+            taps: taps.into(),
             total,
             scans: 0,
         };

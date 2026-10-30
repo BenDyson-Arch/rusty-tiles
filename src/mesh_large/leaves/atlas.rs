@@ -6,7 +6,7 @@ use super::super::{
 };
 use super::schedule::{Decoded, MemoryGate, SourceCache};
 use super::{
-    crops::{self, Block, Crop, SourceSampler},
+    crops::{self, Block, Crop, SourceSampler, CLAMP},
     delivery::{self, MaskDelivery},
     geometry::LatticePlan,
     mask::SurfaceSample,
@@ -77,7 +77,6 @@ struct PagePlan {
     /// Published wrap: CLAMP_TO_EDGE, or the source's on a period page's whole axes.
     wrap: [u32; 2],
 }
-const CLAMP: u32 = 33071;
 
 /// Per axis, whether `uvs` span at least one whole period of a repeating source wrap
 /// (REPEAT, MIRRORED_REPEAT). Such a binding needs every source texel on that axis
@@ -102,8 +101,9 @@ fn period_axes(uvs: &[[f32; 2]], sampler: SourceSampler) -> [bool; 2] {
 /// bindings with a period axis: whole on every axis the members span a period of
 /// (published with the source wrap; UVs unchanged there), one crop of their union on
 /// the other (context folded into the crop, so it is exact real source with
-/// `crop_padding`'s alignment; CLAMP_TO_EDGE). A group that cannot be such a page (a
-/// KTX2 edge not a multiple of four, or over `max_edge`) returns to island crops.
+/// `crop_padding`'s alignment; CLAMP_TO_EDGE). A group returns to island crops when such a
+/// page would hold more texels than its members' crops, or cannot be one (a KTX2 edge not
+/// a multiple of four, or over `max_edge`).
 fn period_pages(
     bindings: &mut [Binding],
     primitives: &[PreparedPrimitive],
@@ -164,16 +164,24 @@ fn period_pages(
             }
             fits &= extent[a] <= max_edge;
         }
-        if !fits {
+        // The period page only where it is no larger than the island crops the members'
+        // actual footprints need (or those crops cannot be represented at all): a bounding
+        // range of sparse triangles spans periods without needing them.
+        let crops = ids.iter().try_fold(0u64, |n, &i| {
+            let b = &bindings[i].block;
+            (b.width > 0).then(|| n + u64::from(b.width) * u64::from(b.height))
+        });
+        let texels = u64::from(extent[0]) * u64::from(extent[1]);
+        if !fits || crops.is_some_and(|c| texels > c) {
             for &i in &ids {
                 let b = &mut bindings[i];
                 b.period = [false; 2];
-                let mipmapped =
-                    profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
-                let uvs = &primitives[b.primitive].uvs[b.output_uv];
-                b.block = crops::plan_islands_aligned(
-                    uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
-                )?;
+                if b.block.width == 0 {
+                    let uvs = &primitives[b.primitive].uvs[b.output_uv];
+                    b.block = crops::plan_islands_aligned(
+                        uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
+                    )?;
+                }
             }
             continue;
         }
@@ -867,18 +875,20 @@ fn layout(
             let mipmapped =
                 profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
             let period = period_axes(&uvs, sampler);
-            let block = if period.contains(&true) {
-                // Placed by `period_pages`.
-                Block {
-                    width: 0,
-                    height: 0,
-                    islands: Vec::new(),
-                    triangle_island: Vec::new(),
+            let block = match crops::plan_islands_aligned(
+                &uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
+            ) {
+                Ok(block) => block,
+                // Unrepresentable as crops: `period_pages` may still place it whole.
+                Err(e) if period.contains(&true) && e.kind() == JobErrorKind::Unsupported => {
+                    Block {
+                        width: 0,
+                        height: 0,
+                        islands: Vec::new(),
+                        triangle_island: Vec::new(),
+                    }
                 }
-            } else {
-                crops::plan_islands_aligned(
-                    &uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
-                )?
+                Err(e) => return Err(e),
             };
             p.uvs.push(uvs);
             bindings.push(Binding {
@@ -1223,6 +1233,7 @@ fn encode_page(
             cutoff,
             linear,
             min_linear,
+            wrap: page.wrap,
         });
         // The published sampler is the source's: a chain only where it mipmaps.
         if mipmapped {

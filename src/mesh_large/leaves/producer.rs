@@ -117,6 +117,9 @@ pub struct LeafOutputReport {
     pub maximum_glb_bytes: u64,
     pub maximum_geometry_error: f64,
     pub density_reduced_leaves: u64,
+    /// Leaves whose planned density was lowered because one leaf job did not fit the
+    /// declared memory budget (explicit, else the default ceiling).
+    pub memory_reduced_leaves: u64,
     /// HLOD coarse tiles written beside the leaves.
     pub proxies: u64,
     pub proxy_bytes: u64,
@@ -272,18 +275,37 @@ pub(crate) struct StagePlan {
     minimum_bytes: u64,
 }
 /// Bytes reserved for the runtime, allocator slack and the output writer.
-const STAGE_RESERVE: u64 = 256 << 20;
+pub(in crate::mesh_large) const STAGE_RESERVE: u64 = 256 << 20;
+/// What one leaf job needs besides the decoded-source cache and the run's shared terms:
+/// its page lease, its closure twice, and one in-flight member window (four closures,
+/// the encoded member and the GLB being assembled), as [`stage_plan`] admits it.
+pub(in crate::mesh_large) fn leaf_job_bytes(page_bytes: u64, owned: u64) -> Option<u64> {
+    page_bytes
+        .checked_add(owned.checked_mul(7)?)?
+        .checked_add(2 * TILE_BYTES)
+}
+/// The decoded-source cache floor: two of the largest decoded images, or every source.
+pub(in crate::mesh_large) fn cache_floor(images: &[crate::gltf_source::source::ImageInfo]) -> u64 {
+    let texels =
+        |i: &crate::gltf_source::source::ImageInfo| u64::from(i.width) * u64::from(i.height);
+    let total = images
+        .iter()
+        .map(|i| texels(i) * 4)
+        .fold(0u64, u64::saturating_add);
+    total.min(
+        images
+            .iter()
+            .map(texels)
+            .max()
+            .unwrap_or(0)
+            .saturating_mul(8),
+    )
+}
 pub(crate) fn stage_plan(
     config: &TreeConfig,
     captured: &full::FullCaptured,
 ) -> Result<StagePlan, JobError> {
     let requested = config.jobs;
-    let largest_source = captured
-        .image_info
-        .iter()
-        .map(|i| u64::from(i.width) * u64::from(i.height))
-        .max()
-        .unwrap_or(0);
     let total_source = captured
         .image_info
         .iter()
@@ -321,7 +343,7 @@ pub(crate) fn stage_plan(
     let available = config.available_memory();
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as u64;
     // The cache always holds at least two decoded images (or every source).
-    let cache_floor = total_source.min(largest_source.saturating_mul(8));
+    let cache_floor = cache_floor(&captured.image_info);
     // Workers share one page-workspace gate, which must admit the largest
     // page. A running leaf owns its closure and encoded pages; a finished
     // leaf waiting for the ordered writer keeps only its closure and receipts
@@ -344,6 +366,8 @@ pub(crate) fn stage_plan(
     let one_job = fixed_for(0)?
         .checked_add(per_job)
         .ok_or_else(|| resource("leaf job memory overflow"))?;
+    // The planner's density schedule (`planning::preflight`) uses the same formula.
+    debug_assert_eq!(Some(one_job), leaf_job_bytes(page_bytes, leaf_owned));
     // Cache every decoded source when it fits half the usable memory, otherwise half the
     // usable memory, but never so much that one leaf job no longer fits beside it and
     // never below the floor. Monotone in `u`, and `u - cache(u)` never decreases.
@@ -682,6 +706,7 @@ pub(crate) fn produce(
         maximum_glb_bytes: 0,
         maximum_geometry_error: 0.,
         density_reduced_leaves: 0,
+        memory_reduced_leaves: 0,
         proxies: 0,
         proxy_bytes: 0,
         escalated_pages: EscalatedPages::default(),
@@ -932,7 +957,7 @@ fn write_leaf(
         return Err(invariant("leaf member order differs from manifest order"));
     }
     timing::count(Counter::Leaves, 1);
-    let receipt = json!({"schemaVersion":1,"uri":format!("leaves/{name}"),"sha256":sha256,"bytes":bytes,"first":node.first,"end":node.end,"cellDepth":node.cell_depth,"cell":node.cell,"pathLength":node.path_len,"path":node.path,"lastOctant":node.last_octant,"depth":node.depth(),"packed":node.is_packed(),"bounds":{"min":bounds.min.map(f64::from),"max":bounds.max.map(f64::from)},"geometryError":geometry_error,"densityDrop":density_drop,"densityReasons":density_reasons,"primitives":primitives,"texelOwnership":if shared_triangles == 0 {"unique"} else {"shared"},"sharedTriangles":shared_triangles,"plannedFootprint":{"densityDrop":plan.density_drop,"pages":plan.pages,"baseTexels":plan.base_texels,"chainTexels":plan.chain_texels,"geometryBytes":plan.geometry_bytes,"planningOwnedBytes":plan.owned_bytes},"appearance":appearance});
+    let receipt = json!({"schemaVersion":1,"uri":format!("leaves/{name}"),"sha256":sha256,"bytes":bytes,"first":node.first,"end":node.end,"cellDepth":node.cell_depth,"cell":node.cell,"pathLength":node.path_len,"path":node.path,"lastOctant":node.last_octant,"depth":node.depth(),"packed":node.is_packed(),"bounds":{"min":bounds.min.map(f64::from),"max":bounds.max.map(f64::from)},"geometryError":geometry_error,"densityDrop":density_drop,"densityReasons":density_reasons,"primitives":primitives,"texelOwnership":if shared_triangles == 0 {"unique"} else {"shared"},"sharedTriangles":shared_triangles,"plannedFootprint":{"densityDrop":plan.density_drop,"memoryDrops":plan.memory_drops,"pages":plan.pages,"baseTexels":plan.base_texels,"chainTexels":plan.chain_texels,"geometryBytes":plan.geometry_bytes,"planningOwnedBytes":plan.owned_bytes},"appearance":appearance});
     serde_json::to_writer(&mut *manifest, &receipt)
         .map_err(|e| invariant(&format!("leaf manifest serialization: {e}")))?;
     manifest
@@ -950,6 +975,7 @@ fn write_leaf(
     report.maximum_glb_bytes = report.maximum_glb_bytes.max(bytes);
     report.maximum_geometry_error = report.maximum_geometry_error.max(geometry_error);
     report.density_reduced_leaves += u64::from(density_drop != 0);
+    report.memory_reduced_leaves += u64::from(plan.memory_drops != 0);
     let ownership = &mut report.texel_ownership;
     if shared_triangles == 0 {
         ownership.unique_leaves += 1;
@@ -1845,6 +1871,115 @@ mod tests {
         let rows = fs::read_to_string(output.join("leaves.jsonl")).unwrap();
         serde_json::from_str(rows.lines().next().unwrap()).unwrap()
     }
+    /// The decoded level 0 of a leaf's first texture (PNG, or KTX2 through the transcoder).
+    fn leaf_rgba(output: &Path) -> Vec<u8> {
+        let (doc, pages) = leaf_pages(output);
+        let leaf = fs::read(output.join("leaves/000000000000.glb")).unwrap();
+        let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
+        let t = &doc["textures"][0];
+        let source = t
+            .get("source")
+            .unwrap_or(&t["extensions"]["KHR_texture_basisu"]["source"]);
+        let view = &doc["bufferViews"][doc["images"][source.as_u64().unwrap() as usize]
+            ["bufferView"]
+            .as_u64()
+            .unwrap() as usize];
+        let at = 20 + json_len + 8 + view["byteOffset"].as_u64().unwrap_or(0) as usize;
+        let data = &leaf[at..at + view["byteLength"].as_u64().unwrap() as usize];
+        match pages[0].4.as_str() {
+            "image/png" => image::load_from_memory(data)
+                .unwrap()
+                .into_rgba8()
+                .into_raw(),
+            _ => crate::basisu_ktx2::decode_level_rgba(data, 0, pages[0].0, pages[0].1).unwrap(),
+        }
+    }
+    /// A MASK material on a period page keeps its surface coverage (#306 review r1 F1:
+    /// the MASK evaluation clamped raw period UVs), and sparse triangles a period apart
+    /// keep island crops instead of the whole source (F2).
+    #[test]
+    fn period_pages_keep_mask_coverage_and_sparse_footprints_crop() {
+        let work = tempfile::tempdir().unwrap();
+        let dir = work.path().join("mask");
+        let (input, _) = repeat_fixture(&dir, [10497, 10497], [3., 3.], 64, false);
+        let ramp = image::RgbaImage::from_fn(64, 64, |x, y| {
+            image::Rgba([(x * 3) as u8, (y * 4) as u8, 90, (x * 255 / 63) as u8])
+        });
+        ramp.save(dir.join("a.png")).unwrap();
+        let mut doc: serde_json::Value =
+            serde_json::from_slice(&fs::read(&input).unwrap()).unwrap();
+        doc["materials"][0]["alphaMode"] = json!("MASK");
+        doc["materials"][0]["alphaCutoff"] = json!(0.5);
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        bake_leaf(&input, &work.path().join("mask-out"), LeafProfile::Balanced);
+        let page = leaf_rgba(&work.path().join("mask-out"));
+        // Independent bilinear REPEAT sampling at surface points of the 8x8 grid (UVs = 3k/8).
+        let alpha = |rgba: &[u8], u: f64, v: f64| {
+            let (x, y) = (u * 64. - 0.5, v * 64. - 0.5);
+            let (fx, fy) = (x - x.floor(), y - y.floor());
+            let tap = |i: f64, j: f64| {
+                f64::from(
+                    rgba[((j.rem_euclid(64.) as usize) * 64 + i.rem_euclid(64.) as usize) * 4 + 3],
+                )
+            };
+            let (i, j) = (x.floor(), y.floor());
+            (tap(i, j) * (1. - fx) + tap(i + 1., j) * fx) * (1. - fy)
+                + (tap(i, j + 1.) * (1. - fx) + tap(i + 1., j + 1.) * fx) * fy
+        };
+        let coverage = |rgba: &[u8]| {
+            let mut pass = 0;
+            for cell in 0..64 {
+                for (a, b) in
+                    (0..16).map(|k| ((k % 4) as f64 / 4. + 0.1, (k / 4) as f64 / 4. + 0.1))
+                {
+                    if a + b < 1. {
+                        let (u, v) = (
+                            ((cell % 8) as f64 + a) * 3. / 8.,
+                            ((cell / 8) as f64 + b) * 3. / 8.,
+                        );
+                        pass += usize::from(alpha(rgba, u, v) >= 127.5);
+                    }
+                }
+            }
+            pass as f64
+        };
+        let (published, source) = (coverage(&page), coverage(&ramp.into_raw()));
+        assert!(
+            (published - source).abs() <= 0.03 * source,
+            "{published} vs {source}"
+        );
+        // 64 tiny triangles, one per period cell over 8x4 periods of a 512² image.
+        let dir = work.path().join("scatter");
+        let (input, _) = repeat_fixture(&dir, [10497, 10497], [8., 4.], 512, false);
+        let mut bytes = fs::read(dir.join("attributes.bin")).unwrap();
+        let uvs: Vec<f32> = (0..64)
+            .flat_map(|i| {
+                let base = [(i % 8) as f32 + 0.3, (i / 8) as f32 * 0.5 + 0.2];
+                [[0., 0.], [0.005, 0.], [0., 0.005]]
+                    .into_iter()
+                    .flat_map(move |c| [base[0] + c[0], base[1] + c[1]])
+            })
+            .collect();
+        let at = 192 * 12;
+        for (k, v) in uvs.iter().enumerate() {
+            bytes[at + k * 4..at + k * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        fs::write(dir.join("attributes.bin"), bytes).unwrap();
+        bake_leaf(
+            &input,
+            &work.path().join("scatter-out"),
+            LeafProfile::Balanced,
+        );
+        let (_, pages) = leaf_pages(&work.path().join("scatter-out"));
+        assert!(
+            pages.iter().all(|p| (p.2, p.3) == (33071, 33071)),
+            "{pages:?}"
+        );
+        assert!(
+            pages.iter().map(|p| p.0 * p.1).sum::<u32>() < 512 * 512,
+            "{pages:?}"
+        );
+    }
     /// UVs spanning whole periods of a repeating wrap keep the source whole on that
     /// axis, with the source wrap, instead of unrolling one copy per period.
     #[test]
@@ -1853,7 +1988,9 @@ mod tests {
         // Lossless: both axes repeat, so the page is the source image itself.
         let (input, source) =
             repeat_fixture(&work.path().join("a"), [10497, 10497], [3., 2.], 64, false);
-        bake_leaf(&input, &work.path().join("a-out"), LeafProfile::Lossless);
+        let row = bake_leaf(&input, &work.path().join("a-out"), LeafProfile::Lossless);
+        // Triangles a period apart read the same texels: shared, not unique.
+        assert!(row["sharedTriangles"].as_u64().unwrap() > 0, "{row}");
         let (doc, pages) = leaf_pages(&work.path().join("a-out"));
         assert_eq!(pages, [(64, 64, 10497, 10497, "image/png".into())]);
         let image = &doc["images"][0];

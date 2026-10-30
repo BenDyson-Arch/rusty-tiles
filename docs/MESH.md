@@ -268,7 +268,14 @@ texel on that axis: its page holds that axis whole, published with the source wr
 and the source UVs unchanged there (the source image itself when both axes do), and
 a crop of the other axis, instead of one unrolled copy per period. Such a page is
 the source's own size, which a KTX2 page needs to be a multiple of four; otherwise
-the binding keeps ordinary crops.
+the binding keeps ordinary crops. It is also used only where it holds no more texels
+than the island crops of the triangles actually there: a few small triangles a period
+apart keep crops rather than pulling in the whole image. Each period page is a texture
+of its own, so a leaf publishes one primitive (draw call) per distinct period page
+(source image, slot, sampler and MASK class) on top of its atlas primitives. A period
+page keeps the source's dimensions, which need not be powers of two: WebGL2 (CesiumJS's
+default) samples such REPEAT or MIRRORED_REPEAT pages directly; WebGL1 cannot, and
+CesiumJS cannot resize compressed (KTX2) images to fix that.
 
 ### Identity, annotation and editability
 
@@ -555,8 +562,11 @@ One declared ceiling governs the whole run, with one rule on every surface:
 - **Pressure never changes output.** It serializes work (`--jobs` stays a maximum
   under the same budget), and what cannot fit even alone is a `resource_limit`
   refusal naming the stage and the bytes it needs, before that stage allocates and
-  before anything is published. Archives are identical for every budget that
-  admits the run.
+  before anything is published. One exception is declared: a leaf whose job cannot fit
+  the declared budget (the explicit one, otherwise the 4 GiB default ceiling, never the
+  detected headroom) at its planned texture density takes the next density step instead
+  of refusing the run; the report counts such leaves in `memory_reduced_leaves`. Archives
+  are identical for every budget that admits the run without such a step.
 - **Reporting.** `diagnostics.memory` holds the `budget` (`requested_bytes`,
   `resolved_bytes`, `source`: `explicit`, `default_ceiling`, `default_headroom` or
   `default_undetected`, and the detected headroom), the least budget that admits each

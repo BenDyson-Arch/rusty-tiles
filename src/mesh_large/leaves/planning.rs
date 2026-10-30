@@ -26,6 +26,8 @@ pub(in crate::mesh_large) struct LeafPlan {
     pub owned_bytes: u64,
     /// The largest page workspace lease the leaf's delivery can take (0 without pages).
     pub page_bytes: u64,
+    /// Density steps taken because the leaf job did not fit the declared memory budget.
+    pub memory_drops: u8,
 }
 impl PartialEq for LeafPlan {
     fn eq(&self, other: &Self) -> bool {
@@ -61,6 +63,7 @@ impl Record for LeafPlan {
         }
         out[64] = self.depth;
         out[65] = self.density_drop;
+        out[66] = self.memory_drops;
     }
     fn decode(bytes: &[u8]) -> Self {
         let values: [u64; 8] = std::array::from_fn(|i| {
@@ -81,6 +84,7 @@ impl Record for LeafPlan {
             page_bytes: values[7],
             depth: bytes[64],
             density_drop: bytes[65],
+            memory_drops: bytes[66],
         }
     }
 }
@@ -97,6 +101,7 @@ pub(in crate::mesh_large) fn preflight(
     nodes: &Sequence<NodeRecord>,
     resources: AtlasResources<'_>,
     config: &TreeConfig,
+    leaf_memory: Option<u64>,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Sequence<LeafPlan>, JobError> {
     check()?;
@@ -150,9 +155,24 @@ pub(in crate::mesh_large) fn preflight(
             12
         };
         let mut selected = None;
+        let mut memory_drops = 0u8;
         for density_drop in 0..=max_drop {
             check()?;
             match atlas::project(&leaf, resources, config.profile, density_drop, check) {
+                // A leaf job that cannot fit the declared budget takes the next density
+                // step (reported), rather than refusing the run once delivery admits it.
+                Ok(projected)
+                    if density_drop < max_drop
+                        && leaf_memory.is_some_and(|limit| {
+                            super::producer::leaf_job_bytes(
+                                projected.page_bytes,
+                                projected.owned_bytes,
+                            )
+                            .is_none_or(|n| n > limit)
+                        }) =>
+                {
+                    memory_drops += 1;
+                }
                 Ok(projected) => {
                     if projected.chain_texels < projected.base_texels
                         || (projected.pages == 0) != (projected.base_texels == 0)
@@ -172,6 +192,7 @@ pub(in crate::mesh_large) fn preflight(
                         geometry_bytes: projected.geometry_bytes,
                         owned_bytes: projected.owned_bytes,
                         page_bytes: projected.page_bytes,
+                        memory_drops,
                     });
                     break;
                 }
@@ -219,10 +240,12 @@ mod tests {
             geometry_bytes: 999,
             owned_bytes: 10000,
             page_bytes: 5555,
+            memory_drops: 2,
         };
         let mut bytes = [255; LeafPlan::SIZE];
         original.encode(&mut bytes);
-        assert_eq!(&bytes[66..], &[0; 6]);
+        assert_eq!(bytes[66], 2);
+        assert_eq!(&bytes[67..], &[0; 5]);
         let decoded = LeafPlan::decode(&bytes);
         let mut second = [0; LeafPlan::SIZE];
         decoded.encode(&mut second);
@@ -318,6 +341,7 @@ mod tests {
             &nodes,
             empty_resources(),
             &config,
+            None,
             &mut || Ok(()),
         )
         .unwrap();
@@ -357,6 +381,7 @@ mod tests {
             &nodes,
             empty_resources(),
             &config,
+            None,
             &mut || {
                 calls += 1;
                 if calls == 3 {
@@ -489,15 +514,15 @@ mod tests {
                 let nodes = nodes.finish().unwrap();
                 let config = TreeConfig::new(profile);
                 let before = scratch.live_bytes();
-                let result =
-                    preflight(
-                        &scratch,
-                        &source,
-                        &nodes,
-                        resources,
-                        &config,
-                        &mut || Ok(()),
-                    );
+                let result = preflight(
+                    &scratch,
+                    &source,
+                    &nodes,
+                    resources,
+                    &config,
+                    None,
+                    &mut || Ok(()),
+                );
                 if let Some(expected_drop) = expected {
                     let plan = result.unwrap();
                     let row = plan.reader().unwrap().next().unwrap().unwrap();
@@ -515,6 +540,25 @@ mod tests {
                     assert_eq!(row.base_texels, oracle.base_texels);
                     assert_eq!(row.chain_texels, oracle.chain_texels);
                     drop(plan);
+                    if (wrap, profile, expected_drop) == (10497, Profile::Fast, 1) {
+                        // Just over the declared memory left for one leaf job: next step.
+                        let need = super::super::producer::leaf_job_bytes(
+                            oracle.page_bytes,
+                            oracle.owned_bytes,
+                        );
+                        let plan = preflight(
+                            &scratch,
+                            &source,
+                            &nodes,
+                            resources,
+                            &config,
+                            Some(need.unwrap() - 1),
+                            &mut || Ok(()),
+                        )
+                        .unwrap();
+                        let row = plan.reader().unwrap().next().unwrap().unwrap();
+                        assert_eq!((row.density_drop, row.memory_drops), (2, 1));
+                    }
                 } else {
                     assert_eq!(result.err().unwrap().kind(), JobErrorKind::Unsupported);
                     assert_eq!(scratch.live_bytes(), before);

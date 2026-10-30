@@ -193,6 +193,56 @@ fn interiors_overlap(a: &Fixed, b: &Fixed) -> bool {
 /// Pair examinations between cancellation checks in the texel-ownership sweep.
 const SHARED_SWEEP_CHECK_PAIRS: u32 = 1 << 16;
 
+/// One footprint for the sweep: exact coordinates (`None` outside the exact domain: it is
+/// shared, and it overlaps whatever its box overlaps) and its box on the 2^-56 grid.
+struct Copy {
+    exact: Option<Fixed>,
+    lo: [i128; 2],
+    hi: [i128; 2],
+}
+impl Copy {
+    fn exact(t: Fixed) -> Self {
+        let lo = [0, 1].map(|a| t.iter().map(|p| p[a]).min().unwrap());
+        let hi = [0, 1].map(|a| t.iter().map(|p| p[a]).max().unwrap());
+        Self {
+            exact: Some(t),
+            lo,
+            hi,
+        }
+    }
+    fn of(t: &[[f32; 2]; 3]) -> Self {
+        let exact = (|| {
+            let mut out = [[0i128; 2]; 3];
+            for (c, p) in t.iter().enumerate() {
+                for a in 0..2 {
+                    out[c][a] = i128::from(fixed(p[a])?);
+                }
+            }
+            Some(out)
+        })();
+        if let Some(t) = exact {
+            return Self::exact(t);
+        }
+        // Scaling a finite f32 by 2^56 is exact in f64; a NaN box overlaps everything.
+        let scale = |v: f32, up: bool| {
+            let x = f64::from(v) * (1u64 << 56) as f64;
+            match (x.is_nan(), up) {
+                (true, false) => i128::MIN,
+                (true, true) => i128::MAX,
+                (false, false) => x.floor() as i128,
+                (false, true) => x.ceil() as i128,
+            }
+        };
+        let lo = [0, 1].map(|a| t.iter().map(|p| scale(p[a], false)).min().unwrap());
+        let hi = [0, 1].map(|a| t.iter().map(|p| scale(p[a], true)).max().unwrap());
+        Self {
+            exact: None,
+            lo,
+            hi,
+        }
+    }
+}
+
 /// Per footprint, whether its decoded-UV interior shares area with another footprint on
 /// the same page. Exact for coordinates on the 2^-56 grid below 8 in magnitude; a
 /// footprint outside that domain, and any footprint whose box overlaps its box, counts as
@@ -201,72 +251,51 @@ pub(in crate::mesh_large) fn shared_footprints(
     footprints: &[[[f32; 2]; 3]],
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Vec<bool>, JobError> {
-    let n = footprints.len();
-    let mut shared = vec![false; n];
-    // Exact coordinates, or None (outside the exact domain).
-    let exact: Vec<Option<Fixed>> = footprints
-        .iter()
-        .map(|t| {
-            let mut out = [[0i128; 2]; 3];
-            for (c, p) in t.iter().enumerate() {
-                for a in 0..2 {
-                    out[c][a] = i128::from(fixed(p[a])?);
-                }
-            }
-            Some(out)
-        })
-        .collect();
-    // f64 boxes (f32 values are exact in f64) for the sweep; degenerate exact footprints
-    // own no interior and leave the sweep.
-    let mut order: Vec<(usize, [f64; 2], [f64; 2])> = Vec::with_capacity(n);
-    for (i, t) in footprints.iter().enumerate() {
-        match &exact[i] {
+    sweep(footprints.iter().map(Copy::of).collect(), check)
+}
+
+fn sweep(
+    copies: Vec<Copy>,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<Vec<bool>, JobError> {
+    let mut shared = vec![false; copies.len()];
+    // Degenerate exact footprints own no interior and leave the sweep.
+    let mut order: Vec<usize> = Vec::with_capacity(copies.len());
+    for (i, c) in copies.iter().enumerate() {
+        match &c.exact {
             Some(f) if twice_area(f) == 0 => continue,
             Some(_) => {}
             None => shared[i] = true,
         }
-        let lo = [0, 1].map(|a| {
-            t.iter()
-                .map(|p| f64::from(p[a]))
-                .fold(f64::INFINITY, f64::min)
-        });
-        let hi = [0, 1].map(|a| {
-            t.iter()
-                .map(|p| f64::from(p[a]))
-                .fold(f64::NEG_INFINITY, f64::max)
-        });
-        // A non-finite box overlaps everything near it; it is already shared.
-        let lo = lo.map(|v| if v.is_nan() { f64::NEG_INFINITY } else { v });
-        let hi = hi.map(|v| if v.is_nan() { f64::INFINITY } else { v });
-        order.push((i, lo, hi));
+        order.push(i);
     }
-    order.sort_by(|x, y| x.1[0].total_cmp(&y.1[0]).then(x.0.cmp(&y.0)));
+    order.sort_by_key(|&i| (copies[i].lo[0], i));
     let mut active: Vec<usize> = Vec::new();
     // Candidate pairs examined since the last cancellation check: a dense page makes the
     // sweep quadratic, so the cost is bounded per pair, not per outer iteration.
     let mut pairs = 0u32;
-    for (k, &(i, lo, hi)) in order.iter().enumerate() {
+    for (k, &i) in order.iter().enumerate() {
         if k % 4096 == 0 {
             check()?;
         }
+        let (lo, hi) = (copies[i].lo, copies[i].hi);
         // Boxes that end at or before this start can only touch: a vertical line
         // separates them, so their interiors are disjoint.
-        active.retain(|&j| order[j].2[0] > lo[0]);
-        for &j in &active {
+        active.retain(|&o| copies[o].hi[0] > lo[0]);
+        for &o in &active {
             pairs += 1;
             if pairs >= SHARED_SWEEP_CHECK_PAIRS {
                 pairs = 0;
                 check()?;
             }
-            let (o, olo, ohi) = order[j];
-            if ohi[1] <= lo[1] || hi[1] <= olo[1] {
+            if copies[o].hi[1] <= lo[1] || hi[1] <= copies[o].lo[1] {
                 continue;
             }
             // Both already shared: the exact test cannot change either answer.
             if shared[i] && shared[o] {
                 continue;
             }
-            let overlap = match (&exact[i], &exact[o]) {
+            let overlap = match (&copies[i].exact, &copies[o].exact) {
                 (Some(a), Some(b)) => interiors_overlap(a, b),
                 _ => true,
             };
@@ -275,9 +304,79 @@ pub(in crate::mesh_large) fn shared_footprints(
                 shared[o] = true;
             }
         }
-        active.push(k);
+        active.push(i);
     }
     Ok(shared)
+}
+
+/// The copies of a footprint on a page with a period axis (`wrap`): shifted by whole
+/// periods (exact in f32: `c - floor(c)` is representable) so it starts in its first
+/// period, then every image under the axis' symmetry (REPEAT: x - 1; MIRRORED: 2 - x and
+/// x - 2) that reaches into [0, 1], where texels live. Two copies overlapping anywhere
+/// read the same texels. `None` when a period axis spans more than one period: the
+/// footprint covers some texel twice and its images are unbounded.
+fn period_copies(t: &[[f32; 2]; 3], wrap: [u32; 2]) -> Option<Vec<Copy>> {
+    let one = 1i128 << 56;
+    let mut base = *t;
+    for (a, &w) in wrap.iter().enumerate() {
+        let period = match w {
+            10497 => 1.,
+            33648 => 2.,
+            _ => continue,
+        };
+        let lo = base.iter().map(|p| p[a]).fold(f32::INFINITY, f32::min);
+        let hi = base.iter().map(|p| p[a]).fold(f32::NEG_INFINITY, f32::max);
+        if hi - lo > 1. || (hi - lo).is_nan() {
+            return None;
+        }
+        let shift = (lo / period).floor() * period;
+        for p in &mut base {
+            p[a] -= shift;
+        }
+    }
+    let Copy { exact: Some(t), .. } = Copy::of(&base) else {
+        return None;
+    };
+    let mut copies = vec![t];
+    for (a, &w) in wrap.iter().enumerate() {
+        let images: &[(i128, i128)] = match w {
+            10497 => &[(1, -1)],
+            33648 => &[(-1, 2), (1, -2)],
+            _ => continue,
+        };
+        let mut next = Vec::new();
+        for c in &copies {
+            next.push(*c);
+            for &(sign, offset) in images {
+                let mut image = *c;
+                for p in &mut image {
+                    p[a] = sign * p[a] + offset * one;
+                }
+                let (lo, hi) = (
+                    image.iter().map(|p| p[a]).min().unwrap(),
+                    image.iter().map(|p| p[a]).max().unwrap(),
+                );
+                if lo < one && hi > 0 {
+                    next.push(image);
+                }
+            }
+        }
+        copies = next;
+    }
+    Some(copies.into_iter().map(Copy::exact).collect())
+}
+
+/// The published wrap of a texture's sampler.
+fn texture_wrap(atlas: &PreparedAtlas, texture: &Value) -> [u32; 2] {
+    let sampler = (texture.as_u64())
+        .and_then(|t| atlas.textures.get(t as usize)?.get("sampler")?.as_u64())
+        .and_then(|s| atlas.samplers.get(s as usize));
+    ["wrapS", "wrapT"].map(|k| {
+        sampler
+            .and_then(|s| s.get(k))
+            .and_then(Value::as_u64)
+            .map_or(crops::CLAMP, |w| w as u32)
+    })
 }
 
 fn page_of(atlas: &PreparedAtlas, texture: &Value) -> Option<usize> {
@@ -306,6 +405,7 @@ pub(in crate::mesh_large) fn leaf_shared_triangles(
         )
     };
     let mut pages = BTreeMap::<usize, Vec<(usize, usize)>>::new();
+    let mut wraps = BTreeMap::<usize, [u32; 2]>::new();
     for (p, primitive) in atlas.primitives.iter().enumerate() {
         let mut infos = Vec::new();
         if let Some(material) = &primitive.material {
@@ -326,6 +426,7 @@ pub(in crate::mesh_large) fn leaf_shared_triangles(
             if primitive.uvs.get(set).is_none() {
                 return Err(invalid());
             }
+            wraps.insert(page, texture_wrap(atlas, &info["index"]));
             let users = pages.entry(page).or_default();
             if !users.contains(&(p, set)) {
                 users.push((p, set));
@@ -337,7 +438,7 @@ pub(in crate::mesh_large) fn leaf_shared_triangles(
         .iter()
         .map(|p| vec![false; p.triangles.len()])
         .collect();
-    for users in pages.values() {
+    for (&page, users) in &pages {
         check()?;
         let mut footprints = Vec::new();
         let mut owners = Vec::new();
@@ -348,10 +449,31 @@ pub(in crate::mesh_large) fn leaf_shared_triangles(
                 owners.push((p, i));
             }
         }
-        for (k, flag) in shared_footprints(&footprints, check)?
-            .into_iter()
-            .enumerate()
-        {
+        let wrap = wraps[&page];
+        let flags = if wrap == [crops::CLAMP; 2] {
+            shared_footprints(&footprints, check)?
+        } else {
+            // A period page: copies of each footprint on the texels it reads.
+            let (mut copies, mut copy_owner) = (Vec::new(), Vec::new());
+            let mut wide = false;
+            for (k, t) in footprints.iter().enumerate() {
+                match period_copies(t, wrap) {
+                    Some(c) => {
+                        copy_owner.extend(std::iter::repeat_n(k, c.len()));
+                        copies.extend(c);
+                    }
+                    None => wide = true,
+                }
+            }
+            let mut flags = vec![wide; footprints.len()];
+            if !wide {
+                for (c, flag) in sweep(copies, check)?.into_iter().enumerate() {
+                    flags[copy_owner[c]] |= flag;
+                }
+            }
+            flags
+        };
+        for (k, flag) in flags.into_iter().enumerate() {
             if flag {
                 let (p, i) = owners[k];
                 *shared[p].get_mut(i).ok_or_else(invalid)? = true;

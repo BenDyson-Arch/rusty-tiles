@@ -355,6 +355,12 @@ including output staging, to memory. Track simultaneous spill, retained source,
 parent handoffs and archive staging, not just capture files. Keep cancellation,
 cleanup and completed-file/no-clobber publication semantics.
 
+**Amendment, 2026-10-30 (PR #306).** A leaf job that cannot fit the declared budget
+(explicit, else the 4 GiB default ceiling; never detected headroom, so output depends on
+the request alone) at its planned texture density takes the next density step instead
+of refusing, reported as `memory_reduced_leaves`. Detected pressure still only
+serializes work.
+
 **Rationale:** explicit ownership/admission makes streaming scale without
 host-sized allocations or expensive discarded retries. **Evidence:** E6, E8, E2's
 unbounded prototype limitations, C/H16.

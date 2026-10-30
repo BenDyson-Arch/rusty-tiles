@@ -188,6 +188,8 @@ pub struct TilerReport {
     pub maximum_glb_bytes: u64,
     pub maximum_leaf_geometry_error: f64,
     pub density_reduced_leaves: u64,
+    /// Leaves whose density was lowered so one leaf job fits the declared memory budget.
+    pub memory_reduced_leaves: u64,
     /// Lossy pages a stronger UASTC step delivered after a gate miss.
     pub escalated_pages: producer::EscalatedPages,
     /// Level-0-sampled pages delivered as exact PNG after every lossy step missed.
@@ -245,6 +247,7 @@ impl TilerReport {
             maximum_glb_bytes: leaf.maximum_glb_bytes,
             maximum_leaf_geometry_error: leaf.maximum_geometry_error,
             density_reduced_leaves: leaf.density_reduced_leaves,
+            memory_reduced_leaves: leaf.memory_reduced_leaves,
             escalated_pages: leaf.escalated_pages,
             lossless_fallback_pages: leaf.lossless_fallback_pages,
             viewer_mip_fallback_pages: leaf.viewer_mip_fallback_pages,

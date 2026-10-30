@@ -129,6 +129,22 @@ pub(in crate::mesh_large) struct MaskDelivery<'a> {
     pub linear: bool,
     /// Explicit source minification texel filter; base keeps magnification.
     pub min_linear: bool,
+    /// The published page wrap: clamped, or a period page's source wrap on its whole axes.
+    pub wrap: [u32; 2],
+}
+impl MaskDelivery<'_> {
+    /// How level `index` of the page is sampled.
+    fn taps(&self, index: usize) -> super::mask::Taps {
+        let linear = if index == 0 {
+            self.linear
+        } else {
+            self.min_linear
+        };
+        super::mask::Taps {
+            linear,
+            wrap: self.wrap,
+        }
+    }
 }
 fn error(kind: JobErrorKind, message: impl Into<String>) -> JobError {
     JobError::new(kind, message.into())
@@ -927,11 +943,7 @@ fn mask_gate(
         context.samples,
         context.factor,
         context.cutoff,
-        if index == 0 {
-            context.linear
-        } else {
-            context.min_linear
-        },
+        context.taps(index),
     )?;
     let floor = match profile {
         Profile::Fast => 0.02,
@@ -1103,11 +1115,7 @@ fn prepare_levels(
                 context.samples,
                 context.factor,
                 context.cutoff,
-                if index == 0 {
-                    context.linear
-                } else {
-                    context.min_linear
-                },
+                context.taps(index),
             )?)
         } else {
             None
@@ -1150,11 +1158,7 @@ fn prepare_levels(
                 context.samples,
                 context.factor,
                 context.cutoff,
-                if index == 0 {
-                    context.linear
-                } else {
-                    context.min_linear
-                },
+                context.taps(index),
             )?;
             let enabled = safe && guarded > 0;
             if enabled {
@@ -1805,6 +1809,7 @@ mod tests {
                         cutoff,
                         linear: true,
                         min_linear: true,
+                        wrap: [33071; 2],
                     }),
                     LADDER,
                 )
@@ -1874,6 +1879,7 @@ mod tests {
                         cutoff: 0.8,
                         linear: true,
                         min_linear: true,
+                        wrap: [33071; 2],
                     }),
                     LADDER,
                 ) {
@@ -2510,6 +2516,7 @@ mod tests {
                     cutoff: 0.8,
                     linear: true,
                     min_linear: true,
+                    wrap: [33071; 2],
                 }),
                 LADDER,
             ) {

@@ -2,6 +2,8 @@
 use crate::{JobError, JobErrorKind};
 use serde_json::Value;
 
+/// glTF CLAMP_TO_EDGE.
+pub(crate) const CLAMP: u32 = 33071;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct SourceSampler {
     pub wrap_s: u32,
