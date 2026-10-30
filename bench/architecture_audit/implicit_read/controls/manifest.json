@@ -371,7 +371,7 @@
     "removed": []
    },
    "expected": "InvalidInput",
-   "file": "fixtures/A-12b.3tz",
+   "file": "fixtures/A-5.3tz",
    "id": "A-12b",
    "limits": {
     "hierarchy_visits": 12
@@ -423,7 +423,7 @@
     "removed": []
    },
    "expected": "InvalidInput",
-   "file": "fixtures/A-12c.trailing.3tz",
+   "file": "fixtures/A-12c.3tz",
    "id": "A-12c.trailing",
    "limits": {},
    "members": 3,
@@ -439,7 +439,7 @@
     "removed": []
    },
    "expected": "ResourceLimit:references",
-   "file": "fixtures/A-12d.3tz",
+   "file": "fixtures/B-8+1.3tz",
    "id": "A-12d",
    "limits": {
     "references": 9
