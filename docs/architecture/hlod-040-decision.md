@@ -549,11 +549,17 @@ strategies, fix 2 and the staged reduction all publish nothing, the cell is rebu
 stages, each running develop's first strategies only (both caps, holes kept or not), so
 every tile built today is unchanged:
 
-- **N1, least owner.** A new face on three shared points, or a new edge between two, is
-  admitted only in the cell that contains the least holding leaf of every one of its
-  points. Every same-depth cell derives the same least leaf from the exact interface
-  intervals, so no two cells create the same face or chord; contract points and segments
-  stay exact.
+- **N1, seam owner (hash split, owner 2026-10-31).** A new edge between two shared points,
+  or a new face on three, is admitted only in its seam owner. A segment {a, b} (published
+  f32 points, compared as little-endian u32 words, a < b) belongs to the cell holding a's
+  least holding leaf, or its greatest when the top bit of FNV-1a 64 over the six words of
+  a then b is set. A face belongs to the owner of its span segment, least to greatest
+  corner; on a seam chain that is the edge a new sliver face adds, and every other new
+  edge of the face needs its own owner. Every same-depth cell derives the same leaf from
+  the exact interface intervals, so each candidate has exactly one owner per depth and no
+  two cells create the same face or chord. Each side of a two-sided seam owns about half
+  of its segments, so a cell that is highest-indexed on every border still builds.
+  Contract points and segments stay exact.
 - **N2, folds.** The fold guard's reversed, coincident and same-direction book faces are
   also admitted. Reversed faces are turned to the source orientation and coincident copies
   beyond the source's count are dropped.
@@ -570,7 +576,8 @@ set, either orientation) or on an edge two or more faces use in the same directi
 built from a child holding admitted folds that keeps some declares stage 0. The native
 validator and the S5 oracle recount `foldFaces` and refuse a mismatch; admit folds only from
 stage 2, or in a declared tile above such a stage, and refuse a stage 0 with none below;
-and on every coarse tile refuse a new face or edge on shared points outside its least owner.
+and on every coarse tile refuse a new face or edge on shared points outside its seam owner
+(`seamOwner`).
 G is S2's measured value. Omission and D1's upward propagation remain only for a cell whose
 contract alone exceeds the cap, or whose last resort cannot keep the open boundaries that
 touch its border (borders near the cap: border relief, A1).

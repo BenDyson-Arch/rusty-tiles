@@ -591,7 +591,7 @@ fn complete_parent(n: usize, third_contact: bool) {
     if third_contact {
         // The only possible upper strip face is a-b-c, a fresh all-contact face.
         // No recovery proposal can self-license it against the original source; the
-        // A2 last resort admits it here, its least owner, after every strategy failed.
+        // A2 last resort admits it here, in its seam owner, after every strategy failed.
         let built = outcome
             .built
             .as_ref()

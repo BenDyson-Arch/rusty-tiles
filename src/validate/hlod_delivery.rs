@@ -2383,7 +2383,7 @@ impl Store {
                     if !(stage >= 2 || (stored > 0 && below)) {
                         self.equal_directions(tile, &surface, &contracted, effort)?;
                     }
-                    self.least_owner(tile, &surface, &contracted, &shared, effort)?;
+                    self.seam_owner(tile, &surface, &contracted, &shared, effort)?;
                     for path in contracted.values() {
                         add_count(&mut census.contracted_border_arcs, 1)?;
                         add_count(

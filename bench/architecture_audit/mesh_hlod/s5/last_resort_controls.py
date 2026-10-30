@@ -8,9 +8,11 @@ Literal archives; no producer imports.
   source's two, and a coincident pair. Refused as a fold unless its payload declares
   `lastResort` {stage 2, foldFaces 3}; undeclared, stage 1, miscounted, and stage 0
   without a fold stage below are refused.
-- Least owner: a planar quad split by a shared chain A-M-B. A coarse tile re-triangulates
-  its own leaf's quad with a face on the three shared points and a new edge A-B. Over the
-  leaf holding their least leaf it is admitted; mirrored over the other leaf, refused.
+- Seam owner: a planar quad split by a shared chain A-M-B between a left (least) and a
+  right (greatest) leaf. A coarse tile re-triangulates its own leaf's quad with a face on
+  the three shared points and a new edge A-B. The chain at x=0 hashes to A's least
+  holder, at x=2 to its greatest: there the highest-indexed side owns the seam. Over the
+  owner it is admitted; mirrored over the other leaf, refused.
 
 Both the oracle and, with --binary, native validation must agree.
 """
@@ -64,20 +66,23 @@ def generate(root):
             root=tile('coarse.glb', [tile('left.glb'), tile('right.glb')])), separators=(',', ':')))
         source(root / (name + '-source.json'), left + right)
         cases.append(dict(name=name, check=check, reason=reason, source=name + '-source.json'))
-    # Least owner: shared chain A-M-B between a left quad (above) and a right quad (below).
-    M, U, W = [1, -.5, 0], [0, 2, 0], [0, -2, 0]
-    left, right = [[A, M, U], [M, [2, 0, 0], U]], [[M, A, W], [[2, 0, 0], M, W]]
-    for name, mine, check in (('least-owner-admitted', 'left', None),
-                              ('least-owner-refused', 'right', 'leastOwner')):
+    # Seam owner: shared chain A-M-B between a left quad (above) and a right quad (below).
+    for name, x, mine, check in (('seam-owner-least-admitted', 0, 'left', None),
+                                 ('seam-owner-least-refused', 0, 'right', 'seamOwner'),
+                                 ('seam-owner-greatest-admitted', 2, 'right', None),
+                                 ('seam-owner-greatest-refused', 2, 'left', 'seamOwner')):
+        P, Q = [x, 0, 0], [x + 2, 0, 0]
+        M, U, W = [x + 1, -.5, 0], [x, 2, 0], [x, -2, 0]
+        left, right = [[P, M, U], [M, Q, U]], [[M, P, W], [Q, M, W]]
         folder = root / name
         folder.mkdir(exist_ok=True)
         (folder / 'left.glb').write_bytes(payload(left, leaf=True))
         (folder / 'right.glb').write_bytes(payload(right, leaf=True, first=2))
         if mine == 'left':
-            coarse = [[A, M, [2, 0, 0]], [A, [2, 0, 0], U]]
+            coarse = [[P, M, Q], [P, Q, U]]
             children = [tile('coarse.glb', [tile('left.glb')]), tile('right.glb')]
         else:
-            coarse = [[[2, 0, 0], M, A], [[2, 0, 0], A, W]]
+            coarse = [[Q, M, P], [Q, P, W]]
             children = [tile('left.glb'), tile('coarse.glb', [tile('right.glb')])]
         (folder / 'coarse.glb').write_bytes(payload(coarse, leaf=False, first=0 if mine == 'left' else 2))
         document = dict(asset={'version': '1.1'}, geometricError=0, root=tile(children=children))

@@ -1,6 +1,7 @@
 //! Reject introduced face coincidences and overlapping edge fans before publication.
 //! This is a proposal check: it never removes, reverses or moves a face.
 use super::{key, Key};
+use crate::mesh_large::hlod::interfaces::InterfaceRow;
 use rustc_hash::FxHashMap as HashMap;
 use rustc_hash::FxHashSet as HashSet;
 #[path = "folds_contract.rs"]
@@ -28,36 +29,78 @@ pub(crate) struct Source {
 }
 
 /// The last resort's relaxations (D1/D11 amendment A2); the default relaxes nothing.
-/// `owned`: shared points whose least holding leaf lies in this cell. A new face on three
-/// of them, or a new edge between two, is admitted here (N1): every same-depth cell
-/// computes the same least leaf, so no other can create it. `folds`: reversed faces,
+/// `least`, `greatest`: the shared points whose least, respectively greatest, holding DFS
+/// leaf lies in this cell. A new edge between two shared points, or a new face on three, is
+/// admitted only in its seam owner (N1, `owns_segment`, `owns_face`): every same-depth
+/// cell derives the same single owner from the canonical keys. `folds`: reversed faces,
 /// coincident groups and same-direction books are admitted (N2, N3), declared and
 /// recounted by the validators. Degenerate faces and every other shared-point rule stay.
 #[derive(Clone, Default)]
 pub(crate) struct Policy {
-    pub owned: HashSet<Key>,
+    pub least: HashSet<Key>,
+    pub greatest: HashSet<Key>,
     pub folds: bool,
+}
+
+/// The published canonical domain: a signed zero is positive zero.
+fn published(k: Key) -> Key {
+    k.map(|w| if w == 0x8000_0000 { 0 } else { w })
+}
+
+/// The seam side of a segment between published keys `a < b`: the top bit of FNV-1a 64
+/// over their little-endian words, `a` first. false: the least holder of `a`; true: its
+/// greatest. The validators compute the same bit independently.
+pub(crate) fn greatest_side(a: Key, b: Key) -> bool {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for w in a.into_iter().chain(b) {
+        for byte in w.to_le_bytes() {
+            h = (h ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    h >> 63 == 1
 }
 
 impl Policy {
     /// Stage 1-3 relaxations for `tile` (over leaves `[begin, end)`), from its contract.
-    pub(crate) fn last_resort(
-        stage: u8,
-        begin: u32,
-        end: u32,
-        interface: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
-    ) -> Self {
+    pub(crate) fn last_resort(stage: u8, begin: u32, end: u32, interface: &[InterfaceRow]) -> Self {
         if stage == 0 {
             return Self::default();
         }
-        Self {
-            owned: interface
+        let holding = |leaf: fn(&InterfaceRow) -> u32| {
+            interface
                 .iter()
-                .filter(|r| r.is_vertex() && (begin..end).contains(&r.lo))
+                .filter(|r| r.is_vertex() && (begin..end).contains(&leaf(r)))
                 .map(|r| r.a)
-                .collect(),
+                .collect()
+        };
+        Self {
+            least: holding(|r| r.lo),
+            greatest: holding(|r| r.hi),
             folds: stage >= 2,
         }
+    }
+
+    /// The segment `{a, b}` between shared points belongs to the cell holding the least or
+    /// greatest holding leaf (`greatest_side`) of its lesser published point: exactly one
+    /// cell per depth.
+    pub(crate) fn owns_segment(&self, a: Key, b: Key) -> bool {
+        let (a, b) = if published(a) <= published(b) {
+            (a, b)
+        } else {
+            (b, a)
+        };
+        if greatest_side(published(a), published(b)) {
+            self.greatest.contains(&a)
+        } else {
+            self.least.contains(&a)
+        }
+    }
+
+    /// A face on three shared points belongs to the owner of its span segment, least to
+    /// greatest published corner. On a seam chain that is the edge a new sliver face adds.
+    pub(crate) fn owns_face(&self, mut f: Face) -> bool {
+        f.sort_unstable_by_key(|&k| published(k));
+        self.owns_segment(f[0], f[2])
     }
 }
 
@@ -157,7 +200,7 @@ impl Source {
                 // a new twin as "input". Retain the local source strip instead.
                 || (source == [0, 0]
                     && f.iter().all(|p| self.boundary.contains(p))
-                    && !f.iter().all(|p| self.policy.owned.contains(p)))
+                    && !self.policy.owns_face(f))
                 || (source == [0, 0]
                     && super::topology::normal(positions, *t)
                         .iter()
@@ -310,10 +353,8 @@ impl Source {
                 counts[d as usize] += 1;
             }
             let source = self.edges.get(&edge).copied().unwrap_or_default();
-            // N1: a new edge between two shared points this cell least-owns.
-            let owned = source == [0, 0]
-                && self.policy.owned.contains(&edge.0)
-                && self.policy.owned.contains(&edge.1);
+            // N1: a new edge between two shared points this cell owns.
+            let owned = source == [0, 0] && self.policy.owns_segment(edge.0, edge.1);
             let boundary =
                 !owned && self.boundary.contains(&edge.0) && self.boundary.contains(&edge.1);
             let unsupported = if boundary && (0..2).any(|d| counts[d] > source[d]) {

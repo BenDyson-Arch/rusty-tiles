@@ -5732,10 +5732,10 @@ fn last_resort_case(name: &str, sheet: Mesh, work: &Path) -> (HashSet<(u64, u64)
 
 /// D1/D11 amendment A2, stage N1. On three noisy sheets folded onto one another, a
 /// depth-1 cell fits only once it may create new faces and edges on the shared points
-/// whose least holding leaf it contains; no fold is admitted. Develop omits it. The cells
-/// still omitted are border-bound (their contracts leave the cap no room: border relief).
+/// of the seam segments it owns; no fold is admitted. Develop omits it. The cells still
+/// omitted are border-bound (their contracts leave the cap no room: border relief).
 #[test]
-fn n1_builds_a_seam_bound_cell_in_its_least_owner() {
+fn n1_builds_a_seam_bound_cell_on_the_segments_it_owns() {
     let work = tempfile::tempdir().unwrap();
     let name = "N1 folded sheets";
     let (develop, dir) = last_resort_case(name, folded_sheet(96, 3, 0., 0.0001, 23), work.path());
@@ -5745,6 +5745,63 @@ fn n1_builds_a_seam_bound_cell_in_its_least_owner() {
         .collect();
     assert!(!n1.is_empty(), "{name}: {:?}", last_resort_tiles(&dir));
     assert!(n1.iter().all(|t| !develop.contains(&(t.0, t.1))), "{name}");
+}
+
+/// (first, depth, leaf begin, leaf end) of every published coarse cell.
+fn cells(dir: &Path) -> Vec<(u64, u64, u64, u64)> {
+    rows(&dir.join("proxies.jsonl"))
+        .iter()
+        .map(|r| {
+            (
+                r["first"].as_u64().unwrap(),
+                r["depth"].as_u64().unwrap(),
+                r["leafBegin"].as_u64().unwrap(),
+                r["leafEnd"].as_u64().unwrap(),
+            )
+        })
+        .collect()
+}
+
+/// The sheet of `n1_builds_a_seam_bound_cell_on_the_segments_it_owns`, mirrored in x.
+fn mirrored(mut sheet: Mesh) -> Mesh {
+    for p in &mut sheet.positions {
+        p[0] = 40. - p[0];
+    }
+    for t in sheet.indices.chunks_mut(3) {
+        t.swap(1, 2);
+    }
+    sheet
+}
+
+/// A2 N1 on the mirrored sheet: the cell that needs N1 is now the last depth-1 cell, so
+/// every shared point's greatest holding leaf is in it and no least one is. Under a
+/// least-owner rule it could create nothing on its seams; under the seam-owner hash it
+/// owns about half of each and builds.
+#[test]
+fn n1_builds_a_cell_highest_indexed_on_every_border() {
+    let work = tempfile::tempdir().unwrap();
+    let name = "N1 mirrored folded sheets";
+    let (develop, dir) = last_resort_case(
+        name,
+        mirrored(folded_sheet(96, 3, 0., 0.0001, 23)),
+        work.path(),
+    );
+    let cells = cells(&dir);
+    let leaves = cells.iter().map(|c| c.3).max().unwrap();
+    let last = cells
+        .iter()
+        .filter(|c| c.1 == 1)
+        .max_by_key(|c| c.2)
+        .unwrap();
+    assert_eq!(last.3, leaves, "{name}: {cells:?}");
+    assert!(
+        last_resort_tiles(&dir)
+            .iter()
+            .any(|t| (t.0, t.1, t.2) == (last.0, 1, 1)),
+        "{name}: {:?}",
+        last_resort_tiles(&dir)
+    );
+    assert!(!develop.contains(&(last.0, 1)), "{name}");
 }
 
 /// A2 stage N2: three sheets 2 cm apart fold onto one another under every reduction of

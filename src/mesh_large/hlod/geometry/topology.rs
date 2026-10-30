@@ -270,7 +270,7 @@ fn choose_targets(
 
 /// Keep the licenses of the original merged children across recovery proposals.
 /// `fallbacks`: see `constrained::contract`. `folds` (A2's N3): the guard runs under that
-/// last-resort policy, so the snap may fold faces; the shared-point rules (least owner),
+/// last-resort policy, so the snap may fold faces; the shared-point rules (seam owner),
 /// exact interface items and an unchanged topology still decide.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn contract_from(

@@ -403,9 +403,12 @@ impl Store {
 
     /// D1/D11 amendment A2 (N1): a coarse face on three shared points that no leaf below
     /// holds, or a coarse edge between two shared points that is neither a leaf edge nor
-    /// a delivered chord, is new on the seam. Only the tile holding the least leaf of
-    /// each of its points may create it, so two same-depth tiles never both do.
-    pub(super) fn least_owner(
+    /// a delivered chord, is new on the seam. Each has one seam owner per depth: for a
+    /// segment `a < b`, the tile holding `a`'s least holding leaf, or its greatest when
+    /// the top bit of FNV-1a 64 over the little-endian words of `a` then `b` is set; a
+    /// face belongs to the owner of its least-to-greatest corner segment. Two same-depth
+    /// tiles therefore never both create it.
+    pub(super) fn seam_owner(
         &self,
         tile: i64,
         surface: &Surface,
@@ -417,16 +420,21 @@ impl Store {
             .connection
             .query_row("SELECT last FROM tiles WHERE id=?", [tile], |r| r.get(0))
             .map_err(sql)?;
-        let mut least = self
+        let mut holders = self
             .connection
-            .prepare_cached("SELECT min(tile) FROM leaf_points WHERE key=?")
+            .prepare_cached("SELECT min(tile), max(tile) FROM leaf_points WHERE key=?")
             .map_err(sql)?;
-        let mut owned = |p: CanonicalPoint| -> Result<bool, Error> {
+        let mut owns = |a: CanonicalPoint, b: CanonicalPoint| -> Result<bool, Error> {
             effort.charge(1)?;
-            let first: Option<i64> = least
-                .query_row([super::point_bytes(p)], |r| r.get(0))
+            let (a, b) = (a.min(b), a.max(b));
+            let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+            for byte in a.into_iter().chain(b).flat_map(u32::to_le_bytes) {
+                h = (h ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
+            }
+            let (lo, hi): (Option<i64>, Option<i64>) = holders
+                .query_row([super::point_bytes(a)], |r| Ok((r.get(0)?, r.get(1)?)))
                 .map_err(sql)?;
-            Ok(first.is_some_and(|f| f > tile && f <= last))
+            Ok((if h >> 63 == 1 { hi } else { lo }).is_some_and(|f| f > tile && f <= last))
         };
         let mut leaf_face = self
             .connection
@@ -445,11 +453,11 @@ impl Store {
             let source: bool = leaf_face
                 .query_row(params![bytes, tile, last], |r| r.get(0))
                 .map_err(sql)?;
-            if !source && !(owned(k[0])? && owned(k[1])? && owned(k[2])?) {
+            if !source && !owns(k[0], k[2])? {
                 return Err(bad(
-                    "leastOwner",
+                    "seamOwner",
                     &format!(
-                        "a new face on three shared points outside their least owner: tile={tile}"
+                        "a new face on three shared points outside its seam owner: tile={tile}"
                     ),
                 ));
             }
@@ -471,11 +479,11 @@ impl Store {
             let source: bool = leaf_edge
                 .query_row(params![super::edge_bytes(*edge), tile, last], |r| r.get(0))
                 .map_err(sql)?;
-            if !source && !(owned(edge.0)? && owned(edge.1)?) {
+            if !source && !owns(edge.0, edge.1)? {
                 return Err(bad(
-                    "leastOwner",
+                    "seamOwner",
                     &format!(
-                        "a new edge between shared points outside their least owner: tile={tile}"
+                        "a new edge between shared points outside its seam owner: tile={tile}"
                     ),
                 ));
             }

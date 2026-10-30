@@ -10,13 +10,17 @@ from the delivered surfaces and source incidence alone:
 - From stage 2 those folds are admitted, and in a declared tile with such a stage below
   it (stage 0: it keeps them as input). Every other tile keeps ``borders.folds``; stage 0
   without a declared fold stage below is refused.
-- Least owner (every tile): a coarse face on three shared points that no leaf below
+- Seam owner (every tile): a coarse face on three shared points that no leaf below
   holds, or a coarse edge between two shared points that is neither a leaf edge nor a
-  delivered chord, must lie in the tile holding the least leaf of each of its points.
+  delivered chord, must lie in its seam owner. A segment between published f32 points
+  a < b (compared as little-endian u32 words) belongs to the tile holding a's least
+  holding leaf, or its greatest when the top bit of FNV-1a 64 over the words of a then
+  b is set; a face belongs to the owner of its least-to-greatest corner segment.
   Same-depth tiles then never both create it.
 """
 import collections
 import json
+import struct
 
 
 def declared(data, require):
@@ -71,6 +75,17 @@ def fold_faces(surface, directed):
                or any(directed[f[j], f[(j + 1) % 3]] > 1 for j in range(3)))
 
 
+def words(xyz):
+    return struct.unpack('<3I', struct.pack('<3f', *(0.0 if x == 0 else x for x in xyz)))
+
+
+def greatest_side(a, b):
+    h = 0xcbf29ce484222325
+    for byte in struct.pack('<6I', *a, *b):
+        h = ((h ^ byte) * 0x100000001b3) & 0xffffffffffffffff
+    return h >> 63 == 1
+
+
 def _leaf_face_index(store):
     if getattr(store, '_leaf_face_keys', False):
         return
@@ -105,14 +120,17 @@ def check(store, tile, surface, directed, arcs, require, declaration):
     if not shared:
         return
     ids = {store.canonical_xyz(p): p for p in shared}
-    least = {}
+    published = {p: words(store.canonical_xyz(p)) for p in shared}
+    holders = {}
 
-    def owned(p):
-        if p not in least:
+    def owns(p, q):
+        p, q = sorted((p, q), key=published.get)
+        if p not in holders:
             store.work.charge()
-            least[p] = store.db.execute('SELECT min(leaf) FROM canonical_owners WHERE point=?',
-                                        (p,)).fetchone()[0]
-        return least[p] is not None and lo <= least[p] < hi
+            holders[p] = store.db.execute('SELECT min(leaf),max(leaf) FROM canonical_owners WHERE point=?',
+                                          (p,)).fetchone()
+        leaf = holders[p][1 if greatest_side(published[p], published[q]) else 0]
+        return leaf is not None and lo <= leaf < hi
 
     for f in surface:
         store.work.charge()
@@ -123,8 +141,9 @@ def check(store, tile, surface, directed, arcs, require, declaration):
         source = store.db.execute(
             'SELECT EXISTS(SELECT 1 FROM leaf_face_keys WHERE a=? AND b=? AND c=? AND leaf>=? AND leaf<?)',
             (a, b, c, lo, hi)).fetchone()[0]
-        require(source or all(owned(p) for p in (a, b, c)), 'leastOwner',
-                f'tile {tid}: a new face on three shared points outside their least owner')
+        span = sorted((a, b, c), key=published.get)
+        require(source or owns(span[0], span[2]), 'seamOwner',
+                f'tile {tid}: a new face on three shared points outside its seam owner')
     for p, q in {(min(p, q), max(p, q)) for p, q in directed}:
         store.work.charge()
         if p not in ids or q not in ids:
@@ -135,5 +154,5 @@ def check(store, tile, surface, directed, arcs, require, declaration):
         source = store.db.execute(
             'SELECT EXISTS(SELECT 1 FROM canonical_edges WHERE a=? AND b=? AND leaf>=? AND leaf<?)',
             (a, b, lo, hi)).fetchone()[0]
-        require(source or (owned(a) and owned(b)), 'leastOwner',
-                f'tile {tid}: a new edge between shared points outside their least owner')
+        require(source or owns(a, b), 'seamOwner',
+                f'tile {tid}: a new edge between shared points outside its seam owner')

@@ -114,7 +114,7 @@ pub(super) struct Stuck {
 /// (no voting: a pure function of the hand-over), degenerate faces go, and the result must
 /// keep every interface item, leave the topology unchanged and pass `guard`: the merged
 /// children's contraction licences under N3's policy (folds admitted, a new face or edge on
-/// shared points only in their least owner). None refuses (the cell is omitted).
+/// shared points only in their seam owner). None refuses (the cell is omitted).
 fn snap_stuck(
     reference: &Merged,
     seed: &Contracted,
@@ -833,7 +833,7 @@ pub(crate) fn build_parent(
 /// and coarse drops and wall panels follow every strategy. `Staged`: develop's strategies,
 /// each reduction staged against the fold guard (`staged`). `N1`-`N3` (D1/D11 amendment
 /// A2) replace omission: develop's first strategies only, staged, with the guard relaxed
-/// by `folds::Policy`: N1 admits new shared-point faces and edges in their least owner,
+/// by `folds::Policy`: N1 admits new shared-point faces and edges in their seam owner,
 /// N2 also admits folds, N3 also reduces by clustering with every locked vertex fixed
 /// (`cluster_reduce`).
 #[derive(Clone, Copy, PartialEq)]
