@@ -436,6 +436,7 @@ fn emit(
         ));
     }
     let mut glb = MetadataGlb::new("rusty-tiles native point cloud");
+    glb::add_extension(&mut glb.document, "KHR_materials_unlit", false)?;
     // Tile-local glTF (Y-up) positions as KHR_mesh_quantization 16-bit codes, dequantized
     // by the content node's translation (the minimum) and scale (the extent).
     let local = |row| {
@@ -582,7 +583,6 @@ fn emit(
             property_attributes.insert(property, json!({ "attribute": semantic }));
         }
     }
-    glb::add_extension(&mut glb.document, "KHR_materials_unlit", false)?;
     let mut extensions = json!({});
     let mut metadata = json!({"schema":{"id":"rusty_tiles_point_cloud","classes":{}}});
     if options.metadata {
