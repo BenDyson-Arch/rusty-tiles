@@ -5481,6 +5481,16 @@ mod containment_controls {
         assert!(error.contains("without content"), "{error}");
         // Other tilesets may keep empty tiles within their error.
         assert!(run(&files(1., false)).is_ok());
+        // An implicit I_0 without content (G 16, floor about 443) over a content child.
+        let mut files = implicit_files(r(), subtree(&[0, 1], &[1], None), &[(1, point_at(0.))]);
+        assert!(run(&files).is_ok());
+        let mut doc: Value = serde_json::from_slice(&files[0].1).unwrap();
+        doc["extensionsUsed"] = json!(["3DTILES_content_gltf_vector"]);
+        files[0].1 = serde_json::to_vec(&doc).unwrap();
+        assert!(run(&files)
+            .unwrap_err()
+            .to_string()
+            .contains("without content"));
     }
 
     #[test]

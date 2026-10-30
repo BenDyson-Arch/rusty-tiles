@@ -1322,13 +1322,11 @@ pub(super) fn encode(
         return Err(data("vector LOD tolerance overflows; reduce lodTolerance"));
     }
     let bound = if level > 0 { tolerance } else { -1. };
-    let (count, minor): (usize, usize) = db
+    let (count, minor, points): (usize, usize, usize) = db
         .query_row(
-            &format!(
-                "SELECT COUNT(*),COALESCE(SUM({small}),0) FROM features WHERE path>=?1 AND path<?2"
-            ),
+            &format!("SELECT COUNT(*),COALESCE(SUM({small}),0),COALESCE(SUM(n),0) FROM features WHERE path>=?1 AND path<?2"),
             rusqlite::params![prefix, end, bound],
-            |r| Ok((r.get::<_, i64>(0)? as usize, r.get::<_, i64>(1)? as usize)),
+            |r| Ok((r.get::<_, i64>(0)? as usize, r.get::<_, i64>(1)? as usize, r.get::<_, i64>(2)? as usize)),
         )
         .map_err(sql)?;
     let count = count - minor + minor.min(max_features);
@@ -1361,7 +1359,9 @@ pub(super) fn encode(
     let mut aggregation = None;
     let mut items = Vec::new();
     let mut aggregation_reason = None;
-    if level > 0 && options.aggregate_points {
+    // Points over a parent's budget are aggregated rather than routed.
+    let over = count > cap || points > options.max_vertices;
+    if level > 0 && (options.aggregate_points || over) {
         match aggregation::collect(&db, prefix, options)? {
             aggregation::Outcome::Ready(value) => {
                 // The tile's tolerance covers its measured aggregate distance.

@@ -544,7 +544,7 @@ struct VectorArgs {
     /// Allow explicitly reported outline stand-ins for unsimplifiable parent polygons
     #[arg(long = "parentRepair", visible_alias = "parent-repair")]
     parent_repair: bool,
-    /// Aggregate point-only parents into per-layer voxel counts; keep original leaves
+    /// Aggregate every point-only parent into per-layer voxel counts (over-budget ones always are)
     #[arg(long = "aggregatePoints", visible_alias = "aggregate-points")]
     aggregate_points: bool,
     /// Maximum feature fragments in parent content; leaves use maxFeatures

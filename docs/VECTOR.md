@@ -223,11 +223,11 @@ Leaves keep every source vertex and segment. Their only change is float32 roundi
 
 A parent that cannot fit its kept features within the budgets retries at a tolerance of its data diagonal, where every unsplit line or polygon is a stand-in or omitted. If that does not fit either, it becomes a routing node without content. `extras.routingReason` says why: `parentFeatures`, `vertices`, `bytes`, `estimatedBytes` or `pointAggregationBudget`. Its `geometricError` is at least 16 times its box diagonal, as for empty mesh parents, so CesiumJS refines it rather than drawing nothing; `validate` refuses vector archives whose content-less tiles fall below this.
 
-By default, every semantic point is kept. Dense point layers get a routing hierarchy rather than sampling.
+Leaves keep every semantic point. A point-only parent whose points exceed its budgets publishes per-layer aggregates instead of routing.
 
 ### Point aggregation
 
-`--aggregate-points` replaces points in point-only parents with per-layer count aggregates. Leaves always keep the original points and properties.
+Parents over their budgets aggregate by default; `--aggregate-points` replaces points in every point-only parent with per-layer count aggregates. Leaves always keep the original points and properties.
 
 ```sh
 rusty-tiles vector -i observations.gpkg -o output/observations.3tz --layer observations \

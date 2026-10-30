@@ -103,7 +103,8 @@ class PointAggregationTests(unittest.TestCase):
                 self.assertLessEqual(len(props), 8)
             self.assertGreater(checked, 0)
             self.assertEqual(report(output)['pointAggregation']['contentTiles'], checked)
-            self.assertEqual(report(baseline)['pointAggregation']['contentTiles'], 0)
+            # Without the flag only parents over their budgets aggregate.
+            self.assertLess(report(baseline)['pointAggregation']['contentTiles'], checked)
 
     def test_layers_stay_separate_and_coincident_counts_refine(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -137,22 +138,25 @@ class PointAggregationTests(unittest.TestCase):
     def test_spread_layer_aggregates_from_the_root_within_a_shrinking_error(self):
         rng=np.random.default_rng(2); centres=rng.uniform(0, 2000, (20, 2))
         xy=np.r_[rng.uniform(0, 2000, (4000, 2)), centres[np.arange(4000) % 20]+rng.normal(0, 20, (4000, 2))]
+        def walk(node, depth=0, parent=None):
+            extras=node['extras']; self.assertIn('content', node)
+            if depth <= 3:self.assertIn('pointAggregation', extras)
+            if 'pointAggregation' in extras:
+                summary=extras['pointAggregation']
+                self.assertLessEqual(summary['maximumDistanceMetres'], extras['toleranceMetres'])
+                self.assertLessEqual(summary['aggregateCount'], 512)
+            if parent is not None:self.assertLess(node['geometricError'], parent)
+            for child in node.get('children', []):walk(child, depth+1, node['geometricError'])
         with tempfile.TemporaryDirectory() as tmp:
-            source=pathlib.Path(tmp)/'spread.geojson'; output=pathlib.Path(tmp)/'out'
+            source=pathlib.Path(tmp)/'spread.geojson'
             source.write_text(json.dumps(dict(type='FeatureCollection', features=[dict(type='Feature', id=i,
                 properties=dict(n=i), geometry=dict(type='Point', coordinates=[*p, 0])) for i, p in enumerate(xy.tolist())])))
-            native_run(types.SimpleNamespace(input=str(source), output=str(output), source_crs='local',
-                max_parent_features=512, aggregate_points=True))
-            def walk(node, depth=0, parent=None):
-                extras=node['extras']; self.assertIn('content', node)
-                if depth <= 3:self.assertIn('pointAggregation', extras)
-                if 'pointAggregation' in extras:
-                    summary=extras['pointAggregation']
-                    self.assertLessEqual(summary['maximumDistanceMetres'], extras['toleranceMetres'])
-                    self.assertLessEqual(summary['aggregateCount'], 512)
-                if parent is not None:self.assertLess(node['geometricError'], parent)
-                for child in node.get('children', []):walk(child, depth+1, node['geometricError'])
-            walk(json.loads((output/'tileset.json').read_text())['root'])
+            # Over-budget parents aggregate by default; the flag aggregates every parent.
+            for flag in (True, False):
+                output=pathlib.Path(tmp)/str(flag)
+                native_run(types.SimpleNamespace(input=str(source), output=str(output), source_crs='local',
+                    max_parent_features=512, aggregate_points=flag))
+                walk(json.loads((output/'tileset.json').read_text())['root'])
 
     def test_layer_budget_routes_without_combining_unrelated_layers(self):
         with tempfile.TemporaryDirectory() as tmp:
