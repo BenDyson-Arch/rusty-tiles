@@ -64,7 +64,7 @@ pub(super) fn collect(
 enum Pass {
     Mixed,
     Over(&'static str),
-    Done(BTreeMap<(String, usize), Feature>, f64),
+    Done(BTreeMap<(usize, usize), Feature>, f64),
 }
 
 /// One pass over the tile's rows in source-identity order. A Point row's box is its
@@ -77,7 +77,11 @@ fn pass(
     budget: usize,
     options: &VectorOptions,
 ) -> Result<Pass, Error> {
-    let mut cells: BTreeMap<(String, usize), Feature> = BTreeMap::new();
+    // Layers by first appearance: rows come in `sortkey` order, which starts with the
+    // layer, so index order is layer order.
+    let mut layers: Vec<String> = Vec::new();
+    let mut cells: BTreeMap<(usize, usize), Feature> = BTreeMap::new();
+    let mut points: Vec<Point> = Vec::new();
     let mut maximum_distance: f64 = 0.;
     let mut estimate = 0usize;
     let mut rows = db
@@ -89,15 +93,22 @@ fn pass(
         .map_err(sql)?;
     let mut rows = rows.query(params![prefix, end]).map_err(sql)?;
     while let Some(row) = rows.next().map_err(sql)? {
-        let sortkey: String = row.get(4).map_err(sql)?;
-        let parts: Vec<&str> = sortkey.split('\0').collect();
-        let (layer, multi) = if row.get::<_, i64>(0).map_err(sql)? == 1 && parts.len() == 3 {
+        let sortkey = row
+            .get_ref(4)
+            .map_err(sql)?
+            .as_str()
+            .map_err(|e| sql(e.into()))?;
+        let mut parts = sortkey.split('\0');
+        let (name, extra) = (parts.next().unwrap_or(""), parts.count());
+        points.clear();
+        let source = if row.get::<_, i64>(0).map_err(sql)? == 1 && extra == 2 {
             let point = [
                 row.get(1).map_err(sql)?,
                 row.get(2).map_err(sql)?,
                 row.get(3).map_err(sql)?,
             ];
-            (parts[0].to_owned(), vec![point])
+            points.push(point);
+            None
         } else {
             let id: i64 = row.get(5).map_err(sql)?;
             let text: String = data.query_row([id], |r| r.get(0)).map_err(sql)?;
@@ -105,13 +116,19 @@ fn pass(
             let (Geometry::Point(_) | Geometry::MultiPoint(_)) = source.geometry else {
                 return Ok(Pass::Mixed);
             };
-            (
-                source.layer().to_owned(),
-                source.geometry.points().copied().collect(),
-            )
+            points.extend(source.geometry.points().copied());
+            Some(source)
         };
-        for point in multi {
-            let key = (layer.clone(), grid.key(point));
+        let name = source.as_ref().map_or(name, Feature::layer);
+        let layer = match layers.iter().rposition(|l| l == name) {
+            Some(layer) => layer,
+            None => {
+                layers.push(name.to_owned());
+                layers.len() - 1
+            }
+        };
+        for &point in &points {
+            let key = (layer, grid.key(point));
             if let Some(aggregate) = cells.get_mut(&key) {
                 let count = aggregate.properties["pointCount"].as_i64().unwrap();
                 aggregate
@@ -131,7 +148,7 @@ fn pass(
                     properties: BTreeMap::from([
                         ("aggregation".into(), json!("voxel")),
                         ("pointCount".into(), json!(1)),
-                        ("sourceLayer".into(), json!(layer)),
+                        ("sourceLayer".into(), json!(layers[layer])),
                     ]),
                     surface_fragment: false,
                     fragment_path: String::new(),
