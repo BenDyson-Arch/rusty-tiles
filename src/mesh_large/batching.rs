@@ -84,8 +84,9 @@ pub(in crate::mesh_large) fn material_key(material: &Value, texture: bool) -> Va
 
 /// Source material ID to the representative of its class: the lowest ID whose class
 /// (literal factors, slot presence and extras, and each bound slot's source sampler
-/// min/mag filter) is equal. Wrap modes are not part of a class: both tile writers
-/// resolve wrapping into page content and publish `CLAMP_TO_EDGE`.
+/// min/mag filter) is equal. Wrap modes are not part of a class: tile writers resolve
+/// wrapping into page content and publish `CLAMP_TO_EDGE`, except a leaf's source period
+/// page, which is a texture of its own.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(in crate::mesh_large) struct MaterialClasses(Vec<u32>);
 

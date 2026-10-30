@@ -262,7 +262,13 @@ Normal, metallic-roughness and other data pages, MASK coverage and ID pages foll
 their own class rules in every profile (see [Profiles](#profiles-and-resources)).
 Leaf atlases keep only each leaf's needed source regions, with aligned crops, wrap,
 gutters and per-level mips; a leaf never depends on a whole source image merely
-because one triangle samples it.
+because one triangle samples it. When a leaf's UVs for one source image span at
+least one whole period of a REPEAT or MIRRORED_REPEAT axis, the leaf needs every
+texel on that axis: its page holds that axis whole, published with the source wrap
+and the source UVs unchanged there (the source image itself when both axes do), and
+a crop of the other axis, instead of one unrolled copy per period. Such a page is
+the source's own size, which a KTX2 page needs to be a multiple of four; otherwise
+the binding keeps ordinary crops.
 
 ### Identity, annotation and editability
 
@@ -581,8 +587,8 @@ modes do not count. A leaf's
 merged positions are rebased onto one shared quantization offset without being
 quantized again, so every decoded vertex is bit-identical to a per-primitive
 encoding. Primitives split only where those properties differ, where a mipmapped
-source sampler keeps a dedicated leaf page in a lossy profile, or where a class
-overflows one page. Every leaf triangle keeps its `source_primitive` and
+source sampler keeps a dedicated leaf page in a lossy profile, where repeated UVs
+keep a source period page of their own, or where a class overflows one page. Every leaf triangle keeps its `source_primitive` and
 `source_triangle` feature IDs; a coarse triangle carries one representative
 `source_primitive` ID ([identity](#identity-annotation-and-editability)). Each
 tile has one property table per feature-ID set. Feature-ID attributes carry no

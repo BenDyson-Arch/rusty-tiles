@@ -6,7 +6,7 @@ use super::super::{
 };
 use super::schedule::{Decoded, MemoryGate, SourceCache};
 use super::{
-    crops::{self, Block, SourceSampler},
+    crops::{self, Block, Crop, SourceSampler},
     delivery::{self, MaskDelivery},
     geometry::LatticePlan,
     mask::SurfaceSample,
@@ -65,6 +65,8 @@ struct Binding {
     source_size: [u32; 2],
     offset: [u32; 2],
     page: usize,
+    /// Axes the binding's UVs span a whole period of ([`period_axes`]).
+    period: [bool; 2],
 }
 struct PagePlan {
     bindings: Vec<usize>,
@@ -72,6 +74,132 @@ struct PagePlan {
     sampler: SourceSampler,
     width: u32,
     height: u32,
+    /// Published wrap: CLAMP_TO_EDGE, or the source's on a period page's whole axes.
+    wrap: [u32; 2],
+}
+const CLAMP: u32 = 33071;
+
+/// Per axis, whether `uvs` span at least one whole period of a repeating source wrap
+/// (REPEAT, MIRRORED_REPEAT). Such a binding needs every source texel on that axis
+/// (D6), so a page holding the axis whole, sampled with the source wrap at the source
+/// UV, replaces copies unrolled period by period.
+fn period_axes(uvs: &[[f32; 2]], sampler: SourceSampler) -> [bool; 2] {
+    let wraps = [sampler.wrap_s, sampler.wrap_t];
+    std::array::from_fn(|a| {
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for uv in uvs {
+            let v = f64::from(uv[a]);
+            if !v.is_finite() || v.abs() > 1e6 {
+                return false;
+            }
+            (lo, hi) = (lo.min(v), hi.max(v));
+        }
+        matches!(wraps[a], 10497 | 33648) && hi - lo >= 1.
+    })
+}
+
+/// One dedicated page per source image, slot role, sampler and MASK class of the
+/// bindings with a period axis: whole on every axis the members span a period of
+/// (published with the source wrap; UVs unchanged there), one crop of their union on
+/// the other (context folded into the crop, so it is exact real source with
+/// `crop_padding`'s alignment; CLAMP_TO_EDGE). A group that cannot be such a page (a
+/// KTX2 edge not a multiple of four, or over `max_edge`) returns to island crops.
+fn period_pages(
+    bindings: &mut [Binding],
+    primitives: &[PreparedPrimitive],
+    (profile, max_edge, mask_classes): (Profile, u32, &[Option<u32>]),
+) -> Result<Vec<PagePlan>, JobError> {
+    let mut groups = BTreeMap::<_, Vec<usize>>::new();
+    for (i, b) in bindings.iter().enumerate() {
+        if b.period.contains(&true) {
+            let mask = (b.slot == TextureSlot::BaseColor).then(|| mask_classes[b.primitive]);
+            let s = b.sampler;
+            let key = (
+                b.image,
+                role(b.slot),
+                [s.wrap_s, s.wrap_t, s.min_filter, s.mag_filter],
+            );
+            groups.entry((key, mask)).or_default().push(i);
+        }
+    }
+    let mut pages = Vec::new();
+    for ids in groups.into_values() {
+        let first = &bindings[ids[0]];
+        let (size, sampler, slot) = (first.source_size, first.sampler, first.slot);
+        let wraps = [sampler.wrap_s, sampler.wrap_t];
+        let (gutter, align) = crop_padding(class(slot), profile, sampler);
+        let (g, al) = (i64::from(gutter), i64::from(align));
+        let mipmapped = profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
+        let uvs = |b: &Binding| &primitives[b.primitive].uvs[b.output_uv];
+        let mut members = Vec::new();
+        for &i in &ids {
+            members.extend_from_slice(uvs(&bindings[i]));
+        }
+        let whole = period_axes(&members, sampler);
+        let (mut origin, mut extent, mut fits) = ([0i64; 2], [0u32; 2], true);
+        for a in 0..2 {
+            let n = f64::from(size[a]);
+            if whole[a] {
+                extent[a] = size[a];
+                fits &= profile == Profile::Lossless || size[a].is_multiple_of(4);
+            } else {
+                let lo = members
+                    .iter()
+                    .map(|uv| f64::from(uv[a]))
+                    .fold(f64::INFINITY, f64::min);
+                let hi = members
+                    .iter()
+                    .map(|uv| f64::from(uv[a]))
+                    .fold(f64::NEG_INFINITY, f64::max);
+                // plan()'s one-texel real-source halo plus the gutter, as real source.
+                let mut start = (lo * n).floor() as i64 - 1 - g;
+                if mipmapped {
+                    start = start.div_euclid(al) * al;
+                }
+                let span = ((hi * n).ceil() as i64 + 1 + g - start).max(1);
+                (origin[a], extent[a]) = (
+                    start,
+                    u32::try_from((span + al - 1) / al * al).unwrap_or(u32::MAX),
+                );
+            }
+            fits &= extent[a] <= max_edge;
+        }
+        if !fits {
+            for &i in &ids {
+                let b = &mut bindings[i];
+                b.period = [false; 2];
+                let mipmapped =
+                    profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
+                let uvs = &primitives[b.primitive].uvs[b.output_uv];
+                b.block = crops::plan_islands_aligned(
+                    uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
+                )?;
+            }
+            continue;
+        }
+        let crop = Crop {
+            origin,
+            width: extent[0],
+            height: extent[1],
+            gutter: 0,
+            interior_width: extent[0],
+            interior_height: extent[1],
+        };
+        for &i in &ids {
+            let triangles = uvs(&bindings[i]).len() / 3;
+            let b = &mut bindings[i];
+            (b.block, b.offset) = (Block::single(crop.clone(), triangles), [0, 0]);
+        }
+        pages.push(PagePlan {
+            bindings: ids,
+            slot,
+            sampler,
+            width: extent[0],
+            height: extent[1],
+            wrap: std::array::from_fn(|a| if whole[a] { wraps[a] } else { CLAMP }),
+        });
+    }
+    Ok(pages)
 }
 
 /// Shelf height/width of one bucket's blocks laid out with shelf width `limit`.
@@ -160,6 +288,7 @@ fn pack_islands(
         sampler: first.sampler,
         width,
         height,
+        wrap: [CLAMP; 2],
     };
     for &b in ids {
         let binding = &mut bindings[b];
@@ -185,7 +314,11 @@ fn pack(
     mask_classes: &[Option<u32>],
 ) -> Result<Vec<PagePlan>, JobError> {
     let mut buckets = BTreeMap::<(u8, u32, u32, Option<u32>), Vec<usize>>::new();
-    for (i, b) in bindings.iter().enumerate() {
+    for (i, b) in bindings
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| !b.period.contains(&true))
+    {
         let mask = if b.slot == TextureSlot::BaseColor {
             mask_classes[b.primitive]
         } else {
@@ -240,6 +373,7 @@ fn pack(
             sampler: first.sampler,
             width: 0,
             height: 0,
+            wrap: [CLAMP; 2],
         };
         let (mut x, mut y, mut row) = (0u32, 0u32, 0u32);
         for i in ids {
@@ -259,6 +393,7 @@ fn pack(
                     sampler: b.sampler,
                     width: 0,
                     height: 0,
+                    wrap: [CLAMP; 2],
                 };
                 x = 0;
                 y = 0;
@@ -731,9 +866,20 @@ fn layout(
             // Mipmapped lossy bindings: interiors on the alignment grid (D6).
             let mipmapped =
                 profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
-            let block = crops::plan_islands_aligned(
-                &uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
-            )?;
+            let period = period_axes(&uvs, sampler);
+            let block = if period.contains(&true) {
+                // Placed by `period_pages`.
+                Block {
+                    width: 0,
+                    height: 0,
+                    islands: Vec::new(),
+                    triangle_island: Vec::new(),
+                }
+            } else {
+                crops::plan_islands_aligned(
+                    &uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
+                )?
+            };
             p.uvs.push(uvs);
             bindings.push(Binding {
                 primitive: pi,
@@ -746,10 +892,22 @@ fn layout(
                 source_size: size,
                 offset: [0; 2],
                 page: 0,
+                period,
             });
         }
     }
-    let plans = pack(&mut bindings, max_edge, &mask_classes)?;
+    let dedicated = period_pages(
+        &mut bindings,
+        &primitives,
+        (profile, max_edge, &mask_classes),
+    )?;
+    let mut plans = pack(&mut bindings, max_edge, &mask_classes)?;
+    for page in dedicated {
+        for &b in &page.bindings {
+            bindings[b].page = plans.len();
+        }
+        plans.push(page);
+    }
     for b in &bindings {
         let page = &plans[b.page];
         for (corner, uv) in primitives[b.primitive].uvs[b.output_uv]
@@ -995,8 +1153,10 @@ fn encode_page(
             if size != b.source_size {
                 return Err(invariant());
             }
+            // A period page's members share one crop: cut it once.
+            let cut = page.wrap == [CLAMP; 2] || bi == page.bindings[0];
             timing::time(Stage::PageCut, || -> Result<(), JobError> {
-                for island in &b.block.islands {
+                for island in b.block.islands.iter().filter(|_| cut) {
                     let crop = &island.crop;
                     let [ox, oy] = [
                         b.offset[0] + island.offset[0],
@@ -1190,7 +1350,7 @@ pub(super) fn prepare(
             bytes: delivered.bytes,
             mime: delivered.mime,
         });
-        atlas.samplers.push(json!({"wrapS":33071,"wrapT":33071,"minFilter":page.sampler.min_filter,"magFilter":page.sampler.mag_filter}));
+        atlas.samplers.push(json!({"wrapS":page.wrap[0],"wrapT":page.wrap[1],"minFilter":page.sampler.min_filter,"magFilter":page.sampler.mag_filter}));
         atlas.textures.push(if delivered.mime == "image/ktx2" {
             json!({"sampler":page_id,"extensions":{"KHR_texture_basisu":{"source":page_id}}})
         } else {
@@ -1221,6 +1381,28 @@ pub(super) fn prepare(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn whole_period_axes_keep_source_uvs_bit_for_bit() {
+        let crop = Crop {
+            origin: [0, -12],
+            width: 1000,
+            height: 40,
+            gutter: 0,
+            interior_width: 1000,
+            interior_height: 40,
+        };
+        let mut x = 0x2545_f491u32;
+        for _ in 0..10_000 {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            let u = (x as f32 / u32::MAX as f32 - 0.5) * 100.;
+            assert_eq!(
+                crops::remap_uv([u, 0.], 1000, 64, &crop, [0, 0], [1000, 40]).unwrap()[0].to_bits(),
+                u.to_bits()
+            );
+        }
+    }
     #[test]
     fn surface_samples_cover_triangle_without_uv_inverse() {
         let weights = barycentrics();

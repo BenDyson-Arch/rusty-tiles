@@ -384,123 +384,145 @@ mod tests {
             records::{Bounds, Provenance, TriangleRecord},
         };
         use crate::gltf_source::source::{Document, ImageInfo};
-        let doc = serde_json::json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+        // CLAMP_TO_EDGE: unrolled crops and the density first fit. REPEAT: one or more whole
+        // periods keep the axis whole at the source's own (dropped) size instead.
+        let repeat =
+            |span: f32, profile, drop| ([[0.0, 0.0], [span, 0.0], [0.0, 0.0]], profile, drop);
+        for (wrap, cases) in [
+            (
+                33071,
+                [
+                    (
+                        [[0.0, 0.0], [1.0, 0.0], [0.0, 0.0]],
+                        Profile::Fast,
+                        Some(2u8),
+                    ),
+                    (
+                        [[0.0, 0.0], [1022.0, 0.0], [0.0, 0.0]],
+                        Profile::Fast,
+                        Some(12),
+                    ),
+                    ([[1e6, 1e6]; 3], Profile::Fast, Some(0)),
+                    ([[0.0, 0.0], [1e6, 0.0], [0.0, 0.0]], Profile::Fast, None),
+                    (
+                        [[0.0, 0.0], [1022.0, 0.0], [0.0, 0.0]],
+                        Profile::Lossless,
+                        None,
+                    ),
+                ],
+            ),
+            (
+                10497,
+                [
+                    repeat(1.0, Profile::Fast, Some(1)),
+                    repeat(1022.0, Profile::Fast, Some(1)),
+                    ([[1e6, 1e6]; 3], Profile::Fast, Some(0)),
+                    repeat(1e6, Profile::Fast, Some(1)),
+                    repeat(1022.0, Profile::Lossless, Some(0)),
+                ],
+            ),
+        ] {
+            let doc = serde_json::json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
             "meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"material":0}]}],
             "buffers":[{"uri":"never-read.bin","byteLength":60}],"bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":24}],
             "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[1,1,0]},
                 {"bufferView":1,"componentType":5126,"count":3,"type":"VEC2"}],
-            "images":[{"uri":"never-read.png"}],"textures":[{"source":0,"sampler":0}],"samplers":[{"minFilter":9729}],"materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
-        let document = Document::parse(&serde_json::to_vec(&doc).unwrap(), || Ok(())).unwrap();
-        let info = [ImageInfo {
-            mime_type: "image/png",
-            extension: "png",
-            width: 4096,
-            height: 1,
-        }];
-        let classes = crate::mesh_large::batching::MaterialClasses::default();
-        let resources = AtlasResources {
-            materials: document.materials(),
-            classes: &classes,
-            textures: document.textures(),
-            samplers: document.samplers(),
-            image_info: &info,
-        };
-        for (uv, profile, expected) in [
-            (
-                [[0.0, 0.0], [1.0, 0.0], [0.0, 0.0]],
-                Profile::Fast,
-                Some(2u8),
-            ),
-            (
-                [[0.0, 0.0], [1022.0, 0.0], [0.0, 0.0]],
-                Profile::Fast,
-                Some(12),
-            ),
-            ([[1e6, 1e6]; 3], Profile::Fast, Some(0)),
-            ([[0.0, 0.0], [1e6, 0.0], [0.0, 0.0]], Profile::Fast, None),
-            (
-                [[0.0, 0.0], [1022.0, 0.0], [0.0, 0.0]],
-                Profile::Lossless,
-                None,
-            ),
-        ] {
-            let scratch = Scratch::create(None, 0).unwrap();
-            let mut source = SequenceWriter::new(&scratch, "physical-test-source", 64).unwrap();
-            let corners = std::array::from_fn(|i| CornerAttributes {
-                texcoords: [uv[i], [0.0; 2]],
-                ..Default::default()
-            });
-            source
-                .push(&FullTriangle {
-                    triangle: TriangleRecord {
-                        key: 0,
-                        source: Provenance::default(),
-                        vertices: [0, 1, 2],
-                        positions: [[0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            "images":[{"uri":"never-read.png"}],"textures":[{"source":0,"sampler":0}],"samplers":[{"minFilter":9729,"wrapS":wrap}],"materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
+            let document = Document::parse(&serde_json::to_vec(&doc).unwrap(), || Ok(())).unwrap();
+            let info = [ImageInfo {
+                mime_type: "image/png",
+                extension: "png",
+                width: 4096,
+                height: 1,
+            }];
+            let classes = crate::mesh_large::batching::MaterialClasses::default();
+            let resources = AtlasResources {
+                materials: document.materials(),
+                classes: &classes,
+                textures: document.textures(),
+                samplers: document.samplers(),
+                image_info: &info,
+            };
+            for (uv, profile, expected) in cases {
+                let scratch = Scratch::create(None, 0).unwrap();
+                let mut source = SequenceWriter::new(&scratch, "physical-test-source", 64).unwrap();
+                let corners = std::array::from_fn(|i| CornerAttributes {
+                    texcoords: [uv[i], [0.0; 2]],
+                    ..Default::default()
+                });
+                source
+                    .push(&FullTriangle {
+                        triangle: TriangleRecord {
+                            key: 0,
+                            source: Provenance::default(),
+                            vertices: [0, 1, 2],
+                            positions: [[0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                            bytes: 56,
+                            degenerate: false,
+                        },
+                        expanded_ordinal: 0,
+                        material: 0,
+                        flags: UV0,
+                        corners,
+                    })
+                    .unwrap();
+                let source = source.finish().unwrap();
+                let mut nodes = SequenceWriter::new(&scratch, "physical-test-nodes", 64).unwrap();
+                nodes
+                    .push(&NodeRecord {
+                        cell_depth: 1,
+                        cell: 0,
+                        path_len: 0,
+                        path: 0,
+                        last_octant: 0,
+                        kind: NodeKind::Leaf,
+                        children: 0,
+                        first: 0,
+                        end: 1,
                         bytes: 56,
-                        degenerate: false,
-                    },
-                    expanded_ordinal: 0,
-                    material: 0,
-                    flags: UV0,
-                    corners,
-                })
-                .unwrap();
-            let source = source.finish().unwrap();
-            let mut nodes = SequenceWriter::new(&scratch, "physical-test-nodes", 64).unwrap();
-            nodes
-                .push(&NodeRecord {
-                    cell_depth: 1,
-                    cell: 0,
-                    path_len: 0,
-                    path: 0,
-                    last_octant: 0,
-                    kind: NodeKind::Leaf,
-                    children: 0,
-                    first: 0,
-                    end: 1,
-                    bytes: 56,
-                    bounds: Bounds {
-                        min: [0.0; 3],
-                        max: [1.0, 1.0, 0.0],
-                    },
-                })
-                .unwrap();
-            let nodes = nodes.finish().unwrap();
-            let config = TreeConfig::new(profile);
-            let before = scratch.live_bytes();
-            let result = preflight(
-                &scratch,
-                &source,
-                &nodes,
-                resources,
-                &config,
-                &mut || Ok(()),
-            );
-            if let Some(expected_drop) = expected {
-                let plan = result.unwrap();
-                let row = plan.reader().unwrap().next().unwrap().unwrap();
-                assert_eq!(row.density_drop, expected_drop);
-                let original = source.reader().unwrap().next().unwrap().unwrap();
-                let oracle = atlas::project(
-                    &[original],
-                    resources,
-                    profile,
-                    u32::from(expected_drop),
-                    &mut || Ok(()),
-                )
-                .unwrap();
-                assert_eq!(row.pages, oracle.pages);
-                assert_eq!(row.base_texels, oracle.base_texels);
-                assert_eq!(row.chain_texels, oracle.chain_texels);
-                drop(plan);
-            } else {
-                assert_eq!(result.err().unwrap().kind(), JobErrorKind::Unsupported);
-                assert_eq!(scratch.live_bytes(), before);
+                        bounds: Bounds {
+                            min: [0.0; 3],
+                            max: [1.0, 1.0, 0.0],
+                        },
+                    })
+                    .unwrap();
+                let nodes = nodes.finish().unwrap();
+                let config = TreeConfig::new(profile);
+                let before = scratch.live_bytes();
+                let result =
+                    preflight(
+                        &scratch,
+                        &source,
+                        &nodes,
+                        resources,
+                        &config,
+                        &mut || Ok(()),
+                    );
+                if let Some(expected_drop) = expected {
+                    let plan = result.unwrap();
+                    let row = plan.reader().unwrap().next().unwrap().unwrap();
+                    assert_eq!(row.density_drop, expected_drop);
+                    let original = source.reader().unwrap().next().unwrap().unwrap();
+                    let oracle = atlas::project(
+                        &[original],
+                        resources,
+                        profile,
+                        u32::from(expected_drop),
+                        &mut || Ok(()),
+                    )
+                    .unwrap();
+                    assert_eq!(row.pages, oracle.pages);
+                    assert_eq!(row.base_texels, oracle.base_texels);
+                    assert_eq!(row.chain_texels, oracle.chain_texels);
+                    drop(plan);
+                } else {
+                    assert_eq!(result.err().unwrap().kind(), JobErrorKind::Unsupported);
+                    assert_eq!(scratch.live_bytes(), before);
+                }
+                drop(nodes);
+                drop(source);
+                scratch.close().unwrap();
             }
-            drop(nodes);
-            drop(source);
-            scratch.close().unwrap();
         }
     }
 }

@@ -1722,6 +1722,199 @@ mod tests {
             }
         }
     }
+    /// One 8x8 grid of triangles per primitive. Primitive 0 samples a `edge`² texture
+    /// over `spans` UV periods with `wraps`; with `mixed`, primitive 1 samples a second
+    /// image inside [0.1, 0.3]². Returns the input and the source texture pixels.
+    fn repeat_fixture(
+        parent: &Path,
+        wraps: [u32; 2],
+        spans: [f32; 2],
+        edge: u32,
+        mixed: bool,
+    ) -> (PathBuf, Vec<u8>) {
+        fs::create_dir_all(parent).unwrap();
+        let (mut bytes, mut views, mut accessors, mut primitives) =
+            (Vec::new(), vec![], vec![], vec![]);
+        for p in 0..1 + usize::from(mixed) {
+            let (lo, span) = if p == 0 {
+                ([0., 0.], spans)
+            } else {
+                ([0.1, 0.1], [0.2, 0.2])
+            };
+            let (mut pos, mut uv) = (Vec::new(), Vec::new());
+            for i in 0..64 {
+                let (x, y) = ((i % 8) as f32, (i / 8 + 9 * p) as f32);
+                for c in [[0., 0.], [1., 0.], [0., 1.]] {
+                    pos.extend([x + c[0], y + c[1], 0.]);
+                    let k = [(i % 8) as f32 + c[0], (i / 8) as f32 + c[1]];
+                    uv.extend([lo[0] + k[0] / 8. * span[0], lo[1] + k[1] / 8. * span[1]]);
+                }
+            }
+            for (values, kind) in [(pos, "VEC3"), (uv, "VEC2")] {
+                let start = bytes.len();
+                values
+                    .iter()
+                    .for_each(|v: &f32| bytes.extend(v.to_le_bytes()));
+                views.push(json!({"buffer":0,"byteOffset":start,"byteLength":bytes.len()-start}));
+                let mut a = json!({"bufferView":views.len()-1,"componentType":5126,"count":192,"type":kind});
+                if kind == "VEC3" {
+                    a["min"] = json!([0, 9 * p, 0]);
+                    a["max"] = json!([8, 9 * p + 8, 0]);
+                }
+                accessors.push(a);
+            }
+            primitives.push(json!({"attributes":{"POSITION":2*p,"TEXCOORD_0":2*p+1},"material":p}));
+        }
+        fs::write(parent.join("attributes.bin"), &bytes).unwrap();
+        let texture = |seed: u32| {
+            image::RgbaImage::from_fn(edge, edge, |x, y| {
+                image::Rgba([
+                    (x * 7 + seed) as u8,
+                    (y * 5) as u8,
+                    ((x ^ y) * 3) as u8,
+                    255,
+                ])
+            })
+        };
+        texture(0).save(parent.join("a.png")).unwrap();
+        texture(90).save(parent.join("b.png")).unwrap();
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "meshes":[{"primitives":primitives}],"buffers":[{"uri":"attributes.bin","byteLength":bytes.len()}],
+            "bufferViews":views,"accessors":accessors,"images":[{"uri":"a.png"},{"uri":"b.png"}],
+            "textures":[{"source":0,"sampler":0},{"source":1,"sampler":1}],
+            "samplers":[{"minFilter":9987,"magFilter":9729,"wrapS":wraps[0],"wrapT":wraps[1]},{"minFilter":9987,"magFilter":9729}],
+            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}},{"pbrMetallicRoughness":{"baseColorTexture":{"index":1}}}]});
+        let input = parent.join("scene.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        (input, texture(0).into_raw())
+    }
+    /// The leaf GLB's JSON and its (width, height, wrapS, wrapT, mime) per texture.
+    #[allow(clippy::type_complexity)]
+    fn leaf_pages(output: &Path) -> (serde_json::Value, Vec<(u32, u32, u64, u64, String)>) {
+        let leaf = fs::read(output.join("leaves/000000000000.glb")).unwrap();
+        let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
+        let doc: serde_json::Value = serde_json::from_slice(&leaf[20..20 + json_len]).unwrap();
+        let bin = &leaf[20 + json_len + 8..];
+        let pages = doc["textures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| {
+                let png = t.get("source").is_some();
+                let source = if png {
+                    &t["source"]
+                } else {
+                    &t["extensions"]["KHR_texture_basisu"]["source"]
+                };
+                let image = &doc["images"][source.as_u64().unwrap() as usize];
+                let view = &doc["bufferViews"][image["bufferView"].as_u64().unwrap() as usize];
+                let at = view["byteOffset"].as_u64().unwrap_or(0) as usize;
+                let data = &bin[at..at + view["byteLength"].as_u64().unwrap() as usize];
+                let (w, h) = if png {
+                    image::load_from_memory(data)
+                        .unwrap()
+                        .into_rgba8()
+                        .dimensions()
+                } else {
+                    let n = |o: usize| u32::from_le_bytes(data[o..o + 4].try_into().unwrap());
+                    (n(20), n(24))
+                };
+                let sampler = &doc["samplers"][t["sampler"].as_u64().unwrap() as usize];
+                let wrap = |k: &str| sampler[k].as_u64().unwrap();
+                (
+                    w,
+                    h,
+                    wrap("wrapS"),
+                    wrap("wrapT"),
+                    image["mimeType"].as_str().unwrap().to_owned(),
+                )
+            })
+            .collect();
+        (doc, pages)
+    }
+    fn bake_leaf(input: &Path, output: &Path, profile: LeafProfile) -> serde_json::Value {
+        mesh_to_leaf_payloads(
+            LeafOutputRequest::new(input, output, profile)
+                .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                    crate::mesh_large::hlod::TRIANGLE_CAP,
+                ))
+                .with_jobs(NonZeroUsize::new(2).unwrap()),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let rows = fs::read_to_string(output.join("leaves.jsonl")).unwrap();
+        serde_json::from_str(rows.lines().next().unwrap()).unwrap()
+    }
+    /// UVs spanning whole periods of a repeating wrap keep the source whole on that
+    /// axis, with the source wrap, instead of unrolling one copy per period.
+    #[test]
+    fn repeated_uvs_publish_whole_source_periods() {
+        let work = tempfile::tempdir().unwrap();
+        // Lossless: both axes repeat, so the page is the source image itself.
+        let (input, source) =
+            repeat_fixture(&work.path().join("a"), [10497, 10497], [3., 2.], 64, false);
+        bake_leaf(&input, &work.path().join("a-out"), LeafProfile::Lossless);
+        let (doc, pages) = leaf_pages(&work.path().join("a-out"));
+        assert_eq!(pages, [(64, 64, 10497, 10497, "image/png".into())]);
+        let image = &doc["images"][0];
+        assert_eq!(image["mimeType"], "image/png");
+        let leaf = fs::read(work.path().join("a-out/leaves/000000000000.glb")).unwrap();
+        let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
+        let view = &doc["bufferViews"][image["bufferView"].as_u64().unwrap() as usize];
+        let at = 20 + json_len + 8 + view["byteOffset"].as_u64().unwrap_or(0) as usize;
+        let png = &leaf[at..at + view["byteLength"].as_u64().unwrap() as usize];
+        assert_eq!(
+            image::load_from_memory(png)
+                .unwrap()
+                .into_rgba8()
+                .into_raw(),
+            source
+        );
+        // Balanced, mirrored strip: only U spans a period; V is a CLAMP crop.
+        let (input, _) = repeat_fixture(
+            &work.path().join("b"),
+            [33648, 10497],
+            [19.2, 0.5],
+            256,
+            false,
+        );
+        let row = bake_leaf(&input, &work.path().join("b-out"), LeafProfile::Balanced);
+        let (_, pages) = leaf_pages(&work.path().join("b-out"));
+        assert_eq!(
+            row["densityDrop"], 0,
+            "19.2 periods would not fit one unrolled page"
+        );
+        assert_eq!((pages[0].0, pages[0].2, pages[0].3), (256, 33648, 33071));
+        assert!(pages[0].1 < 256 && pages[0].1 % 4 == 0, "{pages:?}");
+        // Mixed: a period page beside an ordinary atlas page, as two primitives.
+        let (input, _) = repeat_fixture(&work.path().join("c"), [10497, 10497], [2., 2.], 64, true);
+        bake_leaf(&input, &work.path().join("c-out"), LeafProfile::Balanced);
+        let (doc, pages) = leaf_pages(&work.path().join("c-out"));
+        let mut wraps: Vec<_> = pages.iter().map(|p| (p.2, p.3)).collect();
+        wraps.sort();
+        assert_eq!(wraps, [(10497, 10497), (33071, 33071)]);
+        let primitives = doc["meshes"].as_array().unwrap().iter();
+        assert_eq!(
+            primitives
+                .map(|m| m["primitives"].as_array().unwrap().len())
+                .sum::<usize>(),
+            2
+        );
+        // Under one period the binding keeps today's clamped crop.
+        let (input, _) = repeat_fixture(
+            &work.path().join("d"),
+            [10497, 10497],
+            [0.9, 0.9],
+            64,
+            false,
+        );
+        bake_leaf(&input, &work.path().join("d-out"), LeafProfile::Balanced);
+        assert!(leaf_pages(&work.path().join("d-out"))
+            .1
+            .iter()
+            .all(|p| (p.2, p.3) == (33071, 33071)));
+    }
+
     /// A mip-sampled page that misses every lossy step ships as its exact level-0 PNG
     /// with the source's mipmap sampler (viewer-generated mips, as in the lossless
     /// profile) instead of failing the run; the report names its leaf, page and misses.
