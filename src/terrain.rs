@@ -369,10 +369,42 @@ fn grid(
             heights.push(height);
         }
     }
+    // Emit the triangles of three valid nodes. Reject topology that storage
+    // collapses or turns away from the footprint's geodetic normal: scene
+    // height queries require a surface.
     let mut used = vec![false; columns * rows];
-    for t in triangles(columns, rows) {
-        if t.iter().all(|&k| heights[k].is_some()) {
-            t.iter().for_each(|&k| used[k] = true);
+    for row in 0..rows - 1 {
+        attempt.check()?;
+        for col in 0..columns - 1 {
+            let i = row * columns + col;
+            let cell = [
+                [i, i + 1, i + columns],
+                [i + 1, i + columns + 1, i + columns],
+            ]
+            .map(|t| (t, t.iter().all(|&k| heights[k].is_some())));
+            if !cell[0].1 && !cell[1].1 {
+                continue;
+            }
+            let longitude = raster.bounds[0]
+                + xs[col] as f64 * raster.pixel[0]
+                + (xs[col + 1] - xs[col]) as f64 * raster.pixel[0] / 2.;
+            let latitude = raster.bounds[1]
+                + ys[row] as f64 * raster.pixel[1]
+                + (ys[row + 1] - ys[row]) as f64 * raster.pixel[1] / 2.;
+            let (l, p) = (longitude.to_radians(), latitude.to_radians());
+            let up = [p.cos() * l.cos(), p.cos() * l.sin(), p.sin()];
+            let up: [f64; 3] =
+                std::array::from_fn(|axis| (0..3).map(|j| up[j] * frame.axes[axis][j]).sum());
+            for (t, _) in cell.into_iter().filter(|(_, valid)| *valid) {
+                t.iter().for_each(|&k| used[k] = true);
+                let [a, b, c] = t.map(|k| positions[k].0);
+                if !triangle_is_surface(a, b, c, up) {
+                    return Err(error(
+                        JobErrorKind::Unsupported,
+                        "terrain stored topology collapses or reverses a footprint triangle",
+                    ));
+                }
+            }
         }
     }
     let mut bounds = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
@@ -385,40 +417,10 @@ fn grid(
         extend(&mut bounds, position);
         max_position_error = max_position_error.max(error);
     }
-    let positions: Vec<_> = positions
+    let positions = positions
         .into_iter()
         .map(|(encoded, _, _)| encoded)
         .collect();
-    // Reject topology that storage collapses or turns away from the
-    // footprint's geodetic normal. Scene height queries require a surface.
-    for row in 0..rows - 1 {
-        attempt.check()?;
-        for col in 0..columns - 1 {
-            let i = row * columns + col;
-            let longitude = raster.bounds[0]
-                + xs[col] as f64 * raster.pixel[0]
-                + (xs[col + 1] - xs[col]) as f64 * raster.pixel[0] / 2.;
-            let latitude = raster.bounds[1]
-                + ys[row] as f64 * raster.pixel[1]
-                + (ys[row + 1] - ys[row]) as f64 * raster.pixel[1] / 2.;
-            let (l, p) = (longitude.to_radians(), latitude.to_radians());
-            let up = [p.cos() * l.cos(), p.cos() * l.sin(), p.sin()];
-            let up: [f64; 3] =
-                std::array::from_fn(|axis| (0..3).map(|j| up[j] * frame.axes[axis][j]).sum());
-            for [a, b, c] in [
-                [i, i + 1, i + columns],
-                [i + 1, i + columns + 1, i + columns],
-            ] {
-                let emitted = used[a] && used[b] && used[c];
-                if emitted && !triangle_is_surface(positions[a], positions[b], positions[c], up) {
-                    return Err(error(
-                        JobErrorKind::Unsupported,
-                        "terrain stored topology collapses or reverses a footprint triangle",
-                    ));
-                }
-            }
-        }
-    }
     Ok(glb::Grid {
         positions,
         used,
@@ -428,19 +430,6 @@ fn grid(
         max_position_error,
         height_range,
     })
-}
-/// The lattice triangles `(c,r),(c+1,r),(c,r+1)` and `(c+1,r),(c+1,r+1),(c,r+1)`
-/// of every cell.
-#[cfg(feature = "native-geospatial")]
-fn triangles(columns: usize, rows: usize) -> impl Iterator<Item = [usize; 3]> {
-    (0..rows - 1)
-        .flat_map(move |r| (0..columns - 1).map(move |c| r * columns + c))
-        .flat_map(move |i| {
-            [
-                [i, i + 1, i + columns],
-                [i + 1, i + columns + 1, i + columns],
-            ]
-        })
 }
 #[cfg(feature = "native-geospatial")]
 fn triangle_is_surface(a: [f64; 3], b: [f64; 3], c: [f64; 3], up: [f64; 3]) -> bool {
@@ -497,21 +486,24 @@ impl Sheet {
         let u = (x - self.xs[c] as f64) / (self.xs[c + 1] - self.xs[c]) as f64;
         let v = (y - self.ys[r] as f64) / (self.ys[r + 1] - self.ys[r]) as f64;
         let lower = u + v <= 1. && self.emitted(c, r, false);
-        if !lower && !(u + v >= 1. && self.emitted(c, r, true)) {
-            return None;
-        }
+        (lower || u + v >= 1. && self.emitted(c, r, true)).then(|| self.plane(c, r, x, y))
+    }
+    /// The point at `(x, y)` on cell `(c, r)`'s two triangles, emitted or not.
+    fn plane(&self, c: usize, r: usize, x: f64, y: f64) -> [f64; 3] {
+        let u = (x - self.xs[c] as f64) / (self.xs[c + 1] - self.xs[c]) as f64;
+        let v = (y - self.ys[r] as f64) / (self.ys[r + 1] - self.ys[r]) as f64;
         // Lattice nodes are the stored vertices themselves.
         if (u == 0. || u == 1.) && (v == 0. || v == 1.) {
-            return Some(self.vertex(c + u as usize, r + v as usize));
+            return self.vertex(c + u as usize, r + v as usize);
         }
         let (b, c_) = (self.vertex(c + 1, r), self.vertex(c, r + 1));
-        Some(if lower {
+        if u + v <= 1. {
             let a = self.vertex(c, r);
             std::array::from_fn(|i| a[i] + u * (b[i] - a[i]) + v * (c_[i] - a[i]))
         } else {
             let d = self.vertex(c + 1, r + 1);
             std::array::from_fn(|i| d[i] + (1. - u) * (c_[i] - d[i]) + (1. - v) * (b[i] - d[i]))
-        })
+        }
     }
     /// The surface point at `(x, y)`, if a cell around it covers it.
     fn at(&self, x: f64, y: f64) -> Option<[f64; 3]> {
@@ -584,6 +576,9 @@ fn deviation(patch: &Patch, sheet: &Sheet, children: &[(usize, Sheet)], cells: u
             if !full && (coarse.contains(&true) || some) {
                 worst = worst.max(sheet.diagonal(c, r));
             }
+            if !coarse.contains(&true) {
+                continue;
+            }
             let measure = |x: f64, y: f64| match (fine.at(x, y), sheet.cell(c, r, x, y)) {
                 (Some(a), Some(b)) => distance(a, b),
                 _ => 0.,
@@ -592,7 +587,7 @@ fn deviation(patch: &Patch, sheet: &Sheet, children: &[(usize, Sheet)], cells: u
                 for (i, &x) in fx.iter().enumerate() {
                     if full {
                         // Child lattice nodes are its stored vertices: no search needed.
-                        let here = sheet.cell(c, r, x as f64, y as f64).expect("full cell");
+                        let here = sheet.plane(c, r, x as f64, y as f64);
                         worst = worst.max(distance(fine.vertex(rx.start + i, ry.start + j), here));
                     } else {
                         worst = worst.max(measure(x as f64, y as f64));
@@ -1668,6 +1663,18 @@ mod tests {
                 h
             }
         })
+    }
+    /// The lattice triangles `(c,r),(c+1,r),(c,r+1)` and `(c+1,r),(c+1,r+1),(c,r+1)`
+    /// of every cell.
+    fn triangles(columns: usize, rows: usize) -> impl Iterator<Item = [usize; 3]> {
+        (0..rows - 1)
+            .flat_map(move |r| (0..columns - 1).map(move |c| r * columns + c))
+            .flat_map(move |i| {
+                [
+                    [i, i + 1, i + columns],
+                    [i + 1, i + columns + 1, i + columns],
+                ]
+            })
     }
     fn sheet(pyramid: &Pyramid, plan: &PreparedPlan, patch: &Patch) -> Sheet {
         let g = pyramid.grid(patch, plan.storage(patch)).unwrap();
