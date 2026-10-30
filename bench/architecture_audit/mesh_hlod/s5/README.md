@@ -21,6 +21,26 @@ child components from published keys, against its `droppedComponents` declaratio
 and its geometricError (exact distances); `drop_controls.py` pins an honest drop and
 its undeclared, understated and border-touching refusals for both validators.
 
+D11 border relief (A1, 2026-10-30): `relief.py` re-derives every declared relief step
+from source incidence alone, in IEEE double like the producer:
+- the shared border graph per depth;
+- live junctions (degree, owner changes, terminal leaves, source-open ends, face retention);
+- the walk order, cycle anchors and open-chain witnesses;
+- isolated ears on relieved chains;
+- the corridor greedy;
+- each coarse cell's item count, the 85%/75% trigger and request at `--triangle-cap`,
+  the owner maximum and the finer-level monotone minimum.
+
+A certificate whose `step` differs is `borderReliefStep`. `borders.py` also requires:
+- certified ε within E_d/16 x 2^step;
+- G at least 8 x each relieved certificate (`borderReliefFloor`);
+- mixed-depth gaps on relieved arcs within the coarser G/8.
+
+The rebuild needs every frozen-tree level delivered (no collapsed single-child chain, no
+link placeholder); otherwise the steps are listed in `uninspected`. `border_controls.py`
+pins an honest relieved arc at cap 4 and its wrong-step, understated-step and unfloored
+mutants.
+
 ## Archive validation
 
 `src/validate/identity.rs` projects only owned C1-admitted raw JSON, preserving

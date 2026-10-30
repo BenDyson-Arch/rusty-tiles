@@ -814,11 +814,14 @@ def _bits(key):
 
 
 class Audit:
-    def __init__(self, store, tiles, leaves, archive, require, extent):
+    def __init__(self, store, tiles, leaves, archive, require, extent, cap=8192):
         self.store, self.tiles, self.leaves = store, tiles, leaves
         self.archive, self.require, self.extent = archive, require, extent
         self.ids = {}
         self.stats = collections.Counter()
+        self.cap = cap
+        # Border relief (A1): declared ladder step per tile and delivered chord.
+        self.steps = {}
 
     def canonical(self, key):
         packed = _bits(key)
@@ -892,6 +895,15 @@ class Audit:
             if c.get('terminalLock'):
                 claims.update(self.canonical(k) for k in c['endpoints'])
         self.terminal_claims[tid] = claims
+        steps = {}
+        for c in contract['certificates']:
+            step = c.get('step', 0)
+            require(type(step) is int and 0 <= step <= 8, 'borderReliefStep',
+                    f'tile {tid}: relief step {step!r} outside the ladder 0..8')
+            a, b = (self.canonical(k) for k in c['endpoints'])
+            if a is not None and b is not None and a != b:
+                steps[_key(a, b)] = step
+        self.steps[tid] = steps
         return depth, e
 
     def certify(self, t, r, e):
@@ -931,8 +943,14 @@ class Audit:
             eps = c['epsilon']
             require(type(eps) in (int, float) and math.isfinite(eps) and eps >= 0, 'borderCertificate',
                     f'tile {tid}: invalid epsilon {eps!r}')
-            require(Fraction(eps) * 16 <= Fraction(e), 'borderCertificate',
-                    f'tile {tid}: epsilon {eps} above E_{depth}/16 = {e / 16}')
+            step = c.get('step', 0)
+            require(Fraction(eps) * 16 <= Fraction(e) * 2 ** step, 'borderCertificate',
+                    f'tile {tid}: epsilon {eps} above E_{depth}/16 x 2^{step} = {e / 16 * 2 ** step}')
+            # A1 floor: an exact deeper neighbour (a leaf) meets a relieved chord at its
+            # whole certified displacement, so G covers 8 x it.
+            if step > 0:
+                require(Fraction(eps) * 8 <= Fraction(t['g']), 'borderReliefFloor',
+                        f'tile {tid}: G {t["g"]} below 8 x its relieved certificate {eps}')
             epsilon_max = max(epsilon_max, eps)
             if a == b:
                 # A point-only contact: a claim, re-derived from incidence above.
@@ -1122,12 +1140,17 @@ class Audit:
                     continue
                 (tc, dc), (tf, df) = sorted(((tx, dx), (ty, dy)), key=lambda v: v[1])
                 gap2 = _distance2(image(point, lx, ux, ix, mx), image(point, ly, uy, iy, my))
-                limit = min(Fraction(self.scale(dc)), Fraction(tc['g'])) / 8
+                # Relieved chords (A1): the gap is bounded by the coarser G alone, which
+                # publishes at least 8 x both certified displacements.
+                relieved = any(self.steps.get(int(t['id']), {}).get((lo_, hi_), 0) > 0
+                               for t, lo_, hi_ in ((tx, lx, ux), (ty, ly, uy)) if lo_ is not None)
+                limit = (Fraction(tc['g']) if relieved
+                         else min(Fraction(self.scale(dc)), Fraction(tc['g']))) / 8
                 self.stats['maxMixedGapOverE'] = max(self.stats['maxMixedGapOverE'],
                                                      math.sqrt(gap2) / (self.scale(dc) / 8))
                 require(gap2 <= limit * limit, 'mixedDepthBorderGap',
                         f'tiles {tc["id"]} (depth {dc}) and {tf["id"]} (depth {df}): gap {math.sqrt(gap2)} '
-                        f'above min(E, G)/8 = {float(limit)}')
+                        f'above {"G" if relieved else "min(E, G)"}/8 = {float(limit)}')
         # Terminal contacts: a leaf no deeper than a coarse owner locks it exactly.
         owners = [l for (l,) in store.db.execute('SELECT leaf FROM canonical_owners WHERE point=?', (point,))]
         for t, lower_, *_ in coarse:
@@ -1525,7 +1548,7 @@ class Audit:
         self.stats['omittedCells'] = sum(cells.values())
 
 
-def inspect(store, tiles, leaves, archive, require, audit_path=None, extent=None, census=None):
+def inspect(store, tiles, leaves, archive, require, audit_path=None, extent=None, census=None, cap=8192):
     """D11 audit after the census. Without a sidecar, contraction is refused."""
     census = census or {}
     started = time.process_time()
@@ -1536,7 +1559,7 @@ def inspect(store, tiles, leaves, archive, require, audit_path=None, extent=None
                     'terminal locks and topology receipts need the S1b audit sidecar'])
     data = open(audit_path, 'rb').read()
     rows = [json.loads(line) for line in data.splitlines() if line.strip()]
-    audit = Audit(store, tiles, leaves, archive, require, extent)
+    audit = Audit(store, tiles, leaves, archive, require, extent, cap)
     omitted = audit.join(rows)
     audit.terminal_claims = {}
     contexts = {}
@@ -1555,6 +1578,16 @@ def inspect(store, tiles, leaves, archive, require, audit_path=None, extent=None
         retained = audit.certify(t, r, e)
         audit.topology(t, r, e, retained)
     audit.omission(omitted)
+    # A1: every declared relief step against an independent source re-derivation.
+    import relief
+
+    def arcs_of(tid, c):
+        a, b = (audit.canonical(k) for k in c['endpoints'])
+        row = store.db.execute('SELECT path FROM border_arcs WHERE tile=? AND a=? AND b=?',
+                               (tid, *_key(a, b))).fetchone()
+        return json.loads(row[0])
+    relief_inspected = relief.inspect(store, tiles, leaves, audit.records, arcs_of, cap, extent,
+                                      require, audit.stats)
     stats = dict(audit.stats)
     stats['uninspected'] = [
         'history-dependent receipt counters (reconstructedFaces, duplicateFaces, remeshedVertices, remeshRounds, '
@@ -1567,6 +1600,9 @@ def inspect(store, tiles, leaves, archive, require, audit_path=None, extent=None
         'topology losses (drops, closures, openings, boundary changes) are sampled witnesses under D2: exact '
         'distances at S1b\'s quarter-grid controls and this checker\'s barycentric level-8 grid on every affected '
         'face, never a continuous maximum (a loss between samples is not bounded)']
+    if not relief_inspected:
+        stats['uninspected'].append('border relief steps (A1): the delivered tree hides a frozen-tree level '
+                                    '(a collapsed chain or link placeholder), so cells cannot be rebuilt')
     stats.update(auditCpuSeconds=time.process_time() - started, audited=True, sidecarSha256=hashlib.sha256(data).hexdigest(), sidecarBytes=len(data),
                  records=len(audit.records), omittedRecords=len(omitted), extent=extent)
     return stats

@@ -253,7 +253,7 @@ def check_leaf(f,manifest,stats=None,*,geometry=True):
 
 
 def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='root',profile='hlod',producer_manifest=None,
-          border_audit=None,producer_report=None):
+          border_audit=None,producer_report=None,triangle_cap=8192):
     """Check every published cell. Only one payload/tile is decoded at a time.
 
     root frame removes the archive's common placement, conjugating relative tile
@@ -357,7 +357,7 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
             # D11: the S1b audit sidecar is an index; every claim is re-derived.
             import borders
             result['borders']=borders.inspect(store,tiles,leaves,archive,require,border_audit,
-                                              extent=store.extent(),census=result)
+                                              extent=store.extent(),census=result,cap=triangle_cap)
             if producer_report is not None:
                 require(result['borders'].get('audited'),'borderAudit','a producer report needs the audit sidecar')
                 with open(producer_report) as f:
@@ -444,11 +444,13 @@ if __name__=='__main__':
     p.add_argument('--producer-manifest',help='S1 stage manifest.json; compared only after independent derivation')
     p.add_argument('--border-audit',help='S1b borders.jsonl audit sidecar: an index whose claims are re-derived')
     p.add_argument('--producer-report',help='producer run report naming the audit sidecar hash/bytes')
+    p.add_argument('--triangle-cap',type=int,default=8192,help='hard payload cap the A1 relief trigger is a share of')
     a=p.parse_args()
     try:
         print(json.dumps(audit(a.root,a.expected,scratch=a.scratch,work_limit=a.work_limit,
                               coordinate_frame=a.coordinate_frame,profile=a.profile,producer_manifest=a.producer_manifest,
-                              border_audit=a.border_audit,producer_report=a.producer_report),sort_keys=True))
+                              border_audit=a.border_audit,producer_report=a.producer_report,
+                              triangle_cap=a.triangle_cap),sort_keys=True))
     except Failure as e:
         print(json.dumps(dict(ok=False,check=e.check,detail=e.detail)))
         raise SystemExit(1)

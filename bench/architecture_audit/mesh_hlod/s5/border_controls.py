@@ -163,7 +163,7 @@ class Fixture:
         faces = [f for name in leaves for f in self.leaf_faces(name) if f not in drop]
         if tuple(keep) != (0, 1, 2, 3, 4) or fan:
             # Replace the unit column beside the border by a fan over the kept arc.
-            lo, hi = (3, 4.01) if cell == 'A' else (4, 5)
+            lo, hi = (3, 4.5) if cell == 'A' else (4, 5)
             faces = [f for f in faces if not all(lo <= p[0] <= hi for p in f)]
             outer = [point(3, 0, z) for z in range(5)] if cell == 'A' else [point(5, 0, z) for z in range(5)]
             ring = outer + [self.P[k] for k in sorted(keep, reverse=True)]
@@ -200,6 +200,13 @@ def build(case):
         keep_a = keep_b = (0, 4)
     if name == 'same-depth-gap':
         keep_a = (0, 4)
+    # Border relief (A1) at a cap of 4: the noisy arc keeps 4 chords per cell at step 0
+    # (above 85%); step 6 (E_1/16 x 64, past the per-axis corridor) leaves 2 (75%).
+    relief_step = 0
+    if name.startswith('relief'):
+        keep_a = keep_b = (0, 2, 4)
+        relief_step = {'relief-step-wrong': 7, 'relief-step-understated': 0}.get(name, 6)
+        g_a = g_b = 0.03 if name == 'relief-unfloored' else 0.041
     if name.startswith('mixed'):
         tree, keep_m = 'mixed', (0, 4)
         g_a, g_b = 0.004, 0.02
@@ -337,6 +344,8 @@ def build(case):
             certificates.append(dict(endpoints=[key(a_), key(b_)], chain=[key(fx.P[0]), key(fx.P[1])],
                                      origin=key(fx.P[0]), first=first, end=end,
                                      epsilon=eps * (1 + 1e-6) if eps else 0.0, terminalLock=terminal))
+            if relief_step:
+                certificates[-1]['step'] = relief_step
         interface = [dict(leaf=0, a=key(fx.P[k]), b=key(fx.P[k]), lo=0, hi=3) for k in keep]
         interface += [dict(leaf=0, a=key(fx.P[f]), b=key(fx.P[e]), lo=0, hi=3) for f, e in arcs]
         if name == 'dropped-border' and cell == 'A':
@@ -442,8 +451,18 @@ CASES = [
     ('unknown-payload', 'borderAudit', None), ('omission-unreported', 'omissionReport', None),
     ('dropped-unreported', 'topologyReceipt', 'coarseDrops'),
     ('dropped-tampered-g', 'topologyReceipt', 'coarseDrops'),
+    # Border relief (A1): an honest relieved arc passes both; a declared step the source
+    # re-derivation does not give, or a tolerance below the certified displacement, is
+    # a sidecar lie; G below the relief floor is refused from the archive too.
+    ('relief', None, None),
+    ('relief-step-wrong', 'borderReliefStep', None),
+    ('relief-step-understated', 'borderCertificate', None),
+    ('relief-unfloored', 'borderReliefFloor', 'borderDisplacement'),
 ]
-OFFSETS = {'mixed-beyond-g8': 0.001}
+OFFSETS = {'mixed-beyond-g8': 0.001, 'relief': 0.01, 'relief-step-wrong': 0.01,
+           'relief-step-understated': 0.01, 'relief-unfloored': 0.01}
+# The hard cap each case is checked at (A1's trigger is a share of it).
+CAPS = {'relief': 4, 'relief-step-wrong': 4, 'relief-step-understated': 4, 'relief-unfloored': 4}
 
 
 def _rehash(records, files):
@@ -910,7 +929,8 @@ def run(root, binary=None, sheet_n=120):
     for case in generate(root):
         name = case['name']
         try:
-            result = audit(root / name, root / f'{name}.source.json', border_audit=root / f'{name}.borders.jsonl')
+            result = audit(root / name, root / f'{name}.source.json', border_audit=root / f'{name}.borders.jsonl',
+                           triangle_cap=CAPS.get(name, 8192))
             got = None
             assert result['borders']['audited'], name
         except Failure as e:
@@ -921,6 +941,9 @@ def run(root, binary=None, sheet_n=120):
         entry = dict(name=name, oracle=got)
         if name in ('contracted', 'mixed-within', 'same-depth-gap'):
             assert result.get('contractedBorderArcs', 0) > 0 or got, (name, result)
+        if name == 'relief':
+            assert result['borders'].get('reliefCellsRederived') == 2, result['borders']
+            assert result['borders'].get('reliefStepsChecked', 0) >= 4, result['borders']
         if binary is not None:
             code, report = native(binary, root / name, root / f'{name}.3tz')
             label = case['archiveCheck']
