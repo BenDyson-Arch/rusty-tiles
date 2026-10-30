@@ -5461,6 +5461,10 @@ mod containment_controls {
 
     #[test]
     fn vector_tiles_without_content_refine_until_a_pixel() {
+        use sha2::Digest;
+        let state = b"{}".to_vec();
+        let marker =
+            json!({"vectorBuildStateSha256": format!("{:x}", sha2::Sha256::digest(&state))});
         let files = |error: f64, vector: bool| {
             let mut root = tile(wide());
             root["geometricError"] = json!(error);
@@ -5468,10 +5472,12 @@ mod containment_controls {
             let mut doc = json!({"asset":{"version":"1.1"},"geometricError":error,"root":root,
                 "extensionsUsed":["3DTILES_content_gltf_vector"]});
             if vector {
-                doc["asset"]["extras"] = json!({"vectorBuildStateSha256":"00"});
+                doc["asset"]["extras"] = marker.clone();
             }
             let doc = serde_json::to_vec(&doc).unwrap();
-            vec![("tileset.json", doc), ("a.glb", with_doc(|_| {}))]
+            let mut files = vec![("tileset.json", doc), ("a.glb", with_doc(|_| {}))];
+            files.extend(vector.then(|| ("vector-build.json", state.clone())));
+            files
         };
         // 16 x the root box diagonal, 2 x |(10, 10, 10)|.
         let floor = 32. * 300f64.sqrt();
@@ -5484,7 +5490,8 @@ mod containment_controls {
         let mut files = implicit_files(r(), subtree(&[0, 1], &[1], None), &[(1, point_at(0.))]);
         assert!(run(&files).is_ok());
         let mut doc: Value = serde_json::from_slice(&files[0].1).unwrap();
-        doc["asset"]["extras"] = json!({"vectorBuildStateSha256":"00"});
+        doc["asset"]["extras"] = marker;
+        files.push(("vector-build.json", state));
         files[0].1 = serde_json::to_vec(&doc).unwrap();
         assert!(run(&files)
             .unwrap_err()
