@@ -27,6 +27,10 @@ impl VoxelGrid {
         (cell[0] * self.side + cell[1]) * self.side + cell[2]
     }
 
+    pub fn side(&self) -> usize {
+        self.side
+    }
+
     pub fn error_bound(&self) -> f64 {
         let cell = self.extent.map(|v| v / self.side as f64);
         cell[0].hypot(cell[1]).hypot(cell[2])

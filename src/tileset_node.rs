@@ -99,6 +99,11 @@ pub(crate) fn enclose_children<'a>(
     Ok(error)
 }
 
+/// An empty parent's geometric error is this multiple of its box diagonal: until its whole
+/// box projects below about one pixel at CesiumJS's default maximum screen-space error of
+/// 16, the viewer refines it towards the leaves that hold the geometry.
+pub(crate) const EMPTY_PARENT_SCALE: f64 = 16.;
+
 /// Tileset-level geometric error: at least 1 m, the root box `diagonal`, and
 /// `root_margin` times the root's own error. A margin above 1 is a converter
 /// policy that leaves an SSE interval in which the root itself renders.

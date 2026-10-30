@@ -162,6 +162,25 @@ pub(crate) fn encode_ktx2_mips_decoded(
     encode_ktx2_mips_floor_checked(mips, mode, params)?.map_err(|miss| miss.error)
 }
 
+/// Encodes one level and decodes it without the corruption floors: a probe's texels,
+/// never published. UASTC decodes each 4x4 block as it would inside any image.
+pub(crate) fn encode_decoded_unverified(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    mode: Mode,
+    params: Params,
+) -> Result<Vec<u8>, JobError> {
+    let level = [MipLevel {
+        rgba,
+        width,
+        height,
+    }];
+    check_mips(&level, mode, params)?;
+    let ktx2 = encode_mips_unverified(&level, mode, params)?;
+    decode_level_rgba(&ktx2, 0, width, height)
+}
+
 /// A decoded level that missed the verification's error floor ([`ErrorFloor`])
 /// or detail floor ([`DetailFloor`]): the container is well formed and decodes,
 /// but this encode does not reproduce the input closely enough. A caller may

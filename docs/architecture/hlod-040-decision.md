@@ -302,6 +302,13 @@ and for normal/data/MASK cases where ETC1S misses class-specific floors. Keep
 transfer, normal renormalization, MASK coverage and ID-safe lossless handling.
 PNG's existing lossless sampler policy remains distinct from authored KTX2 mips.
 
+**Amendment, 2026-10-30 (PR #302).** In fast, balanced and quality, a mip-sampled leaf
+page that no lossy step delivers within its gates, normal maps included, ships as its
+exact level-0 PNG with its sampler; the viewer generates its coarser levels (no
+renormalization or linear-light filtering), outside the decoded guarantee, rather than
+failing the run. Each such page is declared in the report and `conversion.json`
+(`viewer_mip_fallback_pages`, uncapped `viewer_mip_fallbacks`).
+
 ETC1S is a bandwidth-oriented recommendation, not an assertion that its encoder
 or every GPU transcode target is fastest. Make the final default choice from
 **one integrated 2048 acceptance campaign**: hold geometry/charts fixed, compare
@@ -512,6 +519,18 @@ included. Only if that publishes nothing is the cell rebuilt with the last resor
 (contraction fallbacks, touching-path pins), so every tile the strategies build is
 unchanged. A cell those strategies fit only by dropping keeps its drops even where a
 last resort would fit without them: one such cell in 160 synthetic city blocks.
+
+Staged reduction (2026-10-30): if fix 2's build also publishes nothing, a third build reruns
+the strategies with each first reduction staged. It steps from the current mesh toward the
+cap, and the unchanged fold guard, the interface points and segments, and component
+survival judge every step. A refused step keeps only the faces around the flagged vertices
+and retries; at a plateau, border carriers (unlocked vertices next to an interface point)
+merge into an adjacent carrier, never onto an interface point. Steps, tries and merge passes
+are fixed constants. Contact pins are not applied inside it: the fold guard refuses any new
+edge between two contacts that the source does not support, at every step, and the staged
+output is only a first proposal that develop's checks (interface retention, the full guard,
+topology changes, S2) still judge. Tiles the earlier builds publish are unchanged. The audit
+records only this build's accepted proposal. Walem: 48 omitted cells to 14.
 
 ## Numeric acceptance contract (proposed, not measured passes)
 

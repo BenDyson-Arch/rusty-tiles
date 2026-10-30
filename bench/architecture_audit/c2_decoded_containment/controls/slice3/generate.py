@@ -369,11 +369,12 @@ def main(argv):
         keep = (r.get("source") or "").startswith(("W", "implicit_read")) and r["id"] not in have
         if keep and ((not forest_dir and r["control"] != "S3-19") or (not pre_dir and r["control"] == "S3-19")):
             built.rows.append({k: v for k, v in r.items() if k != "file"} | {"file": r["file"]})
+    committed = {}  # sha256 -> first committed file: byte-identical controls share one fixture
     for r in built.rows:
         if "file" in r:
             continue
         small = r["bytes"] <= SMALL
-        r["file"] = ("fixtures/%s.3tz" % r["id"]) if small else ("evidence:%s.3tz" % r["id"])
+        r["file"] = committed.setdefault(r["sha256"], "fixtures/%s.3tz" % r["id"]) if small else ("evidence:%s.3tz" % r["id"])
     if check:
         want = {r["id"]: r["sha256"] for r in old["cases"]}
         bad = [r["id"] for r in built.rows if r["id"] in want and want[r["id"]] != r["sha256"]]

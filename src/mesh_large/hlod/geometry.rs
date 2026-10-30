@@ -62,6 +62,9 @@ pub(crate) struct Built {
     pub retries: u32,
     /// Published by the last-resort build (`build_parent`).
     pub last_resort: bool,
+    /// Proposed by the staged build. Only an accepted one is audited: its rejected
+    /// proposals revisit the earlier builds' strategies (`audit::topology_attempt`).
+    pub staged: bool,
     pub interface_vertices: u32,
     pub interface_segments: u32,
     /// Historical receipt field; proposals are rejected rather than reoriented.
@@ -211,6 +214,226 @@ fn missing_among(
     (edges, lost)
 }
 
+// Staged reduction (`Resort::Staged`), fixed bounds: steps, tries of a refused step, its
+// least size, carrier-merge rounds and passes.
+const STAGES: u32 = 120;
+const STAGE_TRIES: u32 = 10;
+const MIN_STEP: usize = 4;
+const MERGE_ROUNDS: u32 = 4;
+const MERGE_PASSES: u32 = 32;
+
+/// Reduce toward the cap in steps from the current mesh (the first a third of the
+/// excess). The unchanged guard, the interface items and component survival judge each
+/// step; a refused step keeps its own faces around the flagged vertices and is redone,
+/// then halves. At a plateau border carriers merge, then the steps resume. The error is
+/// the largest step's meshopt estimate against its previous step (merges add none): a
+/// lower bound, as S2 measures the published G.
+fn staged_reduce(
+    merged: &Merged,
+    source: &[[u32; 3]],
+    interface: &[InterfaceRow],
+    locked: &[bool],
+    cap: usize,
+) -> (Vec<[u32; 3]>, f64) {
+    let guard = folds::Source::new(&merged.positions, source).with_boundary(interface);
+    let segments: HashSet<(Key, Key)> = interface
+        .iter()
+        .filter(|r| !r.is_vertex())
+        .map(|r| (r.a, r.b))
+        .collect();
+    let points = interface_points(interface);
+    let (mut current, mut error) = (merged.triangles.clone(), 0f64);
+    for _ in 0..MERGE_ROUNDS {
+        let mut step = (current.len().saturating_sub(cap) / 3).max(1);
+        for _ in 0..STAGES {
+            if current.len() <= cap {
+                break;
+            }
+            step = step.min(current.len() - cap);
+            let target = current.len() - step;
+            let component = topology::components(&Merged {
+                triangles: current.clone(),
+                ..merged.clone()
+            });
+            let mut seen = HashSet::default();
+            let mut keep: Vec<bool> = current
+                .iter()
+                .map(|t| seen.insert(component[t[0] as usize]))
+                .collect();
+            let mut done = false;
+            for _ in 0..STAGE_TRIES {
+                let (kept, rest): (Vec<_>, Vec<_>) =
+                    current.iter().zip(&keep).partition(|(_, k)| **k);
+                let kept: Vec<[u32; 3]> = kept.into_iter().map(|(t, _)| *t).collect();
+                let fixed: HashSet<u32> = kept.iter().flatten().copied().collect();
+                let rest: Vec<[u32; 3]> = rest.into_iter().map(|(t, _)| *t).collect();
+                let (mut out, e) = simplify(
+                    merged,
+                    &rest,
+                    &|v| locked[v as usize] || fixed.contains(&v),
+                    target.saturating_sub(kept.len()),
+                );
+                out.extend(kept);
+                let mut bad = guard.violations(&merged.positions, &out);
+                let (edges, lost) = missing(&out, &merged.keys, &segments, &points);
+                for (v, k) in merged.keys.iter().enumerate() {
+                    bad[v] |= lost.contains(k) || edges.iter().any(|(a, b)| a == k || b == k);
+                }
+                if !bad.contains(&true) {
+                    if out.len() < current.len() {
+                        (current, error, done) = (out, error.max(e), true);
+                    }
+                    break;
+                }
+                let before = keep.iter().filter(|k| **k).count();
+                for (k, t) in keep.iter_mut().zip(&current) {
+                    *k |= t.iter().any(|&v| bad[v as usize]);
+                }
+                if keep.iter().filter(|k| **k).count() == before {
+                    break;
+                }
+            }
+            if !done {
+                if step <= MIN_STEP {
+                    break;
+                }
+                step /= 2;
+            }
+        }
+        if current.len() <= cap
+            || !carrier_merge(merged, &guard, locked, &points, &mut current, cap)
+        {
+            break;
+        }
+    }
+    (current, error)
+}
+
+/// Merge border carriers (unlocked vertices next to an interface point, off free edges)
+/// into an adjacent carrier, shortest edge first, never onto an interface point. A
+/// collapse keeps each moved face's orientation and area and every other vertex's last
+/// face, and passes the guard on the affected stars (exact: they hold every face on a
+/// changed edge). A pass's collapses have disjoint stars; a pass the whole-mesh guard
+/// refuses is dropped. Whether any merged.
+fn carrier_merge(
+    merged: &Merged,
+    guard: &folds::Source,
+    locked: &[bool],
+    points: &HashSet<Key>,
+    faces: &mut Vec<[u32; 3]>,
+    cap: usize,
+) -> bool {
+    let p = &merged.positions;
+    let border = |v: u32| points.contains(&merged.keys[v as usize]);
+    let mut any = false;
+    for _ in 0..MERGE_PASSES {
+        if faces.len() <= cap {
+            break;
+        }
+        let mut star: HashMap<u32, Vec<usize>> = HashMap::default();
+        let mut uses: HashMap<(u32, u32), u32> = HashMap::default();
+        for (i, t) in faces.iter().enumerate() {
+            for k in 0..3 {
+                star.entry(t[k]).or_default().push(i);
+                let (a, b) = (t[k], t[(k + 1) % 3]);
+                *uses.entry((a.min(b), a.max(b))).or_default() += 1;
+            }
+        }
+        let free: HashSet<u32> = uses
+            .iter()
+            .filter(|(_, n)| **n != 2)
+            .flat_map(|(e, _)| [e.0, e.1])
+            .collect();
+        let carrier = |v: u32| {
+            !locked[v as usize]
+                && !border(v)
+                && !free.contains(&v)
+                && star[&v]
+                    .iter()
+                    .any(|&f| faces[f].iter().any(|&u| border(u)))
+        };
+        let mut candidates: Vec<(f64, u32, u32)> = uses
+            .keys()
+            .filter(|&&(a, b)| carrier(a) && carrier(b))
+            .map(|&(a, b)| {
+                let d = (0..3)
+                    .map(|i| (f64::from(p[a as usize][i]) - f64::from(p[b as usize][i])).powi(2))
+                    .sum();
+                (d, a, b)
+            })
+            .collect();
+        candidates.sort_by(|x, y| x.0.total_cmp(&y.0).then((x.1, x.2).cmp(&(y.1, y.2))));
+        let (mut next, mut dead) = (faces.clone(), vec![false; faces.len()]);
+        let (mut alive, mut used, mut done) = (faces.len(), HashSet::default(), 0);
+        for &(_, a, b) in &candidates {
+            if alive <= cap {
+                break;
+            }
+            if used.contains(&a) || used.contains(&b) {
+                continue;
+            }
+            for (from, to) in [(a, b), (b, a)] {
+                let change: Option<HashMap<usize, Option<[u32; 3]>>> = star[&from]
+                    .iter()
+                    .map(|&f| {
+                        let t = faces[f];
+                        if t.contains(&to) {
+                            return Some((f, None));
+                        }
+                        let n = t.map(|v| if v == from { to } else { v });
+                        let (o, q) = (topology::normal(p, t), topology::normal(p, n));
+                        let kept = q.iter().any(|&x| x != 0.)
+                            && (0..3).map(|i| o[i] * q[i]).sum::<f64>() > 0.;
+                        kept.then_some((f, Some(n)))
+                    })
+                    .collect();
+                let Some(change) = change else { continue };
+                let orphan = change.iter().filter(|(_, n)| n.is_none()).any(|(f, _)| {
+                    faces[*f].iter().any(|&v| {
+                        v != from
+                            && star[&v]
+                                .iter()
+                                .all(|g| change.get(g).is_some_and(Option::is_none))
+                    })
+                });
+                let mut ids: HashSet<usize> = star[&to].iter().copied().collect();
+                for v in change.values().flatten().flatten() {
+                    ids.extend(star[v].iter().copied());
+                }
+                let local: Vec<[u32; 3]> = ids
+                    .iter()
+                    .filter_map(|f| change.get(f).copied().unwrap_or(Some(faces[*f])))
+                    .collect();
+                if orphan || guard.rejects(p, &local) {
+                    continue;
+                }
+                for &f in star[&from].iter().chain(&star[&to]) {
+                    used.extend(faces[f]);
+                }
+                for (f, n) in change {
+                    match n {
+                        Some(n) => next[f] = n,
+                        None => (dead[f], alive) = (true, alive - 1),
+                    }
+                }
+                done += 1;
+                break;
+            }
+        }
+        let out: Vec<[u32; 3]> = next
+            .into_iter()
+            .zip(&dead)
+            .filter(|(_, d)| !**d)
+            .map(|(t, _)| t)
+            .collect();
+        if done == 0 || guard.violations(p, &out).contains(&true) {
+            break;
+        }
+        (*faces, any) = (out, true);
+    }
+    any
+}
+
 /// meshopt over a subset of the merged triangles, compacted to the vertices they use.
 /// Returns triangles in merged vertex indices and the absolute error estimate.
 fn simplify(
@@ -326,7 +549,8 @@ fn oriented(t: &[u32; 3]) -> [u32; 3] {
 /// immediate children enter this job. After a stalled reduction, explicitly remesh the
 /// interior; omission is the reported last resort and propagates upwards in the walk.
 /// Only when that fails, and with `last_resorts` (production: always), the whole build
-/// runs again with fix 2's last resorts (`build`), so no tile it builds changes.
+/// runs again with fix 2's last resorts, then with staged reduction (`Resort`), so no tile
+/// an earlier build publishes changes.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_parent(
     tile: TileKey,
@@ -338,23 +562,36 @@ pub(crate) fn build_parent(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
     last_resorts: bool,
 ) -> Result<Outcome, JobError> {
-    let first = build(
-        tile, children, caps, contract, mapping, assess, check, false,
-    )?;
+    let mut run = |r| build(tile, children, caps, contract, mapping, assess, check, r);
+    let first = run(Resort::None)?;
     if first.built.is_some() || !last_resorts {
         return Ok(first);
     }
-    let mut last = build(tile, children, caps, contract, mapping, assess, check, true)?;
+    let mut last = run(Resort::Fix2)?;
+    last.attempted_topology.add(first.attempted_topology);
+    if last.built.is_none() {
+        let mut staged = run(Resort::Staged)?;
+        staged.attempted_topology.add(last.attempted_topology);
+        last = staged;
+    }
     if let Some(b) = &mut last.built {
         b.last_resort = true;
     }
-    last.attempted_topology.add(first.attempted_topology);
     Ok(last)
 }
 
-/// One build. `last_resorts`: contraction rebuilds also flip interface diagonals and
-/// join slivers (`constrained::contract`), and an attempt also pins touching paths
-/// (`attempt`).
+/// A build's last resorts. `Fix2`: contraction rebuilds also flip interface diagonals and
+/// join slivers (`constrained::contract`), an attempt also pins touching paths (`attempt`),
+/// and coarse drops and wall panels follow every strategy. `Staged`: develop's strategies,
+/// each reduction staged against the fold guard (`staged`).
+#[derive(Clone, Copy, PartialEq)]
+enum Resort {
+    None,
+    Fix2,
+    Staged,
+}
+
+/// One build with the given last resorts.
 #[allow(clippy::too_many_arguments)]
 fn build(
     tile: TileKey,
@@ -364,8 +601,9 @@ fn build(
     mapping: &BorderMap<'_>,
     assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-    last_resorts: bool,
+    resort: Resort,
 ) -> Result<Outcome, JobError> {
+    let fix2 = resort == Resort::Fix2;
     check()?;
     if caps.is_empty() {
         return Err(state("a parent build needs at least one cap"));
@@ -410,7 +648,7 @@ fn build(
             &previous_interface,
             &lookup,
             &mut topology,
-            last_resorts,
+            fix2,
         )? {
             attempted.add(topology);
             topology = Default::default();
@@ -423,7 +661,7 @@ fn build(
                 caps,
                 &mut topology,
                 check,
-                last_resorts,
+                fix2,
             )? {
                 attempted.add(topology);
                 return Ok(Outcome {
@@ -460,7 +698,7 @@ fn build(
                 drops,
                 preserve_holes,
                 &mut opening_pins,
-                last_resorts,
+                resort,
                 &mut attempted,
                 assess,
                 check,
@@ -499,7 +737,7 @@ fn build(
                 drops,
                 preserve_holes,
                 &mut opening_pins,
-                last_resorts,
+                resort,
                 &mut attempted,
                 assess,
                 check,
@@ -560,7 +798,7 @@ fn build(
                 license,
                 preserve_holes,
                 &mut opening_pins,
-                last_resorts,
+                resort,
                 &mut attempted,
                 assess,
                 check,
@@ -590,7 +828,7 @@ fn build(
     // pressure, coarse-drop prefixes followed by the same sequence: all candidates are
     // probed first, so a parent no drop can fit costs one sequence; if they fit, bisect
     // for the least prefix (at most log2(C) + 1 more sequences).
-    if fitted.is_none() && last_resorts {
+    if fitted.is_none() && fix2 {
         let mut sequence = |merged: &mut Merged,
                             license: f64,
                             rounds: u32,
@@ -620,7 +858,7 @@ fn build(
                         license,
                         preserve_holes,
                         &mut opening_pins,
-                        true,
+                        Resort::Fix2,
                         attempted,
                         assess,
                         check,
@@ -843,7 +1081,7 @@ fn assessed_attempt(
     floor: f64,
     preserve_holes: bool,
     opening_pins: &mut HashSet<Key>,
-    pins: bool,
+    resort: Resort,
     attempted: &mut TopologyReceipt,
     assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
@@ -861,7 +1099,7 @@ fn assessed_attempt(
             floor,
             preserve_holes,
             opening_pins,
-            pins,
+            resort,
         );
         let mut b = match proposal {
             Ok(b) => b,
@@ -869,6 +1107,7 @@ fn assessed_attempt(
             Err(e) => return Err(e),
         };
         b.retries += round;
+        b.staged = resort == Resort::Staged;
         let accepted = assess(&mut b)?;
         if !accepted {
             b.change.receipt.rejected_hole_closures += b.change.receipt.closed_holes;
@@ -903,7 +1142,7 @@ fn assessed_attempt(
 }
 
 /// One bounded parent proposal. Unsupported means its protected repair did not
-/// produce an eligible capped result; it is not a proof of cap infeasibility. With `pins`,
+/// produce an eligible capped result; it is not a proof of cap infeasibility. With `Fix2`,
 /// when both modes fail after the touching-boundary comparison refused a proposal, reduce
 /// once more with the anchored paths of touching boundaries locked
 /// (`topology::touching_pins`).
@@ -919,7 +1158,7 @@ fn attempt(
     floor: f64,
     preserve_holes: bool,
     opening_pins: &HashSet<Key>,
-    pins: bool,
+    resort: Resort,
 ) -> Result<Built, JobError> {
     let mut refused = false;
     let mut remaining = REDUCTION_PASSES;
@@ -938,6 +1177,7 @@ fn attempt(
             sheets,
             remaining,
             refused,
+            resort == Resort::Staged,
         )
     };
     // An overprotected ring is a failed strategy, not a cap lower bound. Both
@@ -949,7 +1189,7 @@ fn attempt(
         result => result,
     };
     match result {
-        Err(e) if e.kind() == JobErrorKind::Unsupported && pins && refused => {
+        Err(e) if e.kind() == JobErrorKind::Unsupported && resort == Resort::Fix2 && refused => {
             let border = interface_points(interface);
             let mut locked = opening_pins.clone();
             locked.extend(
@@ -985,6 +1225,7 @@ fn attempt_mode(
     separate_sheets: bool,
     remaining: &mut u32,
     touching: &mut bool,
+    staged: bool,
 ) -> Result<Built, JobError> {
     let _cpu =
         super::cpu_profile::start(super::cpu_profile::Stage::Attempt, merged.triangles.len());
@@ -1022,7 +1263,12 @@ fn attempt_mode(
     };
     let contact_pins = folds::contact_pins(&merged.keys, &merged.triangles, interface);
     for (v, lock) in locked.iter_mut().enumerate() {
-        *lock |= opening_pins.contains(&merged.keys[v]) || contact_pins[v];
+        *lock |= opening_pins.contains(&merged.keys[v]);
+    }
+    // Staged reduction checks every step with the guard, so it needs no contact pins.
+    let staged_lock = (staged && !separate_sheets).then(|| locked.clone());
+    for (lock, &pin) in locked.iter_mut().zip(&contact_pins) {
+        *lock |= pin;
     }
     drop(contact_pins);
     drop(segments);
@@ -1059,7 +1305,10 @@ fn attempt_mode(
                 simplify(merged, faces, lock, target)
             })
         };
-        let (mut output, mut error) = reduce(&merged.triangles, &|v| locked[v as usize], cap)?;
+        let (mut output, mut error) = match &staged_lock {
+            Some(lock) => staged_reduce(merged, contracted_faces, interface, lock, cap),
+            None => reduce(&merged.triangles, &|v| locked[v as usize], cap)?,
+        };
         let mut topology_protected = false;
         let mut fold_retries = 0;
         // Only one immutable post-contraction source per retry sequence. Release
@@ -1298,6 +1547,7 @@ fn attempt_mode(
         protected_faces: protected.iter().filter(|p| **p).count() as u32,
         retries,
         last_resort: false,
+        staged: false,
         interface_vertices: interface_vertices as u32,
         interface_segments: interface_segments as u32,
         reoriented: 0,
@@ -1526,7 +1776,7 @@ mod tests {
             1.,
             false,
             &pins,
-            false,
+            Resort::None,
         )
         .is_err());
         let built = attempt(
@@ -1540,7 +1790,7 @@ mod tests {
             1.,
             false,
             &pins,
-            false,
+            Resort::None,
         )
         .unwrap();
         assert_eq!(built.geometry.triangles.len(), 6);

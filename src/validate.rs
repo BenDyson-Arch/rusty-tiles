@@ -1297,6 +1297,9 @@ struct Check<'a> {
     implicit: ImplicitLimits,
     /// Implicit roots read in this validation (report labels, OD-4).
     implicit_roots: u64,
+    /// A rusty-tiles vector archive (`asset.extras.vectorBuildStateSha256` and `conversion.json`): its content-less
+    /// tiles must refine.
+    vector: bool,
     #[cfg(test)]
     implicit_facts: Vec<ImplicitTileFact>,
     /// Per-URI C2 facts in first-inspection order, for the work-facts seam.
@@ -2393,8 +2396,22 @@ impl Check<'_> {
         Ok((doc, error, schema, charge))
     }
 
+    /// CesiumJS draws nothing at an empty REPLACE tile within its error. A rusty-tiles
+    /// vector archive's content-less tiles refine until their box is about a pixel, as HLOD's do.
+    fn empty_tile(&self, error: f64, diagonal: Option<f64>, depth: usize) -> Result<(), Error> {
+        match diagonal.map(|d| hlod_delivery::EMPTY_PARENT_SCALE * d) {
+            Some(floor) if self.vector && error < floor * (1. - 1e-6) => Err(invalid(format!(
+                "vector tile without content at depth {depth} has geometricError {error} below \
+                 {} x its box diagonal",
+                hlod_delivery::EMPTY_PARENT_SCALE
+            ))),
+            _ => Ok(()),
+        }
+    }
     /// Document-level C2 exclusion facts.
     fn tileset_exclusions(&mut self, doc: &Value) {
+        self.vector |=
+            doc["asset"]["extras"]["vectorBuildStateSha256"].is_string() && !self.reports.is_null();
         if let Some(axis) = doc["asset"].get("gltfUpAxis") {
             if axis.as_str() != Some("Y") {
                 self.c2.exclude(Reason::UpAxisOverride);
@@ -2667,6 +2684,12 @@ impl Check<'_> {
                     .is_none_or(Vec::is_empty),
             (error, volume_diagonal(&bounds)),
         )?;
+        if !external_seen
+            && !payload_seen
+            && node["children"].as_array().is_some_and(|c| !c.is_empty())
+        {
+            self.empty_tile(error, volume_diagonal(&bounds), depth)?;
+        }
         // Amendment D-1: a link tile (external tileset content only) is
         // reported but not compared against the recorded tile budget.
         if external_seen && !payload_seen {
@@ -2743,6 +2766,7 @@ impl Check<'_> {
         // Level-indexed path stack (RC-21): entry `l` is the tile at level `l`,
         // with its C1 volume, its error and its C2 path position.
         let mut path: Vec<(Volume, f64, usize)> = Vec::new();
+        let mut empty: Vec<bool> = Vec::new();
         loop {
             self.progress.step()?;
             // Counter sync around every `Walk::next` (owner charging protocol).
@@ -2851,6 +2875,14 @@ impl Check<'_> {
                 error,
                 volume_diagonal(&volume),
             )?;
+            // A content-less tile is checked once it has a child.
+            if let Some((volume, error, _)) = level.checked_sub(1).and_then(|l| path.get(l)) {
+                if empty.get(level - 1) == Some(&true) {
+                    self.empty_tile(*error, volume_diagonal(volume), depth - 1)?;
+                }
+            }
+            empty.truncate(level);
+            empty.push(tile.contents.is_empty());
             path.truncate(level);
             try_push(&mut path, (volume, bound, index))?;
             // R and I_0 are one tile for counting.
@@ -3345,6 +3377,7 @@ fn inspect_run(
     let mut check = Check {
         implicit: ImplicitLimits::new(limits.document_decoded_bytes, content_limits.json),
         implicit_roots: 0,
+        vector: false,
         #[cfg(test)]
         implicit_facts: Vec::new(),
         #[cfg(test)]
@@ -5468,6 +5501,50 @@ mod containment_controls {
         };
         assert!(outside(run(&files(true))).contains("content=c/1/0/0.glb depth=2 volume=own "));
         assert!(outside(run(&files(false))).contains("content=z.glb depth=1 volume=own "));
+    }
+
+    #[test]
+    fn vector_tiles_without_content_refine_until_a_pixel() {
+        use sha2::Digest;
+        let state = b"{}".to_vec();
+        let marker =
+            json!({"vectorBuildStateSha256": format!("{:x}", sha2::Sha256::digest(&state))});
+        let files = |error: f64, vector: bool| {
+            let mut root = tile(wide());
+            root["geometricError"] = json!(error);
+            root["children"] = json!([content_tile(boxed([0.; 3], [1.; 3]), "a.glb")]);
+            let mut doc = json!({"asset":{"version":"1.1"},"geometricError":error,"root":root,
+                "extensionsUsed":["3DTILES_content_gltf_vector"]});
+            if vector {
+                doc["asset"]["extras"] = marker.clone();
+            }
+            let doc = serde_json::to_vec(&doc).unwrap();
+            let mut files = vec![("tileset.json", doc), ("a.glb", with_doc(|_| {}))];
+            files.extend(vector.then(|| ("vector-build.json", state.clone())));
+            files.extend(vector.then(|| ("conversion.json", b"{}".to_vec())));
+            files
+        };
+        // 16 x the root box diagonal, 2 x |(10, 10, 10)|.
+        let floor = 32. * 300f64.sqrt();
+        assert!(run(&files(floor, true)).is_ok());
+        let error = run(&files(floor * 0.99, true)).unwrap_err().to_string();
+        assert!(error.contains("without content"), "{error}");
+        // Other vector tilesets may keep empty tiles within their error.
+        assert!(run(&files(1., false)).is_ok());
+        // An implicit I_0 without content (G 16, floor about 443) over a content child.
+        let mut files = implicit_files(r(), subtree(&[0, 1], &[1], None), &[(1, point_at(0.))]);
+        assert!(run(&files).is_ok());
+        let mut doc: Value = serde_json::from_slice(&files[0].1).unwrap();
+        doc["asset"]["extras"] = marker;
+        files.extend([
+            ("vector-build.json", state),
+            ("conversion.json", b"{}".to_vec()),
+        ]);
+        files[0].1 = serde_json::to_vec(&doc).unwrap();
+        assert!(run(&files)
+            .unwrap_err()
+            .to_string()
+            .contains("without content"));
     }
 
     #[test]

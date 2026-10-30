@@ -3,7 +3,7 @@ use super::*;
 use crate::runtime::{Attempt, RunEvent};
 use crate::tileset_node::{
     top_level_error, GeometricError, NodePlacement, Refine, TileBox, TileRecord, TileTree,
-    TilesetDocument, TilesetExtension,
+    TilesetDocument, TilesetExtension, EMPTY_PARENT_SCALE,
 };
 use encoding::Candidate;
 use rayon::prelude::*;
@@ -47,7 +47,7 @@ fn cleanup_failure(original: FeatureFailure, cleanup: Error) -> Error {
 fn open_spool(path: &std::path::Path) -> Result<Connection, Error> {
     let db = Connection::open(path).map_err(sql)?;
     db.execute_batch("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF; PRAGMA temp_store=FILE; PRAGMA cache_size=-32768;
-        CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL,fingerprint TEXT,sortkey TEXT);
+        CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL,fingerprint TEXT,sortkey TEXT,omissible INTEGER);
         CREATE INDEX paths ON features(path);
         CREATE TABLE vertices(x REAL,y REAL,z REAL,owner INTEGER,shared INTEGER DEFAULT 0,PRIMARY KEY(x,y,z)) WITHOUT ROWID;").map_err(sql)?;
     Ok(db)
@@ -402,8 +402,15 @@ fn insert_row(db: &Connection, feature: &Feature, path: &str) -> Result<(), Erro
     let center = mul(add(lo, hi), 0.5);
     let bytes = canonical(feature)?;
     let data = String::from_utf8(bytes).unwrap();
-    db.execute("INSERT INTO features(path,data,n,estimate,x,y,z,lx,ly,lz,hx,hy,hz,sortkey) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
-        params![path,data,feature.geometry.size() as i64,feature.estimate() as i64,center[0],center[1],center[2],lo[0],lo[1],lo[2],hi[0],hi[1],hi[2],format!("{}\0{}\0{}",feature.layer(),feature.source_id().as_str().unwrap(),feature.fragment_path)]).map_err(sql)?;
+    // Coarse tiles may omit whole unsplit lines and polygons (`encoding::encode`).
+    let omissible = feature.fragment_path.is_empty()
+        && !feature.surface_fragment
+        && !matches!(
+            feature.geometry,
+            Geometry::Point(_) | Geometry::MultiPoint(_)
+        );
+    db.execute("INSERT INTO features(path,data,n,estimate,x,y,z,lx,ly,lz,hx,hy,hz,sortkey,omissible) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+        params![path,data,feature.geometry.size() as i64,feature.estimate() as i64,center[0],center[1],center[2],lo[0],lo[1],lo[2],hi[0],hi[1],hi[2],format!("{}\0{}\0{}",feature.layer(),feature.source_id().as_str().unwrap(),feature.fragment_path),omissible]).map_err(sql)?;
     let owner = db.last_insert_rowid();
     let mut vertex=db.prepare_cached("INSERT INTO vertices(x,y,z,owner) VALUES(?1,?2,?3,?4) ON CONFLICT(x,y,z) DO UPDATE SET shared=shared OR owner!=excluded.owner").map_err(sql)?;
     for point in feature.geometry.points() {
@@ -636,6 +643,22 @@ fn resolve_grid(db: &Connection) -> Result<(), Error> {
 /// survey's: a refused level stays refused, and a refused full-detail leaf
 /// (level 0) refuses its coarse levels too, as they never joined the
 /// hierarchy.
+/// A parent's tolerance is at least its data diagonal over this ratio: under CesiumJS's
+/// default maximum screen-space error of 16 it refines when about 16 x this many pixels.
+const PARENT_EXTENT_PER_TOLERANCE: f64 = 64.;
+
+/// The coarsest tolerance among the content tiles that render first below `tree`.
+fn top_tolerance(tree: &VectorTree) -> f64 {
+    match tree
+        .record()
+        .extras()
+        .and_then(VectorTileExtras::statistics)
+    {
+        Some(statistics) if !tree.record().contents().is_empty() => statistics.tolerance_metres,
+        _ => tree.children().iter().map(top_tolerance).fold(0., f64::max),
+    }
+}
+
 fn replayed(levels: &[u32], survey: &[Option<&'static str>]) -> Vec<Option<&'static str>> {
     let leaf = levels.iter().position(|l| *l == 0).and_then(|i| survey[i]);
     survey.iter().map(|refusal| refusal.or(leaf)).collect()
@@ -678,8 +701,11 @@ impl Build<'_> {
         &mut self,
         prefix: &str,
         center: Point,
-        levels: &[u32],
+        levels: &[(u32, f64)],
     ) -> Result<Vec<Candidate>, Error> {
+        let tolerance: BTreeMap<u32, f64> = levels.iter().copied().collect();
+        let levels: Vec<u32> = levels.iter().map(|(level, _)| *level).collect();
+        let levels = levels.as_slice();
         let encoder = encoding::Encoder {
             spool: self.spool,
             max_features: self.max_features,
@@ -712,7 +738,7 @@ impl Build<'_> {
             .collect();
         let values: Vec<Result<Candidate, Error>> = self.pool.install(|| {
             todo.par_iter()
-                .map(|level| encoding::encode(encoder, prefix, center, *level))
+                .map(|level| encoding::encode(encoder, prefix, center, *level, tolerance[level]))
                 .collect()
         });
         let mut encoded = values
@@ -817,6 +843,10 @@ impl Build<'_> {
             bounds.grow_to_enclose(delta, child.bounds())?;
             error = error.max(child.geometric_error());
         }
+        if record.contents().is_empty() && !children.is_empty() {
+            // CesiumJS draws nothing at an empty REPLACE tile within its error.
+            error = error.max(GeometricError::new(EMPTY_PARENT_SCALE * bounds.diagonal())?);
+        }
         record.set_bounds(bounds);
         record.set_refine(Refine::Replace);
         record.set_geometric_error(error);
@@ -894,7 +924,10 @@ impl Build<'_> {
         {
             // Indexed parallel collection preserves the same level/report order
             // across worker counts and bounds live candidates by LOD levels/jobs.
-            let levels: Vec<_> = (0..=u32::from(self.options.lod.levels)).collect();
+            let lod = &self.options.lod;
+            let levels: Vec<_> = (0..=u32::from(lod.levels))
+                .map(|level| (level, lod.tolerance_metres * 2f64.powi(level as i32 - 1)))
+                .collect();
             let mut candidates = self.candidates(prefix, center, &levels)?.into_iter();
             let (leaf, _) = self.consume(candidates.next().unwrap())?;
             if let Some(leaf) = leaf {
@@ -1050,11 +1083,30 @@ impl Build<'_> {
             + (stats.count as f64 / self.max_features as f64)
                 .log2()
                 .ceil() as u32;
+        // The parent's tolerance scales with its extent and is coarser than a child's,
+        // or the top of the levels above a leaf, by at least sqrt 2 (a binary split).
+        let lod = &self.options.lod;
+        let chain = lod.tolerance_metres * 2f64.powi(i32::from(lod.levels) - 1);
+        let tolerance = children
+            .iter()
+            .map(|child| std::f64::consts::SQRT_2 * top_tolerance(&child.tree).max(chain))
+            .fold(
+                norm(sub(stats.hi, stats.lo)) / PARENT_EXTENT_PER_TOLERANCE,
+                f64::max,
+            );
         let candidate = self
-            .candidates(prefix, center, &[level.max(1)])?
+            .candidates(prefix, center, &[(level.max(1), tolerance)])?
             .pop()
             .unwrap();
-        let (coarse, reason) = self.consume(candidate)?;
+        let (mut coarse, mut reason) = self.consume(candidate)?;
+        let diagonal = norm(sub(stats.hi, stats.lo));
+        if coarse.is_none() && tolerance < diagonal {
+            // At its own diagonal every unsplit line or polygon is a stand-in or omitted:
+            // content there beats a routing tile, whose error would bound every ancestor.
+            let level = level.max(1) + 1;
+            let retry = self.candidates(prefix, center, &[(level, diagonal)])?.pop();
+            (coarse, reason) = self.consume(retry.unwrap())?;
+        }
         let coarse = match coarse {
             Some(coarse) => coarse,
             None => {
@@ -1062,7 +1114,7 @@ impl Build<'_> {
                 TileRecord::new(
                     NodePlacement::INHERIT,
                     TileBox::centred([0.; 3])?,
-                    GeometricError::new(norm(sub(stats.hi, stats.lo)))?,
+                    GeometricError::new(0.)?,
                     Refine::Replace,
                     Vec::new(),
                     Some(VectorTileExtras::routing(reason)),
@@ -1463,7 +1515,7 @@ mod countries_fragment_tests {
 
     fn fixture_db() -> Connection {
         let db = Connection::open_in_memory().unwrap();
-        db.execute_batch("PRAGMA journal_mode=MEMORY; CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL,sortkey TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,owner INTEGER,shared INTEGER DEFAULT 0,UNIQUE(x,y,z));").unwrap();
+        db.execute_batch("PRAGMA journal_mode=MEMORY; CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL,sortkey TEXT,omissible INTEGER); CREATE TABLE vertices(x REAL,y REAL,z REAL,owner INTEGER,shared INTEGER DEFAULT 0,UNIQUE(x,y,z));").unwrap();
         db
     }
     fn fixture_feature(geometry: Geometry) -> Feature {
@@ -1843,7 +1895,7 @@ mod countries_fragment_tests {
         // Fixture expectation is independent of Spool traversal: only the
         // pre-existing accepted source row and its two vertices may survive.
         let db = Connection::open_in_memory().unwrap();
-        db.execute_batch("PRAGMA journal_mode=MEMORY; CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL,sortkey TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,owner INTEGER,shared INTEGER DEFAULT 0,UNIQUE(x,y,z));").unwrap();
+        db.execute_batch("PRAGMA journal_mode=MEMORY; CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL,sortkey TEXT,omissible INTEGER); CREATE TABLE vertices(x REAL,y REAL,z REAL,owner INTEGER,shared INTEGER DEFAULT 0,UNIQUE(x,y,z));").unwrap();
         let make = |id: &str, geometry: Geometry| Feature {
             properties: BTreeMap::from([
                 ("_source_id".into(), json!(id)),

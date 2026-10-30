@@ -336,7 +336,8 @@ fn policy_statements_match_the_implementation() {
     assert!(!appearance.contains("samplers are kept"));
     assert!(appearance.contains("newly\nauthored atlas samplers"));
     assert!(appearance.contains("never fails the run"));
-    assert!(read("src/mesh_large/hlod/appearance.rs").contains("level0_sampled: true"));
+    assert!(read("src/mesh_large/hlod/appearance.rs")
+        .contains("mipmapped: delivered.mime == \"image/ktx2\""));
     // D8: output and intermediates on memory-backed storage are charged and measured.
     let budget = section(&guide, "### Memory budget", false);
     assert!(!budget.contains("**Not charged:**"));

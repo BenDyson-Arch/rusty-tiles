@@ -294,7 +294,9 @@ and acceptance progress. Do not build scripts around today's numerical constants
 Every present PBR slot follows its colour/data class and the chosen policy.
 Lossy output uses in-process KTX2/Basis; lossless leaf textures use PNG.
 `lossless` describes the agreed leaf texel policy, not exact source GLB bytes,
-arbitrary viewer filtering, or lossless coarse geometry. Leaf coordinate
+arbitrary viewer filtering, or lossless coarse geometry. A lossy leaf page that no
+codec step can deliver within its gates falls back to the same exact PNG, with
+viewer-generated mips outside the guarantee (see the encoder ladder below). Leaf coordinate
 encoding and provenance still follow the tiler contract.
 
 Colour-class pages (base colour and emissive), in **both leaves and coarse
@@ -401,11 +403,20 @@ In a lossy profile, a **leaf** texture page that misses any decoded-image gate a
 profile's own encoder setting (per-level channel and normal floors, MASK
 coverage, the source-sampler check) is re-encoded one step stronger instead of
 failing the run: UASTC pack level 2, then UASTC level 3. Every step is checked
-again by the same gates; gates are never loosened. If level 3 also misses and
-the page's sampler reads level 0 only (no mipmap minification), the page is
-delivered as an exact level-0 PNG, which keeps the sampler. A mip-sampled page
-that still misses at level 3 fails the run, because glTF PNG cannot carry its
-authored coarse levels. (Coarse pages never fail this way; see
+again by the same gates; gates are never loosened. UASTC encodes every 4×4 block
+alone, so a step is decided without encoding the whole chain when the blocks that
+missed a per-block cap at an earlier step, or (before level 3) its coarser levels,
+already miss when encoded alone; the miss is exact and its message starts
+`block probe:` or `level probe:`. If level 3 also misses, the
+page is delivered as an exact level-0 PNG, which keeps the sampler, so one page
+never fails the run. glTF PNG cannot carry authored coarse levels: on a
+mip-sampled page the viewer generates them, outside the decoded guarantee, as for
+`lossless` PNG pages. Its islands sit whole on the 8-texel grid with real-source
+gutters, so a box-filtering viewer reproduces the authored data averages through
+level 3; colour and normal mips are the viewer's own filter. The report and the
+archive's `conversion.json` count these pages as `viewer_mip_fallback_pages` and list
+every one (`first`, `depth`, `page`, `slot`) in `viewer_mip_fallbacks`, uncapped;
+level-0-sampled PNG pages, inside the guarantee, are `lossless_fallback_pages`. (Coarse PNG pages are sampled without mips; see
 [coarse appearance](#coarse-appearance).) Escalation costs output size: an ETC1S page re-encoded
 as UASTC is several times larger, and a PNG fallback page is typically the
 largest form of the page (up to 4 bytes per texel). The ladder depends only on
@@ -648,7 +659,9 @@ counts and maximum leaf geometry error, hierarchy/implicit/document counts,
 depth and packed/synthetic leaf counts, member limits, separate root/tileset
 errors, and normalized placement. Escalation is reported as `escalated_pages`
 (`uastc_level2` and `uastc_level3` counts, by the step that delivered the page),
-`lossless_fallback_pages` (pages delivered as exact PNG), and
+`lossless_fallback_pages` (level-0-sampled pages delivered as exact PNG),
+`viewer_mip_fallback_pages` and its uncapped list `viewer_mip_fallbacks` (mip-sampled
+pages delivered as exact level-0 PNG with viewer-generated mips), and
 `escalation_diagnostics`: the first 32 escalated pages in leaf order, each with
 its `leaf`, `first` source triangle rank and `depth`, `page`, `slot`, `sources`
 (`image`, `material`), delivering `step`, and every gate it missed on the way

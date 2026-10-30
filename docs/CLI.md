@@ -127,12 +127,12 @@ Converts GeoJSON or GeoPackage layers into draft glTF vector content in a `.3tz`
 | `--maxBytes` | `--max-bytes` | `4194304` | Encoded bytes per tile, at least 4096 |
 | `--maxTiles` | `--max-tiles` | `100000` | Tiles in the hierarchy |
 | `--maxSourceVertices` | `--max-source-vertices` | `1000000` | Coordinates in one source feature |
-| `--lodTolerance` | `--lod-tolerance` | `0.1` | Base simplification tolerance in metres. It doubles at each coarser level. |
+| `--lodTolerance` | `--lod-tolerance` | `0.1` | Tolerance in metres of the first coarse level above each leaf. It doubles at each level above it; parents also scale with their extent. See [level of detail](VECTOR.md#level-of-detail) |
 | `--lodLevels` | `--lod-levels` | `3` | Coarse levels above each leaf, from 1 to 16 |
 | `--repair` | | off | Repair invalid polygon outlines and report each repair |
 | `--ambiguousOutlines` | `--ambiguous-outlines` | off | Keep ambiguous filled polygons as their source 3D outlines |
 | `--parentRepair` | `--parent-repair` | off | Allow reported outline stand-ins in parent tiles |
-| `--aggregatePoints` | `--aggregate-points` | off | Replace dense points in parents with per-layer counts |
+| `--aggregatePoints` | `--aggregate-points` | off | Aggregate every point-only parent; parents whose points exceed their budgets always aggregate |
 | `--quantize` | | off | Lossy 16-bit positions, with the error reported |
 | `--meshopt` | | off | Lossless `EXT_meshopt_compression` of accessor buffers |
 | `--reuseTileset` | `--reuse-tileset` | none | Reuse unchanged content from a compatible earlier archive |

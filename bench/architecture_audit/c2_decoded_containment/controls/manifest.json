@@ -133,7 +133,7 @@
       "numericSpan"
      ]
     },
-    "file": "controls/fixtures/worked-example-adjusted-containmentSpanBits-28.3tz",
+    "file": "controls/fixtures/worked-example-adjusted-containmentSpanBits-29.3tz",
     "id": "worked-example-adjusted-containmentSpanBits-28",
     "limits": {
      "containmentSpanBits": 28
@@ -500,7 +500,7 @@
     "expected": {
      "outcome": "Contained"
     },
-    "file": "controls/fixtures/work-containmentWorkUnits-at-sum.3tz",
+    "file": "controls/fixtures/work-base-meshopt.3tz",
     "id": "work-containmentWorkUnits-at-sum",
     "limits": {
      "containmentWorkUnits": 5040
@@ -521,7 +521,7 @@
       "workLimit"
      ]
     },
-    "file": "controls/fixtures/work-containmentWorkUnits-sum-minus-1.3tz",
+    "file": "controls/fixtures/work-base-meshopt.3tz",
     "id": "work-containmentWorkUnits-sum-minus-1",
     "limits": {
      "containmentWorkUnits": 5039
@@ -544,7 +544,7 @@
     "expected": {
      "outcome": "Contained"
     },
-    "file": "controls/fixtures/work-containmentBytesRead-at-sum.3tz",
+    "file": "controls/fixtures/work-base-meshopt.3tz",
     "id": "work-containmentBytesRead-at-sum",
     "limits": {
      "containmentBytesRead": 1404
@@ -565,7 +565,7 @@
       "workLimit"
      ]
     },
-    "file": "controls/fixtures/work-containmentBytesRead-sum-minus-1.3tz",
+    "file": "controls/fixtures/work-base-meshopt.3tz",
     "id": "work-containmentBytesRead-sum-minus-1",
     "limits": {
      "containmentBytesRead": 1403
@@ -588,7 +588,7 @@
     "expected": {
      "outcome": "Contained"
     },
-    "file": "controls/fixtures/work-containmentDecodedBytes-at-sum.3tz",
+    "file": "controls/fixtures/work-base-meshopt.3tz",
     "id": "work-containmentDecodedBytes-at-sum",
     "limits": {
      "containmentDecodedBytes": 42
@@ -609,7 +609,7 @@
       "workLimit"
      ]
     },
-    "file": "controls/fixtures/work-containmentDecodedBytes-sum-minus-1.3tz",
+    "file": "controls/fixtures/work-base-meshopt.3tz",
     "id": "work-containmentDecodedBytes-sum-minus-1",
     "limits": {
      "containmentDecodedBytes": 41
@@ -632,7 +632,7 @@
     "expected": {
      "outcome": "Contained"
     },
-    "file": "controls/fixtures/work-containmentNodeDepth-at-sum.3tz",
+    "file": "controls/fixtures/work-base-meshopt.3tz",
     "id": "work-containmentNodeDepth-at-sum",
     "limits": {
      "containmentNodeDepth": 3
@@ -653,7 +653,7 @@
       "workLimit"
      ]
     },
-    "file": "controls/fixtures/work-containmentNodeDepth-sum-minus-1.3tz",
+    "file": "controls/fixtures/work-base-meshopt.3tz",
     "id": "work-containmentNodeDepth-sum-minus-1",
     "limits": {
      "containmentNodeDepth": 2

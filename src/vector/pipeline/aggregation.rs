@@ -6,6 +6,8 @@ use rusqlite::{params, Connection};
 pub(super) struct Aggregates {
     pub features: Vec<Feature>,
     pub summary: Value,
+    /// Bounds every source point's distance to its aggregate.
+    pub distance: f64,
 }
 
 pub(super) enum Outcome {
@@ -17,16 +19,9 @@ pub(super) enum Outcome {
 pub(super) fn collect(
     db: &Connection,
     prefix: &str,
-    tolerance: f64,
     options: &VectorOptions,
 ) -> Result<Outcome, Error> {
     let end = format!("{prefix}~");
-    let mixed: bool = db.query_row(
-        "SELECT EXISTS(SELECT 1 FROM features WHERE path>=?1 AND path<?2 AND json_extract(data,'$.geometry.type') NOT IN ('Point','MultiPoint'))",
-        params![prefix, end], |r| r.get(0)).map_err(sql)?;
-    if mixed {
-        return Ok(Outcome::Unchanged);
-    }
     let (points, lo, hi): (i64, Point, Point) = db.query_row(
         "SELECT COALESCE(SUM(n),0),COALESCE(MIN(lx),0),COALESCE(MIN(ly),0),COALESCE(MIN(lz),0),COALESCE(MAX(hx),0),COALESCE(MAX(hy),0),COALESCE(MAX(hz),0) FROM features WHERE path>=?1 AND path<?2",
         params![prefix, end], |r| Ok((r.get(0)?,[r.get(1)?,r.get(2)?,r.get(3)?],[r.get(4)?,r.get(5)?,r.get(6)?]))).map_err(sql)?;
@@ -34,53 +29,18 @@ pub(super) fn collect(
         return Ok(Outcome::Unchanged);
     }
     let budget = options.max_parent_features.min(options.max_vertices);
-    let grid = VoxelGrid::new(lo, sub(hi, lo), budget);
-    let mut cells: BTreeMap<(String, usize), Feature> = BTreeMap::new();
-    let mut maximum_distance: f64 = 0.;
-    let mut estimate = 0usize;
-    let mut rows = db
-        .prepare("SELECT data FROM features WHERE path>=?1 AND path<?2 ORDER BY sortkey,id")
-        .map_err(sql)?;
-    let mut rows = rows.query(params![prefix, end]).map_err(sql)?;
-    while let Some(row) = rows.next().map_err(sql)? {
-        let source: Feature = serde_json::from_str(&row.get::<_, String>(0).map_err(sql)?)?;
-        for point in source.geometry.points() {
-            let key = (source.layer().to_owned(), grid.key(*point));
-            if let Some(aggregate) = cells.get_mut(&key) {
-                let count = aggregate.properties["pointCount"].as_i64().unwrap();
-                aggregate
-                    .properties
-                    .insert("pointCount".into(), json!(count + 1));
-                let Geometry::Point(representative) = aggregate.geometry else {
-                    unreachable!()
-                };
-                maximum_distance = maximum_distance.max(norm(sub(*point, representative)));
-                if maximum_distance > tolerance {
-                    return Ok(Outcome::Rejected("pointAggregationTolerance"));
-                }
-            } else {
-                if cells.len() == budget {
-                    return Ok(Outcome::Rejected("pointAggregationBudget"));
-                }
-                let aggregate = Feature {
-                    intrinsic: None,
-                    geometry: Geometry::Point(*point),
-                    properties: BTreeMap::from([
-                        ("aggregation".into(), json!("voxel")),
-                        ("pointCount".into(), json!(1)),
-                        ("sourceLayer".into(), json!(source.layer())),
-                    ]),
-                    surface_fragment: false,
-                    fragment_path: String::new(),
-                };
-                estimate = estimate.saturating_add(aggregate.estimate() - 2048);
-                if estimate > options.max_bytes.saturating_mul(2) {
-                    return Ok(Outcome::Rejected("estimatedBytes"));
-                }
-                cells.insert(key, aggregate);
-            }
+    let mut side = VoxelGrid::new(lo, sub(hi, lo), budget).side();
+    // Coarser grids until the occupied (layer, voxel) cells and their bytes fit:
+    // at most log2(side) + 1 passes; one cell per layer is the coarsest.
+    let (grid, cells, maximum_distance) = loop {
+        let grid = VoxelGrid::new(lo, sub(hi, lo), side.pow(3));
+        match pass(db, prefix, &end, &grid, budget, options)? {
+            Pass::Mixed => return Ok(Outcome::Unchanged),
+            Pass::Done(cells, distance) => break (grid, cells, distance),
+            Pass::Over(_) if side > 1 => side /= 2,
+            Pass::Over(reason) => return Ok(Outcome::Rejected(reason)),
         }
-    }
+    };
     if cells.len() as i64 == points {
         return Ok(Outcome::Unchanged);
     }
@@ -90,9 +50,6 @@ pub(super) fn collect(
     } else {
         maximum_distance + 16. * f64::EPSILON * norm(lo).max(norm(hi)).max(1.)
     };
-    if distance_bound > tolerance {
-        return Ok(Outcome::Rejected("pointAggregationTolerance"));
-    }
     let summary = json!({"method":"voxel","sourcePointCount":points,"aggregateCount":cells.len(),
         "maximumDistanceMetres":distance_bound,"cellDiagonalMetres":grid.error_bound(),
         "sourceProperties":"full-detail leaves only","grouping":"source layer and 3D voxel",
@@ -100,5 +57,139 @@ pub(super) fn collect(
     Ok(Outcome::Ready(Aggregates {
         features: cells.into_values().collect(),
         summary,
+        distance: distance_bound,
     }))
+}
+
+enum Pass {
+    Mixed,
+    Over(&'static str),
+    Done(BTreeMap<(usize, usize), Feature>, f64),
+}
+
+/// One pass over the tile's rows in source-identity order. A Point row's box is its
+/// point and `sortkey` starts with its layer, so only multi-point rows are decoded.
+fn pass(
+    db: &Connection,
+    prefix: &str,
+    end: &str,
+    grid: &VoxelGrid,
+    budget: usize,
+    options: &VectorOptions,
+) -> Result<Pass, Error> {
+    // Layers by first appearance: rows come in `sortkey` order, which starts with the
+    // layer, so index order is layer order.
+    let mut layers: Vec<String> = Vec::new();
+    let mut cells: BTreeMap<(usize, usize), Feature> = BTreeMap::new();
+    let mut points: Vec<Point> = Vec::new();
+    let mut maximum_distance: f64 = 0.;
+    let mut estimate = 0usize;
+    let mut rows = db
+        .prepare("SELECT n,lx,ly,lz,sortkey,id,omissible FROM features WHERE path>=?1 AND path<?2 ORDER BY sortkey,id")
+        .map_err(sql)?;
+    // Sorted without `data`: only rows that are not plain points read it, by id.
+    let mut data = db
+        .prepare_cached("SELECT data FROM features WHERE id=?1")
+        .map_err(sql)?;
+    let mut rows = rows.query(params![prefix, end]).map_err(sql)?;
+    while let Some(row) = rows.next().map_err(sql)? {
+        let sortkey = row
+            .get_ref(4)
+            .map_err(sql)?
+            .as_str()
+            .map_err(|e| sql(e.into()))?;
+        let mut parts = sortkey.split('\0');
+        let name = parts.next().unwrap_or("");
+        // Only an unsplit, non-omissible row of one vertex is a point: never a fragment.
+        let plain = parts.next().is_some() && parts.next() == Some("") && parts.next().is_none();
+        let plain = plain && !row.get::<_, bool>(6).map_err(sql)?;
+        points.clear();
+        let source = if row.get::<_, i64>(0).map_err(sql)? == 1 && plain {
+            let point = [
+                row.get(1).map_err(sql)?,
+                row.get(2).map_err(sql)?,
+                row.get(3).map_err(sql)?,
+            ];
+            points.push(point);
+            None
+        } else {
+            let id: i64 = row.get(5).map_err(sql)?;
+            let text: String = data.query_row([id], |r| r.get(0)).map_err(sql)?;
+            let source: Feature = serde_json::from_str(&text)?;
+            let (Geometry::Point(_) | Geometry::MultiPoint(_)) = source.geometry else {
+                return Ok(Pass::Mixed);
+            };
+            points.extend(source.geometry.points().copied());
+            Some(source)
+        };
+        let name = source.as_ref().map_or(name, Feature::layer);
+        let layer = match layers.iter().rposition(|l| l == name) {
+            Some(layer) => layer,
+            None => {
+                layers.push(name.to_owned());
+                layers.len() - 1
+            }
+        };
+        for &point in &points {
+            let key = (layer, grid.key(point));
+            if let Some(aggregate) = cells.get_mut(&key) {
+                let count = aggregate.properties["pointCount"].as_i64().unwrap();
+                aggregate
+                    .properties
+                    .insert("pointCount".into(), json!(count + 1));
+                let Geometry::Point(representative) = aggregate.geometry else {
+                    unreachable!()
+                };
+                maximum_distance = maximum_distance.max(norm(sub(point, representative)));
+            } else {
+                if cells.len() == budget {
+                    return Ok(Pass::Over("pointAggregationBudget"));
+                }
+                let aggregate = Feature {
+                    intrinsic: None,
+                    geometry: Geometry::Point(point),
+                    properties: BTreeMap::from([
+                        ("aggregation".into(), json!("voxel")),
+                        ("pointCount".into(), json!(1)),
+                        ("sourceLayer".into(), json!(layers[layer])),
+                    ]),
+                    surface_fragment: false,
+                    fragment_path: String::new(),
+                };
+                estimate = estimate.saturating_add(aggregate.estimate() - 2048);
+                if estimate > options.max_bytes.saturating_mul(2) {
+                    return Ok(Pass::Over("estimatedBytes"));
+                }
+                cells.insert(key, aggregate);
+            }
+        }
+    }
+    Ok(Pass::Done(cells, maximum_distance))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_one_vertex_fragment_row_is_not_read_as_a_point() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n,lx,ly,lz,hx,hy,hz,sortkey,omissible)").unwrap();
+        for (id, kind, fragment) in [("a", "Point", ""), ("b", "LineString", "0")] {
+            let coordinates = if kind == "Point" {
+                json!([0., 0., 0.])
+            } else {
+                json!([[0., 0., 0.]])
+            };
+            let data = json!({"properties":{"_source_layer":"L","_source_id":id},"_fragment_path":fragment,
+                "geometry":{"type":kind,"coordinates":coordinates}});
+            db.execute("INSERT INTO features(path,data,n,lx,ly,lz,hx,hy,hz,sortkey,omissible) VALUES('',?1,1,0,0,0,0,0,0,?2,0)",
+                params![data.to_string(), format!("L\0{id}\0{fragment}")]).unwrap();
+        }
+        let outcome = collect(&db, "", &VectorOptions::default()).unwrap();
+        assert!(
+            matches!(outcome, Outcome::Unchanged),
+            "a line fragment makes the tile mixed"
+        );
+    }
 }
