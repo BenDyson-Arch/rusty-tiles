@@ -4669,7 +4669,8 @@ fn closed_box() -> Vec<Mesh> {
 /// Honest omission: about 50 holes per depth-1 cell cannot all stay open under the 300
 /// cap (Euler: V - 2 + 2h > cap), and closing one loses at least its inradius (0.42 m)
 /// against the source on any domain, far above E (0.049 m at depth 1). Each such cell
-/// and the root are omitted, reported and counted; content-less tiles lie only under
+/// (staged reduction fits a fourth with every hole open) and the root are omitted,
+/// reported and counted; content-less tiles lie only under
 /// content-less ancestors; nothing folds; the receipt is scale-invariant.
 #[test]
 fn d11_holey_sheet_reports_its_cap_infeasible_omissions_upward() {
@@ -4694,7 +4695,7 @@ fn d11_holey_sheet_reports_its_cap_infeasible_omissions_upward() {
                 &h["omissionSources"],
                 &h["omittedByDepth"]
             ),
-            (&json!(5), &json!(4), &json!([1, 4, 0, 0])),
+            (&json!(4), &json!(3), &json!([1, 3, 0, 0])),
             "{name}: {h}"
         );
         assert_directed_census(&name, &census(&dir), run.cap);
@@ -5447,4 +5448,41 @@ fn city_block_point_contacts_on_shared_chains_stay_in_contracts() {
         ValidationRequest::new(&archive).expect_profile(crate::validate::ExpectedProfile::Hlod),
     )
     .unwrap();
+}
+
+/// Photogrammetry-like fold (Walem): a noisy 40 m sheet folded back over itself 2 cm
+/// apart. Every reduction of a coarse cell collapses the two layers onto each other
+/// (twin faces, acute books) and the fold guard refuses it; staged reduction with
+/// carrier merging fits it (`geometry::Resort::Staged`).
+#[test]
+fn a_noisy_folded_sheet_builds_every_coarse_tile() {
+    let (n, w) = (72, 145);
+    let h = |i: u32, j: u32| (i.wrapping_mul(73856093) ^ j.wrapping_mul(19349663)) % 1000;
+    let mut sheet = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.5, 0.5, 0.5, 1.],
+    };
+    for i in 0..=n {
+        for j in 0..=2 * n {
+            let (z, y) = (j.min(2 * n - j), if j <= n { 0. } else { 0.02 });
+            let y = y + h(i, j) as f32 * 0.0003;
+            sheet
+                .positions
+                .push([i as f32 * 40. / n as f32, y, z as f32 * 40. / n as f32]);
+        }
+    }
+    for i in 0..n {
+        for j in 0..2 * n {
+            let v = |a: u32, c: u32| a * w + c;
+            sheet.indices.extend([v(i, j), v(i, j + 1), v(i + 1, j)]);
+            sheet
+                .indices
+                .extend([v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
+        }
+    }
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &[sheet]);
+    let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+    assert!(omission_receipt("noisy folded sheet", &dir));
 }
