@@ -461,16 +461,23 @@ def check_directory(directory, samples=4):
             continue
         patch, measured = patches[id(node)], 0.
         x0, y0, x1, y1 = patch.footprint
+        # Clipped cells' diagonals cross leaf edges off the sample grid: add those crossings.
+        crossings = []
+        for (cx0, cx1) in zip(patch.xs, patch.xs[1:]):
+            for (cy0, cy1) in zip(patch.ys, patch.ys[1:]):
+                w, h = cx1 - cx0, cy1 - cy0
+                for n in {w, h, abs(w - h)} - {0} if w != h else ():
+                    crossings += [(cx1 - k / n * w, cy0 + k / n * h) for k in range(n + 1)]
         for leaf in leaves:
             fine = patches[id(leaf)]
             lx0, ly0, lx1, ly1 = fine.footprint
             if not (x0 <= lx0 and lx1 <= x1 and y0 <= ly0 and ly1 <= y1):
                 continue
-            for j in range((ly1 - ly0) * samples + 1):
-                for i in range((lx1 - lx0) * samples + 1):
-                    x, y = lx0 + i / samples, ly0 + j / samples
-                    a, b = patch.at(x, y), fine.at(x, y)
-                    if a and b: measured = max(measured, math.dist(a, b))
+            grid = [(lx0 + i / samples, ly0 + j / samples)
+                    for j in range((ly1 - ly0) * samples + 1) for i in range((lx1 - lx0) * samples + 1)]
+            for x, y in grid + [(x, y) for x, y in crossings if lx0 <= x <= lx1 and ly0 <= y <= ly1]:
+                a, b = patch.at(x, y), fine.at(x, y)
+                if a and b: measured = max(measured, math.dist(a, b))
         node['measured'] = measured
         assert node['error'] >= measured - 1e-9, f'understated geometric error {node["error"]} < {measured}'
     # Skirts: on interior edges only, outward, and their decoded bottoms at least

@@ -518,6 +518,49 @@ impl Sheet {
             .flat_map(|r| cells(&self.xs, x).map(move |c| (c, r)))
             .find_map(|(c, r)| self.cell(c, r, x, y))
     }
+    /// The value at `(x, y)` of each emitted triangle of cell `(c, r)` that
+    /// holds it within rounding: a point computed on the diagonal belongs to
+    /// both triangles, whichever side its arithmetic lands on.
+    fn near_cell(&self, c: usize, r: usize, x: f64, y: f64, out: &mut Vec<[f64; 3]>) {
+        const ROUNDING: f64 = 1e-9;
+        let u = (x - self.xs[c] as f64) / (self.xs[c + 1] - self.xs[c]) as f64;
+        let v = (y - self.ys[r] as f64) / (self.ys[r + 1] - self.ys[r]) as f64;
+        if [u, v, 1. - u, 1. - v].iter().any(|t| *t < -ROUNDING) {
+            return;
+        }
+        let (b, c_) = (self.vertex(c + 1, r), self.vertex(c, r + 1));
+        if u + v <= 1. + ROUNDING && self.emitted(c, r, false) {
+            let a = self.vertex(c, r);
+            out.push(std::array::from_fn(|i| {
+                a[i] + u * (b[i] - a[i]) + v * (c_[i] - a[i])
+            }));
+        }
+        if u + v >= 1. - ROUNDING && self.emitted(c, r, true) {
+            let d = self.vertex(c + 1, r + 1);
+            out.push(std::array::from_fn(|i| {
+                d[i] + (1. - u) * (c_[i] - d[i]) + (1. - v) * (b[i] - d[i])
+            }));
+        }
+    }
+    /// [`Self::near_cell`] over every cell whose closure holds `(x, y)` within rounding.
+    fn near(&self, x: f64, y: f64, out: &mut Vec<[f64; 3]>) {
+        let cells = |nodes: &[usize], v: f64| {
+            let last = nodes.len() - 2;
+            let lo = nodes
+                .partition_point(|&n| (n as f64) < v - 1e-9)
+                .saturating_sub(1);
+            lo.min(last)
+                ..=nodes
+                    .partition_point(|&n| (n as f64) <= v + 1e-9)
+                    .saturating_sub(1)
+                    .min(last)
+        };
+        for r in cells(&self.ys, y) {
+            for c in cells(&self.xs, x) {
+                self.near_cell(c, r, x, y, out);
+            }
+        }
+    }
     /// The longer horizontal diagonal of cell `(c, r)`.
     fn diagonal(&self, c: usize, r: usize) -> f64 {
         let flat = |a: [f64; 3], b: [f64; 3]| (a[0] - b[0]).hypot(a[1] - b[1]);
@@ -823,29 +866,36 @@ impl<'a> Pyramid<'a> {
             let (xa, xb, ya, yb) = (sheet.xs[c], sheet.xs[c + 1], sheet.ys[r], sheet.ys[r + 1]);
             let leaf = self.leaves([xa, xb], [ya, yb], storage)?;
             // A valid leaf node is on the leaf surface whichever side covers it.
+            // Points are evaluated on every emitted triangle within rounding.
+            let mut here = vec![];
             for (j, y) in (ya..=yb).enumerate() {
                 for (i, x) in (xa..=xb).enumerate() {
-                    if let (Some(a), true) = (
-                        sheet.cell(c, r, x as f64, y as f64),
-                        leaf.used[j * leaf.xs.len() + i],
-                    ) {
-                        worst = worst.max(distance(a, leaf.vertex(i, j)));
+                    if leaf.used[j * leaf.xs.len() + i] {
+                        here.clear();
+                        match sheet.cell(c, r, x as f64, y as f64) {
+                            Some(a) => here.push(a),
+                            None => sheet.near_cell(c, r, x as f64, y as f64, &mut here),
+                        }
+                        for a in &here {
+                            worst = worst.max(distance(*a, leaf.vertex(i, j)));
+                        }
                     }
                 }
             }
             // The diagonal runs from (xb, ya) to (xa, yb); in a square cell it
             // follows leaf diagonals through leaf nodes.
             let (w, h) = (xb - xa, yb - ya);
-            let mut measure = |x: f64, y: f64| {
-                if let (Some(a), Some(b)) = (sheet.cell(c, r, x, y), leaf.at(x, y)) {
-                    worst = worst.max(distance(a, b));
-                }
-            };
-            if w != h {
-                for n in [w, h, w.abs_diff(h)] {
-                    for k in 0..=n {
-                        let t = k as f64 / n as f64;
-                        measure(xb as f64 - t * w as f64, ya as f64 + t * h as f64);
+            let mut below = vec![];
+            for n in [w, h, w.abs_diff(h)].into_iter().filter(|_| w != h) {
+                for k in 0..=n {
+                    let t = k as f64 / n as f64;
+                    let (x, y) = (xb as f64 - t * w as f64, ya as f64 + t * h as f64);
+                    here.clear();
+                    below.clear();
+                    sheet.near_cell(c, r, x, y, &mut here);
+                    leaf.near(x, y, &mut below);
+                    for (a, b) in here.iter().flat_map(|a| below.iter().map(move |b| (a, b))) {
+                        worst = worst.max(distance(*a, *b));
                     }
                 }
             }
@@ -2388,6 +2438,61 @@ mod tests {
         // Crossings, not vertices, set the maximum in many of these cells.
         assert!(sensitive > 20, "{sensitive}");
     }
+    /// The review's xorshift, to regenerate its fuzz rasters.
+    struct Xorshift(u64);
+    impl Xorshift {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+        fn unit(&mut self) -> f64 {
+            (self.next() >> 11) as f64 / (1u64 << 53) as f64
+        }
+        fn below(&mut self, n: usize) -> usize {
+            (self.next() % n as u64) as usize
+        }
+    }
+    /// The exact largest distance from a tile to the leaf surface: in every
+    /// cell, at each leaf node and each crossing of the cell diagonal with
+    /// leaf edges, on any emitted triangle within rounding.
+    fn exact(pyramid: &Pyramid, plan: &PreparedPlan, patch: &Patch) -> f64 {
+        let s = sheet(pyramid, plan, patch);
+        let mut worst: f64 = 0.;
+        for r in 0..s.ys.len() - 1 {
+            for c in 0..s.xs.len() - 1 {
+                let (xa, xb, ya, yb) = (s.xs[c], s.xs[c + 1], s.ys[r], s.ys[r + 1]);
+                let storage = plan.storage[pyramid.depth as usize];
+                let leaf = pyramid.leaves([xa, xb], [ya, yb], storage).unwrap();
+                let (w, h) = (xb - xa, yb - ya);
+                let mut points: Vec<_> = (ya..=yb)
+                    .flat_map(|y| (xa..=xb).map(move |x| (x as f64, y as f64)))
+                    .collect();
+                for n in [w, h, w.abs_diff(h)].into_iter().filter(|n| *n > 0) {
+                    let t = |k: usize| k as f64 / n as f64;
+                    points.extend(
+                        (0..=n).map(|k| (xb as f64 - t(k) * w as f64, ya as f64 + t(k) * h as f64)),
+                    );
+                }
+                for (x, y) in points {
+                    let (mut a, mut b) = (vec![], vec![]);
+                    s.near_cell(c, r, x, y, &mut a);
+                    let node = (x.fract() == 0. && y.fract() == 0.)
+                        .then(|| ((x as usize - xa), (y as usize - ya)))
+                        .filter(|&(i, j)| leaf.used[j * leaf.xs.len() + i]);
+                    match node {
+                        Some((i, j)) => b.push(leaf.vertex(i, j)),
+                        None => leaf.near(x, y, &mut b),
+                    }
+                    for (p, q) in a.iter().flat_map(|p| b.iter().map(move |q| (p, q))) {
+                        worst = worst.max(distance(*p, *q));
+                    }
+                }
+            }
+        }
+        worst
+    }
     #[test]
     fn certified_errors_bound_dense_leaf_distance_and_are_monotone() {
         let control = RunControl::default();
@@ -2408,18 +2513,46 @@ mod tests {
             let spike = [0., 150.][usize::from(row && c % 4 == 2)];
             [100. + 0.3 * c as f64 + spike, f64::NAN][usize::from(row && c % 4 == 1)]
         });
-        for (n, (r, full_stride)) in [
-            (bump(64, 48), true),
-            (bump(67, 45), false),
-            (holed(67, 45), false),
-            (bridged, false),
-            (spiky, false),
+        // The review's s85 raster: holes and spikes only in its clipped far
+        // strips, where a clipped cell keeps one coarse triangle.
+        let mut g = Xorshift(85 * 104_729 + 5);
+        let cells85 = [4, 8][g.below(2)];
+        let (w, h) = (
+            16 * (2 + g.below(4)) + 1 + g.below(15),
+            16 * (2 + g.below(4)) + 1 + g.below(15),
+        );
+        let (hole, spike, edge) = (0.1 + 0.3 * g.unit(), 0.1 + 0.4 * g.unit(), 1 + g.below(8));
+        let v: Vec<f64> = (0..w * h)
+            .map(|i| {
+                let (c, r) = (i % w, i / w);
+                let base = 100. + 0.2 * c as f64 + 0.1 * r as f64;
+                let u = if c + edge < w && r + edge < h {
+                    1.
+                } else {
+                    g.unit()
+                };
+                match (u < hole, u < hole + spike) {
+                    (true, _) => f64::NAN,
+                    (_, true) => base + 150. * g.unit(),
+                    _ => base,
+                }
+            })
+            .collect();
+        assert_eq!((w, h, cells85), (35, 79, 4));
+        let s85 = raster::test_raster_with(w, h, 1e-5, move |c, r| v[r * w + c]);
+        for (n, (r, full_stride, cells)) in [
+            (bump(64, 48), true, 16),
+            (bump(67, 45), false, 16),
+            (holed(67, 45), false, 16),
+            (bridged, false, 16),
+            (spiky, false, 16),
+            (s85, false, cells85),
         ]
         .into_iter()
         .enumerate()
         {
             let frame = Frame::new(r.bounds);
-            let pyramid = Pyramid::new(&r, 16, &frame, 0., &attempt);
+            let pyramid = Pyramid::new(&r, cells, &frame, 0., &attempt);
             let plan = plan(&pyramid).unwrap();
             let sheets: Vec<_> = plan
                 .patches
@@ -2434,8 +2567,8 @@ mod tests {
                     assert_eq!(patch.error, 0.);
                     continue;
                 }
-                for &child in &patch.children {
-                    assert!(patch.error >= plan.patches[child].error);
+                for &child in patch.children.iter().filter(|_| patch.content) {
+                    assert!(patch.error >= plan.patches[child].drawn);
                 }
                 let mut measured: f64 = 0.;
                 for &leaf in &leaves {
@@ -2459,6 +2592,8 @@ mod tests {
                     patch.level
                 );
                 assert!(patch.error >= measured, "{n}: {} < {measured}", patch.error);
+                let exact = exact(&pyramid, &plan, patch);
+                assert!(patch.error >= exact, "{n}: {} < exact {exact}", patch.error);
                 if full_stride && patch.level + 1 == pyramid.depth {
                     assert!(
                         patch.error <= measured + 1e-9,
@@ -2467,11 +2602,16 @@ mod tests {
                     );
                 }
             }
-            let report = plan_report(&r, 16, &plan, 0.).unwrap();
-            assert!(report
-                .geometric_error_metres
-                .windows(2)
-                .all(|w| w[0] >= w[1]));
+            let report = plan_report(&r, cells, &plan, 0.).unwrap();
+            // Per-level maxima are monotone where no level holds a routing floor.
+            let floors = plan.patches.iter().any(|p| !p.content);
+            assert!(
+                floors
+                    || report
+                        .geometric_error_metres
+                        .windows(2)
+                        .all(|w| w[0] >= w[1])
+            );
             assert_eq!(report.root_geometric_error_metres, plan.root().error);
         }
         // A constant height only leaves the Earth-curvature sag of decimated
