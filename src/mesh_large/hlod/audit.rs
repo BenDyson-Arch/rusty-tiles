@@ -527,9 +527,11 @@ mod tests {
                 end: u64::MAX,
                 epsilon: f64::MAX,
                 terminal_lock: false,
+                step: u32::MAX,
             }],
             terminal_vertices: vec![a, b],
             scale: f64::MAX,
+            relief_floor: f64::MAX,
         };
         let n = serde_json::to_vec(&contract).unwrap().len() as u64;
         // Includes fixed contract keys too, so this is stricter than the per-ref claim.

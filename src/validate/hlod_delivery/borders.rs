@@ -9,13 +9,15 @@
 //! directions; nothing is matched by distance and no chord is inferred.
 //!
 //! Displacement `d` of a contracted vertex is its distance from the chord at its
-//! ordinal, computed in f64 and rounded outward. Each tile needs `d <= G/16` (the
-//! archive analogue of `epsilon_d <= E_d/16 <= G/16`). Logical depth is not in the
+//! ordinal, computed in f64 and rounded outward. Each tile needs `d <= G/8` (border
+//! relief, D11 amendment A1: a relieved chord's tolerance exceeds E_d/16, and its tiles'
+//! published G covers 8 x their certified displacement). Logical depth is not in the
 //! archive (spliced chains skip levels), so pairwise depth rules use only what the
 //! delivered tree proves: siblings share one logical depth and must agree exactly
 //! (same chord and ordinal, or both exact); a tile whose cell parent is an ancestor
 //! of a disjoint tile is no deeper than it, so a leaf there is a terminal lock (the
-//! deeper tile is exact) and a coarse tile needs `d_X + d_Y <= G_X/8`. Same-depth
+//! deeper tile is exact) and a coarse tile needs `d_X + d_Y <= G_X/8` for every such
+//! tile below its siblings (siblings themselves agree exactly, so add no gap). Same-depth
 //! cousins and source-arc certificates need the source oracle and audit sidecar.
 use super::super::Error;
 use super::{
@@ -447,10 +449,10 @@ impl Store {
         let g = g.unwrap_or(0.);
         for (i, &v) in path.iter().enumerate().take(m).skip(1) {
             let d = displacement(a, b, v, i as u64, m64);
-            if d > g / 16. {
+            if d > g / 8. {
                 return Err(bad(
                     "borderDisplacement",
-                    &format!("contracted border vertex is {d} from its chord, above G/16 = {}: tile={tile}", g / 16.),
+                    &format!("contracted border vertex is {d} from its chord, above G/8 = {}: tile={tile}", g / 8.),
                 ));
             }
             let from_lower = if a == chord.0 {
@@ -735,8 +737,10 @@ fn vertex_pairs(group: &[Owner], effort: &Effort) -> Result<(), Error> {
     effort.charge(n.saturating_mul(levels + 2))?;
     // Siblings: one logical depth, identical images (zero gap).
     let mut first = HashMap::<i64, usize>::new();
+    let mut siblings = HashMap::<i64, Vec<usize>>::new();
     for (i, r) in group.iter().enumerate() {
         let Some((cell, _)) = r.cell else { continue };
+        siblings.entry(cell).or_default().push(i);
         match first.get(&cell) {
             Some(&j) if group[j].image != r.image => {
                 return Err(bad(
@@ -795,9 +799,21 @@ fn vertex_pairs(group: &[Owner], effort: &Effort) -> Result<(), Error> {
                 ));
             }
         } else {
+            // Siblings deliver this vertex identically (checked above): no gap. The bound
+            // covers every tile strictly below them, so skip only the siblings themselves
+            // (at most one per child cell, so a fixed number of range queries).
+            let around = &siblings[&cell];
+            effort.charge(around.len().saturating_mul(2))?;
             let deeper = ranges
                 .iter()
-                .map(|&(lo, hi)| maximum(lo, hi))
+                .map(|&(lo, hi)| {
+                    let (mut best, mut at) = (0f64, lo);
+                    for &s in around.iter().filter(|&&s| s >= lo && s < hi) {
+                        best = best.max(maximum(at, s));
+                        at = s + 1;
+                    }
+                    best.max(maximum(at, hi))
+                })
                 .fold(0., f64::max);
             if (x.d + deeper) * OUTWARD > x.g / 8. {
                 return Err(bad(
@@ -1040,18 +1056,23 @@ mod tests {
         assert!(used <= 4 * 1024, "{used}");
     }
     #[test]
-    fn identical_sibling_contraction_within_g_over_16_passes() {
+    fn identical_sibling_contraction_within_g_over_8_passes() {
         // d = 0.1 <= 2/16; A + B gap bound 0.2 <= 2/8.
         siblings(a_coarse(&[0, 4]), 2., b_coarse(&[0, 4]), 2.).unwrap();
+        // A relieved chord (A1): d = 0.1 <= 1/8, above D11's 1/16.
+        siblings(a_coarse(&[0, 4]), 1., b_coarse(&[0, 4]), 1.).unwrap();
+        // Identical siblings add no gap to each other: G = 8d suffices.
+        siblings(a_coarse(&[0, 4]), 0.8, b_coarse(&[0, 4]), 0.8).unwrap();
         // Exact borders need no G at all.
         siblings(a_coarse(&ALL), 0., b_coarse(&ALL), 0.).unwrap();
         // Keeping P2 moves P1 and P3 by 0.05 off the chords through it.
         siblings(a_coarse(&[0, 2, 4]), 1., b_coarse(&[0, 2, 4]), 1.).unwrap();
     }
     #[test]
-    fn contraction_beyond_g_over_16_is_refused() {
+    fn contraction_beyond_g_over_8_is_refused() {
+        // G below the relief floor: d = 0.1 > 0.75/8.
         refused(
-            siblings(a_coarse(&[0, 4]), 1.5, b_coarse(&[0, 4]), 1.5),
+            siblings(a_coarse(&[0, 4]), 0.75, b_coarse(&[0, 4]), 0.75),
             "borderDisplacement",
         );
         // A contraction with no published G is never within it.
@@ -1154,6 +1175,10 @@ mod tests {
         // M contracts P2 by 0.1 (<= its 2/16) beside an exact A.
         mixed(1., &ALL, &ALL, &[0, 4]).unwrap();
         refused(mixed(0.5, &ALL, &ALL, &[0, 4]), "mixedDepthBorderGap");
+        // A1: A and its sibling B contract alike (no gap), but M below B adds its own
+        // 0.1: 0.2 <= 1.6/8, not <= 1/8.
+        mixed(1.6, &[0, 4], &[0, 4], &[0, 4]).unwrap();
+        refused(mixed(1., &[0, 4], &[0, 4], &[0, 4]), "mixedDepthBorderGap");
     }
     #[test]
     fn a_shallower_leaf_locks_every_deeper_neighbour_exactly() {

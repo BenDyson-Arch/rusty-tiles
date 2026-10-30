@@ -356,7 +356,9 @@ pub(super) fn check(
                     c.missing_segments += 1;
                 }
                 let epsilon = cert["epsilon"].as_f64().unwrap();
-                assert!(epsilon >= 0. && epsilon <= scale / 16.);
+                // Border relief (A1): a ladder step doubles the tolerance.
+                let step = cert["step"].as_u64().unwrap_or(0) as i32;
+                assert!(epsilon >= 0. && epsilon <= scale / 16. * 2f64.powi(step));
                 let mut at_values = Vec::with_capacity(end - first + 1);
                 for (i, &p) in chain.iter().enumerate().take(end + 1).skip(first) {
                     let u = (i - first) as f64 / (end - first) as f64;

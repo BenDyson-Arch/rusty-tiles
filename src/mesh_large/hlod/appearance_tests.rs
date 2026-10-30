@@ -201,13 +201,17 @@ fn stage(input: &Path, out: &Path) -> PathBuf {
 }
 
 fn stage_capped(input: &Path, out: &Path, cap: usize) -> PathBuf {
+    stage_settings(input, out, super::tests::test_settings(cap))
+}
+
+fn stage_settings(input: &Path, out: &Path, settings: super::Settings) -> PathBuf {
     let scratch = out.with_extension("scratch");
     fs::create_dir_all(&scratch).unwrap();
     let request = LeafOutputRequest::new(input, out, LeafProfile::Balanced)
         .with_jobs(NonZeroUsize::new(2).unwrap())
         .with_scratch_dir(&scratch)
         .with_leaf_triangles(256)
-        .with_hlod_settings(super::tests::test_settings(cap));
+        .with_hlod_settings(settings);
     let dir = mesh_to_leaf_payloads(request, &RunControl::default())
         .unwrap()
         .output;
@@ -553,7 +557,15 @@ fn omitted_cells_get_no_pages_textures_or_donor_work() {
     let mut omitted_any = false;
     let mut all_omitted = false;
     for cap in [12, 40, 120] {
-        let dir = stage_capped(&input, &work.path().join(format!("cap{cap}")), cap);
+        // D11's ladder alone: border relief (A1) builds some of these cells.
+        let dir = stage_settings(
+            &input,
+            &work.path().join(format!("cap{cap}")),
+            super::Settings {
+                mutation: super::Mutation::NoRelief,
+                ..super::tests::test_settings(cap)
+            },
+        );
         let manifest: Value =
             serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
         let hlod = &manifest["hlod"];

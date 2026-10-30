@@ -360,6 +360,7 @@ fn measured_contract(parent: TileKey, children: &[TileGeometry], fixture: Fixtur
                     end: 1,
                     epsilon: 0.,
                     terminal_lock: true,
+                    step: 0,
                 };
                 assert_eq!(certificate.endpoints, certificate.chain);
                 assert_eq!(certificate.origin, certificate.chain[0]);
@@ -416,6 +417,7 @@ fn measured_contract(parent: TileKey, children: &[TileGeometry], fixture: Fixtur
         end: 2,
         epsilon,
         terminal_lock: false,
+        step: 0,
     });
     for point in [a, b] {
         interface.push(strip_row(parent.leaf_begin, point, point));
@@ -444,6 +446,7 @@ fn measured_contract(parent: TileKey, children: &[TileGeometry], fixture: Fixtur
         terminal_vertices,
         // A depth-one ladder for an extent containing the generated source.
         scale: (4. + 4. * soup_faces as f64) / 2048.,
+        relief_floor: 0.,
     };
     let metadata = Metadata::of(&contract);
     assert_eq!(metadata.certificates, expected_certificates);

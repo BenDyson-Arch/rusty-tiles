@@ -10,7 +10,7 @@ pub(super) fn memory_need(sorter: SortConfig) -> u64 {
         + sorter.memory_bound::<disk::Words<7>>()
         + 8 * sorter.buffer_bytes as u64
         + (1 << 16)
-        + 12 * disk::CACHE_BYTES
+        + 14 * disk::CACHE_BYTES
         + 8 * graph::FILTER_WORDS as u64
         // Chain reuse compares two live contracts before the geometry stage.
         + 2 * contract_workspace_bytes(6 * super::TRIANGLE_CAP as u64)
@@ -33,6 +33,7 @@ use crate::{
     spill::{Scratch, Sequence, SortConfig},
     JobError,
 };
+use std::collections::BTreeMap;
 
 /// Persistent bound for graph, ownership, source arcs, level correspondence and contracts.
 /// Counts are source interface counts, not an assumed manifold/valence bound. The source
@@ -50,14 +51,14 @@ pub(super) fn scratch_need(
     let persistent = rows
         .checked_mul(8 + 36)?
         .checked_add(vertices.checked_mul(64)?)?
-        .checked_add(edges.checked_mul(56)?)?
+        .checked_add(edges.checked_mul(56 + 40)?)?
         .checked_add(nodes.checked_mul(64)?)?
         .checked_add(leaves.checked_mul(264)?)?
         .checked_add(
             h.checked_mul(
                 vertices
                     .checked_mul(104)?
-                    .checked_add(edges.checked_mul(80)?)?
+                    .checked_add(edges.checked_mul(96)?)?
                     .checked_add(rows.checked_mul(16)?)?,
             )?,
         )?;
@@ -85,6 +86,55 @@ pub(crate) struct DepthReceipt {
     pub omission_sources: u64,
     pub omitted_cells: u64,
     pub frontier_tiles: u64,
+    /// Border relief (A1): cells whose contract exceeded the trigger at this depth, shared
+    /// segments certified at a ladder step above zero, the largest step, and the largest
+    /// published relief floor.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub relief_cells: u64,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub relieved_segments: u64,
+    #[serde(skip_serializing_if = "is_zero_step")]
+    pub max_relief_step: u32,
+    #[serde(skip_serializing_if = "is_zero_f64")]
+    pub max_relief_floor: f64,
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
+}
+fn is_zero_step(n: &u32) -> bool {
+    *n == 0
+}
+fn is_zero_f64(n: &f64) -> bool {
+    *n == 0.
+}
+
+/// Border relief (A1, owner decision 2026-10-30). A cell whose depth-d contract has more
+/// than `TRIGGER` of the hard cap in items requests the least ladder step that brings it
+/// to `TARGET`; a shared arc takes the largest request of its owners, and never less than
+/// its finer level's tolerance. Relief certificates stay exact and shared.
+pub(super) const RELIEF_STEPS: u32 = 8;
+/// Percent of the hard cap.
+const TRIGGER: u64 = 85;
+const TARGET: u64 = 75;
+
+/// One level's relief: cells that triggered, segments above step zero, largest step.
+#[derive(Clone, Copy, Default)]
+pub(super) struct ReliefLevel {
+    pub cells: u64,
+    pub segments: u64,
+    pub max_step: u32,
+}
+
+type Counts = [u64; RELIEF_STEPS as usize + 1];
+
+/// What one level walk does with each source chain.
+enum Mode<'a> {
+    /// Emit chords. A chain's step is its owners' largest request (`requests`, by node),
+    /// and at least its finer level's.
+    Emit(&'a BTreeMap<u64, u32>),
+    /// Count, for every chain with a triggered owner, its chords at each ladder step.
+    Count(&'a mut BTreeMap<u64, Counts>),
 }
 
 pub(super) struct Borders {
@@ -92,11 +142,20 @@ pub(super) struct Borders {
     /// Per (logical depth, source vertex): retained endpoint pair and source parameter.
     maps: Disk<3>,
     /// endpoints, chain source edge, origin, first/end source ordinal, epsilon bits, depth,
-    /// the complete source-owner run whose depth-coarsened owners consume this segment.
-    segments: Disk<10>,
+    /// the complete source-owner run whose depth-coarsened owners consume this segment,
+    /// the largest finer certified displacement on its subarc (bits) and its ladder step.
+    segments: Disk<12>,
     /// Per node: linked references to common segments (head/count stored in Source::nodes).
     refs: Disk<2>,
     ladder: Ladder,
+    /// Hard payload cap the relief trigger is a share of.
+    cap: u64,
+    /// Per source edge: largest certified displacement over finer levels, and the ladder
+    /// step of the finest level so far (A1 floor and monotone tolerance).
+    edge_finer: Disk<2>,
+    /// Per source edge, this level: certified displacement, step and depth + 1.
+    edge_level: Disk<3>,
+    relief: Vec<ReliefLevel>,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -109,6 +168,9 @@ pub(super) struct Certificate {
     pub end: u64,
     pub epsilon: f64,
     pub terminal_lock: bool,
+    /// Border relief ladder step (A1); 0 is D11's E_d/16.
+    #[serde(skip_serializing_if = "is_zero_step")]
+    pub step: u32,
 }
 
 #[derive(serde::Serialize)]
@@ -120,6 +182,11 @@ pub(super) struct Contract {
     /// Exact vertex contacts with a terminal leaf, including contacts with no shared edge.
     pub terminal_vertices: Vec<Key>,
     pub scale: f64,
+    /// Border relief floor (A1): 8 x the largest sum of a certificate's displacement and
+    /// the largest finer certified displacement on its subarc. Published G is at least
+    /// this; it never exceeds `scale` without relief.
+    #[serde(skip_serializing_if = "is_zero_f64")]
+    pub relief_floor: f64,
 }
 
 /// Peak storage of contract construction for at most `limit` linked items. Each
@@ -137,6 +204,10 @@ pub(super) fn contract_workspace_bytes(limit: u64) -> u64 {
 }
 
 impl Contract {
+    /// Whether any certificate is relieved (A1).
+    pub(super) fn relieved(&self) -> bool {
+        self.certificates.iter().any(|c| c.step > 0)
+    }
     pub(super) fn terminal_locks(&self) -> u64 {
         self.terminal_vertices.len() as u64
             + self.certificates.iter().filter(|c| c.terminal_lock).count() as u64
@@ -160,6 +231,7 @@ impl Borders {
         open_ends: impl Iterator<Item = Result<super::interfaces::KeyRecord, crate::spill::SpillError>>,
         faces: impl Iterator<Item = Result<[Key; 3], JobError>>,
         extent: f64,
+        cap: usize,
         lease: &ComponentLease<'_, '_>,
         check: &(dyn Fn() -> Result<(), JobError> + Sync),
     ) -> Result<Self, JobError> {
@@ -174,12 +246,21 @@ impl Borders {
         )?;
         source.retain_faces(faces, check)?;
         let mut borders = Self {
-            source,
             maps: Disk::new(scratch, "border-maps")?,
             segments: Disk::new(scratch, "border-segments")?,
             refs: Disk::new(scratch, "border-contracts")?,
             ladder: Ladder::new(extent)?,
+            cap: cap as u64,
+            edge_finer: Disk::new(scratch, "border-relief-finer")?,
+            edge_level: Disk::new(scratch, "border-relief-level")?,
+            relief: vec![ReliefLevel::default(); source.depth as usize + 1],
+            source,
         };
+        if borders.source.edges.len > 0 {
+            let last = borders.source.edges.len - 1;
+            borders.edge_finer.set(last, [0, 0])?;
+            borders.edge_level.set(last, [0, 0, 0])?;
+        }
         // Source arcs are traversed one level at a time; their temporary ordered points
         // are discarded after certificates and source-vertex maps have been materialized.
         for depth in (0..=borders.source.depth).rev() {
@@ -250,8 +331,9 @@ impl Borders {
             + self.source.leaves.len * 264
             + self.source.leaf_rows.len() * 36
             + self.maps.len * 24
-            + self.segments.len * 80
+            + self.segments.len * 96
             + self.refs.len * 16
+            + self.source.edges.len * 40
     }
     pub(super) fn leaf_rows(&self) -> &Sequence<InterfaceRow> {
         &self.source.leaf_rows
@@ -299,12 +381,94 @@ impl Borders {
         self.ladder.error(depth)
     }
 
+    /// Border relief at this depth (A1).
+    pub(super) fn relief(&self, depth: u32) -> ReliefLevel {
+        self.relief.get(depth as usize).copied().unwrap_or_default()
+    }
+
+    /// One level: emitted as D11 with each chain at its finer level's minimum step. Only
+    /// when a cell's contract then exceeds the trigger are its chains' chords counted at
+    /// every ladder step, the level rewound and emitted again with the requested steps.
+    /// Without a trigger (or finer relief) this is D11's level, byte for byte.
     fn level(
         &mut self,
         scratch: &Scratch,
         depth: u32,
         check: &(dyn Fn() -> Result<(), JobError> + Sync),
     ) -> Result<(), JobError> {
+        let mark = (self.segments.len, self.refs.len);
+        self.walk(scratch, depth, &mut Mode::Emit(&BTreeMap::new()), check)?;
+        let mut counts = BTreeMap::new();
+        let mut items = BTreeMap::new();
+        for id in 0..self.source.nodes.len {
+            let n = self.source.nodes.get(id)?;
+            // Only coarse cells build from a contract; leaves are published exactly.
+            if n[2] == u64::from(depth)
+                && n[5] & 1 == 0
+                && n[7].saturating_mul(100) > TRIGGER * self.cap
+            {
+                counts.insert(id, [0; RELIEF_STEPS as usize + 1]);
+                items.insert(id, n[7]);
+            }
+        }
+        if !counts.is_empty() {
+            check()?;
+            self.walk(scratch, depth, &mut Mode::Count(&mut counts), check)?;
+            let requests: BTreeMap<u64, u32> = counts
+                .iter()
+                .map(|(&id, c)| {
+                    let at = |j: usize| (items[&id] + c[j]).saturating_sub(c[0]);
+                    let step = (1..=RELIEF_STEPS)
+                        .find(|&j| at(j as usize).saturating_mul(100) <= TARGET * self.cap)
+                        .unwrap_or(RELIEF_STEPS);
+                    (id, step)
+                })
+                .collect();
+            self.rewind(mark, depth)?;
+            self.walk(scratch, depth, &mut Mode::Emit(&requests), check)?;
+            self.relief[depth as usize].cells = requests.len() as u64;
+        }
+        // The finer state the next (coarser) level reads: this level's steps, and the
+        // largest certified displacement so far on each external edge.
+        for e in 0..self.source.edges.len {
+            if e.is_multiple_of(4096) {
+                check()?;
+            }
+            let r = self.edge_level.get(e)?;
+            if r[2] == u64::from(depth) + 1 {
+                let f = self.edge_finer.get(e)?;
+                let bound = f64::from_bits(f[0]).max(f64::from_bits(r[0]));
+                self.edge_finer.set(e, [bound.to_bits(), r[1]])?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Drop this level's emission: segments and references from `mark` on, and the
+    /// reference lists of this depth's nodes (only this level writes them).
+    fn rewind(&mut self, mark: (u64, u64), depth: u32) -> Result<(), JobError> {
+        self.segments.truncate(mark.0);
+        self.refs.truncate(mark.1);
+        for id in 0..self.source.nodes.len {
+            let mut n = self.source.nodes.get(id)?;
+            if n[2] == u64::from(depth) {
+                n[6] = NONE;
+                n[7] = 0;
+                self.source.nodes.set(id, n)?;
+            }
+        }
+        self.relief[depth as usize] = ReliefLevel::default();
+        Ok(())
+    }
+
+    fn walk(
+        &mut self,
+        scratch: &Scratch,
+        depth: u32,
+        mode: &mut Mode<'_>,
+        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    ) -> Result<(), JobError> {
+        let emits = matches!(mode, Mode::Emit(_));
         let mut active = Disk::<1>::new(scratch, "border-live-edges")?;
         for i in 0..self.source.edges.len {
             let e = self.source.edges.get(i)?;
@@ -355,10 +519,10 @@ impl Borders {
                 }
             }
             live.push([two[0], two[1], kind])?;
-            if external && degree > 0 && kind == 1 {
+            if emits && external && degree > 0 && kind == 1 {
                 self.point_contacts(v, &vertex, depth, &active, &mut reached)?;
             }
-            if external && degree == 0 {
+            if emits && external && degree == 0 {
                 self.emit_segment([
                     v,
                     v,
@@ -370,6 +534,8 @@ impl Borders {
                     u64::from(depth),
                     vertex[3],
                     vertex[4],
+                    0,
+                    0,
                 ])?;
             }
         }
@@ -384,7 +550,7 @@ impl Borders {
             while edge != NONE {
                 let e = self.source.edges.get(edge)?;
                 if active.get(edge)?[0] == 1 {
-                    self.chain(v, edge, depth, &live, &mut active, &mut arc, check)?;
+                    self.chain(v, edge, depth, &live, &mut active, &mut arc, mode, check)?;
                 }
                 edge = if e[0] == v { e[4] } else { e[5] };
             }
@@ -394,7 +560,7 @@ impl Borders {
         for edge in 0..self.source.edges.len {
             if active.get(edge)?[0] == 1 {
                 let e = self.source.edges.get(edge)?;
-                self.chain(e[0], edge, depth, &live, &mut active, &mut arc, check)?;
+                self.chain(e[0], edge, depth, &live, &mut active, &mut arc, mode, check)?;
             }
         }
         Ok(())
@@ -409,6 +575,7 @@ impl Borders {
         live: &Disk<3>,
         active: &mut Disk<1>,
         arc: &mut Disk<3>,
+        mode: &mut Mode<'_>,
         check: &(dyn Fn() -> Result<(), JobError> + Sync),
     ) -> Result<(), JobError> {
         let mut begin = arc.len;
@@ -444,7 +611,6 @@ impl Borders {
         let mut first_edge = first_edge;
         let mut start = start;
         let e = self.source.edges.get(first_edge)?;
-        let epsilon = self.ladder.epsilon(depth);
         let mut pieces = vec![begin, end];
         if at == start {
             let count = end - begin;
@@ -522,20 +688,104 @@ impl Borders {
                 pieces.insert(1, witness);
             }
         }
-        for pair in pieces.windows(2) {
-            self.shortcuts(
-                arc,
-                pair[0],
-                pair[1],
-                begin,
-                first_edge,
-                start,
-                depth,
-                [e[2], e[3]],
-                epsilon,
-            )?;
+        // A1: the least step whose tolerance covers every finer chord on this arc.
+        let mut least = 0;
+        if depth < self.source.depth {
+            for i in begin..end {
+                let edge = arc.get(i)?[1];
+                if edge != NONE {
+                    least = least.max(self.edge_finer.get(edge)?[1].saturating_sub(1) as u32);
+                }
+            }
+        }
+        // Relieved pieces also end at isolated ears still retained one level finer.
+        let pinned = |this: &Self, step: u32| -> Result<Vec<u64>, JobError> {
+            let mut p = pieces.clone();
+            if step > 0 {
+                for i in begin + 1..end {
+                    let a = arc.get(i)?;
+                    if a[2] != 0 && Source::ear_pinned(&this.source.vertices.get(a[0])?, depth) {
+                        p.push(i);
+                    }
+                }
+                p.sort_unstable();
+                p.dedup();
+            }
+            Ok(p)
+        };
+        let mut owners = Vec::new();
+        let mut at = e[2];
+        while at < e[3] {
+            let owner = self.source.owner(at, depth)?;
+            owners.push(owner);
+            let end = self.source.nodes.get(owner)?[4];
+            at = graph::next_owner(&self.source.owners, at, e[3], end)?;
+        }
+        match mode {
+            Mode::Emit(requests) => {
+                let step = owners
+                    .iter()
+                    .filter_map(|o| requests.get(o).copied())
+                    .fold(least, u32::max);
+                let epsilon = self.ladder.relief(depth, step);
+                for pair in pinned(self, step)?.windows(2) {
+                    self.shortcuts(
+                        arc,
+                        pair[0],
+                        pair[1],
+                        begin,
+                        first_edge,
+                        start,
+                        depth,
+                        [e[2], e[3]],
+                        epsilon,
+                        step,
+                    )?;
+                }
+            }
+            Mode::Count(counts) => {
+                if !owners.iter().any(|o| counts.contains_key(o)) {
+                    return Ok(());
+                }
+                let mut chords = [0u64; RELIEF_STEPS as usize + 1];
+                for (j, chords) in chords.iter_mut().enumerate() {
+                    let step = least.max(j as u32);
+                    let epsilon = self.ladder.relief(depth, step);
+                    for pair in pinned(self, step)?.windows(2) {
+                        *chords += self.count(arc, pair[0], pair[1], epsilon)?;
+                    }
+                }
+                for o in &owners {
+                    if let Some(c) = counts.get_mut(o) {
+                        for (c, n) in c.iter_mut().zip(chords) {
+                            *c += n;
+                        }
+                    }
+                }
+            }
         }
         Ok(())
+    }
+
+    /// Chords one piece would emit at `epsilon` (the relief census; nothing is written).
+    fn count(&self, arc: &Disk<3>, first: u64, last: u64, epsilon: f64) -> Result<u64, JobError> {
+        let vertices = &self.source.vertices;
+        let mut n = 0;
+        curve::shortcuts(
+            first,
+            last,
+            epsilon,
+            &mut |i| {
+                let v = vertices.get(arc.get(i)?[0])?;
+                Ok([v[0] as u32, v[1] as u32, v[2] as u32].map(f32::from_bits))
+            },
+            &mut |i| Ok(arc.get(i)?[2] != 0),
+            &mut |_, _, _| {
+                n += 1;
+                Ok(())
+            },
+        )?;
+        Ok(n)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -550,6 +800,7 @@ impl Borders {
         depth: u32,
         owners: [u64; 2],
         epsilon: f64,
+        step: u32,
     ) -> Result<(), JobError> {
         // The callback's mutation touches only output stores. Source reads and node-owner
         // traversal use immutable input stores; no source-sized chord vector is retained.
@@ -564,6 +815,9 @@ impl Borders {
         let maps = &mut self.maps;
         let segments = &mut self.segments;
         let refs = &mut self.refs;
+        let edge_finer = &self.edge_finer;
+        let edge_level = &mut self.edge_level;
+        let relief = &mut self.relief[depth as usize];
         curve::shortcuts(
             first,
             last,
@@ -576,6 +830,20 @@ impl Borders {
             &mut |a, b, bound| {
                 let va = arc.get(a)?[0];
                 let vb = arc.get(b)?[0];
+                // A1: finer certified displacement on this subarc, and this level's.
+                let mut finer = 0f64;
+                for i in a..b {
+                    let edge = arc.get(i)?[1];
+                    finer = finer.max(f64::from_bits(edge_finer.get(edge)?[0]));
+                    edge_level.set(
+                        edge,
+                        [bound.to_bits(), u64::from(step), u64::from(depth) + 1],
+                    )?;
+                }
+                if step > 0 {
+                    relief.segments += 1;
+                    relief.max_step = relief.max_step.max(step);
+                }
                 let segment = [
                     va,
                     vb,
@@ -587,6 +855,8 @@ impl Borders {
                     u64::from(depth),
                     owners[0],
                     owners[1],
+                    finer.to_bits(),
+                    u64::from(step),
                 ];
                 let id = segments.push(segment)?;
                 for i in a..=b {
@@ -659,6 +929,8 @@ impl Borders {
                         u64::from(depth),
                         vertex[3],
                         vertex[4],
+                        0,
+                        0,
                     ];
                     segment = self.segments.push(s)?;
                 }
@@ -670,7 +942,7 @@ impl Borders {
         }
         Ok(())
     }
-    fn emit_segment(&mut self, segment: [u64; 10]) -> Result<(), JobError> {
+    fn emit_segment(&mut self, segment: [u64; 12]) -> Result<(), JobError> {
         let id = self.segments.push(segment)?;
         let mut at = segment[8];
         while at < segment[9] {
@@ -698,6 +970,7 @@ impl Borders {
         let mut interface = Vec::with_capacity(3 * count);
         let mut certificates = Vec::with_capacity(count);
         let mut terminal_vertices = Vec::with_capacity(2 * count);
+        let mut relief_floor = 0f64;
         while at != NONE {
             let link = self.refs.get(at)?;
             let s = self.segments.get(link[1])?;
@@ -732,7 +1005,12 @@ impl Borders {
                     end: s[5],
                     epsilon: f64::from_bits(s[6]),
                     terminal_lock: edge[6] <= u64::from(key.depth),
+                    step: s[11] as u32,
                 });
+                if s[11] > 0 {
+                    relief_floor =
+                        relief_floor.max(8. * (f64::from_bits(s[6]) + f64::from_bits(s[10])));
+                }
             }
             at = link[0];
         }
@@ -746,6 +1024,7 @@ impl Borders {
             certificates,
             terminal_vertices,
             scale: self.scale(self.publication_depth(key)?),
+            relief_floor,
         }))
     }
     pub(super) fn mapping(
@@ -811,6 +1090,7 @@ mod tests {
                         end: 1,
                         epsilon: 0.,
                         terminal_lock: true,
+                        step: 0,
                     });
                 }
             }
@@ -926,6 +1206,7 @@ mod tests {
                 std::iter::empty(),
                 std::iter::empty(),
                 4096.,
+                super::super::TRIANGLE_CAP,
                 &lease,
                 &|| Ok(()),
             )
@@ -974,6 +1255,7 @@ mod tests {
             certificates: vec![],
             terminal_vertices: vec![],
             scale: 1.,
+            relief_floor: 0.,
         };
         assert_eq!(c.minimum_triangles(), 8193);
         assert!(c.minimum_triangles() > super::super::TRIANGLE_CAP);
@@ -1080,6 +1362,7 @@ mod tests {
             std::iter::empty(),
             faces.into_iter().map(Ok),
             4096.,
+            super::super::TRIANGLE_CAP,
             &lease,
             &|| Ok(()),
         )
@@ -1170,6 +1453,7 @@ mod tests {
             std::iter::empty(),
             std::iter::empty(),
             4096.,
+            super::super::TRIANGLE_CAP,
             &lease,
             &|| Ok(()),
         )
@@ -1226,6 +1510,7 @@ mod tests {
             [Ok(super::super::interfaces::KeyRecord(points[2]))].into_iter(),
             std::iter::empty(),
             4096.,
+            super::super::TRIANGLE_CAP,
             &lease,
             &|| Ok(()),
         )

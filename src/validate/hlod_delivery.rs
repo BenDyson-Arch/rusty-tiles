@@ -18,7 +18,7 @@
 //!
 //! D11 (`borders`): an ancestor may contract its shared leaf border to chords
 //! between retained exact vertices, one witnessed chord per arc, each contracted
-//! vertex within G/16 of its chord at its edge ordinal; junctions and point
+//! vertex within G/8 of its chord at its edge ordinal (A1); junctions and point
 //! contacts stay exact. Siblings agree exactly, a shallower leaf locks deeper
 //! neighbours, and other provably no-deeper pairs stay within G/8. Directed
 //! incidences are counted: unsupported same-direction multiplicity must lie on

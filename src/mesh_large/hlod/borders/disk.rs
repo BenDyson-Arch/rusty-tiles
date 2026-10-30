@@ -156,6 +156,10 @@ impl<const N: usize> Disk<N> {
         self.len = self.len.max(index + 1);
         Ok(())
     }
+    /// Forget every record from `len` on (a relieved level rewinds its emission).
+    pub(super) fn truncate(&mut self, len: u64) {
+        self.len = self.len.min(len);
+    }
     pub(super) fn push(&mut self, record: [u64; N]) -> Result<u64, JobError> {
         let i = self.len;
         self.set(i, record)?;

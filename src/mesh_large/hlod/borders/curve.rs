@@ -29,6 +29,12 @@ impl Ladder {
     pub(super) fn epsilon(self, depth: u32) -> f64 {
         self.error(depth) / 16.
     }
+    /// Border relief (A1): ladder step `step` doubles the tolerance per step. Exact powers
+    /// of two, so a coarser level's step `j` has at least a finer one's tolerance when
+    /// `j >= j_finer - 1`.
+    pub(super) fn relief(self, depth: u32, step: u32) -> f64 {
+        self.epsilon(depth) * 2f64.powi(step as i32)
+    }
 }
 
 /// Rounding allowance for f64 affine arithmetic over f32 coordinates and u64 ordinal

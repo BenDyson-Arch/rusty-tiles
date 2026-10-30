@@ -129,6 +129,40 @@ status only grows with depth and shared edges are fixed, so retained sets stay n
 (checked in test builds). Contraction then moves each removed vertex to the chord
 endpoint more of its faces already hold with an interface or removed third corner,
 collapsing those faces; each side remaps only its own faces of the same chord.
+## Border relief (A1, owner decision 2026-10-30)
+
+See D11's A1 amendment for the rule. Implementation:
+
+- **Border pass.** `borders::Borders::level` first emits a level as before. Each chain's
+  step is the least its finer level allows; that minimum is read per source edge.
+  - Only when a depth-d node then references more than 85% of the hard cap in segments
+    does a counting walk run.
+  - The counting walk re-derives the same chains and, for every chain with a triggered
+    owner, counts its chords at each of the nine ladder steps.
+  - Then the level's segments and references are truncated, this depth's node lists reset,
+    and the level is emitted again with each chain at its owners' largest request.
+  - Per source edge, the pass keeps the finest level's step and the largest certified
+    displacement so far: two disk words, plus three for the level in progress, all charged
+    to the border scratch.
+  - Segment records gain that finer displacement and the step (twelve words). A contract
+    carries `step` per certificate and `reliefFloor`.
+- **Ear pins.** Isolated ears are found in the face-retention pass (vertex bits 48..56). A
+  relieved piece ends at each one that is still retained one level finer.
+- **Contraction.** `geometry::relief::along_border` collapses each removed vertex of a
+  relieved tile onto a neighbour along its own chord.
+  - Collapses are tried nearer neighbour first, in a fixed vertex order.
+  - Each one is checked against the guard's seam rules (same-chord transients allowed), the
+    link condition, orientation, area, duplicates and orphaned corners.
+  - Up to eight rounds may first move a blocking face's interior corner onto a neighbour.
+  - A complete collapse is published only through the unchanged checks: required items,
+    `changes`, and the contraction guard against the original faces.
+  - Otherwise the leftovers take the ordinary snap and reconstruction on the collapsed mesh.
+  - If contraction fails, the primary contraction's `Residue` (never a recovery copy's) is
+    returned in `Outcome` for the last resort.
+- **Cost.** Untriggered levels pay one extra pass over their edges (the finer state).
+  Triggered levels pay two more chain walks and at most nine greedy passes per chain of a
+  triggered cell: O(J·n·h) with J fixed.
+
 ## Coarse drops (owner decision 2026-10-28)
 
 Only after every strategy above has failed, and only when the contracted input

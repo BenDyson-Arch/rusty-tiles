@@ -9,6 +9,7 @@ mod contraction_memory;
 pub(crate) mod folds;
 pub(crate) mod locations;
 pub(crate) mod measurement;
+mod relief;
 mod sheets;
 mod topology;
 pub(crate) use topology::Receipt as TopologyReceipt;
@@ -74,9 +75,25 @@ pub(crate) struct Built {
 pub(crate) struct Outcome {
     pub built: Option<Built>,
     pub contraction_failed: bool,
+    /// Border relief (A1): the primary contraction's residue when a relieved contract's
+    /// contraction failed; the last resort's input (R -> N3 handover).
+    relief: Option<relief::Residue>,
     /// All measured proposals, including rejected candidates and the accepted publication.
     pub attempted_topology: TopologyReceipt,
     pub construction_dropped: Vec<[[f32; 3]; 3]>,
+}
+
+impl Outcome {
+    /// No build was attempted (the contract alone cannot fit the cap).
+    pub(crate) fn unbuilt() -> Self {
+        Self {
+            built: None,
+            contraction_failed: false,
+            relief: None,
+            attempted_topology: Default::default(),
+            construction_dropped: Vec::new(),
+        }
+    }
 }
 
 /// Children merged into one vertex space welded by canonical decoded position, in child
@@ -349,6 +366,11 @@ pub(crate) fn build_parent(
         b.last_resort = true;
     }
     last.attempted_topology.add(first.attempted_topology);
+    if last.built.is_none() {
+        // The residue depends only on children, contract and mapping: the first
+        // build's is the cell's (A1 handover to the last resort).
+        last.relief = first.relief;
+    }
     Ok(last)
 }
 
@@ -404,6 +426,8 @@ fn build(
                 Ok(None)
             }
         };
+        let relieved = contract.relieved();
+        let mut residue = None;
         if !topology::contract(
             &mut merged,
             interface,
@@ -411,6 +435,7 @@ fn build(
             &lookup,
             &mut topology,
             last_resorts,
+            relieved.then_some(&mut residue),
         )? {
             attempted.add(topology);
             topology = Default::default();
@@ -424,11 +449,13 @@ fn build(
                 &mut topology,
                 check,
                 last_resorts,
+                relieved,
             )? {
                 attempted.add(topology);
                 return Ok(Outcome {
                     built: None,
                     contraction_failed: true,
+                    relief: residue,
                     attempted_topology: attempted,
                     construction_dropped: Vec::new(),
                 });
@@ -468,6 +495,7 @@ fn build(
                 attempted.add(topology);
                 b.topology.add(topology);
                 return Ok(Outcome {
+                    relief: None,
                     built: Some(b),
                     contraction_failed: false,
                     attempted_topology: attempted,
@@ -511,6 +539,7 @@ fn build(
                 attempted.add(topology);
                 b.topology.add(topology);
                 return Ok(Outcome {
+                    relief: None,
                     built: Some(b),
                     contraction_failed: false,
                     attempted_topology: attempted,
@@ -686,6 +715,7 @@ fn build(
         topology.opened_holes = 0;
         b.topology.add(topology);
         return Ok(Outcome {
+            relief: None,
             built: Some(b),
             contraction_failed: false,
             attempted_topology: attempted,
@@ -694,6 +724,7 @@ fn build(
     }
     attempted.add(topology);
     Ok(Outcome {
+        relief: None,
         built: None,
         contraction_failed: false,
         attempted_topology: attempted,
@@ -777,6 +808,7 @@ fn recover_contraction(
     receipt: &mut TopologyReceipt,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
     fallbacks: bool,
+    relieved: bool,
 ) -> Result<bool, JobError> {
     let border = interface_points(previous);
     let locked: Vec<_> = merged.keys.iter().map(|k| border.contains(k)).collect();
@@ -820,6 +852,8 @@ fn recover_contraction(
             &mut attempt,
             Some(&reference.triangles),
             fallbacks,
+            // A recovery copy's residue is not the cell's: only the primary one is kept.
+            relieved.then_some(&mut None),
         )? {
             receipt.add(attempt);
             return Ok(true);
@@ -1434,6 +1468,7 @@ mod tests {
                 certificates: vec![],
                 terminal_vertices: vec![],
                 scale: 0.,
+                relief_floor: 0.,
             },
             &|p| {
                 assert!([a, middle, b].contains(&p), "interior source lookup");

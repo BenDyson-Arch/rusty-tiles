@@ -1824,6 +1824,7 @@ fn parent_jobs_allocate_within_their_charge() {
                     certificates: Vec::new(),
                     terminal_vertices: Vec::new(),
                     scale: 0.,
+                    relief_floor: 0.,
                 },
                 &|_| Ok(None),
                 &mut |_| Ok(true),
@@ -3783,11 +3784,13 @@ fn omitted_cells_are_not_measured_and_errors_stay_monotone() {
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &sheet());
     for cap in [12, 30] {
+        // D11's ladder alone: border relief (A1) builds some of these cells.
         let dir = stage(
             &input,
             &work.path().join(format!("cap{cap}")),
             &Run {
                 cap,
+                mutation: Mutation::NoRelief,
                 ..Run::default()
             },
         )
@@ -5087,6 +5090,7 @@ fn ordinary_drops_under_pressure_go_smallest_first() {
     let contract = Contract {
         depth: 2,
         scale: 10.,
+        relief_floor: 0.,
         certificates: vec![],
         terminal_vertices: vec![],
         interface: vec![],
@@ -5222,6 +5226,7 @@ fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
     let contract = Contract {
         depth: 2,
         scale: 10.,
+        relief_floor: 0.,
         certificates: vec![],
         terminal_vertices: vec![],
         interface: vec![],
@@ -5431,6 +5436,144 @@ fn city_blocks_develop_builds_are_unchanged_by_the_last_resorts() {
         });
         assert!(a == b, "city block {layout}");
     }
+}
+
+/// Border relief (D11 amendment A1) control: a planar 160 x 160 grid, every vertex moved
+/// by at most 0.05 of a cell in the plane. The octree planes fall on grid lines, so every
+/// shared border is a noisy straight line far below D11's tolerance (E_d/16 = 0.0024 cells
+/// at depth 2; the Walem case). At cap 150 an interior depth-2 cell's border has 160
+/// points: no disk fits the cap, so D11 omits it and, upwards, the root. Relief certifies
+/// straight chords at about 0.08 cells and every cell builds.
+fn noisy_sheet() -> Vec<Mesh> {
+    let n = 160;
+    let mut rng = 0x2545_f491_4f6c_dd1du64;
+    let mut jitter = || {
+        rng ^= rng << 13;
+        rng ^= rng >> 7;
+        rng ^= rng << 17;
+        ((rng >> 11) as f64 / (1u64 << 53) as f64 - 0.5) as f32 * 0.1
+    };
+    let mut sheet = grid(
+        (n, n),
+        (0., n as f32),
+        (0., n as f32),
+        &|_, _| 0.,
+        [0.5, 0.5, 0.4, 1.],
+    );
+    for p in &mut sheet.positions {
+        p[0] += jitter();
+        p[2] += jitter();
+    }
+    vec![sheet]
+}
+
+fn relief_run(mutation: Mutation) -> Run {
+    Run {
+        cap: 150,
+        mutation,
+        ..Run::default()
+    }
+}
+
+fn relief_receipts(dir: &Path) -> (u64, u64) {
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let depths = manifest["hlod"]["bordersByDepth"].as_array().unwrap();
+    let sum = |k: &str| {
+        depths
+            .iter()
+            .map(|d| d[k].as_u64().unwrap_or(0))
+            .sum::<u64>()
+    };
+    (sum("reliefCells"), sum("relievedSegments"))
+}
+
+#[test]
+fn border_relief_builds_noisy_border_cells_that_d11_omits() {
+    use crate::{mesh_large::delivery, validate::ExpectedProfile};
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &noisy_sheet());
+    let d11 = stage(
+        &input,
+        &work.path().join("d11"),
+        &relief_run(Mutation::NoRelief),
+    )
+    .unwrap();
+    assert!(!omission_receipt("noisy sheet, D11 alone", &d11));
+    assert_eq!(relief_receipts(&d11), (0, 0));
+    let dir = stage(
+        &input,
+        &work.path().join("relief"),
+        &relief_run(Mutation::None),
+    )
+    .unwrap();
+    assert!(omission_receipt("noisy sheet, relief", &dir));
+    let (cells, segments) = relief_receipts(&dir);
+    assert!(
+        cells > 0 && segments > 0,
+        "{cells} cells, {segments} segments"
+    );
+    let output = work.path().join("out.3tz");
+    let mut file = fs::File::create(&output).unwrap();
+    delivery::publish_with_limits(
+        &MeshTilesetRequest::new(&dir, &output),
+        delivery::plan::LIMITS,
+        &mut file,
+        work.path(),
+    )
+    .unwrap();
+    inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod)).unwrap();
+    // G below the relief floor: a relieved chord's displacement exceeds G/8.
+    let unfloored = stage(
+        &input,
+        &work.path().join("unfloored"),
+        &relief_run(Mutation::UnflooredRelief),
+    )
+    .unwrap();
+    let output = work.path().join("unfloored.3tz");
+    let mut file = fs::File::create(&output).unwrap();
+    delivery::publish_with_limits(
+        &MeshTilesetRequest::new(&unfloored, &output),
+        delivery::plan::LIMITS,
+        &mut file,
+        work.path(),
+    )
+    .unwrap();
+    let error = inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("borderDisplacement") || error.contains("mixedDepthBorderGap"),
+        "{error}"
+    );
+}
+
+/// Relief steps come from the global border pass, so both owners of a relieved arc derive
+/// the same chords whatever the job order, budget or spill.
+#[test]
+fn border_relief_is_identical_across_jobs_budgets_and_spill() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &noisy_sheet());
+    let run = |name: &str, jobs: usize, budget: Option<u64>, mutation: Mutation| {
+        stage(
+            &input,
+            &work.path().join(name),
+            &Run {
+                jobs,
+                budget,
+                ..relief_run(mutation)
+            },
+        )
+        .unwrap()
+    };
+    let one = run("one", 1, None, Mutation::None);
+    let many = run("many", 4, Some(64 << 30), Mutation::None);
+    let spilled = run("spilled", 2, None, Mutation::ForceSpill);
+    assert!(relief_receipts(&one).0 > 0);
+    assert!(published(&one) == published(&many));
+    assert!(audit_semantics(&one) == audit_semantics(&many));
+    assert!(published(&one) == published(&spilled));
+    assert!(audit_semantics(&one) == audit_semantics(&spilled));
 }
 
 /// Layout 95: a wall tile touches a roof chain at a corner only; without that point it

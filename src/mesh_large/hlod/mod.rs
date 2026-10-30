@@ -768,15 +768,22 @@ pub(crate) fn produce(
             &captured.lattice,
         )?,
         captured.tree.stats.per_depth[0].maximum_extent,
+        settings.mutation.relief_cap(settings.cap),
         &border_lease,
         check,
     )?;
     drop(source_open_ends);
     report.borders_by_depth = (0..captured.tree.stats.height)
-        .map(|depth| borders::DepthReceipt {
-            depth,
-            scale: borders.scale(depth),
-            ..Default::default()
+        .map(|depth| {
+            let relief = borders.relief(depth);
+            borders::DepthReceipt {
+                depth,
+                scale: borders.scale(depth),
+                relief_cells: relief.cells,
+                relieved_segments: relief.segments,
+                max_relief_step: relief.max_step,
+                ..Default::default()
+            }
         })
         .collect();
     let index_start = resources::process_cpu_seconds();
@@ -1313,7 +1320,13 @@ fn prepare(
         .receipt
         .hole_patch_to_source
         .max(built.controls.closure_max);
-    error.geometric_error = error.geometric_error.max(contract.scale);
+    // A1: relieved chords' certified gaps stay within G/8 of every finer neighbour.
+    error.geometric_error = error.geometric_error.max(contract.scale).max(
+        job.input
+            .settings
+            .mutation
+            .relief_floor(contract.relief_floor),
+    );
     built.change.receipt.published(error.geometric_error);
     built.topology = built.change.receipt;
     error_cpu.representatives = identity_cpu.unwrap_or(0.);
@@ -1398,12 +1411,7 @@ fn build_tile(
             settings.mutation.last_resorts(),
         )?
     } else {
-        geometry::Outcome {
-            built: None,
-            contraction_failed: false,
-            attempted_topology: Default::default(),
-            construction_dropped: Vec::new(),
-        }
+        geometry::Outcome::unbuilt()
     };
     let Some(mut built) = outcome.built else {
         // Its interface cannot fit the cap: omitted, nothing held for its parent.
@@ -1541,6 +1549,13 @@ fn build_tile(
             .iter()
             .map(|c| c.epsilon)
             .fold(0., f64::max),
+        relief_floor: contract.relief_floor,
+        relief_step: contract
+            .certificates
+            .iter()
+            .map(|c| c.step)
+            .max()
+            .unwrap_or(0),
         topology: built.topology,
         attempted_topology: outcome.attempted_topology,
         terminal_locks: contract.terminal_locks(),
@@ -1564,6 +1579,7 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     borders.segments += u64::from(row.interface_segments);
     borders.terminal_locks += row.terminal_locks;
     borders.max_epsilon = borders.max_epsilon.max(row.border_epsilon);
+    borders.max_relief_floor = borders.max_relief_floor.max(row.relief_floor);
     borders.topology.add(row.topology);
     borders.attempted_topology.add(row.attempted_topology);
     report.error_cpu_seconds += row.error_cpu_seconds;
