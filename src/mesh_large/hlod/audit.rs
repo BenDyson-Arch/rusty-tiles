@@ -57,7 +57,10 @@ pub(crate) struct Index {
 /// dropped-component bank and every possible cycle-rank operation descriptor. Parent
 /// inputs at any depth partition the source faces; retries revisit them at most 72 times
 /// (two caps plus seven remesh rounds, two hole policies, RETRIES+1 each). One additional
-/// construction record locates cleanup drops on final failure.
+/// construction record locates cleanup drops on final failure. That counts one build: the
+/// last-resort build's pinned retries, coarse-drop bisection and panels, and the staged
+/// build's accepted proposal, can exceed it; the generous per-record allowance absorbs
+/// this in practice, and an overshoot refuses the opt-in audit (ResourceLimit).
 /// This is a logical maximum: disk space is checked on actual writes. Memory-backed
 /// destinations use the explicit byte budget below in both planning and writing.
 const MAX_LOCATION_RECORDS: u64 = (2 + 7) * 2 * (super::geometry::RETRIES as u64 + 1) + 1;
@@ -213,6 +216,8 @@ impl<'a> Writer<'a> {
     }
     /// Stream a measured proposal while its bounded geometry is still resident. Attempt
     /// ordinals are local to a candidate key; worker scheduling may reorder these lines.
+    /// The staged build streams only its accepted proposal (`Built::staged`); the row's
+    /// attempt count still includes its rejected ones.
     pub(super) fn topology_attempt(
         &self,
         built: &Built,
@@ -379,6 +384,7 @@ mod tests {
             protected_faces: 0,
             retries: 0,
             last_resort: false,
+            staged: false,
             interface_vertices: 0,
             interface_segments: 0,
             reoriented: 0,

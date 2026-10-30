@@ -4669,12 +4669,15 @@ fn closed_box() -> Vec<Mesh> {
 /// Honest omission: about 50 holes per depth-1 cell cannot all stay open under the 300
 /// cap (Euler: V - 2 + 2h > cap), and closing one loses at least its inradius (0.42 m)
 /// against the source on any domain, far above E (0.049 m at depth 1). Each such cell
-/// and the root are omitted, reported and counted; content-less tiles lie only under
-/// content-less ancestors; nothing folds; the receipt is scale-invariant.
+/// (staged reduction fits two of the four with every hole open) and the root are omitted,
+/// reported and counted; content-less tiles lie only under
+/// content-less ancestors; nothing folds; the receipt is scale-invariant at powers of two,
+/// where f32 arithmetic scales exactly and only an absolute tolerance could change it.
+/// x40 rounds every coordinate, which can flip the last resort's marginal fits: it is held
+/// to never omit more than the strategies alone, with the same structural checks.
 #[test]
 fn d11_holey_sheet_reports_its_cap_infeasible_omissions_upward() {
-    use crate::{mesh_large::delivery, validate::ExpectedProfile};
-    for scale in [1., 40., 0.25] {
+    for scale in [1., 32., 0.25, 40.] {
         let name = format!("holey x{scale}");
         let work = tempfile::tempdir().unwrap();
         let input = write_gltf_scaled(
@@ -4688,34 +4691,48 @@ fn d11_holey_sheet_reports_its_cap_infeasible_omissions_upward() {
         let manifest: Value =
             serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
         let h = &manifest["hlod"];
-        assert_eq!(
-            (
-                &h["omittedProxies"],
-                &h["omissionSources"],
-                &h["omittedByDepth"]
-            ),
-            (&json!(5), &json!(4), &json!([1, 4, 0, 0])),
-            "{name}: {h}"
+        let receipt = (
+            h["omittedProxies"].as_u64().unwrap(),
+            h["omissionSources"].as_u64().unwrap(),
+            h["omittedByDepth"].clone(),
         );
+        if scale == 40. {
+            // Rounded coordinates: the last resort fits 0-2 cells, never fewer than the
+            // strategies alone (5 omitted, 4 sources).
+            let depth = |d: usize| receipt.2[d].as_u64().unwrap();
+            assert!(
+                receipt.0 <= 5 && receipt.1 <= 4 && depth(0) == 1 && depth(1) <= 4,
+                "{name}: {h}"
+            );
+        } else {
+            assert_eq!(receipt, (3, 2, json!([1, 2, 0, 0])), "{name}: {h}");
+        }
         assert_directed_census(&name, &census(&dir), run.cap);
-        let output = work.path().join("holey.3tz");
-        let mut file = fs::File::create(&output).unwrap();
-        delivery::publish_with_limits(
-            &MeshTilesetRequest::new(&dir, &output),
-            delivery::plan::LIMITS,
-            &mut file,
-            work.path(),
-        )
-        .unwrap();
-        drop(file);
-        inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod)).unwrap();
-        let shape = refinement_shape(&output);
-        assert_eq!(
-            shape.empty_below_content + shape.error_inversions,
-            0,
-            "{name}: {shape:?}"
-        );
+        published_and_valid(&name, &dir, work.path());
     }
+}
+
+/// Publish a staged HLOD, validate it with the HLOD profile, and require no content-less
+/// tile below content and no error inversion.
+fn published_and_valid(name: &str, dir: &Path, work: &Path) {
+    use crate::{mesh_large::delivery, validate::ExpectedProfile};
+    let output = work.join("published.3tz");
+    let mut file = fs::File::create(&output).unwrap();
+    delivery::publish_with_limits(
+        &MeshTilesetRequest::new(dir, &output),
+        delivery::plan::LIMITS,
+        &mut file,
+        work,
+    )
+    .unwrap();
+    drop(file);
+    inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod)).unwrap();
+    let shape = refinement_shape(&output);
+    assert_eq!(
+        shape.empty_below_content + shape.error_inversions,
+        0,
+        "{name}: {shape:?}"
+    );
 }
 
 /// The positive control for the local closure domain: the holey layout as 2 cm holes on
@@ -5447,4 +5464,43 @@ fn city_block_point_contacts_on_shared_chains_stay_in_contracts() {
         ValidationRequest::new(&archive).expect_profile(crate::validate::ExpectedProfile::Hlod),
     )
     .unwrap();
+}
+
+/// Photogrammetry-like fold (Walem): a noisy 40 m sheet folded back over itself 2 cm
+/// apart. Every reduction of a coarse cell collapses the two layers onto each other
+/// (twin faces, acute books) and the fold guard refuses it; staged reduction with
+/// carrier merging fits it (`geometry::Resort::Staged`).
+#[test]
+fn a_noisy_folded_sheet_builds_every_coarse_tile() {
+    let (n, w) = (72, 145);
+    let h = |i: u32, j: u32| (i.wrapping_mul(73856093) ^ j.wrapping_mul(19349663)) % 1000;
+    let mut sheet = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.5, 0.5, 0.5, 1.],
+    };
+    for i in 0..=n {
+        for j in 0..=2 * n {
+            let (z, y) = (j.min(2 * n - j), if j <= n { 0. } else { 0.02 });
+            let y = y + h(i, j) as f32 * 0.0003;
+            sheet
+                .positions
+                .push([i as f32 * 40. / n as f32, y, z as f32 * 40. / n as f32]);
+        }
+    }
+    for i in 0..n {
+        for j in 0..2 * n {
+            let v = |a: u32, c: u32| a * w + c;
+            sheet.indices.extend([v(i, j), v(i, j + 1), v(i + 1, j)]);
+            sheet
+                .indices
+                .extend([v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
+        }
+    }
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &[sheet]);
+    let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+    assert!(omission_receipt("noisy folded sheet", &dir));
+    assert_directed_census("noisy folded sheet", &census(&dir), Run::default().cap);
+    published_and_valid("noisy folded sheet", &dir, work.path());
 }

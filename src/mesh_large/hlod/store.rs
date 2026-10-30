@@ -159,7 +159,9 @@ pub(crate) struct CoarseTile<'a> {
     pub bounds: Bounds,
     /// Largest published error among the children.
     pub children_error: f64,
-    /// meshopt's absolute error estimate of the reduction (0 for an unreduced union).
+    /// meshopt's absolute error estimate of the reduction (0 for an unreduced union). A
+    /// lower bound: staged and protected reductions report their largest step, measured
+    /// against the previous step, and carrier merges add none. Published G is S2's.
     pub simplifier_error: f64,
     /// Largest move of any vertex from its leaf-canonical decode by the coarse lattice.
     pub encode_displacement: f64,
