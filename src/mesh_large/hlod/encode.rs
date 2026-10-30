@@ -49,6 +49,9 @@ pub(crate) enum Mutation {
     /// Build without the last resorts after develop's strategies (identity reference).
     #[cfg(test)]
     Develop,
+    /// Weld corners on POSITION and feature ID only (the weld's own check must refuse).
+    #[cfg(test)]
+    WeldPositionsOnly,
 }
 
 impl Mutation {
@@ -214,19 +217,33 @@ type Stream = (&'static str, Vec<u8>, usize, Value);
 type Welded = (Vec<usize>, Vec<u32>, Vec<usize>);
 /// Weld bit-identical corners (all attribute bytes together, so every decoded triangle
 /// keeps its corners) into indexed vertices: faces in vertex-cache order, vertices in fetch
-/// order.
-fn weld(streams: &[Stream], corners: usize) -> Result<Welded, JobError> {
-    let width: usize = streams.iter().map(|s| s.2).sum();
-    let mut records = Vec::with_capacity(corners * width);
-    for c in 0..corners {
-        for (_, bytes, stride, _) in streams {
-            records.extend_from_slice(&bytes[c * stride..(c + 1) * stride]);
+/// order. Every corner's full record is checked against its vertex's.
+fn weld(streams: &[Stream], corners: usize, mutation: Mutation) -> Result<Welded, JobError> {
+    // Corner records over the keyed streams: every stream, or (test mutation) a subset.
+    let flat = |keyed: &dyn Fn(&str) -> bool| -> (Vec<u8>, usize) {
+        let width: usize = streams.iter().filter(|s| keyed(s.0)).map(|s| s.2).sum();
+        let mut out = Vec::with_capacity(corners * width);
+        for c in 0..corners {
+            for (_, bytes, stride, _) in streams.iter().filter(|s| keyed(s.0)) {
+                out.extend_from_slice(&bytes[c * stride..(c + 1) * stride]);
+            }
         }
-    }
+        (out, width)
+    };
+    let (records, width) = flat(&|_| true);
+    #[cfg(test)]
+    let subset = (mutation == Mutation::WeldPositionsOnly)
+        .then(|| flat(&|n| n == "POSITION" || n == "_FEATURE_ID_0"));
+    #[cfg(not(test))]
+    let subset: Option<(Vec<u8>, usize)> = {
+        let _ = mutation;
+        None
+    };
+    let (keys, key_width) = subset.as_ref().map_or((&records, width), |(k, w)| (k, *w));
     let mut ids = HashMap::with_capacity(corners);
     let mut first = Vec::new();
-    let remap: Vec<u32> = records
-        .chunks_exact(width)
+    let remap: Vec<u32> = keys
+        .chunks_exact(key_width)
         .enumerate()
         .map(|(c, key)| {
             *ids.entry(key).or_insert_with(|| {
@@ -235,6 +252,12 @@ fn weld(streams: &[Stream], corners: usize) -> Result<Welded, JobError> {
             })
         })
         .collect();
+    let at = |c: usize| &records[c * width..(c + 1) * width];
+    if (0..corners).any(|c| at(c) != at(first[remap[c] as usize])) {
+        return Err(invalid(
+            "coarse weld merged corners whose attributes differ",
+        ));
+    }
     let n = first.len();
     let cached = meshopt::optimize_vertex_cache(&remap, n);
     // The optimizer only reorders faces; map each back (equal faces in input order).
@@ -483,7 +506,7 @@ pub(crate) fn encode(
             4,
             json!({"componentType":5126,"type":"SCALAR"}),
         ));
-        let (order, indices, corner) = weld(&streams, count)?;
+        let (order, indices, corner) = weld(&streams, count, mutation)?;
         face_order.extend(order.iter().map(|&f| faces[f].0));
         let mut attributes = Map::new();
         for (name, bytes, stride, accessor) in streams {

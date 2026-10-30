@@ -380,7 +380,7 @@ impl Store {
             .prepare_cached("INSERT INTO border_map VALUES(?,?,?,?)")
             .map_err(sql)?;
         for (p, (image, d)) in &images {
-            effort.charge(1)?;
+            effort.charge(super::ROW_UNITS)?;
             insert
                 .execute(params![super::point_bytes(*p), tile, image, d])
                 .map_err(sql)?;
@@ -493,7 +493,7 @@ impl Store {
             let lower_first = arc[0].0 == edge.0;
             let mut support = [i64::MAX; 2];
             for &(x, y) in &arc {
-                effort.charge(1)?;
+                effort.charge(super::ROW_UNITS)?;
                 let (nf, nr) = self.leaf_incidence(tile, key(x, y))?;
                 let (with, against) = if x < y { (nf, nr) } else { (nr, nf) };
                 let (forward, reverse) = if lower_first {
@@ -548,7 +548,7 @@ impl Store {
             .map_err(sql)?;
         for (c, &n) in corners.iter().filter(|(_, n)| **n > 1) {
             for v in c {
-                effort.charge(1)?;
+                effort.charge(super::ROW_UNITS)?;
                 let ok: bool = licensed
                     .query_row(params![super::point_bytes(*v), tile, n], |r| r.get(0))
                     .map_err(sql)?;

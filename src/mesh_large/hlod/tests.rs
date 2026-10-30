@@ -1946,6 +1946,102 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
     assert_eq!(seen, 2);
 }
 
+/// The coarse weld keys on every corner attribute: two faces meeting at a position with
+/// different UVs (a chart seam) and two vertices at one position with different normals stay
+/// separate vertices. A weld keyed on position and feature ID alone (the mutant) would merge
+/// them, and the weld's own record check refuses it.
+#[test]
+fn coarse_weld_keeps_uv_and_normal_seams() {
+    use super::{encode, store::*};
+    let bounds = Bounds {
+        min: [-100.; 3],
+        max: [100.; 3],
+    };
+    let lattice = LatticePlan::new(Profile::Balanced, bounds, &[255., 127., 63.]).unwrap();
+    let positions = vec![
+        [0., 0., 0.],
+        [1., 0., 0.],
+        [0., 1., 0.],
+        [1., 1., 0.],
+        [1., 0., 0.],
+    ];
+    let tile = TileGeometry {
+        key: TileKey {
+            first: 0,
+            end: 1,
+            depth: 1,
+            leaf_begin: 0,
+            leaf_end: 1,
+        },
+        ells: vec![2; 5],
+        positions,
+        triangles: vec![[0, 1, 2], [4, 3, 2]],
+        representative: vec![0, 0],
+        primitives: vec![SourcePrimitive {
+            node: 0,
+            mesh: 0,
+            primitive: 0,
+            expanded_ordinal: 0,
+            material: u32::MAX,
+        }],
+        interface: Vec::new(),
+        geometric_error: 0.,
+        lease: None,
+    };
+    let mut appearance = plain_appearance(&tile);
+    // Vertex 2 has a different UV in each face; vertices 1 and 4 share a position only.
+    appearance.groups[0].uvs = Some(vec![
+        [[0., 0.], [1., 0.], [0., 1.]],
+        [[1., 0.], [1., 1.], [0.5, 1.]],
+    ]);
+    appearance.normals = Some(vec![
+        [0., 0., 1.],
+        [0., 0., 1.],
+        [0., 0., 1.],
+        [0., 0., 1.],
+        [0., 1., 0.],
+    ]);
+    let locked = [false; 5];
+    let encoded_positions = || {
+        lattice
+            .encode_coarse(&tile.positions, &tile.ells, &locked, tile.key.depth)
+            .unwrap()
+    };
+    let encoded = encode::encode(
+        &tile,
+        &locked,
+        encoded_positions(),
+        &appearance,
+        0,
+        Mutation::None,
+    )
+    .unwrap();
+    encode::check(&tile, &locked, &encoded).unwrap();
+    let jl = u32::from_le_bytes(encoded.glb[12..16].try_into().unwrap()) as usize;
+    let doc: Value = serde_json::from_slice(&encoded.glb[20..20 + jl]).unwrap();
+    let p = &doc["meshes"][0]["primitives"][0];
+    assert!(p["attributes"].get("TEXCOORD_0").is_some() && p["attributes"].get("NORMAL").is_some());
+    let vertices =
+        &doc["accessors"][p["attributes"]["POSITION"].as_u64().unwrap() as usize]["count"];
+    assert_eq!(vertices, 6, "a seam corner was welded");
+    let mutant = encode::encode(
+        &tile,
+        &locked,
+        encoded_positions(),
+        &appearance,
+        0,
+        Mutation::WeldPositionsOnly,
+    );
+    let message = mutant
+        .err()
+        .expect("the mutant weld must be refused")
+        .to_string();
+    assert!(
+        message.contains("merged corners whose attributes differ"),
+        "{message}"
+    );
+}
+
 /// A small sheet in one corner of a large frame: every cell above it holds one occupied
 /// child, a pass-through chain. Each such cell publishes no content (the child stands for
 /// it), so no two tiles on a root-to-leaf path are the same, the census stays crack-free,

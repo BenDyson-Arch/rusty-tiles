@@ -703,6 +703,12 @@ pub(super) struct DecodedInterfaceCensus {
     /// and checked against its declaration and geometricError, by cell depth.
     pub(super) dropped_by_depth: Vec<u64>,
 }
+/// Payload-element units charged for each scratch-store row a validation writes or looks up
+/// by key (an SQLite B-tree insert, upsert or point query). Measured 2026-10-30 at about 103 ns
+/// of CPU per row against about 6 ns per ordinary payload unit, so one row costs 16 units and
+/// no work class runs much above the ordinary unit's time
+/// (`docs/architecture/validator-limits-amendment.md`, time statement).
+pub(super) const ROW_UNITS: usize = 16;
 /// Hard published triangle cap of every HLOD payload (D1), leaf or coarse.
 pub(super) const TRIANGLE_CAP: u64 = 8192;
 /// A content-less cell's geometric error is at least this multiple of its box
@@ -1284,7 +1290,7 @@ impl Store {
             .prepare_cached("INSERT INTO originals VALUES(?,?,?,?)")
             .map_err(sql)?;
         for (&(source, vertex), p) in &originals {
-            work.charge(1)?;
+            work.charge(ROW_UNITS)?;
             let source: Vec<u8> = source.into_iter().flat_map(u64::to_be_bytes).collect();
             insert
                 .execute(params![
@@ -1777,7 +1783,7 @@ impl Store {
             .map_err(sql)?;
         let mut rows = query.query([]).map_err(sql)?;
         while let Some(row) = rows.next().map_err(sql)? {
-            effort.charge(1)?;
+            effort.charge(ROW_UNITS)?;
             let world: Vec<u8> = row.get(2).map_err(sql)?;
             self.connection
                 .execute(
@@ -1811,11 +1817,11 @@ impl Store {
             .map_err(sql)?;
         let mut edge=self.connection.prepare_cached("INSERT INTO leaf_segments VALUES(?,?,?,?) ON CONFLICT(key,tile) DO UPDATE SET nf=leaf_segments.nf+excluded.nf,nr=leaf_segments.nr+excluded.nr WHERE leaf_segments.nf<=9223372036854775807-excluded.nf AND leaf_segments.nr<=9223372036854775807-excluded.nr").map_err(sql)?;
         for p in &surface.points {
-            effort.charge(1)?;
+            effort.charge(ROW_UNITS)?;
             point.execute(params![point_bytes(*p), tile]).map_err(sql)?;
         }
         for (key, e) in &surface.edges {
-            effort.charge(1)?;
+            effort.charge(ROW_UNITS)?;
             if edge
                 .execute(params![
                     edge_bytes(*key),
@@ -1860,7 +1866,7 @@ impl Store {
                 .prepare_cached("INSERT INTO leaf_faces VALUES(?,?,1) ON CONFLICT(corners,tile) DO UPDATE SET n=n+1")
                 .map_err(sql)?;
             for f in &surface.faces {
-                effort.charge(1)?;
+                effort.charge(ROW_UNITS)?;
                 let mut k = *f;
                 k.sort_unstable();
                 let bytes: Vec<u8> = k.iter().flat_map(|p| point_bytes(*p)).collect();
@@ -1917,7 +1923,7 @@ impl Store {
             )?;
             for f in &surface.faces {
                 for j in 0..3 {
-                    effort.charge(2)?;
+                    effort.charge(ROW_UNITS)?;
                     let (x, y, c) = (f[j], f[(j + 1) % 3], f[(j + 2) % 3]);
                     let key = edge_bytes(if x < y { (x, y) } else { (y, x) });
                     if multi
@@ -1946,7 +1952,7 @@ impl Store {
         let (first, last) = owners;
         let mut lookup=self.connection.prepare_cached("SELECT parent,last,EXISTS(SELECT 1 FROM refs r WHERE r.tile=tiles.id) FROM tiles WHERE id=?").map_err(sql)?;
         loop {
-            effort.charge(1)?;
+            effort.charge(ROW_UNITS)?;
             let (parent, end, content): (Option<i64>, i64, bool) = lookup
                 .query_row([tile], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
                 .map_err(sql)?;
@@ -1974,7 +1980,7 @@ impl Store {
         if first == last {
             return Ok(());
         }
-        effort.charge(1)?;
+        effort.charge(ROW_UNITS)?;
         add_count(&mut census.shared_points, 1)?;
         self.connection
             .execute("INSERT INTO shared_point_keys VALUES(?)", [key])
@@ -2036,7 +2042,7 @@ impl Store {
             // Both endpoints must also occur in another leaf. This is an exact
             // key join, not a chord inference or a distance/near-seam query.
             read_edge(key)?;
-            effort.charge(2)?;
+            effort.charge(2 * ROW_UNITS)?;
             let shared:bool=self.connection.query_row("SELECT EXISTS(SELECT 1 FROM shared_point_keys WHERE key=?1) AND EXISTS(SELECT 1 FROM shared_point_keys WHERE key=?2)",params![&key[..12],&key[12..]],|r|r.get(0)).map_err(sql)?;
             if shared {
                 add_count(&mut census.source_open_edges_with_shared_endpoints, 1)?;
@@ -2129,7 +2135,7 @@ impl Store {
                         .prepare_cached("INSERT INTO coarse_faces VALUES(?,?)")
                         .map_err(sql)?;
                     for f in &surface.faces {
-                        effort.charge(1)?;
+                        effort.charge(ROW_UNITS)?;
                         let bytes: Vec<u8> = f.iter().flat_map(|p| point_bytes(*p)).collect();
                         face.execute(params![tile, bytes]).map_err(sql)?;
                     }
