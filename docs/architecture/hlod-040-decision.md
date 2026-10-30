@@ -302,6 +302,13 @@ and for normal/data/MASK cases where ETC1S misses class-specific floors. Keep
 transfer, normal renormalization, MASK coverage and ID-safe lossless handling.
 PNG's existing lossless sampler policy remains distinct from authored KTX2 mips.
 
+**Amendment, 2026-10-30 (PR #302).** In fast, balanced and quality, a mip-sampled leaf
+page that no lossy step delivers within its gates, normal maps included, ships as its
+exact level-0 PNG with its sampler; the viewer generates its coarser levels (no
+renormalization or linear-light filtering), outside the decoded guarantee, rather than
+failing the run. Each such page is declared in the report and `conversion.json`
+(`viewer_mip_fallback_pages`, uncapped `viewer_mip_fallbacks`).
+
 ETC1S is a bandwidth-oriented recommendation, not an assertion that its encoder
 or every GPU transcode target is fastest. Make the final default choice from
 **one integrated 2048 acceptance campaign**: hold geometry/charts fixed, compare

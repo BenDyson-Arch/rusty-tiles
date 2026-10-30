@@ -889,6 +889,9 @@ pub(super) struct PageEscalation {
     /// Distinct (source image, source material) pairs on the page, in binding order.
     pub sources: Vec<(usize, u32)>,
     pub escalation: delivery::Escalation,
+    /// Delivered as exact level-0 PNG under a mipmap sampler: the viewer generates its
+    /// coarser levels, outside the decoded guarantee.
+    pub viewer_mips: bool,
 }
 /// A leaf's appearance receipts and its escalated pages, in page order.
 #[derive(Debug, Default)]
@@ -1163,11 +1166,14 @@ pub(super) fn prepare(
             json!({"step":e.step.name(),"misses":e.misses.iter().map(delivery::GateMiss::to_json).collect::<Vec<_>>()})
         });
         if let Some(escalation) = delivered.escalation.clone() {
+            let viewer_mips = escalation.step == delivery::Step::LosslessPng
+                && matches!(page.sampler.min_filter, 9984..=9987);
             escalations.push(PageEscalation {
                 page: page_id,
                 slot: page.slot,
                 sources,
                 escalation,
+                viewer_mips,
             });
         }
         encoded_bytes = encoded_bytes

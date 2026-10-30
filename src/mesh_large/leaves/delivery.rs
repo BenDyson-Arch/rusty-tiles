@@ -2908,6 +2908,95 @@ mod tests {
         );
     }
     #[test]
+    fn a_probe_miss_is_a_full_chain_miss() {
+        // #302 review r1's side-by-side check, compact: every probe decision against the
+        // full-chain step it would skip, on binary data, noisy normal and alpha colour
+        // pages, square and not, with sparse support.
+        let mut x = 0x9e37_79b9u32;
+        let mut byte = move || {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            (x >> 24) as u8
+        };
+        let mut probed = 0;
+        for (slot, w, h, sparse) in [
+            (TextureSlot::MetallicRoughness, 64, 64, false),
+            (TextureSlot::Normal, 32, 128, true),
+            (TextureSlot::BaseColor, 64, 16, true),
+        ] {
+            let rgba: Vec<u8> = (0..w * h)
+                .flat_map(|_| match slot {
+                    TextureSlot::MetallicRoughness => [0, byte() & 128, byte() & 128, 255],
+                    TextureSlot::Normal => {
+                        let (a, b) = (
+                            f64::from(byte()) / 400. - 0.32,
+                            f64::from(byte()) / 400. - 0.32,
+                        );
+                        let z = (1. - a * a - b * b).sqrt();
+                        [a, b, z]
+                            .map(|v| ((v + 1.) * 127.5).round() as u8)
+                            .into_iter()
+                            .chain([255])
+                            .collect::<Vec<_>>()
+                            .try_into()
+                            .unwrap()
+                    }
+                    _ => [byte(), byte(), byte(), byte()],
+                })
+                .collect();
+            let support: Vec<u32> = (0..w * h)
+                .map(|i| u32::from(!(sparse && (i % w % 23 < 5 || i / w % 17 < 3))))
+                .collect();
+            let chain =
+                sparse_mips::build(w as u32, h as u32, &rgba, &support, class(slot), MEMORY)
+                    .unwrap();
+            let prepared = prepare_levels(&chain, None).unwrap();
+            let (mut misses, mut witnesses) = (Vec::new(), Vec::new());
+            for step in Step::LOSSY {
+                let profile = Profile::Balanced;
+                let skip = probe(
+                    &chain,
+                    &prepared,
+                    (slot, profile, step),
+                    (&misses[..], &witnesses[..]),
+                )
+                .unwrap();
+                let mut unused = Vec::new();
+                let sink = if skip.is_some() {
+                    &mut unused
+                } else {
+                    &mut witnesses
+                };
+                let full = lossy_step(
+                    &chain,
+                    &prepared,
+                    slot,
+                    profile,
+                    step,
+                    (None, false, 0),
+                    &mut |_| Ok(Value::Null),
+                    &|_, _, _| {},
+                    sink,
+                )
+                .unwrap();
+                if let Some(miss) = &skip {
+                    assert!(
+                        full.is_err(),
+                        "{slot:?} {step:?}: {} but the chain passes",
+                        miss.gate
+                    );
+                    probed += 1;
+                }
+                match (skip, full) {
+                    (Some(miss), _) | (None, Err(miss)) => misses.push(miss),
+                    (None, Ok(_)) => break,
+                }
+            }
+        }
+        assert!(probed > 0, "no probe decided a step");
+    }
+    #[test]
     fn a_level_alone_decodes_as_in_its_chain() {
         // The level probe's premise: UASTC encodes each 4x4 block alone, so a level
         // encoded on its own decodes exactly as inside the complete chain.
@@ -2936,6 +3025,13 @@ mod tests {
             let row = block_row(levels[0].rgba, 128, &blocks);
             let alone = codec::encode_decoded_unverified(&row, 12, 4, mode, params).unwrap();
             assert_eq!(alone, block_row(&whole[0], 128, &blocks), "{step:?} blocks");
+            let row = block_row(levels[2].rgba, 32, &blocks[..2]);
+            let alone = codec::encode_decoded_unverified(&row, 8, 4, mode, params).unwrap();
+            assert_eq!(
+                alone,
+                block_row(&whole[2], 32, &blocks[..2]),
+                "{step:?} mip2 blocks"
+            );
         }
     }
     #[test]

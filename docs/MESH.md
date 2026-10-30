@@ -413,8 +413,10 @@ never fails the run. glTF PNG cannot carry authored coarse levels: on a
 mip-sampled page the viewer generates them, outside the decoded guarantee, as for
 `lossless` PNG pages. Its islands sit whole on the 8-texel grid with real-source
 gutters, so a box-filtering viewer reproduces the authored data averages through
-level 3; colour and normal mips are the viewer's own filter. The report counts
-these pages as `lossless_fallback_pages`. (Coarse PNG pages are sampled without mips; see
+level 3; colour and normal mips are the viewer's own filter. The report and the
+archive's `conversion.json` count these pages as `viewer_mip_fallback_pages` and list
+every one (`first`, `depth`, `page`, `slot`) in `viewer_mip_fallbacks`, uncapped;
+level-0-sampled PNG pages, inside the guarantee, are `lossless_fallback_pages`. (Coarse PNG pages are sampled without mips; see
 [coarse appearance](#coarse-appearance).) Escalation costs output size: an ETC1S page re-encoded
 as UASTC is several times larger, and a PNG fallback page is typically the
 largest form of the page (up to 4 bytes per texel). The ladder depends only on
@@ -657,7 +659,9 @@ counts and maximum leaf geometry error, hierarchy/implicit/document counts,
 depth and packed/synthetic leaf counts, member limits, separate root/tileset
 errors, and normalized placement. Escalation is reported as `escalated_pages`
 (`uastc_level2` and `uastc_level3` counts, by the step that delivered the page),
-`lossless_fallback_pages` (pages delivered as exact PNG), and
+`lossless_fallback_pages` (level-0-sampled pages delivered as exact PNG),
+`viewer_mip_fallback_pages` and its uncapped list `viewer_mip_fallbacks` (mip-sampled
+pages delivered as exact level-0 PNG with viewer-generated mips), and
 `escalation_diagnostics`: the first 32 escalated pages in leaf order, each with
 its `leaf`, `first` source triangle rank and `depth`, `page`, `slot`, `sources`
 (`image`, `material`), delivering `step`, and every gate it missed on the way

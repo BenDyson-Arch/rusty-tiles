@@ -123,9 +123,15 @@ pub struct LeafOutputReport {
     /// Lossy pages delivered by a stronger UASTC step after their profile's
     /// own setting missed a decoded-image gate, by the step that passed.
     pub escalated_pages: EscalatedPages,
-    /// Pages delivered as exact level-0 PNG after every lossy step missed.
+    /// Level-0-sampled pages delivered as exact PNG after every lossy step missed:
+    /// inside the decoded guarantee.
     pub lossless_fallback_pages: u64,
-    /// Escalated pages (both counts above) by what the profile step missed.
+    /// Mip-sampled pages delivered as exact level-0 PNG after every lossy step missed:
+    /// the viewer generates their coarser levels, outside the decoded guarantee.
+    pub viewer_mip_fallback_pages: u64,
+    /// Every such page, uncapped, so the archive names each one.
+    pub viewer_mip_fallbacks: Vec<ViewerMipFallback>,
+    /// Escalated pages (all counts above) by what the profile step missed.
     pub escalation_reasons: EscalationReasons,
     /// The first [`ESCALATION_DIAGNOSTICS`] escalated pages in leaf order.
     pub escalation_diagnostics: Vec<EscalationDiagnostic>,
@@ -166,6 +172,15 @@ pub struct SharedTexels {
     pub texel_ownership: &'static str,
     /// Triangles whose footprint shares area with another's.
     pub triangles: u64,
+}
+/// One mip-sampled leaf page delivered as exact level-0 PNG with viewer-generated mips:
+/// archive tile `f<first>-d<depth>`, page index and slot property.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ViewerMipFallback {
+    pub first: u64,
+    pub depth: u32,
+    pub page: u64,
+    pub slot: &'static str,
 }
 /// Escalated pages by the profile step's miss: a decoded-image gate, or the
 /// codec's own verification floor.
@@ -671,6 +686,8 @@ pub(crate) fn produce(
         proxy_bytes: 0,
         escalated_pages: EscalatedPages::default(),
         lossless_fallback_pages: 0,
+        viewer_mip_fallback_pages: 0,
+        viewer_mip_fallbacks: Vec::new(),
         escalation_reasons: EscalationReasons::default(),
         escalation_diagnostics: Vec::new(),
         escalation_diagnostics_omitted: 0,
@@ -956,6 +973,15 @@ fn write_leaf(
         match page.escalation.step {
             Step::UastcLevel2 => report.escalated_pages.uastc_level2 += 1,
             Step::UastcLevel3 => report.escalated_pages.uastc_level3 += 1,
+            Step::LosslessPng if page.viewer_mips => {
+                report.viewer_mip_fallback_pages += 1;
+                report.viewer_mip_fallbacks.push(ViewerMipFallback {
+                    first: node.first,
+                    depth: node.depth(),
+                    page: page.page as u64,
+                    slot: atlas::slot_property(page.slot),
+                });
+            }
             Step::LosslessPng => report.lossless_fallback_pages += 1,
             Step::Profile => return Err(invariant("unescalated page reported as escalated")),
         }
@@ -1626,7 +1652,8 @@ mod tests {
             let report = &result.report;
             let total = report.escalated_pages.uastc_level2
                 + report.escalated_pages.uastc_level3
-                + report.lossless_fallback_pages;
+                + report.lossless_fallback_pages
+                + report.viewer_mip_fallback_pages;
             assert!(total > 0, "{report:?}");
             let mut manifest = BTreeMap::<String, u64>::new();
             let mut pages = 0;
@@ -1663,7 +1690,10 @@ mod tests {
             let count = |step: &str| manifest.get(step).copied().unwrap_or(0);
             assert_eq!(count("uastc_level2"), report.escalated_pages.uastc_level2);
             assert_eq!(count("uastc_level3"), report.escalated_pages.uastc_level3);
-            assert_eq!(count("lossless_png"), report.lossless_fallback_pages);
+            assert_eq!(
+                count("lossless_png"),
+                report.lossless_fallback_pages + report.viewer_mip_fallback_pages
+            );
             assert_eq!(
                 report.escalation_diagnostics.len() as u64 + report.escalation_diagnostics_omitted,
                 total
@@ -1716,7 +1746,13 @@ mod tests {
         )
         .unwrap();
         let report = &result.report;
-        assert!(report.lossless_fallback_pages > 0, "{report:?}");
+        // Mip-sampled: declared apart from level-0 fallbacks, every page listed.
+        assert_eq!(report.lossless_fallback_pages, 0, "{report:?}");
+        assert!(report.viewer_mip_fallback_pages > 0, "{report:?}");
+        assert_eq!(
+            report.viewer_mip_fallbacks.len() as u64,
+            report.viewer_mip_fallback_pages
+        );
         let diagnostic = report
             .escalation_diagnostics
             .iter()
@@ -1729,6 +1765,20 @@ mod tests {
         let document: serde_json::Value = serde_json::from_slice(&leaf[20..20 + json_len]).unwrap();
         assert_eq!(document["images"][0]["mimeType"], "image/png");
         assert_eq!(document["samplers"][0]["minFilter"], 9987);
+        // The archive declares every such page in conversion.json.
+        let archive = work.path().join("out.3tz");
+        let tiled = crate::mesh_to_tileset(
+            crate::TilerRequest::new(&input, &archive),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let mut zip = zip::ZipArchive::new(fs::File::open(&archive).unwrap()).unwrap();
+        let conversion: serde_json::Value =
+            serde_json::from_reader(zip.by_name("conversion.json").unwrap()).unwrap();
+        let listed = conversion["viewer_mip_fallbacks"].as_array().unwrap();
+        assert_eq!(conversion["viewer_mip_fallback_pages"], listed.len());
+        assert_eq!(listed.len() as u64, tiled.report.viewer_mip_fallback_pages);
+        assert!(listed.iter().any(|p| p["slot"] == "baseColorTexture"));
     }
 
     /// Several cropped mip-sampled noise pages (one per distinct sampler) that miss a
@@ -1828,7 +1878,8 @@ mod tests {
             let report = &result.report;
             let total = report.escalated_pages.uastc_level2
                 + report.escalated_pages.uastc_level3
-                + report.lossless_fallback_pages;
+                + report.lossless_fallback_pages
+                + report.viewer_mip_fallback_pages;
             println!("jobs {jobs}: {:?} total {total}", report.escalation_reasons);
             assert!(total > 1, "{report:?}");
             assert_eq!(
@@ -1920,7 +1971,8 @@ mod tests {
         let report = &result.report;
         let total = report.escalated_pages.uastc_level2
             + report.escalated_pages.uastc_level3
-            + report.lossless_fallback_pages;
+            + report.lossless_fallback_pages
+            + report.viewer_mip_fallback_pages;
         println!(
             "codec-verify escalation {:?} {:?} png {}",
             report.escalation_reasons, report.escalated_pages, report.lossless_fallback_pages
