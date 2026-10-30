@@ -66,13 +66,36 @@ otherwise `max(floor, ⌊S·p/q⌋)`, computed in `u128` with floor division and
 | `hierarchyVisits` | 262,144 | 1/8 | 2,097,160 |
 | `references` | 1,048,576 | 1/8 | 8,388,616 |
 | `totalBytesRead` | 2,147,483,648 | 4/1 | 536,870,913 |
-| `totalPayloadElements` | 16,000,000 | 16/1 | 1,000,001 |
+| `totalPayloadElements` | 16,000,000 | 25/1 | 640,001 |
 | `containmentWorkUnits` | 536,870,912 | 128/1 | 4,194,305 |
 | `containmentBytesRead` | 2,147,483,648 | 4/1 | 536,870,913 |
 | `containmentDecodedBytes` | 2,147,483,648 | 16/1 | 134,217,729 |
 
 This is model 1. κ (the ratios) stays provisional; VS-D freezes it and bumps the model when a
 ratio or floor changes.
+
+**`totalPayloadElements` ratio, measured basis (2026-10-30, still model 1).** The ratio rose
+from 16 to 25 when HLOD coarse tiles became indexed: their validation work is unchanged, but
+their stored bytes fell. Work per stored byte (all C1, identity and delivery work against this
+budget) was logged for every validation the lib, integration and `hlod_acceptance` suites run,
+and for tex3, crop3, mesh-1e6, the border-control sheet and the Walem 2048 archive:
+
+| archive | develop | indexed coarse |
+| --- | --- | --- |
+| border-control sheet (n = 80) | 13.63 | 16.14 |
+| mesh-1e6 | 7.88 | 8.72 |
+| tex3 | 6.43 | 7.26 |
+| crop3 | 5.48 | 6.65 |
+| Walem 2048 (dabca18b) | 5.89 | – |
+
+The largest was 16.14. Any higher value came from an archive that stays under the
+16,000,000 floor (at most 14.22). The ratio is ⌈1.5 × 16.14⌉ = 25.
+
+Hostile expansion stays linear. Members are stored, never deflated, so S is the payload
+bytes. meshopt decodes at most 16 attribute elements, 3 TRIANGLES indices or 1 INDICES index
+per encoded byte. Every unit of work is charged before it runs, so a validation does at most
+max(16,000,000, 25·S) units plus one charge's overshoot. A 10-million-triangle repeated-index
+stream is refused by the per-accessor element cap in 0.1 s.
 
 **VS-C-2. Opt-in caps and natural bounds (A-C1-1, A-C1-2).** With no Class B cap set, the
 archive is bounded by the format and the file alone, in this order (all VS-A, unchanged):

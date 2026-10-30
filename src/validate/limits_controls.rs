@@ -207,7 +207,7 @@ fn derivation_is_explicit_scaled_or_floor_with_ties_at_the_floor() {
 #[test]
 fn report_derivation_at_the_crossovers() {
     for (key, floor, p, q) in [
-        (LimitKey::TotalPayloadElements, 16_000_000u64, 16u64, 1u64),
+        (LimitKey::TotalPayloadElements, 16_000_000u64, 25u64, 1u64),
         (LimitKey::HierarchyVisits, 1 << 18, 1, 8),
         (LimitKey::ContainmentWorkUnits, 1 << 29, 128, 1),
         (LimitKey::References, 1 << 20, 1, 8),
