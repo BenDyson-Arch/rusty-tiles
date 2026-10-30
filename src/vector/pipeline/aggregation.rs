@@ -81,7 +81,11 @@ fn pass(
     let mut maximum_distance: f64 = 0.;
     let mut estimate = 0usize;
     let mut rows = db
-        .prepare("SELECT n,lx,ly,lz,sortkey,data FROM features WHERE path>=?1 AND path<?2 ORDER BY sortkey,id")
+        .prepare("SELECT n,lx,ly,lz,sortkey,id FROM features WHERE path>=?1 AND path<?2 ORDER BY sortkey,id")
+        .map_err(sql)?;
+    // Sorted without `data`: only rows that are not plain points read it, by id.
+    let mut data = db
+        .prepare_cached("SELECT data FROM features WHERE id=?1")
         .map_err(sql)?;
     let mut rows = rows.query(params![prefix, end]).map_err(sql)?;
     while let Some(row) = rows.next().map_err(sql)? {
@@ -95,7 +99,9 @@ fn pass(
             ];
             (parts[0].to_owned(), vec![point])
         } else {
-            let source: Feature = serde_json::from_str(&row.get::<_, String>(5).map_err(sql)?)?;
+            let id: i64 = row.get(5).map_err(sql)?;
+            let text: String = data.query_row([id], |r| r.get(0)).map_err(sql)?;
+            let source: Feature = serde_json::from_str(&text)?;
             let (Geometry::Point(_) | Geometry::MultiPoint(_)) = source.geometry else {
                 return Ok(Pass::Mixed);
             };
