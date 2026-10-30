@@ -146,6 +146,7 @@ class PointAggregationTests(unittest.TestCase):
                 self.assertLessEqual(summary['maximumDistanceMetres'], extras['toleranceMetres'])
                 self.assertLessEqual(summary['aggregateCount'], 512)
             if parent is not None:self.assertLess(node['geometricError'], parent)
+            if node.get('children'):self.assertLessEqual(node['geometricError'], extras['toleranceMetres']+extras['positionRoundingMetres']+1e-6)
             for child in node.get('children', []):walk(child, depth+1, node['geometricError'])
         with tempfile.TemporaryDirectory() as tmp:
             source=pathlib.Path(tmp)/'spread.geojson'
@@ -157,6 +158,13 @@ class PointAggregationTests(unittest.TestCase):
                 native_run(types.SimpleNamespace(input=str(source), output=str(output), source_crs='local',
                     max_parent_features=512, aggregate_points=flag))
                 walk(json.loads((output/'tileset.json').read_text())['root'])
+            # Eight co-located layers in two cities 80 km apart under tiny budgets: the grid
+            # coarsens until every layer fits, so no tile routes at any depth.
+            xy=rng.uniform(0, 2000, (1600, 2))+(np.arange(1600)[:, None] >= 800)*[80000, 0]
+            source=pathlib.Path(tmp)/'layers.gpkg'; output=pathlib.Path(tmp)/'layers'
+            gpkg(source, [(f'L{k}', 3857, [(i+1, dict(type='Point', coordinates=xy[i].tolist()), i) for i in range(k, 1600, 8)]) for k in range(8)])
+            native_run(types.SimpleNamespace(input=str(source), output=str(output), all_layers=True, max_features=16, max_parent_features=64))
+            walk(json.loads((output/'tileset.json').read_text())['root'])
 
     def test_layer_budget_routes_without_combining_unrelated_layers(self):
         with tempfile.TemporaryDirectory() as tmp:

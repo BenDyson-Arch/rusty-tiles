@@ -10,10 +10,11 @@
 - A parent over budget retries at its own diagonal before routing. Routing tiles
   without content get a geometric error of 16 times their box diagonal, as empty
   mesh parents do, so CesiumJS no longer stops at an empty root and draws
-  nothing; `validate` refuses vector archives below this.
+  nothing; `validate` refuses rusty-tiles vector archives below this. Archives
+  from earlier releases with content-less parents now fail `validate`; rebuild them.
 
 ### Changed
 
 - Point-only parents whose points exceed their budgets publish voxel aggregates
-  by default instead of routing; `--aggregate-points` aggregates every
-  point-only parent.
+  by default instead of routing, coarsening the grid until every layer fits;
+  `--aggregate-points` aggregates every point-only parent.

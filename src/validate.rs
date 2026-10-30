@@ -1297,7 +1297,8 @@ struct Check<'a> {
     implicit: ImplicitLimits,
     /// Implicit roots read in this validation (report labels, OD-4).
     implicit_roots: u64,
-    /// The root declares `3DTILES_content_gltf_vector`: its content-less tiles must refine.
+    /// A rusty-tiles vector archive (`asset.extras.vectorBuildStateSha256`): its content-less
+    /// tiles must refine.
     vector: bool,
     #[cfg(test)]
     implicit_facts: Vec<ImplicitTileFact>,
@@ -2390,9 +2391,8 @@ impl Check<'_> {
         Ok((doc, error, schema, charge))
     }
 
-    /// Document-level C2 exclusion facts.
-    /// CesiumJS draws nothing at an empty REPLACE tile within its error. A vector
-    /// archive's content-less tiles refine until their box is about a pixel, as HLOD's do.
+    /// CesiumJS draws nothing at an empty REPLACE tile within its error. A rusty-tiles
+    /// vector archive's content-less tiles refine until their box is about a pixel, as HLOD's do.
     fn empty_tile(&self, error: f64, diagonal: Option<f64>, depth: usize) -> Result<(), Error> {
         match diagonal.map(|d| hlod_delivery::EMPTY_PARENT_SCALE * d) {
             Some(floor) if self.vector && error < floor * (1. - 1e-6) => Err(invalid(format!(
@@ -2403,11 +2403,9 @@ impl Check<'_> {
             _ => Ok(()),
         }
     }
+    /// Document-level C2 exclusion facts.
     fn tileset_exclusions(&mut self, doc: &Value) {
-        let vector = Value::from("3DTILES_content_gltf_vector");
-        self.vector |= doc["extensionsUsed"]
-            .as_array()
-            .is_some_and(|n| n.contains(&vector));
+        self.vector |= doc["asset"]["extras"]["vectorBuildStateSha256"].is_string();
         if let Some(axis) = doc["asset"].get("gltfUpAxis") {
             if axis.as_str() != Some("Y") {
                 self.c2.exclude(Reason::UpAxisOverride);
@@ -5467,9 +5465,10 @@ mod containment_controls {
             let mut root = tile(wide());
             root["geometricError"] = json!(error);
             root["children"] = json!([content_tile(boxed([0.; 3], [1.; 3]), "a.glb")]);
-            let mut doc = json!({"asset":{"version":"1.1"},"geometricError":error,"root":root});
+            let mut doc = json!({"asset":{"version":"1.1"},"geometricError":error,"root":root,
+                "extensionsUsed":["3DTILES_content_gltf_vector"]});
             if vector {
-                doc["extensionsUsed"] = json!(["3DTILES_content_gltf_vector"]);
+                doc["asset"]["extras"] = json!({"vectorBuildStateSha256":"00"});
             }
             let doc = serde_json::to_vec(&doc).unwrap();
             vec![("tileset.json", doc), ("a.glb", with_doc(|_| {}))]
@@ -5479,13 +5478,13 @@ mod containment_controls {
         assert!(run(&files(floor, true)).is_ok());
         let error = run(&files(floor * 0.99, true)).unwrap_err().to_string();
         assert!(error.contains("without content"), "{error}");
-        // Other tilesets may keep empty tiles within their error.
+        // Other vector tilesets may keep empty tiles within their error.
         assert!(run(&files(1., false)).is_ok());
         // An implicit I_0 without content (G 16, floor about 443) over a content child.
         let mut files = implicit_files(r(), subtree(&[0, 1], &[1], None), &[(1, point_at(0.))]);
         assert!(run(&files).is_ok());
         let mut doc: Value = serde_json::from_slice(&files[0].1).unwrap();
-        doc["extensionsUsed"] = json!(["3DTILES_content_gltf_vector"]);
+        doc["asset"]["extras"] = json!({"vectorBuildStateSha256":"00"});
         files[0].1 = serde_json::to_vec(&doc).unwrap();
         assert!(run(&files)
             .unwrap_err()

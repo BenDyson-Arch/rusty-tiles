@@ -221,7 +221,7 @@ Larger features are simplified. Lines use 3D Ramer-Douglas-Peucker simplificatio
 
 Leaves keep every source vertex and segment. Their only change is float32 rounding, which is reported. Leaf `geometricError` is zero unless you quantize.
 
-A parent that cannot fit its kept features within the budgets retries at a tolerance of its data diagonal, where every unsplit line or polygon is a stand-in or omitted. If that does not fit either, it becomes a routing node without content. `extras.routingReason` says why: `parentFeatures`, `vertices`, `bytes`, `estimatedBytes` or `pointAggregationBudget`. Its `geometricError` is at least 16 times its box diagonal, as for empty mesh parents, so CesiumJS refines it rather than drawing nothing; `validate` refuses vector archives whose content-less tiles fall below this.
+A parent that cannot fit its kept features within the budgets retries at a tolerance of its data diagonal, where every unsplit line or polygon is a stand-in or omitted. If that does not fit either, it becomes a routing node without content. `extras.routingReason` says why: `parentFeatures`, `vertices`, `bytes`, `estimatedBytes` or `pointAggregationBudget`. Its `geometricError` is at least 16 times its box diagonal, as for empty mesh parents, so CesiumJS refines it rather than drawing nothing; `validate` refuses rusty-tiles vector archives whose content-less tiles fall below this.
 
 Leaves keep every semantic point. A point-only parent whose points exceed its budgets publishes per-layer aggregates instead of routing.
 
@@ -244,7 +244,7 @@ Points are grouped by layer and 3D voxel, using the same grid as the point-cloud
 
 Aggregates use the metadata class `pointAggregate` and have no `_source_id`. Styles for distant tiles must use these properties, not the original fields. A MultiPoint counts once per coordinate.
 
-Aggregation falls back to the original content when it gives no reduction or breaks a budget. If the original content does not fit either, the tile routes to its children. Where an original point lies farther from its aggregate than the tile's tolerance, the tile's tolerance and geometric error rise to that distance. The parent's geometric error is at least the tolerance, so aggregates always refine to originals up close. `extras.pointAggregation` and `conversion.json.pointAggregation` record what happened.
+Where the layers' occupied voxels exceed the budget, the grid coarsens until they fit. Aggregation falls back to the original content when it gives no reduction or when the layers alone exceed the budget. If the original content does not fit either, the tile routes to its children. Where an original point lies farther from its aggregate than the tile's tolerance, the tile's tolerance and geometric error rise to that distance. The parent's geometric error is at least the tolerance, so aggregates always refine to originals up close. `extras.pointAggregation` and `conversion.json.pointAggregation` record what happened.
 
 ## Encoding
 
