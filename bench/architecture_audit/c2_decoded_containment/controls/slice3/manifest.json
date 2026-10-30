@@ -304,7 +304,7 @@
     "limit": "hierarchy_depth",
     "outcome": "ResourceLimit"
    },
-   "file": "fixtures/S3-16.depth-1.3tz",
+   "file": "fixtures/S3-16.3tz",
    "i1Limits": {
     "hierarchy_depth": 11
    },
@@ -1369,7 +1369,7 @@
     },
     "outcome": "Outside"
    },
-   "file": "fixtures/S3-19.R4.3tz",
+   "file": "fixtures/S3-19.BQ.3tz",
    "i1Limits": {
     "document_decoded_bytes": 67108864,
     "document_items": 65536,
@@ -1929,7 +1929,7 @@
    "expected": {
     "outcome": "Contained"
    },
-   "file": "fixtures/repeated-uri.at-cap.3tz",
+   "file": "fixtures/repeated-uri.base.3tz",
    "i1Limits": {},
    "id": "repeated-uri.at-cap",
    "limits": {
@@ -1968,7 +1968,7 @@
      "workLimit"
     ]
    },
-   "file": "fixtures/repeated-uri.cap-1.3tz",
+   "file": "fixtures/repeated-uri.base.3tz",
    "i1Limits": {},
    "id": "repeated-uri.cap-1",
    "limits": {
