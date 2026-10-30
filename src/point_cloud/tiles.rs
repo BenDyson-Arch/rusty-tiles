@@ -204,7 +204,8 @@ impl<O: ProducerIo> Tree<'_, O> {
                 file.flush()?;
             }
         }
-        let (rows, error, edge) = sampler.finish(path, self.layout.record_len, extent)?;
+        let sizes = (self.layout.record_len, self.options.chunk_points);
+        let (rows, error, edge) = sampler.finish(path, sizes, self.attempt, extent)?;
         std::fs::remove_file(path)?;
         let (mut node, mut half, rounding) =
             self.tile(&rows, &uri, center, parent_center, extent, Some(error))?;
@@ -289,17 +290,21 @@ impl<O: ProducerIo> Tree<'_, O> {
 /// always fits: a child's voxels are never coarser than its parent's. Two chains of
 /// edges `top / 2^j` and `top / (2^j √2)` run down to `budget` voxels along the longest
 /// axis; halving is exact, so each grid nests in the coarser one. Each grid maps a
-/// voxel to its first record ordinal and holds at most `budget + 1` voxels.
-/// A grid's edge and each occupied voxel's first record ordinal.
-type Grid = (f64, FxHashMap<[u64; 3], u64>);
-
+/// voxel to its first record ordinal and holds at most `budget + 1` voxels. A pass
+/// evaluates `LADDER` grids per chain; a chain whose grids all fit continues with its
+/// finer grids in another pass over the same records.
 struct Sampler {
     anchor: [f64; 3],
     budget: usize,
-    chains: [Vec<Grid>; 2],
+    /// Each chain's grids under evaluation, how many it started with, and finer edges.
+    chains: [(Vec<Grid>, usize, Vec<f64>); 2],
     /// Each chain's last finest-grid voxel: coherent input often repeats it.
     last: [Option<[u64; 3]>; 2],
 }
+
+/// A grid's edge and each occupied voxel's first record ordinal.
+type Grid = (f64, FxHashMap<[u64; 3], u64>);
+const LADDER: usize = 4;
 
 impl Sampler {
     fn new(anchor: [f64; 3], extent: [f64; 3], parent_edge: Option<f64>, budget: usize) -> Self {
@@ -308,23 +313,44 @@ impl Sampler {
         // At most `side` root voxels per axis, including points on the upper bound.
         let top = parent_edge.unwrap_or(longest.max(f64::MIN_POSITIVE) / (side as f64 - 0.5));
         let chains = [top, top / std::f64::consts::SQRT_2].map(|mut edge| {
-            let mut grids = vec![(edge, FxHashMap::default())];
+            let mut edges = vec![edge];
             while longest > 0. && longest / edge < budget as f64 && edge / 2. > 0. {
                 edge /= 2.;
-                grids.push((edge, FxHashMap::default()));
+                edges.push(edge);
             }
-            grids
+            (vec![], 0, edges)
         });
-        Self {
+        let mut sampler = Self {
             anchor,
             budget,
             chains,
             last: [None; 2],
+        };
+        sampler.deepen(&mut vec![]);
+        sampler
+    }
+
+    /// Move each chain's finest fitting grid to `best`; a chain whose evaluated grids all
+    /// fit takes its next grids. Returns whether any chain needs another pass.
+    fn deepen(&mut self, best: &mut Vec<Grid>) -> bool {
+        let mut deeper = false;
+        for (grids, started, edges) in &mut self.chains {
+            let intact = grids.len() == *started;
+            best.extend(grids.pop());
+            grids.clear();
+            if intact && !edges.is_empty() {
+                let map =
+                    || FxHashMap::with_capacity_and_hasher(self.budget + 1, Default::default());
+                grids.extend(edges.drain(..edges.len().min(LADDER)).map(|e| (e, map())));
+                (*started, deeper) = (grids.len(), true);
+            }
         }
+        self.last = [None; 2];
+        deeper
     }
 
     fn insert(&mut self, p: [f64; 3], ordinal: u64) {
-        for (chain, last) in self.chains.iter_mut().zip(&mut self.last) {
+        for ((chain, ..), last) in self.chains.iter_mut().zip(&mut self.last) {
             // Finest first: once a voxel is occupied, so are its coarser ones.
             for (finest, (edge, voxels)) in chain.iter_mut().rev().enumerate() {
                 let key = std::array::from_fn(|i| ((p[i] - self.anchor[i]) / *edge) as u64);
@@ -348,12 +374,28 @@ impl Sampler {
     /// The finest fitting grid's records, read by ordinal in key order, its cell diagonal
     /// (clamped to the extent on single-voxel axes) and its edge.
     fn finish(
-        self,
+        mut self,
         path: &Path,
-        len: usize,
+        (len, chunk): (usize, usize),
+        attempt: &Attempt,
         extent: [f64; 3],
     ) -> Result<(Vec<u8>, f64, f64), Error> {
-        let (edge, voxels) = (self.chains.into_iter().filter_map(|mut chain| chain.pop()))
+        let mut best = vec![];
+        while self.deepen(&mut best) {
+            let (mut source, mut ordinal) = (Records::new(path, len, chunk)?, 0);
+            loop {
+                checkpoint(attempt)?;
+                let batch = source.next()?;
+                if batch.is_empty() {
+                    break;
+                }
+                for row in batch.chunks_exact(len) {
+                    self.insert(position(row), ordinal);
+                    ordinal += 1;
+                }
+            }
+        }
+        let (edge, voxels) = (best.into_iter())
             .min_by(|a, b| a.0.total_cmp(&b.0))
             .ok_or_else(|| Error::Data("point sample exceeds maxPoints".into()))?;
         let mut picks: Vec<_> = voxels.into_iter().collect();
