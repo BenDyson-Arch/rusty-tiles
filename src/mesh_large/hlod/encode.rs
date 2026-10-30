@@ -210,13 +210,12 @@ fn table(wire: &mut Wire, rows: &[SourcePrimitive]) -> (Value, Value) {
 
 /// One per-corner attribute: name, bytes, stride and accessor.
 type Stream = (&'static str, Vec<u8>, usize, Value);
+/// Each output face's input face, the triangle indices and each vertex's source corner.
+type Welded = (Vec<usize>, Vec<u32>, Vec<usize>);
 /// Weld bit-identical corners (all attribute bytes together, so every decoded triangle
 /// keeps its corners) into indexed vertices: faces in vertex-cache order, vertices in fetch
-/// order. Returns each output face's input face, the indices and each vertex's corner.
-fn weld(
-    streams: &[Stream],
-    corners: usize,
-) -> Result<(Vec<usize>, Vec<u32>, Vec<usize>), JobError> {
+/// order.
+fn weld(streams: &[Stream], corners: usize) -> Result<Welded, JobError> {
     let width: usize = streams.iter().map(|s| s.2).sum();
     let mut records = Vec::with_capacity(corners * width);
     for c in 0..corners {
@@ -239,12 +238,14 @@ fn weld(
     let n = first.len();
     let cached = meshopt::optimize_vertex_cache(&remap, n);
     // The optimizer only reorders faces; map each back (equal faces in input order).
-    let mut input: HashMap<&[u32], Vec<usize>> = HashMap::new();
-    for (f, t) in remap.chunks_exact(3).enumerate().rev() {
+    let mut input: HashMap<&[u32; 3], Vec<usize>> = HashMap::new();
+    for (f, t) in remap.as_chunks::<3>().0.iter().enumerate().rev() {
         input.entry(t).or_default().push(f);
     }
     let order = cached
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|t| input.get_mut(t).and_then(Vec::pop))
         .collect::<Option<Vec<_>>>()
         .ok_or_else(|| invalid("vertex-cache order lost a face"))?;
