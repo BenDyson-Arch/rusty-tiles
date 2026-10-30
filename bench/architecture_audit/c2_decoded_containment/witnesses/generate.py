@@ -1342,12 +1342,20 @@ def literal_results(case, oracle):
     return out
 
 
+_SHARED_FILES = {}
+
+
 def run_case(case, directory, report_rows, large_ok):
     if case.large and not large_ok:
         report_rows.append({"id": case.id, "group": case.group, "skipped": "needs --large"})
         return None
     path = os.path.join(directory, case.id.replace("/", "_").replace(" ", "_") + ".3tz")
     digest = B.write_3tz(path, case.members())
+    # Byte-identical cases share the first file written; the others keep their ids but not a second copy.
+    first = _SHARED_FILES.setdefault((directory, digest), path)
+    if first != path:
+        os.remove(path)
+        path = first
     oracle = Oracle(path, case.limits)
     report = oracle.run()
     row = {"id": case.id, "group": case.group, "source": case.source,
