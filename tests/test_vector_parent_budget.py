@@ -39,14 +39,19 @@ class ParentFeatureBudgetTests(unittest.TestCase):
 
     def test_separate_parent_feature_and_vertex_limits_report_binding_reason(self):
         with tempfile.TemporaryDirectory() as tmp:
+            # Split fragments are never omitted, so a parent over budget routes.
             root=pathlib.Path(tmp);source=self.source(root)
-            for name,options,reason in [('features',dict(max_parent_features=2),'parentFeatures'),
+            for name,options,reason in [('features',dict(max_parent_features=2,max_vertices=16),'parentFeatures'),
                     ('vertices',dict(max_vertices=8),'vertices')]:
                 out=root/name
                 vector.run(types.SimpleNamespace(input=str(source),output=str(out),source_crs='local',max_features=2,**options))
                 node=json.loads((out/'tileset.json').read_text())['root']
                 self.assertNotIn('content',node)
                 self.assertEqual(node['extras']['routingReason'],reason)
+                # CesiumJS draws nothing at an empty REPLACE tile within its error:
+                # a routing tile refines until its whole box is about a pixel.
+                diagonal=2*math.sqrt(sum(v*v for v in node['boundingVolume']['box'][3:]))
+                self.assertGreaterEqual(node['geometricError'],16*diagonal*(1-1e-12))
 
     @requires_bin('set RUSTY_TILES_BIN for CLI acceptance')
     def test_cli_parent_budget_option_is_wired_and_zero_is_rejected(self):

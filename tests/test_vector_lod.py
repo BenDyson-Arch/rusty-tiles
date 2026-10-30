@@ -86,6 +86,21 @@ def parts(path):
     return out
 
 
+def rings(path, offset):
+    """Ordered polygon rings per source ID in the tile frame (Z-up) plus `offset`."""
+    doc,decode=accessors(path);_,_,ids=read(path);out={}
+    for prim in doc['meshes'][0]['primitives']:
+        pos=decode(prim['attributes']['POSITION'])[:,[0,2,1]]*[1,-1,1]+offset
+        fid=decode(prim['attributes']['_FEATURE_ID_0']);poly=prim['extensions']['EXT_mesh_polygon']
+        loops=decode(poly['loopIndices']);starts=decode(poly['loopIndicesOffsets'])
+        restart={5121:0xff,5123:0xffff,5125:0xffffffff}[doc['accessors'][poly['loopIndices']]['componentType']]
+        for loop in np.split(loops,starts[1:]):
+            for ring in np.split(loop,np.flatnonzero(loop==restart)):
+                ring=ring[ring!=restart]
+                if len(ring):out.setdefault(ids[int(fid[ring[0]])],[]).append(pos[ring])
+    return out
+
+
 class VectorLodTests(unittest.TestCase):
     def test_nonplanar_layers_have_real_parent_content_and_exact_leaf_vertices(self):
         from test_vector_gpkg import gpkg,nodes
@@ -164,9 +179,71 @@ class VectorLodTests(unittest.TestCase):
                     delta=np.array(c['transform'][12:15])
                     self.assertTrue((np.abs(np.array(bc[:3])+delta-b[:3])+np.array([bc[3],bc[7],bc[11]]) <= np.array([b[3],b[7],b[11]])+1e-8).all())
                 if all_ids and ids:
-                    self.assertEqual(sorted(ids),sorted(all_ids))
+                    # Coarse tiles may omit features within their error; each covers the rest.
+                    self.assertLessEqual(set(ids),set(all_ids))
                 return all_ids or ids
             self.assertEqual(len(walk(root)),4)
+
+    def test_coarse_tiles_omit_small_features_within_a_shrinking_error(self):
+        """Coarse tiles keep a subset; what they omit or simplify lies within their error."""
+        rng=np.random.default_rng(7);features=[];a=np.linspace(0,2*np.pi,24,endpoint=False)
+        for i in range(600):
+            r,(x,y)=rng.uniform(.05,1.5),rng.uniform(0,300,2)
+            features.append(np.column_stack([x+r*np.cos(a),y+.6*r*np.sin(a),0*a]))
+        b=np.linspace(0,2*np.pi,64,endpoint=False)
+        for x,y in [(40,40),(260,60),(150,250)]:
+            features.append(np.column_stack([x+20*np.cos(b)*(1+.1*np.sin(7*b)),y+20*np.sin(b),0*b]))
+        with tempfile.TemporaryDirectory() as tmp:
+            source=pathlib.Path(tmp)/'field.geojson';out=pathlib.Path(tmp)/'out'
+            source.write_text(json.dumps(dict(type='FeatureCollection',features=[dict(type='Feature',id=i,properties=dict(n=i),
+                geometry=dict(type='Polygon',coordinates=[f.tolist()+[f[0].tolist()]])) for i,f in enumerate(features)])))
+            vector.run(types.SimpleNamespace(input=str(source),output=str(out),source_crs='local',max_features=16))
+            root=json.loads((out/'tileset.json').read_text())['root'];self.assertIn('content',root)
+            def walk(node,offset,depth=0):
+                if depth:offset=offset+node['transform'][12:15]
+                tile=rings(out/node['content']['uri'],offset) if 'content' in node else None
+                below=[walk(c,offset,depth+1) for c in node.get('children',[])]
+                leaves={k:v for c in below for k,v in c[0].items()}
+                if not below:return tile,node
+                if tile is not None:
+                    g=node['geometricError']+1e-4
+                    self.assertTrue(set(tile)<=set(leaves))
+                    if not depth:self.assertLess(len(tile),len(leaves))
+                    for sid,exact in leaves.items():
+                        points=np.concatenate(exact)
+                        if sid not in tile:
+                            self.assertLessEqual(np.linalg.norm(np.ptp(points,axis=0)),g)
+                            continue
+                        coarse=tile[sid]
+                        for a,b in [(points,coarse),(np.concatenate(coarse),exact)]:
+                            self.assertLessEqual(np.min([distance(a,np.vstack([r,r[:1]])) for r in b],axis=0).max(),g)
+                    for c in node['children']:
+                        if c.get('children') and 'content' in c:self.assertGreater(node['geometricError'],c['geometricError'])
+                return leaves,node
+            leaves,_=walk(root,np.zeros(3));self.assertEqual(len(leaves),603)
+
+    def test_no_routing_tile_under_content_and_stand_ins_ignore_input_order(self):
+        def square(x, y, s):
+            c=[[x, y, 0], [x+s, y, 0], [x+s, y+s, 0], [x, y+s, 0]];return dict(type='Polygon', coordinates=[c+c[:1]])
+        rng=np.random.default_rng(3)
+        cluster=[square(*rng.uniform(0, 40, 2), 5.) for _ in range(480)]+[square(*rng.uniform(0, 2000, 2), .5) for _ in range(40)]
+        grid=[square(3*(i % 20), 3*(i//20), 1) for i in range(400)]
+        def bake(tmp, name, geometries, order, **options):
+            source=pathlib.Path(tmp)/f'{name}.geojson';out=pathlib.Path(tmp)/name
+            source.write_text(json.dumps(dict(type='FeatureCollection', features=[dict(type='Feature', id=i,
+                properties=dict(n=i), geometry=geometries[i]) for i in order])))
+            vector.run(types.SimpleNamespace(input=str(source), output=str(out), source_crs='local', max_features=16, **options))
+            def walk(node, above=False):
+                content='content' in node;self.assertTrue(content or not above)
+                if content and node.get('children'):
+                    self.assertLessEqual(node['geometricError'], node['extras']['toleranceMetres']+1e-3)
+                ids=sorted(read(out/node['content']['uri'])[2]) if content else None
+                return [ids]+[x for c in node.get('children', []) for x in walk(c, above or content)]
+            return walk(json.loads((out/'tileset.json').read_text())['root'])
+        with tempfile.TemporaryDirectory() as tmp:
+            bake(tmp, 'cluster', cluster, range(520), max_parent_features=60)
+            shuffled=list(range(400));np.random.default_rng(5).shuffle(shuffled)
+            self.assertEqual(bake(tmp, 'ordered', grid, range(400)), bake(tmp, 'shuffled', grid, shuffled))
 
 
 if __name__=='__main__':

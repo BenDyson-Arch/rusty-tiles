@@ -1258,11 +1258,34 @@ pub(super) fn cell(p: Point) -> Cell {
     p.map(|v| (v * CELLS_PER_METRE).round() as i64)
 }
 
+/// An unreducible stand-in: its diagonal, source key, geometry and shared cells.
+type Spare = (f64, String, Feature, Vec<(Cell, Kind)>);
+
+fn shared_cells(feature: &Feature, here: &BTreeSet<Cell>) -> Vec<(Cell, Kind)> {
+    let Some(kind) = Kind::of(&feature.geometry) else {
+        return Vec::new();
+    };
+    let cells = feature.geometry.points().map(|p| cell(*p));
+    cells
+        .filter(|c| here.contains(c))
+        .map(|c| (c, kind))
+        .collect()
+}
+
+fn strip_holes(geometry: &mut Geometry) {
+    match geometry {
+        Geometry::Polygon(rings) => rings.truncate(1),
+        Geometry::MultiPolygon(polygons) => polygons.iter_mut().for_each(|r| r.truncate(1)),
+        _ => {}
+    }
+}
+
 pub(super) fn encode(
     encoder: Encoder<'_>,
     prefix: &str,
     center: Point,
     level: u32,
+    tolerance: f64,
 ) -> Result<Candidate, Error> {
     let Encoder {
         spool,
@@ -1289,17 +1312,43 @@ pub(super) fn encode(
     } else {
         max_features
     };
-    let count: usize = db
+    // A whole unsplit line or polygon whose box diagonal fits a coarse tolerance is
+    // within the tile's error: the `max_features` largest (by diagonal, then
+    // source identity) become stand-ins; the rest are omitted, unread.
+    let extent = "COALESCE((hx-lx)*(hx-lx)+(hy-ly)*(hy-ly)+(hz-lz)*(hz-lz),0)";
+    let small = format!("COALESCE(?3>0 AND omissible AND {extent}<=?3*?3,0)");
+    let mut tolerance = if level > 0 { tolerance } else { 0. };
+    if !tolerance.is_finite() {
+        return Err(data("vector LOD tolerance overflows; reduce lodTolerance"));
+    }
+    let bound = if level > 0 { tolerance } else { -1. };
+    let (count, minor, points): (usize, usize, usize) = db
         .query_row(
-            "SELECT COUNT(*) FROM (SELECT 1 FROM features WHERE path>=?1 AND path<?2 LIMIT ?3)",
-            rusqlite::params![
-                prefix,
-                end,
-                i64::try_from(cap.saturating_add(1)).unwrap_or(i64::MAX)
-            ],
-            |r| Ok(r.get::<_, i64>(0)? as usize),
+            &format!("SELECT COUNT(*),COALESCE(SUM({small}),0),COALESCE(SUM(n),0) FROM features WHERE path>=?1 AND path<?2"),
+            rusqlite::params![prefix, end, bound],
+            |r| Ok((r.get::<_, i64>(0)? as usize, r.get::<_, i64>(1)? as usize, r.get::<_, i64>(2)? as usize)),
         )
         .map_err(sql)?;
+    let count = count - minor + minor.min(max_features);
+    // The last stand-in in that order, and the largest omitted diagonal.
+    let mut cut = (-1., String::new(), 0i64);
+    let mut omitted: f64 = 0.;
+    if minor > max_features {
+        let mut stmt = db.prepare(&format!("SELECT {extent},sortkey,id FROM features WHERE path>=?1 AND path<?2 AND {small} ORDER BY {extent} DESC,sortkey,id LIMIT 2 OFFSET {}", max_features - 1)).map_err(sql)?;
+        let mut rows = stmt
+            .query(rusqlite::params![prefix, end, bound])
+            .map_err(sql)?;
+        if let Some(row) = rows.next().map_err(sql)? {
+            cut = (
+                row.get(0).map_err(sql)?,
+                row.get(1).map_err(sql)?,
+                row.get(2).map_err(sql)?,
+            );
+        }
+        if let Some(row) = rows.next().map_err(sql)? {
+            omitted = row.get::<_, f64>(0).map_err(sql)?.sqrt();
+        }
+    }
     let mut result = Candidate {
         node: None,
         reports: Vec::new(),
@@ -1307,20 +1356,16 @@ pub(super) fn encode(
         worker: rayon::current_thread_index().unwrap_or(0),
         survey: None,
     };
-    let tolerance = if level > 0 {
-        options.lod.tolerance_metres * 2f64.powi(level as i32 - 1)
-    } else {
-        0.
-    };
-    if !tolerance.is_finite() {
-        return Err(data("vector LOD tolerance overflows; reduce lodTolerance"));
-    }
     let mut aggregation = None;
     let mut items = Vec::new();
     let mut aggregation_reason = None;
-    if level > 0 && options.aggregate_points {
-        match aggregation::collect(&db, prefix, tolerance, options)? {
+    // Points over a parent's budget are aggregated rather than routed.
+    let over = count > cap || points > options.max_vertices;
+    if level > 0 && (options.aggregate_points || over) {
+        match aggregation::collect(&db, prefix, options)? {
             aggregation::Outcome::Ready(value) => {
+                // The tile's tolerance covers its measured aggregate distance.
+                tolerance = tolerance.max(value.distance);
                 aggregation = Some(value.summary);
                 items = value.features;
             }
@@ -1340,11 +1385,19 @@ pub(super) fn encode(
     let mut estimate = 0;
     // The requested tolerance also promotes coincident aggregates to their
     // original identities on near refinement, even when spatial error is zero.
-    let mut error: f64 = if aggregation.is_some() { tolerance } else { 0. };
+    let mut error: f64 = if aggregation.is_some() {
+        tolerance
+    } else {
+        omitted
+    };
     let mut stmt = db
-        .prepare("SELECT data FROM features WHERE path>=?1 AND path<?2 ORDER BY id")
+        .prepare(&format!("SELECT data,{small},{extent},sortkey FROM features WHERE path>=?1 AND path<?2 AND (NOT {small} OR {extent}>?4 OR ({extent}=?4 AND (sortkey<?5 OR (sortkey=?5 AND id<=?6)))) ORDER BY id"))
         .map_err(sql)?;
-    let mut rows = stmt.query(rusqlite::params![prefix, end]).map_err(sql)?;
+    let mut rows = stmt
+        .query(rusqlite::params![prefix, end, bound, cut.0, cut.1, cut.2])
+        .map_err(sql)?;
+    // The largest unreducible stand-in, kept only if the tile would otherwise be empty.
+    let mut spare: Option<Spare> = None;
     let mut lock_query = db
         .prepare_cached("SELECT shared FROM vertices WHERE x=?1 AND y=?2 AND z=?3")
         .map_err(sql)?;
@@ -1361,7 +1414,16 @@ pub(super) fn encode(
             break;
         };
         // Load one original at a time; retain only budgeted simplified candidates.
-        let feature: Feature = serde_json::from_str(&row.get::<_, String>(0).map_err(sql)?)?;
+        let minor = row.get::<_, bool>(1).map_err(sql)?;
+        let extent = row.get::<_, f64>(2).map_err(sql)?.sqrt();
+        let mut feature: Feature = serde_json::from_str(&row.get::<_, String>(0).map_err(sql)?)?;
+        if minor {
+            // A stand-in keeps its exterior rings, reduced as far as they validly go.
+            strip_holes(&mut feature.geometry);
+            if let Some(intrinsic) = &mut feature.intrinsic {
+                strip_holes(&mut intrinsic.geometry);
+            }
+        }
         let mut locked = BTreeSet::new();
         for p in feature.geometry.points() {
             // Quantization needs every shared vertex, fragments included
@@ -1407,32 +1469,45 @@ pub(super) fn encode(
                 shared_here.insert(cell(*p));
             }
         }
+        let mut staged = Vec::new();
         let feature = if level > 0 {
-            let (feature, e) = geometry::simplify(
+            let (simplified, e) = geometry::simplify(
                 &feature,
-                tolerance,
+                if minor { extent } else { tolerance },
                 &locked,
-                &mut result.reports,
+                if minor {
+                    &mut staged
+                } else {
+                    &mut result.reports
+                },
                 options.parent_repair,
                 center,
                 repair,
             )
             .map_err(FeatureFailure::into_error)?;
-            error = error.max(e);
-            feature
+            error = error.max(if minor { extent } else { e });
+            let size = simplified.geometry.size();
+            if minor && size >= feature.geometry.size() && size > 4 * feature.geometry.paths().len()
+            {
+                let key = row.get::<_, String>(3).map_err(sql)?;
+                if spare
+                    .as_ref()
+                    .is_none_or(|(e, k, ..)| extent > *e || (extent == *e && key < *k))
+                {
+                    let cells = shared_cells(&simplified, &shared_here);
+                    spare = Some((extent, key, simplified, cells));
+                }
+                shared_here.clear();
+                continue;
+            }
+            result.reports.append(&mut staged);
+            simplified
         } else {
             feature
         };
         // Fill copies must meet fill copies, line copies line copies; a
         // line over a fill edge is not a crack.
-        if let Some(kind) = Kind::of(&feature.geometry) {
-            for p in feature.geometry.points() {
-                let c = cell(*p);
-                if shared_here.contains(&c) {
-                    shared.insert((c, kind));
-                }
-            }
-        }
+        shared.extend(shared_cells(&feature, &shared_here));
         shared_here.clear();
         vertices += feature.geometry.size();
         estimate += feature.estimate() - if level > 0 { 2048 } else { 0 };
@@ -1442,6 +1517,14 @@ pub(super) fn encode(
         }
         if estimate > options.max_bytes.saturating_mul(2) {
             result.reason = Some("estimatedBytes");
+            return Ok(result);
+        }
+        items.push(feature);
+    }
+    if let (true, Some((_, _, feature, cells))) = (items.is_empty(), spare) {
+        shared.extend(cells);
+        if feature.geometry.size() > options.max_vertices {
+            result.reason = Some("vertices");
             return Ok(result);
         }
         items.push(feature);
@@ -1605,8 +1688,9 @@ pub(super) fn encode(
         });
         return Ok(result);
     }
+    // A coarse tolerance bounds every simplification, stand-in and omission error.
     let own_error = if level > 0 || options.quantize {
-        error + rounding + quantization
+        error.max(tolerance) + rounding + quantization
     } else {
         0.
     };
@@ -1696,9 +1780,9 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let spool = root.path().join("features.sqlite");
         let db = rusqlite::Connection::open(&spool).unwrap();
-        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER); INSERT INTO vertices VALUES(0,0,0,0);").unwrap();
+        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT '',n DEFAULT 0); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER); INSERT INTO vertices VALUES(0,0,0,0);").unwrap();
         db.execute(
-            "INSERT INTO features VALUES(1,'',?1)",
+            "INSERT INTO features(id,path,data) VALUES(1,'',?1)",
             [serde_json::to_string(&point_feature()).unwrap()],
         )
         .unwrap();
@@ -1716,7 +1800,7 @@ mod tests {
             policy,
             attempt,
         };
-        let result = encode(encoder, "", [0.; 3], 0);
+        let result = encode(encoder, "", [0.; 3], 0, 0.);
         let files = std::fs::read_dir(root.path().join("t"))
             .unwrap()
             .map(|entry| std::fs::read(entry.unwrap().path()).unwrap())
@@ -2433,10 +2517,10 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let spool = root.path().join("features.sqlite");
         let db = rusqlite::Connection::open(&spool).unwrap();
-        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER); CREATE TABLE grid(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fl INTEGER,al INTEGER);").unwrap();
+        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT '',n DEFAULT 0); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER); CREATE TABLE grid(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fl INTEGER,al INTEGER);").unwrap();
         for (id, feature) in [(1, &fill), (2, &line)] {
             db.execute(
-                "INSERT INTO features VALUES(?1,'',?2)",
+                "INSERT INTO features(id,path,data) VALUES(?1,'',?2)",
                 rusqlite::params![id, serde_json::to_string(feature).unwrap()],
             )
             .unwrap();
@@ -2472,7 +2556,7 @@ mod tests {
                 policy: ProducerPolicy::new(false).unwrap(),
                 attempt: &attempt,
             };
-            let candidate = encode(encoder, "", center, 0).unwrap();
+            let candidate = encode(encoder, "", center, 0, 0.).unwrap();
             let files: Vec<_> = std::fs::read_dir(&t).unwrap().collect();
             assert_eq!(files.len(), 1);
             let bytes = std::fs::read(files[0].as_ref().unwrap().path()).unwrap();
@@ -3076,10 +3160,10 @@ mod tests {
             let root = tempfile::tempdir().unwrap();
             let spool = root.path().join("features.sqlite");
             let db = rusqlite::Connection::open(&spool).unwrap();
-            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
+            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT '',n DEFAULT 0); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
             for (id, feature) in std::iter::once(&fill).chain(&pieces).enumerate() {
                 db.execute(
-                    "INSERT INTO features VALUES(?1,'',?2)",
+                    "INSERT INTO features(id,path,data) VALUES(?1,'',?2)",
                     rusqlite::params![id as i64 + 1, serde_json::to_string(feature).unwrap()],
                 )
                 .unwrap();
@@ -3100,7 +3184,7 @@ mod tests {
                 policy: ProducerPolicy::new(meshopt).unwrap(),
                 attempt: &attempt,
             };
-            let node = tile_json(encode(encoder, "", [0.; 3], 0).unwrap().node.unwrap());
+            let node = tile_json(encode(encoder, "", [0.; 3], 0, 0.).unwrap().node.unwrap());
             assert!(node.get("contents").is_none());
             let content = &node["content"];
             assert_eq!(
@@ -3626,18 +3710,18 @@ mod tests {
             let root = tempfile::tempdir().unwrap();
             let spool = root.path().join(format!("{name}.sqlite"));
             let db = rusqlite::Connection::open(&spool).unwrap();
-            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
+            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT '',n DEFAULT 0); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
             let points: Vec<_> = (0..5).map(|i| [i as f64, 0., 0.]).collect();
             let feature = json!({"properties":{"_source_id":"1","name":label.repeat(10000)},"geometry":{"type":"LineString","coordinates":points}});
             db.execute(
-                "INSERT INTO features VALUES(1,'',?1)",
+                "INSERT INTO features(id,path,data) VALUES(1,'',?1)",
                 [feature.to_string()],
             )
             .unwrap();
             // This row would fail JSON decoding if the guard retained/loading
             // loop continued past the first candidate's budget failure.
             db.execute(
-                "INSERT INTO features VALUES(2,'','deliberately invalid JSON')",
+                "INSERT INTO features(id,path,data) VALUES(2,'','deliberately invalid JSON')",
                 [],
             )
             .unwrap();
@@ -3668,7 +3752,7 @@ mod tests {
                 policy: ProducerPolicy::new(options.meshopt).unwrap(),
                 attempt: &attempt,
             };
-            let candidate = encode(encoder, "", [0.; 3], 1).unwrap();
+            let candidate = encode(encoder, "", [0.; 3], 1, options.lod.tolerance_metres).unwrap();
             assert!(candidate.node.is_none());
             assert_eq!(candidate.reason, Some(expected));
         }
@@ -3723,10 +3807,10 @@ mod tests {
             std::fs::create_dir(root.path().join("t")).unwrap();
             let spool = root.path().join("spool.sqlite");
             let db = rusqlite::Connection::open(&spool).unwrap();
-            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
+            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT '',n DEFAULT 0); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
             let feature = json!({"properties":{"_source_id":"raised"},"geometry":{"type":"Polygon","coordinates":[exterior, hole]}});
             db.execute(
-                "INSERT INTO features VALUES(1,'',?1)",
+                "INSERT INTO features(id,path,data) VALUES(1,'',?1)",
                 [feature.to_string()],
             )
             .unwrap();
@@ -3761,7 +3845,7 @@ mod tests {
                 policy: ProducerPolicy::new(false).unwrap(),
                 attempt: &attempt,
             };
-            let candidate = encode(encoder, "", [0.; 3], 1).unwrap();
+            let candidate = encode(encoder, "", [0.; 3], 1, options.lod.tolerance_metres).unwrap();
             let node = tile_json(candidate.node.expect("the parent keeps the source polygon"));
             assert_eq!(
                 node["extras"]["geometryErrorMetres"],
