@@ -199,7 +199,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -343,7 +343,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -487,7 +487,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -631,7 +631,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -775,7 +775,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -919,7 +919,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -1063,7 +1063,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -1208,7 +1208,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -1353,7 +1353,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -1498,7 +1498,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -1642,7 +1642,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -1711,7 +1711,7 @@
           "hierarchyVisits": 1096073,
           "hierarchyDepth": 128,
           "references": 1096073,
-          "totalPayloadElements": 219214625,
+          "totalPayloadElements": 675181045,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -1786,7 +1786,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "scaled"
@@ -1930,7 +1930,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"

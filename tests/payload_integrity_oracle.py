@@ -40,11 +40,11 @@ def main():
     amendment = controls / 'payload_element_ratio_amendment/2026-10-30'
     bundles = [
         ('corrected205', amendment / 'corrected-205-ratio-fixtures.tar.gz',
-         'b78f6495b899b4e38d90fdce859467bd2bbd178257d44c87761d5fd20101279e',
-         'e733097b404c5924e053c57f41d78bb67d3a9d944cddc4bc2fde43d20db1527a', 205),
+         '6d91db506eeabd25c7abc6ebaf638c38ee28f855b6fbccdbb466f173f4b73254',
+         '34bd8dc8f2790e422e09bf845383aa020f5b39530b77f210cbbec3d2339a61e5', 205),
         ('polygon5', amendment / 'polygon-sensitive-5-ratio-fixtures.tar.gz',
-         '60eea366d2a5bb46fc26a1f4348d35c63cb4d69bd878adf1c402080fbcfe7407',
-         'd9b560b5c50bb122872da526717cba9468727bcc451e873244a3a005559bf90c', 5),
+         '61d1069e15c284ceae37f05744f75888e8bfb52796bae530a7f061c3daa9bdb8',
+         'f1b5666996196f8aa13cdea5cbd55299453c6947ec99a324690b0bc2cedd4a8a', 5),
     ]
     phases = {}
     status = 1

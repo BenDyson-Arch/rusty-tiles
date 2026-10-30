@@ -251,8 +251,8 @@ index included), fixed when the catalog is admitted.
 - **Amplification budgets** are `max(floor, ⌊S·p/q⌋)`: `hierarchyVisits` max(262,144, S/8),
   `references` max(1,048,576, S/8), `totalBytesRead` max(2 GiB, 4·S) (explicit member-hash
   and payload/document reads, including repeated reads and constructor index reads),
-  `totalPayloadElements` max(16 million, 25·S) and the three C2 budgets above. Archives up to
-  640,000 stored bytes have exactly the floors. The report's `limitDerivation` gives each
+  `totalPayloadElements` max(16 million, 77·S) and the three C2 budgets above. Archives up to
+  207,792 stored bytes have exactly the floors. The report's `limitDerivation` gives each
   budget's floor, its ratio `perStoredByte` and its `source` (`floor`, `scaled` or
   `explicit`); `storedBytes`, `limits` and `limitDerivation` depend only on S and the
   request's overrides. S is fixed before any budgeted work and every byte of it is hashed, so

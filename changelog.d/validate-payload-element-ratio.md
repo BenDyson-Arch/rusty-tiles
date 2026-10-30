@@ -1,3 +1,4 @@
 ### Changed
 
-- `validate`: the default `totalPayloadElements` budget is now max(16 million, 25 × stored bytes), up from 16 ×. Indexed HLOD coarse tiles take fewer stored bytes for the same validation work, and the largest measured archive needs 16.1 elements per stored byte. The ratio is that maximum with a 1.5× margin.
+- `validate`: the default `totalPayloadElements` budget is now max(16 million, 77 × stored bytes), up from 16 ×. Indexed HLOD coarse tiles take fewer stored bytes for the same validation work. The native HLOD delivery check now charges its scratch-store rows (128 units), original vertex rows (16) and placed original keys (32) at their measured cost. The largest validation the test suites log needs 50.75 elements per stored byte, and the ratio is that maximum with a 1.5× margin. At the worst measured cost per unit, the admitted work is at most 827 s of CPU per stored GB on a P-core.
+- `validate`: the HLOD original-vertex alias check uses a spill sequence and one bounded external sort instead of the SQLite scratch store. This is about 3× faster on leaf-heavy archives, and the verdicts are unchanged.

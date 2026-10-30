@@ -3,7 +3,7 @@
   "files": {
     "fixtures/manifest.json": {
       "bytes": 103382,
-      "sha256": "6b6b8e6cc7b8a3b95bd8462489b2282ca79a0547a73590065eaf502d223bfd30"
+      "sha256": "1db021d2a5be07572f203272386b1687688382237519b6c7b377359ab7cf5d9f"
     },
     "generator.py": {
       "bytes": 23286,

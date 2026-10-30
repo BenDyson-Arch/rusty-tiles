@@ -31,7 +31,7 @@
     },
     "fixtures/manifest.json": {
       "bytes": 21694,
-      "sha256": "8b0bdfcc38bfc004b2d736ed0b1d17a850c617a33a513117b2f8cab3a0b7affb"
+      "sha256": "f8ef13dc13e9bb439862ff802c72166596d30a023b088d08ef57a8ba36222bb9"
     },
     "fixtures/triangles-0xe0/input.3tz": {
       "bytes": 1501,

@@ -199,7 +199,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -343,7 +343,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -507,7 +507,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -670,7 +670,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                25,
+                77,
                 1
               ],
               "source": "floor"
@@ -857,7 +857,7 @@
     "amends": "vs_c_limits_amendment/2026-10-14/stride_controls/fixtures/manifest.json",
     "inputSha256": "59223981688cfa20eaffeb3619e0042accf697e8c23d8ac5e1373cc841b13d7f",
     "inputManifestSha256": "38d693ea276bbf9941738ab5ea21589442373daf8161fec4798475dcbd9abe07",
-    "rule": "admitted expectedReport: totalPayloadElements perStoredByte [16, 1] -> [25, 1] and its limit max(16000000, 25*S); nothing else changes",
+    "rule": "admitted expectedReport: totalPayloadElements perStoredByte [16, 1] -> [77, 1] and its limit max(16000000, 77*S); nothing else changes",
     "specification": "docs/architecture/validator-limits-amendment.md (measured basis, 2026-10-30)",
     "generator": "bench/architecture_audit/c1_payload_integrity/production_controls/payload_element_ratio_amendment/2026-10-30/amend.py"
   }

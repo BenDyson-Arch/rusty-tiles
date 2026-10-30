@@ -129,7 +129,7 @@ const BUDGETS: [(LimitKey, u64, u64, u64); 7] = [
     (LimitKey::HierarchyVisits, 1 << 18, 1, 8),
     (LimitKey::References, 1 << 20, 1, 8),
     (LimitKey::TotalBytesRead, 1 << 31, 4, 1),
-    (LimitKey::TotalPayloadElements, 16_000_000, 25, 1),
+    (LimitKey::TotalPayloadElements, 16_000_000, 77, 1),
     (LimitKey::ContainmentWorkUnits, 1 << 29, 128, 1),
     (LimitKey::ContainmentBytesRead, 1 << 31, 4, 1),
     (LimitKey::ContainmentDecodedBytes, 1 << 31, 16, 1),

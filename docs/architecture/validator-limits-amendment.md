@@ -66,7 +66,7 @@ otherwise `max(floor, ⌊S·p/q⌋)`, computed in `u128` with floor division and
 | `hierarchyVisits` | 262,144 | 1/8 | 2,097,160 |
 | `references` | 1,048,576 | 1/8 | 8,388,616 |
 | `totalBytesRead` | 2,147,483,648 | 4/1 | 536,870,913 |
-| `totalPayloadElements` | 16,000,000 | 25/1 | 640,001 |
+| `totalPayloadElements` | 16,000,000 | 77/1 | 207,793 |
 | `containmentWorkUnits` | 536,870,912 | 128/1 | 4,194,305 |
 | `containmentBytesRead` | 2,147,483,648 | 4/1 | 536,870,913 |
 | `containmentDecodedBytes` | 2,147,483,648 | 16/1 | 134,217,729 |
@@ -75,27 +75,64 @@ This is model 1. κ (the ratios) stays provisional; VS-D freezes it and bumps th
 ratio or floor changes.
 
 **`totalPayloadElements` ratio, measured basis (2026-10-30, still model 1).** The ratio rose
-from 16 to 25 when HLOD coarse tiles became indexed: their validation work is unchanged, but
-their stored bytes fell. Work per stored byte (all C1, identity and delivery work against this
-budget) was logged for every validation the lib, integration and `hlod_acceptance` suites run,
-and for tex3, crop3, mesh-1e6, the border-control sheet and the Walem 2048 archive:
+from 16 to 77. Two things changed together. HLOD coarse tiles became indexed: their validation
+work is unchanged, but their stored bytes fell. And the native HLOD delivery check now charges
+its scratch work at its measured cost, so a unit costs about the same in every work class:
+
+- each SQLite scratch-store row written or looked up by key: 128 units;
+- each original vertex row appended to the ingest spill sequence: 16 units;
+- each placed original key (placement, external sort and ordered alias scan): 32 units.
+
+The original-vertex alias check no longer goes through SQLite. Its rows are appended to a spill
+sequence, and their placed keys are checked by one bounded external sort (the catalog's side-sort
+memory) and one ordered scan. This cut the hostile leaf class c5 from 46.9 s to 15.2 s of CPU.
+
+Work per stored byte (all C1, identity and delivery work against this budget) was logged for
+every validation the lib and integration suites run (5,247), and for the archives below:
 
 | archive | develop | indexed coarse |
 | --- | --- | --- |
-| border-control sheet (n = 80) | 13.63 | 16.14 |
-| mesh-1e6 | 7.88 | 8.72 |
-| tex3 | 6.43 | 7.26 |
-| crop3 | 5.48 | 6.65 |
-| Walem 2048 (dabca18b) | 5.89 | – |
+| border-control sheet (n = 80) | 30.34 | 36.52 |
+| mesh-1e6 | 19.44 | 21.96 |
+| tex3 | 14.62 | 16.74 |
+| crop3 | 12.08 | 15.06 |
+| Walem 2048 (dabca18b) | 13.85 | – |
 
-The largest was 16.14. Any higher value came from an archive that stays under the
-16,000,000 floor (at most 14.22). The ratio is ⌈1.5 × 16.14⌉ = 25.
+The largest value over every logged validation, small archives included, is 50.75 (the
+`plain` suite archives, 144,339 stored bytes, which stay under the floor). The largest above the
+floor is the sheet's 36.52. The ratio is ⌈1.5 × 50.75⌉ = 77.
 
-Hostile expansion stays linear. Members are stored, never deflated, so S is the payload
-bytes. meshopt decodes at most 16 attribute elements, 3 TRIANGLES indices or 1 INDICES index
-per encoded byte. Every unit of work is charged before it runs, so a validation does at most
-max(16,000,000, 25·S) units plus one charge's overshoot. A 10-million-triangle repeated-index
-stream is refused by the per-accessor element cap in 0.1 s.
+Two validator builds now report `limitDerivation.model: 1` with different ratios: 16 before
+this amendment and 77 after it. κ stays provisional under model 1, and only VS-D freezes it and
+bumps the model. Until then, read the ratio from `perStoredByte`, not from the model number.
+
+Hostile expansion stays linear. Members are stored, never deflated, so S is the payload bytes.
+The meshopt codecs decode at most 16 vertices per encoded byte (ATTRIBUTES), 3 indices
+(TRIANGLES) or 1 index (INDICES). C1 charges each attribute vertex once per component, though,
+so a VEC4 u8 stream is up to 64 charged units per encoded byte. The bound does not rest on the
+codec ratio. It holds because every unit of work is charged before it runs: a validation does
+at most max(16,000,000, 77·S) units plus one charge's overshoot. A 10-million-triangle
+repeated-index stream is refused by the per-accessor element cap in 0.1 s.
+
+*Time statement.* CPU time per unit was measured for five adversarial classes. c1–c4 were run to
+a 500,000,000-unit budget; c5 holds 600 leaves of 8,192 triangles with three new original
+vertices each and a valid root, and is validated in full (1,502,712,016 units, 32.0 per stored
+byte). Each run was pinned to one P-core (CPU 10) and one E-core (CPU 17), at idle priority on a
+host at load average about 43:
+
+| class | P-core ns/unit | E-core ns/unit |
+| --- | --- | --- |
+| c1 comp64: unreferenced VEC4 u8 meshopt accessors | 6.71 | 6.93 |
+| c2 hlodseq: distinct-vertex index streams | 8.00 | 8.88 |
+| c3 hloddup: one triangle instanced by 100 nodes | 6.40 | 6.62 |
+| c4 hlodleaf: 100k-triangle leaves, new originals per triangle | 10.74 | 12.32 |
+| c5 hlodleaf: 600 × 8,192-triangle leaves | 10.11 | 10.92 |
+
+The stated bound is `(16,000,000 + 77·S)·τ` with the worst measured τ (c4): on the P-core
+0.17 s plus 827 s per stored GB, and on the E-core 0.20 s plus 949 s per stored GB. Both are
+within the C2 statement below (1,037 and 1,875 s per stored GB). A new work class, or a
+per-unit cost above 13.4 ns (P-core) or 24.3 ns (E-core), must re-weight its charges or
+revisit the ratio.
 
 **VS-C-2. Opt-in caps and natural bounds (A-C1-1, A-C1-2).** With no Class B cap set, the
 archive is bounded by the format and the file alone, in this order (all VS-A, unchanged):
