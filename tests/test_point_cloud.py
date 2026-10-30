@@ -236,6 +236,14 @@ class PointCloudTests(unittest.TestCase):
             operation = Transformer.from_crs(CRS.from_epsg(32632).to_3d(), CRS.from_epsg(4978),
                 always_xy=True, allow_ballpark=False, only_best=True)
             expected = np.column_stack(operation.transform(data.x, data.y, np.asarray(data.z) + 10., errcheck=True))
+            # One source step in ECEF metres at its smallest over the source box (each axis at
+            # its minimum, maximum and spanned zero), independently through PROJ.
+            source = np.column_stack([data.x, data.y, data.z])
+            axes = [sorted({lo, hi} | ({0.} if lo <= 0 <= hi else set())) for lo, hi in zip(source.min(0), source.max(0))]
+            corners = np.array(np.meshgrid(*axes, indexing='ij')).reshape(3, -1).T
+            ecef = lambda p: np.column_stack(operation.transform(p[:, 0], p[:, 1], p[:, 2] + 10., errcheck=True))
+            steps = [np.linalg.norm(ecef(corners + np.eye(3)[i] * data.header.scales[i]) - ecef(corners), axis=1).min() for i in range(3)]
+            self.assertAlmostEqual(report['sourcePrecisionMetres'], min(steps), delta=1e-6 * min(steps) + 1e-8)
             seen = []
             def walk(node, origin):
                 center = origin + translation(node)

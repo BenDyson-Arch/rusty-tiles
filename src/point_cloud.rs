@@ -531,7 +531,7 @@ fn convert(
         expected,
     } = prepared;
     let options = &request.options;
-    let mut precision = f64::NAN;
+    let (mut source_lo, mut source_hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
     let (origin, count) = {
         let mut points = las::PointDataBuilder::new().for_header(&header).build();
         let mut origin = None;
@@ -562,15 +562,9 @@ fn convert(
             checkpoint(attempt)?;
             let projected = coordinates.transform(&xyz)?;
             let origin = *origin.get_or_insert(projected[0]);
-            if precision.is_nan() {
-                // Output metres of one source coordinate step, measured at the first point.
-                let steps: Vec<_> = (0..3)
-                    .map(|i| {
-                        std::array::from_fn(|j| xyz[0][j] + if i == j { scales[i] } else { 0. })
-                    })
-                    .collect();
-                let moved = coordinates.transform(&steps)?;
-                precision = (moved.iter()).fold(f64::INFINITY, |p, m| p.min(norm(sub(*m, origin))));
+            for p in &xyz {
+                source_lo = std::array::from_fn(|i| source_lo[i].min(p[i]));
+                source_hi = std::array::from_fn(|i| source_hi[i].max(p[i]));
             }
             for ((raw, source), point) in points
                 .raw_bytes()
@@ -604,6 +598,37 @@ fn convert(
         )
     };
     drop(reader);
+    // Output metres of one source coordinate step, at its smallest over the source box:
+    // each axis at its minimum, maximum and (when spanned) zero. Local XYZ is metres.
+    let precision = match coordinates {
+        Coordinates::Local => scales.into_iter().fold(f64::INFINITY, f64::min),
+        Coordinates::Ecef(_) => {
+            let at = |i: usize| {
+                [
+                    source_lo[i],
+                    source_hi[i],
+                    0f64.clamp(source_lo[i], source_hi[i]),
+                ]
+            };
+            let mut probes = Vec::with_capacity(108);
+            for x in at(0) {
+                for y in at(1) {
+                    for z in at(2) {
+                        probes.push([x, y, z]);
+                        probes.extend((0..3).map(|i| {
+                            std::array::from_fn(|j| {
+                                [x, y, z][j] + if i == j { scales[i] } else { 0. }
+                            })
+                        }));
+                    }
+                }
+            }
+            let moved = coordinates.transform(&probes)?;
+            (moved.chunks_exact(4))
+                .flat_map(|c| c[1..].iter().map(|m| norm(sub(*m, c[0]))))
+                .fold(f64::INFINITY, f64::min)
+        }
+    };
     let mut tree = tiles::Tree {
         attempt,
         // Filled from the forest writer's published inventory below.

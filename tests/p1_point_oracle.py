@@ -68,6 +68,13 @@ def fixture(path, count=257, fmt=3, variant='spread', extras=True, metadata=Fals
         vlr=struct.pack('<H16sHH32s',0,b'LASF_Spec',4,len(descriptors),b'independent P1 scalar ExtraBytes')+descriptors
     length=FORMATS[fmt]+sum(struct.calcsize('<'+code) for _,_,code in declarations)
     records=[]
+    if variant.startswith('lattice'):
+        # A 1 mm lattice in 40x40x4 m, in several orders: voxel edges fall on lattice points.
+        g=__import__('random').Random(3);lattice=[[g.randrange(40000),g.randrange(40000),g.randrange(4000)] for _ in range(count)]
+        if variant=='lattice_sorted':lattice.sort()
+        if variant=='lattice_alternating':
+            a,b=[p for p in lattice if p[0]<20000],[p for p in lattice if p[0]>=20000]
+            lattice=[p for pair in zip(a,b) for p in pair]+a[len(b):]+b[len(a):]
     for index in range(count):
         # Every fifth pair is fully identical, including all original attributes.
         i=index-1 if index%10==1 else index
@@ -83,6 +90,7 @@ def fixture(path, count=257, fmt=3, variant='spread', extras=True, metadata=Fals
             # A millimetre cluster and points at doubling distances: about 20 octree
             # levels with two children each, beyond one document's skeleton.
             k=index-count+20;xyz=[8<<k]*3 if k>=0 else [i%5,(i//5)%5,(i//25)%5]
+        if variant.startswith('lattice'):xyz=lattice[index]
         raw=bytearray(length);struct.pack_into('<iiiH',raw,0,*xyz,(i*251)%65536)
         if extended:
             raw[14]=(i%14+1)|((i%14+1)<<4)
@@ -111,7 +119,7 @@ def fixture(path, count=257, fmt=3, variant='spread', extras=True, metadata=Fals
     struct.pack_into('<HII',h,94,header_size,header_size+len(vlr),int(bool(vlr)))
     h[104]=fmt;struct.pack_into('<HI',h,105,length,0 if extended else count)
     scale=(.001,.001,.001)
-    offsets=(0.,0.,0.) if variant=='geographic' else ((500000.,0.,123.) if variant=='projected_origin' else (500000.,5000000.,80.))
+    offsets=(0.,0.,0.) if variant=='geographic' or variant.startswith('lattice') else ((500000.,0.,123.) if variant=='projected_origin' else (500000.,5000000.,80.))
     struct.pack_into('<ddd',h,131,*scale);struct.pack_into('<ddd',h,155,*offsets)
     xyzs=[unpack('iii',r) for r in records]
     for axis in range(3):
@@ -397,6 +405,29 @@ def box_contains(box,p,tolerance=2e-5):
     return all(abs(p[a]-box[a])<=abs(box[3+a*3+a])+tolerance for a in range(3))
 
 
+def leaf_encoding(uri,positions,quantized,steps,precision):
+    """Leaves keep 16-bit codes only where a step is within the source precision."""
+    extent=[max(p[a] for p in positions)-min(p[a] for p in positions) for a in range(3)]
+    if quantized:require(all(2*steps[0][a]<=precision*(1+1e-9) for a in range(3) if extent[a]),f'{uri}: 16-bit leaf coarser than the source')
+    else:require(any(e/65535>precision*(1-1e-9) for e in extent),f'{uri}: float32 leaf where 16-bit codes suffice')
+
+
+def check_precision(report,expected,geographic,height,projected=False):
+    """One source step in output metres at its smallest over the source box (each axis at
+    its minimum, maximum and spanned zero). Local is the smallest scale; geographic uses
+    the analytic ellipsoid, within f64 cancellation at ECEF magnitude; projected must lie
+    within the transverse Mercator scale factor and height range of the smallest scale."""
+    reported,scales,names=report['sourcePrecisionMetres'],expected['scales'],('source_x','source_y','source_z')
+    if projected:return require(abs(reported/min(scales)-1)<=2e-3,'projected source precision within the scale factor bound')
+    if not geographic:return require(reported==min(scales),'local source precision is the smallest scale')
+    box=[sorted({min(r[n] for r in expected['rows']),max(r[n] for r in expected['rows'])}|({0.} if min(r[n] for r in expected['rows'])<=0<=max(r[n] for r in expected['rows']) else set())) for n in names]
+    steps=[]
+    for corner in [dict(zip(names,c)) for c in __import__('itertools').product(*box)]:
+        origin=ecef(corner,height)
+        steps+=[math.dist(ecef({**corner,n:corner[n]+v},height),origin) for n,v in zip(names,scales)]
+    require(abs(reported-min(steps))<=1e-6*min(steps)+4*2**-52*6.4e6,'reported source precision')
+
+
 def voxel(p,anchor,edge):
     return tuple(math.floor((p[a]-anchor[a])/edge) for a in range(3))
 
@@ -506,29 +537,24 @@ def audit(source,archive,max_points,geographic=False,height=0.,require_multileaf
             require(distance<=error+3e-6,'parent nearest-representative error claim')
         else:
             require(error==0,'leaf geometric error');leaves.extend(ids);descendants=ids
-            # Leaves keep 16-bit codes only where a step is within the source precision.
-            extent=[max(p[a] for p in positions)-min(p[a] for p in positions) for a in range(3)];precision=report['sourcePrecisionMetres']
-            if quantized:require(all(2*steps[0][a]<=precision*(1+1e-9) for a in range(3) if extent[a]),f'{uri}: 16-bit leaf coarser than the source')
-            else:require(any(e/65535>precision*(1-1e-9) for e in extent),f'{uri}: float32 leaf where 16-bit codes suffice')
+            leaf_encoding(uri,positions,quantized,steps,report['sourcePrecisionMetres'])
         # Invert admitted translation-only tile transforms, composed through
         # skeleton tiles, links and each implicit root's frame.
         require(m[:12]==IDENTITY[:12],'point tile translation profile')
         for index in descendants:
             require(box_contains(box,tuple(expected_positions[index][a]-m[12+a] for a in range(3))),'descendant source escapes transformed bounds')
         return descendants
-    # One source step in output metres, measured independently at the first record.
-    if not expected_positions_override:
-        precision=min(expected['scales'])
-        if geographic:precision=min(math.dist(ecef({**rows[0],n:rows[0][n]+v},height),expected_positions[0]) for n,v in zip(('source_x','source_y','source_z'),expected['scales']))
-        require(math.isclose(report['sourcePrecisionMetres'],precision,rel_tol=1e-6),'reported source precision')
+    check_precision(report,expected,geographic,height,projected=bool(expected_positions_override))
     samples={};visit(root,IDENTITY)
-    anchor=[min(p[a] for p in expected_positions) for a in range(3)]
+    # The producer keys voxels on output coordinates relative to the first record.
+    frame=[tuple(p[a]-expected_positions[0][a] for a in range(3)) for p in expected_positions]
+    anchor=[min(p[a] for p in frame) for a in range(3)]
     def sampled(node,parent_edge):
         if id(node) not in samples:return
         ids,descendants=samples[id(node)]
-        edge=voxels(descendants,expected_positions,anchor,parent_edge,max_points)
+        edge=voxels(descendants,frame,anchor,parent_edge,max_points)
         selected={}
-        for i in sorted(descendants):selected.setdefault(voxel(expected_positions[i],anchor,edge),i)
+        for i in sorted(descendants):selected.setdefault(voxel(frame[i],anchor,edge),i)
         require(collections.Counter(ids)==collections.Counter(selected.values()),'parent first-point voxel representatives')
         for child in node['children']:sampled(child,edge)
     sampled(root,None)
@@ -651,10 +677,11 @@ def run(binary,output_dir,quick=False,baseline=False):
     cases.append((3,'spread',11,1))
     # A chain deeper than one document's skeleton: links and external documents.
     cases.append((3,'deep',11))
+    cases.extend((3,variant,97,64,20000) for variant in ('lattice','lattice_sorted','lattice_alternating'))
     if not quick:cases.extend((fmt,'spread',3) for fmt in FORMATS if fmt!=3)
     for number,case in enumerate(cases):
-        fmt,variant,chunk=case[:3];budget=case[3] if len(case)>3 else 16
-        source=directory/f'{number}-{fmt}-{variant}.las';archive=source.with_suffix('.3tz');fixture(source,fmt=fmt,variant=variant)
+        fmt,variant,chunk=case[:3];budget,count=(case[3:]+(16,257)[len(case)-3:])[:2]
+        source=directory/f'{number}-{fmt}-{variant}.las';archive=source.with_suffix('.3tz');fixture(source,count=count,fmt=fmt,variant=variant)
         command=[str(binary),'--json','point-cloud','-i',str(source),'-o',str(archive),'--sourceCrs','local','--maxPoints',str(budget),'--chunkPoints',str(chunk),'--metadata']
         completed=subprocess.run(command,capture_output=True,text=True)
         require(completed.returncode==0,'conversion failed: '+completed.stdout+completed.stderr)
@@ -710,6 +737,19 @@ def profile_controls(binary,directory,baseline=False):
     position=ecef({'source_x':9.,'source_y':0.,'source_z':123.},7.)
     observed=audit(source,archive,16,expected_positions_override=[position]*23)
     results.append({'case':'analytic UTM32 false easting/equator ECEF','reference':'EPSG32632 false easting500000/northing0 is longitude9deg/latitude0; independent WGS84 ellipsoid formula at h130m','result':observed})
+    # Spread projected records: reported precision and every leaf's encoding.
+    source=directory/'utm-spread.las';archive=source.with_suffix('.3tz');fixture(source)
+    completed,_=invoke(binary,source,archive,options);require(completed.returncode==0,'UTM spread conversion: '+completed.stdout)
+    with zipfile.ZipFile(archive) as z:members={n:z.read(n) for n in z.namelist()}
+    manifest,report=json.loads(members['tileset.json']),json.loads(members['conversion.json'])
+    check_precision(report,enumerate_las(source),False,7.,projected=True)
+    def leaves(node):
+        for child in node.get('children',[]):yield from leaves(child)
+        if not node.get('children'):
+            positions,_,_,(quantized,steps)=decoded_points(members[node['content']['uri']])
+            leaf_encoding(node['content']['uri'],positions,quantized,steps,report['sourcePrecisionMetres']);yield 1
+    count=sum(leaves(expand_forest(manifest['root'],members,set(),'schema' in manifest,{'explicit':0,'implicit_roots':0,'documents':1})))
+    results.append({'case':'UTM32 spread precision and leaf encoding','leaves':count,'sourcePrecisionMetres':report['sourcePrecisionMetres']})
     for kind in ('scaled_u64','scaled_i64','vector_extra','nonfinite_extra','truncated_source','local_height','missing_height','source_alias','hardlink_alias','zero_scale','negative_scale','scaled_overflow','header_size_zero','point_offset_zero','point_offset_u32max','point_offset_beyond_file','evlr_offset_u64max','evlr_offset_beyond_file','f32_unrepresentable_nodata','duplicate_projected_geokey','duplicate_geographic_geokey','untyped_extra','waveform_format'):
         source=directory/f'refused-{kind}.las';target=directory/f'refused-{kind}.3tz'
         if kind=='source_alias':source=target

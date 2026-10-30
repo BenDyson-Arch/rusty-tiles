@@ -290,9 +290,9 @@ impl<O: ProducerIo> Tree<'_, O> {
 /// always fits: a child's voxels are never coarser than its parent's. Two chains of
 /// edges `top / 2^j` and `top / (2^j √2)` run down to `budget` voxels along the longest
 /// axis; halving is exact, so each grid nests in the coarser one. Each grid maps a
-/// voxel to its first record ordinal and holds at most `budget + 1` voxels. A pass
-/// evaluates `LADDER` grids per chain; a chain whose grids all fit continues with its
-/// finer grids in another pass over the same records.
+/// voxel to its first record ordinal and holds at most `budget + 1` voxels. The first
+/// pass evaluates `LADDER` grids per chain; a chain whose grids all fit continues with all
+/// its finer grids in one more pass over the same records.
 struct Sampler {
     anchor: [f64; 3],
     budget: usize,
@@ -341,7 +341,8 @@ impl Sampler {
             if intact && !edges.is_empty() {
                 let map =
                     || FxHashMap::with_capacity_and_hasher(self.budget + 1, Default::default());
-                grids.extend(edges.drain(..edges.len().min(LADDER)).map(|e| (e, map())));
+                let take = if *started == 0 { LADDER } else { edges.len() };
+                grids.extend(edges.drain(..take.min(edges.len())).map(|e| (e, map())));
                 (*started, deeper) = (grids.len(), true);
             }
         }

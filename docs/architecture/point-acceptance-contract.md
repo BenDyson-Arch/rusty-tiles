@@ -61,7 +61,7 @@ producer-owned publication options are removed after caller migration.
 Owner amendment, 2026-10-29: output keeps only position (16-bit per tile axis) and
 8-bit colour unless `metadata` restores the table and the guarantees above. Leaf error
 stays 0 (nothing is omitted below). A leaf whose 16-bit step would exceed one source
-coordinate step in output metres (measured at the first record) keeps float32. Leaf
+coordinate step in output metres (its smallest over the source box) keeps float32. Leaf
 positions differ from source by at most half a step per axis, as reported. The oracle
 checks this per point and axis, each leaf's encoding choice, and that default output
 equals `metadata` output without metadata.
