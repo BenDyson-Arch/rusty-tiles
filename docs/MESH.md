@@ -403,7 +403,11 @@ In a lossy profile, a **leaf** texture page that misses any decoded-image gate a
 profile's own encoder setting (per-level channel and normal floors, MASK
 coverage, the source-sampler check) is re-encoded one step stronger instead of
 failing the run: UASTC pack level 2, then UASTC level 3. Every step is checked
-again by the same gates; gates are never loosened. If level 3 also misses, the
+again by the same gates; gates are never loosened. UASTC encodes every 4×4 block
+alone, so a step is decided without encoding the whole chain when the blocks that
+missed a per-block cap at an earlier step, or (before level 3) its coarser levels,
+already miss when encoded alone; the miss is exact and its message starts
+`block probe:` or `level probe:`. If level 3 also misses, the
 page is delivered as an exact level-0 PNG, which keeps the sampler, so one page
 never fails the run. glTF PNG cannot carry authored coarse levels: on a
 mip-sampled page the viewer generates them, outside the decoded guarantee, as for
