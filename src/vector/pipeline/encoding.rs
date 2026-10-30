@@ -1780,7 +1780,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let spool = root.path().join("features.sqlite");
         let db = rusqlite::Connection::open(&spool).unwrap();
-        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT ''); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER); INSERT INTO vertices VALUES(0,0,0,0);").unwrap();
+        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT '',n DEFAULT 0); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER); INSERT INTO vertices VALUES(0,0,0,0);").unwrap();
         db.execute(
             "INSERT INTO features(id,path,data) VALUES(1,'',?1)",
             [serde_json::to_string(&point_feature()).unwrap()],
@@ -2517,7 +2517,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let spool = root.path().join("features.sqlite");
         let db = rusqlite::Connection::open(&spool).unwrap();
-        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT ''); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER); CREATE TABLE grid(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fl INTEGER,al INTEGER);").unwrap();
+        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT '',n DEFAULT 0); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER); CREATE TABLE grid(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fl INTEGER,al INTEGER);").unwrap();
         for (id, feature) in [(1, &fill), (2, &line)] {
             db.execute(
                 "INSERT INTO features(id,path,data) VALUES(?1,'',?2)",
@@ -3160,7 +3160,7 @@ mod tests {
             let root = tempfile::tempdir().unwrap();
             let spool = root.path().join("features.sqlite");
             let db = rusqlite::Connection::open(&spool).unwrap();
-            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT ''); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
+            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT '',n DEFAULT 0); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
             for (id, feature) in std::iter::once(&fill).chain(&pieces).enumerate() {
                 db.execute(
                     "INSERT INTO features(id,path,data) VALUES(?1,'',?2)",
@@ -3710,7 +3710,7 @@ mod tests {
             let root = tempfile::tempdir().unwrap();
             let spool = root.path().join(format!("{name}.sqlite"));
             let db = rusqlite::Connection::open(&spool).unwrap();
-            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT ''); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
+            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT '',n DEFAULT 0); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
             let points: Vec<_> = (0..5).map(|i| [i as f64, 0., 0.]).collect();
             let feature = json!({"properties":{"_source_id":"1","name":label.repeat(10000)},"geometry":{"type":"LineString","coordinates":points}});
             db.execute(
@@ -3807,7 +3807,7 @@ mod tests {
             std::fs::create_dir(root.path().join("t")).unwrap();
             let spool = root.path().join("spool.sqlite");
             let db = rusqlite::Connection::open(&spool).unwrap();
-            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT ''); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
+            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,lx,ly,lz,hx,hy,hz,omissible DEFAULT 0,sortkey DEFAULT '',n DEFAULT 0); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
             let feature = json!({"properties":{"_source_id":"raised"},"geometry":{"type":"Polygon","coordinates":[exterior, hole]}});
             db.execute(
                 "INSERT INTO features(id,path,data) VALUES(1,'',?1)",
