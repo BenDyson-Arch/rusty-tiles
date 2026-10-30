@@ -142,7 +142,7 @@ Polygons with a horizontal CRS and a constant source height retain their origina
 
 Reconvert existing vector archives to apply this correction. Previous vector build state is incompatible with the corrected encoder, including archives from the removed explicit mode.
 
-`--parent-repair` affects parent display only. Leaves are unchanged. A stand-in is used only when its error bound, the source 3D bounding-box diagonal, fits the tolerance. Reports record `substitution: parentOutline`. No feature is dropped.
+`--parent-repair` affects parent display only. Leaves are unchanged. A stand-in is used only when its error bound, the source 3D bounding-box diagonal, fits the tolerance. Reports record `substitution: parentOutline`. Parent repair itself drops no feature.
 
 Oversized polygons that need triangle fragmentation still need unambiguous filled geometry. Outline fallback does not resolve their fragmentation.
 
@@ -208,24 +208,26 @@ Features and a shared-coordinate index are spooled to a SQLite store beside the 
 
 ## Level of detail
 
-Parents are simplified directly from the original geometry and use `REPLACE` refinement.
+Parents are built directly from the original features and use `REPLACE` refinement. Leaves keep every accepted fragment exactly once; coarse tiles omit or simplify features smaller than their error.
 
-- `--lod-tolerance` is the base tolerance in metres. It doubles at each coarser level.
-- `--lod-levels` sets how many coarse levels sit above each leaf, from 1 to 16.
+- `--lod-tolerance` is the tolerance in metres of the first coarse level above each leaf. It doubles at each of the `--lod-levels` levels above it, from 1 to 16.
+- A parent above two partitions uses at least its data diagonal / 64, and at least √2 times the tolerance of the tiles below it or of the top level above a leaf.
 
-Levels that remove no vertices are omitted. Parent errors never decrease toward the root.
+Levels above a leaf that remove no vertices are omitted. Parent errors never decrease toward the root.
 
-Lines use 3D Ramer-Douglas-Peucker simplification with a conservative error bound. A polygon ring simplifies only when its planarity deviation leaves room inside the tolerance and the result stays valid. Polygons that are too far from planar stay unsimplified. Shared vertices, including fragment seams, are locked. Triangle fill fragments are not simplified.
+In a coarse tile, a whole unsplit line or polygon whose 3D bounding-box diagonal fits the tolerance is within the tile's error. The `--max-features` largest of these (ties by source identity) are kept as stand-ins, reduced as far as they validly go (a polygon keeps its exterior, usually a triangle of source vertices); the others are omitted. Either way the tile's error counts the feature's diagonal. A stand-in that cannot be reduced is omitted; if the tile would otherwise be empty, the largest such feature is kept. Points, split fragments and their outlines are always kept, and `--max-parent-features` counts only kept features.
+
+Larger features are simplified. Lines use 3D Ramer-Douglas-Peucker simplification with a conservative error bound; a ring within the tolerance of its chord keeps its farthest vertex as a triangle. A polygon ring simplifies only when its planarity deviation leaves room inside the tolerance and the result stays valid; otherwise it keeps its source vertices, which carry no error. Shared vertices, including fragment seams, are locked. Triangle fill fragments are not simplified. A coarse tile's `geometricError` is its tolerance, which bounds its simplification errors and omitted or stand-in diagonals, plus rounding and quantization. Tolerances grow at every level, so errors strictly shrink toward the leaves.
 
 Leaves keep every source vertex and segment. Their only change is float32 rounding, which is reported. Leaf `geometricError` is zero unless you quantize.
 
-A parent that cannot fit all its features within the budgets becomes a routing node without content. `extras.routingReason` says why: `parentFeatures`, `vertices`, `bytes` or `estimatedBytes`.
+A parent that cannot fit its kept features within the budgets retries at a tolerance of its data diagonal, where every unsplit line or polygon is a stand-in or omitted. If that does not fit either, it becomes a routing node without content. `extras.routingReason` says why: `parentFeatures`, `vertices`, `bytes`, `estimatedBytes` or `pointAggregationBudget`. Its `geometricError` is at least 16 times its box diagonal, as for empty mesh parents, so CesiumJS refines it rather than drawing nothing; `validate` refuses rusty-tiles vector archives whose content-less tiles fall below this.
 
-By default, every semantic point is kept. Dense point layers get a routing hierarchy rather than sampling.
+Leaves keep every semantic point. A point-only parent whose points exceed its budgets publishes per-layer aggregates instead of routing.
 
 ### Point aggregation
 
-`--aggregate-points` replaces points in point-only parents with per-layer count aggregates. Leaves always keep the original points and properties.
+Parents over their budgets aggregate by default; `--aggregate-points` replaces points in every point-only parent with per-layer count aggregates. Leaves always keep the original points and properties.
 
 ```sh
 rusty-tiles vector -i observations.gpkg -o output/observations.3tz --layer observations \
@@ -242,7 +244,7 @@ Points are grouped by layer and 3D voxel, using the same grid as the point-cloud
 
 Aggregates use the metadata class `pointAggregate` and have no `_source_id`. Styles for distant tiles must use these properties, not the original fields. A MultiPoint counts once per coordinate.
 
-Aggregation falls back to the original content when it gives no reduction, breaks a budget, or exceeds the tolerance. If the original content does not fit either, the tile routes to its children. The parent's geometric error is at least the tolerance, so aggregates always refine to originals up close. `extras.pointAggregation` and `conversion.json.pointAggregation` record what happened.
+Where the layers' occupied voxels exceed the budget, the grid coarsens until they fit. Aggregation falls back to the original content when it gives no reduction or when the layers alone exceed the budget. If the original content does not fit either, the tile routes to its children. Where an original point lies farther from its aggregate than the tile's tolerance, the tile's tolerance and geometric error rise to that distance. The parent's geometric error is at least the tolerance, so aggregates always refine to originals up close. `extras.pointAggregation` and `conversion.json.pointAggregation` record what happened.
 
 ## Encoding
 
