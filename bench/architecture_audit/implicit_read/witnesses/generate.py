@@ -257,21 +257,22 @@ def a12(set_bit):
     # A-12b: trailing bit (§2a.3, InvalidInput) + visits short of the root reservation (§2a.9, ResourceLimit).
     m = implicit_archive(BQ(subtree_hooks=[ir_hook(ROOT_SUB, set_bit("tile", 23))]))
     case("A-12b", m, "InvalidInput", limits={"hierarchy_visits": 12}, pair="A-5",
-         ref="A-12 §2a.3 before §2a.9", note="Tileset + Node = 2 visits, root P_t = 11 > 10 remaining")
+         ref="A-12 §2a.3 before §2a.9", note="Tileset + Node = 2 visits, root P_t = 11 > 10 remaining", file="A-5")
     # A-12c: Scan charge (§2a.2, ResourceLimit) before the trailing-bit pass (§2a.3, InvalidInput).
     case("A-12c", a12c(trailing=True), "ResourceLimit:total_bytes_read", limits={"total_bytes_read": 1_000_000},
          pair="A-12c.base", ref="A-12 §2a.2 before §2a.3",
          note="Scan = 1,001 distinct overlapping views x 4,682 B ~ 4.69 MB; all member bytes < 0.4 MB")
     case("A-12c.base", a12c(trailing=False), "Accepted", ref="A-12c without its two defects")
     case("A-12c.trailing", a12c(trailing=True), "InvalidInput", pair="A-12c.base",
-         ref="A-12c with default limits: the trailing bit alone")
+         ref="A-12c with default limits: the trailing bit alone", file="A-12c")
     # A-12d: content-index reservation (§2a.10, ResourceLimit) before the property table count (§5, InvalidInput).
     def count_plus(ir):
         cls, cnt, props = ir.tables[0]
         ir.tables[0] = (cls, cnt + 1, props)
     m = implicit_archive(BQ(subtree_hooks=[ir_hook(ROOT_SUB, count_plus)]))
     case("A-12d", m, "ResourceLimit:references", limits={"references": 9}, pair="B-8+1",
-         ref="A-12 §2a.10 before §5", note="root subtree member = 1 reference; E = 9 > 8 remaining")
+         ref="A-12 §2a.10 before §5", note="root subtree member = 1 reference; E = 9 > 8 remaining",
+         file="B-8+1")
 
 
 def a12c(trailing):
