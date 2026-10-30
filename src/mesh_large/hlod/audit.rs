@@ -57,7 +57,10 @@ pub(crate) struct Index {
 /// dropped-component bank and every possible cycle-rank operation descriptor. Parent
 /// inputs at any depth partition the source faces; retries revisit them at most 72 times
 /// (two caps plus seven remesh rounds, two hole policies, RETRIES+1 each). One additional
-/// construction record locates cleanup drops on final failure.
+/// construction record locates cleanup drops on final failure. That counts one build: the
+/// last-resort build's pinned retries, coarse-drop bisection and panels, and the staged
+/// build's accepted proposal, can exceed it; the generous per-record allowance absorbs
+/// this in practice, and an overshoot refuses the opt-in audit (ResourceLimit).
 /// This is a logical maximum: disk space is checked on actual writes. Memory-backed
 /// destinations use the explicit byte budget below in both planning and writing.
 const MAX_LOCATION_RECORDS: u64 = (2 + 7) * 2 * (super::geometry::RETRIES as u64 + 1) + 1;

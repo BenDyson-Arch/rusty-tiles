@@ -513,6 +513,18 @@ included. Only if that publishes nothing is the cell rebuilt with the last resor
 unchanged. A cell those strategies fit only by dropping keeps its drops even where a
 last resort would fit without them: one such cell in 160 synthetic city blocks.
 
+Staged reduction (2026-10-30): if fix 2's build also publishes nothing, a third build reruns
+the strategies with each first reduction staged. It steps from the current mesh toward the
+cap, and the unchanged fold guard, the interface points and segments, and component
+survival judge every step. A refused step keeps only the faces around the flagged vertices
+and retries; at a plateau, border carriers (unlocked vertices next to an interface point)
+merge into an adjacent carrier, never onto an interface point. Steps, tries and merge passes
+are fixed constants. Contact pins are not applied inside it: the fold guard refuses any new
+edge between two contacts that the source does not support, at every step, and the staged
+output is only a first proposal that develop's checks (interface retention, the full guard,
+topology changes, S2) still judge. Tiles the earlier builds publish are unchanged. The audit
+records only this build's accepted proposal. Walem: 48 omitted cells to 14.
+
 ## Numeric acceptance contract (proposed, not measured passes)
 
 One source Mtri is one million **input** triangles; CPU is whole-process user+sys,

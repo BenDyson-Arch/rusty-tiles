@@ -225,7 +225,9 @@ const MERGE_PASSES: u32 = 32;
 /// Reduce toward the cap in steps from the current mesh (the first a third of the
 /// excess). The unchanged guard, the interface items and component survival judge each
 /// step; a refused step keeps its own faces around the flagged vertices and is redone,
-/// then halves. At a plateau border carriers merge, then the steps resume.
+/// then halves. At a plateau border carriers merge, then the steps resume. The error is
+/// the largest step's meshopt estimate against its previous step (merges add none): a
+/// lower bound, as S2 measures the published G.
 fn staged_reduce(
     merged: &Merged,
     source: &[[u32; 3]],
