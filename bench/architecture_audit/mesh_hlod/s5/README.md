@@ -33,13 +33,23 @@ from source incidence alone, in IEEE double like the producer:
 
 A certificate whose `step` differs is `borderReliefStep`. `borders.py` also requires:
 - certified ε within E_d/16 x 2^step;
-- G at least 8 x each relieved certificate (`borderReliefFloor`);
-- mixed-depth gaps on relieved arcs within the coarser G/8.
+- G at least 8 x each relieved certificate (`borderReliefFloor`), or 16 x on a collapsed
+  single-child chain: the chain's next member holds the same chord as its finer
+  displacement;
+- each mixed-depth gap within min(max(E, floor), G)/8 of the coarser tile, where floor is
+  its `reliefFloor`. An unrelieved coarser tile keeps E/8 beside a relieved deeper chord.
 
-The rebuild needs every frozen-tree level delivered (no collapsed single-child chain, no
-link placeholder); otherwise the steps are listed in `uninspected`. `border_controls.py`
+The rebuild maps each delivered tile to the frozen cells of its chain:
+- a coarse record covers its contract depth through its `encodedDepth`;
+- an omitted cell covers its omitted records' depths over its leaf interval;
+- a leaf lies one level below its parent's chain.
+
+A link placeholder, a record without `encodedDepth`, or a chain that does not start one
+level below its parent's leaves the steps in `uninspected`. `border_controls.py`
 pins an honest relieved arc at cap 4 and its wrong-step, understated-step and unfloored
-mutants.
+mutants. It also pins an honest relieved collapsed chain (re-derived at both levels) and
+its 8 x ε mutant, and a relieved deeper chord beside an exact coarser tile at a gap
+between E/8 and G/8. The 3e880cb3 oracle accepted both of those mutants.
 
 ## Archive validation
 

@@ -16,8 +16,11 @@ deepest up, it rebuilds:
 - the corridor greedy in IEEE double, as the producer computes it.
 
 Then it counts each coarse cell's items and recomputes the trigger, requests and
-monotone minimum. It needs every cell of the frozen tree delivered at its logical
-depth (no collapsed chain, no link placeholder); otherwise the steps are reported
+monotone minimum. Every delivered tile stands for the frozen cells of its single-child
+chain, from its audit depth to the depth it was built at (`encodedDepth`). An omitted
+cell's chain comes from the omitted records over its leaf interval. A leaf lies one level
+below its parent's chain. Each child's chain must start one level below its parent's,
+from the root at 0. A link placeholder, or labels that do not fit, leave the steps
 uninspected.
 """
 import collections
@@ -77,23 +80,44 @@ class Relief:
         self.tiles, self.leaves = tiles, leaves
 
     # -- the frozen tree from the delivered one --------------------------------
-    def domain(self, records):
-        """Every coarse record at its tree depth, no link placeholder and no collapsed
-        single-child chain (it hides a level of the frozen tree)."""
+    def domain(self, records, omitted):
+        """Frozen depths [top, bottom] of every delivered tile (its single-child chain).
+        False when a link placeholder hides the tree or the labels do not fit."""
+        claimed = collections.defaultdict(set)
+        for r in omitted:
+            claimed[r['key']['leafBegin'], r['key']['leafEnd']].add(r['key']['depth'])
+        self.top, self.bottom = {}, {}
         for t in self.tiles:
             if t.get('external'):
                 return False
-            if t['children'] and len(t['children']) == 1:
+            tid, parent = int(t['id']), t['parent']
+            first = self.bottom[int(parent['id'])] + 1 if parent is not None else 0
+            if not t['children']:
+                top = bottom = first
+            elif tid in records:
+                r = records[tid]
+                top, bottom = r['contract']['depth'], r['tile'].get('encodedDepth')
+                if type(bottom) is not int:
+                    return False
+            else:
+                # An omitted cell: its chain is the omitted depths from its own on, unless
+                # the delivered tree continues the chain below it.
+                depths = claimed.get((t['lo'], t['hi']), set())
+                top = bottom = first
+                if top not in depths:
+                    return False
+                if not any((c['lo'], c['hi']) == (t['lo'], t['hi']) for c in t['children']):
+                    while bottom + 1 in depths:
+                        bottom += 1
+            if top != first or bottom < top:
                 return False
-            r = records.get(int(t['id']))
-            if r is not None and r['contract']['depth'] != t['depth']:
-                return False
+            self.top[tid], self.bottom[tid] = top, bottom
         return True
 
     def cells(self):
-        """Per leaf index: its ancestor-or-self tile at every depth (the leaf itself
+        """Per leaf index: its ancestor-or-self tile at every frozen depth (the leaf itself
         at and below its own depth, as the producer's leaf table)."""
-        self.height = max(t['depth'] for t in self.tiles)
+        self.height = max(self.bottom.values())
         self.cell = {}
         self.leaf_depth = {}
         self.coarse = {}
@@ -102,9 +126,12 @@ class Relief:
             while t is not None:
                 chain.append(t)
                 t = t['parent']
-            chain.reverse()
-            ids = [int(t['id']) for t in chain]
-            depth = leaf['depth']
+            ids = [None] * (self.height + 1)
+            for t in chain:
+                tid = int(t['id'])
+                for d in range(self.top[tid], self.bottom[tid] + 1):
+                    ids[d] = tid
+            depth = self.top[int(leaf['id'])]
             self.leaf_depth[leaf['lo']] = depth
             self.cell[leaf['lo']] = [ids[min(d, depth)] for d in range(self.height + 1)]
         for t in self.tiles:
@@ -347,7 +374,8 @@ class Relief:
             self.store.work.charge()
             items, kept, steps = self.level(depth, {}, None, finer, retained)
             triggered = {o: c for o, c in items.items()
-                         if self.coarse.get(o) and self.tile_depth(o) == depth and c * 100 > TRIGGER * self.cap}
+                         if self.coarse.get(o) and self.top[o] <= depth <= self.bottom[o]
+                         and c * 100 > TRIGGER * self.cap}
             if triggered:
                 counts = {o: [0] * (STEPS + 1) for o in triggered}
                 self.level(depth, {}, counts, finer, retained)
@@ -361,17 +389,15 @@ class Relief:
             finer, retained = steps, kept
         return out
 
-    def tile_depth(self, tid):
-        return self.depth_of[tid]
 
 
-def inspect(store, tiles, leaves, records, arcs_of, cap, extent, require, stats):
+def inspect(store, tiles, leaves, records, omitted, arcs_of, cap, extent, require, stats):
     """Compare every delivered certificate's declared step with the re-derived step of
     the source chain holding its first edge. Returns False when outside the domain."""
     relief = Relief(store, tiles, leaves, cap, extent, require, stats)
-    if not relief.domain(records):
+    if not relief.domain(records, omitted):
         return False
-    relief.depth_of = {int(t['id']): t['depth'] for t in tiles}
+    stats['reliefChainLevels'] += sum(relief.bottom[i] - relief.top[i] for i in relief.top)
     relief.cells()
     relief.graph()
     derived = relief.rederive()

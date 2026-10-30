@@ -820,8 +820,6 @@ class Audit:
         self.ids = {}
         self.stats = collections.Counter()
         self.cap = cap
-        # Border relief (A1): declared ladder step per tile and delivered chord.
-        self.steps = {}
 
     def canonical(self, key):
         packed = _bits(key)
@@ -895,15 +893,10 @@ class Audit:
             if c.get('terminalLock'):
                 claims.update(self.canonical(k) for k in c['endpoints'])
         self.terminal_claims[tid] = claims
-        steps = {}
         for c in contract['certificates']:
             step = c.get('step', 0)
             require(type(step) is int and 0 <= step <= 8, 'borderReliefStep',
                     f'tile {tid}: relief step {step!r} outside the ladder 0..8')
-            a, b = (self.canonical(k) for k in c['endpoints'])
-            if a is not None and b is not None and a != b:
-                steps[_key(a, b)] = step
-        self.steps[tid] = steps
         return depth, e
 
     def certify(self, t, r, e):
@@ -947,10 +940,12 @@ class Audit:
             require(Fraction(eps) * 16 <= Fraction(e) * 2 ** step, 'borderCertificate',
                     f'tile {tid}: epsilon {eps} above E_{depth}/16 x 2^{step} = {e / 16 * 2 ** step}')
             # A1 floor: an exact deeper neighbour (a leaf) meets a relieved chord at its
-            # whole certified displacement, so G covers 8 x it.
+            # whole certified displacement, so G covers 8 x it. A collapsed chain's next
+            # member holds the same chord, its finer displacement: 8 x (eps + eps).
             if step > 0:
-                require(Fraction(eps) * 8 <= Fraction(t['g']), 'borderReliefFloor',
-                        f'tile {tid}: G {t["g"]} below 8 x its relieved certificate {eps}')
+                factor = 16 if r['tile'].get('encodedDepth', depth) > depth else 8
+                require(Fraction(eps) * factor <= Fraction(t['g']), 'borderReliefFloor',
+                        f'tile {tid}: G {t["g"]} below {factor} x its relieved certificate {eps}')
             epsilon_max = max(epsilon_max, eps)
             if a == b:
                 # A point-only contact: a claim, re-derived from incidence above.
@@ -1140,17 +1135,17 @@ class Audit:
                     continue
                 (tc, dc), (tf, df) = sorted(((tx, dx), (ty, dy)), key=lambda v: v[1])
                 gap2 = _distance2(image(point, lx, ux, ix, mx), image(point, ly, uy, iy, my))
-                # Relieved chords (A1): the gap is bounded by the coarser G alone, which
-                # publishes at least 8 x both certified displacements.
-                relieved = any(self.steps.get(int(t['id']), {}).get((lo_, hi_), 0) > 0
-                               for t, lo_, hi_ in ((tx, lx, ux), (ty, ly, uy)) if lo_ is not None)
-                limit = (Fraction(tc['g']) if relieved
-                         else min(Fraction(self.scale(dc)), Fraction(tc['g']))) / 8
+                # Relief (A1) raises the bound to the coarser tile's floor, 8 x its own plus
+                # finer certified displacement. An unrelieved coarser tile keeps E/8 beside
+                # a relieved deeper chord: steps fall by at most one per level.
+                record = self.records.get(int(tc['id']))
+                floor = Fraction(record['tile'].get('reliefFloor', 0)) if record else Fraction(0)
+                limit = min(max(Fraction(self.scale(dc)), floor), Fraction(tc['g'])) / 8
                 self.stats['maxMixedGapOverE'] = max(self.stats['maxMixedGapOverE'],
                                                      math.sqrt(gap2) / (self.scale(dc) / 8))
                 require(gap2 <= limit * limit, 'mixedDepthBorderGap',
                         f'tiles {tc["id"]} (depth {dc}) and {tf["id"]} (depth {df}): gap {math.sqrt(gap2)} '
-                        f'above {"G" if relieved else "min(E, G)"}/8 = {float(limit)}')
+                        f'above min(max(E, relief floor), G)/8 = {float(limit)}')
         # Terminal contacts: a leaf no deeper than a coarse owner locks it exactly.
         owners = [l for (l,) in store.db.execute('SELECT leaf FROM canonical_owners WHERE point=?', (point,))]
         for t, lower_, *_ in coarse:
@@ -1586,7 +1581,7 @@ def inspect(store, tiles, leaves, archive, require, audit_path=None, extent=None
         row = store.db.execute('SELECT path FROM border_arcs WHERE tile=? AND a=? AND b=?',
                                (tid, *_key(a, b))).fetchone()
         return json.loads(row[0])
-    relief_inspected = relief.inspect(store, tiles, leaves, audit.records, arcs_of, cap, extent,
+    relief_inspected = relief.inspect(store, tiles, leaves, audit.records, omitted, arcs_of, cap, extent,
                                       require, audit.stats)
     stats = dict(audit.stats)
     stats['uninspected'] = [
@@ -1601,8 +1596,8 @@ def inspect(store, tiles, leaves, archive, require, audit_path=None, extent=None
         'distances at S1b\'s quarter-grid controls and this checker\'s barycentric level-8 grid on every affected '
         'face, never a continuous maximum (a loss between samples is not bounded)']
     if not relief_inspected:
-        stats['uninspected'].append('border relief steps (A1): the delivered tree hides a frozen-tree level '
-                                    '(a collapsed chain or link placeholder), so cells cannot be rebuilt')
+        stats['uninspected'].append('border relief steps (A1): a link placeholder, or depth labels that do not '
+                                    'fit one frozen tree, so cells cannot be rebuilt')
     stats.update(auditCpuSeconds=time.process_time() - started, audited=True, sidecarSha256=hashlib.sha256(data).hexdigest(), sidecarBytes=len(data),
                  records=len(audit.records), omittedRecords=len(omitted), extent=extent)
     return stats
