@@ -704,11 +704,10 @@ pub(super) struct DecodedInterfaceCensus {
     pub(super) dropped_by_depth: Vec<u64>,
 }
 /// Payload-element units charged for each scratch-store row a validation writes or looks up
-/// by key (an SQLite B-tree insert, upsert or point query). Measured 2026-10-30 at about 103 ns
-/// of CPU per row against about 6 ns per ordinary payload unit, so one row costs 16 units and
-/// no work class runs much above the ordinary unit's time
-/// (`docs/architecture/validator-limits-amendment.md`, time statement).
-pub(super) const ROW_UNITS: usize = 16;
+/// by key (an SQLite B-tree insert, upsert or point query). A row costs far more than an
+/// ordinary payload unit (about 6 ns), so it is weighted to keep every work class within the
+/// stated time per unit (`docs/architecture/validator-limits-amendment.md`, time statement).
+pub(super) const ROW_UNITS: usize = 128;
 /// Hard published triangle cap of every HLOD payload (D1), leaf or coarse.
 pub(super) const TRIANGLE_CAP: u64 = 8192;
 /// A content-less cell's geometric error is at least this multiple of its box
@@ -891,7 +890,7 @@ impl Store {
             CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL,dropped INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE placements(id INTEGER PRIMARY KEY,tile INTEGER NOT NULL,rank INTEGER NOT NULL,frame BLOB NOT NULL,leaf INTEGER NOT NULL);
             CREATE INDEX placement_rank ON placements(rank,leaf,id);
-            CREATE TABLE originals(source BLOB NOT NULL,vertex BLOB NOT NULL,rank INTEGER NOT NULL,point BLOB NOT NULL,PRIMARY KEY(source,vertex,rank)) WITHOUT ROWID;
+            CREATE TABLE originals(source BLOB NOT NULL,vertex BLOB NOT NULL,rank INTEGER NOT NULL,point BLOB NOT NULL,PRIMARY KEY(rank,source,vertex)) WITHOUT ROWID;
             CREATE TABLE leaf_points(key BLOB NOT NULL,tile INTEGER NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             CREATE TABLE leaf_segments(key BLOB NOT NULL,tile INTEGER NOT NULL,nf INTEGER NOT NULL,nr INTEGER NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             CREATE TABLE shared_point_keys(key BLOB PRIMARY KEY) WITHOUT ROWID;
@@ -1554,7 +1553,7 @@ impl Store {
         let mut rows = query.query([]).map_err(sql)?;
         let mut group: Option<(Vec<u8>, Vec<u8>, [u64; 3])> = None;
         while let Some(row) = rows.next().map_err(sql)? {
-            effort.charge(1)?;
+            effort.charge(ROW_UNITS)?;
             let source: Vec<u8> = row.get(0).map_err(sql)?;
             let vertex: Vec<u8> = row.get(1).map_err(sql)?;
             let local = decode::<3>(&row.get::<_, Vec<u8>>(2).map_err(sql)?)?;
