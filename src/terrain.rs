@@ -542,7 +542,13 @@ fn distance(a: [f64; 3], b: [f64; 3]) -> f64 {
 /// surfaces exist; a cell that is neither full nor empty on both levels may
 /// cover differently and costs at least its horizontal diagonal.
 #[cfg(feature = "native-geospatial")]
-fn deviation(patch: &Patch, sheet: &Sheet, children: &[(usize, Sheet)], cells: usize) -> f64 {
+fn deviation(
+    patch: &Patch,
+    sheet: &Sheet,
+    children: &[(usize, Sheet)],
+    cells: usize,
+    partial: &mut Vec<(usize, usize)>,
+) -> f64 {
     let half = cells * patch.stride / 2;
     let mut worst: f64 = 0.;
     let mut points = Vec::with_capacity(16);
@@ -555,6 +561,7 @@ fn deviation(patch: &Patch, sheet: &Sheet, children: &[(usize, Sheet)], cells: u
             let Some((_, fine)) = children.iter().find(|(s, _)| *s == slot) else {
                 if coarse.contains(&true) {
                     worst = worst.max(sheet.diagonal(c, r));
+                    partial.push((c, r));
                 }
                 continue;
             };
@@ -579,19 +586,17 @@ fn deviation(patch: &Patch, sheet: &Sheet, children: &[(usize, Sheet)], cells: u
             if !coarse.contains(&true) {
                 continue;
             }
-            let measure = |x: f64, y: f64| match (fine.at(x, y), sheet.cell(c, r, x, y)) {
-                (Some(a), Some(b)) => distance(a, b),
-                _ => 0.,
-            };
+            // Only a child covering the whole cell carries its own bound to the
+            // leaves here; elsewhere the caller measures the leaves directly.
+            if !full {
+                partial.push((c, r));
+                continue;
+            }
+            // Child lattice nodes are its stored vertices: no search needed.
             for (j, &y) in fy.iter().enumerate() {
                 for (i, &x) in fx.iter().enumerate() {
-                    if full {
-                        // Child lattice nodes are its stored vertices: no search needed.
-                        let here = sheet.plane(c, r, x as f64, y as f64);
-                        worst = worst.max(distance(fine.vertex(rx.start + i, ry.start + j), here));
-                    } else {
-                        worst = worst.max(measure(x as f64, y as f64));
-                    }
+                    let here = sheet.plane(c, r, x as f64, y as f64);
+                    worst = worst.max(distance(fine.vertex(rx.start + i, ry.start + j), here));
                 }
             }
             points.clear();
@@ -604,7 +609,8 @@ fn deviation(patch: &Patch, sheet: &Sheet, children: &[(usize, Sheet)], cells: u
                 points.extend(fy[1..fy.len() - 1].iter().map(|&y| on((y - ya) as f64 / h)));
             }
             for &(x, y) in &points {
-                worst = worst.max(measure(x, y));
+                let fine = fine.at(x, y).expect("a full cell's child covers it");
+                worst = worst.max(distance(fine, sheet.plane(c, r, x, y)));
             }
         }
     }
@@ -777,6 +783,75 @@ impl<'a> Pyramid<'a> {
         }
         Ok(worst)
     }
+    /// The leaf surface over `[x0, x1] x [y0, y1]` as the leaves store it.
+    fn leaves(&self, x: [usize; 2], y: [usize; 2], storage: Storage) -> Result<Sheet, JobError> {
+        let (xs, ys): (Vec<_>, Vec<_>) = ((x[0]..=x[1]).collect(), (y[0]..=y[1]).collect());
+        let (mut positions, mut used) = (vec![], vec![]);
+        for &y in &ys {
+            for &x in &xs {
+                let (lon, lat) = coordinates(self.raster, x, y);
+                let height = surface_height(self.raster, lon, lat, self.offset)?;
+                // A triangle of three valid nodes is a leaf triangle.
+                used.push(height.is_some());
+                positions.push(match height {
+                    Some(h) => place(self.frame, storage, lon, lat, h)?.0,
+                    None => [0.; 3],
+                });
+            }
+        }
+        Ok(Sheet {
+            xs,
+            ys,
+            positions,
+            used,
+        })
+    }
+    /// The largest distance from this tile's surface to the leaf surface in
+    /// `cells`, where a child does not cover the whole cell, so its error does
+    /// not bound the leaves there. Both surfaces are affine on the overlay of
+    /// this cell's triangles with the leaf cells, so the maximum is at leaf
+    /// nodes and at the crossings of this cell's diagonal with leaf edges.
+    fn direct(
+        &self,
+        sheet: &Sheet,
+        cells: &[(usize, usize)],
+        storage: Storage,
+    ) -> Result<f64, JobError> {
+        let mut worst: f64 = 0.;
+        for &(c, r) in cells {
+            self.attempt.check()?;
+            let (xa, xb, ya, yb) = (sheet.xs[c], sheet.xs[c + 1], sheet.ys[r], sheet.ys[r + 1]);
+            let leaf = self.leaves([xa, xb], [ya, yb], storage)?;
+            // A valid leaf node is on the leaf surface whichever side covers it.
+            for (j, y) in (ya..=yb).enumerate() {
+                for (i, x) in (xa..=xb).enumerate() {
+                    if let (Some(a), true) = (
+                        sheet.cell(c, r, x as f64, y as f64),
+                        leaf.used[j * leaf.xs.len() + i],
+                    ) {
+                        worst = worst.max(distance(a, leaf.vertex(i, j)));
+                    }
+                }
+            }
+            // The diagonal runs from (xb, ya) to (xa, yb); in a square cell it
+            // follows leaf diagonals through leaf nodes.
+            let (w, h) = (xb - xa, yb - ya);
+            let mut measure = |x: f64, y: f64| {
+                if let (Some(a), Some(b)) = (sheet.cell(c, r, x, y), leaf.at(x, y)) {
+                    worst = worst.max(distance(a, b));
+                }
+            };
+            if w != h {
+                for n in [w, h, w.abs_diff(h)] {
+                    for k in 0..=n {
+                        let t = k as f64 / n as f64;
+                        measure(xb as f64 - t * w as f64, ya as f64 + t * h as f64);
+                    }
+                }
+            }
+        }
+        Ok(worst)
+    }
     fn grid(&self, patch: &Patch, storage: Storage) -> Result<glb::Grid, JobError> {
         grid(self, &patch.columns(), &patch.rows(), storage)
     }
@@ -838,14 +913,11 @@ impl<'a> Pyramid<'a> {
             let below = (patch.children.iter())
                 .map(|&c| plan.patches[c].drawn)
                 .fold(0., f64::max);
-            let mut sum = deviation(&patch, &sheet, &children, self.cells) + below;
+            let mut partial = vec![];
+            let mut sum = deviation(&patch, &sheet, &children, self.cells, &mut partial) + below;
             if patch.content {
                 sum = sum.max(self.border(&patch, &sheet, plan)?);
-            } else {
-                // As meshes' `EMPTY_PARENT_SCALE`: Cesium stops at an empty tile
-                // whose error passes, so it refines until its extent is a pixel.
-                // Its ancestors, skirts and boxes do not inherit this floor.
-                sum = sum.max(16. * distance(patch.hierarchy[0], patch.hierarchy[1]));
+                sum = sum.max(self.direct(&sheet, &partial, plan.storage[self.depth as usize])?);
             }
             patch.error = if sum > 0. { outward(sum, &sheet) } else { 0. };
             patch.drawn = if patch.content { patch.error } else { below };
@@ -1204,6 +1276,14 @@ fn plan_with(
         patch.skirt_depth = depths;
         patch.bounds = bounds;
         patch.hierarchy = hierarchy;
+        if !patch.content {
+            // As meshes' `EMPTY_PARENT_SCALE`: Cesium stops at an empty tile
+            // whose error passes, so it refines until its published box is
+            // about a pixel. Ancestors, skirts and boxes do not inherit this.
+            let b = box_for(hierarchy);
+            let diagonal = 2. * (b[3].powi(2) + b[7].powi(2) + b[11].powi(2)).sqrt();
+            patch.error = patch.error.max(16. * diagonal);
+        }
     }
     Ok(plan)
 }
@@ -1386,7 +1466,7 @@ struct Tileset {
     geometric_error: f64,
     root: Tile,
 }
-/// The explicit hierarchy H: every tile has content, children state their
+/// The explicit hierarchy H: tiles with content name it, children state their
 /// quadrant slot, and only the root carries the frame and `REPLACE`.
 #[cfg(feature = "native-geospatial")]
 fn hierarchy(plan: &PreparedPlan, frame: &Frame, geometric_error: f64) -> serde_json::Value {
@@ -2143,11 +2223,11 @@ mod tests {
     fn deviation_is_exact_on_planes_and_includes_clipped_diagonal_crossings() {
         let plane = |x: usize, y: usize| 2. * x as f64 + 3. * y as f64 + 5.;
         let (patch, sheet, children) = synthetic(8, 8, 4, 2, plane, |_, x, y| plane(x, y));
-        assert_eq!(deviation(&patch, &sheet, &children, 4), 0.);
+        assert_eq!(deviation(&patch, &sheet, &children, 4, &mut vec![]), 0.);
         // Full-stride cells: the bound is the vertex maximum and equals the dense maximum.
         let wavy = |x: usize, y: usize| ((x * 7 + y * 13) % 5) as f64;
         let (patch, sheet, children) = synthetic(8, 8, 4, 2, wavy, |_, x, y| wavy(x, y));
-        let d = deviation(&patch, &sheet, &children, 4);
+        let d = deviation(&patch, &sheet, &children, 4, &mut vec![]);
         assert!(d > 1.);
         assert!((d - dense(&sheet, &children, 4)).abs() <= 1e-9);
         // A clipped saddle cell [2, 3] x [0, 2] whose child vertices all lie on the
@@ -2170,7 +2250,7 @@ mod tests {
             })
             .fold(0., f64::max);
         assert_eq!(vertices, 0., "a vertex-only bound would certify zero");
-        let d = deviation(&patch, &sheet, &children, 2);
+        let d = deviation(&patch, &sheet, &children, 2, &mut vec![]);
         assert!((d - 5.).abs() <= 1e-9, "{d}");
         assert!((d - dense(&sheet, &children, 2)).abs() <= 1e-9);
         // The transposed saddle in [0, 2] x [2, 3]: only the crossing with the
@@ -2182,7 +2262,7 @@ mod tests {
         let (patch, sheet, children) = synthetic(4, 3, 2, 2, saddle, |coarse, x, y| {
             coarse.at(x as f64, y as f64).unwrap()[2]
         });
-        let d = deviation(&patch, &sheet, &children, 2);
+        let d = deviation(&patch, &sheet, &children, 2, &mut vec![]);
         assert!((d - 5.).abs() <= 1e-9, "{d}");
         assert!((d - dense(&sheet, &children, 2)).abs() <= 1e-9);
     }
@@ -2293,7 +2373,7 @@ mod tests {
                                 base + 0.05 * height(y, x)
                             }
                         });
-                    let d = deviation(&patch, &sheet, &children, 2);
+                    let d = deviation(&patch, &sheet, &children, 2, &mut vec![]);
                     let (reference, vertices, inside) = overlay(&sheet, &children, span);
                     // The clipping argument: no child diagonal is crossed in its interior.
                     assert_eq!(inside, 0, "{stride} {width} {depth}");
@@ -2313,12 +2393,31 @@ mod tests {
         let control = RunControl::default();
         let attempt = control.begin().unwrap();
         // Even dimensions keep every cell full-stride; odd ones clip end strips;
-        // a NoData hole is measured where both surfaces exist.
-        for (r, full_stride) in [
+        // a NoData hole is measured where both surfaces exist. In `bridged`,
+        // NoData pixel column 9 removes level 1's cells over x 8..12, which
+        // level 0 bridges, while leaves keep x 11..12 and its 30 m cliff (pixel
+        // column 10). `spiky` repeats that with 150 m pixel spikes beside 1-pixel holes.
+        let bridged = raster::test_raster_with(64, 32, 1e-5, |c, r| {
+            [
+                100. + 0.2 * c as f64 + 0.1 * r as f64 + [0., 60.][usize::from(c == 10)],
+                f64::NAN,
+            ][usize::from(c == 9)]
+        });
+        let spiky = raster::test_raster_with(67, 45, 1e-5, |c, r| {
+            let row = r % 3 == 0;
+            let spike = [0., 150.][usize::from(row && c % 4 == 2)];
+            [100. + 0.3 * c as f64 + spike, f64::NAN][usize::from(row && c % 4 == 1)]
+        });
+        for (n, (r, full_stride)) in [
             (bump(64, 48), true),
             (bump(67, 45), false),
             (holed(67, 45), false),
-        ] {
+            (bridged, false),
+            (spiky, false),
+        ]
+        .into_iter()
+        .enumerate()
+        {
             let frame = Frame::new(r.bounds);
             let pyramid = Pyramid::new(&r, 16, &frame, 0., &attempt);
             let plan = plan(&pyramid).unwrap();
@@ -2355,11 +2454,11 @@ mod tests {
                     }
                 }
                 assert!(
-                    measured > 0.1,
+                    n > 2 || measured > 0.1,
                     "the fixture must exercise level {}",
                     patch.level
                 );
-                assert!(patch.error >= measured, "{} < {measured}", patch.error);
+                assert!(patch.error >= measured, "{n}: {} < {measured}", patch.error);
                 if full_stride && patch.level + 1 == pyramid.depth {
                     assert!(
                         patch.error <= measured + 1e-9,

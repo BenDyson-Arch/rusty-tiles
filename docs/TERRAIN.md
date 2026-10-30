@@ -88,13 +88,13 @@ tile's error is a **certified bound** on the distance from its decoded surface
 (as stored: quantized positions after dequantization) to the decoded leaf
 surface at the same lattice parameters, with outward rounding: the exact maximum distance
 to the next finer level, including where a clipped edge cell's diagonal crosses
-finer triangles, plus the largest child error. Distances are measured where
-both levels have a surface; a cell whose coverage may differ adds its
-horizontal diagonal. On its interior edges a tile is also measured against
-every valid leaf node, so a seam's gap stays within its two errors where a
-coarse level bridges or loses a NoData hole. A tile without triangles takes
-16 times the diagonal of the surfaces below it, so Cesium refines through it
-while it is visible; it is exempt from error ordering, and the tiles that draw
+finer triangles, plus the largest child error. Where the child does not cover
+a whole cell, next to NoData, the cell is instead measured against the leaf
+surface directly, at every leaf node and diagonal crossing, and adds its
+horizontal diagonal for the coverage difference. On its interior edges a tile
+is also measured against every valid leaf node, so a seam's gap stays within
+its two errors. A tile without triangles takes 16 times the diagonal of its
+published box, so Cesium refines through it while the box spans a pixel; it is exempt from error ordering, and the tiles that draw
 answer only to their nearest drawing ancestor. Errors of drawing tiles never
 increase toward the leaves. Over smooth terrain the value is close to the vertical error plus
 the grid errors of the levels below, a few 65,535ths of the tile size. The

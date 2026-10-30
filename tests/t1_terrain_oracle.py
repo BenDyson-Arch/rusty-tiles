@@ -479,6 +479,17 @@ def check_directory(directory, samples=4):
     # arithmetic is tolerated). A segment is skirted exactly where t and some
     # tile across have a triangle on it.
     root_error = tiles[0]['error']
+    # Upper sanity on drawing tiles: every error term compares two surfaces in
+    # the tile's footprint, chained at most once per level below, so it stays
+    # within 2 x the horizontal box diagonal plus the levels times the relief.
+    max_drawn = max(n['error'] for n in drawn)
+    step = [max(s or [.01]) for s in report['quantizationStepMetres']]
+    heights = [h for p in patches.values() for h in p.height.values()]
+    relief = max(heights) - min(heights) + 1.
+    for node in drawn:
+        b = node['box']
+        span = 2 * math.hypot(math.hypot(*b[3:5]), math.hypot(*b[6:8]))
+        assert node['error'] <= 2 * span + report['levels'] * relief, 'geometric error above its data'
     tolerance = 1e-6
     def across(node, axis, value, low, high):
         lineage, n = set(), node
@@ -511,6 +522,8 @@ def check_directory(directory, samples=4):
             for point in triangle:
                 drop = patch.height[point[1]] - point[2]
                 assert drop == 0 or drop >= max(node['error'] + beside[edge[0]], 1.) - tolerance, 'skirt depth rule'
+                # Upper sanity: no routing floor of a tile without content leaks in.
+                assert drop <= max(node['error'] + max_drawn, 1.) + 4 * step[node['depth']] + tolerance, 'skirt too deep'
             a, b, c = (p[0] for p in triangle)
             u, v = [b[i] - a[i] for i in range(3)], [c[i] - a[i] for i in range(3)]
             normal = (u[1]*v[2] - u[2]*v[1], u[2]*v[0] - u[0]*v[2])
@@ -544,11 +557,15 @@ def check_directory(directory, samples=4):
                 if fa[axis + 2] != fb[axis] or low >= high:
                     continue
                 line = fb[axis]
-                for k in range((high - low) * samples + 1):
-                    s = low + k / samples
-                    x, y = (line, s) if axis == 0 else (s, line)
-                    p, q = patches[id(a)].at(x, y), patches[id(b)].at(x, y)
-                    if not (p and q) or abs(p[2] - q[2]) < 1e-6:
+                points = [(line, low + k / samples) if axis == 0 else (low + k / samples, line)
+                          for k in range((high - low) * samples + 1)]
+                surfaces = [(patches[id(a)].at(*point), patches[id(b)].at(*point)) for point in points]
+                both = [bool(p and q) for p, q in surfaces]
+                for k, ((x, y), (p, q)) in enumerate(zip(points, surfaces)):
+                    # A point contact (one side touches the seam only at a node) is no crack.
+                    s = y if axis == 0 else x
+                    near = [both[j] for j in (k - 1, k + 1) if 0 <= j < len(both)]
+                    if not both[k] or not any(near) or abs(p[2] - q[2]) < 1e-6:
                         continue
                     upper, lower = (a, q) if p[2] > q[2] else (b, p)
                     along = patches[id(upper)].ys if axis == 0 else patches[id(upper)].xs
