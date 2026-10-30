@@ -1297,7 +1297,7 @@ struct Check<'a> {
     implicit: ImplicitLimits,
     /// Implicit roots read in this validation (report labels, OD-4).
     implicit_roots: u64,
-    /// A rusty-tiles vector archive (`asset.extras.vectorBuildStateSha256`): its content-less
+    /// A rusty-tiles vector archive (`asset.extras.vectorBuildStateSha256` and `conversion.json`): its content-less
     /// tiles must refine.
     vector: bool,
     #[cfg(test)]
@@ -2405,7 +2405,8 @@ impl Check<'_> {
     }
     /// Document-level C2 exclusion facts.
     fn tileset_exclusions(&mut self, doc: &Value) {
-        self.vector |= doc["asset"]["extras"]["vectorBuildStateSha256"].is_string();
+        self.vector |=
+            doc["asset"]["extras"]["vectorBuildStateSha256"].is_string() && !self.reports.is_null();
         if let Some(axis) = doc["asset"].get("gltfUpAxis") {
             if axis.as_str() != Some("Y") {
                 self.c2.exclude(Reason::UpAxisOverride);
@@ -5477,6 +5478,7 @@ mod containment_controls {
             let doc = serde_json::to_vec(&doc).unwrap();
             let mut files = vec![("tileset.json", doc), ("a.glb", with_doc(|_| {}))];
             files.extend(vector.then(|| ("vector-build.json", state.clone())));
+            files.extend(vector.then(|| ("conversion.json", b"{}".to_vec())));
             files
         };
         // 16 x the root box diagonal, 2 x |(10, 10, 10)|.
@@ -5491,7 +5493,10 @@ mod containment_controls {
         assert!(run(&files).is_ok());
         let mut doc: Value = serde_json::from_slice(&files[0].1).unwrap();
         doc["asset"]["extras"] = marker;
-        files.push(("vector-build.json", state));
+        files.extend([
+            ("vector-build.json", state),
+            ("conversion.json", b"{}".to_vec()),
+        ]);
         files[0].1 = serde_json::to_vec(&doc).unwrap();
         assert!(run(&files)
             .unwrap_err()

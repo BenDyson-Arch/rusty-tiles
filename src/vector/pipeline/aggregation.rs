@@ -85,7 +85,7 @@ fn pass(
     let mut maximum_distance: f64 = 0.;
     let mut estimate = 0usize;
     let mut rows = db
-        .prepare("SELECT n,lx,ly,lz,sortkey,id FROM features WHERE path>=?1 AND path<?2 ORDER BY sortkey,id")
+        .prepare("SELECT n,lx,ly,lz,sortkey,id,omissible FROM features WHERE path>=?1 AND path<?2 ORDER BY sortkey,id")
         .map_err(sql)?;
     // Sorted without `data`: only rows that are not plain points read it, by id.
     let mut data = db
@@ -99,9 +99,12 @@ fn pass(
             .as_str()
             .map_err(|e| sql(e.into()))?;
         let mut parts = sortkey.split('\0');
-        let (name, extra) = (parts.next().unwrap_or(""), parts.count());
+        let name = parts.next().unwrap_or("");
+        // Only an unsplit, non-omissible row of one vertex is a point: never a fragment.
+        let plain = parts.next().is_some() && parts.next() == Some("") && parts.next().is_none();
+        let plain = plain && !row.get::<_, bool>(6).map_err(sql)?;
         points.clear();
-        let source = if row.get::<_, i64>(0).map_err(sql)? == 1 && extra == 2 {
+        let source = if row.get::<_, i64>(0).map_err(sql)? == 1 && plain {
             let point = [
                 row.get(1).map_err(sql)?,
                 row.get(2).map_err(sql)?,
@@ -162,4 +165,31 @@ fn pass(
         }
     }
     Ok(Pass::Done(cells, maximum_distance))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_one_vertex_fragment_row_is_not_read_as_a_point() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n,lx,ly,lz,hx,hy,hz,sortkey,omissible)").unwrap();
+        for (id, kind, fragment) in [("a", "Point", ""), ("b", "LineString", "0")] {
+            let coordinates = if kind == "Point" {
+                json!([0., 0., 0.])
+            } else {
+                json!([[0., 0., 0.]])
+            };
+            let data = json!({"properties":{"_source_layer":"L","_source_id":id},"_fragment_path":fragment,
+                "geometry":{"type":kind,"coordinates":coordinates}});
+            db.execute("INSERT INTO features(path,data,n,lx,ly,lz,hx,hy,hz,sortkey,omissible) VALUES('',?1,1,0,0,0,0,0,0,?2,0)",
+                params![data.to_string(), format!("L\0{id}\0{fragment}")]).unwrap();
+        }
+        let outcome = collect(&db, "", &VectorOptions::default()).unwrap();
+        assert!(
+            matches!(outcome, Outcome::Unchanged),
+            "a line fragment makes the tile mixed"
+        );
+    }
 }
