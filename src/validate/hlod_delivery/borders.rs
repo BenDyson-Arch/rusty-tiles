@@ -19,13 +19,17 @@
 //! cousins and source-arc certificates need the source oracle and audit sidecar.
 use super::super::Error;
 use super::{
-    bad, read_edge, read_point, sql, CanonicalEdge, CanonicalPoint, Effort, Store, Surface,
+    bad, bulk, read_edge, read_point, spill_failure, sql, CanonicalEdge, CanonicalPoint, Effort,
+    Sorter, Store, Surface,
 };
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// Outward rounding of every f64 distance sum below (well above ten roundings).
 const OUTWARD: f64 = 1. + 1. / (1u64 << 48) as f64;
+fn overflow() -> Error {
+    Error::InvalidState("descendant face count exceeds the counter range".into())
+}
 /// Charged bytes per resident border edge, vertex image or adjacency entry.
 const ITEM_BYTES: usize = 160;
 
@@ -278,12 +282,13 @@ impl Store {
     }
 
     /// D11 border check of one coarse tile's decoded surface. Records each border
-    /// vertex's image for the pairwise depth rules and returns the contracted arcs
-    /// by chord (for the equal-direction multiplicity check).
+    /// vertex's image for the pairwise depth rules (loaded by `border_pairs`) and returns
+    /// the contracted arcs by chord (for the equal-direction multiplicity check).
     pub(super) fn border(
         &self,
         tile: i64,
         surface: &Surface,
+        out: &mut Sorter<'_, 69>,
         effort: &Effort,
     ) -> Result<BTreeMap<CanonicalEdge, Vec<CanonicalPoint>>, Error> {
         let g: Option<f64> = self
@@ -375,15 +380,10 @@ impl Store {
                 images.insert(*p, (Vec::new(), 0.));
             }
         }
-        let mut insert = self
-            .connection
-            .prepare_cached("INSERT INTO border_map VALUES(?,?,?,?)")
-            .map_err(sql)?;
         for (p, (image, d)) in &images {
             effort.charge(super::ROW_UNITS)?;
-            insert
-                .execute(params![super::point_bytes(*p), tile, image, d])
-                .map_err(sql)?;
+            out.push(bulk::image(&super::point_bytes(*p), tile, image, *d))
+                .map_err(spill_failure)?;
         }
         Ok(contracted)
     }
@@ -479,6 +479,13 @@ impl Store {
         contracted: &BTreeMap<CanonicalEdge, Vec<CanonicalPoint>>,
         effort: &Effort,
     ) -> Result<(), Error> {
+        // Descendant rows are those of tiles in (tile, last]; none without a range.
+        let last: Option<i64> = self
+            .connection
+            .query_row("SELECT last FROM tiles WHERE id=?", [tile], |r| r.get(0))
+            .optional()
+            .map_err(sql)?
+            .flatten();
         for (edge, e) in &surface.edges {
             effort.charge(1)?;
             if e.forward < 2 && e.reverse < 2 {
@@ -493,8 +500,8 @@ impl Store {
             let lower_first = arc[0].0 == edge.0;
             let mut support = [i64::MAX; 2];
             for &(x, y) in &arc {
-                effort.charge(super::ROW_UNITS)?;
-                let (nf, nr) = self.leaf_incidence(tile, key(x, y))?;
+                effort.charge(super::SEEK_UNITS)?;
+                let (nf, nr) = self.leaf_incidence((tile, last), key(x, y), effort)?;
                 let (with, against) = if x < y { (nf, nr) } else { (nr, nf) };
                 let (forward, reverse) = if lower_first {
                     (with, against)
@@ -507,7 +514,7 @@ impl Store {
                 if n < 2
                     || (support[direction] >= n as i64
                         && self.corresponds(
-                            tile,
+                            (tile, last),
                             edge,
                             direction,
                             &arc,
@@ -539,20 +546,10 @@ impl Store {
             k.sort_unstable();
             *corners.entry(k).or_default() += 1;
         }
-        let mut licensed = self
-            .connection
-            .prepare_cached(
-                "SELECT EXISTS(SELECT 1 FROM twin_points p,tiles t WHERE t.id=?2 AND p.key=?1 AND
-                 (SELECT coalesce(sum(f.n),0) FROM leaf_faces f WHERE f.corners=p.corners AND f.tile>t.id AND f.tile<=t.last)>=?3)",
-            )
-            .map_err(sql)?;
         for (c, &n) in corners.iter().filter(|(_, n)| **n > 1) {
             for v in c {
-                effort.charge(super::ROW_UNITS)?;
-                let ok: bool = licensed
-                    .query_row(params![super::point_bytes(*v), tile, n], |r| r.get(0))
-                    .map_err(sql)?;
-                if !ok {
+                effort.charge(super::SEEK_UNITS)?;
+                if !self.licensed((tile, last), *v, n, effort)? {
                     return Err(bad(
                         "interfaceWinding",
                         &format!("{n} coincident coarse faces without a coincident source group of that multiplicity at every corner: tile={tile}"),
@@ -571,7 +568,7 @@ impl Store {
     #[allow(clippy::too_many_arguments)]
     fn corresponds(
         &self,
-        tile: i64,
+        (tile, last): (i64, Option<i64>),
         edge: &CanonicalEdge,
         direction: usize,
         arc: &[(CanonicalPoint, CanonicalPoint)],
@@ -591,10 +588,13 @@ impl Store {
                 }
             }
         }
+        let Some(last) = last else {
+            return Ok(arc.is_empty());
+        };
         let mut query = self
             .connection
             .prepare_cached(
-                "SELECT f.third FROM edge_faces f,tiles t WHERE t.id=?2 AND f.key=?1 AND f.dir=?3 AND f.tile>t.id AND f.tile<=t.last",
+                "SELECT third FROM edge_faces WHERE key=?1 AND tile>?2 AND tile<=?3 AND dir=?4",
             )
             .map_err(sql)?;
         for &(x, y) in arc {
@@ -606,11 +606,17 @@ impl Store {
                 1 - along
             };
             let mut source = BTreeMap::<CanonicalPoint, usize>::new();
+            effort.charge(super::SEEK_UNITS)?;
             let mut rows = query
-                .query(params![super::edge_bytes(key(x, y)), tile, wanted as i64])
+                .query(params![
+                    super::edge_bytes(key(x, y)),
+                    tile,
+                    last,
+                    wanted as i64
+                ])
                 .map_err(sql)?;
             while let Some(row) = rows.next().map_err(sql)? {
-                effort.charge(1)?;
+                effort.charge(super::READ_UNITS)?;
                 *source
                     .entry(super::read_point(&row.get::<_, Vec<u8>>(0).map_err(sql)?)?)
                     .or_default() += 1;
@@ -653,20 +659,79 @@ impl Store {
         Ok(true)
     }
 
-    /// Descendant leaf faces on a canonical edge, (lower to higher key, back).
-    fn leaf_incidence(&self, tile: i64, edge: CanonicalEdge) -> Result<(i64, i64), Error> {
-        self.connection
-            .prepare_cached("SELECT coalesce(sum(s.nf),0),coalesce(sum(s.nr),0) FROM leaf_segments s,tiles t WHERE t.id=?2 AND s.key=?1 AND s.tile>t.id AND s.tile<=t.last")
-            .and_then(|mut q| {
-                q.query_row(params![super::edge_bytes(edge), tile], |r| {
-                    Ok((r.get(0)?, r.get(1)?))
-                })
-            })
-            .map_err(sql)
+    /// Descendant leaf faces on a canonical edge, (lower to higher key, back). The seek is
+    /// charged by the caller; each descendant leaf's row is charged here.
+    fn leaf_incidence(
+        &self,
+        (tile, last): (i64, Option<i64>),
+        edge: CanonicalEdge,
+        effort: &Effort,
+    ) -> Result<(i64, i64), Error> {
+        let Some(last) = last else { return Ok((0, 0)) };
+        let mut query = self
+            .connection
+            .prepare_cached("SELECT nf,nr FROM leaf_segments WHERE key=?1 AND tile>?2 AND tile<=?3")
+            .map_err(sql)?;
+        let mut rows = query
+            .query(params![super::edge_bytes(edge), tile, last])
+            .map_err(sql)?;
+        let mut sum = (0i64, 0i64);
+        while let Some(row) = rows.next().map_err(sql)? {
+            effort.charge(super::READ_UNITS)?;
+            let (nf, nr): (i64, i64) = (row.get(0).map_err(sql)?, row.get(1).map_err(sql)?);
+            sum = (
+                sum.0.checked_add(nf).ok_or_else(overflow)?,
+                sum.1.checked_add(nr).ok_or_else(overflow)?,
+            );
+        }
+        Ok(sum)
+    }
+
+    /// Whether some coincident leaf corner set at `key` has at least `n` descendant faces:
+    /// the twins' seek is charged by the caller, each twin's face seek and every descendant
+    /// face row here. Face counts are positive, so the first sum to reach `n` decides.
+    fn licensed(
+        &self,
+        (tile, last): (i64, Option<i64>),
+        key: CanonicalPoint,
+        n: i64,
+        effort: &Effort,
+    ) -> Result<bool, Error> {
+        let Some(last) = last else { return Ok(false) };
+        let mut twins = self
+            .connection
+            .prepare_cached("SELECT corners FROM twin_points WHERE key=? ORDER BY corners")
+            .map_err(sql)?;
+        let mut faces = self
+            .connection
+            .prepare_cached("SELECT n FROM leaf_faces WHERE corners=?1 AND tile>?2 AND tile<=?3")
+            .map_err(sql)?;
+        let mut rows = twins.query([super::point_bytes(key)]).map_err(sql)?;
+        while let Some(twin) = rows.next().map_err(sql)? {
+            effort.charge(super::SEEK_UNITS)?;
+            let corners: Vec<u8> = twin.get(0).map_err(sql)?;
+            let mut sum = 0i64;
+            let mut counts = faces.query(params![corners, tile, last]).map_err(sql)?;
+            while let Some(row) = counts.next().map_err(sql)? {
+                effort.charge(super::READ_UNITS)?;
+                sum = sum
+                    .checked_add(row.get(0).map_err(sql)?)
+                    .ok_or_else(overflow)?;
+                if sum >= n {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
     }
 
     /// Pairwise rules at every shared border vertex, grouped by key.
-    pub(super) fn border_pairs(&self, effort: &Effort) -> Result<(), Error> {
+    pub(super) fn border_pairs(
+        &self,
+        images: Sorter<'_, 69>,
+        effort: &Effort,
+    ) -> Result<(), Error> {
+        self.load_images(images)?;
         // Leaves deliver every shared point exactly.
         self.connection
             .execute_batch("INSERT INTO border_map SELECT l.key,l.tile,x'',0 FROM leaf_points l JOIN shared_point_keys s ON s.key=l.key JOIN tiles t ON t.id=l.tile WHERE t.leaf=1")
@@ -997,6 +1062,32 @@ mod tests {
         refused(case(vec![t, r]), "interfaceWinding");
         // Three coarse copies on the plate's corners exceed its two source faces.
         refused(case(vec![plate]), "interfaceWinding");
+    }
+    #[test]
+    fn any_coincident_group_at_a_corner_may_license_it() {
+        // At the plate's first corner, a coincident group with one face in A1 and one in a
+        // leaf outside A sorts before the plate's own group. It has one face below A, too
+        // few for A's coarse pair; the plate's group, read after it, licenses the pair.
+        let plate = [[1., 0.1, 1.], [1.001, 0.1, 1.], [1., 0.1, 1.001]];
+        let twin = [plate[0], plate[2], plate[1]];
+        let group = [plate[0], [0.5, 0.1, 0.5], [0.5, 0.1, 1.5]];
+        let [mut a0, mut a1] = a_leaves();
+        a0.extend([plate, twin]);
+        a1.push(group);
+        let [b0, b1] = b_leaves();
+        let mut a = a_coarse(&[0, 4]);
+        a.extend([plate, twin, group]);
+        tree(&[
+            (None, 16., None),
+            (Some(0), 2., Some(a)),
+            (Some(1), 0., Some(a0)),
+            (Some(1), 0., Some(a1)),
+            (Some(0), 2., Some(b_coarse(&[0, 4]))),
+            (Some(4), 0., Some(b0)),
+            (Some(4), 0., Some(b1)),
+            (Some(0), 0., Some(vec![group])),
+        ])
+        .unwrap();
     }
     #[test]
     fn edge_multiplicity_licenses_only_faces_matched_on_their_own_side() {

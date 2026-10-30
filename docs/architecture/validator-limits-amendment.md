@@ -79,13 +79,68 @@ from 16 to 77. Two things changed together. HLOD coarse tiles became indexed: th
 work is unchanged, but their stored bytes fell. And the native HLOD delivery check now charges
 its scratch work at its measured cost, so a unit costs about the same in every work class:
 
-- each SQLite scratch-store row written or looked up by key: 128 units;
+- each SQLite scratch-store row written, and each ancestor-walk or placement-frame lookup:
+  128 units;
+- each seek of a keyed lookup into a complete leaf table (descendant incidences, edge faces and
+  coincident faces of a coarse tile, a coarse drop's border contacts): 256 units, and each further
+  row it reads: 32 units. Coarse ancestors read the same descendant rows again, so these are
+  charged per row, not per write;
 - each original vertex row appended to the ingest spill sequence: 16 units;
 - each placed original key (placement, external sort and ordered alias scan): 32 units.
 
 The original-vertex alias check no longer goes through SQLite. Its rows are appended to a spill
 sequence, and their placed keys are checked by one bounded external sort (the catalog's side-sort
 memory) and one ordered scan. This cut the hostile leaf class c5 from 46.9 s to 15.2 s of CPU.
+
+*Constant-cost scratch rows (2026-10-30).* A constant charge per row needs a constant cost per
+row. Random-key B-tree inserts do not have one: once a table outgrows SQLite's 8 MiB page cache,
+each insert reads and writes back pages that miss it, more often as the table grows. So no row
+is inserted out of key order any more:
+
+- Rows whose keys arrive in payload order go to one bounded external sort at a time (the
+  catalog's side-sort configuration, the alias pass's memory bound) and are loaded in primary-key
+  order, so every insert appends. These are the leaf points, segments and faces, ancestor
+  requirements, coarse border images, coincident-face twins and multi-edge leaf faces. Rows with
+  one key are merged as the former upserts merged them (points once, incidences summed with the
+  same overflow refusal, faces counted, directions joined), so every table holds what it held.
+- Two lookups per row became merge joins in key order: the multi-edge filter of the edge-face
+  replay, and the open-segment census's shared-endpoint checks (lower endpoints in scan order,
+  higher ones after a sort).
+- Secondary indexes on references, tiles and placements are built once, by sort, after their rows
+  are in.
+- The lookups that remain read tables that are complete. A coarse tile's descendant incidences,
+  edge faces and coincident faces, and a coarse drop's border contacts (now one seek per side of
+  the tile's range), are charged 256 units per seek and 32 per further row. Ancestor walks (the
+  tiles table, mostly hot) stay at 128 per step. A seek into a large leaf table reads pages the
+  8 MiB cache does not hold, so its cost grows slowly with the table. Measured on the P-core
+  (random keys into a bulk-loaded `leaf_segments`, 200,000 seeks each):
+
+  | rows | table | seek, key present | seek, key absent | ns/unit at 256 + 32 per row |
+  | --- | --- | --- | --- | --- |
+  | 1 M | 39 MB | 1.85 µs | 1.69 µs | 6.4–6.6 |
+  | 4 M | 159 MB | 2.30 µs | 2.14 µs | 8.0–8.4 |
+  | 16 M | 642 MB | 2.60 µs | 2.37 µs | 9.0–9.3 |
+  | 64 M | 2.6 GB | 3.02 µs | 2.87 µs | 10.5–11.2 |
+
+  At the former 128 units per seek the same seeks cost 11.5 to 22.4 ns per unit. The load of
+  those rows (sort and append) cost 0.93 µs per row at 1 M rows and 1.12 µs at 64 M, 7.2 to 8.7
+  ns per charged unit.
+- The D4 coarse-identity check compared every reference with every descendant reference, up to
+  `hierarchyDepth` × `references` index steps, charged only at one unit per 10,000 SQLite VM
+  operations. It is now one preorder pass that keeps each open tile's lowest and highest
+  descendant leaf rank, charged one unit per reference.
+- What SQLite still does uncharged is linear in rows charged when they were written: scans,
+  sorts and index builds over them, and one seek per tile or reference. One unit per 10,000 VM
+  operations stays as a backstop.
+
+Verdicts are unchanged. Validation reports are identical, field for field, except two things:
+
+- `observed` in a budget refusal, the running count at the refusing charge, moves by a few units;
+- `scratch.peakBytes` includes the sort runs (tex3 and crop3: 254 to 310 MB).
+
+Charges change only for the coarse lookups and the D4 pass (Walem: +0.007%) and by SQLite progress
+ticks. So an archive whose work is within that margin of its budget can now be refused where it was
+admitted, or the reverse.
 
 Work per stored byte (all C1, identity and delivery work against this budget) was logged for
 every validation the lib and integration suites run (5,247), and for the archives below:
@@ -102,6 +157,13 @@ The largest value over every logged validation, small archives included, is 50.7
 `plain` suite archives, 144,339 stored bytes, which stay under the floor). The largest above the
 floor is the sheet's 36.52. The ratio is ⌈1.5 × 50.75⌉ = 77.
 
+The constant-cost scratch rows leave this basis unchanged. Logged again with them, the named
+archives' work moves by at most 0.007%. Walem gains 802,476 of 11.47 G units and tex3 and crop3
+gain 12,759, for coarse lookups charged per seek and per row. The sheet and mesh-1e6 lose up to
+3,449 (fewer SQLite progress ticks). The largest value over
+5,546 logged suite validations is 50.74 (the `plain` archives, 144,389 stored bytes). The ratio
+stays 77.
+
 Two validator builds now report `limitDerivation.model: 1` with different ratios: 16 before
 this amendment and 77 after it. κ stays provisional under model 1, and only VS-D freezes it and
 bumps the model. Until then, read the ratio from `perStoredByte`, not from the model number.
@@ -114,55 +176,76 @@ codec ratio. It holds because every unit of work is charged before it runs: a va
 at most max(16,000,000, 77·S) units plus one charge's overshoot. A 10-million-triangle
 repeated-index stream is refused by the per-accessor element cap in 0.1 s.
 
-*Time statement.* CPU time per unit was measured for five adversarial classes. c1–c4 were run to
-a 500,000,000-unit budget; c5 holds 600 leaves of 8,192 triangles with three new original
-vertices each and a valid root, and is validated in full (1,502,712,016 units, 32.0 per stored
-byte). Each run was pinned to one P-core (CPU 10) and one E-core (CPU 17), at idle priority on a
-host at load average about 43:
+*Time statement.* CPU time per unit was measured for eight adversarial classes, each run pinned
+to one P-core (CPU 10) and one E-core (CPU 17) at idle priority, on a host at load average 15–40
+(2026-10-30). c1–c4 run to a 500,000,000-unit budget. c5 holds 600 leaves of 8,192 triangles with
+three new original vertices each and a valid root, and is validated in full (1,502,712,616 units,
+32.0 per stored byte). c6–c8 run to their default budget of 77·S and are refused there.
 
 | class | P-core ns/unit | E-core ns/unit |
 | --- | --- | --- |
-| c1 comp64: unreferenced VEC4 u8 meshopt accessors | 6.71 | 6.93 |
-| c2 hlodseq: distinct-vertex index streams | 8.00 | 8.88 |
-| c3 hloddup: one triangle instanced by 100 nodes | 6.40 | 6.62 |
-| c4 hlodleaf: 100k-triangle leaves, new originals per triangle | 10.74 | 12.32 |
-| c5 hlodleaf: 600 × 8,192-triangle leaves | 10.11 | 10.92 |
+| c1 comp64: unreferenced VEC4 u8 meshopt accessors | 5.80 | 6.47 |
+| c2 hlodseq: distinct-vertex index streams | 7.61 | 8.57 |
+| c3 hloddup: one triangle instanced by 100 nodes | 6.84 | 6.32 |
+| c4 hlodleaf: 100k-triangle leaves, new originals per triangle | 10.28 | 11.88 |
+| c5 hlodleaf: 600 × 8,192-triangle leaves | 9.85 | 10.72 |
 
-For these five classes, `(16,000,000 + 77·S)·τ` with the worst τ (c4) is 0.17 s plus 827 s per
-stored GB on the P-core, and 0.20 s plus 949 s per stored GB on the E-core. Both are within the
-C2 statement below (1,037 and 1,875 s per stored GB).
+The scratch-row classes (generators in `bench/architecture_audit/vs_c_limits/hostile/`):
 
-**This bound does not hold for every class.** The cost of an SQLite scratch-store row grows with
-the size of the scratch tables, but every row is charged the same constant 128 units. Rows with
-random keys (placed leaf points, edges and faces) miss the 8 MiB page cache more often as the
-B-trees deepen. The five classes above keep those tables tiny, because their positions are
-degenerate. A sixth class, from review 2, does not:
+- **c6 leafrand** (review 2): N leaves of 8,192 nondegenerate triangles. Every corner is a distinct
+  pseudo-random lattice point and every leaf has a `source_triangle` table, so each point, edge
+  and face is a random-key row. `leafrand.py N 8192 7` (N = 1,000: seed 11).
+- **c7 twin:** the same leaves under two coarse cells, the second cell's at the first's
+  positions, so every key is shared across the cells: ancestor requirements, multi-edge faces and
+  coincident corner sets as well. `rowclasses.py twin N 8192 3`.
+- **c8 chain:** leaves with every triangle doubled (every segment a multi edge, every face
+  coincident) under a single-child chain of 24 coarse tiles sharing one payload that doubles 128
+  of those triangles. `rowclasses.py chain N 8192 5 OUT 24 128`. At the default budget its
+  admitted work is the leaf rows and the edge-face replay of every leaf; the chain tiles'
+  lookups would come after the budget (its refusal counts are the same with any seek weight).
+  The seek cost is measured directly instead (the probe above).
 
-- **c6 leafrand:** N leaves of 8,192 nondegenerate triangles. Every corner is a distinct
-  pseudo-random lattice point, and every leaf has a `source_triangle` table, so each point, edge
-  and face is a random-key row.
-- Generator: `bench/architecture_audit/vs_c_limits/hostile/leafrand.py N 8192 7 OUT.3tz`.
-- Each archive runs to its default budget of 77·S units and is refused there.
+| class | leaves | S | P-core ns/unit | E-core ns/unit | develop, P-core | develop, E-core |
+| --- | --- | --- | --- | --- | --- | --- |
+| c6 leafrand | 10 | 1.52 MB | 8.38 | 8.87 | 8.37 | 9.47 |
+| c6 leafrand | 40 | 6.08 MB | 8.22 | 8.90 | 10.27 | 12.24 |
+| c6 leafrand | 150 | 22.81 MB | 8.75 | 9.79 | 17.19 | 20.79 |
+| c6 leafrand | 400 | 60.83 MB | 7.27 | 10.15 | not run | 30.10 |
+| c6 leafrand | 1000 | 152.06 MB | 7.61 | 10.64 | not run | not run |
+| c7 twin | 10 | 1.52 MB | 9.68 | 10.57 | 10.04 | 11.16 |
+| c7 twin | 40 | 6.09 MB | 9.97 | 10.59 | 12.99 | 15.37 |
+| c7 twin | 150 | 22.81 MB | 9.73 | 11.60 | not run | 28.87 |
+| c7 twin | 400 | 60.83 MB | 9.27 | 12.45 | not run | not run |
+| c8 chain | 10 | 1.54 MB | 7.16 | 7.88 | 10.55 | 12.40 |
+| c8 chain | 40 | 6.10 MB | 7.62 | 8.27 | 14.66 | 18.65 |
+| c8 chain | 150 | 22.82 MB | 8.04 | 8.92 | not run | not run |
+| c8 chain | 400 | 60.84 MB | 8.15 | 9.08 | not run | not run |
 
-| c6 archive | S | P-core ns/unit | P-core s per stored GB | E-core ns/unit | E-core s per stored GB |
-| --- | --- | --- | --- | --- | --- |
-| 10 leaves | 1.52 MB | 7.8 | 598 | 10.1 | 776 |
-| 40 leaves | 6.08 MB | 10.5 | 811 | 13.2 | 1,013 |
-| 150 leaves | 22.8 MB | 18.4 | **1,419** | 22.6 | 1,738 |
-| 400 leaves | 60.8 MB | 26.7 | **2,052** | not run | |
+E-core repeats of the larger archives gave 9.25 and 9.86 (c6, 150 and 400 leaves) and 11.51 and
+12.55 (c7). Before this change, c6 rose on the P-core from 7.8 ns/unit at 1.52 MB to 26.7 at
+60.8 MB (2,052 s per stored GB; review 2, same archives). In this session develop measures c6 at
+17.19 (P) and 20.79 (E) ns/unit at 22.8 MB and 30.10 (E) at 60.8 MB, and c7 at 28.87 (E) at
+22.8 MB. Now the cost per unit no longer grows with the tables, beyond a logarithmic term:
 
-- On the P-core, the 1,037 s per stored GB statement is **exceeded** for this class from about
-  10 MB stored (met at 6.1 MB, exceeded at 22.8 MB). The cost per unit was still rising at
-  60.8 MB.
-- On the E-core the 1,875 s/GB statement held through 22.8 MB, but the trend is the same, and
-  larger archives were not measured.
-- So the GB-scale time statement holds only for the five constant-cost classes. No time bound is
-  claimed for random-key row work above about 10 MB stored.
-- This is not a regression. Before this amendment rows were charged 1 or 2 units, so develop
-  admits more uncharged row work per byte.
-- **Follow-up (0.4.0, "constant-cost scratch rows"):** replace the random-key B-tree inserts
-  with sort-and-merge passes, as the alias pass already does, so that the per-row cost no longer
-  grows with S. Until it lands, this statement stays qualified.
+- On the P-core c6 and c7 stay within ±10% from 1.5 MB to 152 MB stored. c8 rises 14% over 40×
+  (7.16 to 8.15 ns/unit).
+- On the E-core c6 goes from 8.87 to 10.64 ns/unit over the 100× range, c7 from 10.57 to 12.55
+  over 40×, and c8 from 7.88 to 9.08. The rise is logarithmic. Each external sort merges at most 32 runs of 24 MiB at
+  once, so a sort adds one sequential pass per 32-fold growth of its rows (past about 13 M rows,
+  about 23 MB stored, and again past about 420 M rows, about 700 MB). The hot-path seeks also
+  descend one more B-tree level per hundredfold growth.
+- Extrapolating c7's E-core slope (about 0.5 ns per e-fold of S) from 61 MB to 1 GB gives
+  14 ns/unit.
+
+The stated bound is `(16,000,000 + 77·S)·τ`:
+
+- **P-core:** the worst measured τ is c4's 10.28 ns. That is 0.16 s plus 792 s per stored GB.
+- **E-core:** the worst measured τ is c7's 12.55 ns at 61 MB, and 14 ns extrapolated to 1 GB. That
+  is 0.20 s plus 966 s per stored GB as measured, and 1,078 s extrapolated.
+- Both are within the C2 statement below (1,037 and 1,875 s per stored GB).
+- Keyed lookups, which no class above reaches within its budget, cost at most 11.2 ns/unit on the
+  P-core up to a 64 M-row (2.6 GB) table (the probe above). That is within the P-core τ. A seek
+  grows by about 0.3 µs per fourfold growth of its table.
 
 A new work class, or a per-unit cost above 13.4 ns (P-core) or 24.3 ns (E-core), must re-weight
 its charges or revisit the ratio.

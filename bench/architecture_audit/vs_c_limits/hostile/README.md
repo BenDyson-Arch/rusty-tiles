@@ -1,9 +1,10 @@
 # Hostile `totalPayloadElements` archives
 
 These generators build the adversarial work classes of the `totalPayloadElements` time statement
-(`docs/architecture/validator-limits-amendment.md`). They were written by the non-author reviewers
-of PR #304. CI does not run them. Use them to re-measure the cost per charged unit after a change
-to validator work or weights.
+(`docs/architecture/validator-limits-amendment.md`). The non-author reviewers of PR #304 wrote
+`bombs_lib.py`, `leafrand.py` and `enc.mjs`; `rowclasses.py` and `rows_control.py` come with the
+constant-cost scratch rows. CI runs only `rows_control.py`. Use the others to re-measure the cost
+per charged unit after a change to validator work or weights.
 
 - `bombs_lib.py KIND N_GLBS OUT.3tz [pad] [extra]`: classes c1 `comp64`, c2 `hlodseq`, c3 `hloddup`,
   c4/c5 `hlodleaf`, and `hugecount` (refused before any work).
@@ -11,6 +12,17 @@ to validator work or weights.
   distinct pseudo-random lattice points, with `source_triangle` tables, so every leaf point, edge
   and face is a random-key scratch row. The time-statement archives are `leafrand.py N 8192 7`
   for N = 10, 40, 150 and 400. N = 10 gives S = 1,520,767 and SHA-256 `f92af116…514849b`.
+- `rowclasses.py KIND N_LEAVES TRIANGLES SEED OUT.3tz [K] [COARSE]`: two more scratch-row
+  classes on leafrand's leaves (2026-10-30, constant-cost scratch rows). `twin` puts N/2 leaves
+  under each of two coarse cells, the second cell's leaves at the first's positions, so every key
+  is shared across the cells: ancestor requirements, multi-edge faces and coincident corner sets.
+  `chain` puts N leaves with every triangle doubled under a single-child chain of K coarse tiles
+  sharing one payload that doubles COARSE of those triangles: descendant-incidence, edge-face and
+  coincident-face lookups at every chain tile. The time-statement archives are `twin N 8192 3`
+  and `chain N 8192 5 OUT 24 128` (K stays under `jsonDepth`).
+- `rows_control.py check --binary BIN --work DIR`: CI runs it. The three row classes at a small
+  size with plain buffers (no Node), checking each verdict through the CLI and a structured
+  budget refusal. `rows_control.py generate` writes larger plain-buffer archives.
 - `enc.mjs`: meshopt streams from the upstream meshoptimizer encoder (vertex codec v0). It needs
   Node and the `meshoptimizer` 1.3.0 npm package. `MESHOPT_JS` names the package directory
   (default `./meshoptimizer`). Encoded streams are cached in `RT_HOSTILE_CACHE`

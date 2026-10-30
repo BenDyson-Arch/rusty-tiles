@@ -4,9 +4,10 @@
 //! contribute no interface items; three-distinct collinear faces still do.
 //!
 //! C1/identity admission runs once per payload. Bounded geometry replay emits
-//! only compact point/edge keys and per-leaf face incidence into disk SQLite.
-//! Ordered key scans find actual outside-leaf owners and stage sparse ancestor
-//! obligations. No T contacts, distance joins or tolerant adjacency are inferred.
+//! only compact point/edge keys and per-leaf face incidence into disk SQLite,
+//! through bounded external sorts so that every row is appended in key order
+//! (`bulk`). Ordered key scans find actual outside-leaf owners and stage sparse
+//! ancestor obligations. No T contacts, distance joins or tolerant adjacency are inferred.
 //! Every directed incident owner survives local balanced cancellation.
 //! Original IDs recorded once at ingest (an appended spill sequence) are checked
 //! by one bounded external sort of their exact placed keys, including disjoint
@@ -36,9 +37,13 @@
 //! interfaces/local contradictory pairs.
 use super::{identity, invalid, spill_failure, Budget, Error, ScratchRefusal};
 mod borders;
+mod bulk;
 mod drops;
 use crate::archive3tz::CatalogConfig;
-use crate::spill::{ExternalSorter, Record, Scratch, SequenceWriter, SlotFile, SortConfig};
+use crate::spill::{
+    ExternalSorter, Record, Scratch, Sequence, SequenceWriter, SlotFile, SortConfig,
+};
+use bulk::Sorter;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{value::RawValue, Value};
 use std::{
@@ -707,13 +712,20 @@ pub(super) struct DecodedInterfaceCensus {
     /// and checked against its declaration and geometricError, by cell depth.
     pub(super) dropped_by_depth: Vec<u64>,
 }
-/// Payload-element units charged for each scratch-store row a validation writes or looks up
-/// by key (an SQLite B-tree insert, upsert or point query). A row costs far more than an
-/// ordinary payload unit (about 6 ns), so it is weighted to keep every work class within the
-/// stated time per unit (`docs/architecture/validator-limits-amendment.md`, time statement).
-/// Random-key rows get slower as the tables grow, so this constant under-charges them above
-/// about 10 MB stored (class c6 there) until rows become sort-and-merge passes.
+/// Payload-element units charged for each scratch-store row a validation writes (sorted and
+/// appended in key order, `bulk`), and for each ancestor-walk or placement-frame lookup. A row
+/// costs far more than an ordinary payload unit (about 6 ns), so it is weighted to keep every
+/// work class within the stated time per unit (`docs/architecture/validator-limits-amendment.md`,
+/// time statement).
 pub(super) const ROW_UNITS: usize = 128;
+/// Units for each seek of a keyed lookup into a complete leaf table (descendant incidences,
+/// edge faces and coincident faces of a coarse tile, a coarse drop's border contacts). A seek
+/// reads pages the cache may not hold: 1.7 µs at 1 M rows, 3.0 µs at 64 M.
+pub(super) const SEEK_UNITS: usize = 256;
+/// Units for each further row a keyed range query reads after its seek (charged as a row),
+/// where the same rows can be read again: descendant leaf rows are read once per coarse
+/// ancestor.
+pub(super) const READ_UNITS: usize = 32;
 /// Units for each original vertex row appended to the spill sequence at ingest.
 pub(super) const ORIGINAL_UNITS: usize = 16;
 /// Units for each placed original key: placement, external sort and ordered scan.
@@ -941,6 +953,11 @@ pub(super) struct Store {
     sort: SortConfig,
     buffer_bytes: usize,
 }
+/// The open-segment endpoint merge of `segment_requirements`.
+struct OpenEnds<'a> {
+    lower: bulk::LowerEnds<'a>,
+    higher: SequenceWriter<bulk::End>,
+}
 impl Store {
     pub(super) fn new(scratch: Arc<Scratch>, config: &CatalogConfig) -> Result<Self, Error> {
         Ok(Self {
@@ -972,11 +989,9 @@ impl Store {
         let connection = Connection::open(file.path()).map_err(sql)?;
         connection.execute_batch("PRAGMA cache_size=-8192; PRAGMA temp_store=FILE; PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;
             CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER);
-            CREATE INDEX tile_parent ON tiles(parent);
-            CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL); CREATE INDEX refs_tile ON refs(tile); CREATE INDEX refs_rank ON refs(rank);
+            CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL);
             CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL,dropped INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE placements(id INTEGER PRIMARY KEY,tile INTEGER NOT NULL,rank INTEGER NOT NULL,frame BLOB NOT NULL,leaf INTEGER NOT NULL);
-            CREATE INDEX placement_rank ON placements(rank,leaf,id);
             CREATE TABLE leaf_points(key BLOB NOT NULL,tile INTEGER NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             CREATE TABLE leaf_segments(key BLOB NOT NULL,tile INTEGER NOT NULL,nf INTEGER NOT NULL,nr INTEGER NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             CREATE TABLE shared_point_keys(key BLOB PRIMARY KEY) WITHOUT ROWID;
@@ -1443,6 +1458,14 @@ impl Store {
             }
             self.materialize()?;
         }
+        // Secondary indexes of rows inserted in traversal order are built once, by sort.
+        self.connection
+            .execute_batch(
+                "CREATE INDEX IF NOT EXISTS tile_parent ON tiles(parent);
+                 CREATE INDEX IF NOT EXISTS refs_tile ON refs(tile);
+                 CREATE INDEX IF NOT EXISTS refs_rank ON refs(rank);",
+            )
+            .map_err(sql)?;
         let used = Arc::new(AtomicU64::new(0));
         let effort = Effort {
             budget,
@@ -1500,18 +1523,7 @@ impl Store {
                 "archive expects source identity on every referenced payload",
             ));
         }
-        let coarse_triangle: bool = self
-            .connection
-            .query_row(
-                "SELECT EXISTS(
-            SELECT 1 FROM refs r JOIN tiles t ON t.id=r.tile JOIN payloads p ON p.rank=r.rank
-            WHERE p.triangle_present=1 AND EXISTS(
-                SELECT 1 FROM refs d JOIN tiles l ON l.id=d.tile
-                WHERE d.tile>t.id AND d.tile<=t.last AND l.leaf=1 AND d.rank<>r.rank))",
-                [],
-                |r| r.get(0),
-            )
-            .map_err(sql)?;
+        let (coarse_triangle, coarse_rows) = self.coarse_identity(effort)?;
         if coarse_triangle {
             return Err(bad(
                 "hlodFeatureIds",
@@ -1525,7 +1537,6 @@ impl Store {
                 "descendant leaf has no original triangle rows",
             ));
         }
-        let coarse_rows:bool=self.connection.query_row("SELECT EXISTS(SELECT 1 FROM refs r JOIN tiles t ON t.id=r.tile JOIN payloads p ON p.rank=r.rank WHERE p.primitive_rows>8192 AND EXISTS(SELECT 1 FROM refs d JOIN tiles l ON l.id=d.tile WHERE d.tile>t.id AND d.tile<=t.last AND l.leaf=1 AND d.rank<>r.rank))",[],|r|r.get(0)).map_err(sql)?;
         if coarse_rows {
             return Err(bad(
                 "hlodFeatureIds",
@@ -1539,19 +1550,17 @@ impl Store {
         self.place_references(effort)?;
         self.replay_original_aliases(effort)?;
         self.collect_leaves(effort, read)?;
-        self.connection
-            .execute_batch(
-                "INSERT INTO twin_points SELECT substr(corners,1+12*k.i,12),corners FROM
-                 (SELECT corners FROM leaf_faces GROUP BY corners HAVING sum(n)>1),
-                 (SELECT 0 AS i UNION ALL SELECT 1 UNION ALL SELECT 2) k WHERE 1 ON CONFLICT DO NOTHING",
-            )
-            .map_err(sql)?;
+        self.load_twins()?;
         self.edge_faces(effort, read)?;
-        self.point_requirements(&mut census, effort)?;
-        self.segment_requirements(&mut census, effort)?;
-        self.check_coarse(&mut census, effort, read)?;
+        let mut needs = self.sorter()?;
+        self.point_requirements(&mut census, &mut needs, effort)?;
+        let ends = self.segment_requirements(&mut census, &mut needs, effort)?;
+        self.load_requirements(needs)?;
+        self.count_shared_ends(&mut census, ends)?;
+        let mut images = self.sorter()?;
+        self.check_coarse(&mut census, &mut images, effort, read)?;
         self.coarse_drops(&mut census.dropped_by_depth, effort)?;
-        self.border_pairs(effort)?;
+        self.border_pairs(images, effort)?;
         Ok(Some(census))
     }
     fn hierarchy(&self, effort: &Effort) -> Result<(), Error> {
@@ -1619,6 +1628,93 @@ impl Store {
         // refs_tile supports the range existence probe; no transitive closure table.
         self.connection.execute_batch("UPDATE tiles SET leaf=NOT EXISTS(SELECT 1 FROM refs r WHERE r.tile>tiles.id AND r.tile<=tiles.last);").map_err(sql)?;
         Ok(())
+    }
+    /// D4 coarse references: whether some reference with `source_triangle` rows, and some
+    /// with more than 8192 `source_primitive` rows, lies on a tile above a leaf reference to
+    /// another payload. One preorder pass keeps each open tile's descendant leaf ranks as a
+    /// (lowest, highest) pair, so every reference is read once: a rank differs from some
+    /// descendant leaf rank unless both bounds equal it.
+    fn coarse_identity(&self, effort: &Effort) -> Result<(bool, bool), Error> {
+        type Range = Option<(i64, i64)>;
+        fn join(a: Range, b: Range) -> Range {
+            match (a, b) {
+                (Some(a), Some(b)) => Some((a.0.min(b.0), a.1.max(b.1))),
+                (a, b) => a.or(b),
+            }
+        }
+        /// The tile's first two distinct ranks of one kind: enough to find one that differs.
+        fn note(ranks: &mut [Option<i64>; 2], rank: i64) {
+            if ranks[0].is_none_or(|r| r == rank) {
+                ranks[0] = Some(rank);
+            } else if ranks[1].is_none() {
+                ranks[1] = Some(rank);
+            }
+        }
+        fn differs(below: Range, ranks: &[Option<i64>; 2]) -> bool {
+            below.is_some_and(|(lo, hi)| ranks.iter().flatten().any(|&r| lo != r || hi != r))
+        }
+        struct Frame {
+            id: i64,
+            below: Range,
+            leaf: Range,
+            triangle: [Option<i64>; 2],
+            rows: [Option<i64>; 2],
+        }
+        let mut found = (false, false);
+        let mut close = |frame: Frame, stack: &mut Vec<Frame>| {
+            found.0 |= differs(frame.below, &frame.triangle);
+            found.1 |= differs(frame.below, &frame.rows);
+            if let Some(parent) = stack.last_mut() {
+                parent.below = join(parent.below, join(frame.below, frame.leaf));
+            }
+        };
+        let mut query = self
+            .connection
+            .prepare("SELECT t.id,t.parent,t.leaf,r.rank,p.triangle_present,p.primitive_rows FROM tiles t LEFT JOIN refs r ON r.tile=t.id LEFT JOIN payloads p ON p.rank=r.rank ORDER BY t.id")
+            .map_err(sql)?;
+        let mut rows = query.query([]).map_err(sql)?;
+        let mut stack = Vec::<Frame>::new();
+        while let Some(row) = rows.next().map_err(sql)? {
+            effort.charge(1)?;
+            let id: i64 = row.get(0).map_err(sql)?;
+            if stack.last().map(|f| f.id) != Some(id) {
+                let parent: Option<i64> = row.get(1).map_err(sql)?;
+                while stack.last().map(|f| f.id) != parent {
+                    let frame = stack.pop().ok_or_else(|| {
+                        Error::InvalidState("HLOD hierarchy is not in preorder".into())
+                    })?;
+                    close(frame, &mut stack);
+                }
+                stack.push(Frame {
+                    id,
+                    below: None,
+                    leaf: None,
+                    triangle: [None; 2],
+                    rows: [None; 2],
+                });
+            }
+            let Some(rank) = row.get::<_, Option<i64>>(3).map_err(sql)? else {
+                continue;
+            };
+            let frame = stack.last_mut().expect("frame pushed above");
+            if row.get::<_, Option<bool>>(2).map_err(sql)? == Some(true) {
+                frame.leaf = join(frame.leaf, Some((rank, rank)));
+            }
+            if row.get::<_, Option<bool>>(4).map_err(sql)? == Some(true) {
+                note(&mut frame.triangle, rank);
+            }
+            if row
+                .get::<_, Option<i64>>(5)
+                .map_err(sql)?
+                .is_some_and(|n| n > 8192)
+            {
+                note(&mut frame.rows, rank);
+            }
+        }
+        while let Some(frame) = stack.pop() {
+            close(frame, &mut stack);
+        }
+        Ok(found)
     }
     /// Append one original vertex row to the ingest sequence.
     fn original(&mut self, row: Original) -> Result<(), Error> {
@@ -1947,7 +2043,9 @@ impl Store {
                 )
                 .map_err(sql)?;
         }
-        Ok(())
+        self.connection
+            .execute_batch("CREATE INDEX IF NOT EXISTS placement_rank ON placements(rank,leaf,id)")
+            .map_err(sql)
     }
     fn surface(
         &self,
@@ -1960,32 +2058,28 @@ impl Store {
         let bytes = read(u64::try_from(rank).map_err(|_| super::refused())?)?;
         replay_surface(&bytes, decode::<16>(frame)?, self.decoded_limit, effort)
     }
-    fn record_leaf(&self, tile: i64, surface: &Surface, effort: &Effort) -> Result<(), Error> {
-        let mut point = self
-            .connection
-            .prepare_cached("INSERT OR IGNORE INTO leaf_points VALUES(?,?)")
-            .map_err(sql)?;
-        let mut edge=self.connection.prepare_cached("INSERT INTO leaf_segments VALUES(?,?,?,?) ON CONFLICT(key,tile) DO UPDATE SET nf=leaf_segments.nf+excluded.nf,nr=leaf_segments.nr+excluded.nr WHERE leaf_segments.nf<=9223372036854775807-excluded.nf AND leaf_segments.nr<=9223372036854775807-excluded.nr").map_err(sql)?;
+    /// One leaf placement's points and segments, bound for the bulk load (`bulk`).
+    fn record_leaf(
+        &self,
+        tile: i64,
+        surface: &Surface,
+        rows: &mut Sorter<'_, 61>,
+        effort: &Effort,
+    ) -> Result<(), Error> {
         for p in &surface.points {
             effort.charge(ROW_UNITS)?;
-            point.execute(params![point_bytes(*p), tile]).map_err(sql)?;
+            rows.push(bulk::point_row(&point_bytes(*p), tile))
+                .map_err(spill_failure)?;
         }
         for (key, e) in &surface.edges {
             effort.charge(ROW_UNITS)?;
-            if edge
-                .execute(params![
-                    edge_bytes(*key),
-                    tile,
-                    integer(e.forward)?,
-                    integer(e.reverse)?
-                ])
-                .map_err(sql)?
-                == 0
-            {
-                return Err(Error::limit(
-                    "interfaceSegments: per-leaf face incidence exceeds disk counter range",
-                ));
-            }
+            rows.push(bulk::segment_row(
+                &edge_bytes(*key),
+                tile,
+                integer(e.forward)?,
+                integer(e.reverse)?,
+            ))
+            .map_err(spill_failure)?;
         }
         Ok(())
     }
@@ -1999,6 +2093,7 @@ impl Store {
             .prepare("SELECT tile,rank,frame FROM placements WHERE leaf=1 ORDER BY id")
             .map_err(sql)?;
         let mut rows = query.query([]).map_err(sql)?;
+        let mut leaves = self.sorter()?;
         while let Some(row) = rows.next().map_err(sql)? {
             effort.charge(1)?;
             let surface = self.surface(
@@ -2008,22 +2103,21 @@ impl Store {
                 read,
             )?;
             let tile: i64 = row.get(0).map_err(sql)?;
-            self.record_leaf(tile, &surface, effort)?;
+            self.record_leaf(tile, &surface, &mut leaves, effort)?;
             // Every leaf face by corner set, so coincident source groups are found
             // across leaves too (they license coincident coarse faces above).
-            let mut face = self
-                .connection
-                .prepare_cached("INSERT INTO leaf_faces VALUES(?,?,1) ON CONFLICT(corners,tile) DO UPDATE SET n=n+1")
-                .map_err(sql)?;
             for f in &surface.faces {
                 effort.charge(ROW_UNITS)?;
                 let mut k = *f;
                 k.sort_unstable();
                 let bytes: Vec<u8> = k.iter().flat_map(|p| point_bytes(*p)).collect();
-                face.execute(params![bytes, tile]).map_err(sql)?;
+                leaves
+                    .push(bulk::face_row(&bytes, tile))
+                    .map_err(spill_failure)?;
             }
         }
-        Ok(())
+        drop(rows);
+        self.load_leaves(leaves)
     }
     /// Leaf faces on every edge some direction of which carries two or more
     /// descendant faces: their third corners and directions, so coarse multiplicity
@@ -2054,14 +2148,9 @@ impl Store {
             )
             .map_err(sql)?;
         let mut rows = query.query([]).map_err(sql)?;
-        let mut multi = self
-            .connection
-            .prepare_cached("SELECT EXISTS(SELECT 1 FROM multi_edges WHERE key=?)")
-            .map_err(sql)?;
-        let mut insert = self
-            .connection
-            .prepare_cached("INSERT INTO edge_faces VALUES(?,?,?,?)")
-            .map_err(sql)?;
+        // Every face side of the replayed leaves, kept where its segment is a multi edge by
+        // the merge join of the bulk load.
+        let mut faces = self.sorter()?;
         while let Some(row) = rows.next().map_err(sql)? {
             effort.charge(1)?;
             let tile: i64 = row.get(0).map_err(sql)?;
@@ -2076,19 +2165,16 @@ impl Store {
                     effort.charge(ROW_UNITS)?;
                     let (x, y, c) = (f[j], f[(j + 1) % 3], f[(j + 2) % 3]);
                     let key = edge_bytes(if x < y { (x, y) } else { (y, x) });
-                    if multi
-                        .query_row([&key], |r| r.get::<_, bool>(0))
-                        .map_err(sql)?
-                    {
-                        insert
-                            .execute(params![key, tile, point_bytes(c), i64::from(x > y)])
-                            .map_err(sql)?;
-                    }
+                    faces
+                        .push(bulk::edge_face(&key, tile, &point_bytes(c), x > y))
+                        .map_err(spill_failure)?;
                 }
             }
         }
-        Ok(())
+        drop(rows);
+        self.load_edge_faces(faces)
     }
+    #[allow(clippy::too_many_arguments)]
     fn require_ancestors(
         &self,
         mut tile: i64,
@@ -2096,6 +2182,7 @@ impl Store {
         kind: i64,
         key: &[u8],
         directions: i64,
+        needs: &mut Sorter<'_, 41>,
         effort: &Effort,
     ) -> Result<(), Error> {
         let owner = tile;
@@ -2110,7 +2197,9 @@ impl Store {
                 break;
             }
             if tile != owner && content {
-                self.connection.execute("INSERT INTO requirements VALUES(?,?,?,?) ON CONFLICT(tile,kind,key) DO UPDATE SET directions=requirements.directions|excluded.directions",params![tile,kind,key,directions]).map_err(sql)?;
+                needs
+                    .push(bulk::need(tile, kind, key, directions))
+                    .map_err(spill_failure)?;
             }
             let Some(parent) = parent else {
                 break;
@@ -2119,12 +2208,14 @@ impl Store {
         }
         Ok(())
     }
+    #[allow(clippy::too_many_arguments)]
     fn shared_point(
         &self,
         key: &[u8],
         first: i64,
         last: i64,
         census: &mut DecodedInterfaceCensus,
+        needs: &mut Sorter<'_, 41>,
         effort: &Effort,
     ) -> Result<(), Error> {
         if first == last {
@@ -2142,13 +2233,22 @@ impl Store {
         let mut rows = query.query([key]).map_err(sql)?;
         while let Some(row) = rows.next().map_err(sql)? {
             effort.charge(1)?;
-            self.require_ancestors(row.get(0).map_err(sql)?, (first, last), 0, key, 0, effort)?;
+            self.require_ancestors(
+                row.get(0).map_err(sql)?,
+                (first, last),
+                0,
+                key,
+                0,
+                needs,
+                effort,
+            )?;
         }
         Ok(())
     }
     fn point_requirements(
         &self,
         census: &mut DecodedInterfaceCensus,
+        needs: &mut Sorter<'_, 41>,
         effort: &Effort,
     ) -> Result<(), Error> {
         let mut query = self
@@ -2168,34 +2268,38 @@ impl Store {
                 }
             }
             if let Some((k, first, last)) = group.take() {
-                self.shared_point(&k, first, last, census, effort)?;
+                self.shared_point(&k, first, last, census, needs, effort)?;
             }
             group = Some((key, tile, tile));
         }
         if let Some((key, first, last)) = group {
-            self.shared_point(&key, first, last, census, effort)?;
+            self.shared_point(&key, first, last, census, needs, effort)?;
         }
         Ok(())
     }
+    #[allow(clippy::too_many_arguments)]
     fn segment_group(
         &self,
         key: &[u8],
-        first: i64,
-        last: i64,
+        (first, last): (i64, i64),
         faces: u64,
         census: &mut DecodedInterfaceCensus,
+        open: &mut OpenEnds<'_>,
+        needs: &mut Sorter<'_, 41>,
         effort: &Effort,
     ) -> Result<(), Error> {
         effort.charge(1)?;
         if faces == 1 {
             add_count(&mut census.source_open_edges, 1)?;
             // Both endpoints must also occur in another leaf. This is an exact
-            // key join, not a chord inference or a distance/near-seam query.
+            // key join, not a chord inference or a distance/near-seam query:
+            // lower endpoints merge in key order, higher ones after a sort.
             read_edge(key)?;
             effort.charge(2 * ROW_UNITS)?;
-            let shared:bool=self.connection.query_row("SELECT EXISTS(SELECT 1 FROM shared_point_keys WHERE key=?1) AND EXISTS(SELECT 1 FROM shared_point_keys WHERE key=?2)",params![&key[..12],&key[12..]],|r|r.get(0)).map_err(sql)?;
-            if shared {
-                add_count(&mut census.source_open_edges_with_shared_endpoints, 1)?;
+            if open.lower.shared(&key[..12])? {
+                open.higher
+                    .push(&bulk::end(&key[12..]))
+                    .map_err(spill_failure)?;
             }
         }
         if first == last {
@@ -2217,21 +2321,34 @@ impl Store {
                 1,
                 key,
                 directions,
+                needs,
                 effort,
             )?;
         }
         Ok(())
     }
+    /// Shared segments' ancestor requirements and the open-segment census. Returns the
+    /// higher endpoints of open segments whose lower endpoint is shared (`count_shared_ends`).
     fn segment_requirements(
         &self,
         census: &mut DecodedInterfaceCensus,
+        needs: &mut Sorter<'_, 41>,
         effort: &Effort,
-    ) -> Result<(), Error> {
+    ) -> Result<Sequence<bulk::End>, Error> {
         let mut query = self
             .connection
             .prepare("SELECT key,tile,nf,nr FROM leaf_segments ORDER BY key,tile")
             .map_err(sql)?;
         let mut rows = query.query([]).map_err(sql)?;
+        let mut shared = self
+            .connection
+            .prepare("SELECT key FROM shared_point_keys ORDER BY key")
+            .map_err(sql)?;
+        let mut open = OpenEnds {
+            lower: bulk::LowerEnds::new(&mut shared)?,
+            higher: SequenceWriter::new(&self._scratch, "hlod-open-ends", self.buffer_bytes)
+                .map_err(spill_failure)?,
+        };
         let mut group: Option<(Vec<u8>, i64, i64, u64)> = None;
         while let Some(row) = rows.next().map_err(sql)? {
             effort.charge(1)?;
@@ -2251,20 +2368,38 @@ impl Store {
                 }
             }
             if let Some((k, first, last, n)) = group.take() {
-                self.segment_group(&k, first, last, n, census, effort)?;
+                self.segment_group(&k, (first, last), n, census, &mut open, needs, effort)?;
             }
             group = Some((key, tile, tile, faces));
         }
         if let Some((key, first, last, n)) = group {
-            self.segment_group(&key, first, last, n, census, effort)?;
+            self.segment_group(&key, (first, last), n, census, &mut open, needs, effort)?;
         }
-        Ok(())
+        open.higher.finish().map_err(spill_failure)
+    }
+    /// Counts the open segments whose higher endpoint is shared too, by a sort of those
+    /// endpoints merged with `shared_point_keys`.
+    fn count_shared_ends(
+        &self,
+        census: &mut DecodedInterfaceCensus,
+        ends: Sequence<bulk::End>,
+    ) -> Result<(), Error> {
+        let mut sorted = self.sorter()?;
+        for e in ends.reader().map_err(spill_failure)? {
+            sorted
+                .push(e.map_err(spill_failure)?)
+                .map_err(spill_failure)?;
+        }
+        drop(ends);
+        let shared = self.shared_ends(sorted)?;
+        add_count(&mut census.source_open_edges_with_shared_endpoints, shared)
     }
     /// Every coarse tile's decoded surface (all its placements) against its D11
     /// border: exact junctions, one witnessed chord per shared arc, displacement.
     fn check_coarse(
         &self,
         census: &mut DecodedInterfaceCensus,
+        images: &mut Sorter<'_, 69>,
         effort: &Effort,
         read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
     ) -> Result<(), Error> {
@@ -2289,7 +2424,7 @@ impl Store {
                         let bytes: Vec<u8> = f.iter().flat_map(|p| point_bytes(*p)).collect();
                         face.execute(params![tile, bytes]).map_err(sql)?;
                     }
-                    let contracted = self.border(tile, &surface, effort)?;
+                    let contracted = self.border(tile, &surface, images, effort)?;
                     self.equal_directions(tile, &surface, &contracted, effort)?;
                     for path in contracted.values() {
                         add_count(&mut census.contracted_border_arcs, 1)?;
@@ -2340,9 +2475,14 @@ mod tests {
             used: Arc::new(AtomicU64::new(0)),
         }
     }
+    /// A store with this build's catalog profile: the forced-spill CI run sorts every bulk
+    /// load in runs of a record or two.
     pub(super) fn store() -> Store {
+        store_with(&CatalogConfig::selected())
+    }
+    pub(super) fn store_with(config: &CatalogConfig) -> Store {
         let scratch = Scratch::create(None, 4096).unwrap();
-        Store::new(Arc::new(scratch), &CatalogConfig::DEFAULT).unwrap()
+        Store::new(Arc::new(scratch), config).unwrap()
     }
     #[test]
     fn continuity_is_hlod_only_and_respects_link_placeholders() {
@@ -2426,6 +2566,56 @@ mod tests {
                 assert!(result.unwrap_err().to_string().contains("D4 coarse"));
             }
         }
+    }
+    #[test]
+    fn d4_reads_each_reference_against_its_own_descendant_leaves() {
+        // Tile 1's references and its leaves' ranks; a sibling leaf of tile 1 with rank 5.
+        for (coarse, leaves, refused) in [
+            (&[0][..], &[0, 0][..], false),
+            (&[0, 1], &[0, 0], true),
+            (&[0], &[0, 7], true),
+            (&[7, 0], &[0, 7], true),
+        ] {
+            let mut s = store();
+            s.tile(0, None, IDENTITY).unwrap();
+            s.tile(1, Some(0), IDENTITY).unwrap();
+            let sibling = 2 + leaves.len() as u64;
+            for id in 2..sibling {
+                s.tile(id, Some(1), IDENTITY).unwrap();
+            }
+            s.tile(sibling, Some(0), IDENTITY).unwrap();
+            for &rank in coarse {
+                s.reference(1, rank).unwrap();
+            }
+            for (i, &rank) in leaves.iter().enumerate() {
+                s.reference(2 + i as u64, rank).unwrap();
+            }
+            s.reference(sibling, 5).unwrap();
+            for rank in [0, 1, 5, 7] {
+                s.payload(rank, true, true).unwrap();
+            }
+            let result = s.finish(budget(), 0, &mut |_| Ok(replay_fixture(&[])));
+            let d4 = result.is_err_and(|e| e.to_string().contains("D4 coarse"));
+            assert_eq!(d4, refused, "{coarse:?} over {leaves:?}");
+        }
+        // Two levels down: tile 2 repeats its leaf's payload, tile 1 does not.
+        let mut s = store();
+        for (id, parent, rank) in [
+            (0, None, None),
+            (1, Some(0), Some(0)),
+            (2, Some(1), Some(7)),
+            (3, Some(2), Some(7)),
+        ] {
+            s.tile(id, parent, IDENTITY).unwrap();
+            if let Some(rank) = rank {
+                s.reference(id, rank).unwrap();
+            }
+        }
+        for rank in [0, 7] {
+            s.payload(rank, true, true).unwrap();
+        }
+        let result = s.finish(budget(), 0, &mut |_| Ok(replay_fixture(&[])));
+        assert!(result.unwrap_err().to_string().contains("D4 coarse"));
     }
     #[test]
     fn empty_add_override_does_not_clear_a_replace_ancestor_barrier() {
@@ -2915,11 +3105,16 @@ mod tests {
         s.materialize().unwrap();
         let face = [[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]];
         let surface = replay_surface(&replay_fixture(&face), IDENTITY, 1 << 20, &effort()).unwrap();
-        s.record_leaf(7, &surface, &effort()).unwrap();
-        s.record_leaf(7, &surface, &effort()).unwrap();
+        let mut rows = s.sorter().unwrap();
+        s.record_leaf(7, &surface, &mut rows, &effort()).unwrap();
+        s.record_leaf(7, &surface, &mut rows, &effort()).unwrap();
+        s.load_leaves(rows).unwrap();
         let mut census = DecodedInterfaceCensus::default();
-        s.point_requirements(&mut census, &effort()).unwrap();
-        s.segment_requirements(&mut census, &effort()).unwrap();
+        let mut needs = s.sorter().unwrap();
+        s.point_requirements(&mut census, &mut needs, &effort())
+            .unwrap();
+        s.segment_requirements(&mut census, &mut needs, &effort())
+            .unwrap();
         assert_eq!(census.source_open_edges, 0);
         assert_eq!(census.shared_segments, 0);
         let incidences: i64 = s
