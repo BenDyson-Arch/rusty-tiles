@@ -123,6 +123,8 @@ pub struct DeclaredTile {
     pub fold_faces: u64,
     /// The widest fold's layer separation against its children, in metres (reported).
     pub fold_separation: f64,
+    /// Border vertices snapped from an A1 relief hand-over (0 without one).
+    pub relief_stuck: u32,
     pub geometric_error: f64,
     pub children_error: f64,
 }
@@ -1457,6 +1459,7 @@ fn build_tile(
             contraction_failed: false,
             attempted_topology: Default::default(),
             construction_dropped: Vec::new(),
+            relief: None,
         }
     };
     let Some(mut built) = outcome.built else {
@@ -1627,6 +1630,7 @@ fn build_tile(
         } else {
             0.
         },
+        relief_stuck: built.relief_stuck,
         interface_vertices: built.interface_vertices,
         interface_segments: built.interface_segments,
         reoriented_faces: built.reoriented,
@@ -1690,6 +1694,7 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
             stage: row.last_resort_stage,
             fold_faces: row.fold_faces,
             fold_separation: row.fold_separation,
+            relief_stuck: row.relief_stuck,
             geometric_error: row.geometric_error,
             children_error: row.children_error,
         });

@@ -68,6 +68,8 @@ pub(crate) struct Built {
     pub staged: bool,
     /// The last-resort stage (1-3) that proposed it, 0 otherwise (`Resort::N1`..`N3`).
     pub last_resort_stage: u8,
+    /// Border vertices N3 snapped from an A1 hand-over (`Contracted::stuck`).
+    pub relief_stuck: u32,
     pub interface_vertices: u32,
     pub interface_segments: u32,
     /// Historical receipt field; proposals are rejected rather than reoriented.
@@ -83,12 +85,89 @@ pub(crate) struct Outcome {
     /// All measured proposals, including rejected candidates and the accepted publication.
     pub attempted_topology: TopologyReceipt,
     pub construction_dropped: Vec<[[f32; 3]; 3]>,
+    /// A border contraction the primary build started but could not finish (A1 border
+    /// relief); the last resort's N3 continues from it (`Contracted`).
+    pub relief: Option<Contracted>,
+}
+
+/// A border contraction handed to the last resort's N3 (A1 border relief): the merged
+/// children with every accepted collapse applied (vertex indexing, keys, positions and ells
+/// of `merge(children)`, unchanged) and the border vertices still to remove, each onto its
+/// chord. N3 snaps only those (`snap_stuck`) and neither re-merges nor re-contracts.
+pub(super) struct Contracted {
+    pub merged: Merged,
+    /// Sorted by vertex.
+    pub stuck: Vec<Stuck>,
+}
+
+/// A relieved border vertex left on its chord: its index in `Contracted::merged`, its key,
+/// the chord's retained endpoints in source-arc order and its parameter along it (t <= 0.5
+/// is nearer `chord[0]`).
+pub(super) struct Stuck {
+    pub vertex: u32,
+    pub key: Key,
+    pub chord: [Key; 2],
+    pub t: f64,
+}
+
+/// N3 on a handed-over contraction: each stuck vertex snaps to its nearer chord endpoint
+/// (no voting: a pure function of the hand-over), degenerate faces go, and the result must
+/// keep every interface item, leave the topology unchanged and pass `guard`: the merged
+/// children's contraction licences under N3's policy (folds admitted, a new face or edge on
+/// shared points only in their least owner). None refuses (the cell is omitted).
+fn snap_stuck(
+    reference: &Merged,
+    seed: &Contracted,
+    interface: &[InterfaceRow],
+    guard: &folds::Source,
+) -> Option<Merged> {
+    let m = &seed.merged;
+    if m.keys != reference.keys {
+        return None;
+    }
+    let ids: HashMap<Key, u32> = m
+        .keys
+        .iter()
+        .enumerate()
+        .map(|(i, k)| (*k, i as u32))
+        .collect();
+    let mut map: Vec<u32> = (0..m.keys.len() as u32).collect();
+    for s in &seed.stuck {
+        if m.keys.get(s.vertex as usize) != Some(&s.key) {
+            return None;
+        }
+        map[s.vertex as usize] = *ids.get(&s.chord[usize::from(s.t > 0.5)])?;
+    }
+    let triangles: Vec<[u32; 3]> = m
+        .triangles
+        .iter()
+        .map(|t| t.map(|v| map[v as usize]))
+        .filter(|t| t[0] != t[1] && t[1] != t[2] && t[0] != t[2])
+        .collect();
+    let segments = interface
+        .iter()
+        .filter(|r| !r.is_vertex())
+        .map(|r| (r.a, r.b))
+        .collect();
+    let (edges, points) = missing_owned(&triangles, &m.keys, segments, interface_points(interface));
+    if !edges.is_empty() || !points.is_empty() || triangles.is_empty() {
+        return None;
+    }
+    topology::changes(reference, &triangles, interface, 0.)?;
+    if guard.violations(&m.positions, &triangles).contains(&true) {
+        return None;
+    }
+    Some(Merged {
+        representative: vec![reference.representative[0]; triangles.len()],
+        triangles,
+        ..m.clone()
+    })
 }
 
 /// Children merged into one vertex space welded by canonical decoded position, in child
 /// (slot) order.
 #[derive(Clone)]
-struct Merged {
+pub(super) struct Merged {
     keys: Vec<Key>,
     ells: Vec<u8>,
     positions: Vec<[f32; 3]>,
@@ -717,19 +796,30 @@ pub(crate) fn build_parent(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
     last_resorts: bool,
 ) -> Result<Outcome, JobError> {
-    let mut run = |r| build(tile, children, caps, contract, mapping, assess, check, r);
-    let first = run(Resort::None)?;
+    let mut run = |r, seed| {
+        build(
+            tile, children, caps, contract, mapping, assess, check, r, seed,
+        )
+    };
+    let mut first = run(Resort::None, None)?;
     if first.built.is_some() || !last_resorts {
         return Ok(first);
     }
-    let mut last = run(Resort::Fix2)?;
+    // A1 hand-over from the primary contraction, kept for N3 (`Contracted`).
+    let relief = first.relief.take();
+    let mut last = run(Resort::Fix2, None)?;
     last.attempted_topology.add(first.attempted_topology);
     for resort in [Resort::Staged, Resort::N1, Resort::N2, Resort::N3] {
         if last.built.is_some() {
             break;
         }
-        let mut next = run(resort)?;
+        let mut next = run(resort, relief.as_ref())?;
         next.attempted_topology.add(last.attempted_topology);
+        if let (Some(b), Some(relief)) = (&mut next.built, &relief) {
+            if resort == Resort::N3 {
+                b.relief_stuck = relief.stuck.len() as u32;
+            }
+        }
         last = next;
     }
     if let Some(b) = &mut last.built {
@@ -783,6 +873,7 @@ fn build(
     assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
     resort: Resort,
+    seed: Option<&Contracted>,
 ) -> Result<Outcome, JobError> {
     let fix2 = resort == Resort::Fix2;
     check()?;
@@ -807,25 +898,51 @@ fn build(
     let n3 = (resort == Resort::N3).then_some(&policy);
     let mut topology = topology::Receipt::default();
     let mut attempted = topology::Receipt::default();
-    {
-        // Coarsening only merges owners: every live parent border is a child border.
-        // Nested canonical endpoints therefore make the union of child interfaces a
-        // complete lookup domain. Interior vertices need no disk-backed source search.
-        let mut previous_interface =
-            Vec::with_capacity(children.iter().map(|c| c.interface.len()).sum());
-        for child in children {
-            previous_interface.extend_from_slice(&child.interface);
+    // Coarsening only merges owners: every live parent border is a child border.
+    // Nested canonical endpoints therefore make the union of child interfaces a
+    // complete lookup domain. Interior vertices need no disk-backed source search.
+    let mut previous_interface =
+        Vec::with_capacity(children.iter().map(|c| c.interface.len()).sum());
+    for child in children {
+        previous_interface.extend_from_slice(&child.interface);
+    }
+    super::interfaces::merge_rows(&mut previous_interface);
+    previous_interface.shrink_to_fit();
+    let child_border = interface_points(&previous_interface);
+    let lookup = |k| {
+        if child_border.contains(&k) {
+            mapping(k)
+        } else {
+            Ok(None)
         }
-        super::interfaces::merge_rows(&mut previous_interface);
-        previous_interface.shrink_to_fit();
-        let child_border = interface_points(&previous_interface);
-        let lookup = |k| {
-            if child_border.contains(&k) {
-                mapping(k)
-            } else {
-                Ok(None)
-            }
+    };
+    if let Some(seed) = seed.filter(|_| resort == Resort::N3) {
+        // A1 hand-over: continue the primary contraction, snapping only its stuck vertices,
+        // licensed like any contraction (`folds::Source::for_contraction`).
+        let mapped = reference
+            .keys
+            .iter()
+            .map(|&k| lookup(k))
+            .collect::<Result<Vec<_>, JobError>>()?;
+        let guard = folds::Source::for_contraction(
+            &reference.positions,
+            &reference.triangles,
+            interface,
+            &previous_interface,
+            &mapped,
+        )
+        .with_policy(policy.clone());
+        let Some(snapped) = snap_stuck(&reference, seed, interface, &guard) else {
+            return Ok(Outcome {
+                built: None,
+                contraction_failed: true,
+                attempted_topology: attempted,
+                construction_dropped: Vec::new(),
+                relief: None,
+            });
         };
+        merged = snapped;
+    } else {
         if !topology::contract(
             &mut merged,
             interface,
@@ -855,6 +972,7 @@ fn build(
                     contraction_failed: true,
                     attempted_topology: attempted,
                     construction_dropped: Vec::new(),
+                    relief: None,
                 });
             }
         }
@@ -904,6 +1022,7 @@ fn build(
                     contraction_failed: false,
                     attempted_topology: attempted,
                     construction_dropped: Vec::new(),
+                    relief: None,
                 });
             }
         }
@@ -916,6 +1035,7 @@ fn build(
             contraction_failed: false,
             attempted_topology: attempted,
             construction_dropped: Vec::new(),
+            relief: None,
         });
     }
     // D11: simplifier stagnation alone is not cap infeasibility. Deduplicate and remove
@@ -957,6 +1077,7 @@ fn build(
                     contraction_failed: false,
                     attempted_topology: attempted,
                     construction_dropped: Vec::new(),
+                    relief: None,
                 });
             }
         }
@@ -1132,6 +1253,7 @@ fn build(
             contraction_failed: false,
             attempted_topology: attempted,
             construction_dropped: Vec::new(),
+            relief: None,
         });
     }
     attempted.add(topology);
@@ -1140,6 +1262,7 @@ fn build(
         contraction_failed: false,
         attempted_topology: attempted,
         construction_dropped,
+        relief: None,
     })
 }
 
@@ -1766,6 +1889,7 @@ fn attempt_mode(
         last_resort: false,
         staged: false,
         last_resort_stage: 0,
+        relief_stuck: 0,
         interface_vertices: interface_vertices as u32,
         interface_segments: interface_segments as u32,
         reoriented: 0,
@@ -1779,6 +1903,75 @@ fn attempt_mode(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A1 → N3 hand-over: border chain a-m-b with m left on chord a-b (t 0.25) and an
+    /// interior apex c. `snap_stuck` moves m onto a, drops the face it degenerates and
+    /// keeps the chord, licensed as any contraction is; a snap that leaves no face on the
+    /// chord, or a stuck entry naming another vertex, is refused.
+    #[test]
+    fn handed_over_stuck_vertices_snap_onto_their_chords() {
+        let p = [[0., 0., 0.], [1., 0.1, 0.], [2., 0., 0.], [1., 1., 0.]];
+        let k: Vec<Key> = p.iter().map(|&q| key(q)).collect();
+        let (a, m, b) = (k[0], k[1], k[2]);
+        let merged = |triangles: Vec<[u32; 3]>| Merged {
+            keys: k.clone(),
+            ells: vec![0; 4],
+            positions: p.to_vec(),
+            representative: vec![
+                SourcePrimitive {
+                    node: 0,
+                    mesh: 0,
+                    primitive: 0,
+                    expanded_ordinal: 0,
+                    material: u32::MAX,
+                };
+                triangles.len()
+            ],
+            triangles,
+        };
+        let interface = [
+            InterfaceRow::new(0, a, a, 0, 1),
+            InterfaceRow::new(0, b, b, 0, 1),
+            InterfaceRow::new(0, a.min(b), a.max(b), 0, 1),
+        ];
+        let previous = [
+            InterfaceRow::new(0, a.min(m), a.max(m), 0, 1),
+            InterfaceRow::new(0, m.min(b), m.max(b), 0, 1),
+        ];
+        let mapped = [None, Some((a, b, 0.25, 0)), None, None];
+        let stuck = || {
+            vec![Stuck {
+                vertex: 1,
+                key: m,
+                chord: [a, b],
+                t: 0.25,
+            }]
+        };
+        let check = |triangles: Vec<[u32; 3]>, stuck: Vec<Stuck>| {
+            let reference = merged(triangles);
+            let guard = folds::Source::for_contraction(
+                &reference.positions,
+                &reference.triangles,
+                &interface,
+                &previous,
+                &mapped,
+            )
+            .with_policy(folds::Policy::last_resort(3, 0, 1, &interface));
+            let seed = Contracted {
+                merged: reference.clone(),
+                stuck,
+            };
+            snap_stuck(&reference, &seed, &interface, &guard).map(|m| m.triangles)
+        };
+        assert_eq!(
+            check(vec![[0, 1, 3], [1, 2, 3]], stuck()),
+            Some(vec![[0, 2, 3]])
+        );
+        assert_eq!(check(vec![[0, 1, 2]], stuck()), None);
+        let mut wrong = stuck();
+        wrong[0].key = b;
+        assert_eq!(check(vec![[0, 1, 3], [1, 2, 3]], wrong), None);
+    }
 
     #[test]
     fn fixed_sheet_shortcut_matches_pinned_meshopt_with_degeneracies() {

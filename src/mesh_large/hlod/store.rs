@@ -228,6 +228,9 @@ pub(crate) struct HlodRow {
     /// Holds folds a last resort admitted, here or below (its parent may keep them).
     #[serde(skip)]
     pub carries_folds: bool,
+    /// Border vertices N3 snapped from an A1 relief hand-over.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub relief_stuck: u32,
     /// The widest fold's layer separation, against the children (A3, reported).
     #[serde(skip_serializing_if = "is_zero")]
     pub fold_separation: f64,
