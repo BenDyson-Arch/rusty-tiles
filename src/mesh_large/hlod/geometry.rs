@@ -62,6 +62,9 @@ pub(crate) struct Built {
     pub retries: u32,
     /// Published by the last-resort build (`build_parent`).
     pub last_resort: bool,
+    /// Proposed by the staged build. Only an accepted one is audited: its rejected
+    /// proposals revisit the earlier builds' strategies (`audit::topology_attempt`).
+    pub staged: bool,
     pub interface_vertices: u32,
     pub interface_segments: u32,
     /// Historical receipt field; proposals are rejected rather than reoriented.
@@ -709,16 +712,6 @@ fn build(
             }
         }
     }
-    // The staged reduction needs no remesh rounds or drops (and is not repeated there).
-    if resort == Resort::Staged {
-        attempted.add(topology);
-        return Ok(Outcome {
-            built: None,
-            contraction_failed: false,
-            attempted_topology: attempted,
-            construction_dropped: Vec::new(),
-        });
-    }
     // D11: simplifier stagnation alone is not cap infeasibility. Deduplicate and remove
     // eligible interior components, then remesh with increasingly coarse interior cells.
     let construction_dropped = topology::cleanup(&mut merged, interface, drops, &mut topology);
@@ -1112,6 +1105,7 @@ fn assessed_attempt(
             Err(e) => return Err(e),
         };
         b.retries += round;
+        b.staged = resort == Resort::Staged;
         let accepted = assess(&mut b)?;
         if !accepted {
             b.change.receipt.rejected_hole_closures += b.change.receipt.closed_holes;
@@ -1551,6 +1545,7 @@ fn attempt_mode(
         protected_faces: protected.iter().filter(|p| **p).count() as u32,
         retries,
         last_resort: false,
+        staged: false,
         interface_vertices: interface_vertices as u32,
         interface_segments: interface_segments as u32,
         reoriented: 0,

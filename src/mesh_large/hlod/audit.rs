@@ -213,6 +213,8 @@ impl<'a> Writer<'a> {
     }
     /// Stream a measured proposal while its bounded geometry is still resident. Attempt
     /// ordinals are local to a candidate key; worker scheduling may reorder these lines.
+    /// The staged build streams only its accepted proposal (`Built::staged`); the row's
+    /// attempt count still includes its rejected ones.
     pub(super) fn topology_attempt(
         &self,
         built: &Built,
@@ -379,6 +381,7 @@ mod tests {
             protected_faces: 0,
             retries: 0,
             last_resort: false,
+            staged: false,
             interface_vertices: 0,
             interface_segments: 0,
             reoriented: 0,
