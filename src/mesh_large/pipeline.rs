@@ -190,8 +190,12 @@ pub struct TilerReport {
     pub density_reduced_leaves: u64,
     /// Lossy pages a stronger UASTC step delivered after a gate miss.
     pub escalated_pages: producer::EscalatedPages,
-    /// Pages delivered as exact level-0 PNG after every lossy step missed.
+    /// Level-0-sampled pages delivered as exact PNG after every lossy step missed.
     pub lossless_fallback_pages: u64,
+    /// Mip-sampled pages delivered as exact level-0 PNG, whose coarser levels the viewer
+    /// generates outside the decoded guarantee; each is listed, uncapped.
+    pub viewer_mip_fallback_pages: u64,
+    pub viewer_mip_fallbacks: Vec<producer::ViewerMipFallback>,
     /// Escalated pages by what the profile step missed: `gate` or `codec_verify`.
     pub escalation_reasons: producer::EscalationReasons,
     /// The first escalated pages in leaf order, naming leaf, slot, sources,
@@ -243,6 +247,8 @@ impl TilerReport {
             density_reduced_leaves: leaf.density_reduced_leaves,
             escalated_pages: leaf.escalated_pages,
             lossless_fallback_pages: leaf.lossless_fallback_pages,
+            viewer_mip_fallback_pages: leaf.viewer_mip_fallback_pages,
+            viewer_mip_fallbacks: leaf.viewer_mip_fallbacks.clone(),
             escalation_reasons: leaf.escalation_reasons,
             escalation_diagnostics: leaf.escalation_diagnostics.clone(),
             escalation_diagnostics_omitted: leaf.escalation_diagnostics_omitted,
