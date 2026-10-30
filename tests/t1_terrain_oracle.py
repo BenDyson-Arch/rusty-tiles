@@ -237,7 +237,7 @@ def implicit_tree(root, directory, schema):
         offset = (4 ** level - 1) // 3
         for index in range(4 ** level):
             bit = offset + index
-            assert content[bit] == tiles[bit], 'every available terrain tile has content'
+            assert content[bit] <= tiles[bit], 'content of an unavailable tile'
             if not tiles[bit]:
                 continue
             if level:
@@ -245,7 +245,7 @@ def implicit_tree(root, directory, schema):
             x, y = morton(index, level)
             nodes[(level, x, y)] = dict(box=list(struct.unpack_from('<12d', boxes, rank * 96)),
                                         error=struct.unpack_from('<d', errors, rank * 8)[0],
-                                        uri=template.format(level=level, x=x, y=y), children=[],
+                                        uri=content[bit] and template.format(level=level, x=x, y=y), children=[],
                                         row=dict(subtree=name, rank=rank))
             rank += 1
     for (level, x, y), node in sorted(nodes.items()):
@@ -262,8 +262,8 @@ def expand(tile, directory, schema, documents):
     if 'implicitTiling' in tile:
         assert schema, 'implicit root without the metadata schema'
         return implicit_tree(tile, directory, schema)
-    uri = tile['content']['uri']
-    if uri.endswith('.json'):
+    uri = tile.get('content', {}).get('uri')
+    if uri and uri.endswith('.json'):
         assert not tile.get('children') and uri not in documents, 'link tile has only its document'
         documents.add(uri)
         document = json.loads((directory/uri).read_text())
@@ -369,22 +369,46 @@ def check_directory(directory, samples=4):
     report = json.loads((directory/'conversion.json').read_text())
     frame = root['transform']
     width, height = report['width'], report['height']
-    patches = {id(node): Patch(directory, node, report, frame) for node in tiles}
+    # Only tiles with content draw; a tile without content routes to tiles below.
+    patches = {id(node): Patch(directory, node, report, frame) for node in tiles if node['uri']}
+    drawn = [node for node in tiles if node['uri']]
+    def nodes(node):
+        patch = patches.get(id(node))
+        return list(patch.node.values()) if patch else next(nodes(c) for c in node['children'])
     # Footprints and lattices are quadrants of the parent's, whatever NoData removed.
+    foot = {}
     def place(node, f):
-        patch, stride = patches[id(node)], 2 ** (report['levels'] - 1 - node['depth'])
-        patch.footprint, half = f, report['cellsPerLeaf'] * stride // 2
-        patch.xs, patch.ys = (sorted(set(range(f[a], f[a + 2], stride)) | {f[a + 2]}) for a in (0, 1))
+        foot[id(node)], stride = f, 2 ** (report['levels'] - 1 - node['depth'])
+        half = report['cellsPerLeaf'] * stride // 2
+        if id(node) in patches:
+            patch = patches[id(node)]
+            patch.footprint = f
+            patch.xs, patch.ys = (sorted(set(range(f[a], f[a + 2], stride)) | {f[a + 2]}) for a in (0, 1))
         for child in node['children']:
-            nodes = list(patches[id(child)].node.values())
-            x, y = (f[a] + half * (sum(n[a] for n in nodes) / len(nodes) > f[a] + half) for a in (0, 1))
+            inner = nodes(child)
+            x, y = (f[a] + half * (sum(n[a] for n in inner) / len(inner) > f[a] + half) for a in (0, 1))
             place(child, (x, y, min(x + half, width), min(y + half, height)))
     place(tiles[0], (0, 0, width, height))
+    # GE: a tile that draws answers to its nearest ancestor that draws; one that
+    # does not refines while visible: at least 16 x the diagonal of the surfaces below.
+    def below(node):
+        own = patches[id(node)].local if id(node) in patches else []
+        return own + [p for c in node['children'] for p in below(c)]
+    for node in tiles:
+        ancestor = node['parent']
+        while ancestor and id(ancestor) not in patches:
+            ancestor = ancestor['parent']
+        if id(node) in patches:
+            assert not ancestor or ancestor['error'] >= node['error'], 'geometricErrorOrder'
+        else:
+            points = below(node)
+            extent = math.dist(*([f(p[i] for p in points) for i in range(3)] for f in (min, max)))
+            assert node['error'] >= 16 * extent * (1 - 1e-12), 'content-less routing floor'
     leaves = [node for node in tiles if not node['children']]
     depth = leaves[0]['depth']
     assert all(leaf['depth'] == depth and leaf['error'] == 0 for leaf in leaves), 'uniform full-detail leaves'
-    inventory = {node['uri'] for node in tiles}
-    assert len(inventory) == len(tiles), 'one payload per tile'
+    inventory = {node['uri'] for node in drawn}
+    assert len(inventory) == len(drawn), 'one payload per tile'
     # Structure: one stored position per lattice node in each level (a level's
     # tiles share one grid; coarse levels round the same nodes more coarsely),
     # upward triangles, children partition their parent's footprint, and boxes
@@ -393,6 +417,18 @@ def check_directory(directory, samples=4):
     stored = {}
     west, south = report['bounds'][:2]
     for node in tiles:
+        x0, y0, x1, y1 = foot[id(node)]
+        if node['children']:
+            area = sum((c[2] - c[0]) * (c[3] - c[1]) for c in (foot[id(child)] for child in node['children']))
+            assert area <= (x1 - x0) * (y1 - y0), 'children partition the parent footprint'
+            assert all(x0 <= c[0] and c[2] <= x1 and y0 <= c[1] and c[3] <= y1
+                       for c in (foot[id(child)] for child in node['children'])), 'child footprint outside parent'
+            for child in node['children']:
+                for axis, half in [(0, 3), (1, 7), (2, 11)]:
+                    assert node['box'][axis] - node['box'][half] <= child['box'][axis] - child['box'][half], 'child box below parent minimum'
+                    assert node['box'][axis] + node['box'][half] >= child['box'][axis] + child['box'][half], 'child box above parent maximum'
+        if id(node) not in patches:
+            continue
         patch = patches[id(node)]
         assert patch.compressed, 'uncompressed terrain view'
         assert patch.scale is not None or not node['children'], 'coarse tile without quantized positions'
@@ -406,17 +442,6 @@ def check_directory(directory, samples=4):
             lat = math.radians(south + sum(n[1] for n in triangle) / 3 * report['sourcePixelDegrees'][1])
             up = (math.cos(lat) * math.cos(lon), math.cos(lat) * math.sin(lon), math.sin(lat))
             assert sum(n * u for n, u in zip(normal, up)) > 0, 'reversed or collapsed surface triangle'
-        x0, y0, x1, y1 = patch.footprint
-        if node['children']:
-            assert all(node['error'] >= child['error'] for child in node['children']), 'geometricErrorOrder'
-            area = sum((c[2] - c[0]) * (c[3] - c[1]) for c in (patches[id(child)].footprint for child in node['children']))
-            assert area <= (x1 - x0) * (y1 - y0), 'children partition the parent footprint'
-            assert all(x0 <= c[0] and c[2] <= x1 and y0 <= c[1] and c[3] <= y1
-                       for c in (patches[id(child)].footprint for child in node['children'])), 'child footprint outside parent'
-            for child in node['children']:
-                for axis, half in [(0, 3), (1, 7), (2, 11)]:
-                    assert node['box'][axis] - node['box'][half] <= child['box'][axis] - child['box'][half], 'child box below parent minimum'
-                    assert node['box'][axis] + node['box'][half] >= child['box'][axis] + child['box'][half], 'child box above parent maximum'
         contains_box(node['box'], patch.local + [p[0] for p in patch.skirt_points])
         # A count and outward winding alone permit a duplicated face plus a
         # hole. Census the exact oriented two-triangle stencil of every cell,
@@ -431,7 +456,7 @@ def check_directory(directory, samples=4):
         expected = +expected
         assert Counter(rotate(t) for t in patch.surface_triangles) == expected, 'missing/duplicated/reversed terrain cells'
     # Certified error: dense parametric distance from each tile to the leaf mesh.
-    for node in tiles:
+    for node in drawn:
         if not node['children']:
             continue
         patch, measured = patches[id(node)], 0.
@@ -450,23 +475,23 @@ def check_directory(directory, samples=4):
         assert node['error'] >= measured - 1e-9, f'understated geometric error {node["error"]} < {measured}'
     # Skirts: on interior edges only, outward, and their decoded bottoms at least
     # max(e(t) + e(beside), 1) below the decoded surface, e(beside) being the
-    # largest error of a non-ancestor across the edge (only geodetic arithmetic
-    # is tolerated). Only segments with a triangle in t and its same-level
-    # neighbour are skirted.
+    # largest error of a drawing non-ancestor across the edge (only geodetic
+    # arithmetic is tolerated). A segment is skirted exactly where t and some
+    # tile across have a triangle on it.
     root_error = tiles[0]['error']
     tolerance = 1e-6
-    def across(node, axis, value, low, high, same_level=False):
+    def across(node, axis, value, low, high):
         lineage, n = set(), node
         while n: lineage.add(id(n)); n = n['parent']
         a = 0 if axis == 'x' else 1
-        far = a + 2 if value == patches[id(node)].footprint[a] else a
-        for m in tiles:
-            f = patches[id(m)].footprint
-            if (id(m) not in lineage and f[far] == value and f[1 - a] < high and low < f[3 - a]
-                    and (not same_level or m['depth'] == node['depth'])):
+        far = a + 2 if value == foot[id(node)][a] else a
+        for m in drawn:
+            f = foot[id(m)]
+            if id(m) not in lineage and f[far] == value and f[1 - a] < high and low < f[3 - a]:
                 yield m
     edges = lambda p: {frozenset(pair) for t in p.surface_triangles for pair in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0]))}
-    for node in tiles:
+    curtains = {}
+    for node in drawn:
         patch = patches[id(node)]
         x0, y0, x1, y1 = patch.footprint
         lines = [('x', x0, x0 > 0), ('x', x1, x1 < width), ('y', y0, y0 > 0), ('y', y1, y1 < height)]
@@ -495,16 +520,45 @@ def check_directory(directory, samples=4):
                 covered.add((edge[0], tuple(sorted(nodes))))
             elif len(tops) == 1:
                 covered.add((edge[0], tuple(sorted(nodes)), 'lower'))
+            bottoms = curtains.setdefault(id(node), {}).setdefault(frozenset(nodes), {})
+            for local, n, _ in triangle:
+                bottoms[n] = min(bottoms.get(n, local[2]), local[2])
         mine = edges(patch)
         for axis, value in interior:
-            along = patch.ys if axis == 'x' else patch.xs
-            theirs = set().union(*(edges(patches[id(m)]) for m in across(node, axis, value, *span[axis], True)))
+            along, fixed = (patch.ys, 0) if axis == 'x' else (patch.xs, 1)
+            theirs = [sorted(n[1 - fixed] for n in e) for m in across(node, axis, value, *span[axis])
+                      for e in edges(patches[id(m)]) if all(n[fixed] == value for n in e)]
             for a, b in zip(along, along[1:]):
                 segment = tuple(sorted([(value, a), (value, b)] if axis == 'x' else [(a, value), (b, value)]))
-                if frozenset(segment) in mine and frozenset(segment) in theirs:
+                if frozenset(segment) in mine and any(max(a, c) < min(b, d) for c, d in theirs):
                     assert ((axis, value), segment) in covered and ((axis, value), segment, 'lower') in covered, 'missing skirt'
                 else:
                     assert ((axis, value), segment) not in covered, 'skirt along NoData'
+    # Seams: wherever two tiles a cut can draw side by side both have surface,
+    # the higher one's own curtain reaches the lower surface.
+    for a in drawn:
+        for b in drawn:
+            fa, fb = foot[id(a)], foot[id(b)]
+            for axis in (0, 1):
+                low, high = max(fa[1 - axis], fb[1 - axis]), min(fa[3 - axis], fb[3 - axis])
+                if fa[axis + 2] != fb[axis] or low >= high:
+                    continue
+                line = fb[axis]
+                for k in range((high - low) * samples + 1):
+                    s = low + k / samples
+                    x, y = (line, s) if axis == 0 else (s, line)
+                    p, q = patches[id(a)].at(x, y), patches[id(b)].at(x, y)
+                    if not (p and q) or abs(p[2] - q[2]) < 1e-6:
+                        continue
+                    upper, lower = (a, q) if p[2] > q[2] else (b, p)
+                    along = patches[id(upper)].ys if axis == 0 else patches[id(upper)].xs
+                    reach = []
+                    for u, v in zip(along, along[1:]):
+                        ends = ((line, u), (line, v)) if axis == 0 else ((u, line), (v, line))
+                        c = curtains.get(id(upper), {}).get(frozenset(ends))
+                        if c and u <= s <= v:
+                            reach.append(c[ends[0]] + (s - u) / (v - u) * (c[ends[1]] - c[ends[0]]))
+                    assert any(z <= lower[2] + 1e-9 for z in reach), f'uncovered seam at {(x, y)}'
     # Receipt.
     actual = {p.relative_to(directory).as_posix() for p in directory.rglob('*.glb')}
     assert inventory == actual, 'manifest GLB inventory'

@@ -1471,6 +1471,8 @@ enum ValidationTask {
 }
 struct NodeTask {
     node: Value,
+    /// A document's root: it stands for the tile that links the document.
+    root: bool,
     /// The document's member name, shared by its pending tiles (VS-B-7).
     base: Rc<str>,
     parent: Option<Volume>,
@@ -1492,6 +1494,8 @@ struct ImplicitParent {
     tile: usize,
     bounds: Volume,
     error: f64,
+    /// The error of R's nearest ancestor that draws, or R's own when R does.
+    bound: f64,
     depth: usize,
     #[cfg(test)]
     refine: Option<&'static str>,
@@ -1884,6 +1888,7 @@ impl Check<'_> {
                     pending.push(ValidationTask::ExitTileset { name, charge });
                     pending.push(ValidationTask::Node(NodeTask {
                         node: root,
+                        root: true,
                         base,
                         parent,
                         parent_error: parent_error.map_or(error, |parent| parent.min(error)),
@@ -2447,6 +2452,7 @@ impl Check<'_> {
     fn node(&mut self, task: NodeTask, pending: &mut Vec<ValidationTask>) -> Result<(), Error> {
         let NodeTask {
             mut node,
+            root,
             base,
             parent,
             parent_error,
@@ -2514,11 +2520,19 @@ impl Check<'_> {
             }
         }
         let error = number(&node["geometricError"], "tile.geometricError")?;
-        if error > parent_error + 1e-8 * (1. + parent_error) {
+        // A tile without content draws nothing, so it may route with a larger
+        // error than its parent; tiles that draw answer to the nearest ancestor
+        // that draws. A document root is checked as the tile that links it; an
+        // implicit root's own content is decided by its walk.
+        let draws = root
+            || implicit.is_none()
+                && (node.get("content").is_some() || node.get("contents").is_some());
+        if draws && error > parent_error + 1e-8 * (1. + parent_error) {
             return Err(invalid(format!(
                 "geometricError increases at depth {depth}"
             )));
         }
+        let bound = if draws { error } else { parent_error };
         if let Some(recorder) = self.recording.last_mut() {
             // The document's root is its first registered tile (EM-5.2, EM-5.3).
             if recorder.root.is_none() && self.c2.path[tile].owner == Some((recorder.serial, 0)) {
@@ -2551,6 +2565,7 @@ impl Check<'_> {
                     tile,
                     bounds,
                     error,
+                    bound,
                     depth,
                     #[cfg(test)]
                     refine,
@@ -2603,7 +2618,7 @@ impl Check<'_> {
                 descendants.push(ValidationTask::Tileset {
                     name,
                     parent: Some(bounds.clone()),
-                    parent_error: Some(error),
+                    parent_error: Some(bound),
                     depth: depth + 1,
                     link: Link {
                         parent: Some(tile),
@@ -2674,9 +2689,10 @@ impl Check<'_> {
             for child in children {
                 descendants.push(ValidationTask::Node(NodeTask {
                     node: child,
+                    root: false,
                     base: base.clone(),
                     parent: Some(bounds.clone()),
-                    parent_error: error,
+                    parent_error: bound,
                     depth: depth + 1,
                     link: Link {
                         parent: Some(tile),
@@ -2781,8 +2797,10 @@ impl Check<'_> {
                 }
             };
             let (EffectiveError::Row(error) | EffectiveError::Derived(error)) = tile.error;
+            // Path entries keep the bound for children: the error of the nearest
+            // tile that draws, as for explicit tiles.
             let (parent, parent_error, parent_tile) = match level {
-                0 => (&r.bounds, r.error, r.tile),
+                0 => (&r.bounds, r.bound, r.tile),
                 _ => path
                     .get(level - 1)
                     .map(|(volume, error, index)| (volume, *error, *index))
@@ -2795,11 +2813,20 @@ impl Check<'_> {
                     "child bounds escape parent at depth {depth}"
                 )));
             }
-            if error > parent_error + 1e-8 * (1. + parent_error) {
+            let draws = !tile.contents.is_empty();
+            // I_0 is R: when it draws, R's explicit error answers to R's bound too.
+            let own = if level == 0 {
+                error.max(r.error)
+            } else {
+                error
+            };
+            let exceeds = |e: f64, bound: f64| e > bound + 1e-8 * (1. + bound);
+            if level == 0 && exceeds(error, r.error) || draws && exceeds(own, parent_error) {
                 return Err(invalid(format!(
                     "geometricError increases at depth {depth}"
                 )));
             }
+            let bound = if draws { error } else { parent_error };
             // C2 facts: rows exactly (FLOAT32 already widened by I1), V_R for
             // a rowless I_0, and no volume for a derived cell (I5).
             let index = self.path_tile(TileFact {
@@ -2825,7 +2852,7 @@ impl Check<'_> {
                 volume_diagonal(&volume),
             )?;
             path.truncate(level);
-            try_push(&mut path, (volume, error, index))?;
+            try_push(&mut path, (volume, bound, index))?;
             // R and I_0 are one tile for counting.
             if level > 0 {
                 self.tiles += 1;
@@ -3932,6 +3959,22 @@ mod tests {
             ])
             .unwrap_err();
             assert!(error.to_string().contains(message), "{error}");
+        }
+    }
+    #[test]
+    fn a_tile_without_content_may_exceed_its_parent_but_not_raise_the_bound() {
+        for (error, ok) in [(0.5, true), (2., false)] {
+            let mut link = tile(1., error);
+            link["content"] = json!({"uri":"external.json"});
+            let mut empty = tile(1., 50.);
+            empty["children"] = json!([link]);
+            let mut root = tile(1., 1.);
+            root["children"] = json!([empty]);
+            let result = check_documents(vec![
+                ("tileset.json".into(), tileset(root, 100.)),
+                ("external.json".into(), tileset(tile(0.5, 0.), 0.5)),
+            ]);
+            assert_eq!(result.is_ok(), ok, "{result:?}");
         }
     }
     #[test]

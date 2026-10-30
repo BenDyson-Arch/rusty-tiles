@@ -399,8 +399,8 @@ Runs whose result files left the tree to save space link to [`bench/MOVED_EVIDEN
 | [`public_runtime_audit.json`](bench/public_runtime_audit.json) | Full audits of Autzen points and Natural Earth roads, with source hashes and attribution | `bench/public_data.py`, `bench/audit_point_cloud.py`, `bench/audit_vector.py` |
 | [`vector_benchmark_results.json`](bench/MOVED_EVIDENCE.md) | Native vector against the Python baseline at `fada1d1`, including `--aggregate-points` | `bench/benchmark_vector.py` |
 | [`raster_benchmark_results.json`](bench/MOVED_EVIDENCE.md) | Historical: native raster against the Python baseline at `9a95862`, with every PNG byte compared. R2 retired that converter and its `conversion.json`, so this is not reproducible on current builds | `bench/benchmark_raster.py` at `9a95862` |
-| [`terrain_benchmark_results.json`](bench/MOVED_EVIDENCE.md) | First native terrain at `62091ea` against Python | `bench/benchmark_terrain.py` |
-| [`terrain_performance_results.json`](bench/MOVED_EVIDENCE.md) | Parallel terrain encoding, with byte-identical payloads | `bench/benchmark_terrain.py --mode performance` |
+| [`terrain_benchmark_results.json`](bench/MOVED_EVIDENCE.md) | Historical: first native terrain at `62091ea` against Python | `bench/benchmark_terrain.py` at `871a503` |
+| [`terrain_performance_results.json`](bench/MOVED_EVIDENCE.md) | Historical: parallel quantized-mesh terrain encoding | `bench/benchmark_terrain.py --mode performance` at `871a503` |
 | [`runtime_benchmark_results.json`](bench/runtime_benchmark_results.json) | Native doctor and preview against the Python helpers at `bf3346c` | `bench/benchmark_runtime.py BINARY RESULTS.json` |
 
 Benchmarks build the old and new binaries in separate worktrees and target directories against the same GDAL stack. They use warm caches, one warmup and rotated method order. Peak RSS is the largest process from Linux `wait4`, not a process-tree sum. Run each script with `--help` for its arguments.

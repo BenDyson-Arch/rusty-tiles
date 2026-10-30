@@ -90,19 +90,24 @@ surface at the same lattice parameters, with outward rounding: the exact maximum
 to the next finer level, including where a clipped edge cell's diagonal crosses
 finer triangles, plus the largest child error. Distances are measured where
 both levels have a surface; a cell whose coverage may differ adds its
-horizontal diagonal, and a tile without triangles takes 16 times the diagonal
-of the surfaces below it, so Cesium refines through it while it is visible. Errors never increase toward the leaves. Over smooth terrain the value is close to the vertical error plus
+horizontal diagonal. On its interior edges a tile is also measured against
+every valid leaf node, so a seam's gap stays within its two errors where a
+coarse level bridges or loses a NoData hole. A tile without triangles takes
+16 times the diagonal of the surfaces below it, so Cesium refines through it
+while it is visible; it is exempt from error ordering, and the tiles that draw
+answer only to their nearest drawing ancestor. Errors of drawing tiles never
+increase toward the leaves. Over smooth terrain the value is close to the vertical error plus
 the grid errors of the levels below, a few 65,535ths of the tile size. The
 tileset error leaves an interval in which the root renders. These errors do
 not bound the distance to the continuous DEM.
 
-Neighbours at different levels meet with T-junctions. Each tile edge shared
-with another tile of its level carries a **skirt**: a vertical curtain from
-each edge vertex down to its height minus `max(e + e_beside, 1 m)`, where `e`
-is the tile's error and `e_beside` the error of the coarsest tile that can be
-drawn across that edge: the neighbour-side child of their lowest common
-ancestor. Only segments with a triangle on both sides are skirted, so NoData
-edges stay open. The skirt shares the surface's
+Neighbours at different levels meet with T-junctions. Interior tile edges
+carry a **skirt**: a vertical curtain from each edge vertex down to its
+height minus `max(e + e_beside, 1 m)`, where `e` is the tile's error and
+`e_beside` the largest error of a drawing tile under the neighbour-side child
+of their lowest common ancestor, the tiles that can be drawn across that edge.
+A segment is skirted where the tile and any of those levels have a triangle
+on it, so NoData edges stay open. The skirt shares the surface's
 primitive and material, so each tile is one draw call: its triangles follow
 the surface triangles, its tops are the surface vertices, and its bottoms
 follow the surface vertices. Each skirt is deepened by twice its level's

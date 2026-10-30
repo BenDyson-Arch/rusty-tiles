@@ -1782,7 +1782,7 @@ mod tests {
     #[test]
     fn summary_separates_counts_from_settings() {
         let root = tempfile::tempdir().unwrap();
-        let report = json!({"tiles":5,"heightOffset":2.5,"fillHeight":0,"cellsPerLeaf":64,"positionErrorMetres":0.01,
+        let report = json!({"tiles":5,"heightOffset":2.5,"cellsPerLeaf":64,"positionErrorMetres":0.01,
                "lodLevels":3,"lodToleranceMetres":0.1,"skippedFeatures":2,"features":9,"sourceCrs":"x"});
         let summary = output_summary(root.path(), Some(&report), false);
         assert_eq!(
@@ -1795,7 +1795,7 @@ mod tests {
         );
         assert_eq!(
             summary["settings"],
-            json!({"heightOffset":2.5,"fillHeight":0,"cellsPerLeaf":64,"positionErrorMetres":0.01,
+            json!({"heightOffset":2.5,"cellsPerLeaf":64,"positionErrorMetres":0.01,
                 "lodLevels":3,"lodToleranceMetres":0.1})
         );
         assert_eq!(summary["skippedFeatures"], 2);

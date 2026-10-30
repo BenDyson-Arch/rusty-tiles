@@ -25,6 +25,8 @@ pub(super) struct Grid {
 pub(super) struct Skirt {
     pub bottoms: Vec<[f64; 3]>,
     pub indices: Vec<u32>,
+    /// Which of the west, east, south and north edges carry a curtain.
+    pub edges: [bool; 4],
 }
 /// Largest quantized coordinate: uint16 positions.
 pub(super) const QUANTIZED_STEPS: f64 = 65535.;

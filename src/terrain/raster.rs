@@ -40,6 +40,13 @@ pub(super) struct PreparedRaster {
     validity: Vec<bool>,
 }
 impl PreparedRaster {
+    /// Whether lattice node `(x, y)`, from the south-west corner, samples only
+    /// valid pixels: those [`Self::sample`] weighs.
+    pub fn valid_node(&self, x: usize, y: usize) -> bool {
+        let near = |v: usize, n: usize| v.saturating_sub(1)..=v.min(n - 1);
+        let (w, h) = (self.width, self.height);
+        near(x, w).all(|c| near(h - y, h).all(|r| self.validity[r * w + c]))
+    }
     /// Closed pixel-area footprint; extend edge centres only inside that footprint.
     /// Invalid neighbours with zero interpolation weight do not affect a sample.
     pub fn sample(&self, lon: f64, lat: f64) -> Option<f64> {

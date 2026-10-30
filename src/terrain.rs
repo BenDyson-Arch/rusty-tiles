@@ -246,10 +246,13 @@ struct Patch {
     /// Whether it has surface triangles; one without has descendants that do.
     content: bool,
     children: Vec<usize>,
-    /// Certified bound on the distance from this surface to the leaf surface.
+    /// Certified bound on the distance from this surface to the leaf surface;
+    /// for a tile without triangles, the routing floor.
     error: f64,
-    /// Below the west, east, south and north edges; zero without a same-level
-    /// neighbour.
+    /// The largest error of this tile and its descendants that draw.
+    drawn: f64,
+    /// Below the west, east, south and north edges; zero where no segment is
+    /// skirted.
     skirt_depth: [f64; 4],
     /// Decoded surface vertices, then surface and skirt vertices.
     surface: [[f64; 3]; 2],
@@ -568,22 +571,32 @@ fn deviation(patch: &Patch, sheet: &Sheet, children: &[(usize, Sheet)], cells: u
             };
             let (rx, ry) = (within(&fine.xs, xa, xb), within(&fine.ys, ya, yb));
             let (fx, fy) = (&fine.xs[rx.clone()], &fine.ys[ry.clone()]);
-            let emitted: Vec<bool> = (ry.start..ry.end - 1)
-                .flat_map(|j| (rx.start..rx.end - 1).map(move |i| (i, j)))
-                .flat_map(|(i, j)| [false, true].map(|upper| fine.emitted(i, j, upper)))
-                .collect();
-            let full = coarse == [true; 2] && !emitted.contains(&false);
-            if !full && (coarse.contains(&true) || emitted.contains(&true)) {
+            let (mut some, mut all) = (false, true);
+            for j in ry.start..ry.end - 1 {
+                for i in rx.start..rx.end - 1 {
+                    for upper in [false, true] {
+                        let e = fine.emitted(i, j, upper);
+                        (some, all) = (some || e, all && e);
+                    }
+                }
+            }
+            let full = coarse == [true; 2] && all;
+            if !full && (coarse.contains(&true) || some) {
                 worst = worst.max(sheet.diagonal(c, r));
             }
-            let mut measure = |x: f64, y: f64| {
-                if let (Some(a), Some(b)) = (fine.at(x, y), sheet.cell(c, r, x, y)) {
-                    worst = worst.max(distance(a, b));
-                }
+            let measure = |x: f64, y: f64| match (fine.at(x, y), sheet.cell(c, r, x, y)) {
+                (Some(a), Some(b)) => distance(a, b),
+                _ => 0.,
             };
-            for &y in fy {
-                for &x in fx {
-                    measure(x as f64, y as f64);
+            for (j, &y) in fy.iter().enumerate() {
+                for (i, &x) in fx.iter().enumerate() {
+                    if full {
+                        // Child lattice nodes are its stored vertices: no search needed.
+                        let here = sheet.cell(c, r, x as f64, y as f64).expect("full cell");
+                        worst = worst.max(distance(fine.vertex(rx.start + i, ry.start + j), here));
+                    } else {
+                        worst = worst.max(measure(x as f64, y as f64));
+                    }
                 }
             }
             points.clear();
@@ -596,7 +609,7 @@ fn deviation(patch: &Patch, sheet: &Sheet, children: &[(usize, Sheet)], cells: u
                 points.extend(fy[1..fy.len() - 1].iter().map(|&y| on((y - ya) as f64 / h)));
             }
             for &(x, y) in &points {
-                measure(x, y);
+                worst = worst.max(measure(x, y));
             }
         }
     }
@@ -659,18 +672,118 @@ impl<'a> Pyramid<'a> {
             content: false,
             children: vec![],
             error: 0.,
+            drawn: 0.,
             skirt_depth: [0.; 4],
             surface: [[0.; 3]; 2],
             bounds: [[0.; 3]; 2],
             hierarchy: [[0.; 3]; 2],
         }
     }
+    /// The neighbour-side child of the lowest common ancestor of a tile and its
+    /// same-level neighbour across edge `k` (west, east, south, north). Every
+    /// tile drawable beside it there lies in this one.
+    fn across(
+        &self,
+        level: u32,
+        column: usize,
+        row: usize,
+        k: usize,
+    ) -> Option<(u32, usize, usize)> {
+        let (dc, dr) = [(-1, 0), (1, 0), (0, -1), (0, 1)][k];
+        let (c, r) = (column.checked_add_signed(dc)?, row.checked_add_signed(dr)?);
+        let span = self.span(level);
+        if c * span >= self.raster.width || r * span >= self.raster.height {
+            return None;
+        }
+        let (mut a, mut b, mut level) = ((column, row), (c, r), level);
+        while (a.0 / 2, a.1 / 2) != (b.0 / 2, b.1 / 2) {
+            (a, b, level) = ((a.0 / 2, a.1 / 2), (b.0 / 2, b.1 / 2), level - 1);
+        }
+        Some((level, b.0, b.1))
+    }
+    /// Whether nodes `a` and `b` of the grid line `line` (x = line on sides 0
+    /// and 1, y = line otherwise) bound a triangle west, east, south or north
+    /// of it on the lattice of stride `s`.
+    fn triangle(&self, side: usize, line: usize, (a, b): (usize, usize), s: usize) -> bool {
+        let (w, h) = (self.raster.width, self.raster.height);
+        let (third, ends) = match side {
+            0 => ((line - s, b), [(line, a), (line, b)]),
+            1 => (((line + s).min(w), a), [(line, a), (line, b)]),
+            2 => ((b, line - s), [(a, line), (b, line)]),
+            _ => ((a, (line + s).min(h)), [(a, line), (b, line)]),
+        };
+        (ends.into_iter().chain([third])).all(|(x, y)| self.raster.valid_node(x, y))
+    }
+    /// Leaf-decoded positions of the valid nodes of one grid line.
+    fn line<'p>(
+        &self,
+        vertical: bool,
+        fixed: usize,
+        plan: &'p mut PreparedPlan,
+    ) -> Result<&'p [Option<[f64; 3]>], JobError> {
+        let storage = plan.storage[self.depth as usize];
+        match plan.lines.entry((vertical, fixed)) {
+            std::collections::hash_map::Entry::Occupied(line) => Ok(line.into_mut()),
+            std::collections::hash_map::Entry::Vacant(line) => {
+                self.attempt.check()?;
+                let n = [self.raster.width, self.raster.height][usize::from(vertical)];
+                let mut nodes = Vec::with_capacity(n + 1);
+                for v in 0..=n {
+                    let (x, y) = if vertical { (fixed, v) } else { (v, fixed) };
+                    let (lon, lat) = coordinates(self.raster, x, y);
+                    nodes.push(match surface_height(self.raster, lon, lat, self.offset)? {
+                        Some(h) => Some(place(self.frame, storage, lon, lat, h)?.1),
+                        None => None,
+                    });
+                }
+                Ok(line.insert(nodes))
+            }
+        }
+    }
+    /// The largest distance from this tile's surface on its interior edges to
+    /// the leaf surface at the valid leaf nodes there. Both sides of a seam are
+    /// measured against the same nodes, so its gap is at most the sum of their
+    /// errors, also where a coarse level bridges or loses a NoData hole.
+    fn border(
+        &self,
+        patch: &Patch,
+        sheet: &Sheet,
+        plan: &mut PreparedPlan,
+    ) -> Result<f64, JobError> {
+        let (w, h) = (self.raster.width, self.raster.height);
+        let (c1, r1) = (sheet.xs.len() - 1, sheet.ys.len() - 1);
+        let mut worst: f64 = 0.;
+        for (k, inner) in [patch.x > 0, patch.x1 < w, patch.y > 0, patch.y1 < h]
+            .into_iter()
+            .enumerate()
+        {
+            if !inner {
+                continue;
+            }
+            let along = if k < 2 { &sheet.ys } else { &sheet.xs };
+            let line = self.line(k < 2, [patch.x, patch.x1, patch.y, patch.y1][k], plan)?;
+            for i in 0..along.len() - 1 {
+                // The segment's own triangle: lower west and south, upper east and north.
+                let (c, r) = [(0, i), (c1 - 1, i), (i, 0), (i, r1 - 1)][k];
+                if !sheet.emitted(c, r, k % 2 == 1) {
+                    continue;
+                }
+                let [a, b] = [i, i + 1].map(|j| {
+                    let (c, r) = [(0, j), (c1, j), (j, 0), (j, r1)][k];
+                    sheet.vertex(c, r)
+                });
+                let (ta, tb) = (along[i], along[i + 1]);
+                for (v, leaf) in line[ta..=tb].iter().enumerate() {
+                    let t = v as f64 / (tb - ta) as f64;
+                    let here = std::array::from_fn(|q| a[q] + t * (b[q] - a[q]));
+                    worst = worst.max(leaf.map_or(0., |leaf| distance(here, leaf)));
+                }
+            }
+        }
+        Ok(worst)
+    }
     fn grid(&self, patch: &Patch, storage: Storage) -> Result<glb::Grid, JobError> {
         grid(self, &patch.columns(), &patch.rows(), storage)
-    }
-    fn valid(&self, x: usize, y: usize) -> bool {
-        let (lon, lat) = coordinates(self.raster, x, y);
-        self.raster.sample(lon, lat).is_some()
     }
     /// Plan one tile after its children (post-order), keeping only their
     /// surfaces while this tile's error is measured. Errors are measured on
@@ -725,28 +838,31 @@ impl<'a> Pyramid<'a> {
             used: g.used,
         };
         if !children.is_empty() {
-            // e(t) = d(t) + max e(child) bounds the distance to the leaf mesh.
-            let below = patch
-                .children
-                .iter()
-                .map(|&c| plan.patches[c].error)
+            // e(t) = d(t) + max e(child) bounds the distance to the leaf mesh;
+            // tiles without triangles pass on their descendants' errors.
+            let below = (patch.children.iter())
+                .map(|&c| plan.patches[c].drawn)
                 .fold(0., f64::max);
             let mut sum = deviation(&patch, &sheet, &children, self.cells) + below;
-            if !patch.content {
+            if patch.content {
+                sum = sum.max(self.border(&patch, &sheet, plan)?);
+            } else {
                 // As meshes' `EMPTY_PARENT_SCALE`: Cesium stops at an empty tile
                 // whose error passes, so it refines until its extent is a pixel.
+                // Its ancestors, skirts and boxes do not inherit this floor.
                 sum = sum.max(16. * distance(patch.hierarchy[0], patch.hierarchy[1]));
             }
             patch.error = if sum > 0. { outward(sum, &sheet) } else { 0. };
+            patch.drawn = if patch.content { patch.error } else { below };
         }
         plan.patches.push(patch);
         Ok(Some((plan.patches.len() - 1, sheet)))
     }
     /// Curtains from each skirted edge down to `height - depth`, wound to face
     /// away from the tile under its single-sided material. The tops are the
-    /// tile's own surface vertices. A segment is skirted only where this tile
-    /// and its same-level neighbour both have a triangle on it: NoData edges
-    /// stay open.
+    /// tile's own surface vertices. A segment is skirted where this tile and
+    /// some level drawable across it have a triangle on it: NoData edges stay
+    /// open.
     fn skirt(
         &self,
         patch: &Patch,
@@ -761,40 +877,50 @@ impl<'a> Pyramid<'a> {
             (0..columns).rev().map(|c| (c, 0)).collect(),
             (0..columns).map(|c| (c, rows - 1)).collect(),
         ];
-        // The third nodes of the triangles on either side of a segment.
-        let (s, w, h) = (patch.stride, self.raster.width, self.raster.height);
-        let open = |(xa, ya): (usize, usize), (xb, yb): (usize, usize)| {
-            let thirds = if xa == xb {
-                [(xa - s, yb), ((xa + s).min(w), ya)]
-            } else {
-                [(xb, ya - s), (xa, (ya + s).min(h))]
-            };
-            [(xa, ya), (xb, yb)]
-                .into_iter()
-                .chain(thirds)
-                .all(|(x, y)| self.valid(x, y))
+        let lines = [patch.x, patch.x1, patch.y, patch.y1];
+        let ends = [self.raster.height, self.raster.width];
+        let open = |k: usize, top: u32, (lo, hi): (usize, usize)| {
+            self.triangle(k ^ 1, lines[k], (lo, hi), patch.stride)
+                && (top..=self.depth).any(|level| {
+                    let s = 1 << (self.depth - level);
+                    let mut a = lo / s * s;
+                    while a < hi {
+                        let b = (a + s).min(ends[k / 2]);
+                        if self.triangle(k, lines[k], (a, b), s) {
+                            return true;
+                        }
+                        a = b;
+                    }
+                    false
+                })
         };
         let mut skirt = glb::Skirt {
             bottoms: vec![],
             indices: vec![],
+            edges: [false; 4],
         };
         let surface = (columns * rows) as u32;
         let mut bounds = patch.surface;
         let mut worst: f64 = 0.;
         for (k, nodes) in edges.iter().enumerate().filter(|(k, _)| depths[*k] > 0.) {
             self.attempt.check()?;
-            let lattice: Vec<_> = nodes.iter().map(|&(c, r)| (xs[c], ys[r])).collect();
-            let open: Vec<_> = lattice
-                .windows(2)
-                .map(|p| open(p[0].min(p[1]), p[0].max(p[1])))
+            let Some((top, _, _)) = self.across(patch.level, patch.column, patch.row, k) else {
+                continue;
+            };
+            let along: Vec<_> = (nodes.iter())
+                .map(|&(c, r)| [ys[r], xs[c]][k / 2])
+                .collect();
+            let open: Vec<_> = (along.windows(2))
+                .map(|p| open(k, top, (p[0].min(p[1]), p[0].max(p[1]))))
                 .collect();
             let mut previous = None;
-            for (j, (&(c, r), (x, y))) in nodes.iter().zip(lattice).enumerate() {
+            for (j, &(c, r)) in nodes.iter().enumerate() {
                 let after = j > 0 && open[j - 1];
                 if !after && !open.get(j).copied().unwrap_or(false) {
                     continue;
                 }
-                let (lon, lat) = coordinates(self.raster, x, y);
+                skirt.edges[k] = true;
+                let (lon, lat) = coordinates(self.raster, xs[c], ys[r]);
                 let height = surface_height(self.raster, lon, lat, self.offset)?
                     .expect("skirted nodes are valid");
                 let (bottom, position, error) =
@@ -830,6 +956,8 @@ fn outward(value: f64, sheet: &Sheet) -> f64 {
 struct PreparedPlan {
     /// Post-order: children precede parents and the root is last.
     patches: Vec<Patch>,
+    /// Leaf-decoded nodes of grid lines that coarse tile edges lie on.
+    lines: std::collections::HashMap<(bool, usize), Vec<Option<[f64; 3]>>>,
     /// Position storage per level, coarsest first.
     storage: Vec<Storage>,
     vertices: u64,
@@ -1026,6 +1154,7 @@ fn plan_with(
 ) -> Result<PreparedPlan, JobError> {
     let mut plan = PreparedPlan {
         patches: Vec::with_capacity(tiles),
+        lines: Default::default(),
         storage,
         vertices: 0,
         skirt_vertices: 0,
@@ -1038,10 +1167,11 @@ fn plan_with(
             "terrain source has no triangle of four valid samples",
         ));
     }
-    // Across an edge, a tile renders beside a descendant of the neighbour-side
-    // child of their lowest common ancestor. Both lie within their errors of
-    // the leaf edge, so the gap is at most e(t) + e(child). Skirts also drop by
-    // their storage margin, so decoded bottoms are that far below the surface.
+    // Across an edge, a tile renders beside a drawing descendant of the
+    // neighbour-side child of their lowest common ancestor. Both lie within
+    // their errors of the leaf nodes on the edge, so the gap is at most e(t)
+    // plus that child's drawn error. Skirts also drop by their storage margin,
+    // so decoded bottoms are that far below the surface.
     let ids: std::collections::HashMap<_, _> = (plan.patches.iter().enumerate())
         .map(|(id, p)| ((p.level, p.column, p.row), id))
         .collect();
@@ -1050,18 +1180,12 @@ fn plan_with(
         let storage = plan.storage(patch);
         let magnitude = (patch.surface.iter().flatten()).fold(0f64, |m, v| m.max(v.abs()));
         let mut depths = [0.; 4];
-        for (k, (dc, dr)) in [(-1, 0), (1, 0), (0, -1), (0, 1)].into_iter().enumerate() {
-            let (c, r) = (patch.column as isize + dc, patch.row as isize + dr);
-            let (mut a, mut b) = ((patch.column, patch.row), (c as usize, r as usize));
-            if !patch.content || c < 0 || r < 0 || !ids.contains_key(&(patch.level, b.0, b.1)) {
+        for k in (0..4).filter(|_| patch.content) {
+            let across = pyramid.across(patch.level, patch.column, patch.row, k);
+            let Some(&beside) = across.and_then(|n| ids.get(&n)) else {
                 continue;
-            }
-            let mut level = patch.level;
-            while (a.0 / 2, a.1 / 2) != (b.0 / 2, b.1 / 2) {
-                (a, b, level) = ((a.0 / 2, a.1 / 2), (b.0 / 2, b.1 / 2), level - 1);
-            }
-            let beside = plan.patches[ids[&(level, b.0, b.1)]].error;
-            let mut depth = (patch.error + beside).max(1.);
+            };
+            let mut depth = (patch.error + plan.patches[beside].drawn).max(1.);
             let margin = storage.margin(magnitude + depth + 1.);
             if margin > 0. {
                 depth = (depth + margin).next_up();
@@ -1069,6 +1193,8 @@ fn plan_with(
             depths[k] = depth;
         }
         let (skirt, bounds, error) = pyramid.skirt(patch, storage, depths)?;
+        let depths: [f64; 4] =
+            std::array::from_fn(|k| [0., depths[k]][usize::from(skirt.edges[k])]);
         plan.skirt_vertices += skirt.bottoms.len() as u64;
         if plan.patches[id].level == pyramid.depth {
             plan.position_error = plan.position_error.max(error);
@@ -1973,6 +2099,7 @@ mod tests {
             content: true,
             children: vec![],
             error: 0.,
+            drawn: 0.,
             skirt_depth: [0.; 4],
             surface: [[0.; 3]; 2],
             bounds: [[0.; 3]; 2],
@@ -2256,9 +2383,24 @@ mod tests {
     fn skirts_cover_every_mixed_level_seam_and_face_outward() {
         let control = RunControl::default();
         let attempt = control.begin().unwrap();
-        for r in [bump(67, 45), holed(67, 45)] {
+        // A 30 m ridge on pixel columns 63-64, beside the level-1 seam x = 64,
+        // with a NoData column that level 2 bridges (65) or loses (60).
+        let ridge = |hole: usize| {
+            raster::test_raster_with(160, 48, 1e-5, move |c, r| {
+                let top = if (63..65).contains(&c) && r / 2 % 2 == 0 {
+                    30.
+                } else {
+                    0.
+                };
+                [100. + 0.2 * c as f64 + 0.1 * r as f64 + top, f64::NAN][usize::from(c == hole)]
+            })
+        };
+        for (n, r) in [bump(67, 45), holed(67, 45), ridge(65), ridge(60)]
+            .iter()
+            .enumerate()
+        {
             let frame = Frame::new(r.bounds);
-            let pyramid = Pyramid::new(&r, 16, &frame, 0., &attempt);
+            let pyramid = Pyramid::new(r, 16, &frame, 0., &attempt);
             let plan = plan(&pyramid).unwrap();
             let root = plan.root().error;
             let shallow = (plan.patches.iter())
@@ -2266,13 +2408,15 @@ mod tests {
                 .flat_map(|p| p.skirt_depth)
                 .filter(|d| *d > 0. && *d < root / 4.)
                 .count();
-            assert!(root > 8. && shallow > 10, "{root} {shallow}");
+            assert!(n > 1 || root > 8. && shallow > 10, "{root} {shallow}");
+            // Per tile: each skirted lattice segment and its decoded bottom heights.
+            let mut curtains = vec![BTreeMap::new(); plan.patches.len()];
             let sheets: Vec<_> = plan
                 .patches
                 .iter()
                 .map(|p| sheet(&pyramid, &plan, p))
                 .collect();
-            for patch in &plan.patches {
+            for (id, patch) in plan.patches.iter().enumerate() {
                 let depths = patch.skirt_depth;
                 assert!(depths.iter().all(|d| *d == 0. || *d >= patch.error.max(1.)));
                 let storage = plan.storage(patch);
@@ -2290,7 +2434,13 @@ mod tests {
                 let centre: [f64; 3] =
                     std::array::from_fn(|i| (patch.surface[0][i] + patch.surface[1][i]) / 2.);
                 // Each quad [t, top, b, top, base, b] hangs bottoms below surface tops.
+                let (xs, ys) = (patch.columns(), patch.rows());
+                let node = |i: u32| (xs[i as usize % xs.len()], ys[i as usize / xs.len()]);
                 for quad in skirt.indices.chunks(6) {
+                    let ends = [(quad[0], quad[2]), (quad[1], quad[4])];
+                    let mut ends = ends.map(|(t, b)| (node(t), vertex(b)[2]));
+                    ends.sort_by_key(|e| e.0);
+                    curtains[id].insert((ends[0].0, ends[1].0), [ends[0].1, ends[1].1]);
                     for (top, bottom) in [(quad[0], quad[2]), (quad[1], quad[4])] {
                         assert!(
                             (top as usize) < surface.len(),
@@ -2345,14 +2495,12 @@ mod tests {
                     let Some(((x0, y0), (x1, y1), k)) = segment else {
                         continue;
                     };
-                    let depth = a.skirt_depth[k].min(b.skirt_depth[k - 1]);
-                    assert!(depth > 0.);
                     pairs += 1;
                     let leaf = pyramid.depth;
                     let beside = (a.level == leaf) != (b.level == leaf);
                     let steps = 4 * (x1 - x0 + y1 - y0);
-                    for k in 0..=steps {
-                        let t = k as f64 / steps as f64;
+                    for step in 0..=steps {
+                        let t = step as f64 / steps as f64;
                         let (x, y) = (
                             x0 as f64 + t * (x1 - x0) as f64,
                             y0 as f64 + t * (y1 - y0) as f64,
@@ -2363,9 +2511,33 @@ mod tests {
                         let gap = distance(p, q);
                         worst = worst.max(gap);
                         mixed += usize::from(beside && gap > 0.1);
-                        // Both edges lie within their errors of the leaf edge.
+                        // Both edges lie within their errors of the leaf nodes.
                         assert!(gap <= a.error + b.error + 1e-9, "{gap}");
-                        assert!(gap <= depth, "{gap}");
+                        if gap < 1e-6 {
+                            continue;
+                        }
+                        // The higher side's own curtain reaches the lower surface.
+                        let (high, low) = if p[2] >= q[2] { (i, q) } else { (j, p) };
+                        let h = &plan.patches[high];
+                        let (along, s) = if k == 1 {
+                            (h.rows(), y)
+                        } else {
+                            (h.columns(), x)
+                        };
+                        let covered = (along.windows(2))
+                            .filter(|w| w[0] as f64 <= s && s <= w[1] as f64)
+                            .filter_map(|w| {
+                                let (lo, hi) = (w[0], w[1]);
+                                let key = if k == 1 {
+                                    ((x1, lo), (x1, hi))
+                                } else {
+                                    ((lo, y1), (hi, y1))
+                                };
+                                let t = (s - lo as f64) / (hi - lo) as f64;
+                                (curtains[high].get(&key)).map(|b| b[0] + t * (b[1] - b[0]))
+                            })
+                            .any(|bottom| bottom <= low[2] + 1e-9);
+                        assert!(covered, "uncovered seam at ({x}, {y}): gap {gap}");
                     }
                 }
             }
@@ -2413,12 +2585,13 @@ mod tests {
             for quad in skirt.indices.chunks(6) {
                 let [p, q] = [quad[0], quad[1]].map(node);
                 let ((xa, ya), (xb, yb)) = (p.min(q), p.max(q));
-                let thirds = if xa == xb {
-                    [(xa - s, yb), ((xa + s).min(w), ya)]
-                } else {
-                    [(xb, ya - s), (xa, (ya + s).min(h))]
+                let own = match (xa == xb, xa == patch.x, ya == patch.y) {
+                    (true, true, _) => ((xa + s).min(w), ya),
+                    (true, false, _) => (xa - s, yb),
+                    (false, _, true) => (xa, (ya + s).min(h)),
+                    _ => (xb, ya - s),
                 };
-                assert!([p, q].into_iter().chain(thirds).all(valid));
+                assert!([p, q, own].into_iter().all(valid));
             }
             let segments = |k: usize| [ys.len(), xs.len()][k / 2] - 1;
             let edges = (0..4).filter(|&k| patch.skirt_depth[k] > 0.);
@@ -2449,7 +2622,13 @@ mod tests {
         assert!(find(5, 8).is_none() && !empty.content && leaf.content);
         assert_eq!(empty.children.len(), 2);
         let extent = distance(leaf.surface[0], leaf.surface[1]);
-        assert!(empty.error >= 16. * extent && plan.root().error >= empty.error);
+        // The floor stays on the empty tile: ancestors and skirts see only errors
+        // of tiles that draw.
+        assert!(empty.error >= 16. * extent && plan.root().error < empty.error);
+        let deepest = (plan.patches.iter())
+            .flat_map(|p| p.skirt_depth)
+            .fold(0., f64::max);
+        assert!(deepest < empty.error / 8., "{deepest}");
     }
     /// A tile GLB read back through its own JSON, the meshopt decoders and the
     /// node's translation and scale: the decoded glTF positions and indices.
