@@ -290,10 +290,13 @@ impl<O: ProducerIo> Tree<'_, O> {
 /// edges `top / 2^j` and `top / (2^j √2)` run down to `budget` voxels along the longest
 /// axis; halving is exact, so each grid nests in the coarser one. Each grid maps a
 /// voxel to its first record ordinal and holds at most `budget + 1` voxels.
+/// A grid's edge and each occupied voxel's first record ordinal.
+type Grid = (f64, FxHashMap<[u64; 3], u64>);
+
 struct Sampler {
     anchor: [f64; 3],
     budget: usize,
-    chains: [Vec<(f64, FxHashMap<[u64; 3], u64>)>; 2],
+    chains: [Vec<Grid>; 2],
 }
 
 impl Sampler {
@@ -359,6 +362,7 @@ impl Sampler {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn emit(
     rows: &[u8],
     center: [f64; 3],

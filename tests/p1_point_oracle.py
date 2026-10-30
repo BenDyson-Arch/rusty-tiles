@@ -487,7 +487,7 @@ def audit(source,archive,max_points,geographic=False,height=0.,require_multileaf
             delta=math.dist(world[at],expected_positions[index]);rounding=max(rounding,delta)
             # Half a 16-bit quantization step, float32-scale evaluation and geospatial
             # reference allowances. Leaf error 0 states that nothing is omitted below.
-            slack=max(3e-6,math.sqrt(sum((abs(v)*2**-24)**2 for v in positions[at])))+(2e-8 if geographic else 0.)
+            slack=(max(3e-6,math.sqrt(sum((abs(v)*2**-24)**2 for v in positions[at]))) if not any(steps[at]) else 1e-8)+(2e-8 if geographic or expected_positions_override else 0.)
             require(all(abs(world[at][a]-expected_positions[index][a])<=steps[at][a]+slack for a in range(3)),f'{uri}: rendered POSITION differs by more than half a step on an axis at source {index}')
             require(delta<=report['maxPositionRoundingMetres']+slack,f'{uri}: position error exceeds the reported rounding')
             require(box_contains(box,positions[at]),f'{uri}: rendered position escapes bounds')
