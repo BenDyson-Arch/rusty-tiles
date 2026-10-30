@@ -43,6 +43,8 @@ Full verbose receipts are preserved verbatim as [indexed gzip files](receipts/in
 
 Build a candidate from the checkout and use it explicitly; historical absolute cache paths need not exist.
 
+Fixture sources byte-identical to the F1c1 set are stored once, under `tests/fixtures/f1c1`: `tests/fixtures/f1b3/manifest.json` addresses them as `../f1c1/<path>` with their original sizes and SHA256s. Only `selected-equal-images` differs and keeps its own directory.
+
 ```sh
 cargo test --locked
 cargo build --locked
