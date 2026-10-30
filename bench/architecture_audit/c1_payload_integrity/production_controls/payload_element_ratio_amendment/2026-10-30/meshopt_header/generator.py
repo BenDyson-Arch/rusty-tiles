@@ -1,0 +1,1 @@
+../../../meshopt_header_amendment/2026-10-12/generator.py
