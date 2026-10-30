@@ -300,7 +300,7 @@ impl Store {
                 }
                 let mut touches = false;
                 for &v in members {
-                    effort.charge(1)?;
+                    effort.charge(super::ROW_UNITS)?;
                     if self.outside_leaf(keys[v], parent.id, parent.last)? {
                         touches = true;
                         break;

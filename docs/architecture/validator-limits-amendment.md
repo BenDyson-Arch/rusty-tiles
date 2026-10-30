@@ -66,13 +66,106 @@ otherwise `max(floor, ⌊S·p/q⌋)`, computed in `u128` with floor division and
 | `hierarchyVisits` | 262,144 | 1/8 | 2,097,160 |
 | `references` | 1,048,576 | 1/8 | 8,388,616 |
 | `totalBytesRead` | 2,147,483,648 | 4/1 | 536,870,913 |
-| `totalPayloadElements` | 16,000,000 | 16/1 | 1,000,001 |
+| `totalPayloadElements` | 16,000,000 | 77/1 | 207,793 |
 | `containmentWorkUnits` | 536,870,912 | 128/1 | 4,194,305 |
 | `containmentBytesRead` | 2,147,483,648 | 4/1 | 536,870,913 |
 | `containmentDecodedBytes` | 2,147,483,648 | 16/1 | 134,217,729 |
 
 This is model 1. κ (the ratios) stays provisional; VS-D freezes it and bumps the model when a
 ratio or floor changes.
+
+**`totalPayloadElements` ratio, measured basis (2026-10-30, still model 1).** The ratio rose
+from 16 to 77. Two things changed together. HLOD coarse tiles became indexed: their validation
+work is unchanged, but their stored bytes fell. And the native HLOD delivery check now charges
+its scratch work at its measured cost, so a unit costs about the same in every work class:
+
+- each SQLite scratch-store row written or looked up by key: 128 units;
+- each original vertex row appended to the ingest spill sequence: 16 units;
+- each placed original key (placement, external sort and ordered alias scan): 32 units.
+
+The original-vertex alias check no longer goes through SQLite. Its rows are appended to a spill
+sequence, and their placed keys are checked by one bounded external sort (the catalog's side-sort
+memory) and one ordered scan. This cut the hostile leaf class c5 from 46.9 s to 15.2 s of CPU.
+
+Work per stored byte (all C1, identity and delivery work against this budget) was logged for
+every validation the lib and integration suites run (5,247), and for the archives below:
+
+| archive | develop | indexed coarse |
+| --- | --- | --- |
+| border-control sheet (n = 80) | 30.34 | 36.52 |
+| mesh-1e6 | 19.44 | 21.96 |
+| tex3 | 14.62 | 16.74 |
+| crop3 | 12.08 | 15.06 |
+| Walem 2048 (dabca18b) | 13.85 | – |
+
+The largest value over every logged validation, small archives included, is 50.75 (the
+`plain` suite archives, 144,339 stored bytes, which stay under the floor). The largest above the
+floor is the sheet's 36.52. The ratio is ⌈1.5 × 50.75⌉ = 77.
+
+Two validator builds now report `limitDerivation.model: 1` with different ratios: 16 before
+this amendment and 77 after it. κ stays provisional under model 1, and only VS-D freezes it and
+bumps the model. Until then, read the ratio from `perStoredByte`, not from the model number.
+
+Hostile expansion stays linear. Members are stored, never deflated, so S is the payload bytes.
+The meshopt codecs decode at most 16 vertices per encoded byte (ATTRIBUTES), 3 indices
+(TRIANGLES) or 1 index (INDICES). C1 charges each attribute vertex once per component, though,
+so a VEC4 u8 stream is up to 64 charged units per encoded byte. The bound does not rest on the
+codec ratio. It holds because every unit of work is charged before it runs: a validation does
+at most max(16,000,000, 77·S) units plus one charge's overshoot. A 10-million-triangle
+repeated-index stream is refused by the per-accessor element cap in 0.1 s.
+
+*Time statement.* CPU time per unit was measured for five adversarial classes. c1–c4 were run to
+a 500,000,000-unit budget; c5 holds 600 leaves of 8,192 triangles with three new original
+vertices each and a valid root, and is validated in full (1,502,712,016 units, 32.0 per stored
+byte). Each run was pinned to one P-core (CPU 10) and one E-core (CPU 17), at idle priority on a
+host at load average about 43:
+
+| class | P-core ns/unit | E-core ns/unit |
+| --- | --- | --- |
+| c1 comp64: unreferenced VEC4 u8 meshopt accessors | 6.71 | 6.93 |
+| c2 hlodseq: distinct-vertex index streams | 8.00 | 8.88 |
+| c3 hloddup: one triangle instanced by 100 nodes | 6.40 | 6.62 |
+| c4 hlodleaf: 100k-triangle leaves, new originals per triangle | 10.74 | 12.32 |
+| c5 hlodleaf: 600 × 8,192-triangle leaves | 10.11 | 10.92 |
+
+For these five classes, `(16,000,000 + 77·S)·τ` with the worst τ (c4) is 0.17 s plus 827 s per
+stored GB on the P-core, and 0.20 s plus 949 s per stored GB on the E-core. Both are within the
+C2 statement below (1,037 and 1,875 s per stored GB).
+
+**This bound does not hold for every class.** The cost of an SQLite scratch-store row grows with
+the size of the scratch tables, but every row is charged the same constant 128 units. Rows with
+random keys (placed leaf points, edges and faces) miss the 8 MiB page cache more often as the
+B-trees deepen. The five classes above keep those tables tiny, because their positions are
+degenerate. A sixth class, from review 2, does not:
+
+- **c6 leafrand:** N leaves of 8,192 nondegenerate triangles. Every corner is a distinct
+  pseudo-random lattice point, and every leaf has a `source_triangle` table, so each point, edge
+  and face is a random-key row.
+- Generator: `bench/architecture_audit/vs_c_limits/hostile/leafrand.py N 8192 7 OUT.3tz`.
+- Each archive runs to its default budget of 77·S units and is refused there.
+
+| c6 archive | S | P-core ns/unit | P-core s per stored GB | E-core ns/unit | E-core s per stored GB |
+| --- | --- | --- | --- | --- | --- |
+| 10 leaves | 1.52 MB | 7.8 | 598 | 10.1 | 776 |
+| 40 leaves | 6.08 MB | 10.5 | 811 | 13.2 | 1,013 |
+| 150 leaves | 22.8 MB | 18.4 | **1,419** | 22.6 | 1,738 |
+| 400 leaves | 60.8 MB | 26.7 | **2,052** | not run | |
+
+- On the P-core, the 1,037 s per stored GB statement is **exceeded** for this class from about
+  10 MB stored (met at 6.1 MB, exceeded at 22.8 MB). The cost per unit was still rising at
+  60.8 MB.
+- On the E-core the 1,875 s/GB statement held through 22.8 MB, but the trend is the same, and
+  larger archives were not measured.
+- So the GB-scale time statement holds only for the five constant-cost classes. No time bound is
+  claimed for random-key row work above about 10 MB stored.
+- This is not a regression. Before this amendment rows were charged 1 or 2 units, so develop
+  admits more uncharged row work per byte.
+- **Follow-up (0.4.0, "constant-cost scratch rows"):** replace the random-key B-tree inserts
+  with sort-and-merge passes, as the alias pass already does, so that the per-row cost no longer
+  grows with S. Until it lands, this statement stays qualified.
+
+A new work class, or a per-unit cost above 13.4 ns (P-core) or 24.3 ns (E-core), must re-weight
+its charges or revisit the ratio.
 
 **VS-C-2. Opt-in caps and natural bounds (A-C1-1, A-C1-2).** With no Class B cap set, the
 archive is bounded by the format and the file alone, in this order (all VS-A, unchanged):

@@ -1,0 +1,607 @@
+{
+  "schemaVersion": 1,
+  "status": "Predictions frozen before target execution; not execution evidence",
+  "rule": "C1 H-1: first compressed byte must equal the EXT_meshopt_compression Appendix A header",
+  "specHeaders": {
+    "ATTRIBUTES": "0xa0",
+    "INDICES": "0xd1",
+    "TRIANGLES": "0xe1"
+  },
+  "generatorSha256": "d0dca6f5d890027fe37d4291a01ab2d938c631961b53bc54c3e9ce69f5d1cea4",
+  "runnerSha256": "2879dd9332871d29147ccad34f55efd5174e77a00879b03502ef8d1ec5397558",
+  "referencePins": [
+    {
+      "file": "meshopt_decoder.test.js",
+      "bytes": 16220,
+      "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac",
+      "url": "https://raw.githubusercontent.com/zeux/meshoptimizer/3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d/js/meshopt_decoder.test.js",
+      "revision": "3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d"
+    },
+    {
+      "file": "EXT_meshopt_compression.md",
+      "bytes": 35576,
+      "sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3/extensions/2.0/Vendor/EXT_meshopt_compression/README.md",
+      "revision": "5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3"
+    },
+    {
+      "file": "glTF-core.adoc",
+      "bytes": 148067,
+      "sha256": "77e2f07e8f705d10e9c1201a31d398994f45aa08cc91545ee378c5aff9d46175",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/70b5e4101725950fb8f3f94dd72c37e758ce5daf/specification/2.0/Specification.adoc",
+      "revision": "70b5e4101725950fb8f3f94dd72c37e758ce5daf"
+    }
+  ],
+  "cases": [
+    {
+      "name": "attributes-0xa0",
+      "path": "attributes-0xa0/input.3tz",
+      "mode": "ATTRIBUTES",
+      "header": "0xa0",
+      "specHeader": "0xa0",
+      "upstreamCase": "decodeVertexBuffer",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 4
+          }
+        ],
+        "storedBytes": 1033,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                77,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "rationale": "Appendix A requires header byte 0xa0 for ATTRIBUTES; this stream starts with 0xa0.",
+      "streamSha256": "c1c311df6033a0900eb605c2ad3e5ca631e076f7cf120595fd41d4ba157eab6a",
+      "decodedSha256": "820994b9ed8bf83e8c38f9f6ce0c6b0afb889ecb5e07f4e580add9ae462eab89",
+      "sha256": "46690e58248b24cf414000d6af0913b8dceb06882a59d651dfcb011c18f3fc76",
+      "bytes": 1353,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "6c2cf6ab347f3db9f3db635d2d50edde578e6dae030316b5fe270a9304f36be8"
+      }
+    },
+    {
+      "name": "attributes-0xa1",
+      "path": "attributes-0xa1/input.3tz",
+      "mode": "ATTRIBUTES",
+      "header": "0xa1",
+      "specHeader": "0xa0",
+      "upstreamCase": "decodeVertexBufferV1",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "rationale": "Appendix A requires header byte 0xa0 for ATTRIBUTES; this stream starts with 0xa1.",
+      "streamSha256": "b88a1ac34362c819ad10d8d34724b3d95bcbef840fb02dd9bc94f7d5bbaedb65",
+      "decodedSha256": "820994b9ed8bf83e8c38f9f6ce0c6b0afb889ecb5e07f4e580add9ae462eab89",
+      "sha256": "ed2aa07903989585009256a9e0e39b518901a1b71b7df6ff3aced418181a12a7",
+      "bytes": 1309,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "576dd22dc9c3a4d5cb00cc3238e09703d4073cc63631ff43a2a98184abbb3194"
+      }
+    },
+    {
+      "name": "triangles-0xe1",
+      "path": "triangles-0xe1/input.3tz",
+      "mode": "TRIANGLES",
+      "header": "0xe1",
+      "specHeader": "0xe1",
+      "upstreamCase": "decodeIndexBufferV1_More",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "vertices": 10
+          }
+        ],
+        "storedBytes": 1181,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                77,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "rationale": "Appendix A requires header byte 0xe1 for TRIANGLES; this stream starts with 0xe1.",
+      "streamSha256": "eafb38356e44535385f3d6754886e49003137ea86c322ed6f877429a45fd6688",
+      "decodedSha256": "ac85258697c03b1eacb4b639b9c35aa158fdb634e72e442a3c2d2f58b549623a",
+      "sha256": "6872939f3b75660fe5d7e323f3f2bb651d4a6f1dd00a4c660958ea1d78b752bd",
+      "bytes": 1501,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "3a9ec8c896a8ef63d145656abd306f06baa4ab9d4fe6aca05969ec4f420f379e"
+      }
+    },
+    {
+      "name": "triangles-0xe0",
+      "path": "triangles-0xe0/input.3tz",
+      "mode": "TRIANGLES",
+      "header": "0xe0",
+      "specHeader": "0xe1",
+      "upstreamCase": "decodeIndexBuffer32",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "rationale": "Appendix A requires header byte 0xe1 for TRIANGLES; this stream starts with 0xe0.",
+      "streamSha256": "e9afd091ff49b2912ee2b4360723c5f8a19a7524bde3a0a75a411d2de3aa7574",
+      "decodedSha256": "ac85258697c03b1eacb4b639b9c35aa158fdb634e72e442a3c2d2f58b549623a",
+      "sha256": "2f09f4f48bb8332461d50852f123f4fdc3b0a9842b408c300c5280d42c369dbe",
+      "bytes": 1501,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "b44ca88f4a0b16716624d9c3e61aee18dc0187b21619f5fd4c439ec19c2f7f32"
+      }
+    },
+    {
+      "name": "indices-0xd1",
+      "path": "indices-0xd1/input.3tz",
+      "mode": "INDICES",
+      "header": "0xd1",
+      "specHeader": "0xd1",
+      "upstreamCase": "decodeIndexSequence",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets",
+          "decodedContentContainment"
+        ],
+        "notInspected": [
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "skins, animations, morph targets and rendered extent"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 134217728,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 134217728,
+          "hierarchyVisits": 262144,
+          "hierarchyDepth": 128,
+          "references": 1048576,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
+          "documentItems": 131072,
+          "containmentSpanBits": 4096,
+          "containmentWorkUnits": 536870912,
+          "containmentBytesRead": 2147483648,
+          "containmentDecodedBytes": 2147483648,
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "vertices": 3
+          }
+        ],
+        "storedBytes": 1065,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                77,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
+      },
+      "rationale": "Appendix A requires header byte 0xd1 for INDICES; this stream starts with 0xd1.",
+      "streamSha256": "c0c7ba5957133f0783d06b41d5ea594f4d9437c0a77c506c2a69d6aa9f632054",
+      "decodedSha256": "d26d7deaec63f3a8710dce11fd3df1cc60eb01896dee7d4f38fe1cf424e7250c",
+      "sha256": "5980f1d7cdb4f118efd31f8026279cfbc999eab38685fe5720a9638a9a6a04ac",
+      "bytes": 1385,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "53c593765edbf57e9582af6088700f182c72b43ae13a3daeb1d7697e4ddcb3bb"
+      }
+    },
+    {
+      "name": "attributes-0xa2",
+      "path": "attributes-0xa2/input.3tz",
+      "mode": "ATTRIBUTES",
+      "header": "0xa2",
+      "specHeader": "0xa0",
+      "upstreamCase": "decodeVertexBuffer+header0xa2",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "rationale": "Appendix A requires header byte 0xa0 for ATTRIBUTES; this stream starts with 0xa2.",
+      "streamSha256": "c4809f2bfafad651c809af3b2f1c9e17baf80ac785c0fa5608b956e748d5f9c3",
+      "decodedSha256": "820994b9ed8bf83e8c38f9f6ce0c6b0afb889ecb5e07f4e580add9ae462eab89",
+      "sha256": "63c7241b24506553cae48d791182042440e1934453f84773e13bf5cb78f3731a",
+      "bytes": 1353,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "0b0b65bc0cd8657ab34e6c51a828d0318870a22a3be3a60f6f66dd0a70a85b98"
+      }
+    },
+    {
+      "name": "triangles-0xe2",
+      "path": "triangles-0xe2/input.3tz",
+      "mode": "TRIANGLES",
+      "header": "0xe2",
+      "specHeader": "0xe1",
+      "upstreamCase": "decodeIndexBufferV1_More+header0xe2",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "rationale": "Appendix A requires header byte 0xe1 for TRIANGLES; this stream starts with 0xe2.",
+      "streamSha256": "a0a5c2a62d97a66ed89286af6aad15b55fef989cdee5b415470835dea02bb474",
+      "decodedSha256": "ac85258697c03b1eacb4b639b9c35aa158fdb634e72e442a3c2d2f58b549623a",
+      "sha256": "b67abb43b7f2fad5fb25a7d6c4ec122f5c2f0060d03c440dbb3273ead3434be9",
+      "bytes": 1501,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "10d84c17e1ca5965fec9732da8020a82c6a2ce2309cd81ab999b5e4502105548"
+      }
+    },
+    {
+      "name": "indices-0xd0",
+      "path": "indices-0xd0/input.3tz",
+      "mode": "INDICES",
+      "header": "0xd0",
+      "specHeader": "0xd1",
+      "upstreamCase": "decodeIndexSequence+header0xd0",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "rationale": "Appendix A requires header byte 0xd1 for INDICES; this stream starts with 0xd0.",
+      "streamSha256": "65aaff5cb32f0a2b2a47cf9418c95c06924c36dded1ea05b42410185950181ae",
+      "decodedSha256": "d26d7deaec63f3a8710dce11fd3df1cc60eb01896dee7d4f38fe1cf424e7250c",
+      "sha256": "a3cfddf2b8c793fa0fd9b204eb879ad5b763aec0e6d6ca2ea3469abad5c54796",
+      "bytes": 1385,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "265b982a598ab1307d0fa00bad2b95e53e07f2af6baf95190bf5b530c8f379e0"
+      }
+    },
+    {
+      "name": "indices-0xd2",
+      "path": "indices-0xd2/input.3tz",
+      "mode": "INDICES",
+      "header": "0xd2",
+      "specHeader": "0xd1",
+      "upstreamCase": "decodeIndexSequence+header0xd2",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "rationale": "Appendix A requires header byte 0xd1 for INDICES; this stream starts with 0xd2.",
+      "streamSha256": "e659533ce4e330df89f211fce82054c181ff57dc82696ae5e42f42b6aa567dc4",
+      "decodedSha256": "d26d7deaec63f3a8710dce11fd3df1cc60eb01896dee7d4f38fe1cf424e7250c",
+      "sha256": "dc873ebdcbf0c084cf8f8a50db428e9d96b1e9bff99be9127562c115236e3bae",
+      "bytes": 1385,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "9ec38c84f29bc84cba6978f9cc8a84aa42fc7681db0e24d7d1e58190bd0fc90e"
+      }
+    }
+  ],
+  "vsCLimitsAmendment": {
+    "amends": "meshopt_header_amendment/2026-10-12/fixtures/manifest.json",
+    "inputSha256": "d24a7b9f26a76cda5d2a29652a653fc45871a50b3a6c3743d685cff53173f679",
+    "inputManifestSha256": "2f6e19333e9966df112bbbfa94c30550b327b60d55e7d937155acb6c046f7adf",
+    "rule": "admitted expectedReport gains storedBytes and limitDerivation; limits: the four Class B caps become null and liveDocumentBytes is added; nothing else changes",
+    "model": 1,
+    "oldCaps": {
+      "sourceArchiveBytes": 1073741824,
+      "archiveEntries": 524288,
+      "centralDirectoryBytes": 33554432,
+      "archiveStoredBytes": 1073741824
+    },
+    "liveDocumentBytes": 268435456,
+    "specification": "docs/architecture/validator-limits-amendment.md (VS-C-1, VS-C-4)",
+    "generator": "bench/architecture_audit/c1_payload_integrity/production_controls/vs_c_limits_amendment/2026-10-14/amend.py"
+  },
+  "payloadElementRatioAmendment": {
+    "amends": "vs_c_limits_amendment/2026-10-14/meshopt_header/fixtures/manifest.json",
+    "inputSha256": "c9584382fc8cf388d702b5d734e227b6ff301005d6e19830b56e6aa28a3025f3",
+    "inputManifestSha256": "22ff1456dba290926fc770ce624f9dbc8c6371c831b7622f2a32e4c4b70b24e9",
+    "rule": "admitted expectedReport: totalPayloadElements perStoredByte [16, 1] -> [77, 1] and its limit max(16000000, 77*S); nothing else changes",
+    "specification": "docs/architecture/validator-limits-amendment.md (measured basis, 2026-10-30)",
+    "generator": "bench/architecture_audit/c1_payload_integrity/production_controls/payload_element_ratio_amendment/2026-10-30/amend.py"
+  }
+}

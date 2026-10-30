@@ -741,10 +741,11 @@ fn geometry(dir: &Path) -> Vec<(String, Faces)> {
             let mut faces: Faces = vec![];
             for p in g.prims() {
                 for f in 0..p.positions.len() / 3 {
-                    faces.push((
-                        std::array::from_fn(|k| p.positions[3 * f + k].map(f64::to_bits)),
-                        p.features[3 * f],
-                    ));
+                    // Smallest corner first: the index codec may rotate corners.
+                    let c: [_; 3] =
+                        std::array::from_fn(|k| p.positions[3 * f + k].map(f64::to_bits));
+                    let r = (0..3).min_by_key(|&k| c[k]).unwrap();
+                    faces.push((std::array::from_fn(|k| c[(k + r) % 3]), p.features[3 * f]));
                 }
             }
             faces.sort();

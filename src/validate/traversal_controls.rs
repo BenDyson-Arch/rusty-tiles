@@ -588,13 +588,13 @@ fn budgets_scale_from_stored_bytes_at_their_crossovers() {
         ]
     };
     let floor = budgets(&floors);
-    // (crossover S, index, S step, budget step): at S the floor holds; one step above it,
-    // the budget is κ·S.
+    // (crossover S, index, S step, κ·step): at S the floor holds; one step above it, the
+    // budget is κ·(S + step), above the floor.
     for (stored, index, step, grows) in [
         (1u64 << 21, 0, 8, 1),
         (1 << 23, 1, 8, 1),
         (1 << 29, 2, 1, 4),
-        (1_000_000, 3, 1, 16),
+        (207_792, 3, 1, 77),
         (1 << 22, 4, 1, 128),
         (1 << 29, 5, 1, 4),
         (1 << 27, 6, 1, 16),
@@ -607,9 +607,10 @@ fn budgets_scale_from_stored_bytes_at_their_crossovers() {
         );
         assert_eq!(
             budgets(&at(stored + step))[index],
-            floor[index] + grows,
+            (stored + step) / step * grows,
             "index {index}"
         );
+        assert!(budgets(&at(stored + step))[index] > floor[index]);
     }
     assert_eq!(budgets(&at(0)), floor);
     assert_eq!(budgets(&at(u64::MAX))[2], u64::MAX);

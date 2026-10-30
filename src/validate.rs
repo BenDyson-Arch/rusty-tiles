@@ -3388,7 +3388,7 @@ fn inspect_run(
         },
         reports: report,
         hlod_identity: false,
-        delivery: hlod_delivery::Store::new(scratch.clone())?,
+        delivery: hlod_delivery::Store::new(scratch.clone(), &config)?,
         delivery_path: Vec::new(),
         delivery_next: 0,
         tiles: 0,

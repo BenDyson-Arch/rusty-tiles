@@ -70,7 +70,7 @@ path) uses `max(default, κ·S)` for the seven amplification budgets:
 | `hierarchyVisits` | 2^18 | S/8 |
 | `references` | 2^20 | S/8 |
 | `totalBytesRead` | 2^31 | 4·S |
-| `totalPayloadElements` | 16,000,000 | 16·S |
+| `totalPayloadElements` | 16,000,000 | 77·S |
 | `containmentWorkUnits` | 2^29 | 128·S |
 | `containmentBytesRead` | 2^31 | 4·S |
 | `containmentDecodedBytes` | 2^31 | 16·S |

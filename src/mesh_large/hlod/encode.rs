@@ -1,5 +1,6 @@
-//! Coarse tile GLB: one node and glTF primitive per material group, non-indexed triangles
-//! (one `source_primitive` feature ID per triangle at all three corners, D4), smooth
+//! Coarse tile GLB: one node and glTF primitive per material group, indexed triangles whose
+//! bit-identical corners are welded (one `source_primitive` feature ID per triangle at all
+//! three corners, D4, so corners split where IDs differ), smooth
 //! normals when the source carries them, and the S3 appearance: fresh-chart TEXCOORD_0 and
 //! embedded pages for textured classes (tangents with a baked normal map), per-vertex
 //! COLOR_0 or flat class factors otherwise; meshopt compression. Positions keep every
@@ -19,7 +20,7 @@ use crate::{
     JobError, JobErrorKind,
 };
 use serde_json::{json, Map, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 fn invalid(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message.into())
@@ -48,6 +49,9 @@ pub(crate) enum Mutation {
     /// Build without the last resorts after develop's strategies (identity reference).
     #[cfg(test)]
     Develop,
+    /// Weld corners on POSITION and feature ID only (the weld's own check must refuse).
+    #[cfg(test)]
+    WeldPositionsOnly,
 }
 
 impl Mutation {
@@ -106,9 +110,13 @@ impl Wire {
     fn view(&mut self, bytes: &[u8], stream: Option<MeshoptStream>) -> usize {
         let offset = glb::append_aligned(&mut self.binary, 8, bytes);
         let mut v = json!({"buffer":0,"byteOffset":offset,"byteLength":bytes.len()});
-        if let Some(MeshoptStream::Attributes { stride, .. }) = stream {
-            v["byteStride"] = json!(stride);
-            v["target"] = json!(34962);
+        match stream {
+            Some(MeshoptStream::Attributes { stride, .. }) => {
+                v["byteStride"] = json!(stride);
+                v["target"] = json!(34962);
+            }
+            Some(MeshoptStream::TriangleIndices { .. }) => v["target"] = json!(34963),
+            _ => {}
         }
         self.views.push(v);
         self.streams.push(stream);
@@ -121,6 +129,25 @@ impl Wire {
         accessor["count"] = json!(count);
         self.accessors.push(accessor);
         self.accessors.len() - 1
+    }
+    /// u16 triangle indices (a coarse tile has at most 3 × 8,192 corners).
+    fn indices(&mut self, indices: &[u32], vertex_count: usize) -> Result<usize, JobError> {
+        let mut bytes = Vec::with_capacity(indices.len() * 2);
+        for &i in indices {
+            let i = u16::try_from(i).map_err(|_| invalid("coarse vertex index exceeds u16"))?;
+            bytes.extend_from_slice(&i.to_le_bytes());
+        }
+        let count = indices.len();
+        let stream = MeshoptStream::TriangleIndices {
+            count,
+            width: 2,
+            vertex_count,
+        };
+        let view = self.view(&bytes, Some(stream));
+        let accessor =
+            json!({"bufferView":view,"componentType":5123,"type":"SCALAR","count":count});
+        self.accessors.push(accessor);
+        Ok(self.accessors.len() - 1)
     }
     /// A tightly packed property column; 4/8-byte values are a lossless meshopt stream.
     fn column(&mut self, bytes: &[u8], rows: usize, width: usize) -> usize {
@@ -182,6 +209,81 @@ fn table(wire: &mut Wire, rows: &[SourcePrimitive]) -> (Value, Value) {
         json!({"source_primitive":{"properties":schema}}),
         json!({"class":"source_primitive","count":rows.len(),"properties":properties}),
     )
+}
+
+/// One per-corner attribute: name, bytes, stride and accessor.
+type Stream = (&'static str, Vec<u8>, usize, Value);
+/// Each output face's input face, the triangle indices and each vertex's source corner.
+type Welded = (Vec<usize>, Vec<u32>, Vec<usize>);
+/// Weld bit-identical corners (all attribute bytes together, so every decoded triangle
+/// keeps its corners) into indexed vertices: faces in vertex-cache order, vertices in fetch
+/// order. Every corner's full record is checked against its vertex's.
+fn weld(streams: &[Stream], corners: usize, mutation: Mutation) -> Result<Welded, JobError> {
+    // Corner records over the keyed streams: every stream, or (test mutation) a subset.
+    let flat = |keyed: &dyn Fn(&str) -> bool| -> (Vec<u8>, usize) {
+        let width: usize = streams.iter().filter(|s| keyed(s.0)).map(|s| s.2).sum();
+        let mut out = Vec::with_capacity(corners * width);
+        for c in 0..corners {
+            for (_, bytes, stride, _) in streams.iter().filter(|s| keyed(s.0)) {
+                out.extend_from_slice(&bytes[c * stride..(c + 1) * stride]);
+            }
+        }
+        (out, width)
+    };
+    let (records, width) = flat(&|_| true);
+    #[cfg(test)]
+    let subset = (mutation == Mutation::WeldPositionsOnly)
+        .then(|| flat(&|n| n == "POSITION" || n == "_FEATURE_ID_0"));
+    #[cfg(not(test))]
+    let subset: Option<(Vec<u8>, usize)> = {
+        let _ = mutation;
+        None
+    };
+    let (keys, key_width) = subset.as_ref().map_or((&records, width), |(k, w)| (k, *w));
+    let mut ids = HashMap::with_capacity(corners);
+    let mut first = Vec::new();
+    let remap: Vec<u32> = keys
+        .chunks_exact(key_width)
+        .enumerate()
+        .map(|(c, key)| {
+            *ids.entry(key).or_insert_with(|| {
+                first.push(c);
+                first.len() as u32 - 1
+            })
+        })
+        .collect();
+    let at = |c: usize| &records[c * width..(c + 1) * width];
+    if (0..corners).any(|c| at(c) != at(first[remap[c] as usize])) {
+        return Err(invalid(
+            "coarse weld merged corners whose attributes differ",
+        ));
+    }
+    let n = first.len();
+    let cached = meshopt::optimize_vertex_cache(&remap, n);
+    // The optimizer only reorders faces; map each back (equal faces in input order).
+    let mut input: HashMap<&[u32; 3], Vec<usize>> = HashMap::new();
+    for (f, t) in remap.as_chunks::<3>().0.iter().enumerate().rev() {
+        input.entry(t).or_default().push(f);
+    }
+    let order = cached
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|t| input.get_mut(t).and_then(Vec::pop))
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| invalid("vertex-cache order lost a face"))?;
+    let fetch = meshopt::optimize_vertex_fetch_remap(&cached, n);
+    let mut corner = vec![0; n];
+    for (old, &new) in fetch.iter().enumerate() {
+        *corner
+            .get_mut(new as usize)
+            .ok_or_else(|| invalid("unreferenced coarse vertex"))? = first[old];
+    }
+    Ok((
+        order,
+        cached.iter().map(|&v| fetch[v as usize]).collect(),
+        corner,
+    ))
 }
 
 fn unorm16(v: f32) -> [u8; 2] {
@@ -267,7 +369,6 @@ pub(crate) fn encode(
             })
             .collect();
         faces.sort_unstable();
-        face_order.extend(faces.iter().map(|f| f.0));
         let mut material = out.material;
         let lead = out.groups[0];
         if !lead.pages.is_empty() {
@@ -301,7 +402,11 @@ pub(crate) fn encode(
                     }
                     bytes.extend_from_slice(&[0, 0]);
                 }
-                wire.attribute(&bytes, count, 8, json!({"componentType":5123,"type":"VEC3","normalized":false,"min":min,"max":max}))
+                (
+                    bytes,
+                    8,
+                    json!({"componentType":5123,"type":"VEC3","normalized":false,"min":min,"max":max}),
+                )
             }
             PositionStorage::Float { positions } => {
                 let mut bytes = Vec::with_capacity(count * 12);
@@ -314,11 +419,15 @@ pub(crate) fn encode(
                         max[a] = max[a].max(*c);
                     }
                 }
-                wire.attribute(&bytes, count, 12, json!({"componentType":5126,"type":"VEC3","min":min.map(f64::from),"max":max.map(f64::from)}))
+                (
+                    bytes,
+                    12,
+                    json!({"componentType":5126,"type":"VEC3","min":min.map(f64::from),"max":max.map(f64::from)}),
+                )
             }
         };
-        let mut attributes = serde_json::Map::new();
-        attributes.insert("POSITION".into(), json!(position));
+        // Per-corner attribute streams, welded into indexed vertices below.
+        let mut streams = vec![("POSITION", position.0, position.1, position.2)];
         if let Some(smooth) = &appearance.normals {
             let mut bytes = Vec::with_capacity(count * 4);
             for v in corners() {
@@ -327,13 +436,12 @@ pub(crate) fn encode(
                 }
                 bytes.push(0);
             }
-            let normal = wire.attribute(
-                &bytes,
-                count,
+            streams.push((
+                "NORMAL",
+                bytes,
                 4,
                 json!({"componentType":5120,"type":"VEC3","normalized":true}),
-            );
-            attributes.insert("NORMAL".into(), json!(normal));
+            ));
         }
         let groups = &out.groups;
         if let Some(uvs) = &lead.uvs {
@@ -344,13 +452,12 @@ pub(crate) fn encode(
                     bytes.extend(unorm16(uv[1]));
                 }
             }
-            let id = wire.attribute(
-                &bytes,
-                count,
+            streams.push((
+                "TEXCOORD_0",
+                bytes,
                 4,
                 json!({"componentType":5123,"type":"VEC2","normalized":true}),
-            );
-            attributes.insert("TEXCOORD_0".into(), json!(id));
+            ));
         }
         if let Some(tangents) = &lead.tangents {
             let mut bytes = Vec::with_capacity(count * 4);
@@ -359,13 +466,12 @@ pub(crate) fn encode(
                     bytes.extend(t.map(snorm8));
                 }
             }
-            let id = wire.attribute(
-                &bytes,
-                count,
+            streams.push((
+                "TANGENT",
+                bytes,
                 4,
                 json!({"componentType":5120,"type":"VEC4","normalized":true}),
-            );
-            attributes.insert("TANGENT".into(), json!(id));
+            ));
         }
         if lead.colors.is_some() {
             let mut bytes = Vec::with_capacity(count * 8);
@@ -380,13 +486,12 @@ pub(crate) fn encode(
                     }
                 }
             }
-            let id = wire.attribute(
-                &bytes,
-                count,
+            streams.push((
+                "COLOR_0",
+                bytes,
                 8,
                 json!({"componentType":5123,"type":"VEC4","normalized":true}),
-            );
-            attributes.insert("COLOR_0".into(), json!(id));
+            ));
         }
         let mut bytes = Vec::with_capacity(count * 4);
         for &(t, _, _) in &faces {
@@ -395,12 +500,25 @@ pub(crate) fn encode(
                 bytes.extend_from_slice(&id.to_le_bytes());
             }
         }
-        let feature = wire.attribute(
-            &bytes,
-            count,
+        streams.push((
+            "_FEATURE_ID_0",
+            bytes,
             4,
             json!({"componentType":5126,"type":"SCALAR"}),
-        );
+        ));
+        let (order, indices, corner) = weld(&streams, count, mutation)?;
+        face_order.extend(order.iter().map(|&f| faces[f].0));
+        let mut attributes = Map::new();
+        for (name, bytes, stride, accessor) in streams {
+            let vertices: Vec<u8> = corner
+                .iter()
+                .flat_map(|&c| &bytes[c * stride..(c + 1) * stride])
+                .copied()
+                .collect();
+            let id = wire.attribute(&vertices, corner.len(), stride, accessor);
+            attributes.insert(name.into(), json!(id));
+        }
+        let indices = wire.indices(&indices, corner.len())?;
         let mut node = json!({"mesh":meshes.len()});
         if let PositionStorage::Quantized {
             translation, scale, ..
@@ -410,9 +528,8 @@ pub(crate) fn encode(
             node["scale"] = json!([f64::from(*scale), f64::from(*scale), f64::from(*scale)]);
         }
         nodes.push(node);
-        attributes.insert("_FEATURE_ID_0".into(), json!(feature));
         meshes.push(json!({"primitives":[{
-            "attributes":attributes,
+            "attributes":attributes,"indices":indices,
             "mode":4,"material":index,
             "extensions":{"EXT_mesh_features":{"featureIds":[
                 {"featureCount":rows,"attribute":0,"propertyTable":0,"label":"source_primitive"}]}}}]}));
@@ -545,11 +662,16 @@ pub(crate) fn check(
         if id != tile.representative[triangle] {
             return Err(invalid("decoded representative differs"));
         }
-        for (k, &vertex) in tile.triangles[triangle].iter().enumerate() {
-            if bits(face.p[k]) != bits(encoded.decoded[vertex as usize]) {
-                return Err(invalid("measured positions differ from decoded GLB bits"));
-            }
-            published[vertex as usize] = face.p[k];
+        // The index codec may rotate a face's corners; winding is kept.
+        let vertices = tile.triangles[triangle];
+        let at = |r: usize, k: usize| face.p[(k + r) % 3];
+        let r = (0..3)
+            .find(|&r| {
+                (0..3).all(|k| bits(at(r, k)) == bits(encoded.decoded[vertices[k] as usize]))
+            })
+            .ok_or_else(|| invalid("measured positions differ from decoded GLB bits"))?;
+        for (k, &vertex) in vertices.iter().enumerate() {
+            published[vertex as usize] = at(r, k);
         }
         let corners = face.p.map(bits);
         let degenerate =
