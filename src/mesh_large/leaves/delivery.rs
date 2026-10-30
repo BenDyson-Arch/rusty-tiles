@@ -499,25 +499,15 @@ fn normal_length_caps(profile: Profile) -> (f64, f64) {
 /// and the normal length cap. One complete 4x4 block over any of them misses the
 /// level's gate whatever every other block decodes to.
 struct BlockCaps {
-    max: Vec<(usize, u8)>,
-    rmse: Vec<(usize, f64)>,
+    gates: Vec<(usize, ChannelGate)>,
     normal_length: Option<f64>,
 }
 impl BlockCaps {
     fn new(level: &sparse_mips::Level, slot: TextureSlot, profile: Profile) -> Self {
         let texels = level.support.iter().filter(|&&s| s > 0).count() as u64;
-        let gates: Vec<_> = gated_channels(slot)
-            .iter()
-            .map(|&c| (c, channel_gate(slot, profile, c, texels)))
-            .collect();
         Self {
-            max: gates
-                .iter()
-                .filter_map(|(c, g)| g.max.map(|m| (*c, m)))
-                .collect(),
-            rmse: gates
-                .iter()
-                .filter_map(|(c, g)| g.block_rmse.map(|m| (*c, m)))
+            gates: (gated_channels(slot).iter())
+                .map(|&c| (c, channel_gate(slot, profile, c, texels)))
                 .collect(),
             normal_length: (slot == TextureSlot::Normal).then(|| normal_length_caps(profile).1),
         }
@@ -537,10 +527,15 @@ impl BlockCaps {
         };
         let texel_over = (0..16).any(|t| {
             let (w, e, d) = texel(t);
-            w > 0 && (self.max.iter().any(|&(c, cap)| e[c].abs_diff(d[c]) > cap) || length(d))
+            let max =
+                |&(c, g): &(usize, ChannelGate)| g.max.is_some_and(|m| e[c].abs_diff(d[c]) > m);
+            w > 0 && (self.gates.iter().any(max) || length(d))
         });
         texel_over
-            || self.rmse.iter().any(|&(c, cap)| {
+            || self.gates.iter().any(|&(c, g)| {
+                let Some(cap) = g.block_rmse else {
+                    return false;
+                };
                 let (mut sse, mut weight) = (0., 0.);
                 for t in 0..16 {
                     let (w, e, d) = texel(t);
@@ -555,16 +550,14 @@ impl BlockCaps {
     /// Complete 4x4 blocks (row-major index) of a decoded level that miss.
     fn witnesses(&self, level: &sparse_mips::Level, expected: &[u8], decoded: &[u8]) -> Vec<u32> {
         let w = level.width as usize;
-        let bw = w / 4;
-        (0..bw * (level.height as usize / 4))
+        (0..(w / 4 * (level.height as usize / 4)) as u32)
             .filter(|&b| {
                 self.over(|t| {
-                    let i = (b / bw * 4 + t / 4) * w + b % bw * 4 + t % 4;
+                    let i = block_texel(w, b, t);
                     (level.support[i], &expected[i * 4..], &decoded[i * 4..])
                 })
             })
             .take(WITNESS_BLOCKS)
-            .map(|b| b as u32)
             .collect()
     }
 }
@@ -1014,7 +1007,7 @@ fn escalate(
         }
         let rrr = scalar && step == Step::Profile;
         let earlier = (&misses[..], &witnesses[..]);
-        if let Some(miss) = probe(chain, &prepared, slot, profile, step, mask, earlier)? {
+        if let Some(miss) = probe(chain, &prepared, (slot, profile, step), earlier)? {
             misses.push(miss);
             continue;
         }
@@ -1310,23 +1303,34 @@ fn lossy_step(
     }))
 }
 
-/// Decides a UASTC step from part of its work before encoding the chain. UASTC encodes
-/// every 4x4 block alone, so a block or level encoded on its own decodes to the same
-/// texels as inside the chain (`a_level_alone_decodes_as_in_its_chain`); a probe miss
-/// is the step's miss, exactly. First the blocks where an earlier step put a texel
-/// over a per-texel cap are re-encoded alone (a few blocks). Before UASTC level 3,
-/// every level but 0 is then encoded alone and gated with its codec floors, levels
-/// that missed earlier first. Level 0 (three quarters of the chain) is never probed,
-/// so a step that then passes costs at most a third more, only on a page that
-/// already missed twice.
-#[allow(clippy::too_many_arguments)]
+/// Texel `t` (row-major) of 4x4 block `b` of a `width`-texel level.
+fn block_texel(width: usize, b: u32, t: usize) -> usize {
+    let bw = width / 4;
+    (b as usize / bw * 4 + t / 4) * width + b as usize % bw * 4 + t % 4
+}
+/// `blocks` of a `width`-texel level side by side in one row of blocks.
+fn block_row(rgba: &[u8], width: usize, blocks: &[u32]) -> Vec<u8> {
+    (0..blocks.len() * 16)
+        .flat_map(|i| {
+            let (t, j) = (
+                i / (blocks.len() * 4) * 4 + i % 4,
+                i % (blocks.len() * 4) / 4,
+            );
+            rgba[block_texel(width, blocks[j], t) * 4..][..4].to_vec()
+        })
+        .collect()
+}
+
+/// Decides a doomed UASTC step without encoding its chain. UASTC encodes every 4x4
+/// block alone, so blocks or a level encoded on their own decode as inside the chain
+/// (`a_level_alone_decodes_as_in_its_chain`): a miss here is the step's miss, exactly.
+/// Blocks an earlier step missed a block-local cap on go first; before level 3 so do
+/// the coarse levels, earlier misses first. Level 0 is never probed, so a step that
+/// then passes costs at most a third more, on a page that already missed twice.
 fn probe(
     chain: &sparse_mips::Chain,
     prepared: &Prepared,
-    slot: TextureSlot,
-    profile: Profile,
-    step: Step,
-    mask: Option<MaskDelivery<'_>>,
+    (slot, profile, step): (TextureSlot, Profile, Step),
     (misses, witnesses): (&[GateMiss], &[(usize, Vec<u32>)]),
 ) -> Result<Option<GateMiss>, JobError> {
     if step == Step::Profile {
@@ -1335,71 +1339,45 @@ fn probe(
     let (mode, params) = step_settings(slot, profile, step)?;
     for (index, blocks) in witnesses {
         let level = &chain.levels[*index];
-        let (w, bw) = (level.width as usize, level.width as usize / 4);
-        let texel =
-            |b: u32, t: usize| (b as usize / bw * 4 + t / 4) * w + b as usize % bw * 4 + t % 4;
-        // The witness blocks side by side in one row of blocks.
-        let mut row = vec![0u8; blocks.len() * 64];
-        for (j, &b) in blocks.iter().enumerate() {
-            for t in 0..16 {
-                let at = ((t / 4) * blocks.len() * 4 + j * 4 + t % 4) * 4;
-                row[at..at + 4]
-                    .copy_from_slice(&prepared.delivered[*index][texel(b, t) * 4..][..4]);
-            }
-        }
-        let width = blocks.len() as u32 * 4;
-        let decoded = codec::encode_decoded_unverified(&row, width, 4, mode, params)?;
+        let w = level.width as usize;
+        let row = block_row(&prepared.delivered[*index], w, blocks);
+        let decoded =
+            codec::encode_decoded_unverified(&row, row.len() as u32 / 16, 4, mode, params)?;
         let caps = BlockCaps::new(level, slot, profile);
         for (j, &b) in blocks.iter().enumerate() {
-            let over = caps.over(|t| {
-                let i = texel(b, t);
-                let at = ((t / 4) * blocks.len() * 4 + j * 4 + t % 4) * 4;
+            if caps.over(|t| {
+                let i = block_texel(w, b, t);
+                let at = (t / 4 * blocks.len() * 4 + j * 4 + t % 4) * 4;
                 (
                     level.support[i],
                     &prepared.expected[*index][i * 4..],
                     &decoded[at..],
                 )
-            });
-            if over {
+            }) {
+                let gate = format!("block probe: mip{index} block {b} misses a block-local cap");
                 return Ok(Some(GateMiss {
                     step,
                     mip: Some(*index),
                     reason: MissReason::Gate,
-                    gate: format!(
-                        "block probe: texture {slot:?} {profile:?} mip{index} block {b} misses its \
-                         maximum-error, block-RMSE or normal-length cap"
-                    ),
+                    gate,
                 }));
             }
         }
     }
-    if step != Step::UastcLevel3 {
-        return Ok(None);
-    }
-    let earlier = misses.iter().filter_map(|m| m.mip).filter(|&m| m > 0);
-    let mut order: Vec<usize> = earlier.chain(1..chain.levels.len()).collect();
-    let mut seen = vec![false; chain.levels.len()];
-    order.retain(|&k| !std::mem::replace(&mut seen[k], true));
-    for index in order {
+    let mut seen = vec![step != Step::UastcLevel3; chain.levels.len()];
+    seen[0] = true;
+    let earlier = misses.iter().filter_map(|m| m.mip);
+    for index in earlier.chain(1..chain.levels.len()) {
+        if std::mem::replace(&mut seen[index], true) {
+            continue;
+        }
         let level = &chain.levels[index];
-        let alone = [codec::MipLevel {
-            rgba: &prepared.delivered[index],
-            width: level.width,
-            height: level.height,
-        }];
-        let decoded = match codec::encode_ktx2_mips_floor_checked(&alone, mode, params)? {
-            Ok((_, mut decoded)) => decoded.pop().ok_or_else(resource)?,
-            Err(miss) => {
-                return Ok(Some(GateMiss {
-                    step,
-                    mip: Some(index),
-                    reason: MissReason::CodecVerify,
-                    gate: format!("level probe: {}", miss.error.message()),
-                }))
-            }
-        };
-        let gate = match check_level(
-            &prepared.expected[index],
+        let rgba = &prepared.delivered[index];
+        let decoded =
+            codec::encode_decoded_unverified(rgba, level.width, level.height, mode, params)?;
+        let expected = &prepared.expected[index];
+        if let Err(e) = check_level(
+            expected,
             &decoded,
             &level.support,
             level.width,
@@ -1407,20 +1385,6 @@ fn probe(
             profile,
             index,
         ) {
-            Err(e) => Some(e),
-            Ok(_) => match mask_gate(
-                mask,
-                prepared.mask_receipts[index].as_ref(),
-                &decoded,
-                level,
-                index,
-                profile,
-            )? {
-                Some(Err(e)) => Some(e),
-                _ => None,
-            },
-        };
-        if let Some(e) = gate {
             let mut miss = missed(e, step, Some(index))?;
             miss.gate = format!("level probe: {}", miss.gate);
             return Ok(Some(miss));
@@ -2915,17 +2879,9 @@ mod tests {
     fn doomed_uastc_steps_are_decided_by_block_probes() {
         // Binary metallic noise: UASTC level 2 misses the data cap at mip1, so level 3 is
         // decided by re-encoding level 2's witness blocks, not the whole chain.
+        let bit = |i: u32, k: u32| ((i.wrapping_mul(2_654_435_761) >> k) & 1) as u8 * 230;
         let rgba: Vec<u8> = (0..64 * 64u32)
-            .flat_map(|i| {
-                let bit = |k: u32| {
-                    if (i.wrapping_mul(2_654_435_761) >> k) & 1 == 1 {
-                        230
-                    } else {
-                        0
-                    }
-                };
-                [0, bit(7), bit(13), 255]
-            })
+            .flat_map(|i| [0, bit(i, 7), bit(i, 13), 255])
             .collect();
         let chain = sparse_mips::build(64, 64, &rgba, &[1; 64 * 64], Class::Data, MEMORY).unwrap();
         let out = escalate(
@@ -2976,26 +2932,10 @@ mod tests {
                 assert_eq!(alone[0], whole[index], "{step:?} mip{index}");
             }
             // Blocks 5, 9 and 30 of level 0 side by side, as the block probe lays them.
-            let (w, blocks) = (128, [5usize, 9, 30]);
-            let texel = |b: usize, t: usize| (b / 32 * 4 + t / 4) * w + b % 32 * 4 + t % 4;
-            let mut row = vec![0u8; blocks.len() * 64];
-            for (j, &b) in blocks.iter().enumerate() {
-                for t in 0..16 {
-                    let at = ((t / 4) * blocks.len() * 4 + j * 4 + t % 4) * 4;
-                    row[at..at + 4].copy_from_slice(&levels[0].rgba[texel(b, t) * 4..][..4]);
-                }
-            }
+            let blocks = [5, 9, 30];
+            let row = block_row(levels[0].rgba, 128, &blocks);
             let alone = codec::encode_decoded_unverified(&row, 12, 4, mode, params).unwrap();
-            for (j, &b) in blocks.iter().enumerate() {
-                for t in 0..16 {
-                    let at = ((t / 4) * blocks.len() * 4 + j * 4 + t % 4) * 4;
-                    assert_eq!(
-                        alone[at..at + 4],
-                        whole[0][texel(b, t) * 4..][..4],
-                        "{step:?} block {b}"
-                    );
-                }
-            }
+            assert_eq!(alone, block_row(&whole[0], 128, &blocks), "{step:?} blocks");
         }
     }
     #[test]
