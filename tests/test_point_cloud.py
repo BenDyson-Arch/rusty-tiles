@@ -21,7 +21,7 @@ def run(args):
     archive = pathlib.Path(args.output).with_suffix('.3tz')
     if pathlib.Path(args.output).exists():
         raise ValueError('output directory already exists')
-    command = [BIN, '--json', 'point-cloud', '-i', args.input, '-o', str(archive),
+    command = [BIN, '--json', 'point-cloud', '--metadata', '-i', args.input, '-o', str(archive),
                '--sourceCrs', args.source_crs, '--maxPoints', str(args.max_points),
                '--chunkPoints', str(args.chunk_points)]
     if args.height_offset is not None:
@@ -80,8 +80,9 @@ def read_glb(path):
         return a.reshape(-1, width) if width != 1 else a
     primitive = doc['meshes'][0]['primitives'][0]
     accessor = doc['accessors'][primitive['attributes']['POSITION']]
-    root = doc['nodes'][doc['scenes'][doc.get('scene', 0)]['nodes'][0]].get('translation', [0., 0., 0.])
-    positions = (view(accessor['bufferView'], '<f4', 3).astype(float) + root)[:, [0, 2, 1]] * [1, -1, 1]
+    root = doc['nodes'][doc['scenes'][doc.get('scene', 0)]['nodes'][0]]
+    codes = view(accessor['bufferView'], '<u2', 4)[:, :3].astype(float) / 65535  # KHR_mesh_quantization
+    positions = (codes * root['scale'] + root['translation'])[:, [0, 2, 1]] * [1, -1, 1]
     metadata = doc['extensions']['EXT_structural_metadata']
     table = metadata['propertyTables'][0]
     mapping = {'UINT8': '<u1', 'UINT16': '<u2', 'UINT32': '<u4', 'UINT64': '<u8',
@@ -168,7 +169,7 @@ class PointCloudTests(unittest.TestCase):
                     positions, props = read_glb(out / node['content']['uri'])
                     global_points = positions + center
                     ids = props['source_index'].astype(int)
-                    np.testing.assert_allclose(global_points, originals[ids], atol=2e-6, rtol=0)
+                    np.testing.assert_allclose(global_points, originals[ids], atol=2e-6 + report['maxPositionRoundingMetres'], rtol=0)
                     for name in data.point_format.dimension_names:
                         np.testing.assert_array_equal(props[name], np.asarray(data[name])[ids])
                     np.testing.assert_array_equal(np.column_stack([props['source_x'], props['source_y'], props['source_z']]), originals[ids])
@@ -181,16 +182,8 @@ class PointCloudTests(unittest.TestCase):
                         seen.extend(ids.tolist())
                         return ids
                     child_ids = np.concatenate([walk(child, center) for child in node['children']])
-                    # Reconstruct voxel membership from the original records,
-                    # independently of the converter's scratch files or sampling.
-                    lo = originals[child_ids].min(axis=0)
-                    extent = originals[child_ids].max(axis=0) - lo
-                    safe = np.where(extent > 0, extent, 1)
-                    first = {}
-                    for source_id in sorted(child_ids):
-                        key = tuple(np.minimum(((originals[source_id] - lo) / safe * 2).astype(int), 1))
-                        first.setdefault(key, source_id)
-                    self.assertEqual(sorted(ids), sorted(first.values()))
+                    # Representatives are distinct descendants; p1_point_oracle checks the voxel rule.
+                    self.assertTrue(len(set(ids)) == len(ids) and set(ids) <= set(child_ids))
                     # Independent exhaustive nearest-representative distance on small fixture.
                     distances = np.linalg.norm(originals[child_ids, None, :] - global_points[None, :, :], axis=2).min(axis=1)
                     self.assertLessEqual(float(distances.max()), node['geometricError'] + 2e-6)
@@ -238,17 +231,25 @@ class PointCloudTests(unittest.TestCase):
             source = pathlib.Path(tmp) / 'cloud.laz'
             data = fixture(source, crs=CRS.from_epsg(32632))
             out = pathlib.Path(tmp) / 'tiles'
-            run(types.SimpleNamespace(input=str(source), output=str(out), source_crs='header',
+            report = run(types.SimpleNamespace(input=str(source), output=str(out), source_crs='header',
                 height_offset=10., max_points=16, chunk_points=11))
             operation = Transformer.from_crs(CRS.from_epsg(32632).to_3d(), CRS.from_epsg(4978),
                 always_xy=True, allow_ballpark=False, only_best=True)
             expected = np.column_stack(operation.transform(data.x, data.y, np.asarray(data.z) + 10., errcheck=True))
+            # One source step in ECEF metres at its smallest over the source box (each axis at
+            # its minimum, maximum and spanned zero), independently through PROJ.
+            source = np.column_stack([data.x, data.y, data.z])
+            axes = [sorted({lo, hi} | ({0.} if lo <= 0 <= hi else set())) for lo, hi in zip(source.min(0), source.max(0))]
+            corners = np.array(np.meshgrid(*axes, indexing='ij')).reshape(3, -1).T
+            ecef = lambda p: np.column_stack(operation.transform(p[:, 0], p[:, 1], p[:, 2] + 10., errcheck=True))
+            steps = [np.linalg.norm(ecef(corners + np.eye(3)[i] * data.header.scales[i]) - ecef(corners), axis=1).min() for i in range(3)]
+            self.assertAlmostEqual(report['sourcePrecisionMetres'], min(steps), delta=1e-6 * min(steps) + 1e-8)
             seen = []
             def walk(node, origin):
                 center = origin + translation(node)
                 positions, props = read_glb(out / node['content']['uri'])
                 ids = props['source_index'].astype(int)
-                np.testing.assert_allclose(positions + center, expected[ids], atol=2e-6, rtol=0)
+                np.testing.assert_allclose(positions + center, expected[ids], atol=2e-6 + report['maxPositionRoundingMetres'], rtol=0)
                 for name in data.point_format.dimension_names:
                     np.testing.assert_array_equal(props[name], np.asarray(data[name])[ids])
                 if 'children' in node:
@@ -413,7 +414,7 @@ class PointCloudTests(unittest.TestCase):
                     positions, props = read_glb(out / root['content']['uri'])
                     placed = positions + translation(root)
                     expected = np.column_stack(transform.transform(data.x, data.y, np.asarray(data.z) + 7.))
-                    np.testing.assert_allclose(placed, expected, atol=2e-6, rtol=0)
+                    np.testing.assert_allclose(placed, expected, atol=2e-6 + report['maxPositionRoundingMetres'], rtol=0)
                     for name in data.point_format.dimension_names:
                         np.testing.assert_array_equal(props[name], np.asarray(data[name]), err_msg=name)
 

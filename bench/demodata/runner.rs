@@ -113,6 +113,10 @@ impl Manifest {
             {
                 return Err("recipe must not override private input/output paths".into());
             }
+            // The points audit checks every source column, which only --metadata output keeps.
+            if case.audit == "points" && !case.args.iter().any(|a| a == "--metadata") {
+                return Err(format!("{}: the points audit needs --metadata", case.id).into());
+            }
         }
         Ok(())
     }

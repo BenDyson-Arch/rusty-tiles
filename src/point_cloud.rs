@@ -1,6 +1,7 @@
 //! Bounded LAS/LAZ producer under the F0 file lifecycle.
 use crate::archive3tz::{self, CodecError, WriteFailure};
 use crate::runtime::{Attempt, Staging};
+use crate::vec3::{norm, sub};
 use crate::{crs, Error};
 use crate::{
     CleanupDiagnostic, JobError, JobErrorKind, JobFailure, OutputPolicy, RunControl, RunEvent,
@@ -40,6 +41,9 @@ pub const MAX_POINTS_PER_TILE: usize = 8192;
 
 #[derive(Clone, Debug)]
 pub struct PointCloudOptions {
+    /// Keep the complete source record per point (the P1 property table);
+    /// off by default, when tiles carry only position and colour.
+    pub metadata: bool,
     pub metadata_attributes: bool,
     pub max_points: usize,
     pub chunk_points: usize,
@@ -47,6 +51,7 @@ pub struct PointCloudOptions {
 impl Default for PointCloudOptions {
     fn default() -> Self {
         Self {
+            metadata: false,
             metadata_attributes: false,
             max_points: MAX_POINTS_PER_TILE,
             chunk_points: 100_000,
@@ -91,8 +96,11 @@ pub struct PointCloudReport {
     pub source_scales: [f64; 3],
     pub source_offsets: [f64; 3],
     pub height_offset: Option<f64>,
+    pub metadata: bool,
     pub properties: Vec<String>,
     pub max_position_rounding_metres: f64,
+    pub source_precision_metres: f64,
+    pub float32_tiles: usize,
     pub sampling: String,
     pub max_points: usize,
     pub chunk_points: usize,
@@ -523,6 +531,7 @@ fn convert(
         expected,
     } = prepared;
     let options = &request.options;
+    let (mut source_lo, mut source_hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
     let (origin, count) = {
         let mut points = las::PointDataBuilder::new().for_header(&header).build();
         let mut origin = None;
@@ -553,6 +562,10 @@ fn convert(
             checkpoint(attempt)?;
             let projected = coordinates.transform(&xyz)?;
             let origin = *origin.get_or_insert(projected[0]);
+            for p in &xyz {
+                source_lo = std::array::from_fn(|i| source_lo[i].min(p[i]));
+                source_hi = std::array::from_fn(|i| source_hi[i].max(p[i]));
+            }
             for ((raw, source), point) in points
                 .raw_bytes()
                 .chunks_exact(raw_len)
@@ -585,6 +598,37 @@ fn convert(
         )
     };
     drop(reader);
+    // Output metres of one source coordinate step, at its smallest over the source box:
+    // each axis at its minimum, maximum and (when spanned) zero. Local XYZ is metres.
+    let precision = match coordinates {
+        Coordinates::Local => scales.into_iter().fold(f64::INFINITY, f64::min),
+        Coordinates::Ecef(_) => {
+            let at = |i: usize| {
+                [
+                    source_lo[i],
+                    source_hi[i],
+                    0f64.clamp(source_lo[i], source_hi[i]),
+                ]
+            };
+            let mut probes = Vec::with_capacity(108);
+            for x in at(0) {
+                for y in at(1) {
+                    for z in at(2) {
+                        probes.push([x, y, z]);
+                        probes.extend((0..3).map(|i| {
+                            std::array::from_fn(|j| {
+                                [x, y, z][j] + if i == j { scales[i] } else { 0. }
+                            })
+                        }));
+                    }
+                }
+            }
+            let moved = coordinates.transform(&probes)?;
+            (moved.as_chunks::<4>().0.iter())
+                .flat_map(|c| c[1..].iter().map(|m| norm(sub(*m, c[0]))))
+                .fold(f64::INFINITY, f64::min)
+        }
+    };
     let mut tree = tiles::Tree {
         attempt,
         // Filled from the forest writer's published inventory below.
@@ -597,9 +641,12 @@ fn convert(
         max_rounding: 0.,
         total_points: count,
         leaf_points: 0,
+        anchor: [0.; 3],
+        precision,
+        float32_tiles: 0,
     };
     progress(attempt, "tiling", 0, count)?;
-    let mut root = tree.build(&path, [0.; 3], 0, None)?;
+    let mut root = tree.build(&path, [0.; 3], 0, None, None)?;
     for i in 0..3 {
         let value = root["transform"][12 + i].as_f64().unwrap() + origin[i];
         if !value.is_finite() {
@@ -647,11 +694,14 @@ fn convert(
     let report = PointCloudReport {
         points: count, tiles: tree.tiles, source_crs, resolved_crs: resolved,
         source_scales: scales, source_offsets: offsets, height_offset,
-        properties: layout.dimensions.iter().map(|d| d.name.clone()).collect(),
+        metadata: options.metadata,
+        properties: if options.metadata { layout.dimensions.iter().map(|d| d.name.clone()).collect() } else { Vec::new() },
         max_position_rounding_metres: tree.max_rounding,
-        sampling: "first source point per voxel; cell diagonal bounds source-to-sample distance".into(),
+        source_precision_metres: tree.precision,
+        float32_tiles: tree.float32_tiles,
+        sampling: "first source point per cubic voxel, finest grid fitting maxPoints; cell diagonal bounds source-to-sample distance".into(),
         max_points: options.max_points, chunk_points: options.chunk_points,
-        encoder: "rusty-tiles-native-las-implicit-v3".into(),
+        encoder: "rusty-tiles-native-las-implicit-v4".into(),
         tiling: "implicit".into(),
         coordinate_profile: "local metres or admitted strict horizontal CRS subset; explicit ellipsoidal metre offset".into(),
         scaled_extra_bytes_tolerance: "FLOAT64 multiply then add; absolute error <= 2*EPSILON*(abs(raw*scale)+abs(offset))+2*MIN_POSITIVE; scaled INT64/UINT64 unsupported".into(),
