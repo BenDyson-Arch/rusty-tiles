@@ -1,0 +1,5 @@
+### Fixed
+
+- `mesh`: a lossy leaf texture page that misses its decoded gates at every codec step is now delivered as its exact level-0 PNG even when its sampler mipmaps, instead of failing the run (`unsupported`). The viewer generates that page's coarser levels, outside the decoded guarantee, as for `lossless` pages. The report and the archive's `conversion.json` declare such pages in `viewer_mip_fallback_pages` and list every one in `viewer_mip_fallbacks` (`first`, `depth`, `page`, `slot`); `lossless_fallback_pages` counts only level-0-sampled fallbacks. The textured synthetic city (`texture-1e5-1024`) now converts at `balanced`.
+- `mesh`: tile boxes have a half length of at least 0.1 mm, so a flat tile (one planar triangle) no longer writes a zero axis.
+- `mesh`: a UASTC escalation step whose earlier-missed blocks, or (before UASTC level 3) coarser levels, already miss when encoded alone is decided without encoding the whole chain. UASTC encodes each 4×4 block independently, so the decision is exact and output is unchanged; texture-1e5-1024 leaf-ladder encode work drops from 188 to 136 full-chain encodes.
