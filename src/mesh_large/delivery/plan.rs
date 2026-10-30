@@ -64,14 +64,20 @@ pub(crate) fn state(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message.into())
 }
 
-/// The box written for `aabb`: centre and outward half lengths, and the closed extent of
-/// that box (rounded outward), which is what its parent encloses.
+/// Smallest written half length (metres). A flat tile (one planar triangle) would
+/// otherwise have a zero axis, which the spec allows but clients that invert the box's
+/// half axes (cesium-native) cannot use.
+pub(crate) const MIN_HALF_LENGTH: f64 = 1e-4;
+
+/// The box written for `aabb`: centre and outward half lengths (at least
+/// [`MIN_HALF_LENGTH`]), and the closed extent of that box (rounded outward), which is
+/// what its parent encloses.
 pub(crate) fn tile_box(aabb: Aabb) -> Result<(TileBox, Aabb), JobError> {
     let center: [f64; 3] = std::array::from_fn(|i| aabb.lo[i] * 0.5 + aabb.hi[i] * 0.5);
     let half: [f64; 3] = std::array::from_fn(|i| {
         add_up(aabb.hi[i], -center[i])
             .max(add_up(center[i], -aabb.lo[i]))
-            .max(0.)
+            .max(MIN_HALF_LENGTH)
     });
     let tile = TileBox::offset(center, half).map_err(|e| state(e.to_string()))?;
     let extent = Aabb {

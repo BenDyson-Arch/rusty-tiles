@@ -2,7 +2,7 @@
 //! packed leaves, a depth-21 chain into a synthetic run hierarchy), so every expectation on
 //! slots, availability, members and bounds comes from the generator, not from the module.
 use super::{
-    plan::{tile_box, Builder, Limits, Linked, Node, Sink, LIMITS},
+    plan::{tile_box, Builder, Limits, Linked, Node, Sink, LIMITS, MIN_HALF_LENGTH},
     publish_with,
     source::{glb_bounds, payload_bounds, Aabb, Digits, LeafRow, MAX_GLB_JSON},
     *,
@@ -1458,6 +1458,18 @@ fn glb_bounds_are_outward_and_z_up() {
     }
     let (path, bytes) = write(doc(json!({"mesh":0,"rotation":[0,0,0,1]})));
     assert!(glb_bounds(&path, &row(bytes)).is_err());
+    // A flat tile (tex3's one-triangle leaves) gets a minimal, non-zero half length.
+    let flat = Aabb {
+        lo: [685.0, 55.25, 27.5],
+        hi: [685.0009765625, 55.25, 27.5009765625],
+    };
+    let (tile, extent) = tile_box(flat).unwrap();
+    let lanes = tile.lanes();
+    assert!(
+        [3, 7, 11].iter().all(|&i| lanes[i] >= MIN_HALF_LENGTH),
+        "{lanes:?}"
+    );
+    assert!((0..3).all(|i| extent.lo[i] <= flat.lo[i] && extent.hi[i] >= flat.hi[i]));
 }
 
 // Independently authored conversion-member ceiling control.
