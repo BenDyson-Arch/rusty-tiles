@@ -251,10 +251,12 @@ index included), fixed when the catalog is admitted.
 - **Amplification budgets** are `max(floor, ⌊S·p/q⌋)`: `hierarchyVisits` max(262,144, S/8),
   `references` max(1,048,576, S/8), `totalBytesRead` max(2 GiB, 4·S) (explicit member-hash
   and payload/document reads, including repeated reads and constructor index reads),
-  `totalPayloadElements` max(16 million, 77·S) and the three C2 budgets above. Archives up to
-  207,792 stored bytes have exactly the floors. The report's `limitDerivation` gives each
-  budget's floor, its ratio `perStoredByte` and its `source` (`floor`, `scaled` or
-  `explicit`); `storedBytes`, `limits` and `limitDerivation` depend only on S and the
+  and the three C2 budgets above. `totalPayloadElements` adds its floor instead: 16 million +
+  130·S, so every legitimate dense output measured (up to 86.6 units per stored byte) validates
+  with a 1.5× margin. Archives up to
+  2,097,159 stored bytes have exactly the max-rule floors. The report's `limitDerivation` gives
+  each budget's floor, its ratio `perStoredByte`, its `source` (`floor`, `scaled` or
+  `explicit`) and, for `totalPayloadElements`, `"additive": true`; `storedBytes`, `limits` and `limitDerivation` depend only on S and the
   request's overrides. S is fixed before any budgeted work and every byte of it is hashed, so
   a budget cannot grow from what traversal finds
   ([traversal amendment](architecture/validator-traversal-scale-amendment.md)).

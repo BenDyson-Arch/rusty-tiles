@@ -55,4 +55,4 @@ with zipfile.ZipFile(out, 'w') as z:
     info = zipfile.ZipInfo('@3dtilesIndex1@', (1980, 1, 1, 0, 0, 0)); info.external_attr = 0o100644 << 16
     z.writestr(info, b''.join(h + struct.pack('<Q', o) for h, o in records))
 S = sum(i.compress_size for i in zipfile.ZipFile(out).infolist())
-print(json.dumps(dict(leaves=n, triangles=tri, stored=S, rows_upper=n * tri * 7, row_units_upper=n * tri * 7 * 128, per_byte_rows_units=round(n * tri * 7 * 128 / S, 1), budget=max(16_000_000, 77 * S))))
+print(json.dumps(dict(leaves=n, triangles=tri, stored=S, rows_upper=n * tri * 7, row_units_upper=n * tri * 7 * 128, per_byte_rows_units=round(n * tri * 7 * 128 / S, 1), budget=16_000_000 + 130 * S)))

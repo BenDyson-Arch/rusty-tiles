@@ -6,11 +6,12 @@
     python3 -I amend.py --ktx2 ARCHIVE_ROOT      # amend the KTX2 lane manifest in place
     python3 -I amend.py --ktx2 ARCHIVE_ROOT --check
 
-Rule (docs/architecture/validator-limits-amendment.md, "measured basis (2026-10-30)"): the
-`totalPayloadElements` ratio is 77 per stored byte instead of 16, still model 1. In every admitted
-report, `limitDerivation.budgets.totalPayloadElements` becomes
-{floor: 16000000, perStoredByte: [77, 1], source: "scaled" iff 77*S > floor} and
-`limits.totalPayloadElements` becomes max(16000000, 77*S). S is recomputed from each case archive
+Rule (docs/architecture/validator-limits-amendment.md, "measured basis (2026-10-30)" and its
+additive budget, 2026-10-31): the `totalPayloadElements` budget is 16000000 + 130*S instead of
+max(16000000, 16*S), still model 1. In every admitted report,
+`limitDerivation.budgets.totalPayloadElements` becomes
+{floor: 16000000, perStoredByte: [130, 1], source: "scaled" iff 130*S > 0, additive: true} and
+`limits.totalPayloadElements` becomes 16000000 + 130*S. S is recomputed from each case archive
 by the VS-C script's own ZIP central-directory parser (never by the validator) and must equal the
 report's `storedBytes`; the old entry and value must be exactly the VS-C ratio's (16). Nothing else
 in any report changes, and no category, exit code or refused case may change.
@@ -28,12 +29,22 @@ spec = importlib.util.spec_from_file_location("vs_c_amend", CONTROLS / "vs_c_lim
 vsc = importlib.util.module_from_spec(spec); spec.loader.exec_module(vsc)
 sha, Refused = vsc.sha, vsc.Refused
 KEY = "totalPayloadElements"
-FLOOR, OLD, NEW = 16000000, (16, 1), (77, 1)
+FLOOR, OLD, NEW = 16000000, (16, 1), (130, 1)
 
 
-def entry(s, ratio):
-    p, q = ratio
+def old_entry(s):
+    p, q = OLD
     return {"floor": FLOOR, "perStoredByte": [p, q], "source": "scaled" if s * p // q > FLOOR else "floor"}
+
+
+def new_entry(s):
+    p, q = NEW
+    return {"floor": FLOOR, "perStoredByte": [p, q], "source": "scaled" if s * p // q > 0 else "floor",
+            "additive": True}
+
+
+def new_limit(s):
+    return FLOOR + s * NEW[0] // NEW[1]
 
 
 def amend_report(name, report, s):
@@ -41,12 +52,12 @@ def amend_report(name, report, s):
     budgets, limits = report["limitDerivation"]["budgets"], report["limits"]
     if report["storedBytes"] != s:
         raise Refused("%s: storedBytes %r but the archive's S is %d" % (name, report["storedBytes"], s))
-    if budgets[KEY] == entry(s, NEW) and limits[KEY] == max(FLOOR, s * NEW[0] // NEW[1]):
+    if budgets[KEY] == new_entry(s) and limits[KEY] == new_limit(s):
         return False  # already amended (KTX2 in-place lane): verified only
-    if budgets[KEY] != entry(s, OLD) or limits[KEY] != max(FLOOR, s * OLD[0] // OLD[1]):
+    if budgets[KEY] != old_entry(s) or limits[KEY] != max(FLOOR, s * OLD[0] // OLD[1]):
         raise Refused("%s: %s is %r / %r, not the 16-per-byte rule at S=%d" % (name, KEY, budgets[KEY], limits[KEY], s))
-    budgets[KEY] = entry(s, NEW)
-    limits[KEY] = max(FLOOR, s * NEW[0] // NEW[1])
+    budgets[KEY] = new_entry(s)
+    limits[KEY] = new_limit(s)
     return True
 
 
@@ -66,8 +77,8 @@ def amend_cases(cases, read_archive):
         report = case["expectedReport"] = copy.deepcopy(case["expectedReport"])
         stats["admitted"] += 1
         stats["amended"] += amend_report(case["name"], report, s)
-        if report["limitDerivation"]["budgets"][KEY]["source"] == "scaled":
-            stats["scaled"].append([case["name"], s])
+        if s * OLD[0] // OLD[1] > FLOOR:
+            stats["scaled"].append([case["name"], s])  # scaled under the former max rule too
     return cases, stats
 
 
@@ -79,8 +90,8 @@ def amend_manifest(manifest, read_archive, origin, origin_sha, manifest_sha):
         raise Refused("category or exit code changed")
     amended["payloadElementRatioAmendment"] = {
         "amends": origin, "inputSha256": origin_sha, "inputManifestSha256": manifest_sha,
-        "rule": "admitted expectedReport: totalPayloadElements perStoredByte [16, 1] -> [77, 1] and its limit "
-                "max(16000000, 77*S); nothing else changes",
+        "rule": "admitted expectedReport: totalPayloadElements max(16000000, 16*S) -> 16000000 + 130*S "
+                "(perStoredByte [130, 1], additive); nothing else changes",
         "specification": "docs/architecture/validator-limits-amendment.md (measured basis, 2026-10-30)",
         "generator": "bench/architecture_audit/c1_payload_integrity/production_controls/" + REL + "/amend.py",
     }

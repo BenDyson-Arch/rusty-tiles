@@ -40,7 +40,7 @@ def run(args):
         'vs_c_amend', HERE.parents[1] / 'vs_c_limits_amendment/2026-10-14/amend.py')
     amend = importlib.util.module_from_spec(spec); spec.loader.exec_module(amend)
     generated, _ = amend.amend_cases(generated, lambda case: (fixtures / case['path']).read_bytes())
-    # Payload-element ratio amendment (2026-10-30): totalPayloadElements 77 per stored byte.
+    # Payload-element amendment (2026-10-30/31): totalPayloadElements 16 M + 130 per stored byte.
     spec = importlib.util.spec_from_file_location(
         'ratio_amend', HERE.parents[1] / 'payload_element_ratio_amendment/2026-10-30/amend.py')
     amend = importlib.util.module_from_spec(spec); spec.loader.exec_module(amend)

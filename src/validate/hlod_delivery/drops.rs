@@ -179,16 +179,31 @@ impl Store {
     }
 
     /// Whether a key is held by a leaf outside the preorder range `first..=last`: a
-    /// border point of that tile.
-    fn outside_leaf(&self, key: CanonicalPoint, first: i64, last: i64) -> Result<bool, Error> {
-        self.connection
-            .prepare_cached(
-                "SELECT EXISTS(SELECT 1 FROM leaf_points WHERE key=? AND (tile<? OR tile>?))",
-            )
+    /// border point of that tile. One seek on each side of the range; the caller charges
+    /// the first, the second is charged here.
+    fn outside_leaf(
+        &self,
+        key: CanonicalPoint,
+        first: i64,
+        last: i64,
+        effort: &Effort,
+    ) -> Result<bool, Error> {
+        let key = point_bytes(key);
+        let mut before = self
+            .connection
+            .prepare_cached("SELECT EXISTS(SELECT 1 FROM leaf_points WHERE key=? AND tile<?)")
+            .map_err(sql)?;
+        if before
+            .query_row(rusqlite::params![key, first], |r| r.get(0))
             .map_err(sql)?
-            .query_row(rusqlite::params![point_bytes(key), first, last], |r| {
-                r.get(0)
-            })
+        {
+            return Ok(true);
+        }
+        effort.charge(super::SEEK_UNITS)?;
+        self.connection
+            .prepare_cached("SELECT EXISTS(SELECT 1 FROM leaf_points WHERE key=? AND tile>?)")
+            .map_err(sql)?
+            .query_row(rusqlite::params![key, last], |r| r.get(0))
             .map_err(sql)
     }
 
@@ -300,8 +315,8 @@ impl Store {
                 }
                 let mut touches = false;
                 for &v in members {
-                    effort.charge(super::ROW_UNITS)?;
-                    if self.outside_leaf(keys[v], parent.id, parent.last)? {
+                    effort.charge(super::SEEK_UNITS)?;
+                    if self.outside_leaf(keys[v], parent.id, parent.last, effort)? {
                         touches = true;
                         break;
                     }
@@ -392,6 +407,9 @@ struct Grid {
     size: f64,
     reach: f64,
     cells: HashMap<[i64; 3], Vec<u32>>,
+    /// The face that answered the last query. Queries come in runs from one dropped face or
+    /// component, so it usually answers the next one too.
+    last: std::cell::Cell<Option<u32>>,
 }
 
 impl Grid {
@@ -421,6 +439,7 @@ impl Grid {
             size,
             reach,
             cells: HashMap::default(),
+            last: std::cell::Cell::new(None),
         };
         for (i, f) in faces.iter().enumerate() {
             let ps = f.map(point);
@@ -450,7 +469,9 @@ impl Grid {
     fn cell(&self, p: [f64; 3]) -> [i64; 3] {
         std::array::from_fn(|a| ((p[a] - self.lo[a]) / self.size).floor() as i64)
     }
-    /// Whether `p` lies within the parent's reach plus `slack` of a face.
+    /// Whether `p` lies within the parent's reach plus `slack` of a face. The last answering face
+    /// is tried first: any face within reach answers, and one within reach of `p` was entered in
+    /// `p`'s cell, so the result is the cell scan's.
     fn within(
         &self,
         p: [f64; 3],
@@ -458,13 +479,21 @@ impl Grid {
         faces: &[[CanonicalPoint; 3]],
         effort: &Effort,
     ) -> Result<bool, Error> {
+        let reach = self.reach + slack;
+        let near = |i: u32| distance2(p, faces[i as usize].map(point)) <= reach * reach;
+        if let Some(i) = self.last.get() {
+            effort.charge(1)?;
+            if near(i) {
+                return Ok(true);
+            }
+        }
         let Some(cell) = self.cells.get(&self.cell(p)) else {
             return Ok(false);
         };
-        let reach = self.reach + slack;
         for &i in cell {
             effort.charge(1)?;
-            if distance2(p, faces[i as usize].map(point)) <= reach * reach {
+            if near(i) {
+                self.last.set(Some(i));
                 return Ok(true);
             }
         }
@@ -550,6 +579,17 @@ mod tests {
         error: f64,
         declared: u64,
     ) -> Result<Vec<u64>, Error> {
+        ordered(coarse, leaf, sibling, error, declared, false)
+    }
+    /// `case`, with the sibling leaf before the coarse tile in preorder when `first`.
+    fn ordered(
+        coarse: &[Face],
+        leaf: &[Face],
+        sibling: &[Face],
+        error: f64,
+        declared: u64,
+        first: bool,
+    ) -> Result<Vec<u64>, Error> {
         let payloads = [
             replay_fixture(coarse),
             replay_fixture(leaf),
@@ -557,12 +597,15 @@ mod tests {
         ];
         let mut s = store();
         s.decoded_limit = 1 << 24;
-        for (id, parent) in [(0, None), (1, Some(0)), (2, Some(1)), (3, Some(0))] {
-            s.tile(id, parent, IDENTITY)?;
+        // Tile ids of the coarse tile, its leaf and the sibling leaf.
+        let [c, l, b] = if first { [2, 3, 1] } else { [1, 2, 3] };
+        s.tile(0, None, IDENTITY)?;
+        for id in 1..4 {
+            s.tile(id, Some(if id == l { c } else { 0 }), IDENTITY)?;
         }
         s.kind(0, None, false, 1e3, Some(1.))?;
-        s.kind(1, None, false, error, Some(1.))?;
-        for (tile, rank) in [(1, 0), (2, 1), (3, 2)] {
+        s.kind(c, None, false, error, Some(1.))?;
+        for (tile, rank) in [(c, 0), (l, 1), (b, 2)] {
             s.reference(tile, rank)?;
             s.payload(rank, true, rank != 0)?;
         }
@@ -651,6 +694,19 @@ mod tests {
             at(1, || case(&[NEAR, FAR], &[NEAR, FAR, BIG], &[], 20., 1)),
             "smallest first",
         );
+    }
+
+    #[test]
+    fn a_kept_component_touching_the_border_on_either_side_may_stay() {
+        // FAR shares an edge with the sibling leaf, before or after the coarse tile in
+        // preorder: it is a border component, so it may stay beside the larger dropped BIG.
+        let touching = [[6., 0., 0.], [5., 0., 0.], [5., -1., 0.]];
+        for first in [false, true] {
+            let kept = at(1, || {
+                ordered(&[NEAR, FAR], &[NEAR, FAR, BIG], &[touching], 20., 1, first)
+            });
+            assert_eq!(kept.unwrap(), vec![0, 1], "sibling first: {first}");
+        }
     }
 
     #[test]

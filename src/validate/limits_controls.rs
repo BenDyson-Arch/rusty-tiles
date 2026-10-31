@@ -188,7 +188,8 @@ fn derivation_is_explicit_scaled_or_floor_with_ties_at_the_floor() {
         BudgetRule {
             floor: 1 << 18,
             per_stored_byte: [1, 8],
-            source: Derivation::Explicit
+            source: Derivation::Explicit,
+            additive: false,
         }
     );
     assert_eq!(sources.of(LimitKey::ArchiveEntries), Derivation::Cap);
@@ -203,12 +204,29 @@ fn derivation_is_explicit_scaled_or_floor_with_ties_at_the_floor() {
 }
 
 /// K1: at report level, `storedBytes` is S and each budget is `max(floor, ⌊S·p/q⌋)` with its
-/// source, one below the tie, at the tie and at the first scaled S.
+/// source, one below the tie, at the tie and at the first scaled S; `totalPayloadElements` is
+/// `16,000,000 + 130·S` at every S, reported as additive.
 #[test]
 fn report_derivation_at_the_crossovers() {
+    for stored_bytes in [20_000u64, 152_381, 207_793] {
+        let (_work, path) = sized(stored_bytes);
+        let summary = inspect(ValidationRequest::new(&path))
+            .unwrap()
+            .summary_json()
+            .unwrap();
+        assert_eq!(summary["storedBytes"], stored_bytes);
+        assert_eq!(
+            summary["limits"]["totalPayloadElements"],
+            16_000_000 + 130 * stored_bytes
+        );
+        assert_eq!(
+            summary["limitDerivation"]["budgets"]["totalPayloadElements"],
+            json!({"floor": 16_000_000, "perStoredByte": [130, 1], "source": "scaled", "additive": true}),
+            "at {stored_bytes}"
+        );
+    }
     for (key, floor, p, q) in [
-        (LimitKey::TotalPayloadElements, 16_000_000u64, 77u64, 1u64),
-        (LimitKey::HierarchyVisits, 1 << 18, 1, 8),
+        (LimitKey::HierarchyVisits, 1u64 << 18, 1u64, 8u64),
         (LimitKey::ContainmentWorkUnits, 1 << 29, 128, 1),
         (LimitKey::References, 1 << 20, 1, 8),
     ] {

@@ -594,7 +594,6 @@ fn budgets_scale_from_stored_bytes_at_their_crossovers() {
         (1u64 << 21, 0, 8, 1),
         (1 << 23, 1, 8, 1),
         (1 << 29, 2, 1, 4),
-        (207_792, 3, 1, 77),
         (1 << 22, 4, 1, 128),
         (1 << 29, 5, 1, 4),
         (1 << 27, 6, 1, 16),
@@ -611,6 +610,10 @@ fn budgets_scale_from_stored_bytes_at_their_crossovers() {
             "index {index}"
         );
         assert!(budgets(&at(stored + step))[index] > floor[index]);
+    }
+    // totalPayloadElements adds its floor: 16,000,000 + 130·S at every S.
+    for stored in [0u64, 1, 152_381, 207_793, 1 << 30] {
+        assert_eq!(budgets(&at(stored))[3], 16_000_000 + 130 * stored);
     }
     assert_eq!(budgets(&at(0)), floor);
     assert_eq!(budgets(&at(u64::MAX))[2], u64::MAX);

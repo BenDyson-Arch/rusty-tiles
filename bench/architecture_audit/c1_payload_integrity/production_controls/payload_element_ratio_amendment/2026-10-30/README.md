@@ -1,12 +1,16 @@
-# Payload-element ratio amendment of the C1 payload-control expectations (2026-10-30)
+# Payload-element budget amendment of the C1 payload-control expectations (2026-10-30, re-derived 2026-10-31)
 
-The default `totalPayloadElements` budget is max(16,000,000, 77·S), up from 16·S; it is still
-model 1 ([measured basis](../../../../../docs/architecture/validator-limits-amendment.md)).
-Every admitted report carries `limitDerivation`, so each admitted expectation changes in exactly
-two fields:
+The default `totalPayloadElements` budget is 16,000,000 + 130·S, an additive budget in the form of
+its time statement, instead of max(16,000,000, 16·S); it is still model 1
+([measured basis](../../../../../docs/architecture/validator-limits-amendment.md)). It was
+max(16,000,000, 77·S) when this directory was first written (PR #304); PR #309 re-derived the
+outputs in place from the same VS-C inputs, before any release, so that legitimate dense producer
+output validates with a 1.5× margin. Every admitted report carries `limitDerivation`, so each
+admitted expectation changes in exactly two fields:
 - `limitDerivation.budgets.totalPayloadElements` becomes
-  `{floor: 16000000, perStoredByte: [77, 1], source}`, with `source` "scaled" iff 77·S > floor;
-- `limits.totalPayloadElements` becomes max(16,000,000, 77·S).
+  `{floor: 16000000, perStoredByte: [130, 1], source, additive: true}`, with `source` "scaled" iff
+  130·S > 0;
+- `limits.totalPayloadElements` becomes 16,000,000 + 130·S.
 
 This directory amends the VS-C 2026-10-14 outputs **additively**; they stay as history.
 
@@ -21,7 +25,7 @@ memory and compares it byte for byte with the committed files.
 
 ## Counts
 
-| Lane | Cases | Admitted amended | Scaled `totalPayloadElements` |
+| Lane | Cases | Admitted amended | Above the former floor (16·S > 16,000,000) |
 | --- | --- | --- | --- |
 | corrected-205 | 205 | 73 | none |
 | polygon-sensitive-5 | 5 | 1 | none |
