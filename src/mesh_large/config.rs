@@ -328,7 +328,10 @@ pub(crate) fn plan_jobs(
 }
 
 /// Memory available to this process: `MemAvailable`, capped by a cgroup v2 `memory.max`
-/// headroom when one applies. `None` where the platform does not report it.
+/// headroom when one applies. A cgroup's headroom counts its reclaimable page cache and
+/// slab as available, as the kernel does when it reclaims them before an out-of-memory
+/// kill (and as `MemAvailable` does host-wide); anonymous memory and shmem/tmpfs (on the
+/// anonymous LRU, not `*_file`) stay used. `None` where the platform does not report it.
 pub(crate) fn available_memory() -> Option<u64> {
     #[cfg(target_os = "linux")]
     {
@@ -375,7 +378,8 @@ fn inherited_headroom(root: &std::path::Path, leaf: &std::path::Path) -> Option<
                 .trim()
                 .parse::<u64>()
                 .ok()?;
-            let headroom = max.saturating_sub(current);
+            let used = current.saturating_sub(reclaimable(directory));
+            let headroom = max.saturating_sub(used);
             result = Some(result.map_or(headroom, |prior: u64| prior.min(headroom)));
         }
         if directory == root {
@@ -383,6 +387,19 @@ fn inherited_headroom(root: &std::path::Path, leaf: &std::path::Path) -> Option<
         }
         directory = directory.parent()?;
     }
+}
+
+/// A cgroup's reclaimable page cache and slab from its `memory.stat` (0 when unreadable).
+#[cfg(target_os = "linux")]
+fn reclaimable(directory: &std::path::Path) -> u64 {
+    let Ok(stat) = std::fs::read_to_string(directory.join("memory.stat")) else {
+        return 0;
+    };
+    stat.lines()
+        .filter_map(|line| line.split_once(' '))
+        .filter(|(key, _)| matches!(*key, "active_file" | "inactive_file" | "slab_reclaimable"))
+        .filter_map(|(_, value)| value.trim().parse::<u64>().ok())
+        .fold(0u64, u64::saturating_add)
 }
 
 #[cfg(all(test, target_os = "linux"))]
@@ -402,6 +419,24 @@ mod tests {
         assert_eq!(inherited_headroom(root.path(), &leaf), Some(60));
         std::fs::remove_file(leaf.join("memory.current")).unwrap();
         assert_eq!(inherited_headroom(root.path(), &leaf), None);
+    }
+    /// Page cache a preceding job left in the cgroup (a compile's object files) is
+    /// reclaimable: it counts as headroom, while anonymous and shmem use does not.
+    #[test]
+    fn reclaimable_cgroup_page_cache_counts_as_headroom() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("memory.max"), "1000").unwrap();
+        std::fs::write(root.path().join("memory.current"), "900").unwrap();
+        assert_eq!(inherited_headroom(root.path(), root.path()), Some(100));
+        std::fs::write(
+            root.path().join("memory.stat"),
+            "anon 150\nfile 700\nshmem 50\nactive_file 250\ninactive_file 400\nslab_reclaimable 30\nslab_unreclaimable 20\n",
+        )
+        .unwrap();
+        assert_eq!(inherited_headroom(root.path(), root.path()), Some(780));
+        // Reclaimable figures above the usage leave the limit, never more.
+        std::fs::write(root.path().join("memory.stat"), "inactive_file 5000\n").unwrap();
+        assert_eq!(inherited_headroom(root.path(), root.path()), Some(1000));
     }
 }
 
