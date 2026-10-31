@@ -64,7 +64,7 @@ use std::{
 };
 
 /// S3's coarse appearance policy (recorded in the stage manifest).
-pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized pages, charts isolated through COARSE_ISLAND_ISOLATED_LEVELS mips, at max(G/16, 1e-5 m), \
+pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized pages, mask-packed charts isolated through COARSE_ISLAND_ISOLATED_LEVELS mips, at max(1.25 G/16, 1e-5 m), \
      1024 cap, never finer than the source's texel spacing, nearest captured-source bake; per-vertex COLOR_0 or flat factors untextured";
 
 /// Hard published triangle cap of every coarse tile (D1).
@@ -468,7 +468,7 @@ pub(crate) struct HlodReport {
 }
 
 /// Coarse appearance of one tile depth: page texels, achieved against requested spacing
-/// (`max(G/16, 1e-5 m)`) and cap hits.
+/// (`max(1.25·G/16, 1e-5 m)`) and cap hits.
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DepthAppearance {
@@ -484,7 +484,7 @@ pub struct DepthAppearance {
     pub searches: u64,
     pub donor_reads: u64,
     pub capped_tiles: u64,
-    /// Tiles whose page density the source's own texel spacing set (not `G/16`).
+    /// Tiles whose page density the source's own texel spacing set (not `1.25·G/16`).
     pub source_limited_tiles: u64,
     pub escalated_pages: u64,
     /// Pages delivered as the exact level-0 PNG.

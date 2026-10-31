@@ -2,7 +2,8 @@
 //! coarse tile,
 //!
 //! - **textured classes** get fresh charts packed into one content-sized page per bound
-//!   slot (all slots share the layout), texel spacing `max(G/16, 1e-5 m)` capped at
+//!   slot (all slots share the layout), texel spacing `max(c·G/16, 1e-5 m)`
+//!   ([`SPACING_FACTOR`]) capped at
 //!   `max_edge` per side, baked from the nearest captured source surface of the class
 //!   ([`bake`]): base colour × COLOR_0 in linear light, emissive, metallic-roughness and
 //!   occlusion raw, and normal maps re-expressed in the coarse tangent frame (the source
@@ -72,10 +73,15 @@ pub(crate) fn tile_page_bytes(slots: u64, classes: u64, cap: u64) -> u64 {
 }
 /// Finest requested spacing (D5's `1e-5 m` floor).
 const MIN_SPACING: f64 = 1e-5;
+/// D5's `c` for balanced: coarse texels at `c·G/16`. A tuning constant. 1.25 keeps the
+/// Walem first views within the Metashape byte floor at the measured 0.47 coarse page
+/// occupancy (the floor model in `walem-calibration-20261030`); 0.9 would give texel
+/// parity at 50-200 m but needs about 0.75 occupancy.
+pub(crate) const SPACING_FACTOR: f64 = 1.25;
 
 /// The requested texel spacing of a tile with published error `g`.
 pub(crate) fn spacing(g: f64) -> f64 {
-    (g / 16.).max(MIN_SPACING)
+    (SPACING_FACTOR * g / 16.).max(MIN_SPACING)
 }
 
 /// Stage-wide appearance services.

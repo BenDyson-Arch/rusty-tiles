@@ -224,8 +224,10 @@ between explicit and implicit metadata; it does not recompute source distances.
 Each material class of a coarse tile gets fresh planar charts on its final decoded
 positions (UV seams of the source are ignored; positions never move), packed into
 one content-sized page per bound slot: the least-area rectangle of whole 4×4 codec
-blocks, at most 1,024 texels a side, that holds the charts, with a 2-texel gutter. Texel spacing is
-`max(G / 16, 1e-5 m)`, but never finer than the source's own texel spacing over
+blocks, at most 1,024 texels a side, that holds the charts, with a 2-texel gutter. Charts
+pack by their covered shape (gutter included, on the isolation grid), so they interlock
+instead of each taking its bounding rectangle. Texel spacing is
+`max(1.25 · G / 16, 1e-5 m)`, but never finer than the source's own texel spacing over
 that surface, so a page never carries more texels than the source has. If the
 content cannot fit 1,024², the page uses the finest spacing that does.
 

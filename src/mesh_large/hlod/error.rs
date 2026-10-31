@@ -345,7 +345,7 @@ impl Direction {
         self.area.p99.max(self.controls.p99)
     }
 }
-/// S3 uses geometric_error for max(G/16,1e-5) chart spacing and keeps decoded
+/// S3 uses geometric_error for max(1.25·G/16, 1e-5) chart spacing and keeps decoded
 /// positions/locked vertices fixed. q is diagnostic only; no D10 calibration is applied.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
