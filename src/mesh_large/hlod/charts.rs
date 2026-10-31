@@ -9,6 +9,7 @@
 //! Adapted from the research prototype (`exp/lod-cluster-dag` `charts.cpp`), v0.3.0's
 //! `chart_unwrap` and #260's tight content-sized packing. UV seams are free: the tile was
 //! simplified without them, and every face is charted afresh.
+use crate::mesh_large::mask_pack::{self, Mask};
 use crate::{JobError, JobErrorKind};
 
 type V3 = [f64; 3];
@@ -76,9 +77,8 @@ pub(crate) struct Chart {
     hi: P2,
     origin: [u32; 2],
     size: [u32; 2],
-    /// Packed cells on the `2^isolated` grid: rows of `cells[0].div_ceil(64)` words.
-    cells: [u32; 2],
-    mask: Vec<u64>,
+    /// Packed cells on the `2^isolated` grid.
+    mask: Mask,
 }
 
 /// The packed layout of one group.
@@ -108,12 +108,8 @@ impl Layout {
         let a = 1u32 << self.isolated;
         let mut labels = vec![0u32; w as usize * h as usize];
         for (i, c) in self.charts.iter().enumerate() {
-            let words = c.cells[0].div_ceil(64) as usize;
-            for cy in 0..c.cells[1] {
-                for cx in 0..c.cells[0] {
-                    if c.mask[cy as usize * words + cx as usize / 64] >> (cx % 64) & 1 == 0 {
-                        continue;
-                    }
+            for (cy, c0, c1) in c.mask.runs() {
+                for cx in c0..c1 {
                     let (x0, y0) = (c.origin[0] + cx * a, c.origin[1] + cy * a);
                     for y in y0..(y0 + a).min(h) {
                         let row = (y * w) as usize;
@@ -235,8 +231,7 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
                 hi: [0.; 2],
                 origin: [0; 2],
                 size: [0; 2],
-                cells: [0; 2],
-                mask: Vec::new(),
+                mask: Mask::default(),
             });
             frames.push((p(faces[seed][0]), [0., 1., 0.]));
             continue;
@@ -259,8 +254,7 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
             hi: [f64::MIN; 2],
             origin: [0; 2],
             size: [0; 2],
-            cells: [0; 2],
-            mask: Vec::new(),
+            mask: Mask::default(),
         };
         queue.clear();
         queue.push(seed);
@@ -546,8 +540,7 @@ fn masks(charts: &mut [Chart], scale: f64, a: u32, g: u32) {
             }
         }
         let cells = c.size.map(|e| e.div_ceil(a));
-        let words = cells[0].div_ceil(64) as usize;
-        let mut mask = vec![0u64; words * cells[1] as usize];
+        let mut mask = Mask::new(cells);
         let low = if a == 64 { u64::MAX } else { (1u64 << a) - 1 };
         for cy in 0..cells[1] {
             let y0 = (cy * a).saturating_sub(g) as usize;
@@ -562,82 +555,14 @@ fn masks(charts: &mut [Chart], scale: f64, a: u32, g: u32) {
             for cx in 0..cells[0] {
                 let x = (cx * a) as usize;
                 if block[x / 64] >> (x % 64) & low != 0 {
-                    mask[cy as usize * words + cx as usize / 64] |= 1 << (cx % 64);
+                    mask.set(cx, cy);
                 }
             }
         }
-        c.cells = cells;
         c.mask = mask;
     }
 }
 
-/// Bottom-left pack the charts' masks (in `order`) into `width` cells: the (used width,
-/// height) in cells, or `None` when a chart is wider or the height exceeds `max_height`.
-/// Candidates are the origin, the page top and every placed chart's right and top edges,
-/// the lowest [`CANDIDATES`] kept; a mask collides only where it shares a cell, so charts
-/// interlock.
-fn pack(charts: &mut [Chart], order: &[usize], width: u32, max_height: u32) -> Option<(u32, u32)> {
-    let words = width.div_ceil(64) as usize + 1;
-    let mut page: Vec<u64> = Vec::new();
-    let mut candidates = std::collections::BTreeSet::from([(0u32, 0u32)]);
-    let (mut height, mut used) = (0u32, 0u32);
-    for &i in order {
-        let c = &charts[i];
-        if c.cells[0] > width {
-            return None;
-        }
-        candidates.insert((height, 0));
-        while candidates.len() > CANDIDATES {
-            candidates.pop_last();
-        }
-        let cw = c.cells[0].div_ceil(64) as usize;
-        let fits = |x: u32, y: u32| {
-            let (ws, bs) = ((x / 64) as usize, x % 64);
-            (0..c.cells[1].min(height.saturating_sub(y))).all(|r| {
-                let base = (y + r) as usize * words + ws;
-                let row = &page[base..base + cw + 1];
-                c.mask[r as usize * cw..(r as usize + 1) * cw]
-                    .iter()
-                    .enumerate()
-                    .all(|(k, &v)| {
-                        row[k] & v << bs == 0 && (bs == 0 || row[k + 1] & v >> (64 - bs) == 0)
-                    })
-            })
-        };
-        let (y, x) = candidates
-            .iter()
-            .copied()
-            .find(|&(y, x)| x + c.cells[0] <= width && fits(x, y))?;
-        if y + c.cells[1] > max_height {
-            return None;
-        }
-        page.resize(page.len().max((y + c.cells[1]) as usize * words), 0);
-        let (ws, bs) = ((x / 64) as usize, x % 64);
-        for r in 0..c.cells[1] {
-            let base = (y + r) as usize * words + ws;
-            for (k, &v) in c.mask[r as usize * cw..(r as usize + 1) * cw]
-                .iter()
-                .enumerate()
-            {
-                page[base + k] |= v << bs;
-                if bs > 0 {
-                    page[base + k + 1] |= v >> (64 - bs);
-                }
-            }
-        }
-        height = height.max(y + c.cells[1]);
-        used = used.max(x + c.cells[0]);
-        candidates.remove(&(y, x));
-        candidates.extend([(y, x + c.cells[0]), (y + c.cells[1], x)]);
-        charts[i].origin = [x, y];
-    }
-    Some((used, height))
-}
-
-/// Bottom-left candidates kept per chart (the lowest by row, then column). A scale-gate
-/// tuning constant: 1,024 already packs Walem's coarse tiles identically; 256 leaves 410 of
-/// 799 below their spacing.
-const CANDIDATES: usize = 4096;
 /// Page widths tried, as factors of the masked area's square root (plus the widest chart).
 const WIDTHS: [f64; 4] = [1., 1.15, 1.35, 1.7];
 
@@ -672,18 +597,14 @@ fn fit(
     let min_edge =
         ((max_texels as f64).sqrt() as u32 / unit * unit).clamp(unit, MIN_PAGE.max(unit));
     let mut order: Vec<usize> = (0..charts.len()).collect();
-    order.sort_by(|&x, &y| charts[y].cells[1].cmp(&charts[x].cells[1]).then(x.cmp(&y)));
+    order.sort_by(|&x, &y| {
+        charts[y].mask.cells[1]
+            .cmp(&charts[x].mask.cells[1])
+            .then(x.cmp(&y))
+    });
     let round = |v: u32| v.div_ceil(unit) * unit;
-    let cells: u64 = charts
-        .iter()
-        .map(|c| {
-            c.mask
-                .iter()
-                .map(|w| u64::from(w.count_ones()))
-                .sum::<u64>()
-        })
-        .sum();
-    let widest = charts.iter().map(|c| c.cells[0]).max().unwrap_or(1) * a;
+    let cells: u64 = charts.iter().map(|c| c.mask.count()).sum();
+    let widest = charts.iter().map(|c| c.mask.cells[0]).max().unwrap_or(1) * a;
     let side = ((cells * u64::from(a * a)) as f64).sqrt();
     let mut widths: Vec<u32> = WIDTHS
         .iter()
@@ -694,10 +615,10 @@ fn fit(
         .collect();
     widths.sort_unstable();
     widths.dedup();
-    let mut best: Option<(u64, u32, [u32; 2])> = None;
-    let mut origins = Vec::with_capacity(charts.len());
+    let masks: Vec<&Mask> = charts.iter().map(|c| &c.mask).collect();
+    let mut best: Option<(u64, u32, [u32; 2], Vec<[u32; 2]>)> = None;
     for &w in &widths {
-        let Some((used, h)) = pack(charts, &order, w / a, max_edge / a) else {
+        let Some((at, used, h)) = mask_pack::pack(&masks, &order, w / a, max_edge / a) else {
             continue;
         };
         let page = [round(used * a).max(min_edge), round(h * a).max(min_edge)];
@@ -708,13 +629,11 @@ fn fit(
             u64::from(page[0]) * u64::from(page[1]),
             page[0].max(page[1]),
         );
-        if best.is_none_or(|(x, m, _)| key < (x, m)) {
-            best = Some((key.0, key.1, page));
-            origins.clear();
-            origins.extend(charts.iter().map(|c| c.origin));
+        if best.as_ref().is_none_or(|(x, m, ..)| key < (*x, *m)) {
+            best = Some((key.0, key.1, page, at));
         }
     }
-    let page = best?.2;
+    let (_, _, page, origins) = best?;
     // The chosen width's own packing (cells to texels).
     for (c, o) in charts.iter_mut().zip(&origins) {
         c.origin = o.map(|v| v * a);

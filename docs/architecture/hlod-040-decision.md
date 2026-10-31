@@ -303,6 +303,22 @@ machinery, **not** permission to retain that exception. A crop covering the
 whole image is legitimate only when the leaf actually needs that domain.
 Keep leaf geometry, IDs, exact lossless sampling and shared/unique UV ownership.
 
+**Owner amendment, 2026-10-30 — leaf crop packing (Metashape floor, PR A).**
+- **What changes.**
+  - Each leaf island carries only the cells (its crop alignment grid) within its gutter of a
+    member triangle's footprint.
+  - Islands pack by those masks: bottom-left, interlocking, never sharing a cell.
+  - The page is whole cells and whole 4×4 blocks, no longer a power of two per side.
+- **What stays exact.** Covered texels, the real-source halo and gutter context, translation-only
+  UVs, the `2^K` source-grid alignment of mipmapped islands, and their isolation through
+  level K are unchanged. Only page layout changes.
+- **Measured on Walem dabca18b (offline).**
+  - Leaf pages today are 0.177 covered.
+  - The mask bound is about 0.38.
+  - Removing the power-of-two rounding alone would give about 0.25.
+- **Why it matters.** The D5 floor model needs leaf occupancy of at least 0.3. At 0.3 the
+  worst Metashape-floor position is at 0.999× its MB.
+
 **Rationale:** local leaf dependencies remove the measured 78.22 MB wide-view
 penalty and preserve spatial streaming. **Evidence:** E2, E3, C/H28 and mesh guide.
 

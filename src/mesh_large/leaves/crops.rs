@@ -1,4 +1,5 @@
 //! Checked source-aligned, translation-only crops. No class/value conversion.
+use crate::mesh_large::mask_pack::Mask;
 use crate::{JobError, JobErrorKind};
 use serde_json::Value;
 
@@ -135,6 +136,11 @@ pub(crate) fn plan(
 pub(crate) struct Island {
     pub crop: Crop,
     pub offset: [u32; 2],
+    /// The texels the island needs, as cells of `cell` texels from its allocation's corner:
+    /// every cell within the gutter of a member triangle's footprint (D6, amended
+    /// 2026-10-30). Pages carry and label only these cells, so islands interlock. `None`:
+    /// the whole crop (period pages).
+    pub mask: Option<(u32, Mask)>,
 }
 /// A binding's physical representation: one or more island crops packed into
 /// a `width` x `height` block, and each triangle's island. A single island at
@@ -154,6 +160,7 @@ impl Block {
             islands: vec![Island {
                 crop,
                 offset: [0, 0],
+                mask: None,
             }],
             triangle_island: vec![0; triangles],
         }
@@ -250,13 +257,53 @@ pub(crate) fn plan_islands_aligned(
         }
         spans.push((lo, hi));
     }
+    let mut block = cluster(&spans, max_edge, gutter, align, align_origin)?;
+    // Each island's needed cells: its members' footprints widened by the gutter.
+    let (g, a) = (i64::from(gutter), i64::from(align));
+    let mut masks: Vec<Mask> = block
+        .islands
+        .iter()
+        .map(|i| Mask::new([i.crop.width / align, i.crop.height / align]))
+        .collect();
+    for (t, (lo, hi)) in spans.iter().enumerate() {
+        let k = block.triangle_island[t] as usize;
+        let crop = &block.islands[k].crop;
+        let corner = [crop.origin[0] - g, crop.origin[1] - g];
+        let cells = masks[k].cells;
+        let range = |axis: usize| {
+            let first = ((lo[axis] - g - corner[axis]).max(0) / a) as u32;
+            let last = ((hi[axis] + g - 1 - corner[axis]).max(0) / a) as u32;
+            first.min(cells[axis] - 1)..=last.min(cells[axis] - 1)
+        };
+        for y in range(1) {
+            for x in range(0) {
+                masks[k].set(x, y);
+            }
+        }
+    }
+    for (island, mask) in block.islands.iter_mut().zip(masks) {
+        island.mask = Some((align, mask));
+    }
+    Ok(block)
+}
+
+/// Clusters triangle footprints `spans` into island crops packed into one block
+/// ([`plan_islands_aligned`]), without masks.
+fn cluster(
+    spans: &[([i64; 2], [i64; 2])],
+    max_edge: u32,
+    gutter: u32,
+    align: u32,
+    align_origin: bool,
+) -> Result<Block, JobError> {
+    let triangles = spans.len();
     // Footprints are padded by both gutters plus alignment slack, so islands
     // whose allocations would nearly touch are merged rather than packed apart.
     let pad = i64::from(gutter) * 2 + i64::from(align);
     let mut cell = ISLAND_CELL;
     loop {
         let mut cells = 0u64;
-        for (lo, hi) in &spans {
+        for (lo, hi) in spans {
             let n = |axis: usize| {
                 ((hi[axis] + pad).div_euclid(cell) - (lo[axis] - pad).div_euclid(cell) + 1) as u64
             };
@@ -372,6 +419,7 @@ pub(crate) fn plan_islands_aligned(
         islands.push(Island {
             crop,
             offset: [0, 0],
+            mask: None,
         });
     }
     if islands.len() == 1 {
@@ -868,6 +916,59 @@ mod tests {
                 block,
                 plan_islands(&uvs, 1024, 1024, 4096, gutter, align).unwrap()
             );
+        }
+    }
+    #[test]
+    fn island_masks_hold_every_footprint_with_its_gutter() {
+        for (count, align, gutter, origin) in
+            [(40, 4, 2, false), (300, 1, 2, false), (40, 8, 8, true)]
+        {
+            let uvs = scattered(count, 1024., count as u64 + 7);
+            let block =
+                plan_islands_aligned(&uvs, 1024, 1024, 4096, gutter, align, origin).unwrap();
+            let mut needed = 0u64;
+            for (t, corners) in uvs.as_chunks::<3>().0.iter().enumerate() {
+                let island = &block.islands[block.triangle_island[t] as usize];
+                let (cell, mask) = island.mask.as_ref().unwrap();
+                assert_eq!(*cell, align);
+                assert_eq!(
+                    mask.cells,
+                    [island.crop.width / align, island.crop.height / align]
+                );
+                let corner = [0, 1].map(|a| island.crop.origin[a] - i64::from(gutter));
+                // plan()'s footprint (one-texel halo), widened by the gutter.
+                let span = |a: usize| {
+                    let v = corners.iter().map(|uv| f64::from(uv[a]) * 1024.);
+                    let lo = v.clone().fold(f64::INFINITY, f64::min).floor() as i64 - 1;
+                    let hi = (v.fold(f64::NEG_INFINITY, f64::max).ceil() as i64 + 1).max(lo + 1);
+                    (lo - i64::from(gutter) - corner[a])..(hi + i64::from(gutter) - corner[a])
+                };
+                for y in span(1) {
+                    for x in span(0) {
+                        needed += 1;
+                        assert!(x >= 0 && y >= 0, "footprint outside the allocation");
+                        assert!(
+                            mask.get(x as u32 / align, y as u32 / align),
+                            "uncovered texel"
+                        );
+                    }
+                }
+            }
+            // Masks are no larger than their crops and smaller in total for scattered input.
+            let cells: u64 = block
+                .islands
+                .iter()
+                .map(|i| {
+                    let (c, m) = i.mask.as_ref().unwrap();
+                    m.count() * u64::from(c * c)
+                })
+                .sum();
+            let rects: u64 = block
+                .islands
+                .iter()
+                .map(|i| u64::from(i.crop.width) * u64::from(i.crop.height))
+                .sum();
+            assert!(cells <= rects && needed > 0);
         }
     }
     #[test]
