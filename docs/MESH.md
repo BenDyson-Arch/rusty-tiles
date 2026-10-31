@@ -489,7 +489,11 @@ Each capture stage rechecks free space for its own working set on entry and
 fails closed if its measured peak exceeds its declared bound; the diagnostics
 report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). The HLOD
 incidence pass is measured the same way (`leaf_delivery.hlod_incidence_scratch_peak_bytes`), and the
-whole-run spill peak (`run_scratch_peak_bytes`) must stay within the declared need.
+whole-run spill peak (`run_scratch_peak_bytes`) must stay within what was declared: the
+larger of capture's up-front need and the HLOD stage's own bound
+(`diagnostics.hlod.stage_scratch_bound_bytes`), whose phases are each declared and
+admitted as they start. Isolated triangles reach the incidence pass's worst case of six
+interface items per triangle, beyond any capture stage, without a refusal.
 The coarse walk's own scratch is admitted through its memory leases
 (`diagnostics.hlod.scratch_components`) and is not in the capture figures. A preflight is
 not a reservation against unrelated writers. Owned intermediate files are
