@@ -23,6 +23,8 @@ const STRIP: [[f32; 3]; 4] = [
     [1., 0., 0.],  // b
     [0., 1., 0.],  // free third vertex (contact only in the rejection control)
 ];
+/// `STRIP` at x = 2: there the a-b segment's seam hash names its greatest holder.
+const SHIFTED_STRIP: [[f32; 3]; 4] = [[2., 0., 0.], [2.5, 0., 0.], [3., 0., 0.], [2., 1., 0.]];
 const DIRECT_FACES: [[u32; 3]; 2] = [[0, 1, 3], [1, 2, 3]];
 // The same four-face witness as the constrained strip/frozen-ring control.
 const FOLDED_STRIP: [[f32; 3]; 6] = [
@@ -37,21 +39,30 @@ const FOLDED_FACES: [[u32; 3]; 4] = [[0, 1, 3], [1, 4, 3], [1, 2, 4], [3, 4, 5]]
 
 #[derive(Clone, Copy)]
 enum Fixture {
-    Direct { third_contact: bool },
+    Direct {
+        third_contact: bool,
+    },
+    /// The third-contact strip, `shifted` or not, with the parent holding the greatest
+    /// (`greatest`) or the least leaf of every shared point.
+    Owned {
+        greatest: bool,
+        shifted: bool,
+    },
     Constrained,
 }
 
 impl Fixture {
     fn positions(self) -> &'static [[f32; 3]] {
         match self {
-            Self::Direct { .. } => &STRIP,
+            Self::Direct { .. } | Self::Owned { shifted: false, .. } => &STRIP,
+            Self::Owned { shifted: true, .. } => &SHIFTED_STRIP,
             Self::Constrained => &FOLDED_STRIP,
         }
     }
 
     fn faces(self) -> &'static [[u32; 3]] {
         match self {
-            Self::Direct { .. } => &DIRECT_FACES,
+            Self::Direct { .. } | Self::Owned { .. } => &DIRECT_FACES,
             Self::Constrained => &FOLDED_FACES,
         }
     }
@@ -61,17 +72,24 @@ impl Fixture {
             self,
             Self::Direct {
                 third_contact: true
-            }
+            } | Self::Owned { .. }
         )
     }
-}
 
-fn row(leaf: u32, a: Key, b: Key) -> InterfaceRow {
-    InterfaceRow::new(leaf, a.min(b), a.max(b), leaf, OUTSIDE_LEAF)
-}
+    /// The parent's first leaf: 1 when an exterior leaf 0 precedes it.
+    fn first_leaf(self) -> u32 {
+        u32::from(matches!(self, Self::Owned { greatest: true, .. }))
+    }
 
-fn strip_row(leaf: u32, a: Key, b: Key) -> InterfaceRow {
-    InterfaceRow::new(leaf, a.min(b), a.max(b), leaf, OUTSIDE_LEAF + 1)
+    /// An interface row of a parent leaf, shared with an exterior leaf after the parent
+    /// (`exterior`), or with leaf 0 before it when the parent holds the greatest leaf.
+    fn row(self, leaf: u32, a: Key, b: Key, exterior: u32) -> InterfaceRow {
+        if self.first_leaf() == 1 {
+            InterfaceRow::new(leaf, a.min(b), a.max(b), 0, leaf)
+        } else {
+            InterfaceRow::new(leaf, a.min(b), a.max(b), leaf, exterior)
+        }
+    }
 }
 
 /// A constructive source-domain witness, independent of the producer's guard.
@@ -198,6 +216,7 @@ fn assert_folded_source_domain() {
 fn children(n: usize, fixture: Fixture) -> (TileKey, Vec<TileGeometry>) {
     match fixture {
         Fixture::Direct { third_contact } => assert_source_domain(third_contact),
+        Fixture::Owned { .. } => assert_source_domain(true),
         Fixture::Constrained => assert_folded_source_domain(),
     }
     let strip_faces = fixture.faces().len();
@@ -212,7 +231,7 @@ fn children(n: usize, fixture: Fixture) -> (TileKey, Vec<TileGeometry>) {
             (n - strip_faces) / CHILDREN + usize::from(slot < (n - strip_faces) % CHILDREN);
         let count = soup_faces + if slot == 0 { strip_faces } else { 0 };
         assert!(count <= super::super::TRIANGLE_CAP);
-        let leaf = slot as u32;
+        let leaf = slot as u32 + fixture.first_leaf();
         let mut child = TileGeometry {
             key: TileKey {
                 first,
@@ -235,14 +254,16 @@ fn children(n: usize, fixture: Fixture) -> (TileKey, Vec<TileGeometry>) {
             child.triangles.extend_from_slice(fixture.faces());
             let [a, mid, b, c] = std::array::from_fn(|i| key(fixture.positions()[i]));
             child.interface.extend([
-                strip_row(leaf, a, a),
-                strip_row(leaf, mid, mid),
-                strip_row(leaf, b, b),
-                strip_row(leaf, a, mid),
-                strip_row(leaf, mid, b),
+                fixture.row(leaf, a, a, OUTSIDE_LEAF + 1),
+                fixture.row(leaf, mid, mid, OUTSIDE_LEAF + 1),
+                fixture.row(leaf, b, b, OUTSIDE_LEAF + 1),
+                fixture.row(leaf, a, mid, OUTSIDE_LEAF + 1),
+                fixture.row(leaf, mid, b, OUTSIDE_LEAF + 1),
             ]);
             if third_contact {
-                child.interface.push(strip_row(leaf, c, c));
+                child
+                    .interface
+                    .push(fixture.row(leaf, c, c, OUTSIDE_LEAF + 1));
             }
         }
         for _ in 0..soup_faces {
@@ -252,10 +273,15 @@ fn children(n: usize, fixture: Fixture) -> (TileKey, Vec<TileGeometry>) {
             child.positions.extend(p);
             child.triangles.push([base, base + 1, base + 2]);
             for i in 0..3 {
-                child.interface.push(row(leaf, key(p[i]), key(p[i])));
                 child
                     .interface
-                    .push(row(leaf, key(p[i]), key(p[(i + 1) % 3])));
+                    .push(fixture.row(leaf, key(p[i]), key(p[i]), OUTSIDE_LEAF));
+                child.interface.push(fixture.row(
+                    leaf,
+                    key(p[i]),
+                    key(p[(i + 1) % 3]),
+                    OUTSIDE_LEAF,
+                ));
             }
             soup += 1;
         }
@@ -296,8 +322,8 @@ fn children(n: usize, fixture: Fixture) -> (TileKey, Vec<TileGeometry>) {
             first: 0,
             end: n as u64,
             depth: 1,
-            leaf_begin: 0,
-            leaf_end: OUTSIDE_LEAF,
+            leaf_begin: fixture.first_leaf(),
+            leaf_end: OUTSIDE_LEAF + fixture.first_leaf(),
         },
         children,
     )
@@ -368,9 +394,9 @@ fn measured_contract(parent: TileKey, children: &[TileGeometry], fixture: Fixtur
                 certificates.push(certificate);
                 terminal_vertices.extend([a, b]);
                 for point in [a, b] {
-                    interface.push(row(child.key.leaf_begin, point, point));
+                    interface.push(fixture.row(child.key.leaf_begin, point, point, OUTSIDE_LEAF));
                 }
-                interface.push(row(child.key.leaf_begin, a, b));
+                interface.push(fixture.row(child.key.leaf_begin, a, b, OUTSIDE_LEAF));
             }
         }
     }
@@ -397,7 +423,7 @@ fn measured_contract(parent: TileKey, children: &[TileGeometry], fixture: Fixtur
     let epsilon = (distance + rounding).next_up();
     assert!(epsilon > distance && epsilon.is_finite());
     match fixture {
-        Fixture::Direct { .. } => assert_eq!(distance, 0.),
+        Fixture::Direct { .. } | Fixture::Owned { .. } => assert_eq!(distance, 0.),
         Fixture::Constrained => assert_eq!(distance, 0.5),
     }
     // These are existing child arc edges, while a-b is genuinely new.
@@ -418,13 +444,13 @@ fn measured_contract(parent: TileKey, children: &[TileGeometry], fixture: Fixtur
         terminal_lock: false,
     });
     for point in [a, b] {
-        interface.push(strip_row(parent.leaf_begin, point, point));
+        interface.push(fixture.row(parent.leaf_begin, point, point, OUTSIDE_LEAF + 1));
     }
-    interface.push(strip_row(parent.leaf_begin, a, b));
+    interface.push(fixture.row(parent.leaf_begin, a, b, OUTSIDE_LEAF + 1));
     if fixture.third_contact() {
         let c = key(positions[3]);
         // An isolated point segment emits its endpoint row twice in production.
-        interface.extend([strip_row(parent.leaf_begin, c, c); 2]);
+        interface.extend([fixture.row(parent.leaf_begin, c, c, OUTSIDE_LEAF + 1); 2]);
     }
     assert_eq!(certificates.len(), expected_certificates);
     assert_eq!(terminal_vertices.len(), 6 * soup_faces);
@@ -647,6 +673,49 @@ fn complete_parent(n: usize, third_contact: bool) {
         assert!(lost.0.is_empty() && lost.1.is_empty());
     }
     assert_peaks(n, peak, metadata);
+}
+
+/// D1/D11 amendment A2 (N1, seam owner). The third-contact strip's only completion is the
+/// fresh all-contact face a-b-c, whose span segment is the contract chord a-b. At x = 0 its
+/// seam owner is the cell holding a's least leaf; at x = 2 (`SHIFTED_STRIP`), a's greatest.
+/// A parent holding the greatest leaf of every shared point (highest-indexed on its whole
+/// border) builds it where the hash names its side, and is refused where it does not; the
+/// least-indexed parent the other way round. It is N3 that builds: N3's border snap is
+/// the one that runs under the last-resort policy.
+#[test]
+fn a_highest_indexed_parent_builds_the_seam_faces_it_owns() {
+    for (greatest, shifted, builds) in [
+        (true, true, true),
+        (true, false, false),
+        (false, true, false),
+        (false, false, true),
+    ] {
+        let fixture = Fixture::Owned { greatest, shifted };
+        let (parent, children) = children(64, fixture);
+        let [a, mid, b, c] = std::array::from_fn(|i| key(fixture.positions()[i]));
+        let contract = measured_contract(parent, &children, fixture);
+        let outcome = build_parent(
+            parent,
+            &children,
+            &[super::super::TRIANGLE_CAP],
+            &contract,
+            &|k| {
+                if k == mid {
+                    Ok(Some((a, b, 0.5, 2)))
+                } else {
+                    Ok(Some((k, k, 0., if [a, b, c].contains(&k) { 2 } else { 1 })))
+                }
+            },
+            &mut |_| Ok(true),
+            &|| Ok(()),
+            true,
+        )
+        .unwrap();
+        let stage = outcome.built.as_ref().map(|b| b.last_resort_stage);
+        let name = format!("greatest={greatest} shifted={shifted}");
+        assert_eq!(stage.is_some(), builds, "{name}: {stage:?}");
+        assert!(stage.is_none_or(|s| s == 3), "{name}: {stage:?}");
+    }
 }
 
 #[test]
