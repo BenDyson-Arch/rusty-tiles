@@ -7,9 +7,12 @@ use crate::glb::{self as container, MeshoptLayout, MeshoptStream};
 use crate::{JobError, JobErrorKind};
 use serde_json::json;
 /// A tile's surface lattice. Positions are decoded glTF (y-up) coordinates,
-/// exactly representable by the level's [`Storage`].
+/// exactly representable by the level's [`Storage`]. Only `used` nodes, those
+/// of a triangle whose three nodes are valid, are encoded; the others hold
+/// their zero-height lattice position.
 pub(super) struct Grid {
     pub positions: Vec<[f64; 3]>,
+    pub used: Vec<bool>,
     pub columns: usize,
     pub rows: usize,
     pub bounds: [[f64; 3]; 2],
@@ -17,11 +20,13 @@ pub(super) struct Grid {
     pub height_range: [f64; 2],
 }
 /// Vertical curtains below a tile's interior edges. Their tops are the surface
-/// vertices themselves; `indices` address the surface vertices followed by
+/// vertices themselves; `indices` address the surface lattice followed by
 /// `bottoms`.
 pub(super) struct Skirt {
     pub bottoms: Vec<[f64; 3]>,
     pub indices: Vec<u32>,
+    /// Which of the west, east, south and north edges carry a curtain.
+    pub edges: [bool; 4],
 }
 /// Largest quantized coordinate: uint16 positions.
 pub(super) const QUANTIZED_STEPS: f64 = 65535.;
@@ -77,14 +82,25 @@ pub(super) fn encode(
     storage: Storage,
     mut checkpoint: impl FnMut() -> Result<(), JobError>,
 ) -> Result<Vec<u8>, JobError> {
-    let count = grid.positions.len() + skirt.bottoms.len();
+    // Lattice index to encoded index; unused nodes are dropped.
+    let mut remap = vec![u32::MAX; grid.positions.len()];
+    let mut used = 0;
+    for (i, _) in grid.used.iter().enumerate().filter(|(_, u)| **u) {
+        remap[i] = used;
+        used += 1;
+    }
+    let count = used as usize + skirt.bottoms.len();
     if count > 1 << 16 {
         return Err(JobError::new(
             JobErrorKind::Unsupported,
             "terrain tile exceeds 65536 vertices",
         ));
     }
-    let positions = || grid.positions.iter().chain(&skirt.bottoms);
+    let positions = || {
+        (grid.positions.iter().zip(&grid.used))
+            .filter_map(|(p, u)| u.then_some(p))
+            .chain(&skirt.bottoms)
+    };
     let mut binary =
         Vec::with_capacity(count * 12 + (grid.columns * grid.rows + skirt.indices.len()) * 12);
     let mut node = json!({"mesh":0});
@@ -142,21 +158,25 @@ pub(super) fn encode(
     for y in 0..grid.rows - 1 {
         for x in 0..grid.columns - 1 {
             let a = y * grid.columns + x;
-            for i in [
-                a,
-                a + 1,
-                a + grid.columns,
-                a + 1,
-                a + grid.columns + 1,
-                a + grid.columns,
-            ] {
-                binary.extend((i as u16).to_le_bytes())
+            let c = grid.columns;
+            for t in [[a, a + 1, a + c], [a + 1, a + c + 1, a + c]] {
+                if t.iter().all(|&i| grid.used[i]) {
+                    for i in t {
+                        binary.extend((remap[i] as u16).to_le_bytes())
+                    }
+                    indices += 3;
+                }
             }
-            indices += 6;
         }
     }
     // Skirt triangles follow the surface in the same primitive and material.
+    let surface = grid.positions.len() as u32;
     for &i in &skirt.indices {
+        let i = if i < surface {
+            remap[i as usize]
+        } else {
+            used + i - surface
+        };
         binary.extend(u16::try_from(i).map_err(failure)?.to_le_bytes())
     }
     indices += skirt.indices.len();

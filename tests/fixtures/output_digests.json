@@ -22,15 +22,15 @@
       "#order": "b4a31f26344da2d224b707fa34c3666cae34c1fed5951021a25c9bf4b8050879",
       "@3dtilesIndex1@": "1d2d28d5ec875aef91463eaf6157901ac9221d485ddec248b45a48c89d97ba2f",
       "content/f0-d0.glb": "a7747937e880c0408dc874d0a8a658da774011d14905b47fc3196073886f3590",
-      "conversion.json": "56959cc3845697b1b7ed1ed84b01851e066593392287bb36dea0382ac90f9872",
+      "conversion.json": "d5baf66337cb9cd9ee201e54739d9d7b8c6e6a58ed574d6d27c39404a7f9cf74",
       "tileset.json": "5700e32851ab91d47852f24335d31c01d937c3c3431e91fb51d661e74a68d917"
     },
     "mesh-balanced": {
-      "#archive": "1ecb2b84ef522afbda42e0f39083f11529671d86b50447b92454657b0ab0e1f4",
+      "#archive": "fe7a261546b2f1fe29db0912c91cc0a272bac60b05889e1fd302a2385f5762a4",
       "#order": "b4a31f26344da2d224b707fa34c3666cae34c1fed5951021a25c9bf4b8050879",
       "@3dtilesIndex1@": "e6e5a352296d440dda761dfc6cbd0ba593f575cfcb77566673308c60441f915c",
       "content/f0-d0.glb": "ef423bf01ec1ef3a59e7cd3663939f61aef6f339539cec5b9bd6d4b12687c1af",
-      "conversion.json": "1a119a63b8376ca6856da057f4858afa1642c63a88a1a3e1c128484b8534a163",
+      "conversion.json": "2ce5f9f1ce378ed3904ca05278cab8e15a14ef0804a6c476dfcae5e27567d54a",
       "tileset.json": "65e7ce0fa3bf76b7f0779cdcd0576b96f13ad55577d6894c1673fb47eb694e27"
     }
   }

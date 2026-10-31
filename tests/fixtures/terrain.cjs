@@ -1,5 +1,6 @@
 // Cesium 1.146.0 acceptance: URL and independently decoded GLB oracle JSON.
 // Oracle: {samples:[{longitude,latitude,height,tolerance}],outside:[{longitude,latitude}],minimumLeaves:2,imagery:true}.
+// `outside` points (beyond the footprint or over a NoData hole) have no height and do not clamp.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const {createHash} = require('node:crypto');

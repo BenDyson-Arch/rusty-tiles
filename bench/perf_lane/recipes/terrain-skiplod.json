@@ -3,7 +3,7 @@
   "dataset": "corpus dem.tif (1025x1025 float32 DEM, EPSG:4326)",
   "description": "One terrain conversion with Cesium's default traversal and with skipLevelOfDetail (#201), at the default maximumScreenSpaceError 16 and fully refined (0), where #201 measured 419 against 300 requests",
   "recipes": [
-    {"name": "terrain-lod", "convert": ["terrain", "-i", "{corpus}/dem.tif", "-o", "{out}", "--height-offset", "0", "--fill-height", "0"]},
+    {"name": "terrain-lod", "convert": ["terrain", "-i", "{corpus}/dem.tif", "-o", "{out}", "--height-offset", "0"]},
     {"name": "terrain-skiplod", "like": "terrain-lod", "viewer": {"tilesetOptions": {"skipLevelOfDetail": true}}},
     {"name": "terrain-lod-sse0", "like": "terrain-lod", "viewer": {"maximumScreenSpaceError": 0}},
     {"name": "terrain-skiplod-sse0", "like": "terrain-skiplod", "viewer": {"maximumScreenSpaceError": 0}}

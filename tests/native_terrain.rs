@@ -18,7 +18,6 @@ fn request(input: &Path, output: &Path) -> TerrainRequest {
         output,
         TerrainHeights::RawMetres {
             height_offset_metres: 10.,
-            fill_height_metres: -999.,
         },
         TerrainOptions::new(16),
     )
@@ -29,14 +28,7 @@ fn cli(input: &Path, output: &Path, extra: &[&str]) -> std::process::Output {
         .arg(input)
         .arg("-o")
         .arg(output)
-        .args([
-            "--cells-per-leaf",
-            "16",
-            "--height-offset",
-            "10",
-            "--fill-height",
-            "-999",
-        ])
+        .args(["--cells-per-leaf", "16", "--height-offset", "10"])
         .args(extra)
         .env("PATH", "")
         .output()
@@ -218,7 +210,6 @@ fn malformed_request_is_shared_domain_rejection() {
         &output,
         TerrainHeights::RawMetres {
             height_offset_metres: f64::NAN,
-            fill_height_metres: 0.,
         },
         TerrainOptions::new(16),
     );
@@ -389,7 +380,6 @@ fn concurrent_jobs_and_repeated_publication_keep_independent_state() {
             output,
             TerrainHeights::RawMetres {
                 height_offset_metres: offset,
-                fill_height_metres: -999.,
             },
             TerrainOptions::new(cells),
         )

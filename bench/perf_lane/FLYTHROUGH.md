@@ -34,8 +34,8 @@ Generated 2026-10-14T00:34:33 by `bench/perf_lane/flythrough.py`. Raw data: `/ho
 
 | set | recipe | conversion | viewer | output |
 |---|---|---|---|---|
-| terrain-skiplod | terrain-lod-sse0 | `terrain -i {corpus}/dem.tif -o {out} --height-offset 0 --fill-height 0` | `{"maximumScreenSpaceError": 0}` | 8.39 MiB, 420 files |
-| terrain-skiplod | terrain-skiplod-sse0 | `terrain -i {corpus}/dem.tif -o {out} --height-offset 0 --fill-height 0` | `{"tilesetOptions": {"skipLevelOfDetail": true}, "maximumScreenSpaceError": 0}` | 8.39 MiB, 420 files |
+| terrain-skiplod | terrain-lod-sse0 | `terrain -i {corpus}/dem.tif -o {out} --height-offset 0` | `{"maximumScreenSpaceError": 0}` | 8.39 MiB, 420 files |
+| terrain-skiplod | terrain-skiplod-sse0 | `terrain -i {corpus}/dem.tif -o {out} --height-offset 0` | `{"tilesetOptions": {"skipLevelOfDetail": true}, "maximumScreenSpaceError": 0}` | 8.39 MiB, 420 files |
 | vector-leaves | vector-default | `vector -i {corpus}/vector.geojson -o {out}.3tz --jobs 2 --reproducible` | `{}` | 18.14 MiB, archive files |
 | vector-leaves | vector-leaf16 | `vector -i {corpus}/vector.geojson -o {out}.3tz --jobs 2 --reproducible --maxFeatures 16` | `{}` | 28.83 MiB, archive files |
 

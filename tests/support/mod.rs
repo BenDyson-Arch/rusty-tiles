@@ -161,8 +161,6 @@ pub fn recipes() -> Vec<Recipe> {
                 "16",
                 "--height-offset",
                 "10.25",
-                "--fill-height",
-                "0",
             ]],
             true,
         ),

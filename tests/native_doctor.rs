@@ -367,8 +367,6 @@ fn gtiff_commands(root: &std::path::Path) -> Vec<(&'static str, Vec<std::ffi::Os
                 path(root.join("terrain")),
                 arg("--height-offset"),
                 arg("0"),
-                arg("--fill-height"),
-                arg("0"),
             ],
         ),
     ]
