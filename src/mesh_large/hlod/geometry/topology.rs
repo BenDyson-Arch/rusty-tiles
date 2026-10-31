@@ -196,6 +196,7 @@ pub(super) fn contract(
     mapping: &super::BorderMap<'_>,
     receipt: &mut Receipt,
     fallbacks: bool,
+    folds: Option<&super::folds::Policy>,
 ) -> Result<bool, JobError> {
     contract_from(
         m,
@@ -205,6 +206,7 @@ pub(super) fn contract(
         receipt,
         None,
         fallbacks,
+        folds,
     )
 }
 
@@ -267,7 +269,10 @@ fn choose_targets(
 }
 
 /// Keep the licenses of the original merged children across recovery proposals.
-/// `fallbacks`: see `constrained::contract`.
+/// `fallbacks`: see `constrained::contract`. `folds` (A2's N3): the guard runs under that
+/// last-resort policy, so the snap may fold faces; the shared-point rules (seam owner),
+/// exact interface items and an unchanged topology still decide.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn contract_from(
     m: &mut Merged,
     interface: &[InterfaceRow],
@@ -276,6 +281,7 @@ pub(super) fn contract_from(
     receipt: &mut Receipt,
     original_faces: Option<&[[u32; 3]]>,
     fallbacks: bool,
+    folds: Option<&super::folds::Policy>,
 ) -> Result<bool, JobError> {
     let _cpu = super::super::cpu_profile::start(
         super::super::cpu_profile::Stage::Contract,
@@ -341,7 +347,9 @@ pub(super) fn contract_from(
         .map(|r| (r.a, r.b))
         .collect();
     let lost = super::missing_owned(&output, &m.keys, segments, required);
-    let direct = !folded
+    // N3 (`folds`) snaps onto the contract with folds admitted: exact interface items
+    // and an unchanged topology still decide.
+    let direct = (!folded || folds.is_some())
         && !output.is_empty()
         && lost.0.is_empty()
         && lost.1.is_empty()
@@ -355,6 +363,10 @@ pub(super) fn contract_from(
         &mapping_by_vertex,
     );
     drop(mapping_by_vertex);
+    let guard = match folds {
+        Some(policy) => guard.with_policy(policy.clone()),
+        None => guard,
+    };
     if direct && !guard.violations(&m.positions, &output).iter().any(|v| *v) {
         m.triangles = output;
         m.representative = representatives;
@@ -1152,6 +1164,36 @@ fn cycle_centroids(m: &Merged, edges: &HashMap<(u32, u32), u32>, seed: &[bool]) 
 /// So branch anchors and the first vertex of each path at a branch stay, each path of a
 /// parallel group keeps its middle interior vertex, and each loop its first two.
 /// O(boundary).
+/// Every vertex on an open boundary component that touches the parent interface: what
+/// N3's clustering keeps fixed, so `changes` sees those paths unchanged.
+pub(super) fn touching_boundary(m: &Merged, interface: &[InterfaceRow]) -> Vec<bool> {
+    let mut edges: HashMap<(u32, u32), u32> = HashMap::default();
+    for t in &m.triangles {
+        for i in 0..3 {
+            let (a, b) = (t[i], t[(i + 1) % 3]);
+            if a != b {
+                *edges.entry((a.min(b), a.max(b))).or_default() += 1;
+            }
+        }
+    }
+    edges.retain(|_, n| *n == 1);
+    let border = points(interface);
+    let mut groups = Components::new(m.keys.len());
+    let mut on = vec![false; m.keys.len()];
+    for &(a, b) in edges.keys() {
+        groups.join(a, b);
+        on[a as usize] = true;
+        on[b as usize] = true;
+    }
+    let touching: HashSet<usize> = (0..m.keys.len())
+        .filter(|&v| on[v] && border.contains(&m.keys[v]))
+        .map(|v| groups.root(v))
+        .collect();
+    (0..m.keys.len())
+        .map(|v| on[v] && touching.contains(&groups.root(v)))
+        .collect()
+}
+
 pub(super) fn touching_pins(m: &Merged, interface: &[InterfaceRow]) -> Vec<bool> {
     let mut pins = vec![false; m.keys.len()];
     let mut edges: HashMap<(u32, u32), u32> = HashMap::default();
@@ -1762,7 +1804,16 @@ pub(super) mod tests {
             })
         };
         let mut receipt = Receipt::default();
-        assert!(contract(&mut m, &interface, &previous, &map, &mut receipt, true).unwrap());
+        assert!(contract(
+            &mut m,
+            &interface,
+            &previous,
+            &map,
+            &mut receipt,
+            true,
+            None
+        )
+        .unwrap());
         let boundary = |v: u32| [0, 2, 4, 5].contains(&v);
         assert!(
             m.triangles.iter().all(|t| !t.iter().all(|&v| boundary(v))),
@@ -1785,6 +1836,7 @@ pub(super) mod tests {
             &|k| Ok((k == middle).then_some((a, b, 0.75, 0))),
             &mut Receipt::default(),
             false,
+            None,
         )
         .unwrap_err();
         assert_eq!(error.kind(), crate::JobErrorKind::InvalidState);
@@ -1898,6 +1950,7 @@ pub(super) mod tests {
             &|p| Ok((p == middle).then_some((a, q, 0.5, 0))),
             &mut receipt,
             false,
+            None,
         )
         .unwrap();
         if accepted {
@@ -1962,6 +2015,7 @@ pub(super) mod tests {
             &|p| Ok((p == middle).then_some((a, b, 0.5, 0))),
             &mut receipt,
             false,
+            None,
         )
         .unwrap());
         assert_eq!(m.triangles, [[0, 2, 3], [0, 2, 4], [2, 0, 5]]);
@@ -2264,6 +2318,7 @@ pub(super) mod tests {
             &|p| Ok((p == middle).then_some((a, b, 0.5, 0))),
             &mut receipt,
             false,
+            None,
         )
         .unwrap();
         let segments = [(a, b)].into_iter().collect();

@@ -105,6 +105,8 @@ follows industry practice (Nanite, Simplygon) and locks only exactly shared item
     its children's tiles in the first view.
   - **Scope:** this is the bounded last resort. D11/S1b's topology simplification and border
     scheme are to make it rare.
+  - **Since A2 (D11, 2026-10-30):** a cell whose contract fits the cap is rebuilt by the
+    constructive last resort instead; omission remains for the cases A2 lists.
 - **Winding:** simplified faces keep their source orientation. A face collapsed onto an
   opposite-facing source face is dropped beside its twin, or turned.
 
@@ -540,6 +542,50 @@ edge between two contacts that the source does not support, at every step, and t
 output is only a first proposal that develop's checks (interface retention, the full guard,
 topology changes, S2) still judge. Tiles the earlier builds publish are unchanged. The audit
 records only this build's accepted proposal. Walem: 48 omitted cells to 14.
+
+**Owner amendment, 2026-10-30 — constructive last resort (A2).** Replaces omission for
+every cell whose contract fits the cap (`minimum_triangles` within it). When develop's
+strategies, fix 2 and the staged reduction all publish nothing, the cell is rebuilt in three
+stages, each running develop's first strategies only (both caps, holes kept or not), so
+every tile built today is unchanged:
+
+- **N1, seam owner (hash split, owner 2026-10-31).** A new edge between two shared points,
+  or a new face on three, is admitted only in its seam owner. A segment {a, b} (published
+  f32 points, compared as little-endian u32 words, a < b) belongs to the cell holding a's
+  least holding leaf, or its greatest when the top bit of FNV-1a 64 over the six words of
+  a then b is set. A face belongs to the owner of its span segment, least to greatest
+  corner; on a seam chain that is the edge a new sliver face adds, and every other new
+  edge of the face needs its own owner. Every same-depth cell derives the same leaf from
+  the exact interface intervals, so each candidate has exactly one owner per depth and no
+  two cells create the same face or chord. Each side of a two-sided seam owns about half
+  of its segments, so a cell that is highest-indexed on every border still builds.
+  Contract points and segments stay exact.
+- **N2, folds.** The fold guard's reversed, coincident and same-direction book faces are
+  also admitted. Reversed faces are turned to the source orientation and coincident copies
+  beyond the source's count are dropped.
+- **N3, clustering.** The first reduction is vertex clustering per input component, with
+  every interface point, opening pin and open boundary touching the interface fixed, at the
+  finest grid that fits (cell size doubled from the shortest edge, then bisected: at most
+  76 proposals). Coincident copies stay. Border-free components and holes may drop or close
+  at any size, declared like every drop; S2 measures them into G instead of bounding them
+  by E.
+
+Each A2 tile declares `asset.extras.rustyTiles.lastResort` {stage, foldFaces}. `foldFaces`
+counts the faces of the decoded payload in a coincident group (two or more on one corner
+set, either orientation) or on an edge two or more faces use in the same direction. A tile
+built from a child holding admitted folds that keeps some declares stage 0. The native
+validator and the S5 oracle recount `foldFaces` and refuse a mismatch; admit folds only from
+stage 2, or in a declared tile above such a stage, and refuse a stage 0 with none below;
+and on every coarse tile refuse a new face or edge on shared points outside its seam owner
+(`seamOwner`).
+G is S2's measured value. Omission and D1's upward propagation remain only for a cell whose
+contract alone exceeds the cap, or whose last resort cannot keep the open boundaries that
+touch its border (borders near the cap: border relief, A1).
+
+**A3 (L1, approved 2026-10-30) is superseded by N2.** Folds are admitted at last-resort tiles
+without a separation gate. Their separation (the sandwich width of the folded layers over
+each fold face, against the source) is reported per tile by the acceptance tooling, not
+checked by the validators.
 
 ## Numeric acceptance contract (proposed, not measured passes)
 

@@ -216,6 +216,24 @@ pub(crate) struct HlodRow {
     pub retries: u32,
     #[serde(skip)]
     pub last_resort: bool,
+    /// The last-resort stage that built it (1-3) and its declared fold faces.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub last_resort_stage: u8,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub fold_faces: u64,
+    /// Declared (`asset.extras.rustyTiles.lastResort`): a last resort, or stage 0 over
+    /// admitted folds below.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub declared_folds: bool,
+    /// Holds folds a last resort admitted, here or below (its parent may keep them).
+    #[serde(skip)]
+    pub carries_folds: bool,
+    /// Border vertices N3 snapped from an A1 relief hand-over.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub relief_stuck: u32,
+    /// The widest fold's layer separation, against the children (A3, reported).
+    #[serde(skip_serializing_if = "is_zero")]
+    pub fold_separation: f64,
     pub interface_vertices: u32,
     pub interface_segments: u32,
     /// Simplified faces that landed exactly on an opposite-facing source face (a collapse
@@ -250,4 +268,8 @@ impl From<Bounds> for BoundsRow {
             max: b.max.map(f64::from),
         }
     }
+}
+
+fn is_zero<T: Default + PartialEq>(n: &T) -> bool {
+    *n == T::default()
 }

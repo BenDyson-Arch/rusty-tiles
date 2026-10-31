@@ -346,7 +346,12 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
             require(leaf_count==len(manifest['triangles']),'leafCoverage',f'{leaf_count} != {len(manifest["triangles"])}')
             store.finalize_canonical(require)
             source_points=store.validate_leaf_points(require)
+            import last_resort
+            store.last_resort=last_resort.declarations(tiles,archive,require)
             result=store.census(tiles,leaves,require)
+            result['lastResort']=dict(tiles=len(store.last_resort),
+                byStage=[sum(1 for s,_,_ in store.last_resort.values() if s==k) for k in (0,1,2,3)],
+                foldFaces=sum(f for _,f,_ in store.last_resort.values()))
             from winding import inspect as inspect_winding
             result['winding']=inspect_winding(store,tiles,require)
             from seam_diagnostic import inspect_open_edges

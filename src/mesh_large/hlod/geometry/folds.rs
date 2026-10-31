@@ -1,6 +1,7 @@
 //! Reject introduced face coincidences and overlapping edge fans before publication.
 //! This is a proposal check: it never removes, reverses or moves a face.
 use super::{key, Key};
+use crate::mesh_large::hlod::interfaces::InterfaceRow;
 use rustc_hash::FxHashMap as HashMap;
 use rustc_hash::FxHashSet as HashSet;
 #[path = "folds_contract.rs"]
@@ -24,6 +25,83 @@ pub(crate) struct Source {
     faces: HashMap<Face, [u32; 2]>,
     edges: HashMap<Edge, [u32; 2]>,
     boundary: HashSet<Key>,
+    policy: Policy,
+}
+
+/// The last resort's relaxations (D1/D11 amendment A2); the default relaxes nothing.
+/// `least`, `greatest`: the shared points whose least, respectively greatest, holding DFS
+/// leaf lies in this cell. A new edge between two shared points, or a new face on three, is
+/// admitted only in its seam owner (N1, `owns_segment`, `owns_face`): every same-depth
+/// cell derives the same single owner from the canonical keys. `folds`: reversed faces,
+/// coincident groups and same-direction books are admitted (N2, N3), declared and
+/// recounted by the validators. Degenerate faces and every other shared-point rule stay.
+#[derive(Clone, Default)]
+pub(crate) struct Policy {
+    pub least: HashSet<Key>,
+    pub greatest: HashSet<Key>,
+    pub folds: bool,
+}
+
+/// The published canonical domain: a signed zero is positive zero.
+fn published(k: Key) -> Key {
+    k.map(|w| if w == 0x8000_0000 { 0 } else { w })
+}
+
+/// The seam side of a segment between published keys `a < b`: the top bit of FNV-1a 64
+/// over their little-endian words, `a` first. false: the least holder of `a`; true: its
+/// greatest. The validators compute the same bit independently.
+pub(crate) fn greatest_side(a: Key, b: Key) -> bool {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for w in a.into_iter().chain(b) {
+        for byte in w.to_le_bytes() {
+            h = (h ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    h >> 63 == 1
+}
+
+impl Policy {
+    /// Stage 1-3 relaxations for `tile` (over leaves `[begin, end)`), from its contract.
+    pub(crate) fn last_resort(stage: u8, begin: u32, end: u32, interface: &[InterfaceRow]) -> Self {
+        if stage == 0 {
+            return Self::default();
+        }
+        let holding = |leaf: fn(&InterfaceRow) -> u32| {
+            interface
+                .iter()
+                .filter(|r| r.is_vertex() && (begin..end).contains(&leaf(r)))
+                .map(|r| r.a)
+                .collect()
+        };
+        Self {
+            least: holding(|r| r.lo),
+            greatest: holding(|r| r.hi),
+            folds: stage >= 2,
+        }
+    }
+
+    /// The segment `{a, b}` between shared points belongs to the cell holding the least or
+    /// greatest holding leaf (`greatest_side`) of its lesser published point: exactly one
+    /// cell per depth.
+    pub(crate) fn owns_segment(&self, a: Key, b: Key) -> bool {
+        let (a, b) = if published(a) <= published(b) {
+            (a, b)
+        } else {
+            (b, a)
+        };
+        if greatest_side(published(a), published(b)) {
+            self.greatest.contains(&a)
+        } else {
+            self.least.contains(&a)
+        }
+    }
+
+    /// A face on three shared points belongs to the owner of its span segment, least to
+    /// greatest published corner. On a seam chain that is the edge a new sliver face adds.
+    pub(crate) fn owns_face(&self, mut f: Face) -> bool {
+        f.sort_unstable_by_key(|&k| published(k));
+        self.owns_segment(f[0], f[2])
+    }
 }
 
 impl Source {
@@ -38,6 +116,7 @@ impl Source {
             faces: HashMap::with_capacity_and_hasher(triangles.len(), Default::default()),
             edges: HashMap::with_capacity_and_hasher(triangles.len() * 3 / 2, Default::default()),
             boundary: HashSet::default(),
+            policy: Policy::default(),
         };
         for t in triangles {
             let keys = t.map(|v| key(positions[v as usize]));
@@ -68,6 +147,32 @@ impl Source {
         self
     }
 
+    pub(crate) fn with_policy(mut self, policy: Policy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    /// Turn faces the source holds only the other way round and, with `once`, drop
+    /// coincident copies beyond the source's count per orientation (at least one stays):
+    /// N2 keeps its folds' surfaces once, oriented like the source. N3 keeps every copy, so
+    /// clustering leaves edge counts even wherever the input was closed.
+    pub(crate) fn settle(&self, positions: &[[f32; 3]], triangles: &mut Vec<[u32; 3]>, once: bool) {
+        let mut kept: HashMap<Face, [u32; 2]> = HashMap::default();
+        triangles.retain_mut(|t| {
+            let (f, mut d) = face(t.map(|v| key(positions[v as usize])));
+            let source = self.faces.get(&f).copied().unwrap_or_default();
+            if source[d] == 0 && source[1 - d] != 0 {
+                t.swap(1, 2);
+                d = 1 - d;
+            }
+            let k = kept.entry(f).or_default();
+            let total = k[0] + k[1];
+            let keep = !once || total == 0 || k[d] < source[d];
+            k[d] += u32::from(keep);
+            keep
+        });
+    }
+
     /// `canonical` gives each corner the first vertex index with its Key, so equal
     /// sorted canonical triples are exactly equal faces (`face` is the sorted Key triple).
     fn bad_faces(
@@ -89,11 +194,13 @@ impl Source {
             // A source face license is independent of proposal validity below.
             original[i] = source[d] != 0;
             // Reject the old orient() repair rather than flipping or removing a face.
-            invalid[i] = (source[d] == 0 && source[1 - d] != 0)
+            invalid[i] = (source[d] == 0 && source[1 - d] != 0 && !self.policy.folds)
                 // Two disjoint children can independently close the same three
                 // shared points into opposite faces. Their union would license
                 // a new twin as "input". Retain the local source strip instead.
-                || (source == [0, 0] && f.iter().all(|p| self.boundary.contains(p)))
+                || (source == [0, 0]
+                    && f.iter().all(|p| self.boundary.contains(p))
+                    && !self.policy.owns_face(f))
                 || (source == [0, 0]
                     && super::topology::normal(positions, *t)
                         .iter()
@@ -107,7 +214,7 @@ impl Source {
         let mut at = 0;
         while at < faces.len() {
             let end = at + faces[at..].partition_point(|r| r.0 == faces[at].0);
-            if end - at > 1 {
+            if end - at > 1 && !self.policy.folds {
                 let mut counts = [0; 2];
                 for &(_, d, _) in &faces[at..end] {
                     counts[d as usize] += 1;
@@ -246,13 +353,16 @@ impl Source {
                 counts[d as usize] += 1;
             }
             let source = self.edges.get(&edge).copied().unwrap_or_default();
-            let boundary = self.boundary.contains(&edge.0) && self.boundary.contains(&edge.1);
+            // N1: a new edge between two shared points this cell owns.
+            let owned = source == [0, 0] && self.policy.owns_segment(edge.0, edge.1);
+            let boundary =
+                !owned && self.boundary.contains(&edge.0) && self.boundary.contains(&edge.1);
             let unsupported = if boundary && (0..2).any(|d| counts[d] > source[d]) {
                 // A new edge between shared contacts could be created by either
                 // neighbour independently. Only an existing source edge or a
                 // chord certified over its entire previous arc supplies support.
                 true
-            } else if boundary && !changed_boundary {
+            } else if (boundary && !changed_boundary) || self.policy.folds {
                 false
             } else {
                 (0..2).any(|d| {
@@ -288,6 +398,160 @@ impl Source {
         }
         invalid
     }
+}
+
+/// Faces on a fold, as every validator recounts them from the decoded payload alone:
+/// faces of a coincident group (two or more on one corner set, either orientation), and
+/// faces using an edge that two or more faces use in the same direction. A last-resort
+/// tile declares this count (`asset.extras.rustyTiles.lastResort.foldFaces`).
+pub(crate) fn fold_faces(positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> u64 {
+    let keys: Vec<Face> = triangles
+        .iter()
+        .map(|t| t.map(|v| key(positions[v as usize])))
+        .collect();
+    let mut groups: HashMap<Face, u32> = HashMap::default();
+    let mut edges: HashMap<(Key, Key), u32> = HashMap::default();
+    for k in &keys {
+        if k[0] == k[1] || k[1] == k[2] || k[0] == k[2] {
+            continue;
+        }
+        *groups.entry(face(*k).0).or_default() += 1;
+        for j in 0..3 {
+            *edges.entry((k[j], k[(j + 1) % 3])).or_default() += 1;
+        }
+    }
+    keys.iter()
+        .filter(|k| {
+            !(k[0] == k[1] || k[1] == k[2] || k[0] == k[2])
+                && (groups[&face(**k).0] > 1 || (0..3).any(|j| edges[&(k[j], k[(j + 1) % 3])] > 1))
+        })
+        .count() as u64
+}
+
+/// The widest fold of a tile (D1/D11 amendment A3, reported, never checked): over each
+/// fold face (`fold_faces`), at its corners, edge midpoints and centroid, the distance
+/// to the nearest `reference` face facing the same way plus the nearest facing the other
+/// way, i.e. how far apart the two layers it folds lie. Distances beyond `reach` count as
+/// `reach` (a fold with no second layer within it reports `2 * reach`).
+pub(crate) fn fold_separation(
+    positions: &[[f32; 3]],
+    triangles: &[[u32; 3]],
+    reference: &[([f32; 3], [f32; 3], [f32; 3])],
+    reach: f64,
+) -> f64 {
+    let p = |q: [f32; 3]| q.map(f64::from);
+    let sub = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let cross = |a: [f64; 3], b: [f64; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let keys: Vec<Face> = triangles
+        .iter()
+        .map(|t| t.map(|v| key(positions[v as usize])))
+        .collect();
+    let mut groups: HashMap<Face, u32> = HashMap::default();
+    let mut edges: HashMap<(Key, Key), u32> = HashMap::default();
+    for k in &keys {
+        *groups.entry(face(*k).0).or_default() += 1;
+        for j in 0..3 {
+            *edges.entry((k[j], k[(j + 1) % 3])).or_default() += 1;
+        }
+    }
+    let cell = reach.max(1e-9);
+    let mut grid: HashMap<[i64; 3], Vec<usize>> = HashMap::default();
+    let at = |q: [f64; 3]| q.map(|x| (x / cell).floor() as i64);
+    for (i, f) in reference.iter().enumerate() {
+        let (a, b) = (at(p(f.0)), at(p(f.1)));
+        let c = at(p(f.2));
+        for x in a[0].min(b[0]).min(c[0])..=a[0].max(b[0]).max(c[0]) {
+            for y in a[1].min(b[1]).min(c[1])..=a[1].max(b[1]).max(c[1]) {
+                for z in a[2].min(b[2]).min(c[2])..=a[2].max(b[2]).max(c[2]) {
+                    grid.entry([x, y, z]).or_default().push(i);
+                }
+            }
+        }
+    }
+    let closest = |q: [f64; 3], f: &([f32; 3], [f32; 3], [f32; 3])| {
+        let (a, b, c) = (p(f.0), p(f.1), p(f.2));
+        let (ab, ac, ap) = (sub(b, a), sub(c, a), sub(q, a));
+        let (d1, d2) = (dot(ab, ap), dot(ac, ap));
+        let bp = sub(q, b);
+        let (d3, d4) = (dot(ab, bp), dot(ac, bp));
+        let cp = sub(q, c);
+        let (d5, d6) = (dot(ab, cp), dot(ac, cp));
+        let (va, vb, vc) = (d3 * d6 - d5 * d4, d5 * d2 - d1 * d6, d1 * d4 - d3 * d2);
+        let point = if d1 <= 0. && d2 <= 0. {
+            a
+        } else if d3 >= 0. && d4 <= d3 {
+            b
+        } else if d6 >= 0. && d5 <= d6 {
+            c
+        } else if vc <= 0. && d1 >= 0. && d3 <= 0. {
+            let v = d1 / (d1 - d3);
+            [a[0] + ab[0] * v, a[1] + ab[1] * v, a[2] + ab[2] * v]
+        } else if vb <= 0. && d2 >= 0. && d6 <= 0. {
+            let w = d2 / (d2 - d6);
+            [a[0] + ac[0] * w, a[1] + ac[1] * w, a[2] + ac[2] * w]
+        } else if va <= 0. && d4 - d3 >= 0. && d5 - d6 >= 0. {
+            let w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+            [
+                b[0] + (c[0] - b[0]) * w,
+                b[1] + (c[1] - b[1]) * w,
+                b[2] + (c[2] - b[2]) * w,
+            ]
+        } else {
+            let d = 1. / (va + vb + vc);
+            let (v, w) = (vb * d, vc * d);
+            [
+                a[0] + ab[0] * v + ac[0] * w,
+                a[1] + ab[1] * v + ac[1] * w,
+                a[2] + ab[2] * v + ac[2] * w,
+            ]
+        };
+        dot(sub(q, point), sub(q, point)).sqrt()
+    };
+    let mut widest = 0f64;
+    for (t, k) in triangles.iter().zip(&keys) {
+        let fold = groups[&face(*k).0] > 1 || (0..3).any(|j| edges[&(k[j], k[(j + 1) % 3])] > 1);
+        if !fold || k[0] == k[1] || k[1] == k[2] || k[0] == k[2] {
+            continue;
+        }
+        let v = t.map(|i| p(positions[i as usize]));
+        let n = cross(sub(v[1], v[0]), sub(v[2], v[0]));
+        let mid =
+            |a: [f64; 3], b: [f64; 3]| [(a[0] + b[0]) / 2., (a[1] + b[1]) / 2., (a[2] + b[2]) / 2.];
+        let centre = [0, 1, 2].map(|i| (v[0][i] + v[1][i] + v[2][i]) / 3.);
+        for q in [
+            v[0],
+            v[1],
+            v[2],
+            mid(v[0], v[1]),
+            mid(v[1], v[2]),
+            mid(v[2], v[0]),
+            centre,
+        ] {
+            let mut side = [reach; 2];
+            let c = at(q);
+            for x in c[0] - 1..=c[0] + 1 {
+                for y in c[1] - 1..=c[1] + 1 {
+                    for z in c[2] - 1..=c[2] + 1 {
+                        for &i in grid.get(&[x, y, z]).into_iter().flatten() {
+                            let f = &reference[i];
+                            let m = cross(sub(p(f.1), p(f.0)), sub(p(f.2), p(f.0)));
+                            let s = usize::from(dot(m, n) < 0.);
+                            side[s] = side[s].min(closest(q, f));
+                        }
+                    }
+                }
+            }
+            widest = widest.max(side[0] + side[1]);
+        }
+    }
+    widest
 }
 
 #[cfg(test)]
@@ -417,6 +681,17 @@ pub(crate) fn decode_valid(
     triangles: &[[u32; 3]],
     boundary: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
 ) -> bool {
+    decode_valid_with(before, after, triangles, boundary, &Policy::default())
+}
+
+/// `decode_valid` under a last-resort policy.
+pub(crate) fn decode_valid_with(
+    before: &[[f32; 3]],
+    after: &[[f32; 3]],
+    triangles: &[[u32; 3]],
+    boundary: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
+    policy: &Policy,
+) -> bool {
     let _cpu =
         super::super::cpu_profile::start(super::super::cpu_profile::Stage::Decode, triangles.len());
     // An identity decode has exactly the source face/edge multiplicities and
@@ -431,7 +706,7 @@ pub(crate) fn decode_valid(
     {
         return true;
     }
-    decode_changed(before, after, triangles, boundary)
+    decode_changed(before, after, triangles, boundary, policy)
 }
 
 fn decode_changed(
@@ -439,6 +714,7 @@ fn decode_changed(
     after: &[[f32; 3]],
     triangles: &[[u32; 3]],
     boundary: &[crate::mesh_large::hlod::interfaces::InterfaceRow],
+    policy: &Policy,
 ) -> bool {
     // New decoded keys can acquire an owner in another tile, outside the source
     // incidence graph. Retain canonical source keys; merging onto an existing key
@@ -452,14 +728,16 @@ fn decode_changed(
         let b = super::topology::normal(after, t);
         let old_area = a.iter().any(|&x| x != 0.);
         let new_area = b.iter().any(|&x| x != 0.);
+        // A last-resort tile admits folds; a face decoding to zero area never.
         if old_area != new_area
-            || (old_area && a.iter().zip(b).map(|(a, b)| a * b).sum::<f64>() <= 0.)
+            || (old_area && !policy.folds && a.iter().zip(b).map(|(a, b)| a * b).sum::<f64>() <= 0.)
         {
             return false;
         }
     }
     !Source::new(before, triangles)
         .with_boundary(boundary)
+        .with_policy(policy.clone())
         .violations(after, triangles)
         .iter()
         .any(|v| *v)
@@ -494,7 +772,13 @@ mod tests {
             ];
             for n in 0..=faces.len() {
                 for boundary in [Vec::new(), boundary(&p)] {
-                    assert!(decode_changed(&p, &p, &faces[..n], &boundary));
+                    assert!(decode_changed(
+                        &p,
+                        &p,
+                        &faces[..n],
+                        &boundary,
+                        &Policy::default()
+                    ));
                     assert!(decode_valid(&p, &p, &faces[..n], &boundary));
                 }
             }
@@ -503,7 +787,7 @@ mod tests {
                 changed[v] = p[(v + 1) % p.len()];
                 assert_eq!(
                     decode_valid(&p, &changed, &faces, &boundary(&p)),
-                    decode_changed(&p, &changed, &faces, &boundary(&p)),
+                    decode_changed(&p, &changed, &faces, &boundary(&p), &Policy::default()),
                 );
             }
         }
