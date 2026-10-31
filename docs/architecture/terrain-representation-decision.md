@@ -156,6 +156,25 @@ the stored leaf vertices", "byte-identical leaf surface primitives" and
 
 The report moves to schema 3 with `quantizationStepMetres`.
 
+## Owner amendment, 2026-10-29 — NoData holes
+
+NoData holes replace fill (`--fill-height` and `fillHeightMetres` are
+removed): only triangles of three valid nodes are emitted, and all-NoData
+tiles are unavailable. Where a child does not cover a whole cell, the cell is
+measured against the leaf surface directly and adds one coarse-cell diagonal,
+and a content-less tile above content takes 16× its published box diagonal
+(the mesh empty-parent floor; the box diagonal alone let Cesium stop there). Skirts drop
+`max(e + e_beside, 1 m)` (see the terrain guide) instead of `e + e_root`, and
+none hang along NoData. The default `--cells-per-leaf` is 128.
+
+Owner decision, 2026-10-30 (as option A for meshes): a tile without content is
+exempt from parent ≥ child error ordering, here and in `validate`'s
+`geometricErrorOrder`; tiles with content answer to their nearest ancestor
+with content, which takes the largest of their errors. The 16× floor stays on
+the empty tile only, so ancestors, `e_beside` and boxes never inherit it.
+Interior edges are also measured against the leaf nodes on them, and a
+segment is skirted where any level drawable across has a triangle on it.
+
 ## Acceptance before retaining the replacement
 
 Independent literal/analytic sources must verify every lattice coordinate, height,

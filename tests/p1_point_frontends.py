@@ -31,7 +31,7 @@ def decoded(archive):
 
     def visit(tile, parent):
         frame = oracle.multiply(parent, tile.get('transform', oracle.IDENTITY))
-        positions, columns, schema = oracle.decoded_points(members[tile['content']['uri']])
+        positions, columns, schema, _ = oracle.decoded_points(members[tile['content']['uri']])
         contents.append((columns, schema, [oracle.transform(frame, p) for p in positions],
                          tile['geometricError'], tile['boundingVolume']))
         for child in tile.get('children', []):
@@ -70,7 +70,7 @@ def paired(binary, work):
                 stem = f'{name}-{delivery.suffix[1:]}-{defaults}'
                 cli, python = (work / f'{stem}-{adapter}.3tz' for adapter in ('cli', 'python'))
                 options = ['--sourceCrs', crs]
-                kwargs = dict(source_crs=crs)
+                kwargs = dict(source_crs=crs, metadata=True)
                 if not defaults:
                     options += ['--maxPoints', '16', '--chunkPoints', '3', '--metadata-attributes']
                     kwargs.update(max_points=16, chunk_points=3, metadata_attributes=True)

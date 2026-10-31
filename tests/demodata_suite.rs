@@ -33,6 +33,14 @@ fn manifest_pins_all_recipes_and_selects_profiles_without_silent_skips() {
     assert_eq!(manifest.select("scale", &[]).unwrap().len(), 7);
     assert!(manifest.select("all", &["typo".into()]).is_err());
     assert!(manifest.select("typo", &[]).is_err());
+    let mut lean = runner::Manifest::load().unwrap();
+    let case = lean.cases.iter_mut().find(|c| c.audit == "points").unwrap();
+    case.args.retain(|a| a != "--metadata");
+    assert!(lean
+        .validate()
+        .unwrap_err()
+        .to_string()
+        .contains("needs --metadata"));
 }
 
 #[test]
@@ -154,7 +162,7 @@ fn point_audit_rejects_changed_attributes_even_when_archive_validation_passes() 
         .arg(&input)
         .arg("-o")
         .arg(&output)
-        .args(["--sourceCrs", "local", "--maxPoints", "3"])
+        .args(["--sourceCrs", "local", "--maxPoints", "3", "--metadata"])
         .output()
         .unwrap();
     assert!(
@@ -163,6 +171,21 @@ fn point_audit_rejects_changed_attributes_even_when_archive_validation_passes() 
         String::from_utf8_lossy(&result.stderr)
     );
     runner::audit::check("points", &input, &output).unwrap();
+    // Default output keeps no source columns; the full-identity audit refuses it.
+    let lean = work.path().join("lean.3tz");
+    let args = ["--sourceCrs", "local", "--maxPoints", "3"];
+    let run = support::rusty_tiles()
+        .args(["point-cloud", "-i"])
+        .arg(&input)
+        .arg("-o")
+        .arg(&lean)
+        .args(args)
+        .output();
+    assert!(run.unwrap().status.success());
+    let refused = runner::audit::check("points", &input, &lean)
+        .unwrap_err()
+        .to_string();
+    assert!(refused.contains("needs --metadata"), "{refused}");
     let header = las::Reader::from_path(&input)
         .unwrap()
         .header()

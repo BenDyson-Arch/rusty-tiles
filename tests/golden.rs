@@ -136,7 +136,6 @@ fn derivative_missing_inputs_do_not_publish_output() {
             &output,
             terrain::TerrainHeights::RawMetres {
                 height_offset_metres: 0.,
-                fill_height_metres: 0.,
             },
             terrain::TerrainOptions::new(16),
         ),

@@ -102,7 +102,8 @@ Grid-free globe placement works in the default build. CRS selection automaticall
 | --- | --- | --- | --- |
 | `--sourceCrs` | `--source-crs` | required | `local`, `header`, or a 2D horizontal CRS such as `EPSG:32632` |
 | `--heightOffset` | `--height-offset` | none | Metres added to source Z to give ellipsoidal height. Required for geospatial input. |
-| `--maxPoints` | `--max-points` | `8192` | Maximum points per tile, from 1 to 8192. Each point is one row of the tile's property table, and CesiumJS 1.146 cannot build the GPU metadata texture of a table wider than the WebGL maximum texture size (8192 on the pinned target) |
+| `--maxPoints` | `--max-points` | `8192` | Maximum points per tile, from 1 to 8192. With `--metadata` each point is one row of the tile's property table, and CesiumJS 1.146 cannot build the GPU metadata texture of a table wider than the WebGL maximum texture size (8192 on the pinned target) |
+| `--metadata` | none | off | Keep every source field per point in a property table; off, tiles hold position and colour only |
 | `--metadataAttributes` | `--metadata-attributes` | off | Also expose `vertex_classification`, `vertex_intensity` and `vertex_return_number` as property attributes |
 | `--chunkPoints` | `--chunk-points` | `100000` | Points read per source chunk, at least 1 |
 
@@ -177,9 +178,8 @@ pyramid over full-detail leaves. See the [terrain guide](TERRAIN.md).
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `--cells-per-leaf` | `64` | Source-pixel cells per patch edge: 16, 32, 64 or 128 |
+| `--cells-per-leaf` | `128` | Source-pixel cells per patch edge: 16, 32, 64 or 128 |
 | `--height-offset` | required | Metres added to raw DEM samples to obtain ellipsoidal height |
-| `--fill-height` | required | Ellipsoidal height for missing lattice samples inside the footprint |
 
 Level of detail is always on: coarser levels decimate the leaf lattice, carry
 certified geometric errors and have skirts on shared edges. There is no flat

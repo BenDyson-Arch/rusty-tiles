@@ -13,6 +13,16 @@ const assert = require('node:assert/strict');
     await page.goto(process.argv[2]);
     await page.waitForFunction(() => window.tiles && window.pointCloud || window.failures?.length, null, {timeout: 30000});
     const result = await page.evaluate(async () => {
+      // Tile-frame z-up POSITION: float32, or KHR_mesh_quantization codes through the node scale.
+      const decodePositions = (bytes, length, doc, accessor) => {
+        const view = doc.bufferViews[accessor.bufferView], node = doc.nodes[doc.scenes[doc.scene || 0].nodes[0]];
+        const t = node.translation || [0, 0, 0], s = node.scale || [1, 1, 1], q = accessor.componentType === 5123;
+        const data = new DataView(bytes, 28 + length + (view.byteOffset || 0)), stride = view.byteStride || (q ? 6 : 12);
+        return Array.from({length: accessor.count}, (_, i) => {
+          const p = [0, 1, 2].map(a => (q ? data.getUint16(i * stride + 2 * a, true) / 65535 : data.getFloat32(i * stride + 4 * a, true)) * s[a] + t[a]);
+          return [p[0], -p[2], p[1]];
+        });
+      };
       const C = Cesium, viewer = window.viewer, mesh = window.tiles, cloud = window.pointCloud;
       if (!mesh || !cloud) throw new Error(window.failures.join('\n'));
       viewer.scene.globe.show = false;
@@ -58,13 +68,8 @@ const assert = require('node:assert/strict');
         const doc = JSON.parse(new TextDecoder().decode(new Uint8Array(bytes,20,length)));
         const primitive = doc.meshes[0].primitives[0];
         if (!primitive.extensions.EXT_structural_metadata?.propertyAttributes) throw new Error('Missing point property attributes');
-        const accessor = doc.accessors[primitive.attributes.POSITION];
-        const view = doc.bufferViews[accessor.bufferView];
-        const positions = new Float32Array(bytes, 28 + length + (view.byteOffset || 0), accessor.count * 3);
-        const t = doc.nodes[doc.scenes[doc.scene || 0].nodes[0]].translation || [0,0,0];
-        for (let i = 0; i < accessor.count; i++) {
-          const world = C.Matrix4.multiplyByPoint(tile.computedTransform,
-            new C.Cartesian3(positions[i*3]+t[0], -positions[i*3+2]-t[2], positions[i*3+1]+t[1]), new C.Cartesian3());
+        for (const p of decodePositions(bytes, length, doc, doc.accessors[primitive.attributes.POSITION])) {
+          const world = C.Matrix4.multiplyByPoint(tile.computedTransform, new C.Cartesian3(...p), new C.Cartesian3());
           const screen = C.SceneTransforms.worldToWindowCoordinates(viewer.scene,world);
           const feature = screen && viewer.scene.pick(screen,1,1);
           if (!feature?.getProperty || feature.getProperty('source_index') === undefined) continue;

@@ -8,13 +8,16 @@
 //! Ordered key scans find actual outside-leaf owners and stage sparse ancestor
 //! obligations. No T contacts, distance joins or tolerant adjacency are inferred.
 //! Every directed incident owner survives local balanced cancellation.
-//! Original IDs recorded once at ingest are checked by one ordered key scan,
-//! including disjoint placements and repeated references.
+//! Original IDs recorded once at ingest (an appended spill sequence) are checked
+//! by one bounded external sort of their exact placed keys, including disjoint
+//! placements and repeated references.
 //! No triangle soup or archive-sized geometry/alias vector is retained.
 //! Decoding, key work, scans, owner walks and queries consume the existing work
 //! budget, including one unit per 10,000 SQLite VM operations. SQLite's page
 //! cache is bounded; temporary sorts are disk backed and transient sort sizes
-//! are outside disk_bytes(), which counts the monotonic main database only.
+//! are outside disk_bytes(), which counts the monotonic main database only. The
+//! original-vertex sequence and the alias sort's runs are scratch files counted
+//! in the scratch peak; the sort holds at most the catalog's side-sort memory.
 //!
 //! D11 (`borders`): an ancestor may contract its shared leaf border to chords
 //! between retained exact vertices, one witnessed chord per arc, each contracted
@@ -34,7 +37,8 @@
 use super::{identity, invalid, spill_failure, Budget, Error, ScratchRefusal};
 mod borders;
 mod drops;
-use crate::spill::{Scratch, SlotFile};
+use crate::archive3tz::CatalogConfig;
+use crate::spill::{ExternalSorter, Record, Scratch, SequenceWriter, SlotFile, SortConfig};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{value::RawValue, Value};
 use std::{
@@ -703,6 +707,87 @@ pub(super) struct DecodedInterfaceCensus {
     /// and checked against its declaration and geometricError, by cell depth.
     pub(super) dropped_by_depth: Vec<u64>,
 }
+/// Payload-element units charged for each scratch-store row a validation writes or looks up
+/// by key (an SQLite B-tree insert, upsert or point query). A row costs far more than an
+/// ordinary payload unit (about 6 ns), so it is weighted to keep every work class within the
+/// stated time per unit (`docs/architecture/validator-limits-amendment.md`, time statement).
+/// Random-key rows get slower as the tables grow, so this constant under-charges them above
+/// about 10 MB stored (class c6 there) until rows become sort-and-merge passes.
+pub(super) const ROW_UNITS: usize = 128;
+/// Units for each original vertex row appended to the spill sequence at ingest.
+pub(super) const ORIGINAL_UNITS: usize = 16;
+/// Units for each placed original key: placement, external sort and ordered scan.
+pub(super) const ALIAS_UNITS: usize = 32;
+/// Leaf placement frames of one payload held at once by the alias pass; a payload with
+/// more leaf placements re-reads its original rows once per further chunk.
+const ALIAS_FRAMES: usize = 64;
+
+/// One original vertex of one payload in its payload frame (f64 bits), recorded at ingest.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Original {
+    rank: u64,
+    source: Source,
+    vertex: u64,
+    point: [u64; 3],
+}
+/// One original vertex at one leaf placement. Sorted by (source, vertex, exact), so
+/// distinct exact placed positions of one vertex are adjacent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Alias {
+    source: Source,
+    vertex: u64,
+    exact: [u64; 3],
+}
+fn put(out: &mut [u8], values: impl IntoIterator<Item = u64>) {
+    for (chunk, v) in out.as_chunks_mut::<8>().0.iter_mut().zip(values) {
+        *chunk = v.to_le_bytes();
+    }
+}
+fn take<const N: usize>(bytes: &[u8]) -> [u64; N] {
+    let (words, _) = bytes.as_chunks::<8>();
+    std::array::from_fn(|i| u64::from_le_bytes(words[i]))
+}
+impl Record for Original {
+    const SIZE: usize = 80;
+    fn encode(&self, out: &mut [u8]) {
+        put(
+            out,
+            std::iter::once(self.rank)
+                .chain(self.source)
+                .chain([self.vertex])
+                .chain(self.point),
+        );
+    }
+    fn decode(bytes: &[u8]) -> Self {
+        let v = take::<10>(bytes);
+        Self {
+            rank: v[0],
+            source: [v[1], v[2], v[3], v[4], v[5]],
+            vertex: v[6],
+            point: [v[7], v[8], v[9]],
+        }
+    }
+}
+impl Record for Alias {
+    const SIZE: usize = 72;
+    fn encode(&self, out: &mut [u8]) {
+        put(
+            out,
+            self.source
+                .into_iter()
+                .chain([self.vertex])
+                .chain(self.exact),
+        );
+    }
+    fn decode(bytes: &[u8]) -> Self {
+        let v = take::<9>(bytes);
+        Self {
+            source: [v[0], v[1], v[2], v[3], v[4]],
+            vertex: v[5],
+            exact: [v[6], v[7], v[8]],
+        }
+    }
+}
 /// Hard published triangle cap of every HLOD payload (D1), leaf or coarse.
 pub(super) const TRIANGLE_CAP: u64 = 8192;
 /// A content-less cell's geometric error is at least this multiple of its box
@@ -851,9 +936,13 @@ pub(super) struct Store {
     profile_exclusion: Option<&'static str>,
     decoded_limit: usize,
     census: Option<DecodedInterfaceCensus>,
+    /// Original vertex rows, appended per payload at ingest; the alias pass consumes them.
+    originals: Option<SequenceWriter<Original>>,
+    sort: SortConfig,
+    buffer_bytes: usize,
 }
 impl Store {
-    pub(super) fn new(scratch: Arc<Scratch>) -> Result<Self, Error> {
+    pub(super) fn new(scratch: Arc<Scratch>, config: &CatalogConfig) -> Result<Self, Error> {
         Ok(Self {
             connection: Db(None),
             _file: None,
@@ -865,6 +954,9 @@ impl Store {
             profile_exclusion: None,
             decoded_limit: 0,
             census: None,
+            originals: None,
+            sort: config.side_sort,
+            buffer_bytes: config.buffer_bytes,
         })
     }
     /// Create the disk store and replay the pending rows into it, once.
@@ -885,7 +977,6 @@ impl Store {
             CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL,dropped INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE placements(id INTEGER PRIMARY KEY,tile INTEGER NOT NULL,rank INTEGER NOT NULL,frame BLOB NOT NULL,leaf INTEGER NOT NULL);
             CREATE INDEX placement_rank ON placements(rank,leaf,id);
-            CREATE TABLE originals(source BLOB NOT NULL,vertex BLOB NOT NULL,rank INTEGER NOT NULL,point BLOB NOT NULL,PRIMARY KEY(source,vertex,rank)) WITHOUT ROWID;
             CREATE TABLE leaf_points(key BLOB NOT NULL,tile INTEGER NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             CREATE TABLE leaf_segments(key BLOB NOT NULL,tile INTEGER NOT NULL,nf INTEGER NOT NULL,nr INTEGER NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             CREATE TABLE shared_point_keys(key BLOB PRIMARY KEY) WITHOUT ROWID;
@@ -1277,23 +1368,16 @@ impl Store {
                 "original triangle table has unreferenced rows",
             ));
         }
-        // One row per original vertex in the payload frame; placement is applied by
-        // the alias scan, in the same scene-then-reference order a replay used.
-        let mut insert = self
-            .connection
-            .prepare_cached("INSERT INTO originals VALUES(?,?,?,?)")
-            .map_err(sql)?;
+        // One row per original vertex in the payload frame, contiguous per payload;
+        // placement is applied by the alias pass.
         for (&(source, vertex), p) in &originals {
-            work.charge(1)?;
-            let source: Vec<u8> = source.into_iter().flat_map(u64::to_be_bytes).collect();
-            insert
-                .execute(params![
-                    source,
-                    vertex.to_be_bytes().to_vec(),
-                    integer(rank)?,
-                    encode(p)
-                ])
-                .map_err(sql)?;
+            work.charge(ORIGINAL_UNITS)?;
+            self.original(Original {
+                rank,
+                source,
+                vertex,
+                point: p.map(f64::to_bits),
+            })?;
         }
         Ok(work.used)
     }
@@ -1536,37 +1620,109 @@ impl Store {
         self.connection.execute_batch("UPDATE tiles SET leaf=NOT EXISTS(SELECT 1 FROM refs r WHERE r.tile>tiles.id AND r.tile<=tiles.last);").map_err(sql)?;
         Ok(())
     }
-    /// Every original vertex shared by leaf placements, including repeated
-    /// references to one payload and disjoint geometry, must have one exact placed
-    /// f64 position (normalized zero). One ordered scan over (source, vertex) rows
-    /// recorded at ingest: each payload is decoded once, never per pair.
-    fn replay_original_aliases(&self, effort: &Effort) -> Result<(), Error> {
+    /// Append one original vertex row to the ingest sequence.
+    fn original(&mut self, row: Original) -> Result<(), Error> {
+        if self.originals.is_none() {
+            self.originals = Some(
+                SequenceWriter::new(&self._scratch, "hlod-originals", self.buffer_bytes)
+                    .map_err(spill_failure)?,
+            );
+        }
+        let writer = self.originals.as_mut().expect("writer created above");
+        writer.push(&row).map_err(spill_failure)
+    }
+    /// Leaf placement frames of `rank` after placement id `after`, at most `ALIAS_FRAMES`.
+    fn leaf_frames(&self, rank: u64, after: i64) -> Result<Vec<(i64, Matrix)>, Error> {
         let mut query = self
             .connection
-            .prepare("SELECT o.source,o.vertex,o.point,p.frame FROM originals o JOIN placements p ON p.rank=o.rank WHERE p.leaf=1 ORDER BY o.source,o.vertex")
+            .prepare_cached("SELECT id,frame FROM placements WHERE rank=? AND leaf=1 AND id>? ORDER BY id LIMIT ?")
             .map_err(sql)?;
-        let mut rows = query.query([]).map_err(sql)?;
-        let mut group: Option<(Vec<u8>, Vec<u8>, [u64; 3])> = None;
+        let mut rows = query
+            .query(params![integer(rank)?, after, ALIAS_FRAMES as i64])
+            .map_err(sql)?;
+        let mut frames = Vec::with_capacity(ALIAS_FRAMES);
         while let Some(row) = rows.next().map_err(sql)? {
-            effort.charge(1)?;
-            let source: Vec<u8> = row.get(0).map_err(sql)?;
-            let vertex: Vec<u8> = row.get(1).map_err(sql)?;
-            let local = decode::<3>(&row.get::<_, Vec<u8>>(2).map_err(sql)?)?;
-            let frame = decode::<16>(&row.get::<_, Vec<u8>>(3).map_err(sql)?)?;
-            let placed = point(frame, local);
-            finite(&placed)?;
-            let exact = point_key(placed);
-            match &group {
-                Some((s, v, first)) if *s == source && *v == vertex => {
-                    if *first != exact {
-                        return Err(bad(
-                            "sourceIdentity",
-                            "original vertex has distinct exact decoded placed positions",
-                        ));
-                    }
-                }
-                _ => group = Some((source, vertex, exact)),
+            frames.push((
+                row.get(0).map_err(sql)?,
+                decode::<16>(&row.get::<_, Vec<u8>>(1).map_err(sql)?)?,
+            ));
+        }
+        Ok(frames)
+    }
+    /// Every original vertex shared by leaf placements, including repeated
+    /// references to one payload and disjoint geometry, must have one exact placed
+    /// f64 position (normalized zero). The rows recorded at ingest are read once per
+    /// payload block (and once more per further chunk of `ALIAS_FRAMES` leaf frames),
+    /// each placed key goes to one bounded external sort by (source, vertex, exact),
+    /// and one ordered scan compares neighbours: each payload is decoded once, never
+    /// per pair, and resident memory is the sort configuration plus one frame chunk.
+    fn replay_original_aliases(&mut self, effort: &Effort) -> Result<(), Error> {
+        // The pass owns the sequence: its spill file is removed when the pass ends.
+        let Some(writer) = self.originals.take() else {
+            return Ok(());
+        };
+        let recorded = writer.finish().map_err(spill_failure)?;
+        let mut sorter =
+            ExternalSorter::<Alias>::new(&self._scratch, self.sort).map_err(spill_failure)?;
+        let mut emit = |row: &Original, frames: &[(i64, Matrix)]| -> Result<(), Error> {
+            let local = row.point.map(f64::from_bits);
+            for (_, frame) in frames {
+                effort.charge(ALIAS_UNITS)?;
+                let placed = point(*frame, local);
+                // Checked while keys are emitted, before the sorted scan: an archive with both
+                // a non-finite placement and an alias conflict reports the non-finite one.
+                finite(&placed)?;
+                sorter
+                    .push(Alias {
+                        source: row.source,
+                        vertex: row.vertex,
+                        exact: point_key(placed),
+                    })
+                    .map_err(spill_failure)?;
             }
+            Ok(())
+        };
+        let mut rows = recorded.reader().map_err(spill_failure)?;
+        let mut next = rows.next().transpose().map_err(spill_failure)?;
+        let mut index = 0u64;
+        while let Some(first) = next {
+            // One payload's rows are contiguous: its first frame chunk is applied while
+            // the block is read, further chunks by re-reading the block's range.
+            effort.charge(ROW_UNITS)?;
+            let start = index;
+            let mut frames = self.leaf_frames(first.rank, -1)?;
+            next = Some(first);
+            while let Some(row) = next.filter(|row| row.rank == first.rank) {
+                emit(&row, &frames)?;
+                index += 1;
+                next = rows.next().transpose().map_err(spill_failure)?;
+            }
+            while frames.len() == ALIAS_FRAMES {
+                effort.charge(ROW_UNITS)?;
+                frames = self.leaf_frames(first.rank, frames[ALIAS_FRAMES - 1].0)?;
+                if frames.is_empty() {
+                    break;
+                }
+                for row in recorded
+                    .range(start, index, self.buffer_bytes)
+                    .map_err(spill_failure)?
+                {
+                    emit(&row.map_err(spill_failure)?, &frames)?;
+                }
+            }
+        }
+        let mut previous: Option<Alias> = None;
+        for alias in sorter.finish().map_err(spill_failure)? {
+            let alias = alias.map_err(spill_failure)?;
+            if let Some(p) = previous {
+                if (p.source, p.vertex) == (alias.source, alias.vertex) && p.exact != alias.exact {
+                    return Err(bad(
+                        "sourceIdentity",
+                        "original vertex has distinct exact decoded placed positions",
+                    ));
+                }
+            }
+            previous = Some(alias);
         }
         Ok(())
     }
@@ -1777,7 +1933,7 @@ impl Store {
             .map_err(sql)?;
         let mut rows = query.query([]).map_err(sql)?;
         while let Some(row) = rows.next().map_err(sql)? {
-            effort.charge(1)?;
+            effort.charge(ROW_UNITS)?;
             let world: Vec<u8> = row.get(2).map_err(sql)?;
             self.connection
                 .execute(
@@ -1811,11 +1967,11 @@ impl Store {
             .map_err(sql)?;
         let mut edge=self.connection.prepare_cached("INSERT INTO leaf_segments VALUES(?,?,?,?) ON CONFLICT(key,tile) DO UPDATE SET nf=leaf_segments.nf+excluded.nf,nr=leaf_segments.nr+excluded.nr WHERE leaf_segments.nf<=9223372036854775807-excluded.nf AND leaf_segments.nr<=9223372036854775807-excluded.nr").map_err(sql)?;
         for p in &surface.points {
-            effort.charge(1)?;
+            effort.charge(ROW_UNITS)?;
             point.execute(params![point_bytes(*p), tile]).map_err(sql)?;
         }
         for (key, e) in &surface.edges {
-            effort.charge(1)?;
+            effort.charge(ROW_UNITS)?;
             if edge
                 .execute(params![
                     edge_bytes(*key),
@@ -1860,7 +2016,7 @@ impl Store {
                 .prepare_cached("INSERT INTO leaf_faces VALUES(?,?,1) ON CONFLICT(corners,tile) DO UPDATE SET n=n+1")
                 .map_err(sql)?;
             for f in &surface.faces {
-                effort.charge(1)?;
+                effort.charge(ROW_UNITS)?;
                 let mut k = *f;
                 k.sort_unstable();
                 let bytes: Vec<u8> = k.iter().flat_map(|p| point_bytes(*p)).collect();
@@ -1917,7 +2073,7 @@ impl Store {
             )?;
             for f in &surface.faces {
                 for j in 0..3 {
-                    effort.charge(2)?;
+                    effort.charge(ROW_UNITS)?;
                     let (x, y, c) = (f[j], f[(j + 1) % 3], f[(j + 2) % 3]);
                     let key = edge_bytes(if x < y { (x, y) } else { (y, x) });
                     if multi
@@ -1946,7 +2102,7 @@ impl Store {
         let (first, last) = owners;
         let mut lookup=self.connection.prepare_cached("SELECT parent,last,EXISTS(SELECT 1 FROM refs r WHERE r.tile=tiles.id) FROM tiles WHERE id=?").map_err(sql)?;
         loop {
-            effort.charge(1)?;
+            effort.charge(ROW_UNITS)?;
             let (parent, end, content): (Option<i64>, i64, bool) = lookup
                 .query_row([tile], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
                 .map_err(sql)?;
@@ -1974,7 +2130,7 @@ impl Store {
         if first == last {
             return Ok(());
         }
-        effort.charge(1)?;
+        effort.charge(ROW_UNITS)?;
         add_count(&mut census.shared_points, 1)?;
         self.connection
             .execute("INSERT INTO shared_point_keys VALUES(?)", [key])
@@ -2036,7 +2192,7 @@ impl Store {
             // Both endpoints must also occur in another leaf. This is an exact
             // key join, not a chord inference or a distance/near-seam query.
             read_edge(key)?;
-            effort.charge(2)?;
+            effort.charge(2 * ROW_UNITS)?;
             let shared:bool=self.connection.query_row("SELECT EXISTS(SELECT 1 FROM shared_point_keys WHERE key=?1) AND EXISTS(SELECT 1 FROM shared_point_keys WHERE key=?2)",params![&key[..12],&key[12..]],|r|r.get(0)).map_err(sql)?;
             if shared {
                 add_count(&mut census.source_open_edges_with_shared_endpoints, 1)?;
@@ -2129,7 +2285,7 @@ impl Store {
                         .prepare_cached("INSERT INTO coarse_faces VALUES(?,?)")
                         .map_err(sql)?;
                     for f in &surface.faces {
-                        effort.charge(1)?;
+                        effort.charge(ROW_UNITS)?;
                         let bytes: Vec<u8> = f.iter().flat_map(|p| point_bytes(*p)).collect();
                         face.execute(params![tile, bytes]).map_err(sql)?;
                     }
@@ -2186,7 +2342,7 @@ mod tests {
     }
     pub(super) fn store() -> Store {
         let scratch = Scratch::create(None, 4096).unwrap();
-        Store::new(Arc::new(scratch)).unwrap()
+        Store::new(Arc::new(scratch), &CatalogConfig::DEFAULT).unwrap()
     }
     #[test]
     fn continuity_is_hlod_only_and_respects_link_placeholders() {
@@ -2380,18 +2536,16 @@ mod tests {
         fn aliases(items: &[(i64, f64, f64)]) -> Result<(), Error> {
             let mut s = store();
             s.materialize()?;
+            let mut seen = BTreeSet::new();
             for (id, &(rank, x, shift)) in items.iter().enumerate() {
-                s.connection
-                    .execute(
-                        "INSERT OR IGNORE INTO originals VALUES(?,?,?,?)",
-                        params![
-                            vec![0u8; 40],
-                            0u64.to_be_bytes().to_vec(),
-                            rank,
-                            encode(&[x, 1., 2.])
-                        ],
-                    )
-                    .map_err(sql)?;
+                if seen.insert(rank) {
+                    s.original(Original {
+                        rank: rank as u64,
+                        source: [0; 5],
+                        vertex: 0,
+                        point: [x, 1., 2.].map(f64::to_bits),
+                    })?;
+                }
                 let mut frame = IDENTITY;
                 frame[12] = shift;
                 s.connection
@@ -2423,17 +2577,13 @@ mod tests {
         let mut s = store();
         s.materialize().unwrap();
         for (rank, &(vertex, p)) in rows.iter().enumerate() {
-            s.connection
-                .execute(
-                    "INSERT INTO originals VALUES(?,?,?,?)",
-                    params![
-                        vec![0u8; 40],
-                        vertex.to_be_bytes().to_vec(),
-                        rank as i64,
-                        encode(&p)
-                    ],
-                )
-                .unwrap();
+            s.original(Original {
+                rank: rank as u64,
+                source: [0; 5],
+                vertex,
+                point: p.map(f64::to_bits),
+            })
+            .unwrap();
             s.connection
                 .execute(
                     "INSERT INTO placements(id,tile,rank,frame,leaf) VALUES(?,?,?,?,1)",
@@ -2464,10 +2614,83 @@ mod tests {
                 .unwrap();
         }
     }
+    /// Negative control of the sorted alias pass: a forced-spill sort (runs of four keys,
+    /// fan-in two) and a payload with more leaf placements than one frame chunk still
+    /// refuse one vertex whose exact placed position differs only at its last placement,
+    /// between payloads recorded far apart, and accept the same rows without the gap.
+    #[test]
+    fn sorted_alias_pass_catches_violations_across_runs_and_frame_chunks() {
+        let ulp = f64::from_bits(10f64.to_bits() + 1) - 10.;
+        for config in [CatalogConfig::DEFAULT, CatalogConfig::FORCED_SPILL] {
+            for gap in [0., ulp] {
+                let scratch = Scratch::create(None, 4096).unwrap();
+                let mut s = Store::new(Arc::new(scratch), &config).unwrap();
+                s.materialize().unwrap();
+                let placements = ALIAS_FRAMES as i64 * 2 + 1;
+                // Payload 0: many distinct vertices and `placements` identical frames but
+                // the last, which moves vertex 7 when the gap is nonzero; then 40 filler
+                // payloads; then payload 41 holding vertex 7 at its rebased position.
+                for v in 0..20u64 {
+                    let x = if v == 7 { 0. } else { v as f64 + 0.5 };
+                    s.original(Original {
+                        rank: 0,
+                        source: [1, 2, 3, 4, 5],
+                        vertex: v,
+                        point: [x, 1., 2.].map(f64::to_bits),
+                    })
+                    .unwrap();
+                }
+                for rank in 1..=40u64 {
+                    s.original(Original {
+                        rank,
+                        source: [9; 5],
+                        vertex: rank,
+                        point: [0.; 3].map(f64::to_bits),
+                    })
+                    .unwrap();
+                }
+                s.original(Original {
+                    rank: 41,
+                    source: [1, 2, 3, 4, 5],
+                    vertex: 7,
+                    point: [-10., 1., 2.].map(f64::to_bits),
+                })
+                .unwrap();
+                let mut id = 0i64;
+                let mut place = |s: &Store, rank: i64, shift: f64| {
+                    let mut frame = IDENTITY;
+                    frame[12] = shift;
+                    s.connection
+                        .execute(
+                            "INSERT INTO placements(id,tile,rank,frame,leaf) VALUES(?,?,?,?,1)",
+                            params![id, id, rank, encode(&frame)],
+                        )
+                        .unwrap();
+                    id += 1;
+                };
+                for k in 0..placements {
+                    place(&s, 0, if k == placements - 1 { gap } else { 0. });
+                }
+                for rank in 1..=40 {
+                    place(&s, rank, 0.);
+                }
+                place(&s, 41, 10.);
+                let result = s.replay_original_aliases(&effort());
+                if gap == 0. {
+                    result.unwrap();
+                } else {
+                    assert!(result
+                        .unwrap_err()
+                        .to_string()
+                        .contains("distinct exact decoded placed positions"));
+                }
+            }
+        }
+    }
     #[test]
     fn original_scan_charges_every_row() {
         let rows: Vec<(u64, Point)> = (0..4).map(|v| (v, [v as f64, 0., 0.])).collect();
-        let s = original_rows(&rows);
+        let mut s = original_rows(&rows);
         let mut work = effort();
         work.budget.value = 3;
         assert!(s
@@ -2475,7 +2698,9 @@ mod tests {
             .unwrap_err()
             .exceeded()
             .is_some());
-        s.replay_original_aliases(&effort()).unwrap();
+        original_rows(&rows)
+            .replay_original_aliases(&effort())
+            .unwrap();
     }
 
     fn delivery_case(
@@ -2677,7 +2902,7 @@ mod tests {
         let b = [f64::from_bits(1f64.to_bits() + 1), 0., 0.];
         assert_eq!(canonical(a).unwrap(), canonical(b).unwrap());
         // Original identity keeps the exact f64 bits the f32 seam key merges.
-        let s = original_rows(&[(0, a), (0, b)]);
+        let mut s = original_rows(&[(0, a), (0, b)]);
         assert!(s
             .replay_original_aliases(&effort())
             .unwrap_err()

@@ -69,7 +69,7 @@ def fixtures(directory):
     dem = directory / 'dem.tif'
     dataset = gdal.GetDriverByName('GTiff').Create(str(dem), 32, 32, 1, gdal.GDT_Float64)
     dataset.SetProjection(srs.ExportToWkt()); dataset.SetGeoTransform([12, .01, 0, 42, 0, -.01])
-    values = np.full((32, 32), 123.5, dtype='f8'); values[12:20, 12:20] = -32768
+    values = np.full((32, 32), 123.5, dtype='f8'); values[12:20, 12:20] = -32768; values[20:] = -500
     band = dataset.GetRasterBand(1); band.WriteArray(values); band.SetNoDataValue(-32768)
     band = None; dataset = None
     imagery = directory / 'imagery.tif'
@@ -108,7 +108,7 @@ def main():
         # Converter children cannot invoke helpers through PATH.
         converter_environment = dict(environment, PATH='')
         stdout, _ = run([str(binary), 'terrain', '-i', str(dem), '-o', str(directory / 'terrain'),
-                        '--cells-per-leaf', '16', '--height-offset', '10.25', '--fill-height', '-999.125', '--json'],
+                        '--cells-per-leaf', '16', '--height-offset', '10.25', '--json'],
                        converter_environment, args.timeout)
         evidence['terrainCli'] = json.loads(stdout)
         stdout, _ = run([node, str(pathlib.Path(__file__).parent / 'fixtures/t1_validate_glb.cjs'),

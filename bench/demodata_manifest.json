@@ -2378,6 +2378,7 @@
       "input": "point-cloud/autzen_trim.las",
       "command": "point-cloud",
       "args": [
+        "--metadata",
         "--sourceCrs",
         "local",
         "--maxPoints",
@@ -2395,6 +2396,7 @@
       "input": "point-cloud/usgs-3dep-brookscamp/ept-data/0-0-0-0.laz",
       "command": "point-cloud",
       "args": [
+        "--metadata",
         "--sourceCrs",
         "EPSG:3857",
         "--heightOffset",
@@ -2466,8 +2468,6 @@
         "--cells-per-leaf",
         "64",
         "--height-offset",
-        "0",
-        "--fill-height",
         "0"
       ],
       "audit": "terrain",
@@ -2555,6 +2555,7 @@
       "input": "point-cloud/autzen-classified.laz",
       "command": "point-cloud",
       "args": [
+        "--metadata",
         "--sourceCrs",
         "local",
         "--maxPoints",
@@ -2572,6 +2573,7 @@
       "input": "point-cloud/usgs-3dep-brookscamp/ept-data",
       "command": "point-cloud",
       "args": [
+        "--metadata",
         "--sourceCrs",
         "EPSG:3857",
         "--heightOffset",
@@ -2609,8 +2611,6 @@
         "--cells-per-leaf",
         "64",
         "--height-offset",
-        "0",
-        "--fill-height",
         "0"
       ],
       "audit": "terrain",
@@ -2627,8 +2627,6 @@
         "--cells-per-leaf",
         "64",
         "--height-offset",
-        "0",
-        "--fill-height",
         "0"
       ],
       "audit": "terrain",

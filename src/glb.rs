@@ -108,8 +108,7 @@ pub(crate) fn add_extension(document: &mut Value, name: &str, required: bool) ->
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum MeshoptStream {
     /// Triangle-list indices (`mode: TRIANGLES`) of `width` bytes each.
-    /// Only terrain (native-geospatial) writes them.
-    #[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
+    /// Terrain and HLOD coarse tiles write them.
     TriangleIndices {
         count: usize,
         width: usize,

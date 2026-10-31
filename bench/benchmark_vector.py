@@ -26,7 +26,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tests'))
 from test_vector_reuse import details
 from test_vector_gpkg import gpkg
-spec = importlib.util.spec_from_file_location('timing', ROOT / 'bench/benchmark_terrain.py')
+spec = importlib.util.spec_from_file_location('timing', ROOT / 'bench/timing.py')
 timing = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(timing)
 METHODS = ['python-1', 'rust-1', 'python-4', 'rust-4']

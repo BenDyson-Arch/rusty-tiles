@@ -656,7 +656,7 @@ fn model_to_manifest(
 
 /// Tile local or grid-free georeferenced LAS/LAZ point clouds.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, source_crs, force=false, height_offset=None, max_points=8192, chunk_points=100_000, metadata_attributes=false, callback=None))]
+#[pyo3(signature = (input, output, *, source_crs, force=false, height_offset=None, max_points=8192, chunk_points=100_000, metadata=false, metadata_attributes=false, callback=None))]
 #[allow(clippy::too_many_arguments)]
 fn point_cloud_to_3tz(
     py: Python<'_>,
@@ -667,6 +667,7 @@ fn point_cloud_to_3tz(
     height_offset: Option<f64>,
     max_points: usize,
     chunk_points: usize,
+    metadata: bool,
     metadata_attributes: bool,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<PointCloudResult> {
@@ -695,6 +696,7 @@ fn point_cloud_to_3tz(
     let options = PointCloudOptions {
         max_points,
         chunk_points,
+        metadata,
         metadata_attributes,
     };
     let policy = if force {

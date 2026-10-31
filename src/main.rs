@@ -337,14 +337,11 @@ struct TerrainArgs {
     #[command(flatten)]
     io: IoArgs,
     /// Source-pixel cells per GLB leaf edge: 16, 32, 64 or 128
-    #[arg(long, default_value_t = 64)]
+    #[arg(long, default_value_t = 128)]
     cells_per_leaf: u16,
     /// Add to raw DEM metre heights to obtain ellipsoidal heights; never inferred
     #[arg(long, allow_hyphen_values = true)]
     height_offset: f64,
-    /// Ellipsoidal height used for missing samples inside the source footprint
-    #[arg(long, allow_hyphen_values = true)]
-    fill_height: f64,
 }
 
 #[derive(Args)]
@@ -404,6 +401,9 @@ struct RasterArgs {
 struct PointCloudArgs {
     #[command(flatten)]
     io: IoArgs,
+    /// Keep every source field per point in a property table (off: position and colour only)
+    #[arg(long)]
+    metadata: bool,
     /// Expose classification, intensity and return number as vertex property attributes
     #[arg(long = "metadataAttributes", visible_alias = "metadata-attributes")]
     metadata_attributes: bool,
@@ -1317,6 +1317,7 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
                 }
             };
             let options = PointCloudOptions {
+                metadata: a.metadata,
                 metadata_attributes: a.metadata_attributes,
                 max_points: a.max_points,
                 chunk_points: a.chunk_points,
@@ -1431,7 +1432,6 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
                 a.io.output,
                 terrain::TerrainHeights::RawMetres {
                     height_offset_metres: a.height_offset,
-                    fill_height_metres: a.fill_height,
                 },
                 terrain::TerrainOptions::new(a.cells_per_leaf),
             )
@@ -1676,6 +1676,15 @@ mod tests {
     }
 
     #[test]
+    fn terrain_defaults_to_128_cells_per_leaf() {
+        let args = "rusty-tiles terrain -i a -o b --height-offset 0".split(' ');
+        let Command::Terrain(parsed) = Cli::try_parse_from(args).unwrap().command else {
+            panic!()
+        };
+        assert_eq!(parsed.cells_per_leaf, 128);
+    }
+
+    #[test]
     fn camel_case_options_and_subcommands_have_visible_kebab_aliases() {
         let cli = Cli::command();
         for command in cli.get_subcommands().filter(|c| !c.is_hide_set()) {
@@ -1777,7 +1786,7 @@ mod tests {
     #[test]
     fn summary_separates_counts_from_settings() {
         let root = tempfile::tempdir().unwrap();
-        let report = json!({"tiles":5,"heightOffset":2.5,"fillHeight":0,"cellsPerLeaf":64,"positionErrorMetres":0.01,
+        let report = json!({"tiles":5,"heightOffset":2.5,"cellsPerLeaf":64,"positionErrorMetres":0.01,
                "lodLevels":3,"lodToleranceMetres":0.1,"skippedFeatures":2,"features":9,"sourceCrs":"x"});
         let summary = output_summary(root.path(), Some(&report), false);
         assert_eq!(
@@ -1790,7 +1799,7 @@ mod tests {
         );
         assert_eq!(
             summary["settings"],
-            json!({"heightOffset":2.5,"fillHeight":0,"cellsPerLeaf":64,"positionErrorMetres":0.01,
+            json!({"heightOffset":2.5,"cellsPerLeaf":64,"positionErrorMetres":0.01,
                 "lodLevels":3,"lodToleranceMetres":0.1})
         );
         assert_eq!(summary["skippedFeatures"], 2);
