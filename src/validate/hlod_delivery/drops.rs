@@ -407,6 +407,9 @@ struct Grid {
     size: f64,
     reach: f64,
     cells: HashMap<[i64; 3], Vec<u32>>,
+    /// The face that answered the last query. Queries come in runs from one dropped face or
+    /// component, so it usually answers the next one too.
+    last: std::cell::Cell<Option<u32>>,
 }
 
 impl Grid {
@@ -436,6 +439,7 @@ impl Grid {
             size,
             reach,
             cells: HashMap::default(),
+            last: std::cell::Cell::new(None),
         };
         for (i, f) in faces.iter().enumerate() {
             let ps = f.map(point);
@@ -465,7 +469,9 @@ impl Grid {
     fn cell(&self, p: [f64; 3]) -> [i64; 3] {
         std::array::from_fn(|a| ((p[a] - self.lo[a]) / self.size).floor() as i64)
     }
-    /// Whether `p` lies within the parent's reach plus `slack` of a face.
+    /// Whether `p` lies within the parent's reach plus `slack` of a face. The last answering face
+    /// is tried first: any face within reach answers, and one within reach of `p` was entered in
+    /// `p`'s cell, so the result is the cell scan's.
     fn within(
         &self,
         p: [f64; 3],
@@ -473,13 +479,21 @@ impl Grid {
         faces: &[[CanonicalPoint; 3]],
         effort: &Effort,
     ) -> Result<bool, Error> {
+        let reach = self.reach + slack;
+        let near = |i: u32| distance2(p, faces[i as usize].map(point)) <= reach * reach;
+        if let Some(i) = self.last.get() {
+            effort.charge(1)?;
+            if near(i) {
+                return Ok(true);
+            }
+        }
         let Some(cell) = self.cells.get(&self.cell(p)) else {
             return Ok(false);
         };
-        let reach = self.reach + slack;
         for &i in cell {
             effort.charge(1)?;
-            if distance2(p, faces[i as usize].map(point)) <= reach * reach {
+            if near(i) {
+                self.last.set(Some(i));
                 return Ok(true);
             }
         }

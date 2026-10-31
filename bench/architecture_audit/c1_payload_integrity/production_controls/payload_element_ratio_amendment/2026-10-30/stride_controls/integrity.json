@@ -46,8 +46,8 @@
       "sha256": "820994b9ed8bf83e8c38f9f6ce0c6b0afb889ecb5e07f4e580add9ae462eab89"
     },
     "fixtures/manifest.json": {
-      "bytes": 27762,
-      "sha256": "15ce7e3e98ce92d705ce08059e7a0200c4977af7968d569f721b176ffbe31ff2"
+      "bytes": 27906,
+      "sha256": "1a0df3b12817d5af1e3bb8bc3a9e3640f685bf4adb47ef965bb22f659c280df9"
     },
     "fixtures/scalar-real-range/input.3tz": {
       "bytes": 1433,

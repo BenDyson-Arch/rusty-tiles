@@ -34,17 +34,19 @@ CLASS_C = {
     "hierarchyVisits": (262144, 1, 8),
     "references": (1048576, 1, 8),
     "totalBytesRead": (2147483648, 4, 1),
-    "totalPayloadElements": (16000000, 77, 1),
+    "totalPayloadElements": (16000000, 105, 1),
     "containmentWorkUnits": (536870912, 128, 1),
     "containmentBytesRead": (2147483648, 4, 1),
     "containmentDecodedBytes": (2147483648, 16, 1),
 }
+# Additive keys: floor + floor(S*p/q) instead of max(floor, floor(S*p/q)) (amendment, 2026-10-31).
+ADDITIVE = {"totalPayloadElements"}
 # "first S above the floor" column of the amendment's table
 CROSSOVER = {
     "hierarchyVisits": 2097160,
     "references": 8388616,
     "totalBytesRead": 536870913,
-    "totalPayloadElements": 207793,
+    "totalPayloadElements": 1,
     "containmentWorkUnits": 4194305,
     "containmentBytesRead": 536870913,
     "containmentDecodedBytes": 134217729,
@@ -74,10 +76,15 @@ def expected(S, overrides=None):
         if k in overrides:
             limits[k] = overrides[k]
             src = "explicit"
+        elif k in ADDITIVE:
+            limits[k] = min(floor + scaled, U64_MAX)
+            src = "scaled" if scaled > 0 else "floor"
         else:
             limits[k] = max(floor, scaled)
             src = "scaled" if scaled > floor else "floor"
         budgets[k] = {"floor": floor, "perStoredByte": [p, q], "source": src}
+        if k in ADDITIVE:
+            budgets[k]["additive"] = True
     assert len(limits) == 21
     return limits, {"model": MODEL, "budgets": budgets}
 
@@ -379,18 +386,20 @@ def cmd_self_test(_args):
     ok(all(lim[k] is None for k in CLASS_B), "class B null by default")
     ok(der["model"] == 1 and len(der["budgets"]) == 7, "derivation shape")
     ok(lim["liveDocumentBytes"] == 268435456, "liveDocumentBytes")
-    ok(json.dumps(der, sort_keys=True) == json.dumps(expected(5, {})[1], sort_keys=True),
-       "derivation independent of S below crossovers")
+    fixed = lambda d: json.dumps({k: v for k, v in d["budgets"].items() if k not in ADDITIVE}, sort_keys=True)
+    ok(fixed(der) == fixed(expected(5, {})[1]), "max-rule derivation independent of S below crossovers")
 
     # crossover table, and that the table equals the first S with S*p//q > floor
     for k, (floor, p, q) in CLASS_C.items():
         c = CROSSOVER[k]
         first = None
-        # smallest S with S*p//q > floor  <=>  S*p >= (floor+1)*q
-        first = -(-((floor + 1) * q) // p)
+        # smallest S with S*p//q > floor  <=>  S*p >= (floor+1)*q (additive: S*p//q > 0)
+        base = 0 if k in ADDITIVE else floor
+        first = -(-((base + 1) * q) // p)
         ok(first == c, "%s crossover table %d vs computed %d" % (k, c, first))
-        for S, want_src, want_val in ((c - 1, "floor", floor), (c, "scaled", c * p // q),
-                                      (c + 1, "scaled", (c + 1) * p // q)):
+        rule = (lambda S: floor + S * p // q) if k in ADDITIVE else (lambda S: S * p // q)
+        for S, want_src, want_val in ((c - 1, "floor", floor), (c, "scaled", rule(c)),
+                                      (c + 1, "scaled", rule(c + 1))):
             lim, der = expected(S, {})
             b = der["budgets"][k]
             ok(lim[k] == want_val and b["source"] == want_src,
@@ -401,7 +410,7 @@ def cmd_self_test(_args):
         ok(lim[k] == floor and der["budgets"][k]["source"] == "floor", "%s tie" % k)
         # saturation
         lim, der = expected(U64_MAX, {})
-        want = min(U64_MAX * p // q, U64_MAX)
+        want = min(rule(U64_MAX), U64_MAX)
         ok(lim[k] == want, "%s saturation" % k)
         if p > q:
             ok(lim[k] == U64_MAX and der["budgets"][k]["source"] == "scaled", "%s saturated" % k)

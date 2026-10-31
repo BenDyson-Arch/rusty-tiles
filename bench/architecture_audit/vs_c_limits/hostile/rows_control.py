@@ -315,7 +315,7 @@ def main():
     if a.command == 'generate':
         stored = archive(a.kind, a.n, a.tri, a.seed, a.out, a.chain, a.coarse)
         print(json.dumps({'class': a.kind, 'leaves': a.n, 'triangles': a.tri, 'stored': stored,
-                          'budget': max(16_000_000, 77 * stored)}))
+                          'budget': 16_000_000 + 105 * stored}))
     elif a.command == 'revfan':
         print(json.dumps({'class': 'revfan', 'stored': revfan(a.out, a.chain, a.base, a.m, a.leaves, a.seg)}))
     else:

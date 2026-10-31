@@ -727,6 +727,9 @@ pub(super) const SEEK_UNITS: usize = 320;
 /// where the same rows can be read again: descendant leaf rows are read once per coarse
 /// ancestor.
 pub(super) const READ_UNITS: usize = 32;
+/// Units for each open segment's shared-endpoint check: a merge step, and for a shared lower
+/// endpoint one sequence record, sorted and merged once (about 190 ns measured).
+pub(super) const OPEN_UNITS: usize = 32;
 /// Units for each original vertex row appended to the spill sequence at ingest.
 pub(super) const ORIGINAL_UNITS: usize = 16;
 /// Units for each placed original key: placement, external sort and ordered scan.
@@ -2296,7 +2299,7 @@ impl Store {
             // key join, not a chord inference or a distance/near-seam query:
             // lower endpoints merge in key order, higher ones after a sort.
             read_edge(key)?;
-            effort.charge(2 * ROW_UNITS)?;
+            effort.charge(OPEN_UNITS)?;
             if open.lower.shared(&key[..12])? {
                 open.higher
                     .push(&bulk::end(&key[12..]))

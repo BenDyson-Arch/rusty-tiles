@@ -106,13 +106,17 @@ impl Derivation {
     }
 }
 
-/// The rule of one Class C budget in the report: `max(floor, ⌊S·p/q⌋)` unless explicit.
+/// The rule of one Class C budget in the report: `max(floor, ⌊S·p/q⌋)`, or `floor + ⌊S·p/q⌋`
+/// when `additive`, unless explicit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BudgetRule {
     pub floor: u64,
     pub per_stored_byte: [u64; 2],
     pub source: Derivation,
+    /// The floor is added to the per-byte term instead of bounding it from below.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub additive: bool,
 }
 
 /// The report's `limitDerivation`: the model version and each Class C budget's rule.
@@ -124,15 +128,17 @@ pub struct LimitDerivation {
 
 /// The rule table (VS-C-1). Bump on any change to a floor or ratio (VS-D freezes κ).
 pub const LIMIT_MODEL: u32 = 1;
-/// Class C: key, floor, κ = p/q per stored byte.
-const BUDGETS: [(LimitKey, u64, u64, u64); 7] = [
-    (LimitKey::HierarchyVisits, 1 << 18, 1, 8),
-    (LimitKey::References, 1 << 20, 1, 8),
-    (LimitKey::TotalBytesRead, 1 << 31, 4, 1),
-    (LimitKey::TotalPayloadElements, 16_000_000, 77, 1),
-    (LimitKey::ContainmentWorkUnits, 1 << 29, 128, 1),
-    (LimitKey::ContainmentBytesRead, 1 << 31, 4, 1),
-    (LimitKey::ContainmentDecodedBytes, 1 << 31, 16, 1),
+/// Class C: key, floor, κ = p/q per stored byte, and whether the floor is added.
+/// `totalPayloadElements` is `16,000,000 + 105·S`: the form of its time statement, so legitimate
+/// producer output of any size validates with a 1.5× margin (validator-limits-amendment.md).
+const BUDGETS: [(LimitKey, u64, u64, u64, bool); 7] = [
+    (LimitKey::HierarchyVisits, 1 << 18, 1, 8, false),
+    (LimitKey::References, 1 << 20, 1, 8, false),
+    (LimitKey::TotalBytesRead, 1 << 31, 4, 1, false),
+    (LimitKey::TotalPayloadElements, 16_000_000, 105, 1, true),
+    (LimitKey::ContainmentWorkUnits, 1 << 29, 128, 1, false),
+    (LimitKey::ContainmentBytesRead, 1 << 31, 4, 1, false),
+    (LimitKey::ContainmentDecodedBytes, 1 << 31, 16, 1, false),
 ];
 
 /// `⌊S·p/q⌋` in u128, saturating at `u64::MAX`.
@@ -235,11 +241,14 @@ impl LimitPlan {
         let mut limits = self.admission();
         let mut sources = Sources::absolute();
         let mut budgets = BTreeMap::new();
-        for (key, floor, p, q) in BUDGETS {
+        for (key, floor, p, q, additive) in BUDGETS {
             let scaled = per_stored_byte(stored_bytes, p, q);
             let (value, source) = match self.overrides[key as usize] {
                 Some(value) => (value, Derivation::Explicit),
-                None if scaled > floor => (scaled, Derivation::Scaled),
+                None if additive && scaled > 0 => {
+                    (floor.saturating_add(scaled), Derivation::Scaled)
+                }
+                None if !additive && scaled > floor => (scaled, Derivation::Scaled),
                 None => (floor, Derivation::Floor),
             };
             if let LimitSlot::Budget(slot) = limits.slot(key) {
@@ -252,6 +261,7 @@ impl LimitPlan {
                     floor,
                     per_stored_byte: [p, q],
                     source,
+                    additive,
                 },
             );
         }
@@ -270,13 +280,14 @@ pub(crate) fn absolute_derivation() -> LimitDerivation {
         model: LIMIT_MODEL,
         budgets: BUDGETS
             .into_iter()
-            .map(|(key, floor, p, q)| {
+            .map(|(key, floor, p, q, additive)| {
                 (
                     key.as_str(),
                     BudgetRule {
                         floor,
                         per_stored_byte: [p, q],
                         source: Derivation::Explicit,
+                        additive,
                     },
                 )
             })
