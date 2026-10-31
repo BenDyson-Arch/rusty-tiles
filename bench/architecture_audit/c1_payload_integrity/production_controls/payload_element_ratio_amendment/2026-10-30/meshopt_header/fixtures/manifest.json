@@ -82,7 +82,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 16108465,
+          "totalPayloadElements": 16134290,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -157,7 +157,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -245,7 +245,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 16124005,
+          "totalPayloadElements": 16153530,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -320,7 +320,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -408,7 +408,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 16111825,
+          "totalPayloadElements": 16138450,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -483,7 +483,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -603,7 +603,7 @@
     "amends": "vs_c_limits_amendment/2026-10-14/meshopt_header/fixtures/manifest.json",
     "inputSha256": "c9584382fc8cf388d702b5d734e227b6ff301005d6e19830b56e6aa28a3025f3",
     "inputManifestSha256": "22ff1456dba290926fc770ce624f9dbc8c6371c831b7622f2a32e4c4b70b24e9",
-    "rule": "admitted expectedReport: totalPayloadElements max(16000000, 16*S) -> 16000000 + 105*S (perStoredByte [105, 1], additive); nothing else changes",
+    "rule": "admitted expectedReport: totalPayloadElements max(16000000, 16*S) -> 16000000 + 130*S (perStoredByte [130, 1], additive); nothing else changes",
     "specification": "docs/architecture/validator-limits-amendment.md (measured basis, 2026-10-30)",
     "generator": "bench/architecture_audit/c1_payload_integrity/production_controls/payload_element_ratio_amendment/2026-10-30/amend.py"
   }

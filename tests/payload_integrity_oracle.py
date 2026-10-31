@@ -35,16 +35,16 @@ def main():
     # expect Unsupported; polygon-sensitive-5 holds no legacy content and keeps its bundle.
     # VS-C limits amendment (2026-10-14): storedBytes, limitDerivation, null volume caps and
     # liveDocumentBytes in admitted reports; the H7 and C2-WB bundles stay as history.
-    # Payload-element amendment (2026-10-30/31): totalPayloadElements 16 M + 105 per stored byte
+    # Payload-element amendment (2026-10-30/31): totalPayloadElements 16 M + 130 per stored byte
     # in admitted reports; the VS-C bundles stay as history.
     amendment = controls / 'payload_element_ratio_amendment/2026-10-30'
     bundles = [
         ('corrected205', amendment / 'corrected-205-ratio-fixtures.tar.gz',
-         'bb490a7f6dcbd77e8d8bc9d4bde16254cf0f8c1d98734bee5f2c3b77b1889db9',
-         '106e1d126de61cecc2deb9669a45862d56fa2ca179360d5e261a06c15fbfcac3', 205),
+         '560a5a25964b827a68da56a76ed435711fd554e57a2b9bf7e2657449fa4ee2b4',
+         'd9aad7f7c0632e5a29f53678a2de5dab09e864171162ca3e9d287f5d6afdcaca', 205),
         ('polygon5', amendment / 'polygon-sensitive-5-ratio-fixtures.tar.gz',
-         '9db1b92412cb209dd38b3ea01678e88fb93099aa8465750cd7c08b307b91810f',
-         'd5af6593be1ea40bd96964788dcc1426e903b01f0946ade8ac857fc8c3a9146c', 5),
+         'cf62421e8afd1934b5c205e93f2f91604ac0cd2a15ac0cf5562efad089d0abb4',
+         '2f022f31e0b1402eee3216ca49238ee5392be37525147689e26d7378815f8cc8', 5),
     ]
     phases = {}
     status = 1

@@ -7,11 +7,11 @@
     python3 -I amend.py --ktx2 ARCHIVE_ROOT --check
 
 Rule (docs/architecture/validator-limits-amendment.md, "measured basis (2026-10-30)" and its
-additive budget, 2026-10-31): the `totalPayloadElements` budget is 16000000 + 105*S instead of
+additive budget, 2026-10-31): the `totalPayloadElements` budget is 16000000 + 130*S instead of
 max(16000000, 16*S), still model 1. In every admitted report,
 `limitDerivation.budgets.totalPayloadElements` becomes
-{floor: 16000000, perStoredByte: [105, 1], source: "scaled" iff 105*S > 0, additive: true} and
-`limits.totalPayloadElements` becomes 16000000 + 105*S. S is recomputed from each case archive
+{floor: 16000000, perStoredByte: [130, 1], source: "scaled" iff 130*S > 0, additive: true} and
+`limits.totalPayloadElements` becomes 16000000 + 130*S. S is recomputed from each case archive
 by the VS-C script's own ZIP central-directory parser (never by the validator) and must equal the
 report's `storedBytes`; the old entry and value must be exactly the VS-C ratio's (16). Nothing else
 in any report changes, and no category, exit code or refused case may change.
@@ -29,7 +29,7 @@ spec = importlib.util.spec_from_file_location("vs_c_amend", CONTROLS / "vs_c_lim
 vsc = importlib.util.module_from_spec(spec); spec.loader.exec_module(vsc)
 sha, Refused = vsc.sha, vsc.Refused
 KEY = "totalPayloadElements"
-FLOOR, OLD, NEW = 16000000, (16, 1), (105, 1)
+FLOOR, OLD, NEW = 16000000, (16, 1), (130, 1)
 
 
 def old_entry(s):
@@ -90,8 +90,8 @@ def amend_manifest(manifest, read_archive, origin, origin_sha, manifest_sha):
         raise Refused("category or exit code changed")
     amended["payloadElementRatioAmendment"] = {
         "amends": origin, "inputSha256": origin_sha, "inputManifestSha256": manifest_sha,
-        "rule": "admitted expectedReport: totalPayloadElements max(16000000, 16*S) -> 16000000 + 105*S "
-                "(perStoredByte [105, 1], additive); nothing else changes",
+        "rule": "admitted expectedReport: totalPayloadElements max(16000000, 16*S) -> 16000000 + 130*S "
+                "(perStoredByte [130, 1], additive); nothing else changes",
         "specification": "docs/architecture/validator-limits-amendment.md (measured basis, 2026-10-30)",
         "generator": "bench/architecture_audit/c1_payload_integrity/production_controls/" + REL + "/amend.py",
     }

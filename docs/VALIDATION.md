@@ -252,7 +252,8 @@ index included), fixed when the catalog is admitted.
   `references` max(1,048,576, S/8), `totalBytesRead` max(2 GiB, 4·S) (explicit member-hash
   and payload/document reads, including repeated reads and constructor index reads),
   and the three C2 budgets above. `totalPayloadElements` adds its floor instead: 16 million +
-  105·S, so legitimate dense output of any size validates with a 1.5× margin. Archives up to
+  130·S, so every legitimate dense output measured (up to 86.6 units per stored byte) validates
+  with a 1.5× margin. Archives up to
   2,097,159 stored bytes have exactly the max-rule floors. The report's `limitDerivation` gives
   each budget's floor, its ratio `perStoredByte`, its `source` (`floor`, `scaled` or
   `explicit`) and, for `totalPayloadElements`, `"additive": true`; `storedBytes`, `limits` and `limitDerivation` depend only on S and the

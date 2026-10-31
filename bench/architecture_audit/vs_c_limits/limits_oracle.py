@@ -34,7 +34,7 @@ CLASS_C = {
     "hierarchyVisits": (262144, 1, 8),
     "references": (1048576, 1, 8),
     "totalBytesRead": (2147483648, 4, 1),
-    "totalPayloadElements": (16000000, 105, 1),
+    "totalPayloadElements": (16000000, 130, 1),
     "containmentWorkUnits": (536870912, 128, 1),
     "containmentBytesRead": (2147483648, 4, 1),
     "containmentDecodedBytes": (2147483648, 16, 1),

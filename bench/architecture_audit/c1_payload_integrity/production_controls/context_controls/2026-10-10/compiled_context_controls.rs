@@ -73,7 +73,7 @@ fn declared_derivation() -> Value {
         "hierarchyVisits": rule(262144, 1, 8),
         "references": rule(1048576, 1, 8),
         "totalBytesRead": rule(2147483648, 4, 1),
-        "totalPayloadElements": {"floor": 16000000, "perStoredByte": [105, 1], "source": "explicit", "additive": true},
+        "totalPayloadElements": {"floor": 16000000, "perStoredByte": [130, 1], "source": "explicit", "additive": true},
         "containmentWorkUnits": rule(536870912, 128, 1),
         "containmentBytesRead": rule(2147483648, 4, 1),
         "containmentDecodedBytes": rule(2147483648, 16, 1),

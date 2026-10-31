@@ -4,7 +4,7 @@
   "rule": "C1 KHR_texture_basisu / KTX2 container amendment (2026-10-13)",
   "generatorSha256": "dd15678267c730208e33fa67a2174d3e16cd3464088a8b6d0d8a136c7610255f",
   "oracleSha256": "767113e56e3e24e96798da02791bb2140394e3ef69e307bf6c45687759884b44",
-  "runnerSha256": "3eaca6ea227006c4ca11178c1026896005eb45d6dc0a137a11f92467cf3d342c",
+  "runnerSha256": "a85e014303d18a086ca4f60f5d07d67baea49bd0a6aa77de31cf6b9989dd8b8c",
   "referencePins": {
     "files": [
       {
@@ -124,7 +124,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 16151305,
+          "totalPayloadElements": 16187330,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -199,7 +199,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -269,7 +269,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 16181545,
+          "totalPayloadElements": 16224770,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -344,7 +344,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -414,7 +414,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 16564585,
+          "totalPayloadElements": 16699010,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -489,7 +489,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -559,7 +559,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 22739005,
+          "totalPayloadElements": 24343530,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -634,7 +634,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -704,7 +704,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 19664185,
+          "totalPayloadElements": 20536610,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -779,7 +779,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -849,7 +849,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 16149625,
+          "totalPayloadElements": 16185250,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -924,7 +924,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -994,7 +994,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 16163485,
+          "totalPayloadElements": 16202410,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -1069,7 +1069,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -1140,7 +1140,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 16559545,
+          "totalPayloadElements": 16692770,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -1215,7 +1215,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -1286,7 +1286,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 16559545,
+          "totalPayloadElements": 16692770,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -1361,7 +1361,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -1432,7 +1432,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 16131145,
+          "totalPayloadElements": 16162370,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -1507,7 +1507,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -1577,7 +1577,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 16558705,
+          "totalPayloadElements": 16691730,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -1652,7 +1652,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -1722,7 +1722,7 @@
           "hierarchyVisits": 1096073,
           "hierarchyDepth": 128,
           "references": 1096073,
-          "totalPayloadElements": 936701425,
+          "totalPayloadElements": 1155916050,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -1797,7 +1797,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",
@@ -1867,7 +1867,7 @@
           "hierarchyVisits": 262144,
           "hierarchyDepth": 128,
           "references": 1048576,
-          "totalPayloadElements": 16558705,
+          "totalPayloadElements": 16691730,
           "totalBytesRead": 2147483648,
           "sourceArchiveBytes": null,
           "centralDirectoryBytes": null,
@@ -1942,7 +1942,7 @@
             "totalPayloadElements": {
               "floor": 16000000,
               "perStoredByte": [
-                105,
+                130,
                 1
               ],
               "source": "scaled",

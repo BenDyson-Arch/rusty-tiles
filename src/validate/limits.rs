@@ -129,13 +129,13 @@ pub struct LimitDerivation {
 /// The rule table (VS-C-1). Bump on any change to a floor or ratio (VS-D freezes κ).
 pub const LIMIT_MODEL: u32 = 1;
 /// Class C: key, floor, κ = p/q per stored byte, and whether the floor is added.
-/// `totalPayloadElements` is `16,000,000 + 105·S`: the form of its time statement, so legitimate
+/// `totalPayloadElements` is `16,000,000 + 130·S`: the form of its time statement, so legitimate
 /// producer output of any size validates with a 1.5× margin (validator-limits-amendment.md).
 const BUDGETS: [(LimitKey, u64, u64, u64, bool); 7] = [
     (LimitKey::HierarchyVisits, 1 << 18, 1, 8, false),
     (LimitKey::References, 1 << 20, 1, 8, false),
     (LimitKey::TotalBytesRead, 1 << 31, 4, 1, false),
-    (LimitKey::TotalPayloadElements, 16_000_000, 105, 1, true),
+    (LimitKey::TotalPayloadElements, 16_000_000, 130, 1, true),
     (LimitKey::ContainmentWorkUnits, 1 << 29, 128, 1, false),
     (LimitKey::ContainmentBytesRead, 1 << 31, 4, 1, false),
     (LimitKey::ContainmentDecodedBytes, 1 << 31, 16, 1, false),
