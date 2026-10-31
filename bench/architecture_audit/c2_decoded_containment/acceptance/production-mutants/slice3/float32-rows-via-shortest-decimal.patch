@@ -1,0 +1,19 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 88ee84a..ed396d7 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -1702,7 +1702,13 @@ impl Check<'_> {
+             let index = self.c2.tile(TileFact {
+                 transform: None,
+                 volume: match &tile.volume {
+-                    EffectiveVolume::Row(b) => Some(VolumeFacts::Box(*b)),
++                    EffectiveVolume::Row(b) => Some(VolumeFacts::Box(b.map(|v| {
++                        if (v as f32) as f64 == v && v.is_finite() {
++                            format!("{}", v as f32).parse().unwrap()
++                        } else {
++                            v
++                        }
++                    }))),
+                     EffectiveVolume::DerivedRoot => Some(volume_facts(&r.bounds)),
+                     EffectiveVolume::Derived(_) => None,
+                 },

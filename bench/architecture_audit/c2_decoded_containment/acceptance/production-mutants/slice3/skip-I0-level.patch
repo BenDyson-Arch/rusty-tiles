@@ -1,0 +1,15 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 88ee84a..e7dab91 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -1682,7 +1682,9 @@ impl Check<'_> {
+                 0 => (&r.bounds, r.error, r.tile),
+                 _ => path
+                     .get(level - 1)
+-                    .map(|(volume, error, index)| (volume, *error, *index))
++                    .map(|(volume, error, index)| {
++                        (volume, *error, if level == 1 { r.tile } else { *index })
++                    })
+                     .ok_or_else(|| {
+                         Error::InvalidState("implicit tile without a path parent".into())
+                     })?,

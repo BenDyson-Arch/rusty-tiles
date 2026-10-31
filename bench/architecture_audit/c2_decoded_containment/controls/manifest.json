@@ -1,0 +1,761 @@
+{
+ "pairs": [
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "witnesses/fixtures/W12-TRS-half-turn-order.3tz",
+    "id": "W12-TRS-half-turn-order",
+    "limits": {},
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "c2b2e5e0774b4a096afde1d23b19d76bf6dc7369ee39bf60156ea02c5a143a1b"
+   },
+   "control": "one-ulp-outside",
+   "mutated": {
+    "expected": {
+     "facts": {
+      "depth": 0,
+      "level": 0,
+      "node": 0,
+      "role": "own"
+     },
+     "outcome": "Outside"
+    },
+    "file": "witnesses/fixtures/W12-TRS-half-turn-order~ulp-L0-own-r0.3tz",
+    "id": "W12-TRS-half-turn-order~ulp-L0-own-r0",
+    "limits": {},
+    "oracle": {
+     "facts": {
+      "accessor": 0,
+      "contentAt": "tileset.json:root.content[0]",
+      "coordinate": [
+       "8",
+       "-42",
+       "14"
+      ],
+      "coordinateApprox": [
+       8.0,
+       -42.0,
+       14.0
+      ],
+      "depth": 0,
+      "k": null,
+      "level": 0,
+      "member": "w.glb",
+      "mesh": 0,
+      "node": 0,
+      "primitive": 0,
+      "reference": 0,
+      "role": "own",
+      "uri": "w.glb",
+      "vertex": 0,
+      "volumeAt": "tileset.json:root"
+     },
+     "outcome": "Outside",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "7f4b83fe741c8c60df7de32597515cfa6304acc74e49863414feaa6ed7fca2c9"
+   },
+   "what": "own box row 0 half-length one ulp smaller"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "controls/fixtures/quaternion-window-at-2^-18.3tz",
+    "id": "quaternion-window-at-2^-18",
+    "limits": {},
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "515f689465464e7285411d2676c7860ade11692cf83a45eb8ef76851a0d2122b"
+   },
+   "control": "quaternion-past-window",
+   "mutated": {
+    "expected": {
+     "outcome": "NotInspected",
+     "reasons": [
+      "quaternionWindow"
+     ]
+    },
+    "file": "controls/fixtures/quaternion-window-next-beyond.3tz",
+    "id": "quaternion-window-next-beyond",
+    "limits": {},
+    "oracle": {
+     "facts": null,
+     "outcome": "NotInspected",
+     "reasons": [
+      "quaternionWindow"
+     ],
+     "why": null
+    },
+    "sha256": "f05e42d85a3be53cb5698d842958417e60144d64f97010d21480ba0255919980"
+   },
+   "what": "x component moves to the next binary64"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "controls/fixtures/worked-example-adjusted-containmentSpanBits-29.3tz",
+    "id": "worked-example-adjusted-containmentSpanBits-29",
+    "limits": {
+     "containmentSpanBits": 29
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "2a1007061f9f417b07977da9d8ecb13283387a659e76daa1890c51a1fc4f077b"
+   },
+   "control": "span-at-cap-and-one-over",
+   "mutated": {
+    "expected": {
+     "outcome": "NotInspected",
+     "reasons": [
+      "numericSpan"
+     ]
+    },
+    "file": "controls/fixtures/worked-example-adjusted-containmentSpanBits-29.3tz",
+    "id": "worked-example-adjusted-containmentSpanBits-28",
+    "limits": {
+     "containmentSpanBits": 28
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "NotInspected",
+     "reasons": [
+      "numericSpan"
+     ],
+     "why": null
+    },
+    "sha256": "2a1007061f9f417b07977da9d8ecb13283387a659e76daa1890c51a1fc4f077b"
+   },
+   "what": "same fixture, containmentSpanBits 29 -> 28"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "controls/fixtures/external-content-volume-contains.3tz",
+    "id": "external-content-volume-contains",
+    "limits": {},
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "ebf94c43e9f5f017711b7ef4c9e71249766b59db44fca73467dd87f51a0b25a8"
+   },
+   "control": "external-content-volume-shrunk",
+   "mutated": {
+    "expected": {
+     "facts": {
+      "depth": 1,
+      "level": 1,
+      "role": "externalContent"
+     },
+     "outcome": "Outside"
+    },
+    "file": "controls/fixtures/external-content-volume-excludes.3tz",
+    "id": "external-content-volume-excludes",
+    "limits": {},
+    "oracle": {
+     "facts": {
+      "accessor": 0,
+      "contentAt": "ext.json:root.content[0]",
+      "coordinate": [
+       "8",
+       "-42",
+       "14"
+      ],
+      "coordinateApprox": [
+       8.0,
+       -42.0,
+       14.0
+      ],
+      "depth": 1,
+      "k": 1,
+      "level": 1,
+      "member": "w.glb",
+      "mesh": 0,
+      "node": 0,
+      "primitive": 0,
+      "reference": 0,
+      "role": "externalContent",
+      "uri": "w.glb",
+      "vertex": 0,
+      "volumeAt": "tileset.json:root.content[0]"
+     },
+     "outcome": "Outside",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "66011faa6ab693fe30ed593467faf294b24f00a86683328de65223fe8b928ce8"
+   },
+   "what": "referencing tile content.boundingVolume shrunk to exclude the payload position"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "witnesses/fixtures/same-URI-both-references-inside_(control_base).3tz",
+    "id": "same-URI-both-references-inside (control base)",
+    "limits": {},
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "97508698d074304439e041bbaefcdec00197df942de324896d15e7a71ec4412e"
+   },
+   "control": "same-URI-different-reference",
+   "mutated": {
+    "expected": {
+     "facts": {
+      "depth": 1,
+      "level": 0,
+      "node": 1,
+      "reference": 1,
+      "role": "own"
+     },
+     "outcome": "Outside"
+    },
+    "file": "witnesses/fixtures/same-URI-other-reference-outside.3tz",
+    "id": "same-URI-other-reference-outside",
+    "limits": {},
+    "oracle": {
+     "facts": {
+      "accessor": 0,
+      "contentAt": "tileset.json:root.children[1].content[0]",
+      "coordinate": [
+       "11",
+       "-3",
+       "2"
+      ],
+      "coordinateApprox": [
+       11.0,
+       -3.0,
+       2.0
+      ],
+      "depth": 1,
+      "k": null,
+      "level": 0,
+      "member": "w.glb",
+      "mesh": 0,
+      "node": 1,
+      "primitive": 0,
+      "reference": 1,
+      "role": "own",
+      "uri": "w.glb",
+      "vertex": 0,
+      "volumeAt": "tileset.json:root.children[1]"
+     },
+     "outcome": "Outside",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "d9b20749db3604ecfa42db8785234694bddc084c668e854ca72ba5ce53d4065a"
+   },
+   "what": "second reference's own volume excludes the second instance"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "controls/fixtures/hull-one-instance.3tz",
+    "id": "hull-one-instance",
+    "limits": {},
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "acf57ff3aae1c0a35d7464cce76139a62c49267689214c89c099ac22451edc27"
+   },
+   "control": "hull-two-instances",
+   "mutated": {
+    "expected": {
+     "outcome": "NotInspected",
+     "reasons": [
+      "numericSpan"
+     ]
+    },
+    "file": "controls/fixtures/hull-two-instances.3tz",
+    "id": "hull-two-instances",
+    "limits": {},
+    "oracle": {
+     "facts": null,
+     "outcome": "NotInspected",
+     "reasons": [
+      "numericSpan"
+     ],
+     "why": null
+    },
+    "sha256": "3becce3f5385b69243de3737adab4ed4bb78a5350285aca3aef6a3768cd8c046"
+   },
+   "what": "second instance added to the URI"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "controls/fixtures/tight-non-integer-centre-on-boundary.3tz",
+    "id": "tight-non-integer-centre-on-boundary",
+    "limits": {},
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "c2aee10bfb07e8e13c06263206a8282463ad0f0d01d2bde3c1cd6f7096ab6a72"
+   },
+   "control": "tight-non-integer-centre",
+   "mutated": {
+    "expected": {
+     "facts": {
+      "depth": 0,
+      "level": 0,
+      "role": "own"
+     },
+     "outcome": "Outside"
+    },
+    "file": "controls/fixtures/tight-non-integer-centre-vertex-one-ulp-beyond.3tz",
+    "id": "tight-non-integer-centre-vertex-one-ulp-beyond",
+    "limits": {},
+    "oracle": {
+     "facts": {
+      "accessor": 0,
+      "contentAt": "tileset.json:root.content[0]",
+      "coordinate": [
+       "10066331/33554432",
+       "0",
+       "0"
+      ],
+      "coordinateApprox": [
+       0.30000004172325134,
+       0.0,
+       0.0
+      ],
+      "depth": 0,
+      "k": null,
+      "level": 0,
+      "member": "w.glb",
+      "mesh": 0,
+      "node": 0,
+      "primitive": 0,
+      "reference": 0,
+      "role": "own",
+      "uri": "w.glb",
+      "vertex": 0,
+      "volumeAt": "tileset.json:root"
+     },
+     "outcome": "Outside",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "3bf300d77043a9ab66d941337e29189e9402b1cb44ca9139b0ca5a8cb11e77f8"
+   },
+   "what": "vertex moves one f32 ulp beyond the face"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "controls/fixtures/rotated-TRS-chain-depth-16-box-only.3tz",
+    "id": "rotated-TRS-chain-depth-16-box-only",
+    "limits": {},
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "4fdef94e5dd8f9c9d174751eb12baa8f2f81860c89f09f451fb99b9355a7223f"
+   },
+   "control": "rotated-chain-sphere",
+   "mutated": {
+    "expected": {
+     "outcome": "NotInspected",
+     "reasons": [
+      "numericSpan"
+     ]
+    },
+    "file": "controls/fixtures/rotated-TRS-chain-depth-16-with-sphere-enclosed.3tz",
+    "id": "rotated-TRS-chain-depth-16-with-sphere-enclosed",
+    "limits": {},
+    "oracle": {
+     "facts": null,
+     "outcome": "NotInspected",
+     "reasons": [
+      "numericSpan"
+     ],
+     "why": null
+    },
+    "sha256": "9dcbeaaea261a746325394865f7fcc1906acc18779f2ab087498ff1db799fa7a"
+   },
+   "what": "sphere content volume added at the same depth"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "witnesses/fixtures/W04-unreferenced-indexed-outlier.3tz",
+    "id": "W04-unreferenced-indexed-outlier",
+    "limits": {},
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "835fd75778fca1f39b69b96672d26a6505b108647e6676e34aba577c633deba6"
+   },
+   "control": "undrawn-outlier-made-drawn",
+   "mutated": {
+    "expected": {
+     "facts": {
+      "depth": 0,
+      "level": 0,
+      "primitive": 0,
+      "role": "own",
+      "vertex": 1
+     },
+     "outcome": "Outside"
+    },
+    "file": "controls/fixtures/W04-outlier-made-drawn.3tz",
+    "id": "W04-outlier-made-drawn",
+    "limits": {},
+    "oracle": {
+     "facts": {
+      "accessor": 0,
+      "contentAt": "tileset.json:root.content[0]",
+      "coordinate": [
+       "1000",
+       "-1000",
+       "1000"
+      ],
+      "coordinateApprox": [
+       1000.0,
+       -1000.0,
+       1000.0
+      ],
+      "depth": 0,
+      "k": null,
+      "level": 0,
+      "member": "w.glb",
+      "mesh": 0,
+      "node": 0,
+      "primitive": 0,
+      "reference": 0,
+      "role": "own",
+      "uri": "w.glb",
+      "vertex": 1,
+      "volumeAt": "tileset.json:root"
+     },
+     "outcome": "Outside",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "d5e262e978b4b154f8332bd3870a1cd06e22d51bf352b5971f9d33be45c6cd35"
+   },
+   "what": "index 1 added to the draw"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "controls/fixtures/work-base-meshopt.3tz",
+    "id": "work-containmentWorkUnits-at-sum",
+    "limits": {
+     "containmentWorkUnits": 5040
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "e2f951edb5f337d588f104f33e395ef5470897124f5e54cc90695bebdc672cd0"
+   },
+   "control": "containmentWorkUnits-at-cap-and-one-over",
+   "mutated": {
+    "expected": {
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    },
+    "file": "controls/fixtures/work-base-meshopt.3tz",
+    "id": "work-containmentWorkUnits-sum-minus-1",
+    "limits": {
+     "containmentWorkUnits": 5039
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ],
+     "why": null
+    },
+    "sha256": "e2f951edb5f337d588f104f33e395ef5470897124f5e54cc90695bebdc672cd0"
+   },
+   "what": "containmentWorkUnits = archive total (5040), then total - 1"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "controls/fixtures/work-base-meshopt.3tz",
+    "id": "work-containmentBytesRead-at-sum",
+    "limits": {
+     "containmentBytesRead": 1404
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "e2f951edb5f337d588f104f33e395ef5470897124f5e54cc90695bebdc672cd0"
+   },
+   "control": "containmentBytesRead-at-cap-and-one-over",
+   "mutated": {
+    "expected": {
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    },
+    "file": "controls/fixtures/work-base-meshopt.3tz",
+    "id": "work-containmentBytesRead-sum-minus-1",
+    "limits": {
+     "containmentBytesRead": 1403
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ],
+     "why": null
+    },
+    "sha256": "e2f951edb5f337d588f104f33e395ef5470897124f5e54cc90695bebdc672cd0"
+   },
+   "what": "containmentBytesRead = archive total (1404), then total - 1"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "controls/fixtures/work-base-meshopt.3tz",
+    "id": "work-containmentDecodedBytes-at-sum",
+    "limits": {
+     "containmentDecodedBytes": 42
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "e2f951edb5f337d588f104f33e395ef5470897124f5e54cc90695bebdc672cd0"
+   },
+   "control": "containmentDecodedBytes-at-cap-and-one-over",
+   "mutated": {
+    "expected": {
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    },
+    "file": "controls/fixtures/work-base-meshopt.3tz",
+    "id": "work-containmentDecodedBytes-sum-minus-1",
+    "limits": {
+     "containmentDecodedBytes": 41
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ],
+     "why": null
+    },
+    "sha256": "e2f951edb5f337d588f104f33e395ef5470897124f5e54cc90695bebdc672cd0"
+   },
+   "what": "containmentDecodedBytes = archive total (42), then total - 1"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "controls/fixtures/work-base-meshopt.3tz",
+    "id": "work-containmentNodeDepth-at-sum",
+    "limits": {
+     "containmentNodeDepth": 3
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "e2f951edb5f337d588f104f33e395ef5470897124f5e54cc90695bebdc672cd0"
+   },
+   "control": "containmentNodeDepth-at-cap-and-one-over",
+   "mutated": {
+    "expected": {
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    },
+    "file": "controls/fixtures/work-base-meshopt.3tz",
+    "id": "work-containmentNodeDepth-sum-minus-1",
+    "limits": {
+     "containmentNodeDepth": 2
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ],
+     "why": null
+    },
+    "sha256": "e2f951edb5f337d588f104f33e395ef5470897124f5e54cc90695bebdc672cd0"
+   },
+   "what": "containmentNodeDepth = archive total (3), then total - 1"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "controls/large/repeated-index-three-payloads.3tz",
+    "id": "repeated-index-three-payloads",
+    "limits": {},
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "57c359962778525bb60a583382fafa5912edc436008cc21ddf490a38f64cb763"
+   },
+   "control": "repeated-index-work-units",
+   "mutated": {
+    "expected": {
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    },
+    "file": "controls/large/repeated-index-three-payloads-units-minus-1.3tz",
+    "id": "repeated-index-three-payloads-units-minus-1",
+    "limits": {
+     "containmentWorkUnits": 48008576
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ],
+     "why": null
+    },
+    "sha256": "57c359962778525bb60a583382fafa5912edc436008cc21ddf490a38f64cb763"
+   },
+   "what": "containmentWorkUnits one below the archive sum"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "controls/large/repeated-index-three-payloads-units-at-sum.3tz",
+    "id": "repeated-index-three-payloads-units-at-sum",
+    "limits": {
+     "containmentWorkUnits": 48008577
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "57c359962778525bb60a583382fafa5912edc436008cc21ddf490a38f64cb763"
+   },
+   "control": "repeated-index-work-units-at-cap",
+   "mutated": {
+    "expected": {
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    },
+    "file": "controls/large/repeated-index-three-payloads-units-minus-1.3tz",
+    "id": "repeated-index-three-payloads-units-minus-1",
+    "limits": {
+     "containmentWorkUnits": 48008576
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ],
+     "why": null
+    },
+    "sha256": "57c359962778525bb60a583382fafa5912edc436008cc21ddf490a38f64cb763"
+   },
+   "what": "containmentWorkUnits exactly the deduplicated sum (48008577), then one below; charging T per index occurrence instead of per distinct vertex exceeds the cap"
+  }
+ ],
+ "record": "C2 slice-1 data controls: base and mutated fixtures with expected verdicts. Production and the oracle must both report both verdicts."
+}

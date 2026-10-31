@@ -45,7 +45,7 @@ def benchmark(binary,repeats):
                 env=dict(os.environ,PATH='') if name=='rust' else dict(os.environ)
                 start=time.perf_counter();report=json.loads(subprocess.check_output(doctor,env=env));elapsed=time.perf_counter()-start
                 if not report['ready']:raise AssertionError(report)
-                shared={'vector','terrain','raster','point-cloud','convert','mesh-to-3tz','glb-to-3tz','createTilesetJson'}
+                shared={'vector','terrain','raster','point-cloud','convert','mesh','glb-to-3tz','createTilesetJson'}
                 if not all(report['commands'][command]['ready'] for command in shared):raise AssertionError(report)
                 command=[str(binary),'preview'] if name=='rust' else [sys.executable,str(legacy/'scripts/preview.py')]
                 command += ['--port','0','--cesium',str(runtime),'--mesh',str(tiles)]

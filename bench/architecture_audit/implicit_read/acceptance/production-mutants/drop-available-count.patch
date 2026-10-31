@@ -1,0 +1,13 @@
+diff --git a/src/content_integrity/implicit/availability.rs b/src/content_integrity/implicit/availability.rs
+index 31e0563..bea0378 100644
+--- a/src/content_integrity/implicit/availability.rs
++++ b/src/content_integrity/implicit/availability.rs
+@@ -239,7 +239,7 @@ impl Availability {
+             .chain(contents.iter().map(|c| (*c, tiles)))
+             .chain(std::iter::once((child, children)))
+         {
+-            if count.is_some_and(|count| u128::from(count) != popcount(source, bits)) {
++            if false && count.is_some_and(|count| u128::from(count) != popcount(source, bits)) {
+                 return Err(invalid(
+                     "availableCount differs from the availability popcount",
+                 ));

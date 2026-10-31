@@ -1,17 +1,100 @@
-//! Read-only validation of explicit, self-contained 3TZ packages.
-use crate::{pack::TZ_INDEX_NAME, Error};
-use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
+//! Read-only validation of self-contained explicit and native implicit 3TZ packages.
+use crate::archive3tz::TZ_INDEX_NAME;
+use crate::content_integrity::implicit::{
+    admit_root, declares_implicit, Base, EffectiveError, EffectiveVolume, ImplicitError,
+    ImplicitLimits, ImplicitRoot, ImplicitSchema,
+};
+use crate::content_integrity::{
+    json, payload, FormatError, JsonLimits, PayloadError, PayloadLimits,
+};
+#[cfg(test)]
+mod catalog_controls;
+mod containment;
+mod facts;
+mod hlod_delivery;
+mod identity;
+mod limits;
+#[cfg(test)]
+mod limits_controls;
+#[cfg(test)]
+mod memo_controls;
+mod rows;
+#[cfg(test)]
+mod scale_driver;
+mod schema;
+mod stream_log;
+#[cfg(test)]
+mod traversal_controls;
+mod types;
+pub use limits::{
+    BudgetRule, Derivation, LimitDerivation, LimitExceeded, LimitKey, LimitRefusal,
+    UnknownLimitKey, LIMIT_MODEL,
+};
+use limits::{LimitPlan, Sources};
+pub use rows::{PayloadRows, PayloadRowsIter};
+pub use types::{
+    ExpectedProfile, InterfaceCensus, PayloadReport, ScratchRefusal, ScratchReport,
+    ValidationFailure, ValidationLimits, ValidationReport, ValidationRequest,
+};
+type Error = ValidationFailure;
+use facts::{FactStore, Stored};
+#[cfg(test)]
+use serde_json::json;
+use serde_json::Value;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fs::File,
     io::Read,
     path::Path,
+    rc::Rc,
 };
 
-type Archive = zip::ZipArchive<File>;
+type Archive = crate::archive3tz::StoredArchive<File>;
 fn invalid(message: impl Into<String>) -> Error {
-    Error::Data(message.into())
+    Error::InvalidInput(message.into())
+}
+// Select and host-admit the six consumed format facts once at the operation boundary.
+fn content_limits(limits: &ValidationLimits) -> Result<PayloadLimits, Error> {
+    let host = |value: u64| {
+        usize::try_from(value).map_err(|_| Error::limit("content limit exceeds host range"))
+    };
+    Ok(PayloadLimits {
+        member_bytes: host(limits.member_bytes)?,
+        decoded_bytes: host(limits.document_decoded_bytes)?,
+        accessor_components: limits.accessor_elements,
+        json: JsonLimits {
+            bytes: host(limits.json_bytes)?,
+            depth: limits.json_depth,
+            value_nodes: host(limits.document_items)?,
+        },
+    })
+}
+fn format_error(error: FormatError) -> Error {
+    match error {
+        FormatError::InvalidInput(message) => Error::InvalidInput(message),
+        FormatError::Unsupported(message) => Error::Unsupported(message),
+        FormatError::ResourceLimit(message) => Error::limit(message),
+    }
+}
+fn payload_error(error: PayloadError<Error>) -> Error {
+    match error {
+        PayloadError::Format(error) => format_error(error),
+        PayloadError::Resolver(error) => error,
+    }
+}
+// I1: the resolver's own failure (including real I/O) passes through unchanged.
+fn implicit_error(error: ImplicitError<Error>) -> Error {
+    match error {
+        ImplicitError::Format(error) => format_error(error),
+        ImplicitError::Resolver(error) => error,
+        ImplicitError::InvalidState(message) => Error::InvalidState(message.into()),
+    }
+}
+/// `limit − used` for the I1 counter sync; `used` never exceeds its limit.
+fn remaining(limit: u64, used: u64) -> Result<u64, Error> {
+    limit
+        .checked_sub(used)
+        .ok_or_else(|| Error::InvalidState("validation counter exceeds its limit".into()))
 }
 fn number(value: &Value, label: &str) -> Result<f64, Error> {
     value
@@ -33,29 +116,328 @@ fn array(value: &Value, length: usize, label: &str) -> Result<Vec<f64>, Error> {
         })
         .collect()
 }
-fn read_json(zip: &mut Archive, name: &str) -> Result<Value, Error> {
-    let entry = zip.by_name(name)?;
-    if entry.size() > 64 * 1024 * 1024 {
-        return Err(invalid(format!("JSON entry exceeds 64 MiB: {name}")));
+impl From<serde_json::Error> for ValidationFailure {
+    fn from(e: serde_json::Error) -> Self {
+        Self::invalid(format!("invalid JSON: {e}"))
     }
-    serde_json::from_reader(entry).map_err(|e| invalid(format!("{name}: {e}")))
+}
+impl From<zip::result::ZipError> for ValidationFailure {
+    fn from(e: zip::result::ZipError) -> Self {
+        match e {
+            zip::result::ZipError::Io(e) => archive_read_error(e),
+            other => Self::invalid(other.to_string()),
+        }
+    }
+}
+impl From<crate::Error> for ValidationFailure {
+    fn from(e: crate::Error) -> Self {
+        match e {
+            crate::Error::Validation(e) => e,
+            crate::Error::Io(e) => archive_read_error(e),
+            crate::Error::Zip(e) => e.into(),
+            other => Self::invalid(other.to_string()),
+        }
+    }
+}
+fn archive_read_error(e: std::io::Error) -> ValidationFailure {
+    match e.kind() {
+        std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::InvalidData => {
+            ValidationFailure::invalid(format!("malformed archive bytes: {e}"))
+        }
+        _ => ValidationFailure::Io(e),
+    }
+}
+// Native archive reads preserve their typed format/I/O origins before the
+// retained generic crate/ZIP conversions above can reinterpret an I/O kind.
+fn archive_admission_error(error: crate::archive3tz::ReadError) -> ValidationFailure {
+    use crate::archive3tz::ReadError;
+    match error {
+        ReadError::InvalidInput(message) => Error::InvalidInput(message),
+        ReadError::Unsupported(message) => Error::Unsupported(message),
+        ReadError::ResourceLimit(message) => Error::limit(message),
+        ReadError::Cap {
+            key,
+            message,
+            value,
+            observed,
+        } => Error::ResourceLimit(LimitRefusal::exceeded(
+            message,
+            LimitExceeded {
+                limit: key,
+                value,
+                observed,
+                derivation: limits::Derivation::Cap,
+            },
+        )),
+        ReadError::Io(error) => Error::Io(error),
+        ReadError::MissingMember(name) => invalid(format!("missing archive member: {name}")),
+        ReadError::Scratch(error) => spill_failure(error),
+    }
+}
+/// The validator's own scratch failures (design §1.3 error mapping): never a verdict on
+/// the archive.
+fn spill_failure(error: crate::spill::SpillError) -> Error {
+    use crate::spill::SpillError;
+    let error = match ScratchRefusal::from_spill(error) {
+        Ok(refusal) => return Error::Scratch(refusal),
+        Err(error) => error,
+    };
+    let message = format!("validation scratch: {error}");
+    match error {
+        SpillError::Overflow => Error::limit(message),
+        _ => Error::InvalidState(message),
+    }
+}
+/// Cooperative cancellation and progress of one inspection (VS-C-6): the control is checked
+/// at every step of a phase, and an event is emitted at the phase start and every
+/// `PROGRESS_STEP` steps. Without a control (`inspect`) both are no-ops.
+struct Progress<'a> {
+    attempt: Option<&'a crate::runtime::Attempt>,
+    phase: &'static str,
+    done: u64,
+    total: Option<u64>,
+    /// Checks inside steps in this phase (`Progress::check`).
+    checks: u64,
+}
+const PROGRESS_STEP: u64 = 1024;
+#[cfg(test)]
+thread_local! {
+    /// The phase and step at which the last run control check failed (VS-C-6 controls).
+    static STOPPED: std::cell::Cell<Option<(&'static str, u64)>> = const { std::cell::Cell::new(None) };
+    /// Cancels this handle when a step reaches this phase and count, between events.
+    static CANCEL_AT: std::cell::RefCell<Option<(&'static str, u64, crate::CancellationHandle)>> =
+        const { std::cell::RefCell::new(None) };
+    /// Bare checks inside a step (`Progress::check`) on this thread since the last reset.
+    static CHECKS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Cancels this handle when the bare check count reaches this value.
+    static CANCEL_AT_CHECK: std::cell::RefCell<Option<(u64, crate::CancellationHandle)>> =
+        const { std::cell::RefCell::new(None) };
+}
+fn run_failure(error: crate::JobError) -> Error {
+    match error.kind() {
+        crate::JobErrorKind::Cancelled => Error::Cancelled,
+        crate::JobErrorKind::ObserverFailure => Error::Observer(error.message().to_owned()),
+        _ => Error::InvalidState(error.message().to_owned()),
+    }
+}
+impl<'a> Progress<'a> {
+    fn new(attempt: Option<&'a crate::runtime::Attempt>) -> Self {
+        Self {
+            attempt,
+            phase: "",
+            done: 0,
+            total: None,
+            checks: 0,
+        }
+    }
+    /// Starts `phase`: checks the control and emits its first event.
+    fn phase(&mut self, phase: &'static str, total: Option<u64>) -> Result<(), Error> {
+        (self.phase, self.done, self.total, self.checks) = (phase, 0, total, 0);
+        self.emit()
+    }
+    /// One unit of the current phase, before its work.
+    fn step(&mut self) -> Result<(), Error> {
+        let Some(attempt) = self.attempt else {
+            return Ok(());
+        };
+        self.done += 1;
+        #[cfg(test)]
+        CANCEL_AT.with(|cancel| {
+            if let Some((phase, done, handle)) = &*cancel.borrow() {
+                if (*phase, *done) == (self.phase, self.done) {
+                    handle.cancel();
+                }
+            }
+        });
+        if self.done.is_multiple_of(PROGRESS_STEP) {
+            self.emit()
+        } else {
+            attempt.check().map_err(|error| self.stopped(error))
+        }
+    }
+    /// A cancellation check inside one step, counting no unit: the memo replay of a
+    /// placement (VS-B EM-5.4) registers a whole expansion in one traversal task, bounded by
+    /// the visit and reference budgets rather than by the Class A limits. Every
+    /// `PROGRESS_STEP` such checks re-emit the phase's current event, so an observer (a
+    /// Python callback's signal check) still runs at that interval.
+    fn check(&mut self) -> Result<(), Error> {
+        let Some(attempt) = self.attempt else {
+            return Ok(());
+        };
+        self.checks += 1;
+        #[cfg(test)]
+        {
+            let checks = CHECKS.with(|checks| {
+                checks.set(checks.get() + 1);
+                checks.get()
+            });
+            CANCEL_AT_CHECK.with(|cancel| {
+                if let Some((at, handle)) = &*cancel.borrow() {
+                    if *at == checks {
+                        handle.cancel();
+                    }
+                }
+            });
+        }
+        if self.checks.is_multiple_of(PROGRESS_STEP) {
+            self.emit()
+        } else {
+            attempt.check().map_err(|error| self.stopped(error))
+        }
+    }
+    fn emit(&self) -> Result<(), Error> {
+        let Some(attempt) = self.attempt else {
+            return Ok(());
+        };
+        attempt.check().map_err(|error| self.stopped(error))?;
+        attempt
+            .emit(&crate::RunEvent::Progress {
+                phase: self.phase,
+                done: self.done,
+                total: self.total,
+            })
+            .map_err(|error| self.stopped(error))
+    }
+    fn stopped(&self, error: crate::JobError) -> Error {
+        #[cfg(test)]
+        STOPPED.with(|stopped| stopped.set(Some((self.phase, self.done))));
+        run_failure(error)
+    }
+}
+/// One configurable limit of this validation: its effective value and derivation.
+#[derive(Clone, Copy, Debug)]
+struct Budget {
+    key: LimitKey,
+    value: u64,
+    source: limits::Derivation,
+}
+impl Budget {
+    /// `used + add`, refused over the budget with the structured cause (VS-C-5 T3).
+    fn charge(self, used: u64, add: u64, message: impl FnOnce() -> String) -> Result<u64, Error> {
+        match used.checked_add(add).filter(|&n| n <= self.value) {
+            Some(total) => Ok(total),
+            None => Err(self.refuse(used.saturating_add(add), message())),
+        }
+    }
+    fn refuse(self, observed: u64, message: String) -> Error {
+        Error::ResourceLimit(LimitRefusal::exceeded(
+            message,
+            LimitExceeded {
+                limit: self.key,
+                value: self.value,
+                observed,
+                derivation: self.source,
+            },
+        ))
+    }
+}
+/// The effective budget `key` of `limits`, derived as `sources` says.
+fn budget(limits: &ValidationLimits, sources: &Sources, key: LimitKey) -> Budget {
+    Budget {
+        key,
+        value: limits.get(key).unwrap_or(u64::MAX),
+        source: sources.of(key),
+    }
+}
+/// One bit per catalog rank: whether a reference reached the member.
+struct Bits(Vec<u64>);
+impl Bits {
+    fn new(len: u64) -> Result<Self, Error> {
+        let words = usize::try_from(len.div_ceil(64))
+            .map_err(|_| Error::limit("archive entry count exceeds host range"))?;
+        let mut bits = Vec::new();
+        bits.try_reserve_exact(words).map_err(|_| refused())?;
+        bits.resize(words, 0);
+        Ok(Self(bits))
+    }
+    fn set(&mut self, rank: u64) {
+        self.0[(rank / 64) as usize] |= 1 << (rank % 64);
+    }
+    fn get(&self, rank: u64) -> bool {
+        self.0[(rank / 64) as usize] & (1 << (rank % 64)) != 0
+    }
+}
+fn read_member(
+    archive: &mut Archive,
+    name: &str,
+    bytes_read: &mut u64,
+    reads: Budget,
+    maximum: u64,
+) -> Result<Vec<u8>, Error> {
+    let size = archive.member(name).map_err(archive_admission_error)?.size;
+    if size > maximum {
+        return Err(Error::limit(format!(
+            "member exceeds admitted byte limit: {name}"
+        )));
+    }
+    *bytes_read = reads.charge(*bytes_read, size, || {
+        "member reads exceed work limit".into()
+    })?;
+    archive
+        .read_member(name, maximum)
+        .map_err(archive_admission_error)
+}
+/// A C2 phase-2 re-read: identical members to phase 1, so the precheck's
+/// `containmentBytesRead` total bounds it. Exceeding it means the archive changed.
+fn read_rerun(
+    archive: &mut Archive,
+    name: &str,
+    reread: &mut u64,
+    cap: u64,
+    maximum: u64,
+) -> Result<Vec<u8>, Error> {
+    let size = archive.member(name).map_err(archive_admission_error)?.size;
+    *reread = reread
+        .checked_add(size)
+        .filter(|&n| n <= cap && size <= maximum)
+        .ok_or_else(|| invalid("source archive changed during inspection"))?;
+    archive
+        .read_member(name, maximum)
+        .map_err(archive_admission_error)
 }
 fn uri(base: &str, value: &str) -> Result<String, Error> {
-    if value.is_empty() || value.contains(['\\', ':', '?', '#', '%']) || value.starts_with('/') {
-        return Err(invalid(format!("non-local or unsupported URI: {value}")));
+    if value.is_empty() || value.contains('\\') {
+        return Err(invalid(format!("invalid resource URI: {value}")));
     }
-    let mut parts: Vec<&str> = base
-        .rsplit_once('/')
-        .map_or(vec![], |(dir, _)| dir.split('/').collect());
-    for part in value.split('/') {
-        match part {
+    if value.contains([':', '?', '#']) || value.starts_with('/') {
+        return Err(Error::unsupported(format!(
+            "URI outside archive-local profile: {value}"
+        )));
+    }
+    let mut parts: Vec<String> = base.rsplit_once('/').map_or(vec![], |(dir, _)| {
+        dir.split('/').map(str::to_owned).collect()
+    });
+    // Decode each segment once. Encoded separators must never become path
+    // syntax, and a literal percent in a decoded filename stays literal.
+    for raw in value.split('/') {
+        let mut decoded = Vec::with_capacity(raw.len());
+        let mut bytes = raw.bytes();
+        while let Some(byte) = bytes.next() {
+            decoded.push(if byte == b'%' {
+                let digit = |byte: u8| (byte as char).to_digit(16).map(|n| n as u8);
+                let high = bytes.next().and_then(digit);
+                let low = bytes.next().and_then(digit);
+                let (Some(high), Some(low)) = (high, low) else {
+                    return Err(invalid("invalid URI percent escape"));
+                };
+                high * 16 + low
+            } else {
+                byte
+            });
+        }
+        let part =
+            String::from_utf8(decoded).map_err(|_| invalid("URI decoded path must be UTF-8"))?;
+        if part.contains(['/', '\\']) || part.chars().any(char::is_control) {
+            return Err(invalid("URI decoded segment contains a separator/control"));
+        }
+        match part.as_str() {
             "" | "." => (),
             ".." => {
                 if parts.pop().is_none() {
                     return Err(invalid("URI escapes archive"));
                 }
             }
-            other => parts.push(other),
+            _ => parts.push(part),
         }
     }
     Ok(parts.join("/"))
@@ -108,17 +490,7 @@ fn volume(value: &Value) -> Result<Volume, Error> {
         ));
     }
     if let Some(v) = o.get("box") {
-        let b = array(v, 12, "boundingVolume.box")?;
-        for i in 0..3 {
-            for j in i + 1..3 {
-                let a = [b[3 + 3 * i], b[4 + 3 * i], b[5 + 3 * i]];
-                let c = [b[3 + 3 * j], b[4 + 3 * j], b[5 + 3 * j]];
-                if dot(a, c).abs() > 1e-8 * norm(a) * norm(c) + 1e-12 {
-                    return Err(invalid("box half axes must be orthogonal"));
-                }
-            }
-        }
-        return Ok(Volume::Box(b));
+        return checked_box(array(v, 12, "boundingVolume.box")?);
     }
     if let Some(v) = o.get("sphere") {
         let s = array(v, 4, "boundingVolume.sphere")?;
@@ -138,6 +510,28 @@ fn volume(value: &Value) -> Result<Volume, Error> {
         return Err(invalid("invalid geographic region ranges"));
     }
     Ok(Volume::Region(r))
+}
+/// A finite box with orthogonal half axes, as every explicit tile box is checked.
+/// The corner-to-corner length of an orthogonal box (`2·|half axes|`) or a sphere's
+/// diameter. A region has no metric diagonal here.
+fn volume_diagonal(volume: &Volume) -> Option<f64> {
+    match volume {
+        Volume::Box(b) => Some(2. * b[3..12].iter().map(|v| v * v).sum::<f64>().sqrt()),
+        Volume::Sphere(s) => Some(2. * s[3]),
+        Volume::Region(_) => None,
+    }
+}
+fn checked_box(b: Vec<f64>) -> Result<Volume, Error> {
+    for i in 0..3 {
+        for j in i + 1..3 {
+            let a = [b[3 + 3 * i], b[4 + 3 * i], b[5 + 3 * i]];
+            let c = [b[3 + 3 * j], b[4 + 3 * j], b[5 + 3 * j]];
+            if dot(a, c).abs() > 1e-8 * norm(a) * norm(c) + 1e-12 {
+                return Err(invalid("box half axes must be orthogonal"));
+            }
+        }
+    }
+    Ok(Volume::Box(b))
 }
 fn inside(parent: &Volume, p: [f64; 3], radius: f64) -> bool {
     match parent {
@@ -169,21 +563,30 @@ fn inside(parent: &Volume, p: [f64; 3], radius: f64) -> bool {
 fn contains(parent: &Volume, child: &Volume, m: &[f64]) -> Result<bool, Error> {
     match (parent, child) {
         (Volume::Region(p), Volume::Region(c)) => {
-            let width = |r: &Vec<f64>| (r[2] - r[0]).rem_euclid(2. * std::f64::consts::PI);
-            let offset = (c[0] - p[0]).rem_euclid(2. * std::f64::consts::PI);
-            let pw = if p[2] - p[0] >= 2. * std::f64::consts::PI - 1e-12 {
-                2. * std::f64::consts::PI
-            } else {
-                width(p)
+            use std::f64::consts::TAU;
+            // Eastward longitude span from west: east < west crosses the antimeridian,
+            // and [-π, π] is the whole circle (not the empty span `rem_euclid` gives).
+            let width = |r: &Vec<f64>| r[2] - r[0] + if r[2] < r[0] { TAU } else { 0. };
+            let pw = width(p);
+            let longitude = pw >= TAU - 1e-12 || {
+                // The child's west within the parent's span; a west a rounding step
+                // before the parent's wraps to just under zero, not to almost TAU.
+                let offset = (c[0] - p[0]).rem_euclid(TAU);
+                let offset = if offset > TAU - 1e-12 {
+                    offset - TAU
+                } else {
+                    offset
+                };
+                offset + width(c) <= pw + 1e-12
             };
-            Ok(offset + width(c) <= pw + 1e-12
+            Ok(longitude
                 && c[1] >= p[1] - 1e-12
                 && c[3] <= p[3] + 1e-12
                 && c[4] >= p[4] - 1e-6
                 && c[5] <= p[5] + 1e-6)
         }
-        (Volume::Region(_), _) | (_, Volume::Region(_)) => Err(invalid(
-            "mixed region/Cartesian containment requires the external validator",
+        (Volume::Region(_), _) | (_, Volume::Region(_)) => Err(Error::unsupported(
+            "mixed region/Cartesian containment is outside the admitted profile",
         )),
         (_, Volume::Sphere(s)) => Ok(inside(
             parent,
@@ -206,94 +609,1209 @@ fn contains(parent: &Volume, child: &Volume, m: &[f64]) -> Result<bool, Error> {
         })),
     }
 }
-fn u32_at(data: &[u8], offset: usize) -> Result<usize, Error> {
-    Ok(u32::from_le_bytes(
-        data.get(offset..offset + 4)
-            .ok_or_else(|| invalid("truncated tile header"))?
-            .try_into()
-            .unwrap(),
-    ) as usize)
+// ---- C2 decoded-content containment: operation owner ----
+use containment::{
+    Arena, Credit, Exclusion, LevelFacts, Local, Normalization, RawVertex, ReferenceFacts, Role,
+    SpanCaps, UriBounds, Verdict, VolumeFacts, Word,
+};
+use payload::scene::{
+    ContentExclusions, Instance, NodeTransform, PositionFormat, PositionWord, SceneConsumer,
+};
+
+/// The frozen not-inspected reason enum (14 names; H7 removed `rtcCenter`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Reason {
+    DerivedImplicitVolume,
+    TilesetExtension,
+    TileMetadata,
+    UpAxisOverride,
+    RegionVolume,
+    RotatedBox,
+    GltfExtension,
+    SceneSelection,
+    Skin,
+    MorphTargets,
+    Animation,
+    QuaternionWindow,
+    NumericSpan,
+    WorkLimit,
 }
-fn gltf(zip: &mut Archive, name: &str) -> Result<Option<Value>, Error> {
-    if name.ends_with(".gltf") {
-        return Ok(Some(read_json(zip, name)?));
-    }
-    if !name.ends_with(".glb") && !name.ends_with(".b3dm") {
-        return Err(invalid(format!(
-            "unsupported content format: {name}; use external validator for other formats"
-        )));
-    }
-    let mut entry = zip.by_name(name)?;
-    let size = entry.size();
-    let mut head = [0u8; 28];
-    entry.read_exact(&mut head)?;
-    if name.ends_with(".b3dm") {
-        if &head[..4] != b"b3dm" || u32_at(&head, 4)? != 1 || u32_at(&head, 8)? as u64 != size {
-            return Err(invalid("invalid b3dm header"));
+const REASONS: [Reason; 14] = [
+    Reason::DerivedImplicitVolume,
+    Reason::TilesetExtension,
+    Reason::TileMetadata,
+    Reason::UpAxisOverride,
+    Reason::RegionVolume,
+    Reason::RotatedBox,
+    Reason::GltfExtension,
+    Reason::SceneSelection,
+    Reason::Skin,
+    Reason::MorphTargets,
+    Reason::Animation,
+    Reason::QuaternionWindow,
+    Reason::NumericSpan,
+    Reason::WorkLimit,
+];
+impl Reason {
+    fn name(self) -> &'static str {
+        match self {
+            Self::DerivedImplicitVolume => "derivedImplicitVolume",
+            Self::TilesetExtension => "tilesetExtension",
+            Self::TileMetadata => "tileMetadata",
+            Self::UpAxisOverride => "upAxisOverride",
+            Self::RegionVolume => "regionVolume",
+            Self::RotatedBox => "rotatedBox",
+            Self::GltfExtension => "gltfExtension",
+            Self::SceneSelection => "sceneSelection",
+            Self::Skin => "skin",
+            Self::MorphTargets => "morphTargets",
+            Self::Animation => "animation",
+            Self::QuaternionWindow => "quaternionWindow",
+            Self::NumericSpan => "numericSpan",
+            Self::WorkLimit => "workLimit",
         }
-        let offset = (12..28)
-            .step_by(4)
-            .map(|i| u32_at(&head, i))
-            .collect::<Result<Vec<_>, _>>()?
-            .iter()
-            .sum::<usize>();
-        if offset as u64 > size - 28 {
-            return Err(invalid("b3dm tables exceed payload"));
-        }
-        std::io::copy(
-            &mut entry.by_ref().take(offset as u64),
-            &mut std::io::sink(),
-        )?;
-        entry.read_exact(&mut head[..20])?;
     }
-    if &head[..4] != b"glTF" || u32_at(&head, 4)? != 2 || &head[16..20] != b"JSON" {
-        return Err(invalid(format!("invalid GLB header: {name}")));
+    fn bit(self) -> u16 {
+        1 << self as u16
     }
-    let length = u32_at(&head, 12)?;
-    if length > 64 * 1024 * 1024 || length as u64 + 20 > size {
-        return Err(invalid("invalid/oversized GLB JSON chunk"));
+}
+const TILESET_ALLOWLIST: [&str; 1] = ["3DTILES_content_gltf_vector"];
+fn content_reasons(facts: &ContentExclusions) -> u16 {
+    [
+        (facts.gltf_extension, Reason::GltfExtension),
+        (facts.scene_selection, Reason::SceneSelection),
+        (facts.skin, Reason::Skin),
+        (facts.morph_targets, Reason::MorphTargets),
+        (facts.animation, Reason::Animation),
+    ]
+    .into_iter()
+    .filter(|(applies, _)| *applies)
+    .fold(0, |bits, (_, reason)| bits | reason.bit())
+}
+/// A capacity breach inside the exact arithmetic is a validator defect, never a verdict.
+fn containment_fault() -> Error {
+    Error::InvalidState("internal containment invariant: exact arena capacity exceeded".into())
+}
+fn refused() -> Error {
+    Error::limit("containment storage allocation refused")
+}
+fn try_push<T>(values: &mut Vec<T>, value: T) -> Result<(), Error> {
+    values.try_reserve(1).map_err(|_| refused())?;
+    values.push(value);
+    Ok(())
+}
+fn volume_facts(volume: &Volume) -> VolumeFacts {
+    match volume {
+        Volume::Box(b) => VolumeFacts::Box(std::array::from_fn(|i| b[i])),
+        Volume::Sphere(s) => VolumeFacts::Sphere(std::array::from_fn(|i| s[i])),
+        Volume::Region(_) => VolumeFacts::Region,
     }
-    let mut data = vec![0; length];
-    if name.ends_with(".glb") {
-        if length < 8 {
-            return Err(invalid("GLB JSON chunk is too short"));
-        }
-        data[..8].copy_from_slice(&head[20..28]);
-        entry.read_exact(&mut data[8..])?;
-        if u32_at(&head, 8)? as u64 != size {
-            return Err(invalid("GLB length differs from archive member"));
-        }
+}
+fn local(transform: &NodeTransform) -> Local {
+    match *transform {
+        NodeTransform::Skip => Local::Skip,
+        NodeTransform::Matrix(m) => Local::Matrix(m),
+        NodeTransform::Trs { t, q, s } => Local::Trs { t, q, s },
+    }
+}
+fn normalization(format: PositionFormat) -> Normalization {
+    match format {
+        PositionFormat::F32 => Normalization::None(Word::F32),
+        PositionFormat::I8 { normalized: true } => Normalization::I8,
+        PositionFormat::U8 { normalized: true } => Normalization::U8,
+        PositionFormat::I16 { normalized: true } => Normalization::I16,
+        PositionFormat::U16 { normalized: true } => Normalization::U16,
+        PositionFormat::I8 { .. } | PositionFormat::U8 { .. } => Normalization::None(Word::Int8),
+        PositionFormat::I16 { .. } | PositionFormat::U16 { .. } => Normalization::None(Word::Int16),
+    }
+}
+fn raw_vertex(word: PositionWord) -> RawVertex {
+    match word {
+        PositionWord::F32(v) => RawVertex::F32(v),
+        PositionWord::Int(v) => RawVertex::Int(v),
+    }
+}
+fn scene_error(error: payload::SceneError<Error, Error>) -> Error {
+    match error {
+        payload::SceneError::Payload(error) => payload_error(error),
+        payload::SceneError::Consumer(error) => error,
+    }
+}
+/// H7: legacy 3D Tiles 1.0 content is Unsupported, never partially inspected.
+fn legacy(format: &str, name: &str, magic: bool) -> Error {
+    let magic = if magic {
+        format!(" starts with {format} magic")
     } else {
-        entry.read_exact(&mut data)?;
+        String::new()
+    };
+    Error::unsupported(format!(
+        "legacy {format} content is unsupported (glTF 2.0 content only): {name}{magic}"
+    ))
+}
+fn payload_kind(name: &str) -> Result<payload::PayloadKind, Error> {
+    match name.to_ascii_lowercase().rsplit_once('.') {
+        Some((_, "glb")) => Ok(payload::PayloadKind::Glb),
+        Some((_, "gltf")) => Ok(payload::PayloadKind::LocalGltf),
+        _ => Err(Error::unsupported(
+            "payload format outside GLB/local glTF 2.0",
+        )),
     }
-    Ok(Some(serde_json::from_slice(&data)?))
 }
-struct Check<'a> {
-    zip: &'a mut Archive,
-    names: HashSet<String>,
-    used: HashSet<String>,
-    reports: Value,
-    tiles: usize,
-    contents: usize,
-    active: HashSet<String>,
-    schema: jsonschema::Validator,
+
+/// Per-URI static facts, aggregated over every instance during the first C1
+/// inspection (D4). Never a verdict.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct UriFacts {
+    /// Hull over every (instance, distinct POSITION accessor); None without instances.
+    bounds: Option<UriBounds>,
+    t: u64,
+    /// None when the checked sum overflowed (counts as over the cap).
+    nodes: Option<u64>,
+    idx: u64,
+    e: u64,
+    /// `B`, `Dec`, `J`, `Res`, `Prim`: charged again on every reference (C2-WB §3.1).
+    per_reference: ReferenceFacts,
+    max_depth: u64,
+    exclusions: u16,
 }
-impl Check<'_> {
-    fn reference(&mut self, name: String) -> Result<(), Error> {
-        if !self.names.contains(&name) {
-            return Err(invalid(format!("missing archive entry: {name}")));
+/// One tile of the traversal path (VS-B-3): f64 facts only.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TileFact {
+    /// The tile's own transform into its parent frame, when present.
+    transform: Option<[f64; 16]>,
+    /// `None` only for an implicit tile at level ≥ 1 without a row: its
+    /// `Derived` cell is never evaluated (slice 3 I5, `derivedImplicitVolume`).
+    volume: Option<VolumeFacts>,
+    /// For an external-tileset root: the referencing content's boundingVolume.
+    external: Option<VolumeFacts>,
+    /// The parent's position on the path stack; `None` only for the root.
+    parent: Option<usize>,
+    depth: usize,
+    /// Inherited chain exclusions (C2-WB §3.3): the caller's own bits, ORed at
+    /// registration with the shape exclusions of `volume` and `external` (or
+    /// `derivedImplicitVolume` for a `None` volume, slice 3 §4 step 5) and
+    /// the parent's `chain`. Every level of a reference's chain except its
+    /// content volume is covered, so `Containment::reference` needs no walk.
+    chain: u16,
+    /// EM (VS-B-6): the recorder serial and the local index of a tile recorded for its
+    /// document's summary.
+    owner: Option<(u64, usize)>,
+}
+/// The reason bit of a volume's shape exclusion, if any.
+fn shape_bit(volume: &VolumeFacts) -> u16 {
+    match containment::volume_exclusion(volume) {
+        Some(Exclusion::RegionVolume) => Reason::RegionVolume.bit(),
+        Some(Exclusion::RotatedBox) => Reason::RotatedBox.bit(),
+        Some(Exclusion::NumericSpan) | None => 0,
+    }
+}
+struct Containment {
+    caps: SpanCaps,
+    work_cap: u64,
+    bytes_cap: u64,
+    decoded_cap: u64,
+    exclusions: u16,
+    precheck: Option<Reason>,
+    units: u64,
+    bytes: u64,
+    decoded: u64,
+    /// The path stack (VS-B-3): the tiles of the current traversal path, root first.
+    path: Vec<TileFact>,
+    levels: Vec<LevelFacts>,
+    /// The phase-1 arena (rotation admission).
+    arena: Option<Arena>,
+}
+/// Phase 2 (VS-B-4): the state the stream carries across references, in traversal order.
+#[derive(Default)]
+struct Stream {
+    arena: Option<Arena>,
+    bitmap: Vec<u64>,
+    credit: Credit,
+    reread: u64,
+}
+impl Containment {
+    fn new(limits: &ValidationLimits) -> Self {
+        Self {
+            caps: SpanCaps {
+                span_bits: limits.containment_span_bits,
+                node_depth: limits.containment_node_depth,
+            },
+            work_cap: limits.containment_work_units,
+            bytes_cap: limits.containment_bytes_read,
+            decoded_cap: limits.containment_decoded_bytes,
+            exclusions: 0,
+            precheck: None,
+            units: 0,
+            bytes: 0,
+            decoded: 0,
+            path: Vec::new(),
+            levels: Vec::new(),
+            arena: None,
         }
-        self.used.insert(name);
+    }
+    fn exclude(&mut self, reason: Reason) {
+        self.exclusions |= reason.bit();
+    }
+    fn arena(arena: &mut Option<Arena>, caps: SpanCaps) -> Result<&mut Arena, Error> {
+        if arena.is_none() {
+            *arena = Some(Arena::reserve(caps).map_err(|_| refused())?);
+        }
+        Ok(arena.as_mut().unwrap())
+    }
+    fn on_path(&self, tile: usize) -> Result<&TileFact, Error> {
+        self.path.get(tile).ok_or_else(|| {
+            Error::InvalidState("internal containment invariant: tile is not on the path".into())
+        })
+    }
+    /// Register a tile on the path stack: the stack is cut to its parent and the tile pushed
+    /// above it, so its position is its parent's plus one (the root's is 0). Its `chain` gains
+    /// its own shape bits and its parent's. A rowless implicit tile (`volume: None`) carries
+    /// `derivedImplicitVolume` here, so any reference through it is excluded in O(1), whether
+    /// or not the precheck has already stopped (slice 3 §4 step 5).
+    fn tile(&mut self, mut fact: TileFact) -> Result<usize, Error> {
+        let (position, inherited) = match fact.parent {
+            None => (0, 0),
+            Some(parent) => (parent + 1, self.on_path(parent)?.chain),
+        };
+        fact.chain |= fact
+            .volume
+            .as_ref()
+            .map_or(Reason::DerivedImplicitVolume.bit(), shape_bit)
+            | fact.external.as_ref().map_or(0, shape_bit)
+            | inherited;
+        self.path.truncate(position);
+        try_push(&mut self.path, fact)?;
+        Ok(position)
+    }
+    /// A tile's volume on a level chain. A `None` (derived) volume never
+    /// reaches a chain in domain: its chain bit excludes every reference
+    /// through it before any level is built (slice 3 §4 step 5).
+    fn chain_volume(&self, tile: usize) -> Result<VolumeFacts, Error> {
+        self.on_path(tile)?.volume.ok_or_else(|| {
+            Error::InvalidState(
+                "internal containment invariant: derived implicit volume on a level chain".into(),
+            )
+        })
+    }
+    /// The level chain of a reference: own tile and content volume at level 0,
+    /// then each ancestor through external-tileset roots (I1, I2), read from the path stack.
+    /// Implicit levels have no transform; an implicit root's transform steps out of
+    /// its own level (slice 3 §4 table).
+    fn build_levels(&mut self, tile: usize, content: Option<VolumeFacts>) -> Result<(), Error> {
+        self.levels.clear();
+        let content = content.map(|volume| (Role::Content, volume));
+        let own = self.chain_volume(tile)?;
+        try_push(
+            &mut self.levels,
+            LevelFacts {
+                to_parent: None,
+                volumes: [Some((Role::Own, own)), content, None],
+            },
+        )?;
+        let mut current = tile;
+        while let Some(parent) = self.on_path(current)?.parent {
+            let level = self.levels.len() as u32;
+            let volume = self.chain_volume(parent)?;
+            let child = &self.path[current];
+            let fact = LevelFacts {
+                to_parent: child.transform,
+                volumes: [
+                    Some((Role::Ancestor(level), volume)),
+                    None,
+                    child.external.map(|v| (Role::ExternalContent(level), v)),
+                ],
+            };
+            try_push(&mut self.levels, fact)?;
+            current = parent;
+        }
         Ok(())
     }
-    fn metadata_schema(&mut self, base: &str, doc: &Value) -> Result<(), Error> {
-        if let Some(value) = doc.get("schemaUri") {
-            let value = value
-                .as_str()
-                .ok_or_else(|| invalid("schemaUri must be a string"))?;
-            let name = uri(base, value)?;
-            self.reference(name.clone())?;
-            read_json(self.zip, &name)?;
+    /// Collect chain exclusions in O(1) and run the precheck step for one
+    /// reference, in traversal order. The precheck stops at its first violation;
+    /// the level chain is built only when the precheck step runs (C2-WB §3.3).
+    /// Returns whether the precheck step passed: the reference joins the phase-2 stream
+    /// (VS-B-4). `self.levels` then holds its chain.
+    fn reference(
+        &mut self,
+        tile: usize,
+        content: Option<VolumeFacts>,
+        facts: &UriFacts,
+    ) -> Result<bool, Error> {
+        // Chain bits are ORed even after the precheck has stopped: any exclusion
+        // anywhere overrides the precheck reason.
+        self.exclusions |=
+            facts.exclusions | self.on_path(tile)?.chain | content.as_ref().map_or(0, shape_bit);
+        // The precheck only runs while the archive is still entirely in domain.
+        if self.exclusions != 0 || self.precheck.is_some() {
+            return Ok(false);
+        }
+        self.build_levels(tile, content)?;
+        self.precheck = self.precheck_step(facts);
+        Ok(self.precheck.is_none())
+    }
+    /// One reference's charge: `T·V + Nodes + Idx + E` plus the per-reference
+    /// terms (C2-WB §3.1), against the work cap; `B` and `Dec` also against
+    /// their own caps. Requires `self.levels` built for this reference.
+    fn precheck_step(&mut self, facts: &UriFacts) -> Option<Reason> {
+        let vertex_units = match &facts.bounds {
+            None => 0,
+            Some(bounds) => match containment::level_spans(bounds, &self.levels, self.caps) {
+                Err(Exclusion::NumericSpan) => return Some(Reason::NumericSpan),
+                Err(Exclusion::RegionVolume) => return Some(Reason::RegionVolume),
+                Err(Exclusion::RotatedBox) => return Some(Reason::RotatedBox),
+                Ok(spans) => match containment::vertex_units(facts.t, &spans) {
+                    Some(units) => units,
+                    None => return Some(Reason::WorkLimit),
+                },
+            },
+        };
+        if facts.max_depth > self.caps.node_depth {
+            return Some(Reason::WorkLimit);
+        }
+        let per_reference = &facts.per_reference;
+        let units = facts.nodes.and_then(|nodes| {
+            vertex_units
+                .checked_add(nodes)?
+                .checked_add(facts.idx)?
+                .checked_add(facts.e)?
+                .checked_add(containment::reference_units(
+                    self.levels.len(),
+                    per_reference,
+                )?)
+        });
+        let within = |total: u64, add: Option<u64>, cap: u64| {
+            add.and_then(|add| total.checked_add(add))
+                .filter(|sum| *sum <= cap)
+        };
+        let (Some(units), Some(bytes), Some(decoded)) = (
+            within(self.units, units, self.work_cap),
+            within(self.bytes, Some(per_reference.b), self.bytes_cap),
+            within(self.decoded, Some(per_reference.dec), self.decoded_cap),
+        ) else {
+            return Some(Reason::WorkLimit);
+        };
+        self.units = units;
+        self.bytes = bytes;
+        self.decoded = decoded;
+        None
+    }
+}
+
+/// Phase 1: per-URI static facts through M's bound functions, plus the
+/// quaternion window over every selected node.
+struct FactConsumer<'a> {
+    arena: &'a mut Option<Arena>,
+    caps: SpanCaps,
+    /// Composite bound and the maximum `s_step` along the current path.
+    stack: Vec<(containment::Composite, u32)>,
+    bounds: Option<UriBounds>,
+    t: u64,
+    nodes: Option<u64>,
+    idx: u64,
+    max_depth: u64,
+    quaternion_window: bool,
+    /// Maximum path `s_step` over every instance, with or without POSITION.
+    s_inst_all: u32,
+    /// The planned elements of a plan refused against the archive's remaining
+    /// `totalPayloadElements` (VS-C-5).
+    remainder_refused: Option<u64>,
+}
+impl SceneConsumer for FactConsumer<'_> {
+    type Error = Error;
+    fn remainder_refused(&mut self, planned: u64) {
+        self.remainder_refused = Some(planned);
+    }
+    fn instances_only(&self) -> bool {
+        false
+    }
+    fn enter(&mut self, transform: &NodeTransform, depth: u64) -> Result<(), Error> {
+        self.max_depth = self.max_depth.max(depth);
+        let l = local(transform);
+        if let Local::Trs { q, .. } = l {
+            let arena = Containment::arena(self.arena, self.caps)?;
+            let outcome = containment::admit_rotation(q, arena);
+            if arena.fault() {
+                return Err(containment_fault());
+            }
+            match outcome {
+                containment::RotationOutcome::Ok => {}
+                containment::RotationOutcome::QuaternionWindow => self.quaternion_window = true,
+                containment::RotationOutcome::InvalidZeroOrRange => {
+                    return Err(invalid(
+                        "glTF node rotation must be nonzero with components in [-1, 1]",
+                    ))
+                }
+            }
+        }
+        if l == Local::Skip {
+            self.nodes = self.nodes.and_then(|n| n.checked_add(1));
+            return Ok(());
+        }
+        let (g, path) = match self.stack.last() {
+            Some((g, path)) => (*g, *path),
+            None => (containment::composite_identity(), 0),
+        };
+        let (g, step) = containment::node_step_bound(&g, &l);
+        self.nodes = self
+            .nodes
+            .and_then(|n| n.checked_add(containment::node_units(step)));
+        try_push(&mut self.stack, (g, path.max(step)))
+    }
+    fn leave(&mut self, transform: &NodeTransform) {
+        if *transform != NodeTransform::Skip {
+            self.stack.pop();
+        }
+    }
+    fn instance(&mut self, instance: &Instance<'_, '_>) -> Result<(), Error> {
+        let (g, s_inst) = match self.stack.last() {
+            Some((g, path)) => (*g, *path),
+            None => (containment::composite_identity(), 0),
+        };
+        // sInst ranges over all instances (contract "Per-URI facts").
+        self.s_inst_all = self.s_inst_all.max(s_inst);
+        for &accessor in instance.positions() {
+            let (pair0, s_pos) =
+                containment::position_bound(&g, normalization(instance.format(accessor)));
+            let member = UriBounds {
+                pair0,
+                s_inst,
+                s_pos,
+            };
+            self.bounds = Some(match &self.bounds {
+                Some(bounds) => containment::hull(bounds, &member),
+                None => containment::hull(&UriBounds::identity(), &member),
+            });
+        }
+        self.t = self.t.saturating_add(instance.vertex_total());
+        self.idx = self.idx.saturating_add(instance.index_total());
+        Ok(())
+    }
+}
+
+/// Phase 2: serial streaming of one reference over the live C1 views.
+struct StreamConsumer<'a> {
+    arena: &'a mut Arena,
+    bitmap: &'a mut Vec<u64>,
+    levels: &'a [LevelFacts],
+    member: &'a str,
+    depth: usize,
+    /// The stream's corner-walk budget (H11 V7).
+    credit: &'a mut Credit,
+}
+impl SceneConsumer for StreamConsumer<'_> {
+    type Error = Error;
+    fn instances_only(&self) -> bool {
+        true
+    }
+    fn enter(&mut self, transform: &NodeTransform, _: u64) -> Result<(), Error> {
+        let l = local(transform);
+        if l != Local::Skip {
+            containment::push_node(self.arena, &l);
+            if self.arena.fault() {
+                return Err(containment_fault());
+            }
+        }
+        Ok(())
+    }
+    fn leave(&mut self, transform: &NodeTransform) {
+        if *transform != NodeTransform::Skip {
+            containment::pop_node(self.arena);
+        }
+    }
+    fn instance(&mut self, instance: &Instance<'_, '_>) -> Result<(), Error> {
+        for &accessor in instance.positions() {
+            let words = instance.count(accessor).div_ceil(64);
+            if self.bitmap.len() < words {
+                self.bitmap
+                    .try_reserve_exact(words - self.bitmap.len())
+                    .map_err(|_| refused())?;
+                self.bitmap.resize(words, 0);
+            }
+            let bitmap = &mut self.bitmap[..words];
+            bitmap.fill(0);
+            instance.mark(accessor, |v| bitmap[v / 64] |= 1 << (v % 64));
+            let n = normalization(instance.format(accessor));
+            let first =
+                containment::walk_marked(self.arena, n, self.levels, bitmap, self.credit, |v| {
+                    raw_vertex(instance.vertex(accessor, v))
+                });
+            if self.arena.fault() {
+                return Err(containment_fault());
+            }
+            if let Some((vertex, Verdict::Outside { role, .. })) = first {
+                let volume = match role {
+                    Role::Own => "own".to_owned(),
+                    Role::Content => "content".to_owned(),
+                    Role::ExternalContent(k) => format!("externalContent:{k}"),
+                    Role::Ancestor(k) => format!("ancestor:{k}"),
+                };
+                let primitive = instance.primitive_drawing(accessor, vertex).unwrap_or(0);
+                return Err(invalid(format!(
+                    "decoded content outside bounding volume: content={} depth={} volume={volume} node={} mesh={} primitive={primitive} vertex={vertex}",
+                    self.member,
+                    self.depth,
+                    instance.node(),
+                    instance.mesh(),
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+struct ArchiveResources<'a> {
+    archive: &'a mut Archive,
+    /// Members reached by a reference, by catalog rank.
+    used: Bits,
+    /// Members resolved as I1 subtrees, by catalog rank (OD-7, A-I1-3).
+    subtrees: Bits,
+    limits: ValidationLimits,
+    /// How each configurable key of `limits` was derived (VS-C-5).
+    sources: Sources,
+    content_limits: PayloadLimits,
+    bytes_read: u64,
+    reference_visits: u64,
+}
+impl ArchiveResources<'_> {
+    fn budget(&self, key: LimitKey) -> Budget {
+        budget(&self.limits, &self.sources, key)
+    }
+    /// A JSON member and its live-document charge, `raw bytes + 128 · value nodes` (VS-B-7).
+    fn read_json(&mut self, name: &str) -> Result<(Value, u64), Error> {
+        let reads = self.budget(LimitKey::TotalBytesRead);
+        let bytes = read_member(
+            self.archive,
+            name,
+            &mut self.bytes_read,
+            reads,
+            self.limits.json_bytes,
+        )?;
+        let (value, nodes) =
+            json::parse_counted(&bytes, self.content_limits.json).map_err(format_error)?;
+        let charge = (bytes.len() as u64).saturating_add((nodes as u64).saturating_mul(128));
+        Ok((value, charge))
+    }
+    fn reference(&mut self, name: String) -> Result<(), Error> {
+        let references = self.budget(LimitKey::References);
+        self.reference_visits = references.charge(self.reference_visits, 1, || {
+            format!("archive exceeds {} reference visits", references.value)
+        })?;
+        self.mark(&name)
+    }
+    /// Records use of an existing member; a missing one is InvalidInput.
+    fn mark(&mut self, name: &str) -> Result<(), Error> {
+        match self.archive.find(name).map_err(archive_admission_error)? {
+            Some(member) => {
+                self.used.set(member.rank);
+                Ok(())
+            }
+            None => Err(invalid(format!("missing archive entry: {name}"))),
+        }
+    }
+    /// An emitted implicit content (§2a step 10, DC-3): its reference was
+    /// reserved at subtree admission, so this records use without a charge.
+    fn reference_reserved(&mut self, name: &str) -> Result<(), Error> {
+        self.mark(name)
+    }
+    /// OD-7 (A-I1-3): a subtree member resolved twice in one validation is Unsupported,
+    /// before any charge. A missing member is left to the read that follows.
+    fn first_subtree(&mut self, name: &str) -> Result<(), Error> {
+        if let Some(member) = self.archive.find(name).map_err(archive_admission_error)? {
+            if self.subtrees.get(member.rank) {
+                return Err(Error::unsupported(format!(
+                    "repeated subtree member {name}"
+                )));
+            }
+            self.subtrees.set(member.rank);
+        }
+        Ok(())
+    }
+}
+/// VS-B-9: archive-named `notInspected` labels (declared glTF extensions): the 64
+/// byte-smallest distinct labels of at most 256 bytes; any other sets `truncated`.
+#[derive(Default)]
+struct Labels {
+    kept: BTreeSet<String>,
+    truncated: bool,
+}
+const LABELS_KEPT: usize = 64;
+const LABEL_BYTES: usize = 256;
+impl Labels {
+    fn add(&mut self, label: String) {
+        if label.len() > LABEL_BYTES {
+            self.truncated = true;
+            return;
+        }
+        if self.kept.insert(label) && self.kept.len() > LABELS_KEPT {
+            self.kept.pop_last();
+            self.truncated = true;
+        }
+    }
+}
+/// One visited implicit tile's facts, for the parity seam (RC-16).
+#[cfg(test)]
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ImplicitTileFact {
+    /// The tileset member holding R.
+    pub doc: String,
+    pub level: u32,
+    pub coords: [u32; 3],
+    pub depth: usize,
+    /// The path parent's level; `None` for I_0, whose parent is R.
+    pub parent_level: Option<u32>,
+    pub volume: EffectiveVolume,
+    pub error: EffectiveError,
+    pub refine: Option<&'static str>,
+    pub contents: Vec<(u16, String)>,
+}
+struct Check<'a> {
+    resources: ArchiveResources<'a>,
+    reports: Value,
+    hlod_identity: bool,
+    delivery: hlod_delivery::Store,
+    delivery_path: Vec<u64>,
+    delivery_next: u64,
+    tiles: usize,
+    contents: usize,
+    /// Link tiles: explicit tiles whose contents are all external tilesets.
+    links: usize,
+    active: HashSet<String>,
+    schema: schema::TilesetSchema,
+    task_visits: u64,
+    elements: u64,
+    /// Report rows of first-inspected payloads, in inspection order until the report.
+    rows: rows::RowSink<'a>,
+    /// Cancellation and progress (VS-C-6).
+    progress: Progress<'a>,
+    /// Per-URI facts by rank: the C2 facts and vertex count of every inspected payload.
+    facts: FactStore,
+    /// The catalog's scratch, for a spilled facts store.
+    scratch: std::sync::Arc<crate::spill::Scratch>,
+    not_inspected: BTreeSet<String>,
+    extension_labels: Labels,
+    /// Σ live-document charges of the documents being traversed (VS-B-7).
+    live_documents: u64,
+    /// The phase-2 stream log while the archive is in domain (VS-B-4).
+    stream_log: Option<stream_log::StreamLog>,
+    /// One per validation: the I1 allowances.
+    implicit: ImplicitLimits,
+    /// Implicit roots read in this validation (report labels, OD-4).
+    implicit_roots: u64,
+    /// A rusty-tiles vector archive (`asset.extras.vectorBuildStateSha256` and `conversion.json`): its content-less
+    /// tiles must refine.
+    vector: bool,
+    #[cfg(test)]
+    implicit_facts: Vec<ImplicitTileFact>,
+    /// Per-URI C2 facts in first-inspection order, for the work-facts seam.
+    #[cfg(test)]
+    uri_work: Vec<(String, UriFacts)>,
+    /// Whether the two per-tile and per-URI test seams above collect (off in the scale
+    /// driver, whose memory they would grow).
+    #[cfg(test)]
+    seams: bool,
+    /// The reference traversal of VS-B-4 (controls only): references whose precheck step
+    /// passed, with their level chains, streamed after traversal as the old phase 2 did.
+    #[cfg(test)]
+    #[allow(clippy::type_complexity)]
+    deferred: Option<Vec<(Vec<LevelFacts>, u64, u64, usize)>>,
+    c2: Containment,
+    /// EM: one summary per completed, implicit-free external-tileset document.
+    memo: HashMap<String, Rc<Summary>>,
+    /// EM (VS-B-6): bytes held by summaries and by the events of recorders in progress.
+    memo_bytes: usize,
+    /// The largest `memo_bytes` of the validation (VS-B-6 controls).
+    #[cfg(test)]
+    memo_peak: usize,
+    /// EM: the expansions being traversed in full, innermost last.
+    recording: Vec<Recorder>,
+    /// The serial of the next recorder (owner tags of the path stack).
+    recorder_serial: u64,
+    /// First-inspection payload charges (EM-2): never steady charges.
+    once_references: u64,
+    once_bytes: u64,
+    /// The reference traversal switch of the controls (EM terms).
+    #[cfg(test)]
+    memoize: bool,
+    /// Documents prepared (parsed and schema-checked), for the engagement control.
+    #[cfg(test)]
+    prepared: u64,
+}
+/// EM (VS-B-6): the memo budget for summaries and the events of recorders in progress.
+const MEMO_BYTES: usize = 64 << 20;
+fn memo_budget() -> usize {
+    #[cfg(test)]
+    if let Some(budget) = MEMO_BUDGET.with(std::cell::Cell::get) {
+        return budget;
+    }
+    MEMO_BYTES
+}
+/// EM: the memoized expansion of one external-tileset placement.
+struct Summary {
+    /// Steady charges of one placement (EM-2).
+    visits: u64,
+    references: u64,
+    bytes: u64,
+    /// Report counts of one expansion.
+    tiles: usize,
+    contents: usize,
+    links: usize,
+    /// Deepest tileset task and tile of the expansion, below the placement depth.
+    tileset_depth: usize,
+    node_depth: usize,
+    /// The placement-dependent root facts (EM-5.2, EM-5.3).
+    root_bounds: Volume,
+    root_transform: [f64; 16],
+    root_error: f64,
+    document_error: f64,
+    /// The largest live-document charge of the expansion above the placement's own
+    /// (VS-B-7): a placement may use the summary only if it fits, so the limit's verdict
+    /// does not depend on the memo.
+    live_peak: u64,
+    /// The document's own C2 registrations, in traversal order (EM-5.4).
+    events: Vec<Event>,
+}
+/// One C2 registration of a document's expansion, with its facts by value (VS-B-6). Tile
+/// indices are the document's own tiles in registration order.
+enum Event {
+    /// A tile; `parent: None` is the root, linked to the placement.
+    Tile {
+        parent: Option<usize>,
+        depth: usize,
+        transform: Option<[f64; 16]>,
+        volume: Option<VolumeFacts>,
+    },
+    Reference {
+        tile: usize,
+        rank: u64,
+        content: Option<VolumeFacts>,
+    },
+    Delivery {
+        tile: usize,
+        refine: Option<bool>,
+        placeholder: bool,
+        error: f64,
+        diagonal: Option<f64>,
+    },
+    Place(Box<Placement>),
+}
+impl Event {
+    /// Memo bytes of one event.
+    fn cost(&self) -> usize {
+        size_of::<Event>()
+            + match self {
+                Event::Place(_) => size_of::<Placement>(),
+                _ => 0,
+            }
+    }
+}
+struct Placement {
+    summary: Rc<Summary>,
+    parent: usize,
+    external: Option<VolumeFacts>,
+    depth: usize,
+}
+/// EM: one placement traversed in full, measured for its summary.
+struct Recorder {
+    serial: u64,
+    depth: usize,
+    link: Link,
+    visits: u64,
+    references: u64,
+    bytes: u64,
+    once_references: u64,
+    once_bytes: u64,
+    tiles: usize,
+    contents: usize,
+    links: usize,
+    tileset_depth: usize,
+    node_depth: usize,
+    document_error: f64,
+    root: Option<(Volume, [f64; 16], f64)>,
+    /// `live_documents` before this placement, and its largest value during the expansion,
+    /// replayed nested placements included (VS-B-7).
+    live_base: u64,
+    live_peak: u64,
+    /// The document's own tiles registered so far: local indices `0..locals`.
+    locals: usize,
+    events: Vec<Event>,
+    /// Memo bytes of `events`.
+    held: usize,
+    /// An implicit root in the expansion (EM-3), an unmapped registration, or the memo
+    /// budget (VS-B-6): no summary, and no events are kept.
+    opaque: bool,
+}
+/// The C2 level-chain link of a traversal task: the parent tile's position on the path
+/// stack, and for an external-tileset root the referencing content volume.
+#[derive(Clone, Copy)]
+struct Link {
+    parent: Option<usize>,
+    external: Option<VolumeFacts>,
+}
+enum ValidationTask {
+    Tileset {
+        name: String,
+        parent: Option<Volume>,
+        parent_error: Option<f64>,
+        depth: usize,
+        link: Link,
+        #[cfg(test)]
+        refine: Option<&'static str>,
+    },
+    Node(NodeTask),
+    /// The end of a document traversed in full, releasing its live-document charge.
+    ExitTileset {
+        name: String,
+        charge: u64,
+    },
+    /// A C2 payload reference that follows an external-tileset content of the
+    /// same tile: registered after that tileset, in pre-order (v3.3 item 4).
+    /// Not a hierarchy traversal step, so not charged to `hierarchy_visits`.
+    Reference {
+        tile: usize,
+        content: Option<VolumeFacts>,
+        rank: u64,
+    },
+}
+struct NodeTask {
+    node: Value,
+    /// A document's root: it stands for the tile that links the document.
+    root: bool,
+    /// The document's member name, shared by its pending tiles (VS-B-7).
+    base: Rc<str>,
+    parent: Option<Volume>,
+    parent_error: f64,
+    depth: usize,
+    link: Link,
+    /// The metadata schema of the document holding this tile, kept only for
+    /// documents that hold an implicit root.
+    schema: Option<Rc<ImplicitSchema>>,
+    /// The inherited `refine`, recorded only in the parity facts.
+    #[cfg(test)]
+    refine: Option<&'static str>,
+}
+/// The explicit facts of an implicit root R that its walk consumes.
+struct ImplicitParent {
+    #[cfg(test)]
+    base: String,
+    /// R's position on the path stack: the parent of I_0's `TileFact`.
+    tile: usize,
+    bounds: Volume,
+    error: f64,
+    /// The error of R's nearest ancestor that draws, or R's own when R does.
+    bound: f64,
+    depth: usize,
+    #[cfg(test)]
+    refine: Option<&'static str>,
+}
+impl Check<'_> {
+    /// The single payload classifier (H7 INV-4): every payload caller comes here. Returns
+    /// the member's rank and its facts record; a repeat reference reads the record, never
+    /// re-inspects and never re-charges (VS-B-5).
+    fn payload(&mut self, name: &str) -> Result<(u64, Stored), Error> {
+        // L0 is the caller's: every caller has already established that the
+        // member exists (`Resources::reference` or the catalog lookup for the
+        // tile byte count), so a missing member stays InvalidInput.
+        let rank = self
+            .resources
+            .archive
+            .member(name)
+            .map_err(archive_admission_error)?
+            .rank;
+        if self.facts.inspected(rank) {
+            return Ok((rank, self.facts.get(rank)?));
+        }
+        // L1: a legacy suffix is Unsupported before any payload byte is read.
+        if let Some(format) = payload::legacy_suffix(name) {
+            return Err(legacy(format, name, false));
+        }
+        let references_before = self.resources.reference_visits;
+        let bytes_before = self.resources.bytes_read;
+        let stored = self.inspect_payload(name, rank, bytes_before)?;
+        // EM-2: a payload's first inspection is charged once per validation.
+        self.once_references += self.resources.reference_visits - references_before;
+        self.once_bytes += self.resources.bytes_read - bytes_before;
+        Ok((rank, stored))
+    }
+    fn inspect_payload(
+        &mut self,
+        name: &str,
+        rank: u64,
+        bytes_before: u64,
+    ) -> Result<Stored, Error> {
+        let reads = self.resources.budget(LimitKey::TotalBytesRead);
+        let bytes = read_member(
+            self.resources.archive,
+            name,
+            &mut self.resources.bytes_read,
+            reads,
+            self.resources.limits.member_bytes,
+        )?;
+        // L2: legacy magic in the buffer just read wins over any other suffix.
+        if let Some(format) = payload::legacy_magic(&bytes) {
+            return Err(legacy(format, name, true));
+        }
+        let remaining = self.resources.limits.total_payload_elements - self.elements;
+        let kind = payload_kind(name)?;
+        let mut consumer = FactConsumer {
+            arena: &mut self.c2.arena,
+            caps: self.c2.caps,
+            stack: Vec::new(),
+            bounds: None,
+            t: 0,
+            nodes: Some(0),
+            idx: 0,
+            max_depth: 0,
+            quaternion_window: false,
+            s_inst_all: 0,
+            remainder_refused: None,
+        };
+        let resources = &mut self.resources;
+        let facts = payload::inspect_scene(
+            kind,
+            &bytes,
+            resources.content_limits,
+            remaining,
+            |value, maximum| {
+                let resource = uri(name, value)?;
+                resources.reference(resource.clone())?;
+                let reads = resources.budget(LimitKey::TotalBytesRead);
+                read_member(
+                    resources.archive,
+                    &resource,
+                    &mut resources.bytes_read,
+                    reads,
+                    maximum as u64,
+                )
+            },
+            &mut consumer,
+        )
+        .map_err(|error| match (error, consumer.remainder_refused) {
+            (
+                payload::SceneError::Payload(PayloadError::Format(FormatError::ResourceLimit(
+                    message,
+                ))),
+                Some(planned),
+            ) => self
+                .resources
+                .budget(LimitKey::TotalPayloadElements)
+                .refuse(self.elements.saturating_add(planned), message),
+            (error, _) => scene_error(error),
+        })?;
+        let (identity_checked, identity_work) = identity::inspect(
+            &bytes,
+            self.resources.budget(LimitKey::TotalPayloadElements),
+            self.elements.saturating_add(facts.elements_checked),
+            self.resources.content_limits.decoded_bytes,
+            false,
+        )?;
+        let delivery_work = self.delivery.ingest(
+            rank,
+            &bytes,
+            self.resources.budget(LimitKey::TotalPayloadElements),
+            self.elements
+                .saturating_add(facts.elements_checked)
+                .saturating_add(identity_work),
+            self.resources.content_limits.decoded_bytes,
+        )?;
+        if identity_checked {
+            self.delivery.expect_identity();
+        }
+        self.hlod_identity |= identity_checked;
+        let elements_checked = facts
+            .elements_checked
+            .checked_add(identity_work)
+            .and_then(|n| n.checked_add(delivery_work))
+            .ok_or_else(|| Error::limit("hlodFeatureIds: payload element count overflow"))?;
+        drop(bytes);
+        let mut exclusions = content_reasons(&facts.exclusions);
+        if consumer.quaternion_window {
+            exclusions |= Reason::QuaternionWindow.bit();
+        }
+        let uri_facts = UriFacts {
+            // A URI with no POSITION-bearing instance has no Pair0 and streams
+            // nothing; otherwise sInst covers every instance's node path.
+            bounds: consumer.bounds.map(|mut bounds| {
+                bounds.s_inst = bounds.s_inst.max(consumer.s_inst_all);
+                bounds
+            }),
+            t: consumer.t,
+            nodes: consumer.nodes,
+            idx: consumer.idx,
+            e: elements_checked,
+            per_reference: ReferenceFacts {
+                b: self.resources.bytes_read - bytes_before,
+                dec: facts.materialized_bytes,
+                json_nodes: facts.json_nodes,
+                external_resources: facts.external_resources,
+                instance_primitives: facts.instance_primitives,
+            },
+            max_depth: consumer.max_depth,
+            exclusions,
+        };
+        let stored = Stored {
+            facts: uri_facts,
+            vertices: facts.vertices,
+            replay: facts.replay,
+        };
+        self.facts.insert(rank, &stored, &self.scratch)?;
+        #[cfg(test)]
+        if self.seams {
+            try_push(&mut self.uri_work, (name.to_owned(), uri_facts))?;
+        }
+        self.elements = self
+            .resources
+            .budget(LimitKey::TotalPayloadElements)
+            .charge(self.elements, elements_checked, || {
+                "payload elements exceed archive budget".into()
+            })?;
+        if let Some(value) = facts.schema_uri.as_deref() {
+            self.schema_uri(name, value)?;
+        }
+        self.not_inspected.extend(facts.not_inspected);
+        for label in facts.extensions {
+            self.extension_labels.add(label);
+        }
+        let report = PayloadReport {
+            uri: name.into(),
+            accessors_checked: facts.accessors_checked,
+            primitives_checked: facts.primitives_checked,
+            vertices: facts.vertices,
+        };
+        let member = self
+            .resources
+            .archive
+            .member(name)
+            .map_err(archive_admission_error)?;
+        self.rows.push(&report.uri, member.name_ref, &report)?;
+        Ok(stored)
+    }
+    /// One C2 reference: registration and precheck step; a reference whose step passed is
+    /// logged for the phase-2 stream (VS-B-4).
+    fn c2_ref(
+        &mut self,
+        tile: usize,
+        content: Option<VolumeFacts>,
+        rank: u64,
+        stored: &Stored,
+    ) -> Result<(), Error> {
+        self.delivery.reference(self.delivery_path[tile], rank)?;
+        if !self.c2.reference(tile, content, &stored.facts)? {
+            return self.log(None);
+        }
+        #[cfg(test)]
+        if let Some(deferred) = &mut self.deferred {
+            // The reference traversal: the old phase 2 over in-memory chains, with a full
+            // C1 re-inspection per reference.
+            let levels = self.c2.levels.clone();
+            let depth = self.c2.on_path(tile)?.depth;
+            return try_push(deferred, (levels, rank, stored.facts.t, depth));
+        }
+        self.log(Some(stream_log::Entry::Reference {
+            tile,
+            content,
+            rank,
+        }))
+    }
+    /// A tile on the path stack, logged for the phase-2 stream while in domain (VS-B-4).
+    fn path_tile(&mut self, fact: TileFact) -> Result<usize, Error> {
+        let parent = fact.parent.map(|index| self.delivery_path[index]);
+        let id = self.delivery_next;
+        self.delivery_next = self.delivery_next.checked_add(1).ok_or_else(refused)?;
+        self.delivery
+            .tile(id, parent, fact.transform.unwrap_or(IDENTITY))?;
+        let index = self.c2.tile(fact)?;
+        self.delivery_path.truncate(index);
+        try_push(&mut self.delivery_path, id)?;
+        self.log(Some(stream_log::Entry::Tile(fact)))?;
+        Ok(index)
+    }
+    /// Appends to the phase-2 stream log while the archive is in domain; the log is dropped
+    /// as soon as it is not, since no stream will then run.
+    fn log(&mut self, entry: Option<stream_log::Entry>) -> Result<(), Error> {
+        if self.c2.exclusions != 0 || self.c2.precheck.is_some() {
+            self.stream_log = None;
+            return Ok(());
+        }
+        match (entry, &mut self.stream_log) {
+            (Some(entry), Some(log)) => log.push(&entry, &self.scratch),
+            _ => Ok(()),
+        }
+    }
+    /// Phase 2 (VS-B-4), after whole-archive C1, exclusion and precheck admission: the
+    /// logged tiles rebuild the path stack in traversal order, and each logged reference is
+    /// streamed along its level chain as a replay of its payload's own first admission
+    /// (H23, VS-B-11). The first failure is the result.
+    fn stream(&mut self) -> Result<(), Error> {
+        let Some(log) = self.stream_log.take() else {
+            return Err(Error::InvalidState(
+                "phase-2 stream log missing for an archive in domain".into(),
+            ));
+        };
+        // VS-C-6: phase 2 runs after traversal, so it is its own progress phase, one step
+        // per logged tile or reference (each bounded by the Class A limits).
+        self.progress
+            .phase("validate.stream", Some(log.entries()))?;
+        let log = log.finish(&self.scratch)?;
+        let mut stream = Stream {
+            arena: match self.c2.arena.take() {
+                Some(arena) => Some(arena),
+                None => Some(Arena::reserve(self.c2.caps).map_err(|_| refused())?),
+            },
+            ..Stream::default()
+        };
+        self.c2.path = Vec::new();
+        log.for_each(|entry| {
+            self.progress.step()?;
+            match entry {
+                stream_log::Entry::Tile(fact) => self.c2.tile(fact).map(|_| ()),
+                stream_log::Entry::Reference {
+                    tile,
+                    content,
+                    rank,
+                } => {
+                    self.c2.build_levels(tile, content)?;
+                    let stored = self.facts.get(rank)?;
+                    let depth = self.c2.on_path(tile)?.depth;
+                    stream_member(
+                        &mut self.resources,
+                        &mut stream,
+                        self.c2.caps,
+                        &self.c2.levels,
+                        depth,
+                        rank,
+                        stored.facts.t,
+                        Some(&stored.replay),
+                    )
+                }
+            }
+        })
+    }
+    /// The `schemaUri` document of a tileset, read once per preparation, with its
+    /// live-document charge.
+    fn metadata_schema(&mut self, base: &str, doc: &Value) -> Result<Option<(Value, u64)>, Error> {
+        let Some(value) = doc.get("schemaUri") else {
+            return Ok(None);
+        };
+        let value = value
+            .as_str()
+            .ok_or_else(|| invalid("schemaUri must be a string"))?;
+        self.schema_uri(base, value).map(Some)
+    }
+    fn schema_uri(&mut self, base: &str, value: &str) -> Result<(Value, u64), Error> {
+        let name = uri(base, value)?;
+        self.resources.reference(name.clone())?;
+        self.resources.read_json(&name)
+    }
+    /// VS-B-7: charge a document held while its tiles are traversed.
+    fn hold_document(&mut self, charge: u64) -> Result<(), Error> {
+        let limit = self.resources.limits.live_document_bytes;
+        self.live_documents = self
+            .live_documents
+            .checked_add(charge)
+            .filter(|&n| n <= limit)
+            .ok_or_else(|| Error::limit(format!("live tileset documents exceed {limit} bytes")))?;
+        if let Some(recorder) = self.recording.last_mut() {
+            recorder.live_peak = recorder.live_peak.max(self.live_documents);
         }
         Ok(())
     }
@@ -304,14 +1822,528 @@ impl Check<'_> {
         parent_error: Option<f64>,
         depth: usize,
     ) -> Result<(), Error> {
-        if depth > 128 {
-            return Err(invalid("hierarchy exceeds validation depth limit"));
+        let mut pending = vec![ValidationTask::Tileset {
+            name: name.into(),
+            parent: parent.cloned(),
+            parent_error,
+            depth,
+            link: Link {
+                parent: None,
+                external: None,
+            },
+            #[cfg(test)]
+            refine: None,
+        }];
+        while let Some(task) = pending.pop() {
+            self.progress.step()?;
+            if let ValidationTask::Reference {
+                tile,
+                content,
+                rank,
+            } = task
+            {
+                let stored = self.facts.get(rank)?;
+                self.c2_reference(tile, content, rank, &stored)?;
+                continue;
+            }
+            if let ValidationTask::Tileset {
+                name,
+                parent,
+                parent_error,
+                depth,
+                link,
+                ..
+            } = &task
+            {
+                if let Some(summary) = self.summary(name, *depth) {
+                    self.place(&summary, parent.as_ref(), *parent_error, *depth, *link)?;
+                    continue;
+                }
+            }
+            let visits = self.resources.budget(LimitKey::HierarchyVisits);
+            self.task_visits = visits.charge(self.task_visits, 1, || {
+                format!("hierarchy exceeds {} traversal tasks", visits.value)
+            })?;
+            match task {
+                ValidationTask::Tileset {
+                    name,
+                    parent,
+                    parent_error,
+                    depth,
+                    link,
+                    #[cfg(test)]
+                    refine,
+                } => {
+                    if depth > 128 {
+                        return Err(Error::limit("hierarchy exceeds validation depth limit"));
+                    }
+                    if !self.active.insert(name.clone()) {
+                        return Err(invalid("cyclic external tileset reference"));
+                    }
+                    self.begin(depth, link)?;
+                    let (mut doc, error, schema, charge) = self.prepare_tileset(&name)?;
+                    if let Some(recorder) = self.recording.last_mut() {
+                        recorder.document_error = error;
+                    }
+                    let root = doc["root"].take();
+                    drop(doc);
+                    let base: Rc<str> = Rc::from(name.as_str());
+                    pending.push(ValidationTask::ExitTileset { name, charge });
+                    pending.push(ValidationTask::Node(NodeTask {
+                        node: root,
+                        root: true,
+                        base,
+                        parent,
+                        parent_error: parent_error.map_or(error, |parent| parent.min(error)),
+                        depth,
+                        link,
+                        schema,
+                        #[cfg(test)]
+                        refine,
+                    }));
+                }
+                ValidationTask::Node(task) => {
+                    self.node(task, &mut pending)?;
+                }
+                ValidationTask::ExitTileset { name, charge } => {
+                    self.active.remove(&name);
+                    self.live_documents -= charge;
+                    self.finish(name)?;
+                }
+                ValidationTask::Reference { .. } => unreachable!("handled before charging"),
+            }
         }
-        if !self.active.insert(name.into()) {
-            return Err(invalid("cyclic external tileset reference"));
+        Ok(())
+    }
+
+    /// EM-6: the document's summary, if this placement may use it: the document
+    /// is not on the active path, and every steady charge and depth bound fits.
+    fn summary(&self, name: &str, depth: usize) -> Option<Rc<Summary>> {
+        #[cfg(test)]
+        if !self.memoize {
+            return None;
         }
-        self.reference(name.into())?;
-        let doc = read_json(self.zip, name)?;
+        if self.active.contains(name) {
+            return None;
+        }
+        let summary = self.memo.get(name)?;
+        let limits = &self.resources.limits;
+        let within =
+            |used: u64, add: u64, cap: u64| used.checked_add(add).is_some_and(|n| n <= cap);
+        let deep = |add: usize, cap: u64| {
+            depth
+                .checked_add(add)
+                .is_some_and(|d| u64::try_from(d).is_ok_and(|d| d <= cap))
+        };
+        (within(self.task_visits, summary.visits, limits.hierarchy_visits)
+            && within(
+                self.resources.reference_visits,
+                summary.references,
+                limits.references,
+            )
+            && within(
+                self.resources.bytes_read,
+                summary.bytes,
+                limits.total_bytes_read,
+            )
+            && within(
+                self.live_documents,
+                summary.live_peak,
+                limits.live_document_bytes,
+            )
+            && deep(summary.tileset_depth, 128)
+            && deep(summary.node_depth, limits.hierarchy_depth))
+        .then(|| summary.clone())
+    }
+    /// EM-5: one memoized placement. Its steady charges fit (EM-6), so only the
+    /// root's parent-dependent checks can fail; then its C2 facts are registered.
+    fn place(
+        &mut self,
+        summary: &Rc<Summary>,
+        parent: Option<&Volume>,
+        parent_error: Option<f64>,
+        depth: usize,
+        link: Link,
+    ) -> Result<(), Error> {
+        self.task_visits += summary.visits;
+        self.resources.reference_visits += summary.references;
+        self.resources.bytes_read += summary.bytes;
+        if let Some(parent) = parent {
+            if !contains(parent, &summary.root_bounds, &summary.root_transform)? {
+                return Err(invalid(format!(
+                    "child bounds escape parent at depth {depth}"
+                )));
+            }
+        }
+        let bound = parent_error.map_or(summary.document_error, |parent| {
+            parent.min(summary.document_error)
+        });
+        if summary.root_error > bound + 1e-8 * (1. + bound) {
+            return Err(invalid(format!(
+                "geometricError increases at depth {depth}"
+            )));
+        }
+        self.tiles += summary.tiles;
+        self.contents += summary.contents;
+        self.links += summary.links;
+        let live = self.live_documents + summary.live_peak;
+        let recording = self.recording.last_mut().map(|recorder| {
+            recorder.live_peak = recorder.live_peak.max(live);
+            recorder.tileset_depth = recorder.tileset_depth.max(depth + summary.tileset_depth);
+            recorder.node_depth = recorder.node_depth.max(depth + summary.node_depth);
+            (recorder.opaque, depth - recorder.depth)
+        });
+        if let Some((false, relative)) = recording {
+            match self.local(link.parent) {
+                Some(parent) => self.record(Event::Place(Box::new(Placement {
+                    summary: summary.clone(),
+                    parent,
+                    external: link.external,
+                    depth: relative,
+                })))?,
+                None => self.make_opaque(),
+            }
+        }
+        self.replay(summary, link, depth)
+    }
+    /// EM-5.4: register a summary's C2 facts again under this placement's link
+    /// and depth, in the reference traversal's order, streaming each reference inline
+    /// while in domain. Not recorded: an enclosing recorder holds the placement itself.
+    fn replay(&mut self, summary: &Rc<Summary>, link: Link, depth: usize) -> Result<(), Error> {
+        struct Frame {
+            summary: Rc<Summary>,
+            next: usize,
+            /// Path-stack positions of the document's own tiles, by local index.
+            locals: Vec<usize>,
+            link: Link,
+            depth: usize,
+        }
+        let mut frames = vec![Frame {
+            summary: summary.clone(),
+            next: 0,
+            locals: Vec::new(),
+            link,
+            depth,
+        }];
+        while let Some(frame) = frames.last_mut() {
+            let Some(event) = frame.summary.events.get(frame.next) else {
+                frames.pop();
+                continue;
+            };
+            frame.next += 1;
+            // VS-C-6: one replayed event is bounded work; the expansion is not.
+            self.progress.check()?;
+            let nested = match event {
+                Event::Tile {
+                    parent,
+                    depth,
+                    transform,
+                    volume,
+                } => {
+                    let (parent, external) = match parent {
+                        None => (frame.link.parent, frame.link.external),
+                        Some(local) => (Some(frame.locals[*local]), None),
+                    };
+                    let index = self.path_tile(TileFact {
+                        transform: *transform,
+                        volume: *volume,
+                        external,
+                        parent,
+                        depth: frame.depth + depth,
+                        chain: 0,
+                        owner: None,
+                    })?;
+                    try_push(&mut frame.locals, index)?;
+                    None
+                }
+                Event::Reference {
+                    tile,
+                    rank,
+                    content,
+                } => {
+                    let stored = self.facts.get(*rank)?;
+                    self.c2_ref(frame.locals[*tile], *content, *rank, &stored)?;
+                    None
+                }
+                Event::Delivery {
+                    tile,
+                    refine,
+                    placeholder,
+                    error,
+                    diagonal,
+                } => {
+                    self.delivery.kind(
+                        self.delivery_path[frame.locals[*tile]],
+                        *refine,
+                        *placeholder,
+                        *error,
+                        *diagonal,
+                    )?;
+                    None
+                }
+                Event::Place(placement) => Some(Frame {
+                    summary: placement.summary.clone(),
+                    next: 0,
+                    locals: Vec::new(),
+                    link: Link {
+                        parent: Some(frame.locals[placement.parent]),
+                        external: placement.external,
+                    },
+                    depth: frame.depth + placement.depth,
+                }),
+            };
+            if let Some(nested) = nested {
+                try_push(&mut frames, nested)?;
+            }
+        }
+        Ok(())
+    }
+    /// EM: the local index of the innermost recorder's own tile at path position `tile`.
+    fn local(&self, tile: Option<usize>) -> Option<usize> {
+        let recorder = self.recording.last()?;
+        let (serial, local) = self.c2.path.get(tile?)?.owner?;
+        (serial == recorder.serial).then_some(local)
+    }
+    /// EM (VS-B-6): append an event to the innermost recorder within the memo budget. A
+    /// recorder whose event would exceed it becomes opaque.
+    fn record(&mut self, event: Event) -> Result<(), Error> {
+        let cost = event.cost();
+        if self.recording.last().is_none_or(|recorder| recorder.opaque) {
+            return Ok(());
+        }
+        if self
+            .memo_bytes
+            .checked_add(cost)
+            .is_none_or(|n| n > memo_budget())
+        {
+            self.make_opaque();
+            return Ok(());
+        }
+        let Some(recorder) = self.recording.last_mut() else {
+            return Ok(());
+        };
+        recorder.events.try_reserve(1).map_err(|_| refused())?;
+        recorder.events.push(event);
+        recorder.held += cost;
+        self.memo_bytes += cost;
+        #[cfg(test)]
+        {
+            self.memo_peak = self.memo_peak.max(self.memo_bytes);
+        }
+        Ok(())
+    }
+    /// EM: the innermost recorder's document gets no summary; its events are freed.
+    fn make_opaque(&mut self) {
+        if let Some(recorder) = self.recording.last_mut() {
+            recorder.opaque = true;
+            recorder.events = Vec::new();
+            self.memo_bytes -= recorder.held;
+            recorder.held = 0;
+        }
+    }
+    /// EM: start measuring a placement traversed in full. Its `Tileset` visit
+    /// is already charged.
+    fn begin(&mut self, depth: usize, link: Link) -> Result<(), Error> {
+        let recorder = Recorder {
+            serial: self.recorder_serial,
+            depth,
+            link,
+            visits: self.task_visits - 1,
+            references: self.resources.reference_visits,
+            bytes: self.resources.bytes_read,
+            once_references: self.once_references,
+            once_bytes: self.once_bytes,
+            tiles: self.tiles,
+            contents: self.contents,
+            links: self.links,
+            tileset_depth: depth,
+            node_depth: depth,
+            document_error: 0.,
+            root: None,
+            live_base: self.live_documents,
+            live_peak: self.live_documents,
+            locals: 0,
+            events: Vec::new(),
+            held: 0,
+            opaque: false,
+        };
+        self.recorder_serial += 1;
+        try_push(&mut self.recording, recorder)
+    }
+    /// EM: a placement traversed in full has completed: summarize its document
+    /// unless its expansion is opaque (EM-3, VS-B-6), and enter it in the enclosing one.
+    fn finish(&mut self, name: String) -> Result<(), Error> {
+        let Some(recorder) = self.recording.pop() else {
+            return Err(Error::InvalidState(
+                "external tileset exit without a recorder".into(),
+            ));
+        };
+        let header = size_of::<Summary>() + name.len();
+        let fits = self
+            .memo_bytes
+            .checked_add(header)
+            .is_some_and(|n| n <= memo_budget());
+        let summary = match recorder.root {
+            Some((root_bounds, root_transform, root_error)) if !recorder.opaque && fits => {
+                let once_references = self.once_references - recorder.once_references;
+                let once_bytes = self.once_bytes - recorder.once_bytes;
+                self.memo_bytes += header;
+                #[cfg(test)]
+                {
+                    self.memo_peak = self.memo_peak.max(self.memo_bytes);
+                }
+                Some(Rc::new(Summary {
+                    visits: self.task_visits - recorder.visits,
+                    references: self.resources.reference_visits
+                        - recorder.references
+                        - once_references,
+                    bytes: self.resources.bytes_read - recorder.bytes - once_bytes,
+                    tiles: self.tiles - recorder.tiles,
+                    contents: self.contents - recorder.contents,
+                    links: self.links - recorder.links,
+                    tileset_depth: recorder.tileset_depth - recorder.depth,
+                    node_depth: recorder.node_depth - recorder.depth,
+                    root_bounds,
+                    root_transform,
+                    root_error,
+                    document_error: recorder.document_error,
+                    live_peak: recorder.live_peak - recorder.live_base,
+                    events: recorder.events,
+                }))
+            }
+            _ => {
+                self.memo_bytes -= recorder.held;
+                None
+            }
+        };
+        if let Some(summary) = &summary {
+            self.memo.try_reserve(1).map_err(|_| refused())?;
+            self.memo.insert(name, summary.clone());
+        }
+        let outer = self.recording.last_mut().map(|outer| {
+            outer.live_peak = outer.live_peak.max(recorder.live_peak);
+            outer.tileset_depth = outer.tileset_depth.max(recorder.tileset_depth);
+            outer.node_depth = outer.node_depth.max(recorder.node_depth);
+            (outer.opaque, recorder.depth - outer.depth)
+        });
+        if let Some((false, relative)) = outer {
+            match (summary, self.local(recorder.link.parent)) {
+                (Some(summary), Some(parent)) => {
+                    self.record(Event::Place(Box::new(Placement {
+                        summary,
+                        parent,
+                        external: recorder.link.external,
+                        depth: relative,
+                    })))?
+                }
+                _ => self.make_opaque(),
+            }
+        }
+        Ok(())
+    }
+    /// A C2 tile registration of the full traversal, recorded for the summary
+    /// of the innermost document being traversed.
+    fn c2_tile(&mut self, mut fact: TileFact) -> Result<usize, Error> {
+        let (parent, external, depth) = (fact.parent, fact.external, fact.depth);
+        let (transform, volume) = (fact.transform, fact.volume);
+        // The first registration is the root, linked to the placement; every other
+        // tile's parent is one of the document's own tiles.
+        let mapped = match self.recording.last() {
+            Some(recorder) if !recorder.opaque => Some(if recorder.locals == 0 {
+                (parent == recorder.link.parent && external == recorder.link.external)
+                    .then_some(None)
+            } else {
+                self.local(parent).filter(|_| external.is_none()).map(Some)
+            }),
+            _ => None,
+        };
+        if let (Some(Some(_)), Some(recorder)) = (mapped, self.recording.last()) {
+            fact.owner = Some((recorder.serial, recorder.locals));
+        }
+        let index = self.path_tile(fact)?;
+        match mapped {
+            None => {}
+            Some(Some(parent)) => {
+                let recorder = self.recording.last_mut().unwrap();
+                recorder.locals += 1;
+                let depth = depth - recorder.depth;
+                self.record(Event::Tile {
+                    parent,
+                    depth,
+                    transform,
+                    volume,
+                })?;
+            }
+            Some(None) => self.make_opaque(),
+        }
+        Ok(index)
+    }
+    /// A C2 reference registration of the full traversal, recorded likewise.
+    fn c2_reference(
+        &mut self,
+        tile: usize,
+        content: Option<VolumeFacts>,
+        rank: u64,
+        stored: &Stored,
+    ) -> Result<(), Error> {
+        self.c2_ref(tile, content, rank, stored)?;
+        if self.recording.last().is_some_and(|r| !r.opaque) {
+            match self.local(Some(tile)) {
+                Some(tile) => self.record(Event::Reference {
+                    tile,
+                    rank,
+                    content,
+                })?,
+                None => self.make_opaque(),
+            }
+        }
+        Ok(())
+    }
+
+    /// Delivery state is replayed with memoized hierarchy placements, like C2 facts.
+    fn delivery_kind(
+        &mut self,
+        tile: usize,
+        refine: Option<bool>,
+        placeholder: bool,
+        (error, diagonal): (f64, Option<f64>),
+    ) -> Result<(), Error> {
+        self.delivery.kind(
+            self.delivery_path[tile],
+            refine,
+            placeholder,
+            error,
+            diagonal,
+        )?;
+        if self.recording.last().is_some_and(|r| !r.opaque) {
+            match self.local(Some(tile)) {
+                Some(tile) => self.record(Event::Delivery {
+                    tile,
+                    refine,
+                    placeholder,
+                    error,
+                    diagonal,
+                })?,
+                None => self.make_opaque(),
+            }
+        }
+        Ok(())
+    }
+
+    /// Reads, checks and charges one tileset document (VS-B-7): its root, its error, the
+    /// metadata schema of an implicit root, and its live-document charge.
+    #[allow(clippy::type_complexity)]
+    fn prepare_tileset(
+        &mut self,
+        name: &str,
+    ) -> Result<(Value, f64, Option<Rc<ImplicitSchema>>, u64), Error> {
+        #[cfg(test)]
+        {
+            self.prepared += 1;
+        }
+        self.resources.reference(name.into())?;
+        let (mut doc, mut charge) = self.resources.read_json(name)?;
+        self.hold_document(charge)?;
         self.schema
             .validate(&doc)
             .map_err(|error| invalid(format!("tileset schema: {error}")))?;
@@ -319,44 +2351,185 @@ impl Check<'_> {
             return Err(invalid("asset.version must be 1.0 or 1.1"));
         }
         let error = number(&doc["geometricError"], "tileset.geometricError")?;
-        self.metadata_schema(name, &doc)?;
-        // Each use has its own placement and constraints, even when the JSON
-        // file was already visited under another referring tile.
-        let result = self.node(
-            &doc["root"],
-            name,
-            parent,
-            parent_error.map_or(error, |parent| parent.min(error)),
-            depth,
-        );
-        self.active.remove(name);
-        result
+        let schema_uri = self.metadata_schema(name, &doc)?;
+        self.tileset_exclusions(&doc);
+        if doc["asset"]
+            .get("gltfUpAxis")
+            .is_some_and(|v| v.as_str() != Some("Y"))
+        {
+            self.delivery.exclude_scene("tileset glTF up-axis override");
+        }
+        // One ImplicitSchema per preparation, kept only for documents that hold an
+        // implicit root and only while their tiles are pending (§5, DC-4, VS-B-8).
+        // `schema` and `schemaUri` are mutually exclusive in the tileset schema.
+        let schema = if holds_implicit_root(&doc["root"]) {
+            let value = match schema_uri {
+                Some((value, held)) => {
+                    // A kept `schemaUri` document is live with its tileset.
+                    self.hold_document(held)?;
+                    charge += held;
+                    Some(value)
+                }
+                None => doc.get_mut("schema").map(Value::take),
+            };
+            value.map(|value| Rc::new(ImplicitSchema::new(value)))
+        } else {
+            None
+        };
+        if doc["root"].get("implicitTiling").is_some() {
+            self.make_opaque();
+            // Raw immutable vector payloads remain reachable through the native
+            // reuse state; display content uses implicit URI templates.
+            if let Some(sources) = doc["extras"]["rustyTilesSourceContents"].as_array() {
+                for source in sources {
+                    let source = uri(
+                        name,
+                        source
+                            .as_str()
+                            .ok_or_else(|| invalid("invalid cached content URI"))?,
+                    )?;
+                    self.resources.reference(source.clone())?;
+                    self.payload(&source)?;
+                }
+            }
+        }
+        Ok((doc, error, schema, charge))
     }
-    fn node(
-        &mut self,
-        node: &Value,
-        base: &str,
-        parent: Option<&Volume>,
-        parent_error: f64,
-        depth: usize,
-    ) -> Result<(), Error> {
-        if depth > 128 {
-            return Err(invalid("hierarchy exceeds validation depth limit"));
+
+    /// CesiumJS draws nothing at an empty REPLACE tile within its error. A rusty-tiles
+    /// vector archive's content-less tiles refine until their box is about a pixel, as HLOD's do.
+    fn empty_tile(&self, error: f64, diagonal: Option<f64>, depth: usize) -> Result<(), Error> {
+        match diagonal.map(|d| hlod_delivery::EMPTY_PARENT_SCALE * d) {
+            Some(floor) if self.vector && error < floor * (1. - 1e-6) => Err(invalid(format!(
+                "vector tile without content at depth {depth} has geometricError {error} below \
+                 {} x its box diagonal",
+                hlod_delivery::EMPTY_PARENT_SCALE
+            ))),
+            _ => Ok(()),
+        }
+    }
+    /// Document-level C2 exclusion facts.
+    fn tileset_exclusions(&mut self, doc: &Value) {
+        self.vector |=
+            doc["asset"]["extras"]["vectorBuildStateSha256"].is_string() && !self.reports.is_null();
+        if let Some(axis) = doc["asset"].get("gltfUpAxis") {
+            if axis.as_str() != Some("Y") {
+                self.c2.exclude(Reason::UpAxisOverride);
+            }
+        }
+        for key in ["extensionsUsed", "extensionsRequired"] {
+            if let Some(names) = doc.get(key) {
+                let listed = names.as_array().is_none_or(|names| {
+                    names.iter().any(|name| {
+                        name.as_str()
+                            .is_none_or(|name| !TILESET_ALLOWLIST.contains(&name))
+                    })
+                });
+                if listed {
+                    self.c2.exclude(Reason::TilesetExtension);
+                }
+            }
+        }
+        self.extension_object(doc);
+    }
+    /// An `extensions` object naming anything outside the tileset allowlist. A
+    /// `3DTILES_content_gltf_vector` object with `clip: true` permits clipped
+    /// content outside the volume, so it is a non-allowlisted use (v3.3 item 3).
+    fn extension_object(&mut self, owner: &Value) {
+        if let Some(extensions) = owner.get("extensions") {
+            if extensions.as_object().is_none_or(|e| {
+                e.iter().any(|(name, body)| {
+                    !TILESET_ALLOWLIST.contains(&name.as_str()) || body["clip"] == Value::Bool(true)
+                })
+            }) {
+                self.c2.exclude(Reason::TilesetExtension);
+            }
+        }
+    }
+    /// Report-level recorded budgets of one tile with content (OD-4: these
+    /// apply to explicit and implicit tiles alike).
+    fn tile_budgets(&self, bytes: u64, vertices: u64) -> Result<(), Error> {
+        if let Some(limit) = self.reports["budgets"]["bytes"].as_u64() {
+            if bytes > limit {
+                return Err(invalid("tile exceeds recorded encoded byte budget"));
+            }
+        }
+        if let Some(limit) = self.reports["budgets"]["vertices"].as_u64() {
+            if vertices > limit {
+                return Err(invalid("tile exceeds recorded vertex budget"));
+            }
+        }
+        if let Some(limit) = self.reports["maxPoints"].as_u64() {
+            if vertices > limit {
+                return Err(invalid("tile exceeds recorded point budget"));
+            }
+        }
+        Ok(())
+    }
+    fn node(&mut self, task: NodeTask, pending: &mut Vec<ValidationTask>) -> Result<(), Error> {
+        let NodeTask {
+            mut node,
+            root,
+            base,
+            parent,
+            parent_error,
+            depth,
+            link,
+            schema,
+            #[cfg(test)]
+            refine,
+        } = task;
+        if depth as u64 > self.resources.limits.hierarchy_depth {
+            return Err(Error::limit("hierarchy exceeds validation depth limit"));
+        }
+        if let Some(recorder) = self.recording.last_mut() {
+            recorder.node_depth = recorder.node_depth.max(depth);
         }
         if !node.is_object() {
             return Err(invalid("tile must be an object"));
         }
-        if node.get("implicitTiling").is_some() {
-            return Err(invalid("implicit tiling requires the external validator"));
+        // I1 root admission precedes R's explicit checks (contract precedence):
+        // fields, scheme, levels, volume kind, shape, templates, header classes.
+        let implicit = if declares_implicit(&node) {
+            Some(
+                admit_root(&node, &base, schema.as_deref())
+                    .map_err(|e| implicit_error(e.widen()))?,
+            )
+        } else {
+            None
+        };
+        if implicit.is_some() {
+            // EM-3: an implicit root is walked once per validation (OD-7).
+            self.make_opaque();
         }
         if let Some(refine) = node.get("refine") {
             if !matches!(refine.as_str(), Some("ADD" | "REPLACE")) {
                 return Err(invalid("invalid refine value"));
             }
         }
+        #[cfg(test)]
+        let refine = match node["refine"].as_str() {
+            Some("ADD") => Some("ADD"),
+            Some(_) => Some("REPLACE"),
+            None => refine,
+        };
         let bounds = volume(&node["boundingVolume"])?;
-        let m = transform(node)?;
-        if let Some(parent) = parent {
+        let m = transform(&node)?;
+        if node.get("metadata").is_some() {
+            self.c2.exclude(Reason::TileMetadata);
+        }
+        self.extension_object(&node);
+        self.extension_object(&node["boundingVolume"]);
+        let tile = self.c2_tile(TileFact {
+            transform: node.get("transform").map(|_| std::array::from_fn(|i| m[i])),
+            volume: Some(volume_facts(&bounds)),
+            external: link.external,
+            parent: link.parent,
+            depth,
+            chain: 0,
+            owner: None,
+        })?;
+        if let Some(parent) = &parent {
             if !contains(parent, &bounds, &m)? {
                 return Err(invalid(format!(
                     "child bounds escape parent at depth {depth}"
@@ -364,17 +2537,66 @@ impl Check<'_> {
             }
         }
         let error = number(&node["geometricError"], "tile.geometricError")?;
-        if error > parent_error + 1e-8 * (1. + parent_error) {
+        // A tile without content draws nothing, so it may route with a larger
+        // error than its parent; tiles that draw answer to the nearest ancestor
+        // that draws. A document root is checked as the tile that links it; an
+        // implicit root's own content is decided by its walk.
+        let draws = root
+            || implicit.is_none()
+                && (node.get("content").is_some() || node.get("contents").is_some());
+        if draws && error > parent_error + 1e-8 * (1. + parent_error) {
             return Err(invalid(format!(
                 "geometricError increases at depth {depth}"
             )));
         }
+        let bound = if draws { error } else { parent_error };
+        if let Some(recorder) = self.recording.last_mut() {
+            // The document's root is its first registered tile (EM-5.2, EM-5.3).
+            if recorder.root.is_none() && self.c2.path[tile].owner == Some((recorder.serial, 0)) {
+                recorder.root = Some((bounds.clone(), std::array::from_fn(|i| m[i]), error));
+            }
+        }
         self.tiles += 1;
+        if let Some(root) = implicit {
+            self.delivery_kind(
+                tile,
+                node["refine"].as_str().map(|v| v == "REPLACE"),
+                true,
+                (error, volume_diagonal(&bounds)),
+            )?;
+            // R's content entries are templates: never explicit references.
+            // A header `metadata` entity is copied to every emitted content, so
+            // it is "content has `metadata`" (slice 3 I6, §4 step 7).
+            for slot in 0..root.slots() {
+                let header = root.header(slot);
+                if header.get("metadata").is_some() {
+                    self.c2.exclude(Reason::TileMetadata);
+                }
+                self.extension_object(header);
+            }
+            return self.walk_implicit(
+                &root,
+                ImplicitParent {
+                    #[cfg(test)]
+                    base: base.to_string(),
+                    tile,
+                    bounds,
+                    error,
+                    bound,
+                    depth,
+                    #[cfg(test)]
+                    refine,
+                },
+            );
+        }
         let mut bytes = 0u64;
         let mut vertices = 0u64;
+        let mut descendants = Vec::new();
         if node.get("content").is_some() && node.get("contents").is_some() {
             return Err(invalid("tile has both content and contents"));
         }
+        let mut external_seen = false;
+        let mut payload_seen = false;
         let contents = if let Some(c) = node.get("contents") {
             c.as_array()
                 .ok_or_else(|| invalid("contents must be an array"))?
@@ -387,66 +2609,94 @@ impl Check<'_> {
                 .as_str()
                 .or_else(|| content["url"].as_str())
                 .ok_or_else(|| invalid("content.uri must be a string"))?;
-            let name = uri(base, value)?;
-            self.reference(name.clone())?;
+            let name = uri(&base, value)?;
+            self.resources.reference(name.clone())?;
             self.contents += 1;
-            if let Some(v) = content.get("boundingVolume") {
-                let cb = volume(v)?;
-                if !contains(&bounds, &cb, &IDENTITY)? {
-                    return Err(invalid("content bounds escape tile"));
-                }
+            if content.get("metadata").is_some() {
+                self.c2.exclude(Reason::TileMetadata);
             }
-            bytes += self.zip.by_name(&name)?.size();
+            self.extension_object(&content);
+            let content_volume = match content.get("boundingVolume") {
+                Some(v) => {
+                    self.extension_object(v);
+                    let cb = volume(v)?;
+                    if !contains(&bounds, &cb, &IDENTITY)? {
+                        return Err(invalid("content bounds escape tile"));
+                    }
+                    Some(cb)
+                }
+                None => None,
+            };
             if name.ends_with(".json") {
-                self.tileset(&name, Some(&bounds), Some(error), depth + 1)?;
+                // Amendment D-2: an external tileset document is not tile
+                // payload, so it is not charged to the per-tile byte budget
+                // (it stays charged to the archive and JSON read limits).
+                external_seen = true;
+                descendants.push(ValidationTask::Tileset {
+                    name,
+                    parent: Some(bounds.clone()),
+                    parent_error: Some(bound),
+                    depth: depth + 1,
+                    link: Link {
+                        parent: Some(tile),
+                        external: content_volume.as_ref().map(volume_facts),
+                    },
+                    #[cfg(test)]
+                    refine,
+                });
                 continue;
             }
-            if let Some(doc) = gltf(self.zip, &name)? {
-                self.metadata_schema(&name, &doc["extensions"]["EXT_structural_metadata"])?;
-                for primitive in doc["meshes"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .flat_map(|m| m["primitives"].as_array().into_iter().flatten())
-                {
-                    let index = primitive["attributes"]["POSITION"]
-                        .as_u64()
-                        .ok_or_else(|| invalid("primitive has no POSITION accessor"))?
-                        as usize;
-                    let accessor = doc["accessors"]
-                        .get(index)
-                        .ok_or_else(|| invalid("invalid POSITION accessor index"))?;
-                    vertices += accessor["count"]
-                        .as_u64()
-                        .ok_or_else(|| invalid("invalid POSITION count"))?;
-                }
-                for key in ["images", "buffers"] {
-                    for item in doc[key].as_array().into_iter().flatten() {
-                        if let Some(value) = item["uri"].as_str() {
-                            if !value.starts_with("data:") {
-                                self.reference(uri(&name, value)?)?;
-                            }
-                        }
-                    }
-                }
+            bytes = bytes
+                .checked_add(
+                    self.resources
+                        .archive
+                        .member(&name)
+                        .map_err(archive_admission_error)?
+                        .size,
+                )
+                .ok_or_else(|| invalid("tile byte count overflow"))?;
+            payload_seen = true;
+            let (rank, stored) = self.payload(&name)?;
+            let content = content_volume.as_ref().map(volume_facts);
+            // C1 inspects inline; the C2 reference keeps contents in array order
+            // with each external tileset expanded in place.
+            if external_seen {
+                descendants.push(ValidationTask::Reference {
+                    tile,
+                    content,
+                    rank,
+                });
+            } else {
+                self.c2_reference(tile, content, rank, &stored)?;
             }
+            vertices = vertices
+                .checked_add(stored.vertices)
+                .ok_or_else(|| invalid("tile vertex count overflow"))?;
+        }
+        self.delivery_kind(
+            tile,
+            node["refine"].as_str().map(|v| v == "REPLACE"),
+            external_seen
+                && !payload_seen
+                && node
+                    .get("children")
+                    .and_then(Value::as_array)
+                    .is_none_or(Vec::is_empty),
+            (error, volume_diagonal(&bounds)),
+        )?;
+        if !external_seen
+            && !payload_seen
+            && node["children"].as_array().is_some_and(|c| !c.is_empty())
+        {
+            self.empty_tile(error, volume_diagonal(&bounds), depth)?;
+        }
+        // Amendment D-1: a link tile (external tileset content only) is
+        // reported but not compared against the recorded tile budget.
+        if external_seen && !payload_seen {
+            self.links += 1;
         }
         if bytes > 0 {
-            if let Some(limit) = self.reports["budgets"]["bytes"].as_u64() {
-                if bytes > limit {
-                    return Err(invalid("tile exceeds recorded encoded byte budget"));
-                }
-            }
-            if let Some(limit) = self.reports["budgets"]["vertices"].as_u64() {
-                if vertices > limit {
-                    return Err(invalid("tile exceeds recorded vertex budget"));
-                }
-            }
-            if let Some(limit) = self.reports["maxPoints"].as_u64() {
-                if vertices > limit {
-                    return Err(invalid("tile exceeds recorded point budget"));
-                }
-            }
+            self.tile_budgets(bytes, vertices)?;
             for (key, actual) in [("encodedBytes", bytes), ("vertices", vertices)] {
                 if let Some(recorded) = node["extras"][key].as_u64() {
                     if recorded != actual {
@@ -455,69 +2705,632 @@ impl Check<'_> {
                 }
             }
         }
-        if let Some(children) = node.get("children") {
-            for child in children
-                .as_array()
-                .ok_or_else(|| invalid("children must be an array"))?
-            {
-                self.node(child, base, Some(&bounds), error, depth + 1)?;
+        if let Some(children) = node.as_object_mut().unwrap().remove("children") {
+            let Value::Array(children) = children else {
+                return Err(invalid("children must be an array"));
+            };
+            for child in children {
+                descendants.push(ValidationTask::Node(NodeTask {
+                    node: child,
+                    root: false,
+                    base: base.clone(),
+                    parent: Some(bounds.clone()),
+                    parent_error: bound,
+                    depth: depth + 1,
+                    link: Link {
+                        parent: Some(tile),
+                        external: None,
+                    },
+                    schema: schema.clone(),
+                    #[cfg(test)]
+                    refine,
+                }));
             }
         }
+        pending.extend(descendants.into_iter().rev());
         Ok(())
     }
+    /// The I1 walk of one admitted root R, after R's explicit checks. Each
+    /// visited tile gets the explicit-tile checks: `hierarchyBounds` and
+    /// `geometricErrorOrder` against its path parent (R for I_0), C1 payloads
+    /// and report-level budgets. C2 (slice 3 §4 steps 3-4): each visited tile
+    /// is a `TileFact` whose parent is R for I_0 and its path parent otherwise,
+    /// and each emitted content is a C2 reference, in walk order.
+    /// An I1 failure; a refused reservation of a validation budget gets its structured cause
+    /// (VS-C-5 T3). The counters were synchronized after the refused step, unchanged by it.
+    fn implicit_refusal(&mut self, error: ImplicitError<Error>) -> Error {
+        use crate::content_integrity::implicit::Reservation;
+        let error = implicit_error(error);
+        match (self.implicit.refused.take(), error) {
+            (Some((reservation, amount)), Error::ResourceLimit(refusal))
+                if refusal.limit.is_none() =>
+            {
+                let (key, used) = match reservation {
+                    Reservation::Scan => (LimitKey::TotalBytesRead, self.resources.bytes_read),
+                    Reservation::Visits => (LimitKey::HierarchyVisits, self.task_visits),
+                    Reservation::References => {
+                        (LimitKey::References, self.resources.reference_visits)
+                    }
+                };
+                let observed = u64::try_from(u128::from(used) + amount).unwrap_or(u64::MAX);
+                self.resources
+                    .budget(key)
+                    .refuse(observed, refusal.message().to_owned())
+            }
+            (_, error) => error,
+        }
+    }
+    fn walk_implicit(&mut self, root: &ImplicitRoot<'_>, r: ImplicitParent) -> Result<(), Error> {
+        self.implicit_roots += 1;
+        let mut walk = root.walk();
+        // Level-indexed path stack (RC-21): entry `l` is the tile at level `l`,
+        // with its C1 volume, its error and its C2 path position.
+        let mut path: Vec<(Volume, f64, usize)> = Vec::new();
+        let mut empty: Vec<bool> = Vec::new();
+        loop {
+            self.progress.step()?;
+            // Counter sync around every `Walk::next` (owner charging protocol).
+            let limits = &self.resources.limits;
+            self.implicit.visits_remaining = remaining(limits.hierarchy_visits, self.task_visits)?;
+            self.implicit.refs_remaining =
+                remaining(limits.references, self.resources.reference_visits)?;
+            self.implicit.scan_remaining =
+                remaining(limits.total_bytes_read, self.resources.bytes_read)?;
+            self.implicit.refused = None;
+            let resources = &mut self.resources;
+            let next = walk.next(
+                &mut self.implicit,
+                &mut |name: &str, base: Base<'_>, maximum: u64| -> Result<Vec<u8>, Error> {
+                    let member = match base {
+                        Base::Resolved => {
+                            resources.first_subtree(name)?;
+                            name.to_owned()
+                        }
+                        Base::Relative(from) => uri(from, name)?,
+                    };
+                    resources.reference(member.clone())?;
+                    let maximum = maximum.min(resources.limits.member_bytes);
+                    let reads = resources.budget(LimitKey::TotalBytesRead);
+                    read_member(
+                        resources.archive,
+                        &member,
+                        &mut resources.bytes_read,
+                        reads,
+                        maximum,
+                    )
+                },
+            );
+            let limits = &self.resources.limits;
+            self.task_visits = limits.hierarchy_visits - self.implicit.visits_remaining;
+            self.resources.reference_visits = limits.references - self.implicit.refs_remaining;
+            self.resources.bytes_read = limits.total_bytes_read - self.implicit.scan_remaining;
+            let Some(tile) = next.map_err(|error| self.implicit_refusal(error))? else {
+                break;
+            };
+            let level = tile.level as usize;
+            let depth = r.depth + level;
+            if depth as u64 > self.resources.limits.hierarchy_depth {
+                return Err(Error::limit("hierarchy exceeds validation depth limit"));
+            }
+            let volume = match &tile.volume {
+                EffectiveVolume::Row(b) => checked_box(b.to_vec())?,
+                EffectiveVolume::DerivedRoot => r.bounds.clone(),
+                // OD-3: the labelled rounded evaluation, for this check only.
+                EffectiveVolume::Derived(cell) => {
+                    Volume::Box(cell.rounded_for_hierarchy_bounds().to_vec())
+                }
+            };
+            let (EffectiveError::Row(error) | EffectiveError::Derived(error)) = tile.error;
+            // Path entries keep the bound for children: the error of the nearest
+            // tile that draws, as for explicit tiles.
+            let (parent, parent_error, parent_tile) = match level {
+                0 => (&r.bounds, r.bound, r.tile),
+                _ => path
+                    .get(level - 1)
+                    .map(|(volume, error, index)| (volume, *error, *index))
+                    .ok_or_else(|| {
+                        Error::InvalidState("implicit tile without a path parent".into())
+                    })?,
+            };
+            if !contains(parent, &volume, &IDENTITY)? {
+                return Err(invalid(format!(
+                    "child bounds escape parent at depth {depth}"
+                )));
+            }
+            let draws = !tile.contents.is_empty();
+            // I_0 is R: when it draws, R's explicit error answers to R's bound too.
+            let own = if level == 0 {
+                error.max(r.error)
+            } else {
+                error
+            };
+            let exceeds = |e: f64, bound: f64| e > bound + 1e-8 * (1. + bound);
+            if level == 0 && exceeds(error, r.error) || draws && exceeds(own, parent_error) {
+                return Err(invalid(format!(
+                    "geometricError increases at depth {depth}"
+                )));
+            }
+            let bound = if draws { error } else { parent_error };
+            // C2 facts: rows exactly (FLOAT32 already widened by I1), V_R for
+            // a rowless I_0, and no volume for a derived cell (I5).
+            let index = self.path_tile(TileFact {
+                transform: None,
+                volume: match &tile.volume {
+                    EffectiveVolume::Row(b) => Some(VolumeFacts::Box(*b)),
+                    EffectiveVolume::DerivedRoot => Some(volume_facts(&r.bounds)),
+                    EffectiveVolume::Derived(_) => None,
+                },
+                external: None,
+                parent: Some(parent_tile),
+                depth,
+                chain: 0,
+                owner: None,
+            })?;
+            // Implicit cells inherit the root's refinement; their own error and
+            // effective box decide whether an empty cell refines.
+            self.delivery.kind(
+                self.delivery_path[index],
+                None,
+                false,
+                error,
+                volume_diagonal(&volume),
+            )?;
+            // A content-less tile is checked once it has a child.
+            if let Some((volume, error, _)) = level.checked_sub(1).and_then(|l| path.get(l)) {
+                if empty.get(level - 1) == Some(&true) {
+                    self.empty_tile(*error, volume_diagonal(volume), depth - 1)?;
+                }
+            }
+            empty.truncate(level);
+            empty.push(tile.contents.is_empty());
+            path.truncate(level);
+            try_push(&mut path, (volume, bound, index))?;
+            // R and I_0 are one tile for counting.
+            if level > 0 {
+                self.tiles += 1;
+            }
+            let mut bytes = 0u64;
+            let mut vertices = 0u64;
+            for (_, name) in &tile.contents {
+                self.resources.reference_reserved(name)?;
+                self.contents += 1;
+                bytes = bytes
+                    .checked_add(
+                        self.resources
+                            .archive
+                            .member(name)
+                            .map_err(archive_admission_error)?
+                            .size,
+                    )
+                    .ok_or_else(|| invalid("tile byte count overflow"))?;
+                // JSON detection at admission leaves only payload members here.
+                let (rank, stored) = self.payload(name)?;
+                // C2 registration only: C1 already counted this reference at
+                // subtree admission (`reference_reserved` above).
+                self.c2_ref(index, None, rank, &stored)?;
+                vertices = vertices
+                    .checked_add(stored.vertices)
+                    .ok_or_else(|| invalid("tile vertex count overflow"))?;
+            }
+            if bytes > 0 {
+                self.tile_budgets(bytes, vertices)?;
+            }
+            #[cfg(test)]
+            if self.seams {
+                try_push(
+                    &mut self.implicit_facts,
+                    ImplicitTileFact {
+                        doc: r.base.clone(),
+                        level: tile.level,
+                        coords: tile.coords,
+                        depth,
+                        parent_level: tile.level.checked_sub(1),
+                        volume: tile.volume,
+                        error: tile.error,
+                        refine: r.refine,
+                        contents: tile.contents,
+                    },
+                )?;
+            }
+        }
+        walk.finish().map_err(|e| implicit_error(e.widen()))
+    }
+}
+/// One reference's phase-2 stream: a serial pass over a re-read of its member along its level
+/// chain, continuing `stream`'s arena, bitmap, corner credit and re-read count in traversal
+/// order. Re-reads are charged only to `containmentBytesRead`; C1 counters are untouched.
+///
+/// With `replay`, the member and its external resources are replayed against the receipt of
+/// their own successful first admission (H23): byte identity is checked before any consumer
+/// event, and the accessor-value and KTX2-container passes are not repeated. Without it the
+/// payload is inspected in full again (the reference traversal of the controls).
+#[allow(clippy::too_many_arguments)]
+fn stream_member(
+    resources: &mut ArchiveResources<'_>,
+    stream: &mut Stream,
+    caps: SpanCaps,
+    levels: &[LevelFacts],
+    depth: usize,
+    rank: u64,
+    t: u64,
+    replay: Option<&payload::ReplayAdmission>,
+) -> Result<(), Error> {
+    if stream.arena.is_none() {
+        stream.arena = Some(Arena::reserve(caps).map_err(|_| refused())?);
+    }
+    stream.credit.accrue(t);
+    let name = resources
+        .archive
+        .name(rank)
+        .map_err(archive_admission_error)?;
+    let cap = resources.limits.containment_bytes_read;
+    let limits = resources.content_limits;
+    let archive = &mut *resources.archive;
+    let bytes = read_rerun(
+        archive,
+        &name,
+        &mut stream.reread,
+        cap,
+        limits.member_bytes as u64,
+    )?;
+    let Some(arena) = stream.arena.as_mut() else {
+        return Err(containment_fault());
+    };
+    let mut consumer = StreamConsumer {
+        arena,
+        bitmap: &mut stream.bitmap,
+        levels,
+        member: &name,
+        depth,
+        credit: &mut stream.credit,
+    };
+    let reread = &mut stream.reread;
+    let kind = payload_kind(&name)?;
+    let resolve = |value: &str, maximum: usize| {
+        read_rerun(archive, &uri(&name, value)?, reread, cap, maximum as u64)
+    };
+    match replay {
+        Some(admission) => payload::replay_scene(
+            kind,
+            &bytes,
+            limits,
+            limits.accessor_components,
+            resolve,
+            &mut consumer,
+            admission,
+        ),
+        None => payload::inspect_scene(
+            kind,
+            &bytes,
+            limits,
+            limits.accessor_components,
+            resolve,
+            &mut consumer,
+        ),
+    }
+    .map_err(scene_error)?;
+    Ok(())
+}
+/// Whether a document's tile tree holds a tile declaring an implicit root.
+fn holds_implicit_root(root: &Value) -> bool {
+    let mut pending = vec![root];
+    while let Some(tile) = pending.pop() {
+        if declares_implicit(tile) {
+            return true;
+        }
+        if let Some(children) = tile.get("children").and_then(Value::as_array) {
+            pending.extend(children);
+        }
+    }
+    false
 }
 /// Reject inputs that are not 3TZ (ZIP) archives before opening them, so a
 /// directory or other file gets an actionable message instead of an OS error.
-fn require_archive(path: &Path) -> Result<(), Error> {
+fn open_archive(path: &Path) -> Result<File, Error> {
     const HINT: &str = "validate currently checks .3tz archives only; raster and terrain \
-        output directories are not validated yet. Pass a .3tz written by vector, \
-        point-cloud, mesh-to-3tz, glb-to-3tz or convert";
+        output directories are not validated yet. Pass a .3tz written by mesh, \
+        vector, point-cloud, glb-to-3tz or convert";
     if path.is_dir() {
         return Err(invalid(format!(
             "{} is a directory: {HINT}",
             path.display()
         )));
     }
-    if !path.exists() {
-        return Err(Error::InputNotFound(path.into()));
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    // Inspect the selected handle's type without waiting for a FIFO writer.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let mut file = options.open(path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            Error::Io(std::io::Error::new(
+                error.kind(),
+                format!("input not found: {}", path.display()),
+            ))
+        } else {
+            Error::Io(error)
+        }
+    })?;
+    if !file.metadata()?.is_file() {
+        return Err(Error::unsupported(
+            "validation requires a regular .3tz file",
+        ));
     }
     let mut magic = [0u8; 4];
-    let read = File::open(path)?.read(&mut magic)?;
+    let read = file.read(&mut magic)?;
     if read < 4 || !matches!(&magic, b"PK\x03\x04" | b"PK\x05\x06") {
         return Err(invalid(format!(
             "{} is not a ZIP/.3tz archive: {HINT}",
             path.display()
         )));
     }
-    Ok(())
+    Ok(file)
 }
 
-pub fn archive(path: &Path, external: Option<&Path>) -> Result<Value, Error> {
-    require_archive(path)?;
-    crate::pack::validate_3tz(path)?;
-    let mut zip = Archive::new(File::open(path)?)?;
-    let mut names = HashSet::new();
-    let mut hashes = HashMap::new();
-    for i in 0..zip.len() {
-        let mut entry = zip.by_index(i)?;
-        let name = entry.name().to_owned();
+/// Inspect a bounded archive using only declared archive-local resources.
+/// Success certifies the named checks, not uninspected scene/source semantics.
+/// The amplification budgets scale with the archive's stored bytes (VS-B-2).
+pub fn inspect(request: ValidationRequest) -> Result<ValidationReport, Error> {
+    let budgets = Budgets::Plan(request.plan().clone());
+    inspect_facts(request, budgets).map(|inspection| inspection.report)
+}
+
+/// [`inspect`] under a run control (VS-C-6): cancellation through its handle is honoured at
+/// the next charge site, and its observer receives `validate.hash`, `validate.traverse`,
+/// `validate.stream` (only when the decoded content bounds are streamed) and `validate.rows`
+/// progress events. An observer error aborts the validation. The control is
+/// claimed once and cannot be reused.
+pub fn inspect_with(
+    request: ValidationRequest,
+    control: &crate::RunControl,
+) -> Result<ValidationReport, Error> {
+    let attempt = control
+        .begin()
+        .map_err(|failure| run_failure(failure.error))?;
+    let budgets = Budgets::Plan(request.plan().clone());
+    inspect_run(request, budgets, Some(&attempt)).map(|inspection| inspection.report)
+}
+
+// C1 selects its profile above. Explicit limits also permit bounded internal
+// controls to exercise the actual operation and every resource/parser consumer.
+#[cfg(test)]
+pub(crate) fn inspect_selected(
+    request: ValidationRequest,
+    limits: ValidationLimits,
+) -> Result<ValidationReport, Error> {
+    inspect_facts(request, Budgets::Absolute(limits)).map(|inspection| inspection.report)
+}
+
+/// How the limits of one validation are selected, once at the operation boundary (VS-C-1).
+#[derive(Clone, Debug)]
+pub(crate) enum Budgets {
+    /// Every limit exactly as given, Class A included (the in-crate controls).
+    #[cfg(test)]
+    Absolute(ValidationLimits),
+    /// The request's overrides over the model: caps as given, budgets explicit or
+    /// `max(floor, ⌊S·p/q⌋)`, per-item limits fixed.
+    Plan(LimitPlan),
+}
+impl Budgets {
+    /// The limits before the catalog exists: per-item limits and caps only are read.
+    fn admission(&self) -> ValidationLimits {
+        match self {
+            #[cfg(test)]
+            Self::Absolute(limits) => limits.clone(),
+            Self::Plan(plan) => plan.admission(),
+        }
+    }
+    /// The effective limits for `stored_bytes` admitted stored bytes, their derivation and
+    /// the source of each configurable key.
+    fn resolve(self, stored_bytes: u64) -> (ValidationLimits, LimitDerivation, Sources) {
+        match self {
+            #[cfg(test)]
+            Self::Absolute(limits) => (limits, limits::absolute_derivation(), Sources::absolute()),
+            Self::Plan(plan) => plan.resolve(stored_bytes),
+        }
+    }
+}
+
+/// Per-URI C2 work facts of one successful inspection (v3.3 item 7). Test-only:
+/// acceptance reconciles them with the oracle's model; no public report change.
+#[cfg(test)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct UriWork {
+    pub uri: String,
+    pub t: u64,
+    pub nodes: Option<u64>,
+    pub idx: u64,
+    pub e: u64,
+    pub dec: u64,
+    pub b: u64,
+    pub json_nodes: u64,
+    pub external_resources: u64,
+    pub instance_primitives: u64,
+    pub max_node_depth: u64,
+}
+#[cfg(test)]
+pub(crate) fn containment_work_facts(
+    request: ValidationRequest,
+    limits: ValidationLimits,
+) -> Result<Vec<UriWork>, Error> {
+    let uris = inspect_facts(request, Budgets::Absolute(limits))?.uris;
+    Ok(uris
+        .into_iter()
+        .map(|(uri, f)| UriWork {
+            uri,
+            t: f.t,
+            nodes: f.nodes,
+            idx: f.idx,
+            e: f.e,
+            dec: f.per_reference.dec,
+            b: f.per_reference.b,
+            json_nodes: f.per_reference.json_nodes,
+            external_resources: f.per_reference.external_resources,
+            instance_primitives: f.per_reference.instance_primitives,
+            max_node_depth: f.max_depth,
+        })
+        .collect())
+}
+/// The precheck's accumulated work units of one successful inspection
+/// (C2-WB §3.1). Test-only: 0 when an exclusion stopped the precheck before
+/// its first reference; the units before the violation when it stopped.
+#[cfg(test)]
+pub(crate) fn containment_work_total(
+    request: ValidationRequest,
+    limits: ValidationLimits,
+) -> Result<u64, Error> {
+    inspect_facts(request, Budgets::Absolute(limits)).map(|inspection| inspection.units)
+}
+
+/// The implicit tiles of one successful inspection, in traversal order (RC-16).
+/// Test-only parity seam: acceptance compares them with the oracle's facts.
+#[cfg(test)]
+pub(crate) fn implicit_tile_facts(
+    request: ValidationRequest,
+    limits: ValidationLimits,
+) -> Result<Vec<ImplicitTileFact>, Error> {
+    Ok(inspect_facts(request, Budgets::Absolute(limits))?.implicit)
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Off selects the reference traversal (EM terms) on this thread.
+    static MEMOIZE: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+    /// A memo budget other than `MEMO_BYTES` on this thread (VS-B-6 controls).
+    static MEMO_BUDGET: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+    /// Off stops the test seams (implicit tile facts, per-URI work facts) on this thread.
+    pub(crate) static SEAMS: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+    /// On selects the reference traversal of VS-B-4 (phase 2 after traversal) on this thread.
+    static DEFERRED_STREAM: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+/// Names shown in an unreferenced-entries message; the rest are counted.
+const UNREFERENCED_SHOWN: usize = 16;
+/// Closure: every member not reached by a reference, scanned by rank. The message lists
+/// the first 16 names in byte order and counts any others (A-C1-3).
+fn unreferenced(archive: &mut Archive, used: &Bits) -> Result<(), Error> {
+    let mut first = std::collections::BinaryHeap::new();
+    let mut count = 0u64;
+    for rank in 0..archive.len() {
+        if used.get(rank) {
+            continue;
+        }
+        count += 1;
+        let name = archive.name(rank).map_err(archive_admission_error)?;
+        if first.len() < UNREFERENCED_SHOWN {
+            first.push(name);
+        } else if first.peek().is_some_and(|last| name < *last) {
+            first.pop();
+            first.push(name);
+        }
+    }
+    if count == 0 {
+        return Ok(());
+    }
+    let shown = first.into_sorted_vec().join(", ");
+    let rest = count - UNREFERENCED_SHOWN.min(count as usize) as u64;
+    Err(invalid(if rest == 0 {
+        format!("unreferenced archive entries: {shown}")
+    } else {
+        format!("unreferenced archive entries: {shown} and {rest} more")
+    }))
+}
+/// One successful inspection: the report and its test-only facts.
+struct Inspection {
+    report: ValidationReport,
+    #[cfg(test)]
+    uris: Vec<(String, UriFacts)>,
+    #[cfg(test)]
+    units: u64,
+    #[cfg(test)]
+    prepared: u64,
+    #[cfg(test)]
+    memo_peak: usize,
+    /// `task_visits`, `reference_visits` and `bytes_read` at the end.
+    #[cfg(test)]
+    counters: [u64; 3],
+    /// Payload elements charged to `totalPayloadElements` at the end.
+    #[cfg(test)]
+    elements: u64,
+    #[cfg(test)]
+    implicit: Vec<ImplicitTileFact>,
+}
+
+fn inspect_facts(request: ValidationRequest, budgets: Budgets) -> Result<Inspection, Error> {
+    inspect_run(request, budgets, None)
+}
+
+fn inspect_run(
+    request: ValidationRequest,
+    budgets: Budgets,
+    attempt: Option<&crate::runtime::Attempt>,
+) -> Result<Inspection, Error> {
+    let mut progress = Progress::new(attempt);
+    // VS-C-7: an explicit scratch directory is checked before the input is opened.
+    let placement = match request.scratch() {
+        Some(dir) if dir.is_dir() => crate::spill::Placement::In(dir.to_owned()),
+        Some(dir) => {
+            return Err(Error::InvalidRequest(format!(
+                "scratch directory does not exist or is not a directory: {}",
+                dir.display()
+            )))
+        }
+        // A spilled catalog prefers disk-backed scratch; memory-backed scratch is used only
+        // as a last resort, and the report then states it (`scratch.memoryBacked`).
+        None => crate::spill::Placement::disk(true),
+    };
+    let path = request.input();
+    let expected_hlod = request.expected_profile() == Some(ExpectedProfile::Hlod);
+    let source = open_archive(path)?;
+    let before = source.metadata()?;
+    let identity = same_file::Handle::from_file(source.try_clone()?)?;
+    let limits = budgets.admission();
+    let content_limits = content_limits(&limits)?;
+    let archive_limits = crate::archive3tz::ReadLimits {
+        source_archive_bytes: limits.source_archive_bytes,
+        central_directory_bytes: limits.central_directory_bytes,
+        archive_entries: limits.archive_entries,
+        member_bytes: limits.member_bytes,
+        archive_stored_bytes: limits.archive_stored_bytes,
+    };
+    let mut archive = Archive::new_with(
+        source.try_clone()?,
+        before.len(),
+        &archive_limits,
+        crate::archive3tz::CatalogConfig::selected(),
+        placement,
+    )
+    .map_err(archive_admission_error)?;
+    // VS-C-1: S is fixed by the admitted catalog before any budgeted work.
+    let stored_bytes = archive.stored_bytes();
+    let (limits, limit_derivation, sources) = budgets.resolve(stored_bytes);
+    let reads = budget(&limits, &sources, LimitKey::TotalBytesRead);
+    // Count the exact index bytes already consumed by the format owner. Later
+    // index/member hashing and repeated content reads consume this same budget.
+    let mut bytes_read = archive.index_read_bytes();
+    // The hash pass stays in central-directory order, so its first failure is unchanged.
+    // Only the `vector-build.json` digest is kept.
+    let mut vector_build = None;
+    progress.phase("validate.hash", Some(archive.len()))?;
+    let mut directory = archive.directory().map_err(archive_admission_error)?;
+    while let Some(member) = directory.next_entry().map_err(spill_failure)? {
+        progress.step()?;
+        let name = member.name;
         if name.split('/').any(|v| matches!(v, "" | "." | ".."))
             || name.starts_with('/')
             || name.contains('\\')
-            || !names.insert(name.clone())
         {
-            return Err(invalid(format!("unsafe or duplicate archive path: {name}")));
+            return Err(invalid(format!("unsafe archive path: {name}")));
         }
-        let mut digest = Sha256::new();
-        let mut buffer = [0u8; 65536];
-        loop {
-            let n = entry.read(&mut buffer)?;
-            if n == 0 {
-                break;
-            }
-            digest.update(&buffer[..n]);
-        }
-        let hash = format!("{:x}", digest.finalize());
+        bytes_read = reads.charge(bytes_read, member.size, || {
+            "archive hash reads exceed work limit".into()
+        })?;
+        let digest = archive
+            .hash_range(member.size, member.data_offset, member.crc32)
+            .map_err(archive_admission_error)?;
+        let hash = format!("{:x}", sha2::digest::Output::<sha2::Sha256>::from(digest));
         let stem = Path::new(&name)
             .file_stem()
             .and_then(|s| s.to_str())
@@ -525,105 +3338,617 @@ pub fn archive(path: &Path, external: Option<&Path>) -> Result<Value, Error> {
         if stem.len() == 64 && stem.bytes().all(|b| b.is_ascii_hexdigit()) && stem != hash {
             return Err(invalid(format!("content checksum mismatch: {name}")));
         }
-        hashes.insert(name, hash);
+        if name == "vector-build.json" {
+            vector_build = Some(hash);
+        }
     }
-    let report = if names.contains("conversion.json") {
-        read_json(&mut zip, "conversion.json")?
+    drop(directory);
+    let conversion = archive
+        .find("conversion.json")
+        .map_err(archive_admission_error)?;
+    let report = if conversion.is_some() {
+        json::parse(
+            &read_member(
+                &mut archive,
+                "conversion.json",
+                &mut bytes_read,
+                reads,
+                limits.json_bytes,
+            )?,
+            content_limits.json,
+        )
+        .map_err(format_error)?
     } else {
         Value::Null
     };
+    let c2 = Containment::new(&limits);
+    let entries = archive.len();
+    let mut used = Bits::new(entries)?;
+    used.set(
+        archive
+            .member(TZ_INDEX_NAME)
+            .map_err(archive_admission_error)?
+            .rank,
+    );
+    let subtrees = Bits::new(entries)?;
+    let scratch = archive.scratch();
+    let names = archive.names();
+    let config = *archive.config();
     let mut check = Check {
-        zip: &mut zip,
-        names,
-        used: HashSet::from([TZ_INDEX_NAME.into()]),
+        implicit: ImplicitLimits::new(limits.document_decoded_bytes, content_limits.json),
+        implicit_roots: 0,
+        vector: false,
+        #[cfg(test)]
+        implicit_facts: Vec::new(),
+        #[cfg(test)]
+        uri_work: Vec::new(),
+        #[cfg(test)]
+        seams: SEAMS.with(std::cell::Cell::get),
+        #[cfg(test)]
+        deferred: DEFERRED_STREAM.with(std::cell::Cell::get).then(Vec::new),
+        memo: HashMap::new(),
+        memo_bytes: 0,
+        #[cfg(test)]
+        memo_peak: 0,
+        recording: Vec::new(),
+        recorder_serial: 0,
+        once_references: 0,
+        once_bytes: 0,
+        #[cfg(test)]
+        memoize: MEMOIZE.with(std::cell::Cell::get),
+        #[cfg(test)]
+        prepared: 0,
+        facts: FactStore::new(entries, &config)?,
+        scratch: scratch.clone(),
+        extension_labels: Labels::default(),
+        live_documents: 0,
+        stream_log: Some(stream_log::StreamLog::new(&config)),
+        resources: ArchiveResources {
+            archive: &mut archive,
+            used,
+            subtrees,
+            limits,
+            sources,
+            content_limits,
+            bytes_read,
+            reference_visits: 0,
+        },
         reports: report,
+        hlod_identity: false,
+        delivery: hlod_delivery::Store::new(scratch.clone(), &config)?,
+        delivery_path: Vec::new(),
+        delivery_next: 0,
         tiles: 0,
         contents: 0,
+        links: 0,
         active: HashSet::new(),
-        schema: jsonschema::validator_for(&serde_json::from_str(include_str!(
+        task_visits: 0,
+        elements: 0,
+        rows: rows::RowSink::new(&scratch, &config)?,
+        progress,
+        not_inspected: BTreeSet::from([
+            "decodedContentBounds".into(),
+            "metadataSemantics".into(),
+            "materialAndImageSemantics".into(),
+            "geometricErrorAccuracy".into(),
+        ]),
+        schema: schema::TilesetSchema::new(&serde_json::from_str(include_str!(
             "../docs/schema/tileset.schema.json"
         ))?)
         .map_err(|error| invalid(format!("bundled schema compilation failed: {error}")))?,
+        c2,
     };
-    if check.names.contains("conversion.json") {
-        check.used.insert("conversion.json".into());
+    if let Some(member) = conversion {
+        check.resources.used.set(member.rank);
         if let Some(name) = check.reports["geometryReports"].as_str() {
-            check.reference(uri("conversion.json", name)?)?;
+            check.resources.reference(uri("conversion.json", name)?)?;
+        }
+        // The convert-to-implicit producer was removed in 0.4.0. Archives it
+        // already wrote reference their retained original payloads only here,
+        // so validation keeps reading this marker and checking those payloads.
+        if check.reports["operation"] == "convert-to-implicit" {
+            if let Some(sources) = check.reports["retainedContentUris"].as_array().cloned() {
+                for source in sources {
+                    let source = uri(
+                        "conversion.json",
+                        source
+                            .as_str()
+                            .ok_or_else(|| invalid("invalid retained content URI"))?,
+                    )?;
+                    check.resources.reference(source.clone())?;
+                    check.payload(&source)?;
+                }
+            }
         }
     }
-    let manifest = read_json(check.zip, "tileset.json")?;
-    if let Some(expected) = manifest["asset"]["extras"]["vectorBuildStateSha256"].as_str() {
-        check.reference("vector-build.json".into())?;
-        if hashes.get("vector-build.json").map(String::as_str) != Some(expected) {
-            return Err(invalid("vector build-state checksum mismatch"));
+    {
+        // Only the vector build and HLOD declaration checks read this copy; it is dropped
+        // before traversal.
+        let (manifest, _) = check.resources.read_json("tileset.json")?;
+        // HLOD expectation is owned by the caller or the archive's own declaration, never
+        // inferred from payload labels whose removal it must detect (review r12).
+        if expected_hlod
+            || manifest["asset"]["extras"]["rustyTiles"]["lod"].as_str() == Some("hlod")
+            || check.reports["lod"].as_str() == Some("hlod")
+        {
+            check.delivery.expect_identity();
+        }
+        if let Some(expected) = manifest["asset"]["extras"]["vectorBuildStateSha256"].as_str() {
+            check.resources.reference("vector-build.json".into())?;
+            if vector_build.as_deref() != Some(expected) {
+                return Err(invalid("vector build-state checksum mismatch"));
+            }
         }
     }
+    check.progress.phase("validate.traverse", None)?;
     check.tileset("tileset.json", None, None, 0)?;
     if let Some(limit) = check.reports["budgets"]["tiles"].as_u64() {
-        if check.tiles as u64 > limit {
+        // Amendment D-1: link tiles count in the report, not in the budget.
+        if (check.tiles - check.links) as u64 > limit {
             return Err(invalid("hierarchy exceeds recorded tile budget"));
         }
     }
-    let mut unused: Vec<_> = check.names.difference(&check.used).cloned().collect();
-    unused.sort();
-    if !unused.is_empty() {
-        return Err(invalid(format!(
-            "unreferenced archive entries: {}",
-            unused.join(", ")
-        )));
+    let delivery_budget = check.resources.budget(LimitKey::TotalPayloadElements);
+    let delivery_reads = check.resources.budget(LimitKey::TotalBytesRead);
+    let delivery_member_cap = check.resources.limits.member_bytes;
+    let delivery_resources = &mut check.resources;
+    // Selected geometry replays use already C1-admitted payload ranks. Reads
+    // retain their ordinary volume charge; the delivery owner charges decoding.
+    let delivery_work = check
+        .delivery
+        .finish(delivery_budget, check.elements, &mut |rank| {
+            let name = delivery_resources
+                .archive
+                .name(rank)
+                .map_err(archive_admission_error)?;
+            read_member(
+                delivery_resources.archive,
+                &name,
+                &mut delivery_resources.bytes_read,
+                delivery_reads,
+                delivery_member_cap,
+            )
+        })?;
+    check.elements = check
+        .elements
+        .checked_add(delivery_work)
+        .ok_or_else(refused)?;
+    check.hlod_identity |= check.delivery.checked;
+    unreferenced(check.resources.archive, &check.resources.used)?;
+    // C2 outcome precedence after C1 success: exclusions, then the precheck,
+    // then streaming (Outside or allocation refusal), otherwise Contained.
+    let reasons = if check.c2.exclusions != 0 {
+        check.c2.exclusions
+    } else {
+        check.c2.precheck.map_or(0, Reason::bit)
+    };
+    let contained = reasons == 0;
+    // OD-4 (RC-13): per-tile `extras` are not compared below any implicit root.
+    if check.implicit_roots > 0 {
+        check
+            .not_inspected
+            .insert("recordedBudgets.implicitTileExtras".into());
     }
-    let mut result = json!({"ok":true,"archive":path,"tiles":check.tiles,"contentReferences":check.contents,"entries":check.names.len(),"checks":["index","crc","contentHashes","structure","bounds","geometricError","references","budgets"]});
-    if let Some(executable) = external {
-        let work = tempfile::tempdir()?;
-        let report = work.path().join("report.json");
-        let output = std::process::Command::new(executable)
-            .arg("--tilesetFile")
-            .arg(std::path::absolute(path)?)
-            .arg("--reportFile")
-            .arg(&report)
-            .output()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    Error::Environment(format!(
-                        "external validator not found: {}",
-                        executable.display()
-                    ))
-                } else {
-                    e.into()
-                }
-            })?;
-        if !output.stdout.is_empty() {
-            eprint!("{}", String::from_utf8_lossy(&output.stdout));
+    // VS-B-9: the kept archive-named labels join the list before Contained edits it.
+    let labels = std::mem::take(&mut check.extension_labels);
+    check.not_inspected.extend(labels.kept);
+    if check.hlod_identity {
+        for label in [
+            "EXT_mesh_features",
+            "EXT_structural_metadata",
+            "metadataSemantics",
+            "metadata and feature semantics",
+        ] {
+            check.not_inspected.remove(label);
         }
-        if !output.stderr.is_empty() {
-            eprint!("{}", String::from_utf8_lossy(&output.stderr));
-        }
-        if !output.status.success() {
-            return Err(invalid("external validator failed"));
-        }
-        let report: Value = serde_json::from_reader(
-            File::open(&report)
-                .map_err(|_| invalid("external validator did not write its report"))?,
-        )?;
-        if report["numErrors"].as_u64().unwrap_or(0) > 0
-            || report["issues"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .any(|issue| issue["severity"] == "ERROR")
-        {
-            return Err(invalid(format!(
-                "external validation reported errors: {report}"
-            )));
-        }
-        result["externalValidator"] = report;
+        check
+            .not_inspected
+            .insert("non-identity metadata semantics".into());
+        check
+            .not_inspected
+            .insert("coarse interior/exterior orientation outside required interfaces".into());
+        check
+            .not_inspected
+            .insert("source-original fidelity and exempt crack-width diagnostics".into());
     }
-    Ok(result)
+    if contained {
+        check.stream()?;
+        #[cfg(test)]
+        if let Some(deferred) = check.deferred.take() {
+            let mut stream = Stream {
+                arena: check.c2.arena.take(),
+                ..Stream::default()
+            };
+            for (levels, rank, t, depth) in deferred {
+                let (caps, resources) = (check.c2.caps, &mut check.resources);
+                stream_member(resources, &mut stream, caps, &levels, depth, rank, t, None)?;
+            }
+        }
+        check.not_inspected.remove("decodedContentBounds");
+        check.not_inspected.remove("scene transforms");
+    } else {
+        for reason in REASONS.iter().filter(|r| reasons & r.bit() != 0) {
+            check
+                .not_inspected
+                .insert(format!("decodedContentBounds.{}", reason.name()));
+        }
+    }
+    let after = source.metadata()?;
+    if before.len() != after.len()
+        || before.modified()? != after.modified()?
+        || identity != same_file::Handle::from_path(path)?
+    {
+        return Err(invalid("source archive changed during inspection"));
+    }
+    let implicit = check.implicit_roots > 0;
+    // The walk's working storage is released before the report rows are ordered: the
+    // sorts and the walk are never live together (design §1.4).
+    check.memo = HashMap::new();
+    check.recording = Vec::new();
+    check.c2.path = Vec::new();
+    check.c2.levels = Vec::new();
+    check.c2.arena = None;
+    check.stream_log = None;
+    check.facts = FactStore::new(0, &config)?;
+    check.progress.phase("validate.rows", None)?;
+    let payloads = check.rows.finish(names, scratch.clone())?;
+    check.progress.step()?;
+    let report = ValidationReport {
+        ok: true,
+        archive: path.into(),
+        tiles: check.tiles as u64,
+        content_references: check.contents as u64,
+        entries,
+        payloads,
+        interface_census: check.delivery.census().map(|c| InterfaceCensus {
+            basis: "decoded leaf canonical f32 keys",
+            shared_points: c.shared_points,
+            shared_segments: c.shared_segments,
+            source_open_edges: c.source_open_edges,
+            source_open_edges_with_shared_endpoints: c.source_open_edges_with_shared_endpoints,
+            max_payload_triangles: c.max_payload_triangles,
+            omitted_cells: c.omission.omitted_cells,
+            omission_sources: c.omission.omission_sources,
+            omitted_by_depth: c.omission.omitted_by_depth,
+            frontier_tiles: c.omission.frontier_tiles,
+            frontier_leaves: c.omission.frontier_leaves,
+            contracted_border_arcs: c.contracted_border_arcs,
+            contracted_border_vertices: c.contracted_border_vertices,
+            dropped_components: c.dropped_by_depth.iter().sum(),
+            dropped_by_depth: c.dropped_by_depth,
+        }),
+        scratch: scratch.is_created().then(|| ScratchReport {
+            memory_backed: scratch.memory_backed(),
+            peak_bytes: scratch
+                .peak_bytes()
+                .saturating_add(check.delivery.disk_bytes()),
+        }),
+        stored_bytes,
+        limits: check.resources.limits,
+        limit_derivation,
+        checks: [
+            "archiveIndex",
+            "archiveCrc",
+            "archiveStoredRecordLayout",
+            "contentHashes",
+            "tilesetSchema",
+            "payloadEnvelope",
+            "bufferRanges",
+            "accessorValues",
+            "primitiveIndices",
+            "hierarchyBounds",
+        ]
+        .into_iter()
+        .chain(implicit.then_some("implicitAddressingAndAvailability"))
+        .chain(["geometricErrorOrder"])
+        .chain(check.hlod_identity.then_some("replaceContentContinuity"))
+        .chain(["resourceReferences", "recordedBudgets"])
+        .chain(contained.then_some("decodedContentContainment"))
+        .chain(check.hlod_identity.then_some("hlodFeatureIds"))
+        .chain(check.hlod_identity.then_some("interfaceSegments"))
+        .chain(check.hlod_identity.then_some("interfacePoints"))
+        .chain(check.hlod_identity.then_some("interfaceWinding"))
+        .chain(check.hlod_identity.then_some("borderDisplacement"))
+        .chain(check.hlod_identity.then_some("sameDepthBorderGap"))
+        .chain(check.hlod_identity.then_some("terminalBorderLock"))
+        .chain(check.hlod_identity.then_some("mixedDepthBorderGap"))
+        .map(String::from)
+        .collect(),
+        not_inspected: check.not_inspected.into_iter().collect(),
+        not_inspected_truncated: labels.truncated,
+    };
+    Ok(Inspection {
+        report,
+        #[cfg(test)]
+        uris: check.uri_work,
+        #[cfg(test)]
+        units: check.c2.units,
+        #[cfg(test)]
+        prepared: check.prepared,
+        #[cfg(test)]
+        elements: check.elements,
+        #[cfg(test)]
+        memo_peak: check.memo_peak,
+        #[cfg(test)]
+        counters: [
+            check.task_visits,
+            check.resources.reference_visits,
+            check.resources.bytes_read,
+        ],
+        #[cfg(test)]
+        implicit: check.implicit_facts,
+    })
 }
 
+/// Small I1 archive builders shared by the in-crate tests.
+#[cfg(test)]
+mod i1_fixtures {
+    use serde_json::{json, Value};
+    use std::path::PathBuf;
+
+    pub(super) type Files = std::collections::BTreeMap<String, Vec<u8>>;
+
+    /// A one-point GLB at the origin.
+    pub(super) fn point_glb() -> Vec<u8> {
+        let doc = json!({
+            "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "buffers":[{"byteLength":12}],"bufferViews":[{"buffer":0,"byteLength":12}],
+            "accessors":[{"bufferView":0,"componentType":5126,"type":"VEC3","count":1,
+                "min":[0,0,0],"max":[0,0,0]}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0},"mode":0}]}]
+        });
+        crate::glb::encode_glb(&doc, &[0; 12]).unwrap()
+    }
+    pub(super) fn bits(count: usize, set: &[usize]) -> Vec<u8> {
+        let mut out = vec![0u8; count.div_ceil(8)];
+        for &i in set {
+            out[i / 8] |= 1 << (i % 8);
+        }
+        out
+    }
+    /// A binary subtree: JSON plus one internal buffer of 8-byte aligned views.
+    #[derive(Clone)]
+    pub(super) struct Sub {
+        pub(super) doc: Value,
+        bin: Vec<u8>,
+    }
+    impl Sub {
+        pub(super) fn new(tile: Value, child: Value) -> Self {
+            Self {
+                doc: json!({"tileAvailability":tile,"childSubtreeAvailability":child}),
+                bin: Vec::new(),
+            }
+        }
+        pub(super) fn set(mut self, key: &str, value: Value) -> Self {
+            self.doc[key] = value;
+            self
+        }
+        pub(super) fn view(&mut self, bytes: &[u8]) -> usize {
+            self.bin.resize(self.bin.len().next_multiple_of(8), 0);
+            let offset = self.bin.len();
+            self.bin.extend_from_slice(bytes);
+            if self.doc.get("bufferViews").is_none() {
+                self.doc["bufferViews"] = json!([]);
+            }
+            let views = self.doc["bufferViews"].as_array_mut().unwrap();
+            views.push(json!({"buffer":0,"byteOffset":offset,"byteLength":bytes.len()}));
+            views.len() - 1
+        }
+        pub(super) fn bitstream(&mut self, count: usize, set: &[usize]) -> Value {
+            let view = self.view(&bits(count, set));
+            json!({"bitstream":view,"availableCount":set.len()})
+        }
+        pub(super) fn floats(&mut self, values: &[f64], f32s: bool) -> usize {
+            let bytes: Vec<u8> = values
+                .iter()
+                .flat_map(|v| {
+                    if f32s {
+                        (*v as f32).to_le_bytes().to_vec()
+                    } else {
+                        v.to_le_bytes().to_vec()
+                    }
+                })
+                .collect();
+            self.view(&bytes)
+        }
+        pub(super) fn build(&self) -> Vec<u8> {
+            let mut doc = self.doc.clone();
+            if !self.bin.is_empty() {
+                doc["buffers"] = json!([{"byteLength":self.bin.len()}]);
+            }
+            let mut json = serde_json::to_vec(&doc).unwrap();
+            json.resize(json.len().next_multiple_of(8), b' ');
+            let mut bin = self.bin.clone();
+            bin.resize(bin.len().next_multiple_of(8), 0);
+            let mut out = b"subt".to_vec();
+            out.extend(1u32.to_le_bytes());
+            out.extend((json.len() as u64).to_le_bytes());
+            out.extend((bin.len() as u64).to_le_bytes());
+            out.extend(json);
+            out.extend(bin);
+            out
+        }
+    }
+    pub(super) fn constant(value: u8) -> Value {
+        json!({"constant":value})
+    }
+    pub(super) fn half(h: f64) -> Value {
+        json!([0, 0, 0, h, 0, 0, 0, h, 0, 0, 0, h])
+    }
+    /// An implicit root R: QUADTREE, box half 8, error 16, the given templates.
+    pub(super) fn implicit_root(levels: u32, available: u32, contents: &[&str]) -> Value {
+        let mut root = json!({
+            "boundingVolume":{"box":half(8.)},"geometricError":16,
+            "implicitTiling":{"subdivisionScheme":"QUADTREE","subtreeLevels":levels,
+                "availableLevels":available,"subtrees":{"uri":"s/{level}/{x}/{y}.subtree"}}
+        });
+        match contents {
+            [] => {}
+            [one] => root["content"] = json!({"uri":one}),
+            many => root["contents"] = many.iter().map(|uri| json!({"uri":uri})).collect(),
+        }
+        root
+    }
+    pub(super) fn tileset(root: Value) -> Vec<u8> {
+        serde_json::to_vec(&json!({"asset":{"version":"1.1"},"geometricError":32,"root":root}))
+            .unwrap()
+    }
+    pub(super) fn package(files: &Files) -> (tempfile::TempDir, PathBuf) {
+        let work = tempfile::tempdir().unwrap();
+        let data = work.path().join("data");
+        for (name, bytes) in files {
+            let file = data.join(name);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, bytes).unwrap();
+        }
+        let output = work.path().join("test.3tz");
+        crate::package::package(
+            crate::package::PackageRequest::directory(&data, &output),
+            &crate::RunControl::default(),
+        )
+        .unwrap();
+        (work, output)
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn content_bridges_preserve_causal_io_and_typed_format_categories() {
+        #[derive(Debug)]
+        struct Cause;
+        impl std::fmt::Display for Cause {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("resource limit: duplicate JSON key; actual resolver cause")
+            }
+        }
+        impl std::error::Error for Cause {}
+        for kind in [
+            std::io::ErrorKind::InvalidData,
+            std::io::ErrorKind::UnexpectedEof,
+        ] {
+            for implicit in [false, true] {
+                let io = std::io::Error::new(kind, Cause);
+                let failure = if implicit {
+                    implicit_error(ImplicitError::Resolver(Error::Io(io)))
+                } else {
+                    payload_error(PayloadError::Resolver(Error::Io(io)))
+                };
+                let Error::Io(io) = failure else {
+                    panic!("causal I/O must stay I/O")
+                };
+                assert_eq!(io.kind(), kind);
+                assert!(io.get_ref().unwrap().downcast_ref::<Cause>().is_some());
+                assert_eq!(
+                    io.to_string(),
+                    "resource limit: duplicate JSON key; actual resolver cause"
+                );
+            }
+        }
+        for (format, category) in [
+            (
+                FormatError::InvalidInput("resource limit: lookalike".into()),
+                "invalid_input",
+            ),
+            (
+                FormatError::ResourceLimit("duplicate key lookalike".into()),
+                "resource_limit",
+            ),
+            (
+                FormatError::Unsupported("invalid syntax lookalike".into()),
+                "unsupported",
+            ),
+        ] {
+            assert_eq!(
+                payload_error(PayloadError::Format(format)).category().0,
+                category
+            );
+        }
+    }
+    #[derive(Debug)]
+    struct InjectedReadFailure;
+    impl std::fmt::Display for InjectedReadFailure {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("injected reader failure")
+        }
+    }
+    impl std::error::Error for InjectedReadFailure {}
+
+    fn map_reader_io(error: std::io::Error) -> ValidationFailure {
+        archive_admission_error(crate::archive3tz::ReadError::Io(error))
+    }
+    #[test]
+    fn archive_reader_mapping_preserves_real_os_io_causes() {
+        let work = tempfile::tempdir().unwrap();
+        {
+            let error = File::open(work.path().join("missing.3tz")).unwrap_err();
+            let kind = error.kind();
+            let os_code = error.raw_os_error();
+            let message = error.to_string();
+            assert_eq!(kind, std::io::ErrorKind::NotFound);
+            assert!(os_code.is_some());
+            let failure = map_reader_io(error);
+            assert_eq!(failure.category(), ("io", 1));
+            let Error::Io(error) = failure else {
+                panic!("lost actual I/O origin");
+            };
+            assert_eq!(error.kind(), kind);
+            assert_eq!(error.raw_os_error(), os_code);
+            assert_eq!(error.to_string(), message);
+        }
+    }
+    #[test]
+    fn archive_reader_mapping_preserves_injected_invalid_data_and_eof_io() {
+        for kind in [
+            std::io::ErrorKind::InvalidData,
+            std::io::ErrorKind::UnexpectedEof,
+        ] {
+            {
+                let failure = map_reader_io(std::io::Error::new(kind, InjectedReadFailure));
+                assert_eq!(failure.category(), ("io", 1));
+                let Error::Io(error) = failure else {
+                    panic!("reclassified actual {kind:?} as malformed input");
+                };
+                assert_eq!(error.kind(), kind);
+                assert!(error
+                    .get_ref()
+                    .is_some_and(|cause| cause.is::<InjectedReadFailure>()));
+            }
+        }
+    }
+    #[test]
+    fn archive_admission_mapping_keeps_typed_categories_without_message_matching() {
+        use crate::archive3tz::ReadError;
+        for (error, category) in [
+            (
+                ReadError::InvalidInput("I/O-looking malformed input".into()),
+                ("invalid_input", 3),
+            ),
+            (
+                ReadError::Unsupported("CRC-looking unsupported profile".into()),
+                ("unsupported", 2),
+            ),
+            (
+                ReadError::ResourceLimit("package missing tileset.json".into()),
+                ("resource_limit", 3),
+            ),
+        ] {
+            assert_eq!(archive_admission_error(error).category(), category);
+        }
+    }
+    #[test]
+    fn archive_reader_mapping_distinguishes_missing_member_and_detected_crc() {
+        use crate::archive3tz::ReadError;
+        let missing = archive_admission_error(ReadError::MissingMember("tileset.json".into()));
+        assert_eq!(missing.category(), ("invalid_input", 3));
+        assert_eq!(missing.to_string(), "missing archive member: tileset.json");
+        let crc = archive_admission_error(ReadError::InvalidInput(
+            "detected index CRC mismatch".into(),
+        ));
+        assert_eq!(crc.category(), ("invalid_input", 3));
+        assert_eq!(crc.to_string(), "detected index CRC mismatch");
+    }
     fn tile(radius: f64, error: f64) -> Value {
         json!({"boundingVolume":{"sphere":[0.,0.,0.,radius]},"geometricError":error,"refine":"REPLACE"})
     }
@@ -639,8 +3964,12 @@ mod tests {
             std::fs::write(file, serde_json::to_vec(&value).unwrap()).unwrap();
         }
         let output = work.path().join("test.3tz");
-        crate::pack::convert_to_3tz(&data, &output, &Default::default()).unwrap();
-        archive(&output, None)
+        crate::package::package(
+            crate::package::PackageRequest::directory(&data, &output),
+            &crate::RunControl::default(),
+        )
+        .unwrap();
+        inspect(ValidationRequest::new(&output)).map(|r| serde_json::to_value(r).unwrap())
     }
     #[test]
     fn external_roots_obey_referring_bounds_and_error() {
@@ -663,6 +3992,22 @@ mod tests {
             ])
             .unwrap_err();
             assert!(error.to_string().contains(message), "{error}");
+        }
+    }
+    #[test]
+    fn a_tile_without_content_may_exceed_its_parent_but_not_raise_the_bound() {
+        for (error, ok) in [(0.5, true), (2., false)] {
+            let mut link = tile(1., error);
+            link["content"] = json!({"uri":"external.json"});
+            let mut empty = tile(1., 50.);
+            empty["children"] = json!([link]);
+            let mut root = tile(1., 1.);
+            root["children"] = json!([empty]);
+            let result = check_documents(vec![
+                ("tileset.json".into(), tileset(root, 100.)),
+                ("external.json".into(), tileset(tile(0.5, 0.), 0.5)),
+            ]);
+            assert_eq!(result.is_ok(), ok, "{result:?}");
         }
     }
     #[test]
@@ -695,6 +4040,14 @@ mod tests {
     }
     #[test]
     fn external_cycles_fail_and_depth_continues_across_files() {
+        std::thread::Builder::new()
+            .stack_size(1024 * 1024)
+            .spawn(check_external_cycles_and_depth)
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+    fn check_external_cycles_and_depth() {
         let mut root = tile(1., 0.);
         root["content"] = json!({"uri":"nested/external.json"});
         let mut child = tile(1., 0.);
@@ -785,6 +4138,33 @@ mod tests {
         assert!(!contains(&p, &outside, &IDENTITY).unwrap());
     }
     #[test]
+    fn region_containment_spans_the_whole_longitude_circle() {
+        use std::f64::consts::PI;
+        let region = |w: f64, e: f64| Volume::Region(vec![w, -0.1, e, 0.1, 10., 90.]);
+        let globe = Volume::Region(vec![-PI, -0.5, PI, 0.5, 0., 100.]);
+        let globe_child = region(-PI, PI);
+        // A whole-circle child escapes every narrower parent, crossing or not.
+        assert!(!contains(&region(3., -3.), &globe_child, &IDENTITY).unwrap());
+        assert!(!contains(&region(-PI, 0.1), &globe_child, &IDENTITY).unwrap());
+        assert!(!contains(&region(-3., 3.), &globe_child, &IDENTITY).unwrap());
+        // A whole-circle parent holds any child, including antimeridian crossings.
+        assert!(contains(&globe, &globe_child, &IDENTITY).unwrap());
+        assert!(contains(&globe, &region(3., -3.), &IDENTITY).unwrap());
+        assert!(contains(&globe, &region(-1., 1.), &IDENTITY).unwrap());
+        // The rounding tolerance applies at the parent's west edge as at its east.
+        let parent = Volume::Region(vec![-1., -0.5, 1., 0.5, 0., 100.]);
+        let west = (-1f64).next_down();
+        assert!(contains(&parent, &region(west, 0.), &IDENTITY).unwrap());
+        assert!(contains(&parent, &region(0., 1f64.next_up()), &IDENTITY).unwrap());
+        assert!(!contains(&parent, &region(-1.001, 0.), &IDENTITY).unwrap());
+        assert!(!contains(&parent, &region(0., 1.001), &IDENTITY).unwrap());
+        // Zero-width children on the parent's edges, and widths past the east edge.
+        assert!(contains(&parent, &region(1., 1.), &IDENTITY).unwrap());
+        assert!(contains(&parent, &region(-1., -1.), &IDENTITY).unwrap());
+        assert!(!contains(&parent, &region(1., 1.1), &IDENTITY).unwrap());
+        assert!(!contains(&parent, &region(1.1, 1.1), &IDENTITY).unwrap());
+    }
+    #[test]
     fn degenerate_box_checks_out_of_plane_and_sphere_extent() {
         let flat = Volume::Box(vec![0., 0., 0., 1., 0., 0., 0., 1., 0., 0., 0., 0.]);
         assert!(inside(&flat, [0.5, 0.5, 0.], 0.));
@@ -794,6 +4174,2168 @@ mod tests {
             &Volume::Sphere(vec![0., 0., 0., 2.]),
             [1., 0., 0.],
             1.
+        ));
+    }
+
+    // ---- I1 parity seam (RC-16) and resource controls ----
+    use super::i1_fixtures::{
+        bits, constant, half, implicit_root, package, point_glb, tileset as i1_tileset, Files, Sub,
+    };
+    use crate::content_integrity::implicit::{Cell, Scheme};
+
+    fn i1_facts(files: &Files) -> (ValidationReport, Vec<ImplicitTileFact>) {
+        let (_work, path) = package(files);
+        let report = inspect(ValidationRequest::new(&path)).unwrap();
+        let facts = implicit_tile_facts(ValidationRequest::new(&path), ValidationLimits::default())
+            .unwrap();
+        (report, facts)
+    }
+    fn i1_run(files: &Files, limits: ValidationLimits) -> Result<ValidationReport, Error> {
+        let (_work, path) = package(files);
+        inspect_selected(ValidationRequest::new(&path), limits)
+    }
+
+    /// A non-root R (X-8) with an inherited `refine`, a bitstream root subtree
+    /// with error-only rows, and one FLOAT32 box-only child subtree.
+    fn i1_walk_archive() -> Files {
+        let mut root = Sub::new(Value::Null, Value::Null);
+        let tiles = root.bitstream(5, &[0, 1, 4]);
+        let contents = root.bitstream(5, &[1, 4]);
+        let children = root.bitstream(16, &[15]);
+        let errors = root.floats(&[16., 8., 7.], false);
+        let root = root
+            .set("tileAvailability", tiles)
+            .set("contentAvailability", json!([contents]))
+            .set("childSubtreeAvailability", children)
+            .set(
+                "propertyTables",
+                json!([{"class":"t","count":3,"properties":{"err":{"values":errors}}}]),
+            )
+            .set("tileMetadata", json!(0));
+        let mut child = Sub::new(Value::Null, constant(0));
+        let tiles = child.bitstream(5, &[0]);
+        let contents = child.bitstream(5, &[0]);
+        let volume = child.floats(&[6., 6., 0., 2., 0., 0., 0., 2., 0., 0., 0., 8.], true);
+        let child = child
+            .set("tileAvailability", tiles)
+            .set("contentAvailability", json!([contents]))
+            .set(
+                "propertyTables",
+                json!([{"class":"u","count":1,"properties":{"vol":{"values":volume}}}]),
+            )
+            .set("tileMetadata", json!(0));
+        let r = implicit_root(2, 3, &["c/{level}/{x}/{y}.glb"]);
+        let doc = json!({"asset":{"version":"1.1"},"geometricError":32,
+            "schema":{"id":"s","classes":{
+                "t":{"properties":{"err":{"type":"SCALAR","componentType":"FLOAT64",
+                    "semantic":"TILE_GEOMETRIC_ERROR"}}},
+                "u":{"properties":{"vol":{"type":"SCALAR","componentType":"FLOAT32",
+                    "array":true,"count":12,"semantic":"TILE_BOUNDING_BOX"}}}}},
+            "root":{"boundingVolume":{"box":half(16.)},"geometricError":32,"refine":"ADD",
+                "children":[r]}});
+        let mut files = Files::new();
+        files.insert("tileset.json".into(), serde_json::to_vec(&doc).unwrap());
+        files.insert("s/0/0/0.subtree".into(), root.build());
+        files.insert("s/2/3/3.subtree".into(), child.build());
+        for name in ["1/0/0", "1/1/1", "2/3/3"] {
+            files.insert(format!("c/{name}.glb"), point_glb());
+        }
+        files
+    }
+
+    #[test]
+    fn i1_facts_follow_the_walk_exactly() {
+        let (report, facts) = i1_facts(&i1_walk_archive());
+        let root_box = [0., 0., 0., 8., 0., 0., 0., 8., 0., 0., 0., 8.];
+        let cell = |level, x, y| {
+            EffectiveVolume::Derived(Cell {
+                root: root_box,
+                level,
+                coords: [x, y, 0],
+                scheme: Scheme::Quadtree,
+            })
+        };
+        let fact = |level: u32, xy: [u32; 2], volume, error, contents: &[&str]| ImplicitTileFact {
+            doc: "tileset.json".into(),
+            level,
+            coords: [xy[0], xy[1], 0],
+            depth: 1 + level as usize,
+            parent_level: level.checked_sub(1),
+            volume,
+            error,
+            refine: Some("ADD"),
+            contents: contents.iter().map(|c| (0, c.to_string())).collect(),
+        };
+        assert_eq!(
+            facts,
+            [
+                fact(
+                    0,
+                    [0, 0],
+                    EffectiveVolume::DerivedRoot,
+                    EffectiveError::Row(16.),
+                    &[]
+                ),
+                fact(
+                    1,
+                    [0, 0],
+                    cell(1, 0, 0),
+                    EffectiveError::Row(8.),
+                    &["c/1/0/0.glb"]
+                ),
+                fact(
+                    1,
+                    [1, 1],
+                    cell(1, 1, 1),
+                    EffectiveError::Row(7.),
+                    &["c/1/1/1.glb"]
+                ),
+                fact(
+                    2,
+                    [3, 3],
+                    EffectiveVolume::Row([6., 6., 0., 2., 0., 0., 0., 2., 0., 0., 0., 8.]),
+                    EffectiveError::Derived(4.),
+                    &["c/2/3/3.glb"]
+                ),
+            ]
+        );
+        // R and I_0 count once; one explicit root above R.
+        assert_eq!((report.tiles, report.content_references), (5, 3));
+        assert!(report
+            .checks
+            .contains(&"implicitAddressingAndAvailability".to_owned()));
+    }
+
+    #[test]
+    fn i1_facts_match_the_retained_expander_on_writer_output() {
+        // An explicit hierarchy encoded by the retained writer (rows on every
+        // tile, payload templates), read by I1 and by `expand_tileset`.
+        let work = tempfile::tempdir().unwrap();
+        let data = work.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        let tile = |center: [f64; 2], h: f64, error: f64, uri: &str| {
+            json!({"boundingVolume":{"box":[center[0],center[1],0,h,0,0,0,h,0,0,0,8]},
+                "geometricError":error,"content":{"uri":uri}})
+        };
+        let mut children = Vec::new();
+        for slot in 0..4 {
+            let x = -4. + 8. * f64::from(slot & 1);
+            let y = -4. + 8. * f64::from(slot >> 1);
+            let uri = format!("b{slot}.glb");
+            std::fs::write(data.join(&uri), point_glb()).unwrap();
+            children.push(tile([x, y], 4., 8., &uri));
+        }
+        std::fs::write(data.join("g.glb"), point_glb()).unwrap();
+        std::fs::write(data.join("a.glb"), point_glb()).unwrap();
+        children[3]["children"] = json!([tile([2., 2.], 2., 4., "g.glb")]);
+        let mut root = tile([0., 0.], 8., 16., "a.glb");
+        root["refine"] = json!("REPLACE");
+        root["children"] = json!(children);
+        let mut manifest = json!({"asset":{"version":"1.1"},"geometricError":16,"root":root});
+        crate::implicit::write_forest(
+            &mut manifest,
+            &data,
+            crate::implicit::SubdivisionScheme::Quadtree,
+            &mut || Ok(()),
+        )
+        .unwrap();
+        std::fs::write(
+            data.join("tileset.json"),
+            serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
+        let expanded =
+            crate::implicit::expand_tileset(&manifest, |name| Ok(std::fs::read(data.join(name))?))
+                .unwrap();
+        let mut expected = Vec::new();
+        let mut pending = vec![&expanded["root"]];
+        while let Some(node) = pending.pop() {
+            let volume: Vec<f64> =
+                serde_json::from_value(node["boundingVolume"]["box"].clone()).unwrap();
+            let uris: Vec<String> = node["content"]["uri"]
+                .as_str()
+                .map(String::from)
+                .into_iter()
+                .collect();
+            expected.push((volume, node["geometricError"].as_f64().unwrap(), uris));
+            if let Some(children) = node["children"].as_array() {
+                pending.extend(children.iter().rev());
+            }
+        }
+        let output = work.path().join("writer.3tz");
+        crate::package::package(
+            crate::package::PackageRequest::directory(&data, &output),
+            &crate::RunControl::default(),
+        )
+        .unwrap();
+        let facts =
+            implicit_tile_facts(ValidationRequest::new(&output), ValidationLimits::default())
+                .unwrap();
+        let actual: Vec<_> = facts
+            .iter()
+            .map(|fact| {
+                let EffectiveVolume::Row(volume) = &fact.volume else {
+                    panic!("the writer records a row on every tile: {fact:?}");
+                };
+                let EffectiveError::Row(error) = fact.error else {
+                    panic!("the writer records a row on every tile: {fact:?}");
+                };
+                let uris = fact.contents.iter().map(|(_, uri)| uri.clone()).collect();
+                (volume.to_vec(), error, uris)
+            })
+            .collect();
+        assert_eq!(actual.len(), 6);
+        assert_eq!(actual, expected);
+        let report = inspect(ValidationRequest::new(&output)).unwrap();
+        assert_eq!((report.tiles, report.content_references), (6, 6));
+    }
+
+    /// The base archive: QUADTREE L = 2, A = 2, five tiles, five payloads.
+    fn i1_base() -> Files {
+        let mut files = Files::new();
+        files.insert(
+            "tileset.json".into(),
+            i1_tileset(implicit_root(2, 2, &["c/{level}/{x}/{y}.glb"])),
+        );
+        files.insert(
+            "s/0/0/0.subtree".into(),
+            Sub::new(constant(1), constant(0))
+                .set("contentAvailability", json!([constant(1)]))
+                .build(),
+        );
+        for name in ["0/0/0", "1/0/0", "1/1/0", "1/0/1", "1/1/1"] {
+            files.insert(format!("c/{name}.glb"), point_glb());
+        }
+        files
+    }
+
+    #[test]
+    fn i1_visits_follow_the_reservation_formula() {
+        // RC-7: Tileset + ExitTileset + R + P_t (5) = 8 tasks.
+        let limits = |visits| ValidationLimits {
+            hierarchy_visits: visits,
+            ..ValidationLimits::default()
+        };
+        assert!(i1_run(&i1_base(), limits(8)).is_ok());
+        let failure = i1_run(&i1_base(), limits(7)).unwrap_err();
+        assert_eq!(failure.category().0, "resource_limit", "{failure}");
+        // The reservation refuses the whole subtree before its first visit.
+        let failure = i1_run(&i1_base(), limits(6)).unwrap_err();
+        assert!(
+            failure
+                .to_string()
+                .contains("exceeds remaining hierarchy visits"),
+            "{failure}"
+        );
+    }
+
+    #[test]
+    fn i1_depth_is_r_depth_plus_level() {
+        let limits = |depth| ValidationLimits {
+            hierarchy_depth: depth,
+            ..ValidationLimits::default()
+        };
+        assert!(i1_run(&i1_base(), limits(1)).is_ok());
+        let failure = i1_run(&i1_base(), limits(0)).unwrap_err();
+        assert!(failure.to_string().contains("depth limit"), "{failure}");
+    }
+
+    #[test]
+    fn i1_live_path_cap_admits_the_path_sum_only() {
+        // R2 in miniature: QUADTREE L = 1, A = 3, a chain of three payload-free
+        // subtrees plus a sibling leaf at level 2. The cap is the deepest live
+        // path, well below the cumulative sum.
+        let leaf = Sub::new(constant(1), constant(0)).build();
+        let mut files = Files::new();
+        files.insert("tileset.json".into(), i1_tileset(implicit_root(1, 3, &[])));
+        let mut top = Sub::new(constant(1), Value::Null);
+        let children = top.bitstream(4, &[0]);
+        let top = top.set("childSubtreeAvailability", children).build();
+        let mut middle = Sub::new(constant(1), Value::Null);
+        let children = middle.bitstream(4, &[0, 3]);
+        let middle = middle.set("childSubtreeAvailability", children).build();
+        let path = (top.len() + middle.len() + leaf.len()) as u64;
+        files.insert("s/0/0/0.subtree".into(), top);
+        files.insert("s/1/0/0.subtree".into(), middle);
+        files.insert("s/2/0/0.subtree".into(), leaf.clone());
+        files.insert("s/2/1/1.subtree".into(), leaf);
+        let limits = |cap| ValidationLimits {
+            document_decoded_bytes: cap,
+            ..ValidationLimits::default()
+        };
+        let report = i1_run(&files, limits(path)).unwrap();
+        assert_eq!(report.tiles, 4);
+        let failure = i1_run(&files, limits(path - 1)).unwrap_err();
+        assert!(
+            failure
+                .to_string()
+                .starts_with("member exceeds admitted byte limit: s/2/0/0.subtree"),
+            "{failure}"
+        );
+    }
+
+    /// The smallest `limit` value admitting `files`, by bisection.
+    fn threshold(files: &Files, set: impl Fn(u64) -> ValidationLimits, high: u64) -> u64 {
+        let (_work, path) = package(files);
+        let run = |value| inspect_selected(ValidationRequest::new(&path), set(value)).is_ok();
+        assert!(run(high));
+        let (mut low, mut high) = (0, high);
+        while high - low > 1 {
+            let middle = low + (high - low) / 2;
+            if run(middle) {
+                high = middle;
+            } else {
+                low = middle;
+            }
+        }
+        high
+    }
+
+    #[test]
+    fn i1_availability_scan_is_charged_to_total_bytes_read() {
+        // X-12: a payload-free root whose last charge is its tile view's scan.
+        let mut sub = Sub::new(Value::Null, constant(0));
+        let tiles = sub.bitstream(87_381, &[0]);
+        let sub = sub.set("tileAvailability", tiles);
+        let mut files = Files::new();
+        files.insert("tileset.json".into(), i1_tileset(implicit_root(9, 9, &[])));
+        files.insert("s/0/0/0.subtree".into(), sub.build());
+        let set = |total| ValidationLimits {
+            total_bytes_read: total,
+            ..ValidationLimits::default()
+        };
+        let needed = threshold(&files, set, 1 << 24);
+        let failure = i1_run(&files, set(needed - 1)).unwrap_err();
+        assert_eq!(failure.category().0, "resource_limit");
+        assert!(
+            failure
+                .to_string()
+                .contains("availability scan exceeds total_bytes_read work limit"),
+            "{failure}"
+        );
+        // The scan is ⌈T/8⌉ = 10,923 bytes: refused within that window too.
+        assert!(i1_run(&files, set(needed - 10_923)).is_err());
+    }
+
+    #[test]
+    fn i1_content_reservation_and_emission_share_references() {
+        // DC-3: E is reserved once at admission and emissions are not charged
+        // again, so references are exactly the explicit charges plus E.
+        let set = |references| ValidationLimits {
+            references,
+            ..ValidationLimits::default()
+        };
+        let needed = threshold(&i1_base(), set, 1 << 10);
+        // tileset.json + the subtree member + E = 5 emitted contents.
+        assert_eq!(needed, 1 + 1 + 5);
+        let failure = i1_run(&i1_base(), set(needed - 1)).unwrap_err();
+        assert!(
+            failure
+                .to_string()
+                .contains("subtree content entries exceed remaining references"),
+            "{failure}"
+        );
+    }
+
+    #[test]
+    fn i1_resolver_reads_external_buffers_relative_to_the_subtree() {
+        // An external buffer is one more reference and its bytes; a missing
+        // one is the resolver's InvalidInput.
+        let mut files = Files::new();
+        files.insert("tileset.json".into(), i1_tileset(implicit_root(2, 2, &[])));
+        let mut sub = Sub::new(Value::Null, constant(0));
+        sub.doc["buffers"] = json!([{"uri":"../avail.bin","byteLength":1}]);
+        sub.doc["bufferViews"] = json!([{"buffer":0,"byteOffset":0,"byteLength":1}]);
+        sub.doc["tileAvailability"] = json!({"bitstream":0,"availableCount":2});
+        files.insert("s/0/0/0.subtree".into(), sub.build());
+        let mut avail = bits(5, &[0, 1]);
+        avail.resize(8, 0);
+        files.insert("s/0/avail.bin".into(), avail);
+        assert_eq!(
+            i1_run(&files, ValidationLimits::default()).unwrap().tiles,
+            2
+        );
+        files.remove("s/0/avail.bin");
+        let failure = i1_run(&files, ValidationLimits::default()).unwrap_err();
+        assert_eq!(failure.to_string(), "missing archive entry: s/0/avail.bin");
+    }
+}
+#[test]
+fn archive_uri_decodes_segments_once_and_confines_paths() {
+    assert_eq!(
+        uri("model/source.gltf", "data/a%20b.bin").unwrap(),
+        "model/data/a b.bin"
+    );
+    assert_eq!(
+        uri("model/source.gltf", "a%2520b.bin").unwrap(),
+        "model/a%20b.bin"
+    );
+    assert_eq!(
+        uri("model/source.gltf", "%2e%2e/data.bin").unwrap(),
+        "data.bin"
+    );
+    for value in [
+        "%2e%2e/%2e%2e/data.bin",
+        "%2fdata.bin",
+        "a%5cb.bin",
+        "a%00.bin",
+        "%ff.bin",
+        "bad%",
+        "bad%2g",
+    ] {
+        assert!(uri("model/source.gltf", value).is_err(), "{value}");
+    }
+}
+
+/// C2 operation controls through the real `inspect_selected` entry point.
+#[cfg(test)]
+mod containment_controls {
+    use super::*;
+    use serde_json::json;
+    use std::path::PathBuf;
+
+    fn glb(doc: &Value, bin: &[u8]) -> Vec<u8> {
+        let mut json = serde_json::to_vec(doc).unwrap();
+        while !json.len().is_multiple_of(4) {
+            json.push(b' ');
+        }
+        let mut bin = bin.to_vec();
+        while !bin.len().is_multiple_of(4) {
+            bin.push(0);
+        }
+        let mut out = b"glTF".to_vec();
+        out.extend(2u32.to_le_bytes());
+        let chunks = if bin.is_empty() { 0 } else { 8 + bin.len() };
+        out.extend((20 + json.len() as u32 + chunks as u32).to_le_bytes());
+        out.extend((json.len() as u32).to_le_bytes());
+        out.extend(b"JSON");
+        out.extend(json);
+        if !bin.is_empty() {
+            out.extend((bin.len() as u32).to_le_bytes());
+            out.extend(b"BIN\0");
+            out.extend(bin);
+        }
+        out
+    }
+    /// POINTS over FLOAT positions, one selected scene, the given node list.
+    fn points_doc(positions: &[[f32; 3]], nodes: Value) -> (Value, Vec<u8>) {
+        let mut bin = Vec::new();
+        for p in positions {
+            for c in p {
+                bin.extend(c.to_le_bytes());
+            }
+        }
+        let bound = |f: fn(f32, f32) -> f32, start: f32| -> Vec<f64> {
+            (0..3)
+                .map(|c| f64::from(positions.iter().map(|p| p[c]).fold(start, f)))
+                .collect()
+        };
+        let doc = json!({
+            "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":nodes,
+            "buffers":[{"byteLength":bin.len()}],"bufferViews":[{"buffer":0,"byteLength":bin.len()}],
+            "accessors":[{"bufferView":0,"componentType":5126,"type":"VEC3","count":positions.len(),
+                "min":bound(f32::min, f32::INFINITY),"max":bound(f32::max, f32::NEG_INFINITY)}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0},"mode":0}]}]
+        });
+        (doc, bin)
+    }
+    pub(super) fn points(positions: &[[f32; 3]]) -> Vec<u8> {
+        let (doc, bin) = points_doc(positions, json!([{"mesh":0}]));
+        glb(&doc, &bin)
+    }
+    fn boxed(center: [f64; 3], half: [f64; 3]) -> Value {
+        json!({"box":[center[0],center[1],center[2],half[0],0,0,0,half[1],0,0,0,half[2]]})
+    }
+    fn tile(volume: Value) -> Value {
+        json!({"boundingVolume":volume,"geometricError":0})
+    }
+    fn content_tile(volume: Value, uri: &str) -> Value {
+        let mut tile = tile(volume);
+        tile["content"] = json!({"uri":uri});
+        tile
+    }
+    fn tileset(root: Value) -> Vec<u8> {
+        serde_json::to_vec(&json!({"asset":{"version":"1.1"},"geometricError":0,"root":root}))
+            .unwrap()
+    }
+    fn package(files: &[(&str, Vec<u8>)]) -> (tempfile::TempDir, PathBuf) {
+        let work = tempfile::tempdir().unwrap();
+        let data = work.path().join("data");
+        for (name, bytes) in files {
+            let file = data.join(name);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, bytes).unwrap();
+        }
+        let output = work.path().join("test.3tz");
+        crate::package::package(
+            crate::package::PackageRequest::directory(&data, &output),
+            &crate::RunControl::default(),
+        )
+        .unwrap();
+        (work, output)
+    }
+    fn run_with(
+        files: &[(&str, Vec<u8>)],
+        limits: ValidationLimits,
+    ) -> Result<ValidationReport, Error> {
+        let (_work, path) = package(files);
+        inspect_selected(ValidationRequest::new(&path), limits)
+    }
+    fn run(files: &[(&str, Vec<u8>)]) -> Result<ValidationReport, Error> {
+        run_with(files, ValidationLimits::default())
+    }
+    fn single(volume: Value, payload: Vec<u8>) -> Vec<(&'static str, Vec<u8>)> {
+        vec![
+            ("tileset.json", tileset(content_tile(volume, "a.glb"))),
+            ("a.glb", payload),
+        ]
+    }
+    fn contained(report: &ValidationReport) -> bool {
+        let listed = report
+            .checks
+            .iter()
+            .any(|c| c == "decodedContentContainment");
+        let bounds = report
+            .not_inspected
+            .iter()
+            .any(|c| c == "decodedContentBounds");
+        assert_eq!(listed, !bounds, "{report:?}");
+        if !report.payloads.is_empty() {
+            assert_eq!(
+                listed,
+                !report.not_inspected.iter().any(|c| c == "scene transforms"),
+                "{report:?}"
+            );
+        }
+        listed
+    }
+    /// The `decodedContentBounds.<reason>` entries, in report order.
+    fn reasons(report: &ValidationReport) -> Vec<&str> {
+        report
+            .not_inspected
+            .iter()
+            .filter_map(|c| c.strip_prefix("decodedContentBounds."))
+            .collect()
+    }
+    fn not_inspected(result: Result<ValidationReport, Error>) -> Vec<String> {
+        let report = result.unwrap();
+        assert!(!contained(&report), "{report:?}");
+        reasons(&report).into_iter().map(String::from).collect()
+    }
+    fn outside(result: Result<ValidationReport, Error>) -> String {
+        match result {
+            Err(Error::InvalidInput(message)) => message,
+            other => panic!("expected Outside, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn invalid_state_category_is_invalid_state_exit_one() {
+        let failure = containment_fault();
+        assert!(matches!(failure, Error::InvalidState(_)));
+        assert_eq!(failure.category(), ("invalid_state", 1));
+        assert_eq!(
+            crate::Error::Validation(failure).category(),
+            ("invalid_state", 1)
+        );
+    }
+
+    #[test]
+    fn boundary_vertex_is_contained_and_one_ulp_inside_box_is_outside() {
+        // glTF (1, 2, 3) is (1, -3, 2) in the z-up tile frame after U.
+        let payload = points(&[[1., 2., 3.]]);
+        let report = run(&single(boxed([0.; 3], [1., 3., 2.]), payload.clone())).unwrap();
+        assert!(contained(&report), "{report:?}");
+        assert!(report
+            .not_inspected
+            .iter()
+            .any(|c| c == "skins, animations, morph targets and rendered extent"));
+        // Non-integer centre, vertex exactly on the face.
+        let report = run(&single(
+            boxed([0.5, -1.5, 1.], [0.5, 1.5, 1.]),
+            payload.clone(),
+        ));
+        assert!(contained(&report.unwrap()));
+        for half in [
+            [1f64.next_down(), 3., 2.],
+            [1., 3f64.next_down(), 2.],
+            [1., 3., 2f64.next_down()],
+        ] {
+            assert_eq!(
+                outside(run(&single(boxed([0.; 3], half), payload.clone()))),
+                "decoded content outside bounding volume: content=a.glb depth=0 volume=own node=0 mesh=0 primitive=0 vertex=0"
+            );
+        }
+        // Omitting U would accept a box that only holds the y-up point.
+        assert!(outside(run(&single(boxed([0.; 3], [1., 2., 3.]), payload))).contains("volume=own"));
+    }
+
+    /// H11: declared accessor `min`/`max` never decide containment. The fast path reads the drawn
+    /// words; a lying declaration over viewed storage is a C1 refusal, and over viewless (zero)
+    /// storage, where C1 allows any declaration, the zero words are still tested.
+    #[test]
+    fn declared_accessor_bounds_cannot_hide_an_escape() {
+        // 600 drawn vertices: enough corner credit (T/64 >= 2) for the fast path to run.
+        let mut positions: Vec<[f32; 3]> = (0..600)
+            .map(|i| [(i % 7) as f32 * 0.125, 0.0, (i % 5) as f32 * -0.125])
+            .collect();
+        positions[555] = [3.0, 0.0, 0.0];
+        let volume = boxed([0.5, 0.5, 0.0], [1.0, 1.0, 1.0]);
+        let (doc, bin) = points_doc(&positions, json!([{"mesh":0}]));
+        let message = "decoded content outside bounding volume: content=a.glb depth=0 volume=own node=0 mesh=0 primitive=0 vertex=555";
+        assert_eq!(
+            outside(run(&single(volume.clone(), glb(&doc, &bin)))),
+            message
+        );
+        // Declaring the escaping maximum away is refused before C2 runs.
+        let mut lying = doc.clone();
+        lying["accessors"][0]["max"] = json!([0.75, 0.0, 0.0]);
+        match run(&single(volume.clone(), glb(&lying, &bin))) {
+            Err(Error::InvalidInput(m)) => {
+                assert!(m.contains("declared accessor bounds differ"), "{m}")
+            }
+            other => panic!("expected the C1 bounds refusal, got {other:?}"),
+        }
+        // Viewless storage: the declaration says [0.5, 0.75]^3, the words are zero, and the box
+        // holds the declaration but not the origin.
+        let viewless = json!({
+            "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "accessors":[{"componentType":5126,"type":"VEC3","count":600,
+                "min":[0.5,0.5,0.5],"max":[0.75,0.75,0.75]}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0},"mode":0}]}]
+        });
+        let payload = glb(&viewless, &[]);
+        assert_eq!(
+            outside(run(&single(boxed([0.625, -0.625, 0.625], [0.125; 3]), payload.clone()))),
+            "decoded content outside bounding volume: content=a.glb depth=0 volume=own node=0 mesh=0 primitive=0 vertex=0"
+        );
+        assert!(contained(
+            &run(&single(boxed([0.5, -0.5, 0.5], [0.75; 3]), payload)).unwrap()
+        ));
+    }
+
+    #[test]
+    fn sphere_membership_is_exact() {
+        let payload = points(&[[3., 0., 4.]]);
+        let sphere = |r: f64| json!({"sphere":[0,0,0,r]});
+        assert!(contained(
+            &run(&single(sphere(5.), payload.clone())).unwrap()
+        ));
+        assert!(outside(run(&single(sphere(5f64.next_down()), payload))).contains("volume=own"));
+    }
+
+    #[test]
+    fn undrawn_vertices_are_not_tested_and_drawn_ones_are() {
+        let (mut doc, mut bin) = points_doc(
+            &[[1., 1., 1.], [1000., -1000., 1000.], [0., 0., 0.]],
+            json!([{"mesh":0}]),
+        );
+        bin.extend([0u8, 2, 0, 0]);
+        doc["buffers"][0]["byteLength"] = json!(40);
+        doc["bufferViews"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"buffer":0,"byteOffset":36,"byteLength":3}));
+        doc["accessors"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"bufferView":1,"componentType":5121,"type":"SCALAR","count":3}));
+        doc["meshes"][0]["primitives"][0]["indices"] = json!(1);
+        let volume = boxed([0.; 3], [2., 2., 2.]);
+        assert!(contained(
+            &run(&single(volume.clone(), glb(&doc, &bin))).unwrap()
+        ));
+        bin[37] = 1;
+        assert_eq!(
+            outside(run(&single(volume, glb(&doc, &bin)))),
+            "decoded content outside bounding volume: content=a.glb depth=0 volume=own node=0 mesh=0 primitive=0 vertex=1"
+        );
+    }
+
+    #[test]
+    fn content_ancestor_and_external_content_roles_are_reported() {
+        let payload = points(&[[5., 0., 0.]]);
+        // Content volume.
+        let mut root = content_tile(boxed([0.; 3], [10.; 3]), "a.glb");
+        root["content"]["boundingVolume"] = boxed([0.; 3], [4.; 3]);
+        let message = outside(run(&[
+            ("tileset.json", tileset(root)),
+            ("a.glb", payload.clone()),
+        ]));
+        assert!(message.contains("depth=0 volume=content "), "{message}");
+        // Ancestor (I1): the child volume passes C1's tolerant hierarchy check.
+        let edge = f32::from_bits(10f32.to_bits() + 1);
+        let mut root = tile(boxed([0.; 3], [10.; 3]));
+        root["children"] = json!([content_tile(boxed([0.; 3], [10.000002, 10., 10.]), "a.glb")]);
+        let message = outside(run(&[
+            ("tileset.json", tileset(root)),
+            ("a.glb", points(&[[edge, 0., 0.]])),
+        ]));
+        assert!(message.contains("depth=1 volume=ancestor:1 "), "{message}");
+        // External-reference content volume (I2), tested in the referencing frame.
+        let mut root = tile(boxed([0.; 3], [100.; 3]));
+        root["content"] = json!({"uri":"ext.json","boundingVolume":boxed([0.; 3], [1.; 3])});
+        let message = outside(run(&[
+            ("tileset.json", tileset(root)),
+            (
+                "ext.json",
+                tileset(content_tile(boxed([0.; 3], [50.; 3]), "a.glb")),
+            ),
+            ("a.glb", payload),
+        ]));
+        assert!(
+            message.contains("depth=1 volume=externalContent:1 "),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn external_root_transform_is_a_chain_step() {
+        let mut root = tile(boxed([3., 0., 0.], [1.; 3]));
+        root["content"] = json!({"uri":"ext.json"});
+        let mut external = content_tile(boxed([0.; 3], [1.; 3]), "a.glb");
+        let mut m = IDENTITY;
+        m[12] = 3.;
+        external["transform"] = json!(m);
+        let files = |x: f32| {
+            vec![
+                ("tileset.json", tileset(root.clone())),
+                ("ext.json", tileset(external.clone())),
+                ("a.glb", points(&[[x, 0., 0.]])),
+            ]
+        };
+        // Skipping the external root transform would put -0.9 outside [2, 4].
+        assert!(contained(&run(&files(-0.9)).unwrap()));
+        assert!(contained(&run(&files(0.9)).unwrap()));
+    }
+
+    #[test]
+    fn same_uri_is_tested_per_reference() {
+        let mut first = content_tile(boxed([0.; 3], [1.; 3]), "a.glb");
+        let mut m = IDENTITY;
+        m[12] = 5.;
+        first["transform"] = json!(m);
+        let second = content_tile(boxed([0.; 3], [0.4, 1., 1.]), "a.glb");
+        let mut root = tile(boxed([0.; 3], [10.; 3]));
+        root["children"] = json!([first.clone(), second]);
+        let message = outside(run(&[
+            ("tileset.json", tileset(root.clone())),
+            ("a.glb", points(&[[0.5, 0., 0.]])),
+        ]));
+        assert!(message.contains("depth=1 volume=own "), "{message}");
+        let mut again = first.clone();
+        again["refine"] = json!("ADD");
+        root["children"] = json!([first, again]);
+        assert!(contained(
+            &run(&[
+                ("tileset.json", tileset(root)),
+                ("a.glb", points(&[[0.5, 0., 0.]])),
+            ])
+            .unwrap()
+        ));
+    }
+
+    fn with_doc(patch: impl Fn(&mut Value)) -> Vec<u8> {
+        let (mut doc, bin) = points_doc(&[[0., 0., 0.]], json!([{"mesh":0}]));
+        patch(&mut doc);
+        glb(&doc, &bin)
+    }
+    fn wide() -> Value {
+        boxed([0.; 3], [10.; 3])
+    }
+
+    #[test]
+    fn each_exclusion_reason_is_reported_without_streaming() {
+        let payload = points(&[[0., 0., 0.]]);
+        type Files = Vec<(&'static str, Vec<u8>)>;
+        let mut cases: Vec<(&str, Files)> = Vec::new();
+        let mut doc = json!({"asset":{"version":"1.1"},"geometricError":0,
+            "extensionsUsed":["3DTILES_bounding_volume_S2"],"root":content_tile(wide(), "a.glb")});
+        cases.push((
+            "tilesetExtension",
+            vec![
+                ("tileset.json", serde_json::to_vec(&doc).unwrap()),
+                ("a.glb", payload.clone()),
+            ],
+        ));
+        doc = json!({"asset":{"version":"1.1"},"geometricError":0,"root":content_tile(wide(), "a.glb")});
+        doc["root"]["extensions"] = json!({"ACME_tile":{}});
+        cases.push((
+            "tilesetExtension",
+            vec![
+                ("tileset.json", serde_json::to_vec(&doc).unwrap()),
+                ("a.glb", payload.clone()),
+            ],
+        ));
+        let mut root = content_tile(wide(), "a.glb");
+        root["metadata"] = json!({"class":"c"});
+        cases.push((
+            "tileMetadata",
+            vec![("tileset.json", tileset(root)), ("a.glb", payload.clone())],
+        ));
+        let mut root = content_tile(wide(), "a.glb");
+        root["content"]["metadata"] = json!({"class":"c"});
+        cases.push((
+            "tileMetadata",
+            vec![("tileset.json", tileset(root)), ("a.glb", payload.clone())],
+        ));
+        doc = json!({"asset":{"version":"1.1","gltfUpAxis":"Z"},"geometricError":0,"root":content_tile(wide(), "a.glb")});
+        cases.push((
+            "upAxisOverride",
+            vec![
+                ("tileset.json", serde_json::to_vec(&doc).unwrap()),
+                ("a.glb", payload.clone()),
+            ],
+        ));
+        cases.push((
+            "regionVolume",
+            single(json!({"region":[-0.1,-0.1,0.1,0.1,0,10]}), payload.clone()),
+        ));
+        cases.push((
+            "rotatedBox",
+            single(json!({"box":[0,0,0,1,1,0,-1,1,0,0,0,1]}), payload.clone()),
+        ));
+        cases.push((
+            "gltfExtension",
+            single(
+                wide(),
+                with_doc(|d| {
+                    d["extensionsUsed"] = json!(["CESIUM_RTC"]);
+                    d["extensions"] = json!({"CESIUM_RTC":{"center":[1,2,3]}});
+                }),
+            ),
+        ));
+        cases.push((
+            "sceneSelection",
+            single(
+                wide(),
+                with_doc(|d| {
+                    d.as_object_mut().unwrap().remove("scene");
+                    d["scenes"] = json!([{"nodes":[0]}, {"nodes":[0]}]);
+                }),
+            ),
+        ));
+        cases.push((
+            "skin",
+            single(wide(), with_doc(|d| d["nodes"][0]["skin"] = json!(0))),
+        ));
+        cases.push((
+            "morphTargets",
+            single(wide(), with_doc(|d| d["nodes"][0]["weights"] = json!([0]))),
+        ));
+        cases.push((
+            "animation",
+            single(
+                wide(),
+                with_doc(|d| d["animations"] = json!([{"channels":[],"samplers":[]}])),
+            ),
+        ));
+        cases.push((
+            "quaternionWindow",
+            single(
+                wide(),
+                with_doc(|d| d["nodes"][0]["rotation"] = json!([0, 0, 0, 0.999])),
+            ),
+        ));
+        for (reason, files) in cases {
+            assert_eq!(not_inspected(run(&files)), [reason], "{reason}");
+        }
+    }
+
+    /// The H7 Unsupported message of a legacy verdict, or a panic.
+    fn legacy_verdict(result: Result<ValidationReport, Error>) -> String {
+        match result {
+            Err(Error::Unsupported(message)) if message.starts_with("legacy ") => message,
+            other => panic!("expected a legacy Unsupported verdict, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn legacy_content_is_unsupported_by_suffix_or_magic_and_never_inspected() {
+        let glb = points(&[[0., 0., 0.]]);
+        fn files(name: &str, bytes: Vec<u8>) -> Vec<(&str, Vec<u8>)> {
+            vec![
+                ("tileset.json", tileset(content_tile(wide(), name))),
+                (name, bytes),
+            ]
+        }
+        let after_magic = |format: &str, rest: &[u8]| [format.as_bytes(), rest].concat();
+        for format in ["b3dm", "i3dm", "pnts", "cmpt"] {
+            // L1: the suffix decides; nothing after the name is looked at, so a
+            // GLB, garbage, an empty member and a valid-looking header agree.
+            for name in [
+                format!("a.{format}"),
+                format!("a.{}", format.to_uppercase()),
+            ] {
+                for bytes in [glb.clone(), Vec::new(), after_magic(format, &[0xff; 24])] {
+                    let message = legacy_verdict(run(&files(&name, bytes)));
+                    assert_eq!(
+                        message,
+                        format!(
+                            "legacy {format} content is unsupported (glTF 2.0 content only): {name}"
+                        )
+                    );
+                }
+            }
+            // L2: the first four bytes decide under any other suffix (magic wins).
+            for name in ["a.glb", "a.gltf", "a.bin", "a"] {
+                for rest in [&[][..], &glb[4..], &[0xff; 3][..]] {
+                    let message = legacy_verdict(run(&files(name, after_magic(format, rest))));
+                    assert_eq!(
+                        message,
+                        format!(
+                            "legacy {format} content is unsupported (glTF 2.0 content only): \
+                             {name} starts with {format} magic"
+                        )
+                    );
+                }
+            }
+        }
+        // Not legacy: a non-final legacy suffix, magic off offset 0, short members.
+        assert!(contained(
+            &run(&files("b3dm.cmpt/x.glb", glb.clone())).unwrap()
+        ));
+        for (name, bytes) in [
+            ("a.bin", glb.clone()),
+            ("a.vctr", b"vctr".to_vec()),
+            ("a.bin", b"b3d".to_vec()),
+            ("a.bin", b" b3dm".to_vec()),
+        ] {
+            assert!(
+                matches!(run(&files(name, bytes)), Err(Error::Unsupported(m))
+                    if m == "payload format outside GLB/local glTF 2.0"),
+                "{name}"
+            );
+        }
+        assert!(matches!(
+            run(&files("a.glb", b"B3DM".to_vec())),
+            Err(Error::InvalidInput(_))
+        ));
+        // L0: a missing legacy member stays InvalidInput.
+        assert!(matches!(
+            run(&[("tileset.json", tileset(content_tile(wide(), "a.b3dm")))]),
+            Err(Error::InvalidInput(m)) if m.contains("a.b3dm")
+        ));
+    }
+
+    /// R-1: a legacy suffix is refused before the payload read. The GLB twin has
+    /// the same names' lengths and member sizes, so its smallest admitting
+    /// `total_bytes_read` minus the payload size is exactly the legacy archive's
+    /// need; a classifier placed after the read would breach it.
+    #[test]
+    fn legacy_suffix_is_refused_before_the_payload_read() {
+        let glb = points(&[[0., 0., 0.]]);
+        let twin = vec![
+            ("tileset.json", tileset(content_tile(wide(), "ab.glb"))),
+            ("ab.glb", glb.clone()),
+        ];
+        let legacy_files = vec![
+            ("tileset.json", tileset(content_tile(wide(), "a.b3dm"))),
+            ("a.b3dm", [&b"b3dm"[..], &glb[4..]].concat()),
+        ];
+        let limited = |bytes| ValidationLimits {
+            total_bytes_read: bytes,
+            ..ValidationLimits::default()
+        };
+        let (mut low, mut high) = (0u64, 1 << 20);
+        while low < high {
+            let middle = (low + high) / 2;
+            if run_with(&twin, limited(middle)).is_ok() {
+                high = middle;
+            } else {
+                low = middle + 1;
+            }
+        }
+        let need = low - glb.len() as u64;
+        legacy_verdict(run_with(&legacy_files, limited(need)));
+        assert!(matches!(
+            run_with(&legacy_files, limited(need - 1)),
+            Err(Error::ResourceLimit(_))
+        ));
+    }
+
+    // ---- Slice 3: implicit archives (contract §4) ----
+    use super::i1_fixtures::{constant, implicit_root, tileset as i1_tileset, Sub};
+
+    /// One point at the origin of a node translated by `x` along +X (U leaves
+    /// the X axis unchanged), so the drawn vertex is exactly `(x, 0, 0)`.
+    fn point_at(x: f64) -> Vec<u8> {
+        let (doc, bin) = points_doc(&[[0., 0., 0.]], json!([{"mesh":0,"translation":[x,0,0]}]));
+        glb(&doc, &bin)
+    }
+    /// A box centred at the origin with half-lengths `(hx, 8, 8)`.
+    fn row(hx: f64) -> [f64; 12] {
+        [0., 0., 0., hx, 0., 0., 0., 8., 0., 0., 0., 8.]
+    }
+    /// A FLOAT64 TILE_BOUNDING_BOX schema for subtree rows (class `b`).
+    fn row_schema() -> Value {
+        json!({"id":"s","classes":{
+            "b":{"properties":{"vol":{"type":"SCALAR","componentType":"FLOAT64",
+                "array":true,"count":12,"semantic":"TILE_BOUNDING_BOX"}}},
+            "label":{"properties":{"name":{"type":"STRING"}}}}})
+    }
+    /// The one subtree of a QUADTREE root (L = A = 2): available tiles and
+    /// contents by subtree bit index (0 is I_0, 1 + Morton at level 1), and one
+    /// FLOAT64 row per available tile when `rows` is given.
+    fn subtree(tiles: &[usize], contents: &[usize], rows: Option<&[[f64; 12]]>) -> Vec<u8> {
+        let mut sub = Sub::new(Value::Null, constant(0));
+        let t = sub.bitstream(5, tiles);
+        let c = sub.bitstream(5, contents);
+        let mut sub = sub
+            .set("tileAvailability", t)
+            .set("contentAvailability", json!([c]));
+        if let Some(rows) = rows {
+            let flat: Vec<f64> = rows.iter().flatten().copied().collect();
+            let values = sub.floats(&flat, false);
+            sub = sub
+                .set(
+                    "propertyTables",
+                    json!([{"class":"b","count":rows.len(),"properties":{"vol":{"values":values}}}]),
+                )
+                .set("tileMetadata", json!(0));
+        }
+        sub.build()
+    }
+    /// A tileset document with the row schema.
+    fn implicit_doc(root: Value) -> Vec<u8> {
+        serde_json::to_vec(&json!({"asset":{"version":"1.1"},"geometricError":32,
+            "schema":row_schema(),"root":root}))
+        .unwrap()
+    }
+    const NAMES: [&str; 5] = [
+        "c/0/0/0.glb",
+        "c/1/0/0.glb",
+        "c/1/1/0.glb",
+        "c/1/0/1.glb",
+        "c/1/1/1.glb",
+    ];
+    /// An archive of `root` (holding R with template `c/{level}/{x}/{y}.glb`),
+    /// its subtree, and one payload per emitted content.
+    fn implicit_files(
+        root: Value,
+        sub: Vec<u8>,
+        payloads: &[(usize, Vec<u8>)],
+    ) -> Vec<(&'static str, Vec<u8>)> {
+        let mut files = vec![
+            ("tileset.json", implicit_doc(root)),
+            ("s/0/0/0.subtree", sub),
+        ];
+        files.extend(payloads.iter().map(|(i, p)| (NAMES[*i], p.clone())));
+        files
+    }
+    fn r() -> Value {
+        implicit_root(2, 2, &["c/{level}/{x}/{y}.glb"])
+    }
+
+    #[test]
+    fn implicit_archives_are_inspected() {
+        // §4 step 1: no `implicitTiling` exclusion. Payload-free roots, on the
+        // tileset root and below it, are Contained with the I1 check listed.
+        let subtree = Sub::new(constant(1), constant(0)).build();
+        for root in [
+            implicit_root(1, 1, &[]),
+            json!({"boundingVolume":{"box":[0,0,0,8,0,0,0,8,0,0,0,8]},"geometricError":16,
+                "refine":"ADD","children":[implicit_root(1, 1, &[])]}),
+        ] {
+            let report = run(&[
+                ("tileset.json", i1_tileset(root)),
+                ("s/0/0/0.subtree", subtree.clone()),
+            ])
+            .unwrap();
+            assert!(report
+                .checks
+                .contains(&"implicitAddressingAndAvailability".to_owned()));
+            assert!(contained(&report), "{report:?}");
+            assert!(!report
+                .not_inspected
+                .iter()
+                .any(|c| c.contains("implicitTiling")));
+        }
+        // An implicit content's payload reasons come from its per-URI facts.
+        let subtree = Sub::new(constant(1), constant(0))
+            .set("contentAvailability", json!([constant(1)]))
+            .build();
+        let files = |payload: Vec<u8>| {
+            vec![
+                (
+                    "tileset.json",
+                    i1_tileset(implicit_root(1, 1, &["c/{level}/{x}/{y}.glb"])),
+                ),
+                ("s/0/0/0.subtree", subtree.clone()),
+                ("c/0/0/0.glb", payload),
+            ]
+        };
+        assert_eq!(
+            not_inspected(run(&files(with_doc(|d| d["nodes"][0]["skin"] = json!(0))))),
+            ["skin"]
+        );
+        // DerivedRoot only: I_0's own volume is exactly V_R (closed).
+        assert!(contained(&run(&files(point_at(8.))).unwrap()));
+        assert_eq!(
+            outside(run(&files(point_at(8f64.next_up())))),
+            "decoded content outside bounding volume: content=c/0/0/0.glb depth=0 volume=own node=0 mesh=0 primitive=0 vertex=0"
+        );
+    }
+
+    #[test]
+    fn implicit_chain_tests_own_implicit_ancestors_i0_and_v_r_in_order() {
+        // §4 table and I4. R (depth 1, box half 8) under an explicit parent P
+        // (box half 8 + 2e-7, within the hierarchyBounds tolerance). Rows widen
+        // X by 2e-7 within the same tolerance; the vertex sits at 8 + 1e-7, so
+        // each verdict names the first level whose X face is exactly 8.
+        let (wide, edge) = (8. + 2e-7, 8. + 1e-7);
+        let parent = |hx: f64, r_hx: f64| {
+            let mut r = r();
+            r["boundingVolume"]["box"][3] = json!(r_hx);
+            json!({"boundingVolume":{"box":row(hx).to_vec()},"geometricError":32,
+                "refine":"ADD","children":[r]})
+        };
+        let level_one = |p_hx, r_hx, rows: [f64; 2]| {
+            implicit_files(
+                parent(p_hx, r_hx),
+                subtree(&[0, 1], &[1], Some(&[row(rows[0]), row(rows[1])])),
+                &[(1, point_at(edge))],
+            )
+        };
+        let message = |volume: &str| {
+            format!("decoded content outside bounding volume: content=c/1/0/0.glb depth=2 volume={volume} node=0 mesh=0 primitive=0 vertex=0")
+        };
+        // Level l = 1: own, ancestor:1 = I_0, ancestor:2 = R (V_R), ancestor:3 = P.
+        for (p_hx, r_hx, rows, volume) in [
+            (wide, wide, [wide, 8.], "own"),
+            (wide, wide, [8., wide], "ancestor:1"),
+            (wide, 8., [wide, wide], "ancestor:2"),
+            (8., wide, [wide, wide], "ancestor:3"),
+        ] {
+            assert_eq!(outside(run(&level_one(p_hx, r_hx, rows))), message(volume));
+        }
+        assert!(contained(
+            &run(&level_one(wide, wide, [wide, wide])).unwrap()
+        ));
+        // Level l = 0: own = I_0's row, ancestor:1 = V_R.
+        let level_zero = |r_hx, row_hx| {
+            implicit_files(
+                parent(wide, r_hx),
+                subtree(&[0], &[0], Some(&[row(row_hx)])),
+                &[(0, point_at(edge))],
+            )
+        };
+        let message = |volume: &str| {
+            format!("decoded content outside bounding volume: content=c/0/0/0.glb depth=1 volume={volume} node=0 mesh=0 primitive=0 vertex=0")
+        };
+        assert_eq!(outside(run(&level_zero(wide, 8.))), message("own"));
+        assert_eq!(outside(run(&level_zero(8., wide))), message("ancestor:1"));
+        assert!(contained(&run(&level_zero(wide, wide)).unwrap()));
+    }
+
+    #[test]
+    fn implicit_root_transform_steps_out_of_v_r_before_the_parent() {
+        // R carries translation (10, 0, 0) under P (centre 10, half 8): V_R is
+        // tested in R's frame, then R.transform, then P (§4 table, level l+2).
+        let parent = |r_hx: f64| {
+            let mut r = r();
+            r["boundingVolume"]["box"][3] = json!(r_hx);
+            let mut m = IDENTITY;
+            m[12] = 10.;
+            r["transform"] = json!(m);
+            json!({"boundingVolume":{"box":[10,0,0,8,0,0,0,8,0,0,0,8]},"geometricError":32,
+                "refine":"ADD","children":[r]})
+        };
+        let files = |x: f64| {
+            implicit_files(
+                parent(8. + 2e-7),
+                subtree(&[0], &[0], None),
+                &[(0, point_at(x))],
+            )
+        };
+        assert!(contained(&run(&files(8.)).unwrap()));
+        assert_eq!(
+            outside(run(&files(8. + 1e-7))),
+            "decoded content outside bounding volume: content=c/0/0/0.glb depth=1 volume=ancestor:2 node=0 mesh=0 primitive=0 vertex=0"
+        );
+        // Both verdicts need the step: unstepped, 8 + 1e-7 would lie inside P
+        // and -7 outside it; stepped, -7 is 3, inside P.
+        assert!(contained(&run(&files(-7.)).unwrap()));
+    }
+
+    #[test]
+    fn external_implicit_root_tests_the_referencing_content_after_r_transform() {
+        // tileset.json links ext.json with a content volume centred at x = 5
+        // (half 1); ext.json's root is R with translation (5, 0, 0).
+        let mut r = implicit_root(1, 1, &["c/{level}/{x}/{y}.glb"]);
+        let mut m = IDENTITY;
+        m[12] = 5.;
+        r["transform"] = json!(m);
+        let link = json!({"boundingVolume":{"box":[0,0,0,20,0,0,0,20,0,0,0,20]},
+            "geometricError":32,"contents":[{"uri":"ext.json",
+                "boundingVolume":{"box":[5,0,0,1,0,0,0,8,0,0,0,8]}}]});
+        let subtree = Sub::new(constant(1), constant(0))
+            .set("contentAvailability", json!([constant(1)]))
+            .build();
+        let files = |x: f64| {
+            vec![
+                ("tileset.json", i1_tileset(link.clone())),
+                ("ext.json", i1_tileset(r.clone())),
+                ("s/0/0/0.subtree", subtree.clone()),
+                ("c/0/0/0.glb", point_at(x)),
+            ]
+        };
+        // 0 in R's frame is 5 in the link's: inside only after R.transform.
+        assert!(contained(&run(&files(0.)).unwrap()));
+        assert!(contained(&run(&files(1.)).unwrap()));
+        assert_eq!(
+            outside(run(&files(1f64.next_up()))),
+            "decoded content outside bounding volume: content=c/0/0/0.glb depth=1 volume=externalContent:2 node=0 mesh=0 primitive=0 vertex=0"
+        );
+    }
+
+    #[test]
+    fn derived_implicit_volume_is_chain_scoped() {
+        // §2, I5: rowless level-1 tiles with no content at or below them do
+        // not exclude; a content on one does, through its chain bit.
+        let all = [0, 1, 2, 3, 4];
+        let origin = point_at(0.);
+        assert!(contained(
+            &run(&implicit_files(
+                r(),
+                subtree(&all, &[0], None),
+                &[(0, origin.clone())]
+            ))
+            .unwrap()
+        ));
+        assert_eq!(
+            not_inspected(run(&implicit_files(
+                r(),
+                subtree(&all, &[0, 3], None),
+                &[(0, origin.clone()), (3, origin.clone())]
+            ))),
+            ["derivedImplicitVolume"]
+        );
+        // With rows, the same tiles are tested.
+        let rows = [row(8.); 5];
+        assert!(contained(
+            &run(&implicit_files(
+                r(),
+                subtree(&all, &[0, 3], Some(&rows)),
+                &[(0, origin.clone()), (3, origin)]
+            ))
+            .unwrap()
+        ));
+    }
+
+    #[test]
+    fn derived_implicit_volume_overrides_a_stopped_precheck() {
+        // S3-20 in miniature: an explicit reference first stops the precheck
+        // at workLimit; a later reference through a rowless tile still lists
+        // derivedImplicitVolume, and only it.
+        let origin = point_at(0.);
+        let files = |contents: &[usize]| {
+            let root = json!({"boundingVolume":{"box":[0,0,0,8,0,0,0,8,0,0,0,8]},
+                "geometricError":32,"refine":"ADD",
+                "children":[content_tile(boxed([0.; 3], [8.; 3]), "a.glb"), r()]});
+            let mut files = implicit_files(
+                root,
+                subtree(&[0, 1], contents, None),
+                &contents
+                    .iter()
+                    .map(|&i| (i, origin.clone()))
+                    .collect::<Vec<_>>(),
+            );
+            files.push(("a.glb", origin.clone()));
+            files
+        };
+        let limits = ValidationLimits {
+            containment_work_units: 1,
+            ..ValidationLimits::default()
+        };
+        assert_eq!(
+            not_inspected(run_with(&files(&[0, 1]), limits.clone())),
+            ["derivedImplicitVolume"]
+        );
+        assert_eq!(not_inspected(run_with(&files(&[0]), limits)), ["workLimit"]);
+        assert_eq!(
+            not_inspected(run(&files(&[0, 1]))),
+            ["derivedImplicitVolume"]
+        );
+        assert!(contained(&run(&files(&[0])).unwrap()));
+    }
+
+    #[test]
+    fn template_header_metadata_is_tile_metadata_and_subtree_tables_are_not() {
+        // I6, §4 step 7: a header `metadata` entity is content metadata.
+        let mut root = r();
+        root["content"]["metadata"] = json!({"class":"label","properties":{"name":"x"}});
+        let files = |root: Value| {
+            implicit_files(
+                root,
+                subtree(&[0], &[0], Some(&[row(8.)])),
+                &[(0, point_at(0.))],
+            )
+        };
+        assert_eq!(not_inspected(run(&files(root))), ["tileMetadata"]);
+        // The subtree's TILE_BOUNDING_BOX table alone excludes nothing.
+        assert!(contained(&run(&files(r())).unwrap()));
+    }
+
+    #[test]
+    fn implicit_references_stream_in_walk_order_at_r_position() {
+        // §3 item 4: R's emitted contents are references in I1 walk order, at
+        // R's place in the explicit pre-order. Every payload here is Outside.
+        let far = point_at(100.);
+        let files = |r_first: bool| {
+            let explicit = content_tile(boxed([0.; 3], [8.; 3]), "z.glb");
+            let children = if r_first {
+                json!([r(), explicit])
+            } else {
+                json!([explicit, r()])
+            };
+            let root = json!({"boundingVolume":{"box":[0,0,0,8,0,0,0,8,0,0,0,8]},
+                "geometricError":32,"refine":"ADD","children":children});
+            let mut files = implicit_files(
+                root,
+                subtree(&[0, 1, 2], &[1, 2], Some(&[row(8.); 3])),
+                &[(1, far.clone()), (2, far.clone())],
+            );
+            files.push(("z.glb", far.clone()));
+            files
+        };
+        assert!(outside(run(&files(true))).contains("content=c/1/0/0.glb depth=2 volume=own "));
+        assert!(outside(run(&files(false))).contains("content=z.glb depth=1 volume=own "));
+    }
+
+    #[test]
+    fn vector_tiles_without_content_refine_until_a_pixel() {
+        use sha2::Digest;
+        let state = b"{}".to_vec();
+        let marker =
+            json!({"vectorBuildStateSha256": format!("{:x}", sha2::Sha256::digest(&state))});
+        let files = |error: f64, vector: bool| {
+            let mut root = tile(wide());
+            root["geometricError"] = json!(error);
+            root["children"] = json!([content_tile(boxed([0.; 3], [1.; 3]), "a.glb")]);
+            let mut doc = json!({"asset":{"version":"1.1"},"geometricError":error,"root":root,
+                "extensionsUsed":["3DTILES_content_gltf_vector"]});
+            if vector {
+                doc["asset"]["extras"] = marker.clone();
+            }
+            let doc = serde_json::to_vec(&doc).unwrap();
+            let mut files = vec![("tileset.json", doc), ("a.glb", with_doc(|_| {}))];
+            files.extend(vector.then(|| ("vector-build.json", state.clone())));
+            files.extend(vector.then(|| ("conversion.json", b"{}".to_vec())));
+            files
+        };
+        // 16 x the root box diagonal, 2 x |(10, 10, 10)|.
+        let floor = 32. * 300f64.sqrt();
+        assert!(run(&files(floor, true)).is_ok());
+        let error = run(&files(floor * 0.99, true)).unwrap_err().to_string();
+        assert!(error.contains("without content"), "{error}");
+        // Other vector tilesets may keep empty tiles within their error.
+        assert!(run(&files(1., false)).is_ok());
+        // An implicit I_0 without content (G 16, floor about 443) over a content child.
+        let mut files = implicit_files(r(), subtree(&[0, 1], &[1], None), &[(1, point_at(0.))]);
+        assert!(run(&files).is_ok());
+        let mut doc: Value = serde_json::from_slice(&files[0].1).unwrap();
+        doc["asset"]["extras"] = marker;
+        files.extend([
+            ("vector-build.json", state),
+            ("conversion.json", b"{}".to_vec()),
+        ]);
+        files[0].1 = serde_json::to_vec(&doc).unwrap();
+        assert!(run(&files)
+            .unwrap_err()
+            .to_string()
+            .contains("without content"));
+    }
+
+    #[test]
+    fn allowlisted_and_default_values_do_not_exclude() {
+        let doc = json!({"asset":{"version":"1.1","gltfUpAxis":"Y"},"geometricError":0,
+            "extensionsUsed":["3DTILES_content_gltf_vector"],"root":content_tile(wide(), "a.glb")});
+        let payload = with_doc(|d| {
+            d["extensionsUsed"] = json!(["KHR_materials_unlit", "EXT_mesh_features"]);
+            d["nodes"][0]["rotation"] = json!([0, 0, 0, 1]);
+            d["animations"] = json!([]);
+        });
+        assert!(contained(
+            &run(&[
+                ("tileset.json", serde_json::to_vec(&doc).unwrap()),
+                ("a.glb", payload),
+            ])
+            .unwrap()
+        ));
+        // |q|^2 - 1 exactly 2^-18 is inside the window; one ulp more is not.
+        let edge = 2f64.powi(-9);
+        let q = |x: f64| {
+            single(
+                wide(),
+                with_doc(|d| d["nodes"][0]["rotation"] = json!([x, 0, 0, 1])),
+            )
+        };
+        assert!(contained(&run(&q(edge)).unwrap()));
+        assert_eq!(not_inspected(run(&q(edge.next_up()))), ["quaternionWindow"]);
+    }
+
+    #[test]
+    fn all_reasons_are_listed_sorted_and_deduplicated() {
+        let skinned = with_doc(|d| {
+            d["nodes"][0]["skin"] = json!(0);
+            d["animations"] = json!([{"channels":[],"samplers":[]}]);
+        });
+        let mut root = tile(wide());
+        root["children"] = json!([content_tile(wide(), "a.glb"), content_tile(wide(), "b.glb")]);
+        let doc =
+            json!({"asset":{"version":"1.1","gltfUpAxis":"X"},"geometricError":0,"root":root});
+        assert_eq!(
+            not_inspected(run(&[
+                ("tileset.json", serde_json::to_vec(&doc).unwrap()),
+                ("a.glb", skinned.clone()),
+                ("b.glb", skinned),
+            ])),
+            ["animation", "skin", "upAxisOverride"]
+        );
+    }
+
+    #[test]
+    fn outcome_precedence() {
+        // Malformed node beats an exclusion (here gltfExtension).
+        let malformed = with_doc(|d| {
+            d["extensionsUsed"] = json!(["EXT_mesh_gpu_instancing"]);
+            d["nodes"][0]["matrix"] = json!([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+            d["nodes"][0]["scale"] = json!([1, 1, 1]);
+        });
+        let failure = run(&single(wide(), malformed)).unwrap_err();
+        assert!(
+            matches!(&failure, Error::InvalidInput(m) if m.contains("matrix must not coexist")),
+            "{failure:?}"
+        );
+        // An exclusion beats the precheck and a would-be Outside.
+        let far = points(&[[100., 0., 0.]]);
+        let (mut doc, bin) = points_doc(&[[100., 0., 0.]], json!([{"mesh":0}]));
+        doc["animations"] = json!([{"channels":[],"samplers":[]}]);
+        let limits = ValidationLimits {
+            containment_span_bits: 1,
+            ..ValidationLimits::default()
+        };
+        assert_eq!(
+            not_inspected(run_with(&single(wide(), glb(&doc, &bin)), limits.clone())),
+            ["animation"]
+        );
+        // The precheck beats a would-be Outside.
+        assert_eq!(
+            not_inspected(run_with(&single(wide(), far.clone()), limits)),
+            ["numericSpan"]
+        );
+        assert!(outside(run(&single(wide(), far.clone()))).contains("volume=own"));
+        // A C1 failure beats every C2 outcome.
+        let failure = run(&[
+            ("tileset.json", tileset(content_tile(wide(), "a.glb"))),
+            ("a.glb", far),
+            ("stray.bin", vec![0; 4]),
+        ])
+        .unwrap_err();
+        assert!(failure.to_string().contains("unreferenced archive entries"));
+    }
+
+    #[test]
+    fn precheck_records_only_the_first_violation_in_traversal_order() {
+        // `deep` violates the node-depth cap; `float` violates the span cap
+        // (FLOAT position pair spans 277 bits) while `small` u8 words do not.
+        let deep = {
+            let (mut doc, bin) = points_doc(&[[0., 0., 0.]], json!([{"children":[1]},{"mesh":0}]));
+            doc["extensionsUsed"] = json!(["KHR_mesh_quantization"]);
+            doc["extensionsRequired"] = json!(["KHR_mesh_quantization"]);
+            doc["accessors"][0]["componentType"] = json!(5121);
+            doc["accessors"][0]["min"] = json!([0, 0, 0]);
+            doc["accessors"][0]["max"] = json!([0, 0, 0]);
+            doc["buffers"][0]["byteLength"] = json!(4);
+            doc["bufferViews"][0] = json!({"buffer":0,"byteLength":4,"byteStride":4});
+            drop(bin);
+            glb(&doc, &[0; 4])
+        };
+        let float = points(&[[0., 0., 0.]]);
+        let limits = ValidationLimits {
+            containment_span_bits: 100,
+            containment_node_depth: 1,
+            ..ValidationLimits::default()
+        };
+        let files = |first: &str, second: &str| {
+            let mut root = tile(wide());
+            root["children"] = json!([content_tile(wide(), first), content_tile(wide(), second)]);
+            vec![
+                ("tileset.json", tileset(root)),
+                ("deep.glb", deep.clone()),
+                ("float.glb", float.clone()),
+            ]
+        };
+        assert_eq!(
+            not_inspected(run_with(&files("deep.glb", "float.glb"), limits.clone())),
+            ["workLimit"]
+        );
+        assert_eq!(
+            not_inspected(run_with(&files("float.glb", "deep.glb"), limits.clone())),
+            ["numericSpan"]
+        );
+        // Each alone, at caps that admit it, is contained.
+        let relaxed = ValidationLimits {
+            containment_node_depth: 2,
+            ..limits
+        };
+        assert!(contained(
+            &run_with(&single(wide(), deep.clone()), relaxed).unwrap()
+        ));
+    }
+
+    #[test]
+    fn identity_node_forms_share_spans_at_the_cap_and_one_over() {
+        // FLOAT pair (-149, 127) spans 277 bits; centre and half-lengths add none.
+        for node in [
+            json!({"mesh":0}),
+            json!({"mesh":0,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1]}),
+            json!({"mesh":0,"matrix":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]}),
+        ] {
+            let (doc, bin) = points_doc(&[[0., 0., 0.]], json!([node.clone()]));
+            let files = single(wide(), glb(&doc, &bin));
+            let limits = |bits| ValidationLimits {
+                containment_span_bits: bits,
+                ..ValidationLimits::default()
+            };
+            assert!(contained(&run_with(&files, limits(277)).unwrap()), "{node}");
+            assert_eq!(
+                not_inspected(run_with(&files, limits(276))),
+                ["numericSpan"],
+                "{node}"
+            );
+        }
+    }
+
+    #[test]
+    fn instances_without_position_bound_spans_and_are_never_streamed() {
+        // Review B1: three nested in-window rotations [2^-1000, 0, 0, 1] end in
+        // an empty mesh (static sInst 6008 > 4096). Alone it draws nothing and
+        // has no Pair0: Contained, with no composite pushed (a push would breach
+        // the arena). Beside a real triangle, its sInst joins the URI's
+        // span: numericSpan. Expected verdicts are the oracle's.
+        let rot = json!([2f64.powi(-1000), 0, 0, 1]);
+        let nodes = json!([
+            {"rotation":rot,"children":[1]},
+            {"rotation":rot,"children":[2]},
+            {"rotation":rot,"mesh":0}
+        ]);
+        let empty = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+            "meshes":[{"primitives":[]}],"nodes":nodes});
+        let files = single(boxed([0.; 3], [10.; 3]), glb(&empty, &[]));
+        assert!(contained(&run(&files).unwrap()));
+        let (_work, path) = package(&files);
+        let facts =
+            containment_work_facts(ValidationRequest::new(&path), ValidationLimits::default())
+                .unwrap();
+        // 128·(⌈2002/64⌉² + ⌈4005/64⌉² + ⌈6006/64⌉²), the oracle's precheck units.
+        assert_eq!(facts[0].nodes, Some(1_770_112), "{facts:?}");
+        let mut real = empty.clone();
+        let mut bin = Vec::new();
+        for v in [0f32, 0., 0., 1., 0., 0., 0., 1., 0.] {
+            bin.extend(v.to_le_bytes());
+        }
+        real["buffers"] = json!([{"byteLength":36}]);
+        real["bufferViews"] = json!([{"buffer":0,"byteLength":36}]);
+        real["accessors"] = json!([{"bufferView":0,"componentType":5126,"type":"VEC3",
+            "count":3,"min":[0,0,0],"max":[1,1,0]}]);
+        real["meshes"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"primitives":[{"attributes":{"POSITION":0}}]}));
+        real["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"mesh":1}));
+        real["scenes"][0]["nodes"] = json!([0, 3]);
+        let files = single(boxed([0.; 3], [10.; 3]), glb(&real, &bin));
+        assert_eq!(not_inspected(run(&files)), ["numericSpan"]);
+        // The span is the only obstacle: above 6008 bits the triangle streams.
+        let limits = ValidationLimits {
+            containment_span_bits: 8192,
+            ..ValidationLimits::default()
+        };
+        assert!(contained(&run_with(&files, limits).unwrap()));
+    }
+
+    #[test]
+    fn per_uri_hull_decides_numeric_span_for_multi_instance_uris() {
+        // Each instance alone spans 278 bits (FLOAT pair scaled by 2^-100 or
+        // 2^100); the per-URI Pair0 hull spans 478 (contract v3.1, delta2 H1).
+        let (tiny, huge) = (2f64.powi(-100), 2f64.powi(100));
+        let files = |children: Value| {
+            let nodes = json!([
+                {"children":children},
+                {"mesh":0,"scale":[tiny,tiny,tiny]},
+                {"mesh":0,"scale":[huge,huge,huge]}
+            ]);
+            let (doc, bin) = points_doc(&[[0., 0., 0.]], nodes);
+            single(wide(), glb(&doc, &bin))
+        };
+        let limits = ValidationLimits {
+            containment_span_bits: 300,
+            ..ValidationLimits::default()
+        };
+        for alone in [json!([1]), json!([2])] {
+            assert!(contained(&run_with(&files(alone), limits.clone()).unwrap()));
+        }
+        assert_eq!(
+            not_inspected(run_with(&files(json!([1, 2])), limits)),
+            ["numericSpan"]
+        );
+    }
+
+    #[test]
+    fn work_bytes_decoded_and_depth_caps_at_the_sum_and_one_below() {
+        // One FLOAT vertex, two skipped nodes, one level of span 277 (q = 25)
+        // with the own box: T·V + Nodes + Idx + E = 1·(max(20, 25) + max(25, 25))
+        // + 2 + 1 + 3, plus the per-reference terms (C2-WB §3.1): 1152 + 8·1 +
+        // B + Dec + 16·J + 160·1 (a.bin) + 4·1 (one instance, one primitive).
+        let (mut doc, bin) = points_doc(&[[0., 0., 0.]], json!([{"children":[1]},{"mesh":0}]));
+        doc["buffers"][0]["uri"] = json!("a.bin");
+        let gltf = serde_json::to_vec(&doc).unwrap();
+        let files = vec![
+            ("tileset.json", tileset(content_tile(wide(), "a.gltf"))),
+            ("a.gltf", gltf.clone()),
+            ("a.bin", bin.clone()),
+        ];
+        let read = (gltf.len() + bin.len()) as u64;
+        let json_nodes = value_nodes(&doc);
+        let units = 50 + 2 + 1 + 3 + 1152 + 8 + read + bin.len() as u64 + 16 * json_nodes + 160 + 4;
+        for (field, at_cap) in [
+            ("units", units),
+            ("bytes", read),
+            ("decoded", bin.len() as u64),
+            ("depth", 2),
+        ] {
+            let limits = |cap: u64| {
+                let mut limits = ValidationLimits::default();
+                match field {
+                    "units" => limits.containment_work_units = cap,
+                    "bytes" => limits.containment_bytes_read = cap,
+                    "decoded" => limits.containment_decoded_bytes = cap,
+                    _ => limits.containment_node_depth = cap,
+                }
+                limits
+            };
+            assert!(
+                contained(&run_with(&files, limits(at_cap)).unwrap()),
+                "{field} at cap"
+            );
+            assert_eq!(
+                not_inspected(run_with(&files, limits(at_cap - 1))),
+                ["workLimit"],
+                "{field} one below"
+            );
+        }
+        let (_work, path) = package(&files);
+        assert_eq!(
+            containment_work_facts(ValidationRequest::new(&path), ValidationLimits::default())
+                .unwrap(),
+            [UriWork {
+                uri: "a.gltf".into(),
+                t: 1,
+                nodes: Some(2),
+                idx: 1,
+                e: 3,
+                dec: bin.len() as u64,
+                b: read,
+                json_nodes,
+                external_resources: 1,
+                instance_primitives: 1,
+                max_node_depth: 2,
+            }]
+        );
+        assert_eq!(
+            containment_work_total(ValidationRequest::new(&path), ValidationLimits::default())
+                .unwrap(),
+            units
+        );
+    }
+
+    /// `J`: every JSON value counts one node, containers included.
+    fn value_nodes(v: &Value) -> u64 {
+        1 + match v {
+            Value::Array(items) => items.iter().map(value_nodes).sum(),
+            Value::Object(members) => members.values().map(value_nodes).sum(),
+            _ => 0,
+        }
+    }
+    /// One unnormalized u8 POSITION vertex: every span stays within one limb (q = 1).
+    fn quantized_doc(nodes: Value) -> Value {
+        let (mut doc, _) = points_doc(&[[0., 0., 0.]], nodes);
+        doc["extensionsUsed"] = json!(["KHR_mesh_quantization"]);
+        doc["extensionsRequired"] = json!(["KHR_mesh_quantization"]);
+        doc["accessors"][0]["componentType"] = json!(5121);
+        doc["accessors"][0]["min"] = json!([0, 0, 0]);
+        doc["accessors"][0]["max"] = json!([0, 0, 0]);
+        doc["buffers"][0]["byteLength"] = json!(4);
+        doc["bufferViews"][0] = json!({"buffer":0,"byteLength":4,"byteStride":4});
+        doc
+    }
+    fn work_total(files: &[(&str, Vec<u8>)]) -> u64 {
+        let (_work, path) = package(files);
+        containment_work_total(ValidationRequest::new(&path), ValidationLimits::default()).unwrap()
+    }
+    fn work_facts(files: &[(&str, Vec<u8>)]) -> Vec<UriWork> {
+        let (_work, path) = package(files);
+        containment_work_facts(ValidationRequest::new(&path), ValidationLimits::default()).unwrap()
+    }
+    fn at_cap_pair(files: &[(&str, Vec<u8>)], units: u64) {
+        let cap = |units| ValidationLimits {
+            containment_work_units: units,
+            ..ValidationLimits::default()
+        };
+        assert!(contained(&run_with(files, cap(units)).unwrap()));
+        assert_eq!(
+            not_inspected(run_with(files, cap(units - 1))),
+            ["workLimit"]
+        );
+    }
+
+    #[test]
+    fn level_operations_are_charged_at_their_floors() {
+        // T = 1 and q = 1 at every level, so each difference is one floor per
+        // operation plus 8 per added level; the payload terms are identical.
+        let payload = glb(&quantized_doc(json!([{"mesh":0}])), &[0; 4]);
+        let facts = work_facts(&single(wide(), payload.clone()));
+        assert_eq!(facts[0].t, 1, "{facts:?}");
+        let base = work_total(&single(wide(), payload.clone()));
+        let f = &facts[0];
+        // Level 0: base 20 and the own box 25.
+        assert_eq!(
+            base,
+            20 + 25
+                + f.nodes.unwrap()
+                + f.idx
+                + f.e
+                + 1152
+                + 8
+                + f.b
+                + f.dec
+                + 16 * f.json_nodes
+                + 4
+        );
+        let with_root = |root: Value, extra: &[(&'static str, Vec<u8>)]| {
+            let mut files = vec![("tileset.json", tileset(root)), ("a.glb", payload.clone())];
+            files.extend_from_slice(extra);
+            work_total(&files) - base
+        };
+        // An own sphere instead of the box: 32.
+        let sphere = json!({"sphere":[0, 0, 0, 10]});
+        assert_eq!(
+            with_root(content_tile(sphere.clone(), "a.glb"), &[]),
+            32 - 25
+        );
+        // A content box beside the own box at level 0: 25.
+        let mut root = content_tile(wide(), "a.glb");
+        root["content"]["boundingVolume"] = boxed([0.; 3], [5.; 3]);
+        assert_eq!(with_root(root, &[]), 25);
+        // A child tile without a transform: the parent's box at level 1, no step.
+        let mut root = tile(wide());
+        root["children"] = json!([content_tile(boxed([0.; 3], [5.; 3]), "a.glb")]);
+        assert_eq!(with_root(root.clone(), &[]), 25 + 8);
+        // With a transform the child also pays the step: 30.
+        let mut m = IDENTITY;
+        m[12] = 1.;
+        root["children"][0]["transform"] = json!(m);
+        assert_eq!(with_root(root, &[]), 30 + 25 + 8);
+        // A sphere parent: 32 at level 1.
+        let mut root = tile(sphere);
+        root["children"] = json!([content_tile(boxed([0.; 3], [5.; 3]), "a.glb")]);
+        assert_eq!(with_root(root, &[]), 32 + 8);
+        // Through an external tileset the link's content box is tested at
+        // level 1 beside the parent's own box.
+        let mut root = tile(wide());
+        root["contents"] = json!([{"uri":"ext.json","boundingVolume":boxed([0.; 3], [5.; 3])}]);
+        let ext = tileset(content_tile(boxed([0.; 3], [5.; 3]), "a.glb"));
+        assert_eq!(with_root(root, &[("ext.json", ext)]), 25 + 25 + 8);
+    }
+
+    #[test]
+    fn per_reference_terms_are_charged_on_every_reference() {
+        // Two instances of a two-primitive mesh, an external buffer: Prim = 4,
+        // Res = 1; V = 20 + 25 per (instance, accessor) vertex.
+        let mut doc = quantized_doc(json!([{"children":[1, 2]},{"mesh":0},{"mesh":0}]));
+        doc["scenes"][0]["nodes"] = json!([0]);
+        let primitive = doc["meshes"][0]["primitives"][0].clone();
+        doc["meshes"][0]["primitives"] = json!([primitive.clone(), primitive]);
+        doc["buffers"][0]["uri"] = json!("a.bin");
+        let gltf = serde_json::to_vec(&doc).unwrap();
+        let files = |root: Value, gltf: &[u8]| {
+            vec![
+                ("tileset.json", tileset(root)),
+                ("a.gltf", gltf.to_vec()),
+                ("a.bin", vec![0; 4]),
+            ]
+        };
+        let one = files(content_tile(wide(), "a.gltf"), &gltf);
+        let f = work_facts(&one).remove(0);
+        let read = gltf.len() as u64 + 4;
+        assert_eq!(
+            (
+                f.b,
+                f.dec,
+                f.json_nodes,
+                f.external_resources,
+                f.instance_primitives
+            ),
+            (read, 4, value_nodes(&doc), 1, 2 * 2),
+            "{f:?}"
+        );
+        let units = 45 * f.t
+            + f.nodes.unwrap()
+            + f.idx
+            + f.e
+            + 1152
+            + 8
+            + read
+            + 4
+            + 16 * value_nodes(&doc)
+            + 160
+            + 4 * 4;
+        assert_eq!(work_total(&one), units);
+        at_cap_pair(&one, units);
+        // A second reference to the same URI pays every term again.
+        let mut root = tile(wide());
+        root["contents"] = json!([{"uri":"a.gltf"}, {"uri":"a.gltf"}]);
+        let two = files(root, &gltf);
+        assert_eq!(work_total(&two), 2 * units);
+        at_cap_pair(&two, 2 * units);
+        // J: five more value nodes (an object, an array, three numbers) cost 16
+        // each beside their bytes.
+        let mut extra = doc.clone();
+        extra["extras"] = json!({"k":[1, 2, 3]});
+        let longer = serde_json::to_vec(&extra).unwrap();
+        let more = files(content_tile(wide(), "a.gltf"), &longer);
+        assert_eq!(work_facts(&more)[0].json_nodes, value_nodes(&doc) + 5);
+        assert_eq!(
+            work_total(&more) - units,
+            16 * 5 + (longer.len() - gltf.len()) as u64
+        );
+        // Res: the same bytes as a data URI resolve nothing (Res = 0) and are
+        // read with the JSON; Dec, J and Prim are unchanged.
+        let mut inline = doc.clone();
+        inline["buffers"][0]["uri"] = json!("data:application/octet-stream;base64,AAAAAA==");
+        let inline = serde_json::to_vec(&inline).unwrap();
+        let data = vec![
+            ("tileset.json", tileset(content_tile(wide(), "a.gltf"))),
+            ("a.gltf", inline.clone()),
+        ];
+        let g = work_facts(&data).remove(0);
+        assert_eq!(
+            (
+                g.b,
+                g.dec,
+                g.json_nodes,
+                g.external_resources,
+                g.instance_primitives
+            ),
+            (inline.len() as u64, 4, value_nodes(&doc), 0, 4)
+        );
+        assert_eq!(
+            i128::from(units) - i128::from(work_total(&data)),
+            160 + i128::from(read) - inline.len() as i128
+        );
+    }
+
+    #[test]
+    fn worked_example_total_reproduces_the_c2wb_formula() {
+        // §3.6: spans [23, 29], V = (20 + 25) + (30 + 25) = 100; one TRS node
+        // with s_step = 5: 256; two levels: 1152 + 16; Res = 0, Prim = 1.
+        let doc = json!({
+            "asset":{"version":"2.0"},"extensionsUsed":["KHR_mesh_quantization"],
+            "extensionsRequired":["KHR_mesh_quantization"],"scene":0,"scenes":[{"nodes":[0]}],
+            "nodes":[{"mesh":0,"translation":[10.5,0,-3],"scale":[2,4,0.25]}],
+            "buffers":[{"byteLength":8}],"bufferViews":[{"buffer":0,"byteLength":8,"byteStride":8}],
+            "accessors":[{"bufferView":0,"componentType":5123,"normalized":true,"type":"VEC3",
+                "count":1,"min":[0,0,0],"max":[0,0,0]}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0},"mode":0}]}]
+        });
+        let mut child = content_tile(json!({"box":[1.5,3,2,100,0,0,0,0,0,0,0,50]}), "a.glb");
+        let mut m = IDENTITY;
+        m[12] = 1000.25;
+        m[13] = -20.;
+        child["transform"] = json!(m);
+        let mut root = tile(boxed([0.; 3], [2048.; 3]));
+        root["children"] = json!([child]);
+        let payload = glb(&doc, &[0; 8]);
+        let files = vec![("tileset.json", tileset(root)), ("a.glb", payload.clone())];
+        let f = work_facts(&files).remove(0);
+        assert_eq!(
+            (
+                f.nodes,
+                f.external_resources,
+                f.instance_primitives,
+                f.json_nodes
+            ),
+            (Some(256), 0, 1, value_nodes(&doc)),
+            "{f:?}"
+        );
+        assert_eq!(f.b, payload.len() as u64);
+        let units = f.t * 100 + 256 + f.idx + f.e + f.dec + f.b + 16 * f.json_nodes + 4 + 1152 + 16;
+        assert_eq!(work_total(&files), units);
+        at_cap_pair(&files, units);
+    }
+
+    #[test]
+    fn chain_bits_are_inherited_at_registration_and_ored_per_reference() {
+        let rotated = json!({"box":[0,0,0,1,1,0,-1,1,0,0,0,1]});
+        let small = || boxed([0.; 3], [0.25; 3]);
+        let payload = points(&[[0., 0., 0.]]);
+        let with = |root: Value, extra: Option<(&'static str, Vec<u8>)>| {
+            let mut files = vec![("tileset.json", tileset(root)), ("a.glb", payload.clone())];
+            files.extend(extra);
+            files
+        };
+        // An ancestor's rotated box two levels up.
+        let mut mid = tile(small());
+        mid["children"] = json!([content_tile(small(), "a.glb")]);
+        let mut root = tile(rotated.clone());
+        root["children"] = json!([mid]);
+        assert_eq!(not_inspected(run(&with(root, None))), ["rotatedBox"]);
+        // An external-tileset link's content volume, inherited by the external root.
+        let mut root = tile(wide());
+        root["contents"] = json!([{"uri":"ext.json","boundingVolume":rotated.clone()}]);
+        let ext = tileset(content_tile(small(), "a.glb"));
+        assert_eq!(
+            not_inspected(run(&with(root, Some(("ext.json", ext))))),
+            ["rotatedBox"]
+        );
+        // The reference's own content volume (not part of the tile's chain).
+        let mut root = content_tile(wide(), "a.glb");
+        root["content"]["boundingVolume"] = rotated.clone();
+        assert_eq!(not_inspected(run(&with(root, None))), ["rotatedBox"]);
+        // A rotated tile that no reference passes through excludes nothing.
+        let mut root = content_tile(wide(), "a.glb");
+        root["children"] = json!([tile(rotated.clone())]);
+        assert!(contained(&run(&with(root, None)).unwrap()));
+        // A rotated sibling's content volume excludes nothing for the other reference.
+        let mut root = tile(wide());
+        let mut sibling = tile(wide());
+        sibling["contents"] = json!([{"uri":"ext.json","boundingVolume":rotated}]);
+        root["children"] = json!([content_tile(wide(), "a.glb"), sibling]);
+        let ext = tileset(tile(small()));
+        assert!(contained(
+            &run(&with(root, Some(("ext.json", ext)))).unwrap()
+        ));
+    }
+
+    #[test]
+    fn chain_bits_keep_precedence_after_the_precheck_stops() {
+        // The first reference stops the precheck at workLimit; a later reference
+        // through a rotated ancestor still lists rotatedBox, and only it.
+        let payload = points(&[[0., 0., 0.]]);
+        let mut excluded = tile(json!({"box":[0,0,0,1,1,0,-1,1,0,0,0,1]}));
+        excluded["children"] = json!([content_tile(boxed([0.; 3], [0.25; 3]), "a.glb")]);
+        let mut root = tile(wide());
+        root["children"] = json!([content_tile(wide(), "a.glb"), excluded]);
+        let files = vec![
+            ("tileset.json", tileset(root.clone())),
+            ("a.glb", payload.clone()),
+        ];
+        let limits = ValidationLimits {
+            containment_work_units: 1,
+            ..ValidationLimits::default()
+        };
+        assert_eq!(
+            not_inspected(run_with(&files, limits.clone())),
+            ["rotatedBox"]
+        );
+        // Control: without the later reference the same cap is workLimit.
+        root["children"].as_array_mut().unwrap().pop();
+        let files = vec![("tileset.json", tileset(root)), ("a.glb", payload)];
+        assert_eq!(not_inspected(run_with(&files, limits)), ["workLimit"]);
+    }
+
+    #[test]
+    fn levels_are_built_only_when_the_precheck_step_runs() {
+        let limits = ValidationLimits::default();
+        let mut c = Containment::new(&limits);
+        let facts = UriFacts {
+            bounds: None,
+            t: 0,
+            nodes: Some(0),
+            idx: 0,
+            e: 0,
+            per_reference: ReferenceFacts::default(),
+            max_depth: 0,
+            exclusions: 0,
+        };
+        let fact = |volume, parent, chain| TileFact {
+            transform: None,
+            volume,
+            external: None,
+            parent,
+            depth: 0,
+            chain,
+            owner: None,
+        };
+        let plain = VolumeFacts::Box([0., 0., 0., 1., 0., 0., 0., 1., 0., 0., 0., 1.]);
+        let root = c.tile(fact(Some(plain), None, 0)).unwrap();
+        let child = c.tile(fact(Some(plain), Some(root), 0)).unwrap();
+        assert_eq!((root, child), (0, 1));
+        assert_eq!(c.path[child].chain, 0);
+        assert!(c.reference(child, None, &facts).unwrap());
+        assert_eq!((c.levels.len(), c.units), (2, 1152 + 16));
+        // Slice 3 §4 step 5: a rowless implicit tile (`None`) carries the
+        // derived bit, inherited and ORed without building levels. A sibling takes
+        // its predecessor's place on the path stack (VS-B-3).
+        c.levels.clear();
+        let derived = c.tile(fact(None, Some(root), 0)).unwrap();
+        assert_eq!(derived, child);
+        assert_eq!(c.path[derived].chain, Reason::DerivedImplicitVolume.bit());
+        let below = c.tile(fact(Some(plain), Some(derived), 0)).unwrap();
+        assert_eq!(c.path[below].chain, Reason::DerivedImplicitVolume.bit());
+        assert!(!c.reference(below, None, &facts).unwrap());
+        assert_eq!(c.exclusions, Reason::DerivedImplicitVolume.bit());
+        assert!(c.levels.is_empty());
+        assert_eq!(c.units, 1152 + 16);
+        // `build_levels` never sees a `None` in domain; reaching one, as own
+        // volume or as an ancestor's, is an internal invariant failure.
+        for tile in [derived, below] {
+            assert!(matches!(
+                c.build_levels(tile, None),
+                Err(Error::InvalidState(_))
+            ));
+        }
+        // A caller-supplied chain bit is inherited too.
+        let marked = c
+            .tile(fact(Some(plain), Some(root), Reason::Skin.bit()))
+            .unwrap();
+        let below_marked = c.tile(fact(Some(plain), Some(marked), 0)).unwrap();
+        assert_eq!(c.path[below_marked].chain, Reason::Skin.bit());
+        // A region tile's bit reaches its descendants' chains.
+        let region = c
+            .tile(fact(Some(VolumeFacts::Region), Some(root), 0))
+            .unwrap();
+        let leaf = c.tile(fact(Some(plain), Some(region), 0)).unwrap();
+        assert_eq!(c.path[leaf].chain, Reason::RegionVolume.bit());
+        assert_eq!(c.path[root].chain, 0);
+        assert_eq!(c.path.len(), 3);
+        // A parent that is not on the path is an internal invariant failure.
+        assert!(matches!(
+            c.tile(fact(Some(plain), Some(3), 0)),
+            Err(Error::InvalidState(_))
+        ));
+    }
+
+    #[test]
+    fn worked_example_is_in_domain_at_29_and_numeric_span_at_28() {
+        // Contract "Worked example": TRS node, u16 normalized POSITION, own box
+        // c=(1.5,0,2) h=(100,0,50), child transform (1000.25,-20,0), parent h=2048.
+        let doc = json!({
+            "asset":{"version":"2.0"},"extensionsUsed":["KHR_mesh_quantization"],
+            "extensionsRequired":["KHR_mesh_quantization"],"scene":0,"scenes":[{"nodes":[0]}],
+            "nodes":[{"mesh":0,"translation":[10.5,0,-3],"scale":[2,4,0.25]}],
+            "buffers":[{"byteLength":8}],"bufferViews":[{"buffer":0,"byteLength":8,"byteStride":8}],
+            "accessors":[{"bufferView":0,"componentType":5123,"normalized":true,"type":"VEC3",
+                "count":1,"min":[0,0,0],"max":[0,0,0]}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0},"mode":0}]}]
+        });
+        let mut child = content_tile(json!({"box":[1.5,0,2,100,0,0,0,0,0,0,0,50]}), "a.glb");
+        let mut m = IDENTITY;
+        m[12] = 1000.25;
+        m[13] = -20.;
+        child["transform"] = json!(m);
+        let mut root = tile(boxed([0.; 3], [2048.; 3]));
+        root["children"] = json!([child]);
+        let files = vec![
+            ("tileset.json", tileset(root)),
+            ("a.glb", glb(&doc, &[0; 8])),
+        ];
+        let limits = |bits| ValidationLimits {
+            containment_span_bits: bits,
+            ..ValidationLimits::default()
+        };
+        // In domain at 29: streamed, and the vertex (10.5, 3, 0) misses the
+        // zero-height own box row, so the verdict is a proven Outside.
+        assert_eq!(
+            outside(run_with(&files, limits(29))),
+            "decoded content outside bounding volume: content=a.glb depth=1 volume=own node=0 mesh=0 primitive=0 vertex=0"
+        );
+        assert_eq!(not_inspected(run_with(&files, limits(28))), ["numericSpan"]);
+        // v3.3 item 1: O's adjusted geometry (own-box row-1 centre 3) keeps the
+        // spans [23, 29] and is Contained at the cap.
+        let mut root: Value = serde_json::from_slice(&files[0].1).unwrap();
+        root["root"]["children"][0]["boundingVolume"]["box"][1] = json!(3);
+        let files = vec![
+            ("tileset.json", serde_json::to_vec(&root).unwrap()),
+            files[1].clone(),
+        ];
+        assert!(contained(&run_with(&files, limits(29)).unwrap()));
+        assert_eq!(not_inspected(run_with(&files, limits(28))), ["numericSpan"]);
+    }
+
+    #[test]
+    fn vector_clip_extension_object_is_not_allowlisted() {
+        for (owner, clip, excluded) in [
+            ("tile", true, true),
+            ("content", true, true),
+            ("tileset", true, true),
+            ("tile", false, false),
+        ] {
+            let mut doc = json!({"asset":{"version":"1.1"},"geometricError":0,
+                "extensionsUsed":["3DTILES_content_gltf_vector"],
+                "root":content_tile(wide(), "a.glb")});
+            let extension = json!({"3DTILES_content_gltf_vector":{"clip":clip}});
+            match owner {
+                "tile" => doc["root"]["extensions"] = extension,
+                "content" => doc["root"]["content"]["extensions"] = extension,
+                _ => doc["extensions"] = extension,
+            }
+            let result = run(&[
+                ("tileset.json", serde_json::to_vec(&doc).unwrap()),
+                ("a.glb", points(&[[0., 0., 0.]])),
+            ]);
+            if excluded {
+                assert_eq!(not_inspected(result), ["tilesetExtension"], "{owner}");
+            } else {
+                assert!(contained(&result.unwrap()), "{owner}");
+            }
+        }
+    }
+
+    #[test]
+    fn references_follow_preorder_with_external_tilesets_expanded_in_place() {
+        // contents [ext.json -> b.glb, a.glb]: b.glb is the first reference.
+        let mut root = tile(wide());
+        root["contents"] = json!([{"uri":"ext.json"}, {"uri":"a.glb"}]);
+        let far = points(&[[20., 0., 0.]]);
+        let files = vec![
+            ("tileset.json", tileset(root.clone())),
+            ("ext.json", tileset(content_tile(wide(), "b.glb"))),
+            ("a.glb", far.clone()),
+            ("b.glb", far),
+        ];
+        let message = outside(run(&files));
+        assert!(message.contains("content=b.glb depth=1 "), "{message}");
+        root["contents"] = json!([{"uri":"a.glb"}, {"uri":"ext.json"}]);
+        let message = outside(run(&[
+            ("tileset.json", tileset(root)),
+            files[1].clone(),
+            files[2].clone(),
+            files[3].clone(),
+        ]));
+        assert!(message.contains("content=a.glb depth=0 "), "{message}");
+    }
+
+    #[test]
+    fn each_contents_entry_is_a_reference_with_its_own_volume() {
+        let mut root = tile(wide());
+        root["contents"] = json!([
+            {"uri":"a.glb","boundingVolume":boxed([0.; 3], [2.; 3])},
+            {"uri":"a.glb","boundingVolume":boxed([0.; 3], [0.5; 3])}
+        ]);
+        let files = vec![
+            ("tileset.json", tileset(root.clone())),
+            ("a.glb", points(&[[1., 0., 0.]])),
+        ];
+        assert!(outside(run(&files)).contains("depth=0 volume=content "));
+        root["contents"][1]["boundingVolume"] = boxed([0.; 3], [1.; 3]);
+        assert!(contained(
+            &run(&[("tileset.json", tileset(root)), files[1].clone()]).unwrap()
         ));
     }
 }

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Opt-in full leaf metadata audit against a matching uncompressed LAS source.
 Usage: python audit_point_cloud.py source.las output.3tz
-No data is downloaded; source coordinates must match the conversion input.
+No data is downloaded; source coordinates must match the conversion input,
+converted with --metadata.
 """
 import argparse
 import json

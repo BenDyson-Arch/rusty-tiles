@@ -1,0 +1,2332 @@
+//! The H8 producer publishes leaf GLBs and diagnostic manifests, without a hierarchy.
+use super::super::{
+    attributes::FullTriangle,
+    config::{self, Jobs, Profile, TreeConfig, TILE_BYTES},
+    full::{self, CornerDepth},
+    records::{NodeKind, NodeRecord},
+};
+use super::{
+    atlas,
+    planning::LeafPlan,
+    schedule::{MemoryGate, SourceCache},
+    writer,
+};
+use crate::mesh_large::phases::{Phase, Phases};
+use crate::spill::SequenceReader;
+use crate::stage_timing::{self as timing, Counter, Stage};
+use crate::{
+    runtime::directory::DirectoryTarget, CleanupDiagnostic, JobError, JobErrorKind, JobFailure,
+    OutputPolicy, RunControl, RunEvent,
+};
+use serde::Serialize;
+use serde_json::json;
+use sha2::{Digest, Sha256};
+use std::{
+    collections::BTreeMap,
+    fs::File,
+    io::{BufWriter, Write},
+    num::NonZeroUsize,
+    path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
+};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LeafProfile {
+    Fast,
+    Balanced,
+    Quality,
+    Lossless,
+}
+impl From<LeafProfile> for Profile {
+    fn from(value: LeafProfile) -> Self {
+        match value {
+            LeafProfile::Fast => Self::Fast,
+            LeafProfile::Balanced => Self::Balanced,
+            LeafProfile::Quality => Self::Quality,
+            LeafProfile::Lossless => Self::Lossless,
+        }
+    }
+}
+#[derive(Clone, Debug)]
+pub struct LeafOutputRequest {
+    input: PathBuf,
+    output: PathBuf,
+    profile: LeafProfile,
+    jobs: Jobs,
+    scratch_dir: Option<PathBuf>,
+    memory_budget: Option<u64>,
+    hlod: super::super::hlod::Settings,
+    #[cfg(test)]
+    leaf_triangles: Option<u64>,
+}
+impl LeafOutputRequest {
+    pub fn new(
+        input: impl Into<PathBuf>,
+        output: impl Into<PathBuf>,
+        profile: LeafProfile,
+    ) -> Self {
+        Self {
+            input: input.into(),
+            output: output.into(),
+            profile,
+            jobs: Jobs::Auto,
+            scratch_dir: None,
+            memory_budget: None,
+            hlod: super::super::hlod::Settings::default(),
+            #[cfg(test)]
+            leaf_triangles: None,
+        }
+    }
+    /// Declared memory budget (D8).
+    pub(crate) fn with_memory_budget(mut self, bytes: u64) -> Self {
+        self.memory_budget = Some(bytes);
+        self
+    }
+    /// Test controls: HLOD triangle cap and mutations.
+    #[cfg(test)]
+    pub(crate) fn with_hlod_settings(mut self, settings: super::super::hlod::Settings) -> Self {
+        self.hlod = settings;
+        self
+    }
+    pub fn with_jobs(mut self, jobs: NonZeroUsize) -> Self {
+        self.jobs = Jobs::Fixed(jobs);
+        self
+    }
+    pub fn with_scratch_dir(mut self, path: impl Into<PathBuf>) -> Self {
+        self.scratch_dir = Some(path.into());
+        self
+    }
+    /// Test fixtures: smaller leaves, so small inputs get several leaves and coarse levels.
+    #[cfg(test)]
+    pub(crate) fn with_leaf_triangles(mut self, leaf_triangles: u64) -> Self {
+        self.leaf_triangles = Some(leaf_triangles);
+        self
+    }
+}
+#[derive(Clone, Debug, Serialize)]
+pub struct LeafOutputReport {
+    pub schema_version: u32,
+    pub profile: LeafProfile,
+    pub triangles: u64,
+    pub leaves: u64,
+    pub glb_bytes: u64,
+    pub maximum_glb_bytes: u64,
+    pub maximum_geometry_error: f64,
+    pub density_reduced_leaves: u64,
+    /// Leaves whose planned density was lowered because one leaf job did not fit the
+    /// declared memory budget (explicit, else the default ceiling).
+    pub memory_reduced_leaves: u64,
+    /// HLOD coarse tiles written beside the leaves.
+    pub proxies: u64,
+    pub proxy_bytes: u64,
+    /// Lossy pages delivered by a stronger UASTC step after their profile's
+    /// own setting missed a decoded-image gate, by the step that passed.
+    pub escalated_pages: EscalatedPages,
+    /// Level-0-sampled pages delivered as exact PNG after every lossy step missed:
+    /// inside the decoded guarantee.
+    pub lossless_fallback_pages: u64,
+    /// Mip-sampled pages delivered as exact level-0 PNG after every lossy step missed:
+    /// the viewer generates their coarser levels, outside the decoded guarantee.
+    pub viewer_mip_fallback_pages: u64,
+    /// Every such page, uncapped, so the archive names each one.
+    pub viewer_mip_fallbacks: Vec<ViewerMipFallback>,
+    /// Escalated pages (all counts above) by what the profile step missed.
+    pub escalation_reasons: EscalationReasons,
+    /// The first [`ESCALATION_DIAGNOSTICS`] escalated pages in leaf order.
+    pub escalation_diagnostics: Vec<EscalationDiagnostic>,
+    /// Escalated pages beyond the bounded diagnostics list.
+    pub escalation_diagnostics_omitted: u64,
+    /// H28 texture-space editability of the published tiles.
+    pub texel_ownership: TexelOwnership,
+}
+/// H28 texture-space editability: a tile is `unique` when no two of its triangles'
+/// published decoded-UV footprints share interior area on any page, so a texel edit
+/// changes exactly one triangle; otherwise `shared` (overlapping, mirrored or repeated
+/// source UVs), and the tile is editable in vertex space only. Never a refusal.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct TexelOwnership {
+    pub unique_leaves: u64,
+    pub shared_leaves: u64,
+    /// Triangles of shared leaves whose footprint shares area with another's.
+    pub shared_triangles: u64,
+    /// Coarse tiles: unique by construction (non-overlapping charts on disjoint packed
+    /// rectangles, and the raster's double-coverage refusal).
+    pub unique_proxies: u64,
+    /// The first [`TEXEL_OWNERSHIP_DIAGNOSTICS`] shared leaves, in leaf order; every
+    /// leaf not listed (and not omitted) is unique.
+    pub shared: Vec<SharedTexels>,
+    pub shared_omitted: u64,
+}
+/// Bound of [`TexelOwnership::shared`].
+pub const TEXEL_OWNERSHIP_DIAGNOSTICS: usize = 64;
+/// One leaf whose texels are not uniquely owned.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SharedTexels {
+    /// Leaf member, `leaves/<index>.glb` in the leaf stage.
+    pub leaf: String,
+    /// Archive tile `f<first>-d<depth>`.
+    pub first: u64,
+    pub depth: u32,
+    /// Always `shared`.
+    pub texel_ownership: &'static str,
+    /// Triangles whose footprint shares area with another's.
+    pub triangles: u64,
+}
+/// One mip-sampled leaf page delivered as exact level-0 PNG with viewer-generated mips:
+/// archive tile `f<first>-d<depth>`, page index and slot property.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ViewerMipFallback {
+    pub first: u64,
+    pub depth: u32,
+    pub page: u64,
+    pub slot: &'static str,
+}
+/// Escalated pages by the profile step's miss: a decoded-image gate, or the
+/// codec's own verification floor.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct EscalationReasons {
+    pub gate: u64,
+    pub codec_verify: u64,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct EscalatedPages {
+    pub uastc_level2: u64,
+    pub uastc_level3: u64,
+}
+/// Bound of [`LeafOutputReport::escalation_diagnostics`].
+pub const ESCALATION_DIAGNOSTICS: usize = 32;
+/// One escalated page: its leaf, slot, sources, delivering step and every
+/// gate it missed on the way.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct EscalationDiagnostic {
+    /// Leaf member, `leaves/<index>.glb` in the leaf stage.
+    pub leaf: String,
+    /// The leaf's first source triangle rank and depth: archive tile
+    /// `content/f<first>-d<depth>.glb` when explicit.
+    pub first: u64,
+    pub depth: u32,
+    pub page: u64,
+    pub slot: &'static str,
+    pub sources: Vec<EscalationSource>,
+    pub step: &'static str,
+    pub misses: Vec<EscalationMiss>,
+}
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct EscalationSource {
+    pub image: u64,
+    pub material: u32,
+}
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct EscalationMiss {
+    pub step: &'static str,
+    /// `gate` or `codec_verify`.
+    pub reason: &'static str,
+    pub mip: Option<u64>,
+    pub gate: String,
+}
+#[derive(Debug)]
+pub struct LeafOutputResult {
+    pub output: PathBuf,
+    pub report: LeafOutputReport,
+    pub cleanup_diagnostics: Vec<CleanupDiagnostic>,
+}
+fn invariant(message: &str) -> JobError {
+    JobError::new(JobErrorKind::InvalidState, message)
+}
+fn resource(message: &str) -> JobError {
+    JobError::new(JobErrorKind::ResourceLimit, message)
+}
+fn close_failed_capture(captured: full::FullCaptured, failure: &mut JobFailure) {
+    let path = captured.scratch.path().to_owned();
+    if let Err(error) = captured.close() {
+        failure.secondary.push(error);
+        if path.exists() {
+            failure.retained_paths.push(path);
+        }
+    }
+}
+fn hex(bytes: impl AsRef<[u8]>) -> String {
+    bytes.as_ref().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The delivery stage's memory plan. Pages lease their actual workspace from
+/// one byte gate shared by all workers, so `jobs` threads never hold more than
+/// `gate_bytes` of page workspace whatever page sizes they meet. Decoded
+/// sources live in a separately budgeted cache; in-flight leaves own their
+/// geometry closure and encoded members up to the tile budget each.
+#[derive(Clone, Copy, Debug, Serialize)]
+pub(crate) struct StagePlan {
+    /// Per-page limit for internal allocation checks (largest page lease).
+    page_bytes: u64,
+    gate_bytes: u64,
+    cache_bytes: u64,
+    global_bytes: u64,
+    leaf_bytes: u64,
+    window: u64,
+    jobs: u64,
+    jobs_limited_by: &'static str,
+    available_bytes: Option<u64>,
+    bound_bytes: u64,
+    /// The least available memory (memory-backed scratch included) admitting one leaf job.
+    minimum_bytes: u64,
+}
+/// Bytes reserved for the runtime, allocator slack and the output writer.
+pub(in crate::mesh_large) const STAGE_RESERVE: u64 = 256 << 20;
+/// What one leaf job needs besides the decoded-source cache and the run's shared terms:
+/// its page lease, its closure twice, and one in-flight member window (four closures,
+/// the encoded member and the GLB being assembled), as [`stage_plan`] admits it.
+pub(in crate::mesh_large) fn leaf_job_bytes(page_bytes: u64, owned: u64) -> Option<u64> {
+    page_bytes
+        .checked_add(owned.checked_mul(7)?)?
+        .checked_add(2 * TILE_BYTES)
+}
+/// The decoded-source cache floor: two of the largest decoded images, or every source.
+pub(in crate::mesh_large) fn cache_floor(images: &[crate::gltf_source::source::ImageInfo]) -> u64 {
+    let texels =
+        |i: &crate::gltf_source::source::ImageInfo| u64::from(i.width) * u64::from(i.height);
+    let total = images
+        .iter()
+        .map(|i| texels(i) * 4)
+        .fold(0u64, u64::saturating_add);
+    total.min(
+        images
+            .iter()
+            .map(texels)
+            .max()
+            .unwrap_or(0)
+            .saturating_mul(8),
+    )
+}
+pub(crate) fn stage_plan(
+    config: &TreeConfig,
+    captured: &full::FullCaptured,
+) -> Result<StagePlan, JobError> {
+    let requested = config.jobs;
+    let total_source = captured
+        .image_info
+        .iter()
+        .try_fold(0u64, |n, i| {
+            n.checked_add(u64::from(i.width) * u64::from(i.height) * 4)
+        })
+        .ok_or_else(|| resource("leaf source byte overflow"))?;
+    let global_bytes = captured
+        .report
+        .memory
+        .owned_metadata_bytes
+        .checked_add(captured.report.memory.geometry.document_bytes)
+        .ok_or_else(|| resource("leaf global ownership overflow"))?;
+    // The largest page lease any leaf's delivery takes, from the same physical
+    // crop/packing projection final preparation uses (page assembly, codec, sampler
+    // chain and source decode at its actual dimensions), not a profile-wide maximum
+    // page. Image-free input builds no page, so it reserves no texture workspace (D8).
+    let mut leaf_owned = 0;
+    let mut page_bytes = 0;
+    for plan in captured.leaf_plans.reader()? {
+        let plan = plan?;
+        leaf_owned = leaf_owned.max(plan.owned_bytes);
+        page_bytes = page_bytes.max(plan.page_bytes);
+    }
+    // An in-flight leaf owns its closure and at most one member of encoded
+    // pages plus the GLB being assembled from them.
+    let leaf_bytes = leaf_owned
+        .checked_add(2 * TILE_BYTES)
+        .ok_or_else(|| resource("leaf ownership overflow"))?;
+    let tmpfs = if captured.scratch.memory_backed() {
+        captured.report.scratch.need_bytes
+    } else {
+        0
+    };
+    let available = config.available_memory();
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as u64;
+    // The cache always holds at least two decoded images (or every source).
+    let cache_floor = cache_floor(&captured.image_info);
+    // Workers share one page-workspace gate, which must admit the largest
+    // page. A running leaf owns its closure and encoded pages; a finished
+    // leaf waiting for the ordered writer keeps only its closure and receipts
+    // (its member is already written), so the window is four leaves per
+    // worker and absorbs slow leaves without idling the others.
+    let per_job = leaf_bytes
+        .checked_add(
+            leaf_owned
+                .checked_mul(4)
+                .ok_or_else(|| resource("window"))?,
+        )
+        .ok_or_else(|| resource("per-job overflow"))?;
+    let fixed_for = |cache: u64| {
+        cache
+            .checked_add(page_bytes)
+            .and_then(|n| n.checked_add(2 * leaf_owned))
+            .ok_or_else(|| resource("leaf fixed memory overflow"))
+    };
+    // What one leaf job needs besides the cache.
+    let one_job = fixed_for(0)?
+        .checked_add(per_job)
+        .ok_or_else(|| resource("leaf job memory overflow"))?;
+    // The planner's density schedule (`planning::preflight`) uses the same formula.
+    debug_assert_eq!(Some(one_job), leaf_job_bytes(page_bytes, leaf_owned));
+    // Cache every decoded source when it fits half the usable memory, otherwise half the
+    // usable memory, but never so much that one leaf job no longer fits beside it and
+    // never below the floor. Monotone in `u`, and `u - cache(u)` never decreases.
+    let cache_for = |usable: Option<u64>| match usable {
+        Some(u) => total_source.min(cache_floor.max((u / 2).min(u.saturating_sub(one_job)))),
+        None => total_source.min(cache_floor.saturating_mul(4)),
+    };
+    // One leaf job fits usable memory `u` when `u >= cache floor + page + one job's window`.
+    let fits = |u: u64| -> bool {
+        cache_floor
+            .checked_add(one_job)
+            .is_some_and(|need| u >= need)
+    };
+    let minimum_usable = {
+        let (mut lo, mut hi) = (0u64, u64::MAX / 2);
+        if !fits(hi) {
+            return Err(resource("one leaf job's memory exceeds any budget"));
+        }
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            if fits(mid) {
+                hi = mid;
+            } else {
+                lo = mid + 1;
+            }
+        }
+        lo
+    };
+    let minimum_bytes = minimum_usable
+        .checked_add(tmpfs)
+        .and_then(|n| n.checked_add(global_bytes))
+        .and_then(|n| n.checked_add(STAGE_RESERVE))
+        .ok_or_else(|| resource("leaf minimum overflow"))?;
+    let usable = available.map(|a| {
+        a.saturating_sub(tmpfs)
+            .saturating_sub(global_bytes)
+            .saturating_sub(STAGE_RESERVE)
+    });
+    if usable.is_some_and(|u| !fits(u)) {
+        return Err(resource(&format!(
+            "one leaf job cannot fit available memory including owned scratch: needs {minimum_bytes} bytes, has {} (an explicit --memory-budget at or below the available memory lets leaf texture density step down to fit)",
+            available.unwrap_or(0)
+        )));
+    }
+    let cache_bytes = cache_for(usable);
+    let fixed = fixed_for(cache_bytes)?;
+    let plan = config::plan_jobs(requested, cores as usize, usable, 0, fixed, per_job);
+    let jobs = plan.jobs;
+    let limited_by = plan.limited_by;
+    let window = jobs
+        .checked_mul(4)
+        .and_then(|n| n.checked_add(2))
+        .ok_or_else(|| resource("window"))?;
+    let leaves = jobs
+        .checked_mul(leaf_bytes)
+        .and_then(|n| n.checked_add(window.checked_mul(leaf_owned)?))
+        .ok_or_else(|| resource("leaf window overflow"))?;
+    let gate_bytes = match usable {
+        Some(u) => u.saturating_sub(cache_bytes).saturating_sub(leaves),
+        None => page_bytes.saturating_mul(jobs),
+    };
+    if gate_bytes < page_bytes {
+        return Err(resource(
+            "one leaf job cannot fit available memory including owned scratch",
+        ));
+    }
+    let bound_bytes = global_bytes
+        .checked_add(STAGE_RESERVE)
+        .and_then(|n| n.checked_add(cache_bytes))
+        .and_then(|n| n.checked_add(gate_bytes))
+        .and_then(|n| n.checked_add(leaves))
+        .ok_or_else(|| resource("leaf declared memory overflow"))?;
+    Ok(StagePlan {
+        bound_bytes,
+        page_bytes,
+        gate_bytes,
+        cache_bytes,
+        global_bytes,
+        leaf_bytes,
+        window,
+        jobs,
+        jobs_limited_by: limited_by,
+        available_bytes: available,
+        minimum_bytes,
+    })
+}
+impl StagePlan {
+    pub(crate) fn jobs(&self) -> u64 {
+        self.jobs
+    }
+    pub(crate) fn minimum_bytes(&self) -> u64 {
+        self.minimum_bytes
+    }
+    pub(crate) fn bound_bytes(&self) -> u64 {
+        self.bound_bytes
+    }
+}
+fn write_file(path: &Path, bytes: &[u8]) -> Result<(), JobError> {
+    let mut file = crate::storage_meter::create(path)
+        .map_err(|e| JobError::io("create leaf member", path, e))?;
+    file.write_all(bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|e| JobError::io("write leaf member", path, e))
+}
+/// Retry only the physical member budget, never fidelity or other failures.
+fn encode_with_density_budget<T>(
+    profile: Profile,
+    initial_drop: u32,
+    mut encode: impl FnMut(u32) -> Result<T, atlas::PrepareError>,
+) -> Result<(T, u32, Vec<serde_json::Value>), JobError> {
+    let mut density_drop = initial_drop;
+    let mut reasons = Vec::new();
+    loop {
+        match encode(density_drop) {
+            Ok(encoded) => return Ok((encoded, density_drop, reasons)),
+            Err(atlas::PrepareError::Budget(error))
+                if profile != Profile::Lossless && density_drop < 12 =>
+            {
+                reasons.push(json!({"densityDrop":density_drop,"reason":error.to_string()}));
+                density_drop += 1;
+            }
+            Err(atlas::PrepareError::Budget(error) | atlas::PrepareError::Failure(error)) => {
+                return Err(error);
+            }
+        }
+    }
+}
+/// Write one prepared atlas. This is the single place the writer's
+/// retryable-budget / hard-failure split enters the density retry loop: only
+/// `Budget` may lower texture density, a writer `Failure` must surface as is.
+fn write_prepared<A, R, L>(
+    prepared: Result<(A, R), atlas::PrepareError>,
+    write: impl FnOnce(&A) -> Result<L, writer::WriteError>,
+) -> Result<(L, R), atlas::PrepareError> {
+    prepared.and_then(|(atlas, receipt)| {
+        write(&atlas)
+            .map_err(|error| match error {
+                writer::WriteError::Budget(e) => atlas::PrepareError::Budget(e),
+                writer::WriteError::Failure(e) => atlas::PrepareError::Failure(e),
+            })
+            .map(|leaf| (leaf, receipt))
+    })
+}
+/// One leaf's frozen inputs, read serially from the captured streams.
+struct LeafInput {
+    node: NodeRecord,
+    plan: LeafPlan,
+    records: Vec<FullTriangle>,
+    corner_depths: Vec<[u8; 3]>,
+}
+/// A leaf whose member is already written by its worker; only its identity
+/// and receipts travel to the ordered manifest writer.
+struct LeafEncoded {
+    name: String,
+    sha256: String,
+    bytes: u64,
+    bounds: super::super::records::Bounds,
+    geometry_error: f64,
+    appearance: Vec<serde_json::Value>,
+    escalations: Vec<atlas::PageEscalation>,
+    density_drop: u32,
+    density_reasons: Vec<serde_json::Value>,
+    /// Published glTF primitives (H28).
+    primitives: usize,
+    /// Triangles whose decoded-UV footprint shares a page texel area with another's.
+    shared_triangles: u64,
+}
+fn read_leaf(
+    node: NodeRecord,
+    triangles: &mut SequenceReader<'_, FullTriangle>,
+    depths: &mut SequenceReader<'_, CornerDepth>,
+    plans: &mut SequenceReader<'_, LeafPlan>,
+    check: &dyn Fn() -> Result<(), JobError>,
+) -> Result<LeafInput, JobError> {
+    let count = usize::try_from(node.triangles()).map_err(|_| resource("leaf count overflow"))?;
+    let mut records = Vec::new();
+    records
+        .try_reserve_exact(count)
+        .map_err(|_| resource("leaf triangle allocation"))?;
+    let mut corner_depths = Vec::new();
+    corner_depths
+        .try_reserve_exact(count)
+        .map_err(|_| resource("leaf depth allocation"))?;
+    for i in 0..count {
+        if i.is_multiple_of(4096) {
+            check()?;
+        }
+        records.push(
+            triangles
+                .next()
+                .transpose()?
+                .ok_or_else(|| invariant("truncated full leaf triangles"))?,
+        );
+        corner_depths.push(
+            depths
+                .next()
+                .transpose()?
+                .ok_or_else(|| invariant("truncated leaf corner depths"))?
+                .depths,
+        );
+    }
+    let plan = plans
+        .next()
+        .transpose()?
+        .ok_or_else(|| invariant("truncated frozen leaf plans"))?;
+    if plan.first != node.first || plan.end != node.end || u32::from(plan.depth) != node.depth() {
+        return Err(invariant("leaf payload plan differs from frozen tree"));
+    }
+    Ok(LeafInput {
+        node,
+        plan,
+        records,
+        corner_depths,
+    })
+}
+/// Any leaf failure but cancellation names the leaf member and its rank.
+fn encode_leaf(
+    input: &LeafInput,
+    services: &atlas::Services<'_>,
+    config: &TreeConfig,
+    leaves: &Path,
+    index: u64,
+) -> Result<LeafEncoded, JobError> {
+    let node = &input.node;
+    leaf_encode(input, services, config, leaves, index).map_err(|error| {
+        if error.kind() == JobErrorKind::Cancelled {
+            return error;
+        }
+        JobError::with_cause(
+            error.kind(),
+            format!(
+                "leaf {index:012} (first {}, depth {}): {error}",
+                node.first,
+                node.depth()
+            ),
+            error,
+        )
+    })
+}
+fn leaf_encode(
+    input: &LeafInput,
+    services: &atlas::Services<'_>,
+    config: &TreeConfig,
+    leaves: &Path,
+    index: u64,
+) -> Result<LeafEncoded, JobError> {
+    let node = &input.node;
+    let captured = services.captured;
+    let ((glb, appearance), density_drop, density_reasons) = encode_with_density_budget(
+        config.profile,
+        u32::from(input.plan.density_drop),
+        |density_drop| {
+            (services.check)().map_err(atlas::PrepareError::from)?;
+            write_prepared(
+                atlas::prepare(
+                    (input.records.clone(), input.corner_depths.clone()),
+                    services,
+                    config.profile,
+                    node.depth() as u8,
+                    density_drop,
+                ),
+                |atlas| {
+                    let mut leaf = timing::time(Stage::GlbWrite, || {
+                        writer::encode(
+                            atlas,
+                            &captured.lattice,
+                            node.depth() as u8,
+                            config.tile_bytes(),
+                        )
+                    })?;
+                    // Only the accepted density attempt reaches here.
+                    leaf.shared_triangles = timing::time(Stage::GlbWrite, || {
+                        crate::mesh_large::batching::leaf_shared_triangles(atlas, &mut || {
+                            (services.check)()
+                        })
+                    })?;
+                    Ok(leaf)
+                },
+            )
+        },
+    )?;
+    // Members are named by frozen leaf order, so workers write them in
+    // parallel; the manifest row is still appended strictly in order.
+    let name = format!("{index:012}.glb");
+    let member = leaves.join(&name);
+    timing::time(Stage::MemberWrite, || write_file(&member, &glb.glb))?;
+    Ok(LeafEncoded {
+        name,
+        sha256: hex(Sha256::digest(&glb.glb)),
+        bytes: glb.glb.len() as u64,
+        bounds: glb.bounds,
+        geometry_error: glb.geometry_error,
+        appearance: appearance.receipts,
+        escalations: appearance.escalations,
+        density_drop,
+        density_reasons,
+        primitives: glb.primitives,
+        shared_triangles: glb.shared_triangles,
+    })
+}
+
+/// Leaves are read in frozen order, encoded by a pool of `jobs` workers (pages
+/// of one leaf also run in parallel), and written strictly in leaf order, so
+/// every member, manifest row and the first reported failure are independent
+/// of the worker count.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn produce(
+    path: &Path,
+    captured: &full::FullCaptured,
+    config: &TreeConfig,
+    stage: &StagePlan,
+    profile: LeafProfile,
+    coarse: Coarse<'_>,
+    phases: &Phases<'_>,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+) -> Result<LeafStageOutput, JobError> {
+    let leaf_started = std::time::Instant::now();
+    let total_leaves = captured.tree.stats.leaves;
+    phases.progress(Phase::LeafBuild, 0, Some(total_leaves))?;
+    let leaves = path.join("leaves");
+    crate::storage_meter::create_dir(&leaves)
+        .map_err(|e| JobError::io("create leaf directory", &leaves, e))?;
+    let manifest_path = path.join("leaves.jsonl");
+    let file = crate::storage_meter::create(&manifest_path)
+        .map_err(|e| JobError::io("create leaf manifest", &manifest_path, e))?;
+    let mut manifest = BufWriter::new(file);
+    let mut triangles = captured.triangles.reader()?;
+    let mut depths = captured.corner_depths.reader()?;
+    let mut plans = captured.leaf_plans.reader()?;
+    let mut report = LeafOutputReport {
+        schema_version: 1,
+        profile,
+        triangles: 0,
+        leaves: 0,
+        glb_bytes: 0,
+        maximum_glb_bytes: 0,
+        maximum_geometry_error: 0.,
+        density_reduced_leaves: 0,
+        memory_reduced_leaves: 0,
+        proxies: 0,
+        proxy_bytes: 0,
+        escalated_pages: EscalatedPages::default(),
+        lossless_fallback_pages: 0,
+        viewer_mip_fallback_pages: 0,
+        viewer_mip_fallbacks: Vec::new(),
+        escalation_reasons: EscalationReasons::default(),
+        escalation_diagnostics: Vec::new(),
+        escalation_diagnostics_omitted: 0,
+        texel_ownership: TexelOwnership::default(),
+    };
+    let jobs = usize::try_from(stage.jobs).map_err(|_| resource("delivery jobs overflow"))?;
+    let window = usize::try_from(stage.window).map_err(|_| resource("delivery window overflow"))?;
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(jobs)
+        .thread_name(|i| format!("rt-leaf-{i}"))
+        .build()
+        .map_err(|e| resource(&format!("delivery worker pool: {e}")))?;
+    let cache = SourceCache::new(stage.cache_bytes);
+    let gate = MemoryGate::new(stage.gate_bytes);
+    // Set when the ordered writer stops: queued leaves then end promptly.
+    let stopped = AtomicBool::new(false);
+    let leaf_check = || {
+        if stopped.load(Ordering::Relaxed) {
+            return Err(JobError::new(
+                JobErrorKind::Cancelled,
+                "an earlier leaf ended the delivery stage",
+            ));
+        }
+        check()
+    };
+    let services = atlas::Services {
+        captured,
+        cache: &cache,
+        gate: &gate,
+        memory: stage.page_bytes,
+        check: &leaf_check,
+    };
+    let mut nodes = captured.tree.nodes.reader()?;
+    let result = pool.in_place_scope(|scope| -> Result<(), JobError> {
+        type Done = Result<(LeafEncoded, LeafInput), JobError>;
+        let (sender, receiver) = mpsc::channel::<(u64, Done)>();
+        let mut pending = BTreeMap::new();
+        let (mut spawned, mut written) = (0u64, 0u64);
+        let mut exhausted = false;
+        let mut next_first = 0u64;
+        let outcome = (|| -> Result<(), JobError> {
+            loop {
+                while !exhausted && spawned - written < window as u64 {
+                    let node = loop {
+                        match nodes.next().transpose()? {
+                            None => break None,
+                            Some(node) if node.kind == NodeKind::Leaf => break Some(node),
+                            Some(_) => {}
+                        }
+                    };
+                    let Some(node) = node else {
+                        exhausted = true;
+                        break;
+                    };
+                    check()?;
+                    crate::spill::preflight(
+                        &leaves,
+                        TILE_BYTES + (1 << 20),
+                        crate::spill::SpaceRole::Output,
+                        crate::spill::PreflightStage::Texture,
+                    )?;
+                    if node.first != next_first || node.triangles() > config.leaf_triangles() {
+                        return Err(invariant(
+                            "leaf ranges or triangle limit differ from frozen tree",
+                        ));
+                    }
+                    next_first = node.end;
+                    let input = read_leaf(node, &mut triangles, &mut depths, &mut plans, check)?;
+                    let index = spawned;
+                    let sender = sender.clone();
+                    let services = &services;
+                    let leaves_dir = leaves.as_path();
+                    scope.spawn(move |_| {
+                        // A panicking worker still reports, so the ordered
+                        // writer never waits for a result that cannot come.
+                        let encoded =
+                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                encode_leaf(&input, services, config, leaves_dir, index)
+                            }))
+                            .unwrap_or_else(|_| Err(invariant("leaf worker panicked")));
+                        // The receiver outlives every task of this scope.
+                        let _ = sender.send((index, encoded.map(|e| (e, input))));
+                    });
+                    spawned += 1;
+                }
+                if spawned == written {
+                    return Ok(());
+                }
+                let (index, encoded) = receiver
+                    .recv()
+                    .map_err(|_| invariant("leaf worker ended without a result"))?;
+                pending.insert(index, encoded);
+                while let Some(encoded) = pending.remove(&written) {
+                    let (encoded, input) = encoded?;
+                    write_leaf(&mut manifest, &manifest_path, &mut report, &input, encoded)?;
+                    written += 1;
+                    if written != total_leaves {
+                        phases.progress(Phase::LeafBuild, written, Some(total_leaves))?;
+                    }
+                }
+            }
+        })();
+        if outcome.is_err() {
+            stopped.store(true, Ordering::Relaxed);
+        }
+        outcome
+    });
+    result?;
+    if report.triangles != captured.scan.triangles
+        || report.leaves != captured.tree.stats.leaves
+        || triangles.next().transpose()?.is_some()
+        || depths.next().transpose()?.is_some()
+        || plans.next().transpose()?.is_some()
+    {
+        return Err(invariant(
+            "full leaf output does not cover captured source exactly",
+        ));
+    }
+    manifest
+        .flush()
+        .and_then(|_| manifest.get_ref().sync_all())
+        .map_err(|e| JobError::io("finish leaf manifest", &manifest_path, e))?;
+    phases.progress(Phase::LeafBuild, total_leaves, Some(total_leaves))?;
+    phases.finished(Phase::LeafBuild, leaf_started.elapsed().as_secs_f64())?;
+    let Coarse { plan, settings } = coarse;
+    // Opt-in stage timing: the leaf stage's share, before HLOD adds its own.
+    let leaf_timing = timing::snapshot();
+    // HLOD needs no decoded image or leaf worker: record the cache and page-gate
+    // observations, then release the decoded images and the pool before its own
+    // admission takes effect (the gate and services own no memory).
+    let stats = cache.stats();
+    let gate_peak = gate.peak();
+    drop(cache);
+    drop(pool);
+    let (hlod, hlod_diagnostics) = timing::time(Stage::Lod, || {
+        super::super::hlod::produce(
+            super::super::hlod::HlodInput {
+                stage: path,
+                captured,
+                config,
+                plan,
+                settings,
+                phases,
+            },
+            check,
+        )
+    })?;
+    report.proxies = hlod.tiles;
+    report.texel_ownership.unique_proxies = hlod.tiles;
+    report.proxy_bytes = hlod.bytes;
+    let doc = json!({"schemaVersion":1,"kind":"full_detail_leaf_payloads","report":report,"lattice":captured.lattice,"provenanceSchema":"rusty_tiles_large_source_v1","leafManifest":"leaves.jsonl","proxyManifest":"proxies.jsonl","hlod":hlod,"losslessMipGuarantee":"PNG level0 exact; viewer-generated minification levels outside guarantee"});
+    write_file(
+        &path.join("manifest.json"),
+        &serde_json::to_vec_pretty(&doc).map_err(|e| invariant(&e.to_string()))?,
+    )?;
+    let resources = json!({"hlod":{"plan":plan,"diagnostics":hlod_diagnostics},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate_peak,"sourceCache":stats});
+    write_file(
+        &path.join("resources.json"),
+        &serde_json::to_vec_pretty(&resources).map_err(|e| invariant(&e.to_string()))?,
+    )?;
+    timing::finish(json!({"lod":"hlod","leafStageTiming":leaf_timing}));
+    Ok(LeafStageOutput {
+        report,
+        diagnostics: LeafStageDiagnostics {
+            memory_bound_bytes: stage.bound_bytes,
+            jobs: stage.jobs,
+            jobs_limited_by: stage.jobs_limited_by,
+            available_bytes: stage.available_bytes,
+            page_bytes: stage.page_bytes,
+            gate_bytes: stage.gate_bytes,
+            cache_bytes: stage.cache_bytes,
+            global_bytes: stage.global_bytes,
+            leaf_bytes: stage.leaf_bytes,
+            window: stage.window,
+            page_gate_peak_bytes: gate_peak,
+            cache_peak_resident_bytes: stats.peak_resident_bytes,
+            cache_hits: stats.hits,
+            cache_misses: stats.misses,
+            hlod_incidence_scratch_peak_bytes: hlod_diagnostics.incidence_scratch_peak_bytes,
+        },
+        hlod: hlod_diagnostics,
+    })
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct LeafStageDiagnostics {
+    pub memory_bound_bytes: u64,
+    pub jobs: u64,
+    pub jobs_limited_by: &'static str,
+    pub available_bytes: Option<u64>,
+    pub page_bytes: u64,
+    pub gate_bytes: u64,
+    pub cache_bytes: u64,
+    pub global_bytes: u64,
+    pub leaf_bytes: u64,
+    pub window: u64,
+    pub page_gate_peak_bytes: u64,
+    pub cache_peak_resident_bytes: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+    /// Measured scratch peak of the HLOD incidence pass, retained capture files included.
+    pub hlod_incidence_scratch_peak_bytes: u64,
+}
+pub(crate) struct LeafStageOutput {
+    pub report: LeafOutputReport,
+    pub diagnostics: LeafStageDiagnostics,
+    /// HLOD stage run facts.
+    pub hlod: super::super::hlod::HlodDiagnostics,
+}
+
+/// The HLOD coarse-tile stage run inside the producer while the capture is live, under
+/// its admitted memory plan.
+#[derive(Clone, Copy)]
+pub(crate) struct Coarse<'a> {
+    pub plan: &'a super::super::hlod::HlodMemoryPlan,
+    pub settings: &'a super::super::hlod::Settings,
+}
+
+fn write_leaf(
+    manifest: &mut BufWriter<crate::storage_meter::Metered<File>>,
+    manifest_path: &Path,
+    report: &mut LeafOutputReport,
+    input: &LeafInput,
+    encoded: LeafEncoded,
+) -> Result<(), JobError> {
+    let node = &input.node;
+    let plan = &input.plan;
+    let LeafEncoded {
+        name,
+        sha256,
+        bytes,
+        bounds,
+        geometry_error,
+        appearance,
+        escalations,
+        density_drop,
+        density_reasons,
+        primitives,
+        shared_triangles,
+    } = encoded;
+    if name != format!("{:012}.glb", report.leaves) {
+        return Err(invariant("leaf member order differs from manifest order"));
+    }
+    timing::count(Counter::Leaves, 1);
+    let receipt = json!({"schemaVersion":1,"uri":format!("leaves/{name}"),"sha256":sha256,"bytes":bytes,"first":node.first,"end":node.end,"cellDepth":node.cell_depth,"cell":node.cell,"pathLength":node.path_len,"path":node.path,"lastOctant":node.last_octant,"depth":node.depth(),"packed":node.is_packed(),"bounds":{"min":bounds.min.map(f64::from),"max":bounds.max.map(f64::from)},"geometryError":geometry_error,"densityDrop":density_drop,"densityReasons":density_reasons,"primitives":primitives,"texelOwnership":if shared_triangles == 0 {"unique"} else {"shared"},"sharedTriangles":shared_triangles,"plannedFootprint":{"densityDrop":plan.density_drop,"memoryDrops":plan.memory_drops,"pages":plan.pages,"baseTexels":plan.base_texels,"chainTexels":plan.chain_texels,"geometryBytes":plan.geometry_bytes,"planningOwnedBytes":plan.owned_bytes},"appearance":appearance});
+    serde_json::to_writer(&mut *manifest, &receipt)
+        .map_err(|e| invariant(&format!("leaf manifest serialization: {e}")))?;
+    manifest
+        .write_all(b"\n")
+        .map_err(|e| JobError::io("write leaf manifest", manifest_path, e))?;
+    report.triangles = report
+        .triangles
+        .checked_add(node.triangles())
+        .ok_or_else(|| resource("triangle report overflow"))?;
+    report.leaves += 1;
+    report.glb_bytes = report
+        .glb_bytes
+        .checked_add(bytes)
+        .ok_or_else(|| resource("leaf output size overflow"))?;
+    report.maximum_glb_bytes = report.maximum_glb_bytes.max(bytes);
+    report.maximum_geometry_error = report.maximum_geometry_error.max(geometry_error);
+    report.density_reduced_leaves += u64::from(density_drop != 0);
+    report.memory_reduced_leaves += u64::from(plan.memory_drops != 0);
+    let ownership = &mut report.texel_ownership;
+    if shared_triangles == 0 {
+        ownership.unique_leaves += 1;
+    } else {
+        ownership.shared_leaves += 1;
+        ownership.shared_triangles += shared_triangles;
+        if ownership.shared.len() < TEXEL_OWNERSHIP_DIAGNOSTICS {
+            ownership.shared.push(SharedTexels {
+                leaf: format!("leaves/{name}"),
+                first: node.first,
+                depth: node.depth(),
+                texel_ownership: "shared",
+                triangles: shared_triangles,
+            });
+        } else {
+            ownership.shared_omitted += 1;
+        }
+    }
+    for page in escalations {
+        use super::delivery::{MissReason, Step};
+        match page.escalation.step {
+            Step::UastcLevel2 => report.escalated_pages.uastc_level2 += 1,
+            Step::UastcLevel3 => report.escalated_pages.uastc_level3 += 1,
+            Step::LosslessPng if page.viewer_mips => {
+                report.viewer_mip_fallback_pages += 1;
+                report.viewer_mip_fallbacks.push(ViewerMipFallback {
+                    first: node.first,
+                    depth: node.depth(),
+                    page: page.page as u64,
+                    slot: atlas::slot_property(page.slot),
+                });
+            }
+            Step::LosslessPng => report.lossless_fallback_pages += 1,
+            Step::Profile => return Err(invariant("unescalated page reported as escalated")),
+        }
+        match page.escalation.misses.first().map(|m| m.reason) {
+            Some(MissReason::Gate) => report.escalation_reasons.gate += 1,
+            Some(MissReason::CodecVerify) => report.escalation_reasons.codec_verify += 1,
+            None => return Err(invariant("escalated page without a miss")),
+        }
+        if report.escalation_diagnostics.len() >= ESCALATION_DIAGNOSTICS {
+            report.escalation_diagnostics_omitted += 1;
+            continue;
+        }
+        report.escalation_diagnostics.push(EscalationDiagnostic {
+            leaf: format!("leaves/{name}"),
+            first: node.first,
+            depth: node.depth(),
+            page: page.page as u64,
+            slot: atlas::slot_property(page.slot),
+            sources: page
+                .sources
+                .iter()
+                .map(|&(image, material)| EscalationSource {
+                    image: image as u64,
+                    material,
+                })
+                .collect(),
+            step: page.escalation.step.name(),
+            misses: page
+                .escalation
+                .misses
+                .iter()
+                .map(|m| EscalationMiss {
+                    step: m.step.name(),
+                    reason: m.reason.name(),
+                    mip: m.mip.map(|mip| mip as u64),
+                    gate: m.gate.clone(),
+                })
+                .collect(),
+        });
+    }
+    Ok(())
+}
+
+pub fn mesh_to_leaf_payloads(
+    request: LeafOutputRequest,
+    control: &RunControl,
+) -> Result<LeafOutputResult, JobFailure> {
+    let attempt = control.begin()?;
+    let target = DirectoryTarget::prepare(&request.output, OutputPolicy::CreateNew)
+        .map_err(|e| attempt.fail(e))?;
+    let mut config = TreeConfig::new(request.profile.into());
+    config.jobs = request.jobs;
+    config.scratch_dir = request.scratch_dir;
+    #[cfg(test)]
+    if let Some(leaf_triangles) = request.leaf_triangles {
+        config = config.with_leaf_triangles(leaf_triangles);
+    }
+    let budget = match crate::mesh_large::resources::MemoryBudget::resolve(request.memory_budget) {
+        Ok(budget) => budget,
+        Err(error) => return Err(attempt.fail(error)),
+    };
+    config.memory_budget = Some(budget);
+    let captured = match timing::time(Stage::Capture, || {
+        full::capture(&request.input, &config, &mut || attempt.check())
+    }) {
+        Ok(captured) => captured,
+        Err(failure) => {
+            let mut finished = attempt.fail(failure.error);
+            finished.secondary.extend(failure.secondary);
+            finished.retained_paths.extend(failure.retained_paths);
+            finished.recovery = failure.recovery;
+            return Err(finished);
+        }
+    };
+    let stage_plan = match stage_plan(&config, &captured) {
+        Ok(plan) => plan,
+        Err(error) => {
+            let mut failed = attempt.fail(error);
+            close_failed_capture(captured, &mut failed);
+            return Err(failed);
+        }
+    };
+    let hlod_plan = match super::super::hlod::plan(&captured, &config, &budget, &request.hlod) {
+        Ok(plan) => plan,
+        Err(error) => {
+            let mut failed = attempt.fail(error);
+            close_failed_capture(captured, &mut failed);
+            return Err(failed);
+        }
+    };
+    let coarse = Coarse {
+        plan: &hlod_plan,
+        settings: &request.hlod,
+    };
+    let stage = match target.stage_pending(&attempt) {
+        Ok(stage) => stage,
+        Err(error) => {
+            let mut failed = attempt.fail(error);
+            close_failed_capture(captured, &mut failed);
+            return Err(failed);
+        }
+    };
+    let result = produce(
+        stage.path(),
+        &captured,
+        &config,
+        &stage_plan,
+        request.profile,
+        coarse,
+        &Phases::silent(),
+        &|| attempt.check(),
+    );
+    let cleanup_path = captured.scratch.path().to_owned();
+    let cleanup = captured.close();
+    let report = match result {
+        Ok(output) => output.report,
+        Err(error) => {
+            let mut failed = stage.fail(error);
+            if let Err(error) = cleanup {
+                failed.secondary.push(error);
+                if cleanup_path.exists() {
+                    failed.retained_paths.push(cleanup_path);
+                }
+            }
+            return Err(failed);
+        }
+    };
+    if let Err(error) = cleanup {
+        let mut failed = stage.fail(error);
+        if cleanup_path.exists() {
+            failed.retained_paths.push(cleanup_path);
+        }
+        return Err(failed);
+    }
+    if let Err(error) = attempt
+        .emit(&RunEvent::Progress {
+            phase: "mesh_leaf_payloads",
+            done: report.leaves,
+            total: Some(report.leaves),
+        })
+        .and_then(|_| attempt.close_events())
+    {
+        return Err(stage.fail(error));
+    }
+    let published = stage.seal()?.publish()?;
+    Ok(LeafOutputResult {
+        output: published.output,
+        report,
+        cleanup_diagnostics: published.cleanup_diagnostics,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    #[test]
+    fn fidelity_failure_never_retries_but_physical_budget_advances_density() {
+        let mut attempts = Vec::new();
+        let error = encode_with_density_budget(Profile::Balanced, 2, |drop| {
+            attempts.push(drop);
+            if drop == 2 {
+                Err(atlas::PrepareError::Failure(JobError::new(
+                    JobErrorKind::Unsupported,
+                    "forced MASK fidelity residual",
+                )))
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::Unsupported);
+        assert_eq!(attempts, [2]);
+
+        attempts.clear();
+        let (_, drop, reasons) = encode_with_density_budget(Profile::Balanced, 2, |drop| {
+            attempts.push(drop);
+            if drop == 2 {
+                Err(atlas::PrepareError::Budget(JobError::new(
+                    JobErrorKind::Unsupported,
+                    "physical GLB byte budget",
+                )))
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap();
+        assert_eq!(attempts, [2, 3]);
+        assert_eq!(drop, 3);
+        assert_eq!(reasons.len(), 1);
+        assert_eq!(reasons[0]["densityDrop"], 2);
+        for (profile, initial) in [(Profile::Lossless, 0), (Profile::Balanced, 12)] {
+            attempts.clear();
+            let result = encode_with_density_budget::<()>(profile, initial, |drop| {
+                attempts.push(drop);
+                Err(atlas::PrepareError::Budget(JobError::new(
+                    JobErrorKind::Unsupported,
+                    "physical GLB byte budget",
+                )))
+            });
+            assert!(result.is_err());
+            assert_eq!(attempts, [initial]);
+        }
+    }
+    /// A writer `Failure` (invalid state, consumer row limit, frame escape) must
+    /// reach the caller after one attempt; reclassified as `Budget` it would
+    /// silently coarsen textures and retry up to twelve times.
+    #[test]
+    fn writer_failure_is_never_a_density_retry_but_writer_budget_is() {
+        for (writer_error, retried) in [
+            (
+                writer::WriteError::Failure(JobError::new(
+                    JobErrorKind::InvalidState,
+                    "writer failure",
+                )),
+                false,
+            ),
+            (
+                writer::WriteError::Budget(JobError::new(
+                    JobErrorKind::ResourceLimit,
+                    "member budget",
+                )),
+                true,
+            ),
+        ] {
+            let kind = writer_error.kind();
+            let mut attempts = Vec::new();
+            let mut writer_error = Some(writer_error);
+            let result = encode_with_density_budget(Profile::Balanced, 2, |drop| {
+                attempts.push(drop);
+                match writer_error.take() {
+                    Some(error) => write_prepared(Ok(((), ())), |_| Err::<(), _>(error)),
+                    None => Ok(((), ())),
+                }
+            });
+            if retried {
+                let (_, drop, reasons) = result.unwrap();
+                assert_eq!(
+                    (attempts.as_slice(), drop, reasons.len()),
+                    (&[2, 3][..], 3, 1)
+                );
+            } else {
+                assert_eq!(result.unwrap_err().kind(), kind);
+                assert_eq!(attempts, [2]);
+            }
+        }
+    }
+    #[test]
+    fn real_leaf_output_all_profiles_and_exact_member_limit() {
+        let work = tempfile::tempdir().unwrap();
+        let input = full::tests::fixture(work.path(), 2);
+        for (name, profile) in [
+            ("fast", LeafProfile::Fast),
+            ("balanced", LeafProfile::Balanced),
+            ("quality", LeafProfile::Quality),
+            ("lossless", LeafProfile::Lossless),
+        ] {
+            let output = work.path().join(name);
+            let result = mesh_to_leaf_payloads(
+                LeafOutputRequest::new(&input, &output, profile)
+                    .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                        crate::mesh_large::hlod::TRIANGLE_CAP,
+                    ))
+                    .with_jobs(NonZeroUsize::new(1).unwrap()),
+                &RunControl::default(),
+            )
+            .unwrap();
+            assert_eq!(result.report.triangles, 2);
+            assert_eq!(result.report.leaves, 1);
+            assert!(result.report.maximum_glb_bytes <= TILE_BYTES);
+            let manifest: serde_json::Value =
+                serde_json::from_slice(&fs::read(output.join("manifest.json")).unwrap()).unwrap();
+            assert_eq!(manifest["kind"], "full_detail_leaf_payloads");
+            assert!(!output.join("tileset.json").exists());
+            let leaf = fs::read(output.join("leaves/000000000000.glb")).unwrap();
+            assert_eq!(&leaf[..4], b"glTF");
+            assert_eq!(
+                u32::from_le_bytes(leaf[8..12].try_into().unwrap()) as usize,
+                leaf.len()
+            );
+            let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
+            let document: serde_json::Value =
+                serde_json::from_slice(&leaf[20..20 + json_len]).unwrap();
+            for sampler in document["samplers"].as_array().unwrap() {
+                assert_eq!(
+                    sampler["minFilter"], 9987,
+                    "unspecified source minification uses authored mips"
+                );
+            }
+        }
+    }
+    /// Review round 2 (coordinator decision): a mipmapped source striped in 16-texel
+    /// bands, cropped from texel 16. The cropped island page keeps a COMPLETE authored
+    /// chain to 1x1 and its mipmapped sampler (so the consumer treats it as complete),
+    /// and level 0 is the source's own bands.
+    #[test]
+    fn cropped_mipmapped_leaf_pages_publish_complete_chains() {
+        let work = tempfile::tempdir().unwrap();
+        let source = work.path().join("source");
+        fs::create_dir_all(&source).unwrap();
+        let positions: [f32; 18] = [
+            0., 0., 0., 4., 0., 0., 0., 4., 0., 4., 0., 0., 4., 4., 0., 0., 4., 0.,
+        ];
+        let (lo, hi) = (16.5f32 / 128., 47.5 / 128.);
+        let uvs: [f32; 12] = [lo, lo, hi, lo, lo, hi, hi, lo, hi, hi, lo, hi];
+        let bytes: Vec<u8> = positions
+            .iter()
+            .chain(&uvs)
+            .flat_map(|v| v.to_le_bytes())
+            .collect();
+        fs::write(source.join("quad.bin"), &bytes).unwrap();
+        image::RgbaImage::from_fn(128, 128, |x, _| {
+            let v = if (x / 16) % 2 == 0 { 0 } else { 255 };
+            image::Rgba([v, v, v, 255])
+        })
+        .save(source.join("bands.png"))
+        .unwrap();
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"material":0}]}],
+            "buffers":[{"uri":"quad.bin","byteLength":bytes.len()}],
+            "bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":72},{"buffer":0,"byteOffset":72,"byteLength":48}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":6,"type":"VEC3","min":[0,0,0],"max":[4,4,0]},
+                         {"bufferView":1,"componentType":5126,"count":6,"type":"VEC2"}],
+            "images":[{"uri":"bands.png"}],"textures":[{"source":0,"sampler":0}],
+            "samplers":[{"minFilter":9987,"magFilter":9729}],
+            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
+        let input = source.join("quad.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let output = work.path().join("out");
+        mesh_to_leaf_payloads(
+            LeafOutputRequest::new(&input, &output, LeafProfile::Quality)
+                .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                    crate::mesh_large::hlod::TRIANGLE_CAP,
+                ))
+                .with_jobs(NonZeroUsize::new(1).unwrap()),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let leaf = fs::read(output.join("leaves/000000000000.glb")).unwrap();
+        let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
+        let document: serde_json::Value = serde_json::from_slice(&leaf[20..20 + json_len]).unwrap();
+        assert_eq!(document["samplers"][0]["minFilter"], 9987);
+        let bin = &leaf[20 + json_len + 8..];
+        let view = &document["bufferViews"]
+            [document["images"][0]["bufferView"].as_u64().unwrap() as usize];
+        let start = view["byteOffset"].as_u64().unwrap_or(0) as usize;
+        let ktx2 = &bin[start..start + view["byteLength"].as_u64().unwrap() as usize];
+        let field = |o: usize| u32::from_le_bytes(ktx2[o..o + 4].try_into().unwrap());
+        let (w, h) = (field(20), field(24));
+        assert_eq!(
+            field(40),
+            32 - w.max(h).leading_zeros(),
+            "KTX2 levelCount: complete to 1x1"
+        );
+        let decoder = basisu::Transcoder::new(ktx2).unwrap();
+        let level = decoder
+            .transcode(0, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE)
+            .unwrap();
+        let blended = level
+            .chunks(4)
+            .filter(|p| (48..208).contains(&p[0]))
+            .count();
+        assert!(
+            blended * 50 < level.len() / 4,
+            "{blended} blended texels of {}",
+            level.len() / 4
+        );
+    }
+    #[test]
+    fn synthetic_depth_payloads_are_identical_across_jobs_and_paths() {
+        let work = tempfile::tempdir().unwrap();
+        let input = full::tests::fixture(work.path(), 8193);
+        let mut previous = None;
+        for jobs in [1, 2] {
+            let scratch = work.path().join(format!("scratch{jobs}"));
+            fs::create_dir(&scratch).unwrap();
+            let output = work.path().join(format!("output{jobs}"));
+            let result = mesh_to_leaf_payloads(
+                LeafOutputRequest::new(&input, &output, LeafProfile::Lossless)
+                    .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                        crate::mesh_large::hlod::TRIANGLE_CAP,
+                    ))
+                    .with_jobs(NonZeroUsize::new(jobs).unwrap())
+                    .with_scratch_dir(&scratch),
+                &RunControl::default(),
+            )
+            .unwrap();
+            assert_eq!(result.report.triangles, 8193);
+            assert!(result.report.leaves >= 2);
+            assert!(fs::read_dir(scratch).unwrap().next().is_none());
+            let rows = fs::read_to_string(output.join("leaves.jsonl")).unwrap();
+            let mut files = vec![
+                fs::read(output.join("manifest.json")).unwrap(),
+                rows.as_bytes().to_vec(),
+            ];
+            for row in rows.lines() {
+                let row: serde_json::Value = serde_json::from_str(row).unwrap();
+                assert!(row["depth"].as_u64().unwrap() > 21);
+                files.push(fs::read(output.join(row["uri"].as_str().unwrap())).unwrap());
+            }
+            if let Some(ref prior) = previous {
+                assert_eq!(prior, &files);
+            } else {
+                previous = Some(files);
+            }
+        }
+    }
+    /// Triangles on a spatial grid; every 64 consecutive triangles share a
+    /// small chart at a pseudo-random place in one procedural 1024x1024
+    /// texture, like a photogrammetry atlas: a leaf's hull covers most of the
+    /// texture while its charts are a small part of it.
+    fn scattered_fixture(parent: &Path, count: usize, min_filter: u32) -> PathBuf {
+        textured_fixture(parent, count, min_filter, Texture::Smooth, 1024)
+    }
+    #[derive(Clone, Copy)]
+    enum Texture {
+        Smooth,
+        /// Every n-th 4x4 block holds four scattered random colours.
+        Hard(u64),
+    }
+    /// [`scattered_fixture`]; `Texture::Hard(n)` replaces every n-th 4x4 texture
+    /// block with four scattered random colours (1: every block), so pages
+    /// miss the colour gate at the profile's encoder setting.
+    fn textured_fixture(
+        parent: &Path,
+        count: usize,
+        min_filter: u32,
+        pattern: Texture,
+        edge: u32,
+    ) -> PathBuf {
+        fs::create_dir_all(parent).unwrap();
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((state >> 33) as f32) / (1u64 << 31) as f32
+        };
+        let (mut positions, mut uvs) = (Vec::new(), Vec::new());
+        let side = (count as f64).sqrt().ceil() as usize;
+        let chart = 6. / 1024.;
+        let (mut u0, mut v0) = (0., 0.);
+        for i in 0..count {
+            let (x, y) = ((i % side) as f32, (i / side) as f32);
+            for p in [[x, y, 0.], [x + 1., y, 0.], [x, y + 1., 0.]] {
+                positions.extend(p);
+            }
+            if i % 64 == 0 {
+                (u0, v0) = (next() * 0.95 + 0.02, next() * 0.95 + 0.02);
+            }
+            let k = i % 64;
+            let (u, v) = (
+                u0 + (k % 8) as f32 * chart / 8.,
+                v0 + (k / 8) as f32 * chart / 8.,
+            );
+            for p in [[u, v], [u + chart / 8., v], [u, v + chart / 8.]] {
+                uvs.extend(p);
+            }
+        }
+        let mut bytes = Vec::new();
+        for value in positions.iter().chain(&uvs) {
+            bytes.extend(value.to_le_bytes());
+        }
+        fs::write(parent.join("attributes.bin"), &bytes).unwrap();
+        // Smooth gradients with mild texel detail, like photographed surfaces.
+        let hash = |x: u32, y: u32, s: u32| {
+            let mut h = u64::from(x).wrapping_mul(0x9E37_79B9)
+                ^ u64::from(y).wrapping_mul(0x85EB_CA6B)
+                ^ u64::from(s).wrapping_mul(0x27D4_EB2F);
+            h ^= h >> 13;
+            h = h.wrapping_mul(0xC2B2_AE35);
+            h ^ (h >> 16)
+        };
+        let texture = image::RgbaImage::from_fn(edge, edge, |x, y| {
+            if let Texture::Hard(every) = pattern {
+                if hash(x / 4, y / 4, 77).is_multiple_of(every) {
+                    let c = hash(x / 4, y / 4, (hash(x, y, 9) % 4) as u32);
+                    return image::Rgba([c as u8, (c >> 8) as u8, (c >> 16) as u8, 255]);
+                }
+            }
+            // Every channel stays below 256 for x, y < 1024 (`edge` <= 1024).
+            let detail = (x * 37 + y * 91) % 13;
+            image::Rgba([
+                (x / 8 + detail) as u8,
+                (y / 8 + 40) as u8,
+                ((x + y) / 16 + detail) as u8,
+                255,
+            ])
+        });
+        texture.save(parent.join("texture.png")).unwrap();
+        let split = positions.len() * 4;
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"material":0}]}],
+            "buffers":[{"uri":"attributes.bin","byteLength":bytes.len()}],
+            "bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":split},{"buffer":0,"byteOffset":split,"byteLength":bytes.len()-split}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":count*3,"type":"VEC3","min":[0,0,0],"max":[positions.chunks(3).map(|p| p[0]).fold(0f32, f32::max),positions.chunks(3).map(|p| p[1]).fold(0f32, f32::max),0]},
+                         {"bufferView":1,"componentType":5126,"count":count*3,"type":"VEC2"}],
+            "images":[{"uri":"texture.png"}],"textures":[{"source":0,"sampler":0}],
+            "samplers":[{"minFilter":min_filter,"magFilter":9729}],
+            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
+        let input = parent.join("scene.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        input
+    }
+    fn output_files(output: &Path) -> Vec<Vec<u8>> {
+        let rows = fs::read_to_string(output.join("leaves.jsonl")).unwrap();
+        let mut files = vec![
+            fs::read(output.join("manifest.json")).unwrap(),
+            rows.as_bytes().to_vec(),
+        ];
+        for row in rows.lines() {
+            let row: serde_json::Value = serde_json::from_str(row).unwrap();
+            files.push(fs::read(output.join(row["uri"].as_str().unwrap())).unwrap());
+        }
+        // HLOD coarse tiles are part of the deterministic output too.
+        let proxies = fs::read_to_string(output.join("proxies.jsonl")).unwrap();
+        files.push(proxies.as_bytes().to_vec());
+        for row in proxies.lines() {
+            let row: serde_json::Value = serde_json::from_str(row).unwrap();
+            files.push(fs::read(output.join(row["uri"].as_str().unwrap())).unwrap());
+        }
+        files
+    }
+    #[test]
+    fn scattered_atlas_islands_are_identical_across_jobs_and_shrink_pages() {
+        let work = tempfile::tempdir().unwrap();
+        let input = scattered_fixture(&work.path().join("source"), 20_000, 9729);
+        for profile in [LeafProfile::Fast, LeafProfile::Balanced] {
+            let mut previous = None;
+            for jobs in [1, 3] {
+                let output = work.path().join(format!("{profile:?}{jobs}"));
+                let result = mesh_to_leaf_payloads(
+                    LeafOutputRequest::new(&input, &output, profile)
+                        .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                            crate::mesh_large::hlod::TRIANGLE_CAP,
+                        ))
+                        .with_jobs(NonZeroUsize::new(jobs).unwrap()),
+                    &RunControl::default(),
+                )
+                .unwrap();
+                assert_eq!(result.report.triangles, 20_000);
+                assert!(result.report.leaves >= 2);
+                let files = output_files(&output);
+                for row in fs::read_to_string(output.join("leaves.jsonl"))
+                    .unwrap()
+                    .lines()
+                {
+                    let row: serde_json::Value = serde_json::from_str(row).unwrap();
+                    let bindings: Vec<_> = row["appearance"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter(|r| r.get("islands").is_some())
+                        .collect();
+                    assert!(!bindings.is_empty());
+                    for binding in bindings {
+                        // Scattered footprints become many small islands whose
+                        // real texels are a small part of the 256x256 hull.
+                        assert!(binding["islands"].as_array().unwrap().len() > 1);
+                        assert!(
+                            binding["islandInteriorTexels"].as_u64().unwrap() < 1024 * 1024 / 5
+                        );
+                    }
+                    for page in row["appearance"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter(|r| r.get("levels").is_some())
+                    {
+                        assert!(
+                            page["width"].as_u64().unwrap() * page["height"].as_u64().unwrap()
+                                <= 1024 * 1024 / 4
+                        );
+                    }
+                }
+                if let Some(ref prior) = previous {
+                    assert_eq!(prior, &files, "jobs {jobs} changed published bytes");
+                } else {
+                    previous = Some(files);
+                }
+            }
+        }
+    }
+    #[test]
+    fn lossless_mipmapped_islands_carry_aligned_eight_texel_context() {
+        let work = tempfile::tempdir().unwrap();
+        let input = scattered_fixture(&work.path().join("source"), 640, 9987);
+        let output = work.path().join("lossless");
+        mesh_to_leaf_payloads(
+            LeafOutputRequest::new(&input, &output, LeafProfile::Lossless)
+                .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                    crate::mesh_large::hlod::TRIANGLE_CAP,
+                ))
+                .with_jobs(NonZeroUsize::new(2).unwrap()),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let rows = fs::read_to_string(output.join("leaves.jsonl")).unwrap();
+        let row: serde_json::Value = serde_json::from_str(rows.lines().next().unwrap()).unwrap();
+        let binding = row["appearance"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r.get("islands").is_some())
+            .unwrap();
+        let islands = binding["islands"].as_array().unwrap();
+        assert!(islands.len() > 1);
+        assert_eq!(binding["islandGutter"], 8);
+        for island in islands {
+            for axis in 0..2 {
+                // Allocation origin and size are multiples of eight texels.
+                let interior = island[2 + axis].as_u64().unwrap();
+                let page = island[4 + axis].as_u64().unwrap();
+                assert_eq!((page - 8) % 8, 0, "{island}");
+                assert_eq!((interior + 16) % 8, 0, "{island}");
+            }
+        }
+    }
+    #[test]
+    fn cancelled_output_does_not_create_a_private_or_public_tree() {
+        let work = tempfile::tempdir().unwrap();
+        let input = full::tests::fixture(work.path(), 1);
+        let output = work.path().join("cancelled");
+        let control = RunControl::default();
+        control.cancellation_handle().cancel();
+        let failure = mesh_to_leaf_payloads(
+            LeafOutputRequest::new(input, &output, LeafProfile::Lossless).with_hlod_settings(
+                crate::mesh_large::hlod::test_settings(crate::mesh_large::hlod::TRIANGLE_CAP),
+            ),
+            &control,
+        )
+        .unwrap_err();
+        assert_eq!(failure.error.kind(), JobErrorKind::Cancelled);
+        assert!(!output.exists());
+        assert!(!fs::read_dir(work.path()).unwrap().any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".tiles-dir-")));
+    }
+
+    /// Pages that miss the colour gate at the profile setting escalate; the
+    /// report counts them by step, agrees with the leaf manifest and lists
+    /// them with leaf, slot, sources and the missed level, and the published
+    /// bytes and report are the same for any worker count.
+    #[test]
+    fn escalated_pages_are_reported_and_identical_across_jobs() {
+        let work = tempfile::tempdir().unwrap();
+        let input = textured_fixture(
+            &work.path().join("source"),
+            9_000,
+            9729,
+            Texture::Hard(4),
+            256,
+        );
+        let mut previous = None;
+        for jobs in [1, 3] {
+            let output = work.path().join(format!("balanced{jobs}"));
+            let result = mesh_to_leaf_payloads(
+                LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
+                    .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                        crate::mesh_large::hlod::TRIANGLE_CAP,
+                    ))
+                    .with_jobs(NonZeroUsize::new(jobs).unwrap()),
+                &RunControl::default(),
+            )
+            .unwrap();
+            let report = &result.report;
+            let total = report.escalated_pages.uastc_level2
+                + report.escalated_pages.uastc_level3
+                + report.lossless_fallback_pages
+                + report.viewer_mip_fallback_pages;
+            assert!(total > 0, "{report:?}");
+            let mut manifest = BTreeMap::<String, u64>::new();
+            let mut pages = 0;
+            for row in fs::read_to_string(output.join("leaves.jsonl"))
+                .unwrap()
+                .lines()
+            {
+                let row: serde_json::Value = serde_json::from_str(row).unwrap();
+                for page in row["appearance"].as_array().unwrap() {
+                    if page.get("levels").is_none() {
+                        continue;
+                    }
+                    pages += 1;
+                    if let Some(step) = page["escalation"]["step"].as_str() {
+                        *manifest.entry(step.to_owned()).or_default() += 1;
+                        assert_eq!(page["escalation"]["misses"][0]["step"], "profile");
+                        assert_eq!(
+                            page["mime"],
+                            if step == "lossless_png" {
+                                "image/png"
+                            } else {
+                                "image/ktx2"
+                            }
+                        );
+                    }
+                }
+            }
+            println!(
+                "escalation jobs{jobs} pages{pages} level2 {} level3 {} png {}",
+                report.escalated_pages.uastc_level2,
+                report.escalated_pages.uastc_level3,
+                report.lossless_fallback_pages
+            );
+            let count = |step: &str| manifest.get(step).copied().unwrap_or(0);
+            assert_eq!(count("uastc_level2"), report.escalated_pages.uastc_level2);
+            assert_eq!(count("uastc_level3"), report.escalated_pages.uastc_level3);
+            assert_eq!(
+                count("lossless_png"),
+                report.lossless_fallback_pages + report.viewer_mip_fallback_pages
+            );
+            assert_eq!(
+                report.escalation_diagnostics.len() as u64 + report.escalation_diagnostics_omitted,
+                total
+            );
+            assert!(report.escalation_diagnostics.len() <= ESCALATION_DIAGNOSTICS);
+            for diagnostic in &report.escalation_diagnostics {
+                assert!(diagnostic.leaf.starts_with("leaves/"));
+                assert_eq!(diagnostic.slot, "baseColorTexture");
+                assert_eq!(
+                    diagnostic.sources,
+                    [EscalationSource {
+                        image: 0,
+                        material: 0
+                    }]
+                );
+                assert_eq!(diagnostic.misses[0].step, "profile");
+                assert!(diagnostic.misses.iter().all(|m| m.mip.is_some()));
+            }
+            let files = output_files(&output);
+            let report = serde_json::to_value(report).unwrap();
+            if let Some((prior_files, prior_report)) = &previous {
+                assert_eq!(prior_files, &files, "jobs {jobs} changed published bytes");
+                assert_eq!(prior_report, &report, "jobs {jobs} changed the report");
+            } else {
+                previous = Some((files, report));
+            }
+        }
+    }
+    /// One 8x8 grid of triangles per primitive. Primitive 0 samples a `edge`² texture
+    /// over `spans` UV periods with `wraps`; with `mixed`, primitive 1 samples a second
+    /// image inside [0.1, 0.3]². Returns the input and the source texture pixels.
+    fn repeat_fixture(
+        parent: &Path,
+        wraps: [u32; 2],
+        spans: [f32; 2],
+        edge: u32,
+        mixed: bool,
+    ) -> (PathBuf, Vec<u8>) {
+        fs::create_dir_all(parent).unwrap();
+        let (mut bytes, mut views, mut accessors, mut primitives) =
+            (Vec::new(), vec![], vec![], vec![]);
+        for p in 0..1 + usize::from(mixed) {
+            let (lo, span) = if p == 0 {
+                ([0., 0.], spans)
+            } else {
+                ([0.1, 0.1], [0.2, 0.2])
+            };
+            let (mut pos, mut uv) = (Vec::new(), Vec::new());
+            for i in 0..64 {
+                let (x, y) = ((i % 8) as f32, (i / 8 + 9 * p) as f32);
+                for c in [[0., 0.], [1., 0.], [0., 1.]] {
+                    pos.extend([x + c[0], y + c[1], 0.]);
+                    let k = [(i % 8) as f32 + c[0], (i / 8) as f32 + c[1]];
+                    uv.extend([lo[0] + k[0] / 8. * span[0], lo[1] + k[1] / 8. * span[1]]);
+                }
+            }
+            for (values, kind) in [(pos, "VEC3"), (uv, "VEC2")] {
+                let start = bytes.len();
+                values
+                    .iter()
+                    .for_each(|v: &f32| bytes.extend(v.to_le_bytes()));
+                views.push(json!({"buffer":0,"byteOffset":start,"byteLength":bytes.len()-start}));
+                let mut a = json!({"bufferView":views.len()-1,"componentType":5126,"count":192,"type":kind});
+                if kind == "VEC3" {
+                    a["min"] = json!([0, 9 * p, 0]);
+                    a["max"] = json!([8, 9 * p + 8, 0]);
+                }
+                accessors.push(a);
+            }
+            primitives.push(json!({"attributes":{"POSITION":2*p,"TEXCOORD_0":2*p+1},"material":p}));
+        }
+        fs::write(parent.join("attributes.bin"), &bytes).unwrap();
+        let texture = |seed: u32| {
+            image::RgbaImage::from_fn(edge, edge, |x, y| {
+                image::Rgba([
+                    (x * 7 + seed) as u8,
+                    (y * 5) as u8,
+                    ((x ^ y) * 3) as u8,
+                    255,
+                ])
+            })
+        };
+        texture(0).save(parent.join("a.png")).unwrap();
+        texture(90).save(parent.join("b.png")).unwrap();
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "meshes":[{"primitives":primitives}],"buffers":[{"uri":"attributes.bin","byteLength":bytes.len()}],
+            "bufferViews":views,"accessors":accessors,"images":[{"uri":"a.png"},{"uri":"b.png"}],
+            "textures":[{"source":0,"sampler":0},{"source":1,"sampler":1}],
+            "samplers":[{"minFilter":9987,"magFilter":9729,"wrapS":wraps[0],"wrapT":wraps[1]},{"minFilter":9987,"magFilter":9729}],
+            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}},{"pbrMetallicRoughness":{"baseColorTexture":{"index":1}}}]});
+        let input = parent.join("scene.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        (input, texture(0).into_raw())
+    }
+    /// The leaf GLB's JSON and its (width, height, wrapS, wrapT, mime) per texture.
+    #[allow(clippy::type_complexity)]
+    fn leaf_pages(output: &Path) -> (serde_json::Value, Vec<(u32, u32, u64, u64, String)>) {
+        let leaf = fs::read(output.join("leaves/000000000000.glb")).unwrap();
+        let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
+        let doc: serde_json::Value = serde_json::from_slice(&leaf[20..20 + json_len]).unwrap();
+        let bin = &leaf[20 + json_len + 8..];
+        let pages = doc["textures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| {
+                let png = t.get("source").is_some();
+                let source = if png {
+                    &t["source"]
+                } else {
+                    &t["extensions"]["KHR_texture_basisu"]["source"]
+                };
+                let image = &doc["images"][source.as_u64().unwrap() as usize];
+                let view = &doc["bufferViews"][image["bufferView"].as_u64().unwrap() as usize];
+                let at = view["byteOffset"].as_u64().unwrap_or(0) as usize;
+                let data = &bin[at..at + view["byteLength"].as_u64().unwrap() as usize];
+                let (w, h) = if png {
+                    image::load_from_memory(data)
+                        .unwrap()
+                        .into_rgba8()
+                        .dimensions()
+                } else {
+                    let n = |o: usize| u32::from_le_bytes(data[o..o + 4].try_into().unwrap());
+                    (n(20), n(24))
+                };
+                let sampler = &doc["samplers"][t["sampler"].as_u64().unwrap() as usize];
+                let wrap = |k: &str| sampler[k].as_u64().unwrap();
+                (
+                    w,
+                    h,
+                    wrap("wrapS"),
+                    wrap("wrapT"),
+                    image["mimeType"].as_str().unwrap().to_owned(),
+                )
+            })
+            .collect();
+        (doc, pages)
+    }
+    fn bake_leaf(input: &Path, output: &Path, profile: LeafProfile) -> serde_json::Value {
+        mesh_to_leaf_payloads(
+            LeafOutputRequest::new(input, output, profile)
+                .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                    crate::mesh_large::hlod::TRIANGLE_CAP,
+                ))
+                .with_jobs(NonZeroUsize::new(2).unwrap()),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let rows = fs::read_to_string(output.join("leaves.jsonl")).unwrap();
+        serde_json::from_str(rows.lines().next().unwrap()).unwrap()
+    }
+    /// The decoded level 0 of a leaf's first texture (PNG, or KTX2 through the transcoder).
+    fn leaf_rgba(output: &Path) -> Vec<u8> {
+        let (doc, pages) = leaf_pages(output);
+        let leaf = fs::read(output.join("leaves/000000000000.glb")).unwrap();
+        let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
+        let t = &doc["textures"][0];
+        let source = t
+            .get("source")
+            .unwrap_or(&t["extensions"]["KHR_texture_basisu"]["source"]);
+        let view = &doc["bufferViews"][doc["images"][source.as_u64().unwrap() as usize]
+            ["bufferView"]
+            .as_u64()
+            .unwrap() as usize];
+        let at = 20 + json_len + 8 + view["byteOffset"].as_u64().unwrap_or(0) as usize;
+        let data = &leaf[at..at + view["byteLength"].as_u64().unwrap() as usize];
+        match pages[0].4.as_str() {
+            "image/png" => image::load_from_memory(data)
+                .unwrap()
+                .into_rgba8()
+                .into_raw(),
+            _ => crate::basisu_ktx2::decode_level_rgba(data, 0, pages[0].0, pages[0].1).unwrap(),
+        }
+    }
+    /// A MASK material on a period page keeps its surface coverage (#306 review r1 F1:
+    /// the MASK evaluation clamped raw period UVs), and sparse triangles a period apart
+    /// keep island crops instead of the whole source (F2).
+    #[test]
+    fn period_pages_keep_mask_coverage_and_sparse_footprints_crop() {
+        let work = tempfile::tempdir().unwrap();
+        let dir = work.path().join("mask");
+        let (input, _) = repeat_fixture(&dir, [10497, 10497], [3., 3.], 64, false);
+        let ramp = image::RgbaImage::from_fn(64, 64, |x, y| {
+            image::Rgba([(x * 3) as u8, (y * 4) as u8, 90, (x * 255 / 63) as u8])
+        });
+        ramp.save(dir.join("a.png")).unwrap();
+        let mut doc: serde_json::Value =
+            serde_json::from_slice(&fs::read(&input).unwrap()).unwrap();
+        doc["materials"][0]["alphaMode"] = json!("MASK");
+        doc["materials"][0]["alphaCutoff"] = json!(0.5);
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        bake_leaf(&input, &work.path().join("mask-out"), LeafProfile::Balanced);
+        let page = leaf_rgba(&work.path().join("mask-out"));
+        // Independent bilinear REPEAT sampling at surface points of the 8x8 grid (UVs = 3k/8).
+        let alpha = |rgba: &[u8], u: f64, v: f64| {
+            let (x, y) = (u * 64. - 0.5, v * 64. - 0.5);
+            let (fx, fy) = (x - x.floor(), y - y.floor());
+            let tap = |i: f64, j: f64| {
+                f64::from(
+                    rgba[((j.rem_euclid(64.) as usize) * 64 + i.rem_euclid(64.) as usize) * 4 + 3],
+                )
+            };
+            let (i, j) = (x.floor(), y.floor());
+            (tap(i, j) * (1. - fx) + tap(i + 1., j) * fx) * (1. - fy)
+                + (tap(i, j + 1.) * (1. - fx) + tap(i + 1., j + 1.) * fx) * fy
+        };
+        let coverage = |rgba: &[u8]| {
+            let mut pass = 0;
+            for cell in 0..64 {
+                for (a, b) in
+                    (0..16).map(|k| ((k % 4) as f64 / 4. + 0.1, (k / 4) as f64 / 4. + 0.1))
+                {
+                    if a + b < 1. {
+                        let (u, v) = (
+                            ((cell % 8) as f64 + a) * 3. / 8.,
+                            ((cell / 8) as f64 + b) * 3. / 8.,
+                        );
+                        pass += usize::from(alpha(rgba, u, v) >= 127.5);
+                    }
+                }
+            }
+            pass as f64
+        };
+        let (published, source) = (coverage(&page), coverage(&ramp.into_raw()));
+        assert!(
+            (published - source).abs() <= 0.03 * source,
+            "{published} vs {source}"
+        );
+        // 64 tiny triangles, one per period cell over 8x4 periods of a 512² image.
+        let dir = work.path().join("scatter");
+        let (input, _) = repeat_fixture(&dir, [10497, 10497], [8., 4.], 512, false);
+        let mut bytes = fs::read(dir.join("attributes.bin")).unwrap();
+        let uvs: Vec<f32> = (0..64)
+            .flat_map(|i| {
+                let base = [(i % 8) as f32 + 0.3, (i / 8) as f32 * 0.5 + 0.2];
+                [[0., 0.], [0.005, 0.], [0., 0.005]]
+                    .into_iter()
+                    .flat_map(move |c| [base[0] + c[0], base[1] + c[1]])
+            })
+            .collect();
+        let at = 192 * 12;
+        for (k, v) in uvs.iter().enumerate() {
+            bytes[at + k * 4..at + k * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        fs::write(dir.join("attributes.bin"), bytes).unwrap();
+        bake_leaf(
+            &input,
+            &work.path().join("scatter-out"),
+            LeafProfile::Balanced,
+        );
+        let (_, pages) = leaf_pages(&work.path().join("scatter-out"));
+        assert!(
+            pages.iter().all(|p| (p.2, p.3) == (33071, 33071)),
+            "{pages:?}"
+        );
+        assert!(
+            pages.iter().map(|p| p.0 * p.1).sum::<u32>() < 512 * 512,
+            "{pages:?}"
+        );
+    }
+    /// UVs spanning whole periods of a repeating wrap keep the source whole on that
+    /// axis, with the source wrap, instead of unrolling one copy per period.
+    #[test]
+    fn repeated_uvs_publish_whole_source_periods() {
+        let work = tempfile::tempdir().unwrap();
+        // Lossless: both axes repeat, so the page is the source image itself.
+        let (input, source) =
+            repeat_fixture(&work.path().join("a"), [10497, 10497], [3., 2.], 64, false);
+        let row = bake_leaf(&input, &work.path().join("a-out"), LeafProfile::Lossless);
+        // Triangles a period apart read the same texels: shared, not unique.
+        assert!(row["sharedTriangles"].as_u64().unwrap() > 0, "{row}");
+        let (doc, pages) = leaf_pages(&work.path().join("a-out"));
+        assert_eq!(pages, [(64, 64, 10497, 10497, "image/png".into())]);
+        let image = &doc["images"][0];
+        assert_eq!(image["mimeType"], "image/png");
+        let leaf = fs::read(work.path().join("a-out/leaves/000000000000.glb")).unwrap();
+        let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
+        let view = &doc["bufferViews"][image["bufferView"].as_u64().unwrap() as usize];
+        let at = 20 + json_len + 8 + view["byteOffset"].as_u64().unwrap_or(0) as usize;
+        let png = &leaf[at..at + view["byteLength"].as_u64().unwrap() as usize];
+        assert_eq!(
+            image::load_from_memory(png)
+                .unwrap()
+                .into_rgba8()
+                .into_raw(),
+            source
+        );
+        // Balanced, mirrored strip: only U spans a period; V is a CLAMP crop.
+        let (input, _) = repeat_fixture(
+            &work.path().join("b"),
+            [33648, 10497],
+            [19.2, 0.5],
+            256,
+            false,
+        );
+        let row = bake_leaf(&input, &work.path().join("b-out"), LeafProfile::Balanced);
+        let (_, pages) = leaf_pages(&work.path().join("b-out"));
+        assert_eq!(
+            row["densityDrop"], 0,
+            "19.2 periods would not fit one unrolled page"
+        );
+        assert_eq!((pages[0].0, pages[0].2, pages[0].3), (256, 33648, 33071));
+        assert!(pages[0].1 < 256 && pages[0].1 % 4 == 0, "{pages:?}");
+        // Mixed: a period page beside an ordinary atlas page, as two primitives.
+        let (input, _) = repeat_fixture(&work.path().join("c"), [10497, 10497], [2., 2.], 64, true);
+        bake_leaf(&input, &work.path().join("c-out"), LeafProfile::Balanced);
+        let (doc, pages) = leaf_pages(&work.path().join("c-out"));
+        let mut wraps: Vec<_> = pages.iter().map(|p| (p.2, p.3)).collect();
+        wraps.sort();
+        assert_eq!(wraps, [(10497, 10497), (33071, 33071)]);
+        let primitives = doc["meshes"].as_array().unwrap().iter();
+        assert_eq!(
+            primitives
+                .map(|m| m["primitives"].as_array().unwrap().len())
+                .sum::<usize>(),
+            2
+        );
+        // Under one period the binding keeps today's clamped crop.
+        let (input, _) = repeat_fixture(
+            &work.path().join("d"),
+            [10497, 10497],
+            [0.9, 0.9],
+            64,
+            false,
+        );
+        bake_leaf(&input, &work.path().join("d-out"), LeafProfile::Balanced);
+        assert!(leaf_pages(&work.path().join("d-out"))
+            .1
+            .iter()
+            .all(|p| (p.2, p.3) == (33071, 33071)));
+    }
+
+    /// A mip-sampled page that misses every lossy step ships as its exact level-0 PNG
+    /// with the source's mipmap sampler (viewer-generated mips, as in the lossless
+    /// profile) instead of failing the run; the report names its leaf, page and misses.
+    #[test]
+    fn unrecoverable_mip_sampled_page_falls_back_to_exact_png() {
+        let work = tempfile::tempdir().unwrap();
+        let input = textured_fixture(
+            &work.path().join("source"),
+            640,
+            9987,
+            Texture::Hard(1),
+            256,
+        );
+        let output = work.path().join("out");
+        let result = mesh_to_leaf_payloads(
+            LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
+                .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                    crate::mesh_large::hlod::TRIANGLE_CAP,
+                ))
+                .with_jobs(NonZeroUsize::new(2).unwrap()),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let report = &result.report;
+        // Mip-sampled: declared apart from level-0 fallbacks, every page listed.
+        assert_eq!(report.lossless_fallback_pages, 0, "{report:?}");
+        assert!(report.viewer_mip_fallback_pages > 0, "{report:?}");
+        assert_eq!(
+            report.viewer_mip_fallbacks.len() as u64,
+            report.viewer_mip_fallback_pages
+        );
+        let diagnostic = report
+            .escalation_diagnostics
+            .iter()
+            .find(|d| d.step == "lossless_png")
+            .unwrap();
+        assert_eq!((diagnostic.slot, diagnostic.page), ("baseColorTexture", 0));
+        assert!(diagnostic.misses.iter().any(|m| m.step == "uastc_level3"));
+        let leaf = fs::read(output.join("leaves/000000000000.glb")).unwrap();
+        let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
+        let document: serde_json::Value = serde_json::from_slice(&leaf[20..20 + json_len]).unwrap();
+        assert_eq!(document["images"][0]["mimeType"], "image/png");
+        assert_eq!(document["samplers"][0]["minFilter"], 9987);
+        // The archive declares every such page in conversion.json.
+        let archive = work.path().join("out.3tz");
+        let tiled = crate::mesh_to_tileset(
+            crate::TilerRequest::new(&input, &archive),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let mut zip = zip::ZipArchive::new(fs::File::open(&archive).unwrap()).unwrap();
+        let conversion: serde_json::Value =
+            serde_json::from_reader(zip.by_name("conversion.json").unwrap()).unwrap();
+        let listed = conversion["viewer_mip_fallbacks"].as_array().unwrap();
+        assert_eq!(conversion["viewer_mip_fallback_pages"], listed.len());
+        assert_eq!(listed.len() as u64, tiled.report.viewer_mip_fallback_pages);
+        assert!(listed.iter().any(|p| p["slot"] == "baseColorTexture"));
+    }
+
+    /// Several cropped mip-sampled noise pages (one per distinct sampler) that miss a
+    /// decoded floor at the profile setting: the escalation reasons, diagnostics and
+    /// published bytes are the same for one worker and for many (#234).
+    #[test]
+    fn escalation_reasons_are_identical_across_jobs() {
+        const QUADS: usize = 8;
+        let work = tempfile::tempdir().unwrap();
+        let source = work.path().join("source");
+        fs::create_dir_all(&source).unwrap();
+        let mut bytes = Vec::<u8>::new();
+        let (mut views, mut accessors, mut primitives, mut materials) =
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let (mut images, mut textures) = (Vec::new(), Vec::new());
+        for quad in 0..QUADS {
+            let x0 = 5.0 * quad as f32;
+            let positions: [f32; 18] = [
+                x0,
+                0.,
+                0.,
+                x0 + 4.,
+                0.,
+                0.,
+                x0,
+                4.,
+                0.,
+                x0 + 4.,
+                0.,
+                0.,
+                x0 + 4.,
+                4.,
+                0.,
+                x0,
+                4.,
+                0.,
+            ];
+            // 3.75 repeats of the 64x64 texture: with its 8-texel halo, one 256x256
+            // island of periodic noise.
+            let (lo, hi) = (-1.375f32, 2.375f32);
+            let uvs: [f32; 12] = [lo, lo, hi, lo, lo, hi, hi, lo, hi, hi, lo, hi];
+            for (data, ty, count, min_max) in [
+                (
+                    &positions[..],
+                    "VEC3",
+                    6,
+                    Some(([x0, 0., 0.], [x0 + 4., 4., 0.])),
+                ),
+                (&uvs[..], "VEC2", 6, None),
+            ] {
+                views
+                    .push(json!({"buffer":0,"byteOffset":bytes.len(),"byteLength":data.len() * 4}));
+                bytes.extend(data.iter().flat_map(|v| v.to_le_bytes()));
+                let mut accessor = json!({"bufferView":views.len() - 1,"componentType":5126,
+                    "count":count,"type":ty});
+                if let Some((min, max)) = min_max {
+                    accessor["min"] = json!(min);
+                    accessor["max"] = json!(max);
+                }
+                accessors.push(accessor);
+            }
+            image::RgbaImage::from_fn(64, 64, |x, y| {
+                let v = |k: u32| ((x * 7 + y * 13 + k * 31 + quad as u32 * 17) % 97 + 80) as u8;
+                image::Rgba([v(0), v(1), v(2), 255])
+            })
+            .save(source.join(format!("sharp{quad}.png")))
+            .unwrap();
+            images.push(json!({"uri":format!("sharp{quad}.png")}));
+            textures.push(json!({"source":quad,"sampler":quad}));
+            materials.push(json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":quad}}}));
+            primitives.push(
+                json!({"attributes":{"POSITION":2 * quad,"TEXCOORD_0":2 * quad + 1},
+                "material":quad}),
+            );
+        }
+        fs::write(source.join("quads.bin"), &bytes).unwrap();
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+            "nodes":[{"mesh":0}],"meshes":[{"primitives":primitives}],
+            "buffers":[{"uri":"quads.bin","byteLength":bytes.len()}],
+            "bufferViews":views,"accessors":accessors,"images":images,"textures":textures,
+            "samplers":(0..QUADS).map(|q| json!({"minFilter":9984 + q % 4,"magFilter":9728 + q / 4 % 2})).collect::<Vec<_>>(),
+            "materials":materials});
+        let input = source.join("quads.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let mut previous = None;
+        for jobs in [1, 4] {
+            let output = work.path().join(format!("out{jobs}"));
+            let result = mesh_to_leaf_payloads(
+                LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
+                    .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                        crate::mesh_large::hlod::TRIANGLE_CAP,
+                    ))
+                    .with_jobs(NonZeroUsize::new(jobs).unwrap()),
+                &RunControl::default(),
+            )
+            .unwrap();
+            let report = &result.report;
+            let total = report.escalated_pages.uastc_level2
+                + report.escalated_pages.uastc_level3
+                + report.lossless_fallback_pages
+                + report.viewer_mip_fallback_pages;
+            println!("jobs {jobs}: {:?} total {total}", report.escalation_reasons);
+            assert!(total > 1, "{report:?}");
+            assert_eq!(
+                report.escalation_reasons.gate + report.escalation_reasons.codec_verify,
+                total
+            );
+            let by_reason = |reason: &str| {
+                report
+                    .escalation_diagnostics
+                    .iter()
+                    .filter(|d| d.misses[0].reason == reason)
+                    .count() as u64
+            };
+            assert_eq!(
+                report.escalation_diagnostics.len() as u64 + report.escalation_diagnostics_omitted,
+                total
+            );
+            assert_eq!(
+                by_reason("codec_verify"),
+                report.escalation_reasons.codec_verify
+            );
+            assert_eq!(by_reason("gate"), report.escalation_reasons.gate);
+            let files = output_files(&output);
+            let reasons = serde_json::to_value(report.escalation_reasons).unwrap();
+            let report = serde_json::to_value(report).unwrap();
+            if let Some((prior_files, prior_reasons, prior_report)) = &previous {
+                assert_eq!(
+                    prior_reasons, &reasons,
+                    "jobs {jobs} changed escalation_reasons"
+                );
+                assert_eq!(prior_files, &files, "jobs {jobs} changed published bytes");
+                assert_eq!(prior_report, &report, "jobs {jobs} changed the report");
+            } else {
+                previous = Some((files, reasons, report));
+            }
+        }
+    }
+
+    /// Pages that miss at the profile setting escalate and are counted by reason
+    /// (the codec's own verification apart from gate misses; the reason mapping
+    /// itself is pinned in `delivery`'s ladder tests).
+    #[test]
+    fn escalation_misses_are_reported_by_reason() {
+        let work = tempfile::tempdir().unwrap();
+        // One quad repeating a sharp 64x64 texture, mip-sampled: one cropped island
+        // page of periodic noise.
+        let source = work.path().join("source");
+        fs::create_dir_all(&source).unwrap();
+        let positions: [f32; 18] = [
+            0., 0., 0., 4., 0., 0., 0., 4., 0., 4., 0., 0., 4., 4., 0., 0., 4., 0.,
+        ];
+        // 3.75 repeats of the 64x64 texture: with its 8-texel halo, one 256x256
+        // island of periodic noise.
+        let (lo, hi) = (-1.375f32, 2.375f32);
+        let uvs: [f32; 12] = [lo, lo, hi, lo, lo, hi, hi, lo, hi, hi, lo, hi];
+        let bytes: Vec<u8> = positions
+            .iter()
+            .chain(&uvs)
+            .flat_map(|v| v.to_le_bytes())
+            .collect();
+        fs::write(source.join("quad.bin"), &bytes).unwrap();
+        image::RgbaImage::from_fn(64, 64, |x, y| {
+            let v = |k: u32| ((x * 7 + y * 13 + k * 31) % 97 + 80) as u8;
+            image::Rgba([v(0), v(1), v(2), 255])
+        })
+        .save(source.join("sharp.png"))
+        .unwrap();
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"material":0}]}],
+            "buffers":[{"uri":"quad.bin","byteLength":bytes.len()}],
+            "bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":72},{"buffer":0,"byteOffset":72,"byteLength":48}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":6,"type":"VEC3","min":[0,0,0],"max":[4,4,0]},
+                         {"bufferView":1,"componentType":5126,"count":6,"type":"VEC2"}],
+            "images":[{"uri":"sharp.png"}],"textures":[{"source":0,"sampler":0}],
+            "samplers":[{"minFilter":9987,"magFilter":9729}],
+            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
+        let input = source.join("quad.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let output = work.path().join("out");
+        let result = mesh_to_leaf_payloads(
+            LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
+                .with_hlod_settings(crate::mesh_large::hlod::test_settings(
+                    crate::mesh_large::hlod::TRIANGLE_CAP,
+                ))
+                .with_jobs(NonZeroUsize::new(2).unwrap()),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let report = &result.report;
+        let total = report.escalated_pages.uastc_level2
+            + report.escalated_pages.uastc_level3
+            + report.lossless_fallback_pages
+            + report.viewer_mip_fallback_pages;
+        println!(
+            "codec-verify escalation {:?} {:?} png {}",
+            report.escalation_reasons, report.escalated_pages, report.lossless_fallback_pages
+        );
+        assert!(total > 0, "{report:?}");
+        assert_eq!(
+            report.escalation_reasons.gate + report.escalation_reasons.codec_verify,
+            total
+        );
+        let codec = report
+            .escalation_diagnostics
+            .iter()
+            .filter(|d| d.misses[0].reason == "codec_verify")
+            .count() as u64;
+        assert_eq!(codec, report.escalation_reasons.codec_verify);
+        let gate = report
+            .escalation_diagnostics
+            .iter()
+            .filter(|d| d.misses[0].reason == "gate")
+            .count() as u64;
+        assert_eq!(gate, report.escalation_reasons.gate);
+        assert!(report
+            .escalation_diagnostics
+            .iter()
+            .all(|d| d.misses[0].step == "profile"));
+    }
+}

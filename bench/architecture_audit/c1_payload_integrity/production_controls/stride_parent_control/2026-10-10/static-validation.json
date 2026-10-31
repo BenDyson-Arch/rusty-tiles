@@ -1,0 +1,42 @@
+{
+  "status": "STATIC ONLY, no target execution; current observed source background pins are not execution source identity",
+  "sourcePins": {
+    "src/content_integrity.rs": {
+      "bytes": 1139,
+      "sha256": "f0ba84385e8f9e02617f56c21c2337640f198795c06b66c3a7ceea0c21b2a9b4"
+    },
+    "src/content_integrity/payload.rs": {
+      "bytes": 66755,
+      "sha256": "9eb4d4eba8e8adf435500cecba2fe10869333b3d65cddbff2d488c1a13fd310c"
+    },
+    "src/content_integrity/payload/records.rs": {
+      "bytes": 8392,
+      "sha256": "e04a50f35ab88c9731ccc75c71dcb3e4a7582334a14c7e4c04168f6924a8a7a9"
+    },
+    "src/content_integrity/payload/numbers.rs": {
+      "bytes": 4191,
+      "sha256": "dba564337acc64201b187d569b9a1191baed7fbb3088ba63e52b4aef42b9c509"
+    }
+  },
+  "sourceGate": "payload.rs parent-agreement conditional and exact InvalidInput message retained; accessor ordinary stride gate accepts unusedSCALAR stride8>=element4 and valid28-byte range; viewless POSITION does not consume viewstride",
+  "caps": {
+    "jsonActualChunkBytes": 744,
+    "sourcePayloadBytes": 860,
+    "jsonValueNodes": 64,
+    "jsonMaxValueDepth": 6,
+    "components": 16,
+    "decodedViewBytes": 48,
+    "archiveEntries": 3
+  },
+  "oldSixLaneAndCompiledControlsUnchanged": true,
+  "primaryInterpretation": "Parent agreement unconditional; unused-strided-view hypothetical admits only under existing C1 profile, not universal external normative glTF assertion",
+  "staticChecks": [
+    "Python AST syntax",
+    "Primary literal/hash extraction",
+    "Independent float32 offsets0/8/16/24 finite values and28<=48 window",
+    "ViewlessPOSITION zero bounds and16 components",
+    "GLB chunk types/lengths/zero padding",
+    "ZIP_STORED members/CRC/index construction",
+    "All default individual relevant caps exceed finite fixture work"
+  ]
+}

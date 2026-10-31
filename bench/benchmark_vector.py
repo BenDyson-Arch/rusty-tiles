@@ -12,6 +12,7 @@ import math
 import os
 import pathlib
 import platform
+import re
 import statistics
 import sqlite3
 import subprocess
@@ -25,12 +26,27 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tests'))
 from test_vector_reuse import details
 from test_vector_gpkg import gpkg
-spec = importlib.util.spec_from_file_location('timing', ROOT / 'bench/benchmark_terrain.py')
+spec = importlib.util.spec_from_file_location('timing', ROOT / 'bench/timing.py')
 timing = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(timing)
 METHODS = ['python-1', 'rust-1', 'python-4', 'rust-4']
 CASES = [('small-lines', 24, 128), ('regional-lines', 2048, 128),
          ('polygons-with-holes', 512, 64), ('projected-lines', 1024, 64), ('dense-points', 8192, 1)]
+
+
+def fingerprint_sources():
+    """Build files plus every source in the native vector encoder fingerprint.
+
+    The list is read from FINGERPRINT_SOURCES and NATIVE_FINGERPRINT_SOURCES in
+    src/vector/pipeline/reuse.rs, so the recorded provenance follows the reuse
+    identity instead of a second hand-kept list."""
+    text = (ROOT / 'src/vector/pipeline/reuse.rs').read_text()
+    paths = ['Cargo.toml', 'build.rs']
+    for name in ('const FINGERPRINT_SOURCES', 'const NATIVE_FINGERPRINT_SOURCES'):
+        block = text[text.index(name):]
+        block = block[block.index('['):block.index('];')]
+        paths += re.findall(r'"([^"]+)"', block)
+    return sorted(set(paths))
 
 
 def fixture(root, name, count, vertices):
@@ -133,7 +149,7 @@ def main():
         platform=platform.platform(), cpu=next(line.split(':',1)[1].strip() for line in pathlib.Path('/proc/cpuinfo').read_text().splitlines() if line.startswith('model name')),
         gdal=gdal.VersionInfo('--version'), python=platform.python_version(), numpy=np.__version__, sqlite=sqlite3.sqlite_version,
         nativeReadiness=json.loads(subprocess.check_output([str(args.new_bin.resolve()),'doctor','--command','vector','--json'],text=True))['commands']['vector'],
-        nativeSourceSha256={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [ROOT/'Cargo.toml',ROOT/'Cargo.lock',ROOT/'build.rs',ROOT/'src/vector.rs',ROOT/'src/vector/native.rs',*sorted((ROOT/'src/vector/native').glob('*.rs')),ROOT/'src/point_sampling.rs',ROOT/'src/vector_encoding.rs',ROOT/'src/geospatial.rs',ROOT/'src/georef.rs',ROOT/'src/bbox.rs',ROOT/'src/glb_write.rs',ROOT/'src/pack.rs']},
+        nativeSourceSha256={path:hashlib.sha256((ROOT/path).read_bytes()).hexdigest() for path in fingerprint_sources()},
         oldBinarySha256=hashlib.sha256(args.old_bin.read_bytes()).hexdigest(),
         newBinarySha256=hashlib.sha256(args.new_bin.read_bytes()).hexdigest(),
         build='cargo build --release --locked --features native-geospatial',

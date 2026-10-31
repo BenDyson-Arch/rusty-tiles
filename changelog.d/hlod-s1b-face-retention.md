@@ -1,0 +1,3 @@
+### Fixed
+
+- HLOD: shared borders through planar grids (walls, regular terrain) no longer omit coarse cells with `contraction_stalled`. S1b keeps a shared vertex live from the depth at which a source face spans it and two other border points through interior edges (contracting it would leave a face of interface points only, which the proposal guard refuses), and a removed border vertex moves to the chord endpoint its faces already hold when that collapses them. Retained sets stay nested across depths; the shared contract, its certificates and the validator are unchanged. The 10M-triangle mesh-1e7 input goes from 511 to 136 omitted cells.

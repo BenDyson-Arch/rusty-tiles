@@ -1,0 +1,116 @@
+{
+  "scope": "Ten isolated owned-bake compiled sensitive controls. Baseline/restored focused suite must pass. Coordinator owns lane lock, all mutation/build/runtime, exact source restoration. No H17/ID shared source mutation, no actual H17 sink/completeGLB assembly acceptance.",
+  "frozen_manifest_sha256": "1ee6a5c8a7730d87690fa24c1b139d895ab1a77fa3f8d915d4c0e6be0e202bfd",
+  "cases": [
+    {
+      "name": "raw-source-normal-preunit",
+      "path": "src/mesh_large/bake/source.rs",
+      "old": "TextureSlot::Normal => mips::Class::Data,",
+      "new": "TextureSlot::Normal => mips::Class::Normal,",
+      "test": "mesh_large::bake::probe_tests::unequal_length_original_normal_pixels_filter_raw_then_apply_literal_scale",
+      "restored_source_sha256": "4d9a72a165edbc8f2b7fc5a9615ecebe573ae2b7788a018c32b248b947ae0c6d",
+      "mutated_source_sha256": "727169ded3ccd8b7f92dd60c047e6da37c68de49d13997e1061db7c4d68448f0",
+      "anchor_count": 1,
+      "expected": "Compile then runtime101/one failed: source raw midpoint is changed before scale2; analytic direction error19.0987degrees exceeds3/12floors."
+    },
+    {
+      "name": "unreachable-world-mixture-target",
+      "path": "src/mesh_large/bake/mips.rs",
+      "old": "let reference = sample.frame.transform(reference)?;",
+      "new": "let reference = math::unit(common_world).unwrap();",
+      "test": "mesh_large::bake::controls::terminal_two_frame_normal_floors_keep_committed_reference_and_report_bleed",
+      "restored_source_sha256": "399daad821a46ca04326dbe31f21f98b0fd8d87946584c8b1fc3743b0f8566cc",
+      "mutated_source_sha256": "fe87ba6ef88b1ffefcd5fb40f07f3386cfc987eb9876e5b1263af02758017623",
+      "anchor_count": 1,
+      "expected": "Runtime failure: exact committed RGB through second60degree fragment frame is wrongly refused against common-world reference. Reported bleed must not be codec semantic refusal."
+    },
+    {
+      "name": "chart-last-sample-not-total",
+      "path": "src/mesh_large/bake/mips.rs",
+      "old": ".0 += s.weight;",
+      "new": ".0 = s.weight;",
+      "test": "mesh_large::bake::controls::representative_chart_aggregates_original_support_at_each_footprint",
+      "restored_source_sha256": "399daad821a46ca04326dbe31f21f98b0fd8d87946584c8b1fc3743b0f8566cc",
+      "mutated_source_sha256": "020522565699b0e773c56221fbc2db1ef65afd02bc09c95421e002f4f133beb4",
+      "anchor_count": 1,
+      "expected": "Runtime failure: chart7 support3+3 becomes3 and loses to chart2 weight5 instead of selecting sum6."
+    },
+    {
+      "name": "degenerate-atlas-obligation",
+      "path": "src/mesh_large/bake/charts.rs",
+      "old": "        let Some(normal) = math::face_normal(p) else {\n            assigned[seed] = true;\n            continue;\n        };",
+      "new": "        let normal = math::face_normal(p).unwrap_or([0., 0., 1.]);",
+      "test": "mesh_large::bake::probe_tests::disparate_scale_collinear_faces_retain_corners_without_raster_density",
+      "restored_source_sha256": "3ea54b256f580d6525204ad7bc073b01c8f143e5e7405d3ab7819efd8a7cbe47",
+      "mutated_source_sha256": "8851ec9b051d0632613183a4d09e10dbe9c2add2b84bc2e1e5968cbc4e8f5d70",
+      "anchor_count": 1,
+      "expected": "Runtime failure: zero-area collinear face acquires atlas UVs/dimensions instead of exact unused UV[0,0] and no raster obligation; includes real source capture and typed preparation, noFit."
+    },
+    {
+      "name": "source-colour-treated-as-data",
+      "path": "src/mesh_large/bake/source.rs",
+      "old": "TextureSlot::BaseColor | TextureSlot::Emissive => mips::Class::Colour,",
+      "new": "TextureSlot::BaseColor | TextureSlot::Emissive => mips::Class::Data,",
+      "test": "mesh_large::bake::probe_tests::nonuniform_alias_bindings_keep_uv_sampler_and_class_identity",
+      "restored_source_sha256": "4d9a72a165edbc8f2b7fc5a9615ecebe573ae2b7788a018c32b248b947ae0c6d",
+      "mutated_source_sha256": "18e666a9a3e454f5079c82f843f411bf0cd7b44764a8948937b7d791e56ba7bb",
+      "anchor_count": 1,
+      "expected": "Runtime failure: actual red/blue source LINEAR colour midpoint becomes raw128 instead of188, while image aliases/UV/sampler paths stay distinct."
+    },
+    {
+      "name": "child-lod-nominal-ratio",
+      "path": "src/mesh_large/bake/sampling.rs",
+      "old": "let lod = (texel * gradient).log2();",
+      "new": "let lod = (texel / child.texel_size).log2();",
+      "test": "mesh_large::bake::controls::actual_child_lod_uses_final_decoded_uvs_instead_of_nominal_ratio",
+      "restored_source_sha256": "8978159dc9bc61586a452d0d5f4ddff6ff591cb574a9aeb2a9db0462aca2b546",
+      "mutated_source_sha256": "ba01c11f111de03dd6797b351cdcd20c9e1b04f4c5e5603e758faee05b5218b8",
+      "anchor_count": 1,
+      "expected": "Runtime failure: actual decodedUV Jacobian LOD~.585 selects188; nominalLOD0 wrongly selects255. !direct assert prevents fallback hiding wrong caller."
+    },
+    {
+      "name": "child-sampler-support-reweight",
+      "path": "src/mesh_large/bake/sampling.rs",
+      "old": "let l = &page.levels[level];",
+      "new": "let l = &page.levels[level];\n            let weight = weight * f64::from(l.support[i]);",
+      "test": "mesh_large::bake::controls::actual_child_linear_filter_ignores_unequal_geometric_support",
+      "restored_source_sha256": "8978159dc9bc61586a452d0d5f4ddff6ff591cb574a9aeb2a9db0462aca2b546",
+      "mutated_source_sha256": "016f925f35a5aa437f68ab5851b7bfd55d99dadcde1bd45b60d51c9651ceda56",
+      "anchor_count": 1,
+      "expected": "Runtime failure: sampler equal taps on support1/9 black-white child become243 instead of188, terminal centre changes; !direct asserted."
+    },
+    {
+      "name": "fan-normal-unweighted",
+      "path": "src/mesh_large/bake/frames.rs",
+      "old": "math::mul(n, areas[fi])",
+      "new": "math::mul(n, 1.)",
+      "test": "mesh_large::bake::controls::shared_original_weld_edge_uses_area_weighted_normals_and_decoded_tangents",
+      "restored_source_sha256": "258ac2318afeee11650320532f8c46bb6743e02f2197bf54368169dbd5dc9339",
+      "mutated_source_sha256": "bd4ac0f4b91774c1c7e93200018064f9573353ec0c64e9d943bc612c730d3413",
+      "anchor_count": 1,
+      "expected": "Runtime failure:30degree areas.5/1 shared normal changes20.104degrees to15degrees, difference5.104>mean3; raw tangent fan control also retained."
+    },
+    {
+      "name": "fragment-uses-one-corner-frame",
+      "path": "src/mesh_large/bake/raster.rs",
+      "old": "let frame = Frame::interpolate(\n                                    corners.map(|f| f.normal),\n                                    corners.map(|f| f.tangent),\n                                    corners.map(|f| f.bitangent),\n                                    bary,\n                                )?;",
+      "new": "let frame = corners[0];",
+      "test": "mesh_large::bake::controls::actual_raster_fragment_frame_interpolates_emitted_corner_fan_attributes",
+      "restored_source_sha256": "648e2df26971588ec6894a0edea6a468c491e4c813ba57f28931a254b4bbd4b7",
+      "mutated_source_sha256": "f90f98ad2faa612b512a870f220d565a607a11cd43712268185eabc1f1d5f2ca",
+      "anchor_count": 1,
+      "expected": "Runtime failure: real smooth-fan raster witness uses corner frame instead of independent emitted-f32 barycentric fragment interpolation."
+    },
+    {
+      "name": "all-slot-sampling-uses-base-uv",
+      "path": "src/mesh_large/bake/sampling.rs",
+      "old": "f64::from(binding.uv[i][a])",
+      "new": "f64::from(donor.bindings[0].unwrap().uv[i][a])",
+      "test": "mesh_large::bake::controls::actual_child_slot_bindings_keep_distinct_uv_sampler_and_aliased_signal_classes",
+      "restored_source_sha256": "8978159dc9bc61586a452d0d5f4ddff6ff591cb574a9aeb2a9db0462aca2b546",
+      "mutated_source_sha256": "e29b84de2dad4ecab67841fa407eb2e100bed26aba658df83e2c09ce6df9b83f",
+      "anchor_count": 1,
+      "expected": "Runtime failure: MR/Emissive retain their actual page/role/sampler but use BaseColorUV; expected per-slot188/64/0 and coarse188/128/188 fail. !direct asserted."
+    }
+  ]
+}

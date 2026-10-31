@@ -22,7 +22,7 @@ meshes=[{'primitives':[{'attributes':{'POSITION':0},'indices':1,'material':0,'mo
 data=json.dumps(doc,separators=(',',':')).encode();data+=b' '*((-len(data))%4);binary+=b'\0'*((-len(binary))%4)
 mesh=root/'quad.glb';mesh.write_bytes(struct.pack('<4sII',b'glTF',2,28+len(data)+len(binary))+struct.pack('<I4s',len(data),b'JSON')+data+struct.pack('<I4s',len(binary),b'BIN\0')+binary)
 archive=root/'mesh.3tz'
-call(['glb-to-3tz','-i',str(mesh),'-o',str(archive),'--cartographicPositionDegrees','12.1','41.9','200',])
+call(['mesh','-i',str(mesh),'-o',str(archive),'--anchor','12.1','41.9','200'])
 with zipfile.ZipFile(archive) as z:z.extractall(root/'mesh')
 source=root/'imagery.tif';ds=gdal.GetDriverByName('GTiff').Create(str(source),32,32,3,gdal.GDT_Byte)
 srs=osr.SpatialReference();srs.ImportFromEPSG(4326);ds.SetProjection(srs.ExportToWkt());ds.SetGeoTransform([12,.01,0,42,0,-.01])
@@ -32,10 +32,10 @@ call(['raster','-i',str(source),'-o',str(root/'imagery'),'--maxZoom','10',])
 
 source=root/'dem.tif';ds=gdal.GetDriverByName('GTiff').Create(str(source),32,32,1,gdal.GDT_Float32)
 ds.SetProjection(srs.ExportToWkt());ds.SetGeoTransform([12,.01,0,42,0,-.01])
-values=np.full((32,32),123.5,dtype='f4');values[12:20,12:20]=-32768
+values=np.full((32,32),123.5,dtype='f4');values[12:20,12:20]=-32768;values[20:]=-500
 band=ds.GetRasterBand(1);band.WriteArray(values);band.SetNoDataValue(-32768);band=None;ds=None
-call(['terrain','-i',str(source),'-o',str(root/'terrain'),'--maxZoom','9','--grid','65',
-      '--heightOffset','10.25','--fillHeight','-999.125'])
+call(['terrain','-i',str(source),'-o',str(root/'terrain'),'--cells-per-leaf','16',
+      '--height-offset','10.25'])
 source=root/'cloud.las';fixture(source,crs=CRS.from_epsg(32632))
 run(types.SimpleNamespace(input=str(source),output=str(root/'cloud'),source_crs='header',
     max_points=32,chunk_points=31,height_offset=10))

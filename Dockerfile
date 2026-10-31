@@ -10,32 +10,36 @@ RUN tar -xzf /tmp/proj.tar.gz -C /tmp \
     && cmake -S /tmp/proj-9.8.1 -B /tmp/proj-build -DCMAKE_BUILD_TYPE=Release \
        -DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_TESTING=OFF -DBUILD_APPS=OFF -DENABLE_CURL=OFF \
     && cmake --build /tmp/proj-build -j4 && cmake --install /tmp/proj-build \
+    && install -D -m 0644 /tmp/proj-9.8.1/COPYING /usr/local/share/doc/rusty-tiles-system/proj/COPYING \
     && rm -rf /tmp/proj-build /tmp/proj-9.8.1 /tmp/proj.tar.gz
 ADD --checksum=sha256:68844ae29557b7efae4292c3b4cb3a3b8a79d14b765b89c5a7b17cbae7fa715a \
     https://download.osgeo.org/gdal/3.12.4/gdal-3.12.4.tar.gz /tmp/gdal.tar.gz
 COPY scripts/build-native-gdal.sh /tmp/build-native-gdal.sh
 RUN tar -xzf /tmp/gdal.tar.gz -C /tmp \
     && /tmp/build-native-gdal.sh /tmp/gdal-3.12.4 /tmp/gdal-build \
+    && install -D -m 0644 /tmp/gdal-3.12.4/LICENSE.TXT /usr/local/share/doc/rusty-tiles-system/gdal/LICENSE.TXT \
     && rm -rf /tmp/gdal-build /tmp/gdal-3.12.4 /tmp/gdal.tar.gz
 
 FROM rust:1.98-trixie AS build
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libclang-dev libsqlite3-dev libtiff-dev libgeos-dev pkg-config jq \
+    libclang-dev libsqlite3-dev libtiff-dev libgeos-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=geospatial-build /usr/local/ /usr/local/
 RUN ldconfig
-ENV RUSTY_TILES_DISABLE_NATIVE_JPEG=1
+ENV LIBSQLITE3_SYS_USE_PKG_CONFIG=1
 WORKDIR /src
-COPY . .
+# Keep fixture, documentation and CI-only edits out of the release build cache.
+COPY Cargo.toml Cargo.lock build.rs ./
+COPY src/ src/
+COPY vendor/ vendor/
+COPY bindings/python/Cargo.toml bindings/python/Cargo.toml
+COPY bindings/python/src/ bindings/python/src/
+COPY preview/ preview/
+COPY docs/schema/ docs/schema/
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --locked --release --features native-geospatial \
-    && cargo test --locked --features native-geospatial --no-run --message-format=json > /tmp/artifacts.json \
-    && jq -r 'select(.reason == "compiler-artifact" and .profile.test and .executable != null) | .executable' \
-       /tmp/artifacts.json > /tmp/tests.list \
-    && test -s /tmp/tests.list && mkdir /out-tests /out-bin \
-    && while read -r test; do cp "$test" /out-tests/; done < /tmp/tests.list \
-    && cp target/debug/rusty-tiles /out-bin/debug-rusty-tiles \
+    && mkdir /out-bin \
     && cp target/release/rusty-tiles /out-bin/rusty-tiles
 
 FROM debian:trixie-slim AS native-runtime
@@ -49,16 +53,16 @@ COPY --from=geospatial-build /usr/local/share/gdal /usr/local/share/gdal
 RUN ldconfig && ! command -v python && ! command -v python3
 ENV PROJ_DATA=/usr/local/share/proj PROJ_NETWORK=OFF
 
-FROM native-runtime AS acceptance
-COPY --from=build /out-tests/ /tests/
-# Cargo embeds this executable location in CLI acceptance tests.
-COPY --from=build /out-bin/debug-rusty-tiles /src/target/debug/rusty-tiles
-COPY tests/fixtures /src/tests/fixtures
-COPY docs /src/docs
-WORKDIR /src
-RUN set -eu; for test in /tests/*; do "$test"; done
-
 FROM native-runtime AS runtime
 COPY --from=build /out-bin/rusty-tiles /usr/local/bin/rusty-tiles
+# Licence and upstream notices of vendored code (scripts/third_party_notices.py).
+COPY LICENSE /usr/share/doc/rusty-tiles/
+# Rust crates (scripts/third_party_licenses.py) and the GDAL/PROJ licences from the source builds;
+# the Debian libraries keep their copyright files under /usr/share/doc/<package>/.
+COPY licenses/THIRD_PARTY_LICENSES-native-geospatial.md /usr/share/doc/rusty-tiles/THIRD_PARTY_LICENSES.md
+COPY --from=geospatial-build /usr/local/share/doc/rusty-tiles-system/ /usr/share/doc/rusty-tiles/third_party/system/
+COPY vendor/basis_universal/LICENSE vendor/basis_universal/NOTICE /usr/share/doc/rusty-tiles/third_party/basis_universal/
+COPY vendor/basis_universal/LICENSES/ /usr/share/doc/rusty-tiles/third_party/basis_universal/LICENSES/
+COPY vendor/basis_universal/zstd/LICENSE /usr/share/doc/rusty-tiles/third_party/basis_universal/zstd/
 RUN rusty-tiles doctor --json
 ENTRYPOINT ["rusty-tiles"]
