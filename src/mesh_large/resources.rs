@@ -5,8 +5,9 @@
 //! stage's job plans see `min(detected available, budget)` instead of the detected value,
 //! and the HLOD stage admits its fixed terms, its minimum child window and one parent job
 //! before it allocates. Detected memory pressure only serializes work; it never changes
-//! output. The one declared exception: a leaf whose job cannot fit the declared budget
-//! takes the next texture density step (`planning::preflight`, `memory_reduced_leaves`).
+//! output. The one declared exception: leaves whose pages cannot fit the declared budget
+//! beside the largest leaf closure take the next texture density step
+//! (`planning::preflight`, `memory_reduced_leaves`).
 use crate::{JobError, JobErrorKind};
 use serde::Serialize;
 use std::sync::{Arc, Mutex};

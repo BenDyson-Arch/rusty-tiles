@@ -847,7 +847,12 @@ pub(crate) fn capture_admitted(
         };
         begin_stage(&scratch, &need, stages.leaf_plans)?;
         // The declared budget (explicit, else the 4 GiB default ceiling; never detected
-        // headroom, so output depends on the request only) left for one leaf job.
+        // headroom) left for one leaf job after every term the leaf stage charges besides
+        // the job itself, memory-backed scratch and work/archive storage included.
+        let storage = match &config.output_parents {
+            Some((work, output)) => super::pipeline::storage_charge_bytes((work, output), &need)?,
+            None => 0,
+        };
         let leaf_memory = config.memory_budget.map(|budget| {
             let declared = budget
                 .requested_bytes
@@ -858,6 +863,7 @@ pub(crate) fn capture_admitted(
                 0
             };
             [
+                storage,
                 tmpfs,
                 memory.owned_metadata_bytes,
                 memory.geometry.document_bytes,

@@ -408,7 +408,7 @@ pub(crate) fn stage_plan(
     });
     if usable.is_some_and(|u| !fits(u)) {
         return Err(resource(&format!(
-            "one leaf job cannot fit available memory including owned scratch: needs {minimum_bytes} bytes, has {}",
+            "one leaf job cannot fit available memory including owned scratch: needs {minimum_bytes} bytes, has {} (an explicit --memory-budget at or below the available memory lets leaf texture density step down to fit)",
             available.unwrap_or(0)
         )));
     }

@@ -562,11 +562,18 @@ One declared ceiling governs the whole run, with one rule on every surface:
 - **Pressure never changes output.** It serializes work (`--jobs` stays a maximum
   under the same budget), and what cannot fit even alone is a `resource_limit`
   refusal naming the stage and the bytes it needs, before that stage allocates and
-  before anything is published. One exception is declared: a leaf whose job cannot fit
-  the declared budget (the explicit one, otherwise the 4 GiB default ceiling, never the
-  detected headroom) at its planned texture density takes the next density step instead
-  of refusing the run; the report counts such leaves in `memory_reduced_leaves`. Archives
-  are identical for every budget that admits the run without such a step.
+  before anything is published. One exception is declared: when the leaf stage could not
+  fit its largest leaf page beside its largest leaf closure in the declared budget (the
+  explicit one, otherwise the 4 GiB default ceiling) less what is charged to it besides
+  leaf jobs (memory-backed scratch, work and archive storage, metadata and the decoded
+  source cache floor), the leaves whose pages do not fit take the next texture density
+  step instead of refusing the run; the report counts them in `memory_reduced_leaves`.
+  Output therefore depends on the request and on whether its scratch, work directory or
+  output staging is memory-backed (tmpfs), not on detected headroom. The default budget
+  is resolved below 4 GiB under tight detected headroom (half of it), and planning does
+  not follow it there: such a run can still refuse where an explicit, smaller
+  `--memory-budget` steps the density and succeeds. Archives are identical for every
+  budget that admits the run without such a step.
 - **Reporting.** `diagnostics.memory` holds the `budget` (`requested_bytes`,
   `resolved_bytes`, `source`: `explicit`, `default_ceiling`, `default_headroom` or
   `default_undetected`, and the detected headroom), the least budget that admits each

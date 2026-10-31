@@ -310,22 +310,24 @@ fn sweep(
 }
 
 /// The copies of a footprint on a page with a period axis (`wrap`): shifted by whole
-/// periods (exact in f32: `c - floor(c)` is representable) so it starts in its first
-/// period, then every image under the axis' symmetry (REPEAT: x - 1; MIRRORED: 2 - x and
-/// x - 2) that reaches into [0, 1], where texels live. Two copies overlapping anywhere
-/// read the same texels. `None` when a period axis spans more than one period: the
-/// footprint covers some texel twice and its images are unbounded.
+/// periods so it starts in its first period (in f64, where `c - k` of an f32 `c` and an
+/// integer `k` is exact unless `c` is a tiny negative; such a result off the 2^-56 grid
+/// makes the footprint shared, conservatively), then every image under the axis'
+/// symmetry (REPEAT: x - 1; MIRRORED: 2 - x and x - 2) that reaches into [0, 1], where
+/// texels live. Two copies overlapping anywhere read the same texels. `None` when a period
+/// axis spans more than one period: the footprint covers some texel twice and its images
+/// are unbounded.
 fn period_copies(t: &[[f32; 2]; 3], wrap: [u32; 2]) -> Option<Vec<Copy>> {
     let one = 1i128 << 56;
-    let mut base = *t;
+    let mut base = t.map(|p| p.map(f64::from));
     for (a, &w) in wrap.iter().enumerate() {
         let period = match w {
             10497 => 1.,
             33648 => 2.,
             _ => continue,
         };
-        let lo = base.iter().map(|p| p[a]).fold(f32::INFINITY, f32::min);
-        let hi = base.iter().map(|p| p[a]).fold(f32::NEG_INFINITY, f32::max);
+        let lo = base.iter().map(|p| p[a]).fold(f64::INFINITY, f64::min);
+        let hi = base.iter().map(|p| p[a]).fold(f64::NEG_INFINITY, f64::max);
         if hi - lo > 1. || (hi - lo).is_nan() {
             return None;
         }
@@ -334,9 +336,16 @@ fn period_copies(t: &[[f32; 2]; 3], wrap: [u32; 2]) -> Option<Vec<Copy>> {
             p[a] -= shift;
         }
     }
-    let Copy { exact: Some(t), .. } = Copy::of(&base) else {
-        return None;
+    let grid = |v: f64| {
+        let scaled = v * (1u64 << 56) as f64;
+        (v.abs() < 8. && scaled.fract() == 0.).then_some(i128::from(scaled as i64))
     };
+    let mut t = [[0i128; 2]; 3];
+    for (c, p) in base.iter().enumerate() {
+        for a in 0..2 {
+            t[c][a] = grid(p[a])?;
+        }
+    }
     let mut copies = vec![t];
     for (a, &w) in wrap.iter().enumerate() {
         let images: &[(i128, i128)] = match w {
@@ -491,6 +500,25 @@ mod tests {
         || Ok(())
     }
 
+    #[test]
+    fn period_copies_shift_negative_uvs_exactly() {
+        // Edges at u = -0.1 and u = 0.9 (f32) a period apart: 1 + f32(-0.1) is just above
+        // f32(0.9), a sliver an f32 shift rounds away (#306 review r2 N3).
+        let a = [[-0.2f32, 0.], [-0.1, 0.], [-0.1, 1.]];
+        let b = [[0.9f32, 0.], [1.0, 0.], [0.9, 1.]];
+        let wrap = [10497, crops::CLAMP];
+        let (ca, cb) = (
+            period_copies(&a, wrap).unwrap(),
+            period_copies(&b, wrap).unwrap(),
+        );
+        let owner: Vec<usize> = std::iter::repeat_n(0, ca.len())
+            .chain(std::iter::repeat_n(1, cb.len()))
+            .collect();
+        let flags = sweep(ca.into_iter().chain(cb).collect(), &mut none()).unwrap();
+        assert!([0, 1]
+            .iter()
+            .all(|&o| (0..owner.len()).any(|i| owner[i] == o && flags[i])));
+    }
     #[test]
     fn material_key_ignores_texture_identity_and_fills_defaults() {
         let a = json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":3,"texCoord":1},

@@ -104,6 +104,48 @@ pub(in crate::mesh_large) fn preflight(
     leaf_memory: Option<u64>,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Sequence<LeafPlan>, JobError> {
+    // The leaf stage admits the largest page beside the largest leaf closure, which may
+    // belong to another leaf. A pass whose plans leave some steppable leaf's page over the
+    // allowance beside that closure is planned again with it as every leaf's floor, so the
+    // stage admission passes whenever any density schedule could. Closures barely depend on
+    // density, so this settles in a second pass; the bound only guards termination.
+    let pass = |memory, check: &mut dyn FnMut() -> Result<(), JobError>| {
+        plan_pass(scratch, triangles, nodes, resources, config, memory, check)
+    };
+    let mut floor = 0;
+    for _ in 0..4 {
+        let plans = pass(leaf_memory.map(|m| (m, floor)), check)?;
+        let Some(limit) = leaf_memory else {
+            return Ok(plans);
+        };
+        let rows: Vec<LeafPlan> = plans.reader()?.collect::<Result<_, _>>()?;
+        let owned = rows.iter().map(|p| p.owned_bytes).max().unwrap_or(0);
+        let steppable = config.profile != Profile::Lossless;
+        let short = |p: &LeafPlan| {
+            steppable
+                && p.density_drop < 12
+                && super::producer::leaf_job_bytes(p.page_bytes, owned).is_none_or(|n| n > limit)
+        };
+        if owned <= floor || !rows.iter().any(short) {
+            return Ok(plans);
+        }
+        floor = owned;
+    }
+    pass(leaf_memory.map(|m| (m, floor)), check)
+}
+
+/// One planning pass: each leaf's first density whose projection fits the page edge, the
+/// byte budget and, with `memory = (allowance, floor)`, one leaf job beside a closure of at
+/// least `floor` bytes.
+fn plan_pass(
+    scratch: &Scratch,
+    triangles: &Sequence<FullTriangle>,
+    nodes: &Sequence<NodeRecord>,
+    resources: AtlasResources<'_>,
+    config: &TreeConfig,
+    leaf_memory: Option<(u64, u64)>,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<Sequence<LeafPlan>, JobError> {
     check()?;
     let mut records = triangles.reader()?;
     let mut plans = SequenceWriter::new(scratch, "leaf-plans", config.sort.buffer_bytes)?;
@@ -163,12 +205,10 @@ pub(in crate::mesh_large) fn preflight(
                 // step (reported), rather than refusing the run once delivery admits it.
                 Ok(projected)
                     if density_drop < max_drop
-                        && leaf_memory.is_some_and(|limit| {
-                            super::producer::leaf_job_bytes(
-                                projected.page_bytes,
-                                projected.owned_bytes,
-                            )
-                            .is_none_or(|n| n > limit)
+                        && leaf_memory.is_some_and(|(limit, floor)| {
+                            let owned = projected.owned_bytes.max(floor);
+                            super::producer::leaf_job_bytes(projected.page_bytes, owned)
+                                .is_none_or(|n| n > limit)
                         }) =>
                 {
                     memory_drops += 1;
@@ -558,6 +598,72 @@ mod tests {
                         .unwrap();
                         let row = plan.reader().unwrap().next().unwrap().unwrap();
                         assert_eq!((row.density_drop, row.memory_drops), (2, 1));
+                        drop(plan);
+                        // #306 review r2 N1: a second leaf of 64 untextured primitives has the
+                        // larger closure. The stage admits A's page beside it, so A steps even
+                        // though A's own job fits.
+                        let mut two = SequenceWriter::new(&scratch, "two-leaf-source", 64).unwrap();
+                        two.push(&source.reader().unwrap().next().unwrap().unwrap())
+                            .unwrap();
+                        let mut b = Vec::new();
+                        for k in 0..64u32 {
+                            let mut t = source.reader().unwrap().next().unwrap().unwrap();
+                            t.triangle.key = 1 + u64::from(k);
+                            t.triangle.source = Provenance {
+                                primitive: k + 1,
+                                ..Provenance::default()
+                            };
+                            (t.material, t.flags, t.corners) = (u32::MAX, 0, Default::default());
+                            two.push(&t).unwrap();
+                            b.push(t);
+                        }
+                        let two = two.finish().unwrap();
+                        let owned_b = atlas::project(&b, resources, profile, 0, &mut || Ok(()))
+                            .unwrap()
+                            .owned_bytes;
+                        assert!(owned_b > oracle.owned_bytes);
+                        let mut leaves =
+                            SequenceWriter::new(&scratch, "two-leaf-nodes", 64).unwrap();
+                        for (first, end) in [(0, 1), (1, 65)] {
+                            leaves
+                                .push(&NodeRecord {
+                                    cell_depth: 1,
+                                    cell: first,
+                                    path_len: 0,
+                                    path: 0,
+                                    last_octant: 0,
+                                    kind: NodeKind::Leaf,
+                                    children: 0,
+                                    first,
+                                    end,
+                                    bytes: 56,
+                                    bounds: Bounds {
+                                        min: [0.0; 3],
+                                        max: [1.0, 1.0, 0.0],
+                                    },
+                                })
+                                .unwrap();
+                        }
+                        let leaves = leaves.finish().unwrap();
+                        let limit =
+                            super::super::producer::leaf_job_bytes(oracle.page_bytes, owned_b);
+                        let plan = preflight(
+                            &scratch,
+                            &two,
+                            &leaves,
+                            resources,
+                            &config,
+                            Some(limit.unwrap() - 1),
+                            &mut || Ok(()),
+                        )
+                        .unwrap();
+                        let rows: Vec<_> = plan.reader().unwrap().map(Result::unwrap).collect();
+                        assert_eq!((rows[0].density_drop, rows[0].memory_drops), (2, 1));
+                        // The stage's admission (largest page beside largest closure) now fits.
+                        let page = rows.iter().map(|r| r.page_bytes).max().unwrap();
+                        let owned = rows.iter().map(|r| r.owned_bytes).max().unwrap();
+                        let need = super::super::producer::leaf_job_bytes(page, owned).unwrap();
+                        assert!(need < limit.unwrap(), "{need} vs {limit:?}");
                     }
                 } else {
                     assert_eq!(result.err().unwrap().kind(), JobErrorKind::Unsupported);

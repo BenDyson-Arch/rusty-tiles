@@ -439,12 +439,31 @@ fn storage_class_note(work: &str, archive: &str) -> Option<String> {
 
 /// A meter of one copy of the output reservation, plus [`STORAGE_FIXED_BYTES`], for each of
 /// the work directory and the output parent that is memory-backed, with each owner's class.
+/// What one memory-backed storage owner (the work directory, the staged archive) is
+/// charged to the budget.
+fn storage_copy_bytes(scratch: &super::full::FullScratchNeed) -> u64 {
+    (scratch.output_reserve_bytes / 3).saturating_add(STORAGE_FIXED_BYTES)
+}
+/// The storage charge [`storage_charges`] will take for work under `work_parent` and an
+/// archive staged in `output_parent`, known before capture plans its leaves.
+pub(super) fn storage_charge_bytes(
+    (work_parent, output_parent): (&Path, &Path),
+    scratch: &super::full::FullScratchNeed,
+) -> Result<u64, JobError> {
+    let copy = storage_copy_bytes(scratch);
+    [work_parent, output_parent]
+        .iter()
+        .try_fold(0u64, |n, path| {
+            let volume = crate::spill::inspect_volume(path).map_err(JobError::from)?;
+            Ok(n.saturating_add(if volume.memory_backed { copy } else { 0 }))
+        })
+}
 fn storage_charges(
     work: &Path,
     output_parent: &Path,
     scratch: &super::full::FullScratchNeed,
 ) -> Result<(delivery::StorageCharges, [crate::spill::Volume; 2]), JobError> {
-    let copy = (scratch.output_reserve_bytes / 3).saturating_add(STORAGE_FIXED_BYTES);
+    let copy = storage_copy_bytes(scratch);
     let charge = |path: &Path, what, advice| -> Result<_, JobError> {
         let volume = crate::spill::inspect_volume(path).map_err(JobError::from)?;
         Ok((owner_meter(&volume, copy, what, advice), volume))
