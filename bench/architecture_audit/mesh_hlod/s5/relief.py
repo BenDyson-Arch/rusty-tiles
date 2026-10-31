@@ -24,6 +24,7 @@ from the root at 0. A link placeholder, or labels that do not fit, leave the ste
 uninspected.
 """
 import collections
+import json
 import math
 import struct
 
@@ -83,35 +84,10 @@ class Relief:
     def domain(self, records, omitted):
         """Frozen depths [top, bottom] of every delivered tile (its single-child chain).
         False when a link placeholder hides the tree or the labels do not fit."""
-        claimed = collections.defaultdict(set)
-        for r in omitted:
-            claimed[r['key']['leafBegin'], r['key']['leafEnd']].add(r['key']['depth'])
-        self.top, self.bottom = {}, {}
-        for t in self.tiles:
-            if t.get('external'):
-                return False
-            tid, parent = int(t['id']), t['parent']
-            first = self.bottom[int(parent['id'])] + 1 if parent is not None else 0
-            if not t['children']:
-                top = bottom = first
-            elif tid in records:
-                r = records[tid]
-                top, bottom = r['contract']['depth'], r['tile'].get('encodedDepth')
-                if type(bottom) is not int:
-                    return False
-            else:
-                # An omitted cell: its chain is the omitted depths from its own on, unless
-                # the delivered tree continues the chain below it.
-                depths = claimed.get((t['lo'], t['hi']), set())
-                top = bottom = first
-                if top not in depths:
-                    return False
-                if not any((c['lo'], c['hi']) == (t['lo'], t['hi']) for c in t['children']):
-                    while bottom + 1 in depths:
-                        bottom += 1
-            if top != first or bottom < top:
-                return False
-            self.top[tid], self.bottom[tid] = top, bottom
+        labels = frozen(self.tiles, records, omitted)
+        if labels is None:
+            return False
+        self.top, self.bottom = labels
         return True
 
     def cells(self):
@@ -389,6 +365,74 @@ class Relief:
             finer, retained = steps, kept
         return out
 
+
+
+def frozen(tiles, records, omitted):
+    """Frozen depths [top, bottom] of every delivered tile, by tile id: a coarse record
+    covers its contract depth through its `encodedDepth`; an omitted cell its omitted
+    depths from its own on, unless the delivered tree continues the chain below it; a
+    leaf lies one level below its parent's chain. None when a link placeholder hides the
+    tree or the labels do not fit (each chain starts one level below its parent's)."""
+    claimed = collections.defaultdict(set)
+    for r in omitted:
+        claimed[r['key']['leafBegin'], r['key']['leafEnd']].add(r['key']['depth'])
+    top, bottom = {}, {}
+    for t in tiles:
+        if t.get('external'):
+            return None
+        tid, parent = int(t['id']), t['parent']
+        first = bottom[int(parent['id'])] + 1 if parent is not None else 0
+        if not t['children']:
+            low = high = first
+        elif tid in records:
+            r = records[tid]
+            low, high = r['contract']['depth'], r['tile'].get('encodedDepth')
+            if type(low) is not int or type(high) is not int:
+                return None
+        else:
+            depths = claimed.get((t['lo'], t['hi']), set())
+            low = high = first
+            if low not in depths:
+                return None
+            if not any((c['lo'], c['hi']) == (t['lo'], t['hi']) for c in t['children']):
+                while high + 1 in depths:
+                    high += 1
+        if low != first or high < low:
+            return None
+        top[tid], bottom[tid] = low, high
+    return top, bottom
+
+
+def leaf_depths(tiles, audit_path):
+    """Frozen depth per leaf index from the audit sidecar, before the D11 audit joins it:
+    a leaf below a collapsed chain is quantized on its frozen depth's grid. Coarse tiles
+    carry the sha256 of each payload (`oracle.audit`). None when a coarse payload has no
+    unique record or the labels do not fit; the audit then refuses or leaves relief
+    uninspected, and delivered depths stand."""
+    by_sha, omitted = collections.defaultdict(list), []
+    try:
+        with open(audit_path, 'rb') as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                r = json.loads(line)
+                if r.get('kind') == 'tile':
+                    by_sha[r['tile']['sha256']].append(r)
+                elif r.get('kind') == 'omitted':
+                    omitted.append(r)
+        records = {}
+        for t in tiles:
+            if t['children'] and t['contents']:
+                shas = t.get('sha256', [])
+                if len(shas) != 1 or len(by_sha.get(shas[0], ())) != 1:
+                    return None
+                records[int(t['id'])] = by_sha[shas[0]][0]
+        labels = frozen(tiles, records, omitted)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return None
+    if labels is None:
+        return None
+    return {t['lo']: labels[0][int(t['id'])] for t in tiles if not t['children']}
 
 
 def inspect(store, tiles, leaves, records, omitted, arcs_of, cap, extent, require, stats):

@@ -185,6 +185,16 @@ class Store:
             self.db.execute('INSERT INTO source_orientation VALUES (?,?,?)',(i,key,sign))
         return True
 
+    def relabel(self, depths):
+        """Observation depths by leaf index. A leaf below a collapsed single-child chain
+        lies deeper than delivered; its frozen depth names its quantization grid."""
+        self.work.charge(len(depths))
+        self.db.execute('CREATE TEMP TABLE relabel(leaf INTEGER PRIMARY KEY,depth INTEGER)')
+        self.db.executemany('INSERT INTO relabel VALUES (?,?)',depths.items())
+        self.db.execute('UPDATE observations SET depth=(SELECT depth FROM relabel WHERE relabel.leaf=observations.leaf) '
+                        'WHERE leaf IN (SELECT leaf FROM relabel)')
+        self.db.execute('DROP TABLE relabel')
+
     def finalize_canonical(self, require):
         """Derive source welds before looking at delivered coordinate aliases.
 

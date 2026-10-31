@@ -319,7 +319,10 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                 else:
                     matrix=multiply(t['transform'],yup)
                 for uri in t['contents']:
-                    decoded=decode(archive.read(uri))
+                    data=archive.read(uri)
+                    if t['children'] and border_audit is not None:
+                        t.setdefault('sha256',[]).append(hashlib.sha256(data).hexdigest())
+                    decoded=decode(data)
                     faces=decoded['faces']
                     require(len(faces)<=1_000_000,'oracleWorkLimit','one payload exceeds 1,000,000 faces')
                     # D1's hard cap, per payload, from this decoder's own faces.
@@ -344,9 +347,20 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                     store.leaf_bounds(t['lo'])
                 store.db.commit()
             require(leaf_count==len(manifest['triangles']),'leafCoverage',f'{leaf_count} != {len(manifest["triangles"])}')
+            # A leaf below a collapsed single-child chain is quantized on its frozen
+            # depth's grid, not its delivered depth's: group its observations there.
+            chain_leaves=0
+            if border_audit is not None:
+                import relief
+                frozen=relief.leaf_depths(tiles,border_audit)
+                if frozen:
+                    deeper={t['lo']:frozen[t['lo']] for t in leaves if frozen[t['lo']]!=t['depth']}
+                    store.relabel(deeper)
+                    chain_leaves=len(deeper)
             store.finalize_canonical(require)
             source_points=store.validate_leaf_points(require)
             result=store.census(tiles,leaves,require)
+            result['chainLeaves']=chain_leaves
             from winding import inspect as inspect_winding
             result['winding']=inspect_winding(store,tiles,require)
             from seam_diagnostic import inspect_open_edges

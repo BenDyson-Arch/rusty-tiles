@@ -198,6 +198,14 @@ integer lattice spacings, using ties-to-even f64 rounding and the coarsest
 required incident-depth grid. FLOAT and non-axis-representable integer storage
 are distinguished explicitly; conservative codec tolerance never supplies seam
 equality or invents a weld. Source-equal FLOAT delivery needs no inferred grid.
+A leaf's incident depth is its frozen depth, not its delivered one. A leaf below a
+collapsed single-child chain is quantized on the grid of its depth in the frozen tree.
+`relief.leaf_depths` derives that depth from the audit sidecar before the D11 audit
+(each coarse record's depth through its `encodedDepth`). Delivered depths stand when no
+sidecar is given or the labels do not fit; the D11 audit then refuses or leaves relief
+uninspected. `border_controls.py` `chain-grid` pins it: a chain leaf and a genuine leaf
+share a changed point at one delivered depth. The 20107b1d oracle refused that at
+`sourceCanonical`. The unlabelled mutant still refuses.
 
 Exact source-canonical point/edge ownership produces requirements. The oracle
 counts original surface-face incidence after canonical welding, excluding only
