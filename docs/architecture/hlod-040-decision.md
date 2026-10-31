@@ -355,6 +355,15 @@ including output staging, to memory. Track simultaneous spill, retained source,
 parent handoffs and archive staging, not just capture files. Keep cancellation,
 cleanup and completed-file/no-clobber publication semantics.
 
+**Amendment, 2026-10-30 (PR #306).** When the leaf stage could not admit its largest
+page beside its largest leaf closure in the declared budget (explicit, else the 4 GiB
+default ceiling) less its other charges, the leaves whose pages do not fit take the next
+texture density step instead of refusing, reported as `memory_reduced_leaves`. Output
+depends on the request and on whether scratch, work or output storage is memory-backed,
+not on detected headroom. Detected headroom still never changes output: it serializes
+work, or (when it resolves the default budget below 4 GiB) refuses what does not fit,
+where an explicit smaller budget would step instead.
+
 **Rationale:** explicit ownership/admission makes streaming scale without
 host-sized allocations or expensive discarded retries. **Evidence:** E6, E8, E2's
 unbounded prototype limitations, C/H16.

@@ -525,6 +525,7 @@ fn textured(
                 cutoff,
                 linear: true,
                 min_linear: true,
+                wrap: [33071; 2],
             });
         let d = deliver(
             (services.profile, services.page_memory, services.check),
@@ -1131,6 +1132,7 @@ mod tests {
             cutoff,
             linear: true,
             min_linear: true,
+            wrap: [33071; 2],
         };
         let d = deliver(
             (Profile::Balanced, 1 << 28, &check),

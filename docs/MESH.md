@@ -262,7 +262,20 @@ Normal, metallic-roughness and other data pages, MASK coverage and ID pages foll
 their own class rules in every profile (see [Profiles](#profiles-and-resources)).
 Leaf atlases keep only each leaf's needed source regions, with aligned crops, wrap,
 gutters and per-level mips; a leaf never depends on a whole source image merely
-because one triangle samples it.
+because one triangle samples it. When a leaf's UVs for one source image span at
+least one whole period of a REPEAT or MIRRORED_REPEAT axis, the leaf needs every
+texel on that axis: its page holds that axis whole, published with the source wrap
+and the source UVs unchanged there (the source image itself when both axes do), and
+a crop of the other axis, instead of one unrolled copy per period. Such a page is
+the source's own size, which a KTX2 page needs to be a multiple of four; otherwise
+the binding keeps ordinary crops. It is also used only where it holds no more texels
+than the island crops of the triangles actually there: a few small triangles a period
+apart keep crops rather than pulling in the whole image. Each period page is a texture
+of its own, so a leaf publishes one primitive (draw call) per distinct period page
+(source image, slot, sampler and MASK class) on top of its atlas primitives. A period
+page keeps the source's dimensions, which need not be powers of two: WebGL2 (CesiumJS's
+default) samples such REPEAT or MIRRORED_REPEAT pages directly; WebGL1 cannot, and
+CesiumJS cannot resize compressed (KTX2) images to fix that.
 
 ### Identity, annotation and editability
 
@@ -549,8 +562,18 @@ One declared ceiling governs the whole run, with one rule on every surface:
 - **Pressure never changes output.** It serializes work (`--jobs` stays a maximum
   under the same budget), and what cannot fit even alone is a `resource_limit`
   refusal naming the stage and the bytes it needs, before that stage allocates and
-  before anything is published. Archives are identical for every budget that
-  admits the run.
+  before anything is published. One exception is declared: when the leaf stage could not
+  fit its largest leaf page beside its largest leaf closure in the declared budget (the
+  explicit one, otherwise the 4 GiB default ceiling) less what is charged to it besides
+  leaf jobs (memory-backed scratch, work and archive storage, metadata and the decoded
+  source cache floor), the leaves whose pages do not fit take the next texture density
+  step instead of refusing the run; the report counts them in `memory_reduced_leaves`.
+  Output therefore depends on the request and on whether its scratch, work directory or
+  output staging is memory-backed (tmpfs), not on detected headroom. The default budget
+  is resolved below 4 GiB under tight detected headroom (half of it), and planning does
+  not follow it there: such a run can still refuse where an explicit, smaller
+  `--memory-budget` steps the density and succeeds. Archives are identical for every
+  budget that admits the run without such a step.
 - **Reporting.** `diagnostics.memory` holds the `budget` (`requested_bytes`,
   `resolved_bytes`, `source`: `explicit`, `default_ceiling`, `default_headroom` or
   `default_undetected`, and the detected headroom), the least budget that admits each
@@ -581,8 +604,8 @@ modes do not count. A leaf's
 merged positions are rebased onto one shared quantization offset without being
 quantized again, so every decoded vertex is bit-identical to a per-primitive
 encoding. Primitives split only where those properties differ, where a mipmapped
-source sampler keeps a dedicated leaf page in a lossy profile, or where a class
-overflows one page. Every leaf triangle keeps its `source_primitive` and
+source sampler keeps a dedicated leaf page in a lossy profile, where repeated UVs
+keep a source period page of their own, or where a class overflows one page. Every leaf triangle keeps its `source_primitive` and
 `source_triangle` feature IDs; a coarse triangle carries one representative
 `source_primitive` ID ([identity](#identity-annotation-and-editability)). Each
 tile has one property table per feature-ID set. Feature-ID attributes carry no
