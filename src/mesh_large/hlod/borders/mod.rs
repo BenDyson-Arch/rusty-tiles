@@ -972,11 +972,8 @@ impl Borders {
         };
         // Chain members are consecutive in the frozen tree's preorder.
         let top = self.publication_depth(key)?;
-        let mut id = self.source.node(TileKey { depth: top, ..key })?;
-        for depth in top.. {
-            if id == self.source.nodes.len {
-                break;
-            }
+        let first = self.source.node(TileKey { depth: top, ..key })?;
+        for (id, depth) in (first..self.source.nodes.len).zip(top..) {
             let n = self.source.nodes.get(id)?;
             if (n[0], n[1], n[2]) != (key.first, key.end, u64::from(depth))
                 || n[5] & 1 == 1
@@ -987,7 +984,6 @@ impl Borders {
             if depth != key.depth {
                 contract.relief_floor = contract.relief_floor.max(self.relief_floor(n)?);
             }
-            id += 1;
         }
         Ok(Some(contract))
     }

@@ -3042,7 +3042,8 @@ fn implicit_empty_tiles(archive: &Path) -> usize {
 /// cap-30 sheet had holes). Every content-less tile now takes the empty-parent error, in
 /// explicit output, inside implicit subtrees and as a document's root: over a camera sweep
 /// the traversal draws every leaf exactly once in every frame, and the published content-less
-/// tiles are exactly the omitted cells reported.
+/// tiles are exactly the omitted cells reported. D11 without relief: relief (A1) builds every
+/// cell of the cap-30 sheet.
 #[test]
 fn omitted_cells_refine_whenever_they_are_visible() {
     use crate::mesh_large::delivery::{self, plan::Limits};
@@ -3060,6 +3061,7 @@ fn omitted_cells_refine_whenever_they_are_visible() {
             &work.path().join(format!("cap{cap}")),
             &Run {
                 cap,
+                mutation: Mutation::NoRelief,
                 ..Run::default()
             },
         )
