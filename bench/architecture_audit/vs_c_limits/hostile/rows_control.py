@@ -10,11 +10,20 @@ Classes (positions: a pseudo-random 128^3 lattice in [1, 2)^3, every corner a ne
 - `leafrand`: N leaves of T triangles under a content-less root.
 - `twin`: two coarse cells, each over N/2 leaves; the second cell's leaves repeat the first's
   positions with new vertex ids, so every key is shared across the cells (ancestor
-  requirements, multi edges, coincident corner sets). Refused at the first coarse border.
+  requirements, multi edges, coincident corner sets). Each cell's coarse payload keeps every leaf
+  face, so its border is exact: valid, through the border images and their pairwise rules.
 - `chain`: a single-child chain of K coarse tiles with one payload over N leaves whose
   triangles are each doubled; the coarse payload doubles COARSE of them, so every coarse edge
   is used twice in one direction (descendant incidence, edge-face and twin lookups per tile).
   Refused by the coarse-drop recount after every coarse tile is checked.
+- `revfan` (review 1 of PR #309): a single-child chain of coarse tiles whose every edge is used
+  twice forward and also carries M reversed leaf faces. Valid.
+
+`check` runs each class at CI size and asserts its verdict and a structured budget refusal: a
+smoke test of the delivery paths, not of row cost (the bulk loads are covered by unit tests in
+`src/validate/hlod_delivery/bulk.rs`). On revfan it also measures the units each added chain tile
+charges and asserts the 320-unit seeks of the lookups that tile repeats, a timing-free signal
+that the former 128-unit seeks and one-unit rows fail.
 
 Buffers are plain (no meshopt), so S is larger per row than in the timing archives
 (`leafrand.py`, `rowclasses.py`, upstream meshoptimizer streams); the keys and the work per row
@@ -22,7 +31,8 @@ are the same.
 
 usage:
   rows_control.py generate KIND N T SEED OUT.3tz [K] [COARSE]
-  rows_control.py check --binary BIN --work DIR   (CI size: verdicts of all three classes)
+  rows_control.py revfan OUT.3tz CHAIN BASE M LEAVES [SEG]
+  rows_control.py check --binary BIN --work DIR   (CI size)
 """
 import argparse
 import hashlib
@@ -139,8 +149,10 @@ def archive(kind, n, tri, seed, out, chain=1, coarse=1024):
         for c in range(2):
             leaves = [tile(f'c{c}g{i}.glb', payload(lattice(leaf(i), tri), c * half + i, (c * half + i) * 3 * tri))
                       for i in range(half)]
-            children.append(tile(f'coarse{c}.glb', payload(lattice(random.Random(seed + 7 + c), 1), 1 << 30 | c),
-                                 1, leaves))
+            # The cell's coarse payload keeps every leaf face, so its border is exact and the
+            # validation runs through the border images and their pairwise rules.
+            faces = [x for i in range(half) for x in lattice(leaf(i), tri)]
+            children.append(tile(f'coarse{c}.glb', payload(faces, 1 << 30 | c), 1, leaves))
     elif kind == 'chain':
         leaves, picked = [], []
         for i in range(n):
@@ -158,6 +170,57 @@ def archive(kind, n, tri, seed, out, chain=1, coarse=1024):
     else:
         raise SystemExit(f'unknown class {kind}')
     root = {'boundingVolume': BOX, 'geometricError': 200, 'refine': 'REPLACE', 'children': children}
+    return write(out, root, members)
+
+
+def revfan(out, chain, base, m, leaves, seg=1 << 30):
+    """Review 1's revfan (PR #309): LEAVES leaves each hold BASE/LEAVES base triangles doubled and,
+    for each base edge (a, b), M copies of the reversed face (b, a, d). One coarse payload doubles
+    every base triangle and is shared by a single-child chain of CHAIN coarse tiles, split into an
+    external tileset every SEG levels. Every coarse edge is used twice forward and supported twice
+    forward, so each chain tile looks up that edge's forward edge faces; the M reversed rows lie
+    on the same key, in the other direction."""
+    rnd = random.Random(309)
+    used = set()
+
+    def pt():
+        while True:
+            p = tuple(1 + rnd.randrange(1 << 12) / (1 << 12) for _ in range(3))
+            if p not in used:
+                used.add(p)
+                return p
+    tris = [[pt(), pt(), pt()] for _ in range(base)]
+    flat = lambda ts: [x for t in ts for p in t for x in p]
+    members, vertex, children = [], 0, []
+    per = base // leaves
+    for i in range(leaves):
+        ts = []
+        for a, b, c in tris[i * per:(i + 1) * per]:
+            ts += [[a, b, c], [a, b, c]]
+            for x, y in [(a, b), (b, c), (c, a)]:
+                d = pt()
+                ts += [[y, x, d]] * m
+        name = f'g{i}.glb'
+        members.append((name, payload(flat(ts), i, vertex)))
+        vertex += 3 * len(ts)
+        children.append({'boundingVolume': BOX, 'geometricError': 0, 'refine': 'REPLACE', 'content': {'uri': name}})
+    coarse = [t for t in tris[:per * leaves] for _ in range(2)]
+    members.append(('coarse.glb', payload(flat(coarse), 1 << 30)))
+    node = {'boundingVolume': BOX, 'geometricError': 1, 'refine': 'REPLACE', 'content': {'uri': 'coarse.glb'},
+            'children': children}
+    documents = []
+    for level in range(1, chain):
+        if level % seg == 0:
+            name = f'sub{len(documents)}.json'
+            documents.append((name, json.dumps({'asset': {'version': '1.1'}, 'geometricError': 1, 'root': node}).encode()))
+            node = {'boundingVolume': BOX, 'geometricError': 1, 'refine': 'REPLACE', 'content': {'uri': name}}
+        node = {'boundingVolume': BOX, 'geometricError': 1, 'refine': 'REPLACE', 'content': {'uri': 'coarse.glb'},
+                'children': [node]}
+    root = {'boundingVolume': BOX, 'geometricError': 200, 'refine': 'REPLACE', 'children': [node]}
+    return write(out, root, documents + members)
+
+
+def write(out, root, members):
     tileset = json.dumps({'asset': {'version': '1.1'}, 'geometricError': 200, 'root': root}).encode()
     index = []
     with zipfile.ZipFile(out, 'w') as z:
@@ -183,22 +246,51 @@ def validate(binary, path, work, budget=None):
     return report.get('ok'), error.get('code'), error.get('message') or '', (error.get('limit') or {}).get('observed')
 
 
-def check(binary, work):
-    work = pathlib.Path(work)
-    work.mkdir(parents=True, exist_ok=True)
+def work(binary, path, scratch):
+    """The units a validation charges: the smallest admitting `totalPayloadElements` budget."""
+    admitted = lambda b: validate(binary, path, scratch, b)[1] != 'resource_limit'
+    hi = 1 << 16
+    while not admitted(hi):
+        hi *= 2
+    lo = hi // 2
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        lo, hi = (lo, mid) if admitted(mid) else (mid, hi)
+    return hi
+
+
+def check(binary, work_dir):
+    work_dir = pathlib.Path(work_dir)
+    work_dir.mkdir(parents=True, exist_ok=True)
     unbounded = 1 << 40
     cases = [('leafrand', 4, 512, 1, 1, True, None),
-             ('twin', 4, 512, 3, 1, False, 'interfacePoints: decoded ancestor lost an exact border junction'),
+             ('twin', 4, 512, 3, 1, True, None),
              ('chain', 4, 512, 5, 3, False, 'coarseDrops: tile 1 drops')]
     for kind, n, tri, seed, chain, ok, message in cases:
-        path = work / f'{kind}.3tz'
+        path = work_dir / f'{kind}.3tz'
         archive(kind, n, tri, seed, path, chain, 64)
-        got = validate(binary, path, work, unbounded)
+        got = validate(binary, path, work_dir, unbounded)
         assert got[0] is ok and (message is None or message in got[2]), (kind, got)
         # Work is charged before it runs: a budget below the class's work is a structured refusal.
-        low = validate(binary, path, work, 1_000_000)
+        low = validate(binary, path, work_dir, 1_000_000)
         assert low[1] == 'resource_limit' and 'totalPayloadElements=1000000' in low[2], (kind, low)
         print(json.dumps({'class': kind, 'verdict': got[:3], 'refused_at': low[3]}))
+    # revfan: every chain tile repeats its coarse lookups. Each of the 3·BASE coarse edges takes
+    # two seeks (descendant incidence, forward edge faces) and each of the 3·BASE coincident
+    # corners at least two (twins, then their faces): at least 12·BASE seeks of 320 units per
+    # chain tile. The former 128-unit seeks and one-unit rows (develop f02e8774) charge 12,094
+    # units per added tile here, under that floor; 320-unit seeks charge 39,694 (2026-10-31).
+    base, works = 8, []
+    for k in (2, 6):
+        path = work_dir / f'revfan{k}.3tz'
+        revfan(path, k, base, 40, 2)
+        got = validate(binary, path, work_dir, unbounded)
+        assert got[0] is True, ('revfan', got)
+        works.append(work(binary, path, work_dir))
+    per_tile = (works[1] - works[0]) / 4
+    floor = 12 * base * 320
+    assert per_tile >= floor, ('revfan units per chain tile', per_tile, floor)
+    print(json.dumps({'class': 'revfan', 'units': works, 'per_chain_tile': per_tile, 'floor': floor}))
 
 
 def main():
@@ -211,6 +303,11 @@ def main():
     g.add_argument('out', type=pathlib.Path)
     g.add_argument('chain', type=int, nargs='?', default=1)
     g.add_argument('coarse', type=int, nargs='?', default=1024)
+    r = sub.add_parser('revfan')
+    r.add_argument('out', type=pathlib.Path)
+    for name in ['chain', 'base', 'm', 'leaves']:
+        r.add_argument(name, type=int)
+    r.add_argument('seg', type=int, nargs='?', default=1 << 30)
     c = sub.add_parser('check')
     c.add_argument('--binary', required=True)
     c.add_argument('--work', required=True)
@@ -219,6 +316,8 @@ def main():
         stored = archive(a.kind, a.n, a.tri, a.seed, a.out, a.chain, a.coarse)
         print(json.dumps({'class': a.kind, 'leaves': a.n, 'triangles': a.tri, 'stored': stored,
                           'budget': max(16_000_000, 77 * stored)}))
+    elif a.command == 'revfan':
+        print(json.dumps({'class': 'revfan', 'stored': revfan(a.out, a.chain, a.base, a.m, a.leaves, a.seg)}))
     else:
         check(a.binary, a.work)
 

@@ -102,10 +102,11 @@ pub(super) fn image(key: &[u8], tile: i64, image: &[u8], d: f64) -> Image {
     ])
 }
 
-/// A leaf face on a segment of a replayed leaf: key, tile, third corner and direction.
+/// A leaf face on a segment of a replayed leaf: key, direction, tile and third corner, the
+/// order of `edge_faces_key`, so a lookup of one direction reads only that direction's rows.
 pub(super) type EdgeFace = Packed<45>;
 pub(super) fn edge_face(key: &[u8], tile: i64, third: &[u8], reversed: bool) -> EdgeFace {
-    Packed::new(&[key, &ordered(tile), third, &[u8::from(reversed)]])
+    Packed::new(&[key, &[u8::from(reversed)], &ordered(tile), third])
 }
 
 /// An open segment's higher endpoint, whose lower endpoint is a shared point.
@@ -269,9 +270,9 @@ impl Store {
                 insert
                     .execute(params![
                         key,
-                        face.integer(24),
-                        face.bytes(32, 12),
-                        i64::from(face.0[44])
+                        face.integer(25),
+                        face.bytes(33, 12),
+                        i64::from(face.0[24])
                     ])
                     .map_err(sql)?;
             }
@@ -563,6 +564,29 @@ mod tests {
             }
             assert_eq!(s.shared_ends(ends).unwrap(), 3);
         }
+    }
+
+    /// A coarse ancestor's edge-face lookup reads only the direction it charges: one covering
+    /// index range on (key, dir, tile), no rows of the other direction filtered after it.
+    #[test]
+    fn edge_face_lookups_read_only_the_charged_direction() {
+        let mut s = store_with(&CatalogConfig::DEFAULT);
+        s.materialize().unwrap();
+        let plan: Vec<String> = s
+            .connection
+            .prepare(&format!(
+                "EXPLAIN QUERY PLAN {}",
+                super::super::borders::EDGE_FACES
+            ))
+            .unwrap()
+            .query_map(params![[0u8; 24], 1, 2, 0], |r| r.get(3))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(
+            plan,
+            ["SEARCH edge_faces USING COVERING INDEX edge_faces_key (key=? AND dir=? AND tile>? AND tile<?)"]
+        );
     }
 
     #[test]

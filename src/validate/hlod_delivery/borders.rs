@@ -154,6 +154,10 @@ fn distinct_sides(edge: &CanonicalEdge, direction: usize, surface: &Surface) -> 
                 .all(|e| wedge(a, b, *c, *e) != std::cmp::Ordering::Greater)
     })
 }
+/// Descendant faces of one segment direction: a covering range of `edge_faces_key`, so every
+/// row it reads is a row it returns (and charges), at every coarse ancestor.
+pub(super) const EDGE_FACES: &str =
+    "SELECT third FROM edge_faces WHERE key=?1 AND dir=?4 AND tile>?2 AND tile<=?3";
 /// Charged units per exact wedge sign (its expansion holds up to ~600 terms).
 const WEDGE_UNITS: usize = 64;
 
@@ -591,12 +595,7 @@ impl Store {
         let Some(last) = last else {
             return Ok(arc.is_empty());
         };
-        let mut query = self
-            .connection
-            .prepare_cached(
-                "SELECT third FROM edge_faces WHERE key=?1 AND tile>?2 AND tile<=?3 AND dir=?4",
-            )
-            .map_err(sql)?;
+        let mut query = self.connection.prepare_cached(EDGE_FACES).map_err(sql)?;
         for &(x, y) in arc {
             // The source direction that runs like the coarse face's `direction`.
             let along = usize::from(x > y);

@@ -720,8 +720,9 @@ pub(super) struct DecodedInterfaceCensus {
 pub(super) const ROW_UNITS: usize = 128;
 /// Units for each seek of a keyed lookup into a complete leaf table (descendant incidences,
 /// edge faces and coincident faces of a coarse tile, a coarse drop's border contacts). A seek
-/// reads pages the cache may not hold: 1.7 µs at 1 M rows, 3.0 µs at 64 M.
-pub(super) const SEEK_UNITS: usize = 256;
+/// reads pages the cache may not hold: 1.7 µs at 1 M rows, 3.0 µs at 64 M, about 3.4 µs
+/// extrapolated to the 600 M rows a 1 GB archive's budget can write.
+pub(super) const SEEK_UNITS: usize = 320;
 /// Units for each further row a keyed range query reads after its seek (charged as a row),
 /// where the same rows can be read again: descendant leaf rows are read once per coarse
 /// ancestor.
@@ -1001,7 +1002,7 @@ impl Store {
             CREATE INDEX coarse_faces_tile ON coarse_faces(tile);
             CREATE TABLE multi_edges(key BLOB PRIMARY KEY) WITHOUT ROWID;
             CREATE TABLE edge_faces(key BLOB NOT NULL,tile INTEGER NOT NULL,third BLOB NOT NULL,dir INTEGER NOT NULL);
-            CREATE INDEX edge_faces_key ON edge_faces(key,tile);
+            CREATE INDEX edge_faces_key ON edge_faces(key,dir,tile,third);
             CREATE TABLE twin_points(key BLOB NOT NULL,corners BLOB NOT NULL,PRIMARY KEY(key,corners)) WITHOUT ROWID;
             CREATE TABLE border_map(key BLOB NOT NULL,tile INTEGER NOT NULL,image BLOB NOT NULL,d REAL NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             BEGIN;").map_err(sql)?;
