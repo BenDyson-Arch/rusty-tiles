@@ -335,6 +335,7 @@ struct Metadata {
     certificate_capacity: usize,
     terminal_vertices: usize,
     terminal_capacity: usize,
+    holder_capacity: usize,
 }
 
 impl Metadata {
@@ -344,12 +345,14 @@ impl Metadata {
             certificate_capacity: contract.certificates.capacity(),
             terminal_vertices: contract.terminal_vertices.len(),
             terminal_capacity: contract.terminal_vertices.capacity(),
+            holder_capacity: contract.holders.capacity(),
         }
     }
 
     fn bytes(self) -> usize {
         self.certificate_capacity * std::mem::size_of::<Certificate>()
             + self.terminal_capacity * std::mem::size_of::<Key>()
+            + self.holder_capacity * std::mem::size_of::<super::super::borders::Holders>()
     }
 }
 
@@ -465,6 +468,7 @@ fn measured_contract(parent: TileKey, children: &[TileGeometry], fixture: Fixtur
     terminal_vertices.dedup();
     let contract = Contract {
         depth: parent.depth,
+        holders: super::super::borders::holders_from_rows(&interface),
         interface,
         certificates,
         terminal_vertices,
@@ -536,7 +540,7 @@ fn assert_peaks(n: usize, combined_peak: usize, metadata: Metadata) {
         geometry_charge + contract_charge
     );
     assert_eq!(super::super::JOB_BYTES_PER_TRIANGLE, 1700);
-    // Subtract only certificate/terminal capacities; interface rows and every
+    // Subtract only certificate/terminal/holder capacities; interface rows and every
     // construction transient remain in this conservative geometry residual.
     assert!(
         geometry_peak as u64 <= geometry_charge,
@@ -715,6 +719,63 @@ fn a_highest_indexed_parent_builds_the_seam_faces_it_owns() {
         let name = format!("greatest={greatest} shifted={shifted}");
         assert_eq!(stage.is_some(), builds, "{name}: {stage:?}");
         assert!(stage.is_none_or(|s| s == 3), "{name}: {stage:?}");
+    }
+}
+
+/// #308 review r1 P1. A contract's interface rows carry the interval of the cell's own arcs
+/// at a point, not the leaves holding it; the seam owner must come from the point's holders
+/// (`Contract::holders`). Here the two disagree at a, the anchor of the strip's only
+/// completion, the N-created face a-b-c. With the rows naming the parent least holder but
+/// the holders naming a leaf outside it, the parent must not create the face; with the
+/// rows naming a leaf outside but the holders the parent, it must.
+#[test]
+fn seam_ownership_follows_the_point_holders_not_the_contract_rows() {
+    for (greatest, builds) in [(false, false), (true, true)] {
+        let fixture = Fixture::Owned {
+            greatest,
+            shifted: false,
+        };
+        let (parent, children) = children(64, fixture);
+        let [a, mid, b, c] = std::array::from_fn(|i| key(fixture.positions()[i]));
+        let mut contract = measured_contract(parent, &children, fixture);
+        let rows = contract
+            .interface
+            .iter()
+            .find(|r| r.is_vertex() && r.a == a)
+            .map(|r| (r.lo, r.hi))
+            .unwrap();
+        // The unshifted strip's a-b span hashes to a's least holder.
+        let least = if greatest {
+            parent.leaf_begin
+        } else {
+            parent.leaf_end + 5
+        };
+        let holder = contract.holders.iter_mut().find(|h| h.key == a).unwrap();
+        (holder.lo, holder.hi) = (least, least.max(rows.1));
+        assert_eq!(
+            (parent.leaf_begin..parent.leaf_end).contains(&rows.0),
+            !greatest,
+            "the rows alone would decide the other way"
+        );
+        let outcome = build_parent(
+            parent,
+            &children,
+            &[super::super::TRIANGLE_CAP],
+            &contract,
+            &|k| {
+                if k == mid {
+                    Ok(Some((a, b, 0.5, 2)))
+                } else {
+                    Ok(Some((k, k, 0., if [a, b, c].contains(&k) { 2 } else { 1 })))
+                }
+            },
+            &mut |_| Ok(true),
+            &|| Ok(()),
+            true,
+        )
+        .unwrap();
+        let stage = outcome.built.as_ref().map(|b| b.last_resort_stage);
+        assert_eq!(stage.is_some(), builds, "greatest={greatest}: {stage:?}");
     }
 }
 

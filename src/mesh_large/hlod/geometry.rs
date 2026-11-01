@@ -893,8 +893,12 @@ fn build(
         .map(|c| c.geometric_error)
         .fold(0., f64::max);
     let interface = &contract.interface;
-    let policy =
-        folds::Policy::last_resort(resort.stage(), tile.leaf_begin, tile.leaf_end, interface);
+    let policy = folds::Policy::last_resort(
+        resort.stage(),
+        tile.leaf_begin,
+        tile.leaf_end,
+        &contract.holders,
+    );
     let n3 = (resort == Resort::N3).then_some(&policy);
     let mut topology = topology::Receipt::default();
     let mut attempted = topology::Receipt::default();
@@ -1011,6 +1015,7 @@ fn build(
                 preserve_holes,
                 &mut opening_pins,
                 resort,
+                &policy,
                 &mut attempted,
                 assess,
                 check,
@@ -1062,6 +1067,7 @@ fn build(
                 preserve_holes,
                 &mut opening_pins,
                 resort,
+                &policy,
                 &mut attempted,
                 assess,
                 check,
@@ -1124,6 +1130,7 @@ fn build(
                 preserve_holes,
                 &mut opening_pins,
                 resort,
+                &policy,
                 &mut attempted,
                 assess,
                 check,
@@ -1184,6 +1191,7 @@ fn build(
                         preserve_holes,
                         &mut opening_pins,
                         Resort::Fix2,
+                        &folds::Policy::default(),
                         attempted,
                         assess,
                         check,
@@ -1411,6 +1419,7 @@ fn assessed_attempt(
     preserve_holes: bool,
     opening_pins: &mut HashSet<Key>,
     resort: Resort,
+    policy: &folds::Policy,
     attempted: &mut TopologyReceipt,
     assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
@@ -1429,6 +1438,7 @@ fn assessed_attempt(
             preserve_holes,
             opening_pins,
             resort,
+            policy,
         );
         let mut b = match proposal {
             Ok(b) => b,
@@ -1489,6 +1499,7 @@ fn attempt(
     preserve_holes: bool,
     opening_pins: &HashSet<Key>,
     resort: Resort,
+    policy: &folds::Policy,
 ) -> Result<Built, JobError> {
     let mut refused = false;
     let mut remaining = REDUCTION_PASSES;
@@ -1508,6 +1519,7 @@ fn attempt(
             remaining,
             refused,
             resort,
+            policy,
         )
     };
     // An overprotected ring is a failed strategy, not a cap lower bound. Both
@@ -1556,9 +1568,8 @@ fn attempt_mode(
     remaining: &mut u32,
     touching: &mut bool,
     resort: Resort,
+    policy: &folds::Policy,
 ) -> Result<Built, JobError> {
-    let policy =
-        folds::Policy::last_resort(resort.stage(), tile.leaf_begin, tile.leaf_end, interface);
     let _cpu =
         super::cpu_profile::start(super::cpu_profile::Stage::Attempt, merged.triangles.len());
     let required = || {
@@ -1639,12 +1650,12 @@ fn attempt_mode(
         };
         let (mut output, mut error) = match &staged_lock {
             Some(lock) if resort == Resort::N3 => {
-                cluster_reduce(merged, contracted_faces, interface, lock, cap, &policy)
+                cluster_reduce(merged, contracted_faces, interface, lock, cap, policy)
             }
-            Some(lock) => staged_reduce(merged, contracted_faces, interface, lock, cap, &policy),
+            Some(lock) => staged_reduce(merged, contracted_faces, interface, lock, cap, policy),
             None => reduce(&merged.triangles, &|v| locked[v as usize], cap)?,
         };
-        settle(merged, contracted_faces, &policy, resort, &mut output);
+        settle(merged, contracted_faces, policy, resort, &mut output);
         let mut topology_protected = false;
         let mut fold_retries = 0;
         // Only one immutable post-contraction source per retry sequence. Release
@@ -1769,7 +1780,7 @@ fn attempt_mode(
             };
             reduced.extend(keep);
             output = reduced;
-            settle(merged, contracted_faces, &policy, resort, &mut output);
+            settle(merged, contracted_faces, policy, resort, &mut output);
             error = e;
         }
         if output.len() > cap {
@@ -1956,7 +1967,12 @@ mod tests {
                 &previous,
                 &mapped,
             )
-            .with_policy(folds::Policy::last_resort(3, 0, 1, &interface));
+            .with_policy(folds::Policy::last_resort(
+                3,
+                0,
+                1,
+                &super::super::borders::holders_from_rows(&interface),
+            ));
             let seed = Contracted {
                 merged: reference.clone(),
                 stuck,
@@ -2094,6 +2110,7 @@ mod tests {
                 interface: vec![InterfaceRow::new(0, a, b, 0, 1)],
                 certificates: vec![],
                 terminal_vertices: vec![],
+                holders: vec![],
                 scale: 0.,
             },
             &|p| {
@@ -2188,6 +2205,7 @@ mod tests {
             false,
             &pins,
             Resort::None,
+            &folds::Policy::default(),
         )
         .is_err());
         let built = attempt(
@@ -2202,6 +2220,7 @@ mod tests {
             false,
             &pins,
             Resort::None,
+            &folds::Policy::default(),
         )
         .unwrap();
         assert_eq!(built.geometry.triangles.len(), 6);

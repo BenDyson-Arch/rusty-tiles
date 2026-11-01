@@ -1862,7 +1862,7 @@ fn parent_jobs_allocate_within_their_charge() {
     let mut grid = None;
     for kind in [0u8, 1, 3, 2] {
         let children: Vec<TileGeometry> = (0..8).map(|slot| child(slot, kind)).collect();
-        let (built, peak) = crate::test_alloc::peak(|| {
+        let outer = || {
             let mut interface = children
                 .iter()
                 .flat_map(|c| c.interface.iter())
@@ -1870,12 +1870,20 @@ fn parent_jobs_allocate_within_their_charge() {
                 .copied()
                 .collect();
             super::interfaces::merge_rows(&mut interface);
+            interface
+        };
+        // Point holders are contract metadata, charged with the contract
+        // (`borders::contract_workspace_bytes`), not by the job.
+        let holders = super::borders::holders_from_rows(&outer());
+        let (built, peak) = crate::test_alloc::peak(|| {
+            let interface = outer();
             geometry::build_parent(
                 parent,
                 &children,
                 &[cap],
                 &super::borders::Contract {
                     depth: parent.depth,
+                    holders,
                     interface,
                     certificates: Vec::new(),
                     terminal_vertices: Vec::new(),
@@ -5277,6 +5285,7 @@ fn ordinary_drops_under_pressure_go_smallest_first() {
         certificates: vec![],
         terminal_vertices: vec![],
         interface: vec![],
+        holders: vec![],
     };
     for cap in [faces - 20, faces - 60, faces - 150] {
         let b = super::geometry::build_parent(
@@ -5412,6 +5421,7 @@ fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
         certificates: vec![],
         terminal_vertices: vec![],
         interface: vec![],
+        holders: vec![],
     };
     for cap in [2, 3, 4, 5] {
         let outcome = super::geometry::build_parent(
@@ -5745,6 +5755,191 @@ fn n1_builds_a_seam_bound_cell_on_the_segments_it_owns() {
         .collect();
     assert!(!n1.is_empty(), "{name}: {:?}", last_resort_tiles(&dir));
     assert!(n1.iter().all(|t| !develop.contains(&(t.0, t.1))), "{name}");
+}
+
+/// An egg crate: exact zeros on a lattice, so saddle vertices lie on split planes.
+fn egg_crate(k: u32) -> Mesh {
+    let amp = [8., 16., 32., 64.][(k % 4) as usize];
+    let w: f32 = [8., 4., 16., 8.][(k / 4 % 4) as usize];
+    let s = |t: f32| {
+        if (t / w).fract() == 0. {
+            0.
+        } else {
+            (std::f32::consts::PI * t / w).sin()
+        }
+    };
+    let n = 64u32;
+    let mut mesh = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.5, 0.5, 0.5, 1.],
+    };
+    for i in 0..=n {
+        for j in 0..=n {
+            let (x, z) = (i as f32, j as f32);
+            mesh.positions.push([x, amp * s(x) * s(z), z]);
+        }
+    }
+    for i in 0..n {
+        for j in 0..n {
+            let v = |a: u32, c: u32| a * (n + 1) + c;
+            mesh.indices.extend([v(i, j), v(i, j + 1), v(i + 1, j)]);
+            mesh.indices
+                .extend([v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
+        }
+    }
+    mesh
+}
+
+/// #308 review r1 P1: the producer's seam owner on real contracts. For every built tile its
+/// own `folds::Policy` is rebuilt from the audited contract. Per depth, every shared point
+/// has at most one least and one greatest claimer, exactly one where a tile of that depth
+/// holds the leaf; no segment between points two tiles hold is owned by both; and every
+/// claim is the claim of the tile containing it one depth up. The archive validates. The
+/// cases are the reviewer's: contract-local arc intervals gave egg 5 18 doubly owned
+/// segments, city 2 346, city 3 208, city 6 188, city 7 90.
+#[test]
+fn every_seam_segment_has_one_owner_per_depth_on_real_contracts() {
+    use super::borders::Holders;
+    use super::geometry::folds::Policy;
+    type Tile = (u32, u32, u32, Vec<Holders>, HashSet<[u32; 3]>);
+    for (name, meshes) in [
+        ("egg 2", vec![egg_crate(2)]),
+        ("egg 5", vec![egg_crate(5)]),
+        ("egg 6", vec![egg_crate(6)]),
+        ("city 2", city_block(2)),
+        ("city 3", city_block(3)),
+        ("city 6", city_block(6)),
+        ("city 7", city_block(7)),
+        ("sheet 7", vec![folded_sheet(48, 5, 0.02, 0.001, 7)]),
+    ] {
+        let work = tempfile::tempdir().unwrap();
+        let input = write_gltf(&work.path().join("src"), &meshes);
+        let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+        let audit = work.path().join("hlod.hlod-audit").join("borders.jsonl");
+        let key =
+            |x: &Value| -> [u32; 3] { std::array::from_fn(|i| x[i].as_u64().unwrap() as u32) };
+        let mut tiles: Vec<Tile> = Vec::new();
+        for line in fs::read_to_string(&audit).unwrap().lines() {
+            let v: Value = serde_json::from_str(line).unwrap();
+            if v["kind"] != "tile" {
+                continue;
+            }
+            let c = &v["contract"];
+            let holders = c["holders"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|h| Holders {
+                    key: key(&h["key"]),
+                    lo: h["lo"].as_u64().unwrap() as u32,
+                    hi: h["hi"].as_u64().unwrap() as u32,
+                })
+                .collect();
+            let points = c["interface"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|r| r["a"] == r["b"])
+                .map(|r| key(&r["a"]))
+                .collect();
+            tiles.push((
+                c["depth"].as_u64().unwrap() as u32,
+                v["tile"]["leafBegin"].as_u64().unwrap() as u32,
+                v["tile"]["leafEnd"].as_u64().unwrap() as u32,
+                holders,
+                points,
+            ));
+        }
+        assert!(!tiles.is_empty(), "{name}");
+        let policies: Vec<Policy> = tiles
+            .iter()
+            .map(|t| Policy::last_resort(1, t.1, t.2, &t.3))
+            .collect();
+        // Every tile reports the same holders for a point.
+        let mut global: HashMap<[u32; 3], (u32, u32)> = HashMap::new();
+        for t in &tiles {
+            for h in &t.3 {
+                let seen = *global.entry(h.key).or_insert((h.lo, h.hi));
+                assert_eq!(seen, (h.lo, h.hi), "{name}: holders of {:?}", h.key);
+            }
+        }
+        let depths: std::collections::BTreeSet<u32> = tiles.iter().map(|t| t.0).collect();
+        let (mut segments, mut points) = (0, 0);
+        for &d in &depths {
+            let at: Vec<usize> = (0..tiles.len()).filter(|&i| tiles[i].0 == d).collect();
+            let mut held: HashMap<[u32; 3], Vec<usize>> = HashMap::new();
+            for &i in &at {
+                for p in &tiles[i].4 {
+                    held.entry(*p).or_default().push(i);
+                }
+            }
+            for (p, holders) in &held {
+                let (lo, hi) = global[p];
+                for (leaf, claims) in [
+                    (lo, &policies.iter().map(|q| &q.least).collect::<Vec<_>>()),
+                    (
+                        hi,
+                        &policies.iter().map(|q| &q.greatest).collect::<Vec<_>>(),
+                    ),
+                ] {
+                    let claimers: Vec<usize> = at
+                        .iter()
+                        .copied()
+                        .filter(|&i| claims[i].contains(p))
+                        .collect();
+                    let expected: Vec<usize> = at
+                        .iter()
+                        .copied()
+                        .filter(|&i| (tiles[i].1..tiles[i].2).contains(&leaf))
+                        .collect();
+                    assert_eq!(
+                        claimers, expected,
+                        "{name}: depth {d} point {p:?} leaf {leaf}"
+                    );
+                }
+                points += 1;
+                for (x, &i) in holders.iter().enumerate() {
+                    for &j in &holders[x + 1..] {
+                        for q in tiles[i].4.intersection(&tiles[j].4) {
+                            if q != p {
+                                segments += 1;
+                                assert!(
+                                    !(policies[i].owns_segment(*p, *q)
+                                        && policies[j].owns_segment(*p, *q)),
+                                    "{name}: depth {d} segment {p:?} {q:?} owned twice"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Lineage: a claim at depth d+1 is the claim of the depth-d tile containing it.
+        for (i, t) in tiles.iter().enumerate() {
+            let Some(up) = tiles
+                .iter()
+                .position(|u| u.0 + 1 == t.0 && u.1 <= t.1 && t.2 <= u.2)
+            else {
+                continue;
+            };
+            for p in &policies[i].least {
+                if tiles[up].4.contains(p) {
+                    assert!(policies[up].least.contains(p), "{name}: lineage {p:?}");
+                }
+            }
+            for p in &policies[i].greatest {
+                if tiles[up].4.contains(p) {
+                    assert!(policies[up].greatest.contains(p), "{name}: lineage {p:?}");
+                }
+            }
+        }
+        eprintln!(
+            "{name}: {} tiles, {points} shared points, {segments} shared segments checked",
+            tiles.len()
+        );
+        published_and_valid(name, &dir, work.path());
+    }
 }
 
 /// A2 stage N2: three sheets 2 cm apart fold onto one another under every reduction of

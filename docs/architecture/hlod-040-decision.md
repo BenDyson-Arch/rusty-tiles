@@ -555,9 +555,12 @@ every tile built today is unchanged:
   least holding leaf, or its greatest when the top bit of FNV-1a 64 over the six words of
   a then b is set. A face belongs to the owner of its span segment, least to greatest
   corner; on a seam chain that is the edge a new sliver face adds, and every other new
-  edge of the face needs its own owner. Every same-depth cell derives the same leaf from
-  the exact interface intervals, so each candidate has exactly one owner per depth and no
-  two cells create the same face or chord. Each side of a two-sided seam owns about half
+  edge of the face needs its own owner. A point's least and greatest holding leaves are
+  its whole source owner run, which each contract records per point (`holders`); every
+  cell at every depth reads the same leaves, as the validators read them from the leaves,
+  so each candidate has exactly one owner per depth and no two cells create the same face
+  or chord. (An interface row's interval spans only the cell's own arcs at the point and
+  must not be used for this.) Each side of a two-sided seam owns about half
   of its segments, so a cell that is highest-indexed on every border still builds.
   Contract points and segments stay exact.
 - **N2, folds.** The fold guard's reversed, coincident and same-direction book faces are
@@ -566,8 +569,9 @@ every tile built today is unchanged:
 - **N3, clustering.** The first reduction is vertex clustering per input component, with
   every interface point, opening pin and open boundary touching the interface fixed, at the
   finest grid that fits (cell size doubled from the shortest edge, then bisected: at most
-  76 proposals). Coincident copies stay. Border-free components and holes may drop or close
-  at any size, declared like every drop; S2 measures them into G instead of bounding them
+  77 proposals, one start, 64 doublings and 12 bisections). Coincident copies stay.
+  Border-free components and holes may drop or close at any size, declared like every
+  drop; S2 measures them into G instead of bounding them
   by E.
 
 Each A2 tile declares `asset.extras.rustyTiles.lastResort` {stage, foldFaces}. `foldFaces`

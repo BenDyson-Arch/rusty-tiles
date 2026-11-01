@@ -521,6 +521,7 @@ mod tests {
         let a = [u32::MAX; 3];
         let b = [u32::MAX - 1; 3];
         let contract = Contract {
+            holders: vec![],
             depth: 31,
             interface: vec![
                 InterfaceRow::new(u32::MAX, a, a, u32::MAX, u32::MAX),

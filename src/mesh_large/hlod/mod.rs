@@ -1228,7 +1228,7 @@ fn prepare(
         built.last_resort_stage,
         built.geometry.key.leaf_begin,
         built.geometry.key.leaf_end,
-        &built.geometry.interface,
+        &contract.holders,
     );
     if !geometry::folds::decode_valid_with(
         &built.geometry.positions,

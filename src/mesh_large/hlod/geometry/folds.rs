@@ -1,7 +1,7 @@
 //! Reject introduced face coincidences and overlapping edge fans before publication.
 //! This is a proposal check: it never removes, reverses or moves a face.
 use super::{key, Key};
-use crate::mesh_large::hlod::interfaces::InterfaceRow;
+use crate::mesh_large::hlod::borders::Holders;
 use rustc_hash::FxHashMap as HashMap;
 use rustc_hash::FxHashSet as HashSet;
 #[path = "folds_contract.rs"]
@@ -30,7 +30,8 @@ pub(crate) struct Source {
 
 /// The last resort's relaxations (D1/D11 amendment A2); the default relaxes nothing.
 /// `least`, `greatest`: the shared points whose least, respectively greatest, holding DFS
-/// leaf lies in this cell. A new edge between two shared points, or a new face on three, is
+/// leaf anywhere in the source (`borders::Holders`, not the cell's own arc intervals) lies in
+/// this cell. A new edge between two shared points, or a new face on three, is
 /// admitted only in its seam owner (N1, `owns_segment`, `owns_face`): every same-depth
 /// cell derives the same single owner from the canonical keys. `folds`: reversed faces,
 /// coincident groups and same-direction books are admitted (N2, N3), declared and
@@ -61,21 +62,22 @@ pub(crate) fn greatest_side(a: Key, b: Key) -> bool {
 }
 
 impl Policy {
-    /// Stage 1-3 relaxations for `tile` (over leaves `[begin, end)`), from its contract.
-    pub(crate) fn last_resort(stage: u8, begin: u32, end: u32, interface: &[InterfaceRow]) -> Self {
+    /// Stage 1-3 relaxations for `tile` (over leaves `[begin, end)`), from its contract's
+    /// point holders.
+    pub(crate) fn last_resort(stage: u8, begin: u32, end: u32, holders: &[Holders]) -> Self {
         if stage == 0 {
             return Self::default();
         }
-        let holding = |leaf: fn(&InterfaceRow) -> u32| {
-            interface
+        let holding = |leaf: fn(&Holders) -> u32| {
+            holders
                 .iter()
-                .filter(|r| r.is_vertex() && (begin..end).contains(&leaf(r)))
-                .map(|r| r.a)
+                .filter(|h| (begin..end).contains(&leaf(h)))
+                .map(|h| h.key)
                 .collect()
         };
         Self {
-            least: holding(|r| r.lo),
-            greatest: holding(|r| r.hi),
+            least: holding(|h| h.lo),
+            greatest: holding(|h| h.hi),
             folds: stage >= 2,
         }
     }
