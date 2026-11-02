@@ -7,8 +7,8 @@ PR A `5c319c9b8b9bbf4b3073dc365bcc7a1daee9587d`.
 Bulk evidence was never tracked. It is retained at
 `/home/bend/.cache/rusty-tiles-evidence/pr-b-20261102/`:
 
-- `FINAL.md`: SHA-256 `90926e85bbb97b8a598212d8c0608f04b3e02e56f5f5a26c46fc8eb3ade7d39d`.
-- `MANIFEST.sha256`: SHA-256 `96bcd681bc661b91066cc4ebafc111808eacd383f5348438e67683d4a0e54f01`.
+- `original-ca963b7/FINAL.md`: SHA-256 `90926e85bbb97b8a598212d8c0608f04b3e02e56f5f5a26c46fc8eb3ade7d39d`.
+- `original-ca963b7/MANIFEST.sha256`: SHA-256 `96bcd681bc661b91066cc4ebafc111808eacd383f5348438e67683d4a0e54f01`.
 
 The report covers guarded D10 support admission, per-tile triangles/G,
 source-floor/achieved appearance, exact PR A leaf comparison, 200-city
@@ -40,3 +40,33 @@ Validation is in the evidence directory's `merge-develop-8e010ad9/`:
 All requested checks were rerun and passed without regenerating the digest
 fixture. The HLOD tree is unchanged from `6d224ccd`; prior corpus and timing
 measurements retain their original source identities. PR base: `develop`.
+
+## Develop cf43aef8 and 4 GiB follow-up
+
+Tested implementation: `ff03b78165dfc4e6c02a5834fd6e3ee62df9a127`. Develop `cf43aef8` was merged
+without rewriting history, including PR A's charges/digests, #316/#317 and
+#318's 1% root competition. A sensitive negative control protects selected and
+collapsed roots from D10. Chart/page workspace is admitted on demand, with
+actual-size pages, protected encoder headroom and bounded waits. No retry,
+quality, source-error or topology rule changed.
+
+Current evidence at the directory above:
+
+- `FINAL.md`: SHA-256 `d6f7a5cce57bb9bf73790291c7ce98be1fb4c4accef3921a9ea23a244fbee3e8`.
+- `MANIFEST.sha256`: SHA-256 `df2b42c60a4bc58e8087a0d394aebcf2c4e385936f9e0ca39b6189d8a84e08e3`.
+
+Three alternating slot-1 pairs per fixture at full 4 GiB / three workers:
+mean CPU −1.63% on tex3 and +0.53% on the Walem crop, with substantial paired
+variation. Mean wall time remains +8.63% / +7.69%; elapsed-time parity is not
+claimed. All pairs and prior unsuccessful sources are retained. All 12 archives
+validate, all candidate bytes equal the accepted B output, and all 156 tex3 /
+103 Walem leaves equal develop. Coarse geometry and appearance intentionally
+differ from develop; per-tile/depth triangles, G, source floors and cap reporting
+are in the current report.
+
+Final-source lib (1,254 passed / 25 ignored), --tests including S5 acceptance
+and unchanged output digests, workspace/all-target clippy, fmt, tree and changelog
+checks pass. The clean working-tree release binary equals the measured binary;
+target-pr-b was cargo-cleaned. Earlier full city/crop3 S5 evidence retains its
+original identity. No full Walem bake or floor result is claimed. Fresh Sol review
+and R integration remain pending; CI was not polled. The PR remains a draft.
