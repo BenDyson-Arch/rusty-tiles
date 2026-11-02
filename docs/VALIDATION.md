@@ -23,7 +23,10 @@ and fails `coarseDrops` (`invalid_input`) when the count differs from the declar
 dropped point, or a fixed sample point of a dropped face, lies farther than the payload's
 geometricError from its surface; or when a drop at or above the children's largest
 geometricError comes without cap pressure (the children's faces fit 8,192) or while a
-smaller border-free child component is kept. HLOD archives from before this check, whose
+smaller border-free child component is kept. A payload that declares last-resort stage 3
+(`asset.extras.rustyTiles.lastResort`, verified first) is exempt from those last two rules:
+its border-free components may drop at any size, and only the count and the geometricError
+bound apply. HLOD archives from before this check, whose
 small drops are undeclared, fail it. The report's `interfaceCensus` gives
 `droppedComponents` and `droppedByDepth` (by delivered cell depth).
 

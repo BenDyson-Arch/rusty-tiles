@@ -10,6 +10,12 @@
 //! face's child G added off its vertices): lower bounds on the dropped surface's loss.
 //! A drop that touches the border loses shared keys, which the retention checks
 //! refuse; nothing here relaxes them.
+//!
+//! D1/D11 amendment A2: a tile declaring last-resort stage 3 (N3) may drop border-free
+//! components at any size, measured into G. It is exempt from cap pressure and size order;
+//! the declaration count and the distance bound still hold. Its declaration has been
+//! verified by the time the recount runs (`lastResort`: shape, fold recount, leaf refusal).
+//! Stages 0-2 and undeclared tiles keep every rule.
 use super::{bad, point_bytes, read_point, sql, CanonicalPoint, Effort, Error, Store};
 use rustc_hash::FxHashMap as HashMap;
 use std::collections::HashSet;
@@ -26,6 +32,8 @@ struct Content {
     depth: usize,
     error: f64,
     declared: u64,
+    /// Declared last-resort stage 3 (N3).
+    n3: bool,
     digests: Vec<Vec<u8>>,
     /// Child tiles: id, leaf, geometricError.
     children: Vec<(i64, bool, f64)>,
@@ -70,7 +78,8 @@ impl Store {
                 "SELECT t.id,t.parent,t.placeholder,t.leaf,t.error,t.last,
                  (SELECT group_concat(hex(p.digest)) FROM (SELECT DISTINCT p.digest FROM refs r
                     JOIN payloads p ON p.rank=r.rank WHERE r.tile=t.id ORDER BY p.digest) p),
-                 (SELECT sum(p.dropped) FROM refs r JOIN payloads p ON p.rank=r.rank WHERE r.tile=t.id)
+                 (SELECT sum(p.dropped) FROM refs r JOIN payloads p ON p.rank=r.rank WHERE r.tile=t.id),
+                 (SELECT max(p.last_stage) FROM refs r JOIN payloads p ON p.rank=r.rank WHERE r.tile=t.id)
                  FROM tiles t ORDER BY t.id",
             )
             .map_err(sql)?;
@@ -126,6 +135,8 @@ impl Store {
                                 error,
                                 declared: u64::try_from(declared)
                                     .map_err(|_| bad("coarseDrops", "negative declaration"))?,
+                                // `last_stage` stores stage + 1 (0: undeclared).
+                                n3: row.get::<_, Option<i64>>(8).map_err(sql)? == Some(4),
                                 digests,
                                 children: Vec::new(),
                             })
@@ -275,13 +286,14 @@ impl Store {
             return Ok(());
         }
         // Coarse drops: cap pressure, then smallest first against every kept border-free
-        // component (border contact is a key held by a leaf outside this tile).
+        // component (border contact is a key held by a leaf outside this tile). N3 is
+        // exempt (A2); the distance bound below still applies.
         let largest = components
             .iter()
             .filter(|(r, _)| !present[**r])
             .map(|(_, m)| diagonal(m))
             .fold(f64::MIN, f64::max);
-        if largest >= child_g {
+        if largest >= child_g && !parent.n3 {
             if count_faces <= cap() {
                 return Err(bad(
                     "coarseDrops",

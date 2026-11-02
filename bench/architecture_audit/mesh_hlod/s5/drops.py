@@ -9,6 +9,11 @@ component smaller than it may stay (smallest first). Every dropped key, and S2's
 fixed sample points on every dropped face (the face's child G added off its
 vertices), must lie within the parent's geometricError of its surface (exact
 distances). Border-touching drops lose shared keys and are refused by the census.
+
+D1/D11 amendment A2: a tile declaring last-resort stage 3 (N3), its declaration verified
+by last_resort.py, may drop border-free components at any size, measured into G: it is
+exempt from cap pressure and size order. The count and distance checks still apply.
+Stages 0-2 and undeclared tiles keep every rule.
 """
 import hashlib
 import json
@@ -48,7 +53,7 @@ def diagonal(points):
     return math.sqrt(sum((max(p[k] for p in points) - min(p[k] for p in points)) ** 2 for k in range(3)))
 
 
-def inspect(store, tiles, archive, require, distance2):
+def inspect(store, tiles, archive, require, distance2, n3=frozenset()):
     digests = {t['id']: tuple(sorted(hashlib.sha256(archive.read(u)).digest() for u in t['contents']))
                for t in tiles}
     result = dict(droppedComponents=0, droppedByDepth=[])
@@ -115,7 +120,7 @@ def inspect(store, tiles, archive, require, distance2):
         if not dropped:
             continue
         largest = max(diagonal(m) for m in dropped.values())
-        if largest >= child_g:
+        if largest >= child_g and int(t['id']) not in n3:
             require(count_faces > CAP, 'coarseDrops',
                     f'tile {t["id"]} drops a component of diagonal {largest} at or above its children\'s '
                     f'G {child_g} though its children\'s {count_faces} faces fit the {CAP} cap')

@@ -571,8 +571,9 @@ every tile built today is unchanged:
   finest grid that fits (cell size doubled from the shortest edge, then bisected: at most
   77 proposals, one start, 64 doublings and 12 bisections). Coincident copies stay.
   Border-free components and holes may drop or close at any size, declared like every
-  drop; S2 measures them into G instead of bounding them
-  by E.
+  drop; S2 measures them into G instead of bounding them by E. Both validators exempt a
+  verified stage-3 tile's drops from cap pressure and size order (coarse drops); the
+  declared count and the geometricError bound on dropped surface still hold.
 
 Each A2 tile declares `asset.extras.rustyTiles.lastResort` {stage, foldFaces}. `foldFaces`
 counts the faces of the decoded payload in a coincident group (two or more on one corner

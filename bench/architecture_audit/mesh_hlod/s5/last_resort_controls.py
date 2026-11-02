@@ -8,6 +8,12 @@ Literal archives; no producer imports.
   source's two, and a coincident pair. Refused as a fold unless its payload declares
   `lastResort` {stage 2, foldFaces 3}; undeclared, stage 1, miscounted, and stage 0
   without a fold stage below are refused.
+- N3 drops (A2: border-free components drop at any size, measured into G): a coarse tile
+  over drop_controls' leaves declares stage 3 and drops the small component without cap
+  pressure, or the larger one beside a kept smaller one under pressure. Both are admitted;
+  the same drops at stage 2, or at a stage-0 root over a stage-2 tile, are refused
+  (cap pressure, smallest first), as is a stage-3 drop beyond G, one undeclared, and a
+  stage-3 claim whose fold count does not verify.
 - Seam owner: a planar quad split by a shared chain A-M-B between a left (least) and a
   right (greatest) leaf. A coarse tile re-triangulates its own leaf's quad with a face on
   the three shared points and a new edge A-B. The chain at x=0 hashes to A's least
@@ -26,10 +32,13 @@ import controls
 from exact_controls import A, B, C, D, E, payload, tile
 
 
-def declare(data, stage, folds):
+def declare(data, stage, folds, dropped=None):
     length = int.from_bytes(data[12:16], 'little')
     doc, binary = json.loads(data[20:20 + length]), data[28 + length:]
-    doc['asset'].setdefault('extras', {})['rustyTiles'] = {'lastResort': {'stage': stage, 'foldFaces': folds}}
+    extras = {} if stage is None else {'lastResort': {'stage': stage, 'foldFaces': folds}}
+    if dropped is not None:
+        extras['droppedComponents'] = dropped
+    doc['asset'].setdefault('extras', {})['rustyTiles'] = extras
     text = json.dumps(doc).encode()
     text += b' ' * (-len(text) % 4)
     return (b'glTF' + struct.pack('<III', 2, 28 + len(text) + len(binary), len(text)) + b'JSON' + text
@@ -66,6 +75,38 @@ def generate(root):
             root=tile('coarse.glb', [tile('left.glb'), tile('right.glb')])), separators=(',', ':')))
         source(root / (name + '-source.json'), left + right)
         cases.append(dict(name=name, check=check, reason=reason, source=name + '-source.json'))
+    # N3 drops, on drop_controls' geometry: large separated kept faces (diagonal about
+    # 8.06) and a small one (0.71), 8.6 above the first; G covers what each drop loses.
+    wide = [[[4 * i, 0, 0], [4 * i + 1, 0, 0], [4 * i, 8, 0]] for i in range(8192)]
+    small = [[0, 9, 0], [0.5, 9, 0], [0, 9.5, 0]]
+
+    def drop(name, left, right, coarse, stage, folds, dropped, g, check=None, reason=None, middle=None):
+        folder = root / name
+        folder.mkdir(exist_ok=True)
+        (folder / 'coarse.glb').write_bytes(declare(payload(coarse, leaf=False), stage, folds, dropped))
+        (folder / 'left.glb').write_bytes(payload(left, leaf=True))
+        (folder / 'right.glb').write_bytes(payload(right, leaf=True, first=len(left)))
+        if middle is None:
+            top = tile('coarse.glb', [tile('left.glb'), tile('right.glb')])
+        else:
+            # A stage-2 tile over the left leaf, holding it unchanged, below the root.
+            (folder / 'middle.glb').write_bytes(declare(payload(left, leaf=False), middle, 0))
+            top = tile('coarse.glb', [tile('middle.glb', [tile('left.glb')]), tile('right.glb')])
+            top['children'][0]['geometricError'] = 0
+        top['geometricError'] = g
+        (folder / 'tileset.json').write_text(json.dumps(dict(asset={'version': '1.1'}, geometricError=g, root=top)))
+        source(root / (name + '-source.json'), left + right)
+        cases.append(dict(name=name, check=check, reason=reason, source=name + '-source.json'))
+    drop('n3-drop-without-pressure', wide[:4], [small], wide[:4], 3, 0, 1, 2.0)
+    drop('n3-drop-not-smallest', wide, [small], wide[1:] + [small], 3, 0, 1, 16.0)
+    drop('stage-2-drop-without-pressure', wide[:4], [small], wide[:4], 2, 0, 1, 2.0, 'coarseDrops', 'cap')
+    drop('stage-2-drop-not-smallest', wide, [small], wide[1:] + [small], 2, 0, 1, 16.0, 'coarseDrops',
+         'smallest first')
+    drop('stage-0-drop-without-pressure', wide[:4], [small], wide[:4], 0, 0, 1, 2.0, 'coarseDrops', 'cap',
+         middle=2)
+    drop('n3-drop-beyond-g', wide[:4], [small], wide[:4], 3, 0, 1, 0.5, 'coarseDrops', 'farther than')
+    drop('n3-drop-undeclared', wide[:4], [small], wide[:4], 3, 0, 0, 2.0, 'coarseDrops', 'declares 0')
+    drop('n3-claim-miscounted', wide[:4], [small], wide[:4], 3, 1, 1, 2.0, 'lastResort', 'declared 1 fold faces')
     # Seam owner: shared chain A-M-B between a left quad (above) and a right quad (below).
     for name, x, mine, check in (('seam-owner-least-admitted', 0, 'left', None),
                                  ('seam-owner-least-refused', 0, 'right', 'seamOwner'),
