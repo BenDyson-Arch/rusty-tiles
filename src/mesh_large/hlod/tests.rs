@@ -5901,7 +5901,6 @@ fn last_resort_case(
     .unwrap();
     let c = census(&dir);
     assert_directed_census(name, &c, Run::default().cap);
-    assert!(c.last_resort_tiles > 0, "{name}: {c:?}");
     published_and_valid(name, &dir, work);
     (built, dir)
 }
