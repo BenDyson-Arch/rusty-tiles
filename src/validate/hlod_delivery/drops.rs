@@ -559,8 +559,14 @@ impl Grid {
     fn faces_at(&self, p: [f64; 3]) -> Option<&Vec<u32>> {
         self.slot(self.cell(p)).map(|s| &self.cells[s])
     }
-    fn face(&self, i: u32, faces: &[[CanonicalPoint; 3]]) -> [[f64; 3]; 3] {
-        match self.last.get() {
+    /// Face `i`'s corners: the cached decode if `i` is the cached face, else decoded. The cache
+    /// is read once per scan (`cached`): it changes only when the scan ends.
+    fn face(
+        cached: Option<(u32, [[f64; 3]; 3])>,
+        i: u32,
+        faces: &[[CanonicalPoint; 3]],
+    ) -> [[f64; 3]; 3] {
+        match cached {
             Some((last, face)) if last == i => face,
             _ => faces[i as usize].map(point),
         }
@@ -610,8 +616,9 @@ impl Grid {
             let mut certified = false;
             let mut center_near = false;
             if let Some(cell) = self.faces_at(center.map(Interval::middle)) {
+                let cached = self.last.get();
                 for &i in cell {
-                    let face = self.face(i, faces);
+                    let face = Self::face(cached, i, faces);
                     // A separated centroid rules out BOTH certificates: if all
                     // corners were within reach of this convex face, their
                     // centroid would be too. Charge the executed box query;
@@ -675,7 +682,8 @@ impl Grid {
         effort: &Effort,
     ) -> Result<bool, Error> {
         let reach = self.reach + slack;
-        if let Some((_, face)) = self.last.get() {
+        let cached = self.last.get();
+        if let Some((_, face)) = cached {
             effort.charge(TEST_UNITS)?;
             if distance2(p, face) <= reach * reach {
                 return Ok(true);
@@ -686,7 +694,7 @@ impl Grid {
         };
         for &i in cell {
             effort.charge(TEST_UNITS)?;
-            let face = self.face(i, faces);
+            let face = Self::face(cached, i, faces);
             if distance2(p, face) <= reach * reach {
                 self.last.set(Some((i, face)));
                 return Ok(true);
