@@ -12,6 +12,7 @@ named fixture, is a failed control.
 """
 
 import difflib
+import gzip
 import hashlib
 import json
 import os
@@ -99,7 +100,7 @@ def verdicts(oracle_dir, fixtures):
 
 
 def main():
-    with open(os.path.join(TOP, "witnesses", "report.json")) as fh:
+    with gzip.open(os.path.join(TOP, "witnesses", "report.json.gz"), "rt", encoding="utf-8") as fh:
         rows = json.load(fh)["rows"]
     fixtures = [{"id": r["id"], "file": os.path.join(TOP, r["file"]), "limits": r["limits"]}
                 for r in rows if "file" in r and os.path.exists(os.path.join(TOP, r["file"]))
