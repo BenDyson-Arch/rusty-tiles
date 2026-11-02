@@ -312,6 +312,7 @@ fn read_attributes(
     }
     Ok(out)
 }
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 /// Captures all selected geometry and vertex attributes, retaining every triangle and
 /// degenerate. The returned stream reads only scratch; image bytes are not captured here.
 pub(crate) fn capture_full<'s>(

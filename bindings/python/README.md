@@ -60,6 +60,7 @@ required reports and cleanup diagnostics, as described below.
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=8192` (at most 8192), `chunk_points=100000`, `metadata=False`, `metadata_attributes=False`, `callback=None` |
 | `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage; returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; returns `PackageResult` |
+| `raster_tile_to_directory(input, output, *, zoom, x, y, force=False, callback=None)` | Exported refusal-only surface in the standard wheel: raises `UnsupportedError`; no imagery conversion. `RasterDirectoryResult` is exported with `output`, `report`, `cleanup_diagnostics` properties but this wheel cannot produce one. |
 | `validate(input, *, lazy_payloads=False, max_volume=None, scratch_dir=None, expect_profile=None, callback=None)` | Returns the bounded [validation report](../../docs/VALIDATION.md), including completed checks, inspection gaps, `storedBytes`, the effective `limits` and their `limitDerivation`. `max_volume` maps limit keys to ints (opt-in volume caps such as `sourceArchiveBytes`, or replaced budgets such as `hierarchyVisits`); a bad key or value raises `InvalidRequestError` before any I/O. `scratch_dir` places scratch in an existing directory. `expect_profile="hlod"` requires the HLOD profile whatever the archive's labels say (every payload must carry source identity and every HLOD check runs; an archive that declares HLOD itself is held to it anyway); any other value raises `ValueError` before the archive is opened. `callback` receives progress events; raising from it, or Ctrl-C, stops the validation. A limit refusal's `ResourceLimitError.limit` is `{"limit", "value", "observed", "derivation"}` |
 
 ### Streamed local mesh tiler
@@ -152,6 +153,41 @@ tiling only; their `explicit` keyword was removed in 0.4.0 and now raises
 `metadata=True` keeps every source field in a per-point property table (off by
 default: position and colour only). `metadata_attributes=True` adds point property
 attributes named `vertex_classification`, `vertex_intensity` and `vertex_return_number`.
+
+### Last-resort declarations
+
+`asset.extras.rustyTiles.lastResort` is a strict object with exactly two required
+integer fields: `stage` in 0–3 and `foldFaces` in 0–18446744073709551615; unknown
+fields, missing fields and other types are invalid. Absence means no declaration.
+N1 (stage 1) admits new shared-point faces/edges only in their deterministic seam
+owner. N2 (stage 2) also admits folds, turns reversed faces to source orientation
+and removes coincident copies beyond source multiplicity. N3 (stage 3) clusters
+per input component while fixing interface points, opening pins and border-touching
+open boundaries; border-free components and holes may drop or close at any size,
+with loss measured into G rather than bounded by E. Stage 0 declares inherited
+folds retained above a stage-2/3 descendant, not another reduction strategy.
+
+`foldFaces` counts decoded faces in a coincident group (at least two faces on the
+same corner set, either orientation) or incident to an edge used in the same
+direction by at least two faces. Count each qualifying face once, not each pair
+or edge. Validation recounts this value (`lastResort` on mismatch), requires a
+fold-admitting descendant for stage 0, and permits admitted folds from stage 2
+or in a declared ancestor of such a stage. On every coarse tile, `seamOwner`
+rejects new shared-point edges/faces outside their deterministic owner, using
+whole-source holding-leaf runs; see the [HLOD decision](../../docs/architecture/hlod-040-decision.md) for the hash rule.
+
+For example, inside a GLB's `asset`:
+
+```json
+{"extras":{"rustyTiles":{"lastResort":{"stage":2,"foldFaces":4}}}}
+```
+
+This declares four qualifying decoded faces, which must match the recount.
+Conversion `diagnostics.hlod` reports `last_resort_tiles`, `last_resort_stages`
+(N1/N2/N3 counts), `fold_faces` and `declared_tiles` (including stage-0 tiles,
+with stage and fold count). Residual omission occurs only when the contract alone
+exceeds the cap or border-touching open boundaries cannot survive the last resort;
+it propagates upward. The declaration does not certify source-distance maxima.
 
 ### Rigid placement
 

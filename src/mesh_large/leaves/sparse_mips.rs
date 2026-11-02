@@ -25,8 +25,10 @@ pub(in crate::mesh_large) const ID_NO_FEATURE: [u8; 4] = [255; 4];
 pub(in crate::mesh_large) struct Chain {
     pub class: Class,
     pub levels: Vec<Level>,
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     /// Owned chain plus reusable gutter scratch bound; borrowed inputs and
     /// native encoder workspace/output must be charged by the caller.
+    #[allow(dead_code)] // Retained measurement in the bounded encoding result.
     pub charged_bytes: u64,
 }
 #[derive(Clone, Copy)]
@@ -195,51 +197,6 @@ fn taps(d: usize, src: usize, dst: usize) -> ([(usize, u64); 3], usize, u64) {
         }
     }
     (out, n, dst as u64)
-}
-
-/// Refill zero-support gutters after a caller re-expresses normal values.
-/// The caller already owns the level; memory_limit charges only this helper's
-/// transient nearest-owner scratch plus the returned owner map, with build's tie rules.
-/// Empty texels map to usize::MAX; positive support always owns itself.
-pub(in crate::mesh_large) fn refill_gutters(
-    level: &mut Level,
-    class: Class,
-    memory_limit: u64,
-) -> Result<Vec<usize>, JobError> {
-    let pixels = u64::from(level.width)
-        .checked_mul(u64::from(level.height))
-        .ok_or_else(resource)?;
-    let count = usize::try_from(pixels).map_err(|_| resource())?;
-    if count == 0
-        || level.rgba.len() != count.checked_mul(4).ok_or_else(resource)?
-        || level.support.len() != count
-    {
-        return Err(error(
-            JobErrorKind::InvalidRequest,
-            "gutter RGBA/support shape mismatch",
-        ));
-    }
-    let bytes = pixels
-        .checked_mul((size_of::<Nearest>() + size_of::<usize>()) as u64)
-        .ok_or_else(resource)?;
-    if bytes > memory_limit {
-        return Err(resource());
-    }
-    let mut nearest = reserve(count)?;
-    fill_gutters(level, class, &mut nearest, None);
-    let mut owners = reserve(count)?;
-    owners.extend((0..count).map(|i| {
-        if class == Class::Id {
-            if level.support[i] == 0 {
-                usize::MAX
-            } else {
-                i
-            }
-        } else {
-            nearest[i].owner
-        }
-    }));
-    Ok(owners)
 }
 
 /// Support-weighted value of one level-0 texel of an averaged class: linear colour or
@@ -492,6 +449,7 @@ fn dominant_normal(
     Ok(best.0)
 }
 
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 pub(in crate::mesh_large) fn build(
     width: u32,
     height: u32,

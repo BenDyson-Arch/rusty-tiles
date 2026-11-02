@@ -28,3 +28,21 @@ Commands (Python 3 standard library only):
   sections of the top `## ... Unreleased` section of `CHANGELOG.md` (creating a
   section in Keep a Changelog order if it is missing), in file name order, then
   deletes the fragments. Running it again with no fragments changes nothing.
+
+## Internal-only exemptions
+
+Changes confined to development docs, tests, evidence, benchmark tooling or
+behavior-preserving private refactors may
+record an exemption here instead of a release bullet. Post-policy merges reviewed
+for 0.4.0 (no shipped API or output change):
+
+- #205: annotation/preset roadmap decisions.
+- #207: H8 mutant corpus/test controls and extraction of the unchanged private
+  writer error-classification helper.
+- #210: evidence relocation and repository tree budget tooling.
+- #211: tiler roadmap decisions.
+- #212: benchmark flythrough lane and reporting.
+- #220: roadmap renumbering.
+- #267: foundation audit/rescope proposal.
+- #282: deduplicate C1 specification copies.
+- #305: deduplicate fixtures with shared references.

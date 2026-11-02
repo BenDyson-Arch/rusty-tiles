@@ -176,10 +176,6 @@ impl TreeConfig {
         self.leaf_triangles = leaf_triangles;
         self
     }
-    pub(crate) fn with_tile_bytes(mut self, tile_bytes: u64) -> Self {
-        self.tile_bytes = tile_bytes;
-        self
-    }
     pub(crate) fn with_height_cap(mut self, height_cap: u32) -> Self {
         self.height_cap = height_cap;
         self
@@ -261,6 +257,7 @@ impl MemoryBound {
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     pub(crate) fn base_bytes(&self) -> u64 {
         self.document_bytes
             .saturating_add(self.runtime_bytes)
