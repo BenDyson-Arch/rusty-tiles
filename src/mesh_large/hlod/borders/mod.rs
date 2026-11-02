@@ -440,9 +440,10 @@ impl Borders {
         for id in 0..self.source.nodes.len {
             let n = self.source.nodes.get(id)?;
             // Only coarse cells build from a contract; leaves are published exactly.
+            // Widen before scaling, including for the no-relief cap sentinel.
             if n[2] == u64::from(depth)
                 && n[5] & 1 == 0
-                && n[7].saturating_mul(1000) > 850 * self.cap
+                && u128::from(n[7]) * 1000 > 850 * u128::from(self.cap)
             {
                 counts.insert(id, [0; RELIEF_STEPS as usize + 1]);
                 items.insert(id, n[7]);
@@ -456,7 +457,7 @@ impl Borders {
                 .map(|(&id, c)| {
                     let at = |j: usize| (items[&id] + c[j]).saturating_sub(c[0]);
                     let step = (1..=RELIEF_STEPS)
-                        .find(|&j| at(j as usize).saturating_mul(1000) <= 750 * self.cap)
+                        .find(|&j| u128::from(at(j as usize)) * 1000 <= 750 * u128::from(self.cap))
                         .unwrap_or(RELIEF_STEPS);
                     (id, step)
                 })

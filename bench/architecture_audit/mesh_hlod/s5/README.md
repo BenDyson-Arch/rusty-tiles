@@ -61,6 +61,15 @@ The evidence was generated externally and never held in git. The adjacent
 `r5-astra/FINAL.md` records the finite gates, bake and CPU comparisons, remaining
 quality limits, both raw floor columns and the final A1 text.
 
+Review 3 correction: those library/integration runs used `--release`, which hid
+overflow in the no-relief cap sentinel's percentage multiplication. Both comparisons
+now widen to `u128`; the unchanged controls and full default-profile library suite
+pass with overflow checks (1,250 passed, 24 ignored). New evidence is external at
+`~/.cache/rusty-tiles-evidence/hlod-border-relief-20261030/r5-astra/review3-fix/manifest.json`,
+SHA-256 `fe60c91dc69b557475ebba1af91b1b7bf2ac9acf3fd2cc2bb4fd1cfc073a25f1`.
+It binds the source patch to parent `c7cbad68`; it was never held in git. The production
+cap's comparisons are equivalent, so the city sweep and bake receipts remain unchanged.
+
 ## Archive validation
 
 `src/validate/identity.rs` projects only owned C1-admitted raw JSON, preserving
