@@ -74,8 +74,13 @@ than 20eM after division. Minimum selection preserves this uniform error bound.
 These estimates use the standard product accumulation bound
 `gamma_k = k*u/(1-k*u)`, with `u=2^-53`, and exact binary64 chosen parameters.
 This does not divide by a triangle determinant or assume a well-conditioned
-projection. The enabled exponent range prevents overflow in these certificate
-operations. Underflow errors in the distance norm are below 1e-161; in the
+projection. The enabled exponent range prevents overflow in the interpolation,
+distance norm and support enclosure operations. It does not protect the
+fourth-degree determinant products used to propose an interior projection:
+those may overflow or produce NaN. Proposal arithmetic carries no distance
+guarantee; only finite clamped interpolation parameters are used, so even an
+inaccurate proposal still selects an exact convex witness. Underflow errors
+in the distance norm are below 1e-161; in the
 support calculation, whose denominator is at least 1e-100, below 1e-220.
 Both are smaller than eM even at the minimum M. The factor 256 leaves more than
 a factor of three beyond these bounds, including evaluation of E itself;
@@ -84,9 +89,13 @@ extends each bound from x to every point in its box by 1-Lipschitz continuity.
 Outside this domain, or in an unresolved band, the interval path runs and
 uncertified cases refuse. Each query increments an unweighted fast counter;
 interval fallbacks increment a separate unweighted slow counter. Existing effort
-charges remain, pending #309's separate weighting. The last answering face is
-tried before grid candidates; cached faces are still tested against the same
-bound, so caching changes search order, never the predicate.
+charges remain, pending #309's separate weighting. The last answering face's
+decoded coordinates are reused only at its original position in the current
+cell's candidate list; there is no extra probe or reordering. With or without
+this cache, each query sees identical coordinates, candidate order and distance
+results, and therefore identical early exits and point/face charges. Induction
+over regions gives identical subdivisions and total effort. Thus the cache
+cannot change either the geometric verdict or a refusal at the effort limit.
 
 This is a sufficient certificate and can refuse a valid
 surface when its budget/depth is insufficient. Stages 0–2 and undeclared drops

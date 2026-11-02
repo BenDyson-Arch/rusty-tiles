@@ -139,6 +139,9 @@ pub(super) fn filter(p: Point, t: [[f64; 3]; 3]) -> Option<(f64, f64)> {
     }
     let (u, v, w) = (sub(t[1], t[0]), sub(t[2], t[0]), sub(x, t[0]));
     let (uu, uv, vv, wu, wv) = (dot(u, u), dot(u, v), dot(v, v), dot(w, u), dot(w, v));
+    // These fourth-degree proposal products may overflow even in the filter's
+    // exponent domain. Only finite clamped lerp parameters below are trusted;
+    // the enclosure proof does not depend on an accurate projection.
     let det = uu * vv - uv * uv;
     if det > 0. {
         let (b, c) = ((wu * vv - wv * uv) / det, (wv * uu - wu * uv) / det);

@@ -419,7 +419,10 @@ struct Grid {
     size: f64,
     reach: f64,
     cells: HashMap<[i64; 3], Vec<u32>>,
-    last: std::cell::Cell<Option<u32>>,
+    // Reuse decoded coordinates only at this face's original cell-list position.
+    // Prioritizing even an in-cell cached face can add tests before an earlier
+    // certifier, changing the verdict at the effort limit.
+    last: std::cell::Cell<Option<(u32, [[f64; 3]; 3])>>,
 }
 
 impl Grid {
@@ -479,6 +482,12 @@ impl Grid {
     fn cell(&self, p: [f64; 3]) -> [i64; 3] {
         std::array::from_fn(|a| ((p[a] - self.lo[a]) / self.size).floor() as i64)
     }
+    fn face(&self, i: u32, faces: &[[CanonicalPoint; 3]]) -> [[f64; 3]; 3] {
+        match self.last.get() {
+            Some((last, face)) if last == i => face,
+            _ => faces[i as usize].map(point),
+        }
+    }
     /// Continuous certificate at G, with no child-G slack. Distance to a closed
     /// surface is 1-Lipschitz; the centroid's farthest corner bounds its covering
     /// radius. Also, distance to ONE convex retained triangle is convex, so its
@@ -515,16 +524,12 @@ impl Grid {
             let mut certified = false;
             let mut center_near = false;
             if let Some(cell) = self.cells.get(&self.cell(center.map(Interval::middle))) {
-                let last = self.last.get();
-                for i in last
-                    .into_iter()
-                    .chain(cell.iter().copied().filter(|i| Some(*i) != last))
-                {
-                    let face = faces[i as usize].map(point);
+                for &i in cell {
+                    let face = self.face(i, faces);
                     let d = distance(center, face, ball)?;
                     center_near |= within(d, self.reach);
                     if ball_fits(d, radius, self.reach) {
-                        self.last.set(Some(i));
+                        self.last.set(Some((i, face)));
                         certified = true;
                         break;
                     }
@@ -536,7 +541,7 @@ impl Grid {
                         }
                     }
                     if corners_near {
-                        self.last.set(Some(i));
+                        self.last.set(Some((i, face)));
                         certified = true;
                         break;
                     }
@@ -572,14 +577,11 @@ impl Grid {
             return Ok(false);
         };
         let reach = self.reach + slack;
-        let last = self.last.get();
-        for i in last
-            .into_iter()
-            .chain(cell.iter().copied().filter(|i| Some(*i) != last))
-        {
+        for &i in cell {
             effort.charge(1)?;
-            if distance2(p, faces[i as usize].map(point)) <= reach * reach {
-                self.last.set(Some(i));
+            let face = self.face(i, faces);
+            if distance2(p, face) <= reach * reach {
+                self.last.set(Some((i, face)));
                 return Ok(true);
             }
         }
@@ -744,6 +746,58 @@ mod tests {
         assert!(!grid
             .covers([[0., 0., 1.], [2., 0., 1.], [0., 2., 1.]], &faces, &effort)
             .unwrap());
+    }
+
+    #[test]
+    fn cached_faces_preserve_verdicts_at_the_effort_limit() {
+        use super::super::tests::effort_for_tests;
+        use super::{point, Grid};
+        use std::sync::atomic::Ordering::Relaxed;
+
+        let triangle = [[0.1, 0.1, 0.], [0.2, 0.1, 0.], [0.1, 0.2, 0.]];
+        let p = [0.125, 0.125, 0.];
+        // The first face certifies the centroid ball in one distance test.
+        // The second is outside the cell, in-cell but too far, or certifying
+        // only through three corner tests. Prepending it changes charged work
+        // even in the last case, where both faces certify the region.
+        for (other, in_cell) in [
+            (FAR, false),
+            (NEAR.map(|v| [v[0], v[1], 0.25]), true),
+            (NEAR.map(|v| [v[0], v[1], 0.125]), true),
+        ] {
+            let faces = [NEAR, other].map(|t| t.map(|p| p.map(|v| (v as f32).to_bits())));
+            let grid = Grid::new(&faces, 0.18, 0., &effort_for_tests()).unwrap();
+            assert_eq!(grid.cells[&grid.cell(p)].contains(&1), in_cell);
+            for continuous in [false, true] {
+                let needed = if continuous { 2 } else { 1 }; // region + point, or point
+                for remaining in 0..=8 {
+                    let mut cold = None;
+                    for cached in [None, Some(0), Some(1)] {
+                        grid.last
+                            .set(cached.map(|i| (i, faces[i as usize].map(point))));
+                        let mut effort = effort_for_tests();
+                        effort.base = effort.budget.value - remaining;
+                        let result = if continuous {
+                            grid.covers(triangle, &faces, &effort)
+                        } else {
+                            grid.within(p, 0., &faces, &effort)
+                        };
+                        assert_eq!(result.as_ref().ok(), (remaining >= needed).then_some(&true));
+                        let observed = (
+                            result.map_err(|e| e.to_string()),
+                            effort.used.load(Relaxed),
+                            effort.certificate_fast.load(Relaxed),
+                            effort.certificate_slow.load(Relaxed),
+                        );
+                        if let Some(expected) = &cold {
+                            assert_eq!(&observed, expected);
+                        } else {
+                            cold = Some(observed);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// A third component, larger than `FAR`, 14 m beyond it.

@@ -626,14 +626,20 @@ every tile built today is unchanged:
   coordinate and B the query interval box's upward L1 radius. With M in
   [1e-100,1e100], interpolation/norm and support-plane arithmetic each have
   absolute error below 64*2^-52*M; exponent guards bound underflow and exclude
-  overflow. The remaining margin encloses E evaluation. Lipschitz continuity
-  adds B. The detailed operation/error argument is in
+  overflow in those enclosure operations, not in the fourth-degree projection
+  determinant. That determinant only proposes interpolation parameters;
+  overflow/NaN cannot authorize distance acceptance. Only finite clamped
+  parameters select a convex witness. The remaining margin encloses E evaluation.
+  Lipschitz continuity adds B. The detailed operation/error argument is in
   [VALIDATION.md](../VALIDATION.md). A filter pass therefore implies the exact
   predicate against the same global binary64 reach; no tolerance is added to G.
   Undecided comparisons use the original outward interval witness path;
   centroids, radii, subdivisions and final squared comparisons remain enclosed.
   Separate unweighted counters record fast attempts and slow fallbacks for #309.
-  Reusing the last answering face before the grid scan changes only search order.
+  The cache reuses decoded face coordinates only at their original cell-list
+  position. Cached and uncached scans have identical candidates, distance
+  results, early exits and charges. Induction over regions preserves the same
+  subdivision sequence and budget verdict, including at the effort limit.
   The reference retains exact fractions throughout. Numerical/depth/budget
   exhaustion refuses; this sufficient check need not accept every valid input.
   Stages 0–2 and undeclared drops retain their sampled lower-bound check (child G

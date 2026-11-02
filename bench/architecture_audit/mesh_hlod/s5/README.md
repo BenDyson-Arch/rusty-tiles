@@ -373,3 +373,12 @@ The merged-dup-2000-40 corpus SHA-256 is
 archive SHA-256 `cad47aa33c007f6437a5b2b59bd22b044673963026e96b0f8174ee2532b824a8`.
 Baseline certificate source is develop `ef7db6f372ca60c8c02afc91ce3dd320c73dbfa9`.
 See the external FINAL.md for exact executed source/artifact identities and limits.
+The native `cached_faces_preserve_verdicts_at_the_effort_limit` control compares
+cold/hit/miss caches at nine remaining budgets for both sampled and continuous
+checks. It includes out-of-cell and in-cell misses, and a later certifier requiring
+more point tests than the first certifier. Cache reuse preserves the original
+cell-list order; every outcome and effort/certificate counter must match.
+`cache_controls.py OUT` replays that native control against the reviewed priority
+order and an in-cell-only priority mutant; both must fail. Like the timing
+harness, it substitutes only hash-map/error/effort plumbing.
+Review-fix runs are in `~/.cache/rusty-tiles-evidence/n3-cert-317-fix1-20261102/`.
