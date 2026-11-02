@@ -23,7 +23,6 @@ use super::{
     Sorter, Store, Surface,
 };
 use rusqlite::{params, OptionalExtension};
-use rustc_hash::FxHashSet;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// Outward rounding of every f64 distance sum below (well above ten roundings).
@@ -170,9 +169,10 @@ pub(super) const SOURCE_EDGE: &str =
 pub(super) const EDGE_FACES: &str =
     "SELECT third FROM edge_faces WHERE key=?1 AND dir=?4 AND tile>?2 AND tile<=?3";
 /// Units per seam-owner screen of a coarse face or edge: up to three lookups of its corners
-/// in the tile's shared points, at most 101 ns on a P-core at four million points (PR #309
-/// review 3; a tree set took up to 965 ns).
-const SCREEN_UNITS: usize = 9;
+/// in the tile's shared points, a set keyed per run (SipHash, random key), so crafted
+/// coordinates cannot collide it (PR #309 review 4): at most 367 ns (P-core) and 470 ns
+/// (E-core) per face at four million points, random or colliding keys.
+const SCREEN_UNITS: usize = 32;
 /// Charged units per exact wedge sign (its expansion holds up to ~600 terms).
 const WEDGE_UNITS: usize = 64;
 
@@ -314,7 +314,7 @@ impl Store {
     ) -> Result<
         (
             BTreeMap<CanonicalEdge, Vec<CanonicalPoint>>,
-            FxHashSet<CanonicalPoint>,
+            std::collections::HashSet<CanonicalPoint>,
         ),
         Error,
     > {
@@ -434,7 +434,7 @@ impl Store {
         tile: i64,
         surface: &Surface,
         contracted: &BTreeMap<CanonicalEdge, Vec<CanonicalPoint>>,
-        shared: &FxHashSet<CanonicalPoint>,
+        shared: &std::collections::HashSet<CanonicalPoint>,
         effort: &Effort,
     ) -> Result<(), Error> {
         let last: i64 = self

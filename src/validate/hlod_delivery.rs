@@ -2500,16 +2500,8 @@ impl Store {
                 ));
             }
         }
-        // No duplicate archive-sized state: this read-only view exposes the unique
-        // declaration just validated above. Neither consumer chooses a maximum stage.
-        self.connection
-            .execute_batch(
-                "CREATE TEMP VIEW last_resorts AS
-             SELECT r.tile,min(p.last_stage) AS stage,min(p.fold_faces) AS folds
-             FROM refs r JOIN payloads p ON p.rank=r.rank
-             WHERE p.last_stage>0 GROUP BY r.tile",
-            )
-            .map_err(sql)?;
+        // Every declaration is now unique per tile, so its consumers (the coarse check and the
+        // recount) read any one payload's stage by a seek on the tile's references.
         Ok(())
     }
 

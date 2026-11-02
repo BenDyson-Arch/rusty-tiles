@@ -20,8 +20,7 @@
 mod certificate;
 
 use super::{bad, point_bytes, read_point, sql, CanonicalPoint, Effort, Error, Store};
-use rustc_hash::FxHashMap as HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 /// A parent's geometricError covers a dropped key up to this relative rounding.
 const TOLERANCE: f64 = 1e-6;
@@ -39,6 +38,14 @@ const TEST_UNITS: usize = 2;
 /// 0.96 µs and 0.52 µs per face on an E-core at 1–64 M faces, 0.66 µs and 0.33 µs on a
 /// P-core (PR #309 review 3).
 const FACE_READ_UNITS: usize = 97;
+/// The stage-3 continuous certificate (#313), per item over τ, rounded up on the slower core
+/// (PR #309 review 4): a region's setup (centroid, radius, cell lookup; 84 ns P-core, 151 ns
+/// E-core), one interval distance test (centre or corner against a face; 2.37 µs and 12.3 µs),
+/// and a failed region's subdivision (three midpoints and four stacked regions, fewer interval
+/// operations than a setup, so charged as one).
+const CERT_REGION_UNITS: usize = 10;
+const CERT_TEST_UNITS: usize = 795;
+const CERT_SPLIT_UNITS: usize = CERT_REGION_UNITS;
 /// The recount's leaf faces by tile: `leaf_faces_tile` covers the query (the table's key
 /// holds the corners), so a tile's faces are one index range read in order.
 pub(super) const LEAF_FACES_TILE: &str =
@@ -99,7 +106,8 @@ impl Store {
                  (SELECT group_concat(hex(p.digest)) FROM (SELECT DISTINCT p.digest FROM refs r
                     JOIN payloads p ON p.rank=r.rank WHERE r.tile=t.id ORDER BY p.digest) p),
                  (SELECT sum(p.dropped) FROM refs r JOIN payloads p ON p.rank=r.rank WHERE r.tile=t.id),
-                 (SELECT stage FROM last_resorts WHERE tile=t.id)
+                 (SELECT min(p.last_stage) FROM refs r JOIN payloads p ON p.rank=r.rank
+                    WHERE r.tile=t.id AND p.last_stage>0)
                  FROM tiles t ORDER BY t.id",
             )
             .map_err(sql)?;
@@ -116,7 +124,8 @@ impl Store {
             }
         };
         while let Some(row) = rows.next().map_err(sql)? {
-            effort.charge(1)?;
+            // The tile's digests, drops and last-resort stage: seeks by tile.
+            effort.charge(super::SEEK_UNITS)?;
             let id: i64 = row.get(0).map_err(sql)?;
             let parent: Option<i64> = row.get(1).map_err(sql)?;
             while stack.last().map(|f| f.id) != parent {
@@ -250,8 +259,10 @@ impl Store {
             .map(|(f, _)| f)
             .collect();
         let kept: HashSet<CanonicalPoint> = faces.iter().flatten().copied().collect();
-        // Union-find over the children's faces by canonical key.
-        let mut index: HashMap<CanonicalPoint, usize> = HashMap::default();
+        // Union-find over the children's faces by canonical key. The key map is keyed per run
+        // (SipHash, random key), so crafted coordinates cannot collide it; it only assigns ids
+        // in read order and is never iterated.
+        let mut index: HashMap<CanonicalPoint, usize> = HashMap::new();
         let mut root: Vec<usize> = Vec::new();
         fn find(root: &mut [usize], mut v: usize) -> usize {
             while root[v] != v {
@@ -291,12 +302,17 @@ impl Store {
                 present[r] = true;
             }
         }
-        // Every component's members and bounding-box diagonal.
-        let mut components: HashMap<usize, Vec<usize>> = HashMap::default();
+        // Every component's members (by root, in root order) and bounding-box diagonal.
+        let mut members = vec![Vec::new(); keys.len()];
         for v in 0..keys.len() {
             let r = find(&mut root, v);
-            components.entry(r).or_default().push(v);
+            members[r].push(v);
         }
+        let components: Vec<(usize, Vec<usize>)> = members
+            .into_iter()
+            .enumerate()
+            .filter(|(_, m)| !m.is_empty())
+            .collect();
         let diagonal = |members: &[usize]| {
             let (mut lo, mut hi) = ([f64::MAX; 3], [f64::MIN; 3]);
             for &v in members {
@@ -307,7 +323,7 @@ impl Store {
             }
             (0..3).map(|a| (hi[a] - lo[a]).powi(2)).sum::<f64>().sqrt()
         };
-        let count = components.keys().filter(|r| !present[**r]).count() as u64;
+        let count = components.iter().filter(|(r, _)| !present[*r]).count() as u64;
         if count != parent.declared {
             return Err(bad(
                 "coarseDrops",
@@ -325,7 +341,7 @@ impl Store {
         // exempt (A2); the distance bound below still applies.
         let largest = components
             .iter()
-            .filter(|(r, _)| !present[**r])
+            .filter(|(r, _)| !present[*r])
             .map(|(_, m)| diagonal(m))
             .fold(f64::MIN, f64::max);
         if largest >= child_g && !parent.n3 {
@@ -452,7 +468,10 @@ struct Grid {
     lo: [f64; 3],
     size: [f64; 3],
     reach: f64,
-    cells: HashMap<[i64; 3], Vec<u32>>,
+    /// Cells per axis, and every cell's faces in one dense array (x fastest): no hashing,
+    /// so no input can crowd a bucket.
+    dims: [usize; 3],
+    cells: Vec<Vec<u32>>,
     /// The face that answered the last query. Queries come in runs from one dropped face or
     /// component, so it usually answers the next one too.
     last: std::cell::Cell<Option<u32>>,
@@ -484,9 +503,16 @@ impl Grid {
             lo,
             size,
             reach,
-            cells: HashMap::default(),
+            dims: [0; 3],
+            cells: Vec::new(),
             last: std::cell::Cell::new(None),
         };
+        // Every face's grown box ends at or below `hi`, so its cells lie within `cell(hi)`.
+        let top = grid.cell(hi);
+        grid.dims = std::array::from_fn(|a| usize::try_from(top[a]).unwrap_or(0) + 1);
+        let count = grid.dims.iter().product::<usize>();
+        effort.charge(count)?;
+        grid.cells = vec![Vec::new(); count];
         for (i, f) in faces.iter().enumerate() {
             let ps = f.map(point);
             let (mut a, mut b) = ([i64::MAX; 3], [i64::MIN; 3]);
@@ -505,7 +531,10 @@ impl Grid {
             for x in a[0]..=b[0] {
                 for y in a[1]..=b[1] {
                     for z in a[2]..=b[2] {
-                        grid.cells.entry([x, y, z]).or_default().push(i as u32);
+                        let slot = grid.slot([x, y, z]).ok_or_else(|| {
+                            Error::InvalidState("distance grid cell out of range".into())
+                        })?;
+                        grid.cells[slot].push(i as u32);
                     }
                 }
             }
@@ -515,12 +544,25 @@ impl Grid {
     fn cell(&self, p: [f64; 3]) -> [i64; 3] {
         std::array::from_fn(|a| ((p[a] - self.lo[a]) / self.size[a]).floor() as i64)
     }
+    /// A cell's index in `cells`, or none outside the grid (where no face was entered).
+    fn slot(&self, c: [i64; 3]) -> Option<usize> {
+        let mut slot = 0;
+        for a in (0..3).rev() {
+            let k = usize::try_from(c[a]).ok().filter(|&k| k < self.dims[a])?;
+            slot = slot * self.dims[a] + k;
+        }
+        Some(slot)
+    }
+    fn faces_at(&self, p: [f64; 3]) -> Option<&Vec<u32>> {
+        self.slot(self.cell(p)).map(|s| &self.cells[s])
+    }
     /// Continuous certificate at G, with no child-G slack. Distance to a closed
     /// surface is 1-Lipschitz; the centroid's farthest corner bounds its covering
     /// radius. Also, distance to ONE convex retained triangle is convex, so its
     /// three corner distances bound the whole region (useful at equality).
     /// Four-way subdivision uses a depth-first stack of at most 1 + 3*32 regions.
-    /// Every region and every tested point/face pair consumes the existing budget.
+    /// Each region's setup, each interval distance test and each subdivision is charged at its
+    /// measured cost (`CERT_*_UNITS`).
     fn covers(
         &self,
         triangle: [[f64; 3]; 3],
@@ -530,16 +572,16 @@ impl Grid {
         use certificate::{ball_fits, distance2_upper, radius2, within, Interval};
         let mut stack = vec![(triangle.map(|p| p.map(Interval::point)), 0)];
         while let Some((t, depth)) = stack.pop() {
-            effort.charge(1)?;
+            effort.charge(CERT_REGION_UNITS)?;
             let center =
                 std::array::from_fn(|k| t[0][k].add(t[1][k]).add(t[2][k]).div(Interval::point(3.)));
             let radius = radius2(t, center);
             let mut certified = false;
             let mut center_near = false;
-            if let Some(cell) = self.cells.get(&self.cell(center.map(Interval::middle))) {
+            if let Some(cell) = self.faces_at(center.map(Interval::middle)) {
                 for &i in cell {
                     let face = faces[i as usize].map(point);
-                    effort.charge(1)?;
+                    effort.charge(CERT_TEST_UNITS)?;
                     let d = distance2_upper(center, face);
                     center_near |= within(d, self.reach);
                     if ball_fits(d, radius, self.reach) {
@@ -548,7 +590,7 @@ impl Grid {
                     }
                     let mut corners_near = true;
                     for p in t {
-                        effort.charge(1)?;
+                        effort.charge(CERT_TEST_UNITS)?;
                         if !within(distance2_upper(p, face), self.reach) {
                             corners_near = false;
                             break;
@@ -566,6 +608,7 @@ impl Grid {
             if !center_near || depth == 32 {
                 return Ok(false);
             }
+            effort.charge(CERT_SPLIT_UNITS)?;
             let [a, b, c] = t;
             let mid = |p: certificate::Point, q: certificate::Point| {
                 std::array::from_fn(|k| p[k].add(q[k]).div(Interval::point(2.)))
@@ -596,7 +639,7 @@ impl Grid {
                 return Ok(true);
             }
         }
-        let Some(cell) = self.cells.get(&self.cell(p)) else {
+        let Some(cell) = self.faces_at(p) else {
             return Ok(false);
         };
         for &i in cell {
@@ -764,12 +807,14 @@ mod tests {
         };
         let used = || effort.used.load(Ordering::Relaxed) as usize;
         let grid = super::Grid::new(&faces, 1e-3, 0.01, &effort).unwrap();
-        let cells: usize = grid.cells.values().map(Vec::len).sum();
+        let cells: usize = grid.cells.iter().map(Vec::len).sum();
         assert!(cells > 40 * 1000, "{cells}");
-        assert_eq!(used(), super::CELL_UNITS * cells);
+        assert_eq!(used(), super::CELL_UNITS * cells + grid.cells.len());
         let p = super::point(faces[39][0]);
         let reach = grid.reach + 0.01;
-        let tested = grid.cells[&grid.cell(p)]
+        let tested = grid
+            .faces_at(p)
+            .unwrap()
             .iter()
             .position(|&i| {
                 super::distance2(p, faces[i as usize].map(super::point)) <= reach * reach
