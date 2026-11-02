@@ -563,6 +563,15 @@ fn masks(charts: &mut [Chart], scale: f64, a: u32, g: u32) {
     }
 }
 
+/// Retained masks (including old/new during replacement), raster dilation scratch,
+/// packing page/candidates, and chart-index arrays. fit bounds summed rectangles.
+pub(crate) fn workspace_bytes(edge: u32, texels: u64, faces: u64) -> u64 {
+    texels
+        .saturating_mul(32)
+        .saturating_add(faces.saturating_mul(u64::from(edge) * 16 + 256))
+        .saturating_add(mask_pack::workspace_bytes(edge, faces as usize))
+}
+
 /// Page widths tried, as factors of the masked area's square root (plus the widest chart).
 const WIDTHS: [f64; 4] = [1., 1.15, 1.35, 1.7];
 
@@ -591,6 +600,17 @@ fn fit(
     a: u32,
 ) -> Option<[u32; 2]> {
     sizes(charts, scale, a)?;
+    // Reject impossible rectangles before raster scratch/masks are allocated. The
+    // total bounding area also bounds retained masks for arbitrarily sparse charts.
+    let area: u64 = charts
+        .iter()
+        .map(|c| u64::from(c.size[0]) * u64::from(c.size[1]))
+        .sum();
+    if charts.iter().any(|c| c.size.iter().any(|&e| e > max_edge))
+        || area > max_texels.saturating_mul(64)
+    {
+        return None;
+    }
     masks(charts, scale, a, a.max(GUTTER));
     let unit = a.max(BLOCK);
     // Small allowances may use pages below MIN_PAGE (whole blocks).
@@ -835,6 +855,16 @@ mod tests {
             .iter()
             .map(|c| [c.origin[0], c.origin[1], c.size[0], c.size[1]])
             .collect()
+    }
+
+    #[test]
+    fn oversized_mask_workspace_is_rejected_before_raster_allocation() {
+        let (p, f) = fold();
+        let (mut charts, _) = grow(&p, &f);
+        assert!(fit(&mut charts, 1000., 1024, 1 << 20, 2).is_none());
+        assert!(charts.iter().all(|c| c.mask.bits.capacity() == 0));
+        assert!(fit(&mut charts, 10., 1024, 1, 2).is_none());
+        assert!(charts.iter().all(|c| c.mask.bits.capacity() == 0));
     }
 
     #[test]

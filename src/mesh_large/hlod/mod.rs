@@ -277,6 +277,11 @@ fn appearance_plan(
     let texture = texels
         .saturating_mul(QUERY_BYTES_PER_TEXEL)
         .saturating_add(CHUNK_BYTES)
+        .saturating_add(charts::workspace_bytes(
+            edge,
+            appearance::TILE_TEXELS + appearance::FACE_TEXELS * cap as u64,
+            cap as u64,
+        ))
         .saturating_add(tile_pages.saturating_mul(2))
         .saturating_add(page)
         .saturating_add(decode);

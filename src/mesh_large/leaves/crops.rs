@@ -165,6 +165,16 @@ impl Block {
             triangle_island: vec![0; triangles],
         }
     }
+    pub(crate) fn heap_bytes(&self) -> u64 {
+        (self.islands.capacity() * std::mem::size_of::<Island>()
+            + self.triangle_island.capacity() * std::mem::size_of::<u32>()) as u64
+            + self
+                .islands
+                .iter()
+                .filter_map(|i| i.mask.as_ref())
+                .map(|(_, m)| (m.bits.capacity() * 8) as u64)
+                .sum::<u64>()
+    }
     /// Real source-signal texels (crop interiors) carried by the block.
     pub(crate) fn interior_texels(&self) -> u64 {
         self.islands
@@ -226,6 +236,31 @@ pub(crate) fn plan_islands_aligned(
     align: u32,
     align_origin: bool,
 ) -> Result<Block, JobError> {
+    plan_islands_bounded(
+        uvs,
+        image_width,
+        image_height,
+        max_edge,
+        gutter,
+        align,
+        align_origin,
+        &mut |_| Ok(()),
+    )
+}
+
+/// Admit each planning phase before allocating its workspace or retained masks.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn plan_islands_bounded(
+    uvs: &[[f32; 2]],
+    image_width: u32,
+    image_height: u32,
+    max_edge: u32,
+    gutter: u32,
+    align: u32,
+    align_origin: bool,
+    admit: &mut dyn FnMut(u64) -> Result<(), JobError>,
+) -> Result<Block, JobError> {
+    admit((uvs.len() as u64).saturating_mul(512))?;
     if uvs.is_empty() || !uvs.len().is_multiple_of(3) || align == 0 || !align.is_power_of_two() {
         return Err(invalid(
             "island crop requires whole triangles and POT alignment",
@@ -257,9 +292,17 @@ pub(crate) fn plan_islands_aligned(
         }
         spans.push((lo, hi));
     }
-    let mut block = cluster(&spans, max_edge, gutter, align, align_origin)?;
+    let mut block = cluster(&spans, max_edge, gutter, align, align_origin, admit)?;
     // Each island's needed cells: its members' footprints widened by the gutter.
     let (g, a) = (i64::from(gutter), i64::from(align));
+    let mask_bytes: u64 = block
+        .islands
+        .iter()
+        .map(|i| {
+            u64::from((i.crop.width / align).div_ceil(64)) * u64::from(i.crop.height / align) * 8
+        })
+        .sum();
+    admit(mask_bytes.saturating_add(uvs.len() as u64 * 512))?;
     let mut masks: Vec<Mask> = block
         .islands
         .iter()
@@ -295,6 +338,7 @@ fn cluster(
     gutter: u32,
     align: u32,
     align_origin: bool,
+    admit: &mut dyn FnMut(u64) -> Result<(), JobError>,
 ) -> Result<Block, JobError> {
     let triangles = spans.len();
     // Footprints are padded by both gutters plus alignment slack, so islands
@@ -310,6 +354,13 @@ fn cluster(
             cells = cells.saturating_add(n(0).saturating_mul(n(1)));
         }
         if cells <= ISLAND_CELL_BUDGET {
+            // HashMap load factor, power-of-two capacity and simultaneous old/new
+            // tables during growth; spans, parents, bounds and island/shelf containers coexist.
+            admit(
+                cells
+                    .saturating_mul(96)
+                    .saturating_add(triangles as u64 * 1536),
+            )?;
             break;
         }
         cell = cell.checked_mul(2).ok_or_else(resource)?;

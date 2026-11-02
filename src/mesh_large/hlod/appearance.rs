@@ -54,7 +54,7 @@ pub(crate) const MAX_PAGE_EDGE: u32 = 1024;
 pub(crate) const TILE_TEXELS: u64 = 1 << 20;
 /// Least allowance per group face, so any group fits at zero scale (one gutter-wrapped
 /// chart per face, packed).
-const FACE_TEXELS: u64 = 64;
+pub(super) const FACE_TEXELS: u64 = 64;
 /// Encoded bytes per page texel bounding every delivery form: PNG RGBA (4 B plus row
 /// filter and zlib framing) and KTX2 with its mips (UASTC 4/3 B, ETC1S less).
 const PAGE_BYTES_PER_TEXEL: f64 = 4.5;
