@@ -52,6 +52,15 @@ mutants. It also pins an honest relieved collapsed chain (re-derived at both lev
 its 8 x ε mutant, and a relieved deeper chord beside an exact coarser tile at a gap
 between E/8 and G/8. The 3e880cb3 oracle accepted both of those mutants.
 
+Feasibility-only R gate and bake receipts (2026-11-03) are external at
+`~/.cache/rusty-tiles-evidence/hlod-border-relief-20261030/r5-astra/feasibility-cf43/execution-manifest.json`,
+SHA-256 `c7522a15bb643025e7875b083e4236dd91b9d77c8dbb51686f7beba3a7a729f5`.
+They bind executed source `6c3ac3a9291af1f3852f29edeedf318dc4b5b7c2` against
+develop `cf43aef8b3036a8ac7f5caee47db4ab3b756aca6`, including #317 and #318.
+The evidence was generated externally and never held in git. The adjacent
+`r5-astra/FINAL.md` records the finite gates, bake and CPU comparisons, remaining
+quality limits, both raw floor columns and the final A1 text.
+
 ## Archive validation
 
 `src/validate/identity.rs` projects only owned C1-admitted raw JSON, preserving
