@@ -96,6 +96,112 @@ pub(super) fn within(d2: f64, reach: f64) -> bool {
         && d2 <= Interval::point(reach).mul(Interval::point(reach)).lo
 }
 
+/// A static filter for distance to a closed face. Projection arithmetic ONLY
+/// chooses witnesses; the proof does not assume a correctly classified Voronoi
+/// region. See VALIDATION.md for the absolute forward-error bound.
+pub(super) fn filter(p: Point, t: [[f64; 3]; 3]) -> Option<(f64, f64)> {
+    let x = p.map(Interval::middle);
+    let m = x
+        .into_iter()
+        .chain(t.into_iter().flatten())
+        .map(f64::abs)
+        .fold(0., f64::max);
+    if !(1e-100..=1e100).contains(&m) {
+        return None;
+    }
+    let mut box_error = 0.;
+    for k in 0..3 {
+        let e = (x[k] - p[k].lo).abs().max((p[k].hi - x[k]).abs()).next_up();
+        box_error = (box_error + e).next_up();
+    }
+    if !box_error.is_finite() {
+        return None;
+    }
+    let sub = |a: [f64; 3], b: [f64; 3]| std::array::from_fn::<_, 3, _>(|k| a[k] - b[k]);
+    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let lerp = |a: [f64; 3], b: [f64; 3], u: f64| std::array::from_fn(|k| a[k] + (b[k] - a[k]) * u);
+    let mut q = t[0];
+    let mut d2 = dot(sub(x, q), sub(x, q));
+    let mut consider = |candidate: [f64; 3]| {
+        let v = sub(x, candidate);
+        let d = dot(v, v);
+        if d < d2 {
+            d2 = d;
+            q = candidate;
+        }
+    };
+    for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+        let e = sub(b, a);
+        let u = (dot(sub(x, a), e) / dot(e, e)).clamp(0., 1.);
+        if u.is_finite() {
+            consider(lerp(a, b, u));
+        }
+    }
+    let (u, v, w) = (sub(t[1], t[0]), sub(t[2], t[0]), sub(x, t[0]));
+    let (uu, uv, vv, wu, wv) = (dot(u, u), dot(u, v), dot(v, v), dot(w, u), dot(w, v));
+    // These fourth-degree proposal products may overflow even in the filter's
+    // exponent domain. Only finite clamped lerp parameters below are trusted;
+    // the enclosure proof does not depend on an accurate projection.
+    let det = uu * vv - uv * uv;
+    if det > 0. {
+        let (b, c) = ((wu * vv - wv * uv) / det, (wv * uu - wu * uv) / det);
+        let weights = [(1. - b - c).max(0.), b.max(0.), c.max(0.)];
+        let ab = weights[0] + weights[1];
+        let u = (weights[1] / ab).clamp(0., 1.);
+        let v = (weights[2] / (ab + weights[2])).clamp(0., 1.);
+        if u.is_finite() && v.is_finite() {
+            consider(lerp(lerp(t[0], t[1], u), t[2], v));
+        }
+    }
+    let d = d2.sqrt();
+    let error = (256. * f64::EPSILON * m + box_error).next_up();
+    let upper = (d + error).next_up();
+    // For ANY normal n, min_v n.(x-v)/|n| <= distance(x,face).
+    // n is treated as an exact binary64 vector, not a certified face normal.
+    let n = sub(x, q);
+    let support = if d >= 1e-100 {
+        t.into_iter()
+            .map(|v| dot(n, sub(x, v)))
+            .fold(f64::INFINITY, f64::min)
+            / d
+    } else {
+        0.
+    };
+    Some(((support - error).next_down().max(0.), upper))
+}
+
+/// Return a certified squared upper distance. Interval work is reserved for
+/// undecided comparisons with either the point reach or the ball reach.
+pub(super) fn filtered_upper(
+    p: Point,
+    t: [[f64; 3]; 3],
+    reach: f64,
+    ball: f64,
+    slow: &std::sync::atomic::AtomicU64,
+) -> f64 {
+    // An outward-expanded face box is a cheap necessary condition for reach.
+    // It rejects candidates before projection, including cached faces.
+    for k in 0..3 {
+        let lo = t[0][k].min(t[1][k]).min(t[2][k]);
+        let hi = t[0][k].max(t[1][k]).max(t[2][k]);
+        if p[k].lo > (hi + reach).next_up() || p[k].hi < (lo - reach).next_down() {
+            return f64::INFINITY;
+        }
+    }
+    if let Some((lo, hi)) = filter(p, t) {
+        let decided = |r: f64| hi <= r || lo > r;
+        if decided(reach) && decided(ball) {
+            return if lo > reach {
+                f64::INFINITY
+            } else {
+                (hi * hi).next_up()
+            };
+        }
+    }
+    slow.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    distance2_upper(p, t)
+}
+
 /// Upper bound to ONE face for every point in p's box. Four projection proposals
 /// (interior and three edges) have constant cost. All are merely witness choices:
 /// only their enclosed, normalized convex combinations authorize acceptance.
@@ -181,6 +287,26 @@ mod tests {
         assert!(upper > lower * lower);
         assert!(!within(upper, 8277550726550266.));
         assert!(within(upper, 2. * 8277550726550266.));
+    }
+
+    #[test]
+    fn filter_encloses_distance_and_uses_slow_path_at_boundary() {
+        let t = [[0., 0., 0.], [2., 0., 0.], [0., 2., 0.]];
+        let p = [0.5, 0.5, 1.].map(Interval::point);
+        let (lo, hi) = filter(p, t).unwrap();
+        assert!(lo < 1. && hi > 1.);
+        let slow = std::sync::atomic::AtomicU64::new(0);
+        assert!(within(filtered_upper(p, t, 1.1, 1.1, &slow), 1.1));
+        assert_eq!(slow.load(std::sync::atomic::Ordering::Relaxed), 0);
+        assert!(!within(filtered_upper(p, t, 0.9, 0.9, &slow), 0.9));
+        assert_eq!(slow.load(std::sync::atomic::Ordering::Relaxed), 0);
+        filtered_upper(p, t, 1., 1., &slow);
+        assert_eq!(slow.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert!(filter([Interval::point(1e101); 3], t).is_none());
+        let mut wide = p;
+        wide[2] = Interval { lo: 1., hi: 4. };
+        let (lo, hi) = filter(wide, t).unwrap();
+        assert!(lo <= 1. && hi >= 4.); // Enclose the whole query box, not its midpoint.
     }
 
     #[test]

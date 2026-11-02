@@ -690,6 +690,8 @@ mod tests {
             budget,
             base: 0,
             used: Arc::new(AtomicU64::new(0)),
+            certificate_fast: AtomicU64::new(0),
+            certificate_slow: AtomicU64::new(0),
         };
         for (i, bytes) in payloads.iter().enumerate() {
             let tile = i as i64 + 1;

@@ -617,13 +617,31 @@ every tile built today is unchanged:
   radius (maximum corner distance) bounds the whole region by 1-Lipschitz continuity.
   Alternatively, corner distances to one convex retained triangle bound that region.
   Uncertified regions subdivide at edge midpoints, at most 32 levels, with every
-  region and point/face test charged to the existing effort budget. Native encloses
-  every certificate operation with outward binary64 intervals, including normalized
-  convex witnesses on retained faces and the centroid, radius and subdivision geometry.
-  Projections only choose witnesses; acceptance uses squared upper bounds against the
-  same global binary64 reach, without another tolerance. The reference uses exact
-  fractions throughout this geometry. Numerically unresolved cases refuse. Exhaustion or
-  unresolved depth refuses; this sufficient check need not accept every valid input.
+  region and point/face test charged to the existing effort budget. Native first filters each point/face test with binary64 distance and
+  a rigorous absolute error enclosure. Rounded projections only select a valid
+  convex witness q (nested interpolation parameters in [0,1]). Its computed
+  distance d plus E bounds exact distance from above. For any computed normal
+  n=x-q, `min_v n·(x-v)/|n|` bounds distance from below; subtract E from its
+  computed value. Here `E=up(256*2^-52*M+B)`, M is the largest absolute input
+  coordinate and B the query interval box's upward L1 radius. With M in
+  [1e-100,1e100], interpolation/norm and support-plane arithmetic each have
+  absolute error below 64*2^-52*M; exponent guards bound underflow and exclude
+  overflow in those enclosure operations, not in the fourth-degree projection
+  determinant. That determinant only proposes interpolation parameters;
+  overflow/NaN cannot authorize distance acceptance. Only finite clamped
+  parameters select a convex witness. The remaining margin encloses E evaluation.
+  Lipschitz continuity adds B. The detailed operation/error argument is in
+  [VALIDATION.md](../VALIDATION.md). A filter pass therefore implies the exact
+  predicate against the same global binary64 reach; no tolerance is added to G.
+  Undecided comparisons use the original outward interval witness path;
+  centroids, radii, subdivisions and final squared comparisons remain enclosed.
+  Separate unweighted counters record fast attempts and slow fallbacks for #309.
+  The cache reuses decoded face coordinates only at their original cell-list
+  position. Cached and uncached scans have identical candidates, distance
+  results, early exits and charges. Induction over regions preserves the same
+  subdivision sequence and budget verdict, including at the effort limit.
+  The reference retains exact fractions throughout. Numerical/depth/budget
+  exhaustion refuses; this sufficient check need not accept every valid input.
   Stages 0–2 and undeclared drops retain their sampled lower-bound check (child G
   added off vertices), not this continuous guarantee. Neither check proves producer
   fallback history or error against unpublished source geometry.

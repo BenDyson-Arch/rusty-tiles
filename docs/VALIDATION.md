@@ -35,13 +35,69 @@ three corners fit it against one retained triangle (distance to a convex set is
 convex). Otherwise four-way midpoint subdivision continues to depth 32. Unresolved
 regions fail `coarseDrops`; exhausted effort refuses with the existing budget
 error. Every region and point/retained-face test is charged. The depth-first stack
-holds at most 97 regions. Native uses outward binary64 intervals for every
-arithmetic step in convex witness distances, centroid/radius bounds, and subdivision
-vertices. Approximate projections only select valid convex witnesses; their rounded
-distances never authorize acceptance. Squared comparisons enclose their own rounding,
-against the one binary64 reach computed above; no second tolerance is added. Python
-uses exact fractions for these geometry operations and comparisons. Numerically
-unresolved native certificates refuse. This is a sufficient certificate and can refuse a valid
+holds at most 97 regions. Native first rejects query boxes outside an outward-expanded face bounding box
+(the expansion is the same reach, rounded outwards), then uses a binary64 static filter; the interval routine is the slow
+path for undecided comparisons. The filter never relies on a projection being the
+true closest point. Edge parameters and two nested interpolation parameters are
+finite binary64 values clamped to [0,1]. Their exact interpolations therefore
+choose a point q on the closed retained triangle, even if a rounded projection
+is inaccurate. Let x be the midpoint of the query's interval box, M the maximum
+absolute coordinate of x and the three retained vertices, and B an upward
+rounded L1 radius of that box. With e = 2^-52 the filter uses
+`E = up(256*e*M + B)`. It is enabled only for `1e-100 <= M <= 1e100` and finite B.
+The computed witness distance d gives the upper bound `up(d+E)`.
+
+For the lower bound, the computed vector n = x-q is treated as an exact vector,
+not as a certified surface normal. For every nonzero n,
+`min_v n·(x-v)/|n| <= distance(x,triangle)`; the minimum is over its three vertices.
+The filter evaluates that expression as s and returns `max(0, down(s-E))`.
+If the computed normal length is below 1e-100 it uses zero as the lower bound.
+Thus a strict lower-bound rejection or an upper-bound acceptance implies the
+corresponding exact distance predicate. Neither bound increases the published
+reach. Both the centroid reach and its radius-reduced reach must be decided;
+otherwise the original interval witness routine runs. Region centroids, radii
+and midpoint subdivisions still use outward intervals. Squared comparisons
+also enclose rounding. Python remains the exact-rational reference.
+
+The error bound follows from round-to-nearest binary64 arithmetic, without
+fast-math reassociation. A nested interpolation has coordinate error at most
+16eM; subtraction and the three-term squared norm/square root give total distance
+error below 64eM. For the supporting-plane expression, treating the computed n
+as exact, subtraction, three products, two additions, norm and division give
+absolute error below 64eM (use `|n_i|/|n| <= 1` and `|x_i-v_i| <= 2M`).
+For the operation counts: one interpolation costs at most 5eM per coordinate;
+its composition costs less than 16eM. The final subtraction adds at most 2eM,
+so vector error is below 32eM in Euclidean norm. Five norm operations plus
+square root add less than 12eM. For the support expression, numerator error is
+below 24eM|n|; the norm's relative error (below 4e) and final division add less
+than 20eM after division. Minimum selection preserves this uniform error bound.
+These estimates use the standard product accumulation bound
+`gamma_k = k*u/(1-k*u)`, with `u=2^-53`, and exact binary64 chosen parameters.
+This does not divide by a triangle determinant or assume a well-conditioned
+projection. The enabled exponent range prevents overflow in the interpolation,
+distance norm and support enclosure operations. It does not protect the
+fourth-degree determinant products used to propose an interior projection:
+those may overflow or produce NaN. Proposal arithmetic carries no distance
+guarantee; only finite clamped interpolation parameters are used, so even an
+inaccurate proposal still selects an exact convex witness. Underflow errors
+in the distance norm are below 1e-161; in the
+support calculation, whose denominator is at least 1e-100, below 1e-220.
+Both are smaller than eM even at the minimum M. The factor 256 leaves more than
+a factor of three beyond these bounds, including evaluation of E itself;
+next-up/down encloses the final additions/subtractions and squaring. Adding B
+extends each bound from x to every point in its box by 1-Lipschitz continuity.
+Outside this domain, or in an unresolved band, the interval path runs and
+uncertified cases refuse. Each query increments an unweighted fast counter;
+interval fallbacks increment a separate unweighted slow counter. Existing effort
+charges remain, pending #309's separate weighting. The last answering face's
+decoded coordinates are reused only at its original position in the current
+cell's candidate list; there is no extra probe or reordering. With or without
+this cache, each query sees identical coordinates, candidate order and distance
+results, and therefore identical early exits and point/face charges. Induction
+over regions gives identical subdivisions and total effort. Thus the cache
+cannot change either the geometric verdict or a refusal at the effort limit.
+
+This is a sufficient certificate and can refuse a valid
 surface when its budget/depth is insufficient. Stages 0–2 and undeclared drops
 retain fixed samples, with child G added off vertices; those samples provide only
 lower bounds, not continuous surface certification. None of these checks proves

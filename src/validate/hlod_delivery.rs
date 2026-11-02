@@ -947,6 +947,10 @@ fn replay_surface(
 }
 
 struct Effort {
+    // Unweighted counts: all filter attempts and the subset reaching intervals.
+    // Kept separate so validator work calibration can price the two paths.
+    certificate_fast: AtomicU64,
+    certificate_slow: AtomicU64,
     budget: Budget,
     base: u64,
     used: Arc<AtomicU64>,
@@ -1536,6 +1540,8 @@ impl Store {
             .map_err(sql)?;
         let used = Arc::new(AtomicU64::new(0));
         let effort = Effort {
+            certificate_fast: AtomicU64::new(0),
+            certificate_slow: AtomicU64::new(0),
             budget,
             base: already,
             used: used.clone(),
@@ -2631,6 +2637,8 @@ mod tests {
     }
     fn effort() -> Effort {
         Effort {
+            certificate_fast: AtomicU64::new(0),
+            certificate_slow: AtomicU64::new(0),
             budget: budget(),
             base: 0,
             used: Arc::new(AtomicU64::new(0)),
