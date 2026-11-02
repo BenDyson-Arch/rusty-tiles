@@ -570,8 +570,10 @@ impl Grid {
     /// radius. Also, distance to ONE convex retained triangle is convex, so its
     /// three corner distances bound the whole region (useful at equality).
     /// Four-way subdivision uses a depth-first stack of at most 1 + 3*32 regions.
-    /// Each region's setup, each interval distance test and each subdivision is charged at its
-    /// measured cost (`CERT_*_UNITS`).
+    /// Each region's setup, each distance test (fast path, and the interval path on top when the
+    /// filter leaves it undecided) and each subdivision is charged at its measured cost
+    /// (`CERT_*_UNITS`). Verdicts depend on the archive and budget, never on the coordinate
+    /// cache. Deterministic pruning may lower the budget required for an accept.
     fn covers(
         &self,
         triangle: [[f64; 3]; 3],
@@ -588,10 +590,16 @@ impl Grid {
             let ball = (self.reach - radius.sqrt().next_up()).next_down();
             // Each test is charged its fast path first; one that falls to the slow path is
             // charged that path's extra when the slow counter moves (one charge's overshoot).
+            let charge_distance = || -> Result<(), Error> {
+                effort.charge(CERT_FAST_UNITS)?;
+                effort
+                    .certificate_fast
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Ok(())
+            };
             let distance = |p, face, ball| -> Result<f64, Error> {
                 use std::sync::atomic::Ordering::Relaxed;
-                effort.charge(CERT_FAST_UNITS)?;
-                effort.certificate_fast.fetch_add(1, Relaxed);
+                charge_distance()?;
                 let slow = effort.certificate_slow.load(Relaxed);
                 let d = filtered_upper(p, face, self.reach, ball, &effort.certificate_slow);
                 if effort.certificate_slow.load(Relaxed) != slow {
@@ -604,6 +612,16 @@ impl Grid {
             if let Some(cell) = self.faces_at(center.map(Interval::middle)) {
                 for &i in cell {
                     let face = self.face(i, faces);
+                    // A separated centroid rules out BOTH certificates: if all
+                    // corners were within reach of this convex face, their
+                    // centroid would be too. Charge the executed box query;
+                    // omitted corner queries consume no work. This deterministic
+                    // reduction may admit a smaller budget, never refuse an old
+                    // accept. Cache state changes neither queries nor charges.
+                    if certificate::outside_box(center, face, self.reach) {
+                        charge_distance()?;
+                        continue;
+                    }
                     let d = distance(center, face, ball)?;
                     center_near |= within(d, self.reach);
                     if ball_fits(d, radius, self.reach) {
@@ -968,6 +986,45 @@ mod tests {
                         runs.push((result.map_err(|e| e.to_string()), effort.used.load(Relaxed)));
                     }
                     assert_eq!(runs[0], runs[1]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn pruning_saves_work_with_cache_independent_budget_verdicts() {
+        use super::super::tests::effort_for_tests;
+        use super::{point, Grid};
+        use std::sync::atomic::Ordering::Relaxed;
+        let triangle = [[0.1, 0.1, 0.], [0.2, 0.1, 0.], [0.1, 0.2, 0.]];
+        let faces = [NEAR.map(|v| [v[0], v[1], 0.25]), NEAR]
+            .map(|t| t.map(|p| p.map(|v| (v as f32).to_bits())));
+        let grid = Grid::new(&faces, 0.18, 0., &effort_for_tests()).unwrap();
+        assert_eq!(grid.faces_at([0.125, 0.125, 0.]).unwrap(), &vec![0, 1]);
+        let needed = (super::CERT_REGION_UNITS + 2 * super::CERT_FAST_UNITS) as u64;
+        // Region + separated centroid + certifying centroid: one region and two fast
+        // tests, not three. The old scan also queried a corner of the impossible first face.
+        // This budget improvement is intentional: executed work is charged,
+        // and the archive plus budget determines the verdict, not cache state.
+        for remaining in 0..=needed + 2 {
+            let mut cold = None;
+            for cached in [None, Some(0), Some(1)] {
+                grid.last
+                    .set(cached.map(|i| (i, faces[i as usize].map(point))));
+                let mut effort = effort_for_tests();
+                effort.base = effort.budget.value - remaining;
+                let result = grid.covers(triangle, &faces, &effort);
+                assert_eq!(result.as_ref().ok(), (remaining >= needed).then_some(&true));
+                if remaining >= needed {
+                    assert_eq!(effort.used.load(Relaxed), needed);
+                    assert_eq!(effort.certificate_fast.load(Relaxed), 2);
+                    assert_eq!(effort.certificate_slow.load(Relaxed), 0);
+                }
+                let observed = (result.map_err(|e| e.to_string()), effort.used.load(Relaxed));
+                if let Some(expected) = &cold {
+                    assert_eq!(&observed, expected);
+                } else {
+                    cold = Some(observed);
                 }
             }
         }

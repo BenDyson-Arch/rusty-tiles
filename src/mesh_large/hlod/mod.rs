@@ -30,6 +30,7 @@ mod encode;
 pub(crate) mod error;
 mod geometry;
 pub(crate) mod interfaces;
+mod root_competition;
 pub(crate) mod scratch;
 pub(crate) mod source_index;
 pub(crate) mod store;
@@ -142,6 +143,7 @@ fn job_charge(merged: u64, settings: &Settings) -> u64 {
         .saturating_add(error::WORK_BYTES)
         .saturating_add(error::search_bytes(settings.nearest_steps))
         .saturating_add(TileGeometry::charge(settings.cap as u64))
+        .saturating_add(root_competition::retained_bytes(settings.cap as u64))
 }
 
 fn state(message: impl Into<String>) -> JobError {
@@ -512,6 +514,10 @@ pub(crate) struct HlodReport {
     pub error_cpu: error::CpuReport,
     #[serde(skip)]
     pub error_cpu_by_depth: Vec<f64>,
+    #[serde(skip)]
+    pub root_competition_cpu_seconds: f64,
+    #[serde(skip)]
+    pub root_competition_timing: root_competition::Timing,
     /// Coarse appearance per tile depth (S3).
     pub appearance_by_depth: Vec<DepthAppearance>,
 }
@@ -580,6 +586,8 @@ pub struct HlodDiagnostics {
     pub error_cpu: error::CpuReport,
     /// Summed worker S2 CPU seconds by encoded depth (index construction excluded).
     pub error_cpu_by_depth: Vec<f64>,
+    pub root_competition_cpu_seconds: f64,
+    pub root_competition_timing: root_competition::Timing,
     pub error_measurement: error::ErrorReport,
     pub wall_seconds: f64,
     pub incidence_scratch_peak_bytes: u64,
@@ -623,6 +631,7 @@ struct Closed {
     /// The cell's only child is a leaf (which cannot stand for it): the parent is reduced
     /// to half its input, so it is a genuinely coarser level, not a copy of the leaf.
     single_leaf: bool,
+    ownership_root: bool,
     /// A child holds folds a last resort admitted (A2): the guard licenses them as input,
     /// so this tile may keep them and then declares them (stage 0 if it is no last resort).
     folds_below: bool,
@@ -712,6 +721,7 @@ enum Finished {
         topology: Box<geometry::TopologyReceipt>,
         topology_attempts: u32,
         construction_topology: Option<audit::Index>,
+        root_search: Option<(error::SearchStats, f64, root_competition::Timing)>,
     },
 }
 
@@ -906,6 +916,8 @@ pub(crate) fn produce(
         &ledger,
     );
     diagnostics.error_cpu_seconds = index_cpu.map(|s| s + report.error_cpu_seconds);
+    diagnostics.root_competition_cpu_seconds = report.root_competition_cpu_seconds;
+    diagnostics.root_competition_timing = report.root_competition_timing;
     diagnostics.error_cpu = report.error_cpu;
     diagnostics.error_cpu_by_depth = report.error_cpu_by_depth.clone();
     diagnostics.error_cpu.index = index_cpu.unwrap_or(0.);
@@ -1426,7 +1438,7 @@ fn build_tile(
     let mut published_topology_attempt = None;
     let mut query = job.source.query(captured, closed.key)?;
     let mut nearest = error::Nearest::with_steps(settings.nearest_steps);
-    let outcome = if let Some(contract) = &contract {
+    let mut outcome = if let Some(contract) = &contract {
         let half = if closed.single_leaf {
             children[0].triangles.len().div_ceil(2).min(settings.cap)
         } else if closed.key.depth <= 3 {
@@ -1487,6 +1499,37 @@ fn build_tile(
             relief: None,
         }
     };
+    let mut root_competition = if (closed.ownership_root
+        || job.borders.publication_depth(closed.key)? == 0)
+        && !closed.single_leaf
+        && settings.mutation.root_competition()
+    {
+        if let Some(contract) = &contract {
+            #[cfg(test)]
+            if settings.mutation == Mutation::OmitRootBaseline {
+                outcome.built = None;
+                prepared = None;
+                published_topology_attempt = None;
+            }
+            Some(root_competition::select(
+                job,
+                closed.key,
+                &children,
+                contract,
+                &mut outcome,
+                &mut prepared,
+                &mut query,
+                &mut nearest,
+                audit,
+                &mut topology_attempts,
+                &mut published_topology_attempt,
+            )?)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let Some(mut built) = outcome.built else {
         // Its interface cannot fit the cap: omitted, nothing held for its parent.
         let construction_topology = audit
@@ -1513,6 +1556,9 @@ fn build_tile(
                 .collect::<Result<_, JobError>>()?,
             topology: Box::new(outcome.attempted_topology),
             topology_attempts,
+            root_search: root_competition
+                .as_ref()
+                .map(|r| (nearest.stats, r.cpu_seconds, r.timing)),
             construction_topology,
         };
         return Ok((None, omitted, appearance::Timing::default()));
@@ -1554,6 +1600,7 @@ fn build_tile(
     let contract = contract.as_ref().expect("built tile has contract");
     // S3: fresh charts and a cheap source bake on the final decoded positions, through
     // the same bounded source query.
+    let appearance_start = error::thread_cpu();
     let appearance = appearance::build(
         job.services,
         &mut query,
@@ -1568,6 +1615,11 @@ fn build_tile(
             geometric_error: error.geometric_error,
         },
     )?;
+    if let Some(root) = &mut root_competition {
+        root.timing.appearance = error::thread_cpu()
+            .zip(appearance_start)
+            .map_or(0., |(b, a)| b - a);
+    }
     let declared = built.topology.dropped_components;
     #[cfg(test)]
     let declared = if settings.mutation == Mutation::UndeclaredDrop
@@ -1632,6 +1684,7 @@ fn build_tile(
         geometric_error: error.geometric_error,
         error_policy: error.policy,
         measurement,
+        root_competition,
         nearest_search: nearest.stats,
         error_cpu_seconds,
         error_cpu,
@@ -1686,6 +1739,10 @@ fn build_tile(
 }
 
 fn tally(report: &mut HlodReport, row: &HlodRow) {
+    if let Some(root) = &row.root_competition {
+        report.root_competition_cpu_seconds += root.cpu_seconds;
+        report.root_competition_timing.add(root.timing);
+    }
     let borders = &mut report.borders_by_depth[row.depth as usize];
     borders.tiles += 1;
     borders.segments += u64::from(row.interface_segments);
@@ -1905,6 +1962,7 @@ fn walk(
                         topology: Default::default(),
                         topology_attempts: 0,
                         construction_topology: None,
+                        root_search: None,
                     };
                     let _ = sender.send((
                         closed.id,
@@ -2022,7 +2080,13 @@ fn walk(
                         topology,
                         topology_attempts,
                         construction_topology,
+                        root_search,
                     } => {
+                        if let Some((search, cpu, timing)) = root_search {
+                            report.root_competition_timing.add(timing);
+                            report.error_measurement.nearest.add(search);
+                            report.root_competition_cpu_seconds += cpu;
+                        }
                         let source = reason.source();
                         report.borders_by_depth[key.depth as usize]
                             .attempted_topology
@@ -2183,6 +2247,7 @@ fn walk(
                 },
                 children: frame.children,
                 single_leaf,
+                ownership_root: stack.is_empty(),
                 folds_below: false,
             };
             *next_seq += 1;

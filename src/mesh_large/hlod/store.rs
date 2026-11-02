@@ -197,6 +197,8 @@ pub(crate) struct HlodRow {
     pub geometric_error: f64,
     pub error_policy: &'static str,
     pub measurement: super::error::Summary,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub root_competition: Option<super::root_competition::Receipt>,
     /// The tile's budgeted nearest searches (`error::NEAREST_STEPS`), exhaustions included.
     pub nearest_search: super::error::SearchStats,
     #[serde(skip)]

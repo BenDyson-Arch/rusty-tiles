@@ -5606,7 +5606,8 @@ fn city_blocks_contract_and_reduce_without_omission() {
 }
 
 /// Review r1 P1: the fix 2 last resorts run only once develop's strategies failed, so
-/// blocks develop builds without omission publish the same bytes as without them.
+/// blocks develop builds without omission keep non-root payloads unchanged. The
+/// owner-approved root competition is the sole exception (tested independently).
 #[test]
 fn city_blocks_develop_builds_are_unchanged_by_the_last_resorts() {
     for layout in [1, 13, 93, 111, 159] {
@@ -5626,7 +5627,18 @@ fn city_blocks_develop_builds_are_unchanged_by_the_last_resorts() {
                 .unwrap(),
             )
         });
-        assert!(a == b, "city block {layout}");
+        let roots: HashSet<String> = String::from_utf8(a["proxies.jsonl"].clone())
+            .unwrap()
+            .lines()
+            .map(|l| serde_json::from_str::<Value>(l).unwrap())
+            .filter(|r| r.get("rootCompetition").is_some())
+            .map(|r| r["uri"].as_str().unwrap().to_owned())
+            .collect();
+        for (name, bytes) in &a {
+            if name.ends_with(".glb") && !roots.contains(name) {
+                assert_eq!(Some(bytes), b.get(name), "city block {layout}: {name}");
+            }
+        }
     }
 }
 
@@ -6037,4 +6049,205 @@ fn coarse_mask_charge_restores_five_automatic_workers_at_four_gib() {
             println!("{name} requested={requested:?} extra={extra} job={job} available={available} auto=5");
         }
     }
+}
+
+/// Paired production-construction control: all leaves and non-root payloads stay
+/// byte-identical, while roots may only improve G or replace an own-build omission.
+fn root_pair(layout: u64, jobs: usize, evidence: Option<&Path>) {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &city_block(layout));
+    let dirs = [Mutation::NoRootCompetition, Mutation::None].map(|mutation| {
+        stage(
+            &input,
+            &work.path().join(format!("{mutation:?}")),
+            &Run {
+                mutation,
+                jobs,
+                budget: Some(4 << 30),
+                ..Run::default()
+            },
+        )
+        .unwrap()
+    });
+    let [a, b] = dirs.each_ref().map(|d| rows(&d.join("proxies.jsonl")));
+    assert_eq!(files(&dirs[0], "leaves"), files(&dirs[1], "leaves"));
+    for old in &a {
+        let new = b
+            .iter()
+            .find(|r| r["uri"] == old["uri"])
+            .expect("no lost root");
+        if new.get("rootCompetition").is_some() {
+            assert!(
+                new["geometricError"].as_f64().unwrap() <= old["geometricError"].as_f64().unwrap()
+            );
+            let r = &new["rootCompetition"];
+            assert_eq!(r["baselineG"], old["geometricError"]);
+            if r["accepted"] == true {
+                assert!(
+                    new["geometricError"].as_f64().unwrap()
+                        <= 0.99 * old["geometricError"].as_f64().unwrap()
+                );
+            }
+            if r["accepted"] != true {
+                assert_eq!(old["sha256"], new["sha256"]);
+            }
+        } else {
+            assert_eq!(old["sha256"], new["sha256"]);
+            assert_eq!(old["geometricError"], new["geometricError"]);
+        }
+    }
+    for new in &b {
+        if !a.iter().any(|r| r["uri"] == new["uri"]) {
+            assert_eq!(new["rootCompetition"]["accepted"], true);
+            assert!(new["rootCompetition"]["baselineG"].is_null());
+        }
+    }
+    published_and_valid(&format!("root city {layout}"), &dirs[1], work.path());
+    if let Some(e) = evidence {
+        fs::create_dir_all(e).unwrap();
+        for (side, dir) in ["baseline", "candidate"].into_iter().zip(&dirs) {
+            fs::copy(
+                dir.join("proxies.jsonl"),
+                e.join(format!("{layout}-{side}.jsonl")),
+            )
+            .unwrap();
+        }
+    }
+}
+
+#[test]
+fn root_competition_preserves_non_roots_and_validates() {
+    for layout in [1, 26, 77, 95] {
+        root_pair(layout, 3, None);
+    }
+}
+
+#[test]
+#[ignore = "200-layout paired acceptance sweep"]
+fn root_competition_city_sweep() {
+    let evidence = std::env::var_os("RT_ROOT_CITY_EVIDENCE").map(PathBuf::from);
+    for layout in 0..200 {
+        root_pair(layout, 3, evidence.as_deref());
+    }
+}
+
+/// The bounded natural search found no own-root recovery: N3 is already part of
+/// incumbent construction. These are the closest actual refusals, not injected
+/// failures: a challenger that fails prepare, and a propagated descendant omission.
+#[test]
+fn root_competition_preserves_natural_guard_and_descendant_refusals() {
+    for (name, source) in [
+        ("prepare", vec![egg_crate(6)]),
+        ("descendant", city_block(199)),
+    ] {
+        let work = tempfile::tempdir().unwrap();
+        let input = write_gltf(&work.path().join("src"), &source);
+        let dirs = [Mutation::NoRootCompetition, Mutation::None].map(|mutation| {
+            stage(
+                &input,
+                &work.path().join(format!("{mutation:?}")),
+                &Run {
+                    mutation,
+                    budget: Some(4 << 30),
+                    ..Run::default()
+                },
+            )
+            .unwrap()
+        });
+        for sub in ["leaves", "proxies"] {
+            assert_eq!(files(&dirs[0], sub), files(&dirs[1], sub));
+        }
+        let rr = rows(&dirs[1].join("proxies.jsonl"));
+        let baseline = rows(&dirs[0].join("proxies.jsonl"));
+        assert_eq!(baseline.len(), rr.len());
+        for old in &baseline {
+            let new = rr.iter().find(|r| r["uri"] == old["uri"]).unwrap();
+            assert_eq!(old["geometricError"], new["geometricError"]);
+        }
+        if name == "prepare" {
+            let root = rr
+                .iter()
+                .find(|r| r.get("rootCompetition").is_some())
+                .unwrap();
+            assert_eq!(root["rootCompetition"]["reason"], "prepare_refused");
+            assert_eq!(root["rootCompetition"]["accepted"], false);
+            assert_eq!(root["geometricError"], root["rootCompetition"]["baselineG"]);
+        } else {
+            assert!(rr.iter().all(|r| r["depth"] != 0));
+            let manifest: Value =
+                serde_json::from_slice(&fs::read(dirs[1].join("manifest.json")).unwrap()).unwrap();
+            let h = &manifest["hlod"];
+            assert!(h["omissionSources"].as_u64().unwrap() > 0);
+            assert!(h["omittedProxies"].as_u64().unwrap() > h["omissionSources"].as_u64().unwrap());
+            println!(
+                "natural {name}: omitted={} sources={}",
+                h["omittedProxies"], h["omissionSources"]
+            );
+        }
+        for (side, dir) in dirs.iter().enumerate() {
+            published_and_valid(&format!("natural {name} {side}"), dir, work.path());
+        }
+    }
+}
+
+#[test]
+fn root_competition_natural_own_root_refusal_remains_omitted() {
+    // Closest natural case found: only the root fails, but the full-cap N3
+    // challenger fails too. This is not positive evidence of natural recovery.
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(
+        &work.path().join("src"),
+        &[folded_sheet(48, 3, 0., 0.0001, 23)],
+    );
+    for mutation in [Mutation::NoRootCompetition, Mutation::None] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("{mutation:?}")),
+            &Run {
+                mutation,
+                leaf_triangles: 4096,
+                budget: Some(4 << 30),
+                ..Run::default()
+            },
+        )
+        .unwrap();
+        assert!(rows(&dir.join("leaves.jsonl")).len() > 1);
+        assert!(rows(&dir.join("proxies.jsonl")).is_empty());
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let h = &manifest["hlod"];
+        assert_eq!(h["omittedProxies"], 1);
+        assert_eq!(h["omissionSources"], 1);
+        assert_eq!(h["omittedByDepth"], json!([1, 0]));
+        published_and_valid("natural own-root refusal", &dir, work.path());
+    }
+}
+
+#[test]
+fn root_competition_fills_a_forced_own_build_omission_and_is_job_invariant() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &city_block(1));
+    let dirs = [1, 3].map(|jobs| {
+        stage(
+            &input,
+            &work.path().join(format!("jobs-{jobs}")),
+            &Run {
+                jobs,
+                mutation: Mutation::OmitRootBaseline,
+                budget: Some(4 << 30),
+                ..Run::default()
+            },
+        )
+        .unwrap()
+    });
+    let rr = rows(&dirs[0].join("proxies.jsonl"));
+    let root = rr
+        .iter()
+        .find(|r| r.get("rootCompetition").is_some())
+        .expect("candidate supplied root");
+    assert_eq!(root["rootCompetition"]["accepted"], true);
+    assert!(root["rootCompetition"]["baselineG"].is_null());
+    assert!(root["geometricError"].as_f64().unwrap() >= root["childrenError"].as_f64().unwrap());
+    assert_eq!(published(&dirs[0]), published(&dirs[1]));
+    published_and_valid("recovered root", &dirs[0], work.path());
 }

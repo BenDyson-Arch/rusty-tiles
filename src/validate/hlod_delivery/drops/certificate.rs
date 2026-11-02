@@ -170,6 +170,20 @@ pub(super) fn filter(p: Point, t: [[f64; 3]; 3]) -> Option<(f64, f64)> {
     Some(((support - error).next_down().max(0.), upper))
 }
 
+/// True only when every point in the query box is farther than reach from
+/// the face's box, hence from the face. False makes no distance claim.
+pub(super) fn outside_box(p: Point, t: [[f64; 3]; 3], reach: f64) -> bool {
+    // An outward-expanded face box is a cheap necessary condition for reach.
+    for k in 0..3 {
+        let lo = t[0][k].min(t[1][k]).min(t[2][k]);
+        let hi = t[0][k].max(t[1][k]).max(t[2][k]);
+        if p[k].lo > (hi + reach).next_up() || p[k].hi < (lo - reach).next_down() {
+            return true;
+        }
+    }
+    false
+}
+
 /// Return a certified squared upper distance. Interval work is reserved for
 /// undecided comparisons with either the point reach or the ball reach.
 pub(super) fn filtered_upper(
@@ -179,14 +193,8 @@ pub(super) fn filtered_upper(
     ball: f64,
     slow: &std::sync::atomic::AtomicU64,
 ) -> f64 {
-    // An outward-expanded face box is a cheap necessary condition for reach.
-    // It rejects candidates before projection, including cached faces.
-    for k in 0..3 {
-        let lo = t[0][k].min(t[1][k]).min(t[2][k]);
-        let hi = t[0][k].max(t[1][k]).max(t[2][k]);
-        if p[k].lo > (hi + reach).next_up() || p[k].hi < (lo - reach).next_down() {
-            return f64::INFINITY;
-        }
+    if outside_box(p, t, reach) {
+        return f64::INFINITY;
     }
     if let Some((lo, hi)) = filter(p, t) {
         let decided = |r: f64| hi <= r || lo > r;
@@ -255,6 +263,24 @@ pub(super) fn distance2_upper(p: Point, t: [[f64; 3]; 3]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn separation_requires_the_whole_box_beyond_the_outward_reach() {
+        let t = [[0., 0., 0.], [2., 0., 0.], [0., 2., 0.]];
+        let mut p = [3., 0., 0.].map(Interval::point);
+        assert!(!outside_box(p, t, 1.));
+        p[0] = Interval::point(3f64.next_up());
+        assert!(!outside_box(p, t, 1.));
+        p[0] = Interval::point(3f64.next_up().next_up());
+        assert!(outside_box(p, t, 1.));
+        p[0] = Interval { lo: 2.9, hi: 4. };
+        assert!(!outside_box(p, t, 1.)); // A far midpoint does not suffice.
+        p[0] = Interval {
+            lo: f64::NEG_INFINITY,
+            hi: f64::INFINITY,
+        };
+        assert!(!outside_box(p, t, 1.)); // Unresolved enclosure is not separation.
+    }
 
     #[test]
     fn skinny_face_never_certifies_the_review_counterexample() {

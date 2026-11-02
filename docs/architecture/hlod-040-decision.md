@@ -636,14 +636,27 @@ every tile built today is unchanged:
   Undecided comparisons use the original outward interval witness path;
   centroids, radii, subdivisions and final squared comparisons remain enclosed.
   Separate counters record fast attempts and slow fallbacks; #309 charges them 8
-  and 795 more units (measured cost over τ). In the certificate the cache reuses
-  decoded face coordinates only at their original cell-list position. Cached and
-  uncached scans have identical candidates, distance results, early exits and
-  charges. Induction over regions preserves the same subdivision sequence and
-  budget verdict, including at the effort limit. The sampled stage 0–2 queries
-  try the cached face first: their charged work depends on the cache, which is a
-  pure function of the archive, so verdicts stay deterministic and every test is
-  charged (owner, 2026-11-02).
+  and 795 more units (measured cost over τ). In the certificate the cache reuses decoded face coordinates only at their original cell-list
+  position. Cached and uncached scans have identical candidates, distance
+  results, early exits and charges. Induction over regions preserves the same
+  subdivision sequence and budget verdict, including at the effort limit.
+  A centroid interval box strictly outside a face's outward R-expanded AABB
+  proves the exact centroid farther than R. Convexity then rules out a
+  three-corner certificate against that face. Count/charge one fast box query
+  and omit its impossible corner queries; overlap or an uncertain distance
+  does not authorize pruning. This preserves geometric decisions, subdivision
+  and candidate order, and only decreases required work. The owner-approved
+  budget contract is determinism in archive and budget, charging every executed
+  unit of work. Pruning may turn an effort refusal into an accept, never an old
+  accept into a refusal; cross-version budget thresholds need not be equal.
+  Cache presence still cannot change the certificate's charged work or verdict at
+  any budget. The sampled stage 0–2 queries try the cached face first: their
+  charged work depends on the cache, which is a pure function of the archive, so
+  verdicts stay deterministic and every test is charged (owner, 2026-11-02).
+  Larger initial regions,
+  sibling-certificate state and replacement spatial indices remain deferred:
+  this narrower change needs no new index, resident geometry, subdivision
+  policy or error allowance. The detailed proof is in VALIDATION.md.
   The reference retains exact fractions throughout. Numerical/depth/budget
   exhaustion refuses; this sufficient check need not accept every valid input.
   Stages 0–2 and undeclared drops retain their sampled lower-bound check (child G
@@ -662,6 +675,24 @@ and on every coarse tile refuse a new face or edge on shared points outside its 
 G is S2's measured value. Omission and D1's upward propagation remain only for a cell whose
 contract alone exceeds the cap, or whose last resort cannot keep the open boundaries that
 touch its border (borders near the cap: border relief, A1).
+
+**Owner amendment, 2026-11-02 — root competition (0.4.0).** An ownership root
+may replace an already successful build with one additional fully decoded,
+source-S2-measured candidate at the unchanged 8,192 cap. The coordinator's review
+amendment requires at least a 1% relative reduction in published G to replace a
+successful incumbent (`candidate G <= 0.99 * incumbent G`, strictly lower).
+Smaller improvements and ties retain the incumbent, including child-floor ties,
+to avoid paying more first-view bytes for negligible wins. Recovery of a root
+whose own construction failed is unaffected by this threshold.
+It does not bypass an omitted descendant: no content above an omitted cell
+remains binding. Non-root construction and publication remain unchanged.
+
+Use the same eligibility, topology, fold/drop, exact-seam and validation guards.
+Keep candidate work bounded and O(n log n), charge retained candidate storage,
+count source queries, and release the loser before appearance. Root payload and
+appearance costs and paired processing CPU remain acceptance obligations; reducer
+probe timings alone are not evidence of production speed. Recovery above omitted
+descendants requires a separate owner-approved input/delivery/validator design.
 
 **A3 (L1, approved 2026-10-30) is superseded by N2.** Folds are admitted at last-resort tiles
 without a separation gate. Their separation (the sandwich width of the folded layers over

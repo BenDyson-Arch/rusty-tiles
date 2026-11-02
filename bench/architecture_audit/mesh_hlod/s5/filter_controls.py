@@ -18,7 +18,10 @@ fn main(){for line in io::stdin().lock().lines(){let l=line.unwrap();let v:Vec<f
 let mut p=std::array::from_fn(|k| certificate::Interval::point(v[k]));
 let t=std::array::from_fn(|i|std::array::from_fn(|k|v[3+3*i+k]));
 if v.len()>12 { for _ in 0..32 {p=std::array::from_fn(|k|p[k].add(certificate::Interval::point(t[0][k])).div(certificate::Interval::point(2.)));} }
-match certificate::filter(p,t){Some((lo,hi))=>println!("{lo:.17e} {hi:.17e}"),None=>println!("none")}
+match certificate::filter(p,t){Some((lo,hi))=>print!("{lo:.17e} {hi:.17e}"),None=>print!("none")}
+let m=t.into_iter().flatten().map(f64::abs).fold(0.,f64::max);
+for reach in [0.,m*0.01,m*0.5,m*2.] {print!(" {reach:.17e} {}",u8::from(certificate::outside_box(p,t,reach)));}
+println!();
 }}
 '''
     (a.out/'filter.rs').write_text(code)
@@ -50,9 +53,13 @@ match certificate::filter(p,t){Some((lo,hi))=>println!("{lo:.17e} {hi:.17e}"),No
             for _ in range(32):p=[(p[k]+Fraction(t[0][k]))/2 for k in range(3)]
         exact=distance2(p,t)
         assert line!='none'
-        lo,hi=map(Fraction,map(float,line.split()))
+        fields=line.split()
+        lo,hi=map(Fraction,map(float,fields[:2]))
+        for reach,separated in zip(fields[2::2],fields[3::2],strict=True):
+            if separated=='1':
+                assert exact>Fraction(float(reach))**2,(p,t,reach,exact)
         assert lo*lo<=exact<=hi*hi,(p,t,line,exact)
         count+=1
-    (a.out/'result.json').write_text(json.dumps({'seed':313,'exactEnclosures':count,'depth32Cases':sum(c[2] for c in cases)},indent=2)+'\n')
+    (a.out/'result.json').write_text(json.dumps({'seed':313,'exactEnclosures':count,'separationChecks':4*count,'depth32Cases':sum(c[2] for c in cases)},indent=2)+'\n')
     print((a.out/'result.json').read_text())
 if __name__=='__main__':main()

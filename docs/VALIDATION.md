@@ -87,7 +87,7 @@ a factor of three beyond these bounds, including evaluation of E itself;
 next-up/down encloses the final additions/subtractions and squaring. Adding B
 extends each bound from x to every point in its box by 1-Lipschitz continuity.
 Outside this domain, or in an unresolved band, the interval path runs and
-uncertified cases refuse. Each query increments an unweighted fast counter;
+uncertified cases refuse. Each query increments a fast counter;
 interval fallbacks increment a separate slow counter. Each distance test is
 charged 8 units before it runs and 795 more when it falls to the interval path
 (the measured fast and slow costs over τ; see the
@@ -102,6 +102,29 @@ effort limit. The sampled stage 0–2 checks (`within`) try the cached face firs
 instead: their charged work depends on the cache, but the cache is a pure
 function of the archive (the queries run in a fixed order), so verdicts stay
 deterministic and every distance test is charged.
+
+For stage-3 region scans, an outward reach-expanded face box also provides a
+safe pruning test. If the entire centroid interval box lies strictly outside it
+on any axis, the exact centroid is farther than the same reach R from the face.
+That face cannot certify all three region corners: distance to one closed convex
+triangle is convex, so three corner distances at most R would put their exact
+centroid within R too. The scan therefore charges/counts this centroid box test
+once and skips that face's corner queries. It does not skip on a rounded midpoint
+alone, an uncertain upper distance, or a partially overlapping box.
+
+The budget contract is deterministic in the archive and budget: every executed
+unit of work is charged, and cache state never changes the certificate's charged
+work or verdicts (the stage 0–2 point queries above try the cached face first,
+deterministically).
+Deterministic pruning need not preserve a previous version's budget threshold.
+It preserves geometric decisions, subdivision and the original face order,
+removing only queries which cannot certify the region or set `center_near`.
+Required work therefore only decreases: an old accept cannot become a refusal,
+while an input previously refused solely for effort may now pass. For example,
+one region, a separated centroid and a certifying centroid require three units;
+the unpruned scan needed four because it also queried an impossible corner.
+Cached and uncached scans still have identical queries, charges and verdicts at
+every budget. No weights, global reach or numerical tolerances change.
 
 This is a sufficient certificate and can refuse a valid
 surface when its budget/depth is insufficient. Stages 0–2 and undeclared drops
