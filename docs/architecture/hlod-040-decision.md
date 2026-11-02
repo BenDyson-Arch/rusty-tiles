@@ -479,9 +479,14 @@ cutoff changes output according to host load.
 
 Appearance uses `max(1.25*G/16, measured source spacing, 1e-5 m)`, one layout
 page per class and semantic slot, at most 2048 per side. All classes share a tile
-texel allowance; every semantic page remains present. D8 charges the largest
-simultaneous slot set, mip/encoder/query scratch and retained encoded pages at
-plan time, before allocation. Achieved spacing and cap hits remain explicit.
+texel allowance; every semantic page remains present. D8 plans per-worker chart
+construction and retained encoded pages, plus a shared pool admitting at least
+one maximum slot set beside the source-cache floor. After final layout, actual
+page dimensions determine the mip/encoder/query lease; cache ownership is evicted
+before allocation. A worker holds at most one such lease, with a cancellable
+five-minute wait and resource refusal on timeout. This owner-requested admission
+correction preserves the 2048 policy while avoiding a maximum-page reservation
+for every worker. Achieved spacing and cap hits remain explicit.
 PR A supplies packing/cropping; PR B changes no codecs or source fidelity.
 
 ### D11 — scalable borders (owner decision, 2026-10-24)
