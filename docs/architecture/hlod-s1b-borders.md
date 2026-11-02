@@ -129,18 +129,17 @@ status only grows with depth and shared edges are fixed, so retained sets stay n
 (checked in test builds). Contraction then moves each removed vertex to the chord
 endpoint more of its faces already hold with an interface or removed third corner,
 collapsing those faces; each side remaps only its own faces of the same chord.
-## Border relief (A1, owner decisions 2026-10-30 and 2026-10-31)
+## Feasibility border relief (A1, owner decision 2026-11-02)
 
 See D11's A1 amendment for the rule. Implementation:
 
 - **Border pass.** `borders::Borders::level` first emits a level as before. Each chain's
   step is the least its finer level allows; that minimum is read per source edge.
-  - Only when a depth-d coarse node then references more than 37.5% of the hard cap in
-    segments (the lower of the two pressures' triggers) does a counting walk run.
+  - Only when a depth-d coarse node then references more than 85% of the hard cap in
+    items (segments and points) does a counting walk run.
   - The counting walk re-derives the same chains and, for every chain with a triggered
     owner, counts its chords at each of the nine ladder steps.
-  - Each triggered node requests the larger of its pressures' steps: feasibility (above
-    85%, least j ≤ 8 reaching 75%) and quality (above 37.5%, least j ≤ 6 reaching 25%).
+  - Each triggered node requests the least j ≤ 8 reaching 75%, else 8.
   - Then the level's segments and references are truncated, and the level is emitted again
     with each chain at its owners' largest request.
   - Every node's reference list is unlinked back to its first reference before the level.

@@ -1,10 +1,8 @@
 """D11 border relief (amendment A1), re-derived from source incidence.
 
 The producer certifies each shared arc at depth d at E_d/16 x 2^step, step in
-[0, 8]. A coarse cell whose depth-d contract (chords and points) holds more than a
-pressure's trigger share of the hard cap requests the least step up to the pressure's
-limit that brings it to its target share, and takes the larger of its two pressures'
-requests: feasibility (85% to 75%, steps 1..8) and quality (37.5% to 25%, steps 1..6).
+[0, 8]. A coarse cell whose depth-d contract (chords and points) holds more than
+85% of the hard cap requests the least step in 1..8 that brings it to 75%, else 8.
 An arc takes its owners' largest request, and never less than its finer level's
 tolerance (step >= finer step - 1); it keeps that least step where the requested one
 would not emit fewer chords (isolated ear pins can make a relieved step stricter). This module re-derives those steps independently.
@@ -32,9 +30,8 @@ import math
 import struct
 
 STEPS = 8
-# Relief pressures (per mille of the hard cap): trigger, target, largest step.
-PRESSURES = ((850, 750, 8), (375, 250, 6))
-TRIGGER = min(p[0] for p in PRESSURES)
+# Feasibility shares, per mille of the hard cap.
+TRIGGER, TARGET = 850, 750
 EPS = 2.0 ** -52
 
 
@@ -372,10 +369,8 @@ class Relief:
                 requests = {}
                 for o, c in counts.items():
                     at = lambda j: max(triggered[o] + c[j] - c[0], 0)
-                    requests[o] = max(
-                        0 if triggered[o] * 1000 <= trigger * self.cap
-                        else next((j for j in range(1, steps + 1) if at(j) * 1000 <= target * self.cap), steps)
-                        for trigger, target, steps in PRESSURES)
+                    requests[o] = next(
+                        (j for j in range(1, STEPS + 1) if at(j) * 1000 <= TARGET * self.cap), STEPS)
                 items, kept, steps = self.level(depth, requests, None, finer, retained)
                 self.stats['reliefCellsRederived'] += len(requests)
             out[depth] = (set(triggered), steps)

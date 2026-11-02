@@ -646,28 +646,30 @@ without a separation gate. Their separation (the sandwich width of the folded la
 each fold face, against the source) is reported per tile by the acceptance tooling, not
 checked by the validators.
 
-**Owner amendments, 2026-10-30 and 2026-10-31 — border relief (A1).** E_d/16 is a fixed share
+**Owner amendments, 2026-10-30 to 2026-11-02 — feasibility border relief (A1).** E_d/16 is a fixed share
 of the cell, far below the surface's own border noise at coarse depths.
 - On Walem, every certificate of the seven cells that still omit spans one source edge (ε ≤ 2.7 mm
   at every depth), so borders fill 20–80% of the cap.
 - On mesh-1e7, f0-d1's grid staircases need about 1.75 m, and its exact border alone needs more
   than 8,192 triangles.
 - Evidence: `E/hlod-root-design-20261030/DESIGN.md`, `E/hlod-border-relief-20261030/RISK-CHECK.md`
-  (feasibility), `E/hlod-border-relief-20261030/WALEM.md` (quality, 2026-10-31).
+  (feasibility). Quality pressure is deferred to 0.4.x by the owner on 2026-11-02.
+  The quality candidate `30354b9e` measured 49 Walem omissions, a 53 MB first view
+  (1600×1000, range 3), and only 1/12 positions passing the max-honest-G MS-fp floor.
+  See `E/hlod-border-relief-20261030/r5-astra/MEASURE-30354b9e.md`;
+  `E/hlod-border-relief-20261030/WALEM.md` is the superseded quality model.
 
 - **Ladder.** A shared arc at depth d is certified at ε_arc(d) = (E_d/16)·2^j, j ∈ [0, 8];
   j = 0 is the rule above.
-- **Trigger.** Two pressures share the ladder, counting the cell's depth-d contract (segments
-  and points) with its own arcs at j:
-  - **Feasibility (2026-10-30):** a contract above 85% of the hard cap requests the least
-    j ∈ [1, 8] that brings it to 75%, else 8.
-  - **Quality (2026-10-31):** a contract above 37.5% of the hard cap requests the least
-    j ∈ [1, 6] that brings it to 25%, else 6. j ≤ 6 keeps ε ≤ 4·E_d, so the floor below
-    stays ≤ 64·E_d, where deep tiles' G is near E_d.
-  - A cell takes the larger request.
+- **Trigger.** A coarse cell whose depth-d contract (segments and points) exceeds 85%
+  of the hard cap requests the least j ∈ [1, 8] bringing its items to 75%, else 8.
   - A shared arc takes the largest request of its owners.
   - It never takes less than its finer level's tolerance on the same subarc: j ≥ j_finer − 1,
     so nested endpoints certify.
+  - **Per-arc rule (approved 2026-11-01).** Above that least step, an arc takes the
+    requested step only if it emits fewer chords than the least step; otherwise it keeps
+    the least step. Isolated-ear retention can make a larger step stricter, so relief
+    never adds a segment. The counting walk applies the same rule.
   - The choice is a function of the shared arcs alone, made once in the global border pass,
     so every owner consumes identical chords whatever the job order, budget or spill.
   - Without a trigger, a level is emitted exactly as before.
@@ -720,7 +722,7 @@ of the cell, far below the surface's own border noise at coarse depths.
     the gap is 0, which refuses honest relieved siblings at their 8·d floor. Every tile
     strictly below the siblings still counts.
   - The S5 oracle reads each certificate's `step` and each tile's `reliefFloor` from the
-    sidecar. It re-derives the steps: both pressures' triggers and requests, owner maximum and monotone
+    sidecar. It re-derives the steps: the feasibility trigger and request, per-arc rule, owner maximum and monotone
     tolerance. Collapsed single-child chains are rebuilt from the audit rows' depth and
     encoded depth.
   - The oracle checks certified ε against the step's tolerance. For relieved certificates
@@ -733,8 +735,8 @@ of the cell, far below the surface's own border noise at coarse depths.
   - In topology receipts: `reliefCollapsed` (removed by collapse) and `reliefLeft` (left to
     the ordinary contraction).
   - Per row: `reliefFloor`, `reliefStep`, and A2's `reliefStuck` (vertices N3 snapped).
-- **Constants.** The pressures' shares (85/75% and 37.5/25%), their step limits (8 and 6) and
-  the doubling are scale-gate constants; the algorithm and guarantees are not.
+- **Constants.** The feasibility shares (85/75%), step limit (8) and doubling are
+  scale-gate constants; the algorithm and guarantees are not.
 
 ## Numeric acceptance contract (proposed, not measured passes)
 
