@@ -481,11 +481,13 @@ Appearance uses `max(1.25*G/16, measured source spacing, 1e-5 m)`, one layout
 page per class and semantic slot, at most 2048 per side. All classes share a tile
 texel allowance; every semantic page remains present. D8 charges retained encoded
 pages per worker, plus a shared pool admitting one maximum chart workspace and
-slot set beside the source-cache floor. Each textured group acquires one lease
-before layout; actual page dimensions then shrink its mip/encoder/query charge.
-Retained masks remain charged through encode, and cache ownership is evicted
-before allocation. A worker holds at most one such lease, with a cancellable
-five-minute wait and resource refusal on timeout. This owner-requested admission
+slot set beside the source-cache floor. Each textured group admits charts before
+layout, then its actual page before raster/encode. Retained masks remain charged
+through encode. Chart holders cannot consume the pool's maximum-page headroom,
+so at least one page can progress even when every worker holds charts; page
+holders acquire no further leases. Cache ownership is evicted only for admitted
+chart/actual-page work. Both waits are cancellable, with resource refusal after
+five minutes; no timeout degrades density or drops a slot. This admission
 correction preserves the 2048 policy while avoiding a maximum-page reservation
 and 88.6 MB chart reservation for every worker. Achieved spacing and cap hits remain explicit.
 PR A supplies packing/cropping; PR B changes no codecs or source fidelity.

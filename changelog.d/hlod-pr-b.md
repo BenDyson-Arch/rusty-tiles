@@ -6,7 +6,7 @@
 - Admit coarse appearance up to 2048² per semantic slot with c = 1.25,
   measured source-spacing floors and explicit density/cap reporting.
 - Admit chart/page workspace only during appearance, borrowing from the source
-  cache with a bounded wait and shrinking the charge after layout.
+  cache with bounded waits and protected headroom for actual-size pages.
 - Preserve the root competition winner through D10, including collapsed roots.
 
 - Cache the query-independent sliver classification for source triangles without changing sampled witnesses or their memory charge.

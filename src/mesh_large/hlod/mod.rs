@@ -208,6 +208,8 @@ pub struct HlodMemoryPlan {
     pub image_cache_floor_bytes: u64,
     /// Largest chart/page workspace, reserved only while a textured group uses it.
     pub page_workspace_bytes: u64,
+    /// Space chart holders must leave for one maximum page to make progress.
+    pub page_headroom_bytes: u64,
     /// Encoder workspace ceiling of one coarse page.
     pub page_bytes: u64,
     /// Encoded page bytes one coarse tile may publish (admitted twice: pages and GLB).
@@ -222,6 +224,7 @@ struct AppearancePlan {
     color: u64,
     page: u64,
     page_workspace: u64,
+    page_headroom: u64,
     tile_pages: u64,
     cache_floor: u64,
     cache_total: u64,
@@ -290,6 +293,7 @@ fn appearance_plan(
             color,
             page: 0,
             page_workspace: 0,
+            page_headroom: 0,
             tile_pages: 0,
             cache_floor: 0,
             cache_total: 0,
@@ -333,6 +337,7 @@ fn appearance_plan(
         page,
         page_workspace: chart_workspace(edge, cap)
             .saturating_add(page_workspace([edge, edge], page)),
+        page_headroom: page_workspace([edge, edge], page),
         tile_pages,
         cache_floor: largest_chain.min(cache_total),
         cache_total,
@@ -445,7 +450,8 @@ pub(crate) fn plan(
         cores,
     );
     // Cache and chart/page work share one pool. One maximum group fits beside
-    // the cache floor. Workers acquire once before layout and only shrink the lease.
+    // the cache floor. Chart holders leave maximum-page headroom so at least one
+    // worker can admit its actual page without waiting for another chart holder.
     let image_cache = if appearance.cache_floor == 0 {
         0
     } else {
@@ -476,6 +482,7 @@ pub(crate) fn plan(
         image_cache_bytes: image_cache,
         image_cache_floor_bytes: appearance.cache_floor,
         page_workspace_bytes: appearance.page_workspace,
+        page_headroom_bytes: appearance.page_headroom,
         page_bytes: appearance.page,
         tile_page_bytes: appearance.tile_pages,
         jobs,
@@ -906,6 +913,7 @@ pub(crate) fn produce(
     let cache = bake::ImageCache::with_page_pool(
         input.plan.image_cache_bytes,
         input.plan.image_cache_floor_bytes,
+        input.plan.page_headroom_bytes,
     );
     let layout = captured.triangles.layout().0;
     let services = appearance::Services {

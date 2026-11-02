@@ -20,8 +20,8 @@
 //!
 //! S3 holds no walk scratch (`scratch::ScratchLedger`): charts, page rasters, bake chunks,
 //! donor frontiers, mip chains and codec workspace are memory. Retained encoded pages
-//! are charged per job. Chart/page work borrows cache capacity before layout and shrinks
-//! to the actual page, through [`ImageCache::reserve_page`]. Source reads use S2's
+//! are charged per job. Charts borrow cache capacity before layout; actual-size pages
+//! borrow separately, with protected headroom ensuring progress. Source reads use S2's
 //! admitted index. The walk's scratch check refuses any byte S3 might write unadmitted.
 use super::{
     bake::{self, Hit, ImageCache, Queries},
@@ -453,15 +453,13 @@ fn textured(
     if floor > target {
         facts.source_limited = true;
     }
-    // One non-nested lease covers construction plus the largest possible page.
-    // Retained chart masks stay charged through encode. Shrinking after layout
-    // returns unused page capacity without waiting or weakening density/slots.
+    // Admit charts before construction and keep their retained masks charged through
+    // encode. The pool protects maximum-page headroom from all chart holders, so
+    // acquiring the actual page below cannot deadlock against other chart holders.
     let chart_memory = charts::workspace_bytes(services.max_edge, max_texels, corners.len() as u64);
-    let maximum_page = page_charge([services.max_edge; 2], slots.len() as u64, services.profile)?;
-    let mut group_lease = services.cache.reserve_page(
-        chart_memory.saturating_add(super::page_workspace([services.max_edge; 2], maximum_page)),
-        services.check,
-    )?;
+    let _chart_lease = services
+        .cache
+        .reserve_charts(chart_memory, services.check)?;
     let layout = charts::layout(
         tile.decoded,
         &corners,
@@ -473,8 +471,10 @@ fn textured(
     if page_memory > services.page_memory {
         return Err(state("coarse page exceeds its planned encoder ceiling"));
     }
-    group_lease
-        .shrink(chart_memory.saturating_add(super::page_workspace(layout.size, page_memory)))?;
+    let _page_lease = services.cache.reserve_page(
+        super::page_workspace(layout.size, page_memory),
+        services.check,
+    )?;
     let mut owner = vec![false; (layout.size[0] * layout.size[1]) as usize];
     let mut texels = Vec::new();
     let mut covered = Vec::new();
@@ -1123,10 +1123,10 @@ mod tests {
         // weakening the layout. A pool one byte too small refuses before allocation.
         let page = page_charge(layout.size, 5, Profile::Balanced).unwrap();
         let bytes = super::super::page_workspace(layout.size, page);
-        let cache = ImageCache::with_page_pool(bytes + 64, 64);
+        let cache = ImageCache::with_page_pool(bytes + 64, 64, bytes);
         let _lease = cache.reserve_page(bytes, &|| Ok(())).unwrap();
         assert_eq!(cache.stats().peak_page_bytes, bytes);
-        assert!(ImageCache::with_page_pool(bytes + 63, 64)
+        assert!(ImageCache::with_page_pool(bytes + 63, 64, bytes)
             .reserve_page(bytes, &|| Ok(()))
             .is_err());
     }
