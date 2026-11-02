@@ -300,7 +300,8 @@ pub struct CaptureDiagnostics {
     pub scratch_stage_peak_bytes: super::full::ScratchStages,
     /// Output-side admission reservation on the work directory and output filesystems.
     pub output_reserve_bytes: u64,
-    /// Whole-run spill peak, including the HLOD stage; at most `scratch_logical_need_bytes`.
+    /// Whole-run spill peak, including the HLOD stage; at most the larger of
+    /// `scratch_logical_need_bytes` and `hlod.stage_scratch_bound_bytes`.
     pub run_scratch_peak_bytes: u64,
 }
 #[derive(Clone, Debug, Serialize)]
@@ -800,15 +801,23 @@ pub fn mesh_to_tileset(
         phases.progress(Phase::Archive, 1, Some(1))?;
         phases.finished(Phase::Archive, archive_started.elapsed().as_secs_f64())?;
         let c = &captured.report;
-        // Every spill stage after capture (HLOD incidence, source index, coarse levels) shares
-        // the admitted scratch: the whole-run peak must stay within the declared need.
+        // Every spill stage shares the admitted scratch: the whole-run peak must stay within
+        // what was declared and admitted before it was written. Capture declares its stages
+        // up front; the HLOD stage (incidence phases, source index, coarse walk) declares and
+        // admits each of its phases as it starts, from counts known then (isolated triangles
+        // reach the incidence pass's six items per triangle, beyond any capture stage).
         let run_scratch_peak_bytes = captured.scratch.peak_bytes();
-        if run_scratch_peak_bytes > c.scratch.logical_need_bytes {
+        let declared = c
+            .scratch
+            .logical_need_bytes
+            .max(leaf.hlod.stage_scratch_bound_bytes);
+        if run_scratch_peak_bytes > declared {
             return Err(JobError::new(
                 JobErrorKind::ResourceLimit,
                 format!(
-                    "mesh run spill peak {run_scratch_peak_bytes} bytes exceeded the declared scratch need {}",
-                    c.scratch.logical_need_bytes
+                    "mesh run spill peak {run_scratch_peak_bytes} bytes exceeded the declared \
+                     scratch bound {declared} (capture {}, HLOD stage {})",
+                    c.scratch.logical_need_bytes, leaf.hlod.stage_scratch_bound_bytes
                 ),
             ));
         }

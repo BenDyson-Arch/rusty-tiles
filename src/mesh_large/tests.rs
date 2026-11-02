@@ -201,6 +201,56 @@ fn external_driver() {
     output.close().unwrap();
 }
 
+/// Isolated tiny triangles reach the HLOD incidence pass's worst case (six interface items
+/// each), past every capture stage. That pass declares and admits its phases as it starts,
+/// so the whole-run spill check holds the run to that bound instead of refusing it against
+/// capture's need alone (#309 dense output: 20,000 tiny primitives were refused).
+#[test]
+fn isolated_triangles_spill_within_the_declared_bound() {
+    use crate::{mesh_large::TilerJobs, spill::SortConfig, RunControl};
+    let work = tempfile::tempdir().unwrap();
+    let source = work.path().join("src");
+    fs::create_dir_all(&source).unwrap();
+    let count = 80_000usize;
+    let (mut bytes, mut max) = (Vec::new(), [0f32; 3]);
+    for i in 0..count {
+        let (x, y) = ((i % 200) as f32, (i / 200) as f32);
+        for p in [[x, y, 0.], [x + 0.01, y, 0.], [x, y + 0.01, 0.]] {
+            p.iter().for_each(|v: &f32| bytes.extend(v.to_le_bytes()));
+            max = std::array::from_fn(|a| max[a].max(p[a]));
+        }
+    }
+    let max = max.map(f64::from);
+    fs::write(source.join("tiny.bin"), &bytes).unwrap();
+    let doc = serde_json::json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+        "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],"buffers":[{"uri":"tiny.bin","byteLength":bytes.len()}],
+        "bufferViews":[{"buffer":0,"byteLength":bytes.len()}],
+        "accessors":[{"bufferView":0,"componentType":5126,"count":count*3,"type":"VEC3","min":[0,0,0],"max":max}]});
+    let input = source.join("tiny.gltf");
+    fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+    let sort = SortConfig {
+        run_bytes: 16 << 10,
+        fan_in: 4,
+        buffer_bytes: 4096,
+        jobs: 1,
+    };
+    let scratch = work.path().join("scratch");
+    fs::create_dir(&scratch).unwrap();
+    let request = super::TilerRequest::new(&input, work.path().join("out.3tz"))
+        .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(2).unwrap()))
+        .with_scratch_dir(&scratch)
+        .with_test_spill(sort, 4096);
+    let result = super::mesh_to_tileset(request, &RunControl::default()).unwrap();
+    let (capture, hlod) = (&result.diagnostics.capture, &result.diagnostics.hlod);
+    assert!(
+        capture.run_scratch_peak_bytes > capture.scratch_logical_need_bytes,
+        "the incidence pass outgrew every capture stage: {} vs {}",
+        capture.run_scratch_peak_bytes,
+        capture.scratch_logical_need_bytes
+    );
+    assert!(capture.run_scratch_peak_bytes <= hlod.stage_scratch_bound_bytes);
+}
+
 /// Chunked sort runs change when scratch is freed, never what is published: the same source
 /// tiled with spilling sorts gives byte-identical archives whether runs are one chunk each or
 /// split into many small chunk files, and the same as with default (non-spilling) sorts.

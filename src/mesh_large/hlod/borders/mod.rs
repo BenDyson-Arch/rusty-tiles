@@ -111,6 +111,18 @@ pub(super) struct Certificate {
     pub terminal_lock: bool,
 }
 
+/// A contract point and the least and greatest DFS leaf holding it anywhere in the source:
+/// its whole owner run, the same for every cell and depth (unlike an interface row's
+/// interval, which spans only the cell's own arcs at the point). The seam owner
+/// (`geometry::folds::Policy`) is derived from it, as the validators derive it from the
+/// leaves.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct Holders {
+    pub key: Key,
+    pub lo: u32,
+    pub hi: u32,
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct Contract {
@@ -119,11 +131,14 @@ pub(super) struct Contract {
     pub certificates: Vec<Certificate>,
     /// Exact vertex contacts with a terminal leaf, including contacts with no shared edge.
     pub terminal_vertices: Vec<Key>,
+    /// Every interface point's global holding leaves, sorted by key.
+    pub holders: Vec<Holders>,
     pub scale: f64,
 }
 
 /// Peak storage of contract construction for at most `limit` linked items. Each
-/// item emits at most one certificate, two terminal keys and three interface rows.
+/// item emits at most one certificate, two terminal keys, two point holders and three
+/// interface rows.
 /// `merge_rows` briefly holds both row vectors. Its retired row copy also covers
 /// stable certificate sorting's scratch (one certificate is smaller than three
 /// rows). Exact reservations below prevent growth transients. This allowance stays live
@@ -132,8 +147,32 @@ pub(super) fn contract_workspace_bytes(limit: u64) -> u64 {
     limit.saturating_mul(
         (std::mem::size_of::<Certificate>()
             + 2 * std::mem::size_of::<Key>()
+            + 2 * std::mem::size_of::<Holders>()
             + 6 * std::mem::size_of::<InterfaceRow>()) as u64,
     )
+}
+
+/// Test fixtures: point holders from vertex rows whose intervals stand for the global holders.
+#[cfg(test)]
+pub(crate) fn holders_from_rows(interface: &[InterfaceRow]) -> Vec<Holders> {
+    let mut holders: Vec<_> = interface
+        .iter()
+        .filter(|r| r.is_vertex())
+        .map(|r| Holders {
+            key: r.a,
+            lo: r.lo,
+            hi: r.hi,
+        })
+        .collect();
+    holders.sort_unstable_by_key(|h| h.key);
+    holders.dedup_by(|b, a| {
+        let same = a.key == b.key;
+        if same {
+            (a.lo, a.hi) = (a.lo.min(b.lo), a.hi.max(b.hi));
+        }
+        same
+    });
+    holders
 }
 
 impl Contract {
@@ -698,6 +737,7 @@ impl Borders {
         let mut interface = Vec::with_capacity(3 * count);
         let mut certificates = Vec::with_capacity(count);
         let mut terminal_vertices = Vec::with_capacity(2 * count);
+        let mut holders = Vec::with_capacity(2 * count);
         while at != NONE {
             let link = self.refs.get(at)?;
             let s = self.segments.get(link[1])?;
@@ -709,6 +749,11 @@ impl Borders {
                 if v[7] as u32 <= key.depth {
                     terminal_vertices.push(p);
                 }
+                holders.push(Holders {
+                    key: p,
+                    lo: self.source.owners.get(v[3])?[0] as u32,
+                    hi: self.source.owners.get(v[4] - 1)?[0] as u32,
+                });
             }
             let lo = self.source.owners.get(s[8])?[0] as u32;
             let hi = self.source.owners.get(s[9] - 1)?[0] as u32;
@@ -740,11 +785,14 @@ impl Borders {
         certificates.sort_by_key(|c| (c.endpoints, c.chain, c.first));
         terminal_vertices.sort_unstable();
         terminal_vertices.dedup();
+        holders.sort_unstable_by_key(|h| h.key);
+        holders.dedup();
         Ok(Some(Contract {
             depth: key.depth,
             interface,
             certificates,
             terminal_vertices,
+            holders,
             scale: self.scale(self.publication_depth(key)?),
         }))
     }
@@ -973,6 +1021,7 @@ mod tests {
             interface,
             certificates: vec![],
             terminal_vertices: vec![],
+            holders: vec![],
             scale: 1.,
         };
         assert_eq!(c.minimum_triangles(), 8193);

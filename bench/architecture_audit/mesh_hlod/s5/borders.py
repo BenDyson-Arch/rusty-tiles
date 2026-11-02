@@ -1372,7 +1372,9 @@ class Audit:
             lost, new = {e_ for e_ in ins - outs if not on_border(e_)}, {e_ for e_ in outs - ins if not on_border(e_)}
             if not (removed or added or lost or new):
                 continue
-            limit, label = (e, 'E') if removed or added else (t['g'], 'G')
+            # A2: a declared N3 tile may close or open any border-free hole within G.
+            n3 = getattr(store, 'last_resort', {}).get(int(t['id']), (0, 0, 0))[0] >= 3
+            limit, label = (e, 'E') if (removed or added) and not n3 else (t['g'], 'G')
             self.stats['changedBoundaryClusters'] += 1
             self.stats['topologyClusters'] += bool(removed or added)
             boxes = lambda edges: [([min(x[k], y[k]) - math.dist(x, y) for k in range(3)],
