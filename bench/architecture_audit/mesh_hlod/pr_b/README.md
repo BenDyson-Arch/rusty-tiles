@@ -28,3 +28,15 @@ Current validation is in the evidence directory's `merge-a-b5ef178f/`:
 The requested digest/library/integration/clippy/fmt checks pass; the digest
 fixture was not regenerated. Prior crop/S5/CPU results above retain their
 original source identity. The Sol review of `9b848fed` predates this merge.
+
+## Develop merge follow-up
+
+Merged source: `40c8308c5c8e243e371d6fd5d9d4434cd7d1c7ad`, incorporating develop `8e010ad9`.
+Validation is in the evidence directory's `merge-develop-8e010ad9/`:
+
+- `REPORT.md`: SHA-256 `0abc8136648fdae38a7e515f178d886774f32ac765ddcde07579d6f56c3a333a`.
+- `MANIFEST.sha256`: SHA-256 `1067d2a97904c03d7c0f5481f56900f818825006dd7e3be77989e0d79c18b9cf`.
+
+All requested checks were rerun and passed without regenerating the digest
+fixture. The HLOD tree is unchanged from `6d224ccd`; prior corpus and timing
+measurements retain their original source identities. PR base: `develop`.
