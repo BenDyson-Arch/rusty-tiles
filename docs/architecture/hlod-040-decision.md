@@ -703,6 +703,98 @@ without a separation gate. Their separation (the sandwich width of the folded la
 each fold face, against the source) is reported per tile by the acceptance tooling, not
 checked by the validators.
 
+**Owner amendments, 2026-10-30 to 2026-11-02 — feasibility border relief (A1).** E_d/16 is a fixed share
+of the cell, far below the surface's own border noise at coarse depths.
+- In the initial Walem feasibility study, every certificate of the seven omitted cells
+  spans one source edge (ε ≤ 2.7 mm at every depth), so borders fill 20–80% of the cap.
+- On mesh-1e7, f0-d1's grid staircases need about 1.75 m, and its exact border alone needs more
+  than 8,192 triangles.
+- Evidence: `E/hlod-root-design-20261030/DESIGN.md`, `E/hlod-border-relief-20261030/RISK-CHECK.md`
+  (feasibility). Quality pressure is deferred to 0.4.x by the owner on 2026-11-02.
+  The quality candidate `30354b9e` (before PR A) measured 49 Walem omissions, a 53 MB first view
+  (1600×1000, range 3), and only 1/12 positions passing the max-honest-G MS-fp floor.
+  See `E/hlod-border-relief-20261030/r5-astra/MEASURE-30354b9e.md`;
+  `E/hlod-border-relief-20261030/WALEM.md` is the superseded quality model.
+
+- **Ladder.** A shared arc at depth d is certified at ε_arc(d) = (E_d/16)·2^j, j ∈ [0, 8];
+  j = 0 is the rule above.
+- **Trigger.** A coarse cell whose depth-d contract (segments and points) exceeds 85%
+  of the hard cap requests the least j ∈ [1, 8] bringing its items to 75%, else 8.
+  - A shared arc takes the largest request of its owners.
+  - It never takes less than its finer level's tolerance on the same subarc: j ≥ j_finer − 1,
+    so nested endpoints certify.
+  - **Per-arc rule (owner-approved).** Above that least step, an arc takes the
+    requested step only if it emits fewer chords than the least step; otherwise it keeps
+    the least step. Isolated-ear retention can make a larger step stricter, so relief
+    never adds a segment. The counting walk applies the same rule.
+  - The choice is a function of the shared arcs alone, made once in the global border pass,
+    so every owner consumes identical chords whatever the job order, budget or spill.
+  - Without a trigger or inherited relief, a level is emitted exactly as before.
+- **Unchanged.** Junctions, terminal contacts, cycle anchors, open-chain witnesses and face
+  retention; certificates stay ordinal, checked at every breakpoint and rounded outward.
+- **Isolated ears.** On relieved arcs, an isolated ear stays retained: a source face with
+  both of a vertex's edges shared and its opposite edge held by no other face.
+- **G floor.** Every tile publishes G ≥ max(E_d, 8·(d_own + d_finer), measured error,
+  child G). Here d_own is its largest certified chord displacement and d_finer the largest
+  certified displacement of any finer contract on the same subarcs. This is the D11 pair
+  inequality applied directly:
+  - same-depth gaps stay zero;
+  - a gap between depths is at most d_X + d_Y ≤ G_X/8 for the coarser X;
+  - the floor is 0 without relief.
+  - A single-child chain publishes one tile, at its top, for all its members. That tile's
+    floor is the largest over the chain. The top's own floor counts the next member's
+    identical chord as d_finer, so it is at least 16·d_own.
+- **Contraction.** A tile with a relieved certificate first removes each relieved vertex by
+  collapse along its own chord, under the guard's own checks.
+  - Collapses are refused for: flips; extra-wing edges between contract points; duplicates;
+    orphaned corners; a failed link condition.
+  - Interior vertices never move. Interior relief was removed on 2026-11-02: nothing bounded
+    its moves, and it omitted cells.
+  - A new face or edge on border points across chords is taken only where the build's
+    `folds::Policy` admits it: never in develop's builds, and in N1–N3 only in its seam owner
+    (A2's hash split over `Contract::holders`). Relief has no owner rule of its own.
+  - Each vertex collapses onto its surviving chord neighbour toward its nearer endpoint,
+    each half of a chord taken from its endpoint inward, or else onto its other neighbour.
+  - A target is never a vertex the pass has yet to visit, so a face moves at most once per
+    pass, with at most 4 passes per relief round. The work is linear in the stars of the
+    removed vertices: the endpoint fans are never rescanned.
+  - Vertices it cannot remove take the ordinary contraction.
+  - If the whole contraction fails, the primary build's hand-over (`Contracted`: the collapsed
+    mesh and its stuck vertices, a pure function of children, contract and mapping) is N3's
+    input. N3 first resumes the collapse of the stuck vertices under its own policy, then
+    snaps what is left to the nearer chord endpoint (t ≤ 0.5: the first), with folds declared
+    in `foldFaces`.
+  - A snap that loses an interface item, changes the topology or fails N3's guard refuses
+    the cell. That includes degenerating a chord's only face.
+  - The relief certificates and the floor stay this rule's; the last resort's folds are
+    declared and measured separately.
+- **Validators.**
+  - The native rule `borderDisplacement` becomes d ≤ G/8 per tile (was G/16). Sibling
+    identity is unchanged.
+  - **Pair rule.** `mixedDepthBorderGap` needs
+    (d_X + d_Y)·outward ≤ G_X/8 for each tile Y below X's cell parent. It now skips X's
+    own siblings when it takes the deepest d_Y. Siblings deliver every shared vertex
+    identically, which is checked first, so they add no gap. Before the change, two
+    identical relieved siblings each counted the other's d. That demanded G ≥ 16·d where
+    the gap is 0, which refuses honest relieved siblings at their 8·d floor. Every tile
+    strictly below the siblings still counts.
+  - The S5 oracle reads each certificate's `step` and each tile's `reliefFloor` from the
+    sidecar. It re-derives the steps: the feasibility trigger and request, per-arc rule, owner maximum and monotone
+    tolerance. Collapsed single-child chains are rebuilt from the audit rows' depth and
+    encoded depth.
+  - The oracle checks certified ε against the step's tolerance. For relieved certificates
+    it checks G ≥ 8·ε, or 16·ε on a collapsed chain.
+  - It checks each mixed gap against min(max(E_c, floor_c), G_c)/8 for the coarser tile c.
+    An unrelieved coarser tile keeps E_c/8 even when the deeper chord is relieved, because
+    of the monotone steps.
+- **Receipts.**
+  - Per depth: `reliefCells`, `relievedSegments`, `maxReliefStep`, `maxReliefFloor`.
+  - In topology receipts: `reliefCollapsed` (removed by collapse) and `reliefLeft` (left to
+    the ordinary contraction).
+  - Per row: `reliefFloor`, `reliefStep`, and A2's `reliefStuck` (vertices N3 snapped).
+- **Constants.** The feasibility shares (85/75%), step limit (8) and doubling are
+  scale-gate constants; the algorithm and guarantees are not.
+
 ## Numeric acceptance contract (proposed, not measured passes)
 
 One source Mtri is one million **input** triangles; CPU is whole-process user+sys,
