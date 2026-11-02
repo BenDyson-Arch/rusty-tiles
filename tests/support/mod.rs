@@ -242,7 +242,7 @@ pub fn write_inputs(dir: &Path) {
     let glb = textured_grid_glb(24);
     fs::write(dir.join("mesh.glb"), &glb).unwrap();
     fs::write(dir.join("tileset/mesh.glb"), &glb).unwrap();
-    // A nonconstant low-contrast colour control exercises ETC1S itself. The
+    // A nonconstant low-contrast colour control exercises the initial codec. The
     // existing XOR-gradient input is retained literally for the older recipes;
     // its default lossy delivery legitimately escalates on an appearance gate.
     let balanced = image::RgbaImage::from_fn(64, 64, |x, y| {
