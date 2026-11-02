@@ -178,8 +178,10 @@ See D11's A1 amendment for the rule. Implementation:
     (`relief::resume`), and N3 snaps only what that leaves (`snap_stuck`).
 - **Cost.**
   - Untriggered levels pay one extra pass over their edges (the finer state).
-  - Triggered levels pay two more chain walks and at most nine greedy passes per chain of
-    a triggered cell: O(J·n·h) with J fixed. The rewind reads every node once.
+  - Triggered levels pay two more chain walks. Counting takes at most nine greedy passes
+    per affected chain; re-emission makes at most two extra chord-count passes to apply
+    the per-arc rule, then emits the chosen chords. This is O(J·n·h) with J fixed. The
+    rewind reads every node once. No additional cell build is introduced.
   - Collapse is linear in the removed vertices' stars times (rounds + 1) × passes, plus
     hashing.
 

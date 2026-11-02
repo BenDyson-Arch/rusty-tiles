@@ -160,9 +160,9 @@ has no selector, and a plain `mesh` run uses it.
   canonical border vertices and edges. Coarser levels may contract source arcs,
   with displacement certified against those arcs at no more than `E_d/16`;
   published geometric error is at least that depth's budget `E_d`. A cell whose
-  border alone nearly fills the cap relieves its shared arcs to a larger certified
+  border alone nearly fills the cap relieves its shared arcs to a larger
   tolerance (at most 256 times that), and every tile on those arcs publishes at
-  least 8 times its certified displacement. Same-depth
+  least 8 times the displacement bound. Same-depth
   gaps are zero and mixed-depth gaps are at most one eighth of the larger
   geometric error. Junctions and contacts with exact leaves stay fixed. Source
   defects and T-junctions are counted, never matched with a tolerance. Adjacent

@@ -654,7 +654,7 @@ of the cell, far below the surface's own border noise at coarse depths.
   than 8,192 triangles.
 - Evidence: `E/hlod-root-design-20261030/DESIGN.md`, `E/hlod-border-relief-20261030/RISK-CHECK.md`
   (feasibility). Quality pressure is deferred to 0.4.x by the owner on 2026-11-02.
-  The quality candidate `30354b9e` measured 49 Walem omissions, a 53 MB first view
+  The quality candidate `30354b9e` (before PR A) measured 49 Walem omissions, a 53 MB first view
   (1600×1000, range 3), and only 1/12 positions passing the max-honest-G MS-fp floor.
   See `E/hlod-border-relief-20261030/r5-astra/MEASURE-30354b9e.md`;
   `E/hlod-border-relief-20261030/WALEM.md` is the superseded quality model.
@@ -666,13 +666,13 @@ of the cell, far below the surface's own border noise at coarse depths.
   - A shared arc takes the largest request of its owners.
   - It never takes less than its finer level's tolerance on the same subarc: j ≥ j_finer − 1,
     so nested endpoints certify.
-  - **Per-arc rule (approved 2026-11-01).** Above that least step, an arc takes the
+  - **Per-arc rule (owner-approved).** Above that least step, an arc takes the
     requested step only if it emits fewer chords than the least step; otherwise it keeps
     the least step. Isolated-ear retention can make a larger step stricter, so relief
     never adds a segment. The counting walk applies the same rule.
   - The choice is a function of the shared arcs alone, made once in the global border pass,
     so every owner consumes identical chords whatever the job order, budget or spill.
-  - Without a trigger, a level is emitted exactly as before.
+  - Without a trigger or inherited relief, a level is emitted exactly as before.
 - **Unchanged.** Junctions, terminal contacts, cycle anchors, open-chain witnesses and face
   retention; certificates stay ordinal, checked at every breakpoint and rounded outward.
 - **Isolated ears.** On relieved arcs, an isolated ear stays retained: a source face with
