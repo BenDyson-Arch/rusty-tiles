@@ -206,6 +206,6 @@ mod tests {
         assert!(ball_fits(1., 1., 2.01));
         let t = [[0., 0., 0.], [2., 0., 0.], [0., 2., 0.]];
         let upper = distance2_upper([0.5, 0.5, 1.].map(Interval::point), t);
-        assert!(upper >= 1. && upper < 1.000001);
+        assert!((1. ..1.000001).contains(&upper));
     }
 }
