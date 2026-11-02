@@ -6014,3 +6014,27 @@ fn n3_clusters_a_border_heavy_fold_cell_to_the_cap() {
         assert!(!develop.contains(&key), "{name}: {key:?}");
     }
 }
+
+/// Archived tex3/Walem capture metadata from review r2; no full Walem bake.
+#[test]
+fn coarse_mask_charge_restores_five_automatic_workers_at_four_gib() {
+    use crate::mesh_large::{config::Jobs, resources::MemoryBudget};
+    let extra = super::chart_workspace(super::appearance::MAX_PAGE_EDGE, super::TRIANGLE_CAP);
+    for requested in [None, Some(4 << 30)] {
+        let budget = MemoryBudget::resolve_with(requested, Some(10 << 30)).unwrap();
+        for (name, fixed) in [("tex3", 396_150_356), ("walem-scale", 402_663_442)] {
+            let available = budget.ceiling(Some(10 << 30)) - fixed - 21_108_288 - 22_373_720;
+            let job = 693_607_796 + extra;
+            assert_eq!(
+                super::worker_admission(available, job, Jobs::Auto, 8),
+                (5, "memory")
+            );
+            // Sensitive control: the reviewed overcharge admits only four.
+            assert_eq!(
+                super::worker_admission(available, 693_607_796 + 188_498_304, Jobs::Auto, 8),
+                (4, "memory")
+            );
+            println!("{name} requested={requested:?} extra={extra} job={job} available={available} auto=5");
+        }
+    }
+}

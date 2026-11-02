@@ -504,6 +504,16 @@ fn orient(chart: &mut Chart) {
 /// rasterises to, or within `g` texels of one (the gutter). Word-parallel: a texel
 /// bitmap, dilated by `g` along rows, then each cell ORs its `a + 2g` dilated rows.
 fn masks(charts: &mut [Chart], scale: f64, a: u32, g: u32) {
+    masks_with_usage(charts, scale, a, g, |_, _, _| {});
+}
+
+fn masks_with_usage(
+    charts: &mut [Chart],
+    scale: f64,
+    a: u32,
+    g: u32,
+    mut usage: impl FnMut(u64, u64, u64),
+) {
     assert!(a.is_power_of_two() && a <= 64 && g < 64);
     let (mut bits, mut wide, mut block) = (Vec::new(), Vec::new(), Vec::new());
     for c in charts.iter_mut() {
@@ -559,17 +569,56 @@ fn masks(charts: &mut [Chart], scale: f64, a: u32, g: u32) {
                 }
             }
         }
+        usage(
+            (c.mask.bits.capacity() * 8) as u64,
+            (mask.bits.capacity() * 8) as u64,
+            ((bits.capacity() + wide.capacity() + block.capacity()) * 8) as u64,
+        );
         c.mask = mask;
     }
 }
 
-/// Retained masks (including old/new during replacement), raster dilation scratch,
-/// packing page/candidates, and chart-index arrays. fit bounds summed rectangles.
+/// Peak heap for one group's mask construction or packing, which run sequentially.
+/// `texels` is the group's allowance, `faces` bounds its chart count. All fits have
+/// at least one isolated mip (a >= 2), edges <= edge and summed rectangles <= 64*T.
+/// For a mask w/a by h/a, bytes = 8*ceil(w/(64*a))*h/a, bounded by
+/// area/(8*a²) + 8*h/a. Also cap by `faces` full-edge masks, useful for small groups.
+/// Replacement keeps at most faces+1 masks live. Their rectangle area is bounded
+/// by the previous and current fits together (2*A), including isolation changes.
 pub(crate) fn workspace_bytes(edge: u32, texels: u64, faces: u64) -> u64 {
-    texels
-        .saturating_mul(32)
-        .saturating_add(faces.saturating_mul(u64::from(edge) * 16 + 256))
-        .saturating_add(mask_pack::workspace_bytes(edge, faces as usize))
+    let a = 2u32; // layout's minimum isolation, even if the preferred K increases.
+    let cells = edge.div_ceil(a);
+    let mask = u64::from(cells.div_ceil(64)) * u64::from(cells) * 8;
+    let rectangles = texels
+        .saturating_mul(64)
+        .min(u64::from(edge).pow(2).saturating_mul(faces));
+    let retained = (rectangles
+        .div_ceil(8 * u64::from(a).pow(2))
+        .saturating_add(8 * u64::from(cells) * faces))
+    .min(mask.saturating_mul(faces));
+    let row_words = u64::from(edge.div_ceil(64));
+    // Vec<u64> starts at four words even for a one-word row.
+    let row = row_words.max(4);
+    let raster = (row_words * u64::from(edge)).max(4);
+    // Two reusable raster Vecs: <=2*raster capacity each. During growth one
+    // old allocation (<raster) can coexist with its new allocation. Row scratch
+    // has <=2*row capacity; growing it instead needs less than this raster peak.
+    let scratch = 8 * (5 * raster + 2 * row);
+    let containers = faces.saturating_mul(256);
+    let live_masks = faces.saturating_add(1);
+    let replacing = (rectangles
+        .saturating_mul(2)
+        .div_ceil(8 * u64::from(a).pow(2))
+        .saturating_add(8 * u64::from(cells) * live_masks))
+    .min(mask.saturating_mul(live_masks));
+    let construction = replacing.saturating_add(scratch);
+    // The shared pack bound covers doubled retained page capacity. Also cover
+    // an old page allocation overlapping realloc, just as for raster scratch.
+    let old_page = 8 * (u64::from(cells.div_ceil(64)) + 1) * u64::from(cells);
+    let packing = retained
+        .saturating_add(mask_pack::workspace_bytes(cells, faces as usize))
+        .saturating_add(old_page);
+    containers.saturating_add(construction.max(packing))
 }
 
 /// Page widths tried, as factors of the masked area's square root (plus the widest chart).
@@ -855,6 +904,44 @@ mod tests {
             .iter()
             .map(|c| [c.origin[0], c.origin[1], c.size[0], c.size[1]])
             .collect()
+    }
+
+    #[test]
+    fn mask_charge_covers_measured_aspect_changes_and_word_rounding() {
+        let (p, f) = fold();
+        let (mut charts, _) = grow(&p, &f);
+        // Reuse buffers across narrow/tall, wide/short and non-word-aligned masks,
+        // then replace the retained set at another scale/aspect arrangement.
+        for dims in [
+            [[6, 1024], [1024, 6], [130, 130]],
+            [[1024, 1024], [6, 1024], [1024, 6]],
+            [[130, 130], [1024, 1024], [6, 6]],
+        ] {
+            for (c, size) in charts.iter_mut().zip(dims) {
+                c.size = size;
+            }
+            let mut retained = charts
+                .iter()
+                .map(|c| (c.mask.bits.capacity() * 8) as u64)
+                .sum::<u64>();
+            let mut peak = retained;
+            masks_with_usage(&mut charts, 1., 2, 2, |old, new, scratch| {
+                peak = peak.max(retained + new + scratch);
+                retained = retained - old + new;
+            });
+            let charge = workspace_bytes(1024, 1 << 20, f.len() as u64);
+            assert!(peak <= charge, "measured {peak}, charge {charge}");
+            for c in &charts {
+                assert_eq!(
+                    c.mask.bits.capacity() as u64 * 8,
+                    u64::from(c.size[0].div_ceil(2).div_ceil(64))
+                        * u64::from(c.size[1].div_ceil(2))
+                        * 8
+                );
+            }
+        }
+        assert_eq!(workspace_bytes(1024, 1 << 20, 8192), 40_505_600);
+        assert!(workspace_bytes(512, 1 << 18, 4096) < workspace_bytes(1024, 1 << 20, 8192));
     }
 
     #[test]
