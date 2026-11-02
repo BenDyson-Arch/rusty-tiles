@@ -49,6 +49,12 @@ pub(crate) enum Mutation {
     /// Build without the last resorts after develop's strategies (identity reference).
     #[cfg(test)]
     Develop,
+    /// Force only the incumbent root to fail, exercising candidate recovery.
+    #[cfg(test)]
+    OmitRootBaseline,
+    /// Keep production construction but disable only root competition (control).
+    #[cfg(test)]
+    NoRootCompetition,
     /// Weld corners on POSITION and feature ID only (the weld's own check must refuse).
     #[cfg(test)]
     WeldPositionsOnly,
@@ -61,6 +67,14 @@ pub(crate) enum Mutation {
 }
 
 impl Mutation {
+    pub(crate) fn root_competition(self) -> bool {
+        #[cfg(test)]
+        if self == Self::NoRootCompetition {
+            return false;
+        }
+        self.last_resorts()
+    }
+
     pub(crate) fn last_resorts(self) -> bool {
         #[cfg(test)]
         if self == Self::Develop {

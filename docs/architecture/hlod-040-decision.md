@@ -659,6 +659,24 @@ G is S2's measured value. Omission and D1's upward propagation remain only for a
 contract alone exceeds the cap, or whose last resort cannot keep the open boundaries that
 touch its border (borders near the cap: border relief, A1).
 
+**Owner amendment, 2026-11-02 — root competition (0.4.0).** An ownership root
+may replace an already successful build with one additional fully decoded,
+source-S2-measured candidate at the unchanged 8,192 cap. The coordinator's review
+amendment requires at least a 1% relative reduction in published G to replace a
+successful incumbent (`candidate G <= 0.99 * incumbent G`, strictly lower).
+Smaller improvements and ties retain the incumbent, including child-floor ties,
+to avoid paying more first-view bytes for negligible wins. Recovery of a root
+whose own construction failed is unaffected by this threshold.
+It does not bypass an omitted descendant: no content above an omitted cell
+remains binding. Non-root construction and publication remain unchanged.
+
+Use the same eligibility, topology, fold/drop, exact-seam and validation guards.
+Keep candidate work bounded and O(n log n), charge retained candidate storage,
+count source queries, and release the loser before appearance. Root payload and
+appearance costs and paired processing CPU remain acceptance obligations; reducer
+probe timings alone are not evidence of production speed. Recovery above omitted
+descendants requires a separate owner-approved input/delivery/validator design.
+
 **A3 (L1, approved 2026-10-30) is superseded by N2.** Folds are admitted at last-resort tiles
 without a separation gate. Their separation (the sandwich width of the folded layers over
 each fold face, against the source) is reported per tile by the acceptance tooling, not

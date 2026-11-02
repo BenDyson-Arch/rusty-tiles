@@ -828,6 +828,51 @@ pub(crate) fn build_parent(
     Ok(last)
 }
 
+/// One additional full-cap root proposal. No contraction or border-relief handover:
+/// an ownership root has no external interface. Component-aware N3 preserves the
+/// existing drop/fold/topology guards; the caller still performs final decode and S2.
+pub(crate) fn root_candidate(
+    tile: TileKey,
+    children: &[TileGeometry],
+    cap: usize,
+    contract: &Contract,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+) -> Result<Option<Built>, JobError> {
+    check()?;
+    if !contract.interface.is_empty() {
+        return Ok(None);
+    }
+    let merged = merge(children);
+    let policy = folds::Policy::last_resort(3, tile.leaf_begin, tile.leaf_end, &contract.holders);
+    let proposal = attempt(
+        tile,
+        &merged,
+        &contract.interface,
+        cap,
+        children
+            .iter()
+            .map(|c| c.geometric_error)
+            .fold(0., f64::max),
+        &merged,
+        &merged.triangles,
+        f64::INFINITY,
+        false,
+        &HashSet::default(),
+        Resort::N3,
+        &policy,
+    );
+    match proposal {
+        Ok(mut built) => {
+            built.last_resort = true;
+            built.last_resort_stage = 3;
+            built.staged = true;
+            Ok(Some(built))
+        }
+        Err(e) if e.kind() == JobErrorKind::Unsupported => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
 /// A build's last resorts. `Fix2`: contraction rebuilds also flip interface diagonals and
 /// join slivers (`constrained::contract`), an attempt also pins touching paths (`attempt`),
 /// and coarse drops and wall panels follow every strategy. `Staged`: develop's strategies,
