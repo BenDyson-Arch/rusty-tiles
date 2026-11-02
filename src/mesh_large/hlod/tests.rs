@@ -6325,7 +6325,13 @@ fn root_competition_fills_a_forced_own_build_omission_and_is_job_invariant() {
 #[test]
 fn d10_never_reduces_the_root_selected_by_competition() {
     let work = tempfile::tempdir().unwrap();
-    let input = write_gltf(&work.path().join("src"), &city_block(1));
+    let source = city_block(1);
+    // Exact power-of-two scaling puts the selected G below the 2.8 m allowance.
+    let input = write_gltf_scaled(
+        &work.path().join("src"),
+        &source,
+        &vec![[1. / 64.; 3]; source.len()],
+    );
     for mutation in [Mutation::None, Mutation::ReduceSelectedRoot] {
         let dir = stage(
             &input,
