@@ -609,14 +609,31 @@ every tile built today is unchanged:
   finest grid that fits (cell size doubled from the shortest edge, then bisected: at most
   77 proposals, one start, 64 doublings and 12 bisections). Coincident copies stay.
   Border-free components and holes may drop or close at any size, declared like every
-  drop; S2 measures them into G instead of bounding them
-  by E.
+  drop; S2 measures them into G instead of bounding them by E. Both validators exempt a
+  verified stage-3 tile's drops from cap pressure and size order (coarse drops); the
+  declared count still holds. For stage 3, both validators certify every point of
+  every decoded dropped child triangle within `G*(1+1e-6)+1e-6` of the retained
+  surface, without child-G slack. A centroid sample's distance plus its covering
+  radius (maximum corner distance) bounds the whole region by 1-Lipschitz continuity.
+  Alternatively, corner distances to one convex retained triangle bound that region.
+  Uncertified regions subdivide at edge midpoints, at most 32 levels, with every
+  region and point/face test charged to the existing effort budget. Native encloses
+  every certificate operation with outward binary64 intervals, including normalized
+  convex witnesses on retained faces and the centroid, radius and subdivision geometry.
+  Projections only choose witnesses; acceptance uses squared upper bounds against the
+  same global binary64 reach, without another tolerance. The reference uses exact
+  fractions throughout this geometry. Numerically unresolved cases refuse. Exhaustion or
+  unresolved depth refuses; this sufficient check need not accept every valid input.
+  Stages 0–2 and undeclared drops retain their sampled lower-bound check (child G
+  added off vertices), not this continuous guarantee. Neither check proves producer
+  fallback history or error against unpublished source geometry.
 
 Each A2 tile declares `asset.extras.rustyTiles.lastResort` {stage, foldFaces}. `foldFaces`
 counts the faces of the decoded payload in a coincident group (two or more on one corner
 set, either orientation) or on an edge two or more faces use in the same direction. A tile
 built from a child holding admitted folds that keeps some declares stage 0. The native
-validator and the S5 oracle recount `foldFaces` and refuse a mismatch; admit folds only from
+validator and the S5 oracle refuse declarations on leaves and disagreement among
+declaring payloads of a tile, recount `foldFaces` and refuse a mismatch; admit folds only from
 stage 2, or in a declared tile above such a stage, and refuse a stage 0 with none below;
 and on every coarse tile refuse a new face or edge on shared points outside its seam owner
 (`seamOwner`).

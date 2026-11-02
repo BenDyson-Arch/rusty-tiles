@@ -9,6 +9,12 @@ component smaller than it may stay (smallest first). Every dropped key, and S2's
 fixed sample points on every dropped face (the face's child G added off its
 vertices), must lie within the parent's geometricError of its surface (exact
 distances). Border-touching drops lose shared keys and are refused by the census.
+
+D1/D11 amendment A2: a tile declaring last-resort stage 3 (N3), its declaration verified
+by last_resort.py, may drop border-free components at any size, measured into G: it is
+exempt from cap pressure and size order. The count and distance checks still apply.
+N3 certifies every dropped triangle continuously at G, without child-G slack.
+Stages 0-2 and undeclared tiles keep the sampled rule above.
 """
 import hashlib
 import json
@@ -44,11 +50,55 @@ def samples(t):
     yield [(t[0][k] + t[1][k] + t[2][k]) / 3 for k in range(3)]
 
 
+def covers(triangle, parent, reach, distance2, work):
+    """Certify all points at reach: Lipschitz balls or one convex face per region.
+
+    DFS midpoint subdivision is bounded to depth 32 and charged to oracle work,
+    including each point/retained-face test. All region geometry and squared
+    comparisons use exact fractions; no extra tolerance or child-G slack is used.
+    """
+    stack = [(tuple(tuple(Fraction(v) for v in p) for p in triangle), 0)]
+    bound = Fraction(reach) ** 2
+    while stack:
+        t, depth = stack.pop()
+        work.charge()
+        center = tuple(sum(p[k] for p in t) / 3 for k in range(3))
+        radius2 = max(sum((p[k] - center[k]) ** 2 for k in range(3)) for p in t)
+        certified = center_near = False
+        for f in parent:
+            work.charge()
+            d2 = distance2(center, f['xyz'])
+            center_near |= d2 <= bound
+            gap = bound - d2 - radius2
+            if gap >= 0 and gap ** 2 >= 4 * d2 * radius2:
+                certified = True
+                break
+            corners_near = True
+            for p in t:
+                work.charge()
+                if distance2(p, f['xyz']) > bound:
+                    corners_near = False
+                    break
+            if corners_near:
+                certified = True
+                break
+        if certified:
+            continue
+        if not center_near or depth == 32:
+            return False
+        a, b, c = t
+        def mid(p, q):
+            return tuple((p[k] + q[k]) / 2 for k in range(3))
+        ab, bc, ca = mid(a, b), mid(b, c), mid(c, a)
+        stack.extend((sub, depth + 1) for sub in ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca)))
+    return True
+
+
 def diagonal(points):
     return math.sqrt(sum((max(p[k] for p in points) - min(p[k] for p in points)) ** 2 for k in range(3)))
 
 
-def inspect(store, tiles, archive, require, distance2):
+def inspect(store, tiles, archive, require, distance2, n3=frozenset()):
     digests = {t['id']: tuple(sorted(hashlib.sha256(archive.read(u)).digest() for u in t['contents']))
                for t in tiles}
     result = dict(droppedComponents=0, droppedByDepth=[])
@@ -115,7 +165,7 @@ def inspect(store, tiles, archive, require, distance2):
         if not dropped:
             continue
         largest = max(diagonal(m) for m in dropped.values())
-        if largest >= child_g:
+        if largest >= child_g and int(t['id']) not in n3:
             require(count_faces > CAP, 'coarseDrops',
                     f'tile {t["id"]} drops a component of diagonal {largest} at or above its children\'s '
                     f'G {child_g} though its children\'s {count_faces} faces fit the {CAP} cap')
@@ -140,6 +190,10 @@ def inspect(store, tiles, archive, require, distance2):
                         f'tile {t["id"]} drops surface at {p} farther than its geometricError {t["g"]}')
         for ks, g in child_faces:
             if find(ks[0]) in present:
+                continue
+            if int(t['id']) in n3:
+                require(covers(ks, parent, base, distance2, store.work), 'coarseDrops',
+                        f'tile {t["id"]}: cannot certify dropped surface within geometricError {t["g"]}')
                 continue
             for p in samples(ks):
                 require(near(p, g), 'coarseDrops',
