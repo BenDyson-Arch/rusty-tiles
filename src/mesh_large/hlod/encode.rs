@@ -52,10 +52,11 @@ pub(crate) enum Mutation {
     /// Weld corners on POSITION and feature ID only (the weld's own check must refuse).
     #[cfg(test)]
     WeldPositionsOnly,
-    /// Declare one fold face more than a last-resort payload holds.
+    /// Declare one fold face more than a last-resort payload holds (on D11's ladder, where
+    /// N2's fixture folds).
     #[cfg(test)]
     MiscountFolds,
-    /// Publish a last-resort payload without its declaration.
+    /// Publish a last-resort payload without its declaration (on D11's ladder).
     #[cfg(test)]
     UndeclaredFolds,
     /// Build the shared borders without relief (A1's reference: D11's ladder alone).
@@ -80,7 +81,10 @@ impl Mutation {
     /// The hard cap the border relief trigger is a share of (A1).
     pub(crate) fn relief_cap(self, cap: usize) -> usize {
         #[cfg(test)]
-        if matches!(self, Self::NoRelief | Self::DevelopNoRelief) {
+        if matches!(
+            self,
+            Self::NoRelief | Self::DevelopNoRelief | Self::MiscountFolds | Self::UndeclaredFolds
+        ) {
             return usize::MAX / 200;
         }
         cap

@@ -6164,14 +6164,15 @@ fn every_seam_segment_has_one_owner_per_depth_on_real_contracts() {
 /// A2 stage N2: three sheets 2 cm apart fold onto one another under every reduction of
 /// two depth-1 cells. Develop omits them (and the root); N2 admits the folds, declares
 /// them, and every cell builds. The validator recounts the declaration from the decoded
-/// payload: one fold face too many in it, or no declaration at all, is refused.
+/// payload: one fold face too many in it, or no declaration at all, is refused. All on
+/// D11's ladder: with border relief (A1) these cells build without a last resort.
 #[test]
 fn n2_admits_declared_folds_and_the_validator_recounts_them() {
     use crate::{mesh_large::delivery, validate::ExpectedProfile};
     let work = tempfile::tempdir().unwrap();
     let name = "N2 folded sheets";
     let sheet = folded_sheet(72, 3, 0.02, 0.0001, 4);
-    let (develop, dir) = last_resort_case(name, sheet.clone(), work.path(), true);
+    let (develop, dir) = last_resort_case(name, sheet.clone(), work.path(), false);
     assert!(omission_receipt(name, &dir));
     let n2: Vec<_> = last_resort_tiles(&dir)
         .into_iter()
