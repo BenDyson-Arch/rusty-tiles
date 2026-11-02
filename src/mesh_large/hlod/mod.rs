@@ -65,7 +65,7 @@ use std::{
 
 /// S3's coarse appearance policy (recorded in the stage manifest).
 pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized pages, mask-packed charts isolated through COARSE_ISLAND_ISOLATED_LEVELS mips, at max(1.25 G/16, 1e-5 m), \
-     1024 cap, never finer than the source's texel spacing, nearest captured-source bake; per-vertex COLOR_0 or flat factors untextured";
+     2048 cap per semantic slot, never finer than the source's texel spacing, nearest captured-source bake; per-vertex COLOR_0 or flat factors untextured";
 
 /// Hard published triangle cap of every coarse tile (D1).
 pub(crate) const TRIANGLE_CAP: usize = 8192;

@@ -456,6 +456,34 @@ acceptance numbers.
 **Rationale:** a bounded metadata-only trial can improve client streaming cheaply,
 while keeping the measured geometry/appearance baseline reviewable. **Evidence:** E2, E5, E7.
 
+**Owner-approved PR B scope, 2026-11-02.** The bounded geometry trial uses
+`E_L = 2.8 m / 2^L` as a proposal allowance, never a published error. After
+cap-fit acceptance, a descendant may receive one additional reduction and one
+source-S2 pass. Keep the accepted tile on refusal or measured overshoot. Publish
+measured G with the existing 5% margin, child maximum and border floor. This does
+not enable the metadata-only R trial above. D11, topology eligibility and
+cap-pressure drop licensing stay unchanged; a soft target licenses no drops.
+Skip the ownership root, including collapsed root chains: descendant geometry
+precedes the separate root competition, and appearance follows its winner.
+
+The initial support probe pins singular-edge carriers, retains each connected
+component and checks its Euler characteristic and singular incidence. Restore
+refused components without a second reducer call. Existing hole/drop/strip
+witnesses keep their exact carrier faces, are remapped and source-checked again;
+a missing carrier refuses the proposal. The complete proposal
+must still pass the fold, exact-interface, final-decode and source checks. Work
+is bounded to one capped input (8,192 faces / 24,576 vertices), at most one million
+source triangles and the unchanged S2 sample/query ceilings. Report refusals,
+passes, restored components, triangles, measured G and thread CPU. No elapsed-time
+cutoff changes output according to host load.
+
+Appearance uses `max(1.25*G/16, measured source spacing, 1e-5 m)`, one layout
+page per class and semantic slot, at most 2048 per side. All classes share a tile
+texel allowance; every semantic page remains present. D8 charges the largest
+simultaneous slot set, mip/encoder/query scratch and retained encoded pages at
+plan time, before allocation. Achieved spacing and cap hits remain explicit.
+PR A supplies packing/cropping; PR B changes no codecs or source fidelity.
+
 ### D11 — scalable borders (owner decision, 2026-10-24)
 
 Adopt **corrected A** from `E/astra-hlod-scalable-borders-20261024/DESIGN.md`.

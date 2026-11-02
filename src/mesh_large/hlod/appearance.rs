@@ -2,7 +2,7 @@
 //! coarse tile,
 //!
 //! - **textured classes** get fresh charts packed into one content-sized page per bound
-//!   slot (all slots share the layout), texel spacing `max(c·G/16, 1e-5 m)`
+//!   slot (all slots share the layout), texel spacing `max(c·G/16, source spacing, 1e-5 m)`
 //!   ([`SPACING_FACTOR`]) capped at
 //!   `max_edge` per side, baked from the nearest captured source surface of the class
 //!   ([`bake`]): base colour × COLOR_0 in linear light, emissive, metallic-roughness and
@@ -47,11 +47,11 @@ fn state(message: impl Into<String>) -> JobError {
 }
 
 /// Balanced coarse page cap per side (D5); the page is otherwise sized to its content.
-pub(crate) const MAX_PAGE_EDGE: u32 = 1024;
+pub(crate) const MAX_PAGE_EDGE: u32 = 2048;
 /// Page texels (per slot) a whole coarse tile may spend over all its material groups,
 /// shared by surface area: many classes per parent split one page's worth instead of
 /// each taking a full page.
-pub(crate) const TILE_TEXELS: u64 = 1 << 20;
+pub(crate) const TILE_TEXELS: u64 = 1 << 22;
 /// Least allowance per group face, so any group fits at zero scale (one gutter-wrapped
 /// chart per face, packed).
 const FACE_TEXELS: u64 = 64;
