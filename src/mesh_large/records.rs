@@ -380,6 +380,7 @@ impl NodeRecord {
         self.kind == NodeKind::Leaf && self.path_len == 0 && self.last_octant != self.slot()
     }
 
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     /// Identity of the parent tile, or `None` for the root.
     pub(crate) fn parent(&self) -> Option<(u8, u64, u8, u64)> {
         if self.path_len > 0 {
@@ -393,6 +394,7 @@ impl NodeRecord {
         (self.cell_depth > 0).then(|| (self.cell_depth - 1, self.cell >> 3, 0, 0))
     }
 
+    #[cfg_attr(not(test), allow(dead_code))] // Test fixture access; not used by the public pipeline.
     pub(crate) fn identity(&self) -> (u8, u64, u8, u64) {
         (self.cell_depth, self.cell, self.path_len, self.path)
     }

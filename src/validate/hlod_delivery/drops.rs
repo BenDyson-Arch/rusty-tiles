@@ -10,6 +10,15 @@
 //! face's child G added off its vertices): lower bounds on the dropped surface's loss.
 //! A drop that touches the border loses shared keys, which the retention checks
 //! refuse; nothing here relaxes them.
+//!
+//! D1/D11 amendment A2: a tile declaring last-resort stage 3 (N3) may drop border-free
+//! components at any size, measured into G. It is exempt from cap pressure and size order;
+//! the declaration count and the distance bound still hold. Its declaration has been
+//! verified by the time the recount runs (`lastResort`: shape, fold recount, leaf refusal).
+//! N3 certifies every dropped triangle continuously at G, without child-G slack.
+//! Stages 0-2 and undeclared tiles keep the sampled rule described above.
+mod certificate;
+
 use super::{bad, point_bytes, read_point, sql, CanonicalPoint, Effort, Error, Store};
 use rustc_hash::FxHashMap as HashMap;
 use std::collections::HashSet;
@@ -26,6 +35,8 @@ struct Content {
     depth: usize,
     error: f64,
     declared: u64,
+    /// Declared last-resort stage 3 (N3).
+    n3: bool,
     digests: Vec<Vec<u8>>,
     /// Child tiles: id, leaf, geometricError.
     children: Vec<(i64, bool, f64)>,
@@ -70,7 +81,8 @@ impl Store {
                 "SELECT t.id,t.parent,t.placeholder,t.leaf,t.error,t.last,
                  (SELECT group_concat(hex(p.digest)) FROM (SELECT DISTINCT p.digest FROM refs r
                     JOIN payloads p ON p.rank=r.rank WHERE r.tile=t.id ORDER BY p.digest) p),
-                 (SELECT sum(p.dropped) FROM refs r JOIN payloads p ON p.rank=r.rank WHERE r.tile=t.id)
+                 (SELECT sum(p.dropped) FROM refs r JOIN payloads p ON p.rank=r.rank WHERE r.tile=t.id),
+                 (SELECT stage FROM last_resorts WHERE tile=t.id)
                  FROM tiles t ORDER BY t.id",
             )
             .map_err(sql)?;
@@ -126,6 +138,8 @@ impl Store {
                                 error,
                                 declared: u64::try_from(declared)
                                     .map_err(|_| bad("coarseDrops", "negative declaration"))?,
+                                // `last_stage` stores stage + 1 (0: undeclared).
+                                n3: row.get::<_, Option<i64>>(8).map_err(sql)? == Some(4),
                                 digests,
                                 children: Vec::new(),
                             })
@@ -275,13 +289,14 @@ impl Store {
             return Ok(());
         }
         // Coarse drops: cap pressure, then smallest first against every kept border-free
-        // component (border contact is a key held by a leaf outside this tile).
+        // component (border contact is a key held by a leaf outside this tile). N3 is
+        // exempt (A2); the distance bound below still applies.
         let largest = components
             .iter()
             .filter(|(r, _)| !present[**r])
             .map(|(_, m)| diagonal(m))
             .fold(f64::MIN, f64::max);
-        if largest >= child_g {
+        if largest >= child_g && !parent.n3 {
             if count_faces <= cap() {
                 return Err(bad(
                     "coarseDrops",
@@ -351,6 +366,18 @@ impl Store {
                 continue;
             }
             let t = ids.map(|v| point(keys[v]));
+            if parent.n3 {
+                if !grid.covers(t, &faces, effort)? {
+                    return Err(bad(
+                        "coarseDrops",
+                        &format!(
+                            "tile {}: cannot certify dropped surface within geometricError {}",
+                            parent.id, parent.error
+                        ),
+                    ));
+                }
+                continue;
+            }
             for p in samples(t) {
                 if far(p, *g)? {
                     return Err(refuse(p));
@@ -450,6 +477,69 @@ impl Grid {
     fn cell(&self, p: [f64; 3]) -> [i64; 3] {
         std::array::from_fn(|a| ((p[a] - self.lo[a]) / self.size).floor() as i64)
     }
+    /// Continuous certificate at G, with no child-G slack. Distance to a closed
+    /// surface is 1-Lipschitz; the centroid's farthest corner bounds its covering
+    /// radius. Also, distance to ONE convex retained triangle is convex, so its
+    /// three corner distances bound the whole region (useful at equality).
+    /// Four-way subdivision uses a depth-first stack of at most 1 + 3*32 regions.
+    /// Every region and every tested point/face pair consumes the existing budget.
+    fn covers(
+        &self,
+        triangle: [[f64; 3]; 3],
+        faces: &[[CanonicalPoint; 3]],
+        effort: &Effort,
+    ) -> Result<bool, Error> {
+        use certificate::{ball_fits, distance2_upper, radius2, within, Interval};
+        let mut stack = vec![(triangle.map(|p| p.map(Interval::point)), 0)];
+        while let Some((t, depth)) = stack.pop() {
+            effort.charge(1)?;
+            let center =
+                std::array::from_fn(|k| t[0][k].add(t[1][k]).add(t[2][k]).div(Interval::point(3.)));
+            let radius = radius2(t, center);
+            let mut certified = false;
+            let mut center_near = false;
+            if let Some(cell) = self.cells.get(&self.cell(center.map(Interval::middle))) {
+                for &i in cell {
+                    let face = faces[i as usize].map(point);
+                    effort.charge(1)?;
+                    let d = distance2_upper(center, face);
+                    center_near |= within(d, self.reach);
+                    if ball_fits(d, radius, self.reach) {
+                        certified = true;
+                        break;
+                    }
+                    let mut corners_near = true;
+                    for p in t {
+                        effort.charge(1)?;
+                        if !within(distance2_upper(p, face), self.reach) {
+                            corners_near = false;
+                            break;
+                        }
+                    }
+                    if corners_near {
+                        certified = true;
+                        break;
+                    }
+                }
+            }
+            if certified {
+                continue;
+            }
+            if !center_near || depth == 32 {
+                return Ok(false);
+            }
+            let [a, b, c] = t;
+            let mid = |p: certificate::Point, q: certificate::Point| {
+                std::array::from_fn(|k| p[k].add(q[k]).div(Interval::point(2.)))
+            };
+            let (ab, bc, ca) = (mid(a, b), mid(b, c), mid(c, a));
+            for sub in [[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]] {
+                stack.push((sub, depth + 1));
+            }
+        }
+        Ok(true)
+    }
+
     /// Whether `p` lies within the parent's reach plus `slack` of a face.
     fn within(
         &self,
@@ -588,6 +678,45 @@ mod tests {
         super::TEST_CAP.with(|c| c.set(super::TEST_DEFAULT_CAP));
         result
     }
+    #[test]
+    fn continuous_certificate_subdivides_and_charges_work() {
+        use super::{Effort, Grid};
+        use std::sync::{atomic::AtomicU64, Arc};
+        let effort = Effort {
+            budget: budget(),
+            base: 0,
+            used: Arc::new(AtomicU64::new(0)),
+        };
+        let a = [0., 0., 0.];
+        let b = [2., 0., 0.];
+        let c = [0., 2., 0.];
+        let faces = [
+            [a, [1., 0., 0.], [0., 1., 0.]],
+            [[1., 0., 0.], b, [1., 1., 0.]],
+            [[0., 1., 0.], [1., 1., 0.], c],
+            [[1., 0., 0.], [1., 1., 0.], [0., 1., 0.]],
+        ]
+        .map(|t| t.map(|p| p.map(f32::to_bits)));
+        let grid = Grid::new(&faces, 0., 0., &effort).unwrap();
+        // No single retained face covers the whole triangle; one subdivision does.
+        assert!(grid
+            .covers([a, b, c].map(|p| p.map(f64::from)), &faces, &effort)
+            .unwrap());
+        let mut tiny = budget();
+        tiny.value = 1;
+        let exhausted = Effort {
+            budget: tiny,
+            base: 0,
+            used: Arc::new(AtomicU64::new(0)),
+        };
+        assert!(grid
+            .covers([a, b, c].map(|p| p.map(f64::from)), &faces, &exhausted)
+            .is_err());
+        assert!(!grid
+            .covers([[0., 0., 1.], [2., 0., 1.], [0., 2., 1.]], &faces, &effort)
+            .unwrap());
+    }
+
     /// A third component, larger than `FAR`, 14 m beyond it.
     const BIG: Face = [[20., 0., 0.], [22., 0., 0.], [20., 2., 0.]];
 

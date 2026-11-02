@@ -6,7 +6,7 @@ use crate::validate::{
     ValidationLimits, ValidationRequest,
 };
 use serde_json::{json, Value};
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, io::Read, path::Path};
 
 const ROOT: &str = "bench/architecture_audit/c2_decoded_containment";
 const OUTSIDE: &str = "decoded content outside bounding volume: ";
@@ -122,10 +122,19 @@ fn agrees(expected: &Value, oracle: &Value, got: &Value) -> bool {
 fn production_matches_every_oracle_witness_and_control() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let read = |p: &str| -> Value {
-        serde_json::from_slice(&std::fs::read(root.join(ROOT).join(p)).unwrap()).unwrap()
+        let bytes = std::fs::read(root.join(ROOT).join(p)).unwrap();
+        if p.ends_with(".gz") {
+            let mut decoded = Vec::new();
+            flate2::read::GzDecoder::new(bytes.as_slice())
+                .read_to_end(&mut decoded)
+                .unwrap();
+            serde_json::from_slice(&decoded).unwrap()
+        } else {
+            serde_json::from_slice(&bytes).unwrap()
+        }
     };
     let mut rows: BTreeMap<String, Value> = BTreeMap::new();
-    for row in read("witnesses/report.json")["rows"].as_array().unwrap() {
+    for row in read("witnesses/report.json.gz")["rows"].as_array().unwrap() {
         rows.insert(row["id"].as_str().unwrap().into(), row.clone());
     }
     for pair in read("controls/manifest.json")["pairs"].as_array().unwrap() {

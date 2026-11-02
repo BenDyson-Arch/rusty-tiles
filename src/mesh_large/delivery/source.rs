@@ -50,17 +50,6 @@ impl Digits {
         self.digits[usize::from(self.len)] = digit;
         self.len += 1;
     }
-
-    /// The three axis coordinates of the address at its own depth.
-    pub(crate) fn axes(&self) -> [u32; 3] {
-        let mut axes = [0u32; 3];
-        for &digit in &self.digits[..usize::from(self.len)] {
-            for (axis, value) in axes.iter_mut().enumerate() {
-                *value = (*value << 1) | u32::from((digit >> axis) & 1);
-            }
-        }
-        axes
-    }
 }
 
 /// One `leaves.jsonl` row, checked.
@@ -424,6 +413,7 @@ fn numbers<const N: usize>(value: Option<&Value>, default: f64) -> Option<[f64; 
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 /// The decoded positions' box of an H8 leaf GLB in the tile frame, from its JSON chunk only.
 ///
 /// H8 writes one scene-root node per primitive with at most `translation` and `scale`, and

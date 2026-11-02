@@ -21,11 +21,68 @@ A coarse payload that drops whole components of its children declares how many i
 `asset.extras.rustyTiles.droppedComponents`. Validation recounts the drops from decoded keys
 and fails `coarseDrops` (`invalid_input`) when the count differs from the declaration; when a
 dropped point, or a fixed sample point of a dropped face, lies farther than the payload's
-geometricError from its surface; or when a drop at or above the children's largest
-geometricError comes without cap pressure (the children's faces fit 8,192) or while a
-smaller border-free child component is kept. HLOD archives from before this check, whose
+geometricError from its surface. Outside N3, drops at or above the children's largest
+geometricError also require cap pressure (children above 8,192 faces) and go smallest first
+among border-free components. A payload that declares last-resort stage 3
+(`asset.extras.rustyTiles.lastResort`, verified first) is exempt from those two rules, as
+the [N3 decision](architecture/hlod-040-decision.md) allows: its border-free components may
+drop at any size, with loss measured into G, and only the count and the geometricError bound
+apply. For stage 3 this is a continuous bound on every point of each decoded dropped
+child triangle: distance to the retained surface is at most `G*(1+1e-6)+1e-6`,
+without child-G slack. A region is certified when centroid distance plus its
+farthest-corner radius fits that bound (distance is 1-Lipschitz), or when all
+three corners fit it against one retained triangle (distance to a convex set is
+convex). Otherwise four-way midpoint subdivision continues to depth 32. Unresolved
+regions fail `coarseDrops`; exhausted effort refuses with the existing budget
+error. Every region and point/retained-face test is charged. The depth-first stack
+holds at most 97 regions. Native uses outward binary64 intervals for every
+arithmetic step in convex witness distances, centroid/radius bounds, and subdivision
+vertices. Approximate projections only select valid convex witnesses; their rounded
+distances never authorize acceptance. Squared comparisons enclose their own rounding,
+against the one binary64 reach computed above; no second tolerance is added. Python
+uses exact fractions for these geometry operations and comparisons. Numerically
+unresolved native certificates refuse. This is a sufficient certificate and can refuse a valid
+surface when its budget/depth is insufficient. Stages 0–2 and undeclared drops
+retain fixed samples, with child G added off vertices; those samples provide only
+lower bounds, not continuous surface certification. None of these checks proves
+fallback history or a distance bound to unpublished source geometry.
+HLOD archives from before this check, whose
 small drops are undeclared, fail it. The report's `interfaceCensus` gives
 `droppedComponents` and `droppedByDepth` (by delivered cell depth).
+
+`asset.extras.rustyTiles.lastResort` is a strict object with exactly two required
+integer fields: `stage` in 0–3 and `foldFaces` in 0–18446744073709551615; unknown
+fields, missing fields and other types are invalid. Absence means no declaration.
+N1 (stage 1) admits new shared-point faces/edges only in their deterministic seam
+owner. N2 (stage 2) also admits folds, turns reversed faces to source orientation
+and removes coincident copies beyond source multiplicity. N3 (stage 3) clusters
+per input component while fixing interface points, opening pins and border-touching
+open boundaries; border-free components and holes may drop or close at any size,
+with loss measured into G rather than bounded by E. Stage 0 declares inherited
+folds retained above a stage-2/3 descendant, not another reduction strategy.
+
+`foldFaces` counts decoded faces in a coincident group (at least two faces on the
+same corner set, either orientation) or incident to an edge used in the same
+direction by at least two faces. Count each qualifying face once, not each pair
+or edge. Validation recounts this value (`lastResort` on mismatch), requires a
+fold-admitting descendant for stage 0, rejects any declaration on a leaf, requires
+all declaring payloads of a tile to agree on both stage and foldFaces, and permits admitted folds from stage 2
+or in a declared ancestor of such a stage. On every coarse tile, `seamOwner`
+rejects new shared-point edges/faces outside their deterministic owner, using
+whole-source holding-leaf runs; see the [HLOD decision](architecture/hlod-040-decision.md) for the hash rule.
+
+For example, inside a GLB's `asset`:
+
+```json
+{"extras":{"rustyTiles":{"lastResort":{"stage":2,"foldFaces":4}}}}
+```
+
+This declares four qualifying decoded faces, which must match the recount.
+Conversion `diagnostics.hlod` reports `last_resort_tiles`, `last_resort_stages`
+(N1/N2/N3 counts), `fold_faces` and `declared_tiles` (including stage-0 tiles,
+with stage and fold count). Residual omission occurs only when the contract alone
+exceeds the cap or border-touching open boundaries cannot survive the last resort;
+it propagates upward. The declaration does not certify source-distance maxima.
 
 Supported payloads are GLB 2.0 and archive-local glTF 2.0. Unavailable versions
 or legacy interpretations do not receive an opaque successful pass.
