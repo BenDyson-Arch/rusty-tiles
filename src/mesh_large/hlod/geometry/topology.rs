@@ -99,7 +99,7 @@ impl Receipt {
 
 /// Bounded witnesses of an actual topology proposal. Faces index the proposed output;
 /// boundary and removed-component positions belong to the input before cleanup.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct Change {
     pub receipt: Receipt,
     /// Changed faces on the closing clusters' boundary vertices (the oracle's domain).
@@ -122,7 +122,7 @@ pub(crate) struct Change {
 /// Witnesses of a moved open boundary: input points on the changed surface behind it
 /// (measured to the proxy), and added boundary edges with the output faces (indices)
 /// along them (measured to the source).
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct Strip {
     pub lost_points: Vec<[f64; 3]>,
     pub added_edges: Vec<[[f32; 3]; 2]>,

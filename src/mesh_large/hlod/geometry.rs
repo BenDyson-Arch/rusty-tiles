@@ -6,6 +6,7 @@ mod combined_controls;
 mod constrained;
 #[cfg(test)]
 mod contraction_memory;
+pub(crate) mod descendant;
 pub(crate) mod folds;
 pub(crate) mod locations;
 pub(crate) mod measurement;

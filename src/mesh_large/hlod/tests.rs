@@ -2,6 +2,7 @@
 //! bytes by an independent census (its own GLB decoder; interfaces derived from the decoded
 //! leaves alone, never from producer records), plus the controls that must fail.
 mod border_census;
+mod descendant_city;
 use super::{error::Schedule, Mutation, Settings};
 use crate::{
     content_integrity::meshopt::{self as codec, Mode},

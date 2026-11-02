@@ -138,6 +138,9 @@ fn job_charge(merged: u64, settings: &Settings) -> u64 {
             (settings.cap as u64).saturating_mul(6),
         ))
         .saturating_add(JOB_ENCODE_BYTES)
+        // Accepted tile/measurement, cloned topology witnesses (up to eight capped
+        // children) and one cap-sized D10 proposal coexist during admission.
+        .saturating_add(32 << 20)
         .saturating_add(source_index::QUERY_BYTES)
         .saturating_add(error::WORK_BYTES)
         .saturating_add(error::search_bytes(settings.nearest_steps))
@@ -489,6 +492,19 @@ pub(crate) struct HlodReport {
     pub error_cpu_by_depth: Vec<f64>,
     /// Coarse appearance per tile depth (S3).
     pub appearance_by_depth: Vec<DepthAppearance>,
+    #[serde(skip)]
+    pub descendant_reduction: DescendantReduction,
+}
+
+/// Bounded post-cap geometry work, including refused proposals.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct DescendantReduction {
+    pub reducer_passes: u64,
+    pub source_passes: u64,
+    pub accepted: u64,
+    pub removed_triangles: u64,
+    pub restored_components: u64,
+    pub cpu_seconds: f64,
 }
 
 /// Coarse appearance of one tile depth: page texels, achieved against requested spacing
@@ -556,6 +572,7 @@ pub struct HlodDiagnostics {
     /// Summed worker S2 CPU seconds by encoded depth (index construction excluded).
     pub error_cpu_by_depth: Vec<f64>,
     pub error_measurement: error::ErrorReport,
+    pub descendant_reduction: DescendantReduction,
     pub wall_seconds: f64,
     pub incidence_scratch_peak_bytes: u64,
     /// The incidence pass's staged scratch declarations (its declared bound is their
@@ -883,6 +900,7 @@ pub(crate) fn produce(
     diagnostics.error_cpu_seconds = index_cpu.map(|s| s + report.error_cpu_seconds);
     diagnostics.error_cpu = report.error_cpu;
     diagnostics.error_cpu_by_depth = report.error_cpu_by_depth.clone();
+    diagnostics.descendant_reduction = report.descendant_reduction.clone();
     diagnostics.error_cpu.index = index_cpu.unwrap_or(0.);
     let (lease_peak, timings, held_spill) = result?;
     diagnostics.held_spill = held_spill;
@@ -1204,6 +1222,17 @@ fn prepare(
     query: &mut source_index::SourceQuery<'_>,
     nearest: &mut error::Nearest,
 ) -> Result<Option<Prepared>, JobError> {
+    prepare_positions(job, built, contract, query, nearest, false)
+}
+
+fn prepare_positions(
+    job: &Job<'_, '_>,
+    built: &mut geometry::Built,
+    contract: &borders::Contract,
+    query: &mut source_index::SourceQuery<'_>,
+    nearest: &mut error::Nearest,
+    exact: bool,
+) -> Result<Option<Prepared>, JobError> {
     let (captured, check) = (job.input.captured, job.check);
     let cpu_start = error::thread_cpu();
     // Keep S1's open-border vertices at their leaf-canonical decode. Prepare the final
@@ -1213,7 +1242,7 @@ fn prepare(
         .locked
         .iter()
         .zip(&border)
-        .map(|(l, b)| *l || *b)
+        .map(|(l, b)| exact || *l || *b)
         .collect();
     let mut positions = captured.lattice.encode_coarse(
         &built.geometry.positions,
@@ -1492,6 +1521,63 @@ fn build_tile(
         };
         return Ok((None, omitted, appearance::Timing::default()));
     };
+    // Descendants first; the ownership root (including a collapsed root chain) is
+    // reserved for root competition. Appearance sees only the final measured winner.
+    let mut d10 = geometry::descendant::Report::default();
+    if job.borders.publication_depth(closed.key)? != 0 {
+        let baseline = prepared.as_ref().expect("accepted tile is prepared");
+        d10.target = 2.8 / 2f64.powi(closed.key.depth as i32);
+        d10.baseline_triangles = built.geometry.triangles.len();
+        d10.baseline_g = baseline.error.geometric_error;
+        d10.reason = "no_allowance";
+        if d10.target > d10.baseline_g {
+            let start = error::thread_cpu();
+            let policy = geometry::folds::Policy::last_resort(
+                built.last_resort_stage,
+                closed.key.leaf_begin,
+                closed.key.leaf_end,
+                &contract.as_ref().expect("built contract").holders,
+            );
+            if let Some(mut candidate) = geometry::descendant::propose(
+                &built,
+                &baseline.positions.decoded,
+                d10.target - d10.baseline_g,
+                policy,
+                &mut d10,
+            ) {
+                check()?;
+                d10.source_passes = 1;
+                d10.reason = "source_refused";
+                if let Some(measured) = prepare_positions(
+                    job,
+                    &mut candidate,
+                    contract.as_ref().expect("built contract"),
+                    &mut query,
+                    &mut nearest,
+                    true,
+                )? {
+                    d10.measured_g = Some(measured.error.geometric_error);
+                    d10.reason = "overshoot";
+                    if measured.error.geometric_error <= d10.target {
+                        d10.reason = "accepted";
+                        d10.accepted = true;
+                        // Retain construction facts; no new holes/drops are licensed.
+                        candidate.topology.published(measured.error.geometric_error);
+                        built = candidate;
+                        prepared = Some(measured);
+                        if let Some(audit) = audit {
+                            topology_attempts += 1;
+                            published_topology_attempt =
+                                Some(audit.topology_attempt(&built, topology_attempts, true)?);
+                        }
+                    }
+                }
+            }
+            d10.cpu_seconds = error::thread_cpu().zip(start).map_or(0., |(b, a)| b - a);
+        }
+    } else {
+        d10.reason = "root_reserved";
+    }
     // A3: how far apart the layers of its folds lie, against its children (reported).
     let fold_separation = if built.last_resort_stage >= 2 || closed.folds_below {
         let reference: Vec<_> = children
@@ -1637,6 +1723,7 @@ fn build_tile(
         quantized: encoded.quantized,
         bounds: encoded.bounds.into(),
         appearance: appearance.facts,
+        d10,
         border_scale: contract.scale,
         border_epsilon: contract
             .certificates
@@ -1661,6 +1748,15 @@ fn build_tile(
 }
 
 fn tally(report: &mut HlodReport, row: &HlodRow) {
+    let d = &mut report.descendant_reduction;
+    d.reducer_passes += u64::from(row.d10.reducer_passes);
+    d.source_passes += u64::from(row.d10.source_passes);
+    d.accepted += u64::from(row.d10.accepted);
+    if row.d10.accepted {
+        d.removed_triangles += (row.d10.baseline_triangles - row.triangles as usize) as u64;
+    }
+    d.restored_components += row.d10.restored_components as u64;
+    d.cpu_seconds += row.d10.cpu_seconds;
     let borders = &mut report.borders_by_depth[row.depth as usize];
     borders.tiles += 1;
     borders.segments += u64::from(row.interface_segments);

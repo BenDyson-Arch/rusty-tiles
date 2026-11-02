@@ -242,6 +242,7 @@ pub(crate) struct HlodRow {
     pub quantized: bool,
     pub bounds: BoundsRow,
     pub appearance: super::appearance::TileAppearance,
+    pub d10: super::geometry::descendant::Report,
     pub terminal_locks: u64,
     pub audit_record: Option<super::audit::Index>,
     /// Sidecar-only links; omitted from the deterministic manifest and client archive.
