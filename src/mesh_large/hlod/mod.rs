@@ -1525,7 +1525,7 @@ fn build_tile(
     // Descendants first; the ownership root (including a collapsed root chain) is
     // reserved for root competition. Appearance sees only the final measured winner.
     let mut d10 = geometry::descendant::Report::default();
-    if job.borders.publication_depth(closed.key)? != 0 {
+    if job.borders.publication_depth(closed.key)? != 0 && settings.mutation.descendants() {
         let baseline = prepared.as_ref().expect("accepted tile is prepared");
         d10.target = 2.8 / 2f64.powi(closed.key.depth as i32);
         d10.baseline_triangles = built.geometry.triangles.len();

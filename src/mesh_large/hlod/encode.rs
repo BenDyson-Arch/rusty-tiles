@@ -49,6 +49,9 @@ pub(crate) enum Mutation {
     /// Build without the last resorts after develop's strategies (identity reference).
     #[cfg(test)]
     Develop,
+    /// Retain cap-fit geometry so fold-declaration controls still reach N2.
+    #[cfg(test)]
+    NoDescendants,
     /// Weld corners on POSITION and feature ID only (the weld's own check must refuse).
     #[cfg(test)]
     WeldPositionsOnly,
@@ -61,6 +64,17 @@ pub(crate) enum Mutation {
 }
 
 impl Mutation {
+    pub(crate) fn descendants(self) -> bool {
+        #[cfg(test)]
+        if matches!(
+            self,
+            Self::NoDescendants | Self::MiscountFolds | Self::UndeclaredFolds
+        ) {
+            return false;
+        }
+        true
+    }
+
     pub(crate) fn last_resorts(self) -> bool {
         #[cfg(test)]
         if self == Self::Develop {

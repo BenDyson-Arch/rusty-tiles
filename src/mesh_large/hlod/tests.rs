@@ -5719,6 +5719,15 @@ fn last_resort_tiles(dir: &Path) -> Vec<(u64, u64, u64, u64)> {
 /// A folded-sheet run on develop's strategies only and on the full build: the coarse cells
 /// develop publishes, and the full run's staged directory.
 fn last_resort_case(name: &str, sheet: Mesh, work: &Path) -> (HashSet<(u64, u64)>, PathBuf) {
+    last_resort_case_with(name, sheet, work, Mutation::None)
+}
+
+fn last_resort_case_with(
+    name: &str,
+    sheet: Mesh,
+    work: &Path,
+    mutation: Mutation,
+) -> (HashSet<(u64, u64)>, PathBuf) {
     let input = write_gltf(&work.join("src"), &[sheet]);
     let develop = stage(
         &input,
@@ -5733,7 +5742,15 @@ fn last_resort_case(name: &str, sheet: Mesh, work: &Path) -> (HashSet<(u64, u64)
         .iter()
         .map(|r| (r["first"].as_u64().unwrap(), r["depth"].as_u64().unwrap()))
         .collect();
-    let dir = stage(&input, &work.join("hlod"), &Run::default()).unwrap();
+    let dir = stage(
+        &input,
+        &work.join("hlod"),
+        &Run {
+            mutation,
+            ..Run::default()
+        },
+    )
+    .unwrap();
     let c = census(&dir);
     assert_directed_census(name, &c, Run::default().cap);
     assert!(c.last_resort_tiles > 0, "{name}: {c:?}");
@@ -5953,7 +5970,10 @@ fn n2_admits_declared_folds_and_the_validator_recounts_them() {
     let work = tempfile::tempdir().unwrap();
     let name = "N2 folded sheets";
     let sheet = folded_sheet(72, 3, 0.02, 0.0001, 4);
-    let (develop, dir) = last_resort_case(name, sheet.clone(), work.path());
+    // Keep the original N2 fixture sensitive to incorrect declarations. With the
+    // descendant pass active, its children fit without any last-resort folds.
+    let (develop, dir) =
+        last_resort_case_with(name, sheet.clone(), work.path(), Mutation::NoDescendants);
     assert!(omission_receipt(name, &dir));
     let n2: Vec<_> = last_resort_tiles(&dir)
         .into_iter()
@@ -5965,6 +5985,14 @@ fn n2_admits_declared_folds_and_the_validator_recounts_them() {
     );
     assert!(n2.iter().all(|t| !develop.contains(&(t.0, t.1))), "{name}");
     let input = write_gltf(&work.path().join("src2"), &[sheet]);
+    let reduced = stage(&input, &work.path().join("reduced"), &Run::default()).unwrap();
+    let c = census(&reduced);
+    assert_directed_census("descendant folded sheets", &c, Run::default().cap);
+    assert_eq!(c.last_resort_tiles, 0, "{c:?}");
+    assert!(rows(&reduced.join("proxies.jsonl"))
+        .iter()
+        .any(|r| r["d10"]["accepted"] == true));
+    published_and_valid("descendant folded sheets", &reduced, work.path());
     for (mutation, refusal) in [
         (Mutation::MiscountFolds, "lastResort"),
         (Mutation::UndeclaredFolds, "interfaceWinding"),
