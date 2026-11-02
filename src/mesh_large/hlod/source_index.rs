@@ -41,7 +41,10 @@ pub(crate) struct Triangle {
     pub material: u32,
     pub controls: u32,
     area_bits: u64,
+    // Query-independent branch, rebuilt on decode; occupies resident padding.
+    narrow: bool,
 }
+const _: () = assert!(std::mem::size_of::<Triangle>() <= 96);
 impl Triangle {
     pub(crate) fn new(p: [[f32; 3]; 3], rank: u64) -> Self {
         let q = p.map(|p| p.map(f64::from));
@@ -49,6 +52,7 @@ impl Triangle {
         Self {
             material: u32::MAX,
             controls: 0,
+            narrow: sliver(q),
             area_bits: (0.5 * dot(n, n).sqrt()).to_bits(),
             bits: p.map(|p| p.map(f32::to_bits)),
             rank,
@@ -137,15 +141,17 @@ impl Record for Triangle {
         b[80..88].copy_from_slice(&self.area_bits.to_le_bytes());
     }
     fn decode(b: &[u8]) -> Self {
+        let bits: [[u32; 3]; 3] = std::array::from_fn(|i| {
+            std::array::from_fn(|j| {
+                u32::from_le_bytes(b[(i * 3 + j) * 4..(i * 3 + j + 1) * 4].try_into().unwrap())
+            })
+        });
         Self {
+            narrow: sliver(bits.map(|p| p.map(|v| f64::from(f32::from_bits(v))))),
             material: u32::from_le_bytes(b[72..76].try_into().unwrap()),
             controls: u32::from_le_bytes(b[76..80].try_into().unwrap()),
             area_bits: u64::from_le_bytes(b[80..88].try_into().unwrap()),
-            bits: std::array::from_fn(|i| {
-                std::array::from_fn(|j| {
-                    u32::from_le_bytes(b[(i * 3 + j) * 4..(i * 3 + j + 1) * 4].try_into().unwrap())
-                })
-            }),
+            bits,
             rank: u64::from_le_bytes(b[36..44].try_into().unwrap()),
             order: (
                 Provenance {
@@ -350,7 +356,7 @@ impl Surface {
                         return changed;
                     }
                     let points = t.positions();
-                    let weights = closest(p, points);
+                    let weights = closest_classified(p, points, t.narrow);
                     let d = distance2(p, bary(points, weights));
                     if d < best.distance2
                         || (d == best.distance2 && (t.order, t.rank) < (best.order, best.rank))
@@ -465,7 +471,7 @@ impl Surface {
                         continue;
                     }
                     let points = t.positions();
-                    let weights = closest(p, points);
+                    let weights = closest_classified(p, points, t.narrow);
                     let d = distance2(p, bary(points, weights));
                     if d < best.distance2
                         || (d == best.distance2 && (t.order, t.rank) < (best.order, best.rank))
@@ -586,7 +592,7 @@ impl Hit {
 }
 fn make_hit(p: V3, t: Triangle, index: usize) -> Hit {
     let positions = t.positions();
-    let weights = closest(p, positions);
+    let weights = closest_classified(p, positions, t.narrow);
     Hit {
         rank: t.rank,
         index,
@@ -1259,6 +1265,7 @@ fn segment(q: V3, a: V3, b: V3) -> (V3, f64) {
 /// Its distance is appearance correspondence, never a geometric certificate.
 // Inlined into the nearest searches: this is their inner loop, and returning the
 // weights through memory stalled the caller. Inlining changes no floating-point operation.
+#[cfg(test)]
 #[inline(always)]
 pub(crate) fn closest(q: V3, p: [V3; 3]) -> V3 {
     #[cfg(test)]
@@ -1320,6 +1327,75 @@ pub(crate) fn closest(q: V3, p: [V3; 3]) -> V3 {
     }
     closest_edges(q, p)
 }
+#[inline(always)]
+fn sliver(p: [V3; 3]) -> bool {
+    let ab = sub(p[1], p[0]);
+    let ac = sub(p[2], p[0]);
+    let n = cross(ab, ac);
+    dot(n, n) <= 1e-8 * dot(ab, ab) * dot(ac, ac)
+}
+#[inline(always)]
+fn closest_classified(q: V3, p: [V3; 3], narrow: bool) -> V3 {
+    #[cfg(test)]
+    CLOSEST_CALLS.with(|c| c.set(c.get() + 1));
+    let ab = sub(p[1], p[0]);
+    let ac = sub(p[2], p[0]);
+    let ap = sub(q, p[0]);
+    // Gram determinant / Voronoi products lose the narrow dimension on slivers.
+    // Cross-product barycentrics preserve it (including the 1e8:1 analytic control).
+    if narrow {
+        let n = cross(ab, ac);
+        let n2 = dot(n, n);
+        if n2 > 0. {
+            let v = dot(cross(ap, ac), n) / n2;
+            let w = dot(cross(ab, ap), n) / n2;
+            if v >= 0. && w >= 0. && v + w <= 1. {
+                return [1. - v - w, v, w];
+            }
+        }
+        return closest_edges(q, p);
+    }
+    let d1 = dot(ab, ap);
+    let d2 = dot(ac, ap);
+    if d1 <= 0.0 && d2 <= 0.0 {
+        return [1.0, 0.0, 0.0];
+    }
+    let bp = sub(q, p[1]);
+    let d3 = dot(ab, bp);
+    let d4 = dot(ac, bp);
+    if d3 >= 0.0 && d4 <= d3 {
+        return [0.0, 1.0, 0.0];
+    }
+    let vc = d1 * d4 - d3 * d2;
+    if vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0 && d1 != d3 {
+        let v = d1 / (d1 - d3);
+        return [1.0 - v, v, 0.0];
+    }
+    let cp = sub(q, p[2]);
+    let d5 = dot(ab, cp);
+    let d6 = dot(ac, cp);
+    if d6 >= 0.0 && d5 <= d6 {
+        return [0.0, 0.0, 1.0];
+    }
+    let vb = d5 * d2 - d1 * d6;
+    if vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0 && d2 != d6 {
+        let w = d2 / (d2 - d6);
+        return [1.0 - w, 0.0, w];
+    }
+    let va = d3 * d6 - d5 * d4;
+    if va <= 0.0 && d4 >= d3 && d5 >= d6 && (d4 - d3) + (d5 - d6) != 0.0 {
+        let w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+        return [0.0, 1.0 - w, w];
+    }
+    let den = va + vb + vc;
+    if den > 0.0 && den.is_finite() {
+        let v = (vb / den).clamp(0.0, 1.0);
+        let w = (vc / den).clamp(0.0, 1.0 - v);
+        return [1.0 - v - w, v, w];
+    }
+    closest_edges(q, p)
+}
+
 fn closest_edges(q: V3, p: [V3; 3]) -> V3 {
     let mut best = (f64::INFINITY, [1.0, 0.0, 0.0]);
     for (a, b) in [(0, 1), (1, 2), (2, 0)] {
@@ -1343,6 +1419,53 @@ pub(crate) fn distance2(a: V3, b: V3) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cached_sliver_witness_is_bitwise_identical() {
+        let mut state = 0x9e3779b97f4a7c15u64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for round in 0..100_000 {
+            let scale = 2f64.powi((next() % 220) as i32 - 110);
+            let mut value = || ((next() >> 11) as f64 / (1u64 << 53) as f64 - 0.5) * scale;
+            let mut p: [V3; 3] =
+                std::array::from_fn(|_| std::array::from_fn(|_| f64::from(value() as f32)));
+            match round % 5 {
+                0 => p[1] = p[0],
+                1 => p[2] = p[0],
+                2 => p = [[0.; 3], [scale, 0., 0.], [scale, scale * 1e-8, 0.]],
+                _ => (),
+            }
+            let q: V3 = std::array::from_fn(|_| value());
+            let t = Triangle::new(p.map(|v| v.map(|x| x as f32)), round);
+            let mut encoded = [0; Triangle::SIZE];
+            t.encode(&mut encoded);
+            let decoded = Triangle::decode(&encoded);
+            assert_eq!(t, decoded);
+            assert_eq!(decoded.narrow, sliver(decoded.positions()));
+            assert_eq!(
+                closest(q, decoded.positions()).map(f64::to_bits),
+                make_hit(q, decoded, 0).bary.map(f64::to_bits)
+            );
+            assert_eq!(
+                closest(q, p).map(f64::to_bits),
+                closest_classified(q, p, sliver(p)).map(f64::to_bits),
+                "{p:?} {q:?}"
+            );
+        }
+        let p = [[0.; 3], [1e8, 0., 0.], [1e8, 1., 0.]];
+        let q = [7.5e7, 0.25, 1.];
+        assert!(sliver(p));
+        assert_ne!(
+            closest_classified(q, p, false).map(f64::to_bits),
+            closest(q, p).map(f64::to_bits),
+            "control detects lost sliver branch"
+        );
+    }
+
     #[test]
     fn node_distance_matches_the_f64_max_formulation_bit_for_bit() {
         let reference = |n: &Node, p: V3| -> f64 {

@@ -7,3 +7,5 @@
   measured source-spacing floors and explicit density/cap reporting.
 - Admit page workspace at its final layout size, borrowing from the source cache
   with a bounded wait instead of reserving 2048² for every worker.
+
+- Cache the query-independent sliver classification for source triangles without changing sampled witnesses or their memory charge.
