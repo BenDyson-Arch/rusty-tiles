@@ -51,14 +51,21 @@ def decode(path):
 def distance2(p, face):
     """Exact squared distance from p to the closed triangle, as a Fraction.
 
-    Binary float inputs are exact dyadic rationals: put all twelve coordinates
-    on one power-of-two scale as integers. Region tests are signs of integer
+    Binary float inputs are exact dyadic rationals; certificate centroids may
+    also contain thirds. Put all coordinates on one common integer scale. Region tests are signs of integer
     numerators (no division, no rounding), so a skinny f32 triangle whose float
     Gram determinant would round to zero keeps its interior (review r12).
     """
-    ratios=[float(v).as_integer_ratio() for q in (p,*face) for v in q]
-    shift=max(d.bit_length()-1 for _,d in ratios)
-    n=[r<<(shift-d.bit_length()+1) for r,d in ratios]
+    ratios=[(v if isinstance(v, Fraction) else float(v)).as_integer_ratio() for q in (p,*face) for v in q]
+    # Subdivision coordinates remain exact dyadics; centroids may include thirds.
+    if any(d & (d - 1) for _, d in ratios):
+        import math
+        scale=math.lcm(*(d for _, d in ratios))
+        n=[r*(scale//d) for r,d in ratios]
+    else:
+        shift=max(d.bit_length()-1 for _,d in ratios)
+        scale=1<<shift
+        n=[r<<(shift-d.bit_length()+1) for r,d in ratios]
     P,A,B,C=n[0:3],n[3:6],n[6:9],n[9:12]
     sub=lambda x,y:[x[0]-y[0],x[1]-y[1],x[2]-y[2]]
     dot=lambda x,y:x[0]*y[0]+x[1]*y[1]+x[2]*y[2]
@@ -82,7 +89,7 @@ def distance2(p, face):
             candidate=(dot(w,w)*dd-wd*wd,dd)
         if best is None or candidate[0]*best[1]<best[0]*candidate[1]:
             best=candidate
-    return Fraction(best[0],best[1]<<(2*shift))
+    return Fraction(best[0],best[1]*scale*scale)
 
 def material_class(m):
     m=m or {}
@@ -405,7 +412,9 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                     require(material_class(f['material'])==material_class(want['material']),'representativeMaterialClass',t['id'])
             # D11 coarse drops: declared, recounted and within geometricError (drops.py).
             import drops
-            result['coarseDrops']=drops.inspect(store,tiles,archive,require,distance2)
+            # A2: verified stage-3 (N3) tiles may drop at any size (last_resort.py).
+            n3={tid for tid,(stage,_,_) in getattr(store,'last_resort',{}).items() if stage==3}
+            result['coarseDrops']=drops.inspect(store,tiles,archive,require,distance2,n3)
             # Upward omission, single first-renderable cover and empty-cell
             # refinement, from the same independent expansion (omission.py).
             from omission import inspect as inspect_omission, Failure as OmissionFailure

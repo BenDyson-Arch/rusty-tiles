@@ -13,7 +13,8 @@
   excess coincident copies); N3 clusters each input component with interface points,
   opening pins and border-touching open boundaries fixed. N3 permits border-free
   components and holes to drop or close at any size, measured into geometric error G
-  rather than bounded by E. Outside N3, coarse drops require cap pressure and drops
+  rather than bounded by E; validation exempts a verified stage-3 tile's drops from cap
+  pressure and size order. Outside N3, coarse drops require cap pressure and drops
   at or above child G go smallest first. All component drops are declared in
   `asset.extras.rustyTiles.droppedComponents` and measured into G.
 - Constructive tiles declare strict `asset.extras.rustyTiles.lastResort`

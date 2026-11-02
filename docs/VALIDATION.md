@@ -22,14 +22,87 @@ A coarse payload that drops whole components of its children declares how many i
 and fails `coarseDrops` (`invalid_input`) when the count differs from the declaration; when a
 dropped point, or a fixed sample point of a dropped face, lies farther than the payload's
 geometricError from its surface. Outside N3, drops at or above the children's largest
-geometricError also require
-cap pressure (children above 8,192 faces) and smallest-first border-free drops.
-The [N3 decision](architecture/hlod-040-decision.md) permits border-free components
-and holes to drop or close at any size, with loss measured into G. **Pending
-validator correction:** the current validator still applies the older cap-pressure and ordering
-checks to N3 too; it may therefore refuse output in N3's admitted domain via
-`coarseDrops`.
-That correction is a separate release gate. HLOD archives from before this check, whose
+geometricError also require cap pressure (children above 8,192 faces) and go smallest first
+among border-free components. A payload that declares last-resort stage 3
+(`asset.extras.rustyTiles.lastResort`, verified first) is exempt from those two rules, as
+the [N3 decision](architecture/hlod-040-decision.md) allows: its border-free components may
+drop at any size, with loss measured into G, and only the count and the geometricError bound
+apply. For stage 3 this is a continuous bound on every point of each decoded dropped
+child triangle: distance to the retained surface is at most `G*(1+1e-6)+1e-6`,
+without child-G slack. A region is certified when centroid distance plus its
+farthest-corner radius fits that bound (distance is 1-Lipschitz), or when all
+three corners fit it against one retained triangle (distance to a convex set is
+convex). Otherwise four-way midpoint subdivision continues to depth 32. Unresolved
+regions fail `coarseDrops`; exhausted effort refuses with the existing budget
+error. Every region and point/retained-face test is charged. The depth-first stack
+holds at most 97 regions. Native first rejects query boxes outside an outward-expanded face bounding box
+(the expansion is the same reach, rounded outwards), then uses a binary64 static filter; the interval routine is the slow
+path for undecided comparisons. The filter never relies on a projection being the
+true closest point. Edge parameters and two nested interpolation parameters are
+finite binary64 values clamped to [0,1]. Their exact interpolations therefore
+choose a point q on the closed retained triangle, even if a rounded projection
+is inaccurate. Let x be the midpoint of the query's interval box, M the maximum
+absolute coordinate of x and the three retained vertices, and B an upward
+rounded L1 radius of that box. With e = 2^-52 the filter uses
+`E = up(256*e*M + B)`. It is enabled only for `1e-100 <= M <= 1e100` and finite B.
+The computed witness distance d gives the upper bound `up(d+E)`.
+
+For the lower bound, the computed vector n = x-q is treated as an exact vector,
+not as a certified surface normal. For every nonzero n,
+`min_v n·(x-v)/|n| <= distance(x,triangle)`; the minimum is over its three vertices.
+The filter evaluates that expression as s and returns `max(0, down(s-E))`.
+If the computed normal length is below 1e-100 it uses zero as the lower bound.
+Thus a strict lower-bound rejection or an upper-bound acceptance implies the
+corresponding exact distance predicate. Neither bound increases the published
+reach. Both the centroid reach and its radius-reduced reach must be decided;
+otherwise the original interval witness routine runs. Region centroids, radii
+and midpoint subdivisions still use outward intervals. Squared comparisons
+also enclose rounding. Python remains the exact-rational reference.
+
+The error bound follows from round-to-nearest binary64 arithmetic, without
+fast-math reassociation. A nested interpolation has coordinate error at most
+16eM; subtraction and the three-term squared norm/square root give total distance
+error below 64eM. For the supporting-plane expression, treating the computed n
+as exact, subtraction, three products, two additions, norm and division give
+absolute error below 64eM (use `|n_i|/|n| <= 1` and `|x_i-v_i| <= 2M`).
+For the operation counts: one interpolation costs at most 5eM per coordinate;
+its composition costs less than 16eM. The final subtraction adds at most 2eM,
+so vector error is below 32eM in Euclidean norm. Five norm operations plus
+square root add less than 12eM. For the support expression, numerator error is
+below 24eM|n|; the norm's relative error (below 4e) and final division add less
+than 20eM after division. Minimum selection preserves this uniform error bound.
+These estimates use the standard product accumulation bound
+`gamma_k = k*u/(1-k*u)`, with `u=2^-53`, and exact binary64 chosen parameters.
+This does not divide by a triangle determinant or assume a well-conditioned
+projection. The enabled exponent range prevents overflow in the interpolation,
+distance norm and support enclosure operations. It does not protect the
+fourth-degree determinant products used to propose an interior projection:
+those may overflow or produce NaN. Proposal arithmetic carries no distance
+guarantee; only finite clamped interpolation parameters are used, so even an
+inaccurate proposal still selects an exact convex witness. Underflow errors
+in the distance norm are below 1e-161; in the
+support calculation, whose denominator is at least 1e-100, below 1e-220.
+Both are smaller than eM even at the minimum M. The factor 256 leaves more than
+a factor of three beyond these bounds, including evaluation of E itself;
+next-up/down encloses the final additions/subtractions and squaring. Adding B
+extends each bound from x to every point in its box by 1-Lipschitz continuity.
+Outside this domain, or in an unresolved band, the interval path runs and
+uncertified cases refuse. Each query increments an unweighted fast counter;
+interval fallbacks increment a separate unweighted slow counter. Existing effort
+charges remain, pending #309's separate weighting. The last answering face's
+decoded coordinates are reused only at its original position in the current
+cell's candidate list; there is no extra probe or reordering. With or without
+this cache, each query sees identical coordinates, candidate order and distance
+results, and therefore identical early exits and point/face charges. Induction
+over regions gives identical subdivisions and total effort. Thus the cache
+cannot change either the geometric verdict or a refusal at the effort limit.
+
+This is a sufficient certificate and can refuse a valid
+surface when its budget/depth is insufficient. Stages 0–2 and undeclared drops
+retain fixed samples, with child G added off vertices; those samples provide only
+lower bounds, not continuous surface certification. None of these checks proves
+fallback history or a distance bound to unpublished source geometry.
+HLOD archives from before this check, whose
 small drops are undeclared, fail it. The report's `interfaceCensus` gives
 `droppedComponents` and `droppedByDepth` (by delivered cell depth).
 
@@ -48,7 +121,8 @@ folds retained above a stage-2/3 descendant, not another reduction strategy.
 same corner set, either orientation) or incident to an edge used in the same
 direction by at least two faces. Count each qualifying face once, not each pair
 or edge. Validation recounts this value (`lastResort` on mismatch), requires a
-fold-admitting descendant for stage 0, and permits admitted folds from stage 2
+fold-admitting descendant for stage 0, rejects any declaration on a leaf, requires
+all declaring payloads of a tile to agree on both stage and foldFaces, and permits admitted folds from stage 2
 or in a declared ancestor of such a stage. On every coarse tile, `seamOwner`
 rejects new shared-point edges/faces outside their deterministic owner, using
 whole-source holding-leaf runs; see the [HLOD decision](architecture/hlod-040-decision.md) for the hash rule.

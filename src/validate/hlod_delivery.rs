@@ -927,6 +927,10 @@ fn replay_surface(
 }
 
 struct Effort {
+    // Unweighted counts: all filter attempts and the subset reaching intervals.
+    // Kept separate so validator work calibration can price the two paths.
+    certificate_fast: AtomicU64,
+    certificate_slow: AtomicU64,
     budget: Budget,
     base: u64,
     used: Arc<AtomicU64>,
@@ -1504,6 +1508,8 @@ impl Store {
         }
         let used = Arc::new(AtomicU64::new(0));
         let effort = Effort {
+            certificate_fast: AtomicU64::new(0),
+            certificate_slow: AtomicU64::new(0),
             budget,
             base: already,
             used: used.clone(),
@@ -1608,6 +1614,7 @@ impl Store {
         self.edge_faces(effort, read)?;
         self.point_requirements(&mut census, effort)?;
         self.segment_requirements(&mut census, effort)?;
+        self.resolve_last_resorts(effort)?;
         self.check_coarse(&mut census, effort, read)?;
         self.coarse_drops(&mut census.dropped_by_depth, effort)?;
         self.border_pairs(effort)?;
@@ -2319,6 +2326,56 @@ impl Store {
         }
         Ok(())
     }
+    /// Resolve declarations once, before any fold or drop exemption. Undeclared
+    /// payloads do not contradict a declaration (the reference uses the same rule).
+    fn resolve_last_resorts(&self, effort: &Effort) -> Result<(), Error> {
+        let mut query = self
+            .connection
+            .prepare(
+                "SELECT r.tile,t.leaf,min(p.last_stage),max(p.last_stage),
+                    min(p.fold_faces),max(p.fold_faces),count(*)
+             FROM refs r JOIN payloads p ON p.rank=r.rank JOIN tiles t ON t.id=r.tile
+             WHERE p.last_stage>0 GROUP BY r.tile ORDER BY r.tile",
+            )
+            .map_err(sql)?;
+        let mut rows = query.query([]).map_err(sql)?;
+        while let Some(row) = rows.next().map_err(sql)? {
+            effort.charge(
+                usize::try_from(row.get::<_, i64>(6).map_err(sql)?)
+                    .map_err(|_| super::refused())?
+                    .saturating_mul(ROW_UNITS),
+            )?;
+            let tile: i64 = row.get(0).map_err(sql)?;
+            if row.get::<_, bool>(1).map_err(sql)? {
+                return Err(bad(
+                    "lastResort",
+                    &format!("leaf tile {tile} declares a last resort"),
+                ));
+            }
+            let stage: i64 = row.get(2).map_err(sql)?;
+            let folds: i64 = row.get(4).map_err(sql)?;
+            if stage != row.get::<_, i64>(3).map_err(sql)?
+                || folds != row.get::<_, i64>(5).map_err(sql)?
+            {
+                return Err(bad(
+                    "lastResort",
+                    &format!("tile {tile}: payloads disagree"),
+                ));
+            }
+        }
+        // No duplicate archive-sized state: this read-only view exposes the unique
+        // declaration just validated above. Neither consumer chooses a maximum stage.
+        self.connection
+            .execute_batch(
+                "CREATE TEMP VIEW last_resorts AS
+             SELECT r.tile,min(p.last_stage) AS stage,min(p.fold_faces) AS folds
+             FROM refs r JOIN payloads p ON p.rank=r.rank
+             WHERE p.last_stage>0 GROUP BY r.tile",
+            )
+            .map_err(sql)?;
+        Ok(())
+    }
+
     /// Every coarse tile's decoded surface (all its placements) against its D11
     /// border: exact junctions, one witnessed chord per shared arc, displacement.
     fn check_coarse(
@@ -2356,10 +2413,10 @@ impl Store {
                     let (stored, declared, below): (i64, i64, bool) = self
                         .connection
                         .query_row(
-                            "SELECT coalesce(max(p.last_stage),0),coalesce(max(p.fold_faces),0),
-                             EXISTS(SELECT 1 FROM refs d JOIN payloads q ON q.rank=d.rank,tiles t
-                               WHERE t.id=?1 AND d.tile>t.id AND d.tile<=t.last AND q.last_stage>=3)
-                             FROM refs r JOIN payloads p ON p.rank=r.rank WHERE r.tile=?1",
+                            "SELECT coalesce((SELECT stage FROM last_resorts WHERE tile=?1),0),
+                             coalesce((SELECT folds FROM last_resorts WHERE tile=?1),0),
+                             EXISTS(SELECT 1 FROM last_resorts d,tiles t
+                               WHERE t.id=?1 AND d.tile>t.id AND d.tile<=t.last AND d.stage>=3)",
                             [tile],
                             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
                         )
@@ -2428,6 +2485,8 @@ mod tests {
     }
     fn effort() -> Effort {
         Effort {
+            certificate_fast: AtomicU64::new(0),
+            certificate_slow: AtomicU64::new(0),
             budget: budget(),
             base: 0,
             used: Arc::new(AtomicU64::new(0)),

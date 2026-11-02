@@ -479,14 +479,15 @@ cutoff changes output according to host load.
 
 Appearance uses `max(1.25*G/16, measured source spacing, 1e-5 m)`, one layout
 page per class and semantic slot, at most 2048 per side. All classes share a tile
-texel allowance; every semantic page remains present. D8 plans per-worker chart
-construction and retained encoded pages, plus a shared pool admitting at least
-one maximum slot set beside the source-cache floor. After final layout, actual
-page dimensions determine the mip/encoder/query lease; cache ownership is evicted
+texel allowance; every semantic page remains present. D8 charges retained encoded
+pages per worker, plus a shared pool admitting one maximum chart workspace and
+slot set beside the source-cache floor. Each textured group acquires one lease
+before layout; actual page dimensions then shrink its mip/encoder/query charge.
+Retained masks remain charged through encode, and cache ownership is evicted
 before allocation. A worker holds at most one such lease, with a cancellable
 five-minute wait and resource refusal on timeout. This owner-requested admission
 correction preserves the 2048 policy while avoiding a maximum-page reservation
-for every worker. Achieved spacing and cap hits remain explicit.
+and 88.6 MB chart reservation for every worker. Achieved spacing and cap hits remain explicit.
 PR A supplies packing/cropping; PR B changes no codecs or source fidelity.
 
 ### D11 — scalable borders (owner decision, 2026-10-24)
@@ -642,20 +643,73 @@ every tile built today is unchanged:
   finest grid that fits (cell size doubled from the shortest edge, then bisected: at most
   77 proposals, one start, 64 doublings and 12 bisections). Coincident copies stay.
   Border-free components and holes may drop or close at any size, declared like every
-  drop; S2 measures them into G instead of bounding them
-  by E.
+  drop; S2 measures them into G instead of bounding them by E. Both validators exempt a
+  verified stage-3 tile's drops from cap pressure and size order (coarse drops); the
+  declared count still holds. For stage 3, both validators certify every point of
+  every decoded dropped child triangle within `G*(1+1e-6)+1e-6` of the retained
+  surface, without child-G slack. A centroid sample's distance plus its covering
+  radius (maximum corner distance) bounds the whole region by 1-Lipschitz continuity.
+  Alternatively, corner distances to one convex retained triangle bound that region.
+  Uncertified regions subdivide at edge midpoints, at most 32 levels, with every
+  region and point/face test charged to the existing effort budget. Native first filters each point/face test with binary64 distance and
+  a rigorous absolute error enclosure. Rounded projections only select a valid
+  convex witness q (nested interpolation parameters in [0,1]). Its computed
+  distance d plus E bounds exact distance from above. For any computed normal
+  n=x-q, `min_v n·(x-v)/|n|` bounds distance from below; subtract E from its
+  computed value. Here `E=up(256*2^-52*M+B)`, M is the largest absolute input
+  coordinate and B the query interval box's upward L1 radius. With M in
+  [1e-100,1e100], interpolation/norm and support-plane arithmetic each have
+  absolute error below 64*2^-52*M; exponent guards bound underflow and exclude
+  overflow in those enclosure operations, not in the fourth-degree projection
+  determinant. That determinant only proposes interpolation parameters;
+  overflow/NaN cannot authorize distance acceptance. Only finite clamped
+  parameters select a convex witness. The remaining margin encloses E evaluation.
+  Lipschitz continuity adds B. The detailed operation/error argument is in
+  [VALIDATION.md](../VALIDATION.md). A filter pass therefore implies the exact
+  predicate against the same global binary64 reach; no tolerance is added to G.
+  Undecided comparisons use the original outward interval witness path;
+  centroids, radii, subdivisions and final squared comparisons remain enclosed.
+  Separate unweighted counters record fast attempts and slow fallbacks for #309.
+  The cache reuses decoded face coordinates only at their original cell-list
+  position. Cached and uncached scans have identical candidates, distance
+  results, early exits and charges. Induction over regions preserves the same
+  subdivision sequence and budget verdict, including at the effort limit.
+  The reference retains exact fractions throughout. Numerical/depth/budget
+  exhaustion refuses; this sufficient check need not accept every valid input.
+  Stages 0–2 and undeclared drops retain their sampled lower-bound check (child G
+  added off vertices), not this continuous guarantee. Neither check proves producer
+  fallback history or error against unpublished source geometry.
 
 Each A2 tile declares `asset.extras.rustyTiles.lastResort` {stage, foldFaces}. `foldFaces`
 counts the faces of the decoded payload in a coincident group (two or more on one corner
 set, either orientation) or on an edge two or more faces use in the same direction. A tile
 built from a child holding admitted folds that keeps some declares stage 0. The native
-validator and the S5 oracle recount `foldFaces` and refuse a mismatch; admit folds only from
+validator and the S5 oracle refuse declarations on leaves and disagreement among
+declaring payloads of a tile, recount `foldFaces` and refuse a mismatch; admit folds only from
 stage 2, or in a declared tile above such a stage, and refuse a stage 0 with none below;
 and on every coarse tile refuse a new face or edge on shared points outside its seam owner
 (`seamOwner`).
 G is S2's measured value. Omission and D1's upward propagation remain only for a cell whose
 contract alone exceeds the cap, or whose last resort cannot keep the open boundaries that
 touch its border (borders near the cap: border relief, A1).
+
+**Owner amendment, 2026-11-02 — root competition (0.4.0).** An ownership root
+may replace an already successful build with one additional fully decoded,
+source-S2-measured candidate at the unchanged 8,192 cap. The coordinator's review
+amendment requires at least a 1% relative reduction in published G to replace a
+successful incumbent (`candidate G <= 0.99 * incumbent G`, strictly lower).
+Smaller improvements and ties retain the incumbent, including child-floor ties,
+to avoid paying more first-view bytes for negligible wins. Recovery of a root
+whose own construction failed is unaffected by this threshold.
+It does not bypass an omitted descendant: no content above an omitted cell
+remains binding. Non-root construction and publication remain unchanged.
+
+Use the same eligibility, topology, fold/drop, exact-seam and validation guards.
+Keep candidate work bounded and O(n log n), charge retained candidate storage,
+count source queries, and release the loser before appearance. Root payload and
+appearance costs and paired processing CPU remain acceptance obligations; reducer
+probe timings alone are not evidence of production speed. Recovery above omitted
+descendants requires a separate owner-approved input/delivery/validator design.
 
 **A3 (L1, approved 2026-10-30) is superseded by N2.** Folds are admitted at last-resort tiles
 without a separation gate. Their separation (the sandwich width of the folded layers over
@@ -672,12 +726,22 @@ hardware lane. Wall time is recorded, not substituted for CPU by multiplying job
 
 For `mgal_detail_offset_2048.glb` (9,999,999 triangles), balanced, propose:
 
-- **Whole conversion ≤50 CPU-s/Mtri (≤500 CPU-s); coarse stage ≤30 CPU-s/Mtri.**
-  These are optimistic 20×-class production gates, tightened at the owner’s
-  request; stretch goals are 30 whole / 20 coarse CPU-s/Mtri. They are not
-  extrapolated prototype passes. E4’s 8.9 CPU-s/Mtri legacy crop motivates a
-  low-tens target, but its different tree/codec/domain is not production proof.
-  A miss remains work or an explicit reviewed budget revision.
+- **0.4.0 S8 CPU gate (owner approved 2026-11-02): whole conversion ≤450
+  CPU-s/Mtri and coarse stage ≤350 CPU-s/Mtri** (4,500 / 3,500 CPU-s at
+  10 Mtri). This applies only to this exact Walem fixture and balanced profile,
+  not a universal per-triangle guarantee. The measured `8710429a` whole/coarse
+  baseline was 3,704 / 2,836 CPU-s at approximately 10 Mtri: 370.4 / 283.6
+  CPU-s/Mtri × 1.20 = 444.48 / 340.32, rounded up to 450 / 350. The 20%
+  allowance is integration and host-variation headroom, not a measured pass
+  for the final relief/root candidate or its 4 GiB run. Difficult cells and
+  texture density prevent extrapolation to arbitrary inputs; the measured
+  514,041-triangle crop already costs more per triangle. Derivation and raw
+  receipt index: `~/.cache/rusty-tiles-evidence/s8-cpu-plan-20261102/PLAN.md`.
+  **50 whole / 30 coarse CPU-s/Mtri (500 / 300 at 10 Mtri)** remains the
+  stated 0.4.x/0.5 optimization goal. No codec change is authorized by this
+  budget revision, and it waives none of the root, quality, memory or client
+  acceptance gates below.
+  A provably output-identical retry speed-up is deferred to 0.4.x: the #315 counterexample stalls at 310 faces for steps 59, 29, 14 and 7 before develop reduces to 307 faces at step 3 (`~/.cache/rusty-tiles-evidence/retry-315-review1-20261102/REVIEW.md`).
 - **Metashape floor (owner, 2026-10-30).** At 50, 100, 200, 400, 800 and 1,500 m from the
   leaf-content centre, at 1600×1000 and 2560×1600, the conversion's requests and MB must not
   exceed those of the Metashape export `walem_detail.3tz`, restricted to our footprint.
@@ -732,8 +796,9 @@ not elapsed days. S8 is the one full 2048 acceptance campaign; earlier slices
 use small analytic fixtures and tex3/crop3. No implementation or run is part of
 this documentation PR. The numeric contract above is **A**: its CPU, three-view
 MB, memory and crack gates are shared integration criteria. Per-slice allocations
-below are proposed diagnostic budgets, not measured performance or permission to
-trade away A. Reserve ≤10 CPU-s/Mtri for capture/partition/leaf preparation;
+below retain the 0.4.x/0.5 optimization goal, not additional 0.4.0 S8 CPU gates,
+measured performance or permission to trade away A. For that goal, reserve
+≤10 CPU-s/Mtri for capture/partition/leaf preparation;
 S1–S4 allocate the other 40, with ≤7 of the codec allocation attributable to
 coarse pages to meet the coarse total of 30. One coordinator owns sustained
 builds/runs; parallel file work has explicit ownership.
@@ -852,7 +917,7 @@ builds/runs; parallel file work has explicit ownership.
 - **Numbers:** combined leaf/coarse codec work allocation ≤15 CPU-s/Mtri,
   archive/hierarchy ≤2; bounded leases within 4 GiB; 0 decode cracks; A's
   6.0/63.366/197.521 MB ceilings with complete dependency accounting. Coarse
-  portions of S1–S4 together must also meet ≤30 CPU-s/Mtri.
+  portions of S1–S4 together target ≤30 CPU-s/Mtri for 0.4.x/0.5.
 - **Dependencies/parallel:** schema/interface preparation parallels S2/S3;
   integration waits for their final output. S2 owns plan/source, S4 archive/codec.
 
@@ -921,7 +986,8 @@ builds/runs; parallel file work has explicit ownership.
   small material/codec/memory/cancellation fixtures plus applicable final-source
   CI/wheel/Blender checks. Trial R=G/2 with q guard only after R=G passes; one
   accepted setting is frozen, failures remain explicit. No CI polling required.
-- **Numbers:** all of A: ≤50 total / ≤30 coarse CPU-s/Mtri; first views
+- **Numbers:** all of A: ≤450 total / ≤350 coarse CPU-s/Mtri for the exact
+  S8 Walem fixture only (derivation and 0.4.x/0.5 goal above); first views
   ≤6.0/63.366/197.521 MB; ≤4 GiB RSS with declared cap; 0 gaps across the full
   15,536/6,859 pair reference census; 0 wrong leaf IDs; root error and PSNR
   floors. Record per-stage CPU, wall, scratch, mips, requests, draw calls and

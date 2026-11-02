@@ -10,6 +10,15 @@
 //! face's child G added off its vertices): lower bounds on the dropped surface's loss.
 //! A drop that touches the border loses shared keys, which the retention checks
 //! refuse; nothing here relaxes them.
+//!
+//! D1/D11 amendment A2: a tile declaring last-resort stage 3 (N3) may drop border-free
+//! components at any size, measured into G. It is exempt from cap pressure and size order;
+//! the declaration count and the distance bound still hold. Its declaration has been
+//! verified by the time the recount runs (`lastResort`: shape, fold recount, leaf refusal).
+//! N3 certifies every dropped triangle continuously at G, without child-G slack.
+//! Stages 0-2 and undeclared tiles keep the sampled rule described above.
+mod certificate;
+
 use super::{bad, point_bytes, read_point, sql, CanonicalPoint, Effort, Error, Store};
 use rustc_hash::FxHashMap as HashMap;
 use std::collections::HashSet;
@@ -26,6 +35,8 @@ struct Content {
     depth: usize,
     error: f64,
     declared: u64,
+    /// Declared last-resort stage 3 (N3).
+    n3: bool,
     digests: Vec<Vec<u8>>,
     /// Child tiles: id, leaf, geometricError.
     children: Vec<(i64, bool, f64)>,
@@ -70,7 +81,8 @@ impl Store {
                 "SELECT t.id,t.parent,t.placeholder,t.leaf,t.error,t.last,
                  (SELECT group_concat(hex(p.digest)) FROM (SELECT DISTINCT p.digest FROM refs r
                     JOIN payloads p ON p.rank=r.rank WHERE r.tile=t.id ORDER BY p.digest) p),
-                 (SELECT sum(p.dropped) FROM refs r JOIN payloads p ON p.rank=r.rank WHERE r.tile=t.id)
+                 (SELECT sum(p.dropped) FROM refs r JOIN payloads p ON p.rank=r.rank WHERE r.tile=t.id),
+                 (SELECT stage FROM last_resorts WHERE tile=t.id)
                  FROM tiles t ORDER BY t.id",
             )
             .map_err(sql)?;
@@ -126,6 +138,8 @@ impl Store {
                                 error,
                                 declared: u64::try_from(declared)
                                     .map_err(|_| bad("coarseDrops", "negative declaration"))?,
+                                // `last_stage` stores stage + 1 (0: undeclared).
+                                n3: row.get::<_, Option<i64>>(8).map_err(sql)? == Some(4),
                                 digests,
                                 children: Vec::new(),
                             })
@@ -275,13 +289,14 @@ impl Store {
             return Ok(());
         }
         // Coarse drops: cap pressure, then smallest first against every kept border-free
-        // component (border contact is a key held by a leaf outside this tile).
+        // component (border contact is a key held by a leaf outside this tile). N3 is
+        // exempt (A2); the distance bound below still applies.
         let largest = components
             .iter()
             .filter(|(r, _)| !present[**r])
             .map(|(_, m)| diagonal(m))
             .fold(f64::MIN, f64::max);
-        if largest >= child_g {
+        if largest >= child_g && !parent.n3 {
             if count_faces <= cap() {
                 return Err(bad(
                     "coarseDrops",
@@ -351,6 +366,18 @@ impl Store {
                 continue;
             }
             let t = ids.map(|v| point(keys[v]));
+            if parent.n3 {
+                if !grid.covers(t, &faces, effort)? {
+                    return Err(bad(
+                        "coarseDrops",
+                        &format!(
+                            "tile {}: cannot certify dropped surface within geometricError {}",
+                            parent.id, parent.error
+                        ),
+                    ));
+                }
+                continue;
+            }
             for p in samples(t) {
                 if far(p, *g)? {
                     return Err(refuse(p));
@@ -392,6 +419,10 @@ struct Grid {
     size: f64,
     reach: f64,
     cells: HashMap<[i64; 3], Vec<u32>>,
+    // Reuse decoded coordinates only at this face's original cell-list position.
+    // Prioritizing even an in-cell cached face can add tests before an earlier
+    // certifier, changing the verdict at the effort limit.
+    last: std::cell::Cell<Option<(u32, [[f64; 3]; 3])>>,
 }
 
 impl Grid {
@@ -421,6 +452,7 @@ impl Grid {
             size,
             reach,
             cells: HashMap::default(),
+            last: std::cell::Cell::new(None),
         };
         for (i, f) in faces.iter().enumerate() {
             let ps = f.map(point);
@@ -450,6 +482,89 @@ impl Grid {
     fn cell(&self, p: [f64; 3]) -> [i64; 3] {
         std::array::from_fn(|a| ((p[a] - self.lo[a]) / self.size).floor() as i64)
     }
+    fn face(&self, i: u32, faces: &[[CanonicalPoint; 3]]) -> [[f64; 3]; 3] {
+        match self.last.get() {
+            Some((last, face)) if last == i => face,
+            _ => faces[i as usize].map(point),
+        }
+    }
+    /// Continuous certificate at G, with no child-G slack. Distance to a closed
+    /// surface is 1-Lipschitz; the centroid's farthest corner bounds its covering
+    /// radius. Also, distance to ONE convex retained triangle is convex, so its
+    /// three corner distances bound the whole region (useful at equality).
+    /// Four-way subdivision uses a depth-first stack of at most 1 + 3*32 regions.
+    /// Every region and every tested point/face pair consumes the existing budget.
+    fn covers(
+        &self,
+        triangle: [[f64; 3]; 3],
+        faces: &[[CanonicalPoint; 3]],
+        effort: &Effort,
+    ) -> Result<bool, Error> {
+        use certificate::{ball_fits, filtered_upper, radius2, within, Interval};
+        let mut stack = vec![(triangle.map(|p| p.map(Interval::point)), 0)];
+        while let Some((t, depth)) = stack.pop() {
+            effort.charge(1)?;
+            let center =
+                std::array::from_fn(|k| t[0][k].add(t[1][k]).add(t[2][k]).div(Interval::point(3.)));
+            let radius = radius2(t, center);
+            let ball = (self.reach - radius.sqrt().next_up()).next_down();
+            let distance = |p, face, ball| -> Result<f64, Error> {
+                effort.charge(1)?;
+                effort
+                    .certificate_fast
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Ok(filtered_upper(
+                    p,
+                    face,
+                    self.reach,
+                    ball,
+                    &effort.certificate_slow,
+                ))
+            };
+            let mut certified = false;
+            let mut center_near = false;
+            if let Some(cell) = self.cells.get(&self.cell(center.map(Interval::middle))) {
+                for &i in cell {
+                    let face = self.face(i, faces);
+                    let d = distance(center, face, ball)?;
+                    center_near |= within(d, self.reach);
+                    if ball_fits(d, radius, self.reach) {
+                        self.last.set(Some((i, face)));
+                        certified = true;
+                        break;
+                    }
+                    let mut corners_near = true;
+                    for p in t {
+                        if !within(distance(p, face, self.reach)?, self.reach) {
+                            corners_near = false;
+                            break;
+                        }
+                    }
+                    if corners_near {
+                        self.last.set(Some((i, face)));
+                        certified = true;
+                        break;
+                    }
+                }
+            }
+            if certified {
+                continue;
+            }
+            if !center_near || depth == 32 {
+                return Ok(false);
+            }
+            let [a, b, c] = t;
+            let mid = |p: certificate::Point, q: certificate::Point| {
+                std::array::from_fn(|k| p[k].add(q[k]).div(Interval::point(2.)))
+            };
+            let (ab, bc, ca) = (mid(a, b), mid(b, c), mid(c, a));
+            for sub in [[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]] {
+                stack.push((sub, depth + 1));
+            }
+        }
+        Ok(true)
+    }
+
     /// Whether `p` lies within the parent's reach plus `slack` of a face.
     fn within(
         &self,
@@ -464,7 +579,9 @@ impl Grid {
         let reach = self.reach + slack;
         for &i in cell {
             effort.charge(1)?;
-            if distance2(p, faces[i as usize].map(point)) <= reach * reach {
+            let face = self.face(i, faces);
+            if distance2(p, face) <= reach * reach {
+                self.last.set(Some((i, face)));
                 return Ok(true);
             }
         }
@@ -588,6 +705,101 @@ mod tests {
         super::TEST_CAP.with(|c| c.set(super::TEST_DEFAULT_CAP));
         result
     }
+    #[test]
+    fn continuous_certificate_subdivides_and_charges_work() {
+        use super::{Effort, Grid};
+        use std::sync::{atomic::AtomicU64, Arc};
+        let effort = Effort {
+            certificate_fast: AtomicU64::new(0),
+            certificate_slow: AtomicU64::new(0),
+            budget: budget(),
+            base: 0,
+            used: Arc::new(AtomicU64::new(0)),
+        };
+        let a = [0., 0., 0.];
+        let b = [2., 0., 0.];
+        let c = [0., 2., 0.];
+        let faces = [
+            [a, [1., 0., 0.], [0., 1., 0.]],
+            [[1., 0., 0.], b, [1., 1., 0.]],
+            [[0., 1., 0.], [1., 1., 0.], c],
+            [[1., 0., 0.], [1., 1., 0.], [0., 1., 0.]],
+        ]
+        .map(|t| t.map(|p| p.map(f32::to_bits)));
+        let grid = Grid::new(&faces, 0., 0., &effort).unwrap();
+        // No single retained face covers the whole triangle; one subdivision does.
+        assert!(grid
+            .covers([a, b, c].map(|p| p.map(f64::from)), &faces, &effort)
+            .unwrap());
+        let mut tiny = budget();
+        tiny.value = 1;
+        let exhausted = Effort {
+            certificate_fast: AtomicU64::new(0),
+            certificate_slow: AtomicU64::new(0),
+            budget: tiny,
+            base: 0,
+            used: Arc::new(AtomicU64::new(0)),
+        };
+        assert!(grid
+            .covers([a, b, c].map(|p| p.map(f64::from)), &faces, &exhausted)
+            .is_err());
+        assert!(!grid
+            .covers([[0., 0., 1.], [2., 0., 1.], [0., 2., 1.]], &faces, &effort)
+            .unwrap());
+    }
+
+    #[test]
+    fn cached_faces_preserve_verdicts_at_the_effort_limit() {
+        use super::super::tests::effort_for_tests;
+        use super::{point, Grid};
+        use std::sync::atomic::Ordering::Relaxed;
+
+        let triangle = [[0.1, 0.1, 0.], [0.2, 0.1, 0.], [0.1, 0.2, 0.]];
+        let p = [0.125, 0.125, 0.];
+        // The first face certifies the centroid ball in one distance test.
+        // The second is outside the cell, in-cell but too far, or certifying
+        // only through three corner tests. Prepending it changes charged work
+        // even in the last case, where both faces certify the region.
+        for (other, in_cell) in [
+            (FAR, false),
+            (NEAR.map(|v| [v[0], v[1], 0.25]), true),
+            (NEAR.map(|v| [v[0], v[1], 0.125]), true),
+        ] {
+            let faces = [NEAR, other].map(|t| t.map(|p| p.map(|v| (v as f32).to_bits())));
+            let grid = Grid::new(&faces, 0.18, 0., &effort_for_tests()).unwrap();
+            assert_eq!(grid.cells[&grid.cell(p)].contains(&1), in_cell);
+            for continuous in [false, true] {
+                let needed = if continuous { 2 } else { 1 }; // region + point, or point
+                for remaining in 0..=8 {
+                    let mut cold = None;
+                    for cached in [None, Some(0), Some(1)] {
+                        grid.last
+                            .set(cached.map(|i| (i, faces[i as usize].map(point))));
+                        let mut effort = effort_for_tests();
+                        effort.base = effort.budget.value - remaining;
+                        let result = if continuous {
+                            grid.covers(triangle, &faces, &effort)
+                        } else {
+                            grid.within(p, 0., &faces, &effort)
+                        };
+                        assert_eq!(result.as_ref().ok(), (remaining >= needed).then_some(&true));
+                        let observed = (
+                            result.map_err(|e| e.to_string()),
+                            effort.used.load(Relaxed),
+                            effort.certificate_fast.load(Relaxed),
+                            effort.certificate_slow.load(Relaxed),
+                        );
+                        if let Some(expected) = &cold {
+                            assert_eq!(&observed, expected);
+                        } else {
+                            cold = Some(observed);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// A third component, larger than `FAR`, 14 m beyond it.
     const BIG: Face = [[20., 0., 0.], [22., 0., 0.], [20., 2., 0.]];
 

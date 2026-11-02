@@ -417,12 +417,25 @@ pub(crate) struct ImageCache {
     released: Condvar,
 }
 
-/// One group's raster/query/codec admission. It borrows cache capacity before any
-/// page-sized allocation; retained encoded pages and worker-held chains are separate
+/// One group's chart/raster/query/codec admission. It borrows cache capacity before
+/// chart construction; retained encoded pages and worker-held chains are separate
 /// job charges. Groups never nest these leases, so waiting cannot pin another page.
 pub(crate) struct PageLease<'a> {
     cache: &'a ImageCache,
     bytes: u64,
+}
+
+impl PageLease<'_> {
+    /// Return unused capacity after layout; never wait while holding a reservation.
+    pub(crate) fn shrink(&mut self, bytes: u64) -> Result<(), JobError> {
+        if bytes > self.bytes {
+            return Err(resource("coarse group exceeds its admitted workspace"));
+        }
+        lock(&self.cache.state).pages -= self.bytes - bytes;
+        self.bytes = bytes;
+        self.cache.released.notify_all();
+        Ok(())
+    }
 }
 
 impl Drop for PageLease<'_> {
@@ -968,6 +981,24 @@ mod tests {
         assert_eq!(cache.stats().page_leases, 2);
         assert_eq!(cache.stats().peak_page_bytes, 300);
         assert_eq!(lock(&cache.state).pages, 0);
+    }
+
+    #[test]
+    fn group_admission_shrinks_without_waiting_or_losing_retained_charge() {
+        let cache = ImageCache::with_page_pool(400, 100);
+        let mut group = cache.reserve_page(300, &|| Ok(())).unwrap();
+        assert!(group.shrink(301).is_err());
+        assert_eq!(lock(&cache.state).pages, 300);
+        group.shrink(100).unwrap();
+        let next = cache
+            .reserve_until(200, Duration::ZERO, &|| Ok(()))
+            .unwrap();
+        assert_eq!(lock(&cache.state).pages, 300);
+        drop(next);
+        assert_eq!(lock(&cache.state).pages, 100);
+        drop(group);
+        assert_eq!(lock(&cache.state).pages, 0);
+        assert_eq!(cache.stats().page_lease_waits, 0);
     }
 
     /// Many source images through a small cache: resident chains stay within the budget

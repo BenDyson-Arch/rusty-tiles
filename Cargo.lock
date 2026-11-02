@@ -1913,6 +1913,7 @@ dependencies = [
  "cc",
  "clap",
  "crc32fast",
+ "flate2",
  "futures-util",
  "gdal-sys",
  "geo",

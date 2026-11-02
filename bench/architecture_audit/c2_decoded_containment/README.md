@@ -32,7 +32,7 @@ nothing from the repository. It is pure Python 3 standard library.
 | `oracle/c2o/` | `numbers` (exact JSON numbers, f32/f64 to Fraction), `meshopt` (NONE-filter decoder), `gltf` (GLB/glTF, accessors; legacy b3dm/i3dm/pnts/cmpt is the C1 Unsupported verdict since H7), `scene` (admission, selection, walk), `spans` (normative span definition), `volumes` (box/sphere predicates), `tileset` (3TZ, traversal, levels), `check` (precedence, domain, precheck, streaming) |
 | `oracle/self_test/` | `run.py` plus `meshopt_vectors.json` (pinned upstream golden vectors and spec examples) |
 | `oracle/mutants/` | The 12 contract implementation mutants as hashed patches against the oracle, with the fixtures each flips |
-| `witnesses/` | `generate.py` and `build.py` (fixture writer, independent of `c2o`), pinned `inputs/`, generated `fixtures/` and `report.json` |
+| `witnesses/` | `generate.py` and `build.py` (fixture writer, independent of `c2o`), pinned `inputs/`, generated `fixtures/` and `report.json.gz` |
 | `controls/` | `manifest.json` with base/mutated fixture pairs, hashes and expected verdicts; `fixtures/`. `large/` is generated, not committed |
 | `corpus/` | `run.py` and `manifest.json`: the oracle outcome for each artifact of R's producer corpus |
 | `wb/` | C2-WB (O-WB): the calibration-matrix class fixtures, per-term identities, chain-bit controls, the independent hand formula and the formula mutants. See [wb/README.md](wb/README.md) |
@@ -528,7 +528,7 @@ fixtures follow those rulings. Each ruled item says which decision applies.
     - One-ulp mutants at ancestor levels, and centre-shift mutants of
       zero-half-length rows, break declared nesting by one ulp. Whether
       production reaches C2 for them depends on C1's slack. Each such row is
-      noted in `report.json`.
+      noted in `witnesses/report.json.gz`.
     - In the I2 control, the content volume of the referencing tile excludes
       the external root's volume. If C1 compares external roots against that
       content volume, `hierarchyBounds` precedes C2.
@@ -612,7 +612,7 @@ cap values in `controls/manifest.json`):
 `work-base-meshopt` breaks down as vertex 390 (T 3 × V 130) + Nodes 513 + Idx 3 +
 E 12 + Dec 42 + B 1,404 + 16·94 + 4·1 + 1152 + 8·2. The bytes, decoded, depth and
 span pairs are unchanged. Every other witness and control keeps its verdict at
-the default cap; their per-row totals in `witnesses/report.json` are informative.
+the default cap; their per-row totals in `witnesses/report.json.gz` are informative.
 
 Corpus totals (no verdict changes): vector explicit 10,939–84,490, point cloud
 explicit 17,492,428, F1c2 mesh 2,731,984, W1 plain 11,597, near-window 23,837,
@@ -1078,7 +1078,7 @@ Perf evidence (`perf/`): `lane-process.json` `476c064c…`, `forest.json` `eab82
 
 ## What remains
 
-- Production verdicts for `witnesses/report.json`, `controls/manifest.json`
+- Production verdicts for `witnesses/report.json.gz`, `controls/manifest.json`
   and `corpus/manifest.json`, once M and F land. Each Outside row needs a
   recorded disposition. The corpus has none.
 - Done (2026-10-12): R's measurement of the cap value (C2-WB WB-6): 2^29, from
@@ -1111,3 +1111,14 @@ C2-WB 90/90 (matrix-size rows generated), slice-3 80/80, S3-18 sweep 181 cases (
 forest 34/34 and 5/5 pairs, I1 181/181, H11 controls passing; 0 disagreements, 0 skipped. W corpus
 27/27 of the artifacts present: the other 14 lived under `/tmp/rusty-tiles-i1-contract-20261011/` and
 were lost to a reboot (41/41 at the pre-reboot H7 source with the same classifier). Summaries are kept outside the tree in `~/.cache/rusty-tiles-evidence/h7-20261013/parity/`.
+
+## Witness report storage (2026-11-02)
+
+The slice-1 witness report is stored losslessly as
+[`witnesses/report.json.gz`](witnesses/report.json.gz). The parity test and oracle
+mutant runner decode it directly; `witnesses/generate.py` writes deterministic
+gzip (`mtime=0`, no filename). Its uncompressed bytes retain SHA-256
+`c969cd6f8391390b840e6196f5676eb00efe9464f0e08306b0884dd3fcd3f367`
+(last plain copy: `8e010ad9`). Fixture hashes and input pins are unchanged; they
+still describe the original inputs and fixture bytes, not their storage wrapper.
+Use `gzip -dc witnesses/report.json.gz` to inspect the JSON.

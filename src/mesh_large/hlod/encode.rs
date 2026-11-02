@@ -52,6 +52,15 @@ pub(crate) enum Mutation {
     /// Retain cap-fit geometry so fold-declaration controls still reach N2.
     #[cfg(test)]
     NoDescendants,
+    /// Negative control: incorrectly allow D10 after root selection.
+    #[cfg(test)]
+    ReduceSelectedRoot,
+    /// Force only the incumbent root to fail, exercising candidate recovery.
+    #[cfg(test)]
+    OmitRootBaseline,
+    /// Keep production construction but disable only root competition (control).
+    #[cfg(test)]
+    NoRootCompetition,
     /// Weld corners on POSITION and feature ID only (the weld's own check must refuse).
     #[cfg(test)]
     WeldPositionsOnly,
@@ -73,6 +82,14 @@ impl Mutation {
             return false;
         }
         true
+    }
+
+    pub(crate) fn root_competition(self) -> bool {
+        #[cfg(test)]
+        if self == Self::NoRootCompetition {
+            return false;
+        }
+        self.last_resorts()
     }
 
     pub(crate) fn last_resorts(self) -> bool {

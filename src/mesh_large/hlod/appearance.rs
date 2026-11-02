@@ -19,9 +19,9 @@
 //! pre-encode page. Geometry, triangle order and representative IDs are never changed.
 //!
 //! S3 holds no walk scratch (`scratch::ScratchLedger`): charts, page rasters, bake chunks,
-//! donor frontiers, mip chains and codec workspace are memory. Charts and retained
-//! encoded pages are charged per job; page-sized work borrows cache capacity after
-//! layout, before allocation, through [`ImageCache::reserve_page`]. Source reads use S2's
+//! donor frontiers, mip chains and codec workspace are memory. Retained encoded pages
+//! are charged per job. Chart/page work borrows cache capacity before layout and shrinks
+//! to the actual page, through [`ImageCache::reserve_page`]. Source reads use S2's
 //! admitted index. The walk's scratch check refuses any byte S3 might write unadmitted.
 use super::{
     bake::{self, Hit, ImageCache, Queries},
@@ -453,6 +453,15 @@ fn textured(
     if floor > target {
         facts.source_limited = true;
     }
+    // One non-nested lease covers construction plus the largest possible page.
+    // Retained chart masks stay charged through encode. Shrinking after layout
+    // returns unused page capacity without waiting or weakening density/slots.
+    let chart_memory = charts::workspace_bytes(services.max_edge, max_texels, corners.len() as u64);
+    let maximum_page = page_charge([services.max_edge; 2], slots.len() as u64, services.profile)?;
+    let mut group_lease = services.cache.reserve_page(
+        chart_memory.saturating_add(super::page_workspace([services.max_edge; 2], maximum_page)),
+        services.check,
+    )?;
     let layout = charts::layout(
         tile.decoded,
         &corners,
@@ -464,10 +473,8 @@ fn textured(
     if page_memory > services.page_memory {
         return Err(state("coarse page exceeds its planned encoder ceiling"));
     }
-    let _page_lease = services.cache.reserve_page(
-        super::page_workspace(layout.size, page_memory),
-        services.check,
-    )?;
+    group_lease
+        .shrink(chart_memory.saturating_add(super::page_workspace(layout.size, page_memory)))?;
     let mut owner = vec![false; (layout.size[0] * layout.size[1]) as usize];
     let mut texels = Vec::new();
     let mut covered = Vec::new();
