@@ -45,20 +45,61 @@ def _rounding(a, b):
     return max([1.0] + [abs(x) for x in a] + [abs(x) for x in b]) * (128.0 * EPS)
 
 
-def shortcuts(first, last, epsilon, point, retained, emit):
-    """`curve::shortcuts`: greedy coordinate corridors over ordinal parameters."""
+SPAN = 64      # interior points of a relieved chord, at most (curve::RELIEF_SPAN)
+NORMALS = 12   # face normals kept per shared vertex (graph::NORMALS); more: unremovable
+
+
+def _f32(x):
+    return struct.unpack('<f', struct.pack('<f', x))[0]
+
+
+def unit_normal(corners):
+    """`graph::unit_normal`: corners (key bits, xyz) in key order, f64 cross product,
+    rounded to f32; None when degenerate."""
+    (_, p0), (_, p1), (_, p2) = sorted(corners)
+    u = [p1[k] - p0[k] for k in range(3)]
+    v = [p2[k] - p0[k] for k in range(3)]
+    n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
+    length = math.sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2])
+    if not (length > 0.0 and math.isfinite(length)):
+        return None
+    return tuple(_f32(x / length) for x in n)
+
+
+def dragged(window, tol):
+    """`curve::dragged`: every interior point moves to either endpoint with each of its
+    faces' planes within tol."""
+    ends = (window[0][0], window[-1][0])
+    for p, faces in window[1:-1]:
+        if faces is None:
+            return False
+        for n in faces:
+            for e in ends:
+                d = [e[k] - p[k] for k in range(3)]
+                if abs(d[0] * n[0] + d[1] * n[1] + d[2] * n[2]) > tol:
+                    return False
+    return True
+
+
+def shortcuts(first, last, epsilon, point, retained, emit, faces=None):
+    """`curve::shortcuts`: greedy coordinate corridors over ordinal parameters. With
+    `faces` (relieved steps), the span cap and the drag bound too."""
     guard = 0.0
     for i in range(first, last + 1):
         p = point(i)
         guard = max(guard, _rounding(p, p))
+    tol = max(epsilon - 2.0 * guard, 0.0)
     start = first
     while start < last:
         a = point(start)
+        window = [(a, faces(start))] if faces else None
         lower = [-math.inf] * 3
         upper = [math.inf] * 3
         end, i = start, start + 1
         while i <= last:
             b = point(i)
+            if faces:
+                window.append((b, faces(i)))
             radius = max(epsilon - 2.0 * guard, 0.0) / math.sqrt(3.0)
             n = float(i - start)
             fits = epsilon >= 2.0 * guard
@@ -69,7 +110,8 @@ def shortcuts(first, last, epsilon, point, retained, emit):
                 slope = delta / n
                 fits = fits and lower[axis] <= slope <= upper[axis]
             if retained(i):
-                if end != start and not fits:
+                if end != start and not (fits and (faces is None or (i - start <= SPAN + 1
+                                                                      and dragged(window, tol)))):
                     break
                 end = i
             i += 1
@@ -158,7 +200,29 @@ class Relief:
                 for p in (a, b):
                     if p in self.vid:
                         self.open[self.vid[p]] = True
+        self.corners = list(db.execute(
+            'SELECT x.canonical,y.canonical,z.canonical FROM source_corners c '
+            'JOIN canonical_map x ON x.point=c.a JOIN canonical_map y ON y.point=c.b '
+            'JOIN canonical_map z ON z.point=c.c'))
+        # Relief's drag bound (A1): every source face's normal at each of its shared corners.
+        self.normals = [[] for _ in shared_points]
+        for face in self.corners:
+            self.store.work.charge()
+            at = [self.vid.get(p) for p in face]
+            if all(v is None for v in at):
+                continue
+            n = unit_normal([(keys[p], xyz[p]) for p in face])
+            if n is None:
+                continue
+            for v in at:
+                if v is not None:
+                    self.normals[v].append(n)
         self.retain_faces()
+
+    def faces(self, v):
+        """A shared vertex's face normals, or None beyond NORMALS faces."""
+        n = self.normals[v]
+        return n if len(n) <= NORMALS else None
 
     def external_run(self, owners, depth):
         return self.cell[owners[0]][depth] != self.cell[owners[-1]][depth]
@@ -175,7 +239,7 @@ class Relief:
         """Face retention (bits 40..48) and isolated ears (48..56): shallowest depth."""
         self.face_from = [0] * len(self.point)
         self.ear_from = [0] * len(self.point)
-        for a, b, c in self.store.db.execute('SELECT a,b,c FROM source_corners'):
+        for a, b, c in self.corners:
             ids = [self.vid.get(p) for p in (a, b, c)]
             if any(i is None for i in ids):
                 continue
@@ -310,7 +374,8 @@ class Relief:
                 ps = pinned(step)
                 for x, y in zip(ps, ps[1:]):
                     shortcuts(x, y, epsilon, lambda i: self.point[arc[i][0]],
-                              lambda i: is_retained(arc[i][0]), lambda s, e: out.append((s, e)))
+                              lambda i: is_retained(arc[i][0]), lambda s, e: out.append((s, e)),
+                              faces=(lambda i: self.faces(arc[i][0])) if step > 0 else None)
                 return out
 
             if count is not None:

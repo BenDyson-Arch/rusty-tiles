@@ -156,6 +156,13 @@ See D11's A1 amendment for the rule. Implementation:
     only the chain.
 - **Ear pins.** Isolated ears are found in the face-retention pass (vertex bits 48..56). A
   relieved piece ends at each one that is still retained one level finer.
+- **Drag bound.**
+  - The face-retention pass also records, for every shared vertex, up to 12 unit normals
+    of the source faces holding it (`border-normals`, 152 B per vertex).
+  - At relieved steps, `curve::shortcuts` caps a chord at 64 interior points.
+  - It accepts a chord only if every interior point can move to either endpoint with each
+    face plane within ε − 2·guard (`dragged`). The check runs over a window bounded by the
+    cap.
 - **Contraction.** `geometry::relief::along_border` collapses each removed vertex of a
   relieved tile onto a neighbour along its own chord.
   - Each vertex collapses toward its nearer chord endpoint: the t ≤ 0.5 half in ascending
@@ -171,7 +178,6 @@ See D11's A1 amendment for the rule. Implementation:
     border points across chords is taken only in its seam owner, and never at stage 0;
     same-chord transients are allowed), the link condition, orientation, area, duplicates
     and orphaned corners.
-  - Up to eight rounds may first move a blocking face's interior corner onto a neighbour.
   - A complete collapse is published only through the unchanged checks: required items,
     `changes`, and the contraction guard against the original faces.
   - Otherwise the leftovers take the ordinary snap and reconstruction on the collapsed mesh.

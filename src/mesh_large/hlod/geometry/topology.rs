@@ -197,6 +197,7 @@ fn retain(m: &mut Merged, keep: &[bool]) {
 /// Consume the shared chord without folding incident faces. A sign-preserving collapse
 /// is cheap; otherwise rebuild the affected manifold patch against the exact boundary.
 /// Failure leaves the source mesh intact for the caller's reported frontier policy.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn contract(
     m: &mut Merged,
     interface: &[InterfaceRow],

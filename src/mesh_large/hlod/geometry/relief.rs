@@ -6,18 +6,16 @@
 //! collapse keeps local topology (link condition), no new face or edge lies on border
 //! points only (transients among one chord's points are allowed; otherwise only in its seam
 //! owner under the build's `folds::Policy`, none at stage 0), no edge between contract
-//! points gains a wing, no face is duplicated and no corner loses its last face. A vertex
-//! every such collapse refuses may first move a blocking interior corner onto a neighbour.
-//! What remains is stuck: the ordinary contraction tries it, and when the whole contraction
+//! points gains a wing, no face is duplicated and no corner loses its last face. Interior
+//! vertices never move: the border pass bounds every relieved vertex's drag (A1), and
+//! nothing bounds an interior move. What remains is stuck: the ordinary contraction tries it, and when the whole contraction
 //! fails the cell's `Contracted` goes to the last resort's N3, which first resumes the
 //! collapse under its own policy (`resume`), then snaps what is left.
 use super::{folds::Policy, topology, Contracted, Merged, Stuck};
 use crate::mesh_large::hlod::interfaces::{InterfaceRow, Key};
 use rustc_hash::FxHashMap as HashMap;
 
-/// Rounds of interior relief around vertices every chord collapse refuses.
-const RELIEF_ROUNDS: usize = 8;
-/// Collapse passes per round (a face moves at most once per pass).
+/// Collapse passes (a face moves at most once per pass).
 const PASSES: usize = 4;
 
 type Mapping = Option<(Key, Key, f64, u8)>;
@@ -289,69 +287,6 @@ impl State<'_> {
             self.incident[u as usize].push(f);
         }
     }
-    /// Move one interior corner of a face blocking `v -> u` onto a neighbour, preferring
-    /// interior ones.
-    fn relieve(&mut self, v: u32, u: u32) -> bool {
-        if u == u32::MAX {
-            return false;
-        }
-        // Only the faces `v -> u` would flip or leave on border points block it.
-        let mut blocking = Vec::new();
-        for f in self.star(v) {
-            let t = self.faces[f as usize];
-            if t.contains(&u) {
-                continue;
-            }
-            let after = t.map(|x| if x == v { u } else { x });
-            let before_n = topology::normal(&self.m.positions, t);
-            let after_n = topology::normal(&self.m.positions, after);
-            let dot: f64 = (0..3).map(|i| before_n[i] * after_n[i]).sum();
-            let on_border = after.iter().all(|&x| self.border[x as usize])
-                && !self.same_chord(&after)
-                && !self
-                    .policy
-                    .owns_face(after.map(|x| self.m.keys[x as usize]));
-            if !self.area(after) || dot <= 0. || on_border {
-                blocking.push(f);
-            }
-        }
-        for f in blocking {
-            for x in self.faces[f as usize] {
-                if self.border[x as usize] || self.required[x as usize] {
-                    continue;
-                }
-                let mut targets: Vec<u32> = Vec::new();
-                for g in self.star(x) {
-                    for y in self.faces[g as usize] {
-                        if y != x && !targets.contains(&y) {
-                            targets.push(y);
-                        }
-                    }
-                }
-                let p = self.m.positions[x as usize];
-                let d = |y: &u32| {
-                    let q = self.m.positions[*y as usize];
-                    (0..3)
-                        .map(|i| (f64::from(p[i]) - f64::from(q[i])).powi(2))
-                        .sum::<f64>()
-                };
-                // Interior targets first; a border target passes the same seam checks.
-                targets.sort_by(|a, b| {
-                    self.border[*a as usize]
-                        .cmp(&self.border[*b as usize])
-                        .then(d(a).total_cmp(&d(b)))
-                        .then(a.cmp(b))
-                });
-                for y in targets {
-                    if let Ok(plan) = self.plan(x, y) {
-                        self.apply(y, plan);
-                        return true;
-                    }
-                }
-            }
-        }
-        false
-    }
 }
 
 /// Contract every vertex `mapping` moves onto its chord by collapses along that chord.
@@ -460,48 +395,35 @@ fn collapse(
     }
     let mut left: Vec<u32> = removed;
     let mut pending = vec![false; n];
-    for round in 0..=RELIEF_ROUNDS {
-        for _ in 0..PASSES {
-            let before = left.len();
-            for &v in &left {
-                pending[v as usize] = true;
-            }
-            left.retain(|&v| {
-                pending[v as usize] = false;
-                let (p, q) = (prev[v as usize], next[v as usize]);
-                let targets = if toward_b[v as usize] { [q, p] } else { [p, q] };
-                for u in targets {
-                    if u == u32::MAX || pending[u as usize] {
-                        continue;
-                    }
-                    if let Ok(plan) = s.plan(v, u) {
-                        s.apply(u, plan);
-                        s.border[v as usize] = false;
-                        // Unlink v from its chord.
-                        if p != u32::MAX && next[p as usize] == v {
-                            next[p as usize] = q;
-                        }
-                        if q != u32::MAX && prev[q as usize] == v {
-                            prev[q as usize] = p;
-                        }
-                        return false;
-                    }
-                }
-                true
-            });
-            if left.is_empty() || left.len() == before {
-                break;
-            }
-        }
-        if left.is_empty() || round == RELIEF_ROUNDS {
-            break;
-        }
-        let mut relieved = false;
+    for _ in 0..PASSES {
+        let before = left.len();
         for &v in &left {
-            let (p, q) = (prev[v as usize], next[v as usize]);
-            relieved |= s.relieve(v, p) || s.relieve(v, q);
+            pending[v as usize] = true;
         }
-        if !relieved {
+        left.retain(|&v| {
+            pending[v as usize] = false;
+            let (p, q) = (prev[v as usize], next[v as usize]);
+            let targets = if toward_b[v as usize] { [q, p] } else { [p, q] };
+            for u in targets {
+                if u == u32::MAX || pending[u as usize] {
+                    continue;
+                }
+                if let Ok(plan) = s.plan(v, u) {
+                    s.apply(u, plan);
+                    s.border[v as usize] = false;
+                    // Unlink v from its chord.
+                    if p != u32::MAX && next[p as usize] == v {
+                        next[p as usize] = q;
+                    }
+                    if q != u32::MAX && prev[q as usize] == v {
+                        prev[q as usize] = p;
+                    }
+                    return false;
+                }
+            }
+            true
+        });
+        if left.is_empty() || left.len() == before {
             break;
         }
     }

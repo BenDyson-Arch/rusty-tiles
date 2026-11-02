@@ -2930,6 +2930,7 @@ fn assert_bounded_jobs(dir: &Path, cap: u64) {
 /// nothing, so no job merges more than eight capped children and no content-less cell has a
 /// content ancestor (Cesium's empty traversal never meets one below content). The capped
 /// tiles below the omitted cap cover every leaf exactly once; the first view loads them.
+/// D11 without relief: border relief (A1) fits this sheet's interfaces at cap 12.
 #[test]
 fn a_parent_whose_interface_cannot_fit_is_omitted_not_refused() {
     use crate::mesh_large::delivery::{self, plan::Limits};
@@ -2940,6 +2941,7 @@ fn a_parent_whose_interface_cannot_fit_is_omitted_not_refused() {
         &work.path().join("capped"),
         &Run {
             cap: 12,
+            mutation: Mutation::NoRelief,
             ..Run::default()
         },
     )
@@ -5861,14 +5863,25 @@ fn last_resort_tiles(dir: &Path) -> Vec<(u64, u64, u64, u64)> {
 }
 
 /// A folded-sheet run on develop's strategies only and on the full build: the coarse cells
-/// develop publishes, and the full run's staged directory.
-fn last_resort_case(name: &str, sheet: Mesh, work: &Path) -> (HashSet<(u64, u64)>, PathBuf) {
+/// develop publishes, and the full run's staged directory. Without `relief`, both runs use
+/// D11's ladder alone (A1 off).
+fn last_resort_case(
+    name: &str,
+    sheet: Mesh,
+    work: &Path,
+    relief: bool,
+) -> (HashSet<(u64, u64)>, PathBuf) {
     let input = write_gltf(&work.join("src"), &[sheet]);
+    let (reference, full) = if relief {
+        (Mutation::Develop, Mutation::None)
+    } else {
+        (Mutation::DevelopNoRelief, Mutation::NoRelief)
+    };
     let develop = stage(
         &input,
         &work.join("develop"),
         &Run {
-            mutation: Mutation::Develop,
+            mutation: reference,
             ..Run::default()
         },
     )
@@ -5877,7 +5890,15 @@ fn last_resort_case(name: &str, sheet: Mesh, work: &Path) -> (HashSet<(u64, u64)
         .iter()
         .map(|r| (r["first"].as_u64().unwrap(), r["depth"].as_u64().unwrap()))
         .collect();
-    let dir = stage(&input, &work.join("hlod"), &Run::default()).unwrap();
+    let dir = stage(
+        &input,
+        &work.join("hlod"),
+        &Run {
+            mutation: full,
+            ..Run::default()
+        },
+    )
+    .unwrap();
     let c = census(&dir);
     assert_directed_census(name, &c, Run::default().cap);
     assert!(c.last_resort_tiles > 0, "{name}: {c:?}");
@@ -5887,19 +5908,28 @@ fn last_resort_case(name: &str, sheet: Mesh, work: &Path) -> (HashSet<(u64, u64)
 
 /// D1/D11 amendment A2, stage N1. On three noisy sheets folded onto one another, a
 /// depth-1 cell fits only once it may create new faces and edges on the shared points
-/// of the seam segments it owns; no fold is admitted. Develop omits it. The cells still
-/// omitted are border-bound (their contracts leave the cap no room: border relief).
+/// of the seam segments it owns; no fold is admitted. Develop omits it. On D11's ladder
+/// alone (relief off) the cells still omitted are border-bound: their contracts leave the
+/// cap no room. With border relief (A1) those borders relax, and the root builds too.
 #[test]
 fn n1_builds_a_seam_bound_cell_on_the_segments_it_owns() {
     let work = tempfile::tempdir().unwrap();
     let name = "N1 folded sheets";
-    let (develop, dir) = last_resort_case(name, folded_sheet(96, 3, 0., 0.0001, 23), work.path());
+    let sheet = folded_sheet(96, 3, 0., 0.0001, 23);
+    let (develop, dir) = last_resort_case(name, sheet.clone(), &work.path().join("d11"), false);
     let n1: Vec<_> = last_resort_tiles(&dir)
         .into_iter()
         .filter(|t| t.2 == 1)
         .collect();
     assert!(!n1.is_empty(), "{name}: {:?}", last_resort_tiles(&dir));
     assert!(n1.iter().all(|t| !develop.contains(&(t.0, t.1))), "{name}");
+    let (_, relieved) = last_resort_case(name, sheet, &work.path().join("relief"), true);
+    assert!(
+        rows(&relieved.join("proxies.jsonl"))
+            .iter()
+            .any(|r| r["depth"] == 0),
+        "{name}: the root builds with relief"
+    );
 }
 
 /// An egg crate: exact zeros on a lattice, so saddle vertices lie on split planes.
@@ -6141,7 +6171,7 @@ fn n2_admits_declared_folds_and_the_validator_recounts_them() {
     let work = tempfile::tempdir().unwrap();
     let name = "N2 folded sheets";
     let sheet = folded_sheet(72, 3, 0.02, 0.0001, 4);
-    let (develop, dir) = last_resort_case(name, sheet.clone(), work.path());
+    let (develop, dir) = last_resort_case(name, sheet.clone(), work.path(), true);
     assert!(omission_receipt(name, &dir));
     let n2: Vec<_> = last_resort_tiles(&dir)
         .into_iter()
@@ -6190,7 +6220,8 @@ fn n2_admits_declared_folds_and_the_validator_recounts_them() {
 fn n3_clusters_a_border_heavy_fold_cell_to_the_cap() {
     let work = tempfile::tempdir().unwrap();
     let name = "N3 folded sheets";
-    let (develop, dir) = last_resort_case(name, folded_sheet(48, 5, 0.02, 0.001, 7), work.path());
+    let (develop, dir) =
+        last_resort_case(name, folded_sheet(48, 5, 0.02, 0.001, 7), work.path(), true);
     let rows = rows(&dir.join("proxies.jsonl"));
     let n3: Vec<_> = rows
         .iter()

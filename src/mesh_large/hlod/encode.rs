@@ -61,6 +61,9 @@ pub(crate) enum Mutation {
     /// Build the shared borders without relief (A1's reference: D11's ladder alone).
     #[cfg(test)]
     NoRelief,
+    /// `Develop` and `NoRelief` together: develop's strategies on D11's ladder alone.
+    #[cfg(test)]
+    DevelopNoRelief,
     /// Publish relieved tiles without their relief floor on G.
     #[cfg(test)]
     UnflooredRelief,
@@ -69,7 +72,7 @@ pub(crate) enum Mutation {
 impl Mutation {
     pub(crate) fn last_resorts(self) -> bool {
         #[cfg(test)]
-        if self == Self::Develop {
+        if matches!(self, Self::Develop | Self::DevelopNoRelief) {
             return false;
         }
         true
@@ -77,7 +80,7 @@ impl Mutation {
     /// The hard cap the border relief trigger is a share of (A1).
     pub(crate) fn relief_cap(self, cap: usize) -> usize {
         #[cfg(test)]
-        if self == Self::NoRelief {
+        if matches!(self, Self::NoRelief | Self::DevelopNoRelief) {
             return usize::MAX / 200;
         }
         cap
