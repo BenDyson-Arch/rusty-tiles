@@ -42,3 +42,25 @@ crop3 whole x1.085, coarse x1.108 (ratio of medians). S2, D4 and witness searche
 cheaper than in 9af55ee1; the remaining crop3 excess is S1b's fold-retry passes, fold source
 rebuilds and witnesses. Bulk evidence: `~/.cache/rusty-tiles-evidence/hlod-cpu-20261028/`,
 never committed. `FINAL-3661e713.md` SHA-256: `1c713cb9f3ee24f4ade7270dfb30167aa459854ad9e8a6ea89c69e93487ab39d`.
+
+## Retry plateau and S8 budget (2026-11-02)
+
+Base develop `65696ab7`. The staged ladder stops after four stages without a
+new minimum in retained faces or proposal violations; carrier passes require
+face reduction. The 120 × 10 × 4 proposal bound remains explicit. No codec change.
+
+Tex3, crop3, mesh-1e6 and five Walem crops are byte-identical to the base;
+200 city layouts match all 14,085 leaf/proxy tile hashes. Jobs1/3 agree.
+Three interleaved slot1 pairs give original-Walem mean CPU 684.67 → 623.67 s;
+small controls are mixed, and the separate jobs1 control is 605 → 622 s.
+The exact-S8-Walem 450/350 CPU-s/Mtri budget is documented in the architecture
+decision; it is not a universal bound or final integrated S8 acceptance.
+
+Bulk evidence was produced outside git and has never been committed:
+`~/.cache/rusty-tiles-evidence/retry-plateau-20261102/`.
+`receipt-manifest.json` SHA-256: `a98980ea137acd8fe13f2c5ddc8539194531df34edb76da76c415fa9768b78f7`.
+It binds the base, production patch/source, binaries, inputs, generators,
+comparisons and local check receipts. `FINAL.md` records per-corpus identity,
+CPU/RSS, limits and the publication/cleanup handback. The geometry source hash is
+`fcdd749c9ff4a7dc5ab0e46b3798bf8ba31a6d18983d65887ce9524bf22c3105`.
+Relief/root integration and independent review remain separate gates.

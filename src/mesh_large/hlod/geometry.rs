@@ -297,12 +297,42 @@ fn missing_among(
 }
 
 // Staged reduction (`Resort::Staged`), fixed bounds: steps, tries of a refused step, its
-// least size, carrier-merge rounds and passes.
+// least size, carrier-merge rounds and passes. Per invocation: at most
+// STAGES * STAGE_TRIES * MERGE_ROUNDS = 4,800 simplifier proposals, plus
+// MERGE_ROUNDS * MERGE_PASSES = 128 carrier passes. Plateau exits only lower these.
 const STAGES: u32 = 120;
 const STAGE_TRIES: u32 = 10;
 const MIN_STEP: usize = 4;
 const MERGE_ROUNDS: u32 = 4;
 const MERGE_PASSES: u32 = 32;
+
+/// Four consecutive stages without a new low in retained faces or violating vertices
+/// end this round's ladder. Even a one-face reduction resets the window; a carrier
+/// reduction starts a fresh window. This is a deterministic work policy, not a proof
+/// that a later target could never succeed. The existing publication guards still apply.
+#[derive(Default)]
+struct RetryProgress {
+    best: Option<(usize, usize)>,
+    stalled: u32,
+}
+impl RetryProgress {
+    fn plateau(&mut self, faces: usize, violations: usize) -> bool {
+        let improved = self.best.is_none_or(|(f, v)| faces < f || violations < v);
+        self.best = Some(self.best.map_or((faces, violations), |(f, v)| {
+            (f.min(faces), v.min(violations))
+        }));
+        self.stalled = if improved { 0 } else { self.stalled + 1 };
+        self.stalled >= 4
+    }
+}
+
+#[derive(Default)]
+struct RetryWork {
+    attempts: u32,
+    stages: u32,
+    carrier_passes: u32,
+    plateaus: u32,
+}
 
 /// Reduce toward the cap in steps from the current mesh (the first a third of the
 /// excess). The unchanged guard, the interface items and component survival judge each
@@ -328,12 +358,19 @@ fn staged_reduce(
         .collect();
     let points = interface_points(interface);
     let (mut current, mut error) = (merged.triangles.clone(), 0f64);
+    let mut work = RetryWork::default();
     for _ in 0..MERGE_ROUNDS {
+        let mut progress = RetryProgress {
+            best: Some((current.len(), usize::MAX)),
+            stalled: 0,
+        };
         let mut step = (current.len().saturating_sub(cap) / 3).max(1);
         for _ in 0..STAGES {
             if current.len() <= cap {
                 break;
             }
+            work.stages += 1;
+            let mut violations = usize::MAX;
             step = step.min(current.len() - cap);
             let target = current.len() - step;
             let component = topology::components(&Merged {
@@ -347,6 +384,7 @@ fn staged_reduce(
                 .collect();
             let mut done = false;
             for _ in 0..STAGE_TRIES {
+                work.attempts += 1;
                 let (kept, rest): (Vec<_>, Vec<_>) =
                     current.iter().zip(&keep).partition(|(_, k)| **k);
                 let kept: Vec<[u32; 3]> = kept.into_iter().map(|(t, _)| *t).collect();
@@ -364,6 +402,7 @@ fn staged_reduce(
                 for (v, k) in merged.keys.iter().enumerate() {
                     bad[v] |= lost.contains(k) || edges.iter().any(|(a, b)| a == k || b == k);
                 }
+                violations = violations.min(bad.iter().filter(|b| **b).count());
                 if !bad.contains(&true) {
                     if out.len() < current.len() {
                         (current, error, done) = (out, error.max(e), true);
@@ -378,6 +417,10 @@ fn staged_reduce(
                     break;
                 }
             }
+            if progress.plateau(current.len(), violations) {
+                work.plateaus += 1;
+                break;
+            }
             if !done {
                 if step <= MIN_STEP {
                     break;
@@ -386,10 +429,28 @@ fn staged_reduce(
             }
         }
         if current.len() <= cap
-            || !carrier_merge(merged, &guard, locked, &points, &mut current, cap)
+            || !carrier_merge(
+                merged,
+                &guard,
+                locked,
+                &points,
+                &mut current,
+                cap,
+                &mut work,
+            )
         {
             break;
         }
+    }
+    if std::env::var_os("RT_HLOD_CPU_PROFILE").is_some() {
+        eprintln!(
+            "HLOD_RETRY attempts={} stages={} carrier_passes={} plateaus={} attempt_bound={}",
+            work.attempts,
+            work.stages,
+            work.carrier_passes,
+            work.plateaus,
+            STAGES * STAGE_TRIES * MERGE_ROUNDS,
+        );
     }
     (current, error)
 }
@@ -548,7 +609,8 @@ fn distance(a: [f64; 3], b: [f64; 3]) -> f64 {
 /// collapse keeps each moved face's orientation and area and every other vertex's last
 /// face, and passes the guard on the affected stars (exact: they hold every face on a
 /// changed edge). A pass's collapses have disjoint stars; a pass the whole-mesh guard
-/// refuses is dropped. Whether any merged.
+/// refuses is dropped. A pass must strictly reduce faces to continue: retaining the
+/// same faces cannot enable a later carrier pass. Whether any merged.
 fn carrier_merge(
     merged: &Merged,
     guard: &folds::Source,
@@ -556,6 +618,7 @@ fn carrier_merge(
     points: &HashSet<Key>,
     faces: &mut Vec<[u32; 3]>,
     cap: usize,
+    work: &mut RetryWork,
 ) -> bool {
     let p = &merged.positions;
     let border = |v: u32| points.contains(&merged.keys[v as usize]);
@@ -564,6 +627,7 @@ fn carrier_merge(
         if faces.len() <= cap {
             break;
         }
+        work.carrier_passes += 1;
         let mut star: HashMap<u32, Vec<usize>> = HashMap::default();
         let mut uses: HashMap<(u32, u32), u32> = HashMap::default();
         for (i, t) in faces.iter().enumerate() {
@@ -660,7 +724,7 @@ fn carrier_merge(
             .filter(|(_, d)| !**d)
             .map(|(t, _)| t)
             .collect();
-        if done == 0 || guard.violations(p, &out).contains(&true) {
+        if done == 0 || out.len() >= faces.len() || guard.violations(p, &out).contains(&true) {
             break;
         }
         (*faces, any) = (out, true);
@@ -2225,5 +2289,39 @@ mod tests {
         .unwrap();
         assert_eq!(built.geometry.triangles.len(), 6);
         assert_eq!(built.reoriented, 0);
+    }
+}
+
+#[cfg(test)]
+mod retry_progress_controls {
+    use super::RetryProgress;
+
+    #[test]
+    fn plateau_needs_four_stages_without_a_new_low() {
+        let mut p = RetryProgress::default();
+        assert!(!p.plateau(100, 9));
+        for _ in 0..3 {
+            assert!(!p.plateau(100, 9));
+        }
+        assert!(p.plateau(100, 9));
+    }
+
+    #[test]
+    fn slow_face_or_violation_progress_resets_the_window() {
+        let mut p = RetryProgress::default();
+        for faces in (90..100).rev() {
+            assert!(!p.plateau(faces, 9));
+            for _ in 0..3 {
+                assert!(!p.plateau(faces, 9));
+            }
+        }
+        for violations in (0..9).rev() {
+            assert!(!p.plateau(90, violations));
+            for _ in 0..3 {
+                assert!(!p.plateau(90, violations));
+            }
+        }
+        // Merely oscillating above the best values is not new progress.
+        assert!(p.plateau(91, 1));
     }
 }

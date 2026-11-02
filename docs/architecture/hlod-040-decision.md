@@ -601,12 +601,21 @@ hardware lane. Wall time is recorded, not substituted for CPU by multiplying job
 
 For `mgal_detail_offset_2048.glb` (9,999,999 triangles), balanced, propose:
 
-- **Whole conversion ≤50 CPU-s/Mtri (≤500 CPU-s); coarse stage ≤30 CPU-s/Mtri.**
-  These are optimistic 20×-class production gates, tightened at the owner’s
-  request; stretch goals are 30 whole / 20 coarse CPU-s/Mtri. They are not
-  extrapolated prototype passes. E4’s 8.9 CPU-s/Mtri legacy crop motivates a
-  low-tens target, but its different tree/codec/domain is not production proof.
-  A miss remains work or an explicit reviewed budget revision.
+- **0.4.0 S8 CPU gate (owner approved 2026-11-02): whole conversion ≤450
+  CPU-s/Mtri and coarse stage ≤350 CPU-s/Mtri** (4,500 / 3,500 CPU-s at
+  10 Mtri). This applies only to this exact Walem fixture and balanced profile,
+  not a universal per-triangle guarantee. The measured `8710429a` whole/coarse
+  baseline was 3,704 / 2,836 CPU-s at approximately 10 Mtri: 370.4 / 283.6
+  CPU-s/Mtri × 1.20 = 444.48 / 340.32, rounded up to 450 / 350. The 20%
+  allowance is integration and host-variation headroom, not a measured pass
+  for the final relief/root candidate or its 4 GiB run. Difficult cells and
+  texture density prevent extrapolation to arbitrary inputs; the measured
+  514,041-triangle crop already costs more per triangle. Derivation and raw
+  receipt index: `~/.cache/rusty-tiles-evidence/s8-cpu-plan-20261102/PLAN.md`.
+  **50 whole / 30 coarse CPU-s/Mtri (500 / 300 at 10 Mtri)** remains the
+  stated 0.4.x/0.5 optimization goal. No codec change is authorized by this
+  budget revision, and it waives none of the root, quality, memory or client
+  acceptance gates below.
 - First-view ceilings, decimal MB including ancestors, GLBs, images, JSON and
   subtrees: **≤6.0 at 1600×1000/range 3; ≤63.366 at 2560×1600/range 3;
   ≤197.521 at 2560×1600/range 0.75**. Stretch targets 5.442/40/150 MB are
@@ -653,8 +662,9 @@ not elapsed days. S8 is the one full 2048 acceptance campaign; earlier slices
 use small analytic fixtures and tex3/crop3. No implementation or run is part of
 this documentation PR. The numeric contract above is **A**: its CPU, three-view
 MB, memory and crack gates are shared integration criteria. Per-slice allocations
-below are proposed diagnostic budgets, not measured performance or permission to
-trade away A. Reserve ≤10 CPU-s/Mtri for capture/partition/leaf preparation;
+below retain the 0.4.x/0.5 optimization goal, not additional 0.4.0 S8 CPU gates,
+measured performance or permission to trade away A. For that goal, reserve
+≤10 CPU-s/Mtri for capture/partition/leaf preparation;
 S1–S4 allocate the other 40, with ≤7 of the codec allocation attributable to
 coarse pages to meet the coarse total of 30. One coordinator owns sustained
 builds/runs; parallel file work has explicit ownership.
@@ -773,7 +783,7 @@ builds/runs; parallel file work has explicit ownership.
 - **Numbers:** combined leaf/coarse codec work allocation ≤15 CPU-s/Mtri,
   archive/hierarchy ≤2; bounded leases within 4 GiB; 0 decode cracks; A's
   6.0/63.366/197.521 MB ceilings with complete dependency accounting. Coarse
-  portions of S1–S4 together must also meet ≤30 CPU-s/Mtri.
+  portions of S1–S4 together target ≤30 CPU-s/Mtri for 0.4.x/0.5.
 - **Dependencies/parallel:** schema/interface preparation parallels S2/S3;
   integration waits for their final output. S2 owns plan/source, S4 archive/codec.
 
@@ -842,7 +852,8 @@ builds/runs; parallel file work has explicit ownership.
   small material/codec/memory/cancellation fixtures plus applicable final-source
   CI/wheel/Blender checks. Trial R=G/2 with q guard only after R=G passes; one
   accepted setting is frozen, failures remain explicit. No CI polling required.
-- **Numbers:** all of A: ≤50 total / ≤30 coarse CPU-s/Mtri; first views
+- **Numbers:** all of A: ≤450 total / ≤350 coarse CPU-s/Mtri for the exact
+  S8 Walem fixture only (derivation and 0.4.x/0.5 goal above); first views
   ≤6.0/63.366/197.521 MB; ≤4 GiB RSS with declared cap; 0 gaps across the full
   15,536/6,859 pair reference census; 0 wrong leaf IDs; root error and PSNR
   floors. Record per-stage CPU, wall, scratch, mips, requests, draw calls and
