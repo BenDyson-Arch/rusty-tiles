@@ -42,3 +42,20 @@ crop3 whole x1.085, coarse x1.108 (ratio of medians). S2, D4 and witness searche
 cheaper than in 9af55ee1; the remaining crop3 excess is S1b's fold-retry passes, fold source
 rebuilds and witnesses. Bulk evidence: `~/.cache/rusty-tiles-evidence/hlod-cpu-20261028/`,
 never committed. `FINAL-3661e713.md` SHA-256: `1c713cb9f3ee24f4ade7270dfb30167aa459854ad9e8a6ea89c69e93487ab39d`.
+
+## S8 CPU budget amendment (2026-11-02, PR #315)
+
+The owner retained only the fixture-specific 450/350 CPU-s/Mtri amendment;
+50/30 remains the later optimization goal. Retry optimization is deferred to
+0.4.x pending a proof of output identity. The rejected plateau at `4d9ca2a8`
+stalls at 310 faces over four steps, but develop reduces faces at the next step.
+Review: `~/.cache/rusty-tiles-evidence/retry-315-review1-20261102/REVIEW.md`,
+SHA-256 `31413f5d19cbcaa369764b96aa0d469d199f74df2e2b1113fd2122442fb5a6ea`. No archive-byte difference was demonstrated.
+
+Historical corpus receipts remain under
+`~/.cache/rusty-tiles-evidence/retry-plateau-20261102/`; `FINAL.md` records the
+owner's rescope. Bulk evidence was never committed; its implementation source
+was `4d9ca2a8`. The old receipt manifest SHA-256 is
+`a98980ea137acd8fe13f2c5ddc8539194531df34edb76da76c415fa9768b78f7`;
+its frozen executable binaries are removed per owner instruction. Those results
+are historical evidence for the rejected candidate, not a shipped speed-up.
