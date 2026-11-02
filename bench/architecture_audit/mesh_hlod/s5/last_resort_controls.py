@@ -14,6 +14,9 @@ Literal archives; no producer imports.
   the same drops at stage 2, or at a stage-0 root over a stage-2 tile, are refused
   (cap pressure, smallest first), as is a stage-3 drop beyond G, one undeclared, and a
   stage-3 claim whose fold count does not verify.
+- PR #313 review: the sampling-gap triangle, leaf declarations, disagreeing payload
+  stages/fold counts, four relative-stage cases and all 120 seeded combinations.
+  Their GLB bytes and parsed tilesets match the independent review's literal archives.
 - Seam owner: a planar quad split by a shared chain A-M-B between a left (least) and a
   right (greatest) leaf. A coarse tile re-triangulates its own leaf's quad with a face on
   the three shared points and a new edge A-B. The chain at x=0 hashes to A's least
@@ -90,7 +93,7 @@ def generate(root):
             top = tile('coarse.glb', [tile('left.glb'), tile('right.glb')])
         else:
             # A stage-2 tile over the left leaf, holding it unchanged, below the root.
-            (folder / 'middle.glb').write_bytes(declare(payload(left, leaf=False), middle, 0))
+            (folder / 'middle.glb').write_bytes(declare(payload(left, leaf=False), middle, 0, 0))
             top = tile('coarse.glb', [tile('middle.glb', [tile('left.glb')]), tile('right.glb')])
             top['children'][0]['geometricError'] = 0
         top['geometricError'] = g
@@ -107,6 +110,42 @@ def generate(root):
     drop('n3-drop-beyond-g', wide[:4], [small], wide[:4], 3, 0, 1, 0.5, 'coarseDrops', 'farther than')
     drop('n3-drop-undeclared', wide[:4], [small], wide[:4], 3, 0, 0, 2.0, 'coarseDrops', 'declares 0')
     drop('n3-claim-miscounted', wide[:4], [small], wide[:4], 3, 1, 1, 2.0, 'lastResort', 'declared 1 fold faces')
+    # Independent PR #313 review: a 12-unit face hidden between fixed samples.
+    from drops import samples
+    triangle = [[0, 0, 0], [12, 0, 0], [0, 12, 0]]
+    patches = [[[x + .03125, y, 0], [x + .0625, y, 0], [x + .03125, y + .03125, 0]]
+               for x, y, _ in samples(triangle)]
+    drop('sampling-gap', patches, [triangle], patches, 3, 0, 1, .125, 'coarseDrops')
+    left, right = wide[:1], [small]
+    for relative in (None, 1, 2, 3):
+        drop(f'self-claimed3-relative-{relative}', left, right, left, 3, 0, 1, 2, middle=relative)
+    for name in ('leaf-stage3', 'leaf-fold99', 'mixed-payload-stages', 'multi-fold-count'):
+        rr = right + [[[3, 9, 0], [3.5, 9, 0], [3, 9.5, 0]]] if name == 'mixed-payload-stages' else right
+        drop(name, left, rr, left + right, 3, 0, int(name == 'mixed-payload-stages'), 16,
+             'lastResort', 'leaf tile' if name.startswith('leaf') else 'payloads disagree')
+        folder = root / name
+        if name.startswith('leaf'):
+            (folder / 'left.glb').write_bytes(declare(payload(left, leaf=True), 3, 99 if name == 'leaf-fold99' else 0))
+        else:
+            (folder / 'coarse.glb').write_bytes(declare(payload(left, leaf=False), 3, 0,
+                                                       int(name == 'mixed-payload-stages')))
+            (folder / 'extra.glb').write_bytes(declare(payload(right, leaf=False),
+                2 if name == 'mixed-payload-stages' else 3, 0 if name == 'mixed-payload-stages' else 1, 0))
+            doc = json.loads((folder / 'tileset.json').read_text())
+            doc['root'].pop('content')
+            doc['root']['contents'] = [{'uri': 'coarse.glb'}, {'uri': 'extra.glb'}]
+            (folder / 'tileset.json').write_text(json.dumps(doc))
+    # The review's complete seeded 120-case corpus, with pinned expected checks.
+    import random
+    rng = random.Random(313)
+    expected = 'LLLDDDDDDPDDLDDLDDDDLPPPDDDDPDLDLDLDDPDLDLDLDDDDDDDPPLLLDPDDDDDLLPDLPDDLDLDDDLDDLDDPDLLLDDLLPDDPDLDDDLDDLDDLDPDLDDDLDDLD'
+    for i, outcome in enumerate(expected):
+        stage = rng.choice([None, 0, 1, 2, 3])
+        middle = rng.choice([None, 1, 2, 3])
+        omit = rng.choice([True, False])
+        folds, count, g = rng.choice([0, 0, 0, 1]), rng.choice([0, 1, 2]), rng.choice([.5, 2, 16])
+        drop(f'random-{i:03d}', left, right, left if omit else left + right, stage, folds, count, g,
+             {'P': None, 'D': 'coarseDrops', 'L': 'lastResort'}[outcome], middle=middle)
     # Seam owner: shared chain A-M-B between a left quad (above) and a right quad (below).
     for name, x, mine, check in (('seam-owner-least-admitted', 0, 'left', None),
                                  ('seam-owner-least-refused', 0, 'right', 'seamOwner'),
@@ -134,7 +173,21 @@ def generate(root):
 
 
 def run(root, binary=None):
-    from oracle import audit, Failure
+    from oracle import audit, Failure, distance2
+    from drops import covers
+    from spatial import Work, WorkLimit
+    # One subdivision is necessary: no individual retained triangle covers the
+    # original triangle. Equality and exhausted work must not become false passes.
+    triangle = ((0, 0, 0), (2, 0, 0), (0, 2, 0))
+    faces = [{'xyz': f} for f in (
+        ((0, 0, 0), (1, 0, 0), (0, 1, 0)), ((1, 0, 0), (2, 0, 0), (1, 1, 0)),
+        ((0, 1, 0), (1, 1, 0), (0, 2, 0)), ((1, 0, 0), (1, 1, 0), (0, 1, 0)))]
+    assert covers(triangle, faces, 1e-6, distance2, Work())
+    try:
+        covers(triangle, faces, 1e-6, distance2, Work(1))
+        raise AssertionError('certificate ignored work limit')
+    except WorkLimit:
+        pass
     root = Path(root)
     results = []
     for c in generate(root):

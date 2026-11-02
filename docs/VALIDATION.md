@@ -27,7 +27,20 @@ among border-free components. A payload that declares last-resort stage 3
 (`asset.extras.rustyTiles.lastResort`, verified first) is exempt from those two rules, as
 the [N3 decision](architecture/hlod-040-decision.md) allows: its border-free components may
 drop at any size, with loss measured into G, and only the count and the geometricError bound
-apply. HLOD archives from before this check, whose
+apply. For stage 3 this is a continuous bound on every point of each decoded dropped
+child triangle: distance to the retained surface is at most `G*(1+1e-6)+1e-6`,
+without child-G slack. A region is certified when centroid distance plus its
+farthest-corner radius fits that bound (distance is 1-Lipschitz), or when all
+three corners fit it against one retained triangle (distance to a convex set is
+convex). Otherwise four-way midpoint subdivision continues to depth 32. Unresolved
+regions fail `coarseDrops`; exhausted effort refuses with the existing budget
+error. Every region and point/retained-face test is charged. The depth-first stack
+holds at most 97 regions. This is a sufficient certificate and can refuse a valid
+surface when its budget/depth is insufficient. Stages 0–2 and undeclared drops
+retain fixed samples, with child G added off vertices; those samples provide only
+lower bounds, not continuous surface certification. None of these checks proves
+fallback history or a distance bound to unpublished source geometry.
+HLOD archives from before this check, whose
 small drops are undeclared, fail it. The report's `interfaceCensus` gives
 `droppedComponents` and `droppedByDepth` (by delivered cell depth).
 
@@ -46,7 +59,8 @@ folds retained above a stage-2/3 descendant, not another reduction strategy.
 same corner set, either orientation) or incident to an edge used in the same
 direction by at least two faces. Count each qualifying face once, not each pair
 or edge. Validation recounts this value (`lastResort` on mismatch), requires a
-fold-admitting descendant for stage 0, and permits admitted folds from stage 2
+fold-admitting descendant for stage 0, rejects any declaration on a leaf, requires
+all declaring payloads of a tile to agree on both stage and foldFaces, and permits admitted folds from stage 2
 or in a declared ancestor of such a stage. On every coarse tile, `seamOwner`
 rejects new shared-point edges/faces outside their deterministic owner, using
 whole-source holding-leaf runs; see the [HLOD decision](architecture/hlod-040-decision.md) for the hash rule.
