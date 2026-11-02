@@ -2,6 +2,8 @@
 //! Boundary reconstruction precedes meshopt reduction. Stalled interiors get bounded
 //! topology cleanup and remeshing; only the reported capped frontier remains afterwards.
 #[cfg(test)]
+mod cluster_controls;
+#[cfg(test)]
 mod combined_controls;
 mod constrained;
 #[cfg(test)]
@@ -424,7 +426,9 @@ const CLUSTER_BISECTIONS: u32 = 12;
 /// components, as topology accounting requires) onto the member nearest the cell's mean
 /// (least index on ties); degenerate faces go and the rest settle (`settle`). The cell starts at
 /// the shortest edge, doubles until the output fits, then bisects toward the finest fit.
-/// The error is the largest move onto a representative.
+/// On a shared interface, a rejected settled grid uses the remaining doubling
+/// allowance to seek a capped guard-valid grid. The error is the largest move
+/// onto a representative.
 fn cluster_reduce(
     merged: &Merged,
     source: &[[u32; 3]],
@@ -512,27 +516,52 @@ fn cluster_reduce(
     };
     let (mut fine, mut h) = (shortest, shortest);
     let mut best = run(h);
-    if best.0.len() <= cap || !h.is_finite() {
+    if !h.is_finite() {
         return best;
     }
-    let mut fit = None;
-    for _ in 0..CLUSTER_DOUBLINGS {
-        h *= 2.;
-        best = run(h);
-        if best.0.len() <= cap {
-            fit = Some(h);
-            break;
+    let mut doublings = 0;
+    if best.0.len() > cap {
+        let mut fit = None;
+        while doublings < CLUSTER_DOUBLINGS {
+            h *= 2.;
+            doublings += 1;
+            best = run(h);
+            if best.0.len() <= cap {
+                fit = Some(h);
+                break;
+            }
+            fine = h;
         }
-        fine = h;
+        if let Some(mut coarse) = fit {
+            for _ in 0..CLUSTER_BISECTIONS {
+                let mid = (fine + coarse) / 2.;
+                let r = run(mid);
+                if r.0.len() <= cap {
+                    (coarse, best) = (mid, r);
+                } else {
+                    fine = mid;
+                }
+            }
+            h = coarse;
+        }
     }
-    if let Some(mut coarse) = fit {
-        for _ in 0..CLUSTER_BISECTIONS {
-            let mid = (fine + coarse) / 2.;
-            let r = run(mid);
-            if r.0.len() <= cap {
-                (coarse, best) = (mid, r);
-            } else {
-                fine = mid;
+    // Settling a reversed source face can increase a shared edge's directed
+    // incidence. A count-fitting grid is then unusable even though a coarser
+    // grid keeps the same exact border. Preserve an already valid result; spend
+    // only the remaining doubling allowance before the ordinary protected retry.
+    let valid = |faces: &[[u32; 3]]| {
+        !guard
+            .violations(&merged.positions, faces)
+            .iter()
+            .any(|v| *v)
+    };
+    if !interface.is_empty() && best.0.len() <= cap && !valid(&best.0) {
+        while doublings < CLUSTER_DOUBLINGS {
+            h *= 2.;
+            doublings += 1;
+            let candidate = run(h);
+            if !candidate.0.is_empty() && candidate.0.len() <= cap && valid(&candidate.0) {
+                return candidate;
             }
         }
     }
