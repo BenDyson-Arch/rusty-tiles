@@ -618,24 +618,6 @@ of the cell, far below the surface's own border noise at coarse depths.
   - Without a trigger, a level is emitted exactly as before.
 - **Unchanged.** Junctions, terminal contacts, cycle anchors, open-chain witnesses and face
   retention; certificates stay ordinal, checked at every breakpoint and rounded outward.
-- **Drag bound (owner, 2026-11-02).** A relieved chord (j ≥ 1) spans at most 64 interior
-  points.
-  - Each removed point p must stay within the tolerance of its faces' planes when it moves
-    to either chord endpoint e: |(e − p)·n| ≤ ε − 2·guard for the unit normal n of every
-    source face holding p.
-  - Normals come from the face's corner keys in key order, in f64, rounded to f32.
-  - A point holding more than 12 faces cannot be removed by a relieved chord.
-  - Collapse and snap move a removed vertex along its chord. Without this bound, a surface
-    meeting the border there (a wall on a straight ground border) was dragged metres off its
-    plane: a sweep tile went from 0.049 m to 17.7 m.
-  - With the bound, every moved face stays within ε of its source plane, so the floor below
-    covers it.
-  - Step 0 (D11) is unchanged.
-  - The bound can make a relieved step the stricter one. An arc therefore takes its
-    requested step only where that emits fewer chords than its least step; otherwise it
-    keeps the least step (D11 at 0). Relief never adds a segment to an arc. On the egg
-    crate the bounded step 6 needed 1,728 segments against D11's 1,600, and every depth-1
-    cell was omitted.
 - **Isolated ears.** On relieved arcs, an isolated ear stays retained: a source face with
   both of a vertex's edges shared and its opposite edge held by no other face.
 - **G floor.** Every tile publishes G ≥ max(E_d, 8·(d_own + d_finer), measured error,
@@ -683,7 +665,7 @@ of the cell, far below the surface's own border noise at coarse depths.
     the gap is 0, which refuses honest relieved siblings at their 8·d floor. Every tile
     strictly below the siblings still counts.
   - The S5 oracle reads each certificate's `step` and each tile's `reliefFloor` from the
-    sidecar. It re-derives the steps with the drag bound from the source faces: both pressures' triggers and requests, owner maximum and monotone
+    sidecar. It re-derives the steps: both pressures' triggers and requests, owner maximum and monotone
     tolerance. Collapsed single-child chains are rebuilt from the audit rows' depth and
     encoded depth.
   - The oracle checks certified ε against the step's tolerance. For relieved certificates

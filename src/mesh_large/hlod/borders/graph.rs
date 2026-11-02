@@ -21,28 +21,6 @@ use crate::{
 /// positives only cost an exact lookup.
 pub(super) const FILTER_WORDS: usize = 1 << 17;
 
-/// Unit normals of the source faces a shared vertex holds, at most this many (A1 drag).
-pub(super) const NORMALS: usize = 12;
-/// A vertex's face normals (f32), or None when it holds more than `NORMALS` faces.
-pub(super) type Faces = Option<([[f32; 3]; NORMALS], usize)>;
-
-/// The unit normal of a source face, from its corner keys in key order (so every reader
-/// computes the same bits), rounded to f32; None for a degenerate face.
-pub(super) fn unit_normal(face: &[Key; 3]) -> Option<[f32; 3]> {
-    let mut k = *face;
-    k.sort_unstable();
-    let p = k.map(|c| c.map(|w| f64::from(f32::from_bits(w))));
-    let u = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]];
-    let v = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]];
-    let n = [
-        u[1] * v[2] - u[2] * v[1],
-        u[2] * v[0] - u[0] * v[2],
-        u[0] * v[1] - u[1] * v[0],
-    ];
-    let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-    (len > 0. && len.is_finite()).then(|| n.map(|x| (x / len) as f32))
-}
-
 pub(super) struct Source {
     /// key x/y/z, owner first/end, incident head/count, minimum terminal leaf depth
     /// (bit 32: source open end; bits 40..48: face retention depth + 1).
@@ -56,9 +34,6 @@ pub(super) struct Source {
     pub(super) leaves: Disk<33>,
     pub(super) depth: u32,
     pub(super) leaf_rows: Sequence<InterfaceRow>,
-    /// Per vertex: up to `NORMALS` unit normals of the source faces holding it (two f32
-    /// per word) and their count (`NORMALS + 1`: more), for relief's drag bound (A1).
-    pub(super) normals: Disk<19>,
 }
 
 /// Owner rows are sorted by DFS leaf index. All leaves of one depth owner occupy
@@ -231,10 +206,6 @@ impl Source {
             )?;
         }
         admitted()?;
-        let mut normals = Disk::new(scratch, "border-normals")?;
-        if vertices.len > 0 {
-            normals.set(vertices.len - 1, [0; 19])?;
-        }
         let mut source = Self {
             vertices,
             edges: Disk::new(scratch, "border-edges")?,
@@ -243,7 +214,6 @@ impl Source {
             leaves,
             depth,
             leaf_rows,
-            normals,
         };
         let mut previous = None;
         for i in 0..raw_edges.len {
@@ -325,37 +295,21 @@ impl Source {
                 check()?;
             }
             let face = face?;
-            let hit = face.map(|k| {
-                probes(&k)
+            if !face.iter().all(|k| {
+                probes(k)
                     .iter()
                     .all(|&bit| filter[(bit / 64) as usize] & 1 << (bit % 64) != 0)
-            });
-            if !hit.contains(&true) {
+            }) {
                 continue;
             }
-            // Relief's drag bound (A1): every shared corner records the face's normal.
-            let mut found = [None; 3];
-            for c in 0..3 {
-                if hit[c] {
-                    found[c] = self.vertex(face[c])?;
-                }
-            }
-            if let Some(n) = found
-                .iter()
-                .any(Option::is_some)
-                .then(|| unit_normal(&face))
-                .flatten()
-            {
-                for v in found.into_iter().flatten() {
-                    self.add_normal(v, n)?;
-                }
-            }
-            let [Some(i0), Some(i1), Some(i2)] = found else {
-                continue;
-            };
-            let ids = [i0, i1, i2];
+            let mut ids = [0; 3];
             let mut depth = 0;
-            for &v in &ids {
+            for (id, k) in ids.iter_mut().zip(&face) {
+                let Some(v) = self.vertex(*k)? else {
+                    depth = NONE;
+                    break;
+                };
+                *id = v;
                 let r = self.vertices.get(v)?;
                 let external = (0..=self.depth)
                     .find_map(|d| match self.external(r[3], r[4], d) {
@@ -366,6 +320,9 @@ impl Source {
                     .transpose()?
                     .ok_or_else(|| state("a shared source vertex is never external"))?;
                 depth = depth.max(external);
+            }
+            if depth == NONE {
+                continue;
             }
             // An edge counts as shared only where it is a border at that depth: a
             // deeper border between two cells of one owner is interior there.
@@ -424,35 +381,6 @@ impl Source {
             }
         }
         Ok(false)
-    }
-    fn add_normal(&mut self, v: u64, n: [f32; 3]) -> Result<(), JobError> {
-        let mut r = self.normals.get(v)?;
-        let count = r[18] as usize;
-        if count < NORMALS {
-            for (axis, x) in n.into_iter().enumerate() {
-                let at = 3 * count + axis;
-                let shift = 32 * (at % 2);
-                r[at / 2] = r[at / 2] & !(0xffff_ffff << shift) | u64::from(x.to_bits()) << shift;
-            }
-        }
-        r[18] = (count + 1).min(NORMALS + 1) as u64;
-        self.normals.set(v, r)
-    }
-    /// The unit normals of the source faces holding vertex `v` (A1 drag bound).
-    pub(super) fn faces(normals: &Disk<19>, v: u64) -> Result<Faces, JobError> {
-        let r = normals.get(v)?;
-        let count = r[18] as usize;
-        if count > NORMALS {
-            return Ok(None);
-        }
-        let mut out = [[0f32; 3]; NORMALS];
-        for (s, n) in out.iter_mut().enumerate().take(count) {
-            for (axis, x) in n.iter_mut().enumerate() {
-                let at = 3 * s + axis;
-                *x = f32::from_bits((r[at / 2] >> (32 * (at % 2))) as u32);
-            }
-        }
-        Ok(Some((out, count)))
     }
     /// Whether a relieved chord at `depth` keeps this vertex (an isolated ear, A1).
     pub(super) fn ear_pinned(record: &[u64; 8], depth: u32) -> bool {

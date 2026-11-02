@@ -7,9 +7,8 @@
 //! points only (transients among one chord's points are allowed; otherwise only in its seam
 //! owner under the build's `folds::Policy`, none at stage 0), no edge between contract
 //! points gains a wing, no face is duplicated and no corner loses its last face. Interior
-//! vertices never move: the border pass bounds every relieved vertex's drag (A1), and
-//! nothing bounds an interior move. What remains is stuck: the ordinary contraction tries it, and when the whole contraction
-//! fails the cell's `Contracted` goes to the last resort's N3, which first resumes the
+//! vertices never move. What remains is stuck: the ordinary contraction tries it, and when
+//! the whole contraction fails the cell's `Contracted` goes to the last resort's N3, which first resumes the
 //! collapse under its own policy (`resume`), then snaps what is left.
 use super::{folds::Policy, topology, Contracted, Merged, Stuck};
 use crate::mesh_large::hlod::interfaces::{InterfaceRow, Key};

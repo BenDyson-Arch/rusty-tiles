@@ -27,9 +27,7 @@ from source incidence alone, in IEEE double like the producer:
 - live junctions (degree, owner changes, terminal leaves, source-open ends, face retention);
 - the walk order, cycle anchors and open-chain witnesses;
 - isolated ears on relieved chains;
-- the corridor greedy, and at relieved steps its span cap (64) and drag bound: each removed
-  point's source-face normals (from `canonical_map`, corner keys in key order, f32), against
-  both chord endpoints;
+- the corridor greedy;
 - each coarse cell's item count and both pressures' triggers and requests at `--triangle-cap`
   (feasibility 85% to 75%, steps ≤ 8; quality 37.5% to 25%, steps ≤ 6; the larger wins),
   the owner maximum and the finer-level monotone minimum.

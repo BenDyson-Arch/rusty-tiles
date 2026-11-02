@@ -10,7 +10,7 @@ pub(super) fn memory_need(sorter: SortConfig) -> u64 {
         + sorter.memory_bound::<disk::Words<7>>()
         + 8 * sorter.buffer_bytes as u64
         + (1 << 16)
-        + 15 * disk::CACHE_BYTES
+        + 14 * disk::CACHE_BYTES
         + 8 * graph::FILTER_WORDS as u64
         // Chain reuse compares two live contracts before the geometry stage.
         + 2 * contract_workspace_bytes(6 * super::TRIANGLE_CAP as u64)
@@ -50,7 +50,7 @@ pub(super) fn scratch_need(
     let h = u64::from(height) + 1;
     let persistent = rows
         .checked_mul(8 + 36)?
-        .checked_add(vertices.checked_mul(64 + 152)?)?
+        .checked_add(vertices.checked_mul(64)?)?
         .checked_add(edges.checked_mul(56 + 40)?)?
         .checked_add(nodes.checked_mul(64)?)?
         .checked_add(leaves.checked_mul(264)?)?
@@ -399,7 +399,7 @@ impl Borders {
         super::audit::bound(self.refs.len, self.source.nodes.len, source_triangle_depths)
     }
     fn bytes(&self) -> u64 {
-        self.source.vertices.len * (64 + 152)
+        self.source.vertices.len * 64
             + self.source.edges.len * 56
             + self.source.owners.len * 8
             + self.source.nodes.len * 64
@@ -802,12 +802,12 @@ impl Borders {
             at = graph::next_owner(&self.source.owners, at, e[3], end)?;
         }
         // Chords this arc emits at `step`. A relieved step is taken only where it emits
-        // fewer chords than the least step: the drag bound can make it the stricter one.
+        // fewer chords than the least step; isolated ear pins can make it stricter.
         let chords = |this: &Self, step: u32| -> Result<u64, JobError> {
             let epsilon = this.ladder.relief(depth, step);
             let mut n = 0;
             for pair in pinned(this, step)?.windows(2) {
-                n += this.count(arc, pair[0], pair[1], epsilon, step > 0)?;
+                n += this.count(arc, pair[0], pair[1], epsilon)?;
             }
             Ok(n)
         };
@@ -860,17 +860,8 @@ impl Borders {
     }
 
     /// Chords one piece would emit at `epsilon` (the relief census; nothing is written).
-    fn count(
-        &self,
-        arc: &Disk<3>,
-        first: u64,
-        last: u64,
-        epsilon: f64,
-        relieved: bool,
-    ) -> Result<u64, JobError> {
+    fn count(&self, arc: &Disk<3>, first: u64, last: u64, epsilon: f64) -> Result<u64, JobError> {
         let vertices = &self.source.vertices;
-        let normals = &self.source.normals;
-        let mut faces = |i| Source::faces(normals, arc.get(i)?[0]);
         let mut n = 0;
         curve::shortcuts(
             first,
@@ -885,7 +876,6 @@ impl Borders {
                 n += 1;
                 Ok(())
             },
-            relieved.then_some(&mut faces as &mut dyn FnMut(u64) -> _),
         )?;
         Ok(n)
     }
@@ -911,11 +901,8 @@ impl Borders {
             owners: owner_store,
             leaves,
             nodes,
-            normals,
             ..
         } = &mut self.source;
-        let normals = &*normals;
-        let mut faces = |i| Source::faces(normals, arc.get(i)?[0]);
         let vertex_count = vertices.len;
         let maps = &mut self.maps;
         let segments = &mut self.segments;
@@ -987,7 +974,6 @@ impl Borders {
                 }
                 Ok(())
             },
-            (step > 0).then_some(&mut faces as &mut dyn FnMut(u64) -> _),
         )?;
         Ok(())
     }

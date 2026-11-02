@@ -48,36 +48,10 @@ fn rounding(a: [f32; 3], b: [f32; 3]) -> f64 {
         * (128. * f64::EPSILON)
 }
 
-/// Interior points of a relieved chord, at most (A1 drag bound; bounds its window).
-pub(super) const RELIEF_SPAN: u64 = 64;
-
-/// Whether every interior point of the chord `window[0]`..`window[last]` can move to either
-/// endpoint with each source face it holds staying within `tol` of its plane (A1 drag
-/// bound): |(endpoint - p) . n| <= tol for every face normal n at p.
-fn dragged(window: &[([f32; 3], super::graph::Faces)], tol: f64) -> bool {
-    let ends = [window[0].0, window[window.len() - 1].0];
-    window[1..window.len() - 1].iter().all(|(p, faces)| {
-        let Some((normals, count)) = faces else {
-            return false;
-        };
-        normals[..*count].iter().all(|n| {
-            ends.iter().all(|e| {
-                let d = [0, 1, 2].map(|axis| f64::from(e[axis]) - f64::from(p[axis]));
-                (d[0] * f64::from(n[0]) + d[1] * f64::from(n[1]) + d[2] * f64::from(n[2])).abs()
-                    <= tol
-            })
-        })
-    })
-}
-
 /// Greedy coordinate corridors. Each source point is read a constant number of times;
 /// `emit` receives inclusive endpoint ordinals and an outward displacement certificate.
 /// Splitting into pinned subarcs (junctions, terminal locks, cycle anchors) is the caller's
 /// responsibility. Reads may be positioned disk reads; only constant state is resident.
-///
-/// `faces` (relieved steps, A1): a chord also spans at most `RELIEF_SPAN` interior points,
-/// and every interior point's source faces stay within the tolerance of their planes when
-/// it moves to either endpoint (`dragged`): the window holds the chord's points.
 pub(super) fn shortcuts(
     first: u64,
     last: u64,
@@ -85,7 +59,6 @@ pub(super) fn shortcuts(
     point: &mut impl FnMut(u64) -> Result<[f32; 3], JobError>,
     retained: &mut impl FnMut(u64) -> Result<bool, JobError>,
     emit: &mut impl FnMut(u64, u64, f64) -> Result<(), JobError>,
-    mut faces: Option<&mut dyn FnMut(u64) -> Result<super::graph::Faces, JobError>>,
 ) -> Result<(), JobError> {
     if first >= last || !epsilon.is_finite() || epsilon < 0. {
         return Err(state("invalid source arc or shortcut tolerance"));
@@ -97,24 +70,15 @@ pub(super) fn shortcuts(
         let p = point(i)?;
         guard = guard.max(rounding(p, p));
     }
-    let tol = (epsilon - 2. * guard).max(0.);
-    let mut window = Vec::new();
     let mut start = first;
     while start < last {
         let a = point(start)?;
-        window.clear();
-        if let Some(faces) = faces.as_mut() {
-            window.push((a, faces(start)?));
-        }
         let mut lower = [f64::NEG_INFINITY; 3];
         let mut upper = [f64::INFINITY; 3];
         let mut end = start;
         let mut i = start + 1;
         while i <= last {
             let b = point(i)?;
-            if let Some(faces) = faces.as_mut() {
-                window.push((b, faces(i)?));
-            }
             let radius = (epsilon - 2. * guard).max(0.) / 3f64.sqrt();
             let n = (i - start) as f64;
             let mut fits = epsilon >= 2. * guard;
@@ -128,11 +92,7 @@ pub(super) fn shortcuts(
             // An original source edge always fits exactly. Failed extension finalizes the
             // last accepted endpoint, then starts the next chord there.
             if retained(i)? {
-                if end != start
-                    && !(fits
-                        && (faces.is_none()
-                            || (i - start <= RELIEF_SPAN + 1 && dragged(&window, tol))))
-                {
+                if end != start && !fits {
                     break;
                 }
                 end = i;
@@ -195,71 +155,9 @@ mod tests {
                 result.push((a, b, e));
                 Ok(())
             },
-            None,
         )
         .unwrap();
         (result, reads)
-    }
-
-    /// Relieved chords over `points`, each holding the faces `normals(i)` (A1 drag bound).
-    fn relieved(
-        points: &[[f32; 3]],
-        epsilon: f64,
-        normals: &dyn Fn(usize) -> Vec<[f32; 3]>,
-    ) -> Vec<(u64, u64)> {
-        let mut out = Vec::new();
-        let mut faces = |i: u64| {
-            let mut n = [[0f32; 3]; super::super::graph::NORMALS];
-            let list = normals(i as usize);
-            n[..list.len()].copy_from_slice(&list);
-            Ok(Some((n, list.len())))
-        };
-        shortcuts(
-            0,
-            points.len() as u64 - 1,
-            epsilon,
-            &mut |i| Ok(points[i as usize]),
-            &mut |_| Ok(true),
-            &mut |a, b, _| {
-                out.push((a, b));
-                Ok(())
-            },
-            Some(&mut faces),
-        )
-        .unwrap();
-        out
-    }
-
-    /// A straight ground border where a wall stands at point 2: moving point 2 along the
-    /// chord would drag the wall's faces (normal along the border) off their plane, so a
-    /// relieved chord ends there. Flat faces (normal up) let it through, and without the
-    /// drag bound (step 0) the whole line is one chord.
-    #[test]
-    fn relieved_chords_keep_a_point_whose_faces_would_drag() {
-        let points: Vec<[f32; 3]> = (0..5).map(|x| [x as f32, 0., 0.]).collect();
-        let flat = |_: usize| vec![[0., 0., 1.]];
-        let wall = |i: usize| {
-            if i == 2 {
-                vec![[0., 0., 1.], [1., 0., 0.]]
-            } else {
-                vec![[0., 0., 1.]]
-            }
-        };
-        assert_eq!(relieved(&points, 0.1, &flat), [(0, 4)]);
-        assert_eq!(relieved(&points, 0.1, &wall), [(0, 2), (2, 4)]);
-        assert_eq!(contract(&points, 0.1).0.len(), 1);
-    }
-
-    /// A relieved chord spans at most `RELIEF_SPAN` interior points, even on a flat line.
-    #[test]
-    fn relieved_chords_span_at_most_the_relief_span() {
-        let points: Vec<[f32; 3]> = (0..200).map(|x| [x as f32, 0., 0.]).collect();
-        let chords = relieved(&points, 0.1, &|_| vec![[0., 0., 1.]]);
-        assert!(
-            chords.iter().all(|(a, b)| b - a <= RELIEF_SPAN + 1),
-            "{chords:?}"
-        );
-        assert_eq!(chords.first(), Some(&(0, RELIEF_SPAN + 1)));
     }
 
     #[test]
@@ -276,7 +174,6 @@ mod tests {
                 chords.push((a, b, e));
                 Ok(())
             },
-            None,
         )
         .unwrap();
         assert_eq!(chords.len(), 2);
@@ -316,7 +213,6 @@ mod tests {
                     chords.push((a, b, bound));
                     Ok(())
                 },
-                None,
             )
             .unwrap();
             assert_eq!(chords.len(), 1);
