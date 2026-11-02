@@ -529,15 +529,12 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
         Ok(())
     }
 
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     pub(crate) fn extend(
         &mut self,
         records: impl IntoIterator<Item = T>,
     ) -> Result<(), SpillError> {
         records.into_iter().try_for_each(|record| self.push(record))
-    }
-
-    pub(crate) fn stats(&self) -> SortStats {
-        self.stats
     }
 
     #[cfg(test)]
@@ -780,6 +777,7 @@ pub(crate) struct SortedStream<'s, T: Record> {
 }
 
 impl<T: Record> SortedStream<'_, T> {
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     pub(crate) fn remaining(&self) -> u64 {
         self.remaining
     }
@@ -809,6 +807,7 @@ impl<T: Record> SortedStream<'_, T> {
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))] // Test fixture access; not used by the public pipeline.
     pub(crate) fn stats(&self) -> SortStats {
         self.stats
     }

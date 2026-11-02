@@ -91,6 +91,7 @@ pub(in crate::mesh_large) fn material_key(material: &Value, texture: bool) -> Va
 pub(in crate::mesh_large) struct MaterialClasses(Vec<u32>);
 
 impl MaterialClasses {
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     /// No materials.
     pub(in crate::mesh_large) const EMPTY: Self = Self(Vec::new());
     pub(in crate::mesh_large) fn new(
@@ -124,11 +125,6 @@ impl MaterialClasses {
             classes.push(*first.entry(key.to_string()).or_insert(id));
         }
         Ok(Self(classes))
-    }
-    /// Each listed material is its own class (fixtures without a capture).
-    #[cfg(test)]
-    pub(in crate::mesh_large) fn identity(count: u32) -> Self {
-        Self((0..count).collect())
     }
     /// The class representative of `material`; `u32::MAX` (no material) and IDs outside
     /// the table are their own class.

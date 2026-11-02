@@ -144,7 +144,8 @@ source that would need native PROJ for only some vertices is refused.
 
 Leaves are the exact tiles; an occupied cell above them publishes one coarse tile
 built from its children, unless it is [omitted](#hierarchy-and-cracks) because its
-locked interface cannot fit the triangle cap. This is the only coarse-tile method; it
+contract exceeds the triangle cap or border-touching open boundaries cannot be
+kept by the last resort. This is the only coarse-tile method; it
 has no selector, and a plain `mesh` run uses it.
 
 ### Hierarchy and cracks
@@ -164,10 +165,10 @@ has no selector, and a plain `mesh` run uses it.
   defects and T-junctions are counted, never matched with a tolerance. Adjacent
   faces may be retriangulated, but delivered border edges and border-connected
   components survive. This does not make the source watertight.
-- **Omission, not refusal.** 8,192 triangles stays the hard published cap. If a
-  parent still needs more triangles than the cap after shared-border reconstruction,
-  simplification and bounded interior remeshing, its coarse
-  tile is **omitted**; the run does not fail. Omission propagates upward: every ancestor to the root is omitted
+- **Residual omission.** After ordinary strategies fail, constructive last resorts
+  N1/N2/N3 run as described below. A coarse tile is omitted only if its contract
+  alone exceeds the 8,192-triangle cap or its last resort cannot keep the open
+  boundaries touching its border; the run does not fail. Omission propagates upward: every ancestor to the root is omitted
   too, because a parent cannot be built with a hole where the omitted tile was. An
   omitted cell publishes no content and holds no geometry, and the capped descendant
   frontier (coarse tiles and leaves below it) is what the archive publishes there. An
@@ -179,23 +180,55 @@ has no selector, and a plain `mesh` run uses it.
   `omitted_by_depth`, including zeros at every tree depth. Its `borders_by_depth`
   summary also reports border displacement, terminal locks, topology changes by
   kind, omission sources and capped-frontier uses, including zeros. The internal
-  leaf manifest carries the same counts. Omission is a bounded last resort and costs client requests near the omitted region (about 8
+  leaf manifest carries the same counts. Residual omission costs client requests near the omitted region (about 8
   times the depth in content-less cells plus the children's tiles). It is distinct from resource refusals: a budget or scratch/disk shortfall is
   still `resource_limit`, and an unreadable or unsupported source is still refused.
-- **Coarse drops.** Before omitting a cell whose contracted children exceed the cap,
-  the producer drops whole border-free components smallest first (bounding-box
-  diagonal), even above the cell's G floor, until it fits. G covers the dropped surface
-  and stays at least the children's G; an ancestor may then drop smaller components
-  under that larger G as ordinary drops. Any drop, ordinary or coarse, now needs cap
-  pressure (the cell's input above the cap), and drops at or above the children's G go
-  smallest first. Every coarse payload that drops child
-  components says how many in glTF `asset.extras.rustyTiles.droppedComponents` (absent
-  when none), which `validate` recounts. `borders_by_depth[].topology` reports
-  `droppedComponents` and, when nonzero, `coarseDroppedComponents`.
+- **Coarse drops.** Outside N3, whole border-free components drop under cap
+  pressure; drops at or above child G go smallest first (bounding-box diagonal,
+  then triangle count). N3 permits border-free components and holes to drop or
+  close at any size. Loss is measured into G, which stays at least child G.
+  Every component drop is declared in `asset.extras.rustyTiles.droppedComponents`;
+  `borders_by_depth[].topology` reports `droppedComponents` and nonzero
+  `coarseDroppedComponents`. See the [validator caveat](VALIDATION.md).
 - **Single-child chains.** A cell whose only child is a coarse tile publishes that
   tile once, at the top of the chain; the cells below carry no content and the same
   error, so refinement stays monotone. A cell whose only child is a leaf publishes
   a reduced copy of it.
+
+### Last-resort declarations
+
+`asset.extras.rustyTiles.lastResort` is a strict object with exactly two required
+integer fields: `stage` in 0–3 and `foldFaces` in 0–18446744073709551615; unknown
+fields, missing fields and other types are invalid. Absence means no declaration.
+N1 (stage 1) admits new shared-point faces/edges only in their deterministic seam
+owner. N2 (stage 2) also admits folds, turns reversed faces to source orientation
+and removes coincident copies beyond source multiplicity. N3 (stage 3) clusters
+per input component while fixing interface points, opening pins and border-touching
+open boundaries; border-free components and holes may drop or close at any size,
+with loss measured into G rather than bounded by E. Stage 0 declares inherited
+folds retained above a stage-2/3 descendant, not another reduction strategy.
+
+`foldFaces` counts decoded faces in a coincident group (at least two faces on the
+same corner set, either orientation) or incident to an edge used in the same
+direction by at least two faces. Count each qualifying face once, not each pair
+or edge. Validation recounts this value (`lastResort` on mismatch), requires a
+fold-admitting descendant for stage 0, and permits admitted folds from stage 2
+or in a declared ancestor of such a stage. On every coarse tile, `seamOwner`
+rejects new shared-point edges/faces outside their deterministic owner, using
+whole-source holding-leaf runs; see the [HLOD decision](architecture/hlod-040-decision.md) for the hash rule.
+
+For example, inside a GLB's `asset`:
+
+```json
+{"extras":{"rustyTiles":{"lastResort":{"stage":2,"foldFaces":4}}}}
+```
+
+This declares four qualifying decoded faces, which must match the recount.
+Conversion `diagnostics.hlod` reports `last_resort_tiles`, `last_resort_stages`
+(N1/N2/N3 counts), `fold_faces` and `declared_tiles` (including stage-0 tiles,
+with stage and fold count). Residual omission occurs only when the contract alone
+exceeds the cap or border-touching open boundaries cannot survive the last resort;
+it propagates upward. The declaration does not certify source-distance maxima.
 
 ### Geometric error: sampled, not certified
 

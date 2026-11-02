@@ -40,9 +40,6 @@ impl MemoryGate {
             freed: Condvar::new(),
         }
     }
-    pub(super) fn total(&self) -> u64 {
-        self.total
-    }
     /// Highest number of simultaneously leased bytes.
     pub(super) fn peak(&self) -> u64 {
         lock(&self.state).peak

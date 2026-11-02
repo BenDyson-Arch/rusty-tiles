@@ -525,6 +525,7 @@ fn memory_bound(
     })
 }
 
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 pub(crate) fn capture(
     input: &Path,
     config: &TreeConfig,
@@ -1041,6 +1042,7 @@ impl RecordLimits {
         Ok(())
     }
 }
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 /// A typed refusal, never a truncation, for a run with more triangles than [`RANK_LIMIT`].
 pub(crate) fn check_rank_limit(triangles: u64) -> Result<(), JobError> {
     RecordLimits::PACKED.check_triangles(triangles)

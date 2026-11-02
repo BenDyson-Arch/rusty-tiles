@@ -66,6 +66,7 @@ pub(crate) fn resolve(value: Option<&Value>) -> Result<SourceSampler, JobError> 
         mag_filter: field("magFilter", 9729, &[9728, 9729])?,
     })
 }
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 pub(crate) fn plan(
     uvs: &[[f32; 2]],
     image_width: u32,
@@ -180,6 +181,7 @@ const ISLAND_CELL_BUDGET: u64 = 1 << 22;
 /// Initial clustering cell edge in source texels. Footprints whose padded
 /// allocations come within one cell of each other share an island.
 const ISLAND_CELL: i64 = 8;
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 /// Island crops: triangles (three UV corners each) are clustered by the
 /// overlap of their padded texel footprints on a coarse grid; each cluster
 /// becomes one crop with the same real-source halo and gutter as [`plan`],
