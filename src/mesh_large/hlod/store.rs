@@ -47,6 +47,8 @@ pub(crate) enum StoppingBound {
     Input,
     /// Reduced to the triangle cap (the budget-led target).
     TriangleBudget,
+    /// One error-targeted proposal, constrained by support and source admission.
+    GuardedError,
 }
 
 /// A finished tile held for its parent: welded vertices with their leaf-canonical decode,

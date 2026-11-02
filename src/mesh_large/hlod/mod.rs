@@ -447,6 +447,7 @@ pub(crate) struct HlodReport {
     pub input_triangles: u64,
     pub stopped_by_input: u64,
     pub stopped_by_triangle_budget: u64,
+    pub stopped_by_guarded_error: u64,
     pub tiles_with_protected_faces: u64,
     pub protected_faces: u64,
     pub retries: u64,
@@ -1774,6 +1775,7 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     match row.stopping_bound {
         StoppingBound::Input => report.stopped_by_input += 1,
         StoppingBound::TriangleBudget => report.stopped_by_triangle_budget += 1,
+        StoppingBound::GuardedError => report.stopped_by_guarded_error += 1,
     }
     report.tiles_with_protected_faces += u64::from(row.protected_faces > 0);
     report.protected_faces += u64::from(row.protected_faces);

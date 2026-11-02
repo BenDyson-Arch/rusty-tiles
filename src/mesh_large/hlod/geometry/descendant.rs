@@ -325,7 +325,7 @@ pub(crate) fn propose(
             lease: None,
         },
         locked: built.locked.clone(),
-        stopping: built.stopping,
+        stopping: super::super::store::StoppingBound::GuardedError,
         simplifier_error: f64::from(estimate),
         children_error: built.children_error,
         input_triangles: built.input_triangles,
