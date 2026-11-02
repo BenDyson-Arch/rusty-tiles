@@ -474,9 +474,9 @@ struct Grid {
     /// so no input can crowd a bucket.
     dims: [usize; 3],
     cells: Vec<Vec<u32>>,
-    /// The face that answered or certified last, with its decoded corners, reused only at its
-    /// own cell-list position: trying it first could add tests before an earlier answer and
-    /// change the verdict at the effort limit (#317).
+    /// The face that answered or certified last, with its decoded corners. `within` tries it
+    /// first; the certificate reuses its corners only at its own cell-list position, so the
+    /// certificate's charged work never depends on the cache (#317).
     last: std::cell::Cell<Option<(u32, [[f64; 3]; 3])>>,
 }
 
@@ -644,8 +644,11 @@ impl Grid {
         Ok(true)
     }
 
-    /// Whether `p` lies within the parent's reach plus `slack` of a face, scanning `p`'s cell in
-    /// order (#317: the cached face only lends its decoded corners at its own position).
+    /// Whether `p` lies within the parent's reach plus `slack` of a face. The last answering face
+    /// is tried first (charged as a test): any face within reach answers, and one within reach
+    /// of `p` was entered in `p`'s cell, so the answer is the cell scan's. The charged work then
+    /// depends on the cache, which is a pure function of the archive (the queries run in a fixed
+    /// order), so the verdict stays deterministic and every test is charged.
     fn within(
         &self,
         p: [f64; 3],
@@ -654,6 +657,12 @@ impl Grid {
         effort: &Effort,
     ) -> Result<bool, Error> {
         let reach = self.reach + slack;
+        if let Some((_, face)) = self.last.get() {
+            effort.charge(TEST_UNITS)?;
+            if distance2(p, face) <= reach * reach {
+                return Ok(true);
+            }
+        }
         let Some(cell) = self.faces_at(p) else {
             return Ok(false);
         };
@@ -842,10 +851,10 @@ mod tests {
         let before = used();
         assert!(grid.within(p, 0.01, &faces, &effort).unwrap());
         assert_eq!(used() - before, super::TEST_UNITS * tested);
-        // The cached answer lends its corners only: the scan, and its charge, repeat.
+        // The last answer is tried first: one test.
         let before = used();
         assert!(grid.within(p, 0.01, &faces, &effort).unwrap());
-        assert_eq!(used() - before, super::TEST_UNITS * tested);
+        assert_eq!(used() - before, super::TEST_UNITS);
     }
 
     #[test]
@@ -892,9 +901,9 @@ mod tests {
     }
 
     #[test]
-    fn cached_faces_preserve_verdicts_at_the_effort_limit() {
+    fn cached_faces_keep_certificate_work_and_honest_point_queries() {
         use super::super::tests::effort_for_tests;
-        use super::{point, Grid};
+        use super::{distance2, point, Grid};
         use std::sync::atomic::Ordering::Relaxed;
 
         let triangle = [[0.1, 0.1, 0.], [0.2, 0.1, 0.], [0.1, 0.2, 0.]];
@@ -911,38 +920,54 @@ mod tests {
             let faces = [NEAR, other].map(|t| t.map(|p| p.map(|v| (v as f32).to_bits())));
             let grid = Grid::new(&faces, 0.18, 0., &effort_for_tests()).unwrap();
             assert_eq!(grid.faces_at(p).unwrap().contains(&1), in_cell);
-            for continuous in [false, true] {
-                // region + one fast test, or one point test
-                let needed = if continuous {
-                    super::CERT_REGION_UNITS + super::CERT_FAST_UNITS
-                } else {
-                    super::TEST_UNITS
-                } as u64;
-                for remaining in 0..=needed + 8 {
-                    let mut cold = None;
-                    for cached in [None, Some(0), Some(1)] {
+            let reach2 = grid.reach * grid.reach;
+            let near = |i: u32| distance2(p, faces[i as usize].map(point)) <= reach2;
+            let cell = grid.faces_at(p).unwrap().clone();
+            for remaining in 0..=super::CERT_REGION_UNITS as u64 + 32 {
+                // The certificate: the same verdict and work whatever the cache holds (#317).
+                let mut cold = None;
+                for cached in [None, Some(0), Some(1)] {
+                    grid.last
+                        .set(cached.map(|i| (i, faces[i as usize].map(point))));
+                    let mut effort = effort_for_tests();
+                    effort.base = effort.budget.value - remaining;
+                    let result = grid.covers(triangle, &faces, &effort);
+                    let needed = (super::CERT_REGION_UNITS + super::CERT_FAST_UNITS) as u64;
+                    assert_eq!(result.as_ref().ok(), (remaining >= needed).then_some(&true));
+                    let observed = (
+                        result.map_err(|e| e.to_string()),
+                        effort.used.load(Relaxed),
+                        effort.certificate_fast.load(Relaxed),
+                        effort.certificate_slow.load(Relaxed),
+                    );
+                    match &cold {
+                        Some(expected) => assert_eq!(&observed, expected),
+                        None => cold = Some(observed),
+                    }
+                }
+                // A point query: its work depends on the cache (tried first), so it is a pure
+                // function of the cache state, and every distance test it runs is charged.
+                for cached in [None, Some(0), Some(1)] {
+                    let tests = match cached {
+                        Some(i) if near(i) => 1,
+                        Some(_) => 1 + cell.iter().position(|&i| near(i)).unwrap() + 1,
+                        None => cell.iter().position(|&i| near(i)).unwrap() + 1,
+                    } as u64;
+                    let needed = super::TEST_UNITS as u64 * tests;
+                    let mut runs = Vec::new();
+                    for _ in 0..2 {
                         grid.last
                             .set(cached.map(|i| (i, faces[i as usize].map(point))));
                         let mut effort = effort_for_tests();
                         effort.base = effort.budget.value - remaining;
-                        let result = if continuous {
-                            grid.covers(triangle, &faces, &effort)
-                        } else {
-                            grid.within(p, 0., &faces, &effort)
-                        };
+                        let result = grid.within(p, 0., &faces, &effort);
                         assert_eq!(result.as_ref().ok(), (remaining >= needed).then_some(&true));
-                        let observed = (
-                            result.map_err(|e| e.to_string()),
-                            effort.used.load(Relaxed),
-                            effort.certificate_fast.load(Relaxed),
-                            effort.certificate_slow.load(Relaxed),
-                        );
-                        if let Some(expected) = &cold {
-                            assert_eq!(&observed, expected);
-                        } else {
-                            cold = Some(observed);
+                        if remaining >= needed {
+                            assert_eq!(effort.used.load(Relaxed), needed);
                         }
+                        runs.push((result.map_err(|e| e.to_string()), effort.used.load(Relaxed)));
                     }
+                    assert_eq!(runs[0], runs[1]);
                 }
             }
         }

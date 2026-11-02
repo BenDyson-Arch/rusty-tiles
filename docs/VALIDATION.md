@@ -88,14 +88,20 @@ next-up/down encloses the final additions/subtractions and squaring. Adding B
 extends each bound from x to every point in its box by 1-Lipschitz continuity.
 Outside this domain, or in an unresolved band, the interval path runs and
 uncertified cases refuse. Each query increments an unweighted fast counter;
-interval fallbacks increment a separate unweighted slow counter. Existing effort
-charges remain, pending #309's separate weighting. The last answering face's
-decoded coordinates are reused only at its original position in the current
-cell's candidate list; there is no extra probe or reordering. With or without
-this cache, each query sees identical coordinates, candidate order and distance
-results, and therefore identical early exits and point/face charges. Induction
-over regions gives identical subdivisions and total effort. Thus the cache
-cannot change either the geometric verdict or a refusal at the effort limit.
+interval fallbacks increment a separate slow counter. Each distance test is
+charged 8 units before it runs and 795 more when it falls to the interval path
+(the measured fast and slow costs over τ; see the
+[limits amendment](architecture/validator-limits-amendment.md)). In the
+certificate, the last answering face's decoded coordinates are reused only at its
+original position in the current cell's candidate list; there is no extra probe
+or reordering. With or without this cache, each certificate query sees identical
+coordinates, candidate order and distance results, and therefore identical early
+exits and charges. Induction over regions gives identical subdivisions and total
+effort, so the cache cannot change the certificate's verdict or a refusal at the
+effort limit. The sampled stage 0–2 checks (`within`) try the cached face first
+instead: their charged work depends on the cache, but the cache is a pure
+function of the archive (the queries run in a fixed order), so verdicts stay
+deterministic and every distance test is charged.
 
 This is a sufficient certificate and can refuse a valid
 surface when its budget/depth is insufficient. Stages 0–2 and undeclared drops
