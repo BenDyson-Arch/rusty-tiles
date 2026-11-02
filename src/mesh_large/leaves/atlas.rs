@@ -109,6 +109,7 @@ fn period_pages(
     bindings: &mut [Binding],
     primitives: &[PreparedPrimitive],
     (profile, max_edge, mask_classes): (Profile, u32, &[Option<u32>]),
+    admit: &mut dyn FnMut(u64) -> Result<(), JobError>,
 ) -> Result<Vec<PagePlan>, JobError> {
     let mut groups = BTreeMap::<_, Vec<usize>>::new();
     for (i, b) in bindings.iter().enumerate() {
@@ -179,8 +180,8 @@ fn period_pages(
                 b.period = [false; 2];
                 if b.block.width == 0 {
                     let uvs = &primitives[b.primitive].uvs[b.output_uv];
-                    b.block = crops::plan_islands_aligned(
-                        uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
+                    b.block = crops::plan_islands_bounded(
+                        uvs, size[0], size[1], max_edge, gutter, align, mipmapped, admit,
                     )?;
                 }
             }
@@ -718,9 +719,11 @@ struct Layout {
     bindings: Vec<Binding>,
     masked: Vec<bool>,
     pages: Vec<PagePlan>,
+    planning_bytes: u64,
 }
 /// Shares the exact physical crop/packing representation with final preparation.
 /// Counts planning owners and raw streams; it does not predict compressed file size.
+#[cfg(test)]
 pub(super) fn project(
     triangles: &[FullTriangle],
     resources: AtlasResources<'_>,
@@ -728,11 +731,22 @@ pub(super) fn project(
     drop: u32,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<LeafProjection, JobError> {
+    project_bounded(triangles, resources, profile, drop, None, check)
+}
+pub(super) fn project_bounded(
+    triangles: &[FullTriangle],
+    resources: AtlasResources<'_>,
+    profile: Profile,
+    drop: u32,
+    ceiling: Option<u64>,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<LeafProjection, JobError> {
     let layout = layout(
         (triangles.to_vec(), vec![[0; 3]; triangles.len()]),
         resources,
         profile,
         drop,
+        ceiling,
         check,
     )?;
     let mut base = 0u64;
@@ -821,6 +835,7 @@ pub(super) fn project(
         .ok_or_else(resource)?;
     let owned = rows
         .checked_add(uv)
+        .and_then(|n| n.checked_add(layout.planning_bytes))
         .and_then(|n| n.checked_add(metadata))
         .and_then(|n| n.checked_add(receipt_owners))
         .and_then(|n| n.checked_add((layout.bindings.len() as u64).checked_mul(16 << 10)?))
@@ -839,6 +854,7 @@ fn layout(
     resources: AtlasResources<'_>,
     profile: Profile,
     drop: u32,
+    ceiling: Option<u64>,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Layout, JobError> {
     let mut primitives = triangles_by_primitive(geometry.0, geometry.1)?;
@@ -854,6 +870,7 @@ fn layout(
         _ => 4096,
     };
     let mut bindings = Vec::new();
+    let (mut retained, mut planning_bytes) = (0u64, 0u64);
     let mut masked = vec![false; primitives.len()];
     let mut mask_classes = vec![None; primitives.len()];
     for (pi, p) in primitives.iter_mut().enumerate() {
@@ -892,8 +909,22 @@ fn layout(
             let mipmapped =
                 profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
             let period = period_axes(&uvs, sampler);
-            let block = match crops::plan_islands_aligned(
-                &uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
+            let block = match crops::plan_islands_bounded(
+                &uvs,
+                size[0],
+                size[1],
+                max_edge,
+                gutter,
+                align,
+                mipmapped,
+                &mut |bytes| {
+                    let peak = retained.checked_add(bytes).ok_or_else(resource)?;
+                    if ceiling.is_some_and(|limit| peak > limit) {
+                        return Err(resource());
+                    }
+                    planning_bytes = planning_bytes.max(peak);
+                    Ok(())
+                },
             ) {
                 Ok(block) => block,
                 // Unrepresentable as crops: `period_pages` may still place it whole.
@@ -907,6 +938,9 @@ fn layout(
                 }
                 Err(e) => return Err(e),
             };
+            retained = retained
+                .checked_add(block.heap_bytes())
+                .ok_or_else(resource)?;
             p.uvs.push(uvs);
             bindings.push(Binding {
                 primitive: pi,
@@ -923,10 +957,31 @@ fn layout(
             });
         }
     }
+    let items = bindings.iter().map(|b| b.block.islands.len()).sum();
+    planning_bytes = planning_bytes.max(
+        retained
+            .checked_add(if items == 0 {
+                0
+            } else {
+                mask_pack::workspace_bytes(max_edge, items)
+            })
+            .ok_or_else(resource)?,
+    );
+    if ceiling.is_some_and(|limit| planning_bytes > limit) {
+        return Err(resource());
+    }
     let dedicated = period_pages(
         &mut bindings,
         &primitives,
         (profile, max_edge, &mask_classes),
+        &mut |bytes| {
+            let peak = retained.checked_add(bytes).ok_or_else(resource)?;
+            if ceiling.is_some_and(|limit| peak > limit) {
+                return Err(resource());
+            }
+            planning_bytes = planning_bytes.max(peak);
+            Ok(())
+        },
     )?;
     let mut plans = pack(&mut bindings, max_edge, &mask_classes)?;
     for page in dedicated {
@@ -970,6 +1025,7 @@ fn layout(
         bindings,
         masked,
         pages: plans,
+        planning_bytes,
     })
 }
 
@@ -1008,10 +1064,11 @@ fn page_charge(
         .checked_mul(u64::from(page.height))
         .ok_or_else(resource)?;
     let codec = delivery::workspace_charge([page.width, page.height], profile)?;
-    // RGBA and support, plus island labels and their reduced chain on mipmapped pages.
+    // RGBA/support, labels/reduced chain, and the span Vec: at most one run
+    // per texel, 12 bytes each with up to twice the capacity during collection.
     let mipmapped = profile != Profile::Lossless && matches!(page.sampler.min_filter, 9984..=9987);
     let assembly = pixels
-        .checked_mul(if mipmapped { 18 } else { 8 })
+        .checked_mul(if mipmapped { 42 } else { 32 })
         .ok_or_else(resource)?;
     let mut decode = 0u64;
     for &bi in &page.bindings {
@@ -1323,7 +1380,7 @@ pub(super) fn prepare(
         image_info: &captured.image_info,
     };
     let layout = timing::time(Stage::Layout, || {
-        layout(geometry, resources, profile, drop, &mut || {
+        layout(geometry, resources, profile, drop, None, &mut || {
             (services.check)()
         })
     })?;
@@ -1421,6 +1478,81 @@ pub(super) fn prepare(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn lossless_8192_mask_capacity_is_projected_and_refused_before_allocation() {
+        use crate::gltf_source::source::{Document, ImageInfo};
+        use crate::mesh_large::{
+            attributes::{CornerAttributes, UV0},
+            records::{Provenance, TriangleRecord},
+        };
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"material":0}]}],
+            "buffers":[{"uri":"never-read.bin","byteLength":60}],"bufferViews":[{"buffer":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":24}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[1,1,0]},
+                {"bufferView":1,"componentType":5126,"count":3,"type":"VEC2"}],
+            "images":[{"uri":"never-read.png"}],"textures":[{"source":0,"sampler":0}],
+            "samplers":[{"minFilter":9729,"wrapS":33071,"wrapT":33071}],
+            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
+        let document = Document::parse(&serde_json::to_vec(&doc).unwrap(), || Ok(())).unwrap();
+        let info = [ImageInfo {
+            mime_type: "image/png",
+            extension: "png",
+            width: 8186,
+            height: 8186,
+        }];
+        let classes = crate::mesh_large::batching::MaterialClasses::default();
+        let resources = AtlasResources {
+            materials: document.materials(),
+            classes: &classes,
+            textures: document.textures(),
+            samplers: document.samplers(),
+            image_info: &info,
+        };
+        let uv = [[0., 0.], [1., 0.], [0., 1.]];
+        let row = FullTriangle {
+            triangle: TriangleRecord {
+                key: 0,
+                source: Provenance::default(),
+                vertices: [0, 1, 2],
+                positions: [[0.; 3], [1., 0., 0.], [0., 1., 0.]],
+                bytes: 56,
+                degenerate: false,
+            },
+            expanded_ordinal: 0,
+            material: 0,
+            flags: UV0,
+            corners: std::array::from_fn(|i| CornerAttributes {
+                texcoords: [uv[i], [0.; 2]],
+                ..Default::default()
+            }),
+        };
+        let block = crops::plan_islands_aligned(&uv, 8186, 8186, 8192, 2, 1, false).unwrap();
+        let bits: u64 = block
+            .islands
+            .iter()
+            .map(|i| i.mask.as_ref().unwrap().1.bits.capacity() as u64 * 8)
+            .sum();
+        assert_eq!(bits, 8_388_608);
+        let projected = project(&[row], resources, Profile::Lossless, 0, &mut || Ok(())).unwrap();
+        assert!(projected.owned_bytes >= block.heap_bytes());
+        assert!(projected.owned_bytes >= bits + mask_pack::workspace_bytes(8192, 1));
+        println!(
+            "8192² bits={bits}, containers={}, projected owned={}",
+            block.heap_bytes() - bits,
+            projected.owned_bytes
+        );
+        let err = project_bounded(
+            &[row],
+            resources,
+            Profile::Lossless,
+            0,
+            Some(bits - 1),
+            &mut || Ok(()),
+        )
+        .err()
+        .unwrap();
+        assert_eq!(err.kind(), JobErrorKind::ResourceLimit);
+    }
     #[test]
     fn whole_period_axes_keep_source_uvs_bit_for_bit() {
         let crop = Crop {

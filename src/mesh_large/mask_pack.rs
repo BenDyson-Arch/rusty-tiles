@@ -63,6 +63,14 @@ impl Mask {
     }
 }
 
+/// Peak packing heap: doubling page words, bounded B-tree nodes (including the
+/// insertion before trimming), sort/reference/item arrays and two origin solutions.
+pub(crate) fn workspace_bytes(edge: u32, items: usize) -> u64 {
+    16 * (u64::from(edge.div_ceil(64)) + 1) * u64::from(edge)
+        + (CANDIDATES as u64 + 3) * 128
+        + items as u64 * 128
+}
+
 /// Bottom-left pack `masks` in `order` into `width` cells: per mask its origin in cells, and
 /// the (used width, height), or `None` when a mask is wider or the height exceeds
 /// `max_height`. Candidates are the origin, the page top and every placed mask's right and

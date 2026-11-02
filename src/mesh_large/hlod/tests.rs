@@ -6043,3 +6043,36 @@ fn n3_clusters_a_border_heavy_fold_cell_to_the_cap() {
         assert!(!develop.contains(&key), "{name}: {key:?}");
     }
 }
+
+/// Archived tex3/Walem metadata: A's 1024 pages and B's 2048 slots before the
+/// mask-workspace charge. These are separate policies, not additive page charges.
+#[test]
+fn coarse_mask_charge_keeps_archived_worker_limits_for_each_page_policy() {
+    use crate::mesh_large::{config::Jobs, resources::MemoryBudget};
+    let a_masks = super::charts::workspace_bytes(1024, 1 << 20, super::TRIANGLE_CAP as u64);
+    let b_masks = super::chart_workspace(super::appearance::MAX_PAGE_EDGE, super::TRIANGLE_CAP);
+    assert_eq!(a_masks, 40_505_600);
+    assert_eq!(b_masks, 88_613_376);
+    for requested in [None, Some(4 << 30)] {
+        let budget = MemoryBudget::resolve_with(requested, Some(10 << 30)).unwrap();
+        for (name, fixed) in [("tex3", 396_150_356), ("walem-scale", 402_663_442)] {
+            let available = budget.ceiling(Some(10 << 30)) - fixed - 21_108_288 - 22_373_720;
+            for (policy, base_job, extra, workers) in [
+                ("A/1024", 693_607_796, a_masks, 5),
+                ("B/2048", 1_491_574_132, b_masks, 2),
+            ] {
+                let job = base_job + extra;
+                assert_eq!(
+                    super::worker_admission(available, job, Jobs::Auto, 8),
+                    (workers, "memory")
+                );
+                println!("{name} {policy} requested={requested:?} extra={extra} job={job} available={available} auto={workers}");
+            }
+            // Sensitive control: the reviewed overcharge admits only four.
+            assert_eq!(
+                super::worker_admission(available, 693_607_796 + 188_498_304, Jobs::Auto, 8),
+                (4, "memory")
+            );
+        }
+    }
+}
