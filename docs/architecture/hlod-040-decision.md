@@ -640,6 +640,20 @@ every tile built today is unchanged:
   position. Cached and uncached scans have identical candidates, distance
   results, early exits and charges. Induction over regions preserves the same
   subdivision sequence and budget verdict, including at the effort limit.
+  A centroid interval box strictly outside a face's outward R-expanded AABB
+  proves the exact centroid farther than R. Convexity then rules out a
+  three-corner certificate against that face. Count/charge one fast box query
+  and omit its impossible corner queries; overlap or an uncertain distance
+  does not authorize pruning. This preserves geometric decisions, subdivision
+  and candidate order, and only decreases required work. The owner-approved
+  budget contract is determinism in archive and budget, charging every executed
+  unit of work. Pruning may turn an effort refusal into an accept, never an old
+  accept into a refusal; cross-version budget thresholds need not be equal.
+  Cache presence still cannot change charged work or verdict at any budget.
+  Larger initial regions,
+  sibling-certificate state and replacement spatial indices remain deferred:
+  this narrower change needs no new index, resident geometry, subdivision
+  policy or error allowance. The detailed proof is in VALIDATION.md.
   The reference retains exact fractions throughout. Numerical/depth/budget
   exhaustion refuses; this sufficient check need not accept every valid input.
   Stages 0–2 and undeclared drops retain their sampled lower-bound check (child G

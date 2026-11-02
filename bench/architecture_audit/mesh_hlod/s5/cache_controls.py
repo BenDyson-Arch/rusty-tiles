@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay the native effort-limit control against two cache-priority mutants.
+"""Replay cache invariance and pruning accept-preservation against sensitive mutants.
 
 Uses source-extracted Grid/predicates and a tiny effort shim with the same additive
 budget rule. The native unit test is authoritative for actual Budget/Error wiring.
@@ -59,6 +59,31 @@ const FAR:Face=[[5.,0.,0.],[6.,0.,0.],[5.,1.,0.]];
         (out / (variant + '.log')).write_text(run.stdout + run.stderr)
         results[variant] = run.returncode
     assert results == {'fixed': 0, 'priority': 101, 'in-cell-priority': 101}, results
+    # Reconstruct the previous scan by removing only the pruning branch. Keep
+    # geometry, numeric predicates, subdivision, candidate order and accounting.
+    start = code.index('    fn covers(')
+    end = code.index('    /// Whether `p`', start)
+    original = code[start:end].replace('fn covers(', 'fn covers_unpruned(', 1)
+    begin = original.index('                    if certificate::outside_box(center,')
+    stop = original.index('                    let d = distance(center,', begin)
+    pruning = original[begin:stop]
+    assert 'charge_distance()?;' in pruning and 'continue;' in pruning
+    original = original[:begin] + original[stop:]
+    differential = code + '\nimpl Grid {\n' + original + '}\n'
+    differential += Path(__file__).with_name('pruning_control.rs').read_text()
+    for variant in ['pruning', 'pruning-reject-mutant']:
+        mutant = differential
+        if variant != 'pruning':
+            assert mutant.count(pruning) == 1
+            mutant = mutant.replace(pruning, pruning.replace('continue;', 'return Ok(false);'))
+        path, binary = out / (variant + '.rs'), out / variant
+        path.write_text(mutant)
+        subprocess.run(['rustc', '--edition=2021', '--test', str(path), '-o', str(binary)], check=True)
+        run = subprocess.run([str(binary), 'pruning_never_turns_an_accept_into_a_refusal',
+                              '--nocapture'], text=True, capture_output=True)
+        (out / (variant + '.log')).write_text(run.stdout + run.stderr)
+        results[variant] = run.returncode
+    assert results['pruning'] == 0 and results['pruning-reject-mutant'] == 101, results
     (out / 'result.json').write_text(json.dumps(results, indent=2) + '\n')
     print(json.dumps(results))
 
