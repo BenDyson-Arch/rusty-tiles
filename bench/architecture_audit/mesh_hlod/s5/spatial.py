@@ -454,7 +454,13 @@ class Store:
             if t['children']:
                 # D11: coarse borders are arcs between retained exact vertices.
                 arcs=borders.tile_border(self,t,vertices,directed,require,d11)
-                borders.folds(self,t,directed,arcs,require,surface)
+                # A2: a declared last resort recounts its fold faces; from stage 2
+                # they are admitted (last_resort.py).
+                declaration=getattr(self,'last_resort',{}).get(int(t['id']))
+                if declaration is None or not declaration[2]:
+                    borders.folds(self,t,directed,arcs,require,surface)
+                import last_resort
+                last_resort.check(self,t,surface,directed,arcs,require,declaration)
             for kind,a,b in self.db.execute('SELECT kind,a,b FROM requirements WHERE tile=? ORDER BY kind DESC',(int(t['id']),)):
                 self.work.charge()
                 if t['children'] and kind<2:
