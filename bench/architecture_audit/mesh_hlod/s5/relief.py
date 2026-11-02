@@ -6,7 +6,8 @@ pressure's trigger share of the hard cap requests the least step up to the press
 limit that brings it to its target share, and takes the larger of its two pressures'
 requests: feasibility (85% to 75%, steps 1..8) and quality (37.5% to 25%, steps 1..6).
 An arc takes its owners' largest request, and never less than its finer level's
-tolerance (step >= finer step - 1). This module re-derives those steps independently.
+tolerance (step >= finer step - 1); it keeps that least step where the requested one
+would not emit fewer chords (the drag bound can make a relieved step the stricter). This module re-derives those steps independently.
 
 From the verified leaves' canonical incidence only, for every depth from the
 deepest up, it rebuilds:
@@ -381,13 +382,18 @@ class Relief:
             if count is not None:
                 if not any(o in count for o in owners):
                     return
-                per = [len(chords(max(least, j))) for j in range(STEPS + 1)]
+                base = len(chords(least))
+                per = [base if j <= least else min(len(chords(j)), base)
+                       for j in range(STEPS + 1)]
                 for o in owners:
                     if o in count:
                         for j in range(STEPS + 1):
                             count[o][j] += per[j]
                 return
             step = max([least] + [requests[o] for o in owners if o in requests])
+            # Relieved only where that emits fewer chords than the least step.
+            if step > least and len(chords(step)) >= len(chords(least)):
+                step = least
             for s, e in chords(step):
                 for o in owners:
                     items[o] += 1

@@ -801,12 +801,25 @@ impl Borders {
             let end = self.source.nodes.get(owner)?[4];
             at = graph::next_owner(&self.source.owners, at, e[3], end)?;
         }
+        // Chords this arc emits at `step`. A relieved step is taken only where it emits
+        // fewer chords than the least step: the drag bound can make it the stricter one.
+        let chords = |this: &Self, step: u32| -> Result<u64, JobError> {
+            let epsilon = this.ladder.relief(depth, step);
+            let mut n = 0;
+            for pair in pinned(this, step)?.windows(2) {
+                n += this.count(arc, pair[0], pair[1], epsilon, step > 0)?;
+            }
+            Ok(n)
+        };
         match mode {
             Mode::Emit(requests) => {
-                let step = owners
+                let mut step = owners
                     .iter()
                     .filter_map(|o| requests.get(o).copied())
                     .fold(least, u32::max);
+                if step > least && chords(self, step)? >= chords(self, least)? {
+                    step = least;
+                }
                 let epsilon = self.ladder.relief(depth, step);
                 for pair in pinned(self, step)?.windows(2) {
                     self.shortcuts(
@@ -827,17 +840,16 @@ impl Borders {
                 if !owners.iter().any(|o| counts.contains_key(o)) {
                     return Ok(());
                 }
-                let mut chords = [0u64; RELIEF_STEPS as usize + 1];
-                for (j, chords) in chords.iter_mut().enumerate() {
-                    let step = least.max(j as u32);
-                    let epsilon = self.ladder.relief(depth, step);
-                    for pair in pinned(self, step)?.windows(2) {
-                        *chords += self.count(arc, pair[0], pair[1], epsilon, step > 0)?;
+                let base = chords(self, least)?;
+                let mut per = [base; RELIEF_STEPS as usize + 1];
+                for (j, n) in per.iter_mut().enumerate().skip(1) {
+                    if j as u32 > least {
+                        *n = chords(self, j as u32)?.min(base);
                     }
                 }
                 for o in &owners {
                     if let Some(c) = counts.get_mut(o) {
-                        for (c, n) in c.iter_mut().zip(chords) {
+                        for (c, n) in c.iter_mut().zip(per) {
                             *c += n;
                         }
                     }

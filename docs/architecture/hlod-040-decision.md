@@ -631,6 +631,11 @@ of the cell, far below the surface's own border noise at coarse depths.
   - With the bound, every moved face stays within ε of its source plane, so the floor below
     covers it.
   - Step 0 (D11) is unchanged.
+  - The bound can make a relieved step the stricter one. An arc therefore takes its
+    requested step only where that emits fewer chords than its least step; otherwise it
+    keeps the least step (D11 at 0). Relief never adds a segment to an arc. On the egg
+    crate the bounded step 6 needed 1,728 segments against D11's 1,600, and every depth-1
+    cell was omitted.
 - **Isolated ears.** On relieved arcs, an isolated ear stays retained: a source face with
   both of a vertex's edges shared and its opposite edge held by no other face.
 - **G floor.** Every tile publishes G ≥ max(E_d, 8·(d_own + d_finer), measured error,
