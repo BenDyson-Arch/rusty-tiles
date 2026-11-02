@@ -135,6 +135,13 @@ wherever the concrete scope has not adopted them.
 - [Component evidence and disposition ledger](evidence-ledger.md)
 - [Executable audit evidence](../../bench/architecture_audit/README.md)
 
+Root competition acceptance (2026-11-02) is retained externally at
+`~/.cache/rusty-tiles-evidence/root-competition-20261102/FINAL.md`, SHA-256
+`c552483fac3ce1a52ff28a7fb86bac08cf04ccbdb52aa51bd411a193ad6dde27`.
+It covers implementation `3734dfc2370d672a545bcd2f8a8007259aec9d7c` against
+develop `ef7db6f3`; the evidence was created externally and never held in git.
+Post-relief Walem acceptance and independent review remain pending.
+
 The API sketches are proposed interfaces, not currently available APIs. Evidence
 separates observations made with the unmodified converter from isolated failure
 injection and findings established only by source inspection.
