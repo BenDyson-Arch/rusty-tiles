@@ -1,5 +1,5 @@
 //! Owner-approved root-only competition. One extra proposal, one source S2 pass,
-//! strict published-G selection, and no appearance work on the loser.
+//! at least 1% lower published G, and no appearance work on the loser.
 use super::*;
 
 /// The incumbent survives while the candidate uses the ordinary job workspace.
@@ -42,7 +42,7 @@ pub(crate) struct Receipt {
 }
 
 fn improves(old: Option<f64>, new: f64) -> bool {
-    new.is_finite() && old.is_none_or(|g| new < g)
+    new.is_finite() && old.is_none_or(|g| new < g && new <= 0.99 * g)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -99,6 +99,11 @@ pub(super) fn select(
             receipt.accepted = improves(receipt.baseline_g, measured.error.geometric_error);
             receipt.reason = if receipt.accepted {
                 "lower_g_or_missing"
+            } else if receipt
+                .baseline_g
+                .is_some_and(|g| measured.error.geometric_error < g)
+            {
+                "improvement_below_one_percent"
             } else {
                 "incumbent_not_worse"
             };
@@ -127,7 +132,11 @@ pub(super) fn select(
 mod tests {
     use super::*;
     #[test]
-    fn strict_published_g_keeps_ties_and_can_fill_a_missing_root() {
+    fn one_percent_published_g_threshold_does_not_limit_recovery() {
+        assert!(improves(Some(100.), 99.));
+        assert!(!improves(Some(100.), 99_f64.next_up()));
+        assert!(!improves(Some(76.75499839782717), 76.75499839782715));
+        assert!(!improves(Some(0.), 0.));
         assert!(improves(Some(6.), 5.));
         assert!(!improves(Some(6.), 6.));
         assert!(!improves(Some(6.), 7.));

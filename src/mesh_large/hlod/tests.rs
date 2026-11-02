@@ -6082,6 +6082,12 @@ fn root_pair(layout: u64, jobs: usize, evidence: Option<&Path>) {
             );
             let r = &new["rootCompetition"];
             assert_eq!(r["baselineG"], old["geometricError"]);
+            if r["accepted"] == true {
+                assert!(
+                    new["geometricError"].as_f64().unwrap()
+                        <= 0.99 * old["geometricError"].as_f64().unwrap()
+                );
+            }
             if r["accepted"] != true {
                 assert_eq!(old["sha256"], new["sha256"]);
             }
@@ -6125,8 +6131,100 @@ fn root_competition_city_sweep() {
     }
 }
 
+/// The bounded natural search found no own-root recovery: N3 is already part of
+/// incumbent construction. These are the closest actual refusals, not injected
+/// failures: a challenger that fails prepare, and a propagated descendant omission.
 #[test]
-fn root_competition_fills_an_own_build_omission_and_is_job_invariant() {
+fn root_competition_preserves_natural_guard_and_descendant_refusals() {
+    for (name, source) in [
+        ("prepare", vec![egg_crate(6)]),
+        ("descendant", city_block(199)),
+    ] {
+        let work = tempfile::tempdir().unwrap();
+        let input = write_gltf(&work.path().join("src"), &source);
+        let dirs = [Mutation::NoRootCompetition, Mutation::None].map(|mutation| {
+            stage(
+                &input,
+                &work.path().join(format!("{mutation:?}")),
+                &Run {
+                    mutation,
+                    budget: Some(4 << 30),
+                    ..Run::default()
+                },
+            )
+            .unwrap()
+        });
+        for sub in ["leaves", "proxies"] {
+            assert_eq!(files(&dirs[0], sub), files(&dirs[1], sub));
+        }
+        let rr = rows(&dirs[1].join("proxies.jsonl"));
+        let baseline = rows(&dirs[0].join("proxies.jsonl"));
+        assert_eq!(baseline.len(), rr.len());
+        for old in &baseline {
+            let new = rr.iter().find(|r| r["uri"] == old["uri"]).unwrap();
+            assert_eq!(old["geometricError"], new["geometricError"]);
+        }
+        if name == "prepare" {
+            let root = rr
+                .iter()
+                .find(|r| r.get("rootCompetition").is_some())
+                .unwrap();
+            assert_eq!(root["rootCompetition"]["reason"], "prepare_refused");
+            assert_eq!(root["rootCompetition"]["accepted"], false);
+            assert_eq!(root["geometricError"], root["rootCompetition"]["baselineG"]);
+        } else {
+            assert!(rr.iter().all(|r| r["depth"] != 0));
+            let manifest: Value =
+                serde_json::from_slice(&fs::read(dirs[1].join("manifest.json")).unwrap()).unwrap();
+            let h = &manifest["hlod"];
+            assert!(h["omissionSources"].as_u64().unwrap() > 0);
+            assert!(h["omittedProxies"].as_u64().unwrap() > h["omissionSources"].as_u64().unwrap());
+            println!(
+                "natural {name}: omitted={} sources={}",
+                h["omittedProxies"], h["omissionSources"]
+            );
+        }
+        for (side, dir) in dirs.iter().enumerate() {
+            published_and_valid(&format!("natural {name} {side}"), dir, work.path());
+        }
+    }
+}
+
+#[test]
+fn root_competition_natural_own_root_refusal_remains_omitted() {
+    // Closest natural case found: only the root fails, but the full-cap N3
+    // challenger fails too. This is not positive evidence of natural recovery.
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(
+        &work.path().join("src"),
+        &[folded_sheet(48, 3, 0., 0.0001, 23)],
+    );
+    for mutation in [Mutation::NoRootCompetition, Mutation::None] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("{mutation:?}")),
+            &Run {
+                mutation,
+                leaf_triangles: 4096,
+                budget: Some(4 << 30),
+                ..Run::default()
+            },
+        )
+        .unwrap();
+        assert!(rows(&dir.join("leaves.jsonl")).len() > 1);
+        assert!(rows(&dir.join("proxies.jsonl")).is_empty());
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let h = &manifest["hlod"];
+        assert_eq!(h["omittedProxies"], 1);
+        assert_eq!(h["omissionSources"], 1);
+        assert_eq!(h["omittedByDepth"], json!([1, 0]));
+        published_and_valid("natural own-root refusal", &dir, work.path());
+    }
+}
+
+#[test]
+fn root_competition_fills_a_forced_own_build_omission_and_is_job_invariant() {
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &city_block(1));
     let dirs = [1, 3].map(|jobs| {
