@@ -86,6 +86,9 @@ impl Policy {
     /// greatest holding leaf (`greatest_side`) of its lesser published point: exactly one
     /// cell per depth.
     pub(crate) fn owns_segment(&self, a: Key, b: Key) -> bool {
+        if self.least.is_empty() && self.greatest.is_empty() {
+            return false;
+        }
         let (a, b) = if published(a) <= published(b) {
             (a, b)
         } else {
@@ -356,9 +359,9 @@ impl Source {
             }
             let source = self.edges.get(&edge).copied().unwrap_or_default();
             // N1: a new edge between two shared points this cell owns.
-            let owned = source == [0, 0] && self.policy.owns_segment(edge.0, edge.1);
-            let boundary =
-                !owned && self.boundary.contains(&edge.0) && self.boundary.contains(&edge.1);
+            let boundary = self.boundary.contains(&edge.0)
+                && self.boundary.contains(&edge.1)
+                && !(source == [0, 0] && self.policy.owns_segment(edge.0, edge.1));
             let unsupported = if boundary && (0..2).any(|d| counts[d] > source[d]) {
                 // A new edge between shared contacts could be created by either
                 // neighbour independently. Only an existing source edge or a
@@ -1018,5 +1021,57 @@ mod tests {
         folded[3] = p[4];
         assert!(decode_valid(&p, &p, &triangles, &[]));
         assert!(!decode_valid(&p, &folded, &triangles, &[]));
+    }
+}
+
+#[cfg(test)]
+mod ownership_query_tests {
+    use super::*;
+
+    #[test]
+    fn ownership_matches_literal_rule_for_empty_and_nonempty_holders() {
+        let points = [
+            [0., 0., 0.],
+            [-0., 0., 0.],
+            [0., -0., 0.],
+            [1., 2., 3.],
+            [-1., 2., 3.],
+            [f32::MAX, 0., f32::MIN_POSITIVE],
+        ]
+        .map(key);
+        for least in 0u32..1 << points.len() {
+            for greatest in 0u32..1 << points.len() {
+                let policy = Policy {
+                    least: points
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, &p)| (least & (1 << i) != 0).then_some(p))
+                        .collect(),
+                    greatest: points
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, &p)| (greatest & (1 << i) != 0).then_some(p))
+                        .collect(),
+                    folds: false,
+                };
+                for a in points {
+                    for b in points {
+                        // Literal preoptimization query: preserve signed-zero ties
+                        // and the canonical FNV seam owner for every holder set.
+                        let (lo, hi) = if published(a) <= published(b) {
+                            (a, b)
+                        } else {
+                            (b, a)
+                        };
+                        let expected = if greatest_side(published(lo), published(hi)) {
+                            policy.greatest.contains(&lo)
+                        } else {
+                            policy.least.contains(&lo)
+                        };
+                        assert_eq!(policy.owns_segment(a, b), expected);
+                    }
+                }
+            }
+        }
     }
 }

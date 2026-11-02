@@ -8,5 +8,6 @@
 - Admit chart/page workspace only during appearance, borrowing from the source
   cache with bounded waits and protected headroom for actual-size pages.
 - Preserve the root competition winner through D10, including collapsed roots.
-
-- Cache the query-independent sliver classification for source triangles without changing sampled witnesses or their memory charge.
+- Cache the query-independent sliver classification for source triangles without
+  changing sampled witnesses or their memory charge.
+- Skip unused seam-owner queries while preserving every fold-guard decision.
