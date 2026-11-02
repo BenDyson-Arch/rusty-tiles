@@ -196,12 +196,16 @@ pub struct HlodMemoryPlan {
     pub minimum_bytes: u64,
     /// The walk's lease ledger (`ceiling - fixed`).
     pub ledger_bytes: u64,
-    /// Coarse texture/chart/mip/codec workspace of one parent job (zero without images).
+    /// Per-job charts, decode and retained pages; page-sized work uses the shared pool.
     pub texture_workspace_bytes: u64,
     /// The vertex-colour path's query state of one job (zero without COLOR_0).
     pub color_workspace_bytes: u64,
-    /// Shared decoded source-chain cache (zero without images).
+    /// Shared cache/page pool; cache capacity is lent to admitted page workspaces.
     pub image_cache_bytes: u64,
+    /// Cache capacity left even while page workspaces are admitted.
+    pub image_cache_floor_bytes: u64,
+    /// Largest single page/query workspace, reserved only after layout determines size.
+    pub page_workspace_bytes: u64,
     /// Encoder workspace ceiling of one coarse page.
     pub page_bytes: u64,
     /// Encoded page bytes one coarse tile may publish (admitted twice: pages and GLB).
@@ -215,6 +219,7 @@ struct AppearancePlan {
     texture: u64,
     color: u64,
     page: u64,
+    page_workspace: u64,
     tile_pages: u64,
     cache_floor: u64,
     cache_total: u64,
@@ -225,6 +230,13 @@ struct AppearancePlan {
 const QUERY_BYTES_PER_TEXEL: u64 = 24;
 /// One bake chunk's points, hits, source frames, requests and levels of detail.
 const CHUNK_BYTES: u64 = bake::CHUNK as u64 * 160;
+
+/// Page-sized work, separate from per-job chart construction and retained output.
+fn page_workspace(size: [u32; 2], page: u64) -> u64 {
+    (u64::from(size[0]) * u64::from(size[1]))
+        .saturating_mul(QUERY_BYTES_PER_TEXEL)
+        .saturating_add(page)
+}
 
 /// Production worker selection, separate from host detection so archived capture
 /// ownership can exercise auto admission without launching workers or a corpus bake.
@@ -275,13 +287,13 @@ fn appearance_plan(
             texture: 0,
             color,
             page: 0,
+            page_workspace: 0,
             tile_pages: 0,
             cache_floor: 0,
             cache_total: 0,
         });
     }
     let edge = appearance::MAX_PAGE_EDGE;
-    let texels = u64::from(edge) * u64::from(edge);
     let slots = captured
         .materials
         .iter()
@@ -303,16 +315,13 @@ fn appearance_plan(
         .saturating_mul(16)
         .saturating_add(32 << 20)
         .saturating_add(largest_chain);
-    // One group's page workspace at a time, plus the tile's delivered pages and the GLB
-    // being assembled from them (each at most `tile_pages`).
+    // Layouts are fully admitted before construction. Actual page-sized work later
+    // borrows shared cache capacity; delivered pages and GLB remain per-job charges.
     let tile_pages =
         appearance::tile_page_bytes(slots, captured.materials.len() as u64, cap as u64);
-    let texture = texels
-        .saturating_mul(QUERY_BYTES_PER_TEXEL)
-        .saturating_add(CHUNK_BYTES)
+    let texture = CHUNK_BYTES
         .saturating_add(chart_workspace(edge, cap))
         .saturating_add(tile_pages.saturating_mul(2))
-        .saturating_add(page)
         .saturating_add(decode);
     let cache_total = captured.image_info.iter().fold(0u64, |n, i| {
         n.saturating_add(bake::chain_bytes(i.width, i.height))
@@ -321,6 +330,7 @@ fn appearance_plan(
         texture,
         color,
         page,
+        page_workspace: page_workspace([edge, edge], page),
         tile_pages,
         cache_floor: largest_chain.min(cache_total),
         cache_total,
@@ -380,6 +390,7 @@ pub(crate) fn plan(
         incidence.max(
             window
                 .saturating_add(job)
+                .saturating_add(appearance.page_workspace)
                 .saturating_add(appearance.cache_floor),
         ),
     );
@@ -415,28 +426,39 @@ pub(crate) fn plan(
     if ceiling < minimum {
         return Err(resource(format!(
             "HLOD stage needs at least {minimum} bytes (fixed {fixed}, incidence {incidence}, \
-             child window {window}, one parent job {job}) but the memory budget allows \
+             child window {window}, one parent job {job}, shared page {}) but the memory budget allows \
              {ceiling} (budget {}, memory-backed scratch {tmpfs})",
+            appearance.page_workspace,
             budget.resolved_bytes
         )));
     }
     let ledger = ceiling - fixed;
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as u64;
     let (jobs, limited_by) = worker_admission(
-        (ledger - window).saturating_sub(appearance.cache_floor),
+        (ledger - window)
+            .saturating_sub(appearance.cache_floor)
+            .saturating_sub(appearance.page_workspace),
         job,
         config.jobs,
         cores,
     );
-    // The cache takes what the admitted jobs leave, up to every chain, at least its floor.
+    // Cache and page work share one pool. Even with every worker holding its layout,
+    // one maximum page fits beside the cache floor; no worker waits holding a page.
     let image_cache = if appearance.cache_floor == 0 {
         0
     } else {
-        appearance.cache_total.min(
-            (ledger - window)
-                .saturating_sub(jobs.saturating_mul(job))
-                .max(appearance.cache_floor),
-        )
+        appearance
+            .cache_total
+            .saturating_add(appearance.page_workspace)
+            .min(
+                (ledger - window)
+                    .saturating_sub(jobs.saturating_mul(job))
+                    .max(
+                        appearance
+                            .cache_floor
+                            .saturating_add(appearance.page_workspace),
+                    ),
+            )
     };
     Ok(HlodMemoryPlan {
         budget_bytes: budget.resolved_bytes,
@@ -450,6 +472,8 @@ pub(crate) fn plan(
         texture_workspace_bytes: appearance.texture,
         color_workspace_bytes: appearance.color,
         image_cache_bytes: image_cache,
+        image_cache_floor_bytes: appearance.cache_floor,
+        page_workspace_bytes: appearance.page_workspace,
         page_bytes: appearance.page,
         tile_page_bytes: appearance.tile_pages,
         jobs,
@@ -869,7 +893,10 @@ pub(crate) fn produce(
         .zip(index_start)
         .map(|(b, a)| b - a);
     // S3: the shared decoded source-chain cache and what every appearance job reads.
-    let cache = bake::ImageCache::new(input.plan.image_cache_bytes);
+    let cache = bake::ImageCache::with_page_pool(
+        input.plan.image_cache_bytes,
+        input.plan.image_cache_floor_bytes,
+    );
     let layout = captured.triangles.layout().0;
     let services = appearance::Services {
         captured,
@@ -1914,6 +1941,9 @@ fn walk(
     let plan = input.plan;
     let settings = input.settings;
     let ledger = Ledger::new(plan.ledger_bytes);
+    let _page_pool = ledger
+        .try_lease(plan.image_cache_bytes, 0)
+        .ok_or_else(|| state("HLOD shared cache/page pool exceeds its plan"))?;
     let job_bytes = plan.job_bytes;
     // The most a job merges: eight capped children (an omitted child is never merged).
     let job_inputs = input

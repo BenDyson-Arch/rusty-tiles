@@ -6047,7 +6047,7 @@ fn n3_clusters_a_border_heavy_fold_cell_to_the_cap() {
 /// Archived tex3/Walem metadata: A's 1024 pages and B's 2048 slots before the
 /// mask-workspace charge. These are separate policies, not additive page charges.
 #[test]
-fn coarse_mask_charge_keeps_archived_worker_limits_for_each_page_policy() {
+fn coarse_page_pool_preserves_mask_charges_and_recovers_workers() {
     use crate::mesh_large::{config::Jobs, resources::MemoryBudget};
     let a_masks = super::charts::workspace_bytes(1024, 1 << 20, super::TRIANGLE_CAP as u64);
     let b_masks = super::chart_workspace(super::appearance::MAX_PAGE_EDGE, super::TRIANGLE_CAP);
@@ -6059,7 +6059,7 @@ fn coarse_mask_charge_keeps_archived_worker_limits_for_each_page_policy() {
             let available = budget.ceiling(Some(10 << 30)) - fixed - 21_108_288 - 22_373_720;
             for (policy, base_job, extra, workers) in [
                 ("A/1024", 693_607_796, a_masks, 5),
-                ("B/2048", 1_491_574_132, b_masks, 2),
+                ("B/eager-2048-control", 1_491_574_132, b_masks, 2),
             ] {
                 let job = base_job + extra;
                 assert_eq!(
@@ -6072,6 +6072,24 @@ fn coarse_mask_charge_keeps_archived_worker_limits_for_each_page_policy() {
             assert_eq!(
                 super::worker_admission(available, 693_607_796 + 188_498_304, Jobs::Auto, 8),
                 (4, "memory")
+            );
+            // B now owns the maximum page once in a shared cache/page pool. Only
+            // actual post-layout page work borrows from it; chart masks remain per job.
+            let page = super::appearance::page_charge([2048; 2], 1, Profile::Balanced).unwrap();
+            let shared_page = super::page_workspace([2048; 2], page);
+            let job = 1_491_574_132 + b_masks - shared_page;
+            assert_eq!(
+                super::worker_admission(available - shared_page, job, Jobs::Auto, 8),
+                (5, "memory")
+            );
+            let request = Jobs::Fixed(NonZeroUsize::new(3).unwrap());
+            assert_eq!(
+                super::worker_admission(available - shared_page, job, request, 8),
+                (3, "request")
+            );
+            assert_eq!(
+                super::worker_admission(available, 1_491_574_132 + b_masks, request, 8),
+                (2, "memory")
             );
         }
     }
