@@ -2779,7 +2779,9 @@ fn back_to_back_sheets_keep_their_source_orientation() {
 /// Mirrored nodes (negative-determinant scale) face where their leaves face at every depth:
 /// capture reverses their corners once, and coarse tiles inherit them. Every coarse face of
 /// a bumpy sheet points to the side its leaves' faces point to on average, and mirroring the
-/// sheet turns that side over.
+/// sheet turns that side over. The root competition may select a declared N3 fold;
+/// check that licence and native validation separately, while the disabled-competition
+/// control retains the all-faces orientation assertion.
 #[test]
 fn mirrored_nodes_keep_their_orientation_in_coarse_tiles() {
     let normal = |f: &[Point; 3]| {
@@ -2796,47 +2798,71 @@ fn mirrored_nodes_keep_their_orientation_in_coarse_tiles() {
     };
     let dot = |a: [f64; 3], b: [f64; 3]| (0..3).map(|i| a[i] * b[i]).sum::<f64>();
     let mut sides = Vec::new();
-    for mirrored in [false, true] {
-        let work = tempfile::tempdir().unwrap();
-        let mut meshes = sheet();
-        let mut scales = Vec::new();
-        if mirrored {
-            for m in &mut meshes {
-                for p in &mut m.positions {
-                    p[0] = -p[0];
+    for mutation in [Mutation::NoRootCompetition, Mutation::None] {
+        for mirrored in [false, true] {
+            let work = tempfile::tempdir().unwrap();
+            let mut meshes = sheet();
+            let mut scales = Vec::new();
+            if mirrored {
+                for m in &mut meshes {
+                    for p in &mut m.positions {
+                        p[0] = -p[0];
+                    }
+                    scales.push([-1., 1., 1.]);
                 }
-                scales.push([-1., 1., 1.]);
+            }
+            let input = write_gltf_scaled(&work.path().join("src"), &meshes, &scales);
+            let dir = stage(
+                &input,
+                &work.path().join("hlod"),
+                &Run {
+                    mutation,
+                    ..Run::default()
+                },
+            )
+            .unwrap();
+            let census = census(&dir);
+            assert_eq!(
+                census.missing_segments + census.reversed_coarse_faces,
+                0,
+                "{census:?}"
+            );
+            let tiles = load(&dir);
+            let mut side = [0f64; 3];
+            for f in tiles.iter().filter(|t| t.leaf).flat_map(|t| &t.faces) {
+                let n = normal(f);
+                side = std::array::from_fn(|i| side[i] + n[i]);
+            }
+            assert_eq!(census.fold_declaration_mismatches, 0, "{census:?}");
+            let records = rows(&dir.join("proxies.jsonl"));
+            let mut coarse_faces = 0;
+            for t in tiles.iter().filter(|t| !t.leaf) {
+                let faces: Vec<_> = t.faces.iter().filter(|f| !degenerate(f)).collect();
+                coarse_faces += faces.len();
+                let against = faces.iter().filter(|f| dot(normal(f), side) <= 0.).count();
+                if against > 0 {
+                    let r = records.iter().find(|r| r["uri"] == t.uri).unwrap();
+                    assert_eq!(mutation, Mutation::None, "{r}");
+                    assert!(
+                        t.folds,
+                        "mirrored {mirrored}: {} has {against} unlicensed faces",
+                        t.uri
+                    );
+                    assert_eq!(r["rootCompetition"]["accepted"], true, "{r}");
+                    assert_eq!(r["d10"]["reason"], "root_reserved");
+                    assert!(against as u64 <= r["foldFaces"].as_u64().unwrap());
+                }
+            }
+            assert!(coarse_faces > 0);
+            published_and_valid(
+                "mirrored orientation and declared root folds",
+                &dir,
+                work.path(),
+            );
+            if mutation == Mutation::None {
+                sides.push(side);
             }
         }
-        let input = write_gltf_scaled(&work.path().join("src"), &meshes, &scales);
-        let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
-        let census = census(&dir);
-        assert_eq!(
-            census.missing_segments + census.reversed_coarse_faces,
-            0,
-            "{census:?}"
-        );
-        let tiles = load(&dir);
-        let mut side = [0f64; 3];
-        for f in tiles.iter().filter(|t| t.leaf).flat_map(|t| &t.faces) {
-            let n = normal(f);
-            side = std::array::from_fn(|i| side[i] + n[i]);
-        }
-        let coarse: Vec<&[Point; 3]> = tiles
-            .iter()
-            .filter(|t| !t.leaf)
-            .flat_map(|t| &t.faces)
-            .filter(|f| !degenerate(f))
-            .collect();
-        assert!(!coarse.is_empty());
-        let against = coarse.iter().filter(|f| dot(normal(f), side) <= 0.).count();
-        assert_eq!(
-            against,
-            0,
-            "mirrored {mirrored}: {against} of {}",
-            coarse.len()
-        );
-        sides.push(side);
     }
     assert!(dot(sides[0], sides[1]) < 0., "{sides:?}");
 }
@@ -6085,14 +6111,14 @@ fn coarse_page_pool_preserves_mask_charges_and_recovers_workers() {
                 super::worker_admission(available, 693_607_796 + 188_498_304, Jobs::Auto, 8),
                 (4, "memory")
             );
-            // B now owns the maximum page once in a shared cache/page pool. Only
-            // chart/page work borrows from it only while a textured group is live.
+            // B owns the maximum chart/page workspace once in the shared pool.
+            // Only live textured groups borrow from it.
             let page = super::appearance::page_charge([2048; 2], 1, Profile::Balanced).unwrap();
             let shared_page = super::page_workspace([2048; 2], page) + b_masks;
             let job = 1_491_574_132 + b_masks - shared_page;
             assert_eq!(
                 super::worker_admission(available - shared_page, job, Jobs::Auto, 8),
-                (5, "memory")
+                (6, "memory")
             );
             let request = Jobs::Fixed(NonZeroUsize::new(3).unwrap());
             assert_eq!(
