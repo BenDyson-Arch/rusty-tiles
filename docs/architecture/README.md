@@ -137,8 +137,8 @@ wherever the concrete scope has not adopted them.
 
 Root competition acceptance (2026-11-02) is retained externally at
 `~/.cache/rusty-tiles-evidence/root-competition-20261102/FINAL.md`, SHA-256
-`c552483fac3ce1a52ff28a7fb86bac08cf04ccbdb52aa51bd411a193ad6dde27`.
-It covers implementation `3734dfc2370d672a545bcd2f8a8007259aec9d7c` against
+`5723db5051a1e7521919692c1b990cd6e182d692dead2d3e4f6c721b9aced9a6`.
+It covers implementation `20b190bd315deedaaece47faf588a4e77a39936f` against
 develop `ef7db6f3`; the evidence was created externally and never held in git.
 Post-relief Walem acceptance and independent review remain pending.
 
