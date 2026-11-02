@@ -9,6 +9,7 @@
 //! Adapted from the research prototype (`exp/lod-cluster-dag` `charts.cpp`), v0.3.0's
 //! `chart_unwrap` and #260's tight content-sized packing. UV seams are free: the tile was
 //! simplified without them, and every face is charted afresh.
+use crate::mesh_large::mask_pack::{self, Mask};
 use crate::{JobError, JobErrorKind};
 
 type V3 = [f64; 3];
@@ -28,10 +29,11 @@ const CHART_FACES: usize = 192;
 /// Texels of gutter on every side of a chart; the sparse-mip encoder fills them from the
 /// nearest covered texel at every level.
 pub(crate) const GUTTER: u32 = 2;
-/// Mip levels through which a coarse page keeps its charts isolated: chart rectangles sit
-/// on the `2^K` grid with gutters of `2^K` (at least [`GUTTER`]). A scale-gate tuning
+/// Mip levels through which a coarse page keeps its charts isolated: chart masks are whole
+/// cells of the `2^K` grid with gutters of `2^K` (at least [`GUTTER`]). A scale-gate tuning
 /// constant. One level suffices in normal traversal: a coarse texel is at least `G/16`
-/// (the requested spacing; the source-density floor and the page cap only coarsen it), so
+/// (the requested spacing is `1.25·G/16`; the source-density floor and the page cap only
+/// coarsen it), so
 /// when Cesium refines at SSE 16 the tile's `G` spans 16 px and a texel at least 1 px.
 /// The tile stays shown only until its parent's SSE drops below 16; with the parent's
 /// error about `2G` the tile's `G` then spans 8 px, a texel at least 0.5 px, so the tile is
@@ -75,6 +77,8 @@ pub(crate) struct Chart {
     hi: P2,
     origin: [u32; 2],
     size: [u32; 2],
+    /// Packed cells on the `2^isolated` grid.
+    mask: Mask,
 }
 
 /// The packed layout of one group.
@@ -96,19 +100,23 @@ pub(crate) struct Layout {
 }
 
 impl Layout {
-    /// Per page texel: 1 + the chart whose packed rectangle (gutters included) holds it,
-    /// 0 outside every chart. Keeps charts apart in reduced levels and gutter fill.
+    /// Per page texel: 1 + the chart whose packed mask (gutters included) holds it, 0
+    /// outside every chart. Masks are whole `2^isolated` cells and never share one, which
+    /// keeps charts apart in reduced levels and gutter fill.
     pub(crate) fn labels(&self) -> Vec<u32> {
         let [w, h] = self.size;
+        let a = 1u32 << self.isolated;
         let mut labels = vec![0u32; w as usize * h as usize];
         for (i, c) in self.charts.iter().enumerate() {
-            for y in c.origin[1]..(c.origin[1] + c.size[1]).min(h) {
-                let row = (y * w) as usize;
-                let (a, b) = (
-                    c.origin[0] as usize,
-                    ((c.origin[0] + c.size[0]).min(w)) as usize,
-                );
-                labels[row + a..row + b].fill(i as u32 + 1);
+            for (cy, c0, c1) in c.mask.runs() {
+                for cx in c0..c1 {
+                    let (x0, y0) = (c.origin[0] + cx * a, c.origin[1] + cy * a);
+                    for y in y0..(y0 + a).min(h) {
+                        let row = (y * w) as usize;
+                        labels[row + x0 as usize..row + (x0 + a).min(w) as usize]
+                            .fill(i as u32 + 1);
+                    }
+                }
             }
         }
         labels
@@ -223,6 +231,7 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
                 hi: [0.; 2],
                 origin: [0; 2],
                 size: [0; 2],
+                mask: Mask::default(),
             });
             frames.push((p(faces[seed][0]), [0., 1., 0.]));
             continue;
@@ -245,6 +254,7 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
             hi: [f64::MIN; 2],
             origin: [0; 2],
             size: [0; 2],
+            mask: Mask::default(),
         };
         queue.clear();
         queue.push(seed);
@@ -490,32 +500,129 @@ fn orient(chart: &mut Chart) {
     }
 }
 
-/// Shelf-pack `charts` (sized by [`sizes`]) into width `width`: the (used width, packed
-/// height), or `None` when a chart is wider than the page or the height exceeds
-/// `max_height`.
-fn shelf(charts: &mut [Chart], order: &[usize], width: u32, max_height: u32) -> Option<(u32, u32)> {
-    let (mut x, mut y, mut row, mut used) = (0u32, 0u32, 0u32, 0u32);
-    for &i in order {
-        let c = &mut charts[i];
-        let (w, h) = (c.size[0], c.size[1]);
-        if w > width {
-            return None;
-        }
-        if x + w > width {
-            x = 0;
-            y += row;
-            row = 0;
-        }
-        if y + h > max_height {
-            return None;
-        }
-        c.origin = [x, y];
-        x += w;
-        used = used.max(x);
-        row = row.max(h);
-    }
-    Some((used, y + row))
+/// Each chart's mask at `scale` on the `a` grid: every cell holding a texel a face
+/// rasterises to, or within `g` texels of one (the gutter). Word-parallel: a texel
+/// bitmap, dilated by `g` along rows, then each cell ORs its `a + 2g` dilated rows.
+fn masks(charts: &mut [Chart], scale: f64, a: u32, g: u32) {
+    masks_with_usage(charts, scale, a, g, |_, _, _| {});
 }
+
+fn masks_with_usage(
+    charts: &mut [Chart],
+    scale: f64,
+    a: u32,
+    g: u32,
+    mut usage: impl FnMut(u64, u64, u64),
+) {
+    assert!(a.is_power_of_two() && a <= 64 && g < 64);
+    let (mut bits, mut wide, mut block) = (Vec::new(), Vec::new(), Vec::new());
+    for c in charts.iter_mut() {
+        let [w, h] = c.size;
+        let tw = w.div_ceil(64) as usize;
+        bits.clear();
+        bits.resize(tw * h as usize, 0u64);
+        for t in &c.points {
+            let pixels =
+                t.map(|q| std::array::from_fn(|k| f64::from(g) + (q[k] - c.lo[k]) * scale));
+            raster_spans(&pixels, c.size, |y, x0, x1| {
+                let row = &mut bits[y as usize * tw..(y as usize + 1) * tw];
+                for x in x0..=x1 {
+                    row[x as usize / 64] |= 1 << (x % 64);
+                }
+            });
+        }
+        // Row dilation: every bit spreads `g` texels left and right.
+        wide.clear();
+        wide.resize(bits.len(), 0u64);
+        for (row, out) in bits.chunks_exact(tw).zip(wide.chunks_exact_mut(tw)) {
+            for (i, o) in out.iter_mut().enumerate() {
+                let mut v = row[i];
+                for s in 1..=g {
+                    v |= row[i] << s | row[i] >> s;
+                    if i > 0 {
+                        v |= row[i - 1] >> (64 - s);
+                    }
+                    if i + 1 < tw {
+                        v |= row[i + 1] << (64 - s);
+                    }
+                }
+                *o = v;
+            }
+        }
+        let cells = c.size.map(|e| e.div_ceil(a));
+        let mut mask = Mask::new(cells);
+        let low = if a == 64 { u64::MAX } else { (1u64 << a) - 1 };
+        for cy in 0..cells[1] {
+            let y0 = (cy * a).saturating_sub(g) as usize;
+            let y1 = ((cy * a + a + g) as usize).min(h as usize);
+            block.clear();
+            block.resize(tw, 0u64);
+            for y in y0..y1 {
+                for (b, &v) in block.iter_mut().zip(&wide[y * tw..(y + 1) * tw]) {
+                    *b |= v;
+                }
+            }
+            for cx in 0..cells[0] {
+                let x = (cx * a) as usize;
+                if block[x / 64] >> (x % 64) & low != 0 {
+                    mask.set(cx, cy);
+                }
+            }
+        }
+        usage(
+            (c.mask.bits.capacity() * 8) as u64,
+            (mask.bits.capacity() * 8) as u64,
+            ((bits.capacity() + wide.capacity() + block.capacity()) * 8) as u64,
+        );
+        c.mask = mask;
+    }
+}
+
+/// Peak heap for one group's mask construction or packing, which run sequentially.
+/// `texels` is the group's allowance, `faces` bounds its chart count. All fits have
+/// at least one isolated mip (a >= 2), edges <= edge and summed rectangles <= 64*T.
+/// For a mask w/a by h/a, bytes = 8*ceil(w/(64*a))*h/a, bounded by
+/// area/(8*a²) + 8*h/a. Also cap by `faces` full-edge masks, useful for small groups.
+/// Replacement keeps at most faces+1 masks live. Their rectangle area is bounded
+/// by the previous and current fits together (2*A), including isolation changes.
+pub(crate) fn workspace_bytes(edge: u32, texels: u64, faces: u64) -> u64 {
+    let a = 2u32; // layout's minimum isolation, even if the preferred K increases.
+    let cells = edge.div_ceil(a);
+    let mask = u64::from(cells.div_ceil(64)) * u64::from(cells) * 8;
+    let rectangles = texels
+        .saturating_mul(64)
+        .min(u64::from(edge).pow(2).saturating_mul(faces));
+    let retained = (rectangles
+        .div_ceil(8 * u64::from(a).pow(2))
+        .saturating_add(8 * u64::from(cells) * faces))
+    .min(mask.saturating_mul(faces));
+    let row_words = u64::from(edge.div_ceil(64));
+    // Vec<u64> starts at four words even for a one-word row.
+    let row = row_words.max(4);
+    let raster = (row_words * u64::from(edge)).max(4);
+    // Two reusable raster Vecs: <=2*raster capacity each. During growth one
+    // old allocation (<raster) can coexist with its new allocation. Row scratch
+    // has <=2*row capacity; growing it instead needs less than this raster peak.
+    let scratch = 8 * (5 * raster + 2 * row);
+    let containers = faces.saturating_mul(256);
+    let live_masks = faces.saturating_add(1);
+    let replacing = (rectangles
+        .saturating_mul(2)
+        .div_ceil(8 * u64::from(a).pow(2))
+        .saturating_add(8 * u64::from(cells) * live_masks))
+    .min(mask.saturating_mul(live_masks));
+    let construction = replacing.saturating_add(scratch);
+    // The shared pack bound covers doubled retained page capacity. Also cover
+    // an old page allocation overlapping realloc, just as for raster scratch.
+    let old_page = 8 * (u64::from(cells.div_ceil(64)) + 1) * u64::from(cells);
+    let packing = retained
+        .saturating_add(mask_pack::workspace_bytes(cells, faces as usize))
+        .saturating_add(old_page);
+    containers.saturating_add(construction.max(packing))
+}
+
+/// Page widths tried, as factors of the masked area's square root (plus the widest chart).
+const WIDTHS: [f64; 4] = [1., 1.15, 1.35, 1.7];
 
 fn sizes(charts: &mut [Chart], scale: f64, a: u32) -> Option<()> {
     for c in charts.iter_mut() {
@@ -532,8 +639,8 @@ fn sizes(charts: &mut [Chart], scale: f64, a: u32) -> Option<()> {
 }
 
 /// The least-area block-aligned page in `MIN_PAGE..=max_edge` per side holding every
-/// chart at `scale` (shelves by descending height at a few widths around the square
-/// root of the chart area; ties to the narrower); packs the charts into it.
+/// chart's mask at `scale` (bottom-left by descending mask height at a few widths around
+/// the square root of the masked area; ties to the narrower); packs the charts into it.
 fn fit(
     charts: &mut [Chart],
     scale: f64,
@@ -542,36 +649,50 @@ fn fit(
     a: u32,
 ) -> Option<[u32; 2]> {
     sizes(charts, scale, a)?;
+    // Reject impossible rectangles before raster scratch/masks are allocated. The
+    // total bounding area also bounds retained masks for arbitrarily sparse charts.
+    let area: u64 = charts
+        .iter()
+        .map(|c| u64::from(c.size[0]) * u64::from(c.size[1]))
+        .sum();
+    if charts.iter().any(|c| c.size.iter().any(|&e| e > max_edge))
+        || area > max_texels.saturating_mul(64)
+    {
+        return None;
+    }
+    masks(charts, scale, a, a.max(GUTTER));
     let unit = a.max(BLOCK);
     // Small allowances may use pages below MIN_PAGE (whole blocks).
     let min_edge =
         ((max_texels as f64).sqrt() as u32 / unit * unit).clamp(unit, MIN_PAGE.max(unit));
     let mut order: Vec<usize> = (0..charts.len()).collect();
-    order.sort_by(|&a, &b| charts[b].size[1].cmp(&charts[a].size[1]).then(a.cmp(&b)));
-    let round = |v: f64| ((v.ceil() as u64).div_ceil(u64::from(unit)) * u64::from(unit)) as u32;
-    let area: f64 = charts
+    order.sort_by(|&x, &y| {
+        charts[y].mask.cells[1]
+            .cmp(&charts[x].mask.cells[1])
+            .then(x.cmp(&y))
+    });
+    let round = |v: u32| v.div_ceil(unit) * unit;
+    let cells: u64 = charts.iter().map(|c| c.mask.count()).sum();
+    let widest = charts.iter().map(|c| c.mask.cells[0]).max().unwrap_or(1) * a;
+    let side = ((cells * u64::from(a * a)) as f64).sqrt();
+    let mut widths: Vec<u32> = WIDTHS
         .iter()
-        .map(|c| f64::from(c.size[0]) * f64::from(c.size[1]))
-        .sum();
-    let widest = charts.iter().map(|c| c.size[0]).max().unwrap_or(1);
-    let mut widths: Vec<u32> = [1., 1.1, 1.25, 1.4, 1.6, 2., 2.5, 3.2]
-        .iter()
-        .map(|f| round(area.sqrt() * f))
-        .chain([round(f64::from(widest)), max_edge])
-        .map(|w| w.clamp(min_edge, max_edge).max(round(f64::from(widest))))
+        .map(|f| round((side * f).ceil() as u32))
+        .chain([round(widest)])
+        .map(|w| w.clamp(min_edge, max_edge).max(round(widest)))
         .filter(|&w| w <= max_edge)
         .collect();
     widths.sort_unstable();
     widths.dedup();
-    let mut best: Option<(u64, u32, [u32; 2])> = None;
+    let masks: Vec<&Mask> = charts.iter().map(|c| &c.mask).collect();
+    // (page area, longer side, page, chart origins in cells)
+    type Fit = (u64, u32, [u32; 2], Vec<[u32; 2]>);
+    let mut best: Option<Fit> = None;
     for &w in &widths {
-        let Some((used, h)) = shelf(charts, &order, w, max_edge) else {
+        let Some((at, used, h)) = mask_pack::pack(&masks, &order, w / a, max_edge / a) else {
             continue;
         };
-        let page = [
-            round(f64::from(used)).max(min_edge),
-            round(f64::from(h)).max(min_edge),
-        ];
+        let page = [round(used * a).max(min_edge), round(h * a).max(min_edge)];
         if page[1] > max_edge || u64::from(page[0]) * u64::from(page[1]) > max_texels {
             continue;
         }
@@ -579,13 +700,15 @@ fn fit(
             u64::from(page[0]) * u64::from(page[1]),
             page[0].max(page[1]),
         );
-        if best.is_none_or(|(a, m, _)| key < (a, m)) {
-            best = Some((key.0, key.1, page));
+        if best.as_ref().is_none_or(|(x, m, ..)| key < (*x, *m)) {
+            best = Some((key.0, key.1, page, at));
         }
     }
-    let page = best?.2;
-    // Re-pack at the chosen width so chart origins match the page.
-    shelf(charts, &order, page[0], page[1])?;
+    let (_, _, page, origins) = best?;
+    // The chosen width's own packing (cells to texels).
+    for (c, o) in charts.iter_mut().zip(&origins) {
+        c.origin = o.map(|v| v * a);
+    }
     Some(page)
 }
 
@@ -625,7 +748,8 @@ pub(crate) fn layout(
         if let Some(size) = fit(&mut charts, target, max_edge, max_texels, a) {
             (target, size, false)
         } else {
-            // The finest scale that fits the cap: bisection on a monotone shelf fit.
+            // The finest scale that fits the cap, by bisection: `lo` always fits (zero scale
+            // fits at this isolation), and a fit is deterministic, so the final fit holds.
             let (mut lo, mut hi) = (0., target);
             for _ in 0..40 {
                 let mid = 0.5 * (lo + hi);
@@ -666,6 +790,47 @@ pub(crate) fn layout(
 /// face, never its bounding box (a long sliver costs its length, not its box area).
 pub(crate) fn raster(pixels: &[[f64; 2]; 3], size: [u32; 2], out: &mut Vec<(u32, [f64; 3])>) {
     out.clear();
+    raster_each(pixels, size, |texel, w| out.push((texel, w)));
+}
+
+/// [`raster`] without collecting: `f(texel, weights)` per covered texel, in the same order.
+fn raster_each(pixels: &[[f64; 2]; 3], size: [u32; 2], mut f: impl FnMut(u32, [f64; 3])) {
+    raster_rows(pixels, size, |y, x0, x1, bary| {
+        let mut any = false;
+        for x in x0..=x1 {
+            let w = bary(f64::from(x) + 0.5);
+            if w.iter().all(|&v| v >= -1e-9) {
+                any = true;
+                f(y * size[0] + x, w.map(|v| v.max(0.)));
+            }
+        }
+        any
+    });
+}
+
+/// The covered texels of each row as one span `[x0, x1]`: the weights are affine along a
+/// row, so only the ends are tested. Used for coverage masks, where weights are unused.
+fn raster_spans(pixels: &[[f64; 2]; 3], size: [u32; 2], mut f: impl FnMut(u32, u32, u32)) {
+    raster_rows(pixels, size, |y, x0, x1, bary| {
+        let inside = |x: u32| bary(f64::from(x) + 0.5).iter().all(|&v| v >= -1e-9);
+        let Some(a) = (x0..=x1).find(|&x| inside(x)) else {
+            return false;
+        };
+        let b = (a..=x1).rev().find(|&x| inside(x)).unwrap_or(a);
+        f(y, a, b);
+        true
+    });
+}
+
+/// Rows of [`raster`]: per row `y`, the candidate texel range `[x0, x1]` and the weights at
+/// a texel centre `x`; `row` returns whether it covered a texel. When no row did, the
+/// centroid texel is reported with equal weights.
+fn raster_rows(
+    pixels: &[[f64; 2]; 3],
+    size: [u32; 2],
+    mut row: impl FnMut(u32, u32, u32, &dyn Fn(f64) -> [f64; 3]) -> bool,
+) {
+    let mut any = false;
     let p = pixels;
     let den = (p[1][1] - p[2][1]) * (p[0][0] - p[2][0]) + (p[2][0] - p[1][0]) * (p[0][1] - p[2][1]);
     if den.abs() > 1e-12 {
@@ -705,19 +870,14 @@ pub(crate) fn raster(pixels: &[[f64; 2]; 3], size: [u32; 2], out: &mut Vec<(u32,
             if x1 < 0. {
                 continue;
             }
-            for x in x0..=x1 as u32 {
-                let w = bary(f64::from(x) + 0.5, cy);
-                if w.iter().all(|&v| v >= -1e-9) {
-                    out.push((y as u32 * size[0] + x, w.map(|v| v.max(0.))));
-                }
-            }
+            any |= row(y as u32, x0, x1 as u32, &|cx| bary(cx, cy));
         }
     }
-    if out.is_empty() {
+    if !any {
         let c: [f64; 2] = std::array::from_fn(|a| (p[0][a] + p[1][a] + p[2][a]) / 3.);
         let x = (c[0].floor().max(0.) as u32).min(size[0] - 1);
         let y = (c[1].floor().max(0.) as u32).min(size[1] - 1);
-        out.push((y * size[0] + x, [1. / 3.; 3]));
+        row(y, x, x, &|_| [1. / 3.; 3]);
     }
 }
 
@@ -744,6 +904,54 @@ mod tests {
             .iter()
             .map(|c| [c.origin[0], c.origin[1], c.size[0], c.size[1]])
             .collect()
+    }
+
+    #[test]
+    fn mask_charge_covers_measured_aspect_changes_and_word_rounding() {
+        let (p, f) = fold();
+        let (mut charts, _) = grow(&p, &f);
+        // Reuse buffers across narrow/tall, wide/short and non-word-aligned masks,
+        // then replace the retained set at another scale/aspect arrangement.
+        for dims in [
+            [[6, 1024], [1024, 6], [130, 130]],
+            [[1024, 1024], [6, 1024], [1024, 6]],
+            [[130, 130], [1024, 1024], [6, 6]],
+        ] {
+            for (c, size) in charts.iter_mut().zip(dims) {
+                c.size = size;
+            }
+            let mut retained = charts
+                .iter()
+                .map(|c| (c.mask.bits.capacity() * 8) as u64)
+                .sum::<u64>();
+            let mut peak = retained;
+            masks_with_usage(&mut charts, 1., 2, 2, |old, new, scratch| {
+                peak = peak.max(retained + new + scratch);
+                retained = retained - old + new;
+            });
+            let charge = workspace_bytes(1024, 1 << 20, f.len() as u64);
+            assert!(peak <= charge, "measured {peak}, charge {charge}");
+            for c in &charts {
+                assert_eq!(
+                    c.mask.bits.capacity() as u64 * 8,
+                    u64::from(c.size[0].div_ceil(2).div_ceil(64))
+                        * u64::from(c.size[1].div_ceil(2))
+                        * 8
+                );
+            }
+        }
+        assert_eq!(workspace_bytes(1024, 1 << 20, 8192), 40_505_600);
+        assert!(workspace_bytes(512, 1 << 18, 4096) < workspace_bytes(1024, 1 << 20, 8192));
+    }
+
+    #[test]
+    fn oversized_mask_workspace_is_rejected_before_raster_allocation() {
+        let (p, f) = fold();
+        let (mut charts, _) = grow(&p, &f);
+        assert!(fit(&mut charts, 1000., 1024, 1 << 20, 2).is_none());
+        assert!(charts.iter().all(|c| c.mask.bits.capacity() == 0));
+        assert!(fit(&mut charts, 10., 1024, 1, 2).is_none());
+        assert!(charts.iter().all(|c| c.mask.bits.capacity() == 0));
     }
 
     #[test]

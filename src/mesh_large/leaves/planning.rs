@@ -200,17 +200,26 @@ fn plan_pass(
         let mut memory_drops = 0u8;
         for density_drop in 0..=max_drop {
             check()?;
-            match atlas::project(&leaf, resources, config.profile, density_drop, check) {
+            match atlas::project_bounded(
+                &leaf,
+                resources,
+                config.profile,
+                density_drop,
+                leaf_memory.map(|m| m.0),
+                check,
+            ) {
                 // A leaf job that cannot fit the declared budget takes the next density
                 // step (reported), rather than refusing the run once delivery admits it.
                 Ok(projected)
-                    if density_drop < max_drop
-                        && leaf_memory.is_some_and(|(limit, floor)| {
-                            let owned = projected.owned_bytes.max(floor);
-                            super::producer::leaf_job_bytes(projected.page_bytes, owned)
-                                .is_none_or(|n| n > limit)
-                        }) =>
+                    if leaf_memory.is_some_and(|(limit, floor)| {
+                        let owned = projected.owned_bytes.max(floor);
+                        super::producer::leaf_job_bytes(projected.page_bytes, owned)
+                            .is_none_or(|n| n > limit)
+                    }) =>
                 {
+                    if density_drop == max_drop {
+                        return Err(resource("leaf planning workspace exceeds the declared memory budget at every density"));
+                    }
                     memory_drops += 1;
                 }
                 Ok(projected) => {
@@ -237,7 +246,13 @@ fn plan_pass(
                     break;
                 }
                 Err(error)
-                    if error.kind() == JobErrorKind::Unsupported && density_drop < max_drop => {}
+                    if matches!(
+                        error.kind(),
+                        JobErrorKind::Unsupported | JobErrorKind::ResourceLimit
+                    ) && density_drop < max_drop =>
+                {
+                    memory_drops += u8::from(error.kind() == JobErrorKind::ResourceLimit);
+                }
                 Err(error) => return Err(error),
             }
         }
@@ -586,7 +601,18 @@ mod tests {
                             oracle.page_bytes,
                             oracle.owned_bytes,
                         );
-                        let plan = preflight(
+                        let expected_fit = (u32::from(expected_drop)..=12).find(|&drop| {
+                            atlas::project(&[original], resources, profile, drop, &mut || Ok(()))
+                                .ok()
+                                .and_then(|p| {
+                                    super::super::producer::leaf_job_bytes(
+                                        p.page_bytes,
+                                        p.owned_bytes,
+                                    )
+                                })
+                                .is_some_and(|bytes| bytes < need.unwrap())
+                        });
+                        let result = preflight(
                             &scratch,
                             &source,
                             &nodes,
@@ -594,19 +620,35 @@ mod tests {
                             &config,
                             Some(need.unwrap() - 1),
                             &mut || Ok(()),
-                        )
-                        .unwrap();
-                        let row = plan.reader().unwrap().next().unwrap().unwrap();
-                        assert_eq!((row.density_drop, row.memory_drops), (2, 1));
-                        drop(plan);
-                        // #306 review r2 N1: a second leaf of 64 untextured primitives has the
-                        // larger closure. The stage admits A's page beside it, so A steps even
+                        );
+                        if let Some(expected_fit) = expected_fit {
+                            let plan = result.unwrap();
+                            let row = plan.reader().unwrap().next().unwrap().unwrap();
+                            assert_eq!(
+                                (u32::from(row.density_drop), u32::from(row.memory_drops)),
+                                (expected_fit, expected_fit - u32::from(expected_drop))
+                            );
+                            drop(plan);
+                        } else {
+                            // Packing's fixed workspace can dominate every density: refuse.
+                            assert_eq!(result.err().unwrap().kind(), JobErrorKind::ResourceLimit);
+                        }
+                        // #306 review r2 N1: a second leaf of untextured primitives has the
+                        // larger closure, including the textured leaf's planning workspace. The stage admits A's page beside it, so A steps even
                         // though A's own job fits.
                         let mut two = SequenceWriter::new(&scratch, "two-leaf-source", 64).unwrap();
                         two.push(&source.reader().unwrap().next().unwrap().unwrap())
                             .unwrap();
                         let mut b = Vec::new();
-                        for k in 0..64u32 {
+                        let mut unit = original;
+                        (unit.material, unit.flags, unit.corners) =
+                            (u32::MAX, 0, Default::default());
+                        let unit_owned =
+                            atlas::project(&[unit], resources, profile, 0, &mut || Ok(()))
+                                .unwrap()
+                                .owned_bytes;
+                        let untextured = (oracle.owned_bytes / unit_owned + 2).max(64) as u32;
+                        for k in 0..untextured {
                             let mut t = source.reader().unwrap().next().unwrap().unwrap();
                             t.triangle.key = 1 + u64::from(k);
                             t.triangle.source = Provenance {
@@ -624,7 +666,7 @@ mod tests {
                         assert!(owned_b > oracle.owned_bytes);
                         let mut leaves =
                             SequenceWriter::new(&scratch, "two-leaf-nodes", 64).unwrap();
-                        for (first, end) in [(0, 1), (1, 65)] {
+                        for (first, end) in [(0, 1), (1, u64::from(untextured) + 1)] {
                             leaves
                                 .push(&NodeRecord {
                                     cell_depth: 1,
@@ -647,7 +689,7 @@ mod tests {
                         let leaves = leaves.finish().unwrap();
                         let limit =
                             super::super::producer::leaf_job_bytes(oracle.page_bytes, owned_b);
-                        let plan = preflight(
+                        let result = preflight(
                             &scratch,
                             &two,
                             &leaves,
@@ -655,15 +697,36 @@ mod tests {
                             &config,
                             Some(limit.unwrap() - 1),
                             &mut || Ok(()),
-                        )
-                        .unwrap();
-                        let rows: Vec<_> = plan.reader().unwrap().map(Result::unwrap).collect();
-                        assert_eq!((rows[0].density_drop, rows[0].memory_drops), (2, 1));
-                        // The stage's admission (largest page beside largest closure) now fits.
-                        let page = rows.iter().map(|r| r.page_bytes).max().unwrap();
-                        let owned = rows.iter().map(|r| r.owned_bytes).max().unwrap();
-                        let need = super::super::producer::leaf_job_bytes(page, owned).unwrap();
-                        assert!(need < limit.unwrap(), "{need} vs {limit:?}");
+                        );
+                        let expected_fit = (u32::from(expected_drop)..=12).find(|&drop| {
+                            atlas::project(&[original], resources, profile, drop, &mut || Ok(()))
+                                .ok()
+                                .and_then(|p| {
+                                    super::super::producer::leaf_job_bytes(
+                                        p.page_bytes,
+                                        p.owned_bytes.max(owned_b),
+                                    )
+                                })
+                                .is_some_and(|bytes| bytes < limit.unwrap())
+                        });
+                        if let Some(expected_fit) = expected_fit {
+                            let plan = result.unwrap();
+                            let rows: Vec<_> = plan.reader().unwrap().map(Result::unwrap).collect();
+                            assert_eq!(
+                                (
+                                    u32::from(rows[0].density_drop),
+                                    u32::from(rows[0].memory_drops)
+                                ),
+                                (expected_fit, expected_fit - u32::from(expected_drop))
+                            );
+                            // The stage's admission (largest page beside largest closure) now fits.
+                            let page = rows.iter().map(|r| r.page_bytes).max().unwrap();
+                            let owned = rows.iter().map(|r| r.owned_bytes).max().unwrap();
+                            let need = super::super::producer::leaf_job_bytes(page, owned).unwrap();
+                            assert!(need < limit.unwrap(), "{need} vs {limit:?}");
+                        } else {
+                            assert_eq!(result.err().unwrap().kind(), JobErrorKind::ResourceLimit);
+                        }
                     }
                 } else {
                     assert_eq!(result.err().unwrap().kind(), JobErrorKind::Unsupported);

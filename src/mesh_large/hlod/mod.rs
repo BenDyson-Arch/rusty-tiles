@@ -64,7 +64,7 @@ use std::{
 };
 
 /// S3's coarse appearance policy (recorded in the stage manifest).
-pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized pages, charts isolated through COARSE_ISLAND_ISOLATED_LEVELS mips, at max(G/16, 1e-5 m), \
+pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized pages, mask-packed charts isolated through COARSE_ISLAND_ISOLATED_LEVELS mips, at max(1.25 G/16, 1e-5 m), \
      1024 cap, never finer than the source's texel spacing, nearest captured-source bake; per-vertex COLOR_0 or flat factors untextured";
 
 /// Hard published triangle cap of every coarse tile (D1).
@@ -223,6 +223,36 @@ const QUERY_BYTES_PER_TEXEL: u64 = 24;
 /// One bake chunk's points, hits, source frames, requests and levels of detail.
 const CHUNK_BYTES: u64 = bake::CHUNK as u64 * 160;
 
+/// Production worker selection, separate from host detection so archived capture
+/// ownership can exercise auto admission without launching workers or a corpus bake.
+fn worker_admission(
+    available: u64,
+    job: u64,
+    jobs: config::Jobs,
+    cores: u64,
+) -> (u64, &'static str) {
+    let requested = match jobs {
+        config::Jobs::Auto => cores,
+        config::Jobs::Fixed(n) => n.get() as u64,
+    };
+    let fit = (available / job.max(1)).max(1);
+    if fit < requested.min(cores) {
+        (fit, "memory")
+    } else if requested < cores {
+        (requested, "request")
+    } else {
+        (cores, "cores")
+    }
+}
+
+fn chart_workspace(edge: u32, cap: usize) -> u64 {
+    charts::workspace_bytes(
+        edge,
+        appearance::TILE_TEXELS.max(appearance::FACE_TEXELS * cap as u64),
+        cap as u64,
+    )
+}
+
 fn appearance_plan(
     captured: &FullCaptured,
     profile: config::Profile,
@@ -277,6 +307,7 @@ fn appearance_plan(
     let texture = texels
         .saturating_mul(QUERY_BYTES_PER_TEXEL)
         .saturating_add(CHUNK_BYTES)
+        .saturating_add(chart_workspace(edge, cap))
         .saturating_add(tile_pages.saturating_mul(2))
         .saturating_add(page)
         .saturating_add(decode);
@@ -388,18 +419,12 @@ pub(crate) fn plan(
     }
     let ledger = ceiling - fixed;
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as u64;
-    let requested = match config.jobs {
-        config::Jobs::Auto => cores,
-        config::Jobs::Fixed(n) => n.get() as u64,
-    };
-    let fit = ((ledger - window).saturating_sub(appearance.cache_floor) / job.max(1)).max(1);
-    let (jobs, limited_by) = if fit < requested.min(cores) {
-        (fit, "memory")
-    } else if requested < cores {
-        (requested, "request")
-    } else {
-        (cores, "cores")
-    };
+    let (jobs, limited_by) = worker_admission(
+        (ledger - window).saturating_sub(appearance.cache_floor),
+        job,
+        config.jobs,
+        cores,
+    );
     // The cache takes what the admitted jobs leave, up to every chain, at least its floor.
     let image_cache = if appearance.cache_floor == 0 {
         0
@@ -492,7 +517,7 @@ pub(crate) struct HlodReport {
 }
 
 /// Coarse appearance of one tile depth: page texels, achieved against requested spacing
-/// (`max(G/16, 1e-5 m)`) and cap hits.
+/// (`max(1.25·G/16, 1e-5 m)`) and cap hits.
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DepthAppearance {
@@ -508,7 +533,7 @@ pub struct DepthAppearance {
     pub searches: u64,
     pub donor_reads: u64,
     pub capped_tiles: u64,
-    /// Tiles whose page density the source's own texel spacing set (not `G/16`).
+    /// Tiles whose page density the source's own texel spacing set (not `1.25·G/16`).
     pub source_limited_tiles: u64,
     pub escalated_pages: u64,
     /// Pages delivered as the exact level-0 PNG.

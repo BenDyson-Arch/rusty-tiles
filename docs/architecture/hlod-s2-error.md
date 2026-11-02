@@ -92,7 +92,7 @@ iterated for results). All candidates clip to the descendant source range; ties 
 provenance, expanded ordinal, then rank. S3 consumes `nearest_budget`, `surface`,
 `area`, `primitive` and `triangle` (the original `FullTriangle` for donors), the
 decoded `CoarseTile`, its representatives and G; chart spacing is
-`max(G/16, 1e-5 m)` and must keep decoded positions and representatives.
+`max(1.25·G/16, 1e-5 m)` (D5, amended 2026-10-30) and must keep decoded positions and representatives.
 
 ## Resources
 
