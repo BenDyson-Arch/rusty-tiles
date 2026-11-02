@@ -46,3 +46,4 @@ for 0.4.0 (no shipped API or output change):
 - #267: foundation audit/rescope proposal.
 - #282: deduplicate C1 specification copies.
 - #305: deduplicate fixtures with shared references.
+- Tree headroom: lossless C2 witness report storage and reader updates (internal only).
