@@ -364,7 +364,8 @@ defect.
   S grows. R = ⌈1.5 × 144.4 × 1.03⌉ = 224 (owner, 2026-11-03), from the plateau with 3%
   headroom; it tends to a 1.552 margin for the densest class. All 80 outputs (review 2's 28,
   review 3's 10, the merged-producer re-bakes and the CI and dup scale, the `iso` sweep, gen3
-  and the named archives) validate at the default budget and at two thirds of it. MARGIN_LINE
+  and the named archives) validate at the default budget and at two thirds of it. The lowest margin is ci-32000's 1.667;
+  the 16 M term carries the small outputs.
 - **No other legitimate archive comes close.** Under the final charges the named archives are:
   sheet 42.66, mesh-1e6 25.72, tex3 19.85, crop3 17.81, Walem 15.99 (dabca18b) and 18.08 (the
   #308 bake 8710429a, with its last-resort tiles). All lie far under 224/1.5. The suites were
@@ -469,20 +470,23 @@ Before this change, c6 rose on the P-core from 7.8 ns/unit at 1.52 MB to 26.7 at
   about 15.3 ns/unit, from review 2's re-time of c7 at 13.49–13.59 ns/unit.
 
 The recount classes (review 3; `recount.py`, "Coarse-drop recount and last-resort checks"
-above), each run at the default budget, 16,000,000 + 224·S, until the budget refuses it, with
-the final build (2026-11-02, three runs each, load average 19 on the P-core runs and 27 on the
-E-core ones):
+above) and review 4's colliding-key archives, each run at the default budget, 16,000,000 +
+224·S, with the final build (2026-11-03, three runs each, load average 10 on the P-core runs and
+6 on the E-core ones):
 
-| class | S | budget | P-core ns/unit | E-core ns/unit | review 3 (a277be2d), P / E |
-| --- | --- | --- | --- | --- | --- |
-| c10 grid, N = 2,000 | 183,055 | 49,865,175 | 4.67–5.67 | 14.58–15.52 | 19.15–19.62 / – |
-| c10 grid, N = 8,000 | 683,051 | 142,364,435 | 3.82–4.44 | 12.19–13.62 | 17.64–18.14 / 32.6–36.9 |
-| c11 scan, N = 4,100, D = 4,000 | 471,742 | 103,272,270 | 7.60–8.26 | 12.05–12.11 | 16.85–16.94 / – |
+| class | S | P-core ns/unit | E-core ns/unit | before (a277be2d / 160f1d8a), P / E |
+| --- | --- | --- | --- | --- |
+| c10 grid, N = 2,000 | 183,055 | 2.88–3.03 | 4.75–5.16 | 19.15–19.62 / – |
+| c10 grid, N = 8,000 | 683,051 | 2.69–2.70 | 4.34–4.53 | 17.64–18.14 / 32.6–36.9 |
+| c11 scan, N = 4,100, D = 4,000 | 471,742 | 7.75–7.82 | 11.50–11.58 | 16.85–16.94 / – |
+| hash-8000 (colliding recount keys) | – | 7.31–7.36 | 9.91–10.61 | – / 736.9 in the recount |
+| screen-8000 (colliding shared points) | – | 6.08–6.17 | 9.22–9.63 | – / 166.9 in the screen |
+| screen-8000, compressed | – | 6.04–6.84 | 9.42–10.02 | – |
 
-The E-core figure for c10 at N = 2,000 is the run's CPU over its budget: a 0.75 s run, where
-fixed start-up and a host at load 27 weigh most. Legitimate outputs measured alongside (phase
-probe, unbounded): the dense outputs at 7.7–10.5 ns/unit (P) and 9.7–12.7 (E), Walem 8710429a
-at 9.75 and 12.28.
+Each runs until the budget refuses it, or validates in full. Legitimate outputs measured
+alongside (phase probe, unbounded): ci-32000 at 5.64–5.67 ns/unit (P) and 11.19–11.86 (E),
+Walem 8710429a at 9.75 and 12.28 (earlier build). The E-core τ below stays the worst run
+measured over these rounds, c10 grid-2000's 15.52 at load 27 (2026-11-02).
 
 The stated bound is `(16,000,000 + 224·S)·τ`, the default budget times τ, with τ the worst of
 every measurement and every extrapolation to 1 GB stored:
