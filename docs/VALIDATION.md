@@ -97,6 +97,27 @@ results, and therefore identical early exits and point/face charges. Induction
 over regions gives identical subdivisions and total effort. Thus the cache
 cannot change either the geometric verdict or a refusal at the effort limit.
 
+For stage-3 region scans, an outward reach-expanded face box also provides a
+safe pruning test. If the entire centroid interval box lies strictly outside it
+on any axis, the exact centroid is farther than the same reach R from the face.
+That face cannot certify all three region corners: distance to one closed convex
+triangle is convex, so three corner distances at most R would put their exact
+centroid within R too. The scan therefore charges/counts this centroid box test
+once and skips that face's corner queries. It does not skip on a rounded midpoint
+alone, an uncertain upper distance, or a partially overlapping box.
+
+The budget contract is deterministic in the archive and budget: every executed
+unit of work is charged, and cache state never changes charged work or verdicts.
+Deterministic pruning need not preserve a previous version's budget threshold.
+It preserves geometric decisions, subdivision and the original face order,
+removing only queries which cannot certify the region or set `center_near`.
+Required work therefore only decreases: an old accept cannot become a refusal,
+while an input previously refused solely for effort may now pass. For example,
+one region, a separated centroid and a certifying centroid require three units;
+the unpruned scan needed four because it also queried an impossible corner.
+Cached and uncached scans still have identical queries, charges and verdicts at
+every budget. No weights, global reach or numerical tolerances change.
+
 This is a sufficient certificate and can refuse a valid
 surface when its budget/depth is insufficient. Stages 0–2 and undeclared drops
 retain fixed samples, with child G added off vertices; those samples provide only

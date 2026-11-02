@@ -11,3 +11,4 @@
 - Cache the query-independent sliver classification for source triangles without
   changing sampled witnesses or their memory charge.
 - Skip unused seam-owner queries while preserving every fold-guard decision.
+- Preserve relief feasibility, N3 handover and certified seam floors through D10.

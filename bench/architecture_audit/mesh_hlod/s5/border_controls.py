@@ -51,8 +51,9 @@ def oriented(face):
     return face if ny > 0 else (a, c, b)
 
 
-def glb(faces, ids, *, leaf):
-    """One primitive; source_primitive (and leaf source_triangle) identity tables."""
+def glb(faces, ids, *, leaf, step=None):
+    """One primitive; source_primitive (and leaf source_triangle) identity tables. With
+    `step`, positions are signed-short grid codes under a node scale (KHR_mesh_quantization)."""
     binary = bytearray()
     views, accessors = [], []
 
@@ -65,9 +66,17 @@ def glb(faces, ids, *, leaf):
         return len(accessors) - 1
 
     corners = [p for f in faces for p in f]
-    position = accessor(b''.join(struct.pack('<3f', *p) for p in corners), 5126, 'VEC3', len(corners),
-                        min=[min(p[k] for p in corners) for k in range(3)],
-                        max=[max(p[k] for p in corners) for k in range(3)])
+    if step:
+        codes = [tuple(round(v / step) for v in p) for p in corners]
+        assert all(c * step == v for p, q in zip(corners, codes) for v, c in zip(p, q)), 'corner off the grid'
+        position = accessor(b''.join(struct.pack('<hhhxx', *c) for c in codes), 5122, 'VEC3', len(codes),
+                            min=[min(c[k] for c in codes) for k in range(3)],
+                            max=[max(c[k] for c in codes) for k in range(3)])
+        views[accessors[position]['bufferView']]['byteStride'] = 8
+    else:
+        position = accessor(b''.join(struct.pack('<3f', *p) for p in corners), 5126, 'VEC3', len(corners),
+                            min=[min(p[k] for p in corners) for k in range(3)],
+                            max=[max(p[k] for p in corners) for k in range(3)])
     attributes, sets, classes, tables = {'POSITION': position}, [], {}, []
     labels = ['source_primitive', 'source_triangle'] if leaf else ['source_primitive']
     for si, label in enumerate(labels):
@@ -100,6 +109,10 @@ def glb(faces, ids, *, leaf):
                materials=[MATERIAL], buffers=[{'byteLength': len(binary)}], bufferViews=views, accessors=accessors,
                extensionsUsed=['EXT_mesh_features', 'EXT_structural_metadata'],
                extensions={'EXT_structural_metadata': {'schema': {'classes': classes}, 'propertyTables': tables}})
+    if step:
+        doc['nodes'] = [{'mesh': 0, 'scale': [step] * 3}]
+        doc['extensionsUsed'].append('KHR_mesh_quantization')
+        doc['extensionsRequired'] = ['KHR_mesh_quantization']
     data = json.dumps(doc, separators=(',', ':')).encode()
     data += b' ' * (-len(data) % 4)
     binary += b'\0' * (-len(binary) % 4)
@@ -163,7 +176,7 @@ class Fixture:
         faces = [f for name in leaves for f in self.leaf_faces(name) if f not in drop]
         if tuple(keep) != (0, 1, 2, 3, 4) or fan:
             # Replace the unit column beside the border by a fan over the kept arc.
-            lo, hi = (3, 4.01) if cell == 'A' else (4, 5)
+            lo, hi = (3, 4.5) if cell == 'A' else (4, 5)
             faces = [f for f in faces if not all(lo <= p[0] <= hi for p in f)]
             outer = [point(3, 0, z) for z in range(5)] if cell == 'A' else [point(5, 0, z) for z in range(5)]
             ring = outer + [self.P[k] for k in sorted(keep, reverse=True)]
@@ -200,9 +213,40 @@ def build(case):
         keep_a = keep_b = (0, 4)
     if name == 'same-depth-gap':
         keep_a = (0, 4)
+    # Border relief (A1) at a cap of 4: the noisy arc keeps 4 chords per cell at step 0
+    # (above 85%); step 6 (E_1/16 x 64, past the per-axis corridor) leaves 2 (75%).
+    relief_step = 0
+    g_m, step_m, encoded = 0.002, None, None
+    if name.startswith('relief'):
+        keep_a = keep_b = (0, 2, 4)
+        relief_step = {'relief-step-wrong': 7, 'relief-step-understated': 0}.get(name, 6)
+        g_a = g_b = 0.03 if name == 'relief-unfloored' else 0.041
+    if name.startswith('relief-chain'):
+        # A and B are collapsed single-child chains built at depth 2 and published at 1:
+        # the relief re-derivation rebuilds depth 2 (it triggers there, at step 7), and
+        # the published chord's next member holds it too, so G covers 16 x eps.
+        tree, encoded = 'chain', 2
+        g_a = g_b = 0.07 if name == 'relief-chain-unfloored' else 0.17
     if name.startswith('mixed'):
         tree, keep_m = 'mixed', (0, 4)
         g_a, g_b = 0.004, 0.02
+    grids = {}
+    if name.startswith('chain-grid'):
+        # Review 2 (N-1): A is a collapsed chain (published at 1, built at 2), B is not.
+        # Their leaves are all delivered at depth 2, but A's lie at frozen depth 3 and are
+        # quantized on its finer grid. P2's source is off both grids; every leaf delivers
+        # it on B's coarser one. Grouped by delivered depth, P2 has two grids at its
+        # minimum depth (oracleDomain); grouped by frozen depth, B's grid alone. The
+        # unlabelled mutant declares no chain, so delivered depths stand.
+        tree = 'chain-grid'
+        grids = {'A0': 2.0 ** -9, 'A1': 2.0 ** -9, 'B0': 2.0 ** -8, 'B1': 2.0 ** -8}
+    if name == 'mixed-relieved-finer':
+        # Review 1 (P3-3): only the deeper chords are relieved; the coarser tiles keep
+        # every point (unrelieved). Their gap is bounded by E_1/8 (steps fall by one per
+        # level at most), not by G/8: 0.001 lies between the two.
+        tree, keep_m, step_m = 'mixed-deep', (0, 4), 4
+        g_a = g_b = 0.012
+        g_m = 0.009
     if name == 'mixed-within':
         # A valid mixed depth: A's leaves lie below A' (depth 2), which contracts
         # exactly like its cousin M, so no leaf is as shallow as M.
@@ -256,7 +300,10 @@ def build(case):
         for f in leaves[n]:
             ids = [vertex_ids[p] for p in f]
             rows[n].append((triangle, ids))
-            source[f'0,0,0,{triangle}'] = dict(xyz=[list(p) for p in f], vertices=ids, material=MATERIAL,
+            xyz = [list(p) for p in f]
+            if grids:
+                xyz = [[p[0] + 0.0005, p[1], p[2]] if tuple(p) == fx.P[2] else p for p in xyz]
+            source[f'0,0,0,{triangle}'] = dict(xyz=xyz, vertices=ids, material=MATERIAL,
                                                expanded_ordinal=0, material_index=0)
             triangle += 1
     a = fx.coarse('A', keep_a, patch, drop_a)
@@ -276,7 +323,7 @@ def build(case):
     if name == 'coincident-twin':
         a.append((a[0][0], a[0][2], a[0][1]))
     b = fx.coarse('B', keep_b)
-    files = {f'{n}.glb': glb(leaves[n], rows[n], leaf=True) for n in leaves}
+    files = {f'{n}.glb': glb(leaves[n], rows[n], leaf=True, step=grids.get(n)) for n in leaves}
     files['A.glb'] = glb(a, identities(a), leaf=False)
     if drop_a:
         # D11 coarse drops: every payload declares the child components it drops.
@@ -295,15 +342,15 @@ def build(case):
     leaf = lambda n: tile(f'{n}.glb', 0)
     records = []
     depth_a = depth_b = 1
-    if tree == 'siblings':
+    if tree in ('siblings', 'chain', 'chain-grid'):
         root = tile(None, 0, [tile('A.glb', g_a, [leaf('A0'), leaf('A1')]), tile('B.glb', g_b, [leaf('B0'), leaf('B1')])])
         intervals = {'A': (0, 2), 'B': (2, 4)}
     elif tree == 'mixed-deep':
         m, a2 = fx.coarse('B', keep_m), fx.coarse('A', keep_m)
         files['M.glb'] = glb(m, identities(m), leaf=False)
         files['A2.glb'] = glb(a2, identities(a2), leaf=False)
-        root = tile(None, 0, [tile('A.glb', g_a, [tile('A2.glb', 0.002, [leaf('A0'), leaf('A1')])]),
-                              tile('B.glb', g_b, [tile('M.glb', 0.002, [leaf('B0'), leaf('B1')])])])
+        root = tile(None, 0, [tile('A.glb', g_a, [tile('A2.glb', g_m, [leaf('A0'), leaf('A1')])]),
+                              tile('B.glb', g_b, [tile('M.glb', g_m, [leaf('B0'), leaf('B1')])])])
         intervals = {'A': (0, 2), 'A2': (0, 2), 'B': (2, 4), 'M': (2, 4)}
     elif tree == 'mixed':
         m = fx.coarse('B', keep_m)
@@ -323,7 +370,8 @@ def build(case):
         intervals = {'B': (1, 3), 'M': (1, 3)}
     doc = refinable(dict(asset={'version': '1.1'}, geometricError=0, root=root))
 
-    def record(cell, uri, depth, g, keep, topology=None, terminal=False, child_keep=(0, 1, 2, 3, 4)):
+    def record(cell, uri, depth, g, keep, topology=None, terminal=False, child_keep=(0, 1, 2, 3, 4), step=None,
+               built=None):
         data = files[uri]
         arcs = list(zip(keep, keep[1:]))
         certificates = []
@@ -337,6 +385,8 @@ def build(case):
             certificates.append(dict(endpoints=[key(a_), key(b_)], chain=[key(fx.P[0]), key(fx.P[1])],
                                      origin=key(fx.P[0]), first=first, end=end,
                                      epsilon=eps * (1 + 1e-6) if eps else 0.0, terminalLock=terminal))
+            if (relief_step if step is None else step):
+                certificates[-1]['step'] = relief_step if step is None else step
         interface = [dict(leaf=0, a=key(fx.P[k]), b=key(fx.P[k]), lo=0, hi=3) for k in keep]
         interface += [dict(leaf=0, a=key(fx.P[f]), b=key(fx.P[e]), lo=0, hi=3) for f, e in arcs]
         if name == 'dropped-border' and cell == 'A':
@@ -352,7 +402,7 @@ def build(case):
         lo, hi = intervals[cell]
         return dict(schemaVersion=1, kind='tile',
                     tile=dict(uri=uri, sha256=hashlib.sha256(data).hexdigest(), bytes=len(data), leafBegin=lo,
-                              leafEnd=hi, depth=depth, geometricError=g, topology=receipt,
+                              leafEnd=hi, depth=depth, encodedDepth=built or encoded or depth, geometricError=g, topology=receipt,
                               attemptedTopology=copy.deepcopy(receipt)),
                     contract=dict(depth=depth, scale=scale(depth), interface=interface, certificates=certificates,
                                   terminalVertices=[key(fx.P[k]) for k in keep] if terminal else []))
@@ -364,13 +414,14 @@ def build(case):
         total = 3
     else:
         below = keep_m if tree == 'mixed-deep' else (0, 1, 2, 3, 4)
-        records.append(record('A', 'A.glb', depth_a, g_a, keep_a, topology_a, child_keep=below))
+        chain_a = 2 if name == 'chain-grid' else None
+        records.append(record('A', 'A.glb', depth_a, g_a, keep_a, topology_a, child_keep=below, built=chain_a))
         records.append(record('B', 'B.glb', depth_b, g_b, keep_b, child_keep=below))
         if tree == 'mixed':
             records.append(record('M', 'M.glb', 2, g_b, keep_m))
         if tree == 'mixed-deep':
-            records.append(record('A2', 'A2.glb', 2, 0.002, keep_m))
-            records.append(record('M', 'M.glb', 2, 0.002, keep_m))
+            records.append(record('A2', 'A2.glb', 2, g_m, keep_m, step=step_m))
+            records.append(record('M', 'M.glb', 2, g_m, keep_m, step=step_m))
         frontier = [dict(leafBegin=0, leafEnd=2), dict(leafBegin=2, leafEnd=4)]
         total = 4
     records.append(dict(schemaVersion=1, kind='omitted', key=dict(first=0, end=triangle, depth=0, leafBegin=0,
@@ -442,8 +493,30 @@ CASES = [
     ('unknown-payload', 'borderAudit', None), ('omission-unreported', 'omissionReport', None),
     ('dropped-unreported', 'topologyReceipt', 'coarseDrops'),
     ('dropped-tampered-g', 'topologyReceipt', 'coarseDrops'),
+    # Border relief (A1): an honest relieved arc passes both; a declared step the source
+    # re-derivation does not give, or a tolerance below the certified displacement, is
+    # a sidecar lie; G below the relief floor is refused from the archive too.
+    ('relief', None, None),
+    ('relief-step-wrong', 'borderReliefStep', None),
+    ('relief-step-understated', 'borderCertificate', None),
+    ('relief-unfloored', 'borderReliefFloor', 'borderDisplacement'),
+    # Review 1 (P1): a relieved collapsed chain is re-derived level by level, and its G
+    # covers 16 x eps; native validation cannot see the chain's depths.
+    ('relief-chain', None, None),
+    ('relief-chain-unfloored', 'borderReliefFloor', None),
+    # Review 1 (P3-3): an unrelieved coarser tile beside a relieved deeper chord keeps E/8.
+    ('mixed-relieved-finer', 'mixedDepthBorderGap', None),
+    # Review 2 (N-1): leaf grids are keyed by frozen depth below a collapsed chain.
+    ('chain-grid', None, None),
+    ('chain-grid-unlabelled', 'oracleDomain', None),
 ]
-OFFSETS = {'mixed-beyond-g8': 0.001}
+OFFSETS = {'mixed-beyond-g8': 0.001, 'relief': 0.01, 'relief-step-wrong': 0.01,
+           'relief-step-understated': 0.01, 'relief-unfloored': 0.01, 'relief-chain': 0.01,
+           'relief-chain-unfloored': 0.01, 'mixed-relieved-finer': 0.001, 'chain-grid': 0.,
+           'chain-grid-unlabelled': 0.}
+# The hard cap each case is checked at (A1's trigger is a share of it).
+CAPS = {'relief': 4, 'relief-step-wrong': 4, 'relief-step-understated': 4, 'relief-unfloored': 4,
+        'relief-chain': 4, 'relief-chain-unfloored': 4}
 
 
 def _rehash(records, files):
@@ -910,17 +983,33 @@ def run(root, binary=None, sheet_n=120):
     for case in generate(root):
         name = case['name']
         try:
-            result = audit(root / name, root / f'{name}.source.json', border_audit=root / f'{name}.borders.jsonl')
+            result = audit(root / name, root / f'{name}.source.json', border_audit=root / f'{name}.borders.jsonl',
+                           triangle_cap=CAPS.get(name, 8192))
             got = None
             assert result['borders']['audited'], name
         except Failure as e:
             got, result = e.check, dict(detail=e.detail)
         assert got == case['oracleCheck'], (name, case['oracleCheck'], got, result.get('detail'))
+        if name == 'chain-grid-unlabelled':
+            assert 'sourceCanonical' in result['detail'], result['detail']
         if name in CAP_REFUSALS and got == 'coarseDrops':
             assert 'cap' in result['detail'], (name, result['detail'])
         entry = dict(name=name, oracle=got)
         if name in ('contracted', 'mixed-within', 'same-depth-gap'):
             assert result.get('contractedBorderArcs', 0) > 0 or got, (name, result)
+        if name == 'relief':
+            assert result['borders'].get('reliefCellsRederived') == 2, result['borders']
+            assert result['borders'].get('reliefStepsChecked', 0) >= 4, result['borders']
+        if name == 'chain-grid':
+            # A0 and A1 group at frozen depth 3; P2 snaps on B's grid alone.
+            assert result.get('chainLeaves') == 2, result.get('chainLeaves')
+            assert result['canonical'].get('gridSourcePoints', 0) >= 1, result['canonical']
+        if name == 'relief-chain':
+            # Inspected through the chain: depth 2 triggers (feasibility), and depth 1's two
+            # inherited items stay below the trigger (no further request).
+            assert result['borders'].get('reliefChainLevels') == 2, result['borders']
+            assert result['borders'].get('reliefCellsRederived') == 2, result['borders']
+            assert result['borders'].get('reliefStepsChecked', 0) >= 4, result['borders']
         if binary is not None:
             code, report = native(binary, root / name, root / f'{name}.3tz')
             label = case['archiveCheck']

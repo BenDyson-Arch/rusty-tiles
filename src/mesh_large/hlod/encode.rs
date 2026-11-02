@@ -52,6 +52,9 @@ pub(crate) enum Mutation {
     /// Retain cap-fit geometry so fold-declaration controls still reach N2.
     #[cfg(test)]
     NoDescendants,
+    /// Preserve the N2 declaration fixture on the no-relief ladder.
+    #[cfg(test)]
+    NoReliefDescendants,
     /// Negative control: incorrectly allow D10 after root selection.
     #[cfg(test)]
     ReduceSelectedRoot,
@@ -64,12 +67,22 @@ pub(crate) enum Mutation {
     /// Weld corners on POSITION and feature ID only (the weld's own check must refuse).
     #[cfg(test)]
     WeldPositionsOnly,
-    /// Declare one fold face more than a last-resort payload holds.
+    /// Declare one fold face more than a last-resort payload holds (on D11's ladder, where
+    /// N2's fixture folds).
     #[cfg(test)]
     MiscountFolds,
-    /// Publish a last-resort payload without its declaration.
+    /// Publish a last-resort payload without its declaration (on D11's ladder).
     #[cfg(test)]
     UndeclaredFolds,
+    /// Build the shared borders without relief (A1's reference: D11's ladder alone).
+    #[cfg(test)]
+    NoRelief,
+    /// `Develop` and `NoRelief` together: develop's strategies on D11's ladder alone.
+    #[cfg(test)]
+    DevelopNoRelief,
+    /// Publish relieved tiles without their relief floor on G.
+    #[cfg(test)]
+    UnflooredRelief,
 }
 
 impl Mutation {
@@ -77,7 +90,10 @@ impl Mutation {
         #[cfg(test)]
         if matches!(
             self,
-            Self::NoDescendants | Self::MiscountFolds | Self::UndeclaredFolds
+            Self::NoDescendants
+                | Self::NoReliefDescendants
+                | Self::MiscountFolds
+                | Self::UndeclaredFolds
         ) {
             return false;
         }
@@ -94,10 +110,33 @@ impl Mutation {
 
     pub(crate) fn last_resorts(self) -> bool {
         #[cfg(test)]
-        if self == Self::Develop {
+        if matches!(self, Self::Develop | Self::DevelopNoRelief) {
             return false;
         }
         true
+    }
+    /// The hard cap the border relief trigger is a share of (A1).
+    pub(crate) fn relief_cap(self, cap: usize) -> usize {
+        #[cfg(test)]
+        if matches!(
+            self,
+            Self::NoRelief
+                | Self::NoReliefDescendants
+                | Self::DevelopNoRelief
+                | Self::MiscountFolds
+                | Self::UndeclaredFolds
+        ) {
+            return usize::MAX / 200;
+        }
+        cap
+    }
+    /// The relief floor publication applies to G (A1).
+    pub(crate) fn relief_floor(self, floor: f64) -> f64 {
+        #[cfg(test)]
+        if self == Self::UnflooredRelief {
+            return 0.;
+        }
+        floor
     }
 }
 

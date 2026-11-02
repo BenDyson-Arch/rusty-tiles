@@ -1889,6 +1889,7 @@ fn parent_jobs_allocate_within_their_charge() {
                     certificates: Vec::new(),
                     terminal_vertices: Vec::new(),
                     scale: 0.,
+                    relief_floor: 0.,
                 },
                 &|_| Ok(None),
                 &mut |_| Ok(true),
@@ -2956,6 +2957,7 @@ fn assert_bounded_jobs(dir: &Path, cap: u64) {
 /// nothing, so no job merges more than eight capped children and no content-less cell has a
 /// content ancestor (Cesium's empty traversal never meets one below content). The capped
 /// tiles below the omitted cap cover every leaf exactly once; the first view loads them.
+/// D11 without relief: border relief (A1) fits this sheet's interfaces at cap 12.
 #[test]
 fn a_parent_whose_interface_cannot_fit_is_omitted_not_refused() {
     use crate::mesh_large::delivery::{self, plan::Limits};
@@ -2966,6 +2968,7 @@ fn a_parent_whose_interface_cannot_fit_is_omitted_not_refused() {
         &work.path().join("capped"),
         &Run {
             cap: 12,
+            mutation: Mutation::NoRelief,
             ..Run::default()
         },
     )
@@ -3247,7 +3250,8 @@ fn implicit_empty_tiles(archive: &Path) -> usize {
 /// cap-30 sheet had holes). Every content-less tile now takes the empty-parent error, in
 /// explicit output, inside implicit subtrees and as a document's root: over a camera sweep
 /// the traversal draws every leaf exactly once in every frame, and the published content-less
-/// tiles are exactly the omitted cells reported.
+/// tiles are exactly the omitted cells reported. D11 without relief: relief (A1) builds every
+/// cell of the cap-30 sheet.
 #[test]
 fn omitted_cells_refine_whenever_they_are_visible() {
     use crate::mesh_large::delivery::{self, plan::Limits};
@@ -3265,6 +3269,7 @@ fn omitted_cells_refine_whenever_they_are_visible() {
             &work.path().join(format!("cap{cap}")),
             &Run {
                 cap,
+                mutation: Mutation::NoRelief,
                 ..Run::default()
             },
         )
@@ -4006,11 +4011,13 @@ fn omitted_cells_are_not_measured_and_errors_stay_monotone() {
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &sheet());
     for cap in [12, 30] {
+        // D11's ladder alone: border relief (A1) builds some of these cells.
         let dir = stage(
             &input,
             &work.path().join(format!("cap{cap}")),
             &Run {
                 cap,
+                mutation: Mutation::NoRelief,
                 ..Run::default()
             },
         )
@@ -5309,6 +5316,7 @@ fn ordinary_drops_under_pressure_go_smallest_first() {
     let contract = Contract {
         depth: 2,
         scale: 10.,
+        relief_floor: 0.,
         certificates: vec![],
         terminal_vertices: vec![],
         interface: vec![],
@@ -5445,6 +5453,7 @@ fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
     let contract = Contract {
         depth: 2,
         scale: 10.,
+        relief_floor: 0.,
         certificates: vec![],
         terminal_vertices: vec![],
         interface: vec![],
@@ -5669,6 +5678,144 @@ fn city_blocks_develop_builds_are_unchanged_by_the_last_resorts() {
     }
 }
 
+/// Border relief (D11 amendment A1) control: a planar 160 x 160 grid, every vertex moved
+/// by at most 0.05 of a cell in the plane. The octree planes fall on grid lines, so every
+/// shared border is a noisy straight line far below D11's tolerance (E_d/16 = 0.0024 cells
+/// at depth 2; the Walem case). At cap 150 an interior depth-2 cell's border has 160
+/// points: no disk fits the cap, so D11 omits it and, upwards, the root. Relief certifies
+/// straight chords at about 0.08 cells and every cell builds.
+fn noisy_sheet() -> Vec<Mesh> {
+    let n = 160;
+    let mut rng = 0x2545_f491_4f6c_dd1du64;
+    let mut jitter = || {
+        rng ^= rng << 13;
+        rng ^= rng >> 7;
+        rng ^= rng << 17;
+        ((rng >> 11) as f64 / (1u64 << 53) as f64 - 0.5) as f32 * 0.1
+    };
+    let mut sheet = grid(
+        (n, n),
+        (0., n as f32),
+        (0., n as f32),
+        &|_, _| 0.,
+        [0.5, 0.5, 0.4, 1.],
+    );
+    for p in &mut sheet.positions {
+        p[0] += jitter();
+        p[2] += jitter();
+    }
+    vec![sheet]
+}
+
+fn relief_run(mutation: Mutation) -> Run {
+    Run {
+        cap: 150,
+        mutation,
+        ..Run::default()
+    }
+}
+
+fn relief_receipts(dir: &Path) -> (u64, u64) {
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let depths = manifest["hlod"]["bordersByDepth"].as_array().unwrap();
+    let sum = |k: &str| {
+        depths
+            .iter()
+            .map(|d| d[k].as_u64().unwrap_or(0))
+            .sum::<u64>()
+    };
+    (sum("reliefCells"), sum("relievedSegments"))
+}
+
+#[test]
+fn border_relief_builds_noisy_border_cells_that_d11_omits() {
+    use crate::{mesh_large::delivery, validate::ExpectedProfile};
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &noisy_sheet());
+    let d11 = stage(
+        &input,
+        &work.path().join("d11"),
+        &relief_run(Mutation::NoRelief),
+    )
+    .unwrap();
+    assert!(!omission_receipt("noisy sheet, D11 alone", &d11));
+    assert_eq!(relief_receipts(&d11), (0, 0));
+    let dir = stage(
+        &input,
+        &work.path().join("relief"),
+        &relief_run(Mutation::None),
+    )
+    .unwrap();
+    assert!(omission_receipt("noisy sheet, relief", &dir));
+    let (cells, segments) = relief_receipts(&dir);
+    assert!(
+        cells > 0 && segments > 0,
+        "{cells} cells, {segments} segments"
+    );
+    let output = work.path().join("out.3tz");
+    let mut file = fs::File::create(&output).unwrap();
+    delivery::publish_with_limits(
+        &MeshTilesetRequest::new(&dir, &output),
+        delivery::plan::LIMITS,
+        &mut file,
+        work.path(),
+    )
+    .unwrap();
+    inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod)).unwrap();
+    // G below the relief floor: a relieved chord's displacement exceeds G/8.
+    let unfloored = stage(
+        &input,
+        &work.path().join("unfloored"),
+        &relief_run(Mutation::UnflooredRelief),
+    )
+    .unwrap();
+    let output = work.path().join("unfloored.3tz");
+    let mut file = fs::File::create(&output).unwrap();
+    delivery::publish_with_limits(
+        &MeshTilesetRequest::new(&unfloored, &output),
+        delivery::plan::LIMITS,
+        &mut file,
+        work.path(),
+    )
+    .unwrap();
+    let error = inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("borderDisplacement") || error.contains("mixedDepthBorderGap"),
+        "{error}"
+    );
+}
+
+/// Relief steps come from the global border pass, so both owners of a relieved arc derive
+/// the same chords whatever the job order, budget or spill.
+#[test]
+fn border_relief_is_identical_across_jobs_budgets_and_spill() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &noisy_sheet());
+    let run = |name: &str, jobs: usize, budget: Option<u64>, mutation: Mutation| {
+        stage(
+            &input,
+            &work.path().join(name),
+            &Run {
+                jobs,
+                budget,
+                ..relief_run(mutation)
+            },
+        )
+        .unwrap()
+    };
+    let one = run("one", 1, None, Mutation::None);
+    let many = run("many", 4, Some(64 << 30), Mutation::None);
+    let spilled = run("spilled", 2, None, Mutation::ForceSpill);
+    assert!(relief_receipts(&one).0 > 0);
+    assert!(published(&one) == published(&many));
+    assert!(audit_semantics(&one) == audit_semantics(&many));
+    assert!(published(&one) == published(&spilled));
+    assert!(audit_semantics(&one) == audit_semantics(&spilled));
+}
+
 /// Layout 95: a wall tile touches a roof chain at a corner only; without that point it
 /// closed its T-junction top onto the roof edge, and the root folded both one way.
 #[test]
@@ -5754,24 +5901,34 @@ fn last_resort_tiles(dir: &Path) -> Vec<(u64, u64, u64, u64)> {
         .collect()
 }
 
-/// A folded-sheet run on develop's strategies only and on the full build: the coarse cells
-/// develop publishes, and the full run's staged directory.
-fn last_resort_case(name: &str, sheet: Mesh, work: &Path) -> (HashSet<(u64, u64)>, PathBuf) {
-    last_resort_case_with(name, sheet, work, Mutation::None)
+/// Compare the original strategies with the full build on the same border policy.
+fn last_resort_case(
+    name: &str,
+    sheet: Mesh,
+    work: &Path,
+    relief: bool,
+) -> (HashSet<(u64, u64)>, PathBuf) {
+    let (reference, full) = if relief {
+        (Mutation::Develop, Mutation::None)
+    } else {
+        (Mutation::DevelopNoRelief, Mutation::NoRelief)
+    };
+    last_resort_case_with(name, sheet, work, reference, full)
 }
 
 fn last_resort_case_with(
     name: &str,
     sheet: Mesh,
     work: &Path,
-    mutation: Mutation,
+    reference: Mutation,
+    full: Mutation,
 ) -> (HashSet<(u64, u64)>, PathBuf) {
     let input = write_gltf(&work.join("src"), &[sheet]);
     let develop = stage(
         &input,
         &work.join("develop"),
         &Run {
-            mutation: Mutation::Develop,
+            mutation: reference,
             ..Run::default()
         },
     )
@@ -5784,33 +5941,41 @@ fn last_resort_case_with(
         &input,
         &work.join("hlod"),
         &Run {
-            mutation,
+            mutation: full,
             ..Run::default()
         },
     )
     .unwrap();
     let c = census(&dir);
     assert_directed_census(name, &c, Run::default().cap);
-    assert!(c.last_resort_tiles > 0, "{name}: {c:?}");
     published_and_valid(name, &dir, work);
     (built, dir)
 }
 
 /// D1/D11 amendment A2, stage N1. On three noisy sheets folded onto one another, a
 /// depth-1 cell fits only once it may create new faces and edges on the shared points
-/// of the seam segments it owns; no fold is admitted. Develop omits it. The cells still
-/// omitted are border-bound (their contracts leave the cap no room: border relief).
+/// of the seam segments it owns; no fold is admitted. Develop omits it. On D11's ladder
+/// alone (relief off) the cells still omitted are border-bound: their contracts leave the
+/// cap no room. With border relief (A1) those borders relax, and the root builds too.
 #[test]
 fn n1_builds_a_seam_bound_cell_on_the_segments_it_owns() {
     let work = tempfile::tempdir().unwrap();
     let name = "N1 folded sheets";
-    let (develop, dir) = last_resort_case(name, folded_sheet(96, 3, 0., 0.0001, 23), work.path());
+    let sheet = folded_sheet(96, 3, 0., 0.0001, 23);
+    let (develop, dir) = last_resort_case(name, sheet.clone(), &work.path().join("d11"), false);
     let n1: Vec<_> = last_resort_tiles(&dir)
         .into_iter()
         .filter(|t| t.2 == 1)
         .collect();
     assert!(!n1.is_empty(), "{name}: {:?}", last_resort_tiles(&dir));
     assert!(n1.iter().all(|t| !develop.contains(&(t.0, t.1))), "{name}");
+    let (_, relieved) = last_resort_case(name, sheet, &work.path().join("relief"), true);
+    assert!(
+        rows(&relieved.join("proxies.jsonl"))
+            .iter()
+            .any(|r| r["depth"] == 0),
+        "{name}: the root builds with relief"
+    );
 }
 
 /// An egg crate: exact zeros on a lattice, so saddle vertices lie on split planes.
@@ -5854,24 +6019,43 @@ fn egg_crate(k: u32) -> Mesh {
 /// claim is the claim of the tile containing it one depth up. The archive validates. The
 /// cases are the reviewer's: contract-local arc intervals gave egg 5 18 doubly owned
 /// segments, city 2 346, city 3 208, city 6 188, city 7 90.
+///
+/// Every point's holders are also recomputed from the decoded leaf payloads: the least and
+/// greatest DFS leaf whose faces hold it (#308 review 2 P3: holders were only checked
+/// against themselves). Border relief (A1) is active throughout; the noisy sheet at cap
+/// 150 relieves its borders, so relieved contracts are censused too.
 #[test]
 fn every_seam_segment_has_one_owner_per_depth_on_real_contracts() {
     use super::borders::Holders;
     use super::geometry::folds::Policy;
     type Tile = (u32, u32, u32, Vec<Holders>, HashSet<[u32; 3]>);
-    for (name, meshes) in [
-        ("egg 2", vec![egg_crate(2)]),
-        ("egg 5", vec![egg_crate(5)]),
-        ("egg 6", vec![egg_crate(6)]),
-        ("city 2", city_block(2)),
-        ("city 3", city_block(3)),
-        ("city 6", city_block(6)),
-        ("city 7", city_block(7)),
-        ("sheet 7", vec![folded_sheet(48, 5, 0.02, 0.001, 7)]),
+    let mut relieved = 0;
+    for (name, meshes, run) in [
+        ("egg 2", vec![egg_crate(2)], Run::default()),
+        ("egg 5", vec![egg_crate(5)], Run::default()),
+        ("egg 6", vec![egg_crate(6)], Run::default()),
+        ("city 2", city_block(2), Run::default()),
+        ("city 3", city_block(3), Run::default()),
+        ("city 6", city_block(6), Run::default()),
+        ("city 7", city_block(7), Run::default()),
+        (
+            "sheet 7",
+            vec![folded_sheet(48, 5, 0.02, 0.001, 7)],
+            Run::default(),
+        ),
+        ("noisy relief", noisy_sheet(), relief_run(Mutation::None)),
     ] {
         let work = tempfile::tempdir().unwrap();
         let input = write_gltf(&work.path().join("src"), &meshes);
-        let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+        let dir = stage(&input, &work.path().join("hlod"), &run).unwrap();
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        relieved += manifest["hlod"]["bordersByDepth"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|d| d["relievedSegments"].as_u64())
+            .sum::<u64>();
         let audit = work.path().join("hlod.hlod-audit").join("borders.jsonl");
         let key =
             |x: &Value| -> [u32; 3] { std::array::from_fn(|i| x[i].as_u64().unwrap() as u32) };
@@ -5919,6 +6103,28 @@ fn every_seam_segment_has_one_owner_per_depth_on_real_contracts() {
                 let seen = *global.entry(h.key).or_insert((h.lo, h.hi));
                 assert_eq!(seen, (h.lo, h.hi), "{name}: holders of {:?}", h.key);
             }
+        }
+        // And they are the leaves': the least and greatest DFS leaf whose decoded faces
+        // hold the point.
+        let mut held_by: HashMap<[u32; 3], (u32, u32)> = HashMap::new();
+        for (leaf, r) in rows(&dir.join("leaves.jsonl")).iter().enumerate() {
+            let bytes = fs::read(dir.join(r["uri"].as_str().unwrap())).unwrap();
+            for face in super::decode::decode(&bytes).unwrap().faces {
+                for p in face.p {
+                    let leaf = leaf as u32;
+                    let e = held_by
+                        .entry(super::interfaces::key(p))
+                        .or_insert((leaf, leaf));
+                    *e = (e.0.min(leaf), e.1.max(leaf));
+                }
+            }
+        }
+        for (p, holders) in &global {
+            assert_eq!(
+                held_by.get(p),
+                Some(holders),
+                "{name}: holders of {p:?} differ from the decoded leaves"
+            );
         }
         let depths: std::collections::BTreeSet<u32> = tiles.iter().map(|t| t.0).collect();
         let (mut segments, mut points) = (0, 0);
@@ -5991,27 +6197,36 @@ fn every_seam_segment_has_one_owner_per_depth_on_real_contracts() {
             }
         }
         eprintln!(
-            "{name}: {} tiles, {points} shared points, {segments} shared segments checked",
-            tiles.len()
+            "{name}: {} tiles, {points} shared points, {segments} shared segments, {} holders \
+             checked against the decoded leaves",
+            tiles.len(),
+            global.len()
         );
         published_and_valid(name, &dir, work.path());
     }
+    assert!(relieved > 0, "no case relieved a border");
 }
 
 /// A2 stage N2: three sheets 2 cm apart fold onto one another under every reduction of
 /// two depth-1 cells. Develop omits them (and the root); N2 admits the folds, declares
 /// them, and every cell builds. The validator recounts the declaration from the decoded
-/// payload: one fold face too many in it, or no declaration at all, is refused.
+/// payload: one fold face too many in it, or no declaration at all, is refused. All on
+/// D11's ladder: with border relief (A1) these cells build without a last resort.
 #[test]
 fn n2_admits_declared_folds_and_the_validator_recounts_them() {
     use crate::{mesh_large::delivery, validate::ExpectedProfile};
     let work = tempfile::tempdir().unwrap();
     let name = "N2 folded sheets";
     let sheet = folded_sheet(72, 3, 0.02, 0.0001, 4);
-    // Keep the original N2 fixture sensitive to incorrect declarations. With the
-    // descendant pass active, its children fit without any last-resort folds.
-    let (develop, dir) =
-        last_resort_case_with(name, sheet.clone(), work.path(), Mutation::NoDescendants);
+    // Keep both the no-relief ladder and cap-fit geometry: either relief or D10
+    // can make this declaration mutant vacuous by eliminating its N2 folds.
+    let (develop, dir) = last_resort_case_with(
+        name,
+        sheet.clone(),
+        work.path(),
+        Mutation::DevelopNoRelief,
+        Mutation::NoReliefDescendants,
+    );
     assert!(omission_receipt(name, &dir));
     let n2: Vec<_> = last_resort_tiles(&dir)
         .into_iter()
@@ -6068,7 +6283,8 @@ fn n2_admits_declared_folds_and_the_validator_recounts_them() {
 fn n3_clusters_a_border_heavy_fold_cell_to_the_cap() {
     let work = tempfile::tempdir().unwrap();
     let name = "N3 folded sheets";
-    let (develop, dir) = last_resort_case(name, folded_sheet(48, 5, 0.02, 0.001, 7), work.path());
+    let (develop, dir) =
+        last_resort_case(name, folded_sheet(48, 5, 0.02, 0.001, 7), work.path(), true);
     let rows = rows(&dir.join("proxies.jsonl"));
     let n3: Vec<_> = rows
         .iter()
@@ -6392,4 +6608,97 @@ fn d10_never_reduces_the_root_selected_by_competition() {
             assert!(root["d10"]["reducerPasses"].as_u64().unwrap() > 0, "{root}");
         }
     }
+}
+
+/// Exercise D10 on an actually relieved, feasible hierarchy. The unscaled fixture's
+/// relief floor can consume the D10 allowance; power-of-two scaling preserves its
+/// seam geometry while making this a sensitive admission control.
+#[test]
+fn descendant_admission_preserves_relieved_seams_and_floors() {
+    let work = tempfile::tempdir().unwrap();
+    let meshes = noisy_sheet();
+    let input = write_gltf_scaled(
+        &work.path().join("src"),
+        &meshes,
+        &vec![[1. / 64.; 3]; meshes.len()],
+    );
+    let mut attempts = 0;
+    let mut admitted = 0;
+    let mut n3 = 0;
+    for mutation in [Mutation::NoDescendants, Mutation::None] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("{mutation:?}")),
+            &relief_run(mutation),
+        )
+        .unwrap();
+        assert!(relief_receipts(&dir).1 > 0);
+        assert!(omission_receipt("relieved descendants", &dir));
+        for row in rows(&dir.join("proxies.jsonl")) {
+            let floor = row["reliefFloor"].as_f64().unwrap_or(0.);
+            assert!(row["geometricError"].as_f64().unwrap() >= floor);
+            if mutation == Mutation::None && floor > 0. {
+                attempts += row["d10"]["reducerPasses"].as_u64().unwrap();
+                admitted += u64::from(row["d10"]["accepted"] == true);
+                if row["d10"]["accepted"] == true {
+                    assert!(row["d10"]["measuredG"].as_f64().unwrap() >= floor);
+                }
+            }
+            if row.get("rootCompetition").is_some() {
+                assert_eq!(row["d10"]["reducerPasses"], 0);
+                assert_eq!(row["d10"]["reason"], "root_reserved");
+            }
+        }
+        n3 += last_resort_tiles(&dir).iter().filter(|t| t.2 == 3).count();
+        published_and_valid("relieved descendants", &dir, work.path());
+    }
+    eprintln!("relief D10: attempts={attempts}, admitted={admitted}, N3={n3}");
+    assert!(
+        attempts > 0 && admitted > 0,
+        "relief control must exercise D10 admission"
+    );
+}
+
+#[test]
+fn descendant_refusal_preserves_n3_seams() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf_scaled(
+        &work.path().join("src"),
+        &[folded_sheet(48, 5, 0.02, 0.001, 7)],
+        &[[1. / 64.; 3]],
+    );
+    let run = Run::default();
+    let dir = stage(&input, &work.path().join("out"), &run).unwrap();
+    let rr = rows(&dir.join("proxies.jsonl"));
+    let n3: Vec<_> = rr
+        .iter()
+        .filter(|r| r["lastResortStage"] == 3 && r["interfaceSegments"].as_u64().unwrap() > 0)
+        .collect();
+    let attempts: u64 = n3
+        .iter()
+        .map(|r| r["d10"]["reducerPasses"].as_u64().unwrap())
+        .sum();
+    let admitted = n3.iter().filter(|r| r["d10"]["accepted"] == true).count();
+    eprintln!(
+        "N3 D10: cells={}, attempts={attempts}, admitted={admitted}",
+        n3.len()
+    );
+    assert!(attempts > 0, "N3 control must exercise D10");
+    for r in n3 {
+        assert!(r["geometricError"].as_f64().unwrap() >= r["reliefFloor"].as_f64().unwrap_or(0.));
+        let d = &r["d10"];
+        eprintln!(
+            "N3 D10: first={} stuck={} floor={} decision={d}",
+            r["first"], r["reliefStuck"], r["reliefFloor"]
+        );
+        if d["accepted"] == true {
+            assert_eq!(r["geometricError"], d["measuredG"]);
+            assert!(d["measuredG"].as_f64().unwrap() <= d["target"].as_f64().unwrap());
+        } else {
+            assert_eq!(r["triangles"], d["baselineTriangles"]);
+            assert_eq!(r["geometricError"], d["baselineG"]);
+        }
+    }
+    assert_directed_census("N3 D10", &census(&dir), run.cap);
+    published_and_valid("N3 D10", &dir, work.path());
 }

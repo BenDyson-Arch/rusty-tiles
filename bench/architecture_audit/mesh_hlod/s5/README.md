@@ -21,6 +21,55 @@ child components from published keys, against its `droppedComponents` declaratio
 and its geometricError (exact distances); `drop_controls.py` pins an honest drop and
 its undeclared, understated and border-touching refusals for both validators.
 
+D11 border relief (A1, 2026-10-30): `relief.py` re-derives every declared relief step
+from source incidence alone, in IEEE double like the producer:
+- the shared border graph per depth;
+- live junctions (degree, owner changes, terminal leaves, source-open ends, face retention);
+- the walk order, cycle anchors and open-chain witnesses;
+- isolated ears on relieved chains;
+- the corridor greedy;
+- each coarse cell's item count and feasibility trigger and request at `--triangle-cap`
+  (85% to 75%, steps ≤ 8),
+  the owner maximum and the finer-level monotone minimum.
+
+A certificate whose `step` differs is `borderReliefStep`. `borders.py` also requires:
+- certified ε within E_d/16 x 2^step;
+- G at least 8 x each relieved certificate (`borderReliefFloor`), or 16 x on a collapsed
+  single-child chain: the chain's next member holds the same chord as its finer
+  displacement;
+- each mixed-depth gap within min(max(E, floor), G)/8 of the coarser tile, where floor is
+  its `reliefFloor`. An unrelieved coarser tile keeps E/8 beside a relieved deeper chord.
+
+The rebuild maps each delivered tile to the frozen cells of its chain:
+- a coarse record covers its contract depth through its `encodedDepth`;
+- an omitted cell covers its omitted records' depths over its leaf interval;
+- a leaf lies one level below its parent's chain.
+
+A link placeholder, a record without `encodedDepth`, or a chain that does not start one
+level below its parent's leaves the steps in `uninspected`. `border_controls.py`
+pins an honest relieved arc at cap 4 and its wrong-step, understated-step and unfloored
+mutants. It also pins an honest relieved collapsed chain (re-derived at both levels) and
+its 8 x ε mutant, and a relieved deeper chord beside an exact coarser tile at a gap
+between E/8 and G/8. The 3e880cb3 oracle accepted both of those mutants.
+
+Feasibility-only R gate and bake receipts (2026-11-03) are external at
+`~/.cache/rusty-tiles-evidence/hlod-border-relief-20261030/r5-astra/feasibility-cf43/execution-manifest.json`,
+SHA-256 `c7522a15bb643025e7875b083e4236dd91b9d77c8dbb51686f7beba3a7a729f5`.
+They bind executed source `6c3ac3a9291af1f3852f29edeedf318dc4b5b7c2` against
+develop `cf43aef8b3036a8ac7f5caee47db4ab3b756aca6`, including #317 and #318.
+The evidence was generated externally and never held in git. The adjacent
+`r5-astra/FINAL.md` records the finite gates, bake and CPU comparisons, remaining
+quality limits, both raw floor columns and the final A1 text.
+
+Review 3 correction: those library/integration runs used `--release`, which hid
+overflow in the no-relief cap sentinel's percentage multiplication. Both comparisons
+now widen to `u128`; the unchanged controls and full default-profile library suite
+pass with overflow checks (1,250 passed, 24 ignored). New evidence is external at
+`~/.cache/rusty-tiles-evidence/hlod-border-relief-20261030/r5-astra/review3-fix/manifest.json`,
+SHA-256 `fe60c91dc69b557475ebba1af91b1b7bf2ac9acf3fd2cc2bb4fd1cfc073a25f1`.
+It binds the source patch to parent `c7cbad68`; it was never held in git. The production
+cap's comparisons are equivalent, so the city sweep and bake receipts remain unchanged.
+
 ## Archive validation
 
 `src/validate/identity.rs` projects only owned C1-admitted raw JSON, preserving
@@ -168,6 +217,14 @@ integer lattice spacings, using ties-to-even f64 rounding and the coarsest
 required incident-depth grid. FLOAT and non-axis-representable integer storage
 are distinguished explicitly; conservative codec tolerance never supplies seam
 equality or invents a weld. Source-equal FLOAT delivery needs no inferred grid.
+A leaf's incident depth is its frozen depth, not its delivered one. A leaf below a
+collapsed single-child chain is quantized on the grid of its depth in the frozen tree.
+`relief.leaf_depths` derives that depth from the audit sidecar before the D11 audit
+(each coarse record's depth through its `encodedDepth`). Delivered depths stand when no
+sidecar is given or the labels do not fit; the D11 audit then refuses or leaves relief
+uninspected. `border_controls.py` `chain-grid` pins it: a chain leaf and a genuine leaf
+share a changed point at one delivered depth. The 20107b1d oracle refused that at
+`sourceCanonical`. The unlabelled mutant still refuses.
 
 Exact source-canonical point/edge ownership produces requirements. The oracle
 counts original surface-face incidence after canonical welding, excluding only
@@ -382,3 +439,48 @@ cell-list order; every outcome and effort/certificate counter must match.
 order and an in-cell-only priority mutant; both must fail. Like the timing
 harness, it substitutes only hash-map/error/effort plumbing.
 Review-fix runs are in `~/.cache/rusty-tiles-evidence/n3-cert-317-fix1-20261102/`.
+
+N3 centroid-box pruning (2026-11-03) retains both existing certificate predicates.
+`filter_controls.py OUT` also checks 8,496 box-separation decisions against exact
+rational distances. Native controls check strict outward box boundaries, interval
+boxes that overlap despite a far midpoint, and the three-unit completion boundary
+with cold/hit/miss coordinate caches. `cache_controls.py` retains the priority
+mutants. Before/after weighted #309 measurements, per-height receipts and exact
+input/source hashes are in `~/.cache/rusty-tiles-evidence/n3-certificate-2-20261103/`;
+these are measurements on an isolated accounting overlay, not production weights
+or approval of R. The existing synthetic archives are read without rebaking.
+The generated evidence was never tracked (there is no former holding commit).
+The source baseline is develop `cf43aef8b3036a8ac7f5caee47db4ab3b756aca6`;
+measurement receipts are bound by SHA-256:
+
+- `measure-10.json`: `b88548220a4f132eee4ee56cc2a1f64e2b202b4fa04703b0164b247b14bde27f`
+- `measure-17.json`: `8e6fd6ab675997ffa6cd8e9be61af3bb0c1220b81ce716e5589b33bceffd83b8`
+
+The 2026-11-03 owner decision permits deterministic pruning to lower the budget
+needed for acceptance; it never permits cache-dependent work or verdicts.
+`cache_controls.py OUT` also reads `pruning_control.rs` and reconstructs the
+unpruned scan by removing only the pruning branch from the extracted source.
+The differential test sweeps 19 geometries, budgets through each old completion
+threshold, and cold/hit/miss caches. Every old accept must remain an accept,
+all charged work must be nonincreasing, and strict budget improvements must
+occur. A mutant that refuses on separation must fail this test. The native
+three-unit control retains actual Budget/Error wiring; neither the old scan
+nor a pruning mode switch is added to production.
+
+Review-fix CPU evidence is in
+`~/.cache/rusty-tiles-evidence/n3-cert2-319-fix1-20261103/`. The scoped
+`dupscale.sh` regeneration produced byte-identical ci-32000 and dup-16000 archives,
+retained there read-only with producer/generator provenance. Four interleaved
+slot-1 P-core pairs compare actual develop `cf43aef8` with implementation
+`b5de7154`, using identical phase instrumentation and checking full report
+identity. Mean whole CPU is 83.768 → 81.113 s and 36.577 → 34.787 s, respectively.
+ci-32000's remainder varies in both directions; its mean change is +0.898 s,
+not a demonstrated zero-cost difference. Three additional pairs replay the exact
+historical #309-overlay binaries: remainder CPU is 35.236 → 35.222 s. The prior
+single-pair +8.081 s remainder increase was not reproduced. These are bounded
+shared-host observations, not a universal speed guarantee or a new choice of R.
+The external evidence was never tracked; SHA-256 bindings are:
+
+- `paired-summary.json`: `d7686983f146bc9037f158af50d9820746c349bb80df1e2a080586c8a864b501`
+- `overlay-summary.json`: `5149887db0803c08d2ae51db128017bee26b07451efb4e11ed069cafdd2ccb7c`
+- `inputs.json`: `2dcef14b9487bf0f45fb764278600058f2a9c9bc12038bcd97bd4667ba985b02`
