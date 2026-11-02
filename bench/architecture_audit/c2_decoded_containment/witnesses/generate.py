@@ -7,7 +7,7 @@ oracle on each and write the expected-versus-actual report.
 Inputs (pinned by sha256, copied under witnesses/inputs/):
   witnesses.json, slice1-witness-expectations.json, w13-normalized.json.
 Outputs:
-  witnesses/fixtures/*.3tz, witnesses/report.json,
+  witnesses/fixtures/*.3tz, witnesses/report.json.gz,
   controls/fixtures/*.3tz, controls/manifest.json,
   controls/large/*.3tz (only with --large; not committed, hashes pinned).
 
@@ -19,6 +19,7 @@ build.py's own exact helpers). The oracle's verdict is then compared with them.
 import argparse
 import ast
 import copy
+import gzip
 import hashlib
 import json
 import math
@@ -1440,9 +1441,10 @@ def main():
         "controlPairs": len(controls["pairs"]),
         "controlPairsAgree": len([p for p in controls["pairs"] if p["agree"]]),
     }
-    with open(os.path.join(HERE, "report.json"), "w") as fh:
-        json.dump({"summary": summary, "inputs": {k: v[1] for k, v in INPUT_PINS.items()},
-                   "rows": rows}, fh, indent=1, sort_keys=True)
+    report = json.dumps({"summary": summary, "inputs": {k: v[1] for k, v in INPUT_PINS.items()},
+                         "rows": rows}, indent=1, sort_keys=True).encode("utf-8")
+    with open(os.path.join(HERE, "report.json.gz"), "wb") as fh:
+        fh.write(gzip.compress(report, mtime=0))
     print(json.dumps(summary, indent=1))
     return 0 if not summary["disagree"] and summary["controlPairsAgree"] == summary["controlPairs"] else 1
 
