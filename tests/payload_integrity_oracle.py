@@ -35,7 +35,7 @@ def main():
     # expect Unsupported; polygon-sensitive-5 holds no legacy content and keeps its bundle.
     # VS-C limits amendment (2026-10-14): storedBytes, limitDerivation, null volume caps and
     # liveDocumentBytes in admitted reports; the H7 and C2-WB bundles stay as history.
-    # Payload-element amendment (2026-10-30/31): totalPayloadElements 16 M + 185 per stored byte
+    # Payload-element amendment (2026-10-30/31): totalPayloadElements 16 M + 224 per stored byte
     # in admitted reports; the VS-C bundles stay as history.
     amendment = controls / 'payload_element_ratio_amendment/2026-10-30'
     bundles = [

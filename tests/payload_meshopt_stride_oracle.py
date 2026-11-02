@@ -26,7 +26,7 @@ def main():
         # then the validator-caps amendment (2026-10-11) with the raised limits defaults,
         # then the C2-WB cap amendment (2026-10-12): containmentWorkUnits 2^29,
         # then the VS-C limits amendment (2026-10-14): storedBytes, limitDerivation, null caps,
-        # then the payload-element amendment (2026-10-30/31): totalPayloadElements 16 M + 185/byte.
+        # then the payload-element amendment (2026-10-30/31): totalPayloadElements 16 M + 224/byte.
         ('stride6', controls / 'payload_element_ratio_amendment/2026-10-30/stride_controls',
          '28ab00d806bc9c259e25fef3056cd63d4cc45921cc43f2fbca5d9178bd74c77e', 6),
         ('parent1', controls / 'stride_parent_control/2026-10-10',

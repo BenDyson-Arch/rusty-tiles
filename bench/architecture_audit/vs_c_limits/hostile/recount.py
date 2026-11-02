@@ -178,7 +178,7 @@ def main():
         info = dict(N=n, D=d, children=len(kids))
     else:
         sys.exit(__doc__)
-    print(json.dumps(dict(cls=argv[0], **info, stored=stored, budget=16_000_000 + 185 * stored)))
+    print(json.dumps(dict(cls=argv[0], **info, stored=stored, budget=16_000_000 + 224 * stored)))
 
 
 if __name__ == '__main__':
