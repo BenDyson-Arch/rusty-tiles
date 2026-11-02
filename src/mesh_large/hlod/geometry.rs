@@ -551,12 +551,7 @@ fn cluster_reduce(
     // incidence. A count-fitting grid is then unusable even though a coarser
     // grid keeps the same exact border. Preserve an already valid result; spend
     // only the remaining doubling allowance before the ordinary protected retry.
-    let valid = |faces: &[[u32; 3]]| {
-        !guard
-            .violations(&merged.positions, faces)
-            .iter()
-            .any(|v| *v)
-    };
+    let valid = |faces: &[[u32; 3]]| !guard.rejects(&merged.positions, faces);
     if recover && !interface.is_empty() && best.0.len() <= cap && !valid(&best.0) {
         while doublings < CLUSTER_DOUBLINGS {
             h *= 2.;
