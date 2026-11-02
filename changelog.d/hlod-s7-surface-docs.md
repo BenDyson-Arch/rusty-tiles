@@ -25,15 +25,13 @@
 ### Changed
 
 - `mesh` builds its coarse tiles with the 0.4 classic octree HLOD only. Leaves stay
-  exact. Coarse tiles are crack-free by construction (locked outer interfaces), carry
+  exact. Coarse tiles use shared contracted border interfaces, carry
   a **sampled, measured** geometric error rather than a certificate, and carry one
   representative `source_primitive` feature ID per triangle (exact provenance stays on
   leaves, so exact annotation maps to leaves). Coarse textures are fresh
   content-sized charts, and a profile picks one colour codec for leaves and coarse
   pages (ETC1S for `fast` and `balanced`, UASTC for `quality`, PNG for `lossless`).
-  A parent whose locked interface cannot fit the 8,192-triangle cap is omitted (with
-  every ancestor) instead of refusing the run, and the capped descendant frontier is
-  published; a coarse page that no codec step can deliver within its gates falls back to
+  Omission follows the residual HLOD policy; a coarse page that no codec step can deliver within its gates falls back to
   its exact level-0 PNG, sampled without mips. The mesh guide, CLI reference and Python
   README describe this; the H16 and H28 contracts carry HLOD notes. Where an earlier
   entry in this release (the H16 mesh delivery) says coarse tiles are certified, read

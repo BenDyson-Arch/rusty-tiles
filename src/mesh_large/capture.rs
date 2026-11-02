@@ -15,6 +15,7 @@ type Result<T> = std::result::Result<T, JobError>;
 fn invalid(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidInput, message)
 }
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 fn invariant(message: &'static str) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message)
 }
@@ -90,6 +91,7 @@ pub(super) fn canonical(mut position: [f32; 3]) -> [f32; 3] {
     }
     position
 }
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 pub(super) fn bake(
     p: &ScenePrimitive<'_>,
     positions: &mut ElementReader<'_>,
@@ -100,6 +102,7 @@ pub(super) fn bake(
     ))
 }
 
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 /// Read-only preflight scan gives the tight box of used baked corners. It observes payload
 /// bytes, so invalid referenced positions/indices may fail here before scratch creation.
 pub(crate) fn scan(
@@ -160,6 +163,7 @@ pub(crate) fn scan_with_source_bounds(
     ))
 }
 
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 /// Reads all source geometry before returning a sorted stream that refers only to scratch.
 /// All authored triangles remain represented, including repeated welded corners.
 pub(crate) fn capture<'s>(

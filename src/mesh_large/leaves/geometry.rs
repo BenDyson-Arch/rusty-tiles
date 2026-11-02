@@ -37,6 +37,8 @@ pub(crate) enum PositionStorage {
 #[derive(Clone, Debug)]
 pub(crate) struct EncodedPositions {
     pub storage: PositionStorage,
+    #[cfg_attr(not(test), allow(dead_code))]
+    // Retained for bounded unit-test fixtures; production uses the streamed facade.
     pub common_origin: [f32; 3],
     pub decoded: Vec<[f32; 3]>,
     pub bounds: Bounds,
@@ -98,6 +100,7 @@ impl LatticePlan {
     pub(crate) fn profile(&self) -> Profile {
         self.profile
     }
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     pub(crate) fn steps(&self) -> &[f32] {
         &self.steps
     }

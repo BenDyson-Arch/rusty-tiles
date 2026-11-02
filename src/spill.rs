@@ -6,7 +6,6 @@
 //! before the scratch directory exists. Output order is the stable sort of input order, so it is
 //! independent of `R`, `F` and `jobs`. Every I/O failure is a typed [`SpillError`]; scratch files
 //! are removed on drop and on error.
-#![allow(dead_code)] // ML2 item 1 lands before its producers (ML2 items B and C).
 
 mod scratch;
 mod sequence;
