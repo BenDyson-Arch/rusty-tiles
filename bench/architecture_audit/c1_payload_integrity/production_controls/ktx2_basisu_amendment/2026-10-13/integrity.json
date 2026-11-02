@@ -3,7 +3,7 @@
   "files": {
     "fixtures/manifest.json": {
       "bytes": 103824,
-      "sha256": "42346342c3100df67474c59963da068168d2ee747a1427b3268c03fc3ebdaccc"
+      "sha256": "808ed531859565682739962fc92645ad3a96488f921dd101bde637cbef9cd0c6"
     },
     "generator.py": {
       "bytes": 23286,
@@ -59,7 +59,7 @@
     },
     "runner.py": {
       "bytes": 6424,
-      "sha256": "088460d3fa29032750f7c5ff4e0ef5a2da1167c19f93a6d03ae64917a7003f84"
+      "sha256": "bb654b8a3a2c1d6d5bf69f2ea421895c4028dc36dbc5fdcb23257b63c1fa6802"
     }
   }
 }
