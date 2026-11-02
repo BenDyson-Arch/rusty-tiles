@@ -97,6 +97,23 @@ results, and therefore identical early exits and point/face charges. Induction
 over regions gives identical subdivisions and total effort. Thus the cache
 cannot change either the geometric verdict or a refusal at the effort limit.
 
+For stage-3 region scans, an outward reach-expanded face box also provides a
+safe pruning test. If the entire centroid interval box lies strictly outside it
+on any axis, the exact centroid is farther than the same reach R from the face.
+That face cannot certify all three region corners: distance to one closed convex
+triangle is convex, so three corner distances at most R would put their exact
+centroid within R too. The scan therefore charges/counts this centroid box test
+once and skips that face's corner queries. It does not skip on a rounded midpoint
+alone, an uncertain upper distance, or a partially overlapping box.
+
+This pruning preserves geometric decisions, subdivision and the original face
+order. It only removes queries which cannot certify the region or set
+`center_near`, so an old budgeted success cannot become a resource refusal.
+Cached and uncached coordinate reads still produce the identical query/charge
+sequence. An input previously refused solely for effort may now complete within
+the same limit. No weights, global reach or numerical tolerances change.
+
+
 This is a sufficient certificate and can refuse a valid
 surface when its budget/depth is insufficient. Stages 0–2 and undeclared drops
 retain fixed samples, with child G added off vertices; those samples provide only

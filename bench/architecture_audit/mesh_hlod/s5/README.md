@@ -382,3 +382,19 @@ cell-list order; every outcome and effort/certificate counter must match.
 order and an in-cell-only priority mutant; both must fail. Like the timing
 harness, it substitutes only hash-map/error/effort plumbing.
 Review-fix runs are in `~/.cache/rusty-tiles-evidence/n3-cert-317-fix1-20261102/`.
+
+N3 centroid-box pruning (2026-11-03) retains both existing certificate predicates.
+`filter_controls.py OUT` also checks 8,496 box-separation decisions against exact
+rational distances. Native controls check strict outward box boundaries, interval
+boxes that overlap despite a far midpoint, and the three-unit completion boundary
+with cold/hit/miss coordinate caches. `cache_controls.py` retains the priority
+mutants. Before/after weighted #309 measurements, per-height receipts and exact
+input/source hashes are in `~/.cache/rusty-tiles-evidence/n3-certificate-2-20261103/`;
+these are measurements on an isolated accounting overlay, not production weights
+or approval of R. The existing synthetic archives are read without rebaking.
+The generated evidence was never tracked (there is no former holding commit).
+The source baseline is develop `cf43aef8b3036a8ac7f5caee47db4ab3b756aca6`;
+measurement receipts are bound by SHA-256:
+
+- `measure-10.json`: `b88548220a4f132eee4ee56cc2a1f64e2b202b4fa04703b0164b247b14bde27f`
+- `measure-17.json`: `8e6fd6ab675997ffa6cd8e9be61af3bb0c1220b81ce716e5589b33bceffd83b8`

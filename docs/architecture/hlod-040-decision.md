@@ -640,6 +640,16 @@ every tile built today is unchanged:
   position. Cached and uncached scans have identical candidates, distance
   results, early exits and charges. Induction over regions preserves the same
   subdivision sequence and budget verdict, including at the effort limit.
+  A centroid interval box strictly outside a face's outward R-expanded AABB
+  proves the exact centroid farther than R. Convexity then rules out a
+  three-corner certificate against that face. Count/charge one fast box query
+  and omit its impossible corner queries; overlap or an uncertain distance
+  does not authorize pruning. This preserves geometric decisions, subdivision
+  and candidate order, and only decreases required work. Cache presence still
+  cannot change the query/charge sequence or verdict. Larger initial regions,
+  sibling-certificate state and replacement spatial indices remain deferred:
+  this narrower change needs no new index, resident geometry, subdivision
+  policy or error allowance. The detailed proof is in VALIDATION.md.
   The reference retains exact fractions throughout. Numerical/depth/budget
   exhaustion refuses; this sufficient check need not accept every valid input.
   Stages 0–2 and undeclared drops retain their sampled lower-bound check (child G

@@ -508,11 +508,15 @@ impl Grid {
                 std::array::from_fn(|k| t[0][k].add(t[1][k]).add(t[2][k]).div(Interval::point(3.)));
             let radius = radius2(t, center);
             let ball = (self.reach - radius.sqrt().next_up()).next_down();
-            let distance = |p, face, ball| -> Result<f64, Error> {
+            let charge_distance = || -> Result<(), Error> {
                 effort.charge(1)?;
                 effort
                     .certificate_fast
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Ok(())
+            };
+            let distance = |p, face, ball| -> Result<f64, Error> {
+                charge_distance()?;
                 Ok(filtered_upper(
                     p,
                     face,
@@ -526,6 +530,14 @@ impl Grid {
             if let Some(cell) = self.cells.get(&self.cell(center.map(Interval::middle))) {
                 for &i in cell {
                     let face = self.face(i, faces);
+                    // A separated centroid rules out BOTH certificates: if all
+                    // corners were within reach of this convex face, their
+                    // centroid would be too. Count the box query, but do not
+                    // query corners that cannot change the result.
+                    if certificate::outside_box(center, face, self.reach) {
+                        charge_distance()?;
+                        continue;
+                    }
                     let d = distance(center, face, ball)?;
                     center_near |= within(d, self.reach);
                     if ball_fits(d, radius, self.reach) {
@@ -795,6 +807,42 @@ mod tests {
                             cold = Some(observed);
                         }
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn separated_centroid_prunes_corners_without_cache_or_budget_dependence() {
+        use super::super::tests::effort_for_tests;
+        use super::{point, Grid};
+        use std::sync::atomic::Ordering::Relaxed;
+        let triangle = [[0.1, 0.1, 0.], [0.2, 0.1, 0.], [0.1, 0.2, 0.]];
+        let faces = [NEAR.map(|v| [v[0], v[1], 0.25]), NEAR]
+            .map(|t| t.map(|p| p.map(|v| (v as f32).to_bits())));
+        let grid = Grid::new(&faces, 0.18, 0., &effort_for_tests()).unwrap();
+        assert_eq!(grid.cells[&grid.cell([0.125, 0.125, 0.])], vec![0, 1]);
+        // Region + separated centroid + certifying centroid: three units, not
+        // four. The old scan also queried a corner of the impossible first face.
+        for remaining in 0..=5 {
+            let mut cold = None;
+            for cached in [None, Some(0), Some(1)] {
+                grid.last
+                    .set(cached.map(|i| (i, faces[i as usize].map(point))));
+                let mut effort = effort_for_tests();
+                effort.base = effort.budget.value - remaining;
+                let result = grid.covers(triangle, &faces, &effort);
+                assert_eq!(result.as_ref().ok(), (remaining >= 3).then_some(&true));
+                if remaining >= 3 {
+                    assert_eq!(effort.used.load(Relaxed), 3);
+                    assert_eq!(effort.certificate_fast.load(Relaxed), 2);
+                    assert_eq!(effort.certificate_slow.load(Relaxed), 0);
+                }
+                let observed = (result.map_err(|e| e.to_string()), effort.used.load(Relaxed));
+                if let Some(expected) = &cold {
+                    assert_eq!(&observed, expected);
+                } else {
+                    cold = Some(observed);
                 }
             }
         }
