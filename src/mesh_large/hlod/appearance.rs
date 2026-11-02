@@ -1084,6 +1084,29 @@ pub(crate) fn page_charge(size: [u32; 2], slots: u64, profile: Profile) -> Resul
 mod tests {
     use super::*;
 
+    #[test]
+    fn density_pressure_uses_the_admitted_2048_page_and_reports_the_cap() {
+        let p = [
+            [0., 0., 0.],
+            [100., 0., 0.],
+            [100., 100., 0.],
+            [0., 100., 0.],
+        ];
+        let layout = charts::layout(
+            &p,
+            &[[0, 1, 2], [0, 2, 3]],
+            0.001,
+            MAX_PAGE_EDGE,
+            TILE_TEXELS,
+        )
+        .unwrap();
+        assert!(layout.capped);
+        assert!(layout.size.iter().all(|&n| n > 1024 && n <= 2048));
+        // A 100 m chart cannot have achieved millimetre spacing in this page.
+        assert!(1. / layout.scale >= 100. / 2048.);
+        assert!(u64::from(layout.size[0]) * u64::from(layout.size[1]) <= TILE_TEXELS);
+    }
+
     /// Review probe (round 1): a MASK base-colour coarse page (cutoff 0.75) whose texels
     /// alternate around the cutoff. The shared coverage-preserving delivery keeps every
     /// sample's classification on the published (level-0) page.
