@@ -162,14 +162,11 @@ impl Ledger {
         })
     }
 
-    pub(crate) fn total(&self) -> u64 {
-        self.total
-    }
-
     pub(crate) fn peak(&self) -> u64 {
         self.lock().peak
     }
 
+    #[cfg_attr(not(test), allow(dead_code))] // Test fixture access; not used by the public pipeline.
     pub(crate) fn used(&self) -> u64 {
         self.lock().used
     }
@@ -197,10 +194,6 @@ impl Ledger {
 }
 
 impl Lease {
-    pub(crate) fn bytes(&self) -> u64 {
-        self.bytes
-    }
-
     /// Give back the part of the lease above `bytes` (an output smaller than its admission).
     pub(crate) fn shrink(&mut self, bytes: u64) {
         if bytes < self.bytes {

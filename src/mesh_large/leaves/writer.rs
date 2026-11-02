@@ -23,6 +23,7 @@ pub(super) struct EncodedLeaf {
     pub glb: Vec<u8>,
     pub bounds: Bounds,
     pub geometry_error: f64,
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     /// Decoded published POSITION per PREPARED (source) primitive, in atlas order and
     /// corner order (the lattice decode the writer proves client-order exact, unchanged by
     /// H28 merging).
@@ -30,6 +31,8 @@ pub(super) struct EncodedLeaf {
     /// The NORMAL a renderer reads per prepared primitive, in corner order (empty without
     /// NORMAL): the octahedral codes decoded by the reference meshopt filter and read
     /// as normalized SHORT, or the published f32 values.
+    #[cfg_attr(not(test), allow(dead_code))]
+    // Retained measurement in the bounded encoding result.
     pub normals: Vec<Vec<[f32; 3]>>,
     /// Published glTF primitives (H28: one per material class, texture set, attribute
     /// set and exact position window).
@@ -44,6 +47,7 @@ pub(super) enum WriteError {
     Failure(JobError),
 }
 impl WriteError {
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     pub(super) fn kind(&self) -> JobErrorKind {
         match self {
             Self::Budget(error) | Self::Failure(error) => error.kind(),

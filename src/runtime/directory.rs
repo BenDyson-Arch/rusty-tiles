@@ -25,6 +25,8 @@ pub(crate) use platform::test_directory;
 
 /// Read-only destination preparation, before any private output is created.
 pub(crate) struct DirectoryTarget {
+    #[cfg_attr(not(test), allow(dead_code))]
+    // Native directory publication and its lifecycle controls; unavailable in the standard build.
     output: PathBuf,
     policy: OutputPolicy,
 }
@@ -34,6 +36,7 @@ impl DirectoryTarget {
         &self.output
     }
 
+    #[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
     pub(crate) fn prepare(output: &Path, policy: OutputPolicy) -> Result<Self, JobError> {
         let name = output.file_name().ok_or_else(|| {
             JobError::new(
@@ -95,6 +98,8 @@ impl DirectoryTarget {
 
 pub(crate) struct DirectoryStaging<'a> {
     tree: TempDir,
+    #[cfg_attr(not(test), allow(dead_code))]
+    // Native directory publication and its lifecycle controls; unavailable in the standard build.
     target: DirectoryTarget,
     attempt: &'a Attempt,
 }
@@ -107,6 +112,7 @@ impl<'a> DirectoryStaging<'a> {
             + self.tree.path().as_os_str().len()
     }
 
+    #[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
     pub(crate) fn path(&self) -> &Path {
         self.tree.path()
     }
@@ -144,12 +150,14 @@ impl<'a> DirectoryStaging<'a> {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
 pub(crate) struct SealedDirectory<'a> {
     tree: TempDir,
     target: DirectoryTarget,
     attempt: &'a Attempt,
 }
 impl SealedDirectory<'_> {
+    #[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
     pub(crate) fn publish(self) -> Result<Published, JobFailure> {
         self.publish_with(&SystemDirectories)
     }
@@ -267,6 +275,7 @@ impl SealedDirectory<'_> {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
 /// Sync `output`'s parent after a rename or unlink; failure is a diagnostic
 /// because the namespace change itself has already happened.
 fn sync_parent(
@@ -283,6 +292,7 @@ fn sync_parent(
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
 /// Owned recovery container after the output-to-backup move succeeds.
 struct PreviousOutput {
     holder: PathBuf,
@@ -290,6 +300,7 @@ struct PreviousOutput {
 }
 
 trait DirectoryOperations {
+    #[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
     fn hold(&self, output: &Path, previous: &Path) -> io::Result<()> {
         platform::install(output, previous)
     }
@@ -315,6 +326,7 @@ trait DirectoryOperations {
 struct SystemDirectories;
 impl DirectoryOperations for SystemDirectories {}
 
+#[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
 fn cleanup_empty_diagnostic(
     path: PathBuf,
     operations: &dyn DirectoryOperations,
@@ -328,6 +340,7 @@ fn cleanup_empty_diagnostic(
         }),
     }
 }
+#[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
 fn cleanup_empty(path: PathBuf, operations: &dyn DirectoryOperations, failure: &mut JobFailure) {
     if let Some(diagnostic) = cleanup_empty_diagnostic(path, operations) {
         failure.retained_paths.push(diagnostic.path);

@@ -51,6 +51,7 @@ impl From<LeafProfile> for Profile {
         }
     }
 }
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 #[derive(Clone, Debug)]
 pub struct LeafOutputRequest {
     input: PathBuf,
@@ -64,6 +65,7 @@ pub struct LeafOutputRequest {
     leaf_triangles: Option<u64>,
 }
 impl LeafOutputRequest {
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     pub fn new(
         input: impl Into<PathBuf>,
         output: impl Into<PathBuf>,
@@ -82,6 +84,7 @@ impl LeafOutputRequest {
         }
     }
     /// Declared memory budget (D8).
+    #[cfg_attr(not(test), allow(dead_code))] // Test fixture access; not used by the public pipeline.
     pub(crate) fn with_memory_budget(mut self, bytes: u64) -> Self {
         self.memory_budget = Some(bytes);
         self
@@ -92,10 +95,12 @@ impl LeafOutputRequest {
         self.hlod = settings;
         self
     }
+    #[cfg_attr(not(test), allow(dead_code))] // Test fixture access; not used by the public pipeline.
     pub fn with_jobs(mut self, jobs: NonZeroUsize) -> Self {
         self.jobs = Jobs::Fixed(jobs);
         self
     }
+    #[cfg_attr(not(test), allow(dead_code))] // Test fixture access; not used by the public pipeline.
     pub fn with_scratch_dir(mut self, path: impl Into<PathBuf>) -> Self {
         self.scratch_dir = Some(path.into());
         self
@@ -228,10 +233,12 @@ pub struct EscalationMiss {
     pub mip: Option<u64>,
     pub gate: String,
 }
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 #[derive(Debug)]
 pub struct LeafOutputResult {
     pub output: PathBuf,
     pub report: LeafOutputReport,
+    #[allow(dead_code)] // Test-only leaf publication result preserves cleanup diagnostics.
     pub cleanup_diagnostics: Vec<CleanupDiagnostic>,
 }
 fn invariant(message: &str) -> JobError {
@@ -240,6 +247,7 @@ fn invariant(message: &str) -> JobError {
 fn resource(message: &str) -> JobError {
     JobError::new(JobErrorKind::ResourceLimit, message)
 }
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 fn close_failed_capture(captured: full::FullCaptured, failure: &mut JobFailure) {
     let path = captured.scratch.path().to_owned();
     if let Err(error) = captured.close() {
@@ -455,9 +463,6 @@ pub(crate) fn stage_plan(
     })
 }
 impl StagePlan {
-    pub(crate) fn jobs(&self) -> u64 {
-        self.jobs
-    }
     pub(crate) fn minimum_bytes(&self) -> u64 {
         self.minimum_bytes
     }
@@ -1051,6 +1056,7 @@ fn write_leaf(
     Ok(())
 }
 
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 pub fn mesh_to_leaf_payloads(
     request: LeafOutputRequest,
     control: &RunControl,

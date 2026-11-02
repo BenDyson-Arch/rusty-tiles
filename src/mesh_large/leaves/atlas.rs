@@ -14,6 +14,7 @@ use super::{
     prepared::{PreparedAtlas, PreparedPage, PreparedPrimitive},
     sparse_mips::LEAF_ISLAND_ISOLATED_LEVELS,
 };
+use crate::mesh_large::mask_pack::{self, Mask};
 use crate::stage_timing::{self as timing, Counter, Stage};
 use crate::{
     gltf_source::source::{self, TextureSlot},
@@ -108,6 +109,7 @@ fn period_pages(
     bindings: &mut [Binding],
     primitives: &[PreparedPrimitive],
     (profile, max_edge, mask_classes): (Profile, u32, &[Option<u32>]),
+    admit: &mut dyn FnMut(u64) -> Result<(), JobError>,
 ) -> Result<Vec<PagePlan>, JobError> {
     let mut groups = BTreeMap::<_, Vec<usize>>::new();
     for (i, b) in bindings.iter().enumerate() {
@@ -178,8 +180,8 @@ fn period_pages(
                 b.period = [false; 2];
                 if b.block.width == 0 {
                     let uvs = &primitives[b.primitive].uvs[b.output_uv];
-                    b.block = crops::plan_islands_aligned(
-                        uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
+                    b.block = crops::plan_islands_bounded(
+                        uvs, size[0], size[1], max_edge, gutter, align, mipmapped, admit,
                     )?;
                 }
             }
@@ -230,10 +232,12 @@ fn shelf_extent(bindings: &[Binding], ids: &[usize], limit: u32) -> Option<(u32,
     Some((width as u32, u32::try_from(y + row).ok()?))
 }
 
-/// Packs every island of one bucket's bindings directly into a single page,
-/// when they fit, choosing the power-of-two shelf width that minimises the
-/// page area. Bindings then sit at page offset zero and each island carries
-/// its page position.
+/// Packs every island of one bucket's bindings directly into a single page, when they
+/// fit: each island by its mask ([`crops::Island::mask`]), bottom-left, so islands
+/// interlock and never share a cell. The page is whole cells and whole 4x4 codec blocks
+/// (`build_islands` and `build_base` take any multiple of four), at the least-area width
+/// among a few around the square root of the masked area. Bindings then sit at page
+/// offset zero and each island carries its page position.
 fn pack_islands(
     bindings: &mut [Binding],
     ids: &[usize],
@@ -242,52 +246,66 @@ fn pack_islands(
 ) -> Result<Option<PagePlan>, JobError> {
     let mut items = Vec::new();
     for &b in ids {
-        for (k, island) in bindings[b].block.islands.iter().enumerate() {
-            items.push((b, k, island.crop.width, island.crop.height));
-        }
+        items.extend((0..bindings[b].block.islands.len()).map(|k| (b, k)));
     }
-    items.sort_by_key(|&(b, k, w, h)| (std::cmp::Reverse(h), std::cmp::Reverse(w), b, k));
-    let shelf = |limit: u32| -> Option<(u32, u32, Vec<[u32; 2]>)> {
-        let (mut x, mut y, mut row, mut width) = (0u64, 0u64, 0u64, 0u64);
-        let mut offsets = Vec::with_capacity(items.len());
-        for &(_, _, w, h) in &items {
-            let (w, h) = (u64::from(w), u64::from(h));
-            if w > u64::from(limit) {
-                return None;
-            }
-            if x + w > u64::from(limit) {
-                x = 0;
-                y += row;
-                row = 0;
-            }
-            offsets.push([x as u32, y as u32]);
-            x += w;
-            row = row.max(h);
-            width = width.max(x);
-        }
-        let height = y + row;
-        (height <= u64::from(max_edge)).then_some((width as u32, height as u32, offsets))
-    };
-    let mut best: Option<(u64, u32, u32, Vec<[u32; 2]>)> = None;
-    let mut limit = 4u32;
-    while limit <= max_edge {
-        if let Some((w, h, offsets)) = shelf(limit) {
-            let (pw, ph) = (w.max(4).next_power_of_two(), h.max(4).next_power_of_two());
-            let area = u64::from(pw) * u64::from(ph);
-            if best.as_ref().is_none_or(|b| area < b.0) {
-                best = Some((area, pw, ph, offsets));
-            }
-        }
-        limit = match limit.checked_mul(2) {
-            Some(next) => next,
-            None => break,
-        };
-    }
-    let Some((_, width, height, offsets)) = best else {
+    let masks: Option<Vec<(u32, &Mask)>> = items
+        .iter()
+        .map(|&(b, k)| {
+            bindings[b].block.islands[k]
+                .mask
+                .as_ref()
+                .map(|(c, m)| (*c, m))
+        })
+        .collect();
+    let Some(masks) = masks else {
         return Ok(None);
     };
-    for (&(b, k, _, _), offset) in items.iter().zip(offsets) {
-        bindings[b].block.islands[k].offset = offset;
+    let cell = masks.first().map_or(4, |m| m.0);
+    if masks.iter().any(|m| m.0 != cell) || !(1..=64).contains(&cell) {
+        return Ok(None);
+    }
+    let masks: Vec<&Mask> = masks.into_iter().map(|m| m.1).collect();
+    let mut order: Vec<usize> = (0..items.len()).collect();
+    order.sort_by_key(|&i| {
+        let c = masks[i].cells;
+        (std::cmp::Reverse(c[1]), std::cmp::Reverse(c[0]), items[i])
+    });
+    let unit = cell.max(4);
+    let round = |v: u64| v.div_ceil(u64::from(unit)) * u64::from(unit);
+    let area: u64 = masks.iter().map(|m| m.count()).sum::<u64>() * u64::from(cell * cell);
+    let widest = round(u64::from(
+        masks.iter().map(|m| m.cells[0]).max().unwrap_or(1) * cell,
+    ));
+    let mut widths: Vec<u64> = [1., 1.15, 1.35, 1.7]
+        .iter()
+        .map(|f| round(((area as f64).sqrt() * f).ceil() as u64).max(widest))
+        .chain([widest])
+        .filter(|&w| w <= u64::from(max_edge))
+        .collect();
+    widths.sort_unstable();
+    widths.dedup();
+    // (page area, longer side, width, height, island origins in cells)
+    type Fit = (u64, u32, u32, u32, Vec<[u32; 2]>);
+    let mut best: Option<Fit> = None;
+    for w in widths {
+        let Some((at, used, h)) = mask_pack::pack(&masks, &order, w as u32 / cell, max_edge / cell)
+        else {
+            continue;
+        };
+        let (pw, ph) = (round(u64::from(used * cell)), round(u64::from(h * cell)));
+        if ph > u64::from(max_edge) {
+            continue;
+        }
+        let key = (pw * ph, pw.max(ph) as u32);
+        if best.as_ref().is_none_or(|b| key < (b.0, b.1)) {
+            best = Some((key.0, key.1, pw as u32, ph as u32, at));
+        }
+    }
+    let Some((_, _, width, height, at)) = best else {
+        return Ok(None);
+    };
+    for (&(b, k), origin) in items.iter().zip(at) {
+        bindings[b].block.islands[k].offset = origin.map(|v| v * cell);
     }
     let first = &bindings[ids[0]];
     let page = PagePlan {
@@ -308,9 +326,9 @@ fn pack_islands(
     Ok(Some(page))
 }
 
-/// Stable shelves ordered by descending crop dimensions and canonical binding order.
-/// When a bucket fits one page, the shelf width is the power of two that
-/// minimises the page area; otherwise shelves span the maximum page edge.
+/// A bucket's islands share one mask-packed page when they fit ([`pack_islands`]);
+/// otherwise bindings take stable shelves ordered by descending crop dimensions and
+/// canonical binding order, spanning the maximum page edge, on power-of-two pages.
 ///
 /// Mipmapped bindings share pages like any other: their islands carry aligned
 /// source context, never a whole-image dedicated page (D6). MASK
@@ -701,9 +719,11 @@ struct Layout {
     bindings: Vec<Binding>,
     masked: Vec<bool>,
     pages: Vec<PagePlan>,
+    planning_bytes: u64,
 }
 /// Shares the exact physical crop/packing representation with final preparation.
 /// Counts planning owners and raw streams; it does not predict compressed file size.
+#[cfg(test)]
 pub(super) fn project(
     triangles: &[FullTriangle],
     resources: AtlasResources<'_>,
@@ -711,11 +731,22 @@ pub(super) fn project(
     drop: u32,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<LeafProjection, JobError> {
+    project_bounded(triangles, resources, profile, drop, None, check)
+}
+pub(super) fn project_bounded(
+    triangles: &[FullTriangle],
+    resources: AtlasResources<'_>,
+    profile: Profile,
+    drop: u32,
+    ceiling: Option<u64>,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<LeafProjection, JobError> {
     let layout = layout(
         (triangles.to_vec(), vec![[0; 3]; triangles.len()]),
         resources,
         profile,
         drop,
+        ceiling,
         check,
     )?;
     let mut base = 0u64;
@@ -804,6 +835,7 @@ pub(super) fn project(
         .ok_or_else(resource)?;
     let owned = rows
         .checked_add(uv)
+        .and_then(|n| n.checked_add(layout.planning_bytes))
         .and_then(|n| n.checked_add(metadata))
         .and_then(|n| n.checked_add(receipt_owners))
         .and_then(|n| n.checked_add((layout.bindings.len() as u64).checked_mul(16 << 10)?))
@@ -822,6 +854,7 @@ fn layout(
     resources: AtlasResources<'_>,
     profile: Profile,
     drop: u32,
+    ceiling: Option<u64>,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Layout, JobError> {
     let mut primitives = triangles_by_primitive(geometry.0, geometry.1)?;
@@ -837,6 +870,7 @@ fn layout(
         _ => 4096,
     };
     let mut bindings = Vec::new();
+    let (mut retained, mut planning_bytes) = (0u64, 0u64);
     let mut masked = vec![false; primitives.len()];
     let mut mask_classes = vec![None; primitives.len()];
     for (pi, p) in primitives.iter_mut().enumerate() {
@@ -875,8 +909,22 @@ fn layout(
             let mipmapped =
                 profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
             let period = period_axes(&uvs, sampler);
-            let block = match crops::plan_islands_aligned(
-                &uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
+            let block = match crops::plan_islands_bounded(
+                &uvs,
+                size[0],
+                size[1],
+                max_edge,
+                gutter,
+                align,
+                mipmapped,
+                &mut |bytes| {
+                    let peak = retained.checked_add(bytes).ok_or_else(resource)?;
+                    if ceiling.is_some_and(|limit| peak > limit) {
+                        return Err(resource());
+                    }
+                    planning_bytes = planning_bytes.max(peak);
+                    Ok(())
+                },
             ) {
                 Ok(block) => block,
                 // Unrepresentable as crops: `period_pages` may still place it whole.
@@ -890,6 +938,9 @@ fn layout(
                 }
                 Err(e) => return Err(e),
             };
+            retained = retained
+                .checked_add(block.heap_bytes())
+                .ok_or_else(resource)?;
             p.uvs.push(uvs);
             bindings.push(Binding {
                 primitive: pi,
@@ -906,10 +957,31 @@ fn layout(
             });
         }
     }
+    let items = bindings.iter().map(|b| b.block.islands.len()).sum();
+    planning_bytes = planning_bytes.max(
+        retained
+            .checked_add(if items == 0 {
+                0
+            } else {
+                mask_pack::workspace_bytes(max_edge, items)
+            })
+            .ok_or_else(resource)?,
+    );
+    if ceiling.is_some_and(|limit| planning_bytes > limit) {
+        return Err(resource());
+    }
     let dedicated = period_pages(
         &mut bindings,
         &primitives,
         (profile, max_edge, &mask_classes),
+        &mut |bytes| {
+            let peak = retained.checked_add(bytes).ok_or_else(resource)?;
+            if ceiling.is_some_and(|limit| peak > limit) {
+                return Err(resource());
+            }
+            planning_bytes = planning_bytes.max(peak);
+            Ok(())
+        },
     )?;
     let mut plans = pack(&mut bindings, max_edge, &mask_classes)?;
     for page in dedicated {
@@ -953,6 +1025,7 @@ fn layout(
         bindings,
         masked,
         pages: plans,
+        planning_bytes,
     })
 }
 
@@ -991,10 +1064,11 @@ fn page_charge(
         .checked_mul(u64::from(page.height))
         .ok_or_else(resource)?;
     let codec = delivery::workspace_charge([page.width, page.height], profile)?;
-    // RGBA and support, plus island labels and their reduced chain on mipmapped pages.
+    // RGBA/support, labels/reduced chain, and the span Vec: at most one run
+    // per texel, 12 bytes each with up to twice the capacity during collection.
     let mipmapped = profile != Profile::Lossless && matches!(page.sampler.min_filter, 9984..=9987);
     let assembly = pixels
-        .checked_mul(if mipmapped { 18 } else { 8 })
+        .checked_mul(if mipmapped { 42 } else { 32 })
         .ok_or_else(resource)?;
     let mut decode = 0u64;
     for &bi in &page.bindings {
@@ -1174,29 +1248,41 @@ fn encode_page(
                     ];
                     let copied =
                         crops::copy_crop(&source.rgba, size[0], size[1], crop, b.sampler, memory)?;
-                    let row = crop.width as usize * 4;
-                    for y in 0..crop.height {
-                        let dst = ((oy + y) * page.width + ox) as usize * 4;
-                        let src = y as usize * row;
-                        rgba[dst..dst + row].copy_from_slice(&copied[src..src + row]);
-                    }
-                    // Mipmapped islands: the whole allocation is real source under the
+                    // The island's spans of crop texels: its mask cells (other islands may
+                    // interlock into the rest of its rectangle), or the whole crop.
+                    let spans: Vec<(u32, u32, u32)> = match &island.mask {
+                        Some((cell, mask)) => mask
+                            .runs()
+                            .flat_map(|(cy, c0, c1)| {
+                                (cy * cell..(cy + 1) * cell)
+                                    .map(move |y| (y, c0 * cell, (c1 * cell).min(crop.width)))
+                            })
+                            .filter(|&(y, ..)| y < crop.height)
+                            .collect(),
+                        None => (0..crop.height).map(|y| (y, 0, crop.width)).collect(),
+                    };
+                    // Mipmapped islands: every carried texel is real source under the
                     // sampler's wrap (copy_crop), so every level through K is the
                     // area-weighted source average over its footprint, gutters included.
-                    let (from, rows, cols) = if mipmapped {
-                        (0, crop.height, crop.width)
+                    // Otherwise only the interior is signal.
+                    let interior = if mipmapped {
+                        [0, crop.width, 0, crop.height]
                     } else {
-                        (crop.gutter, crop.interior_height, crop.interior_width)
+                        let g = crop.gutter;
+                        [g, g + crop.interior_width, g, g + crop.interior_height]
                     };
-                    for y in from..from + rows {
-                        let first = ((oy + y) * page.width + ox + from) as usize;
-                        support[first..first + cols as usize].fill(1);
-                    }
-                    if mipmapped {
-                        next_label += 1;
-                        for y in 0..crop.height {
-                            let first = ((oy + y) * page.width + ox) as usize;
-                            labels[first..first + crop.width as usize].fill(next_label);
+                    next_label += 1;
+                    for (y, x0, x1) in spans {
+                        let at = |x: u32| ((oy + y) * page.width + ox + x) as usize;
+                        let src = (y * crop.width + x0) as usize * 4;
+                        rgba[at(x0) * 4..at(x1) * 4]
+                            .copy_from_slice(&copied[src..src + (x1 - x0) as usize * 4]);
+                        let (s0, s1) = (x0.max(interior[0]), x1.min(interior[1]));
+                        if (interior[2]..interior[3]).contains(&y) && s0 < s1 {
+                            support[at(s0)..at(s1)].fill(1);
+                        }
+                        if mipmapped {
+                            labels[at(x0)..at(x1)].fill(next_label);
                         }
                     }
                 }
@@ -1294,7 +1380,7 @@ pub(super) fn prepare(
         image_info: &captured.image_info,
     };
     let layout = timing::time(Stage::Layout, || {
-        layout(geometry, resources, profile, drop, &mut || {
+        layout(geometry, resources, profile, drop, None, &mut || {
             (services.check)()
         })
     })?;
@@ -1393,6 +1479,81 @@ pub(super) fn prepare(
 mod tests {
     use super::*;
     #[test]
+    fn lossless_8192_mask_capacity_is_projected_and_refused_before_allocation() {
+        use crate::gltf_source::source::{Document, ImageInfo};
+        use crate::mesh_large::{
+            attributes::{CornerAttributes, UV0},
+            records::{Provenance, TriangleRecord},
+        };
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"material":0}]}],
+            "buffers":[{"uri":"never-read.bin","byteLength":60}],"bufferViews":[{"buffer":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":24}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[1,1,0]},
+                {"bufferView":1,"componentType":5126,"count":3,"type":"VEC2"}],
+            "images":[{"uri":"never-read.png"}],"textures":[{"source":0,"sampler":0}],
+            "samplers":[{"minFilter":9729,"wrapS":33071,"wrapT":33071}],
+            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
+        let document = Document::parse(&serde_json::to_vec(&doc).unwrap(), || Ok(())).unwrap();
+        let info = [ImageInfo {
+            mime_type: "image/png",
+            extension: "png",
+            width: 8186,
+            height: 8186,
+        }];
+        let classes = crate::mesh_large::batching::MaterialClasses::default();
+        let resources = AtlasResources {
+            materials: document.materials(),
+            classes: &classes,
+            textures: document.textures(),
+            samplers: document.samplers(),
+            image_info: &info,
+        };
+        let uv = [[0., 0.], [1., 0.], [0., 1.]];
+        let row = FullTriangle {
+            triangle: TriangleRecord {
+                key: 0,
+                source: Provenance::default(),
+                vertices: [0, 1, 2],
+                positions: [[0.; 3], [1., 0., 0.], [0., 1., 0.]],
+                bytes: 56,
+                degenerate: false,
+            },
+            expanded_ordinal: 0,
+            material: 0,
+            flags: UV0,
+            corners: std::array::from_fn(|i| CornerAttributes {
+                texcoords: [uv[i], [0.; 2]],
+                ..Default::default()
+            }),
+        };
+        let block = crops::plan_islands_aligned(&uv, 8186, 8186, 8192, 2, 1, false).unwrap();
+        let bits: u64 = block
+            .islands
+            .iter()
+            .map(|i| i.mask.as_ref().unwrap().1.bits.capacity() as u64 * 8)
+            .sum();
+        assert_eq!(bits, 8_388_608);
+        let projected = project(&[row], resources, Profile::Lossless, 0, &mut || Ok(())).unwrap();
+        assert!(projected.owned_bytes >= block.heap_bytes());
+        assert!(projected.owned_bytes >= bits + mask_pack::workspace_bytes(8192, 1));
+        println!(
+            "8192² bits={bits}, containers={}, projected owned={}",
+            block.heap_bytes() - bits,
+            projected.owned_bytes
+        );
+        let err = project_bounded(
+            &[row],
+            resources,
+            Profile::Lossless,
+            0,
+            Some(bits - 1),
+            &mut || Ok(()),
+        )
+        .err()
+        .unwrap();
+        assert_eq!(err.kind(), JobErrorKind::ResourceLimit);
+    }
+    #[test]
     fn whole_period_axes_keep_source_uvs_bit_for_bit() {
         let crop = Crop {
             origin: [0, -12],
@@ -1412,6 +1573,93 @@ mod tests {
                 crops::remap_uv([u, 0.], 1000, 64, &crop, [0, 0], [1000, 40]).unwrap()[0].to_bits(),
                 u.to_bits()
             );
+        }
+    }
+    /// L-shaped footprints (a row and a column of small triangles) make islands whose
+    /// rectangles are mostly empty. On one page no cell is shared, every island stays on its
+    /// alignment grid inside the page, and the page is no larger than the islands'
+    /// rectangles laid end to end, and smaller than the previous power-of-two shelf page.
+    #[test]
+    fn island_pages_interlock_masks_on_whole_blocks() {
+        let n = 1024u32;
+        let sampler = crops::resolve(None).unwrap();
+        let mut bindings = Vec::new();
+        for k in 0..12 {
+            let (u0, v0) = (0.05 + 0.07 * f64::from(k), 0.1 + 0.06 * f64::from(k % 5));
+            let mut uvs = Vec::new();
+            for i in 0..12 {
+                let step = 4. * f64::from(i) / f64::from(n);
+                let d = 2. / f64::from(n);
+                for (u, v) in [(u0 + step, v0), (u0, v0 + step)] {
+                    uvs.extend([[u, v], [u + d, v], [u, v + d]].map(|q| q.map(|x| x as f32)));
+                }
+            }
+            let block = crops::plan_islands_aligned(&uvs, n, n, 4096, 8, 8, true).unwrap();
+            bindings.push(Binding {
+                primitive: 0,
+                slot: TextureSlot::BaseColor,
+                source_uv: 0,
+                output_uv: 0,
+                image: 0,
+                sampler,
+                block,
+                source_size: [n, n],
+                offset: [0, 0],
+                page: 0,
+                period: [false; 2],
+            });
+        }
+        let rects: u64 = bindings
+            .iter()
+            .flat_map(|b| &b.block.islands)
+            .map(|i| u64::from(i.crop.width) * u64::from(i.crop.height))
+            .sum();
+        let ids: Vec<usize> = (0..bindings.len()).collect();
+        let page = pack_islands(&mut bindings, &ids, 4096, 0).unwrap().unwrap();
+        assert_eq!((page.width % 8, page.height % 8), (0, 0));
+        // The previous layout: shelves by descending height at power-of-two widths, on a
+        // power-of-two page. Masks and block-sized pages are never larger.
+        let mut items: Vec<[u32; 2]> = bindings
+            .iter()
+            .flat_map(|b| &b.block.islands)
+            .map(|i| [i.crop.width, i.crop.height])
+            .collect();
+        items.sort_by_key(|d| (std::cmp::Reverse(d[1]), std::cmp::Reverse(d[0])));
+        let shelf = (2..=12)
+            .filter_map(|k| {
+                let limit = 1u32 << k;
+                let (mut x, mut y, mut row, mut w) = (0, 0, 0, 0);
+                for d in &items {
+                    if d[0] > limit {
+                        return None;
+                    }
+                    if x + d[0] > limit {
+                        (x, y, row) = (0, y + row, 0);
+                    }
+                    x += d[0];
+                    row = row.max(d[1]);
+                    w = w.max(x);
+                }
+                Some(u64::from(w.next_power_of_two()) * u64::from((y + row).next_power_of_two()))
+            })
+            .min()
+            .unwrap();
+        let area = u64::from(page.width) * u64::from(page.height);
+        assert!(area <= rects && area < shelf, "{area} vs {rects} / {shelf}");
+        let mut owner = std::collections::HashMap::new();
+        for (bi, b) in bindings.iter().enumerate() {
+            for (k, island) in b.block.islands.iter().enumerate() {
+                let (cell, mask) = island.mask.as_ref().unwrap();
+                assert_eq!((island.offset[0] % cell, island.offset[1] % cell), (0, 0));
+                assert!(island.offset[0] + island.crop.width < page.width + cell);
+                for (y, x0, x1) in mask.runs() {
+                    for x in x0..x1 {
+                        let at = (island.offset[0] / cell + x, island.offset[1] / cell + y);
+                        assert!(at.0 * cell < page.width && at.1 * cell < page.height);
+                        assert!(owner.insert(at, (bi, k)).is_none(), "cell {at:?} shared");
+                    }
+                }
+            }
         }
     }
     #[test]

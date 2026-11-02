@@ -341,6 +341,7 @@ fn child_axes(axes: [u32; 3], slot: u8) -> [u32; 3] {
 }
 
 impl<'s, S: Sink> Builder<'s, S> {
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     pub(crate) fn new(sink: &'s mut S, limits: Limits) -> Self {
         Self::with_proxies(sink, limits, None)
     }
