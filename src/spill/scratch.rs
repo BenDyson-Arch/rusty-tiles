@@ -393,6 +393,7 @@ impl Scratch {
             .is_some_and(|created| created.volume.memory_backed)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     /// Free bytes observed by the preflight (0 before a deferred scratch is created).
     pub(crate) fn available_at_start(&self) -> u64 {
         self.created

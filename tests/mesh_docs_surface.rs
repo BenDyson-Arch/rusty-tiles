@@ -305,9 +305,9 @@ fn documented_budget_defaults_match_the_code() {
 #[test]
 fn policy_statements_match_the_implementation() {
     let guide = current_guide(&read("docs/MESH.md"));
-    // A parent that cannot fit the cap is omitted, never refused (amended D1).
+    // After the last resorts, a parent that still cannot fit is omitted, never refused.
     let omission = section(&guide, "### Hierarchy and cracks", false);
-    assert!(omission.contains("**Omission, not refusal.**"));
+    assert!(omission.contains("**Residual omission.**"));
     assert!(omission.contains("omitted"), "omission must be described");
     for field in [
         "diagnostics.hlod",

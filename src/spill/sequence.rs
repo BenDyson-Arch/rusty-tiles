@@ -138,10 +138,6 @@ impl<T: Record> Sequence<T> {
         T::size_in(self.layout)
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
-        self.records == 0
-    }
-
     /// A new reader from the first record. Readers are independent.
     pub(crate) fn reader(&self) -> Result<SequenceReader<'_, T>, SpillError> {
         let inner = self

@@ -68,6 +68,7 @@ impl<'a> Phases<'a> {
     pub(crate) fn new(emit: &'a Emit<'a>) -> Self {
         Self::with(Some(emit))
     }
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     /// Records times; emits nothing.
     pub(crate) fn silent() -> Phases<'static> {
         Phases::with(None)
