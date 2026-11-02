@@ -26,7 +26,7 @@ geometricError also require
 cap pressure (children above 8,192 faces) and smallest-first border-free drops.
 The [N3 decision](architecture/hlod-040-decision.md) permits border-free components
 and holes to drop or close at any size, with loss measured into G. **Pending
-validator correction:** this head still applies the older cap-pressure and ordering
+validator correction:** the current validator still applies the older cap-pressure and ordering
 checks to N3 too; it may therefore refuse output in N3's admitted domain via
 `coarseDrops`.
 That correction is a separate release gate. HLOD archives from before this check, whose

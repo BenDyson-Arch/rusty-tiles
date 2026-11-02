@@ -50,7 +50,7 @@ The shared layout is a bounded implicit forest. Producer naming/partition detail
 
 Streams one static glTF/GLB scene, local metre/Y-up or in a declared source CRS,
 through capture, leaf encoding, HLOD coarse levels and Tiles 1.1 implicit `.3tz` delivery. Leaves are exact;
-every parent tile is built from its children with locked outer interfaces (crack-free by construction), a sampled,
+every parent tile is built from its children whose outer seams stay exactly shared with its neighbours, a sampled,
 measured geometric error rather than a certificate, a representative source-primitive identity and freshly
 baked textures. See the [mesh guide](MESH.md)
 for admitted sources, placement, resources, migration and the known Cesium
