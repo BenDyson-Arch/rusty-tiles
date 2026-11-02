@@ -5943,24 +5943,43 @@ fn egg_crate(k: u32) -> Mesh {
 /// claim is the claim of the tile containing it one depth up. The archive validates. The
 /// cases are the reviewer's: contract-local arc intervals gave egg 5 18 doubly owned
 /// segments, city 2 346, city 3 208, city 6 188, city 7 90.
+///
+/// Every point's holders are also recomputed from the decoded leaf payloads: the least and
+/// greatest DFS leaf whose faces hold it (#308 review 2 P3: holders were only checked
+/// against themselves). Border relief (A1) is active throughout; the noisy sheet at cap
+/// 150 relieves its borders, so relieved contracts are censused too.
 #[test]
 fn every_seam_segment_has_one_owner_per_depth_on_real_contracts() {
     use super::borders::Holders;
     use super::geometry::folds::Policy;
     type Tile = (u32, u32, u32, Vec<Holders>, HashSet<[u32; 3]>);
-    for (name, meshes) in [
-        ("egg 2", vec![egg_crate(2)]),
-        ("egg 5", vec![egg_crate(5)]),
-        ("egg 6", vec![egg_crate(6)]),
-        ("city 2", city_block(2)),
-        ("city 3", city_block(3)),
-        ("city 6", city_block(6)),
-        ("city 7", city_block(7)),
-        ("sheet 7", vec![folded_sheet(48, 5, 0.02, 0.001, 7)]),
+    let mut relieved = 0;
+    for (name, meshes, run) in [
+        ("egg 2", vec![egg_crate(2)], Run::default()),
+        ("egg 5", vec![egg_crate(5)], Run::default()),
+        ("egg 6", vec![egg_crate(6)], Run::default()),
+        ("city 2", city_block(2), Run::default()),
+        ("city 3", city_block(3), Run::default()),
+        ("city 6", city_block(6), Run::default()),
+        ("city 7", city_block(7), Run::default()),
+        (
+            "sheet 7",
+            vec![folded_sheet(48, 5, 0.02, 0.001, 7)],
+            Run::default(),
+        ),
+        ("noisy relief", noisy_sheet(), relief_run(Mutation::None)),
     ] {
         let work = tempfile::tempdir().unwrap();
         let input = write_gltf(&work.path().join("src"), &meshes);
-        let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+        let dir = stage(&input, &work.path().join("hlod"), &run).unwrap();
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        relieved += manifest["hlod"]["bordersByDepth"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|d| d["relievedSegments"].as_u64())
+            .sum::<u64>();
         let audit = work.path().join("hlod.hlod-audit").join("borders.jsonl");
         let key =
             |x: &Value| -> [u32; 3] { std::array::from_fn(|i| x[i].as_u64().unwrap() as u32) };
@@ -6008,6 +6027,28 @@ fn every_seam_segment_has_one_owner_per_depth_on_real_contracts() {
                 let seen = *global.entry(h.key).or_insert((h.lo, h.hi));
                 assert_eq!(seen, (h.lo, h.hi), "{name}: holders of {:?}", h.key);
             }
+        }
+        // And they are the leaves': the least and greatest DFS leaf whose decoded faces
+        // hold the point.
+        let mut held_by: HashMap<[u32; 3], (u32, u32)> = HashMap::new();
+        for (leaf, r) in rows(&dir.join("leaves.jsonl")).iter().enumerate() {
+            let bytes = fs::read(dir.join(r["uri"].as_str().unwrap())).unwrap();
+            for face in super::decode::decode(&bytes).unwrap().faces {
+                for p in face.p {
+                    let leaf = leaf as u32;
+                    let e = held_by
+                        .entry(super::interfaces::key(p))
+                        .or_insert((leaf, leaf));
+                    *e = (e.0.min(leaf), e.1.max(leaf));
+                }
+            }
+        }
+        for (p, holders) in &global {
+            assert_eq!(
+                held_by.get(p),
+                Some(holders),
+                "{name}: holders of {p:?} differ from the decoded leaves"
+            );
         }
         let depths: std::collections::BTreeSet<u32> = tiles.iter().map(|t| t.0).collect();
         let (mut segments, mut points) = (0, 0);
@@ -6080,11 +6121,14 @@ fn every_seam_segment_has_one_owner_per_depth_on_real_contracts() {
             }
         }
         eprintln!(
-            "{name}: {} tiles, {points} shared points, {segments} shared segments checked",
-            tiles.len()
+            "{name}: {} tiles, {points} shared points, {segments} shared segments, {} holders \
+             checked against the decoded leaves",
+            tiles.len(),
+            global.len()
         );
         published_and_valid(name, &dir, work.path());
     }
+    assert!(relieved > 0, "no case relieved a border");
 }
 
 /// A2 stage N2: three sheets 2 cm apart fold onto one another under every reduction of

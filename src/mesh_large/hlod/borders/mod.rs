@@ -109,14 +109,50 @@ fn is_zero_f64(n: &f64) -> bool {
     *n == 0.
 }
 
-/// Border relief (A1, owner decision 2026-10-30). A cell whose depth-d contract has more
-/// than `TRIGGER` of the hard cap in items requests the least ladder step that brings it
-/// to `TARGET`; a shared arc takes the largest request of its owners, and never less than
-/// its finer level's tolerance. Relief certificates stay exact and shared.
+/// Border relief (A1, owner decisions 2026-10-30 and 2026-10-31). A cell whose depth-d
+/// contract holds more than a pressure's trigger share of the hard cap in items requests
+/// the least ladder step up to the pressure's limit that brings it to its target share;
+/// it takes the larger of its two pressures' requests. A shared arc takes the largest
+/// request of its owners, and never less than its finer level's tolerance. Relief
+/// certificates stay exact and shared.
 pub(super) const RELIEF_STEPS: u32 = 8;
-/// Percent of the hard cap.
-const TRIGGER: u64 = 85;
-const TARGET: u64 = 75;
+
+/// A relief pressure: shares of the hard cap in per mille, and its largest step.
+struct Pressure {
+    trigger: u64,
+    target: u64,
+    steps: u32,
+}
+
+/// Feasibility: a border near or above the cap (85% to 75%, the whole ladder).
+const FEASIBILITY: Pressure = Pressure {
+    trigger: 850,
+    target: 750,
+    steps: RELIEF_STEPS,
+};
+/// Quality: a border that starves the reduction (37.5% to 25%), at most step 6, i.e.
+/// epsilon <= 4 E_d, so the relief floor stays within 64 E_d.
+const QUALITY: Pressure = Pressure {
+    trigger: 375,
+    target: 250,
+    steps: 6,
+};
+
+// The level walk counts a cell only above the lowest trigger.
+const _: () = assert!(QUALITY.trigger <= FEASIBILITY.trigger && QUALITY.steps <= RELIEF_STEPS);
+
+impl Pressure {
+    /// The step this pressure requests for a cell of `items` that would hold `at(j)` items
+    /// at step j, or 0 below its trigger.
+    fn request(&self, items: u64, at: impl Fn(usize) -> u64, cap: u64) -> u32 {
+        if items.saturating_mul(1000) <= self.trigger * cap {
+            return 0;
+        }
+        (1..=self.steps)
+            .find(|&j| at(j as usize).saturating_mul(1000) <= self.target * cap)
+            .unwrap_or(self.steps)
+    }
+}
 
 /// One level's relief: cells that triggered, segments above step zero, largest step.
 #[derive(Clone, Copy, Default)]
@@ -437,6 +473,7 @@ impl Borders {
     ) -> Result<(), JobError> {
         let mark = (self.segments.len, self.refs.len);
         self.walk(scratch, depth, &mut Mode::Emit(&BTreeMap::new()), check)?;
+        // Every pressure's trigger is at or above the quality trigger.
         let mut counts = BTreeMap::new();
         let mut items = BTreeMap::new();
         for id in 0..self.source.nodes.len {
@@ -444,7 +481,7 @@ impl Borders {
             // Only coarse cells build from a contract; leaves are published exactly.
             if n[2] == u64::from(depth)
                 && n[5] & 1 == 0
-                && n[7].saturating_mul(100) > TRIGGER * self.cap
+                && n[7].saturating_mul(1000) > QUALITY.trigger * self.cap
             {
                 counts.insert(id, [0; RELIEF_STEPS as usize + 1]);
                 items.insert(id, n[7]);
@@ -457,9 +494,9 @@ impl Borders {
                 .iter()
                 .map(|(&id, c)| {
                     let at = |j: usize| (items[&id] + c[j]).saturating_sub(c[0]);
-                    let step = (1..=RELIEF_STEPS)
-                        .find(|&j| at(j as usize).saturating_mul(100) <= TARGET * self.cap)
-                        .unwrap_or(RELIEF_STEPS);
+                    let step = FEASIBILITY
+                        .request(items[&id], at, self.cap)
+                        .max(QUALITY.request(items[&id], at, self.cap));
                     (id, step)
                 })
                 .collect();

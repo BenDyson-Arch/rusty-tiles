@@ -591,17 +591,25 @@ without a separation gate. Their separation (the sandwich width of the folded la
 each fold face, against the source) is reported per tile by the acceptance tooling, not
 checked by the validators.
 
-**Owner amendment, 2026-10-30 — border relief (A1).** E_d/16 is a fixed share of the cell,
-far below the surface's own border noise at coarse depths. On Walem, every certificate of the
-seven cells that still omit spans one source edge (ε ≤ 2.7 mm at every depth), so borders fill
-20–80% of the cap. On mesh-1e7, f0-d1's grid staircases need about 1.75 m, and its exact
-border alone needs more than 8,192 triangles. Evidence:
-`E/hlod-root-design-20261030/DESIGN.md`, `E/hlod-border-relief-20261030/RISK-CHECK.md`.
+**Owner amendments, 2026-10-30 and 2026-10-31 — border relief (A1).** E_d/16 is a fixed share
+of the cell, far below the surface's own border noise at coarse depths.
+- On Walem, every certificate of the seven cells that still omit spans one source edge (ε ≤ 2.7 mm
+  at every depth), so borders fill 20–80% of the cap.
+- On mesh-1e7, f0-d1's grid staircases need about 1.75 m, and its exact border alone needs more
+  than 8,192 triangles.
+- Evidence: `E/hlod-root-design-20261030/DESIGN.md`, `E/hlod-border-relief-20261030/RISK-CHECK.md`
+  (feasibility), `E/hlod-border-relief-20261030/WALEM.md` (quality, 2026-10-31).
 
 - **Ladder.** A shared arc at depth d is certified at ε_arc(d) = (E_d/16)·2^j, j ∈ [0, 8];
   j = 0 is the rule above.
-- **Trigger.** A cell whose depth-d contract (segments and points) exceeds 85% of the hard
-  cap requests the least j ≥ 1 that brings it to 75%, counting its own arcs at j.
+- **Trigger.** Two pressures share the ladder, counting the cell's depth-d contract (segments
+  and points) with its own arcs at j:
+  - **Feasibility (2026-10-30):** a contract above 85% of the hard cap requests the least
+    j ∈ [1, 8] that brings it to 75%, else 8.
+  - **Quality (2026-10-31):** a contract above 37.5% of the hard cap requests the least
+    j ∈ [1, 6] that brings it to 25%, else 6. j ≤ 6 keeps ε ≤ 4·E_d, so the floor below
+    stays ≤ 64·E_d, where deep tiles' G is near E_d.
+  - A cell takes the larger request.
   - A shared arc takes the largest request of its owners.
   - It never takes less than its finer level's tolerance on the same subarc: j ≥ j_finer − 1,
     so nested endpoints certify.
@@ -624,18 +632,25 @@ border alone needs more than 8,192 triangles. Evidence:
     identical chord as d_finer, so it is at least 16·d_own.
 - **Contraction.** A tile with a relieved certificate first removes each relieved vertex by
   collapse along its own chord, under the guard's own checks.
-  - Collapses are refused for: flips; faces or new or extra-wing edges on contract points only;
-    duplicates; orphaned corners; a failed link condition. A bounded relief of interior
-    neighbours is allowed first.
+  - Collapses are refused for: flips; extra-wing edges between contract points; duplicates;
+    orphaned corners; a failed link condition. A bounded relief of interior neighbours is
+    allowed first.
+  - A new face or edge on border points across chords is taken only where the build's
+    `folds::Policy` admits it: never in develop's builds, and in N1–N3 only in its seam owner
+    (A2's hash split over `Contract::holders`). Relief has no owner rule of its own.
   - Each vertex collapses onto its surviving chord neighbour toward its nearer endpoint,
     each half of a chord taken from its endpoint inward, or else onto its other neighbour.
   - A target is never a vertex the pass has yet to visit, so a face moves at most once per
     pass, with at most 4 passes per relief round. The work is linear in the stars of the
     removed vertices: the endpoint fans are never rescanned.
   - Vertices it cannot remove take the ordinary contraction.
-  - If the whole contraction fails, the cell's residue (collapsed mesh and stuck vertices, a
-    pure function of children, contract and mapping) is the last resort's input. The last
-    resort snaps only those vertices, with declared folds.
+  - If the whole contraction fails, the primary build's hand-over (`Contracted`: the collapsed
+    mesh and its stuck vertices, a pure function of children, contract and mapping) is N3's
+    input. N3 first resumes the collapse of the stuck vertices under its own policy, then
+    snaps what is left to the nearer chord endpoint (t ≤ 0.5: the first), with folds declared
+    in `foldFaces`.
+  - A snap that loses an interface item, changes the topology or fails N3's guard refuses
+    the cell. That includes degenerating a chord's only face.
   - The relief certificates and the floor stay this rule's; the last resort's folds are
     declared and measured separately.
 - **Validators.**
@@ -649,7 +664,7 @@ border alone needs more than 8,192 triangles. Evidence:
     the gap is 0, which refuses honest relieved siblings at their 8·d floor. Every tile
     strictly below the siblings still counts.
   - The S5 oracle reads each certificate's `step` and each tile's `reliefFloor` from the
-    sidecar. It re-derives the steps: trigger, request, owner maximum and monotone
+    sidecar. It re-derives the steps: both pressures' triggers and requests, owner maximum and monotone
     tolerance. Collapsed single-child chains are rebuilt from the audit rows' depth and
     encoded depth.
   - The oracle checks certified ε against the step's tolerance. For relieved certificates
@@ -657,11 +672,13 @@ border alone needs more than 8,192 triangles. Evidence:
   - It checks each mixed gap against min(max(E_c, floor_c), G_c)/8 for the coarser tile c.
     An unrelieved coarser tile keeps E_c/8 even when the deeper chord is relieved, because
     of the monotone steps.
-- **Receipts.** Per depth: `reliefCells`, `relievedSegments`, `maxReliefStep`,
-  `maxReliefFloor`. In topology receipts: `reliefCollapsed`, `reliefStuck`. Per row:
-  `reliefFloor`, `reliefStep`.
-- **Constants.** 85%, 75%, 8 steps and the doubling are scale-gate constants; the algorithm
-  and guarantees are not.
+- **Receipts.**
+  - Per depth: `reliefCells`, `relievedSegments`, `maxReliefStep`, `maxReliefFloor`.
+  - In topology receipts: `reliefCollapsed` (removed by collapse) and `reliefLeft` (left to
+    the ordinary contraction).
+  - Per row: `reliefFloor`, `reliefStep`, and A2's `reliefStuck` (vertices N3 snapped).
+- **Constants.** The pressures' shares (85/75% and 37.5/25%), their step limits (8 and 6) and
+  the doubling are scale-gate constants; the algorithm and guarantees are not.
 
 ## Numeric acceptance contract (proposed, not measured passes)
 

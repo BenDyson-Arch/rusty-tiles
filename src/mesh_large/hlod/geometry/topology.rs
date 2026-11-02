@@ -1884,7 +1884,8 @@ pub(super) mod tests {
             &map,
             &mut receipt,
             true,
-            None
+            None,
+            None,
         )
         .unwrap());
         let boundary = |v: u32| [0, 2, 4, 5].contains(&v);
@@ -1909,6 +1910,7 @@ pub(super) mod tests {
             &|k| Ok((k == middle).then_some((a, b, 0.75, 0))),
             &mut Receipt::default(),
             false,
+            None,
             None,
         )
         .unwrap_err();
@@ -2024,6 +2026,7 @@ pub(super) mod tests {
             &mut receipt,
             false,
             None,
+            None,
         )
         .unwrap();
         if accepted {
@@ -2088,6 +2091,7 @@ pub(super) mod tests {
             &|p| Ok((p == middle).then_some((a, b, 0.5, 0))),
             &mut receipt,
             false,
+            None,
             None,
         )
         .unwrap());
@@ -2391,6 +2395,7 @@ pub(super) mod tests {
             &|p| Ok((p == middle).then_some((a, b, 0.5, 0))),
             &mut receipt,
             false,
+            None,
             None,
         )
         .unwrap();

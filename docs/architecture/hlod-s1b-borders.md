@@ -129,16 +129,18 @@ status only grows with depth and shared edges are fixed, so retained sets stay n
 (checked in test builds). Contraction then moves each removed vertex to the chord
 endpoint more of its faces already hold with an interface or removed third corner,
 collapsing those faces; each side remaps only its own faces of the same chord.
-## Border relief (A1, owner decision 2026-10-30)
+## Border relief (A1, owner decisions 2026-10-30 and 2026-10-31)
 
 See D11's A1 amendment for the rule. Implementation:
 
 - **Border pass.** `borders::Borders::level` first emits a level as before. Each chain's
   step is the least its finer level allows; that minimum is read per source edge.
-  - Only when a depth-d node then references more than 85% of the hard cap in segments
-    does a counting walk run.
+  - Only when a depth-d coarse node then references more than 37.5% of the hard cap in
+    segments (the lower of the two pressures' triggers) does a counting walk run.
   - The counting walk re-derives the same chains and, for every chain with a triggered
     owner, counts its chords at each of the nine ladder steps.
+  - Each triggered node requests the larger of its pressures' steps: feasibility (above
+    85%, least j ≤ 8 reaching 75%) and quality (above 37.5%, least j ≤ 6 reaching 25%).
   - Then the level's segments and references are truncated, and the level is emitted again
     with each chain at its owners' largest request.
   - Every node's reference list is unlinked back to its first reference before the level.
@@ -165,14 +167,17 @@ See D11's A1 amendment for the rule. Implementation:
     collapse costs the star of the vertex it removes, not the fan its endpoint gathers.
   - A chord of k removed vertices costs O(k). A control counts incident visits per removed
     vertex and requires the count to stay flat from k = 1,000 to 32,000.
-  - Each one is checked against the guard's seam rules (same-chord transients allowed), the
-    link condition, orientation, area, duplicates and orphaned corners.
+  - Each one is checked against the build's seam rule (`folds::Policy`: a new face or edge on
+    border points across chords is taken only in its seam owner, and never at stage 0;
+    same-chord transients are allowed), the link condition, orientation, area, duplicates
+    and orphaned corners.
   - Up to eight rounds may first move a blocking face's interior corner onto a neighbour.
   - A complete collapse is published only through the unchanged checks: required items,
     `changes`, and the contraction guard against the original faces.
   - Otherwise the leftovers take the ordinary snap and reconstruction on the collapsed mesh.
-  - If contraction fails, the primary contraction's `Residue` (never a recovery copy's) is
-    returned in `Outcome` for the last resort.
+  - If contraction fails, the primary build's `Contracted` (collapsed mesh and stuck
+    vertices) is `Outcome::relief`. `build_parent` resumes its collapse under N3's policy
+    (`relief::resume`), and N3 snaps only what that leaves (`snap_stuck`).
 - **Cost.**
   - Untriggered levels pay one extra pass over their edges (the finer state).
   - Triggered levels pay two more chain walks and at most nine greedy passes per chain of

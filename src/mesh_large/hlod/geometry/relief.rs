@@ -184,7 +184,9 @@ impl State<'_> {
             // among one chord's points: those are transients of its own contraction.
             if after.iter().all(|&x| self.border[x as usize])
                 && !self.same_chord(&after)
-                && !self.policy.owns_face(after.map(|x| self.m.keys[x as usize]))
+                && !self
+                    .policy
+                    .owns_face(after.map(|x| self.m.keys[x as usize]))
             {
                 return Err(Refusal::BorderFace);
             }
@@ -306,7 +308,9 @@ impl State<'_> {
             let dot: f64 = (0..3).map(|i| before_n[i] * after_n[i]).sum();
             let on_border = after.iter().all(|&x| self.border[x as usize])
                 && !self.same_chord(&after)
-                && !self.policy.owns_face(after.map(|x| self.m.keys[x as usize]));
+                && !self
+                    .policy
+                    .owns_face(after.map(|x| self.m.keys[x as usize]));
             if !self.area(after) || dot <= 0. || on_border {
                 blocking.push(f);
             }
@@ -571,7 +575,8 @@ mod tests {
         for k in [1_000u32, 2_000, 8_000, 32_000] {
             let (m, interface, mapping) = strip(k);
             let started = std::time::Instant::now();
-            let (faces, left, work) = collapse(&m, &interface, &mapping, &Policy::default()).unwrap();
+            let (faces, left, work) =
+                collapse(&m, &interface, &mapping, &Policy::default()).unwrap();
             eprintln!(
                 "RELIEF COLLAPSE k={k} work={work} secs={:.4}",
                 started.elapsed().as_secs_f64()
@@ -585,5 +590,121 @@ mod tests {
                 "k={k}: {per} visits per vertex, {first} at 1,000"
             );
         }
+    }
+
+    /// The children's interface along the strip's border row (every vertex and edge of
+    /// row 0), and the guard N3 checks a hand-over with: the strip's own contraction
+    /// licences under N3's policy from the contract's holders.
+    fn n3_guard(
+        m: &Merged,
+        interface: &[InterfaceRow],
+        previous: &[InterfaceRow],
+        mapping: &[Mapping],
+    ) -> super::super::folds::Source {
+        let holders = crate::mesh_large::hlod::borders::holders_from_rows(interface);
+        super::super::folds::Source::for_contraction(
+            &m.positions,
+            &m.triangles,
+            interface,
+            previous,
+            mapping,
+        )
+        .with_policy(Policy::last_resort(3, 0, 1, &holders))
+    }
+
+    fn row_interface(m: &Merged, row: &[u32]) -> Vec<InterfaceRow> {
+        let mut rows: Vec<InterfaceRow> = row
+            .iter()
+            .map(|&v| InterfaceRow::new(0, m.keys[v as usize], m.keys[v as usize], 0, 2))
+            .collect();
+        for w in row.windows(2) {
+            let (a, b) = (m.keys[w[0] as usize], m.keys[w[1] as usize]);
+            rows.push(InterfaceRow::new(0, a.min(b), a.max(b), 0, 2));
+        }
+        crate::mesh_large::hlod::interfaces::merge_rows(&mut rows);
+        rows
+    }
+
+    /// A chord collapsed completely hands N3 an empty stuck list (the guard refused the
+    /// result, not a vertex): `resume` leaves it as it is, and N3's snap publishes the
+    /// collapsed faces unchanged.
+    #[test]
+    fn an_empty_stuck_list_hands_over_the_collapsed_faces() {
+        let k = 8;
+        let (m, interface, mapping) = strip(k);
+        let (faces, left) = along_border(&m, &interface, &mapping, &Policy::default()).unwrap();
+        assert!(left.is_empty());
+        let (seed, collapsed) = handover(&m, faces.clone(), &left, &mapping);
+        assert!(seed.stuck.is_empty());
+        assert_eq!(collapsed, u64::from(k) - 1);
+        let previous = row_interface(&m, &(0..=k).collect::<Vec<_>>());
+        let guard = n3_guard(&m, &interface, &previous, &mapping);
+        let holders = crate::mesh_large::hlod::borders::holders_from_rows(&interface);
+        let resumed = resume(&seed, &interface, &Policy::last_resort(3, 0, 1, &holders));
+        assert!(resumed.stuck.is_empty());
+        assert_eq!(resumed.merged.triangles, faces);
+        let snapped = super::super::snap_stuck(&m, &resumed, &interface, &guard).unwrap();
+        assert_eq!(snapped.triangles, faces);
+    }
+
+    /// A stuck vertex v on chord a-b nearer a, where the faces holding b are only
+    /// (a, b, v): snapping v to a degenerates the chord's only face, so N3 refuses (the
+    /// cell is omitted and reported). Resuming the collapse first moves v onto b instead,
+    /// which keeps the chord, and N3 then publishes it.
+    #[test]
+    fn a_snap_that_removes_a_chords_only_face_is_refused() {
+        let positions = vec![
+            [0., 0., 0.],  // a
+            [2., 0., 0.],  // b
+            [1., 0.3, 0.], // v
+            [0.5, 1., 0.], // x
+            [1.5, 1., 0.], // y
+        ];
+        let keys: Vec<Key> = positions
+            .iter()
+            .map(|p: &[f32; 3]| p.map(f32::to_bits))
+            .collect();
+        let triangles = vec![[0, 1, 2], [0, 2, 3], [2, 4, 3]];
+        let first = crate::mesh_large::hlod::store::SourcePrimitive {
+            node: 0,
+            mesh: 0,
+            primitive: 0,
+            expanded_ordinal: 0,
+            material: u32::MAX,
+        };
+        let m = Merged {
+            ells: vec![0; keys.len()],
+            keys: keys.clone(),
+            positions,
+            representative: vec![first; triangles.len()],
+            triangles,
+        };
+        let (a, b) = (keys[0], keys[1]);
+        let interface = vec![
+            InterfaceRow::new(0, a, a, 0, 2),
+            InterfaceRow::new(0, b, b, 0, 2),
+            InterfaceRow::new(0, a.min(b), a.max(b), 0, 2),
+        ];
+        let previous = row_interface(&m, &[0, 2, 1]);
+        let mut mapping: Vec<Mapping> = vec![None; keys.len()];
+        mapping[2] = Some((a, b, 0.4, 0));
+        let seed = Contracted {
+            merged: m.clone(),
+            stuck: vec![Stuck {
+                vertex: 2,
+                key: keys[2],
+                chord: [a, b],
+                t: 0.4,
+            }],
+        };
+        let guard = n3_guard(&m, &interface, &previous, &mapping);
+        assert!(super::super::snap_stuck(&m, &seed, &interface, &guard).is_none());
+        let resumed = resume(&seed, &interface, &Policy::default());
+        assert!(resumed.stuck.is_empty());
+        let snapped = super::super::snap_stuck(&m, &resumed, &interface, &guard).unwrap();
+        assert!(snapped
+            .triangles
+            .iter()
+            .any(|t| t.contains(&0) && t.contains(&1)));
     }
 }
