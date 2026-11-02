@@ -300,7 +300,23 @@ pub(crate) fn propose(
     // The cap-fit builder appends construction counts after its source check.
     // Remeasurement republishes change.receipt, so carry that complete receipt
     // forward too (not just the earlier hole/drop comparison's receipt).
-    change.receipt = built.topology;
+    // Distances belong to the new decoded surface. In particular, an old drop
+    // maximum can exceed the new G after improvement; retaining it would make
+    // the receipt contradict the fresh source measurement.
+    change.receipt = topology::Receipt {
+        hole_patch_to_source: 0.,
+        hole_boundary_to_patch: 0.,
+        dropped_component_to_proxy: 0.,
+        opened_hole_to_proxy: 0.,
+        opened_hole_boundary_to_source: 0.,
+        hole_g_increase: 0.,
+        dropped_component_g_increase: 0.,
+        opened_hole_g_increase: 0.,
+        closed_hole_final_g: 0.,
+        opened_hole_final_g: 0.,
+        dropped_component_final_g: 0.,
+        ..built.topology
+    };
     for i in change
         .patch_faces
         .iter_mut()
@@ -459,6 +475,35 @@ mod tests {
         assert_eq!(report.source_passes, 0);
         assert_eq!(reduced.change.receipt.contracted_vertices, 7);
         let mut changed = built;
+        // A prior bounded source search can report an upper distance larger
+        // than the next pass. These dropped-source controls lie on the new
+        // plane: its fresh distance is zero, regardless of the old maximum.
+        changed.topology.dropped_components = 1;
+        changed.topology.dropped_component_to_proxy = 0.05;
+        changed.change.dropped = vec![[[1., 1., 0.], [1.25, 1., 0.], [1., 1.25, 0.]]];
+        let mut candidate = propose(
+            &changed,
+            &positions,
+            0.1,
+            folds::Policy::default(),
+            &mut Report::default(),
+        )
+        .unwrap();
+        super::super::measurement::assess(
+            &mut candidate.change,
+            &candidate.geometry.positions,
+            &candidate.geometry.triangles,
+            0.1,
+            0.,
+            &mut |p, _| Ok((p, 0.)),
+            &|| Ok(()),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(candidate.change.receipt.dropped_components, 1);
+        assert_eq!(candidate.change.receipt.contracted_vertices, 7);
+        assert!(candidate.change.receipt.dropped_component_to_proxy < 1e-12);
+        assert!(candidate.change.receipt.dropped_component_g_increase < 1e-12);
         changed.change.patch_faces = vec![usize::MAX];
         assert!(propose(
             &changed,
