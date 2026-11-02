@@ -16,3 +16,15 @@ comparison, crop3 S5, native archives, three slot-1 CPU pairs, and resource
 limits. The manifest binds final logs, scripts, artifacts and references.
 No full Walem bake or floor result is claimed. A/R integration and separate
 nonauthor review remain open; this evidence does not authorize promotion.
+
+## PR A merge follow-up
+
+Merged source: `6d224ccd5934da26aa40afbe40dc35045b811b0a` (parents `9b848fed` and `b5ef178f`).
+Current validation is in the evidence directory's `merge-a-b5ef178f/`:
+
+- `REPORT.md`: SHA-256 `6489e7c88db5508bbf3e662140346def31b8543e1e8c3f65a48e7c118bfe788f`.
+- `MANIFEST.sha256`: SHA-256 `5f67cb65c279cf3255a0fb99cdb32761d3b446c0c30b99d0c73056bc989b5d63`.
+
+The requested digest/library/integration/clippy/fmt checks pass; the digest
+fixture was not regenerated. Prior crop/S5/CPU results above retain their
+original source identity. The Sol review of `9b848fed` predates this merge.
