@@ -297,6 +297,10 @@ pub(crate) fn propose(
         remap.insert(i, j);
     }
     let mut change = built.change.clone();
+    // The cap-fit builder appends construction counts after its source check.
+    // Remeasurement republishes change.receipt, so carry that complete receipt
+    // forward too (not just the earlier hole/drop comparison's receipt).
+    change.receipt = built.topology;
     for i in change
         .patch_faces
         .iter_mut()
@@ -417,7 +421,10 @@ mod tests {
             interface_vertices: 0,
             interface_segments: 0,
             reoriented: 0,
-            topology: Default::default(),
+            topology: topology::Receipt {
+                contracted_vertices: 7,
+                ..Default::default()
+            },
             change: Default::default(),
             controls: Default::default(),
         };
@@ -450,6 +457,7 @@ mod tests {
         assert!(reduced.geometry.positions.len() <= 3 * reduced.geometry.triangles.len());
         assert_eq!(report.reducer_passes, 1);
         assert_eq!(report.source_passes, 0);
+        assert_eq!(reduced.change.receipt.contracted_vertices, 7);
         let mut changed = built;
         changed.change.patch_faces = vec![usize::MAX];
         assert!(propose(
