@@ -280,12 +280,19 @@ impl Store {
     /// D11 border check of one coarse tile's decoded surface. Records each border
     /// vertex's image for the pairwise depth rules and returns the contracted arcs
     /// by chord (for the equal-direction multiplicity check).
+    #[allow(clippy::type_complexity)]
     pub(super) fn border(
         &self,
         tile: i64,
         surface: &Surface,
         effort: &Effort,
-    ) -> Result<BTreeMap<CanonicalEdge, Vec<CanonicalPoint>>, Error> {
+    ) -> Result<
+        (
+            BTreeMap<CanonicalEdge, Vec<CanonicalPoint>>,
+            BTreeSet<CanonicalPoint>,
+        ),
+        Error,
+    > {
         let g: Option<f64> = self
             .connection
             .query_row("SELECT error FROM tiles WHERE id=?", [tile], |r| r.get(0))
@@ -385,7 +392,103 @@ impl Store {
                 .execute(params![super::point_bytes(*p), tile, image, d])
                 .map_err(sql)?;
         }
-        Ok(contracted)
+        let shared = border
+            .points
+            .iter()
+            .chain(border.adjacent.keys())
+            .copied()
+            .collect();
+        Ok((contracted, shared))
+    }
+
+    /// D1/D11 amendment A2 (N1): a coarse face on three shared points that no leaf below
+    /// holds, or a coarse edge between two shared points that is neither a leaf edge nor
+    /// a delivered chord, is new on the seam. Each has one seam owner per depth: for a
+    /// segment `a < b`, the tile holding `a`'s least holding leaf, or its greatest when
+    /// the top bit of FNV-1a 64 over the little-endian words of `a` then `b` is set; a
+    /// face belongs to the owner of its least-to-greatest corner segment. Two same-depth
+    /// tiles therefore never both create it.
+    pub(super) fn seam_owner(
+        &self,
+        tile: i64,
+        surface: &Surface,
+        contracted: &BTreeMap<CanonicalEdge, Vec<CanonicalPoint>>,
+        shared: &BTreeSet<CanonicalPoint>,
+        effort: &Effort,
+    ) -> Result<(), Error> {
+        let last: i64 = self
+            .connection
+            .query_row("SELECT last FROM tiles WHERE id=?", [tile], |r| r.get(0))
+            .map_err(sql)?;
+        let mut holders = self
+            .connection
+            .prepare_cached("SELECT min(tile), max(tile) FROM leaf_points WHERE key=?")
+            .map_err(sql)?;
+        let mut owns = |a: CanonicalPoint, b: CanonicalPoint| -> Result<bool, Error> {
+            effort.charge(1)?;
+            let (a, b) = (a.min(b), a.max(b));
+            let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+            for byte in a.into_iter().chain(b).flat_map(u32::to_le_bytes) {
+                h = (h ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
+            }
+            let (lo, hi): (Option<i64>, Option<i64>) = holders
+                .query_row([super::point_bytes(a)], |r| Ok((r.get(0)?, r.get(1)?)))
+                .map_err(sql)?;
+            Ok((if h >> 63 == 1 { hi } else { lo }).is_some_and(|f| f > tile && f <= last))
+        };
+        let mut leaf_face = self
+            .connection
+            .prepare_cached(
+                "SELECT EXISTS(SELECT 1 FROM leaf_faces WHERE corners=?1 AND tile>?2 AND tile<=?3)",
+            )
+            .map_err(sql)?;
+        for f in &surface.faces {
+            effort.charge(1)?;
+            if !f.iter().all(|p| shared.contains(p)) {
+                continue;
+            }
+            let mut k = *f;
+            k.sort_unstable();
+            let bytes: Vec<u8> = k.iter().flat_map(|p| super::point_bytes(*p)).collect();
+            let source: bool = leaf_face
+                .query_row(params![bytes, tile, last], |r| r.get(0))
+                .map_err(sql)?;
+            if !source && !owns(k[0], k[2])? {
+                return Err(bad(
+                    "seamOwner",
+                    &format!(
+                        "a new face on three shared points outside its seam owner: tile={tile}"
+                    ),
+                ));
+            }
+        }
+        let mut leaf_edge = self
+            .connection
+            .prepare_cached(
+                "SELECT EXISTS(SELECT 1 FROM leaf_segments WHERE key=?1 AND tile>?2 AND tile<=?3)",
+            )
+            .map_err(sql)?;
+        for edge in surface.edges.keys() {
+            effort.charge(1)?;
+            if !shared.contains(&edge.0)
+                || !shared.contains(&edge.1)
+                || contracted.contains_key(edge)
+            {
+                continue;
+            }
+            let source: bool = leaf_edge
+                .query_row(params![super::edge_bytes(*edge), tile, last], |r| r.get(0))
+                .map_err(sql)?;
+            if !source && !owns(edge.0, edge.1)? {
+                return Err(bad(
+                    "seamOwner",
+                    &format!(
+                        "a new edge between shared points outside its seam owner: tile={tile}"
+                    ),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// One arc between retained vertices: its chord, directions and displacement.

@@ -15,7 +15,7 @@ use std::{
 /// Work-root directories outside the `base` family: the other digested families
 /// and run outputs (winding probes, omission producer-report inputs, D11 border
 /// controls, whose producer-baked sheet is not digested).
-const OTHER: [&str; 8] = [
+const OTHER: [&str; 9] = [
     "lattice",
     "native",
     "nonmanifold",
@@ -24,6 +24,7 @@ const OTHER: [&str; 8] = [
     "winding",
     "omission-reports",
     "border",
+    "last_resort",
 ];
 
 /// Sorted `relative-path\tsha256\n` lines of a family's generated members.
@@ -95,6 +96,7 @@ fn sampled_hlod_archives_and_named_mutants() {
         "omission_controls.py",
         "seam_diagnostic_controls.py",
         "border_controls.py",
+        "last_resort_controls.py",
     ] {
         let probes = work.path().join(name.trim_end_matches("_controls.py"));
         let result = Command::new("python3")
@@ -112,6 +114,7 @@ fn sampled_hlod_archives_and_named_mutants() {
                         | "exact_controls.py"
                         | "omission_controls.py"
                         | "border_controls.py"
+                        | "last_resort_controls.py"
                 ) {
                     let mut args = vec!["--binary", env!("CARGO_BIN_EXE_rusty-tiles")];
                     // The producer sheet's exact audit dominates this test: 80 is the
