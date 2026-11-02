@@ -70,7 +70,7 @@ the additive `totalPayloadElements` that is every S ≥ 1.
 | `hierarchyVisits` | 262,144 | 1/8 | 2,097,160 |
 | `references` | 1,048,576 | 1/8 | 8,388,616 |
 | `totalBytesRead` | 2,147,483,648 | 4/1 | 536,870,913 |
-| `totalPayloadElements` | 16,000,000 | 130/1, added | 1 |
+| `totalPayloadElements` | 16,000,000 | 185/1, added | 1 |
 | `containmentWorkUnits` | 536,870,912 | 128/1 | 4,194,305 |
 | `containmentBytesRead` | 2,147,483,648 | 4/1 | 536,870,913 |
 | `containmentDecodedBytes` | 2,147,483,648 | 16/1 | 134,217,729 |
@@ -131,10 +131,9 @@ is inserted out of key order any more:
   | 64 M | 2.6 GB | 3.02 µs | 2.87 µs | 8.6–9.0 |
 
   A least-squares fit gives 0.38 µs per fourfold growth. A 1 GB archive's budget writes at most
-  130·S/128 ≈ 1.02 G rows, where a seek costs about 3.59 µs (key absent) to 3.73 µs (present):
-  10.6–11.2 ns per unit at 320 units (with the 32-unit row read when the key is present). The
-  weight is set so this extrapolation stays within the P-core τ; at 256 units it would be 14.0
-  ns. At the former 128 units the measured seeks cost
+  185·S/128 ≈ 1.45 G rows, where a seek costs about 3.69 µs (key absent) to 3.83 µs (present):
+  10.9–11.53 ns per unit at 320 units (with the 32-unit row read when the key is present). This
+  extrapolation sets the P-core τ (below); at 256 units it would be 14.4 ns. At the former 128 units the measured seeks cost
   11.5 to 22.4 ns per unit. The load of
   those rows (sort and append) cost 0.93 µs per row at 1 M rows and 1.12 µs at 64 M, 7.2 to 8.7
   ns per charged unit.
@@ -145,6 +144,59 @@ is inserted out of key order any more:
 - What SQLite still does uncharged is linear in rows charged when they were written: scans,
   sorts and index builds over them, and one seek per tile or reference. One unit per 10,000 VM
   operations stays as a backstop.
+
+**Coarse-drop recount and last-resort checks (review 3, 2026-11-02).** A few stored faces can
+drive the D11 recount's grid inserts and distance tests to any count, so neither is amortized
+against row charges. Each class is now charged its worst measured CPU per item over τ, rounded
+up on both cores (P-core τ 11.53, E-core 15.3):
+
+| work | measured worst per item, P / E | units | was |
+| --- | --- | --- | --- |
+| a parent face entered in a distance-grid cell (c10 grid) | 18.4 / 53 ns (load 24) | 4 | 1 |
+| a distance query, and each face it tests (c11 scan) | 18.4 / 23.8 ns | 2 | 1 |
+| a child face the recount reads: its share of the `leaf_faces_tile` build and the recount's pass | 0.66 + 0.33 / 0.96 + 0.52 µs | 97 | 1 |
+| a seam-owner screen of a coarse face or edge (#308) | 101 / 91 ns | 9 | 1 |
+| a seam-owner source or owner lookup (#308) | a leaf-table seek | 320 | 1 |
+| a declared tile's fold-stage lookup (#308) | one seek | 320 | uncharged scan |
+
+- **Grid and queries.** Review 3's c10 `grid` (N big coarse faces, each entered in about 27,000
+  cells, one dropped tiny triangle) and c11 `scan` (D dropped triangles over a stack of planes in
+  one cell, the last-face cache missing) ran 1.47–1.71× over the P-core statement and 2.1–2.4×
+  over the E-core one. Measured at the final weights (unbounded, phase probe, load 18–28), grid
+  inserts cost 4.1–5.3 ns/unit (P) and 12.1–13.2 (E), queries 7.8–8.3 and 12.0.
+- **Per-axis grid cells.** The grid had at most 32 cubic cells on its longest axis, so a long
+  thin parent crowded its faces into a few cells along the short axes. Each axis now has at most
+  32 cells of its own size (never under the widest reach). A point within reach of a face still
+  lies in a cell the face was entered in, so every answer is unchanged, and a face still enters
+  at most 33 cells per axis.
+- **Face reads at 1 GB.** The recount's child-face query now reads a covering index,
+  `leaf_faces_tile(tile, n)` (the key holds the corners), so a tile's faces are one ordered
+  range and no row needs a seek. Probed by bulk-loading 1–64 M random leaf faces (3.3 GB), then
+  building the index and reading every tile:
+
+  | faces | load, P / E | index build, P / E | covering read, P / E |
+  | --- | --- | --- | --- |
+  | 1 M | 937 / 1,265 ns | 585 / 840 ns | 144 / 172 ns |
+  | 4 M | 1,009 / 1,267 ns | 638 / 948 ns | 121 / 181 ns |
+  | 16 M | 1,028 / 1,373 ns | 664 / 955 ns | 125 / 185 ns |
+  | 64 M | 1,274 / 1,509 ns | 602 / 885 ns | 111 / 182 ns |
+
+  Neither the build nor the read grows with the table. The recount's pass over each read face
+  (union-find, components) costs up to 0.33 µs (P) and 0.52 µs (E) on the dense outputs. The
+  97 units cover the build and the pass at the E-core worst; the load is covered by the face
+  row's own 128 units (11.8 ns/unit E-core at 64 M rows).
+- **Seam owner (#308).** The screen looked a coarse face's corners up in a tree set of the
+  tile's shared points: up to 965 ns per face at four million points. It is a hash set now, at
+  most 101 ns (P) and 91 ns (E) per face, 64 and 52 per edge. Each source lookup and owner
+  lookup is one seek; the owner query asks for the least or the greatest holding leaf alone, so
+  it reads one index entry instead of every holder.
+- **Fold stage (#308).** Whether a declared coarse tile has a fold-stage tile below it was an
+  uncharged scan of every descendant reference, repeated at every declared ancestor. The tiles
+  referencing a fold-stage payload are collected once (`fold_stages`), and each declared tile
+  seeks past itself. #308's `fold_faces` pass is linear in the tile's faces, each already
+  charged 128 units: 32 ms over the whole of Walem 8710429a.
+- `seam_owner_fold_stage_and_recount_lookups_are_single_seeks` pins the query plans, and
+  `grid_inserts_and_distance_tests_are_charged_at_their_weights` the recount weights.
 
 Verdicts are unchanged. Validation reports are identical, field for field, except two things:
 
@@ -186,8 +238,8 @@ Per stored byte: tex3 16.72, crop3 15.04, the sheet 36.40, mesh-1e6 21.78, Walem
 value over
 5,546 logged suite validations is 50.74 (the `plain` archives, 144,389 stored bytes).
 
-**Additive budget (2026-10-31, still model 1).** `totalPayloadElements` is now
-`16,000,000 + 130·S` instead of `max(16,000,000, 77·S)`. The owner's rule (2026-10-31) is that
+**Additive budget (2026-10-31, still model 1; R re-derived 2026-11-02).** `totalPayloadElements`
+is now `16,000,000 + 185·S` instead of `max(16,000,000, 77·S)`. The owner's rule (2026-10-31) is that
 legitimate producer output always validates with a 1.5× margin. That rule outranks the time
 figure: the budget bounds hostile input, and refusing an archive our own producer made is a
 defect.
@@ -207,10 +259,12 @@ defect.
     answers, and such a face lies in the point's cell, so the result is the scan's. 46 M units
     become 7 M, and the run takes 0.25 s instead of 0.65 s.
   - The census is charged 32 units per open edge, its measured 190 ns.
+  - Under review 3's recount charges (2026-11-02) the stepped fixture charges 16.9 M units
+    (33.8 per byte), a 6.4× margin at the default budget.
 - **The dense class.** Even so, this class is dense: every isolated triangle is seven scratch
   rows (three points, three edges, one face) in about 18–28 stored bytes. Producer bakes of the
   fixture's geometry with a 16² texture (`gen3.py`, `mesh --profile balanced`), validated on the
-  P-core (CPU 10) after both fixes:
+  P-core (CPU 10) after both fixes, at review 2's recount charges:
 
   | output (texture², primitives) | S | units | units per byte | (1.5·W − 16 M)/S | ns/unit |
   | --- | --- | --- | --- | --- | --- |
@@ -221,8 +275,8 @@ defect.
   | 16², 10,000 | 5,055,383 | 351,154,731 | 69.5 | 101.0 | 6.8 |
   | the fixture itself, stepped (2048² page) | 501,232 | 19,077,389 | 38.1 | 25.2 | 8.4 |
 
-- **A geometry sweep (PR #309 review 2).** One generator is not the class. The review baked 27
-  outputs over other layouts: `iso` (isolated triangles, 1–400 per primitive), `dupK` (every
+- **A geometry sweep (PR #309 review 2, at review 2's charges).** One generator is not the
+  class. The review baked 27 outputs over other layouts: `iso` (isolated triangles, 1–400 per primitive), `dupK` (every
   triangle K times with one winding), jittered, quad, double-sided and gen3 up to 15,000
   primitives. The densest:
 
@@ -238,29 +292,59 @@ defect.
   More triangles per primitive, or repeated faces, add rows (repeated faces add only the
   multi-edge face rows) for few stored bytes. They run at 7.3–8.5 ns/unit on the P-core.
 - **Why not a cheaper charge.** Profiled (P-core, `RT_VALIDATE_WORK_LOG`), dup-2000-40 spends
-  108.6 M units on the leaf rows (7.1 ns/unit) and 88.1 M on the edge-face replay (10.9 ns/unit);
-  iso-500-160 spends 86 M on the leaf rows (7.8 ns/unit) and 18.8 M on the coarse-drop recount
-  (17.4 ns/unit). The row phases already run at 7–11 ns per charged unit at 2–3 MB, so a lower
-  row charge would put them above τ as the tables grow to 1 GB (about 1 G rows), where the
-  weights are set. The recount costs more than τ per unit; it is amortized against the
-  128-unit charges of the rows it reads, and every measured class that reaches it stays within
-  τ. A future hostile class could aim at it (review 2's note). The overcharge of small outputs
-  against their own run time is the row weight priced for a 1 GB table, not wasted work.
+  108.6 M units on the leaf rows (7.1 ns/unit) and 88.1 M on the edge-face replay (10.9 ns/unit).
+  The row phases already run at 7–11 ns per charged unit at 2–3 MB, so a lower row charge would
+  put them above τ as the tables grow to 1 GB (about 1.45 G rows), where the weights are set.
+  The overcharge of small outputs against their own run time is the row weight priced for a
+  1 GB table, not wasted work.
+- **Review 3's recount weights and the merged last resort (2026-11-02).** The coarse-drop
+  recount and #308's checks are now charged at their measured cost ("Coarse-drop recount and
+  last-resort checks", below). That raises the outputs that declare drops, the `iso` layouts
+  most. The merged producer (#308) also builds declared last-resort tiles where it used to
+  omit, so the `dup` layouts gain coarse tiles and their checks. Every output was validated
+  again under the final charges, and the densest were baked again with the merged producer:
+
+  | output (layout-primitives-triangles) | S | units | units per byte | (1.5·W − 16 M)/S |
+  | --- | --- | --- | --- | --- |
+  | iso-32000-80 | 67,076,748 | 8,052,603,675 | 120.05 | 179.8 |
+  | iso-16000-80 | 33,452,005 | 3,904,830,779 | 116.73 | 174.6 |
+  | iso-4000-72 | 7,264,523 | 786,560,032 | 108.27 | 160.2 |
+  | iso-4000-80 | 8,036,726 | 857,137,244 | 106.65 | 158.0 |
+  | iso-2000-80 | 3,965,496 | 417,316,752 | 105.24 | 153.8 |
+  | iso-8000-80 | 16,550,431 | 1,686,940,282 | 101.93 | 151.9 |
+  | iso-1000-80 | 1,936,145 | 197,069,576 | 101.78 | 144.4 |
+  | iso-48000-80 | 83,717,988 | 7,549,748,180 | 90.18 | 135.1 |
+  | ci-4000-40-2 (the CI layout), merged producer, 31 last-resort tiles | 6,986,968 | 676,625,486 | 96.84 | 143.0 |
+  | dup-4000-40, merged producer | 6,989,546 | 676,543,306 | 96.79 | 142.9 |
+  | ci-4000-40-2, a277be2d producer (31 omitted proxies) | 5,526,597 | 479,209,878 | 86.71 | 127.2 |
+
+  The `iso` density depends on how full the binary hierarchy is, not on S alone: it peaks at the
+  full 127- and 255-tile trees (16,000 and 32,000 primitives) and falls at 48,000 primitives
+  (also 255 tiles). Almost all the variation is the recount's distance queries (26–44 units per
+  byte); every other phase stays within 1 unit per byte. The next full tree (64,000
+  primitives) needs glTF JSON over 16 MiB, which `mesh` refuses.
 - **The margin and R.** A 1.5× margin means 1.5·W ≤ 16,000,000 + R·S, so R must cover
   (1.5·W − 16 M)/S for every legitimate output. That term approaches 1.5 × the class's density as
-  S grows. R = ⌈1.5 × 86.6⌉ = 130, from the worst output of the sweep, covers every output above
-  as S grows. The 16 M term carries the small outputs: the 184 KB bake has 2.09× margin.
-- **No other legitimate archive comes close.** The suites' 50.74 and the named archives (sheet
-  36.40, mesh-1e6 21.78, tex3 16.72, crop3 15.04, Walem 13.85) all lie far under 130/1.5.
-- **Controls.** The class joins the named archives (gen3 at 400–10,000 primitives, dup-2000-40
-  and dup-300-40; logged under `~/.cache/rusty-tiles-evidence/validator-scratch-rows-20261030/`).
-  Two CI-sized bakes are controls (`tests/dense_output_validates.rs`): gen3's 400 primitives,
-  where the 16 M floor carries the budget, and dup at 300 primitives of 40 triangles (S ≈ 0.41
-  MB, 88.3 units per byte), where 130·S is over three times the floor. Each must validate at
-  the default budget and at two thirds of it.
+  S grows. R = 185 was set from the densest output at the 3-unit grid weight (⌈1.5 × 119.30 ×
+  1.03⌉). The final 4-unit weight raises that output to 120.05, so R keeps 2.7% headroom: the
+  margin stays at least 1.5 for densities up to 123.3 units per byte. All 75 outputs (review 2's 28, review 3's 10, the merged re-bakes, the `iso` sweep,
+  gen3 and the named archives) validate at the default budget and at two thirds of it. The
+  lowest margin is iso-32000-80's 1.543; the 16 M term carries the small outputs.
+- **No other legitimate archive comes close.** Under the final charges the named archives are:
+  sheet 42.66, mesh-1e6 25.72, tex3 19.85, crop3 17.81, Walem 15.99 (dabca18b) and 18.08 (the
+  #308 bake 8710429a, with its last-resort tiles). All lie far under 185/1.5. The suites were
+  not logged again (they were at most 50.74 under review 2's charges, all under the floor).
+- **Controls.** The class joins the named archives (gen3 at 400–10,000 primitives, the `dup`,
+  `iso` and CI layouts above; logged under
+  `~/.cache/rusty-tiles-evidence/validator-scratch-rows-20261030/`). Three CI-sized bakes are
+  controls (`tests/dense_output_validates.rs`): gen3's 400 primitives, where the 16 M floor
+  carries the budget; dup at 300 primitives of 40 doubled triangles; and iso at 200 primitives
+  of 80, with coarse drops. In the last two 185·S is over three times the floor. Each must
+  validate at the default budget and at two thirds of it.
 
 Validator builds report `limitDerivation.model: 1` with three different rules: 16 per stored
-byte, 77 (PR #304) and the additive 16,000,000 + 130·S. κ stays provisional under model 1, and only VS-D freezes it and
+byte, 77 (PR #304) and the additive 16,000,000 + 185·S (an additive 105 and 130 were never
+released). κ stays provisional under model 1, and only VS-D freezes it and
 bumps the model. Until then, read the ratio from `perStoredByte`, not from the model number.
 
 Hostile expansion stays linear. Members are stored, never deflated, so S is the payload bytes.
@@ -268,10 +352,10 @@ The meshopt codecs decode at most 16 vertices per encoded byte (ATTRIBUTES), 3 i
 (TRIANGLES) or 1 index (INDICES). C1 charges each attribute vertex once per component, though,
 so a VEC4 u8 stream is up to 64 charged units per encoded byte. The bound does not rest on the
 codec ratio. It holds because every unit of work is charged before it runs: a validation does
-at most 16,000,000 + 130·S units plus one charge's overshoot. A 10-million-triangle
+at most 16,000,000 + 185·S units plus one charge's overshoot. A 10-million-triangle
 repeated-index stream is refused by the per-accessor element cap in 0.1 s.
 
-*Time statement.* CPU time per unit was measured for nine adversarial classes, each run pinned
+*Time statement.* CPU time per unit was measured for eleven adversarial classes, each run pinned
 to one P-core (CPU 10) and one E-core (CPU 17) at idle priority, on a host at load average 15–56
 (2026-10-30 and -31). c1–c4 run to a 500,000,000-unit budget. c5 holds 600 leaves of 8,192 triangles with
 three new original vertices each and a valid root, and is validated in full (1,502,712,616 units,
@@ -349,30 +433,45 @@ Before this change, c6 rose on the P-core from 7.8 ns/unit at 1.52 MB to 26.7 at
 - Extrapolating c7's E-core slope (about 0.6 ns per e-fold of S) from 61 MB to 1 GB gives
   about 15.3 ns/unit, from review 2's re-time of c7 at 13.49–13.59 ns/unit.
 
-The stated bound is `(16,000,000 + 130·S)·τ`, the default budget times τ, with τ the worst of
+The recount classes (review 3; `recount.py`, "Coarse-drop recount and last-resort checks"
+above), each run at the default budget, 16,000,000 + 185·S, until the budget refuses it, with
+the final build (2026-11-02, three runs each, load average 19 on the P-core runs and 27 on the
+E-core ones):
+
+| class | S | budget | P-core ns/unit | E-core ns/unit | review 3 (a277be2d), P / E |
+| --- | --- | --- | --- | --- | --- |
+| c10 grid, N = 2,000 | 183,055 | 49,865,175 | 4.67–5.67 | 14.58–15.52 | 19.15–19.62 / – |
+| c10 grid, N = 8,000 | 683,051 | 142,364,435 | 3.82–4.44 | 12.19–13.62 | 17.64–18.14 / 32.6–36.9 |
+| c11 scan, N = 4,100, D = 4,000 | 471,742 | 103,272,270 | 7.60–8.26 | 12.05–12.11 | 16.85–16.94 / – |
+
+The E-core figure for c10 at N = 2,000 is the run's CPU over its budget: a 0.75 s run, where
+fixed start-up and a host at load 27 weigh most. Legitimate outputs measured alongside (phase
+probe, unbounded): the dense outputs at 7.7–10.5 ns/unit (P) and 9.7–12.7 (E), Walem 8710429a
+at 9.75 and 12.28.
+
+The stated bound is `(16,000,000 + 185·S)·τ`, the default budget times τ, with τ the worst of
 every measurement and every extrapolation to 1 GB stored:
 
-- **P-core: τ = 11.48 ns.**
-  - The largest measured value is c9's floor-bound run at the former budget, 11.03–11.48 ns. τ
-    is its maximum.
-  - Otherwise c7's 10.85 and c4's 10.28 ns.
-  - Extrapolated to 1 GB: a seek at about 1.02 G rows costs 10.6–11.2 ns at 320 units (the probe
-    above), and c7's slope gives about 10.7 ns.
-  - That is 0.18 s plus 1,492 s per stored GB.
-- **E-core: τ = 15.3 ns.**
-  - The largest measured values are c9's former floor-bound run at 14.12 ns and c7's 13.27–13.59
-    ns at 61 MB.
-  - c7 extrapolates to about 15.3 ns at 1 GB.
-  - That is 0.24 s plus 1,989 s per stored GB.
+- **P-core: τ = 11.53 ns.**
+  - Extrapolated to 1 GB, a seek at about 1.45 G rows costs 10.9–11.53 ns at 320 units (the
+    probe above). τ is that extrapolation's maximum.
+  - The largest measured value is c9's floor-bound run at the former budget, 11.03–11.48 ns;
+    otherwise c7's 10.85 and c4's 10.28 ns. c7's slope gives about 10.7 ns at 1 GB.
+  - That is 0.18 s plus 2,133 s per stored GB.
+- **E-core: τ = 15.52 ns.**
+  - The largest measured value is c10 grid at N = 2,000, 15.52 ns per budget unit in its worst
+    of three runs (load 27).
+  - c7 extrapolates to about 15.3 ns at 1 GB; c9's former floor-bound run measured 14.12 ns.
+  - That is 0.25 s plus 2,871 s per stored GB.
 - **Against the C2 statement.** Both figures are above the C2 statement's 1,037 s (P-core) and
-  1,875 s (E-core) per stored GB (below). The ratio was raised from 77 to an additive 130 on
-  2026-10-31 so that legitimate dense producer output validates with a 1.5× margin (the owner's
-  rule, above); that rule outranks the time figure.
+  1,875 s (E-core) per stored GB (below). The ratio rose from 77 to an additive 185 so that
+  legitimate dense producer output validates with a 1.5× margin (the owner's rule, above); that
+  rule outranks the time figure.
 - **What the bound means.** It limits what hostile input can make a validation spend. Legitimate
-  output spends far less per byte: the densest outputs above run at 6.6–8.5 ns/unit, at most
-  about 740 s/GB.
+  output spends far less per byte: the densest outputs above run at 7.7–12.7 ns/unit, at most
+  about 1,520 s/GB.
 
-A new work class, or a per-unit cost above 11.48 ns (P-core) or 15.3 ns (E-core), must re-weight
+A new work class, or a per-unit cost above 11.53 ns (P-core) or 15.52 ns (E-core), must re-weight
 its charges or revisit the ratio.
 
 **VS-C-2. Opt-in caps and natural bounds (A-C1-1, A-C1-2).** With no Class B cap set, the
@@ -530,11 +629,11 @@ byte (half of κ_u), VS-D must revisit κ before release.
 The `totalPayloadElements` statement is its own bound and is no longer held under this one
 (2026-10-31). Both bound the time hostile input can make a validation spend:
 
-- The P-core figure is 0.18 s plus 1,492 s per stored GB at `16,000,000 + 130·S` units. That is
+- The P-core figure is 0.18 s plus 2,133 s per stored GB at `16,000,000 + 185·S` units. That is
   above the 1,037 s/GB here.
-- The E-core figure is 0.24 s plus 1,989 s per stored GB. That is above the 1,875 s/GB here.
+- The E-core figure is 0.25 s plus 2,871 s per stored GB. That is above the 1,875 s/GB here.
 
-The payload-element ratio was raised to that additive 130 so that legitimate dense producer
+The payload-element ratio was raised to that additive 185 so that legitimate dense producer
 output (thousands of isolated tiny triangles) never refuses ("Additive budget", above). Measured
 time is therefore stated, not capped to this figure.
 

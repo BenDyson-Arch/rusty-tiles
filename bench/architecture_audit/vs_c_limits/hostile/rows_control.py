@@ -37,6 +37,7 @@ usage:
 import argparse
 import hashlib
 import json
+import math
 import pathlib
 import random
 import struct
@@ -72,8 +73,11 @@ class Glb:
                                    count=count, **extra))
         return len(self.accessors) - 1
 
-    def finish(self, primitive, tables, classes, serial):
-        doc = {'asset': {'version': '2.0', 'generator': f'rows_control {serial}'}, 'scene': 0,
+    def finish(self, primitive, tables, classes, serial, dropped=0):
+        asset = {'version': '2.0', 'generator': f'rows_control {serial}'}
+        if dropped:
+            asset['extras'] = {'rustyTiles': {'droppedComponents': dropped}}
+        doc = {'asset': asset, 'scene': 0,
                'scenes': [{'nodes': [0]}], 'nodes': [{'mesh': 0}], 'meshes': [{'primitives': [primitive]}],
                'buffers': [{'byteLength': 0}], 'bufferViews': self.views, 'accessors': self.accessors,
                'extensions': {'EXT_structural_metadata': {
@@ -95,9 +99,10 @@ def table(g, cls, count, columns, values):
     return {'class': cls, 'count': count, 'properties': props}
 
 
-def payload(xyz, serial, first_vertex=None):
+def payload(xyz, serial, first_vertex=None, dropped=0):
     """A leaf (with `first_vertex`: a source_triangle table naming new original vertices) or a
-    coarse payload (source_primitive only), len(xyz) / 9 triangles of distinct vertices."""
+    coarse payload (source_primitive only, declaring `dropped` components), len(xyz) / 9
+    triangles of distinct vertices."""
     g = Glb()
     t = len(xyz) // 9
     v = 3 * t
@@ -120,7 +125,7 @@ def payload(xyz, serial, first_vertex=None):
     primitive = {'attributes': attributes, 'mode': 4,
                  'indices': g.accessor(struct.pack(f'<{v}I', *range(v)), 5125, 'SCALAR', v, 34963),
                  'extensions': {'EXT_mesh_features': {'featureIds': features}}}
-    return g.finish(primitive, tables, classes, serial)
+    return g.finish(primitive, tables, classes, serial, dropped)
 
 
 def lattice(rnd, triangles):
@@ -171,6 +176,51 @@ def archive(kind, n, tri, seed, out, chain=1, coarse=1024):
         raise SystemExit(f'unknown class {kind}')
     root = {'boundingVolume': BOX, 'geometricError': 200, 'refine': 'REPLACE', 'children': children}
     return write(out, root, members)
+
+
+def recount_archive(kind, out, n, d=0):
+    """`recount.py`'s geometry with plain buffers: `grid` N (one dropped tiny triangle, leaves G
+    0.01, coarse G 0.02) or `scan` N D (D dropped triangles, leaves G 0, coarse G 1e-6). Returns
+    the coarse faces with S."""
+    import recount
+    kids, coarse = recount.grid(n) if kind == 'grid' else recount.scan(n, d)
+    dropped, leaf_g, err = (1, 0.01, 0.02) if kind == 'grid' else (d, 0.0, 1e-6)
+    members = []
+
+    def tile(name, blob, error, children=None):
+        members.append((name, blob))
+        t = {'boundingVolume': BOX, 'geometricError': error, 'refine': 'REPLACE', 'content': {'uri': name}}
+        if children is not None:
+            t['children'] = children
+        return t
+
+    half = len(kids) // 2
+    leaves = [tile('a.glb', payload([x for f in kids[:half] for x in f], 0, 0), leaf_g),
+              tile('b.glb', payload([x for f in kids[half:] for x in f], 1, 3 * half), leaf_g)]
+    children = [tile('coarse.glb', payload([x for f in coarse for x in f], 1 << 30, None, dropped), err, leaves)]
+    root = {'boundingVolume': BOX, 'geometricError': 200, 'refine': 'REPLACE', 'children': children}
+    return coarse, write(out, root, members)
+
+
+def grid_cells(coarse, error, slack):
+    """The distance-grid cell inserts of the coarse-drop recount (`drops.rs`, `Grid::new`), in
+    the same f64 arithmetic: each face's box grown by the widest reach, on at most 32 cells per
+    axis, each axis with its own cell size."""
+    f32 = lambda x: struct.unpack('<f', struct.pack('<f', x))[0]
+    faces = [[[f32(f[3 * j + k]) for k in range(3)] for j in range(3)] for f in coarse]
+    reach = error * (1. + 1e-6) + 1e-6
+    widest = reach + slack
+    lo = [min(p[a] - widest for f in faces for p in f) for a in range(3)]
+    hi = [max(p[a] + widest for f in faces for p in f) for a in range(3)]
+    size = [max((hi[a] - lo[a]) / 32., widest, 2.2250738585072014e-308) for a in range(3)]
+    cell = lambda x, a: math.floor((x - lo[a]) / size[a])
+    total = 0
+    for f in faces:
+        n = 1
+        for a in range(3):
+            n *= max(cell(p[a] + widest, a) for p in f) - min(cell(p[a] - widest, a) for p in f) + 1
+        total += n
+    return total
 
 
 def revfan(out, chain, base, m, leaves, seg=1 << 30):
@@ -291,6 +341,23 @@ def check(binary, work_dir):
     floor = 12 * base * 320
     assert per_tile >= floor, ('revfan units per chain tile', per_tile, floor)
     print(json.dumps({'class': 'revfan', 'units': works, 'per_chain_tile': per_tile, 'floor': floor}))
+    # Coarse-drop recount (review 3 of PR #309). grid: the recount enters each of 60 big coarse
+    # faces in its distance-grid cells, 4 units per insert, so the work is at least 4 × the
+    # cells; the former one unit per insert charges about a quarter of that. scan: valid with 100
+    # drops, each answered from the 24 planes it spans.
+    path = work_dir / 'grid.3tz'
+    coarse, _ = recount_archive('grid', path, 60)
+    got = validate(binary, path, work_dir, unbounded)
+    assert got[0] is True, ('grid', got)
+    cells, units = grid_cells(coarse, 0.02, 0.01), work(binary, path, work_dir)
+    assert units >= 4 * cells, ('grid units against 4 per cell insert', units, cells)
+    print(json.dumps({'class': 'grid', 'units': units, 'cells': cells}))
+    path = work_dir / 'scan.3tz'
+    recount_archive('scan', path, 600, 100)
+    got = validate(binary, path, work_dir, unbounded)
+    low = validate(binary, path, work_dir, 1_000_000)
+    assert got[0] is True and low[1] == 'resource_limit', ('scan', got, low)
+    print(json.dumps({'class': 'scan', 'verdict': got[:3], 'refused_at': low[3]}))
 
 
 def main():
@@ -315,7 +382,7 @@ def main():
     if a.command == 'generate':
         stored = archive(a.kind, a.n, a.tri, a.seed, a.out, a.chain, a.coarse)
         print(json.dumps({'class': a.kind, 'leaves': a.n, 'triangles': a.tri, 'stored': stored,
-                          'budget': 16_000_000 + 130 * stored}))
+                          'budget': 16_000_000 + 185 * stored}))
     elif a.command == 'revfan':
         print(json.dumps({'class': 'revfan', 'stored': revfan(a.out, a.chain, a.base, a.m, a.leaves, a.seg)}))
     else:

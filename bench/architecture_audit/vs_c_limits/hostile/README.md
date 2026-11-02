@@ -20,12 +20,22 @@ per charged unit after a change to validator work or weights.
   sharing one payload that doubles COARSE of those triangles: descendant-incidence, edge-face and
   coincident-face lookups at every chain tile. The time-statement archives are `twin N 8192 3`
   and `chain N 8192 5 OUT 24 128` (K stays under `jsonDepth`).
-- `rows_control.py check --binary BIN --work DIR`: CI runs it. Four classes at a small size with
-  plain buffers (no Node): leafrand, twin (valid, through the border images), chain and c9
-  revfan. It checks each verdict through the CLI and a structured budget refusal. On revfan it
-  also asserts the units each added chain tile charges, from the 320-unit seeks of the lookups
-  that tile repeats. This is a timing-free signal: the former 128-unit seeks fail it (develop
-  f02e8774 charges 12,094 units per tile, the floor is 30,720).
+- `recount.py grid N OUT.3tz [LEAFG] [ERR]` and `recount.py scan N D OUT.3tz`: classes c10 and
+  c11, the D11 coarse-drop recount (PR #309 review 3; the reviewer's `gridbomb.py` and
+  `scanbomb.py`, reproduced byte for byte). `grid` enters N big coarse faces in about 27,000
+  distance-grid cells each; `scan` makes D dropped triangles query a stack of N planes in one
+  cell, missing the last-face cache. The time-statement archives are `grid 2000`, `grid 8000`
+  and `scan 4100 4000`.
+- `rows_control.py check --binary BIN --work DIR`: CI runs it. Six classes at a small size with
+  plain buffers (no Node): leafrand, twin (valid, through the border images), chain, c9 revfan,
+  and c10 grid and c11 scan on `recount.py`'s geometry. It checks each verdict through the CLI
+  and a structured budget refusal. Two timing-free signals:
+  - on revfan, the units each added chain tile charges, from the 320-unit seeks of the lookups
+    that tile repeats (the former 128-unit seeks fail it: develop f02e8774 charges 12,094 units
+    per tile, the floor is 30,720);
+  - on grid, the charged units against the recount's distance-grid inserts, computed in the
+    validator's own f64 arithmetic: at least 4 per insert (the former one unit per insert,
+    develop 814d2703, gives 1.09).
   - `rows_control.py generate` writes larger plain-buffer archives.
   - `rows_control.py revfan OUT K 64 1360 32 25` writes review 1's c9 archives byte for byte (K = 1,
     100, 122).

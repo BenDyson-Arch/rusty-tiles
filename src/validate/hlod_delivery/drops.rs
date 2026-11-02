@@ -18,6 +18,23 @@ use std::collections::HashSet;
 const TOLERANCE: f64 = 1e-6;
 /// The distance grid has at most this many cells per axis.
 const GRID: f64 = 32.;
+/// Units per grid cell insert and per distance query or face test: each class's worst
+/// measured CPU per insert or test over τ, rounded up on both cores (PR #309 review 3:
+/// inserts 18.4 ns P-core and 53 ns E-core at load 24, tests 18.4 and 23.8 ns, against τ 11.53
+/// and 15.3 ns). A few stored faces can drive any number of either, so neither is amortized
+/// against row charges.
+const CELL_UNITS: usize = 4;
+const TEST_UNITS: usize = 2;
+/// Units per child face the recount reads: its share of the `leaf_faces_tile` build and the
+/// recount's pass over it (union-find, components), which no other charge covers. Up to
+/// 0.96 µs and 0.52 µs per face on an E-core at 1–64 M faces, 0.66 µs and 0.33 µs on a
+/// P-core (PR #309 review 3).
+const FACE_READ_UNITS: usize = 97;
+/// The recount's leaf faces by tile: `leaf_faces_tile` covers the query (the table's key
+/// holds the corners), so a tile's faces are one index range read in order.
+pub(super) const LEAF_FACES_TILE: &str =
+    "CREATE INDEX IF NOT EXISTS leaf_faces_tile ON leaf_faces(tile,n)";
+pub(super) const LEAF_FACES_OF: &str = "SELECT corners,n FROM leaf_faces WHERE tile=?";
 
 struct Content {
     id: i64,
@@ -62,7 +79,7 @@ impl Store {
         effort: &Effort,
     ) -> Result<(), Error> {
         self.connection
-            .execute_batch("CREATE INDEX IF NOT EXISTS leaf_faces_tile ON leaf_faces(tile)")
+            .execute_batch(LEAF_FACES_TILE)
             .map_err(sql)?;
         let mut query = self
             .connection
@@ -153,7 +170,7 @@ impl Store {
         let mut query = self
             .connection
             .prepare_cached(if leaf {
-                "SELECT corners,n FROM leaf_faces WHERE tile=?"
+                LEAF_FACES_OF
             } else {
                 "SELECT corners,1 FROM coarse_faces WHERE tile=?"
             })
@@ -236,7 +253,7 @@ impl Store {
         for &(child, leaf, g) in &parent.children {
             child_g = child_g.max(g);
             for (face, n) in self.faces(child, leaf)? {
-                effort.charge(1)?;
+                effort.charge(FACE_READ_UNITS)?;
                 count_faces = count_faces.saturating_add(n);
                 let ids = face.map(|k| {
                     *index.entry(k).or_insert_with(|| {
@@ -336,7 +353,7 @@ impl Store {
         }
         let grid = Grid::new(&faces, parent.error, child_g, effort)?;
         let far = |p: [f64; 3], slack: f64| -> Result<bool, Error> {
-            effort.charge(1)?;
+            effort.charge(TEST_UNITS)?;
             Ok(!grid.within(p, slack, &faces, effort)?)
         };
         let refuse = |p: [f64; 3]| {
@@ -401,10 +418,12 @@ fn point(k: CanonicalPoint) -> [f64; 3] {
 
 /// The parent's faces binned by their box grown by the widest reach: a point within
 /// that distance of a face lies in a cell the face was entered in. Every insertion is
-/// charged to the validation budget.
+/// charged to the validation budget, `CELL_UNITS` each. Each axis has at most `GRID` cells
+/// of its own size (never under the widest reach), so a long thin parent is not binned into a
+/// few crowded cells along its short axes.
 struct Grid {
     lo: [f64; 3],
-    size: f64,
+    size: [f64; 3],
     reach: f64,
     cells: HashMap<[i64; 3], Vec<u32>>,
     /// The face that answered the last query. Queries come in runs from one dropped face or
@@ -432,8 +451,8 @@ impl Grid {
                 }
             }
         }
-        let extent = (0..3).map(|a| hi[a] - lo[a]).fold(0., f64::max);
-        let size = (extent / GRID).max(widest).max(f64::MIN_POSITIVE);
+        let size =
+            std::array::from_fn(|a| ((hi[a] - lo[a]) / GRID).max(widest).max(f64::MIN_POSITIVE));
         let mut grid = Self {
             lo,
             size,
@@ -455,7 +474,7 @@ impl Grid {
                 }
             }
             let cells = (0..3).map(|k| (b[k] - a[k] + 1) as u64).product::<u64>();
-            effort.charge(cells as usize)?;
+            effort.charge((cells as usize).saturating_mul(CELL_UNITS))?;
             for x in a[0]..=b[0] {
                 for y in a[1]..=b[1] {
                     for z in a[2]..=b[2] {
@@ -467,7 +486,7 @@ impl Grid {
         Ok(grid)
     }
     fn cell(&self, p: [f64; 3]) -> [i64; 3] {
-        std::array::from_fn(|a| ((p[a] - self.lo[a]) / self.size).floor() as i64)
+        std::array::from_fn(|a| ((p[a] - self.lo[a]) / self.size[a]).floor() as i64)
     }
     /// Whether `p` lies within the parent's reach plus `slack` of a face. The last answering face
     /// is tried first: any face within reach answers, and one within reach of `p` was entered in
@@ -482,7 +501,7 @@ impl Grid {
         let reach = self.reach + slack;
         let near = |i: u32| distance2(p, faces[i as usize].map(point)) <= reach * reach;
         if let Some(i) = self.last.get() {
-            effort.charge(1)?;
+            effort.charge(TEST_UNITS)?;
             if near(i) {
                 return Ok(true);
             }
@@ -491,7 +510,7 @@ impl Grid {
             return Ok(false);
         };
         for &i in cell {
-            effort.charge(1)?;
+            effort.charge(TEST_UNITS)?;
             if near(i) {
                 self.last.set(Some(i));
                 return Ok(true);
@@ -631,6 +650,50 @@ mod tests {
         super::TEST_CAP.with(|c| c.set(super::TEST_DEFAULT_CAP));
         result
     }
+    /// Grid inserts and distance tests are charged at their measured weights (PR #309 review
+    /// 3): `CELL_UNITS` per cell a face is entered in, `TEST_UNITS` per query and per face
+    /// tested. A hit on the last answering face is one test.
+    #[test]
+    fn grid_inserts_and_distance_tests_are_charged_at_their_weights() {
+        use super::super::{Budget, Effort};
+        use std::sync::{atomic::AtomicU64, atomic::Ordering, Arc};
+        let key = |p: Point| p.map(|x| (x as f32).to_bits());
+        let faces: Vec<_> = (0..40)
+            .map(|i| {
+                let t = 0.1 + 0.3 * f64::from(i) / 40.;
+                [[0., t, 0.], [1., 1. - t, 1.], [t, 1., 0.5]].map(key)
+            })
+            .collect();
+        let effort = Effort {
+            budget: Budget {
+                value: 1 << 40,
+                ..budget()
+            },
+            base: 0,
+            used: Arc::new(AtomicU64::new(0)),
+        };
+        let used = || effort.used.load(Ordering::Relaxed) as usize;
+        let grid = super::Grid::new(&faces, 1e-3, 0.01, &effort).unwrap();
+        let cells: usize = grid.cells.values().map(Vec::len).sum();
+        assert!(cells > 40 * 1000, "{cells}");
+        assert_eq!(used(), super::CELL_UNITS * cells);
+        let p = super::point(faces[39][0]);
+        let reach = grid.reach + 0.01;
+        let tested = grid.cells[&grid.cell(p)]
+            .iter()
+            .position(|&i| {
+                super::distance2(p, faces[i as usize].map(super::point)) <= reach * reach
+            })
+            .unwrap()
+            + 1;
+        let before = used();
+        assert!(grid.within(p, 0.01, &faces, &effort).unwrap());
+        assert_eq!(used() - before, super::TEST_UNITS * tested);
+        let before = used();
+        assert!(grid.within(p, 0.01, &faces, &effort).unwrap());
+        assert_eq!(used() - before, super::TEST_UNITS);
+    }
+
     /// A third component, larger than `FAR`, 14 m beyond it.
     const BIG: Face = [[20., 0., 0.], [22., 0., 0.], [20., 2., 0.]];
 

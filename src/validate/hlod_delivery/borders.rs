@@ -23,6 +23,7 @@ use super::{
     Sorter, Store, Surface,
 };
 use rusqlite::{params, OptionalExtension};
+use rustc_hash::FxHashSet;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// Outward rounding of every f64 distance sum below (well above ten roundings).
@@ -154,10 +155,24 @@ fn distinct_sides(edge: &CanonicalEdge, direction: usize, surface: &Surface) -> 
                 .all(|e| wedge(a, b, *c, *e) != std::cmp::Ordering::Greater)
     })
 }
+/// The seam-owner lookups (`seam_owner`): each is one seek, charged `SEEK_UNITS`. A key's
+/// least and greatest holding leaf are separate queries so each reads one index entry.
+pub(super) const LEAST_HOLDER: &str =
+    "SELECT tile FROM leaf_points WHERE key=? ORDER BY tile LIMIT 1";
+pub(super) const GREATEST_HOLDER: &str =
+    "SELECT tile FROM leaf_points WHERE key=? ORDER BY tile DESC LIMIT 1";
+pub(super) const SOURCE_FACE: &str =
+    "SELECT EXISTS(SELECT 1 FROM leaf_faces WHERE corners=?1 AND tile>?2 AND tile<=?3)";
+pub(super) const SOURCE_EDGE: &str =
+    "SELECT EXISTS(SELECT 1 FROM leaf_segments WHERE key=?1 AND tile>?2 AND tile<=?3)";
 /// Descendant faces of one segment direction: a covering range of `edge_faces_key`, so every
 /// row it reads is a row it returns (and charges), at every coarse ancestor.
 pub(super) const EDGE_FACES: &str =
     "SELECT third FROM edge_faces WHERE key=?1 AND dir=?4 AND tile>?2 AND tile<=?3";
+/// Units per seam-owner screen of a coarse face or edge: up to three lookups of its corners
+/// in the tile's shared points, at most 101 ns on a P-core at four million points (PR #309
+/// review 3; a tree set took up to 965 ns).
+const SCREEN_UNITS: usize = 9;
 /// Charged units per exact wedge sign (its expansion holds up to ~600 terms).
 const WEDGE_UNITS: usize = 64;
 
@@ -299,7 +314,7 @@ impl Store {
     ) -> Result<
         (
             BTreeMap<CanonicalEdge, Vec<CanonicalPoint>>,
-            BTreeSet<CanonicalPoint>,
+            FxHashSet<CanonicalPoint>,
         ),
         Error,
     > {
@@ -412,46 +427,50 @@ impl Store {
     /// segment `a < b`, the tile holding `a`'s least holding leaf, or its greatest when
     /// the top bit of FNV-1a 64 over the little-endian words of `a` then `b` is set; a
     /// face belongs to the owner of its least-to-greatest corner segment. Two same-depth
-    /// tiles therefore never both create it.
+    /// tiles therefore never both create it. Each face and edge is screened (`SCREEN_UNITS`);
+    /// each source or owner lookup is a seek into a leaf table (`SEEK_UNITS`).
     pub(super) fn seam_owner(
         &self,
         tile: i64,
         surface: &Surface,
         contracted: &BTreeMap<CanonicalEdge, Vec<CanonicalPoint>>,
-        shared: &BTreeSet<CanonicalPoint>,
+        shared: &FxHashSet<CanonicalPoint>,
         effort: &Effort,
     ) -> Result<(), Error> {
         let last: i64 = self
             .connection
             .query_row("SELECT last FROM tiles WHERE id=?", [tile], |r| r.get(0))
             .map_err(sql)?;
-        let mut holders = self
+        let mut least = self.connection.prepare_cached(LEAST_HOLDER).map_err(sql)?;
+        let mut greatest = self
             .connection
-            .prepare_cached("SELECT min(tile), max(tile) FROM leaf_points WHERE key=?")
+            .prepare_cached(GREATEST_HOLDER)
             .map_err(sql)?;
         let mut owns = |a: CanonicalPoint, b: CanonicalPoint| -> Result<bool, Error> {
-            effort.charge(1)?;
+            effort.charge(super::SEEK_UNITS)?;
             let (a, b) = (a.min(b), a.max(b));
             let mut h: u64 = 0xcbf2_9ce4_8422_2325;
             for byte in a.into_iter().chain(b).flat_map(u32::to_le_bytes) {
                 h = (h ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
             }
-            let (lo, hi): (Option<i64>, Option<i64>) = holders
-                .query_row([super::point_bytes(a)], |r| Ok((r.get(0)?, r.get(1)?)))
+            let holder = if h >> 63 == 1 {
+                &mut greatest
+            } else {
+                &mut least
+            };
+            let holder: Option<i64> = holder
+                .query_row([super::point_bytes(a)], |r| r.get(0))
+                .optional()
                 .map_err(sql)?;
-            Ok((if h >> 63 == 1 { hi } else { lo }).is_some_and(|f| f > tile && f <= last))
+            Ok(holder.is_some_and(|f| f > tile && f <= last))
         };
-        let mut leaf_face = self
-            .connection
-            .prepare_cached(
-                "SELECT EXISTS(SELECT 1 FROM leaf_faces WHERE corners=?1 AND tile>?2 AND tile<=?3)",
-            )
-            .map_err(sql)?;
+        let mut leaf_face = self.connection.prepare_cached(SOURCE_FACE).map_err(sql)?;
         for f in &surface.faces {
-            effort.charge(1)?;
+            effort.charge(SCREEN_UNITS)?;
             if !f.iter().all(|p| shared.contains(p)) {
                 continue;
             }
+            effort.charge(super::SEEK_UNITS)?;
             let mut k = *f;
             k.sort_unstable();
             let bytes: Vec<u8> = k.iter().flat_map(|p| super::point_bytes(*p)).collect();
@@ -467,20 +486,16 @@ impl Store {
                 ));
             }
         }
-        let mut leaf_edge = self
-            .connection
-            .prepare_cached(
-                "SELECT EXISTS(SELECT 1 FROM leaf_segments WHERE key=?1 AND tile>?2 AND tile<=?3)",
-            )
-            .map_err(sql)?;
+        let mut leaf_edge = self.connection.prepare_cached(SOURCE_EDGE).map_err(sql)?;
         for edge in surface.edges.keys() {
-            effort.charge(1)?;
+            effort.charge(SCREEN_UNITS)?;
             if !shared.contains(&edge.0)
                 || !shared.contains(&edge.1)
                 || contracted.contains_key(edge)
             {
                 continue;
             }
+            effort.charge(super::SEEK_UNITS)?;
             let source: bool = leaf_edge
                 .query_row(params![super::edge_bytes(*edge), tile, last], |r| r.get(0))
                 .map_err(sql)?;

@@ -2,9 +2,11 @@
 //! margin (validator-limits-amendment.md, "Additive budget (2026-10-31)"). The densest class
 //! measured is many primitives of isolated tiny triangles: every triangle is seven scratch rows
 //! (three points, three edges, one face) in a few stored bytes. The first case is the PR #306
-//! review-2 fixture's untextured leaf, where the 16 M floor carries the budget; the second is
-//! the densest output of the PR #309 review-2 sweep (`dup`: every triangle twice, 40 per
-//! primitive), large enough that 130·S, not the floor, sets the budget.
+//! review-2 fixture's untextured leaf, where the 16 M floor carries the budget. The others are
+//! large enough that 185·S, not the floor, sets the budget: the densest output without drops of
+//! the PR #309 review-2 sweep (`dup`: every triangle twice, 40 per primitive), and the densest
+//! of all under review 3's recount weights (`iso`: 80 isolated triangles per primitive, with
+//! coarse drops).
 use serde_json::{json, Value};
 use std::{fs, path::Path, process::Command};
 
@@ -114,12 +116,12 @@ fn bake_and_validate(primitives: usize, per: usize, copies: usize) -> u64 {
     let stored = report["storedBytes"].as_u64().unwrap();
     assert_eq!(
         report["limits"]["totalPayloadElements"],
-        16_000_000 + 130 * stored
+        16_000_000 + 185 * stored
     );
     // The same validation at two thirds of the default budget still fits: a 1.5× margin.
     let margin = format!(
         "totalPayloadElements={}",
-        (16_000_000 + 130 * stored) * 2 / 3
+        (16_000_000 + 185 * stored) * 2 / 3
     );
     let tight = validate(&["--maxVolume", &margin]);
     assert_eq!(tight["ok"], true, "{tight}");
@@ -134,5 +136,12 @@ fn dense_tiny_triangle_output_validates_with_a_one_and_a_half_margin() {
 #[test]
 fn duplicated_dense_output_validates_with_a_one_and_a_half_margin_where_r_sets_the_budget() {
     let stored = bake_and_validate(300, 40, 2);
-    assert!(130 * stored > 3 * 16_000_000, "S = {stored}");
+    assert!(185 * stored > 3 * 16_000_000, "S = {stored}");
+}
+
+#[test]
+fn isolated_dense_output_with_drops_validates_with_a_one_and_a_half_margin_where_r_sets_the_budget()
+{
+    let stored = bake_and_validate(200, 80, 1);
+    assert!(185 * stored > 3 * 16_000_000, "S = {stored}");
 }

@@ -781,6 +781,10 @@ pub(super) const READ_UNITS: usize = 32;
 /// Units for each open segment's shared-endpoint check: a merge step, and for a shared lower
 /// endpoint one sequence record, sorted and merged once (about 190 ns measured).
 pub(super) const OPEN_UNITS: usize = 32;
+/// Whether a tile has a descendant declared at a fold stage: one seek past it in
+/// `fold_stages`, bounded by its preorder `last`.
+const FOLD_STAGE_BELOW: &str = "SELECT EXISTS(SELECT 1 FROM tiles t,fold_stages f
+     WHERE t.id=?1 AND f.tile>t.id AND f.tile<=t.last)";
 /// Units for each original vertex row appended to the spill sequence at ingest.
 pub(super) const ORIGINAL_UNITS: usize = 16;
 /// Units for each placed original key: placement, external sort and ordered scan.
@@ -1059,6 +1063,7 @@ impl Store {
             CREATE INDEX edge_faces_key ON edge_faces(key,dir,tile,third);
             CREATE TABLE twin_points(key BLOB NOT NULL,corners BLOB NOT NULL,PRIMARY KEY(key,corners)) WITHOUT ROWID;
             CREATE TABLE border_map(key BLOB NOT NULL,tile INTEGER NOT NULL,image BLOB NOT NULL,d REAL NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
+            CREATE TABLE fold_stages(tile INTEGER PRIMARY KEY);
             BEGIN;").map_err(sql)?;
         let pending = std::mem::take(&mut self.pending);
         for t in &pending.tiles {
@@ -2466,6 +2471,15 @@ impl Store {
         effort: &Effort,
         read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
     ) -> Result<(), Error> {
+        // The tiles referencing a payload declared at a fold stage (2 or 3), once: each
+        // declared coarse tile then finds one below it by a single seek, not by a scan of
+        // its descendants' references at every ancestor.
+        self.connection
+            .execute_batch(
+                "INSERT OR IGNORE INTO fold_stages SELECT r.tile FROM payloads p
+                 JOIN refs r ON r.rank=p.rank WHERE p.last_stage>=3",
+            )
+            .map_err(sql)?;
         let mut query = self
             .connection
             .prepare("SELECT tile,rank,frame FROM placements WHERE leaf=0 ORDER BY tile,id")
@@ -2492,18 +2506,25 @@ impl Store {
                     // admitted from stage 2, and in a declared tile above such a stage
                     // (it keeps them as input); otherwise every fold needs source.
                     // `last_stage` stores stage + 1 (0: undeclared).
-                    let (stored, declared, below): (i64, i64, bool) = self
+                    let (stored, declared): (i64, i64) = self
                         .connection
                         .query_row(
-                            "SELECT coalesce(max(p.last_stage),0),coalesce(max(p.fold_faces),0),
-                             EXISTS(SELECT 1 FROM refs d JOIN payloads q ON q.rank=d.rank,tiles t
-                               WHERE t.id=?1 AND d.tile>t.id AND d.tile<=t.last AND q.last_stage>=3)
+                            "SELECT coalesce(max(p.last_stage),0),coalesce(max(p.fold_faces),0)
                              FROM refs r JOIN payloads p ON p.rank=r.rank WHERE r.tile=?1",
                             [tile],
-                            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                            |r| Ok((r.get(0)?, r.get(1)?)),
                         )
                         .map_err(sql)?;
                     let stage = stored - 1;
+                    // A declared fold stage below: one seek into `fold_stages`.
+                    let below = stored > 0 && {
+                        effort.charge(SEEK_UNITS)?;
+                        self.connection
+                            .prepare_cached(FOLD_STAGE_BELOW)
+                            .map_err(sql)?
+                            .query_row([tile], |r| r.get(0))
+                            .map_err(sql)?
+                    };
                     if stored > 0 && i64::try_from(fold_faces(&surface)).ok() != Some(declared) {
                         return Err(bad(
                             "lastResort",

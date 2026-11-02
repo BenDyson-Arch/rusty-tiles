@@ -589,6 +589,56 @@ mod tests {
         );
     }
 
+    /// The seam-owner, fold-stage and recount lookups each read one index entry or one
+    /// covering range: a seek, never a scan per row (PR #309 review 3 and the #308 merge).
+    #[test]
+    fn seam_owner_fold_stage_and_recount_lookups_are_single_seeks() {
+        use super::super::{borders, drops, FOLD_STAGE_BELOW};
+        let mut s = store_with(&CatalogConfig::DEFAULT);
+        s.materialize().unwrap();
+        s.connection.execute_batch(drops::LEAF_FACES_TILE).unwrap();
+        let plan = |query: &str| -> Vec<String> {
+            let mut statement = s
+                .connection
+                .prepare(&format!("EXPLAIN QUERY PLAN {query}"))
+                .unwrap();
+            let nulls = vec![rusqlite::types::Null; statement.parameter_count()];
+            statement
+                .query_map(rusqlite::params_from_iter(nulls), |r| r.get(3))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect()
+        };
+        let all = [
+            borders::LEAST_HOLDER,
+            borders::GREATEST_HOLDER,
+            borders::SOURCE_FACE,
+            borders::SOURCE_EDGE,
+            FOLD_STAGE_BELOW,
+            drops::LEAF_FACES_OF,
+        ]
+        .map(|q| plan(q).join(" | "));
+        let exists = "SCAN CONSTANT ROW | SCALAR SUBQUERY 1 | ";
+        assert_eq!(
+            all,
+            [
+                "SEARCH leaf_points USING PRIMARY KEY (key=?)".to_string(),
+                "SEARCH leaf_points USING PRIMARY KEY (key=?)".to_string(),
+                format!(
+                    "{exists}SEARCH leaf_faces USING PRIMARY KEY (corners=? AND tile>? AND tile<?)"
+                ),
+                format!(
+                    "{exists}SEARCH leaf_segments USING PRIMARY KEY (key=? AND tile>? AND tile<?)"
+                ),
+                format!(
+                    "{exists}SEARCH t USING INTEGER PRIMARY KEY (rowid=?) | \
+                     SEARCH f USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)"
+                ),
+                "SEARCH leaf_faces USING COVERING INDEX leaf_faces_tile (tile=?)".to_string(),
+            ]
+        );
+    }
+
     #[test]
     fn summed_incidence_beyond_the_counter_range_is_refused() {
         let mut s = store_with(&CatalogConfig::FORCED_SPILL);
