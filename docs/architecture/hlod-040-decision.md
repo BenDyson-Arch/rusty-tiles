@@ -648,8 +648,8 @@ checked by the validators.
 
 **Owner amendments, 2026-10-30 to 2026-11-02 — feasibility border relief (A1).** E_d/16 is a fixed share
 of the cell, far below the surface's own border noise at coarse depths.
-- On Walem, every certificate of the seven cells that still omit spans one source edge (ε ≤ 2.7 mm
-  at every depth), so borders fill 20–80% of the cap.
+- In the initial Walem feasibility study, every certificate of the seven omitted cells
+  spans one source edge (ε ≤ 2.7 mm at every depth), so borders fill 20–80% of the cap.
 - On mesh-1e7, f0-d1's grid staircases need about 1.75 m, and its exact border alone needs more
   than 8,192 triangles.
 - Evidence: `E/hlod-root-design-20261030/DESIGN.md`, `E/hlod-border-relief-20261030/RISK-CHECK.md`
@@ -714,7 +714,7 @@ of the cell, far below the surface's own border noise at coarse depths.
 - **Validators.**
   - The native rule `borderDisplacement` becomes d ≤ G/8 per tile (was G/16). Sibling
     identity is unchanged.
-  - **Pair rule change, for owner sign-off.** `mixedDepthBorderGap` needs
+  - **Pair rule.** `mixedDepthBorderGap` needs
     (d_X + d_Y)·outward ≤ G_X/8 for each tile Y below X's cell parent. It now skips X's
     own siblings when it takes the deepest d_Y. Siblings deliver every shared vertex
     identically, which is checked first, so they add no gap. Before the change, two
