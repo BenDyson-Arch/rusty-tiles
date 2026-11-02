@@ -350,7 +350,7 @@ mod tests {
     #[test]
     fn one_proposal_reduces_interior_and_keeps_exact_open_support() {
         use crate::mesh_large::hlod::store::{SourcePrimitive, StoppingBound, TileKey};
-        let n = 20u32;
+        let n = 64u32;
         let positions: Vec<_> = (0..=n)
             .flat_map(|x| (0..=n).map(move |y| [x as f32, y as f32, 0.]))
             .collect();
@@ -366,7 +366,7 @@ mod tests {
             geometry: TileGeometry {
                 key: TileKey {
                     first: 0,
-                    end: 800,
+                    end: triangles.len() as u64,
                     depth: 3,
                     leaf_begin: 0,
                     leaf_end: 2,
@@ -390,7 +390,7 @@ mod tests {
             stopping: StoppingBound::TriangleBudget,
             simplifier_error: 0.,
             children_error: 0.,
-            input_triangles: 800,
+            input_triangles: triangles.len() as u32,
             protected_faces: 0,
             retries: 0,
             last_resort: false,
@@ -405,14 +405,18 @@ mod tests {
             controls: Default::default(),
         };
         let mut report = Report::default();
-        let reduced = propose(
-            &built,
-            &positions,
-            0.1,
-            folds::Policy::default(),
-            &mut report,
-        )
-        .unwrap();
+        let (reduced, peak) = crate::test_alloc::peak(|| {
+            propose(
+                &built,
+                &positions,
+                0.1,
+                folds::Policy::default(),
+                &mut report,
+            )
+            .unwrap()
+        });
+        assert!(peak < 32 << 20, "D10 proposal peak {peak}");
+        eprintln!("D10 8192-face proposal peak: {peak} bytes");
         assert!(reduced.geometry.triangles.len() < triangles.len() / 2);
         assert!(preserves(&triangles, &reduced.geometry.triangles));
         assert_eq!(reduced.geometry.positions, positions);
@@ -428,6 +432,21 @@ mod tests {
             &mut report
         )
         .is_none());
+    }
+    #[test]
+    fn pinched_closed_sheets_are_singular_without_singular_edges() {
+        let f = [
+            [0, 1, 2],
+            [0, 3, 1],
+            [1, 3, 2],
+            [0, 2, 3],
+            [0, 4, 5],
+            [0, 6, 4],
+            [4, 6, 5],
+            [0, 5, 6],
+        ];
+        assert!(edges(&f).values().all(|&n| n == 2));
+        assert_eq!(singular_vertices(&f), HashSet::from_iter([0]));
     }
     #[test]
     fn support_refuses_missing_components_and_openings() {
