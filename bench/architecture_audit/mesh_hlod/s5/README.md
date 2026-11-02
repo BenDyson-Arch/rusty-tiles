@@ -398,3 +398,26 @@ kernel witnesses run first: the two-triangle grid whose float early-out
 under-reported the exact maximum, and 1,024- and 8,192-face fans whose domain
 flood must stay linear and charged. Also run is a contracted bump sheet, baked by
 the real producer, which must pass both validators.
+
+
+The N3 static-filter probes are `filter_controls.py` (exact rational enclosures,
+including 32 subdivisions) and `certificate_probe.py` (published-byte corpus,
+source-exact Grid/certificate timing, and `micro` mode for box/filter/interval
+paths). Run timing through the shared measure.py slot locks. The harness replaces
+only hash-map/error/effort plumbing; it does not time decode or grid construction.
+Bulk evidence is external at
+`~/.cache/rusty-tiles-evidence/n3-certificate-20261102/` (generated, never tracked).
+The merged-dup-2000-40 corpus SHA-256 is
+`d7807142a7f5a4d37c9bc673bc60b6905f264c9c6313778a20ef0162f51bb34a`, derived from
+archive SHA-256 `cad47aa33c007f6437a5b2b59bd22b044673963026e96b0f8174ee2532b824a8`.
+Baseline certificate source is develop `ef7db6f372ca60c8c02afc91ce3dd320c73dbfa9`.
+See the external FINAL.md for exact executed source/artifact identities and limits.
+The native `cached_faces_preserve_verdicts_at_the_effort_limit` control compares
+cold/hit/miss caches at nine remaining budgets for both sampled and continuous
+checks. It includes out-of-cell and in-cell misses, and a later certifier requiring
+more point tests than the first certifier. Cache reuse preserves the original
+cell-list order; every outcome and effort/certificate counter must match.
+`cache_controls.py OUT` replays that native control against the reviewed priority
+order and an in-cell-only priority mutant; both must fail. Like the timing
+harness, it substitutes only hash-map/error/effort plumbing.
+Review-fix runs are in `~/.cache/rusty-tiles-evidence/n3-cert-317-fix1-20261102/`.
