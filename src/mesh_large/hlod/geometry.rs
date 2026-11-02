@@ -9,6 +9,7 @@ mod contraction_memory;
 pub(crate) mod folds;
 pub(crate) mod locations;
 pub(crate) mod measurement;
+mod relief;
 mod sheets;
 mod topology;
 pub(crate) use topology::Receipt as TopologyReceipt;
@@ -805,8 +806,18 @@ pub(crate) fn build_parent(
     if first.built.is_some() || !last_resorts {
         return Ok(first);
     }
-    // A1 hand-over from the primary contraction, kept for N3 (`Contracted`).
-    let relief = first.relief.take();
+    // A1 hand-over from the primary contraction, kept for N3 (`Contracted`). Its chord
+    // collapse resumes under N3's policy (a seam face or edge in its owner), so N3 snaps
+    // only what that still leaves.
+    let relief = first.relief.take().map(|seed| {
+        let policy = folds::Policy::last_resort(
+            Resort::N3.stage(),
+            tile.leaf_begin,
+            tile.leaf_end,
+            &contract.holders,
+        );
+        relief::resume(&seed, &contract.interface, &policy)
+    });
     let mut last = run(Resort::Fix2, None)?;
     last.attempted_topology.add(first.attempted_topology);
     for resort in [Resort::Staged, Resort::N1, Resort::N2, Resort::N3] {
@@ -965,6 +976,8 @@ fn build(
             Ok(None)
         }
     };
+    let relieved = contract.relieved();
+    let mut residue = None;
     if let Some(seed) = seed.filter(|_| resort == Resort::N3) {
         // A1 hand-over: continue the primary contraction, snapping only its stuck vertices,
         // licensed like any contraction (`folds::Source::for_contraction`).
@@ -992,6 +1005,14 @@ fn build(
         };
         merged = snapped;
     } else {
+        // A1: a relieved contract contracts by collapse along its chords. Only the
+        // primary build's residue is the cell's hand-over (`Outcome::relief`).
+        let mut discard = None;
+        let slot = if resort == Resort::None {
+            &mut residue
+        } else {
+            &mut discard
+        };
         if !topology::contract(
             &mut merged,
             interface,
@@ -1000,6 +1021,7 @@ fn build(
             &mut topology,
             fix2,
             n3,
+            relieved.then_some(slot),
         )? {
             attempted.add(topology);
             topology = Default::default();
@@ -1014,6 +1036,7 @@ fn build(
                 check,
                 fix2,
                 n3,
+                relieved,
             )? {
                 attempted.add(topology);
                 return Ok(Outcome {
@@ -1021,7 +1044,7 @@ fn build(
                     contraction_failed: true,
                     attempted_topology: attempted,
                     construction_dropped: Vec::new(),
-                    relief: None,
+                    relief: residue,
                 });
             }
         }
@@ -1315,7 +1338,7 @@ fn build(
         contraction_failed: false,
         attempted_topology: attempted,
         construction_dropped,
-        relief: None,
+        relief: residue,
     })
 }
 
@@ -1396,6 +1419,7 @@ fn recover_contraction(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
     fallbacks: bool,
     folds: Option<&folds::Policy>,
+    relieved: bool,
 ) -> Result<bool, JobError> {
     let border = interface_points(previous);
     let locked: Vec<_> = merged.keys.iter().map(|k| border.contains(k)).collect();
@@ -1440,6 +1464,8 @@ fn recover_contraction(
             Some(&reference.triangles),
             fallbacks,
             folds,
+            // A recovery copy's residue is not the cell's: only the primary one is kept.
+            relieved.then_some(&mut None),
         )? {
             receipt.add(attempt);
             return Ok(true);
@@ -2157,6 +2183,7 @@ mod tests {
                 terminal_vertices: vec![],
                 holders: vec![],
                 scale: 0.,
+                relief_floor: 0.,
             },
             &|p| {
                 assert!([a, middle, b].contains(&p), "interior source lookup");
