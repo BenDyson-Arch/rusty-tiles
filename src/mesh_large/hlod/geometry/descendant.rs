@@ -312,11 +312,28 @@ pub(crate) fn propose(
         }
     }
     change.opening_faces = opening;
+    // Held tiles are charged by their surviving triangles. Remove unused vertices
+    // before publication/parent handoff, retaining first-use order and exact bits.
+    let mut vertex_ids = vec![u32::MAX; decoded.len()];
+    let (mut positions, mut ells, mut locked) = (Vec::new(), Vec::new(), Vec::new());
+    for t in &mut faces {
+        for v in t {
+            let old = *v as usize;
+            let id = &mut vertex_ids[old];
+            if *id == u32::MAX {
+                *id = positions.len() as u32;
+                positions.push(decoded[old]);
+                ells.push(tile.ells[old]);
+                locked.push(built.locked[old]);
+            }
+            *v = *id;
+        }
+    }
     Some(Built {
         geometry: TileGeometry {
             key: tile.key,
-            ells: tile.ells.clone(),
-            positions: decoded.to_vec(),
+            ells,
+            positions,
             representative: vec![0; faces.len()],
             primitives: tile.primitives.clone(),
             triangles: faces,
@@ -324,7 +341,7 @@ pub(crate) fn propose(
             geometric_error: 0.,
             lease: None,
         },
-        locked: built.locked.clone(),
+        locked,
         stopping: super::super::store::StoppingBound::GuardedError,
         simplifier_error: f64::from(estimate),
         children_error: built.children_error,
@@ -418,8 +435,19 @@ mod tests {
         assert!(peak < 32 << 20, "D10 proposal peak {peak}");
         eprintln!("D10 8192-face proposal peak: {peak} bytes");
         assert!(reduced.geometry.triangles.len() < triangles.len() / 2);
-        assert!(preserves(&triangles, &reduced.geometry.triangles));
-        assert_eq!(reduced.geometry.positions, positions);
+        let original: HashMap<_, _> = positions
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (key(*p), i as u32))
+            .collect();
+        let mapped: Vec<_> = reduced
+            .geometry
+            .triangles
+            .iter()
+            .map(|t| t.map(|v| original[&key(reduced.geometry.positions[v as usize])]))
+            .collect();
+        assert!(preserves(&triangles, &mapped));
+        assert!(reduced.geometry.positions.len() <= 3 * reduced.geometry.triangles.len());
         assert_eq!(report.reducer_passes, 1);
         assert_eq!(report.source_passes, 0);
         let mut changed = built;
