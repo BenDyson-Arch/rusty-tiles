@@ -1817,7 +1817,9 @@ mod tests {
 
     /// Review 1 (P3-2): relief triggers at depth 2 beside a depth-1 leaf A, which owns its
     /// depth-2 items itself. The level's rewind must unlink A's list too: every node's
-    /// list ends after exactly its count, and A's contract reads the relieved chords.
+    /// list ends after exactly its count. A's arc is pinned at every point (A is published
+    /// exactly), so its owner's request would emit no fewer chords there: it stays at
+    /// step 0, while the owner's other arc is relieved from 40 chords to 2.
     #[test]
     fn relief_rewind_unlinks_shallower_leaves_owning_deeper_items() {
         let nodes = [
@@ -1847,7 +1849,13 @@ mod tests {
                 .contract(tile(0, 1, 1, 0, 1), 100_000)
                 .unwrap()
                 .unwrap();
-            assert!(a.certificates.iter().any(|c| c.step > 0));
+            assert!(!a.certificates.is_empty());
+            assert!(a.certificates.iter().all(|c| c.step == 0));
+            let owner = borders
+                .contract(tile(1, 3, 2, 1, 3), 100_000)
+                .unwrap()
+                .unwrap();
+            assert_eq!(owner.certificates.iter().filter(|c| c.step > 0).count(), 2);
         });
     }
 }
