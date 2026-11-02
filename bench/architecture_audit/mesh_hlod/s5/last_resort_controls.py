@@ -135,6 +135,28 @@ def generate(root):
             doc['root'].pop('content')
             doc['root']['contents'] = [{'uri': 'coarse.glb'}, {'uri': 'extra.glb'}]
             (folder / 'tileset.json').write_text(json.dumps(doc))
+    # Review r2: skinny finite-f32 face for which a rounded closest point
+    # underestimates the true distance. Preserve literal coordinates, not a search.
+    numeric_face = [[-1.4724074926764578e+23, 2.9648180383498556e+22, -7.774404609302878e+22], [5.001019053693828e+22, 1.1372596964707108e+23, -1.23504860697962e+23], [-3.7499307865693355e+22, 7.642523899974737e+22, -1.032032911033214e+23]]
+    numeric_drop = [[2.9580527309896196e+22, 1.0501786345078302e+23, -1.1876531748611357e+23], [2.9580525058096382e+22, 1.0501786345078302e+23, -1.1876531748611357e+23], [2.9580527309896196e+22, 1.0501787245798227e+23, -1.1876531748611357e+23]]
+    numeric_g = 8277542449007818.0
+    for name, scale, sign, margin, check in (
+            ('numeric-bound', 1., 1., 1., 'coarseDrops'),
+            ('numeric-bound-small', 2.**-40, 1., 1., 'coarseDrops'),
+            ('numeric-bound-reflected', 1., -1., 1., 'coarseDrops'),
+            ('numeric-bound-margin', 1., 1., 2., None)):
+        kept = [[v * scale * sign for v in p] for p in numeric_face]
+        lost = [[v * scale * sign for v in p] for p in numeric_drop]
+        g = numeric_g * scale * margin
+        drop(name, [kept], [lost], [kept], 3, 0, 1, g, check)
+        # The original review has bounds sized for the large literal coordinates.
+        folder = root / name
+        extent = max(abs(v) for t in (kept, lost) for p in t for v in p) * 4 + 10
+        top = tile('coarse.glb', [tile('left.glb', box=(0, extent)),
+                                tile('right.glb', box=(0, extent))], box=(0, extent))
+        top['geometricError'] = g
+        (folder / 'tileset.json').write_text(json.dumps(dict(
+            asset={'version': '1.1'}, geometricError=g, root=top)))
     # The review's complete seeded 120-case corpus, with pinned expected checks.
     import random
     rng = random.Random(313)
@@ -176,6 +198,10 @@ def run(root, binary=None):
     from oracle import audit, Failure, distance2
     from drops import covers
     from spatial import Work, WorkLimit
+    from fractions import Fraction
+    # A non-dyadic centroid must not be silently converted back to binary64.
+    assert distance2((Fraction(1, 3), 0, 0),
+                     ((0, 0, 0), (0, 1, 0), (0, 0, 1))) == Fraction(1, 9)
     # One subdivision is necessary: no individual retained triangle covers the
     # original triangle. Equality and exhausted work must not become false passes.
     triangle = ((0, 0, 0), (2, 0, 0), (0, 2, 0))

@@ -54,21 +54,23 @@ def covers(triangle, parent, reach, distance2, work):
     """Certify all points at reach: Lipschitz balls or one convex face per region.
 
     DFS midpoint subdivision is bounded to depth 32 and charged to oracle work,
-    including each point/retained-face test. No child-G slack is used for N3.
+    including each point/retained-face test. All region geometry and squared
+    comparisons use exact fractions; no extra tolerance or child-G slack is used.
     """
-    stack = [(triangle, 0)]
+    stack = [(tuple(tuple(Fraction(v) for v in p) for p in triangle), 0)]
     bound = Fraction(reach) ** 2
     while stack:
         t, depth = stack.pop()
         work.charge()
         center = tuple(sum(p[k] for p in t) / 3 for k in range(3))
-        radius = max(math.dist(p, center) for p in t)
+        radius2 = max(sum((p[k] - center[k]) ** 2 for k in range(3)) for p in t)
         certified = center_near = False
         for f in parent:
             work.charge()
             d2 = distance2(center, f['xyz'])
             center_near |= d2 <= bound
-            if radius <= reach and d2 <= Fraction(reach - radius) ** 2:
+            gap = bound - d2 - radius2
+            if gap >= 0 and gap ** 2 >= 4 * d2 * radius2:
                 certified = True
                 break
             corners_near = True
@@ -86,7 +88,7 @@ def covers(triangle, parent, reach, distance2, work):
             return False
         a, b, c = t
         def mid(p, q):
-            return tuple((p[k] + q[k]) * .5 for k in range(3))
+            return tuple((p[k] + q[k]) / 2 for k in range(3))
         ab, bc, ca = mid(a, b), mid(b, c), mid(c, a)
         stack.extend((sub, depth + 1) for sub in ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca)))
     return True

@@ -579,7 +579,12 @@ every tile built today is unchanged:
   radius (maximum corner distance) bounds the whole region by 1-Lipschitz continuity.
   Alternatively, corner distances to one convex retained triangle bound that region.
   Uncertified regions subdivide at edge midpoints, at most 32 levels, with every
-  region and point/face test charged to the existing effort budget. Exhaustion or
+  region and point/face test charged to the existing effort budget. Native encloses
+  every certificate operation with outward binary64 intervals, including normalized
+  convex witnesses on retained faces and the centroid, radius and subdivision geometry.
+  Projections only choose witnesses; acceptance uses squared upper bounds against the
+  same global binary64 reach, without another tolerance. The reference uses exact
+  fractions throughout this geometry. Numerically unresolved cases refuse. Exhaustion or
   unresolved depth refuses; this sufficient check need not accept every valid input.
   Stages 0–2 and undeclared drops retain their sampled lower-bound check (child G
   added off vertices), not this continuous guarantee. Neither check proves producer

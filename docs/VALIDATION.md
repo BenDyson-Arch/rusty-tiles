@@ -35,7 +35,13 @@ three corners fit it against one retained triangle (distance to a convex set is
 convex). Otherwise four-way midpoint subdivision continues to depth 32. Unresolved
 regions fail `coarseDrops`; exhausted effort refuses with the existing budget
 error. Every region and point/retained-face test is charged. The depth-first stack
-holds at most 97 regions. This is a sufficient certificate and can refuse a valid
+holds at most 97 regions. Native uses outward binary64 intervals for every
+arithmetic step in convex witness distances, centroid/radius bounds, and subdivision
+vertices. Approximate projections only select valid convex witnesses; their rounded
+distances never authorize acceptance. Squared comparisons enclose their own rounding,
+against the one binary64 reach computed above; no second tolerance is added. Python
+uses exact fractions for these geometry operations and comparisons. Numerically
+unresolved native certificates refuse. This is a sufficient certificate and can refuse a valid
 surface when its budget/depth is insufficient. Stages 0–2 and undeclared drops
 retain fixed samples, with child G added off vertices; those samples provide only
 lower bounds, not continuous surface certification. None of these checks proves

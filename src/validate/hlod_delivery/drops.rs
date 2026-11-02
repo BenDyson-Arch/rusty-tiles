@@ -17,6 +17,8 @@
 //! verified by the time the recount runs (`lastResort`: shape, fold recount, leaf refusal).
 //! N3 certifies every dropped triangle continuously at G, without child-G slack.
 //! Stages 0-2 and undeclared tiles keep the sampled rule described above.
+mod certificate;
+
 use super::{bad, point_bytes, read_point, sql, CanonicalPoint, Effort, Error, Store};
 use rustc_hash::FxHashMap as HashMap;
 use std::collections::HashSet;
@@ -487,36 +489,29 @@ impl Grid {
         faces: &[[CanonicalPoint; 3]],
         effort: &Effort,
     ) -> Result<bool, Error> {
-        let mut stack = vec![(triangle, 0)];
+        use certificate::{ball_fits, distance2_upper, radius2, within, Interval};
+        let mut stack = vec![(triangle.map(|p| p.map(Interval::point)), 0)];
         while let Some((t, depth)) = stack.pop() {
             effort.charge(1)?;
-            let center = std::array::from_fn(|k| (t[0][k] + t[1][k] + t[2][k]) / 3.);
-            let radius = t
-                .iter()
-                .map(|p| {
-                    (0..3)
-                        .map(|k| (p[k] - center[k]).powi(2))
-                        .sum::<f64>()
-                        .sqrt()
-                })
-                .fold(0., f64::max);
+            let center =
+                std::array::from_fn(|k| t[0][k].add(t[1][k]).add(t[2][k]).div(Interval::point(3.)));
+            let radius = radius2(t, center);
             let mut certified = false;
             let mut center_near = false;
-            if let Some(cell) = self.cells.get(&self.cell(center)) {
+            if let Some(cell) = self.cells.get(&self.cell(center.map(Interval::middle))) {
                 for &i in cell {
                     let face = faces[i as usize].map(point);
                     effort.charge(1)?;
-                    let d = distance2(center, face).sqrt();
-                    center_near |= d <= self.reach;
-                    if d + radius <= self.reach {
+                    let d = distance2_upper(center, face);
+                    center_near |= within(d, self.reach);
+                    if ball_fits(d, radius, self.reach) {
                         certified = true;
                         break;
                     }
                     let mut corners_near = true;
                     for p in t {
                         effort.charge(1)?;
-                        let within = distance2(p, face) <= self.reach * self.reach;
-                        if !within {
+                        if !within(distance2_upper(p, face), self.reach) {
                             corners_near = false;
                             break;
                         }
@@ -534,7 +529,9 @@ impl Grid {
                 return Ok(false);
             }
             let [a, b, c] = t;
-            let mid = |p: [f64; 3], q: [f64; 3]| std::array::from_fn(|k| (p[k] + q[k]) * 0.5);
+            let mid = |p: certificate::Point, q: certificate::Point| {
+                std::array::from_fn(|k| p[k].add(q[k]).div(Interval::point(2.)))
+            };
             let (ab, bc, ca) = (mid(a, b), mid(b, c), mid(c, a));
             for sub in [[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]] {
                 stack.push((sub, depth + 1));
