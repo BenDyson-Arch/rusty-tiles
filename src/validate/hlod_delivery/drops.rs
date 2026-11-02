@@ -419,6 +419,7 @@ struct Grid {
     size: f64,
     reach: f64,
     cells: HashMap<[i64; 3], Vec<u32>>,
+    last: std::cell::Cell<Option<u32>>,
 }
 
 impl Grid {
@@ -448,6 +449,7 @@ impl Grid {
             size,
             reach,
             cells: HashMap::default(),
+            last: std::cell::Cell::new(None),
         };
         for (i, f) in faces.iter().enumerate() {
             let ps = f.map(point);
@@ -489,34 +491,52 @@ impl Grid {
         faces: &[[CanonicalPoint; 3]],
         effort: &Effort,
     ) -> Result<bool, Error> {
-        use certificate::{ball_fits, distance2_upper, radius2, within, Interval};
+        use certificate::{ball_fits, filtered_upper, radius2, within, Interval};
         let mut stack = vec![(triangle.map(|p| p.map(Interval::point)), 0)];
         while let Some((t, depth)) = stack.pop() {
             effort.charge(1)?;
             let center =
                 std::array::from_fn(|k| t[0][k].add(t[1][k]).add(t[2][k]).div(Interval::point(3.)));
             let radius = radius2(t, center);
+            let ball = (self.reach - radius.sqrt().next_up()).next_down();
+            let distance = |p, face, ball| -> Result<f64, Error> {
+                effort.charge(1)?;
+                effort
+                    .certificate_fast
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Ok(filtered_upper(
+                    p,
+                    face,
+                    self.reach,
+                    ball,
+                    &effort.certificate_slow,
+                ))
+            };
             let mut certified = false;
             let mut center_near = false;
             if let Some(cell) = self.cells.get(&self.cell(center.map(Interval::middle))) {
-                for &i in cell {
+                let last = self.last.get();
+                for i in last
+                    .into_iter()
+                    .chain(cell.iter().copied().filter(|i| Some(*i) != last))
+                {
                     let face = faces[i as usize].map(point);
-                    effort.charge(1)?;
-                    let d = distance2_upper(center, face);
+                    let d = distance(center, face, ball)?;
                     center_near |= within(d, self.reach);
                     if ball_fits(d, radius, self.reach) {
+                        self.last.set(Some(i));
                         certified = true;
                         break;
                     }
                     let mut corners_near = true;
                     for p in t {
-                        effort.charge(1)?;
-                        if !within(distance2_upper(p, face), self.reach) {
+                        if !within(distance(p, face, self.reach)?, self.reach) {
                             corners_near = false;
                             break;
                         }
                     }
                     if corners_near {
+                        self.last.set(Some(i));
                         certified = true;
                         break;
                     }
@@ -552,9 +572,14 @@ impl Grid {
             return Ok(false);
         };
         let reach = self.reach + slack;
-        for &i in cell {
+        let last = self.last.get();
+        for i in last
+            .into_iter()
+            .chain(cell.iter().copied().filter(|i| Some(*i) != last))
+        {
             effort.charge(1)?;
             if distance2(p, faces[i as usize].map(point)) <= reach * reach {
+                self.last.set(Some(i));
                 return Ok(true);
             }
         }
@@ -683,6 +708,8 @@ mod tests {
         use super::{Effort, Grid};
         use std::sync::{atomic::AtomicU64, Arc};
         let effort = Effort {
+            certificate_fast: AtomicU64::new(0),
+            certificate_slow: AtomicU64::new(0),
             budget: budget(),
             base: 0,
             used: Arc::new(AtomicU64::new(0)),
@@ -705,6 +732,8 @@ mod tests {
         let mut tiny = budget();
         tiny.value = 1;
         let exhausted = Effort {
+            certificate_fast: AtomicU64::new(0),
+            certificate_slow: AtomicU64::new(0),
             budget: tiny,
             base: 0,
             used: Arc::new(AtomicU64::new(0)),
