@@ -409,7 +409,7 @@ fn settle(
         folds::Source::new(&merged.positions, source).settle(
             &merged.positions,
             out,
-            resort != Resort::N3,
+            !resort.clustered(),
         );
     }
 }
@@ -426,9 +426,9 @@ const CLUSTER_BISECTIONS: u32 = 12;
 /// components, as topology accounting requires) onto the member nearest the cell's mean
 /// (least index on ties); degenerate faces go and the rest settle (`settle`). The cell starts at
 /// the shortest edge, doubles until the output fits, then bisects toward the finest fit.
-/// On a shared interface, a rejected settled grid uses the remaining doubling
-/// allowance to seek a capped guard-valid grid. The error is the largest move
-/// onto a representative.
+/// In recovery after complete cell failure, a rejected settled grid uses the
+/// remaining doubling allowance to seek a capped guard-valid grid. The error
+/// is the largest move onto a representative.
 fn cluster_reduce(
     merged: &Merged,
     source: &[[u32; 3]],
@@ -436,6 +436,7 @@ fn cluster_reduce(
     locked: &[bool],
     cap: usize,
     policy: &folds::Policy,
+    recover: bool,
 ) -> (Vec<[u32; 3]>, f64) {
     let guard = folds::Source::new(&merged.positions, source)
         .with_boundary(interface)
@@ -555,7 +556,7 @@ fn cluster_reduce(
             .iter()
             .any(|v| *v)
     };
-    if !interface.is_empty() && best.0.len() <= cap && !valid(&best.0) {
+    if recover && !interface.is_empty() && best.0.len() <= cap && !valid(&best.0) {
         while doublings < CLUSTER_DOUBLINGS {
             h *= 2.;
             doublings += 1;
@@ -851,6 +852,27 @@ pub(crate) fn build_parent(
         }
         last = next;
     }
+    // Preserve every successful cell, including a protected N3 repair or a
+    // later cap/hole strategy. Only a complete failure gets this additional
+    // full-cap construction strategy; its policy and admission remain N3's.
+    if last.built.is_none() && !contract.interface.is_empty() {
+        let mut next = build(
+            tile,
+            children,
+            &caps[caps.len() - 1..],
+            contract,
+            mapping,
+            assess,
+            check,
+            Resort::N3Recovery,
+            relief.as_ref(),
+        )?;
+        next.attempted_topology.add(last.attempted_topology);
+        if let (Some(b), Some(relief)) = (&mut next.built, &relief) {
+            b.relief_stuck = relief.stuck.len() as u32;
+        }
+        last = next;
+    }
     if let Some(b) = &mut last.built {
         b.last_resort = true;
     }
@@ -918,6 +940,8 @@ enum Resort {
     N1,
     N2,
     N3,
+    /// After complete failure: coarsen an invalid grid, with N3 permissions.
+    N3Recovery,
 }
 
 impl Resort {
@@ -926,13 +950,16 @@ impl Resort {
         match self {
             Self::N1 => 1,
             Self::N2 => 2,
-            Self::N3 => 3,
+            Self::N3 | Self::N3Recovery => 3,
             _ => 0,
         }
     }
+    fn clustered(self) -> bool {
+        matches!(self, Self::N3 | Self::N3Recovery)
+    }
     /// Whether the first reduction is staged or clustered (without contact pins).
     fn staged(self) -> bool {
-        matches!(self, Self::Staged | Self::N1 | Self::N2 | Self::N3)
+        matches!(self, Self::Staged | Self::N1 | Self::N2) || self.clustered()
     }
 }
 
@@ -973,7 +1000,7 @@ fn build(
         tile.leaf_end,
         &contract.holders,
     );
-    let n3 = (resort == Resort::N3).then_some(&policy);
+    let n3 = resort.clustered().then_some(&policy);
     let mut topology = topology::Receipt::default();
     let mut attempted = topology::Receipt::default();
     // Coarsening only merges owners: every live parent border is a child border.
@@ -994,7 +1021,7 @@ fn build(
             Ok(None)
         }
     };
-    if let Some(seed) = seed.filter(|_| resort == Resort::N3) {
+    if let Some(seed) = seed.filter(|_| resort.clustered()) {
         // A1 hand-over: continue the primary contraction, snapping only its stuck vertices,
         // licensed like any contraction (`folds::Source::for_contraction`).
         let mapped = reference
@@ -1064,7 +1091,7 @@ fn build(
     let pressure = contracted_faces.len() > *caps.last().unwrap();
     // N3's clustering may drop or close any border-free component or hole: declared,
     // ordered smallest first and covered by S2's measured G like every drop.
-    let drops = if resort == Resort::N3 {
+    let drops = if resort.clustered() {
         f64::INFINITY
     } else if pressure {
         floor
@@ -1723,9 +1750,15 @@ fn attempt_mode(
             })
         };
         let (mut output, mut error) = match &staged_lock {
-            Some(lock) if resort == Resort::N3 => {
-                cluster_reduce(merged, contracted_faces, interface, lock, cap, policy)
-            }
+            Some(lock) if resort.clustered() => cluster_reduce(
+                merged,
+                contracted_faces,
+                interface,
+                lock,
+                cap,
+                policy,
+                resort == Resort::N3Recovery,
+            ),
             Some(lock) => staged_reduce(merged, contracted_faces, interface, lock, cap, policy),
             None => reduce(&merged.triangles, &|v| locked[v as usize], cap)?,
         };

@@ -606,12 +606,15 @@ every tile built today is unchanged:
   beyond the source's count are dropped.
 - **N3, clustering.** The first reduction is vertex clustering per input component, with
   every interface point, opening pin and open boundary touching the interface fixed, at the
-  finest count-fitting grid first. If source-orientation settlement makes that grid
-  violate the existing fold/shared-edge guard, the remaining cell-size doublings seek
-  a capped, guard-valid grid before protected reduction retries. A valid initial result
-  stays unchanged. Fit search and repair share 64 doublings, with at most 12 bisections:
-  at most 77 proposals including the start. The same topology, decode and S2 checks
-  still apply to the selected grid. Coincident copies stay.
+  finest count-fitting grid first (at most 77 grids: one start, 64 doublings and 12
+  bisections). Existing successful cell construction is retained, including protected
+  repairs and later caps/hole strategies. Only after complete failure, a cell with a
+  nonempty interface gets an additional full-cap N3 construction strategy. If
+  source-orientation settlement invalidates its finest capped grid, the remaining
+  doublings seek a nonempty capped grid that passes the unchanged fold/shared-edge
+  guard. Each recovery search shares the same 77-grid bound; the two existing hole
+  policies, reduction-pass budget, topology, decode and source-S2 checks still apply.
+  Its declaration and permissions remain stage 3. Coincident copies stay.
   Border-free components and holes may drop or close at any size, declared like every
   drop; S2 measures them into G instead of bounding them by E. Both validators exempt a
   verified stage-3 tile's drops from cap pressure and size order (coarse drops); the

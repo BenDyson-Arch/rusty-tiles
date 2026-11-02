@@ -1,3 +1,3 @@
 ### Fixed
 
-- HLOD clustering can recover a stalled cell when its finest capped grid violates a shared-edge guard but a coarser grid passes, within the existing search bound.
+- HLOD can recover an omitted cell with a coarser guarded cluster when its finest capped grid violates shared-edge incidence, preserving every previously successful cell build.

@@ -66,8 +66,25 @@ fn clustering_can_coarsen_past_a_settled_shared_edge_conflict() {
         .any(|v| *v));
 
     let locked = [true, true, false, false, false, false, false];
-    let (output, error) =
-        cluster_reduce(&merged, &merged.triangles, &interface, &locked, 2, &policy);
+    let (ordinary, _) = cluster_reduce(
+        &merged,
+        &merged.triangles,
+        &interface,
+        &locked,
+        2,
+        &policy,
+        false,
+    );
+    assert_eq!(ordinary, first, "the ordinary search stays unchanged");
+    let (output, error) = cluster_reduce(
+        &merged,
+        &merged.triangles,
+        &interface,
+        &locked,
+        2,
+        &policy,
+        true,
+    );
     assert_eq!(output.len(), 2);
     assert!(error.is_finite() && error > 0.);
     assert!(!guard
