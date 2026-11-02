@@ -28,7 +28,8 @@ from source incidence alone, in IEEE double like the producer:
 - the walk order, cycle anchors and open-chain witnesses;
 - isolated ears on relieved chains;
 - the corridor greedy;
-- each coarse cell's item count, the 85%/75% trigger and request at `--triangle-cap`,
+- each coarse cell's item count and both pressures' triggers and requests at `--triangle-cap`
+  (feasibility 85% to 75%, steps ≤ 8; quality 37.5% to 25%, steps ≤ 6; the larger wins),
   the owner maximum and the finer-level monotone minimum.
 
 A certificate whose `step` differs is `borderReliefStep`. `borders.py` also requires:
@@ -47,7 +48,8 @@ The rebuild maps each delivered tile to the frozen cells of its chain:
 A link placeholder, a record without `encodedDepth`, or a chain that does not start one
 level below its parent's leaves the steps in `uninspected`. `border_controls.py`
 pins an honest relieved arc at cap 4 and its wrong-step, understated-step and unfloored
-mutants. It also pins an honest relieved collapsed chain (re-derived at both levels) and
+mutants, a quality-only relieved arc at cap 8 (`relief-quality`) and the same declared step
+at cap 16, where no pressure fires (`relief-quality-off`). It also pins an honest relieved collapsed chain (re-derived at both levels) and
 its 8 x ε mutant, and a relieved deeper chord beside an exact coarser tile at a gap
 between E/8 and G/8. The 3e880cb3 oracle accepted both of those mutants.
 

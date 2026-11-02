@@ -504,6 +504,11 @@ CASES = [
     # covers 16 x eps; native validation cannot see the chain's depths.
     ('relief-chain', None, None),
     ('relief-chain-unfloored', 'borderReliefFloor', None),
+    # Quality pressure (A1, 2026-10-31): at cap 8 the arc's 4 items exceed 37.5% but not
+    # 85%, so only quality relief re-derives step 6 (2 items, 25%). At cap 16 neither
+    # pressure fires, and the same declared step is a lie.
+    ('relief-quality', None, None),
+    ('relief-quality-off', 'borderReliefStep', None),
     # Review 1 (P3-3): an unrelieved coarser tile beside a relieved deeper chord keeps E/8.
     ('mixed-relieved-finer', 'mixedDepthBorderGap', None),
     # Review 2 (N-1): leaf grids are keyed by frozen depth below a collapsed chain.
@@ -513,10 +518,11 @@ CASES = [
 OFFSETS = {'mixed-beyond-g8': 0.001, 'relief': 0.01, 'relief-step-wrong': 0.01,
            'relief-step-understated': 0.01, 'relief-unfloored': 0.01, 'relief-chain': 0.01,
            'relief-chain-unfloored': 0.01, 'mixed-relieved-finer': 0.001, 'chain-grid': 0.,
+           'relief-quality': 0.01, 'relief-quality-off': 0.01,
            'chain-grid-unlabelled': 0.}
 # The hard cap each case is checked at (A1's trigger is a share of it).
 CAPS = {'relief': 4, 'relief-step-wrong': 4, 'relief-step-understated': 4, 'relief-unfloored': 4,
-        'relief-chain': 4, 'relief-chain-unfloored': 4}
+        'relief-chain': 4, 'relief-chain-unfloored': 4, 'relief-quality': 8, 'relief-quality-off': 16}
 
 
 def _rehash(records, files):
@@ -997,7 +1003,7 @@ def run(root, binary=None, sheet_n=120):
         entry = dict(name=name, oracle=got)
         if name in ('contracted', 'mixed-within', 'same-depth-gap'):
             assert result.get('contractedBorderArcs', 0) > 0 or got, (name, result)
-        if name == 'relief':
+        if name in ('relief', 'relief-quality'):
             assert result['borders'].get('reliefCellsRederived') == 2, result['borders']
             assert result['borders'].get('reliefStepsChecked', 0) >= 4, result['borders']
         if name == 'chain-grid':
@@ -1005,9 +1011,10 @@ def run(root, binary=None, sheet_n=120):
             assert result.get('chainLeaves') == 2, result.get('chainLeaves')
             assert result['canonical'].get('gridSourcePoints', 0) >= 1, result['canonical']
         if name == 'relief-chain':
-            # Inspected through the chain: depth 2 triggers, depth 1 follows it.
+            # Inspected through the chain: depth 2 triggers (feasibility), and depth 1's two
+            # inherited items still exceed the quality trigger (no further step).
             assert result['borders'].get('reliefChainLevels') == 2, result['borders']
-            assert result['borders'].get('reliefCellsRederived') == 2, result['borders']
+            assert result['borders'].get('reliefCellsRederived') == 4, result['borders']
             assert result['borders'].get('reliefStepsChecked', 0) >= 4, result['borders']
         if binary is not None:
             code, report = native(binary, root / name, root / f'{name}.3tz')
