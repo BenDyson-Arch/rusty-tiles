@@ -528,7 +528,7 @@ fixtures follow those rulings. Each ruled item says which decision applies.
     - One-ulp mutants at ancestor levels, and centre-shift mutants of
       zero-half-length rows, break declared nesting by one ulp. Whether
       production reaches C2 for them depends on C1's slack. Each such row is
-      noted in `report.json`.
+      noted in `witnesses/report.json.gz`.
     - In the I2 control, the content volume of the referencing tile excludes
       the external root's volume. If C1 compares external roots against that
       content volume, `hierarchyBounds` precedes C2.
