@@ -409,3 +409,21 @@ all charged work must be nonincreasing, and strict budget improvements must
 occur. A mutant that refuses on separation must fail this test. The native
 three-unit control retains actual Budget/Error wiring; neither the old scan
 nor a pruning mode switch is added to production.
+
+Review-fix CPU evidence is in
+`~/.cache/rusty-tiles-evidence/n3-cert2-319-fix1-20261103/`. The scoped
+`dupscale.sh` regeneration produced byte-identical ci-32000 and dup-16000 archives,
+retained there read-only with producer/generator provenance. Four interleaved
+slot-1 P-core pairs compare actual develop `cf43aef8` with implementation
+`b5de7154`, using identical phase instrumentation and checking full report
+identity. Mean whole CPU is 83.768 → 81.113 s and 36.577 → 34.787 s, respectively.
+ci-32000's remainder varies in both directions; its mean change is +0.898 s,
+not a demonstrated zero-cost difference. Three additional pairs replay the exact
+historical #309-overlay binaries: remainder CPU is 35.236 → 35.222 s. The prior
+single-pair +8.081 s remainder increase was not reproduced. These are bounded
+shared-host observations, not a universal speed guarantee or a new choice of R.
+The external evidence was never tracked; SHA-256 bindings are:
+
+- `paired-summary.json`: `d7686983f146bc9037f158af50d9820746c349bb80df1e2a080586c8a864b501`
+- `overlay-summary.json`: `5149887db0803c08d2ae51db128017bee26b07451efb4e11ed069cafdd2ccb7c`
+- `inputs.json`: `2dcef14b9487bf0f45fb764278600058f2a9c9bc12038bcd97bd4667ba985b02`
