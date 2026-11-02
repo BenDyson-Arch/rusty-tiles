@@ -8,5 +8,4 @@
 
 ### Changed
 
-- Vector reuse: existing `--reuse-tileset` caches are invalidated a second time (the first was the retirement preparation), so the first reuse run after upgrading rebuilds every tile. This change edits `metadata.rs`, `bbox.rs`, `georef.rs` and other files the encoder fingerprint hashes whole. Vector output is otherwise byte-identical.
 - The deep implicit-forest validator test now reads a committed witness archive written by the removed `mesh-to-3tz`, pinned by sha256. The F1a–F1d2 oracle, viewer and wheel drivers that exercised `mesh-local-to-3tz`, and their CI steps, are retired; the six demo-corpus `mesh-to-3tz` cases are dropped. The CI `native-jpeg` test legs now run the default build.

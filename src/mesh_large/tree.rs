@@ -84,6 +84,7 @@ pub(crate) struct TreeStats {
     pub degenerate_cells: u64,
     pub per_depth: Vec<DepthBounds>,
 }
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 pub(crate) struct TreeOutput {
     pub triangles: Sequence<TriangleRecord>,
     /// Preorder, sorted by (first rank, depth).
@@ -429,6 +430,7 @@ fn common_cell_prefix(a: u64, b: u64) -> u8 {
         .unwrap_or(0)
 }
 
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 /// H1's tree over a sorted stream; the rank-ordered triangles are stored and kept.
 pub(crate) fn build(
     scratch: &Scratch,

@@ -40,9 +40,7 @@
 //! implicit payload under a name only that tile uses and delete it as soon as its document
 //! is written. Staging at the final name needs neither.
 //!
-//! The large-mesh tiler's delivery (H16) is the intended caller; until it lands, the tests
-//! are the only one.
-#![cfg_attr(not(test), allow(dead_code))]
+//! The large-mesh tiler's delivery (H16) consumes this writer.
 
 use super::{
     check_document, check_implicit_tile, collect_records, coordinate_template, data, widen,
@@ -71,6 +69,7 @@ use std::{collections::BTreeSet, path::Path};
 pub(crate) struct RootName(String);
 
 impl RootName {
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     pub(crate) fn new(name: impl Into<String>) -> Result<Self, Error> {
         let name = name.into();
         if name.is_empty()
@@ -100,6 +99,7 @@ impl RootName {
 /// How a streamed implicit root names its members.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum ImplicitNames {
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     /// The whole-tree writer's form under a [`RootName`] prefix.
     Prefix(RootName),
     /// The caller's templates: one content template per content slot, in slot order (content
@@ -188,6 +188,7 @@ impl<X> ForestTile<X> {
         Self::Explicit { record, children }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     /// An implicit root named by `name` ([`ImplicitNames::Prefix`]).
     pub(crate) fn implicit(name: RootName, tree: TileTree<X>) -> Self {
         Self::named(ImplicitNames::Prefix(name), tree)
@@ -225,6 +226,7 @@ pub(crate) struct DocumentLink {
 }
 
 impl DocumentLink {
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     pub(crate) fn name(&self) -> &MemberName {
         &self.name
     }

@@ -686,6 +686,7 @@ pub(in crate::mesh_large) fn workspace_charge(
     Ok(charge)
 }
 
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 #[allow(clippy::too_many_arguments)]
 pub(in crate::mesh_large) fn encode(
     dimensions: [u32; 2],
@@ -1474,6 +1475,7 @@ fn png_step(
     }))
 }
 
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 /// One exact PNG per authored ID level. Level 0 is the delivered texture
 /// (sampled NEAREST, no runtime mips); coarser levels are ID-safe pages for
 /// coarse proxies. Every level is decoded independently and must equal the
@@ -1484,6 +1486,7 @@ pub(in crate::mesh_large) struct IdDelivery {
     pub levels: Vec<Vec<u8>>,
     pub receipts: Vec<Value>,
 }
+#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
 pub(in crate::mesh_large) fn encode_id_chain(
     chain: &sparse_mips::Chain,
     memory_limit: u64,

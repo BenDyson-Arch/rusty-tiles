@@ -35,22 +35,35 @@ pub(crate) struct Level {
 }
 #[derive(Debug)]
 pub(crate) struct Coverage {
+    #[cfg_attr(not(test), allow(dead_code))]
+    // Retained for bounded unit-test fixtures; production uses the streamed facade.
     pub target: f64,
+    #[cfg_attr(not(test), allow(dead_code))]
+    // Retained measurement in the bounded encoding result.
     pub actual: f64,
+    #[cfg_attr(not(test), allow(dead_code))]
+    // Retained measurement in the bounded encoding result.
     pub residual: f64,
+    #[allow(dead_code)] // Coverage measurement returned with the independently checked mip result.
     pub scale: f64,
+    #[allow(dead_code)] // Coverage measurement returned with the independently checked mip result.
     pub texels: usize,
     /// Attainable passing counts under a uniform nonnegative scale, after RGBA8 rounding.
+    #[cfg_attr(not(test), allow(dead_code))]
+    // Retained measurement in the bounded encoding result.
     pub attainable_counts: Vec<usize>,
 }
 #[derive(Debug)]
 pub(crate) struct Chain {
+    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[allow(dead_code)] // Retained measurement in the bounded encoding result.
     pub class: Class,
     pub levels: Vec<Level>,
     pub coverage: Vec<Coverage>,
     pub normal_cancellations: Vec<usize>,
     /// Charged owning allocation bound (pixels, level/report records, count lists).
     /// Caller additionally owns encoder workspace/output and its job/global memory.
+    #[allow(dead_code)] // Retained measurement in the bounded encoding result.
     pub charged_bytes: usize,
 }
 fn err(kind: JobErrorKind, s: &str) -> JobError {
