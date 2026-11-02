@@ -32,6 +32,12 @@ pub(crate) struct Receipt {
     /// tile's G floor, licensed only once no other strategy fits the cap.
     #[serde(skip_serializing_if = "is_zero")]
     pub coarse_dropped_components: u64,
+    /// Border relief (A1): relieved border vertices removed by collapse along their chord,
+    /// and those the collapse left to the ordinary contraction.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub relief_collapsed: u64,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub relief_left: u64,
     pub max_dropped_component_diameter: f64,
     pub hole_patch_to_source: f64,
     pub hole_boundary_to_patch: f64,
@@ -52,6 +58,8 @@ impl Receipt {
         self.duplicate_faces += r.duplicate_faces;
         self.dropped_components += r.dropped_components;
         self.coarse_dropped_components += r.coarse_dropped_components;
+        self.relief_collapsed += r.relief_collapsed;
+        self.relief_left += r.relief_left;
         self.closed_holes += r.closed_holes;
         self.opened_holes += r.opened_holes;
         self.remeshed_vertices += r.remeshed_vertices;
@@ -197,6 +205,7 @@ pub(super) fn contract(
     receipt: &mut Receipt,
     fallbacks: bool,
     folds: Option<&super::folds::Policy>,
+    relief: Option<&mut Option<super::Contracted>>,
 ) -> Result<bool, JobError> {
     contract_from(
         m,
@@ -207,6 +216,7 @@ pub(super) fn contract(
         None,
         fallbacks,
         folds,
+        relief,
     )
 }
 
@@ -271,7 +281,9 @@ fn choose_targets(
 /// Keep the licenses of the original merged children across recovery proposals.
 /// `fallbacks`: see `constrained::contract`. `folds` (A2's N3): the guard runs under that
 /// last-resort policy, so the snap may fold faces; the shared-point rules (seam owner),
-/// exact interface items and an unchanged topology still decide.
+/// exact interface items and an unchanged topology still decide. `relief`: the contract has
+/// relieved chords (A1), and the slot receives this contraction's residue when it does not
+/// complete.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn contract_from(
     m: &mut Merged,
@@ -282,6 +294,7 @@ pub(super) fn contract_from(
     original_faces: Option<&[[u32; 3]]>,
     fallbacks: bool,
     folds: Option<&super::folds::Policy>,
+    relief: Option<&mut Option<super::Contracted>>,
 ) -> Result<bool, JobError> {
     let _cpu = super::super::cpu_profile::start(
         super::super::cpu_profile::Stage::Contract,
@@ -323,6 +336,66 @@ pub(super) fn contract_from(
     }
     choose_targets(m, interface, &ids, &mapping_by_vertex, &mut map);
     drop(ids);
+    // Relieved contract (A1): collapse along each chord first. A complete collapse the
+    // checks below accept is the contraction; otherwise the vertices it left take the
+    // ordinary snap (and reconstruction) below, on the collapsed mesh but against the
+    // original faces' licences, and the slot keeps this residue for the last resort.
+    let mut collapsed_original: Option<Vec<[u32; 3]>> = None;
+    let strict = super::folds::Policy::default();
+    if let Some(slot) = relief {
+        let policy = folds.unwrap_or(&strict);
+        if let Some((faces, left)) =
+            super::relief::along_border(m, interface, &mapping_by_vertex, policy)
+        {
+            let original = original_faces.map_or_else(|| m.triangles.clone(), <[_]>::to_vec);
+            let (residue, collapsed) =
+                super::relief::handover(m, faces.clone(), &left, &mapping_by_vertex);
+            receipt.relief_collapsed += collapsed;
+            receipt.relief_left += left.len() as u64;
+            if left.is_empty() {
+                let required = points(interface);
+                let segments = interface
+                    .iter()
+                    .filter(|r| !r.is_vertex())
+                    .map(|r| (r.a, r.b))
+                    .collect();
+                let lost = super::missing_owned(&faces, &m.keys, segments, required);
+                let guard = super::folds::Source::for_contraction(
+                    &m.positions,
+                    &original,
+                    interface,
+                    previous_interface,
+                    &mapping_by_vertex,
+                )
+                .with_policy(policy.clone());
+                if !faces.is_empty()
+                    && lost.0.is_empty()
+                    && lost.1.is_empty()
+                    && changes(m, &faces, interface, 0.).is_some()
+                    && !guard.violations(&m.positions, &faces).iter().any(|v| *v)
+                {
+                    m.triangles = faces;
+                    let first = m.representative[0];
+                    m.representative.resize(m.triangles.len(), first);
+                    return Ok(true);
+                }
+                *slot = Some(residue);
+            } else {
+                *slot = Some(residue);
+                let left: HashSet<u32> = left.into_iter().collect();
+                for (v, target) in map.iter_mut().enumerate() {
+                    if !left.contains(&(v as u32)) {
+                        *target = v as u32;
+                    }
+                }
+                m.triangles = faces;
+                let first = m.representative[0];
+                m.representative.resize(m.triangles.len(), first);
+                collapsed_original = Some(original);
+            }
+        }
+    }
+    let original_faces = collapsed_original.as_deref().or(original_faces);
     let mut output = Vec::with_capacity(m.triangles.len());
     let mut representatives = Vec::with_capacity(m.triangles.len());
     let mut folded = false;

@@ -251,6 +251,11 @@ pub(crate) struct HlodRow {
     pub published_topology_attempt: Option<super::audit::Index>,
     pub border_scale: f64,
     pub border_epsilon: f64,
+    /// Border relief (A1): the build contract's floor on G and its largest ladder step.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub relief_floor: f64,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub relief_step: u32,
     pub topology: super::geometry::TopologyReceipt,
     pub attempted_topology: super::geometry::TopologyReceipt,
 }

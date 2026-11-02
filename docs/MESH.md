@@ -158,7 +158,10 @@ has no selector, and a plain `mesh` run uses it.
 - **Shared borders by construction.** Every owner at a given depth uses the same
   canonical border vertices and edges. Coarser levels may contract source arcs,
   with displacement certified against those arcs at no more than `E_d/16`;
-  published geometric error is at least that depth's budget `E_d`. Same-depth
+  published geometric error is at least that depth's budget `E_d`. A cell whose
+  border alone nearly fills the cap relieves its shared arcs to a larger certified
+  tolerance (at most 256 times that), and every tile on those arcs publishes at
+  least 8 times its certified displacement. Same-depth
   gaps are zero and mixed-depth gaps are at most one eighth of the larger
   geometric error. Junctions and contacts with exact leaves stay fixed. Source
   defects and T-junctions are counted, never matched with a tolerance. Adjacent

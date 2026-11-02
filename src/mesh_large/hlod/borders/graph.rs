@@ -335,6 +335,25 @@ impl Source {
             for (c, id) in ids.into_iter().enumerate() {
                 // Corner c's edges in the face are c-(c+1) and (c+2)-c.
                 if shared[c] || shared[(c + 2) % 3] {
+                    // Border relief (A1): an isolated ear. Both of c's edges are shared and
+                    // the opposite edge has no other face here (it is shared too, or its
+                    // endpoints are both source-open): collapsing c along a relieved chord
+                    // would remove the face, so relieved chords keep c (bits 48..56).
+                    let opposite = (c + 1) % 3;
+                    let ear = shared[c] && shared[(c + 2) % 3] && {
+                        let open = |i: usize| -> Result<bool, JobError> {
+                            Ok(self.vertices.get(ids[i])?[7] >> 32 & 1 != 0)
+                        };
+                        shared[opposite] || (open(opposite)? && open((c + 2) % 3)?)
+                    };
+                    if ear {
+                        let mut v = self.vertices.get(id)?;
+                        let old = v[7] >> 48 & 0xff;
+                        if old == 0 || depth + 1 < old {
+                            v[7] = v[7] & !(0xff << 48) | (depth + 1) << 48;
+                            self.vertices.set(id, v)?;
+                        }
+                    }
                     continue;
                 }
                 let mut v = self.vertices.get(id)?;
@@ -362,6 +381,11 @@ impl Source {
             }
         }
         Ok(false)
+    }
+    /// Whether a relieved chord at `depth` keeps this vertex (an isolated ear, A1).
+    pub(super) fn ear_pinned(record: &[u64; 8], depth: u32) -> bool {
+        let from = record[7] >> 48 & 0xff;
+        from != 0 && u64::from(depth) + 1 >= from
     }
     /// Whether face retention keeps this vertex record live at `depth`.
     pub(super) fn face_retained(record: &[u64; 8], depth: u32) -> bool {
