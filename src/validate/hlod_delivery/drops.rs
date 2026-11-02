@@ -494,6 +494,8 @@ impl Grid {
     /// three corner distances bound the whole region (useful at equality).
     /// Four-way subdivision uses a depth-first stack of at most 1 + 3*32 regions.
     /// Every region and every tested point/face pair consumes the existing budget.
+    /// Verdicts depend on the archive and budget, never on the coordinate cache.
+    /// Deterministic pruning may lower the budget required for an accept.
     fn covers(
         &self,
         triangle: [[f64; 3]; 3],
@@ -532,8 +534,10 @@ impl Grid {
                     let face = self.face(i, faces);
                     // A separated centroid rules out BOTH certificates: if all
                     // corners were within reach of this convex face, their
-                    // centroid would be too. Count the box query, but do not
-                    // query corners that cannot change the result.
+                    // centroid would be too. Charge the executed box query;
+                    // omitted corner queries consume no work. This deterministic
+                    // reduction may admit a smaller budget, never refuse an old
+                    // accept. Cache state changes neither queries nor charges.
                     if certificate::outside_box(center, face, self.reach) {
                         charge_distance()?;
                         continue;
@@ -813,7 +817,7 @@ mod tests {
     }
 
     #[test]
-    fn separated_centroid_prunes_corners_without_cache_or_budget_dependence() {
+    fn pruning_saves_work_with_cache_independent_budget_verdicts() {
         use super::super::tests::effort_for_tests;
         use super::{point, Grid};
         use std::sync::atomic::Ordering::Relaxed;
@@ -824,6 +828,8 @@ mod tests {
         assert_eq!(grid.cells[&grid.cell([0.125, 0.125, 0.])], vec![0, 1]);
         // Region + separated centroid + certifying centroid: three units, not
         // four. The old scan also queried a corner of the impossible first face.
+        // This budget improvement is intentional: executed work is charged,
+        // and the archive plus budget determines the verdict, not cache state.
         for remaining in 0..=5 {
             let mut cold = None;
             for cached in [None, Some(0), Some(1)] {

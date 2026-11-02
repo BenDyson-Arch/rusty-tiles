@@ -106,13 +106,17 @@ centroid within R too. The scan therefore charges/counts this centroid box test
 once and skips that face's corner queries. It does not skip on a rounded midpoint
 alone, an uncertain upper distance, or a partially overlapping box.
 
-This pruning preserves geometric decisions, subdivision and the original face
-order. It only removes queries which cannot certify the region or set
-`center_near`, so an old budgeted success cannot become a resource refusal.
-Cached and uncached coordinate reads still produce the identical query/charge
-sequence. An input previously refused solely for effort may now complete within
-the same limit. No weights, global reach or numerical tolerances change.
-
+The budget contract is deterministic in the archive and budget: every executed
+unit of work is charged, and cache state never changes charged work or verdicts.
+Deterministic pruning need not preserve a previous version's budget threshold.
+It preserves geometric decisions, subdivision and the original face order,
+removing only queries which cannot certify the region or set `center_near`.
+Required work therefore only decreases: an old accept cannot become a refusal,
+while an input previously refused solely for effort may now pass. For example,
+one region, a separated centroid and a certifying centroid require three units;
+the unpruned scan needed four because it also queried an impossible corner.
+Cached and uncached scans still have identical queries, charges and verdicts at
+every budget. No weights, global reach or numerical tolerances change.
 
 This is a sufficient certificate and can refuse a valid
 surface when its budget/depth is insufficient. Stages 0–2 and undeclared drops

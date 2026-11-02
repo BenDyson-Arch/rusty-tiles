@@ -645,8 +645,12 @@ every tile built today is unchanged:
   three-corner certificate against that face. Count/charge one fast box query
   and omit its impossible corner queries; overlap or an uncertain distance
   does not authorize pruning. This preserves geometric decisions, subdivision
-  and candidate order, and only decreases required work. Cache presence still
-  cannot change the query/charge sequence or verdict. Larger initial regions,
+  and candidate order, and only decreases required work. The owner-approved
+  budget contract is determinism in archive and budget, charging every executed
+  unit of work. Pruning may turn an effort refusal into an accept, never an old
+  accept into a refusal; cross-version budget thresholds need not be equal.
+  Cache presence still cannot change charged work or verdict at any budget.
+  Larger initial regions,
   sibling-certificate state and replacement spatial indices remain deferred:
   this narrower change needs no new index, resident geometry, subdivision
   policy or error allowance. The detailed proof is in VALIDATION.md.

@@ -398,3 +398,14 @@ measurement receipts are bound by SHA-256:
 
 - `measure-10.json`: `b88548220a4f132eee4ee56cc2a1f64e2b202b4fa04703b0164b247b14bde27f`
 - `measure-17.json`: `8e6fd6ab675997ffa6cd8e9be61af3bb0c1220b81ce716e5589b33bceffd83b8`
+
+The 2026-11-03 owner decision permits deterministic pruning to lower the budget
+needed for acceptance; it never permits cache-dependent work or verdicts.
+`cache_controls.py OUT` also reads `pruning_control.rs` and reconstructs the
+unpruned scan by removing only the pruning branch from the extracted source.
+The differential test sweeps 19 geometries, budgets through each old completion
+threshold, and cold/hit/miss caches. Every old accept must remain an accept,
+all charged work must be nonincreasing, and strict budget improvements must
+occur. A mutant that refuses on separation must fail this test. The native
+three-unit control retains actual Budget/Error wiring; neither the old scan
+nor a pruning mode switch is added to production.
