@@ -474,10 +474,13 @@ struct Grid {
     /// so no input can crowd a bucket.
     dims: [usize; 3],
     cells: Vec<Vec<u32>>,
-    /// The face that answered or certified last, with its decoded corners. `within` tries it
-    /// first; the certificate reuses its corners only at its own cell-list position, so the
-    /// certificate's charged work never depends on the cache (#317).
-    last: std::cell::Cell<Option<(u32, [[f64; 3]; 3])>>,
+    /// The face that answered the last point query; `within` tries it first. Queries come in
+    /// runs from one dropped face or component, so it usually answers the next one too.
+    last: std::cell::Cell<Option<u32>>,
+    /// The face that certified last, with its decoded corners. The certificate reuses them only
+    /// at that face's own cell-list position, so its charged work never depends on the cache
+    /// (#317).
+    certified: std::cell::Cell<Option<(u32, [[f64; 3]; 3])>>,
 }
 
 impl Grid {
@@ -509,6 +512,7 @@ impl Grid {
             dims: [0; 3],
             cells: Vec::new(),
             last: std::cell::Cell::new(None),
+            certified: std::cell::Cell::new(None),
         };
         // Every face's grown box ends at or below `hi`, so its cells lie within `cell(hi)`.
         let top = grid.cell(hi);
@@ -616,7 +620,7 @@ impl Grid {
             let mut certified = false;
             let mut center_near = false;
             if let Some(cell) = self.faces_at(center.map(Interval::middle)) {
-                let cached = self.last.get();
+                let cached = self.certified.get();
                 for &i in cell {
                     let face = Self::face(cached, i, faces);
                     // A separated centroid rules out BOTH certificates: if all
@@ -632,7 +636,7 @@ impl Grid {
                     let d = distance(center, face, ball)?;
                     center_near |= within(d, self.reach);
                     if ball_fits(d, radius, self.reach) {
-                        self.last.set(Some((i, face)));
+                        self.certified.set(Some((i, face)));
                         certified = true;
                         break;
                     }
@@ -644,7 +648,7 @@ impl Grid {
                         }
                     }
                     if corners_near {
-                        self.last.set(Some((i, face)));
+                        self.certified.set(Some((i, face)));
                         certified = true;
                         break;
                     }
@@ -682,10 +686,10 @@ impl Grid {
         effort: &Effort,
     ) -> Result<bool, Error> {
         let reach = self.reach + slack;
-        let cached = self.last.get();
-        if let Some((_, face)) = cached {
+        let near = |i: u32| distance2(p, faces[i as usize].map(point)) <= reach * reach;
+        if let Some(i) = self.last.get() {
             effort.charge(TEST_UNITS)?;
-            if distance2(p, face) <= reach * reach {
+            if near(i) {
                 return Ok(true);
             }
         }
@@ -694,9 +698,8 @@ impl Grid {
         };
         for &i in cell {
             effort.charge(TEST_UNITS)?;
-            let face = Self::face(cached, i, faces);
-            if distance2(p, face) <= reach * reach {
-                self.last.set(Some((i, face)));
+            if near(i) {
+                self.last.set(Some(i));
                 return Ok(true);
             }
         }
@@ -953,7 +956,7 @@ mod tests {
                 // The certificate: the same verdict and work whatever the cache holds (#317).
                 let mut cold = None;
                 for cached in [None, Some(0), Some(1)] {
-                    grid.last
+                    grid.certified
                         .set(cached.map(|i| (i, faces[i as usize].map(point))));
                     let mut effort = effort_for_tests();
                     effort.base = effort.budget.value - remaining;
@@ -982,8 +985,7 @@ mod tests {
                     let needed = super::TEST_UNITS as u64 * tests;
                     let mut runs = Vec::new();
                     for _ in 0..2 {
-                        grid.last
-                            .set(cached.map(|i| (i, faces[i as usize].map(point))));
+                        grid.last.set(cached);
                         let mut effort = effort_for_tests();
                         effort.base = effort.budget.value - remaining;
                         let result = grid.within(p, 0., &faces, &effort);
@@ -1017,7 +1019,7 @@ mod tests {
         for remaining in 0..=needed + 2 {
             let mut cold = None;
             for cached in [None, Some(0), Some(1)] {
-                grid.last
+                grid.certified
                     .set(cached.map(|i| (i, faces[i as usize].map(point))));
                 let mut effort = effort_for_tests();
                 effort.base = effort.budget.value - remaining;
