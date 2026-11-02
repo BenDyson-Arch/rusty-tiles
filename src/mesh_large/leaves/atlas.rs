@@ -283,7 +283,9 @@ fn pack_islands(
         .collect();
     widths.sort_unstable();
     widths.dedup();
-    let mut best: Option<(u64, u32, u32, u32, Vec<[u32; 2]>)> = None;
+    // (page area, longer side, width, height, island origins in cells)
+    type Fit = (u64, u32, u32, u32, Vec<[u32; 2]>);
+    let mut best: Option<Fit> = None;
     for w in widths {
         let Some((at, used, h)) = mask_pack::pack(&masks, &order, w as u32 / cell, max_edge / cell)
         else {
@@ -1517,7 +1519,7 @@ mod tests {
             for (k, island) in b.block.islands.iter().enumerate() {
                 let (cell, mask) = island.mask.as_ref().unwrap();
                 assert_eq!((island.offset[0] % cell, island.offset[1] % cell), (0, 0));
-                assert!(island.offset[0] + island.crop.width <= page.width + cell - 1);
+                assert!(island.offset[0] + island.crop.width < page.width + cell);
                 for (y, x0, x1) in mask.runs() {
                     for x in x0..x1 {
                         let at = (island.offset[0] / cell + x, island.offset[1] / cell + y);

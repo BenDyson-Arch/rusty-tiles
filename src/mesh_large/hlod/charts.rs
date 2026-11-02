@@ -616,7 +616,9 @@ fn fit(
     widths.sort_unstable();
     widths.dedup();
     let masks: Vec<&Mask> = charts.iter().map(|c| &c.mask).collect();
-    let mut best: Option<(u64, u32, [u32; 2], Vec<[u32; 2]>)> = None;
+    // (page area, longer side, page, chart origins in cells)
+    type Fit = (u64, u32, [u32; 2], Vec<[u32; 2]>);
+    let mut best: Option<Fit> = None;
     for &w in &widths {
         let Some((at, used, h)) = mask_pack::pack(&masks, &order, w / a, max_edge / a) else {
             continue;
