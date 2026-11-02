@@ -40,12 +40,12 @@ const TEST_UNITS: usize = 2;
 const FACE_READ_UNITS: usize = 97;
 /// The stage-3 continuous certificate (#313, filtered by #317), per item over τ, rounded up on
 /// the slower core (PR #309 review 4): a region's setup (centroid, radius, cell lookup; 84 ns
-/// P-core, 151 ns E-core); a distance test's fast path (box reject or f64 filter; up to 62 ns
-/// and 114 ns); a test the filter leaves undecided, which runs the interval distance on top
+/// P-core, 151 ns E-core); a distance test's fast path (box reject or f64 filter; up to 99 ns
+/// and 116 ns); a test the filter leaves undecided, which runs the interval distance on top
 /// (2.37 µs and 12.3 µs); and a failed region's subdivision (three midpoints and four stacked
 /// regions, fewer interval operations than a setup, so charged as one).
 const CERT_REGION_UNITS: usize = 10;
-const CERT_FAST_UNITS: usize = 8;
+const CERT_FAST_UNITS: usize = 9;
 const CERT_SLOW_UNITS: usize = 795;
 const CERT_SPLIT_UNITS: usize = CERT_REGION_UNITS;
 /// The recount's leaf faces by tile: `leaf_faces_tile` covers the query (the table's key

@@ -89,7 +89,7 @@ extends each bound from x to every point in its box by 1-Lipschitz continuity.
 Outside this domain, or in an unresolved band, the interval path runs and
 uncertified cases refuse. Each query increments a fast counter;
 interval fallbacks increment a separate slow counter. Each distance test is
-charged 8 units before it runs and 795 more when it falls to the interval path
+charged 9 units before it runs and 795 more when it falls to the interval path
 (the measured fast and slow costs over τ; see the
 [limits amendment](architecture/validator-limits-amendment.md)). In the
 certificate, the last answering face's decoded coordinates are reused only at its

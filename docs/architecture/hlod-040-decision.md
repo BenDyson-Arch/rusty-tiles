@@ -635,7 +635,7 @@ every tile built today is unchanged:
   predicate against the same global binary64 reach; no tolerance is added to G.
   Undecided comparisons use the original outward interval witness path;
   centroids, radii, subdivisions and final squared comparisons remain enclosed.
-  Separate counters record fast attempts and slow fallbacks; #309 charges them 8
+  Separate counters record fast attempts and slow fallbacks; #309 charges them 9
   and 795 more units (measured cost over τ). In the certificate the cache reuses decoded face coordinates only at their original cell-list
   position. Cached and uncached scans have identical candidates, distance
   results, early exits and charges. Induction over regions preserves the same
