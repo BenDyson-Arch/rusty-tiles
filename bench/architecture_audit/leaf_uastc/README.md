@@ -17,3 +17,10 @@ bounds already include UASTC escalation, so changing the initial mode must not
 add a second encoder lease or reduce worker admission. Independent acceptance:
 archive/member comparison, KTX2 structural validator, source-referenced tex3
 PSNR, slot-1 CPU pairs and 4 GiB stage admission, plus full Walem delivery.
+
+Full acceptance report: `~/.cache/rusty-tiles-evidence/leaf-uastc-20261103/FINAL.md`,
+SHA-256 `3310f7ccdc9b183782d286ff0b323a7177885568be6b23740bd942d8004b7a1c`. Executed source: `abbc3520b7ea184bee503c65e4250aada1baa508`;
+raw evidence was never tracked. Full Walem: 807.573 MB leaves, 973.328 MB archive,
+2,658 converter CPU seconds. All 832 coarse GLBs and all leaf page dimensions
+are unchanged. Published-G floor 0/12; max-honest-G 5/12. The report distinguishes
+three fixed-worker CPU pairs from the actual five-worker admission pair.
