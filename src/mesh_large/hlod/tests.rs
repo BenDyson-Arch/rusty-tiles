@@ -6480,6 +6480,7 @@ fn descendant_recovery_is_complete_measured_and_job_and_spill_invariant() {
         (1, Mutation::OmitRecoveryInput),
         (3, Mutation::OmitRecoveryInput),
         (3, Mutation::OmitRecoveryInputSpill),
+        (3, Mutation::RefuseRecoveryRoot),
     ];
     let dirs: Vec<_> = variants
         .into_iter()
@@ -6502,7 +6503,7 @@ fn descendant_recovery_is_complete_measured_and_job_and_spill_invariant() {
         .collect();
     let baseline = rows(&dirs[0].join("proxies.jsonl"));
     assert!(baseline.iter().all(|r| r["depth"] != 0));
-    for dir in &dirs[1..] {
+    for dir in &dirs[1..4] {
         let candidate = rows(&dir.join("proxies.jsonl"));
         let root = candidate
             .iter()
@@ -6529,4 +6530,14 @@ fn descendant_recovery_is_complete_measured_and_job_and_spill_invariant() {
     }
     assert_eq!(published(&dirs[1]), published(&dirs[2]));
     assert_eq!(published(&dirs[1]), published(&dirs[3]));
+    assert_eq!(published(&dirs[0]), published(&dirs[4]));
+    let manifest = |dir: &Path| -> Value {
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap()
+    };
+    let (before, refused) = (manifest(&dirs[0]), manifest(&dirs[4]));
+    for count in ["omittedProxies", "omissionSources", "omittedByDepth"] {
+        assert_eq!(before["hlod"][count], refused["hlod"][count], "{count}");
+    }
+    assert!(refused["hlod"]["recovery"].is_null());
+    published_and_valid("refused descendant recovery", &dirs[4], work.path());
 }

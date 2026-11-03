@@ -81,6 +81,8 @@ pub(crate) enum Mutation {
     OmitRecoveryInputSpill,
     #[cfg(test)]
     OmitRecoveryInputNoRecovery,
+    #[cfg(test)]
+    RefuseRecoveryRoot,
 }
 
 impl Mutation {
@@ -102,6 +104,7 @@ impl Mutation {
             Self::OmitRecoveryInput
                 | Self::OmitRecoveryInputSpill
                 | Self::OmitRecoveryInputNoRecovery
+                | Self::RefuseRecoveryRoot
         )
     }
     pub(crate) fn root_competition(self) -> bool {

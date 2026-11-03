@@ -1559,6 +1559,10 @@ fn build_tile(
     } else {
         None
     };
+    #[cfg(test)]
+    if closed.recover && settings.mutation == Mutation::RefuseRecoveryRoot {
+        outcome.built = None;
+    }
     let Some(mut built) = outcome.built else {
         // Construction failed: retain only a complete bounded descendant frontier.
         let construction_topology = audit
@@ -1567,7 +1571,12 @@ fn build_tile(
             .transpose()?;
         let omitted = Finished::Omitted {
             key: closed.key,
-            reason: if outcome.contraction_failed {
+            // A refused recovery leaves the original ownership omission in place.
+            // Its source is still below this root; the attempted bypass does not
+            // change that relation or expose deeper inputs as direct children.
+            reason: if closed.recover {
+                OmissionReason::DescendantOmission
+            } else if outcome.contraction_failed {
                 OmissionReason::ContractionStalled
             } else if contract.is_some() {
                 OmissionReason::RemeshStalled
@@ -1576,6 +1585,13 @@ fn build_tile(
             },
             frontier: children
                 .iter()
+                .filter(|c| {
+                    recovery.as_ref().is_none_or(|r| {
+                        !r.omitted
+                            .iter()
+                            .any(|k| k.first <= c.key.first && c.key.end <= k.end)
+                    })
+                })
                 .map(|c| {
                     Ok(TileKey {
                         depth: job.borders.publication_depth(c.key)?,
