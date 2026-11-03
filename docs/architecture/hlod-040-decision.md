@@ -666,8 +666,8 @@ every tile built today is unchanged:
   predicate against the same global binary64 reach; no tolerance is added to G.
   Undecided comparisons use the original outward interval witness path;
   centroids, radii, subdivisions and final squared comparisons remain enclosed.
-  Separate unweighted counters record fast attempts and slow fallbacks for #309.
-  The cache reuses decoded face coordinates only at their original cell-list
+  Separate counters record fast attempts and slow fallbacks; #309 charges them 9
+  and 795 more units (measured cost over τ). In the certificate the cache reuses decoded face coordinates only at their original cell-list
   position. Cached and uncached scans have identical candidates, distance
   results, early exits and charges. Induction over regions preserves the same
   subdivision sequence and budget verdict, including at the effort limit.
@@ -680,7 +680,10 @@ every tile built today is unchanged:
   budget contract is determinism in archive and budget, charging every executed
   unit of work. Pruning may turn an effort refusal into an accept, never an old
   accept into a refusal; cross-version budget thresholds need not be equal.
-  Cache presence still cannot change charged work or verdict at any budget.
+  Cache presence still cannot change the certificate's charged work or verdict at
+  any budget. The sampled stage 0–2 queries try the cached face first: their
+  charged work depends on the cache, which is a pure function of the archive, so
+  verdicts stay deterministic and every test is charged (owner, 2026-11-02).
   Larger initial regions,
   sibling-certificate state and replacement spatial indices remain deferred:
   this narrower change needs no new index, resident geometry, subdivision

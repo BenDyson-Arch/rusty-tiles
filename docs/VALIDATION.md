@@ -111,15 +111,21 @@ a factor of three beyond these bounds, including evaluation of E itself;
 next-up/down encloses the final additions/subtractions and squaring. Adding B
 extends each bound from x to every point in its box by 1-Lipschitz continuity.
 Outside this domain, or in an unresolved band, the interval path runs and
-uncertified cases refuse. Each query increments an unweighted fast counter;
-interval fallbacks increment a separate unweighted slow counter. Existing effort
-charges remain, pending #309's separate weighting. The last answering face's
-decoded coordinates are reused only at its original position in the current
-cell's candidate list; there is no extra probe or reordering. With or without
-this cache, each query sees identical coordinates, candidate order and distance
-results, and therefore identical early exits and point/face charges. Induction
-over regions gives identical subdivisions and total effort. Thus the cache
-cannot change either the geometric verdict or a refusal at the effort limit.
+uncertified cases refuse. Each query increments a fast counter;
+interval fallbacks increment a separate slow counter. Each distance test is
+charged 9 units before it runs and 795 more when it falls to the interval path
+(the measured fast and slow costs over τ; see the
+[limits amendment](architecture/validator-limits-amendment.md)). In the
+certificate, the last answering face's decoded coordinates are reused only at its
+original position in the current cell's candidate list; there is no extra probe
+or reordering. With or without this cache, each certificate query sees identical
+coordinates, candidate order and distance results, and therefore identical early
+exits and charges. Induction over regions gives identical subdivisions and total
+effort, so the cache cannot change the certificate's verdict or a refusal at the
+effort limit. The sampled stage 0–2 checks (`within`) try the cached face first
+instead: their charged work depends on the cache, but the cache is a pure
+function of the archive (the queries run in a fixed order), so verdicts stay
+deterministic and every distance test is charged.
 
 For stage-3 region scans, an outward reach-expanded face box also provides a
 safe pruning test. If the entire centroid interval box lies strictly outside it
@@ -131,7 +137,9 @@ once and skips that face's corner queries. It does not skip on a rounded midpoin
 alone, an uncertain upper distance, or a partially overlapping box.
 
 The budget contract is deterministic in the archive and budget: every executed
-unit of work is charged, and cache state never changes charged work or verdicts.
+unit of work is charged, and cache state never changes the certificate's charged
+work or verdicts (the stage 0–2 point queries above try the cached face first,
+deterministically).
 Deterministic pruning need not preserve a previous version's budget threshold.
 It preserves geometric decisions, subdivision and the original face order,
 removing only queries which cannot certify the region or set `center_near`.
@@ -410,10 +418,12 @@ index included), fixed when the catalog is admitted.
 - **Amplification budgets** are `max(floor, ⌊S·p/q⌋)`: `hierarchyVisits` max(262,144, S/8),
   `references` max(1,048,576, S/8), `totalBytesRead` max(2 GiB, 4·S) (explicit member-hash
   and payload/document reads, including repeated reads and constructor index reads),
-  `totalPayloadElements` max(16 million, 77·S) and the three C2 budgets above. Archives up to
-  207,792 stored bytes have exactly the floors. The report's `limitDerivation` gives each
-  budget's floor, its ratio `perStoredByte` and its `source` (`floor`, `scaled` or
-  `explicit`); `storedBytes`, `limits` and `limitDerivation` depend only on S and the
+  and the three C2 budgets above. `totalPayloadElements` adds its floor instead: 16 million +
+  224·S, so every legitimate dense output measured (up to about 144 units per stored byte) validates
+  with a 1.5× margin. Archives up to
+  2,097,159 stored bytes have exactly the max-rule floors. The report's `limitDerivation` gives
+  each budget's floor, its ratio `perStoredByte`, its `source` (`floor`, `scaled` or
+  `explicit`) and, for `totalPayloadElements`, `"additive": true`; `storedBytes`, `limits` and `limitDerivation` depend only on S and the
   request's overrides. S is fixed before any budgeted work and every byte of it is hashed, so
   a budget cannot grow from what traversal finds
   ([traversal amendment](architecture/validator-traversal-scale-amendment.md)).
