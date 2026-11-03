@@ -399,11 +399,11 @@ def check(binary, work_dir):
     assert got[0] is True and low[1] == 'resource_limit', ('scan', got, low)
     print(json.dumps({'class': 'scan', 'verdict': got[:3], 'refused_at': low[3]}))
     # cert (review 5): a stage-3 tile whose drops the continuous certificate covers, through
-    # fast tests on zero-width corners. Valid; a small budget is a structured refusal.
+    # fast tests on zero-width corners. Valid; a budget under its work is a structured refusal.
     path = work_dir / 'cert.3tz'
     certificate_archive(path, 50, 50)
     got = validate(binary, path, work_dir, unbounded)
-    low = validate(binary, path, work_dir, 1_000_000)
+    low = validate(binary, path, work_dir, 20_000)
     assert got[0] is True and low[1] == 'resource_limit', ('cert', got, low)
     print(json.dumps({'class': 'cert', 'verdict': got[:3], 'refused_at': low[3]}))
 
