@@ -17,6 +17,29 @@ Python `expect_profile="hlod"`) requires that profile whatever the archive's lab
 an archive stripped of its labels cannot pass as a plain one. `hlod` is the only value; any
 other is refused as `usage` (Python `ValueError`) before the archive is opened. The checks
 are listed in the [HLOD acceptance record](../bench/architecture_audit/mesh_hlod/s5/README.md).
+Declared descendant recovery uses an explicit REPLACE ownership root. Its GLB marks
+`asset.extras.rustyTiles.descendantRecovery: 1`; the root tile's `extras.recovery`
+contains exactly `version`, `root`, `encodedDepth`, `frontier` and `omitted`.
+Version is 1. Ownership keys contain `first`, `end`, `depth`, `leafBegin` and
+`leafEnd`; each frontier entry contains a `key` and its decoded `triangles` count.
+There are one to eight capped inputs, at most 65,536 input triangles, and one to
+256 skipped ownership cells. Source and DFS-leaf intervals must form complete,
+disjoint covers. The actual refinement children, resolving document links, must
+be precisely that frontier, with G no greater than the recovered root's.
+
+Native and S5 count terminal payload triangles/leaves independently, compare the
+intervals, verify ownership identities and reconstruct the skipped ownership tree.
+D11 uses those ownership parents for exact and mixed-depth borders; drop and G
+checks use actual refinement. Graph depth does not change ownership depth. Missing
+or inconsistent declarations fail `recoveryRelation`; coverage defects fail
+`recoveryCoverage`; cap/input limits fail `recoveryBounds`; ownership defects fail
+`recoveryOwnership`; an error below the frontier fails `recoveryError` or the
+existing geometric-error ordering check. Empty delivery cells below content remain
+invalid: declared omitted nodes must be spliced out. These checks do not certify
+unpublished source-distance maxima; the producer's decoded source-S2 measurement
+remains required. Construction omissions and bypassed cells are recorded separately
+from content-less cells remaining in delivery.
+
 A coarse payload that drops whole components of its children declares how many in glTF
 `asset.extras.rustyTiles.droppedComponents`. Validation recounts the drops from decoded keys
 and fails `coarseDrops` (`invalid_input`) when the count differs from the declaration; when a
@@ -159,7 +182,8 @@ Conversion `diagnostics.hlod` reports `last_resort_tiles`, `last_resort_stages`
 (N1/N2/N3 counts), `fold_faces` and `declared_tiles` (including stage-0 tiles,
 with stage and fold count). Residual omission occurs only when the contract alone
 exceeds the cap or border-touching open boundaries cannot survive the last resort;
-it propagates upward. The declaration does not certify source-distance maxima.
+it propagates upward unless bounded declared root recovery succeeds. The last-resort
+declaration does not itself authorize bypass or certify source-distance maxima.
 
 Supported payloads are GLB 2.0 and archive-local glTF 2.0. Unavailable versions
 or legacy interpretations do not receive an opaque successful pass.

@@ -26,5 +26,9 @@
  "last_resort": {
   "files": 845,
   "sha256": "ed935e5e8011a6ed4caafb8de8abd8d6e3d7c9b81ecfdbd50f23292e2c65d56e"
+ },
+ "recovery": {
+  "files": 125,
+  "sha256": "f14cf84dd8cdcd7f997e71166442be11bb57478392b4614c69edd9685d9492fa"
  }
 }

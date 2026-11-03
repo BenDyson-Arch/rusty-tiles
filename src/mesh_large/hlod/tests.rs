@@ -1927,8 +1927,7 @@ fn parent_jobs_allocate_within_their_charge() {
             &built.locked,
             positions,
             &plain_appearance(g),
-            0,
-            None,
+            encode::Declarations::default(),
             Mutation::None,
         )?;
         encode::check(g, &built.locked, &encoded)
@@ -2001,8 +2000,7 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
         &locked,
         positions,
         &appearance,
-        0,
-        None,
+        encode::Declarations::default(),
         Mutation::None,
     )
     .unwrap();
@@ -2086,8 +2084,7 @@ fn coarse_weld_keeps_uv_and_normal_seams() {
         &locked,
         encoded_positions(),
         &appearance,
-        0,
-        None,
+        encode::Declarations::default(),
         Mutation::None,
     )
     .unwrap();
@@ -2104,8 +2101,7 @@ fn coarse_weld_keeps_uv_and_normal_seams() {
         &locked,
         encoded_positions(),
         &appearance,
-        0,
-        None,
+        encode::Declarations::default(),
         Mutation::WeldPositionsOnly,
     );
     let message = mutant
@@ -6470,4 +6466,67 @@ fn root_competition_fills_a_forced_own_build_omission_and_is_job_invariant() {
     assert!(root["geometricError"].as_f64().unwrap() >= root["childrenError"].as_f64().unwrap());
     assert_eq!(published(&dirs[0]), published(&dirs[1]));
     published_and_valid("recovered root", &dirs[0], work.path());
+}
+
+/// Inject one depth-1 construction failure; recovery must use its complete leaves,
+/// preserve all other payloads, measure the root normally and validate final delivery.
+#[test]
+fn descendant_recovery_is_complete_measured_and_job_and_spill_invariant() {
+    let work = tempfile::tempdir().unwrap();
+    let source = grid((16, 16), (0., 100.), (0., 100.), &bump, [0.4, 0.5, 0.3, 1.]);
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    let variants = [
+        (1, Mutation::OmitRecoveryInputNoRecovery),
+        (1, Mutation::OmitRecoveryInput),
+        (3, Mutation::OmitRecoveryInput),
+        (3, Mutation::OmitRecoveryInputSpill),
+    ];
+    let dirs: Vec<_> = variants
+        .into_iter()
+        .enumerate()
+        .map(|(i, (jobs, mutation))| {
+            stage(
+                &input,
+                &work.path().join(format!("run-{i}")),
+                &Run {
+                    leaf_triangles: 64,
+                    cap: 100,
+                    jobs,
+                    mutation,
+                    budget: Some(4 << 30),
+                    ..s2_run()
+                },
+            )
+            .unwrap()
+        })
+        .collect();
+    let baseline = rows(&dirs[0].join("proxies.jsonl"));
+    assert!(baseline.iter().all(|r| r["depth"] != 0));
+    for dir in &dirs[1..] {
+        let candidate = rows(&dir.join("proxies.jsonl"));
+        let root = candidate
+            .iter()
+            .find(|r| r["depth"] == 0)
+            .expect("root recovered");
+        assert!(root["recovery"]["frontier"].as_array().unwrap().len() <= 8);
+        assert_eq!(root["recovery"]["omitted"].as_array().unwrap().len(), 1);
+        assert!(
+            root["geometricError"].as_f64().unwrap() >= root["childrenError"].as_f64().unwrap()
+        );
+        assert!(
+            root["measurement"]["areaSamplesPerDirection"]
+                .as_u64()
+                .unwrap()
+                >= 2048
+        );
+        for old in &baseline {
+            let new = candidate.iter().find(|r| r["uri"] == old["uri"]).unwrap();
+            assert_eq!(old["sha256"], new["sha256"]);
+            assert_eq!(old["geometricError"], new["geometricError"]);
+        }
+        assert_eq!(files(&dirs[0], "leaves"), files(dir, "leaves"));
+        published_and_valid("descendant recovery", dir, work.path());
+    }
+    assert_eq!(published(&dirs[1]), published(&dirs[2]));
+    assert_eq!(published(&dirs[1]), published(&dirs[3]));
 }

@@ -199,6 +199,7 @@ pub(crate) struct ProxyRow {
     /// sampling schedule.
     pub sampling: (u64, u64, crate::mesh_large::hlod::error::Schedule),
     pub encoded_depth: u32,
+    pub recovery: Option<crate::mesh_large::hlod::recovery::Recovery>,
 }
 
 #[derive(Deserialize)]
@@ -221,6 +222,8 @@ struct ProxyWire {
     measurement: Option<crate::mesh_large::hlod::error::Summary>,
     #[serde(default)]
     children_error: Option<f64>,
+    #[serde(default)]
+    recovery: Option<crate::mesh_large::hlod::recovery::Recovery>,
 }
 
 impl ProxyRow {
@@ -279,6 +282,7 @@ impl ProxyRow {
             geometric_error: w.geometric_error,
             primitives: w.primitives,
             encoded_depth,
+            recovery: w.recovery,
             sampling: (
                 summary.area_samples_per_direction,
                 summary.depth_source_triangles,
@@ -547,6 +551,7 @@ pub(crate) struct LeafDirectory {
     pub totals: LeafTotals,
     /// HLOD coarse tiles are present (`proxyManifest`, with the stage's `hlod` record).
     pub proxies: bool,
+    pub recovery: Option<crate::mesh_large::hlod::recovery::Recovery>,
     /// HLOD cells whose coarse tile was omitted (`hlod.omittedProxies`): they publish no
     /// content and are not measured.
     omitted_proxies: u64,
@@ -615,6 +620,13 @@ impl LeafDirectory {
             root: root.to_owned(),
             totals,
             proxies,
+            recovery: manifest["hlod"]
+                .get("recovery")
+                .map(|r| {
+                    serde_json::from_value(r.clone())
+                        .map_err(|e| input(format!("invalid recovery: {e}")))
+                })
+                .transpose()?,
             omitted_proxies,
             omitted_by_depth,
             max_glb_json: MAX_GLB_JSON,

@@ -1019,9 +1019,11 @@ class Audit:
         one depth, and a labelled cell is strictly deeper than its labelled cell
         ancestors (a repeated chain payload excepted). Returns exact depths (labels,
         and leaves with a labelled sibling) and proven lower bounds for the rest."""
+        from recovery import ownership_view
+        tiles = ownership_view(self.tiles)
         require = self.require
         labels, source = {}, {}
-        for t in self.tiles:
+        for t in tiles:
             tid = int(t['id'])
             if tid in self.records:
                 labels[tid], source[tid] = self.records[tid]['contract']['depth'], id(self.records[tid])
@@ -1030,14 +1032,14 @@ class Audit:
         for r in omitted:
             claimed[r['key']['leafBegin'], r['key']['leafEnd']].append(r['key']['depth'])
         cells = collections.defaultdict(list)
-        for t in self.tiles:
+        for t in tiles:
             if not t['contents'] and not t['external']:
                 cells[t['lo'], t['hi']].append(int(t['id']))
         for key, ids in cells.items():
             for tid, depth in zip(ids, sorted(claimed.get(key, ()))):
                 labels[tid], source[tid] = depth, ('omitted', tid)
         exact, lower = dict(labels), {}
-        for t in self.tiles:
+        for t in tiles:
             tid = int(t['id'])
             parent, steps = self.cell_parent(t), 1
             while parent is not None and int(parent['id']) not in labels:
@@ -1049,7 +1051,7 @@ class Audit:
                         f'({labels[pid]})')
             if tid not in labels:
                 lower[tid] = labels[int(parent['id'])] + steps if parent is not None else 0
-        for t in self.tiles:
+        for t in tiles:
             children = [int(c['id']) for c in self.cell_children(t)]
             found = {labels[c] for c in children if c in labels}
             require(len(found) <= 1, 'borderDepth',
@@ -1506,11 +1508,12 @@ class Audit:
 
     # -- omission --------------------------------------------------------------
     def omission(self, omitted):
+        from recovery import ownership_view
         require = self.require
         cells = collections.Counter()
         sources = collections.Counter()
         frontier = collections.defaultdict(collections.Counter)
-        for t in self.tiles:
+        for t in ownership_view(self.tiles):
             if t['contents'] or t['external']:
                 continue
             key = (t['lo'], t['hi'])
@@ -1527,7 +1530,7 @@ class Audit:
             key = (k['leafBegin'], k['leafEnd'])
             claimed[key] += 1
             reason = r['reason']
-            require(reason in ('contract_lower_bound', 'remesh_stalled', 'descendant_omission'), 'omissionReport',
+            require(reason in ('contract_lower_bound', 'contraction_stalled', 'remesh_stalled', 'descendant_omission'), 'omissionReport',
                     f'unknown omission reason {reason!r}')
             require(r['source'] == (reason != 'descendant_omission'), 'omissionReport',
                     f'omission source flag disagrees with reason {reason}')

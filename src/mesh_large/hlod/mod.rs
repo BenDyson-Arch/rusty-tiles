@@ -5,8 +5,8 @@
 //! common depth-wise border contracts, then simplified to at most 8,192 triangles.
 //! Source-parameter certificates give identical same-depth edges and mixed-depth gaps
 //! bounded by the coarse geometric error / 8. Terminal leaf contacts remain exact.
-//! Impossible capped parents publish no content and omission propagates to the root;
-//! bounded descendants provide the reported last-resort frontier.
+//! Impossible capped parents publish no content. A complete bounded descendant frontier
+//! may recover the ownership root under its declared delivery relation.
 //!
 //! The stage streams: one spillable incidence pass, then a preorder walk that holds only
 //! the tiles waiting for their parent, admitted against the run's declared memory budget
@@ -30,6 +30,7 @@ mod encode;
 pub(crate) mod error;
 mod geometry;
 pub(crate) mod interfaces;
+pub(crate) mod recovery;
 mod root_competition;
 pub(crate) mod scratch;
 pub(crate) mod source_index;
@@ -70,7 +71,9 @@ pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized 
 
 /// Hard published triangle cap of every coarse tile (D1).
 pub(crate) const TRIANGLE_CAP: usize = 8192;
-/// Runtime, allocator slack and output-writer reserve of the stage.
+/// Runtime, allocator slack and output-writer reserve of the stage. Includes the
+/// bounded recovery metadata: <= 8 held descriptors per ready slot and one <= 64 KiB
+/// relation. Geometry itself remains separately leased, including returned frontiers.
 const STAGE_RESERVE: u64 = 256 << 20;
 /// Charged workspace per merged input triangle of one parent job (`m` merged triangles,
 /// at most `3m` vertices; held children and the returned output have separate leases).
@@ -484,10 +487,9 @@ pub(crate) struct HlodReport {
     pub declared_tiles: Vec<DeclaredTile>,
     /// Content-less cells (omitted coarse tiles), by cell depth, and of them the sources:
     /// cells whose exact interface (or topology plain simplification cannot reduce) needs
-    /// more triangles than the cap. Omission propagates to every ancestor (no content above a
-    /// content-less cell), so the rest are those ancestors, pass-through chain cells above an
-    /// omitted cell included; the capped tiles below are the refinement frontier. Equal to
-    /// the content-less tiles of the published tileset.
+    /// more triangles than the cap. Includes propagation and pass-through cells. A declared
+    /// recovery may splice these construction omissions out of the delivery tree; they
+    /// remain in this receipt and the audit sidecar.
     pub omitted_proxies: u64,
     pub omission_sources: u64,
     pub omitted_by_depth: Vec<u64>,
@@ -520,6 +522,8 @@ pub(crate) struct HlodReport {
     pub root_competition_timing: root_competition::Timing,
     /// Coarse appearance per tile depth (S3).
     pub appearance_by_depth: Vec<DepthAppearance>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery: Option<recovery::Recovery>,
 }
 
 /// Coarse appearance of one tile depth: page texels, achieved against requested spacing
@@ -632,6 +636,7 @@ struct Closed {
     /// to half its input, so it is a genuinely coarser level, not a copy of the leaf.
     single_leaf: bool,
     ownership_root: bool,
+    recover: bool,
     /// A child holds folds a last resort admitted (A2): the guard licenses them as input,
     /// so this tile may keep them and then declares them (stage 0 if it is no last resort).
     folds_below: bool,
@@ -691,9 +696,10 @@ struct Frame {
     started: usize,
 }
 
-/// A finished parent: its geometry (held for its own parent) and its published row, or
-/// neither when its coarse tile is omitted.
-type Done = Result<(Option<TileGeometry>, Finished, appearance::Timing), JobError>;
+/// A finished parent: its built geometry, or the complete bounded frontier retained
+/// after omission. An empty vector means that recovery input is unavailable.
+type Done = Result<(Vec<TileGeometry>, Finished, appearance::Timing), JobError>;
+type HeldDone = Result<(Vec<store::spill::Held>, Finished, appearance::Timing), JobError>;
 
 #[derive(Clone, Copy, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -713,7 +719,7 @@ impl OmissionReason {
 enum Finished {
     Row(Box<HlodRow>),
     /// Omitted at its cell depth: it could not keep its interface within the cap (`source`),
-    /// or a child was omitted (propagated: omission reaches the root).
+    /// or a child was omitted (propagated until a declared root recovery succeeds).
     Omitted {
         key: TileKey,
         reason: OmissionReason,
@@ -1446,6 +1452,10 @@ fn build_tile(
         .borders
         .contract(closed.key, 6 * settings.cap)?
         .filter(|c| c.minimum_triangles() <= settings.cap);
+    let recovery = closed
+        .recover
+        .then(|| recovery::declare(job, closed.key, &children))
+        .transpose()?;
     let mut prepared = None;
     let mut topology_attempts = 0;
     let mut published_topology_attempt = None;
@@ -1512,6 +1522,12 @@ fn build_tile(
             relief: None,
         }
     };
+    #[cfg(test)]
+    if settings.mutation.omit_recovery_input() && closed.key.first == 0 && closed.key.depth == 1 {
+        outcome.built = None;
+        prepared = None;
+        published_topology_attempt = None;
+    }
     let mut root_competition = if (closed.ownership_root
         || job.borders.publication_depth(closed.key)? == 0)
         && !closed.single_leaf
@@ -1544,7 +1560,7 @@ fn build_tile(
         None
     };
     let Some(mut built) = outcome.built else {
-        // Its interface cannot fit the cap: omitted, nothing held for its parent.
+        // Construction failed: retain only a complete bounded descendant frontier.
         let construction_topology = audit
             .filter(|_| !outcome.construction_dropped.is_empty())
             .map(|a| a.construction(closed.key, &outcome.construction_dropped))
@@ -1574,7 +1590,16 @@ fn build_tile(
                 .map(|r| (nearest.stats, r.cpu_seconds, r.timing)),
             construction_topology,
         };
-        return Ok((None, omitted, appearance::Timing::default()));
+        let frontier = if recovery::bounded(
+            children.iter().map(|c| (c.key, c.triangles.len() as u64)),
+            closed.key,
+            settings.cap,
+        ) {
+            children
+        } else {
+            Vec::new()
+        };
+        return Ok((frontier, omitted, appearance::Timing::default()));
     };
     // A3: how far apart the layers of its folds lie, against its children (reported).
     let fold_separation = if built.last_resort_stage >= 2 || closed.folds_below {
@@ -1659,8 +1684,11 @@ fn build_tile(
         &built.locked,
         positions,
         &appearance,
-        declared,
-        last_resort,
+        encode::Declarations {
+            dropped: declared,
+            last_resort,
+            recovery: recovery.is_some(),
+        },
         settings.mutation,
     )?;
     drop(appearance.groups);
@@ -1698,6 +1726,7 @@ fn build_tile(
         error_policy: error.policy,
         measurement,
         root_competition,
+        recovery,
         nearest_search: nearest.stats,
         error_cpu_seconds,
         error_cpu,
@@ -1752,7 +1781,7 @@ fn build_tile(
     geometry.geometric_error = error.geometric_error;
     shrink(&mut geometry);
     Ok((
-        Some(geometry),
+        vec![geometry],
         Finished::Row(Box::new(row)),
         appearance.timing,
     ))
@@ -1895,13 +1924,12 @@ fn walk(
     let settings = input.settings;
     let ledger = Ledger::new(plan.ledger_bytes);
     let job_bytes = plan.job_bytes;
-    // The most a job merges: eight capped children (an omitted child is never merged).
+    // The most a job merges: eight capped built inputs, including a recovery frontier.
     let job_inputs = input
         .config
         .leaf_triangles()
         .max(settings.cap as u64)
         .saturating_mul(8);
-    let out_bytes = TileGeometry::charge(settings.cap as u64);
     let job_peak = std::cell::Cell::new(0u64);
     let mut timings = appearance::Timing::default();
     let jobs = usize::try_from(plan.jobs.max(1)).map_err(|_| resource("jobs overflow"))?;
@@ -1939,10 +1967,11 @@ fn walk(
     input.phases.progress(Phase::HlodGeometry, 0, Some(total))?;
     let mut passed = 0u64;
     let outcome = pool.in_place_scope(|scope| -> Result<(), JobError> {
-        let (sender, receiver) = mpsc::channel::<(u64, u64, Done)>();
+        let (sender, receiver) = mpsc::channel::<(u64, u64, HeldDone)>();
         let mut stack: Vec<Frame> = Vec::new();
-        // Finished children: their geometry, or none when omitted.
-        let mut ready: HashMap<u64, Option<store::spill::Held>> = HashMap::new();
+        // Finished children: one built tile, a complete frontier, or unavailable input.
+        let mut ready: HashMap<u64, Vec<store::spill::Held>> = HashMap::new();
+        let omitted_ids = std::cell::RefCell::new(std::collections::HashSet::<u64>::new());
         // Finished tiles holding admitted folds (A2), by walk id.
         let carriers = std::cell::RefCell::new(std::collections::HashSet::<u64>::new());
         let mut pending: Vec<Closed> = Vec::new();
@@ -1953,7 +1982,7 @@ fn walk(
         // Spawn every pending parent whose children are ready, in postorder, while workers
         // and the ledger admit its job.
         let spawn = |pending: &mut Vec<Closed>,
-                     ready: &mut HashMap<u64, Option<store::spill::Held>>,
+                     ready: &mut HashMap<u64, Vec<store::spill::Held>>,
                      inflight: &mut usize|
          -> Result<(), JobError> {
             let mut i = 0;
@@ -1962,19 +1991,49 @@ fn walk(
                     i += 1;
                     continue;
                 }
-                // An omitted child omits this cell too, before any merge: nothing to build,
-                // its other children's geometry released (omission reaches the root).
-                if pending[i].children.iter().any(|c| ready[c].is_none()) {
+                let has_omission = pending[i]
+                    .children
+                    .iter()
+                    .any(|c| omitted_ids.borrow().contains(c));
+                let complete = pending[i].children.iter().all(|c| !ready[c].is_empty())
+                    && recovery::bounded(
+                        pending[i]
+                            .children
+                            .iter()
+                            .flat_map(|c| ready[c].iter())
+                            .map(|g| (g.key(), g.triangles())),
+                        pending[i].key,
+                        settings.cap,
+                    );
+                let root = settings.mutation.recovery()
+                    && (pending[i].ownership_root
+                        || job.borders.publication_depth(pending[i].key)? == 0);
+                if has_omission && (!root || !complete) {
                     let closed = pending.remove(i);
+                    let mut retained = Vec::new();
                     let mut frontier = Vec::new();
                     for c in &closed.children {
-                        if let Some(geometry) = ready.remove(c).flatten() {
-                            frontier.push(TileKey {
-                                depth: job.borders.publication_depth(geometry.key())?,
-                                ..geometry.key()
-                            });
+                        let was_omitted = omitted_ids.borrow_mut().remove(c);
+                        for geometry in ready.remove(c).unwrap() {
+                            if !was_omitted {
+                                frontier.push(TileKey {
+                                    depth: job.borders.publication_depth(geometry.key())?,
+                                    ..geometry.key()
+                                });
+                            }
+                            if complete {
+                                retained.push(geometry);
+                            }
                         }
                     }
+                    if closed
+                        .children
+                        .iter()
+                        .any(|c| carriers.borrow().contains(c))
+                    {
+                        carriers.borrow_mut().insert(closed.id);
+                    }
+                    omitted_ids.borrow_mut().insert(closed.id);
                     *inflight += 1;
                     let omitted = Finished::Omitted {
                         key: closed.key,
@@ -1988,16 +2047,15 @@ fn walk(
                     let _ = sender.send((
                         closed.id,
                         closed.seq,
-                        Ok((None, omitted, appearance::Timing::default())),
+                        Ok((retained, omitted, appearance::Timing::default())),
                     ));
                     continue;
                 }
-                // Children are capped (an omitted child propagates instead of merging), so
-                // every job is within its planned charge.
                 let merged: u64 = pending[i]
                     .children
                     .iter()
-                    .map(|c| ready[c].as_ref().map_or(0, |g| g.triangles()))
+                    .flat_map(|c| ready[c].iter())
+                    .map(|g| g.triangles())
                     .sum();
                 if merged > job_inputs {
                     return Err(state(format!(
@@ -2017,14 +2075,22 @@ fn walk(
                     break;
                 };
                 let mut closed = pending.remove(i);
+                closed.recover = has_omission;
+                for c in &closed.children {
+                    omitted_ids.borrow_mut().remove(c);
+                }
                 closed.folds_below = closed
                     .children
                     .iter()
                     .any(|c| carriers.borrow().contains(c));
+                if closed.folds_below {
+                    carriers.borrow_mut().insert(closed.id);
+                }
                 let children: Vec<TileGeometry> = closed
                     .children
                     .iter()
-                    .map(|c| ready.remove(c).flatten().unwrap().load())
+                    .flat_map(|c| ready.remove(c).unwrap())
+                    .map(|g| g.load())
                     .collect::<Result<_, JobError>>()?;
                 let sender = sender.clone();
                 *inflight += 1;
@@ -2032,27 +2098,38 @@ fn walk(
                     let (id, seq) = (closed.id, closed.seq);
                     let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         let mut built = build_tile(job, &closed, children, audit)?;
-                        // The job's admission includes its output: keep that part while the
-                        // tile is held for its parent, release the workspace.
-                        if let Some(tile) = built.0.as_mut() {
-                            let mut lease = job_lease;
+                        // Reloaded inputs remain charged if failure returns the frontier.
+                        // Resident inputs already own their leases. A successful output
+                        // takes only its own part of the existing job admission.
+                        let mut lease = job_lease;
+                        for tile in &mut built.0 {
                             let held = tile.check_charge()?;
-                            if held > out_bytes {
-                                return Err(state("a coarse tile exceeds its admitted output"));
+                            if tile.lease.is_none() {
+                                tile.lease = Some(lease.split(held).ok_or_else(|| {
+                                    state("returned frontier exceeds its job admission")
+                                })?);
                             }
-                            lease.shrink(held);
-                            tile.lease = Some(lease);
                         }
                         Ok(built)
                     }))
                     .unwrap_or_else(|_| Err(state("HLOD worker panicked")));
+                    let done = done.map(|(tiles, row, timing)| {
+                        (
+                            tiles
+                                .into_iter()
+                                .map(store::spill::Held::Resident)
+                                .collect(),
+                            row,
+                            timing,
+                        )
+                    });
                     let _ = sender.send((id, seq, done));
                 });
             }
             Ok(())
         };
         let mut receive = |pending: &mut Vec<Closed>,
-                           ready: &mut HashMap<u64, Option<store::spill::Held>>,
+                           ready: &mut HashMap<u64, Vec<store::spill::Held>>,
                            inflight: &mut usize,
                            finished_rows: &mut BTreeMap<u64, Finished>|
          -> Result<(), JobError> {
@@ -2066,17 +2143,26 @@ fn walk(
                 .map_err(|_| state("HLOD worker ended without a result"))?;
             *inflight -= 1;
             let (geometry, row, timing) = done?;
-            if matches!(&row, Finished::Row(r) if r.carries_folds) {
-                carriers.borrow_mut().insert(id);
+            match &row {
+                Finished::Row(r) => {
+                    if r.carries_folds {
+                        carriers.borrow_mut().insert(id);
+                    } else {
+                        carriers.borrow_mut().remove(&id);
+                    }
+                }
+                Finished::Omitted { .. } => {
+                    omitted_ids.borrow_mut().insert(id);
+                }
             }
             timings.surface += timing.surface;
             timings.charts += timing.charts;
             timings.query += timing.query;
             timings.sample += timing.sample;
             timings.encode += timing.encode;
-            ready.insert(id, geometry.map(store::spill::Held::Resident));
+            ready.insert(id, geometry);
             #[cfg(test)]
-            if settings.mutation == Mutation::ForceSpill {
+            if settings.mutation.force_spill() {
                 while spill.borrow_mut().spill_one(ready)? {}
             }
             finished_rows.insert(seq, row);
@@ -2188,6 +2274,9 @@ fn walk(
                 if let Some(audit) = audit {
                     row.audit_record = Some(audit.tile(&row, &contract)?);
                 }
+                if row.recovery.is_some() {
+                    report.recovery.clone_from(&row.recovery);
+                }
                 tally(report, &row);
                 serde_json::to_writer(&mut writer, &row).map_err(|e| state(e.to_string()))?;
                 writer
@@ -2269,6 +2358,7 @@ fn walk(
                 children: frame.children,
                 single_leaf,
                 ownership_root: stack.is_empty(),
+                recover: false,
                 folds_below: false,
             };
             *next_seq += 1;
@@ -2354,9 +2444,9 @@ fn walk(
                     Some(parent) => {
                         kinds.insert(id, Child::Leaf);
                         adopt(parent, id, &kinds, &mut publish);
-                        ready.insert(id, Some(store::spill::Held::Resident(tile)));
+                        ready.insert(id, vec![store::spill::Held::Resident(tile)]);
                         #[cfg(test)]
-                        if settings.mutation == Mutation::ForceSpill {
+                        if settings.mutation.force_spill() {
                             while spill.borrow_mut().spill_one(&mut ready)? {}
                         }
                     }

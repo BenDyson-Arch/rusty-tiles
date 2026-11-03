@@ -123,6 +123,8 @@ pub(crate) struct TileExtras {
     last_octant: Option<u8>,
     #[serde(rename = "syntheticLevels", skip_serializing_if = "Option::is_none")]
     synthetic_levels: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recovery: Option<crate::mesh_large::hlod::recovery::Recovery>,
 }
 
 fn record(node: &Node, contents: Vec<ContentRef>) -> Result<TileRecord<TileExtras>, JobError> {
@@ -130,9 +132,14 @@ fn record(node: &Node, contents: Vec<ContentRef>) -> Result<TileRecord<TileExtra
     let extras = TileExtras {
         first: node.first.to_string(),
         depth: node.depth,
-        end: leaf.map(|l| l.end.to_string()),
+        end: if node.proxy.as_ref().is_some_and(|p| p.recovery.is_some()) {
+            Some(node.end.to_string())
+        } else {
+            leaf.map(|l| l.end.to_string())
+        },
         last_octant: leaf.filter(|l| l.packed).map(|l| l.last_octant),
         synthetic_levels: leaf.filter(|l| l.synthetic > 0).map(|l| l.synthetic),
+        recovery: node.proxy.as_ref().and_then(|p| p.recovery.clone()),
     };
     let error = GeometricError::new(node.error).map_err(|e| state(e.to_string()))?;
     TileRecord::new(
@@ -527,7 +534,8 @@ fn plan_pass(
 ) -> Result<Planned, JobError> {
     let mut sink = PlanSink::default();
     let proxies = leaves.proxies.then(|| leaves.proxy_rows()).transpose()?;
-    let mut builder = Builder::with_proxies(&mut sink, limits, proxies);
+    let mut builder =
+        Builder::with_proxies(&mut sink, limits, proxies).with_recovery(leaves.recovery.clone())?;
     let mut triangles = 0u64;
     for (index, item) in leaves.leaves()?.enumerate() {
         if index % 256 == 0 {
@@ -795,7 +803,8 @@ pub(crate) fn write_prepared(
         check,
     };
     let proxies = leaves.proxies.then(|| leaves.proxy_rows()).transpose()?;
-    let mut builder = Builder::with_proxies(&mut sink, limits, proxies);
+    let mut builder =
+        Builder::with_proxies(&mut sink, limits, proxies).with_recovery(leaves.recovery.clone())?;
     for (index, item) in leaves.leaves()?.enumerate() {
         if index % 256 == 0 {
             (builder.sink().check)()?;

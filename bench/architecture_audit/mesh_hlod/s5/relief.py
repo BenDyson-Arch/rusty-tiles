@@ -81,7 +81,10 @@ class Relief:
     def __init__(self, store, tiles, leaves, cap, extent, require, stats):
         self.store, self.require, self.stats = store, require, stats
         self.cap, self.extent = cap, extent
-        self.tiles, self.leaves = tiles, leaves
+        from recovery import ownership_view
+        self.tiles = ownership_view(tiles)
+        by_id = {t["id"]: t for t in self.tiles}
+        self.leaves = [by_id[t["id"]] for t in leaves]
 
     # -- the frozen tree from the delivered one --------------------------------
     def domain(self, records, omitted):
@@ -385,6 +388,8 @@ def frozen(tiles, records, omitted):
     depths from its own on, unless the delivered tree continues the chain below it; a
     leaf lies one level below its parent's chain. None when a link placeholder hides the
     tree or the labels do not fit (each chain starts one level below its parent's)."""
+    from recovery import ownership_view
+    tiles = ownership_view(tiles)
     claimed = collections.defaultdict(set)
     for r in omitted:
         claimed[r['key']['leafBegin'], r['key']['leafEnd']].add(r['key']['depth'])

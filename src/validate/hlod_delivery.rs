@@ -37,6 +37,7 @@
 use super::{identity, invalid, spill_failure, Budget, Error, ScratchRefusal};
 mod borders;
 mod drops;
+pub(super) mod recovery;
 use crate::archive3tz::CatalogConfig;
 use crate::spill::{ExternalSorter, Record, Scratch, SequenceWriter, SlotFile, SortConfig};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -974,6 +975,7 @@ struct PendingTile {
     placeholder: bool,
     error: Option<f64>,
     diagonal: Option<f64>,
+    metadata: Option<recovery::Metadata>,
 }
 /// Buffered rows (tiles, references and payloads) before the store moves to disk.
 const PENDING_ROWS: usize = 16_384;
@@ -1026,10 +1028,11 @@ impl Store {
             .map_err(|e| Error::Scratch(ScratchRefusal::Io(e)))?;
         let connection = Connection::open(file.path()).map_err(sql)?;
         connection.execute_batch("PRAGMA cache_size=-8192; PRAGMA temp_store=FILE; PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;
-            CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER);
+            CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER,rank_first INTEGER,ownership_depth INTEGER,recovery TEXT);
             CREATE INDEX tile_parent ON tiles(parent);
+            CREATE TABLE recovery_cells(id INTEGER PRIMARY KEY,first INTEGER NOT NULL,last INTEGER NOT NULL);
             CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL); CREATE INDEX refs_tile ON refs(tile); CREATE INDEX refs_rank ON refs(rank);
-            CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL,dropped INTEGER NOT NULL DEFAULT 0,last_stage INTEGER NOT NULL DEFAULT 0,fold_faces INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL,dropped INTEGER NOT NULL DEFAULT 0,last_stage INTEGER NOT NULL DEFAULT 0,fold_faces INTEGER NOT NULL DEFAULT 0,recovery INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE placements(id INTEGER PRIMARY KEY,tile INTEGER NOT NULL,rank INTEGER NOT NULL,frame BLOB NOT NULL,leaf INTEGER NOT NULL);
             CREATE INDEX placement_rank ON placements(rank,leaf,id);
             CREATE TABLE leaf_points(key BLOB NOT NULL,tile INTEGER NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
@@ -1049,7 +1052,7 @@ impl Store {
         for t in &pending.tiles {
             connection
                 .execute(
-                    "INSERT INTO tiles(id,parent,world,refine,placeholder,error,diagonal) VALUES(?,?,?,?,?,?,?)",
+                    "INSERT INTO tiles(id,parent,world,refine,placeholder,error,diagonal,rank_first,ownership_depth,recovery) VALUES(?,?,?,?,?,?,?,?,?,?)",
                     params![
                         integer(t.id)?,
                         t.parent.map(integer).transpose()?,
@@ -1057,7 +1060,10 @@ impl Store {
                         t.refine,
                         t.placeholder,
                         t.error,
-                        t.diagonal
+                        t.diagonal,
+                        t.metadata.as_ref().and_then(|m| m.owner.map(|k| k.0)).map(integer).transpose()?,
+                        t.metadata.as_ref().and_then(|m| m.owner.map(|k| k.1)),
+                        t.metadata.as_ref().and_then(|m| m.recovery.as_deref())
                     ],
                 )
                 .map_err(sql)?;
@@ -1137,6 +1143,7 @@ impl Store {
                 placeholder: false,
                 error: None,
                 diagonal: None,
+                metadata: None,
             });
             return self.bound_pending();
         }
@@ -1255,6 +1262,15 @@ impl Store {
                 .execute(
                     "UPDATE payloads SET last_stage=?,fold_faces=? WHERE rank=?",
                     params![i64::from(stage) + 1, integer(folds)?, integer(rank)?],
+                )
+                .map_err(sql)?;
+        }
+        let recovery = recovery::payload_marker(raw)?;
+        if recovery {
+            self.connection
+                .execute(
+                    "UPDATE payloads SET recovery=1 WHERE rank=?",
+                    [integer(rank)?],
                 )
                 .map_err(sql)?;
         }
@@ -1599,6 +1615,7 @@ impl Store {
         }
         let mut census = DecodedInterfaceCensus::default();
         self.triangle_cap(&mut census)?;
+        self.recovery(effort)?;
         census.omission = self.omission(effort)?;
         self.single_cover(effort)?;
         self.place_references(effort)?;

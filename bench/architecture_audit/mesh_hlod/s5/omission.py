@@ -81,15 +81,18 @@ def diagonal(node):
 
 
 def inspect(tiles, archive):
-    sizes, digests = {}, {}
+    from recovery import marker, inspect as inspect_recovery
+    sizes, digests, markers = {}, {}, {}
     for t in tiles:
         for uri in t['contents']:
             if uri not in sizes:
                 data = archive.read(uri)
                 sizes[uri] = triangles(data, uri)
+                markers[uri] = marker(data, require)
                 digests[uri] = hashlib.sha256(data).digest()
                 require(sizes[uri] <= TRIANGLE_CAP, 'triangleCap',
                         f'{uri} publishes {sizes[uri]} triangles, above the hard {TRIANGLE_CAP}')
+    recovery = inspect_recovery(tiles, sizes, markers, require)
     index = {id(t): i for i, t in enumerate(tiles)}
     # Reverse preorder: whether any strict descendant renders.
     below = {}
@@ -154,7 +157,7 @@ def inspect(tiles, archive):
                 node = parent
     return dict(maxPayloadTriangles=max(sizes.values(), default=0), omittedCells=omitted,
                 omissionSources=sources, omittedByDepth=by_depth, frontierTiles=frontier,
-                frontierLeaves=covered)
+                frontierLeaves=covered, **recovery)
 
 
 def compare(derived, manifest):
@@ -164,7 +167,19 @@ def compare(derived, manifest):
                     omittedByDepth=list(hlod.get('omittedByDepth') or []))
     while reported['omittedByDepth'] and reported['omittedByDepth'][-1] == 0:
         reported['omittedByDepth'].pop()
-    differences = {k: dict(derived=derived[k], reported=v) for k, v in reported.items() if derived[k] != v}
+    counts = dict(derived)
+    counts['omittedCells'] += derived.get('bypassedCells', 0)
+    if derived.get('bypassedCells', 0):
+        # Source count requires the declared ownership scaffold, kept separate from delivery counts.
+        counts['omissionSources'] += derived.get('bypassedSources', 0)
+    depth = list(counts['omittedByDepth'])
+    for d, n in enumerate(derived.get('bypassedByDepth', [])):
+        depth.extend([0] * (d + 1 - len(depth)))
+        depth[d] += n
+    while depth and depth[-1] == 0:
+        depth.pop()
+    counts['omittedByDepth'] = depth
+    differences = {k: dict(derived=counts[k], reported=v) for k, v in reported.items() if counts[k] != v}
     if hlod.get('maxTriangles') is not None and hlod['maxTriangles'] > TRIANGLE_CAP:
         differences['maxTriangles'] = dict(derived=derived['maxPayloadTriangles'], reported=hlod['maxTriangles'])
     return dict(ok=not differences, check='omissionReport', reported=reported, differences=differences)

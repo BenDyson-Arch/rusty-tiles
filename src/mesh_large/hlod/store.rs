@@ -5,12 +5,12 @@
 pub(crate) mod spill;
 use super::interfaces::InterfaceRow;
 use crate::mesh_large::{records::Bounds, resources::Lease};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// One tile of the frozen ownership tree: its source rank range, tile depth and DFS leaf
 /// interval. `[first, end)` is also the descendant source range S2 samples against.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub(crate) struct TileKey {
     pub first: u64,
     pub end: u64,
@@ -199,6 +199,8 @@ pub(crate) struct HlodRow {
     pub measurement: super::error::Summary,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub root_competition: Option<super::root_competition::Receipt>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery: Option<super::recovery::Recovery>,
     /// The tile's budgeted nearest searches (`error::NEAREST_STEPS`), exhaustions included.
     pub nearest_search: super::error::SearchStats,
     #[serde(skip)]

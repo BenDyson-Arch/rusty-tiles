@@ -593,6 +593,7 @@ def expand(archive):
         _require(not (payloads and external), 'mixed external and renderable content unsupported')
         tile = dict(id=str(len(tiles)), node=node, parent=parent, children=[], depth=depth,
                     contents=payloads, transform=transform, g=g, refine=refine,
+                    implicit=implicit is not None,
                     external=bool(external), external_uris=[name for name, _ in external])
         tiles.append(tile)
         if parent is not None:
