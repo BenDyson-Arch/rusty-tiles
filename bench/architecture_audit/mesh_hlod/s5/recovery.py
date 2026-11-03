@@ -11,12 +11,18 @@ import struct
 
 def marker(data, require):
     length = struct.unpack_from('<I', data, 12)[0]
-    doc = json.loads(data[20:20 + length])
-    value = doc.get('asset', {}).get('extras', {}).get('rustyTiles', {}).get('descendantRecovery')
-    if value is None:
-        return False
+    value = json.loads(data[20:20 + length])
+    for name in ('asset', 'extras', 'rustyTiles', 'descendantRecovery'):
+        if not isinstance(value, dict) or name not in value:
+            return False
+        value = value[name]
     require(type(value) is int and value == 1, 'recoveryRelation', 'invalid payload recovery version')
     return True
+
+
+def extras(tile):
+    value = tile['node'].get('extras')
+    return value if isinstance(value, dict) else {}
 
 
 def key(value, require):
@@ -43,7 +49,7 @@ def cell_children(tile):
 
 
 def inspect(tiles, sizes, markers, require):
-    declarations = [t for t in tiles if 'recovery' in t['node'].get('extras', {})]
+    declarations = [t for t in tiles if 'recovery' in extras(t)]
     marked = [t for t in tiles if any(markers[u] for u in t['contents'])]
     require(len(declarations) == len(marked) <= 1 and all(a is b for a, b in zip(declarations, marked)),
             'recoveryRelation', 'payload and delivery recovery declarations differ')
@@ -56,7 +62,7 @@ def inspect(tiles, sizes, markers, require):
     require(parent is None and root['refine'] == 'REPLACE' and len(root['contents']) == 1
             and not root.get('implicit') and 'implicitTiling' not in root['node'],
             'recoveryRelation', 'recovery requires one explicit REPLACE ownership root')
-    value = root['node']['extras']['recovery']
+    value = extras(root)['recovery']
     require(isinstance(value, dict) and set(value) == {'version', 'root', 'encodedDepth', 'frontier', 'omitted'}
             and type(value['version']) is int and value['version'] == 1,
             'recoveryRelation', 'invalid recovery declaration')
@@ -64,6 +70,7 @@ def inspect(tiles, sizes, markers, require):
     require(rk[0] == rk[2] == rk[3] == 0 and type(value['encodedDepth']) is int
             and 0 <= value['encodedDepth'] <= 30
             and str(root['node']['extras'].get('first')) == '0'
+            and type(root['node']['extras'].get('depth')) is int
             and root['node']['extras'].get('depth') == 0,
             'recoveryRelation', 'invalid recovery root')
     inputs, omitted = value['frontier'], value['omitted']
@@ -103,8 +110,9 @@ def inspect(tiles, sizes, markers, require):
                 'recoveryCoverage', 'frontier child has no single renderable payload')
         require(bounds[id(child)] == (ck[0], ck[1], ck[3], ck[4]),
                 'recoveryCoverage', 'frontier interval differs from its delivered cover')
-        extras = child['node'].get('extras', {})
-        require(str(extras.get('first')) == str(ck[0]) and extras.get('depth') == ck[2],
+        owner = extras(child)
+        require(str(owner.get('first')) == str(ck[0]) and type(owner.get('depth')) is int
+                and owner.get('depth') == ck[2],
                 'recoveryOwnership', 'frontier ownership identity differs from the declaration')
         require(ck[2] < 31 or not child['children'], 'recoveryOwnership', 'coarse frontier exceeds internal depth')
         require(sum(sizes[u] for u in child['contents']) == n, 'recoveryBounds', 'frontier triangle count differs')

@@ -6530,7 +6530,11 @@ fn descendant_recovery_is_complete_measured_and_job_and_spill_invariant() {
     }
     assert_eq!(published(&dirs[1]), published(&dirs[2]));
     assert_eq!(published(&dirs[1]), published(&dirs[3]));
-    assert_eq!(published(&dirs[0]), published(&dirs[4]));
+    let (mut original, mut refused_output) = (published(&dirs[0]), published(&dirs[4]));
+    // The failed attempt changes input-work and query counters, not publication.
+    original.remove("manifest.json");
+    refused_output.remove("manifest.json");
+    assert_eq!(original, refused_output);
     let manifest = |dir: &Path| -> Value {
         serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap()
     };
@@ -6539,5 +6543,14 @@ fn descendant_recovery_is_complete_measured_and_job_and_spill_invariant() {
         assert_eq!(before["hlod"][count], refused["hlod"][count], "{count}");
     }
     assert!(refused["hlod"]["recovery"].is_null());
+    assert!(refused["hlod"]["maxJobInputTriangles"].as_u64().unwrap() <= 8 * 100);
+    assert!(
+        refused["hlod"]["errorMeasurement"]["nearest"]["searches"]
+            .as_u64()
+            .unwrap()
+            > before["hlod"]["errorMeasurement"]["nearest"]["searches"]
+                .as_u64()
+                .unwrap()
+    );
     published_and_valid("refused descendant recovery", &dirs[4], work.path());
 }

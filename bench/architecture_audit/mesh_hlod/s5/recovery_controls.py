@@ -98,6 +98,10 @@ def generate(root):
         relation(doc)['frontier'][0]['key']['depth'] = 2
     case('ownership-depth', depth, 'recoveryOwnership')
 
+    def boolean_depth(doc, files):
+        doc['root']['children'][0]['extras']['depth'] = True
+    case('noninteger-ownership-depth', boolean_depth, 'recoveryOwnership')
+
     def scaffold(doc, files):
         relation(doc)['omitted'][0]['depth'] = 2
     case('ownership-scaffold', scaffold, 'recoveryOwnership')
@@ -107,6 +111,19 @@ def generate(root):
         del payload['asset']['extras']
         files['root.glb'] = native_controls.pack(payload, binary)
     case('missing-payload-declaration', marker, 'recoveryRelation')
+
+    def null_marker(doc, files):
+        payload, binary = native_controls.unpack(files['root.glb'])
+        payload['asset']['extras']['rustyTiles']['descendantRecovery'] = None
+        files['root.glb'] = native_controls.pack(payload, binary)
+    case('null-payload-declaration', null_marker, 'recoveryRelation')
+
+    def nullable(doc, files):
+        doc['root']['children'][0]['children'][0]['extras'] = None
+        payload, binary = native_controls.unpack(files['leaf0.glb'])
+        payload['asset']['extras'] = None
+        files['leaf0.glb'] = native_controls.pack(payload, binary)
+    case('unrelated-null-extras', nullable)
 
     def linked(doc, files):
         left = doc['root']['children'][0]
