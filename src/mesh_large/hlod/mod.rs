@@ -66,7 +66,7 @@ use std::{
 
 /// S3's coarse appearance policy (recorded in the stage manifest).
 pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized pages, mask-packed charts isolated through COARSE_ISLAND_ISOLATED_LEVELS mips, at max(1.25 G/16, 1e-5 m), \
-     1024 cap, never finer than the source's texel spacing, nearest captured-source bake; per-vertex COLOR_0 or flat factors untextured";
+     2048 cap per semantic slot, never finer than the source's texel spacing, nearest captured-source bake; per-vertex COLOR_0 or flat factors untextured";
 
 /// Hard published triangle cap of every coarse tile (D1).
 pub(crate) const TRIANGLE_CAP: usize = 8192;
@@ -139,6 +139,9 @@ fn job_charge(merged: u64, settings: &Settings) -> u64 {
             (settings.cap as u64).saturating_mul(6),
         ))
         .saturating_add(JOB_ENCODE_BYTES)
+        // Accepted tile/measurement, cloned topology witnesses (up to eight capped
+        // children) and one cap-sized D10 proposal coexist during admission.
+        .saturating_add(32 << 20)
         .saturating_add(source_index::QUERY_BYTES)
         .saturating_add(error::WORK_BYTES)
         .saturating_add(error::search_bytes(settings.nearest_steps))
@@ -195,12 +198,18 @@ pub struct HlodMemoryPlan {
     pub minimum_bytes: u64,
     /// The walk's lease ledger (`ceiling - fixed`).
     pub ledger_bytes: u64,
-    /// Coarse texture/chart/mip/codec workspace of one parent job (zero without images).
+    /// Per-job decode and retained pages; charts/page work use the shared pool.
     pub texture_workspace_bytes: u64,
     /// The vertex-colour path's query state of one job (zero without COLOR_0).
     pub color_workspace_bytes: u64,
-    /// Shared decoded source-chain cache (zero without images).
+    /// Shared cache/page pool; cache capacity is lent to admitted page workspaces.
     pub image_cache_bytes: u64,
+    /// Cache capacity left even while page workspaces are admitted.
+    pub image_cache_floor_bytes: u64,
+    /// Largest chart/page workspace, reserved only while a textured group uses it.
+    pub page_workspace_bytes: u64,
+    /// Space chart holders must leave for one maximum page to make progress.
+    pub page_headroom_bytes: u64,
     /// Encoder workspace ceiling of one coarse page.
     pub page_bytes: u64,
     /// Encoded page bytes one coarse tile may publish (admitted twice: pages and GLB).
@@ -214,6 +223,8 @@ struct AppearancePlan {
     texture: u64,
     color: u64,
     page: u64,
+    page_workspace: u64,
+    page_headroom: u64,
     tile_pages: u64,
     cache_floor: u64,
     cache_total: u64,
@@ -224,6 +235,13 @@ struct AppearancePlan {
 const QUERY_BYTES_PER_TEXEL: u64 = 24;
 /// One bake chunk's points, hits, source frames, requests and levels of detail.
 const CHUNK_BYTES: u64 = bake::CHUNK as u64 * 160;
+
+/// Page-sized work, separate from chart construction and retained output.
+fn page_workspace(size: [u32; 2], page: u64) -> u64 {
+    (u64::from(size[0]) * u64::from(size[1]))
+        .saturating_mul(QUERY_BYTES_PER_TEXEL)
+        .saturating_add(page)
+}
 
 /// Production worker selection, separate from host detection so archived capture
 /// ownership can exercise auto admission without launching workers or a corpus bake.
@@ -274,13 +292,14 @@ fn appearance_plan(
             texture: 0,
             color,
             page: 0,
+            page_workspace: 0,
+            page_headroom: 0,
             tile_pages: 0,
             cache_floor: 0,
             cache_total: 0,
         });
     }
     let edge = appearance::MAX_PAGE_EDGE;
-    let texels = u64::from(edge) * u64::from(edge);
     let slots = captured
         .materials
         .iter()
@@ -302,16 +321,12 @@ fn appearance_plan(
         .saturating_mul(16)
         .saturating_add(32 << 20)
         .saturating_add(largest_chain);
-    // One group's page workspace at a time, plus the tile's delivered pages and the GLB
-    // being assembled from them (each at most `tile_pages`).
+    // Chart/page work borrows shared cache capacity only during appearance.
+    // Delivered pages and GLB remain per-job charges.
     let tile_pages =
         appearance::tile_page_bytes(slots, captured.materials.len() as u64, cap as u64);
-    let texture = texels
-        .saturating_mul(QUERY_BYTES_PER_TEXEL)
-        .saturating_add(CHUNK_BYTES)
-        .saturating_add(chart_workspace(edge, cap))
+    let texture = CHUNK_BYTES
         .saturating_add(tile_pages.saturating_mul(2))
-        .saturating_add(page)
         .saturating_add(decode);
     let cache_total = captured.image_info.iter().fold(0u64, |n, i| {
         n.saturating_add(bake::chain_bytes(i.width, i.height))
@@ -320,6 +335,9 @@ fn appearance_plan(
         texture,
         color,
         page,
+        page_workspace: chart_workspace(edge, cap)
+            .saturating_add(page_workspace([edge, edge], page)),
+        page_headroom: page_workspace([edge, edge], page),
         tile_pages,
         cache_floor: largest_chain.min(cache_total),
         cache_total,
@@ -379,6 +397,7 @@ pub(crate) fn plan(
         incidence.max(
             window
                 .saturating_add(job)
+                .saturating_add(appearance.page_workspace)
                 .saturating_add(appearance.cache_floor),
         ),
     );
@@ -414,28 +433,40 @@ pub(crate) fn plan(
     if ceiling < minimum {
         return Err(resource(format!(
             "HLOD stage needs at least {minimum} bytes (fixed {fixed}, incidence {incidence}, \
-             child window {window}, one parent job {job}) but the memory budget allows \
+             child window {window}, one parent job {job}, shared page {}) but the memory budget allows \
              {ceiling} (budget {}, memory-backed scratch {tmpfs})",
+            appearance.page_workspace,
             budget.resolved_bytes
         )));
     }
     let ledger = ceiling - fixed;
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as u64;
     let (jobs, limited_by) = worker_admission(
-        (ledger - window).saturating_sub(appearance.cache_floor),
+        (ledger - window)
+            .saturating_sub(appearance.cache_floor)
+            .saturating_sub(appearance.page_workspace),
         job,
         config.jobs,
         cores,
     );
-    // The cache takes what the admitted jobs leave, up to every chain, at least its floor.
+    // Cache and chart/page work share one pool. One maximum group fits beside
+    // the cache floor. Chart holders leave maximum-page headroom so at least one
+    // worker can admit its actual page without waiting for another chart holder.
     let image_cache = if appearance.cache_floor == 0 {
         0
     } else {
-        appearance.cache_total.min(
-            (ledger - window)
-                .saturating_sub(jobs.saturating_mul(job))
-                .max(appearance.cache_floor),
-        )
+        appearance
+            .cache_total
+            .saturating_add(appearance.page_workspace)
+            .min(
+                (ledger - window)
+                    .saturating_sub(jobs.saturating_mul(job))
+                    .max(
+                        appearance
+                            .cache_floor
+                            .saturating_add(appearance.page_workspace),
+                    ),
+            )
     };
     Ok(HlodMemoryPlan {
         budget_bytes: budget.resolved_bytes,
@@ -449,6 +480,9 @@ pub(crate) fn plan(
         texture_workspace_bytes: appearance.texture,
         color_workspace_bytes: appearance.color,
         image_cache_bytes: image_cache,
+        image_cache_floor_bytes: appearance.cache_floor,
+        page_workspace_bytes: appearance.page_workspace,
+        page_headroom_bytes: appearance.page_headroom,
         page_bytes: appearance.page,
         tile_page_bytes: appearance.tile_pages,
         jobs,
@@ -471,6 +505,7 @@ pub(crate) struct HlodReport {
     pub input_triangles: u64,
     pub stopped_by_input: u64,
     pub stopped_by_triangle_budget: u64,
+    pub stopped_by_guarded_error: u64,
     pub tiles_with_protected_faces: u64,
     pub protected_faces: u64,
     pub retries: u64,
@@ -520,6 +555,19 @@ pub(crate) struct HlodReport {
     pub root_competition_timing: root_competition::Timing,
     /// Coarse appearance per tile depth (S3).
     pub appearance_by_depth: Vec<DepthAppearance>,
+    #[serde(skip)]
+    pub descendant_reduction: DescendantReduction,
+}
+
+/// Bounded post-cap geometry work, including refused proposals.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct DescendantReduction {
+    pub reducer_passes: u64,
+    pub source_passes: u64,
+    pub accepted: u64,
+    pub removed_triangles: u64,
+    pub restored_components: u64,
+    pub cpu_seconds: f64,
 }
 
 /// Coarse appearance of one tile depth: page texels, achieved against requested spacing
@@ -589,6 +637,7 @@ pub struct HlodDiagnostics {
     pub root_competition_cpu_seconds: f64,
     pub root_competition_timing: root_competition::Timing,
     pub error_measurement: error::ErrorReport,
+    pub descendant_reduction: DescendantReduction,
     pub wall_seconds: f64,
     pub incidence_scratch_peak_bytes: u64,
     /// The incidence pass's staged scratch declarations (its declared bound is their
@@ -868,7 +917,11 @@ pub(crate) fn produce(
         .zip(index_start)
         .map(|(b, a)| b - a);
     // S3: the shared decoded source-chain cache and what every appearance job reads.
-    let cache = bake::ImageCache::new(input.plan.image_cache_bytes);
+    let cache = bake::ImageCache::with_page_pool(
+        input.plan.image_cache_bytes,
+        input.plan.image_cache_floor_bytes,
+        input.plan.page_headroom_bytes,
+    );
     let layout = captured.triangles.layout().0;
     let services = appearance::Services {
         captured,
@@ -927,6 +980,7 @@ pub(crate) fn produce(
     diagnostics.root_competition_timing = report.root_competition_timing;
     diagnostics.error_cpu = report.error_cpu;
     diagnostics.error_cpu_by_depth = report.error_cpu_by_depth.clone();
+    diagnostics.descendant_reduction = report.descendant_reduction.clone();
     diagnostics.error_cpu.index = index_cpu.unwrap_or(0.);
     let (lease_peak, timings, held_spill) = result?;
     diagnostics.held_spill = held_spill;
@@ -1248,6 +1302,17 @@ fn prepare(
     query: &mut source_index::SourceQuery<'_>,
     nearest: &mut error::Nearest,
 ) -> Result<Option<Prepared>, JobError> {
+    prepare_positions(job, built, contract, query, nearest, false)
+}
+
+fn prepare_positions(
+    job: &Job<'_, '_>,
+    built: &mut geometry::Built,
+    contract: &borders::Contract,
+    query: &mut source_index::SourceQuery<'_>,
+    nearest: &mut error::Nearest,
+    exact: bool,
+) -> Result<Option<Prepared>, JobError> {
     let (captured, check) = (job.input.captured, job.check);
     let cpu_start = error::thread_cpu();
     // Keep S1's open-border vertices at their leaf-canonical decode. Prepare the final
@@ -1257,7 +1322,7 @@ fn prepare(
         .locked
         .iter()
         .zip(&border)
-        .map(|(l, b)| *l || *b)
+        .map(|(l, b)| exact || *l || *b)
         .collect();
     let mut positions = captured.lattice.encode_coarse(
         &built.geometry.positions,
@@ -1576,6 +1641,68 @@ fn build_tile(
         };
         return Ok((None, omitted, appearance::Timing::default()));
     };
+    // Descendants first; the ownership root (including a collapsed root chain) is
+    // reserved for root competition. Appearance sees only the final measured winner.
+    let mut d10 = geometry::descendant::Report::default();
+    let root_reserved = closed.ownership_root
+        || job.borders.publication_depth(closed.key)? == 0
+        || root_competition.is_some();
+    #[cfg(test)]
+    let root_reserved = root_reserved && settings.mutation != Mutation::ReduceSelectedRoot;
+    if !root_reserved && settings.mutation.descendants() {
+        let baseline = prepared.as_ref().expect("accepted tile is prepared");
+        d10.target = 2.8 / 2f64.powi(closed.key.depth as i32);
+        d10.baseline_triangles = built.geometry.triangles.len();
+        d10.baseline_g = baseline.error.geometric_error;
+        d10.reason = "no_allowance";
+        if d10.target > d10.baseline_g {
+            let start = error::thread_cpu();
+            let policy = geometry::folds::Policy::last_resort(
+                built.last_resort_stage,
+                closed.key.leaf_begin,
+                closed.key.leaf_end,
+                &contract.as_ref().expect("built contract").holders,
+            );
+            if let Some(mut candidate) = geometry::descendant::propose(
+                &built,
+                &baseline.positions.decoded,
+                d10.target - d10.baseline_g,
+                policy,
+                &mut d10,
+            ) {
+                check()?;
+                d10.source_passes = 1;
+                d10.reason = "source_refused";
+                if let Some(measured) = prepare_positions(
+                    job,
+                    &mut candidate,
+                    contract.as_ref().expect("built contract"),
+                    &mut query,
+                    &mut nearest,
+                    true,
+                )? {
+                    d10.measured_g = Some(measured.error.geometric_error);
+                    d10.reason = "overshoot";
+                    if measured.error.geometric_error <= d10.target {
+                        d10.reason = "accepted";
+                        d10.accepted = true;
+                        // Retain construction facts; no new holes/drops are licensed.
+                        candidate.topology.published(measured.error.geometric_error);
+                        built = candidate;
+                        prepared = Some(measured);
+                        if let Some(audit) = audit {
+                            topology_attempts += 1;
+                            published_topology_attempt =
+                                Some(audit.topology_attempt(&built, topology_attempts, true)?);
+                        }
+                    }
+                }
+            }
+            d10.cpu_seconds = error::thread_cpu().zip(start).map_or(0., |(b, a)| b - a);
+        }
+    } else {
+        d10.reason = "root_reserved";
+    }
     // A3: how far apart the layers of its folds lie, against its children (reported).
     let fold_separation = if built.last_resort_stage >= 2 || closed.folds_below {
         let reference: Vec<_> = children
@@ -1728,6 +1855,7 @@ fn build_tile(
         quantized: encoded.quantized,
         bounds: encoded.bounds.into(),
         appearance: appearance.facts,
+        d10,
         border_scale: contract.scale,
         border_epsilon: contract
             .certificates
@@ -1759,6 +1887,15 @@ fn build_tile(
 }
 
 fn tally(report: &mut HlodReport, row: &HlodRow) {
+    let d = &mut report.descendant_reduction;
+    d.reducer_passes += u64::from(row.d10.reducer_passes);
+    d.source_passes += u64::from(row.d10.source_passes);
+    d.accepted += u64::from(row.d10.accepted);
+    if row.d10.accepted {
+        d.removed_triangles += (row.d10.baseline_triangles - row.triangles as usize) as u64;
+    }
+    d.restored_components += row.d10.restored_components as u64;
+    d.cpu_seconds += row.d10.cpu_seconds;
     if let Some(root) = &row.root_competition {
         report.root_competition_cpu_seconds += root.cpu_seconds;
         report.root_competition_timing.add(root.timing);
@@ -1781,6 +1918,7 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     match row.stopping_bound {
         StoppingBound::Input => report.stopped_by_input += 1,
         StoppingBound::TriangleBudget => report.stopped_by_triangle_budget += 1,
+        StoppingBound::GuardedError => report.stopped_by_guarded_error += 1,
     }
     report.tiles_with_protected_faces += u64::from(row.protected_faces > 0);
     report.protected_faces += u64::from(row.protected_faces);
@@ -1894,6 +2032,9 @@ fn walk(
     let plan = input.plan;
     let settings = input.settings;
     let ledger = Ledger::new(plan.ledger_bytes);
+    let _page_pool = ledger
+        .try_lease(plan.image_cache_bytes, 0)
+        .ok_or_else(|| state("HLOD shared cache/page pool exceeds its plan"))?;
     let job_bytes = plan.job_bytes;
     // The most a job merges: eight capped children (an omitted child is never merged).
     let job_inputs = input

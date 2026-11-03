@@ -507,7 +507,10 @@ fn coarse_pages_rebake_the_source_ramp_with_content_sized_pages() {
         );
         let [w, h] = [0, 1].map(|i| a["pageSize"][i].as_u64().unwrap());
         assert!(
-            w % 4 == 0 && h % 4 == 0 && (32..=1024).contains(&w) && (32..=1024).contains(&h),
+            w % 4 == 0
+                && h % 4 == 0
+                && (32..=u64::from(super::appearance::MAX_PAGE_EDGE)).contains(&w)
+                && (32..=u64::from(super::appearance::MAX_PAGE_EDGE)).contains(&h),
             "{w}x{h}"
         );
         assert!(glb.doc["extensionsUsed"]

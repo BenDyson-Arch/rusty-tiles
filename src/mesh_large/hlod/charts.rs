@@ -916,7 +916,11 @@ mod tests {
             [[6, 1024], [1024, 6], [130, 130]],
             [[1024, 1024], [6, 1024], [1024, 6]],
             [[130, 130], [1024, 1024], [6, 6]],
+            [[6, 2048], [2048, 6], [258, 258]],
+            [[2048, 2048], [6, 2048], [2048, 6]],
+            [[258, 258], [2048, 2048], [6, 6]],
         ] {
+            let edge = dims.iter().flatten().copied().max().unwrap();
             for (c, size) in charts.iter_mut().zip(dims) {
                 c.size = size;
             }
@@ -929,7 +933,7 @@ mod tests {
                 peak = peak.max(retained + new + scratch);
                 retained = retained - old + new;
             });
-            let charge = workspace_bytes(1024, 1 << 20, f.len() as u64);
+            let charge = workspace_bytes(edge, u64::from(edge).pow(2), f.len() as u64);
             assert!(peak <= charge, "measured {peak}, charge {charge}");
             for c in &charts {
                 assert_eq!(
@@ -941,6 +945,7 @@ mod tests {
             }
         }
         assert_eq!(workspace_bytes(1024, 1 << 20, 8192), 40_505_600);
+        assert_eq!(workspace_bytes(2048, 1 << 22, 8192), 88_613_376);
         assert!(workspace_bytes(512, 1 << 18, 4096) < workspace_bytes(1024, 1 << 20, 8192));
     }
 

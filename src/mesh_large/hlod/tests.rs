@@ -2,6 +2,7 @@
 //! bytes by an independent census (its own GLB decoder; interfaces derived from the decoded
 //! leaves alone, never from producer records), plus the controls that must fail.
 mod border_census;
+mod descendant_city;
 use super::{error::Schedule, Mutation, Settings};
 use crate::{
     content_integrity::meshopt::{self as codec, Mode},
@@ -2779,7 +2780,9 @@ fn back_to_back_sheets_keep_their_source_orientation() {
 /// Mirrored nodes (negative-determinant scale) face where their leaves face at every depth:
 /// capture reverses their corners once, and coarse tiles inherit them. Every coarse face of
 /// a bumpy sheet points to the side its leaves' faces point to on average, and mirroring the
-/// sheet turns that side over.
+/// sheet turns that side over. The root competition may select a declared N3 fold;
+/// check that licence and native validation separately, while the disabled-competition
+/// control retains the all-faces orientation assertion.
 #[test]
 fn mirrored_nodes_keep_their_orientation_in_coarse_tiles() {
     let normal = |f: &[Point; 3]| {
@@ -2796,47 +2799,71 @@ fn mirrored_nodes_keep_their_orientation_in_coarse_tiles() {
     };
     let dot = |a: [f64; 3], b: [f64; 3]| (0..3).map(|i| a[i] * b[i]).sum::<f64>();
     let mut sides = Vec::new();
-    for mirrored in [false, true] {
-        let work = tempfile::tempdir().unwrap();
-        let mut meshes = sheet();
-        let mut scales = Vec::new();
-        if mirrored {
-            for m in &mut meshes {
-                for p in &mut m.positions {
-                    p[0] = -p[0];
+    for mutation in [Mutation::NoRootCompetition, Mutation::None] {
+        for mirrored in [false, true] {
+            let work = tempfile::tempdir().unwrap();
+            let mut meshes = sheet();
+            let mut scales = Vec::new();
+            if mirrored {
+                for m in &mut meshes {
+                    for p in &mut m.positions {
+                        p[0] = -p[0];
+                    }
+                    scales.push([-1., 1., 1.]);
                 }
-                scales.push([-1., 1., 1.]);
+            }
+            let input = write_gltf_scaled(&work.path().join("src"), &meshes, &scales);
+            let dir = stage(
+                &input,
+                &work.path().join("hlod"),
+                &Run {
+                    mutation,
+                    ..Run::default()
+                },
+            )
+            .unwrap();
+            let census = census(&dir);
+            assert_eq!(
+                census.missing_segments + census.reversed_coarse_faces,
+                0,
+                "{census:?}"
+            );
+            let tiles = load(&dir);
+            let mut side = [0f64; 3];
+            for f in tiles.iter().filter(|t| t.leaf).flat_map(|t| &t.faces) {
+                let n = normal(f);
+                side = std::array::from_fn(|i| side[i] + n[i]);
+            }
+            assert_eq!(census.fold_declaration_mismatches, 0, "{census:?}");
+            let records = rows(&dir.join("proxies.jsonl"));
+            let mut coarse_faces = 0;
+            for t in tiles.iter().filter(|t| !t.leaf) {
+                let faces: Vec<_> = t.faces.iter().filter(|f| !degenerate(f)).collect();
+                coarse_faces += faces.len();
+                let against = faces.iter().filter(|f| dot(normal(f), side) <= 0.).count();
+                if against > 0 {
+                    let r = records.iter().find(|r| r["uri"] == t.uri).unwrap();
+                    assert_eq!(mutation, Mutation::None, "{r}");
+                    assert!(
+                        t.folds,
+                        "mirrored {mirrored}: {} has {against} unlicensed faces",
+                        t.uri
+                    );
+                    assert_eq!(r["rootCompetition"]["accepted"], true, "{r}");
+                    assert_eq!(r["d10"]["reason"], "root_reserved");
+                    assert!(against as u64 <= r["foldFaces"].as_u64().unwrap());
+                }
+            }
+            assert!(coarse_faces > 0);
+            published_and_valid(
+                "mirrored orientation and declared root folds",
+                &dir,
+                work.path(),
+            );
+            if mutation == Mutation::None {
+                sides.push(side);
             }
         }
-        let input = write_gltf_scaled(&work.path().join("src"), &meshes, &scales);
-        let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
-        let census = census(&dir);
-        assert_eq!(
-            census.missing_segments + census.reversed_coarse_faces,
-            0,
-            "{census:?}"
-        );
-        let tiles = load(&dir);
-        let mut side = [0f64; 3];
-        for f in tiles.iter().filter(|t| t.leaf).flat_map(|t| &t.faces) {
-            let n = normal(f);
-            side = std::array::from_fn(|i| side[i] + n[i]);
-        }
-        let coarse: Vec<&[Point; 3]> = tiles
-            .iter()
-            .filter(|t| !t.leaf)
-            .flat_map(|t| &t.faces)
-            .filter(|f| !degenerate(f))
-            .collect();
-        assert!(!coarse.is_empty());
-        let against = coarse.iter().filter(|f| dot(normal(f), side) <= 0.).count();
-        assert_eq!(
-            against,
-            0,
-            "mirrored {mirrored}: {against} of {}",
-            coarse.len()
-        );
-        sides.push(side);
     }
     assert!(dot(sides[0], sides[1]) < 0., "{sides:?}");
 }
@@ -5874,21 +5901,29 @@ fn last_resort_tiles(dir: &Path) -> Vec<(u64, u64, u64, u64)> {
         .collect()
 }
 
-/// A folded-sheet run on develop's strategies only and on the full build: the coarse cells
-/// develop publishes, and the full run's staged directory. Without `relief`, both runs use
-/// D11's ladder alone (A1 off).
+/// Compare the original strategies with the full build on the same border policy.
 fn last_resort_case(
     name: &str,
     sheet: Mesh,
     work: &Path,
     relief: bool,
 ) -> (HashSet<(u64, u64)>, PathBuf) {
-    let input = write_gltf(&work.join("src"), &[sheet]);
     let (reference, full) = if relief {
         (Mutation::Develop, Mutation::None)
     } else {
         (Mutation::DevelopNoRelief, Mutation::NoRelief)
     };
+    last_resort_case_with(name, sheet, work, reference, full)
+}
+
+fn last_resort_case_with(
+    name: &str,
+    sheet: Mesh,
+    work: &Path,
+    reference: Mutation,
+    full: Mutation,
+) -> (HashSet<(u64, u64)>, PathBuf) {
+    let input = write_gltf(&work.join("src"), &[sheet]);
     let develop = stage(
         &input,
         &work.join("develop"),
@@ -6183,7 +6218,15 @@ fn n2_admits_declared_folds_and_the_validator_recounts_them() {
     let work = tempfile::tempdir().unwrap();
     let name = "N2 folded sheets";
     let sheet = folded_sheet(72, 3, 0.02, 0.0001, 4);
-    let (develop, dir) = last_resort_case(name, sheet.clone(), work.path(), false);
+    // Keep both the no-relief ladder and cap-fit geometry: either relief or D10
+    // can make this declaration mutant vacuous by eliminating its N2 folds.
+    let (develop, dir) = last_resort_case_with(
+        name,
+        sheet.clone(),
+        work.path(),
+        Mutation::DevelopNoRelief,
+        Mutation::NoReliefDescendants,
+    );
     assert!(omission_receipt(name, &dir));
     let n2: Vec<_> = last_resort_tiles(&dir)
         .into_iter()
@@ -6195,6 +6238,14 @@ fn n2_admits_declared_folds_and_the_validator_recounts_them() {
     );
     assert!(n2.iter().all(|t| !develop.contains(&(t.0, t.1))), "{name}");
     let input = write_gltf(&work.path().join("src2"), &[sheet]);
+    let reduced = stage(&input, &work.path().join("reduced"), &Run::default()).unwrap();
+    let c = census(&reduced);
+    assert_directed_census("descendant folded sheets", &c, Run::default().cap);
+    assert_eq!(c.last_resort_tiles, 0, "{c:?}");
+    assert!(rows(&reduced.join("proxies.jsonl"))
+        .iter()
+        .any(|r| r["d10"]["accepted"] == true));
+    published_and_valid("descendant folded sheets", &reduced, work.path());
     for (mutation, refusal) in [
         (Mutation::MiscountFolds, "lastResort"),
         (Mutation::UndeclaredFolds, "interfaceWinding"),
@@ -6247,26 +6298,53 @@ fn n3_clusters_a_border_heavy_fold_cell_to_the_cap() {
     }
 }
 
-/// Archived tex3/Walem capture metadata from review r2; no full Walem bake.
+/// Archived tex3/Walem metadata: A's 1024 pages and B's 2048 slots before the
+/// mask-workspace charge. These are separate policies, not additive page charges.
 #[test]
-fn coarse_mask_charge_restores_five_automatic_workers_at_four_gib() {
+fn coarse_page_pool_preserves_mask_charges_and_recovers_workers() {
     use crate::mesh_large::{config::Jobs, resources::MemoryBudget};
-    let extra = super::chart_workspace(super::appearance::MAX_PAGE_EDGE, super::TRIANGLE_CAP);
+    let a_masks = super::charts::workspace_bytes(1024, 1 << 20, super::TRIANGLE_CAP as u64);
+    let b_masks = super::chart_workspace(super::appearance::MAX_PAGE_EDGE, super::TRIANGLE_CAP);
+    assert_eq!(a_masks, 40_505_600);
+    assert_eq!(b_masks, 88_613_376);
     for requested in [None, Some(4 << 30)] {
         let budget = MemoryBudget::resolve_with(requested, Some(10 << 30)).unwrap();
         for (name, fixed) in [("tex3", 396_150_356), ("walem-scale", 402_663_442)] {
             let available = budget.ceiling(Some(10 << 30)) - fixed - 21_108_288 - 22_373_720;
-            let job = 693_607_796 + extra;
-            assert_eq!(
-                super::worker_admission(available, job, Jobs::Auto, 8),
-                (5, "memory")
-            );
+            for (policy, base_job, extra, workers) in [
+                ("A/1024", 693_607_796, a_masks, 5),
+                ("B/eager-2048-control", 1_491_574_132, b_masks, 2),
+            ] {
+                let job = base_job + extra;
+                assert_eq!(
+                    super::worker_admission(available, job, Jobs::Auto, 8),
+                    (workers, "memory")
+                );
+                println!("{name} {policy} requested={requested:?} extra={extra} job={job} available={available} auto={workers}");
+            }
             // Sensitive control: the reviewed overcharge admits only four.
             assert_eq!(
                 super::worker_admission(available, 693_607_796 + 188_498_304, Jobs::Auto, 8),
                 (4, "memory")
             );
-            println!("{name} requested={requested:?} extra={extra} job={job} available={available} auto=5");
+            // B owns the maximum chart/page workspace once in the shared pool.
+            // Only live textured groups borrow from it.
+            let page = super::appearance::page_charge([2048; 2], 1, Profile::Balanced).unwrap();
+            let shared_page = super::page_workspace([2048; 2], page) + b_masks;
+            let job = 1_491_574_132 + b_masks - shared_page;
+            assert_eq!(
+                super::worker_admission(available - shared_page, job, Jobs::Auto, 8),
+                (6, "memory")
+            );
+            let request = Jobs::Fixed(NonZeroUsize::new(3).unwrap());
+            assert_eq!(
+                super::worker_admission(available - shared_page, job, request, 8),
+                (3, "request")
+            );
+            assert_eq!(
+                super::worker_admission(available, 1_491_574_132 + b_masks, request, 8),
+                (2, "memory")
+            );
         }
     }
 }
@@ -6301,6 +6379,18 @@ fn root_pair(layout: u64, jobs: usize, evidence: Option<&Path>) {
                 new["geometricError"].as_f64().unwrap() <= old["geometricError"].as_f64().unwrap()
             );
             let r = &new["rootCompetition"];
+            assert_eq!(new["d10"]["reason"], "root_reserved");
+            assert_eq!(new["d10"]["reducerPasses"], 0);
+            assert_eq!(new["d10"]["sourcePasses"], 0);
+            let selected = if r["accepted"] == true {
+                &r["candidateG"]
+            } else {
+                &r["baselineG"]
+            };
+            assert_eq!(
+                &new["geometricError"], selected,
+                "D10 must preserve the selected root G"
+            );
             assert_eq!(r["baselineG"], old["geometricError"]);
             if r["accepted"] == true {
                 assert!(
@@ -6470,4 +6560,145 @@ fn root_competition_fills_a_forced_own_build_omission_and_is_job_invariant() {
     assert!(root["geometricError"].as_f64().unwrap() >= root["childrenError"].as_f64().unwrap());
     assert_eq!(published(&dirs[0]), published(&dirs[1]));
     published_and_valid("recovered root", &dirs[0], work.path());
+}
+
+/// A production-path negative control proves the root guard suppresses a real D10
+/// attempt, rather than merely observing a root with no available error allowance.
+#[test]
+fn d10_never_reduces_the_root_selected_by_competition() {
+    let work = tempfile::tempdir().unwrap();
+    let source = city_block(1);
+    // Exact power-of-two scaling puts the selected G below the 2.8 m allowance.
+    let input = write_gltf_scaled(
+        &work.path().join("src"),
+        &source,
+        &vec![[1. / 64.; 3]; source.len()],
+    );
+    for mutation in [Mutation::None, Mutation::ReduceSelectedRoot] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("{mutation:?}")),
+            &Run {
+                mutation,
+                budget: Some(4 << 30),
+                ..Run::default()
+            },
+        )
+        .unwrap();
+        let rr = rows(&dir.join("proxies.jsonl"));
+        let root = rr
+            .iter()
+            .find(|r| r.get("rootCompetition").is_some())
+            .unwrap();
+        let receipt = &root["rootCompetition"];
+        if mutation == Mutation::None {
+            assert_eq!(root["d10"]["reason"], "root_reserved");
+            assert_eq!(root["d10"]["reducerPasses"], 0);
+            assert_eq!(root["d10"]["sourcePasses"], 0);
+            assert_eq!(
+                root["geometricError"],
+                if receipt["accepted"] == true {
+                    receipt["candidateG"].clone()
+                } else {
+                    receipt["baselineG"].clone()
+                }
+            );
+            published_and_valid("protected root", &dir, work.path());
+        } else {
+            assert!(root["d10"]["reducerPasses"].as_u64().unwrap() > 0, "{root}");
+        }
+    }
+}
+
+/// Exercise D10 on an actually relieved, feasible hierarchy. The unscaled fixture's
+/// relief floor can consume the D10 allowance; power-of-two scaling preserves its
+/// seam geometry while making this a sensitive admission control.
+#[test]
+fn descendant_admission_preserves_relieved_seams_and_floors() {
+    let work = tempfile::tempdir().unwrap();
+    let meshes = noisy_sheet();
+    let input = write_gltf_scaled(
+        &work.path().join("src"),
+        &meshes,
+        &vec![[1. / 64.; 3]; meshes.len()],
+    );
+    let mut attempts = 0;
+    let mut admitted = 0;
+    let mut n3 = 0;
+    for mutation in [Mutation::NoDescendants, Mutation::None] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("{mutation:?}")),
+            &relief_run(mutation),
+        )
+        .unwrap();
+        assert!(relief_receipts(&dir).1 > 0);
+        assert!(omission_receipt("relieved descendants", &dir));
+        for row in rows(&dir.join("proxies.jsonl")) {
+            let floor = row["reliefFloor"].as_f64().unwrap_or(0.);
+            assert!(row["geometricError"].as_f64().unwrap() >= floor);
+            if mutation == Mutation::None && floor > 0. {
+                attempts += row["d10"]["reducerPasses"].as_u64().unwrap();
+                admitted += u64::from(row["d10"]["accepted"] == true);
+                if row["d10"]["accepted"] == true {
+                    assert!(row["d10"]["measuredG"].as_f64().unwrap() >= floor);
+                }
+            }
+            if row.get("rootCompetition").is_some() {
+                assert_eq!(row["d10"]["reducerPasses"], 0);
+                assert_eq!(row["d10"]["reason"], "root_reserved");
+            }
+        }
+        n3 += last_resort_tiles(&dir).iter().filter(|t| t.2 == 3).count();
+        published_and_valid("relieved descendants", &dir, work.path());
+    }
+    eprintln!("relief D10: attempts={attempts}, admitted={admitted}, N3={n3}");
+    assert!(
+        attempts > 0 && admitted > 0,
+        "relief control must exercise D10 admission"
+    );
+}
+
+#[test]
+fn descendant_refusal_preserves_n3_seams() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf_scaled(
+        &work.path().join("src"),
+        &[folded_sheet(48, 5, 0.02, 0.001, 7)],
+        &[[1. / 64.; 3]],
+    );
+    let run = Run::default();
+    let dir = stage(&input, &work.path().join("out"), &run).unwrap();
+    let rr = rows(&dir.join("proxies.jsonl"));
+    let n3: Vec<_> = rr
+        .iter()
+        .filter(|r| r["lastResortStage"] == 3 && r["interfaceSegments"].as_u64().unwrap() > 0)
+        .collect();
+    let attempts: u64 = n3
+        .iter()
+        .map(|r| r["d10"]["reducerPasses"].as_u64().unwrap())
+        .sum();
+    let admitted = n3.iter().filter(|r| r["d10"]["accepted"] == true).count();
+    eprintln!(
+        "N3 D10: cells={}, attempts={attempts}, admitted={admitted}",
+        n3.len()
+    );
+    assert!(attempts > 0, "N3 control must exercise D10");
+    for r in n3 {
+        assert!(r["geometricError"].as_f64().unwrap() >= r["reliefFloor"].as_f64().unwrap_or(0.));
+        let d = &r["d10"];
+        eprintln!(
+            "N3 D10: first={} stuck={} floor={} decision={d}",
+            r["first"], r["reliefStuck"], r["reliefFloor"]
+        );
+        if d["accepted"] == true {
+            assert_eq!(r["geometricError"], d["measuredG"]);
+            assert!(d["measuredG"].as_f64().unwrap() <= d["target"].as_f64().unwrap());
+        } else {
+            assert_eq!(r["triangles"], d["baselineTriangles"]);
+            assert_eq!(r["geometricError"], d["baselineG"]);
+        }
+    }
+    assert_directed_census("N3 D10", &census(&dir), run.cap);
+    published_and_valid("N3 D10", &dir, work.path());
 }

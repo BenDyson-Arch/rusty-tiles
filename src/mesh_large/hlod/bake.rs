@@ -19,7 +19,8 @@ use crate::{
 };
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, MutexGuard, OnceLock},
+    sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock},
+    time::{Duration, Instant},
 };
 
 fn state(message: impl Into<String>) -> JobError {
@@ -396,6 +397,15 @@ struct CacheState {
     hits: u64,
     misses: u64,
     load_seconds: f64,
+    /// All active chart and page workspace reservations.
+    pages: u64,
+    charts: u64,
+    chart_peak: u64,
+    chart_leases: u64,
+    page_peak: u64,
+    page_leases: u64,
+    page_waits: u64,
+    page_wait_seconds: f64,
 }
 
 /// Decoded chains keyed by (image, class), shared by the stage's workers. A request
@@ -406,7 +416,38 @@ struct CacheState {
 /// changes output: every chain level is the same function of the source image.
 pub(crate) struct ImageCache {
     budget: u64,
+    floor: u64,
+    page_headroom: u64,
     state: Mutex<CacheState>,
+    released: Condvar,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Workspace {
+    Charts,
+    Page,
+}
+
+/// Chart and page reservations both precede their allocations. Chart holders cannot
+/// consume the maximum-page headroom; page holders acquire nothing further. Thus
+/// at least one page can always progress even when every worker holds charts.
+/// Retained encoded pages and worker-held image chains have separate job charges.
+pub(crate) struct PageLease<'a> {
+    cache: &'a ImageCache,
+    bytes: u64,
+    kind: Workspace,
+}
+
+impl Drop for PageLease<'_> {
+    fn drop(&mut self) {
+        let mut s = lock(&self.cache.state);
+        s.pages -= self.bytes;
+        if self.kind == Workspace::Charts {
+            s.charts -= self.bytes;
+        }
+        drop(s);
+        self.cache.released.notify_all();
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
@@ -418,6 +459,13 @@ pub struct CacheStats {
     pub misses: u64,
     /// Thread CPU seconds of image reconstruction, decode and chain builds.
     pub load_cpu_seconds: f64,
+    /// Combined chart/page reservation peak, excluding cache-owned chains.
+    pub peak_page_bytes: u64,
+    pub peak_chart_bytes: u64,
+    pub chart_leases: u64,
+    pub page_leases: u64,
+    pub page_lease_waits: u64,
+    pub page_wait_seconds: f64,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -430,10 +478,99 @@ pub(crate) fn chain_bytes(width: u32, height: u32) -> u64 {
 }
 
 impl ImageCache {
+    #[cfg(test)]
     pub(crate) fn new(budget: u64) -> Self {
+        Self::with_page_pool(budget, 0, 0)
+    }
+    pub(crate) fn with_page_pool(budget: u64, floor: u64, page_headroom: u64) -> Self {
         Self {
             budget,
+            floor,
+            page_headroom,
             state: Mutex::new(CacheState::default()),
+            released: Condvar::new(),
+        }
+    }
+
+    pub(crate) fn reserve_page(
+        &self,
+        bytes: u64,
+        check: &dyn Fn() -> Result<(), JobError>,
+    ) -> Result<PageLease<'_>, JobError> {
+        self.reserve_until(bytes, Workspace::Page, Duration::from_secs(300), check)
+    }
+
+    pub(crate) fn reserve_charts(
+        &self,
+        bytes: u64,
+        check: &dyn Fn() -> Result<(), JobError>,
+    ) -> Result<PageLease<'_>, JobError> {
+        self.reserve_until(bytes, Workspace::Charts, Duration::from_secs(300), check)
+    }
+
+    fn reserve_until(
+        &self,
+        bytes: u64,
+        kind: Workspace,
+        timeout: Duration,
+        check: &dyn Fn() -> Result<(), JobError>,
+    ) -> Result<PageLease<'_>, JobError> {
+        let capacity = self.budget.saturating_sub(self.floor);
+        let chart_limit = capacity.saturating_sub(self.page_headroom);
+        if bytes > capacity || (kind == Workspace::Charts && bytes > chart_limit) {
+            return Err(resource(
+                "coarse appearance exceeds its planned shared workspace",
+            ));
+        }
+        let start = Instant::now();
+        let mut waited = false;
+        loop {
+            check()?;
+            let mut s = lock(&self.state);
+            if bytes <= capacity - s.pages
+                && (kind == Workspace::Page || bytes <= chart_limit - s.charts)
+            {
+                s.pages += bytes;
+                s.page_peak = s.page_peak.max(s.pages);
+                if kind == Workspace::Charts {
+                    s.charts += bytes;
+                    s.chart_peak = s.chart_peak.max(s.charts);
+                    s.chart_leases += 1;
+                } else {
+                    s.page_leases += 1;
+                }
+                if waited {
+                    s.page_wait_seconds += start.elapsed().as_secs_f64();
+                }
+                // Evict cache ownership before admitting the allocation. In-flight
+                // loads and chains held by samplers have each worker's decode charge.
+                while s.resident > self.budget - s.pages {
+                    let Some((_, key)) = s.order.pop_first() else {
+                        break;
+                    };
+                    s.resident -= s.entries.remove(&key).map_or(0, |e| e.bytes);
+                }
+                return Ok(PageLease {
+                    cache: self,
+                    bytes,
+                    kind,
+                });
+            }
+            if !waited {
+                s.page_waits += 1;
+                waited = true;
+            }
+            let remaining = timeout.saturating_sub(start.elapsed());
+            if remaining.is_zero() {
+                return Err(resource(
+                    "timed out waiting for coarse appearance workspace",
+                ));
+            }
+            drop(
+                self.released
+                    .wait_timeout(s, remaining.min(Duration::from_millis(100)))
+                    .unwrap_or_else(|p| p.into_inner()),
+            );
         }
     }
     pub(crate) fn stats(&self) -> CacheStats {
@@ -444,6 +581,12 @@ impl ImageCache {
             hits: s.hits,
             misses: s.misses,
             load_cpu_seconds: s.load_seconds,
+            peak_page_bytes: s.page_peak,
+            peak_chart_bytes: s.chart_peak,
+            chart_leases: s.chart_leases,
+            page_leases: s.page_leases,
+            page_lease_waits: s.page_waits,
+            page_wait_seconds: s.page_wait_seconds,
         }
     }
     /// The chain of `image` as `class`, holding at least levels `need..`.
@@ -546,7 +689,7 @@ impl ImageCache {
                 }
                 s.peak = s.peak.max(s.resident);
                 // Evict least recently used chains (never the one just served).
-                while s.resident > self.budget {
+                while s.resident > self.budget - s.pages {
                     let Some(&(last, oldest)) = s.order.iter().find(|(_, k)| *k != key) else {
                         break;
                     };
@@ -811,6 +954,161 @@ pub(crate) fn binding(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn page_admission_evicts_cache_before_allocation_and_preserves_held_chains() {
+        let cache = ImageCache::with_page_pool(400, 100, 0);
+        let load = |base| {
+            Ok(Chain {
+                base,
+                levels: Vec::new(),
+                bytes: 100,
+            })
+        };
+        let held = cache.get_with((0, 0), 0, &load).unwrap();
+        for i in 1..4 {
+            cache.get_with((i, 0), 0, &load).unwrap();
+        }
+        let page = cache.reserve_page(300, &|| Ok(())).unwrap();
+        {
+            let s = lock(&cache.state);
+            assert_eq!((s.pages, s.resident), (300, 100));
+            assert!(!s.entries.contains_key(&(0, 0)));
+        }
+        assert_eq!(
+            held.bytes, 100,
+            "sampler ownership has its own worker charge"
+        );
+        cache.get_with((4, 0), 0, &load).unwrap();
+        assert_eq!(lock(&cache.state).resident, 100);
+        assert!(cache.reserve_page(301, &|| Ok(())).is_err());
+        let timed = cache.reserve_until(1, Workspace::Page, Duration::ZERO, &|| Ok(()));
+        assert!(matches!(timed, Err(e) if e.kind() == JobErrorKind::ResourceLimit));
+        let cancelled = cache.reserve_page(1, &|| Err(state("cancelled")));
+        assert!(matches!(cancelled, Err(e) if e.to_string().contains("cancelled")));
+        assert_eq!(
+            lock(&cache.state).pages,
+            300,
+            "refusal leaks no reservation"
+        );
+        drop(page);
+        for i in 5..8 {
+            cache.get_with((i, 0), 0, &load).unwrap();
+        }
+        assert_eq!(lock(&cache.state).resident, 400, "cache capacity restored");
+    }
+
+    #[test]
+    fn page_admission_waits_then_wakes_on_release() {
+        let cache = ImageCache::with_page_pool(400, 100, 0);
+        let page = cache.reserve_page(300, &|| Ok(())).unwrap();
+        std::thread::scope(|scope| {
+            let waiter = scope.spawn(|| {
+                let _page = cache.reserve_until(
+                    200,
+                    Workspace::Page,
+                    Duration::from_secs(5),
+                    &|| Ok(()),
+                )?;
+                assert!(lock(&cache.state).pages <= 300);
+                Ok::<_, JobError>(())
+            });
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while cache.stats().page_lease_waits == 0 {
+                assert!(Instant::now() < deadline);
+                std::thread::yield_now();
+            }
+            drop(page);
+            waiter.join().unwrap().unwrap();
+        });
+        assert_eq!(cache.stats().page_leases, 2);
+        assert_eq!(cache.stats().peak_page_bytes, 300);
+        assert_eq!(lock(&cache.state).pages, 0);
+    }
+
+    #[test]
+    fn chart_holders_leave_room_for_a_maximum_page_and_keep_small_pages_cached() {
+        let cache = ImageCache::with_page_pool(1000, 100, 500);
+        let load = |base| {
+            Ok(Chain {
+                base,
+                levels: Vec::new(),
+                bytes: 100,
+            })
+        };
+        for i in 0..6 {
+            cache.get_with((i, 0), 0, &load).unwrap();
+        }
+        let a = cache.reserve_charts(200, &|| Ok(())).unwrap();
+        let b = cache.reserve_charts(200, &|| Ok(())).unwrap();
+        assert_eq!(lock(&cache.state).resident, 600);
+        let small = cache.reserve_page(100, &|| Ok(())).unwrap();
+        assert_eq!(
+            lock(&cache.state).resident,
+            500,
+            "evict for actual work only"
+        );
+        drop(small);
+        assert!(cache.reserve_charts(401, &|| Ok(())).is_err());
+        let blocked = cache.reserve_until(1, Workspace::Charts, Duration::ZERO, &|| Ok(()));
+        assert!(matches!(blocked, Err(e) if e.kind() == JobErrorKind::ResourceLimit));
+        let cancelled = cache.reserve_charts(1, &|| Err(state("cancelled")));
+        assert!(matches!(cancelled, Err(e) if e.to_string().contains("cancelled")));
+        // Sensitive boundary: every available chart byte is held, yet one full
+        // maximum page still fits without releasing either chart or weakening it.
+        let page = cache
+            .reserve_until(500, Workspace::Page, Duration::ZERO, &|| Ok(()))
+            .unwrap();
+        assert_eq!(lock(&cache.state).pages, 900);
+        assert_eq!(cache.stats().peak_chart_bytes, 400);
+        assert_eq!(lock(&cache.state).resident, 100);
+        drop(page);
+        drop(a);
+        drop(b);
+        assert_eq!(lock(&cache.state).pages, 0);
+        assert_eq!(cache.stats().chart_leases, 2);
+    }
+
+    #[test]
+    fn pages_and_charts_wake_without_a_chart_page_resource_cycle() {
+        let cache = ImageCache::with_page_pool(1000, 100, 500);
+        let a = cache.reserve_charts(200, &|| Ok(())).unwrap();
+        let b = cache.reserve_charts(200, &|| Ok(())).unwrap();
+        let page = cache.reserve_page(500, &|| Ok(())).unwrap();
+        std::thread::scope(|scope| {
+            let waiter = scope.spawn(|| {
+                let _p = cache
+                    .reserve_until(500, Workspace::Page, Duration::from_secs(5), &|| Ok(()))
+                    .unwrap();
+            });
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while cache.stats().page_lease_waits == 0 {
+                assert!(Instant::now() < deadline);
+                std::thread::yield_now();
+            }
+            drop(page); // Both chart holders remain live while the next page proceeds.
+            waiter.join().unwrap();
+        });
+        let page = cache.reserve_page(500, &|| Ok(())).unwrap();
+        std::thread::scope(|scope| {
+            let waiter = scope.spawn(|| {
+                let _c = cache
+                    .reserve_until(100, Workspace::Charts, Duration::from_secs(5), &|| Ok(()))
+                    .unwrap();
+            });
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while cache.stats().page_lease_waits < 2 {
+                assert!(Instant::now() < deadline);
+                std::thread::yield_now();
+            }
+            drop(b); // Page work can remain live while a chart waiter wakes.
+            waiter.join().unwrap();
+        });
+        assert_eq!(lock(&cache.state).pages, 700);
+        drop(page);
+        drop(a);
+        assert_eq!(lock(&cache.state).pages, 0);
+    }
 
     /// Many source images through a small cache: resident chains stay within the budget
     /// plus the one being served, eviction is least recently used, and a coarser request

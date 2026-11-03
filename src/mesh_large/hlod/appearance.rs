@@ -2,7 +2,7 @@
 //! coarse tile,
 //!
 //! - **textured classes** get fresh charts packed into one content-sized page per bound
-//!   slot (all slots share the layout), texel spacing `max(c·G/16, 1e-5 m)`
+//!   slot (all slots share the layout), texel spacing `max(c·G/16, source spacing, 1e-5 m)`
 //!   ([`SPACING_FACTOR`]) capped at
 //!   `max_edge` per side, baked from the nearest captured source surface of the class
 //!   ([`bake`]): base colour × COLOR_0 in linear light, emissive, metallic-roughness and
@@ -19,11 +19,10 @@
 //! pre-encode page. Geometry, triangle order and representative IDs are never changed.
 //!
 //! S3 holds no walk scratch (`scratch::ScratchLedger`): charts, page rasters, bake chunks,
-//! donor frontiers, mip chains and codec workspace are memory, charged in the parent job's
-//! admission (`HlodMemoryPlan::texture_workspace_bytes`, `page_bytes`, `tile_page_bytes`,
-//! `bake::RESOLVE_BYTES`, `bake::LOCAL_BYTES`), and decoded source chains live in the
-//! bounded [`ImageCache`] (`image_cache_bytes`). Its source reads go through S2's admitted
-//! index. The walk's stage-wide scratch check refuses any byte S3 might write unadmitted.
+//! donor frontiers, mip chains and codec workspace are memory. Retained encoded pages
+//! are charged per job. Charts borrow cache capacity before layout; actual-size pages
+//! borrow separately, with protected headroom ensuring progress. Source reads use S2's
+//! admitted index. The walk's scratch check refuses any byte S3 might write unadmitted.
 use super::{
     bake::{self, Hit, ImageCache, Queries},
     charts,
@@ -47,11 +46,11 @@ fn state(message: impl Into<String>) -> JobError {
 }
 
 /// Balanced coarse page cap per side (D5); the page is otherwise sized to its content.
-pub(crate) const MAX_PAGE_EDGE: u32 = 1024;
+pub(crate) const MAX_PAGE_EDGE: u32 = 2048;
 /// Page texels (per slot) a whole coarse tile may spend over all its material groups,
 /// shared by surface area: many classes per parent split one page's worth instead of
 /// each taking a full page.
-pub(crate) const TILE_TEXELS: u64 = 1 << 20;
+pub(crate) const TILE_TEXELS: u64 = 1 << 22;
 /// Least allowance per group face, so any group fits at zero scale (one gutter-wrapped
 /// chart per face, packed).
 pub(super) const FACE_TEXELS: u64 = 64;
@@ -90,7 +89,7 @@ pub(crate) struct Services<'a> {
     pub cache: &'a ImageCache,
     pub profile: Profile,
     pub max_edge: u32,
-    /// Per-page encoder workspace ceiling (the job's admitted page charge).
+    /// Per-page encoder workspace ceiling (admitted from the shared pool after layout).
     pub page_memory: u64,
     /// Encoded page bytes a tile may publish ([`tile_page_bytes`], admitted twice).
     pub tile_page_bytes: u64,
@@ -454,12 +453,27 @@ fn textured(
     if floor > target {
         facts.source_limited = true;
     }
+    // Admit charts before construction and keep their retained masks charged through
+    // encode. The pool protects maximum-page headroom from all chart holders, so
+    // acquiring the actual page below cannot deadlock against other chart holders.
+    let chart_memory = charts::workspace_bytes(services.max_edge, max_texels, corners.len() as u64);
+    let _chart_lease = services
+        .cache
+        .reserve_charts(chart_memory, services.check)?;
     let layout = charts::layout(
         tile.decoded,
         &corners,
         target.max(floor),
         services.max_edge,
         max_texels,
+    )?;
+    let page_memory = page_charge(layout.size, slots.len() as u64, services.profile)?;
+    if page_memory > services.page_memory {
+        return Err(state("coarse page exceeds its planned encoder ceiling"));
+    }
+    let _page_lease = services.cache.reserve_page(
+        super::page_workspace(layout.size, page_memory),
+        services.check,
     )?;
     let mut owner = vec![false; (layout.size[0] * layout.size[1]) as usize];
     let mut texels = Vec::new();
@@ -534,7 +548,7 @@ fn textured(
                 wrap: [33071; 2],
             });
         let d = deliver(
-            (services.profile, services.page_memory, services.check),
+            (services.profile, page_memory, services.check),
             page,
             (&labels, p.layout.isolated),
             mask,
@@ -1083,6 +1097,39 @@ pub(crate) fn page_charge(size: [u32; 2], slots: u64, profile: Profile) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn density_pressure_uses_the_admitted_2048_page_and_reports_the_cap() {
+        let p = [
+            [0., 0., 0.],
+            [100., 0., 0.],
+            [100., 100., 0.],
+            [0., 100., 0.],
+        ];
+        let layout = charts::layout(
+            &p,
+            &[[0, 1, 2], [0, 2, 3]],
+            0.001,
+            MAX_PAGE_EDGE,
+            TILE_TEXELS,
+        )
+        .unwrap();
+        assert!(layout.capped);
+        assert!(layout.size.iter().all(|&n| n > 1024 && n <= 2048));
+        // A 100 m chart cannot have achieved millimetre spacing in this page.
+        assert!(1. / layout.scale >= 100. / 2048.);
+        assert!(u64::from(layout.size[0]) * u64::from(layout.size[1]) <= TILE_TEXELS);
+        // A five-slot 2048 page can take the shared admission in full without
+        // weakening the layout. A pool one byte too small refuses before allocation.
+        let page = page_charge(layout.size, 5, Profile::Balanced).unwrap();
+        let bytes = super::super::page_workspace(layout.size, page);
+        let cache = ImageCache::with_page_pool(bytes + 64, 64, bytes);
+        let _lease = cache.reserve_page(bytes, &|| Ok(())).unwrap();
+        assert_eq!(cache.stats().peak_page_bytes, bytes);
+        assert!(ImageCache::with_page_pool(bytes + 63, 64, bytes)
+            .reserve_page(bytes, &|| Ok(()))
+            .is_err());
+    }
 
     /// Review probe (round 1): a MASK base-colour coarse page (cutoff 0.75) whose texels
     /// alternate around the cutoff. The shared coverage-preserving delivery keeps every

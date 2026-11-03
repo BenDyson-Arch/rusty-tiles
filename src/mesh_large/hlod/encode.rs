@@ -49,6 +49,15 @@ pub(crate) enum Mutation {
     /// Build without the last resorts after develop's strategies (identity reference).
     #[cfg(test)]
     Develop,
+    /// Retain cap-fit geometry so fold-declaration controls still reach N2.
+    #[cfg(test)]
+    NoDescendants,
+    /// Preserve the N2 declaration fixture on the no-relief ladder.
+    #[cfg(test)]
+    NoReliefDescendants,
+    /// Negative control: incorrectly allow D10 after root selection.
+    #[cfg(test)]
+    ReduceSelectedRoot,
     /// Force only the incumbent root to fail, exercising candidate recovery.
     #[cfg(test)]
     OmitRootBaseline,
@@ -77,6 +86,20 @@ pub(crate) enum Mutation {
 }
 
 impl Mutation {
+    pub(crate) fn descendants(self) -> bool {
+        #[cfg(test)]
+        if matches!(
+            self,
+            Self::NoDescendants
+                | Self::NoReliefDescendants
+                | Self::MiscountFolds
+                | Self::UndeclaredFolds
+        ) {
+            return false;
+        }
+        true
+    }
+
     pub(crate) fn root_competition(self) -> bool {
         #[cfg(test)]
         if self == Self::NoRootCompetition {
@@ -97,7 +120,11 @@ impl Mutation {
         #[cfg(test)]
         if matches!(
             self,
-            Self::NoRelief | Self::DevelopNoRelief | Self::MiscountFolds | Self::UndeclaredFolds
+            Self::NoRelief
+                | Self::NoReliefDescendants
+                | Self::DevelopNoRelief
+                | Self::MiscountFolds
+                | Self::UndeclaredFolds
         ) {
             return usize::MAX / 200;
         }
