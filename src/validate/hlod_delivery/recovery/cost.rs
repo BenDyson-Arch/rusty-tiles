@@ -156,7 +156,7 @@ fn recovery_work_cost_probe() {
         (
             "long-rank",
             serde_json::json!({"extras":{"first":"0".repeat(16*MAX_JSON),"depth":0}}),
-            READ_UNITS,
+            READ_UNITS + METADATA_UNITS,
         ),
         ("missing", serde_json::json!({}), READ_UNITS),
         (

@@ -891,6 +891,12 @@ For `mgal_detail_offset_2048.glb` (9,999,999 triangles), balanced, propose:
   simulator at SSE 16, heading −0.8, pitch −0.65, horizontal FOV 60°, range in
   bounding-sphere radii; also record actual consumer requests with pinned cache,
   server and GPU settings. Pin mismatches; a simulator is not load-time proof.
+- **Combined Walem disposition (owner, 2026-11-03).** For the #322 combined
+  candidate, the owner accepts the max-honest-G floor misses at both 50 m views
+  and at 2560×1600/800 m, and the 1600×1000/range-3 first view of 18.608045 MB
+  against 6.0 MB, for 0.4.0. All four remain **0.4.x targets**. Keep the measured
+  9/12 max-honest-G and 3/12 published-G floor columns and all three first-view
+  receipts; the sampled-error, child-monotone G, cap and D11 rules are unchanged.
 - **Declared 4 GiB cap and measured peak process RSS ≤4 GiB**, no swap, no
   uncharged resident source index. Record cgroup/page-cache peak separately.
   Gate (a)'s untextured 526,174,760-triangle run still requires **2 GiB**.

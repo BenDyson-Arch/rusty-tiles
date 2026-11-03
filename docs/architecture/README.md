@@ -154,15 +154,20 @@ Independent review and the root/delivery objective remain open.
 
 Bounded descendant recovery (2026-11-03, PR #322) is retained externally at
 `~/.cache/rusty-tiles-evidence/bypass-recovery-20261103/FINAL.md`, SHA-256
-`af5c658f050bf67d22149080406c60e10665645f8635ac201cbe7abb1e4d9e5a`.
+`843ae794a050739d5703c2db7d895ff1c44af92fe3ed2be1a38e5bee8753d54a`.
 Production source `d476024b4bbe6ffee9b385af7a59075c008c36a3` and bake head
 `57e7a14428aa5e2446d2d71b4da6183f7960343b` include #309, #320 and #321.
-The receipt was created externally and never held in git. Walem now has a
-validated root at own/published G 5.815484 m over seven complete frontier inputs.
-One failed ownership cell is declared and bypassed. Regression checks pass;
-paired tex3 CPU has a qualified +2.36% median. The first 6 MB view ceiling still
-fails, and published/max-honest floors are 3/12 and 9/12. Final-source nonauthor
-review and broader release acceptance remain pending.
+Validator correction and gate head `7224fdbc170ab16ad9b6eb9bb6dd2183325f6e7a`
+rejects invalid explicit ownership behind document links while retaining genuine
+implicit inheritance. Sol's P1 witness now rejects; its canonical control passes.
+The receipt was created externally and never held in git; the prior receipt is
+preserved in `review1-fix/previous-FINAL.md`. The Walem archive is unchanged,
+with root own/published G 5.815484 m and one declared bypass. Regression and
+revalidation receipts include 200 retained city candidates with identical probe
+rows. Paired tex3 CPU retains its qualified +2.36% median. The measured 6 MB
+first-view miss and three max-honest-G floor misses are owner-accepted for 0.4.0
+and retained as 0.4.x targets; floor columns remain 3/12 and 9/12. Corrected-head
+nonauthor re-review and broader release acceptance remain separate.
 
 The API sketches are proposed interfaces, not currently available APIs. Evidence
 separates observations made with the unmodified converter from isolated failure
