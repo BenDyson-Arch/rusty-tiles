@@ -14,24 +14,46 @@ impl Interval {
     pub(super) fn point(x: f64) -> Self {
         Self { lo: x, hi: x }
     }
-    fn bounds(lo: f64, hi: f64) -> Self {
+    /// Outward rounding of computed endpoints. A result below the smallest normal widens to
+    /// ±`f64::MIN_POSITIVE`, not to a subnormal: by monotonic rounding the true value lies
+    /// within it, and later arithmetic stays on normal numbers (subnormal operands cost a
+    /// microcode assist per operation on E-cores, PR #309 review 5). `exact_zero`: the
+    /// operation is exact when it yields 0 (a sum or difference, or a product with an all-zero
+    /// factor), so 0 stays 0.
+    fn bounds_with(lo: f64, hi: f64, exact_zero: bool) -> Self {
         if lo.is_nan() || hi.is_nan() {
-            Self {
+            return Self {
                 lo: f64::NEG_INFINITY,
                 hi: f64::INFINITY,
-            }
-        } else {
-            Self {
-                lo: lo.next_down(),
-                hi: hi.next_up(),
-            }
+            };
+        }
+        let down = |x: f64| match x {
+            0. if exact_zero => 0.,
+            _ if x.abs() < f64::MIN_POSITIVE => -f64::MIN_POSITIVE,
+            _ => x.next_down(),
+        };
+        let up = |x: f64| match x {
+            0. if exact_zero => 0.,
+            _ if x.abs() < f64::MIN_POSITIVE => f64::MIN_POSITIVE,
+            _ => x.next_up(),
+        };
+        Self {
+            lo: down(lo),
+            hi: up(hi),
         }
     }
+    fn bounds(lo: f64, hi: f64) -> Self {
+        Self::bounds_with(lo, hi, false)
+    }
+    fn zero(self) -> bool {
+        self.lo == 0. && self.hi == 0.
+    }
     pub(super) fn add(self, rhs: Self) -> Self {
-        Self::bounds(self.lo + rhs.lo, self.hi + rhs.hi)
+        // A binary64 sum that rounds to zero is exactly zero (gradual underflow).
+        Self::bounds_with(self.lo + rhs.lo, self.hi + rhs.hi, true)
     }
     fn sub(self, rhs: Self) -> Self {
-        Self::bounds(self.lo - rhs.hi, self.hi - rhs.lo)
+        Self::bounds_with(self.lo - rhs.hi, self.hi - rhs.lo, true)
     }
     fn mul(self, rhs: Self) -> Self {
         let products = [
@@ -43,9 +65,10 @@ impl Interval {
         if products.iter().any(|x| x.is_nan()) {
             return Self::bounds(f64::NAN, f64::NAN);
         }
-        Self::bounds(
+        Self::bounds_with(
             products.into_iter().fold(f64::INFINITY, f64::min),
             products.into_iter().fold(f64::NEG_INFINITY, f64::max),
+            self.zero() || rhs.zero(),
         )
     }
     pub(super) fn div(self, rhs: Self) -> Self {
@@ -64,6 +87,9 @@ pub(super) type Point = [Interval; 3];
 fn norm2_upper(v: Point) -> f64 {
     v.into_iter().fold(0., |sum, x| {
         let magnitude = x.lo.abs().max(x.hi.abs());
+        if magnitude == 0. {
+            return sum;
+        }
         (sum + (magnitude * magnitude).next_up()).next_up()
     })
 }
@@ -111,8 +137,12 @@ pub(super) fn filter(p: Point, t: [[f64; 3]; 3]) -> Option<(f64, f64)> {
     }
     let mut box_error = 0.;
     for k in 0..3 {
-        let e = (x[k] - p[k].lo).abs().max((p[k].hi - x[k]).abs()).next_up();
-        box_error = (box_error + e).next_up();
+        // A zero-width coordinate (a region's original corner) has its midpoint exactly: no
+        // error, and no subnormal `next_up(0)`.
+        let e = (x[k] - p[k].lo).abs().max((p[k].hi - x[k]).abs());
+        if e > 0. {
+            box_error = (box_error + e.next_up()).next_up();
+        }
     }
     if !box_error.is_finite() {
         return None;
