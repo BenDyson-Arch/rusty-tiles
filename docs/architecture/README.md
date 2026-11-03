@@ -142,6 +142,16 @@ It covers implementation `20b190bd315deedaaece47faf588a4e77a39936f` against
 develop `ef7db6f3`; the evidence was created externally and never held in git.
 Post-relief Walem acceptance and independent review remain pending.
 
+Walem stalled-cell recovery (2026-11-03) is retained externally at
+`~/.cache/rusty-tiles-evidence/walem-stall-20261103/FINAL.md`, SHA-256
+`e7143d75b63eb029d3db507ff1f4b19fa8d3b707ab07878fad8c9552a35722f0`.
+It covers tested production source `eef859d1918eaae407c05236dbf453fce3166bf8`
+against landed develop `f1c69172`; the evidence was created externally and
+never held in git. The original cell and its parent now build; a newly exposed
+d1 contraction failure still omits the root. Regression gates and native Walem
+validation pass; the first 6 MB view ceiling fails and the honest floor is 9/12.
+Independent review and the root/delivery objective remain open.
+
 The API sketches are proposed interfaces, not currently available APIs. Evidence
 separates observations made with the unmodified converter from isolated failure
 injection and findings established only by source inspection.
