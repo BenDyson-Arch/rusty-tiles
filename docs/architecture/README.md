@@ -152,6 +152,18 @@ d1 contraction failure still omits the root. Regression gates and native Walem
 validation pass; the first 6 MB view ceiling fails and the honest floor is 9/12.
 Independent review and the root/delivery objective remain open.
 
+Bounded descendant recovery (2026-11-03, PR #322) is retained externally at
+`~/.cache/rusty-tiles-evidence/bypass-recovery-20261103/FINAL.md`, SHA-256
+`af5c658f050bf67d22149080406c60e10665645f8635ac201cbe7abb1e4d9e5a`.
+Production source `d476024b4bbe6ffee9b385af7a59075c008c36a3` and bake head
+`57e7a14428aa5e2446d2d71b4da6183f7960343b` include #309, #320 and #321.
+The receipt was created externally and never held in git. Walem now has a
+validated root at own/published G 5.815484 m over seven complete frontier inputs.
+One failed ownership cell is declared and bypassed. Regression checks pass;
+paired tex3 CPU has a qualified +2.36% median. The first 6 MB view ceiling still
+fails, and published/max-honest floors are 3/12 and 9/12. Final-source nonauthor
+review and broader release acceptance remain pending.
+
 The API sketches are proposed interfaces, not currently available APIs. Evidence
 separates observations made with the unmodified converter from isolated failure
 injection and findings established only by source inspection.
