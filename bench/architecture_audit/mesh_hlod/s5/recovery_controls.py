@@ -5,6 +5,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+import struct
 import subprocess
 
 import controls
@@ -164,8 +165,10 @@ def generate(root):
         leaf['implicitTiling'] = dict(subdivisionScheme='QUADTREE', subtreeLevels=1, availableLevels=1,
                                      subtrees={'uri': 'frontier-{level}-{x}-{y}.subtree'})
         files['frontier-0-0-0.glb'] = files.pop('leaf2.glb')
-        files['frontier-0-0-0.subtree'] = json.dumps(dict(tileAvailability={'constant': 1},
+        subtree = json.dumps(dict(tileAvailability={'constant': 1},
             contentAvailability=[{'constant': 1}], childSubtreeAvailability={'constant': 0})).encode()
+        subtree += b' ' * (-len(subtree) % 8)
+        files['frontier-0-0-0.subtree'] = struct.pack('<4sIQQ', b'subt', 1, len(subtree), 0) + subtree
     case('implicit-frontier-owner', implicit_frontier)
 
     def collapsed(doc, files, shift=2):
