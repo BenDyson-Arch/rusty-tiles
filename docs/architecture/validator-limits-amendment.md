@@ -157,8 +157,8 @@ up on both cores (P-core τ 11.68, E-core 15.52):
 | a child face the recount reads: its share of the `leaf_faces_tile` build and the recount's pass | 0.66 + 0.33 / 0.96 + 0.52 µs | 97 | 1 |
 | a seam-owner screen of a coarse face or edge (#308) | 367 / 470 ns (SipHash, colliding keys) | 32 | 1 |
 | a stage-3 certificate region's setup, and a failed region's subdivision (#313) | 84 / 151 ns | 10 each | 1 |
-| a certificate distance test, fast path (#317 box reject or f64 filter) | 99 / 116 ns | 9 | 1 |
-| a certificate test the filter leaves undecided (interval path, on top) | 2.37 / 12.3 µs | 795 | – |
+| a certificate distance test, fast path (#317 box reject or f64 filter) | 99 / 99 ns (zero-width corners, review 5) | 9 | 1 |
+| a certificate test the filter leaves undecided (interval path, on top) | 372 / 741 ns (2.37 / 12.3 µs before review 5) | 795 (upper bound) | – |
 | a coarse tile's per-tile lookups in the recount (digests, drops, stage) | one seek | 320 | 1 |
 | a seam-owner source or owner lookup (#308) | a leaf-table seek | 320 | 1 |
 | a declared tile's fold-stage lookup (#308) | one seek | 320 | uncharged scan |
@@ -213,6 +213,16 @@ up on both cores (P-core τ 11.68, E-core 15.52):
   (`within`) try the last answering face first: their work depends on the cache, a pure
   function of the archive, so verdicts stay deterministic and every test is charged (owner,
   2026-11-02).
+- **Subnormals (review 5).** A certificate corner is a zero-width interval, and outward
+  rounding of an exact zero produced subnormal values (`next_up(0.)`); every operation on them
+  took a microcode assist on the E-core. A fast test on an exact corner cost 477 ns there (54 ns
+  per charged unit), the interval path 12.7 µs. Exact zeros of sums, differences and zero-factor
+  products now stay zero, tiny results widen to ±`f64::MIN_POSITIVE` (the true value lies
+  within, by monotonic rounding), and the filter adds no error for a zero-width coordinate.
+  Every bound stays outward. The fast test now costs at most 99 ns on either core, the
+  interval path 372 ns (P) and 741 ns (E). The stress class c12 `cert` (`rows_control.py`: a
+  stage-3 tile with K distractors before its certifier, D dropped triangles) runs within τ
+  (time statement, below).
 - `seam_owner_fold_stage_and_recount_lookups_are_single_seeks` pins the query plans;
   `grid_inserts_and_distance_tests_are_charged_at_their_weights`,
   `cached_faces_keep_certificate_work_and_honest_point_queries` and
@@ -354,15 +364,24 @@ defect.
   | ci-N-40-2 (the CI layout) | 112.8 | 119.0 | 122.6 | 125.4 | 134.6 |
   | dup-N-40 | – | – | 127.8 | 131.2 | – |
 
-  Only the recount's query work grows. Per coarse tile it is bounded by the 8,192 cap (on
-  ci-32000 at most 23.6 M units, at the level above the lowest coarse tiles, falling above it:
-  2.5, 23.6, 16.0, 16.0, 14.7, 8.7, 7.8, 6.1 M by height), and the tile count halves per level,
-  so the total is a geometric series: at most 57.8 units per byte from queries against 48.0 at
-  32,000 primitives, a plateau of about 144.4 units per byte.
+  Only the recount's query work grew measurably in this range. On ci-32000 its units per coarse
+  tile were 2.5, 23.6, 16.0, 16.0, 14.7, 8.7, 7.8 and 6.1 M by height, and the tile count halves
+  per level. If every higher level stayed at or below the largest per-tile figure observed
+  (23.6 M), the query work would stay under 57.8 units per byte (48.0 at 32,000 primitives), a
+  plateau of about 144.4 units per byte. That plateau is an extrapolation from these observed
+  maxima, not a proved bound: the 8,192-face cap bounds each tile's work, but not at 23.6 M,
+  and the other charged work was measured, not bounded. Larger or differently shaped outputs
+  could be denser and need R re-measured. The budget still bounds time for any input; R only
+  sets the headroom of legitimate output.
+- **Regression note (2026-11-03, final charges).** Units per stored byte of the CI layout
+  (ci-N-40-2, merged producer): 2,000 primitives 112.8, 4,000 119.0, 8,000 122.6, 16,000
+  125.4, 32,000 134.6; dup-N-40: 8,000 127.8, 16,000 131.2. Any change that raises these
+  needs the margin re-checked.
 - **The margin and R.** A 1.5× margin means 1.5·W ≤ 16,000,000 + R·S, so R must cover
   (1.5·W − 16 M)/S for every legitimate output. That term approaches 1.5 × the class's density as
-  S grows. R = ⌈1.5 × 144.4 × 1.03⌉ = 224 (owner, 2026-11-03), from the plateau with 3%
-  headroom; it tends to a 1.552 margin for the densest class. All 80 outputs (review 2's 28,
+  S grows. R = ⌈1.5 × 144.4 × 1.03⌉ = 224 (owner, 2026-11-03), from the extrapolated plateau
+  with 3% headroom; at that plateau the margin would be 1.552. The measured corpus is what
+  supports it. All 80 outputs (review 2's 28,
   review 3's 10, the merged-producer re-bakes and the CI and dup scale, the `iso` sweep, gen3
   and the named archives) validate at the default budget and at two thirds of it. The lowest margin is ci-32000's 1.667;
   the 16 M term carries the small outputs.
@@ -482,8 +501,12 @@ above) and review 4's colliding-key archives, each run at the default budget, 16
 | hash-8000 (colliding recount keys) | – | 7.31–7.36 | 9.91–10.61 | – / 736.9 in the recount |
 | screen-8000 (colliding shared points) | – | 6.08–6.17 | 9.22–9.63 | – / 166.9 in the screen |
 | screen-8000, compressed | – | 6.04–6.84 | 9.42–10.02 | – |
+| c12 cert, K = 2,000, D = 4,000 (stage 3, exact corners) | 910,945 | 6.07–6.48 | 11.38–11.52 | 8.74–8.80 / 36.71–36.79 |
+| c12 cert, K = 1,000, D = 1,000 | 330,873 | 7.67–8.68 | 13.15–13.30 | 10.17–10.86 / 36.11–36.18 |
 
-Each runs until the budget refuses it, or validates in full. Legitimate outputs measured
+Each runs until the budget refuses it, or validates in full. The c12 rows are the review-5
+build; one cold first P-core run of K = 1,000 measured 11.82 (five reruns 7.81–8.68). The
+"before" column for c12 is the same archive on 4bc38ea6, before the subnormal fix. Legitimate outputs measured
 alongside (phase probe, unbounded): ci-32000 at 5.64–5.67 ns/unit (P) and 11.19–11.86 (E),
 Walem 8710429a at 9.75 and 12.28 (earlier build). The E-core τ below stays the worst run
 measured over these rounds, c10 grid-2000's 15.52 at load 27 (2026-11-02).

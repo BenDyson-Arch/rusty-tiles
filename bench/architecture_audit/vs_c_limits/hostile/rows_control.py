@@ -73,10 +73,15 @@ class Glb:
                                    count=count, **extra))
         return len(self.accessors) - 1
 
-    def finish(self, primitive, tables, classes, serial, dropped=0):
+    def finish(self, primitive, tables, classes, serial, dropped=0, last_resort=None):
         asset = {'version': '2.0', 'generator': f'rows_control {serial}'}
+        extras = {}
         if dropped:
-            asset['extras'] = {'rustyTiles': {'droppedComponents': dropped}}
+            extras['droppedComponents'] = dropped
+        if last_resort is not None:
+            extras['lastResort'] = {'stage': last_resort, 'foldFaces': 0}
+        if extras:
+            asset['extras'] = {'rustyTiles': extras}
         doc = {'asset': asset, 'scene': 0,
                'scenes': [{'nodes': [0]}], 'nodes': [{'mesh': 0}], 'meshes': [{'primitives': [primitive]}],
                'buffers': [{'byteLength': 0}], 'bufferViews': self.views, 'accessors': self.accessors,
@@ -99,7 +104,7 @@ def table(g, cls, count, columns, values):
     return {'class': cls, 'count': count, 'properties': props}
 
 
-def payload(xyz, serial, first_vertex=None, dropped=0):
+def payload(xyz, serial, first_vertex=None, dropped=0, last_resort=None):
     """A leaf (with `first_vertex`: a source_triangle table naming new original vertices) or a
     coarse payload (source_primitive only, declaring `dropped` components), len(xyz) / 9
     triangles of distinct vertices."""
@@ -125,7 +130,7 @@ def payload(xyz, serial, first_vertex=None, dropped=0):
     primitive = {'attributes': attributes, 'mode': 4,
                  'indices': g.accessor(struct.pack(f'<{v}I', *range(v)), 5125, 'SCALAR', v, 34963),
                  'extensions': {'EXT_mesh_features': {'featureIds': features}}}
-    return g.finish(primitive, tables, classes, serial, dropped)
+    return g.finish(primitive, tables, classes, serial, dropped, last_resort)
 
 
 def lattice(rnd, triangles):
@@ -200,6 +205,41 @@ def recount_archive(kind, out, n, d=0):
     children = [tile('coarse.glb', payload([x for f in coarse for x in f], 1 << 30, None, dropped), err, leaves)]
     root = {'boundingVolume': BOX, 'geometricError': 200, 'refine': 'REPLACE', 'children': children}
     return coarse, write(out, root, members)
+
+
+def certificate_archive(out, k, d, reach=0.01):
+    """Review 5 of PR #309: a stage-3 (N3) coarse tile whose drops are certified by #313's
+    continuous certificate, dominated by fast tests on zero-width corners. The coarse payload
+    keeps K tiny distractor faces near the origin, then one large certifier face, all at z = 0;
+    D dropped triangles of circumradius 2 x reach lie over them. Each dropped region tests every
+    distractor (its centre is near, its first corner is not) before the certifier covers it."""
+    distractors = []
+    for i in range(k):
+        x, y = 1e-4 * (i % 50), 1e-4 * (i // 50)
+        distractors.append([x, y, 0., x + 2e-5, y, 0., x, y + 2e-5, 0.])
+    certifier = [-1., -1., 0., 1.9, -1., 0., -1., 1.9, 0.]
+    drops = []
+    for j in range(d):
+        cx = 1e-6 * j
+        drops.append([cx + 2 * reach, 0., 0., cx - reach, 1.7320508 * reach, 0., cx - reach, -1.7320508 * reach, 0.])
+    coarse = distractors + [certifier]
+    kids = coarse + drops
+    members = []
+
+    def tile(name, blob, error, children=None):
+        members.append((name, blob))
+        t = {'boundingVolume': BOX, 'geometricError': error, 'refine': 'REPLACE', 'content': {'uri': name}}
+        if children is not None:
+            t['children'] = children
+        return t
+
+    half = len(kids) // 2
+    leaves = [tile('a.glb', payload([x for f in kids[:half] for x in f], 0, 0), 0.),
+              tile('b.glb', payload([x for f in kids[half:] for x in f], 1, 3 * half), 0.)]
+    blob = payload([x for f in coarse for x in f], 1 << 30, None, d, 3)
+    root = {'boundingVolume': BOX, 'geometricError': 200, 'refine': 'REPLACE',
+            'children': [tile('coarse.glb', blob, reach, leaves)]}
+    return write(out, root, members)
 
 
 def grid_cells(coarse, error, slack):
@@ -358,6 +398,14 @@ def check(binary, work_dir):
     low = validate(binary, path, work_dir, 1_000_000)
     assert got[0] is True and low[1] == 'resource_limit', ('scan', got, low)
     print(json.dumps({'class': 'scan', 'verdict': got[:3], 'refused_at': low[3]}))
+    # cert (review 5): a stage-3 tile whose drops the continuous certificate covers, through
+    # fast tests on zero-width corners. Valid; a small budget is a structured refusal.
+    path = work_dir / 'cert.3tz'
+    certificate_archive(path, 50, 50)
+    got = validate(binary, path, work_dir, unbounded)
+    low = validate(binary, path, work_dir, 1_000_000)
+    assert got[0] is True and low[1] == 'resource_limit', ('cert', got, low)
+    print(json.dumps({'class': 'cert', 'verdict': got[:3], 'refused_at': low[3]}))
 
 
 def main():

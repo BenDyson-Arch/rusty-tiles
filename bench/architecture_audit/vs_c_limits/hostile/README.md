@@ -26,9 +26,11 @@ per charged unit after a change to validator work or weights.
   distance-grid cells each; `scan` makes D dropped triangles query a stack of N planes in one
   cell, missing the last-face cache. The time-statement archives are `grid 2000`, `grid 8000`
   and `scan 4100 4000`.
-- `rows_control.py check --binary BIN --work DIR`: CI runs it. Six classes at a small size with
+- `rows_control.py check --binary BIN --work DIR`: CI runs it. Seven classes at a small size with
   plain buffers (no Node): leafrand, twin (valid, through the border images), chain, c9 revfan,
-  and c10 grid and c11 scan on `recount.py`'s geometry. It checks each verdict through the CLI
+  c10 grid and c11 scan on `recount.py`'s geometry, and c12 cert (review 5: a stage-3 tile whose
+  drops the continuous certificate covers through fast tests on zero-width corners;
+  `certificate_archive(OUT, K, D)` writes larger ones). It checks each verdict through the CLI
   and a structured budget refusal. Two timing-free signals:
   - on revfan, the units each added chain tile charges, from the 320-unit seeks of the lookups
     that tile repeats (the former 128-unit seeks fail it: develop f02e8774 charges 12,094 units
