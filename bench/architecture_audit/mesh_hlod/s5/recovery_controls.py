@@ -61,9 +61,9 @@ def generate(root):
 
     case('complete-frontier')
 
-    case('noncanonical-root-rank', lambda doc, files: doc['root']['extras'].update(first='00'), 'recoveryRelation')
-    case('signed-root-rank', lambda doc, files: doc['root']['extras'].update(first='+0'), 'recoveryRelation')
-    case('long-root-rank', lambda doc, files: doc['root']['extras'].update(first='0'*65536), 'recoveryRelation')
+    case('noncanonical-root-rank', lambda doc, files: doc['root']['extras'].update(first='00'), 'recoveryRelation', 'recoveryOwnership')
+    case('signed-root-rank', lambda doc, files: doc['root']['extras'].update(first='+0'), 'recoveryRelation', 'recoveryOwnership')
+    case('long-root-rank', lambda doc, files: doc['root']['extras'].update(first='0'*65536), 'recoveryRelation', 'recoveryOwnership')
     case('noncanonical-frontier-rank', lambda doc, files: doc['root']['children'][0]['extras'].update(first='00'), 'recoveryOwnership')
     case('oversized-declaration', lambda doc, files: doc['root']['extras']['recovery'].update(omitted=['x'*65536]), 'recoveryRelation', 'recoveryBounds')
 
@@ -137,6 +137,36 @@ def generate(root):
         link = tile('left.json', 2)
         doc['root']['children'][0] = link
     case('linked-frontier', linked)
+
+    def linked_owner(doc, files, owner):
+        left = doc['root']['children'][0]
+        left['extras'] = owner
+        files['left.json'] = json.dumps(dict(asset={'version': '1.1'}, geometricError=2, root=left)).encode()
+        link = tile('left.json', 2)
+        link['extras'] = dict(first='0', depth=1)
+        doc['root']['children'][0] = link
+    case('linked-owner-control', lambda doc, files: linked_owner(doc, files, dict(first='0', depth=1)))
+    for name, owner in [
+        ('invalid-rank', dict(first='00', depth=1)),
+        ('missing-owner', {}),
+        ('missing-rank', dict(depth=1)),
+        ('missing-depth', dict(first='0')),
+        ('null-rank', dict(first=None, depth=1)),
+        ('null-depth', dict(first='0', depth=None)),
+        ('boolean-depth', dict(first='0', depth=True)),
+    ]:
+        case('linked-' + name, lambda doc, files, owner=owner: linked_owner(doc, files, owner),
+             'recoveryOwnership')
+
+    def implicit_frontier(doc, files):
+        leaf = doc['root']['children'][1]
+        leaf['content']['uri'] = 'frontier-{level}-{x}-{y}.glb'
+        leaf['implicitTiling'] = dict(subdivisionScheme='QUADTREE', subtreeLevels=1, availableLevels=1,
+                                     subtrees={'uri': 'frontier-{level}-{x}-{y}.subtree'})
+        files['frontier-0-0-0.glb'] = files.pop('leaf2.glb')
+        files['frontier-0-0-0.subtree'] = json.dumps(dict(tileAvailability={'constant': 1},
+            contentAvailability=[{'constant': 1}], childSubtreeAvailability={'constant': 0})).encode()
+    case('implicit-frontier-owner', implicit_frontier)
 
     def collapsed(doc, files, shift=2):
         r = relation(doc)

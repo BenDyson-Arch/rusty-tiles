@@ -1056,7 +1056,7 @@ impl Store {
             .map_err(|e| Error::Scratch(ScratchRefusal::Io(e)))?;
         let connection = Connection::open(file.path()).map_err(sql)?;
         connection.execute_batch("PRAGMA cache_size=-8192; PRAGMA temp_store=FILE; PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;
-            CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER,rank_first INTEGER,ownership_depth INTEGER,recovery TEXT);
+            CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER,rank_first INTEGER,ownership_depth INTEGER,ownership_invalid INTEGER NOT NULL DEFAULT 0,implicit_root INTEGER NOT NULL DEFAULT 0,recovery TEXT);
             CREATE TABLE recovery_cells(id INTEGER PRIMARY KEY,first INTEGER NOT NULL,last INTEGER NOT NULL);
             CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL);
             CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL,dropped INTEGER NOT NULL DEFAULT 0,last_stage INTEGER NOT NULL DEFAULT 0,fold_faces INTEGER NOT NULL DEFAULT 0,recovery INTEGER NOT NULL DEFAULT 0);
@@ -1079,7 +1079,7 @@ impl Store {
         for t in &pending.tiles {
             connection
                 .execute(
-                    "INSERT INTO tiles(id,parent,world,refine,placeholder,error,diagonal,rank_first,ownership_depth,recovery) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO tiles(id,parent,world,refine,placeholder,error,diagonal,rank_first,ownership_depth,ownership_invalid,implicit_root,recovery) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                     params![
                         integer(t.id)?,
                         t.parent.map(integer).transpose()?,
@@ -1090,6 +1090,8 @@ impl Store {
                         t.diagonal,
                         t.metadata.as_ref().and_then(|m| m.owner.map(|k| k.0)).map(integer).transpose()?,
                         t.metadata.as_ref().and_then(|m| m.owner.map(|k| k.1)),
+                        t.metadata.as_ref().is_some_and(|m| m.invalid_owner),
+                        t.metadata.as_ref().is_some_and(|m| m.implicit_root),
                         t.metadata.as_ref().and_then(|m| m.recovery.as_deref())
                     ],
                 )

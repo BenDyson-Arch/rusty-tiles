@@ -2358,7 +2358,12 @@ impl Check<'_> {
         Ok(())
     }
 
-    fn delivery_metadata(&mut self, tile: usize, node: &Value) -> Result<(), Error> {
+    fn delivery_metadata(
+        &mut self,
+        tile: usize,
+        node: &Value,
+        implicit_root: bool,
+    ) -> Result<(), Error> {
         use hlod_delivery::recovery::{JSON_BYTE_UNITS, MAX_JSON, READ_UNITS};
         let declared = node["extras"].get("recovery").is_some();
         let units = READ_UNITS
@@ -2373,7 +2378,7 @@ impl Check<'_> {
             .charge(self.elements, units as u64, || {
                 "descendantRecovery: metadata read exceeds payload element budget".into()
             })?;
-        let Some(metadata) = hlod_delivery::recovery::Metadata::read(node)? else {
+        let Some(metadata) = hlod_delivery::recovery::Metadata::read(node, implicit_root)? else {
             return Ok(());
         };
         self.recovery_metadata_charge(false)?;
@@ -2618,7 +2623,8 @@ impl Check<'_> {
             }
         }
         self.tiles += 1;
-        self.delivery_metadata(tile, &node)?;
+        // Only an admitted implicit header can supply ownership to its generated I_0.
+        self.delivery_metadata(tile, &node, implicit.is_some())?;
         if let Some(root) = implicit {
             self.delivery_kind(
                 tile,

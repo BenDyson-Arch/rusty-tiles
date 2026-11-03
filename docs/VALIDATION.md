@@ -27,6 +27,11 @@ There are one to eight capped inputs, at most 65,536 input triangles, and one to
 disjoint covers. Internal ownership depths are at most 30; frontier leaves may
 reach depth 31. The actual refinement children, resolving document links, must
 be precisely that frontier, with G no greater than the recovered root's.
+An explicit root or frontier tile must carry its own valid ownership label;
+an external document link cannot supply or repair it. Only the generated root
+cell of an admitted implicit header inherits that header's ownership. Malformed
+or partial labels remain distinct from absent metadata and are rejected when
+recovery consumes them.
 
 Native and S5 count terminal payload triangles/leaves independently, compare the
 intervals, verify ownership identities and reconstruct the skipped ownership tree.

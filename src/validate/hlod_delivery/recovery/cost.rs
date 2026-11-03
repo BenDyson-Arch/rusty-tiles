@@ -178,7 +178,7 @@ fn recovery_work_cost_probe() {
         for _ in 0..3 {
             let start = cpu();
             for id in 0..n {
-                if let Some(m) = Metadata::read(std::hint::black_box(&node)).unwrap() {
+                if let Some(m) = Metadata::read(std::hint::black_box(&node), false).unwrap() {
                     s.metadata(id as u64, &m).unwrap();
                 }
             }
@@ -204,7 +204,7 @@ fn recovery_work_cost_probe() {
         for _ in 0..3 {
             let start = cpu();
             for _ in 0..1000 {
-                assert!(Metadata::read(std::hint::black_box(&node)).is_err());
+                assert!(Metadata::read(std::hint::black_box(&node), false).is_err());
             }
             report(
                 name,
@@ -322,7 +322,10 @@ fn recovery_cost_refuses_before_census_and_bounds_metadata_serialization() {
         .unwrap();
     assert!(!exists);
     let node = serde_json::json!({"extras":{"recovery":{"x":"x".repeat(MAX_JSON)}}});
-    assert!(matches!(Metadata::read(&node), Err(Error::InvalidInput(_))));
+    assert!(matches!(
+        Metadata::read(&node, false),
+        Err(Error::InvalidInput(_))
+    ));
 }
 
 #[test]
@@ -334,12 +337,15 @@ fn recovery_metadata_bounds_precede_string_scans_and_match_canonical_ranks() {
         "0".repeat(16 * MAX_JSON),
     ] {
         let node = serde_json::json!({"extras":{"first":text,"depth":0}});
-        assert!(Metadata::read(&node).unwrap().is_none());
+        assert!(Metadata::read(&node, false).unwrap().unwrap().invalid_owner);
     }
     for n in [0, u64::MAX] {
         for value in [serde_json::json!(n), serde_json::json!(n.to_string())] {
             let node = serde_json::json!({"extras":{"first":value,"depth":0}});
-            assert_eq!(Metadata::read(&node).unwrap().unwrap().owner, Some((n, 0)));
+            assert_eq!(
+                Metadata::read(&node, false).unwrap().unwrap().owner,
+                Some((n, 0))
+            );
         }
     }
     let mut deep = Value::Null;
@@ -353,6 +359,9 @@ fn recovery_metadata_bounds_precede_string_scans_and_match_canonical_ranks() {
         serde_json::json!({"x":"\n".repeat(MAX_JSON/2)}),
     ] {
         let node = serde_json::json!({"extras":{"recovery":value}});
-        assert!(matches!(Metadata::read(&node), Err(Error::InvalidInput(_))));
+        assert!(matches!(
+            Metadata::read(&node, false),
+            Err(Error::InvalidInput(_))
+        ));
     }
 }

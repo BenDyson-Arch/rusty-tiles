@@ -80,11 +80,15 @@ fn bounded_value(value: &Value, left: &mut usize, depth: u8) -> bool {
 #[derive(Clone)]
 pub(crate) struct Metadata {
     pub(super) owner: Option<(u64, u32)>,
+    // Malformed explicit labels remain distinct from absent, opaque metadata.
+    pub(super) invalid_owner: bool,
+    // Set by implicit admission, never inferred from an external-link placeholder.
+    pub(super) implicit_root: bool,
     pub(super) recovery: Option<String>,
 }
 
 impl Metadata {
-    pub(crate) fn read(node: &Value) -> Result<Option<Self>, Error> {
+    pub(crate) fn read(node: &Value, implicit_root: bool) -> Result<Option<Self>, Error> {
         let extras = &node["extras"];
         let first = rank(&extras["first"]);
         let depth = extras["depth"].as_u64().and_then(|d| u32::try_from(d).ok());
@@ -105,7 +109,13 @@ impl Metadata {
             })
             .transpose()?;
         let owner = first.zip(depth);
-        Ok((owner.is_some() || recovery.is_some()).then_some(Self { owner, recovery }))
+        let ownership_present = extras.get("first").is_some() || extras.get("depth").is_some();
+        Ok((ownership_present || recovery.is_some()).then_some(Self {
+            owner,
+            invalid_owner: ownership_present && owner.is_none(),
+            implicit_root,
+            recovery,
+        }))
     }
     pub(crate) fn declared(&self) -> bool {
         self.recovery.is_some()
@@ -189,10 +199,12 @@ impl Store {
         }
         self.connection
             .execute(
-                "UPDATE tiles SET rank_first=?,ownership_depth=?,recovery=? WHERE id=?",
+                "UPDATE tiles SET rank_first=?,ownership_depth=?,ownership_invalid=?,implicit_root=?,recovery=? WHERE id=?",
                 params![
                     metadata.owner.map(|k| k.0).map(integer).transpose()?,
                     metadata.owner.map(|k| k.1),
+                    metadata.invalid_owner,
+                    metadata.implicit_root,
                     metadata.recovery,
                     integer(id)?
                 ],
@@ -205,14 +217,20 @@ impl Store {
         // An implicit root's generated cell inherits its header's ownership identity.
         loop {
             effort.charge(LOOKUP_UNITS)?;
-            let (first, depth, parent): (Option<i64>, Option<u32>, Option<i64>) = self
+            let (first, depth, invalid, parent): (Option<i64>, Option<u32>, bool, Option<i64>) = self
                 .connection
                 .query_row(
-                    "SELECT rank_first,ownership_depth,parent FROM tiles WHERE id=?",
+                    "SELECT rank_first,ownership_depth,ownership_invalid,parent FROM tiles WHERE id=?",
                     [id],
-                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
                 )
                 .map_err(sql)?;
+            if invalid {
+                return Err(bad(
+                    "recoveryOwnership",
+                    "invalid explicit ownership identity",
+                ));
+            }
             if let Some(owner) = first.zip(depth) {
                 return Ok(Some((owner.0 as u64, owner.1)));
             }
@@ -220,13 +238,15 @@ impl Store {
                 return Ok(None);
             };
             effort.charge(LOOKUP_UNITS)?;
-            let placeholder: bool = self
+            let implicit_root: bool = self
                 .connection
-                .query_row("SELECT placeholder FROM tiles WHERE id=?", [parent], |r| {
-                    r.get(0)
-                })
+                .query_row(
+                    "SELECT implicit_root FROM tiles WHERE id=?",
+                    [parent],
+                    |r| r.get(0),
+                )
                 .map_err(sql)?;
-            if !placeholder {
+            if !implicit_root {
                 return Ok(None);
             }
             id = parent;
@@ -518,5 +538,43 @@ impl Store {
                 .map_err(sql)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recovery_owner_distinguishes_invalid_absent_and_implicit_header() {
+        for materialized in [false, true] {
+            for implicit_root in [false, true] {
+                for invalid in [false, true] {
+                    let mut store = super::super::tests::store();
+                    if materialized {
+                        store.materialize().unwrap();
+                    }
+                    store.tile(0, None, super::super::IDENTITY).unwrap();
+                    store.tile(1, Some(0), super::super::IDENTITY).unwrap();
+                    store.kind(0, None, true, 1., None).unwrap();
+                    let header = serde_json::json!({"extras":{"first":"0","depth":1}});
+                    let metadata = Metadata::read(&header, implicit_root).unwrap().unwrap();
+                    store.metadata(0, &metadata).unwrap();
+                    if invalid {
+                        let node = serde_json::json!({"extras":{"first":"00","depth":1}});
+                        let metadata = Metadata::read(&node, false).unwrap().unwrap();
+                        assert!(metadata.invalid_owner);
+                        store.metadata(1, &metadata).unwrap();
+                    }
+                    store.materialize().unwrap();
+                    let result = store.recovery_owner(1, &super::super::tests::effort_for_tests());
+                    if invalid {
+                        assert!(matches!(result, Err(Error::InvalidInput(_))));
+                    } else {
+                        assert_eq!(result.unwrap(), implicit_root.then_some((0, 1)));
+                    }
+                }
+            }
+        }
     }
 }
