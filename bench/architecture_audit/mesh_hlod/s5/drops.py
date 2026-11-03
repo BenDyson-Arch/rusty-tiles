@@ -36,7 +36,10 @@ def declared(data, require):
         return 0
     length = int.from_bytes(data[12:16], 'little')
     doc = json.loads(data[20:20 + length])
-    value = doc.get('asset', {}).get('extras', {}).get('rustyTiles', {}).get('droppedComponents', 0)
+    value = doc
+    for name in ('asset', 'extras', 'rustyTiles'):
+        value = value.get(name) if isinstance(value, dict) else None
+    value = value.get('droppedComponents', 0) if isinstance(value, dict) else 0
     require(type(value) is int and value >= 0, 'coarseDrops', 'droppedComponents is not an unsigned integer')
     return value
 

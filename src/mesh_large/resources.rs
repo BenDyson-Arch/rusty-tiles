@@ -194,6 +194,15 @@ impl Ledger {
 }
 
 impl Lease {
+    /// Transfer part of an existing admission without an unleased interval.
+    pub(crate) fn split(&mut self, bytes: u64) -> Option<Self> {
+        self.bytes = self.bytes.checked_sub(bytes)?;
+        Some(Self {
+            ledger: self.ledger.clone(),
+            bytes,
+        })
+    }
+
     /// Give back the part of the lease above `bytes` (an output smaller than its admission).
     pub(crate) fn shrink(&mut self, bytes: u64) {
         if bytes < self.bytes {
@@ -349,6 +358,23 @@ mod tests {
                 .kind(),
             JobErrorKind::InvalidRequest
         );
+    }
+
+    #[test]
+    fn split_admission_keeps_each_returned_frontier_charged() {
+        let ledger = Ledger::new(100);
+        let mut job = ledger.try_lease(100, 0).unwrap();
+        let a = job.split(40).unwrap();
+        let b = job.split(30).unwrap();
+        assert_eq!(ledger.used(), 100);
+        assert!(job.split(31).is_none());
+        drop(job);
+        assert_eq!(ledger.used(), 70);
+        assert!(ledger.try_lease(31, 0).is_none());
+        drop(a);
+        assert_eq!(ledger.used(), 30);
+        drop(b);
+        assert_eq!(ledger.used(), 0);
     }
 
     #[test]

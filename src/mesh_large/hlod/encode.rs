@@ -74,9 +74,39 @@ pub(crate) enum Mutation {
     /// Publish relieved tiles without their relief floor on G.
     #[cfg(test)]
     UnflooredRelief,
+    /// Failure-injection controls for bounded frontier lifetime and root publication.
+    #[cfg(test)]
+    OmitRecoveryInput,
+    #[cfg(test)]
+    OmitRecoveryInputSpill,
+    #[cfg(test)]
+    OmitRecoveryInputNoRecovery,
+    #[cfg(test)]
+    RefuseRecoveryRoot,
 }
 
 impl Mutation {
+    pub(crate) fn recovery(self) -> bool {
+        #[cfg(test)]
+        if self == Self::OmitRecoveryInputNoRecovery {
+            return false;
+        }
+        self.last_resorts()
+    }
+    #[cfg(test)]
+    pub(crate) fn force_spill(self) -> bool {
+        matches!(self, Self::ForceSpill | Self::OmitRecoveryInputSpill)
+    }
+    #[cfg(test)]
+    pub(crate) fn omit_recovery_input(self) -> bool {
+        matches!(
+            self,
+            Self::OmitRecoveryInput
+                | Self::OmitRecoveryInputSpill
+                | Self::OmitRecoveryInputNoRecovery
+                | Self::RefuseRecoveryRoot
+        )
+    }
     pub(crate) fn root_competition(self) -> bool {
         #[cfg(test)]
         if self == Self::NoRootCompetition {
@@ -342,6 +372,14 @@ fn snorm8(v: f32) -> u8 {
     ((v.clamp(-1., 1.) * 127.).round() as i8) as u8
 }
 
+/// Independently checked declarations stored in the coarse payload.
+#[derive(Default)]
+pub(crate) struct Declarations {
+    pub dropped: u64,
+    pub last_resort: Option<(u8, u64)>,
+    pub recovery: bool,
+}
+
 /// Encode `tile` (its `locked` vertices on the outer interface) at its tile depth, at
 /// `positions` with `appearance`.
 pub(crate) fn encode(
@@ -349,8 +387,7 @@ pub(crate) fn encode(
     locked: &[bool],
     mut positions: CoarsePositions,
     appearance: &Appearance,
-    dropped: u64,
-    last_resort: Option<(u8, u64)>,
+    declarations: Declarations,
     mutation: Mutation,
 ) -> Result<Encoded, JobError> {
     let rows = tile.primitives.len();
@@ -605,14 +642,17 @@ pub(crate) fn encode(
     // longer holds (validators recount them and check G against each). A2 last-resort
     // declaration: its stage and fold faces (`folds::fold_faces`, recounted likewise).
     let mut declared = serde_json::Map::new();
-    if dropped > 0 {
-        declared.insert("droppedComponents".into(), json!(dropped));
+    if declarations.dropped > 0 {
+        declared.insert("droppedComponents".into(), json!(declarations.dropped));
     }
-    if let Some((stage, folds)) = last_resort {
+    if let Some((stage, folds)) = declarations.last_resort {
         declared.insert(
             "lastResort".into(),
             json!({"stage": stage, "foldFaces": folds}),
         );
+    }
+    if declarations.recovery {
+        declared.insert("descendantRecovery".into(), json!(1));
     }
     if !declared.is_empty() {
         document["asset"]["extras"] = json!({ "rustyTiles": declared });

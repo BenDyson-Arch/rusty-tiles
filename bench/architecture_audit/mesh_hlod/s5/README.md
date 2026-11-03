@@ -483,4 +483,25 @@ The external evidence was never tracked; SHA-256 bindings are:
 
 - `paired-summary.json`: `d7686983f146bc9037f158af50d9820746c349bb80df1e2a080586c8a864b501`
 - `overlay-summary.json`: `5149887db0803c08d2ae51db128017bee26b07451efb4e11ed069cafdd2ccb7c`
+
+The #309 work-model integration updates the retained source-extracted harness to
+read the selected source's cost constants and supply its error variants. The
+current native control is
+`cached_faces_keep_certificate_work_and_honest_point_queries`: certificate
+coordinate-cache state changes neither verdicts nor charges; point-query caching
+may change work, but every executed test is charged and repeated queries with the
+same cache state agree. The priority mutants therefore alter only the certificate
+scan. Each invocation asserts that one named test actually ran, preventing a
+renamed test from silently running zero controls. The pruning differential uses
+the certificate cache and sweeps through the weighted completion thresholds;
+all old accepts remain accepts and charged work is nonincreasing. Its 19-geometry
+corpus and all three rejecting mutants are retained. This is harness maintenance,
+not a production policy change; the native unit tests own actual Budget/Error
+wiring. The passing current-source runs and earlier harness compilation failure
+are retained under `~/.cache/rusty-tiles-evidence/bypass-recovery-20261103/s5/`.
 - `inputs.json`: `2dcef14b9487bf0f45fb764278600058f2a9c9bc12038bcd97bd4667ba985b02`
+
+The current harness receipt is `s5/cache309-receipt.json`, SHA-256
+`b53db78638c91685fa870e1374edc1a771d52625a986e5c6adca6ba57b7efa67`. It records source, generated-kernel, binary and log hashes.
+The evidence was created externally and never held in git; this commit first
+records its pointer.

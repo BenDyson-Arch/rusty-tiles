@@ -36,7 +36,7 @@ pub(crate) fn bound(
     height: u32,
     allocation: u64,
 ) -> Option<u64> {
-    let limit = limit(height) as u64 + 1;
+    let limit = (limit(height) as u64 + 1) * super::super::recovery::INPUTS as u64;
     let all = source_triangles.checked_add(nodes.checked_mul(cap)?)?;
     let triangles = all.min(limit.checked_mul(leaf_cap.max(cap))?);
     triangles
@@ -252,20 +252,27 @@ impl<'l, 's> Manager<'l, 's> {
     /// Oldest resident sibling first, independent of HashMap iteration and worker timing.
     pub(crate) fn spill_one(
         &mut self,
-        ready: &mut HashMap<u64, Option<Held>>,
+        ready: &mut HashMap<u64, Vec<Held>>,
     ) -> Result<bool, JobError> {
-        let id = ready
+        let selected = ready
             .iter()
-            .filter(|(_, t)| matches!(t, Some(Held::Resident(_))))
-            .map(|(id, _)| *id)
+            .flat_map(|(id, tiles)| {
+                tiles
+                    .iter()
+                    .enumerate()
+                    .filter_map(move |(i, t)| matches!(t, Held::Resident(_)).then_some((*id, i)))
+            })
             .min();
-        let Some(id) = id else {
+        let Some((id, i)) = selected else {
             return Ok(false);
         };
-        let Some(Held::Resident(tile)) = ready.remove(&id).unwrap() else {
+        let Held::Resident(tile) = ready.get_mut(&id).unwrap().remove(i) else {
             unreachable!()
         };
-        ready.insert(id, Some(Held::Disk(self.spill(tile)?)));
+        ready
+            .get_mut(&id)
+            .unwrap()
+            .insert(i, Held::Disk(self.spill(tile)?));
         Ok(true)
     }
 }
@@ -328,7 +335,7 @@ mod tests {
     fn billion_scale_sibling_storage_depends_on_height_and_cap() {
         let at = |n| bound(n, n / 8192, 8192, 8192, 32, 4096).unwrap();
         assert_eq!(at(500_000_000), at(1_000_000_000));
-        assert!(at(1_000_000_000) < 1 << 30);
+        assert!(at(1_000_000_000) < 8 << 30);
         assert_eq!(limit(32), 296);
     }
 }

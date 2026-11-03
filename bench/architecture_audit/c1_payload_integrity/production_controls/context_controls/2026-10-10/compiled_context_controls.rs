@@ -24,7 +24,9 @@ fn selected_limits() -> ValidationLimits {
         hierarchy_visits: 128,
         hierarchy_depth: 32,
         references: 1024,
-        total_payload_elements: 16,
+        // Non-target headroom includes the separately charged explicit-tile
+        // metadata reads; the aggregate controls below still test exact limits.
+        total_payload_elements: 128,
         total_bytes_read: 4194304,
         source_archive_bytes: Some(1048576),
         central_directory_bytes: Some(65536),
@@ -271,6 +273,11 @@ fn actual_c1_aggregate_cache_and_shared_accessor_components() {
             equality,
             case["successfulUniqueComponents"].as_u64().unwrap()
         );
+        // The frozen manifest counts payload components. The complete C1 work
+        // allowance also pays 32 units per literal explicit tile's metadata read.
+        // This is independently declared, not imported from production constants
+        // or derived from a validator report. All five fixtures are explicit.
+        let equality = equality + 32 * case["expectedReport"]["tiles"].as_u64().unwrap();
         for admitted in [true, false] {
             let mut limits = selected_limits();
             limits.total_payload_elements = equality - u64::from(!admitted);

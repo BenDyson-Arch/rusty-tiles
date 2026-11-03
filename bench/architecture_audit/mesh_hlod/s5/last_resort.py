@@ -28,7 +28,9 @@ def declared(data, require):
         return None
     length = int.from_bytes(data[12:16], 'little')
     doc = json.loads(data[20:20 + length])
-    value = doc.get('asset', {}).get('extras', {}).get('rustyTiles', {}).get('lastResort')
+    value = doc
+    for name in ('asset', 'extras', 'rustyTiles', 'lastResort'):
+        value = value.get(name) if isinstance(value, dict) else None
     if value is None:
         return None
     require(isinstance(value, dict) and set(value) == {'stage', 'foldFaces'}

@@ -27,6 +27,8 @@ use super::{
 use rusqlite::{params, OptionalExtension};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+/// Ordered ownership query, also exercised by the retained cost probe.
+pub(super) const OWNERS: &str = "SELECT b.key,b.tile,t.last,t.cell,coalesce(v.last,c.last),t.error,t.leaf,b.image,b.d,coalesce(v.first,c.id+1) FROM border_map b JOIN tiles t ON t.id=b.tile LEFT JOIN tiles c ON c.id=t.cell LEFT JOIN recovery_cells v ON v.id=t.cell ORDER BY b.key,b.tile";
 /// Outward rounding of every f64 distance sum below (well above ten roundings).
 const OUTWARD: f64 = 1. + 1. / (1u64 << 48) as f64;
 fn overflow() -> Error {
@@ -856,14 +858,13 @@ impl Store {
         self.connection
             .execute_batch("INSERT INTO border_map SELECT l.key,l.tile,x'',0 FROM leaf_points l JOIN shared_point_keys s ON s.key=l.key JOIN tiles t ON t.id=l.tile WHERE t.leaf=1")
             .map_err(sql)?;
-        let mut query = self
-            .connection
-            .prepare("SELECT b.key,b.tile,t.last,t.cell,c.last,t.error,t.leaf,b.image,b.d FROM border_map b JOIN tiles t ON t.id=b.tile LEFT JOIN tiles c ON c.id=t.cell ORDER BY b.key,b.tile")
-            .map_err(sql)?;
+        let mut query = self.connection.prepare(OWNERS).map_err(sql)?;
         let mut rows = query.query([]).map_err(sql)?;
         let mut group: Vec<Owner> = Vec::new();
         let mut current: Option<Vec<u8>> = None;
         loop {
+            // Price the recovery ownership lookup before SQLite steps the row.
+            effort.charge(super::recovery::BORDER_UNITS)?;
             let row = rows.next().map_err(sql)?;
             let key: Option<Vec<u8>> = row.map(|r| r.get(0)).transpose().map_err(sql)?;
             if key != current {
@@ -886,7 +887,10 @@ impl Store {
             group.push(Owner {
                 tile: row.get(1).map_err(sql)?,
                 last: row.get(2).map_err(sql)?,
-                cell: cell.zip(cell_last),
+                cell: cell
+                    .zip(cell_last)
+                    .zip(row.get::<_, Option<i64>>(9).map_err(sql)?)
+                    .map(|((id, last), first)| (id, first, last)),
                 g: row.get::<_, Option<f64>>(5).map_err(sql)?.unwrap_or(0.),
                 leaf: row.get(6).map_err(sql)?,
                 image: row.get(7).map_err(sql)?,
@@ -902,7 +906,7 @@ impl Store {
 struct Owner {
     tile: i64,
     last: i64,
-    cell: Option<(i64, i64)>,
+    cell: Option<(i64, i64, i64)>,
     g: f64,
     leaf: bool,
     image: Vec<u8>,
@@ -922,7 +926,7 @@ fn vertex_pairs(group: &[Owner], effort: &Effort) -> Result<(), Error> {
     let mut first = HashMap::<i64, usize>::new();
     let mut siblings = HashMap::<i64, Vec<usize>>::new();
     for (i, r) in group.iter().enumerate() {
-        let Some((cell, _)) = r.cell else { continue };
+        let Some((cell, _, _)) = r.cell else { continue };
         siblings.entry(cell).or_default().push(i);
         match first.get(&cell) {
             Some(&j) if group[j].image != r.image => {
@@ -964,11 +968,11 @@ fn vertex_pairs(group: &[Owner], effort: &Effort) -> Result<(), Error> {
     }
     let index = |id: i64| group.partition_point(|r| r.tile < id);
     for x in group {
-        let Some((cell, cell_last)) = x.cell else {
+        let Some((cell, cell_first, cell_last)) = x.cell else {
             continue;
         };
         let ranges = [
-            (index(cell + 1), index(x.tile)),
+            (index(cell_first), index(x.tile)),
             (index(x.last + 1), index(cell_last + 1)),
         ];
         if x.leaf {

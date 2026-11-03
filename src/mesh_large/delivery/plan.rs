@@ -15,6 +15,7 @@
 //! close is within the caps, so resident state is the open stack plus such fragments,
 //! whatever the input size. See `docs/architecture/implicit-forest-consolidation.md`.
 use super::source::{add_down, add_up, Aabb, LeafRow, ProxyRow};
+use crate::mesh_large::hlod::recovery::Recovery;
 use crate::{tileset_node::TileBox, JobError, JobErrorKind};
 
 /// The fixed partition: caps on one fragment, and therefore on every document.
@@ -52,7 +53,8 @@ pub(crate) fn held_bytes_bound() -> u64 {
     let per = std::mem::size_of::<Node>()
         + std::mem::size_of::<LeafRow>().max(std::mem::size_of::<ProxyRow>())
         + 128;
-    records * per as u64
+    // The one recovery declaration can be copied along a collapsed root chain.
+    records * per as u64 + 32 * 65536
 }
 
 /// Below this height a non-leaf tile is (inside) an implicit root (P-IMPL `S`).
@@ -96,6 +98,7 @@ pub(crate) type Linked = Option<crate::implicit::DocumentLink>;
 /// A closed tile.
 pub(crate) struct Node {
     pub first: u64,
+    pub end: u64,
     pub depth: u32,
     pub slot: u8,
     pub axes: [u32; 3],
@@ -116,11 +119,9 @@ pub(crate) struct Node {
     /// cannot skip a cell (an implicit tree, a document's root) it repeats the coarse tile.
     pub chain: Option<Box<ProxyRow>>,
     /// An HLOD cell whose coarse tile was omitted: it, or a descendant, could not keep its
-    /// exact interface within the cap, and omission propagates to the root. It publishes no
-    /// content, and every ancestor is omitted too, so it never sits between content levels
-    /// (no coarse tile above it can stop drawing on reaching it); it is plain availability,
-    /// explicit or implicit, and may be a document's root. Checked: a coarse tile above an
-    /// omitted cell is refused.
+    /// exact interface within the cap. It publishes no content. A declared root recovery
+    /// splices its omitted ownership cells before nodes are published; all remaining
+    /// omissions propagate to the root and cannot sit between content levels.
     pub omitted: bool,
     /// Inline children in slot order (empty for leaves and links).
     pub children: Vec<Node>,
@@ -334,6 +335,8 @@ pub(crate) struct Builder<'s, S: Sink> {
     finished_root: bool,
     /// The next proxy row, read but not yet matched.
     lookahead: Option<(ProxyRow, Aabb)>,
+    recovery: Option<Recovery>,
+    bypassed: usize,
 }
 
 fn child_axes(axes: [u32; 3], slot: u8) -> [u32; 3] {
@@ -364,7 +367,18 @@ impl<'s, S: Sink> Builder<'s, S> {
             shape: Shape::default(),
             finished_root: false,
             lookahead: None,
+            recovery: None,
+            bypassed: 0,
         }
+    }
+
+    /// The root declaration is known before descendants can become external documents.
+    pub(crate) fn with_recovery(mut self, recovery: Option<Recovery>) -> Result<Self, JobError> {
+        if let Some(r) = &recovery {
+            r.check()?;
+        }
+        self.recovery = recovery;
+        Ok(self)
     }
 
     pub(crate) fn sink(&mut self) -> &mut S {
@@ -452,6 +466,7 @@ impl<'s, S: Sink> Builder<'s, S> {
         self.shape.packed_leaves += u64::from(row.packed);
         Ok(Node {
             first: row.first,
+            end: row.end,
             depth: row.depth(),
             slot,
             axes,
@@ -495,6 +510,11 @@ impl<'s, S: Sink> Builder<'s, S> {
             .reduce(Aabb::union)
             .unwrap();
         let children_error = frame.children.iter().map(|c| c.error).fold(0., f64::max);
+        let recovery_omitted = self.recovery.as_ref().is_some_and(|r| {
+            r.omitted
+                .iter()
+                .any(|k| (k.first, k.end, k.depth) == (frame.first, self.next_rank, frame.depth))
+        });
         // An HLOD cell without content sits below its single-child chain's coarse tile.
         let mut chain_error = None;
         let mut chain = None;
@@ -524,7 +544,8 @@ impl<'s, S: Sink> Builder<'s, S> {
                 // monotone and happens exactly where the coarse tile's own cell would refine.
                 Some((row, bounds))
                     if (row.first, row.end) == (frame.first, self.next_rank)
-                        && row.depth < frame.depth =>
+                        && row.depth < frame.depth
+                        && !recovery_omitted =>
                 {
                     chain_error = Some(row.geometric_error);
                     chain = Some(Box::new(row.clone()));
@@ -551,7 +572,56 @@ impl<'s, S: Sink> Builder<'s, S> {
         } else {
             None
         };
-        // Omission reaches the root: no coarse content above an omitted cell.
+        if recovery_omitted {
+            if !omitted {
+                return Err(state("recovery names a cell that was not omitted"));
+            }
+            self.bypassed += 1;
+            for child in frame.children {
+                self.attach(child);
+            }
+            return Ok(());
+        }
+        // A recovered root can represent a collapsed ownership chain. Its encoded
+        // depth belongs to geometry, not delivery: splice those pass-through cells
+        // here so neither partitioning nor an implicit root repeats its payload.
+        if chain.is_some()
+            && self.recovery.as_ref().is_some_and(|r| {
+                frame.depth > 0
+                    && frame.depth <= r.encoded_depth
+                    && frame.first == r.root.first
+                    && self.next_rank == r.root.end
+            })
+        {
+            self.shape.spliced_chain_cells += 1;
+            for child in frame.children {
+                self.attach(child);
+            }
+            return Ok(());
+        }
+        if frame.depth == 0 {
+            let declared = proxy.as_ref().and_then(|p| p.recovery.as_ref());
+            if declared != self.recovery.as_ref() {
+                return Err(state("root row and stage recovery declarations differ"));
+            }
+            if let Some(r) = declared {
+                if self.bypassed != r.omitted.len()
+                    || r.root.end != self.next_rank
+                    || frame.children.len() != r.frontier.len()
+                    || frame.children.iter().zip(&r.frontier).any(|(n, c)| {
+                        (n.first, n.end, n.depth) != (c.key.first, c.key.end, c.key.depth)
+                            || n.omitted
+                    })
+                {
+                    return Err(state(
+                        "recovery does not match the complete refinement frontier",
+                    ));
+                }
+            }
+        } else if proxy.as_ref().is_some_and(|p| p.recovery.is_some()) {
+            return Err(state("recovery is supported only at the ownership root"));
+        }
+        // Undeclared content above an omitted cell remains invalid.
         if (proxy.is_some() || chain.is_some()) && frame.children.iter().any(|c| c.omitted) {
             return Err(JobError::new(
                 JobErrorKind::InvalidInput,
@@ -591,6 +661,7 @@ impl<'s, S: Sink> Builder<'s, S> {
         let skeleton = height >= SKELETON_HEIGHT;
         let mut node = Node {
             first: frame.first,
+            end: self.next_rank,
             depth: frame.depth,
             slot: frame.slot,
             axes: frame.axes,
@@ -612,7 +683,7 @@ impl<'s, S: Sink> Builder<'s, S> {
         // Every tile starts explicit: a shallow tree's totals are its own explicit tiles.
         node.aggregate();
         if frame.depth == 0 {
-            if skeleton {
+            if skeleton || self.recovery.is_some() {
                 self.fit(&mut node)?;
             } else if node.objects > self.limits.objects || node.levels > self.limits.levels {
                 node.implicit = true;
@@ -692,8 +763,9 @@ impl<'s, S: Sink> Builder<'s, S> {
         // The link keeps its document root's omission, so the content-above-omitted rule
         // holds across documents too.
         let omitted = node.omitted;
-        let (first, depth, slot, axes, tile, extent, error, height) = (
+        let (first, end, depth, slot, axes, tile, extent, error, height) = (
             node.first,
+            node.end,
             node.depth,
             node.slot,
             node.axes,
@@ -705,6 +777,7 @@ impl<'s, S: Sink> Builder<'s, S> {
         let link = self.sink.external(node)?;
         Ok(Node {
             first,
+            end,
             depth,
             slot,
             axes,
@@ -753,6 +826,82 @@ impl<'s, S: Sink> Builder<'s, S> {
 mod omission_tests {
     use super::*;
     use crate::mesh_large::delivery::source::Digits;
+
+    #[test]
+    fn a_recovered_root_chain_splices_before_partitioning() {
+        use crate::mesh_large::hlod::{recovery::Input, store::TileKey};
+        let key = |first, end, depth| TileKey {
+            first,
+            end,
+            depth,
+            leaf_begin: first as u32,
+            leaf_end: end as u32,
+        };
+        let recovery = Recovery {
+            version: 1,
+            root: key(0, 2, 0),
+            encoded_depth: 2,
+            frontier: (0..2)
+                .map(|i| Input {
+                    key: key(i, i + 1, 4),
+                    triangles: 1,
+                })
+                .collect(),
+            omitted: vec![key(0, 2, 3)],
+        };
+        let proxy = ProxyRow {
+            uri: "proxies/f0-d0.glb".into(),
+            sha256: [0; 32],
+            bytes: 100,
+            first: 0,
+            end: 2,
+            depth: 0,
+            geometric_error: 1.,
+            primitives: 1,
+            sampling: (0, 0, crate::mesh_large::hlod::error::Schedule::PRODUCTION),
+            encoded_depth: 2,
+            recovery: Some(recovery.clone()),
+        };
+        let bounds = Aabb {
+            lo: [0.; 3],
+            hi: [1.; 3],
+        };
+        let rows = std::iter::once(Ok((proxy, bounds)));
+        let mut sink = Collect::default();
+        let mut builder = Builder::with_proxies(&mut sink, LIMITS, Some(Box::new(rows)))
+            .with_recovery(Some(recovery))
+            .unwrap();
+        for i in 0..2 {
+            let mut digits = Digits::ROOT;
+            for slot in [0, 0, 0, i as u8] {
+                digits.push(slot);
+            }
+            builder
+                .push(
+                    LeafRow {
+                        uri: format!("leaves/{i}.glb"),
+                        sha256: [0; 32],
+                        bytes: 100,
+                        first: i,
+                        end: i + 1,
+                        digits,
+                        last_octant: i as u8,
+                        packed: false,
+                        synthetic: 0,
+                        geometry_error: 0.,
+                    },
+                    bounds,
+                )
+                .unwrap();
+        }
+        let shape = builder.finish().unwrap();
+        assert_eq!(shape.proxies, 1);
+        assert_eq!(shape.omitted_cells, 1);
+        assert_eq!(shape.spliced_chain_cells, 2);
+        assert_eq!(shape.implicit_roots, 0);
+        assert_eq!(sink.omitted, 0);
+        assert_eq!(sink.docs, vec![(3, 3, 2)]);
+    }
 
     #[derive(Default)]
     struct Collect {
@@ -889,6 +1038,7 @@ mod omission_tests {
             primitives: 1,
             sampling: (0, 0, crate::mesh_large::hlod::error::Schedule::PRODUCTION),
             encoded_depth: 0,
+            recovery: None,
         };
         let (shape, _) = plan(2, vec![root]);
         let err = shape.unwrap_err();
@@ -912,6 +1062,7 @@ mod omission_tests {
             primitives: 1,
             sampling: (0, 0, crate::mesh_large::hlod::error::Schedule::PRODUCTION),
             encoded_depth: 0,
+            recovery: None,
         };
         let tight = Limits {
             objects: 4,

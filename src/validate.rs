@@ -1392,6 +1392,10 @@ enum Event {
         error: f64,
         diagonal: Option<f64>,
     },
+    Ownership {
+        tile: usize,
+        metadata: Box<hlod_delivery::recovery::Metadata>,
+    },
     Place(Box<Placement>),
 }
 impl Event {
@@ -1400,6 +1404,7 @@ impl Event {
         size_of::<Event>()
             + match self {
                 Event::Place(_) => size_of::<Placement>(),
+                Event::Ownership { metadata, .. } => metadata.cost(),
                 _ => 0,
             }
     }
@@ -2081,6 +2086,12 @@ impl Check<'_> {
                     )?;
                     None
                 }
+                Event::Ownership { tile, metadata } => {
+                    self.recovery_metadata_charge(metadata.declared())?;
+                    self.delivery
+                        .metadata(self.delivery_path[frame.locals[*tile]], metadata)?;
+                    None
+                }
                 Event::Place(placement) => Some(Frame {
                     summary: placement.summary.clone(),
                     next: 0,
@@ -2330,6 +2341,61 @@ impl Check<'_> {
         Ok(())
     }
 
+    fn recovery_metadata_charge(&mut self, declaration: bool) -> Result<(), Error> {
+        use hlod_delivery::recovery::{JSON_BYTE_UNITS, MAX_JSON, METADATA_UNITS};
+        let units = METADATA_UNITS
+            + if declaration {
+                MAX_JSON * JSON_BYTE_UNITS
+            } else {
+                0
+            };
+        self.elements = self
+            .resources
+            .budget(LimitKey::TotalPayloadElements)
+            .charge(self.elements, units as u64, || {
+                "descendantRecovery: metadata work exceeds payload element budget".into()
+            })?;
+        Ok(())
+    }
+
+    fn delivery_metadata(
+        &mut self,
+        tile: usize,
+        node: &Value,
+        implicit_root: bool,
+    ) -> Result<(), Error> {
+        use hlod_delivery::recovery::{JSON_BYTE_UNITS, MAX_JSON, READ_UNITS};
+        let declared = node["extras"].get("recovery").is_some();
+        let units = READ_UNITS
+            + if declared {
+                MAX_JSON * JSON_BYTE_UNITS
+            } else {
+                0
+            };
+        self.elements = self
+            .resources
+            .budget(LimitKey::TotalPayloadElements)
+            .charge(self.elements, units as u64, || {
+                "descendantRecovery: metadata read exceeds payload element budget".into()
+            })?;
+        let Some(metadata) = hlod_delivery::recovery::Metadata::read(node, implicit_root)? else {
+            return Ok(());
+        };
+        self.recovery_metadata_charge(false)?;
+        self.delivery
+            .metadata(self.delivery_path[tile], &metadata)?;
+        if self.recording.last().is_some_and(|r| !r.opaque) {
+            match self.local(Some(tile)) {
+                Some(tile) => self.record(Event::Ownership {
+                    tile,
+                    metadata: Box::new(metadata),
+                })?,
+                None => self.make_opaque(),
+            }
+        }
+        Ok(())
+    }
+
     /// Reads, checks and charges one tileset document (VS-B-7): its root, its error, the
     /// metadata schema of an implicit root, and its live-document charge.
     #[allow(clippy::type_complexity)]
@@ -2557,6 +2623,8 @@ impl Check<'_> {
             }
         }
         self.tiles += 1;
+        // Only an admitted implicit header can supply ownership to its generated I_0.
+        self.delivery_metadata(tile, &node, implicit.is_some())?;
         if let Some(root) = implicit {
             self.delivery_kind(
                 tile,
@@ -3652,6 +3720,7 @@ fn inspect_run(
         .chain(check.hlod_identity.then_some("sameDepthBorderGap"))
         .chain(check.hlod_identity.then_some("terminalBorderLock"))
         .chain(check.hlod_identity.then_some("mixedDepthBorderGap"))
+        .chain(check.hlod_identity.then_some("descendantRecovery"))
         .map(String::from)
         .collect(),
         not_inspected: check.not_inspected.into_iter().collect(),

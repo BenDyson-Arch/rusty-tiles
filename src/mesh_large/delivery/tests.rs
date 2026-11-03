@@ -1580,6 +1580,7 @@ fn repeated_chain_content_stays_inside_its_tile() {
         primitives: 1,
         sampling: (0, 0, crate::mesh_large::hlod::error::Schedule::PRODUCTION),
         encoded_depth: 0,
+        recovery: None,
     };
     let payload = Aabb {
         lo: [-1., -coarse, -1.],

@@ -66,3 +66,14 @@ Source files and retained fixture members are pinned in the dated preparation
 manifest. Failed expectations require owning-boundary investigation and a new
 dated correction record; they do not authorize rewriting the original frozen
 205 controls or claiming broader acceptance.
+
+The 2026-11-03 recovery-work amendment charges 32 C1 units per explicit tile's
+metadata read, including an absent declaration. The compiled adapter independently
+adds `32 * expectedReport.tiles` to the five explicit aggregate fixtures' frozen
+payload-component equalities. Equality and one-less remain required on identical
+archive bytes. Other context probes use 128 units of unrelated-work headroom so
+they still reach their selected JSON limit or legacy-format classification. The
+original fixtures, component counts and prepared controls are unchanged. Executed
+correction receipts are retained in
+`~/.cache/rusty-tiles-evidence/bypass-recovery-20261103/`.
+`context-check.log` SHA-256: `68d317d1bc6081c194a4c09cd8b63a84630d77912f14c3ad43d55d46eac290ac`; created externally and never held in git.

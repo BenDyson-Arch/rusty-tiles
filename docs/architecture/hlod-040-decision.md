@@ -86,23 +86,34 @@ follows industry practice (Nanite, Simplygon) and locks only exactly shared item
   hard published cap. A parent whose exact interface, or topology plain simplification
   cannot reduce (D3), needs more triangles than its cap has its coarse tile **omitted**. It
   is never refused.
-  - **Upward propagation:** every ancestor up to the root is omitted too. Its parent cannot
-    be built without a hole where it was.
-  - **Omitted cells:** they publish no content and hold no geometry; nothing is merged from
-    them and nothing is cloned.
-  - **No vanishing:** a content-less cell has only content-less ancestors, so it never sits
-    between content levels (the Cesium vanishing lesson). Delivery refuses a coarse tile above
-    an omitted cell.
-  - **Delivery:** the omitted region is a top-connected cap of plain availability (explicit or
-    implicit, an omitted root included), partitioned under the existing document caps. Each
-    omitted cell takes the empty-parent error (at least 16 × its box diagonal), so it refines
-    whenever it is visible; it has no content ancestor to fall back on.
-  - **Jobs:** omission is decided before merging, so every job merges at most eight capped
-    children.
-  - **Reported:** `hlod.omittedProxies`, `omissionSources` (cells that could not fit) and
-    `omittedByDepth`.
-  - **Client cost:** local. One source omission costs about 8 × depth content-less cells plus
-    its children's tiles in the first view.
+  - **Propagation and declared recovery (owner amendment, 2026-11-03):** an
+    unavailable child propagates omission unless a complete, disjoint built-descendant
+    frontier is available within eight inputs, each capped at C, and 8C triangles total.
+    The first implementation constructs only the ownership root from that frontier.
+    Intermediate omitted cells remain construction omissions. Exceeding a bound makes
+    recovery unavailable; coverage is never truncated.
+  - **Geometry lifetime:** an omitted cell holds no approximation of its own. Its bounded
+    descendant frontier retains leased geometry or charged spill records until consumed.
+    A successful ancestor replaces the held inputs; a failed bounded root retains the
+    original empty-root delivery. Decode, reload, source queries and candidates are charged.
+  - **No vanishing:** a recovered root uses explicit REPLACE and declares the ownership
+    cells it skips and its actual renderable refinement frontier. Delivery splices those
+    omitted nodes before partitioning documents. No content-less delivery cell sits between
+    the root and its replacements. Undeclared content above omission remains invalid.
+  - **Ownership:** refinement edges do not renumber ownership or encoded depth. Both
+    validators verify the complete ownership scaffold and use it for D11 same-depth and
+    mixed-depth rules, separately from actual refinement edges used for G and drop checks.
+  - **Unrecovered delivery:** the omitted region remains a top-connected cap of plain
+    availability, explicit or implicit. Each delivered empty cell retains error at least
+    16 times its box diagonal so it refines while visible.
+  - **Jobs:** a recovered root gets one bounded normal construction/source-S2 admission,
+    followed by existing root competition. Every admitted input and output remains capped.
+    G dominates the actual frontier; no cap, seam, topology or honest-G rule changes.
+  - **Reported:** `hlod.omittedProxies`, `omissionSources` and `omittedByDepth` count
+    construction omissions. Optional `hlod.recovery` records the verified bypass relation;
+    its skipped cells are distinct from delivered empty cells.
+  - **Client cost:** an unrecovered root loads its first built frontier. A recovered root
+    loads its own content until SSE requests refinement, then its declared frontier.
   - **Scope:** this is the bounded last resort. D11/S1b's topology simplification and border
     scheme are to make it rare.
   - **Since A2 (D11, 2026-10-30):** a cell whose contract fits the cap is rebuilt by the
@@ -704,15 +715,43 @@ successful incumbent (`candidate G <= 0.99 * incumbent G`, strictly lower).
 Smaller improvements and ties retain the incumbent, including child-floor ties,
 to avoid paying more first-view bytes for negligible wins. Recovery of a root
 whose own construction failed is unaffected by this threshold.
-It does not bypass an omitted descendant: no content above an omitted cell
-remains binding. Non-root construction and publication remain unchanged.
+Root competition does not itself bypass an omitted descendant. The separately approved
+descendant-recovery relation below supplies its bounded input. Non-root successful
+construction and payloads remain unchanged.
 
 Use the same eligibility, topology, fold/drop, exact-seam and validation guards.
 Keep candidate work bounded and O(n log n), charge retained candidate storage,
 count source queries, and release the loser before appearance. Root payload and
 appearance costs and paired processing CPU remain acceptance obligations; reducer
-probe timings alone are not evidence of production speed. Recovery above omitted
-descendants requires a separate owner-approved input/delivery/validator design.
+probe timings alone are not evidence of production speed.
+
+**Owner amendment, 2026-11-03 — descendant recovery (0.4.0).** Content may sit
+above omitted ownership cells under a declared, validated recovery relation. The
+first supported slice recovers an ownership root, with at most eight complete capped
+frontier inputs and at most 8C triangles. The frontier stops at each first built
+cell; missing coverage or any exceeded bound refuses recovery. One bounded construction
+and decoded source-S2 pass precede the existing root competition. Existing successful
+cells are retained. Explicit REPLACE delivery splices the declared omitted nodes,
+so the actual children are the frontier tiles through transparent document links.
+The recovered relation is never encoded as an implicit hierarchy; existing supported
+subtrees below frontier tiles keep their delivery.
+
+The root payload declares `asset.extras.rustyTiles.descendantRecovery: 1` and its
+explicit tile carries `extras.recovery`: version, root key, encoded root depth,
+frontier keys/counts and omitted ownership keys. The declaration contains at most
+256 skipped cells (eight paths through the bounded tree). Native and S5 independently
+check the payload marker, complete nonoverlapping source/leaf intervals, decoded
+input counts, actual refinement children, root-G domination and the ownership scaffold.
+D11 checks use reconstructed ownership parents; G and drop checks use actual
+refinement. No validator permission is inferred merely from mixed graph depths.
+Literal positive, coverage-gap, overlap, undeclared and below-frontier-G controls
+are required. Stock-client loading/refinement, processing cost and first-view/floor
+receipts remain acceptance obligations; bounded input alone proves no quality gain.
+
+The recovery validator shares #309's R = 224 work budget. Its metadata, census,
+lookup, ownership reconstruction and D11 join costs are charged before execution,
+with weights measured against tau_P = 11.68 ns and tau_E = 15.52 ns. This changes
+neither the total allowance nor any geometric acceptance rule.
 
 **A3 (L1, approved 2026-10-30) is superseded by N2.** Folds are admitted at last-resort tiles
 without a separation gate. Their separation (the sandwich width of the folded layers over
@@ -852,6 +891,12 @@ For `mgal_detail_offset_2048.glb` (9,999,999 triangles), balanced, propose:
   simulator at SSE 16, heading −0.8, pitch −0.65, horizontal FOV 60°, range in
   bounding-sphere radii; also record actual consumer requests with pinned cache,
   server and GPU settings. Pin mismatches; a simulator is not load-time proof.
+- **Combined Walem disposition (owner, 2026-11-03).** For the #322 combined
+  candidate, the owner accepts the max-honest-G floor misses at both 50 m views
+  and at 2560×1600/800 m, and the 1600×1000/range-3 first view of 18.608045 MB
+  against 6.0 MB, for 0.4.0. All four remain **0.4.x targets**. Keep the measured
+  9/12 max-honest-G and 3/12 published-G floor columns and all three first-view
+  receipts; the sampled-error, child-monotone G, cap and D11 rules are unchanged.
 - **Declared 4 GiB cap and measured peak process RSS ≤4 GiB**, no swap, no
   uncharged resident source index. Record cgroup/page-cache peak separately.
   Gate (a)'s untextured 526,174,760-triangle run still requires **2 GiB**.

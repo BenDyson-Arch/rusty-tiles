@@ -317,6 +317,8 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
         work=Work(work_limit)
         store=Store(Path(temporary)/'census.sqlite',work)
         leaf_count=representatives=0
+        recovery_sizes, recovery_markers = {}, {}
+        import recovery
         attributes=collections.Counter()
         try:
             for t in tiles:
@@ -331,6 +333,8 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                         t.setdefault('sha256',[]).append(hashlib.sha256(data).hexdigest())
                     decoded=decode(data)
                     faces=decoded['faces']
+                    recovery_sizes[uri] = len(faces)
+                    recovery_markers[uri] = recovery.marker(data, require)
                     require(len(faces)<=1_000_000,'oracleWorkLimit','one payload exceeds 1,000,000 faces')
                     # D1's hard cap, per payload, from this decoder's own faces.
                     require(len(faces)<=8192,'triangleCap',f'{uri} publishes {len(faces)} triangles, above the hard 8192')
@@ -354,6 +358,7 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                     store.leaf_bounds(t['lo'])
                 store.db.commit()
             require(leaf_count==len(manifest['triangles']),'leafCoverage',f'{leaf_count} != {len(manifest["triangles"])}')
+            recovery.inspect(tiles, recovery_sizes, recovery_markers, require)
             # A leaf below a collapsed single-child chain is quantized on its frozen
             # depth's grid, not its delivered depth's: group its observations there.
             chain_leaves=0
