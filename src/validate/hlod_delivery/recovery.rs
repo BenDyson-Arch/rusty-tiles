@@ -36,6 +36,47 @@ impl std::io::Write for Json {
     }
 }
 
+// Rank labels use the producer's canonical unsigned spelling. Checking length
+// before parse prevents arbitrarily many leading zeroes from escaping READ_UNITS.
+fn rank(value: &Value) -> Option<u64> {
+    let Some(text) = value.as_str() else {
+        return value.as_u64();
+    };
+    if text.is_empty()
+        || text.len() > 20
+        || !text.as_bytes()[0].is_ascii_digit()
+        || (text.len() > 1 && text.starts_with('0'))
+    {
+        return None;
+    }
+    text.parse().ok()
+}
+
+// serde_json scans a string before handing its fragment to Write. Bound raw
+// bytes and nodes first, without scanning strings or building an extra DOM.
+// The owned schema has depth <=4; malformed deep values stop at eight levels.
+fn bounded_value(value: &Value, left: &mut usize, depth: u8) -> bool {
+    if depth > 8 {
+        return false;
+    }
+    let bytes = 1usize.saturating_add(value.as_str().map_or(0, str::len));
+    let Some(remaining) = left.checked_sub(bytes) else {
+        return false;
+    };
+    *left = remaining;
+    match value {
+        Value::Array(values) => values.iter().all(|v| bounded_value(v, left, depth + 1)),
+        Value::Object(values) => values.iter().all(|(key, v)| {
+            let Some(remaining) = left.checked_sub(key.len()) else {
+                return false;
+            };
+            *left = remaining;
+            bounded_value(v, left, depth + 1)
+        }),
+        _ => true,
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct Metadata {
     pub(super) owner: Option<(u64, u32)>,
@@ -45,14 +86,18 @@ pub(crate) struct Metadata {
 impl Metadata {
     pub(crate) fn read(node: &Value) -> Result<Option<Self>, Error> {
         let extras = &node["extras"];
-        let first = extras["first"]
-            .as_str()
-            .and_then(|v| v.parse().ok())
-            .or_else(|| extras["first"].as_u64());
+        let first = rank(&extras["first"]);
         let depth = extras["depth"].as_u64().and_then(|d| u32::try_from(d).ok());
         let recovery = extras
             .get("recovery")
             .map(|v| {
+                let mut remaining = MAX_JSON;
+                if !bounded_value(v, &mut remaining, 0) {
+                    return Err(bad(
+                        "recoveryBounds",
+                        "recovery declaration exceeds its metadata bounds",
+                    ));
+                }
                 let mut out = Json(Vec::with_capacity(MAX_JSON));
                 serde_json::to_writer(&mut out, v)
                     .map_err(|_| bad("recoveryBounds", "recovery declaration exceeds 64 KiB"))?;

@@ -153,6 +153,11 @@ fn recovery_work_cost_probe() {
             serde_json::json!({"extras":{"recovery":vec![0; 30000]}}),
             READ_UNITS + METADATA_UNITS + MAX_JSON * JSON_BYTE_UNITS,
         ),
+        (
+            "long-rank",
+            serde_json::json!({"extras":{"first":"0".repeat(16*MAX_JSON),"depth":0}}),
+            READ_UNITS,
+        ),
         ("missing", serde_json::json!({}), READ_UNITS),
         (
             "ordinary",
@@ -178,6 +183,36 @@ fn recovery_work_cost_probe() {
                 }
             }
             report(name, n, "metadata", (cpu() - start) * 1e9, (n * per) as u64);
+        }
+    }
+    for (name, value) in [
+        (
+            "oversize-value",
+            serde_json::json!({"x":"x".repeat(16*MAX_JSON)}),
+        ),
+        (
+            "oversize-key",
+            Value::Object(
+                [("x".repeat(16 * MAX_JSON), Value::Null)]
+                    .into_iter()
+                    .collect(),
+            ),
+        ),
+        ("oversize-array", serde_json::json!(vec![0; 16 * MAX_JSON])),
+    ] {
+        let node = serde_json::json!({"extras":{"recovery":value}});
+        for _ in 0..3 {
+            let start = cpu();
+            for _ in 0..1000 {
+                assert!(Metadata::read(std::hint::black_box(&node)).is_err());
+            }
+            report(
+                name,
+                1000,
+                "metadata-refusal",
+                (cpu() - start) * 1e9,
+                (1000 * (READ_UNITS + MAX_JSON * JSON_BYTE_UNITS)) as u64,
+            );
         }
     }
     for n in [2048, 131072] {
@@ -288,4 +323,36 @@ fn recovery_cost_refuses_before_census_and_bounds_metadata_serialization() {
     assert!(!exists);
     let node = serde_json::json!({"extras":{"recovery":{"x":"x".repeat(MAX_JSON)}}});
     assert!(matches!(Metadata::read(&node), Err(Error::InvalidInput(_))));
+}
+
+#[test]
+fn recovery_metadata_bounds_precede_string_scans_and_match_canonical_ranks() {
+    for text in [
+        "".to_owned(),
+        "00".to_owned(),
+        "+0".to_owned(),
+        "0".repeat(16 * MAX_JSON),
+    ] {
+        let node = serde_json::json!({"extras":{"first":text,"depth":0}});
+        assert!(Metadata::read(&node).unwrap().is_none());
+    }
+    for n in [0, u64::MAX] {
+        for value in [serde_json::json!(n), serde_json::json!(n.to_string())] {
+            let node = serde_json::json!({"extras":{"first":value,"depth":0}});
+            assert_eq!(Metadata::read(&node).unwrap().unwrap().owner, Some((n, 0)));
+        }
+    }
+    let mut deep = Value::Null;
+    for _ in 0..9 {
+        deep = Value::Array(vec![deep]);
+    }
+    for value in [
+        deep,
+        serde_json::json!(vec![0; MAX_JSON + 1]),
+        serde_json::json!({"x":"x".repeat(MAX_JSON)}),
+        serde_json::json!({"x":"\n".repeat(MAX_JSON/2)}),
+    ] {
+        let node = serde_json::json!({"extras":{"recovery":value}});
+        assert!(matches!(Metadata::read(&node), Err(Error::InvalidInput(_))));
+    }
 }

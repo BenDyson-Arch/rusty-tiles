@@ -749,8 +749,10 @@ The 2026-11-03 descendant-recovery addition retains the 16M floor, R = 224 and
 metadata inspection/write (including memo placement), raw marker scans, SQL
 relation scans and terminal census, coverage/ownership lookups, bounded scaffold
 comparisons and the D11 ownership join. Registered tile/reference cardinalities
-bound SQL work before execution. A recovery declaration stops serializing at
-64 KiB; at most 265 scaffold keys enter the pairwise pass. Indexed first/last
+bound SQL work before execution. Canonical rank labels have at most 20 digits.
+A declaration preflight bounds raw key/string bytes plus value nodes to 64 KiB
+and depth to eight before serialization can scan strings. Serialization also
+stops at 64 KiB; at most 265 scaffold keys enter the pairwise pass. Indexed first/last
 terminal prefixes replace repeated coverage aggregates. No budget refusal may
 truncate the frontier.
 
@@ -773,22 +775,26 @@ pinned to CPUs 10 and 17 at idle priority, measured these maxima (ns/charged uni
 
 | path | P | E |
 | --- | ---: | ---: |
-| relation discovery | 3.004 | 5.438 |
-| declaration admission | 4.984 | 7.605 |
-| terminal census | 3.013 | 5.557 |
-| coverage and ownership lookup | 1.955 | 4.351 |
-| ownership scaffold | 2.773 | 5.501 |
-| wide metadata read | 4.108 | 7.485 |
-| metadata write | 2.857 | 7.240 |
-| bounded serialization | 1.219 | 1.920 |
-| raw marker scan | 1.142 | 1.979 |
-| complete D11 ownership query | 4.490 | 7.426 |
+| relation discovery | 3.004 | 5.459 |
+| declaration admission | 3.598 | 5.872 |
+| terminal census | 3.151 | 5.113 |
+| coverage and ownership lookup | 2.047 | 4.340 |
+| ownership scaffold | 2.759 | 5.535 |
+| wide metadata read | 3.598 | 6.612 |
+| metadata write | 2.867 | 7.253 |
+| bounded preflight and serialization | 1.416 | 2.617 |
+| oversized declaration refusal | 0.378 | 0.727 |
+| long-rank refusal | 0.797 | 1.280 |
+| raw marker scan | 1.137 | 1.989 |
+| complete D11 ownership query | 4.413 | 7.218 |
 
 The retained ignored probe is
 `src/validate/hlod_delivery/recovery/cost.rs::recovery_work_cost_probe`.
 It exercises 8, 2,048 and 131,072 terminal leaves, tables beyond the 8 MiB cache,
 232 skipped ownership cells, wide objects, many small values, long strings and
-escaped marker keys. Its synthetic SQL counts isolate operation cost; they are
+escaped marker keys. Adversarial cases include 1 MiB leading-zero rank strings,
+1 MiB declaration strings/keys and arrays of 1,048,576 values; admission stops
+before unbounded parsing or serialization. Its synthetic SQL counts isolate operation cost; they are
 not geometric acceptance. Thread CPU excludes fixture construction and process
 startup. The census/SQL probe uses an explicit unlimited test allowance to observe
 whole paths; production limits do not change. Literal native/S5 archives and the
@@ -798,8 +804,8 @@ unmeasured cardinalities and disk latency are outside this measurement.
 Exact source/patch and test-binary hashes, bootstrap and final timings, and weight
 selection are retained under
 `~/.cache/rusty-tiles-evidence/bypass-recovery-20261103/cost/`.
-`final-summary.json` SHA-256:
-`04d1bdf55544f58d1bfdafc56add87b5978d94b0d4056a049a546ac34f2242ba`.
+`bounded-summary.json` SHA-256:
+`a9a7a2ab22f04af7595e13160b7a703fcd7b89672f7bb0dd5bba5cfb4aaae15d`.
 The evidence was created externally and never held in git; this commit first
 records its pointer. Whole-archive regression, combined Walem and independent
 review remain separate acceptance gates.

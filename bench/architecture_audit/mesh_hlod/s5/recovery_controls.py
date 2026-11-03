@@ -61,6 +61,12 @@ def generate(root):
 
     case('complete-frontier')
 
+    case('noncanonical-root-rank', lambda doc, files: doc['root']['extras'].update(first='00'), 'recoveryRelation')
+    case('signed-root-rank', lambda doc, files: doc['root']['extras'].update(first='+0'), 'recoveryRelation')
+    case('long-root-rank', lambda doc, files: doc['root']['extras'].update(first='0'*65536), 'recoveryRelation')
+    case('noncanonical-frontier-rank', lambda doc, files: doc['root']['children'][0]['extras'].update(first='00'), 'recoveryOwnership')
+    case('oversized-declaration', lambda doc, files: doc['root']['extras']['recovery'].update(omitted=['x'*65536]), 'recoveryRelation', 'recoveryBounds')
+
     def relation(doc):
         return doc['root']['extras']['recovery']
 

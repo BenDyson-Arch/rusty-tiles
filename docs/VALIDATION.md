@@ -49,7 +49,11 @@ metadata reads and memo replay, bounded declaration serialization, raw payload
 marker scans, registered tile/reference scans, the terminal census, indexed
 coverage/ownership lookups, scaffold comparisons and D11 ownership joins. Charges
 precede those operations; a budget refusal does not permit truncated coverage.
-The declaration is limited to 64 KiB while serializing. Coverage endpoints use
+Rank strings use canonical unsigned decimal spelling (at most 20 digits). Before
+serialization, a declaration is bounded to 64 KiB of raw key/string bytes plus
+value nodes, with at most eight nested levels; serialization also stops at 64 KiB.
+These bounds include the supported schema and stop oversized malformed values
+before string scanning. Coverage endpoints use
 indexed terminal prefixes; a declared frontier does not cause repeated subtree
 scans. See the [work calibration](architecture/validator-limits-amendment.md#recovery-relation-work)
 for the P/E-core measurements and proof limits.
