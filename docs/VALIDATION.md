@@ -40,6 +40,19 @@ invalid: declared omitted nodes must be spliced out. These checks do not certify
 unpublished source-distance maxima; the producer's decoded source-S2 measurement
 remains required. Construction omissions and bypassed cells are recorded separately
 from content-less cells remaining in delivery.
+Archive-only inspection verifies the declared ownership scaffold against delivered
+terminal coverage; it cannot recover an unpublished pre-bypass hierarchy. Source
+truth remains an obligation of the source oracle and audit evidence.
+
+Recovery inspection uses the existing C1 payload-work budget (R = 224), including
+metadata reads and memo replay, bounded declaration serialization, raw payload
+marker scans, registered tile/reference scans, the terminal census, indexed
+coverage/ownership lookups, scaffold comparisons and D11 ownership joins. Charges
+precede those operations; a budget refusal does not permit truncated coverage.
+The declaration is limited to 64 KiB while serializing. Coverage endpoints use
+indexed terminal prefixes; a declared frontier does not cause repeated subtree
+scans. See the [work calibration](architecture/validator-limits-amendment.md#recovery-relation-work)
+for the P/E-core measurements and proof limits.
 
 A coarse payload that drops whole components of its children declares how many in glTF
 `asset.extras.rustyTiles.droppedComponents`. Validation recounts the drops from decoded keys

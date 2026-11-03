@@ -5,6 +5,37 @@ use rusqlite::{params, OptionalExtension};
 use serde::Deserialize;
 use serde_json::{value::RawValue, Value};
 
+// Calibrated against #309: tau_P=11.68 ns, tau_E=15.52 ns.
+// See docs/architecture/validator-limits-amendment.md and the retained cost probe.
+pub(crate) const READ_UNITS: usize = 32;
+pub(super) const BORDER_UNITS: usize = 64;
+pub(crate) const METADATA_UNITS: usize = 512;
+pub(crate) const JSON_BYTE_UNITS: usize = 4;
+pub(crate) const MAX_JSON: usize = 65536;
+const SETUP_UNITS: usize = 16384;
+const SCAN_UNITS: usize = 8;
+const CENSUS_UNITS: usize = 128;
+const LOOKUP_UNITS: usize = 1024;
+const PAIR_UNITS: usize = 16;
+
+#[cfg(all(test, unix))]
+mod cost;
+
+/// Stop while serializing: an untrusted declaration cannot allocate past its bound.
+struct Json(Vec<u8>);
+impl std::io::Write for Json {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        if bytes.len() > MAX_JSON - self.0.len() {
+            return Err(std::io::Error::other("recovery declaration exceeds 64 KiB"));
+        }
+        self.0.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct Metadata {
     pub(super) owner: Option<(u64, u32)>,
@@ -21,13 +52,18 @@ impl Metadata {
         let depth = extras["depth"].as_u64().and_then(|d| u32::try_from(d).ok());
         let recovery = extras
             .get("recovery")
-            .map(serde_json::to_string)
+            .map(|v| {
+                let mut out = Json(Vec::with_capacity(MAX_JSON));
+                serde_json::to_writer(&mut out, v)
+                    .map_err(|_| bad("recoveryBounds", "recovery declaration exceeds 64 KiB"))?;
+                Ok::<_, Error>(String::from_utf8(out.0).expect("JSON is UTF-8"))
+            })
             .transpose()?;
-        if recovery.as_ref().is_some_and(|r| r.len() > 65536) {
-            return Err(bad("recoveryBounds", "recovery declaration exceeds 64 KiB"));
-        }
         let owner = first.zip(depth);
         Ok((owner.is_some() || recovery.is_some()).then_some(Self { owner, recovery }))
+    }
+    pub(crate) fn declared(&self) -> bool {
+        self.recovery.is_some()
     }
     pub(crate) fn cost(&self) -> usize {
         std::mem::size_of::<Self>() + self.recovery.as_ref().map_or(0, String::len)
@@ -120,9 +156,10 @@ impl Store {
         Ok(())
     }
 
-    fn recovery_owner(&self, mut id: i64) -> Result<Option<(u64, u32)>, Error> {
+    fn recovery_owner(&self, mut id: i64, effort: &Effort) -> Result<Option<(u64, u32)>, Error> {
         // An implicit root's generated cell inherits its header's ownership identity.
         loop {
+            effort.charge(LOOKUP_UNITS)?;
             let (first, depth, parent): (Option<i64>, Option<u32>, Option<i64>) = self
                 .connection
                 .query_row(
@@ -137,6 +174,7 @@ impl Store {
             let Some(parent) = parent else {
                 return Ok(None);
             };
+            effort.charge(LOOKUP_UNITS)?;
             let placeholder: bool = self
                 .connection
                 .query_row("SELECT placeholder FROM tiles WHERE id=?", [parent], |r| {
@@ -151,6 +189,10 @@ impl Store {
     }
 
     pub(super) fn recovery(&self, effort: &Effort) -> Result<(), Error> {
+        #[cfg(all(test, unix))]
+        let discovery = cost::Phase::new("discovery", effort);
+        let rows = self.recovery_rows.0.saturating_add(self.recovery_rows.1);
+        effort.charge(SETUP_UNITS.saturating_add(rows.saturating_mul(SCAN_UNITS)))?;
         let declarations: i64 = self
             .connection
             .query_row(
@@ -189,6 +231,11 @@ impl Store {
                 "recovery requires one explicit REPLACE ownership root",
             ));
         }
+        #[cfg(all(test, unix))]
+        drop(discovery);
+        #[cfg(all(test, unix))]
+        let admission = cost::Phase::new("admission", effort);
+        effort.charge(text.len().saturating_mul(JSON_BYTE_UNITS))?;
         let declaration: Declaration = serde_json::from_str(&text)
             .map_err(|_| bad("recoveryRelation", "invalid recovery declaration"))?;
         let d = &declaration;
@@ -198,7 +245,7 @@ impl Store {
             || d.root.depth != 0
             || d.root.leaf_begin != 0
             || d.encoded_depth > 30
-            || self.recovery_owner(root)? != Some((0, 0))
+            || self.recovery_owner(root, effort)? != Some((0, 0))
         {
             return Err(bad("recoveryRelation", "invalid recovery root"));
         }
@@ -217,14 +264,22 @@ impl Store {
             ));
         }
 
+        #[cfg(all(test, unix))]
+        drop(admission);
+        #[cfg(all(test, unix))]
+        let census_time = cost::Phase::new("census", effort);
+        effort.charge(SETUP_UNITS.saturating_add(rows.saturating_mul(CENSUS_UNITS)))?;
         // One streamed terminal census. Source ranks and DFS leaf bounds are recomputed
         // from payload counts, not trusted from the relation or the producer report.
         self.connection.execute_batch("CREATE TEMP TABLE recovery_leaves(tile INTEGER PRIMARY KEY,first INTEGER,last INTEGER,lo INTEGER,hi INTEGER);").map_err(sql)?;
         let mut census = self.connection.prepare("SELECT t.id,coalesce(sum(p.triangles),0) FROM tiles t LEFT JOIN refs r ON r.tile=t.id LEFT JOIN payloads p ON p.rank=r.rank WHERE NOT EXISTS(SELECT 1 FROM tiles c WHERE c.parent=t.id) GROUP BY t.id ORDER BY t.id").map_err(sql)?;
         let mut rows = census.query([]).map_err(sql)?;
         let (mut rank, mut leaf) = (0u64, 0u64);
+        let mut insert = self
+            .connection
+            .prepare("INSERT INTO recovery_leaves VALUES(?,?,?,?,?)")
+            .map_err(sql)?;
         while let Some(r) = rows.next().map_err(sql)? {
-            effort.charge(super::ROW_UNITS)?;
             let id: i64 = r.get(0).map_err(sql)?;
             let count = u64::try_from(r.get::<_, i64>(1).map_err(sql)?)
                 .map_err(|_| bad("recoveryCoverage", "negative terminal count"))?;
@@ -234,31 +289,33 @@ impl Store {
             if count == 0 {
                 return Err(bad("recoveryCoverage", "terminal frontier has no content"));
             }
-            self.connection
-                .execute(
-                    "INSERT INTO recovery_leaves VALUES(?,?,?,?,?)",
-                    params![
-                        id,
-                        integer(rank)?,
-                        integer(end)?,
-                        integer(leaf)?,
-                        integer(leaf + 1)?
-                    ],
-                )
+            insert
+                .execute(params![
+                    id,
+                    integer(rank)?,
+                    integer(end)?,
+                    integer(leaf)?,
+                    integer(leaf + 1)?
+                ])
                 .map_err(sql)?;
             (rank, leaf) = (end, leaf + 1);
         }
+        #[cfg(all(test, unix))]
+        drop(census_time);
+        #[cfg(all(test, unix))]
+        let coverage_time = cost::Phase::new("coverage", effort);
+        // Prefixes are strictly increasing and complete, so two indexed endpoints
+        // prove the same interval as min/max without rescanning each subtree.
         let cover = |id: i64, end: i64, k: Key| -> Result<bool, Error> {
-            let found: (Option<i64>, Option<i64>, Option<u32>, Option<u32>) = self.connection.query_row(
-                "SELECT min(first),max(last),min(lo),max(hi) FROM recovery_leaves WHERE tile>=? AND tile<=?",
-                params![id,end], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).map_err(sql)?;
-            Ok(found
-                == (
-                    Some(k.first as i64),
-                    Some(k.end as i64),
-                    Some(k.leaf_begin),
-                    Some(k.leaf_end),
-                ))
+            effort.charge(2 * LOOKUP_UNITS)?;
+            let first: Option<(i64,u32)> = self.connection.query_row(
+                "SELECT first,lo FROM recovery_leaves WHERE tile>=? AND tile<=? ORDER BY tile LIMIT 1",
+                params![id,end], |r| Ok((r.get(0)?,r.get(1)?))).optional().map_err(sql)?;
+            let last: Option<(i64,u32)> = self.connection.query_row(
+                "SELECT last,hi FROM recovery_leaves WHERE tile>=? AND tile<=? ORDER BY tile DESC LIMIT 1",
+                params![id,end], |r| Ok((r.get(0)?,r.get(1)?))).optional().map_err(sql)?;
+            Ok(first == Some((k.first as i64, k.leaf_begin))
+                && last == Some((k.end as i64, k.leaf_end)))
         };
         if !cover(root, last, d.root)? {
             return Err(bad(
@@ -266,6 +323,14 @@ impl Store {
                 "root differs from its delivered terminal cover",
             ));
         }
+        effort.charge(
+            SETUP_UNITS.saturating_add(
+                self.recovery_rows
+                    .0
+                    .saturating_add(self.recovery_rows.1)
+                    .saturating_mul(SCAN_UNITS),
+            ),
+        )?;
         let mut query = self.connection.prepare(
             "SELECT t.id,t.last,t.error,count(r.rank),coalesce(sum(p.triangles),0) FROM tiles t LEFT JOIN refs r ON r.tile=t.id LEFT JOIN payloads p ON p.rank=r.rank WHERE t.cell=? AND t.placeholder=0 GROUP BY t.id ORDER BY t.id LIMIT 9").map_err(sql)?;
         let children: Vec<(i64, i64, f64, i64, i64)> = query
@@ -282,14 +347,13 @@ impl Store {
             ));
         }
         for ((id, end, error, refs, triangles), input) in children.iter().zip(&d.frontier) {
-            effort.charge(1)?;
             if !input.key.valid() || *refs != 1 || !cover(*id, *end, input.key)? {
                 return Err(bad(
                     "recoveryCoverage",
                     "frontier differs from its delivered cover",
                 ));
             }
-            if self.recovery_owner(*id)? != Some((input.key.first, input.key.depth))
+            if self.recovery_owner(*id, effort)? != Some((input.key.first, input.key.depth))
                 || (input.key.depth == 31 && id != end)
             {
                 return Err(bad(
@@ -308,6 +372,12 @@ impl Store {
             }
         }
 
+        #[cfg(all(test, unix))]
+        drop(coverage_time);
+        #[cfg(all(test, unix))]
+        let _scaffold_time = cost::Phase::new("scaffold", effort);
+        let size = 1 + d.omitted.len() + d.frontier.len();
+        effort.charge(size.saturating_mul(size).saturating_mul(PAIR_UNITS))?;
         let mut keys = vec![Key {
             depth: d.encoded_depth,
             ..d.root
@@ -334,7 +404,6 @@ impl Store {
                 "invalid or duplicate ownership cell",
             ));
         }
-        effort.charge(keys.len().saturating_mul(keys.len()))?;
         let mut parents = vec![0usize; keys.len()];
         let mut owned = vec![Vec::new(); keys.len()];
         for i in 1..keys.len() {
@@ -385,6 +454,7 @@ impl Store {
                 .collect();
             let first = covered.iter().map(|(_, c)| c.0).min().unwrap();
             let last = covered.iter().map(|(_, c)| c.1).max().unwrap();
+            effort.charge(LOOKUP_UNITS)?;
             self.connection
                 .execute(
                     "INSERT INTO recovery_cells VALUES(?,?,?)",
@@ -394,6 +464,7 @@ impl Store {
         }
         for (i, child) in children.iter().enumerate() {
             let p = parents[split + i];
+            effort.charge(LOOKUP_UNITS)?;
             self.connection
                 .execute(
                     "UPDATE tiles SET cell=? WHERE id=?",

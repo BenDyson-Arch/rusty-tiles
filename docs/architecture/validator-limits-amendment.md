@@ -741,3 +741,65 @@ and the payload rows spill by N (VS-A CAT-5, VS-B-5), and the member ceiling bou
 - Class A limits are not overridable; a tiler output over `documentItems` or `jsonBytes` is
   refused (tiler risk R-5), by decision.
 - `validate_3tz` has no scratch-directory parameter (OQ-C8).
+
+## Recovery relation work
+
+The 2026-11-03 descendant-recovery addition retains the 16M floor, R = 224 and
+τ_P = 11.68 ns / τ_E = 15.52 ns. New work is prepaid at its owning boundary:
+metadata inspection/write (including memo placement), raw marker scans, SQL
+relation scans and terminal census, coverage/ownership lookups, bounded scaffold
+comparisons and the D11 ownership join. Registered tile/reference cardinalities
+bound SQL work before execution. A recovery declaration stops serializing at
+64 KiB; at most 265 scaffold keys enter the pairwise pass. Indexed first/last
+terminal prefixes replace repeated coverage aggregates. No budget refusal may
+truncate the frontier.
+
+| operation | charged units |
+| --- | ---: |
+| metadata read | 32 |
+| metadata write, marker update or memo placement | 512 |
+| declaration serialization/parse byte; each of four raw marker scans | 4 |
+| discovery, census or coverage setup | 16,384 |
+| registered tile/reference scanned | 8 |
+| registered tile/reference in terminal census | 128 |
+| indexed ownership/coverage lookup or virtual ownership write | 1,024 |
+| bounded scaffold key pair | 16 |
+| D11 ownership row (including the virtual-cell join) | 64 |
+
+Weights round measured ns/operation divided by each core's τ upward, with margin
+for preparation and logarithmic table growth. A preliminary 16-unit metadata
+read exceeded τ_P on wide objects and was doubled. Three final repeats per case,
+pinned to CPUs 10 and 17 at idle priority, measured these maxima (ns/charged unit):
+
+| path | P | E |
+| --- | ---: | ---: |
+| relation discovery | 3.004 | 5.438 |
+| declaration admission | 4.984 | 7.605 |
+| terminal census | 3.013 | 5.557 |
+| coverage and ownership lookup | 1.955 | 4.351 |
+| ownership scaffold | 2.773 | 5.501 |
+| wide metadata read | 4.108 | 7.485 |
+| metadata write | 2.857 | 7.240 |
+| bounded serialization | 1.219 | 1.920 |
+| raw marker scan | 1.142 | 1.979 |
+| complete D11 ownership query | 4.490 | 7.426 |
+
+The retained ignored probe is
+`src/validate/hlod_delivery/recovery/cost.rs::recovery_work_cost_probe`.
+It exercises 8, 2,048 and 131,072 terminal leaves, tables beyond the 8 MiB cache,
+232 skipped ownership cells, wide objects, many small values, long strings and
+escaped marker keys. Its synthetic SQL counts isolate operation cost; they are
+not geometric acceptance. Thread CPU excludes fixture construction and process
+startup. The census/SQL probe uses an explicit unlimited test allowance to observe
+whole paths; production limits do not change. Literal native/S5 archives and the
+source-S2 producer controls establish semantic acceptance separately. Other hosts,
+unmeasured cardinalities and disk latency are outside this measurement.
+
+Exact source/patch and test-binary hashes, bootstrap and final timings, and weight
+selection are retained under
+`~/.cache/rusty-tiles-evidence/bypass-recovery-20261103/cost/`.
+`final-summary.json` SHA-256:
+`04d1bdf55544f58d1bfdafc56add87b5978d94b0d4056a049a546ac34f2242ba`.
+The evidence was created externally and never held in git; this commit first
+records its pointer. Whole-archive regression, combined Walem and independent
+review remain separate acceptance gates.

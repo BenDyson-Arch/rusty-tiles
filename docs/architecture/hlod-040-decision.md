@@ -748,6 +748,11 @@ Literal positive, coverage-gap, overlap, undeclared and below-frontier-G control
 are required. Stock-client loading/refinement, processing cost and first-view/floor
 receipts remain acceptance obligations; bounded input alone proves no quality gain.
 
+The recovery validator shares #309's R = 224 work budget. Its metadata, census,
+lookup, ownership reconstruction and D11 join costs are charged before execution,
+with weights measured against tau_P = 11.68 ns and tau_E = 15.52 ns. This changes
+neither the total allowance nor any geometric acceptance rule.
+
 **A3 (L1, approved 2026-10-30) is superseded by N2.** Folds are admitted at last-resort tiles
 without a separation gate. Their separation (the sandwich width of the folded layers over
 each fold face, against the source) is reported per tile by the acceptance tooling, not

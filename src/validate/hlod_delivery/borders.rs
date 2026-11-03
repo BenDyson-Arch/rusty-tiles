@@ -27,6 +27,8 @@ use super::{
 use rusqlite::{params, OptionalExtension};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+/// Ordered ownership query, also exercised by the retained cost probe.
+pub(super) const OWNERS: &str = "SELECT b.key,b.tile,t.last,t.cell,coalesce(v.last,c.last),t.error,t.leaf,b.image,b.d,coalesce(v.first,c.id+1) FROM border_map b JOIN tiles t ON t.id=b.tile LEFT JOIN tiles c ON c.id=t.cell LEFT JOIN recovery_cells v ON v.id=t.cell ORDER BY b.key,b.tile";
 /// Outward rounding of every f64 distance sum below (well above ten roundings).
 const OUTWARD: f64 = 1. + 1. / (1u64 << 48) as f64;
 fn overflow() -> Error {
@@ -856,14 +858,13 @@ impl Store {
         self.connection
             .execute_batch("INSERT INTO border_map SELECT l.key,l.tile,x'',0 FROM leaf_points l JOIN shared_point_keys s ON s.key=l.key JOIN tiles t ON t.id=l.tile WHERE t.leaf=1")
             .map_err(sql)?;
-        let mut query = self
-            .connection
-            .prepare("SELECT b.key,b.tile,t.last,t.cell,coalesce(v.last,c.last),t.error,t.leaf,b.image,b.d,coalesce(v.first,c.id+1) FROM border_map b JOIN tiles t ON t.id=b.tile LEFT JOIN tiles c ON c.id=t.cell LEFT JOIN recovery_cells v ON v.id=t.cell ORDER BY b.key,b.tile")
-            .map_err(sql)?;
+        let mut query = self.connection.prepare(OWNERS).map_err(sql)?;
         let mut rows = query.query([]).map_err(sql)?;
         let mut group: Vec<Owner> = Vec::new();
         let mut current: Option<Vec<u8>> = None;
         loop {
+            // Price the recovery ownership lookup before SQLite steps the row.
+            effort.charge(super::recovery::BORDER_UNITS)?;
             let row = rows.next().map_err(sql)?;
             let key: Option<Vec<u8>> = row.map(|r| r.get(0)).transpose().map_err(sql)?;
             if key != current {

@@ -2087,6 +2087,7 @@ impl Check<'_> {
                     None
                 }
                 Event::Ownership { tile, metadata } => {
+                    self.recovery_metadata_charge(metadata.declared())?;
                     self.delivery
                         .metadata(self.delivery_path[frame.locals[*tile]], metadata)?;
                     None
@@ -2340,10 +2341,42 @@ impl Check<'_> {
         Ok(())
     }
 
+    fn recovery_metadata_charge(&mut self, declaration: bool) -> Result<(), Error> {
+        use hlod_delivery::recovery::{JSON_BYTE_UNITS, MAX_JSON, METADATA_UNITS};
+        let units = METADATA_UNITS
+            + if declaration {
+                MAX_JSON * JSON_BYTE_UNITS
+            } else {
+                0
+            };
+        self.elements = self
+            .resources
+            .budget(LimitKey::TotalPayloadElements)
+            .charge(self.elements, units as u64, || {
+                "descendantRecovery: metadata work exceeds payload element budget".into()
+            })?;
+        Ok(())
+    }
+
     fn delivery_metadata(&mut self, tile: usize, node: &Value) -> Result<(), Error> {
+        use hlod_delivery::recovery::{JSON_BYTE_UNITS, MAX_JSON, READ_UNITS};
+        let declared = node["extras"].get("recovery").is_some();
+        let units = READ_UNITS
+            + if declared {
+                MAX_JSON * JSON_BYTE_UNITS
+            } else {
+                0
+            };
+        self.elements = self
+            .resources
+            .budget(LimitKey::TotalPayloadElements)
+            .charge(self.elements, units as u64, || {
+                "descendantRecovery: metadata read exceeds payload element budget".into()
+            })?;
         let Some(metadata) = hlod_delivery::recovery::Metadata::read(node)? else {
             return Ok(());
         };
+        self.recovery_metadata_charge(false)?;
         self.delivery
             .metadata(self.delivery_path[tile], &metadata)?;
         if self.recording.last().is_some_and(|r| !r.opaque) {

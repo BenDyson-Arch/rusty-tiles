@@ -1003,6 +1003,8 @@ const PENDING_ROWS: usize = 16_384;
 /// One validation's disk hierarchy and decoded boundary index. Field order closes
 /// SQLite before removing its private file and the existing scratch anchor.
 pub(super) struct Store {
+    // Registered cardinalities bound recovery SQL before it runs, including refusals.
+    recovery_rows: (usize, usize),
     connection: Db,
     _file: Option<tempfile::NamedTempFile>,
     _anchor: Option<SlotFile>,
@@ -1026,6 +1028,7 @@ struct OpenEnds<'a> {
 impl Store {
     pub(super) fn new(scratch: Arc<Scratch>, config: &CatalogConfig) -> Result<Self, Error> {
         Ok(Self {
+            recovery_rows: (0, 0),
             connection: Db(None),
             _file: None,
             _anchor: None,
@@ -1127,6 +1130,7 @@ impl Store {
         parent: Option<u64>,
         local: Matrix,
     ) -> Result<(), Error> {
+        self.recovery_rows.0 = self.recovery_rows.0.saturating_add(1);
         finite(&local)?;
         if !nonsingular(local) {
             self.exclude_scene("singular tile placement is outside the decoded interface profile");
@@ -1211,6 +1215,7 @@ impl Store {
         Ok(())
     }
     pub(super) fn reference(&mut self, id: u64, rank: u64) -> Result<(), Error> {
+        self.recovery_rows.1 = self.recovery_rows.1.saturating_add(1);
         if self.connection.0.is_none() {
             self.pending.refs.push((id, rank));
             return self.bound_pending();
@@ -1289,8 +1294,15 @@ impl Store {
                 )
                 .map_err(sql)?;
         }
+        // Four nested raw-field scans, each bounded by the admitted JSON length.
+        work.charge(
+            raw.get()
+                .len()
+                .saturating_mul(4 * recovery::JSON_BYTE_UNITS),
+        )?;
         let recovery = recovery::payload_marker(raw)?;
         if recovery {
+            work.charge(recovery::METADATA_UNITS)?;
             self.connection
                 .execute(
                     "UPDATE payloads SET recovery=1 WHERE rank=?",
