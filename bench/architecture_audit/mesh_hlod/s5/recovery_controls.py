@@ -115,18 +115,19 @@ def generate(root):
         doc['root']['children'][0] = link
     case('linked-frontier', linked)
 
-    def collapsed(doc, files):
+    def collapsed(doc, files, shift=2):
         r = relation(doc)
-        r['encodedDepth'] = 2
+        r['encodedDepth'] = shift
         for child in r['frontier']:
-            child['key']['depth'] += 2
-        r['omitted'][0]['depth'] += 2
+            child['key']['depth'] += shift
+        r['omitted'][0]['depth'] += shift
         pending = list(doc['root']['children'])
         while pending:
             child = pending.pop()
-            child['extras']['depth'] += 2
+            child['extras']['depth'] += shift
             pending.extend(child.get('children', []))
     case('collapsed-root-chain', collapsed)
+    case('deepest-frontier-leaves', lambda doc, files: collapsed(doc, files, 29))
     (root / 'cases.json').write_text(json.dumps(cases, indent=2) + '\n')
     return cases
 
@@ -246,6 +247,17 @@ def borders(root, binary):
             assert expected is None, (name, result)
         except Failure as error:
             assert error.check == expected, (name, expected, error.check, error.detail)
+        if variant == 'mixed-within':
+            import recovery
+            restore = recovery.ownership_view
+            recovery.ownership_view = lambda tiles: tiles
+            try:
+                audit(folder, source_path, border_audit=audit_path)
+                raise AssertionError('ownership-restoration control was insensitive')
+            except Failure as error:
+                assert error.check == 'borderDepth', (error.check, error.detail)
+            finally:
+                recovery.ownership_view = restore
         verdict = 'not run'
         if binary:
             code, report = bc.native(binary, folder, folder.with_suffix('.3tz'))

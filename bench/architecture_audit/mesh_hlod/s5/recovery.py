@@ -26,7 +26,7 @@ def key(value, require):
             'recoveryRelation', 'invalid ownership integer')
     result = tuple(value[n] for n in names)
     a, b, d, lo, hi = result
-    require(a < b and lo < hi < 2**32 and d <= 30,
+    require(a < b and lo < hi < 2**32 and d <= 31,
             'recoveryCoverage', 'empty or invalid ownership interval')
     return result
 
@@ -80,6 +80,7 @@ def inspect(tiles, sizes, markers, require):
         counts.append(n)
     require(sum(counts) <= 8 * 8192, 'recoveryBounds', 'frontier triangles exceed 8C')
     skipped = [key(k, require) for k in omitted]
+    require(all(k[2] <= 30 for k in skipped), 'recoveryOwnership', 'omitted cell exceeds internal depth')
 
     # Terminal cover, independent of the declaration and all producer rank labels.
     bounds, leaf, rank = {}, 0, 0
@@ -105,6 +106,7 @@ def inspect(tiles, sizes, markers, require):
         extras = child['node'].get('extras', {})
         require(str(extras.get('first')) == str(ck[0]) and extras.get('depth') == ck[2],
                 'recoveryOwnership', 'frontier ownership identity differs from the declaration')
+        require(ck[2] < 31 or not child['children'], 'recoveryOwnership', 'coarse frontier exceeds internal depth')
         require(sum(sizes[u] for u in child['contents']) == n, 'recoveryBounds', 'frontier triangle count differs')
         require(root['g'] >= child['g'], 'recoveryError', 'root G is below its refinement frontier')
         child['_recovery_depth'] = ck[2]

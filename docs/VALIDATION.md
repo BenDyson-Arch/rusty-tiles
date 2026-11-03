@@ -24,7 +24,8 @@ Version is 1. Ownership keys contain `first`, `end`, `depth`, `leafBegin` and
 `leafEnd`; each frontier entry contains a `key` and its decoded `triangles` count.
 There are one to eight capped inputs, at most 65,536 input triangles, and one to
 256 skipped ownership cells. Source and DFS-leaf intervals must form complete,
-disjoint covers. The actual refinement children, resolving document links, must
+disjoint covers. Internal ownership depths are at most 30; frontier leaves may
+reach depth 31. The actual refinement children, resolving document links, must
 be precisely that frontier, with G no greater than the recovered root's.
 
 Native and S5 count terminal payload triangles/leaves independently, compare the

@@ -60,7 +60,7 @@ impl Key {
         self.first < self.end
             && self.end <= i64::MAX as u64
             && self.leaf_begin < self.leaf_end
-            && self.depth <= 30
+            && self.depth <= 31
     }
     fn contains(self, child: Self) -> bool {
         self.depth < child.depth
@@ -289,7 +289,9 @@ impl Store {
                     "frontier differs from its delivered cover",
                 ));
             }
-            if self.recovery_owner(*id)? != Some((input.key.first, input.key.depth)) {
+            if self.recovery_owner(*id)? != Some((input.key.first, input.key.depth))
+                || (input.key.depth == 31 && id != end)
+            {
                 return Err(bad(
                     "recoveryOwnership",
                     "frontier ownership identity differs",
@@ -313,6 +315,12 @@ impl Store {
         keys.extend(&d.omitted);
         let split = keys.len();
         keys.extend(d.frontier.iter().map(|c| c.key));
+        if d.omitted.iter().any(|k| k.depth > 30) {
+            return Err(bad(
+                "recoveryOwnership",
+                "omitted cell exceeds internal depth",
+            ));
+        }
         if keys.iter().any(|k| !k.valid())
             || keys
                 .iter()
