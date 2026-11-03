@@ -41,7 +41,7 @@ fn pruning_never_turns_an_accept_into_a_refusal() {
             .collect();
         let grid = Grid::new(&faces, *reach, 0., &effort_for_tests()).unwrap();
         let run = |unpruned, remaining, cached: Option<usize>| {
-            grid.last
+            grid.certified
                 .set(cached.map(|i| (i as u32, faces[i].map(point))));
             let mut effort = effort_for_tests();
             effort.base = effort.budget.value - remaining;

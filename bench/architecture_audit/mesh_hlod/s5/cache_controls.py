@@ -29,13 +29,14 @@ def main():
     code = code[:start] + r'''struct Budget { value:u64 }
 struct Effort { certificate_fast:AtomicU64,certificate_slow:AtomicU64,budget:Budget,base:u64,used:AtomicU64 }
 impl Default for Effort {fn default()->Self {Self {certificate_fast:AtomicU64::new(0),certificate_slow:AtomicU64::new(0),budget:Budget{value:10_000_000},base:0,used:AtomicU64::new(0)}}}
-impl Effort {fn charge(&self,n:usize)->Result<(),Error>{let old=self.used.fetch_add(n as u64,Ordering::Relaxed);let total=self.base+old+n as u64;if total>self.budget.value {Err(format!("budget exceeded: {total}"))}else{Ok(())}}}
+impl Effort {fn charge(&self,n:usize)->Result<(),Error>{let old=self.used.fetch_add(n as u64,Ordering::Relaxed);let total=self.base+old+n as u64;if total>self.budget.value {Err(Error::ResourceLimit(format!("budget exceeded: {total}")))}else{Ok(())}}}
 fn effort_for_tests()->Effort {Effort::default()}
 ''' + code[end:]
     src = source.read_text()
     test = src[src.index('    #[test]\n    fn cached_faces'):src.index('    /// A third component')]
     test = test.replace('        use super::super::tests::effort_for_tests;\n', '')
     test = test.replace('        use super::{point, Grid};\n', '')
+    test = test.replace('        use super::{distance2, point, Grid};\n', '')
     code += (r'''#[cfg(test)] mod budget_control {use super::*;
 type Face=[[f64;3];3];
 const NEAR:Face=[[0.,0.,0.],[2.,0.,0.],[0.,2.,0.]];
@@ -45,18 +46,21 @@ const FAR:Face=[[5.,0.,0.],[6.,0.,0.],[5.,1.,0.]];
     for variant in ['fixed', 'priority', 'in-cell-priority']:
         mutant = code
         if variant != 'fixed':
-            loop = ('let last = self.last.get().map(|(i, _)| i);\n'
+            loop = ('let last = self.certified.get().map(|(i, _)| i);\n'
                     'for i in last.into_iter().chain(cell.iter().copied().filter(|i| Some(*i) != last)) {')
             if variant == 'in-cell-priority':
                 loop = loop.replace('.map(|(i, _)| i);', '.map(|(i, _)| i).filter(|i| cell.contains(i));')
-            assert mutant.count('for &i in cell {') == 2
-            mutant = mutant.replace('for &i in cell {', loop)
+            begin, end = mutant.index('    fn covers('), mutant.index('    /// Whether `p`')
+            certificate = mutant[begin:end]
+            assert certificate.count('for &i in cell {') == 1
+            mutant = mutant[:begin] + certificate.replace('for &i in cell {', loop) + mutant[end:]
         path, binary = out / (variant + '.rs'), out / variant
         path.write_text(mutant)
         subprocess.run(['rustc', '--edition=2021', '--test', str(path), '-o', str(binary)], check=True)
-        run = subprocess.run([str(binary), 'cached_faces_preserve_verdicts_at_the_effort_limit',
-                              '--nocapture'], text=True, capture_output=True)
+        run = subprocess.run([str(binary), 'budget_control::cached_faces_keep_certificate_work_and_honest_point_queries',
+                              '--exact', '--nocapture'], text=True, capture_output=True)
         (out / (variant + '.log')).write_text(run.stdout + run.stderr)
+        assert 'running 1 test' in run.stdout, run.stdout
         results[variant] = run.returncode
     assert results == {'fixed': 0, 'priority': 101, 'in-cell-priority': 101}, results
     # Reconstruct the previous scan by removing only the pruning branch. Keep
@@ -82,6 +86,7 @@ const FAR:Face=[[5.,0.,0.],[6.,0.,0.],[5.,1.,0.]];
         run = subprocess.run([str(binary), 'pruning_never_turns_an_accept_into_a_refusal',
                               '--nocapture'], text=True, capture_output=True)
         (out / (variant + '.log')).write_text(run.stdout + run.stderr)
+        assert 'running 1 test' in run.stdout, run.stdout
         results[variant] = run.returncode
     assert results['pruning'] == 0 and results['pruning-reject-mutant'] == 101, results
     (out / 'result.json').write_text(json.dumps(results, indent=2) + '\n')

@@ -6,7 +6,7 @@ The harness replaces only Effort/error/hash-map plumbing and times Grid::covers,
 not archive decode or grid construction. It counts original distance calls or
 new fast/slow calls, and supplies a separate per-test microbenchmark.
 """
-import sys,struct,json,hashlib
+import sys,struct,json,hashlib,re
 from pathlib import Path
 from archive import Archive,expand
 from oracle import decode
@@ -71,8 +71,9 @@ def harness(root,out):
     prefix='''#![allow(dead_code)]
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64,Ordering};
-type CanonicalPoint=[u32;3]; type Error=String;
-const GRID:f64=32.; const TOLERANCE:f64=1e-6;
+type CanonicalPoint=[u32;3];
+#[derive(Clone,Debug,PartialEq)] enum Error { InvalidState(String), ResourceLimit(String) }
+impl std::fmt::Display for Error {fn fmt(&self,f:&mut std::fmt::Formatter<'_>)->std::fmt::Result {match self {Self::InvalidState(s)|Self::ResourceLimit(s)=>f.write_str(s)}}}
 #[derive(Default)] struct Effort { certificate_fast:AtomicU64,certificate_slow:AtomicU64 }
 impl Effort { fn charge(&self,_n:usize)->Result<(),Error>{Ok(())} }
 fn point(p:CanonicalPoint)->[f64;3]{p.map(|x|f64::from(f32::from_bits(x)))}
@@ -112,7 +113,11 @@ fn main(){
  }
 }
 '''
-    Path(out).write_text(prefix+'mod certificate {\n'+cert+'\n}\n'+grid+main)
+    # Keep the selected source's prices, including symbolic constant dependencies.
+    constants='\n'.join(re.findall(r'^const [A-Z_]+:[^;\n]+;',s,re.M))+'\n'
+    if 'HashMap' not in grid:
+        prefix=prefix.replace('use std::collections::HashMap;\n','')
+    Path(out).write_text(prefix+constants+'mod certificate {\n'+cert+'\n}\n'+grid+main)
 if __name__=='__main__':
     if sys.argv[1]=='corpus':corpus(*sys.argv[2:])
     else:harness(*sys.argv[2:])
