@@ -2,8 +2,9 @@
 use super::*;
 use std::{cell::RefCell, sync::atomic::Ordering};
 
+type Measurements = Vec<(&'static str, f64, u64)>;
 thread_local! {
-    static TIMES: RefCell<Option<Vec<(&'static str, f64, u64)>>> = const { RefCell::new(None) };
+    static TIMES: RefCell<Option<Measurements>> = const { RefCell::new(None) };
 }
 fn cpu() -> f64 {
     let mut t = std::mem::MaybeUninit::<libc::timespec>::uninit();
