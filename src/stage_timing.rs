@@ -1,8 +1,7 @@
-//! Opt-in stage timing for the large-mesh leaf producer. Disabled unless the
-//! `RUSTY_TILES_STAGE_TIMING` environment variable names an output file; then
+//! Stage timing for the large-mesh leaf producer. Diagnostics include
 //! summed per-thread wall nanoseconds, call counts and texel counters are
-//! accumulated in process-wide atomics and written as one JSON document when
-//! the producer finishes. Diagnostics only: nothing here feeds output bytes.
+//! accumulated in process-wide atomics. RUSTY_TILES_STAGE_TIMING additionally
+//! writes a JSON document at completion. Nothing here feeds output bytes.
 use serde_json::{json, Map, Value};
 use std::{
     sync::{
@@ -107,7 +106,7 @@ fn totals() -> Option<&'static Totals> {
     static TOTALS: OnceLock<Option<Totals>> = OnceLock::new();
     TOTALS
         .get_or_init(|| {
-            std::env::var_os("RUSTY_TILES_STAGE_TIMING").map(|_| Totals {
+            Some(Totals {
                 cpu_nanos: std::array::from_fn(|_| AtomicU64::new(0)),
                 nanos: std::array::from_fn(|_| AtomicU64::new(0)),
                 calls: std::array::from_fn(|_| AtomicU64::new(0)),

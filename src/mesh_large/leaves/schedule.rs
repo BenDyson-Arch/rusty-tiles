@@ -1,12 +1,9 @@
 //! Shared delivery services for parallel leaf encoding: a byte-budget memory
 //! gate that every page acquires before it allocates its workspace, and a
-//! bounded least-recently-used cache of decoded source images. Neither changes
+//! immutable image table backed by resident rasters or a bounded texel-tile cache. Neither changes
 //! output bytes: work order and thread count only affect timing.
 use crate::{JobError, JobErrorKind};
-use std::{
-    collections::HashMap,
-    sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock},
-};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
@@ -77,27 +74,23 @@ pub(super) struct Decoded {
     pub size: [u32; 2],
     pub rgba: Vec<u8>,
 }
-type Cell = Arc<OnceLock<Result<Arc<Decoded>, JobError>>>;
-struct Entry {
-    cell: Cell,
-    last_use: u64,
-    bytes: u64,
+pub(super) struct Stored {
+    pub size: [u32; 2],
+    pub rgba: crate::mesh_large::image_tiles::Raster,
 }
+type Cell = Arc<OnceLock<Result<Arc<Stored>, JobError>>>;
+type ChainCell = Arc<OnceLock<Result<Vec<Arc<Stored>>, JobError>>>;
 #[derive(Default)]
 struct CacheState {
-    entries: HashMap<(usize, u32), Entry>,
-    clock: u64,
-    resident: u64,
-    peak: u64,
+    entries: std::collections::BTreeMap<(usize, u32), Cell>,
+    chains: std::collections::BTreeMap<(usize, u32), ChainCell>,
     hits: u64,
     misses: u64,
+    decodes: u64,
 }
-/// Decoded sources keyed by (image, density drop). Concurrent requests for one
-/// key share a single decode. Entries beyond `budget` bytes are evicted
-/// least-recently-used first; callers keep evicted images alive only while
-/// they still hold them.
 pub(super) struct SourceCache {
     budget: u64,
+    store: crate::mesh_large::image_tiles::Store,
     state: Mutex<CacheState>,
 }
 #[derive(Clone, Copy, Debug, serde::Serialize)]
@@ -106,95 +99,98 @@ pub(super) struct CacheStats {
     pub peak_resident_bytes: u64,
     pub hits: u64,
     pub misses: u64,
+    pub scratch_bytes: u64,
+    pub decode_count: u64,
 }
 impl SourceCache {
-    pub(super) fn new(budget: u64) -> Self {
+    pub(super) fn new(budget: u64, bound: u64) -> Self {
         Self {
             budget,
+            store: crate::mesh_large::image_tiles::Store::new(budget, bound),
             state: Mutex::new(CacheState::default()),
         }
     }
     pub(super) fn stats(&self) -> CacheStats {
-        let state = lock(&self.state);
+        let s = lock(&self.state);
         CacheStats {
             budget_bytes: self.budget,
-            peak_resident_bytes: state.peak,
-            hits: state.hits,
-            misses: state.misses,
+            peak_resident_bytes: self.store.peak(),
+            hits: s.hits,
+            misses: s.misses,
+            scratch_bytes: self.store.scratch_bytes(),
+            decode_count: s.decodes,
         }
     }
     pub(super) fn get(
         &self,
+        scratch: &crate::spill::Scratch,
         key: (usize, u32),
         load: impl FnOnce() -> Result<Decoded, JobError>,
-    ) -> Result<Arc<Decoded>, JobError> {
+    ) -> Result<Arc<Stored>, JobError> {
         let cell = {
-            let mut state = lock(&self.state);
-            state.clock += 1;
-            let clock = state.clock;
-            let mut hit = true;
-            let cell = state
-                .entries
-                .entry(key)
-                .or_insert_with(|| {
-                    hit = false;
-                    Entry {
-                        cell: Arc::new(OnceLock::new()),
-                        last_use: clock,
-                        bytes: 0,
-                    }
-                })
-                .cell
-                .clone();
-            if let Some(entry) = state.entries.get_mut(&key) {
-                entry.last_use = clock;
-            }
-            if hit {
-                state.hits += 1;
+            let mut s = lock(&self.state);
+            if let Some(cell) = s.entries.get(&key).cloned() {
+                s.hits += 1;
+                cell
             } else {
-                state.misses += 1;
+                s.misses += 1;
+                if key.1 == 0 {
+                    s.decodes += 1;
+                }
+                let cell = Arc::new(OnceLock::new());
+                s.entries.insert(key, cell.clone());
+                cell
             }
-            cell
         };
-        let result = cell.get_or_init(|| load().map(Arc::new)).clone();
-        let mut state = lock(&self.state);
-        match &result {
-            Err(_) => {
-                // Never retain a failure; a later request decodes again.
-                if state
-                    .entries
-                    .get(&key)
-                    .is_some_and(|entry| Arc::ptr_eq(&entry.cell, &cell))
-                {
-                    let removed = state.entries.remove(&key).map_or(0, |e| e.bytes);
-                    state.resident -= removed;
-                }
+        cell.get_or_init(|| {
+            let d = load()?;
+            Ok(Arc::new(Stored {
+                size: d.size,
+                rgba: self.store.put(scratch, d.size[0], d.size[1], d.rgba)?,
+            }))
+        })
+        .clone()
+    }
+    /// Density variants have different semantic filters from HLOD. Build each
+    /// complete class chain once, retaining every reduced level for later requests.
+    pub(super) fn density(
+        &self,
+        scratch: &crate::spill::Scratch,
+        key: (usize, u32),
+        drop: u32,
+        load: impl FnOnce() -> Result<Vec<super::mips::Level>, JobError>,
+    ) -> Result<Arc<Stored>, JobError> {
+        let cell = {
+            let mut s = lock(&self.state);
+            if let Some(cell) = s.chains.get(&key).cloned() {
+                s.hits += 1;
+                cell
+            } else {
+                s.misses += 1;
+                let cell = Arc::new(OnceLock::new());
+                s.chains.insert(key, cell.clone());
+                cell
             }
-            Ok(decoded) => {
-                let bytes = decoded.rgba.len() as u64;
-                if let Some(entry) = state.entries.get_mut(&key) {
-                    if entry.bytes == 0 && Arc::ptr_eq(&entry.cell, &cell) {
-                        entry.bytes = bytes;
-                        state.resident += bytes;
-                    }
-                }
-                state.peak = state.peak.max(state.resident);
-                while state.resident > self.budget {
-                    let Some(oldest) = state
-                        .entries
-                        .iter()
-                        .filter(|(k, e)| **k != key && e.bytes > 0)
-                        .min_by_key(|(k, e)| (e.last_use, **k))
-                        .map(|(k, _)| *k)
-                    else {
-                        break;
-                    };
-                    let removed = state.entries.remove(&oldest).map_or(0, |e| e.bytes);
-                    state.resident -= removed;
-                }
-            }
-        }
-        result
+        };
+        let levels = cell
+            .get_or_init(|| {
+                load()?
+                    .into_iter()
+                    .skip(1)
+                    .map(|l| {
+                        Ok(Arc::new(Stored {
+                            size: [l.width, l.height],
+                            rgba: self.store.put(scratch, l.width, l.height, l.rgba)?,
+                        }))
+                    })
+                    .collect()
+            })
+            .as_ref()
+            .map_err(Clone::clone)?;
+        levels
+            .get(drop.saturating_sub(1) as usize)
+            .cloned()
+            .ok_or_else(|| JobError::new(JobErrorKind::InvalidState, "density level outside chain"))
     }
 }
 
@@ -203,35 +199,109 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
     #[test]
-    fn cache_shares_one_decode_and_evicts_least_recent() {
-        let cache = SourceCache::new(8);
+    fn source_cache_scale_decode_count_is_independent_of_access_order() {
+        let scratch = crate::spill::Scratch::create(None, 0).unwrap();
+        let cache = SourceCache::new(256, 32 * 256);
+        let decodes = AtomicUsize::new(0);
+        for round in 0..8 {
+            for image in 0..32 {
+                let decoded = cache
+                    .get(&scratch, (image, 0), || {
+                        decodes.fetch_add(1, Ordering::SeqCst);
+                        Ok(Decoded {
+                            size: [8, 8],
+                            rgba: vec![image as u8; 256],
+                        })
+                    })
+                    .unwrap();
+                assert_eq!(decoded.rgba.materialize().unwrap(), vec![image as u8; 256]);
+            }
+            assert!(
+                decodes.load(Ordering::SeqCst) <= 32 * 2,
+                "round {round}: {} decodes for 32 images",
+                decodes.load(Ordering::SeqCst)
+            );
+        }
+    }
+
+    #[test]
+    fn cache_shares_one_decode_and_retains_failures() {
+        let scratch = crate::spill::Scratch::create(None, 0).unwrap();
+        let cache = SourceCache::new(8, 12);
         let loads = AtomicUsize::new(0);
-        let load = |n: u8| {
-            loads.fetch_add(1, Ordering::SeqCst);
-            Ok(Decoded {
-                size: [1, 1],
-                rgba: vec![n; 4],
-            })
-        };
         std::thread::scope(|scope| {
             for _ in 0..8 {
-                scope.spawn(|| cache.get((0, 0), || load(1)).unwrap());
+                scope.spawn(|| {
+                    cache
+                        .get(&scratch, (0, 0), || {
+                            loads.fetch_add(1, Ordering::SeqCst);
+                            Ok(Decoded {
+                                size: [1, 1],
+                                rgba: vec![1; 4],
+                            })
+                        })
+                        .unwrap()
+                });
             }
         });
         assert_eq!(loads.load(Ordering::SeqCst), 1);
-        cache.get((1, 0), || load(2)).unwrap();
-        cache.get((0, 0), || load(9)).unwrap();
-        // Budget 8 holds two 4-byte images: (1,0) is now least recent.
-        cache.get((2, 0), || load(3)).unwrap();
-        assert_eq!(cache.get((0, 0), || load(9)).unwrap().rgba, [1; 4]);
-        assert_eq!(cache.get((1, 0), || load(7)).unwrap().rgba, [7; 4]);
-        assert!(cache.stats().peak_resident_bytes <= 12);
-        let failed = cache.get((5, 0), || {
-            Err(JobError::new(JobErrorKind::Cancelled, "cancelled"))
-        });
-        assert!(failed.is_err());
-        assert_eq!(cache.get((5, 0), || load(5)).unwrap().rgba, [5; 4]);
+        for i in 1..3 {
+            cache
+                .get(&scratch, (i, 0), || {
+                    Ok(Decoded {
+                        size: [1, 1],
+                        rgba: vec![i as u8; 4],
+                    })
+                })
+                .unwrap();
+        }
+        assert_eq!(
+            cache
+                .get(&scratch, (0, 0), || panic!("redecode"))
+                .unwrap()
+                .rgba
+                .materialize()
+                .unwrap(),
+            [1; 4]
+        );
+        assert!(cache
+            .get(&scratch, (5, 0), || Err(JobError::new(
+                JobErrorKind::Cancelled,
+                "cancelled"
+            )))
+            .is_err());
+        assert!(cache
+            .get(&scratch, (5, 0), || panic!(
+                "failed identities must not restart"
+            ))
+            .is_err());
     }
+    #[test]
+    fn density_requests_build_a_class_chain_once() {
+        let scratch = crate::spill::Scratch::create(None, 0).unwrap();
+        let cache = SourceCache::new(16, 84);
+        let builds = AtomicUsize::new(0);
+        for drop in [3, 1, 2, 1, 3, 2] {
+            let level = cache
+                .density(&scratch, (0, 0), drop, || {
+                    builds.fetch_add(1, Ordering::SeqCst);
+                    Ok((0..4)
+                        .map(|i| super::super::mips::Level {
+                            width: 8 >> i,
+                            height: 8 >> i,
+                            rgba: vec![i as u8; (8usize >> i) * (8usize >> i) * 4],
+                        })
+                        .collect())
+                })
+                .unwrap();
+            assert_eq!(
+                level.rgba.materialize().unwrap(),
+                vec![drop as u8; (8usize >> drop) * (8usize >> drop) * 4]
+            );
+        }
+        assert_eq!(builds.load(Ordering::SeqCst), 1);
+    }
+
     #[test]
     fn gate_refuses_oversized_and_blocks_until_release() {
         let gate = MemoryGate::new(10);

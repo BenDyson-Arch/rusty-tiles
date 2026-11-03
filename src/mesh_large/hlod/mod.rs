@@ -301,10 +301,11 @@ fn appearance_plan(
     let largest_chain = bake::chain_bytes(largest.0 as u32, largest.1 as u32);
     // One image decode transient (encoded bytes, RGBA, chain build copy) and the chain a
     // worker holds while sampling, besides the shared cache.
-    let decode = (largest.0 * largest.1)
-        .saturating_mul(16)
-        .saturating_add(32 << 20)
-        .saturating_add(largest_chain);
+    let decode = super::image_tiles::READER_BYTES * 2
+        + (largest.0 * largest.1)
+            .saturating_mul(16)
+            .saturating_add(32 << 20)
+            .saturating_add(largest_chain);
     // One group's page workspace at a time, plus the tile's delivered pages and the GLB
     // being assembled from them (each at most `tile_pages`).
     let tile_pages =
@@ -316,9 +317,7 @@ fn appearance_plan(
         .saturating_add(tile_pages.saturating_mul(2))
         .saturating_add(page)
         .saturating_add(decode);
-    let cache_total = captured.image_info.iter().fold(0u64, |n, i| {
-        n.saturating_add(bake::chain_bytes(i.width, i.height))
-    });
+    let cache_total = super::image_tiles::bound(captured, false);
     Ok(AppearancePlan {
         texture,
         color,
@@ -371,6 +370,7 @@ pub(crate) fn plan(
         .owned_metadata_bytes
         .saturating_add(captured.report.memory.geometry.document_bytes)
         .saturating_add(STAGE_RESERVE)
+        .saturating_add(captured.images.len() as u64 * super::image_tiles::IMAGE_METADATA_BYTES)
         .saturating_add(source_index::BUILD_BYTES)
         .saturating_add(borders::WALK_CACHE_BYTES)
         // Publication resolves one contract while admitted worker jobs remain live.
@@ -874,7 +874,17 @@ pub(crate) fn produce(
         .zip(index_start)
         .map(|(b, a)| b - a);
     // S3: the shared decoded source-chain cache and what every appearance job reads.
-    let cache = bake::ImageCache::new(input.plan.image_cache_bytes);
+    let image_bound = super::image_tiles::bound(captured, false);
+    let image_scratch_bound = if image_bound <= input.plan.image_cache_bytes {
+        0
+    } else {
+        image_bound
+    };
+    let image_lease = ledger.admit(
+        "image_tiles",
+        image_scratch_bound.saturating_add(super::image_tiles::file_rounding(captured)),
+    )?;
+    let cache = bake::ImageCache::new(input.plan.image_cache_bytes, image_bound);
     let layout = captured.triangles.layout().0;
     let services = appearance::Services {
         captured,
@@ -938,6 +948,7 @@ pub(crate) fn produce(
     diagnostics.held_spill = held_spill;
     diagnostics.appearance_seconds = timings;
     diagnostics.image_cache = cache.stats();
+    image_lease.charge(diagnostics.image_cache.scratch_bytes)?;
     diagnostics.audit = audit.as_ref().map(audit::Writer::finish).transpose()?;
     report.audit = diagnostics.audit.as_ref().map(audit::Summary::from);
     drop(audit);
@@ -1175,6 +1186,8 @@ fn memory_backed_need(
             )?)
         })
         .and_then(|b| b.checked_add(held_spill_bound(captured, config, cap)?))
+        .and_then(|b| b.checked_add(super::image_tiles::bound(captured, false)))
+        .and_then(|b| b.checked_add(super::image_tiles::file_rounding(captured)))
         .map(|b| b.max(need.need_bytes))
         .ok_or_else(|| resource("HLOD memory-backed scratch need overflows"))
 }

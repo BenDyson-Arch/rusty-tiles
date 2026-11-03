@@ -5,8 +5,8 @@
 //! drift gate, facing or donor search.
 //!
 //! Hits record the donor's interpolants; images are then sampled grouped by image through
-//! a bounded, shared cache of decoded colour-correct mip chains ([`ImageCache`]), so a
-//! tile decodes each image at most once and the run never holds every image.
+//! immutable colour-correct mip chains ([`ImageCache`]). Each source/class is decoded
+//! once per stage; large working sets spill to a bounded cache of texel tiles.
 use super::source_index::{Budget, Frontier, Hit as SourceHit, SourceQuery, Surface};
 use crate::{
     gltf_source::source::{self as gsource, TextureSlot},
@@ -17,10 +17,7 @@ use crate::{
     },
     JobError, JobErrorKind,
 };
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex, MutexGuard, OnceLock},
-};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 fn state(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message.into())
@@ -372,43 +369,28 @@ pub(crate) fn resolve(
 
 /// A decoded source image's chain from level `base` down to 1x1 (RGBA8, colour
 /// classes sRGB-encoded): `levels[0]` is source level `base`.
-pub(crate) struct Chain {
+pub(crate) struct Chain<L = mips::Level> {
     pub base: u32,
-    pub levels: Vec<mips::Level>,
+    pub levels: Vec<L>,
     pub bytes: u64,
 }
 
-type Cell = Arc<OnceLock<Result<Arc<Chain>, JobError>>>;
-struct Entry {
-    cell: Cell,
-    base: u32,
-    last_use: u64,
-    bytes: u64,
-}
+type StoredChain = Chain<crate::mesh_large::image_tiles::Raster>;
+type Cell = Arc<OnceLock<Result<Arc<StoredChain>, JobError>>>;
 #[derive(Default)]
 struct CacheState {
-    entries: HashMap<(usize, u8), Entry>,
-    /// Resident entries by (last use, key): O(log n) least-recently-used eviction.
-    order: std::collections::BTreeSet<(u64, (usize, u8))>,
-    clock: u64,
-    resident: u64,
-    peak: u64,
+    entries: std::collections::BTreeMap<(usize, u8), Cell>,
     hits: u64,
     misses: u64,
     load_seconds: f64,
 }
-
-/// Decoded chains keyed by (image, class), shared by the stage's workers. A request
-/// names the finest level it samples; a cached chain starting at that level or finer
-/// serves it, otherwise the chain is rebuilt from the requested level (coarse tiles
-/// keep only small levels resident). Least recently used entries beyond `budget` bytes
-/// are evicted (holders keep an evicted chain alive only while they sample it). Never
-/// changes output: every chain level is the same function of the source image.
+/// Stage-lifetime image/class identities. Eviction in the shared tile store cannot
+/// trigger reconstruction; even a coarse first request builds the full chain.
 pub(crate) struct ImageCache {
     budget: u64,
+    store: crate::mesh_large::image_tiles::Store,
     state: Mutex<CacheState>,
 }
-
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheStats {
@@ -416,23 +398,20 @@ pub struct CacheStats {
     pub peak_resident_bytes: u64,
     pub hits: u64,
     pub misses: u64,
-    /// Thread CPU seconds of image reconstruction, decode and chain builds.
     pub load_cpu_seconds: f64,
+    pub scratch_bytes: u64,
 }
-
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
-
-/// Bytes of a decoded image's complete mip chain (4/3 of RGBA8, rounded up).
 pub(crate) fn chain_bytes(width: u32, height: u32) -> u64 {
-    (u64::from(width) * u64::from(height) * 4).div_ceil(3) * 4 + 4096
+    crate::mesh_large::image_tiles::chain_bytes(width, height) + 4096
 }
-
 impl ImageCache {
-    pub(crate) fn new(budget: u64) -> Self {
+    pub(crate) fn new(budget: u64, bound: u64) -> Self {
         Self {
             budget,
+            store: crate::mesh_large::image_tiles::Store::new(budget, bound),
             state: Mutex::new(CacheState::default()),
         }
     }
@@ -440,123 +419,64 @@ impl ImageCache {
         let s = lock(&self.state);
         CacheStats {
             budget_bytes: self.budget,
-            peak_resident_bytes: s.peak,
+            peak_resident_bytes: self.store.peak(),
             hits: s.hits,
             misses: s.misses,
             load_cpu_seconds: s.load_seconds,
+            scratch_bytes: self.store.scratch_bytes(),
         }
     }
-    /// The chain of `image` as `class`, holding at least levels `need..`.
     pub(crate) fn get(
         &self,
         captured: &FullCaptured,
         image: usize,
         class: mips::Class,
-        need: u32,
+        _need: u32,
         check: &dyn Fn() -> Result<(), JobError>,
-    ) -> Result<Arc<Chain>, JobError> {
-        self.get_with((image, class_rank(class)), need, &|base| {
-            load(captured, image, class, base, check)
+    ) -> Result<Arc<StoredChain>, JobError> {
+        self.get_with(&captured.scratch, (image, class_rank(class)), &|| {
+            load(captured, image, class, 0, check)
         })
     }
-    /// [`ImageCache::get`] with the chain builder supplied (`load(base)`).
     fn get_with(
         &self,
+        scratch: &crate::spill::Scratch,
         key: (usize, u8),
-        need: u32,
-        load: &dyn Fn(u32) -> Result<Chain, JobError>,
-    ) -> Result<Arc<Chain>, JobError> {
-        let (cell, base) = {
+        load: &dyn Fn() -> Result<Chain, JobError>,
+    ) -> Result<Arc<StoredChain>, JobError> {
+        let cell = {
             let mut s = lock(&self.state);
-            s.clock += 1;
-            let clock = s.clock;
-            let cached = s
-                .entries
-                .get(&key)
-                .filter(|e| e.base <= need)
-                .map(|e| e.cell.clone());
-            match cached {
-                Some(cell) => {
-                    s.hits += 1;
-                    let e = s.entries.get_mut(&key).expect("cached entry");
-                    let (old, resident) = (e.last_use, e.bytes > 0);
-                    e.last_use = clock;
-                    let base = e.base;
-                    if resident {
-                        s.order.remove(&(old, key));
-                        s.order.insert((clock, key));
-                    }
-                    (cell, base)
-                }
-                None => {
-                    s.misses += 1;
-                    let cell: Cell = Arc::new(OnceLock::new());
-                    let old = s.entries.insert(
-                        key,
-                        Entry {
-                            cell: cell.clone(),
-                            base: need,
-                            last_use: clock,
-                            bytes: 0,
-                        },
-                    );
-                    if let Some(old) = old.filter(|e| e.bytes > 0) {
-                        s.resident -= old.bytes;
-                        s.order.remove(&(old.last_use, key));
-                    }
-                    (cell, need)
-                }
+            if let Some(cell) = s.entries.get(&key).cloned() {
+                s.hits += 1;
+                cell
+            } else {
+                s.misses += 1;
+                let cell = Arc::new(OnceLock::new());
+                s.entries.insert(key, cell.clone());
+                cell
             }
         };
-        let mut seconds = 0.;
-        let result = cell
-            .get_or_init(|| {
-                let started = super::error::thread_cpu();
-                let chain = load(base).map(Arc::new);
-                seconds = super::error::thread_cpu()
-                    .zip(started)
-                    .map_or(0., |(b, a)| b - a);
-                chain
-            })
-            .clone();
-        let mut s = lock(&self.state);
-        s.load_seconds += seconds;
-        let current = s
-            .entries
-            .get(&key)
-            .is_some_and(|e| Arc::ptr_eq(&e.cell, &cell));
-        match &result {
-            Err(_) => {
-                if current {
-                    if let Some(e) = s.entries.remove(&key).filter(|e| e.bytes > 0) {
-                        s.resident -= e.bytes;
-                        s.order.remove(&(e.last_use, key));
-                    }
-                }
-            }
-            Ok(chain) => {
-                if current {
-                    let e = s.entries.get_mut(&key).expect("current entry");
-                    if e.bytes == 0 {
-                        e.bytes = chain.bytes;
-                        let last = e.last_use;
-                        s.resident += chain.bytes;
-                        s.order.insert((last, key));
-                    }
-                }
-                s.peak = s.peak.max(s.resident);
-                // Evict least recently used chains (never the one just served).
-                while s.resident > self.budget {
-                    let Some(&(last, oldest)) = s.order.iter().find(|(_, k)| *k != key) else {
-                        break;
-                    };
-                    s.order.remove(&(last, oldest));
-                    let removed = s.entries.remove(&oldest).map_or(0, |e| e.bytes);
-                    s.resident -= removed;
-                }
-            }
-        }
-        result
+        cell.get_or_init(|| {
+            let started = super::error::thread_cpu();
+            let result = (|| {
+                let chain = load()?;
+                let levels = chain
+                    .levels
+                    .into_iter()
+                    .map(|l| self.store.put(scratch, l.width, l.height, l.rgba))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(Arc::new(Chain {
+                    base: chain.base,
+                    levels,
+                    bytes: chain.bytes,
+                }))
+            })();
+            lock(&self.state).load_seconds += super::error::thread_cpu()
+                .zip(started)
+                .map_or(0., |(b, a)| b - a);
+            result
+        })
+        .clone()
     }
 }
 
@@ -716,12 +636,12 @@ pub(crate) fn srgb(v: f64) -> f64 {
 /// and magnification filter apply; minification always uses the colour-correct chain
 /// (the coarse texel represents an area, not a point).
 pub(crate) fn sample(
-    chain: &Chain,
+    chain: &StoredChain,
     class: mips::Class,
     sampler: crops::SourceSampler,
     uv: [f32; 2],
     lod: f64,
-) -> [f64; 4] {
+) -> Result<[f64; 4], JobError> {
     let levels = &chain.levels;
     let top = (levels.len() - 1) as f64;
     let l = if lod.is_finite() {
@@ -733,22 +653,24 @@ pub(crate) fn sample(
     let b = (a + 1).min(levels.len() - 1);
     let f = l - a as f64;
     let nearest = chain.base == 0 && l <= 0. && matches!(sampler.mag_filter, 9728);
-    let fetch = |level: &mips::Level| -> [f64; 4] {
+    let fetch = |level: &crate::mesh_large::image_tiles::Raster| -> Result<[f64; 4], JobError> {
+        let mut reader = level.reader();
         let x = f64::from(uv[0]) * f64::from(level.width) - 0.5;
         let y = f64::from(uv[1]) * f64::from(level.height) - 0.5;
         let lut = linear_lut();
-        let get = |x: i64, y: i64| -> [f64; 4] {
-            let i = (wrap(y, level.height, sampler.wrap_t) * level.width as usize
-                + wrap(x, level.width, sampler.wrap_s))
-                * 4;
-            std::array::from_fn(|c| {
-                let v = level.rgba[i + c];
+        let mut get = |x: i64, y: i64| -> Result<[f64; 4], JobError> {
+            let pixel = reader.pixel(
+                wrap(x, level.width, sampler.wrap_s),
+                wrap(y, level.height, sampler.wrap_t),
+            )?;
+            Ok(std::array::from_fn(|c| {
+                let v = pixel[c];
                 if class == mips::Class::Colour && c < 3 {
                     lut[v as usize]
                 } else {
                     f64::from(v) / 255.
                 }
-            })
+            }))
         };
         if !(x.is_finite() && y.is_finite()) {
             return get(0, 0);
@@ -760,23 +682,23 @@ pub(crate) fn sample(
         let (fx, fy) = (x - x0, y - y0);
         let (x0, y0) = (x0 as i64, y0 as i64);
         let p = [
-            get(x0, y0),
-            get(x0 + 1, y0),
-            get(x0, y0 + 1),
-            get(x0 + 1, y0 + 1),
+            get(x0, y0)?,
+            get(x0 + 1, y0)?,
+            get(x0, y0 + 1)?,
+            get(x0 + 1, y0 + 1)?,
         ];
-        std::array::from_fn(|c| {
+        Ok(std::array::from_fn(|c| {
             let top = p[0][c] + (p[1][c] - p[0][c]) * fx;
             let bottom = p[2][c] + (p[3][c] - p[2][c]) * fx;
             top + (bottom - top) * fy
-        })
+        }))
     };
-    let p = fetch(&levels[a]);
+    let p = fetch(&levels[a])?;
     if b == a || f == 0. {
-        return p;
+        return Ok(p);
     }
-    let q = fetch(&levels[b]);
-    std::array::from_fn(|c| p[c] + (q[c] - p[c]) * f)
+    let q = fetch(&levels[b])?;
+    Ok(std::array::from_fn(|c| p[c] + (q[c] - p[c]) * f))
 }
 
 /// The texture of `slot` in source material `material`: (image, sampler, texcoord set).
@@ -816,55 +738,94 @@ mod tests {
     /// plus the one being served, eviction is least recently used, and a coarser request
     /// is served by a cached finer chain.
     #[test]
-    fn image_cache_stays_bounded_and_evicts_least_recently_used() {
-        let chain = |base: u32| -> Result<Chain, JobError> {
-            Ok(Chain {
-                base,
-                levels: vec![mips::Level {
-                    width: 1,
-                    height: 1,
-                    rgba: vec![0; 4],
-                }],
-                bytes: 100 >> base.min(2),
-            })
-        };
-        let cache = ImageCache::new(300);
+    fn image_cache_scale_decode_count_is_independent_of_access_order() {
+        let scratch = crate::spill::Scratch::create(None, 0).unwrap();
+        let cache = ImageCache::new(256, 32 * 256);
         let loads = std::cell::Cell::new(0);
-        let load = |base: u32| {
-            loads.set(loads.get() + 1);
-            chain(base)
-        };
-        for round in 0..3 {
-            for image in 0..1000 {
-                cache.get_with((image, 0), 0, &load).unwrap();
-                let s = lock(&cache.state);
-                assert!(
-                    s.resident <= 300,
-                    "round {round} image {image}: {}",
-                    s.resident
-                );
+        for round in 0..8 {
+            for image in 0..32 {
+                let chain = cache
+                    .get_with(&scratch, (image, 0), &|| {
+                        loads.set(loads.get() + 1);
+                        Ok(Chain {
+                            base: 0,
+                            levels: vec![mips::Level {
+                                width: 8,
+                                height: 8,
+                                rgba: vec![image as u8; 256],
+                            }],
+                            bytes: 256,
+                        })
+                    })
+                    .unwrap();
                 assert_eq!(
-                    s.order.len(),
-                    s.entries.values().filter(|e| e.bytes > 0).count()
+                    chain.levels[0].materialize().unwrap(),
+                    vec![image as u8; 256]
                 );
             }
+            assert!(loads.get() <= 32, "round {round}: {} loads", loads.get());
+            assert!(cache.stats().peak_resident_bytes <= 256);
         }
-        assert_eq!(
-            loads.get(),
-            3000,
-            "a cyclic scan larger than the cache always misses"
-        );
-        // The three most recent survive; a coarser request is a hit on the finer chain.
-        cache.get_with((999, 0), 2, &load).unwrap();
-        assert_eq!(loads.get(), 3000);
-        cache.get_with((996, 0), 0, &load).unwrap();
-        assert_eq!(
-            loads.get(),
-            3001,
-            "the least recently used chain was evicted"
-        );
-        // Peak: the budget plus the one chain being served before eviction.
-        assert!(cache.stats().peak_resident_bytes <= 400);
+        assert_eq!(cache.stats().scratch_bytes, 32 * 256);
+    }
+
+    #[test]
+    fn tiled_sampling_matches_resident_at_seams_wraps_and_all_lods() {
+        let scratch = crate::spill::Scratch::create(None, 0).unwrap();
+        for class in [
+            mips::Class::Colour,
+            mips::Class::Normal,
+            mips::Class::Data,
+            mips::Class::Id,
+        ] {
+            let build = || {
+                let mut levels = vec![mips::Level {
+                    width: 257,
+                    height: 129,
+                    rgba: (0..257 * 129 * 4)
+                        .map(|i| ((i * 17 + i / 11) % 256) as u8)
+                        .collect(),
+                }];
+                while levels.last().unwrap().width > 1 || levels.last().unwrap().height > 1 {
+                    levels.push(halve(levels.last().unwrap(), class));
+                }
+                Ok(Chain {
+                    base: 0,
+                    bytes: chain_bytes(257, 129),
+                    levels,
+                })
+            };
+            let bound = chain_bytes(257, 129);
+            let resident = ImageCache::new(bound, bound);
+            let tiled = ImageCache::new(66048, bound);
+            let a = resident.get_with(&scratch, (0, 0), &build).unwrap();
+            let b = tiled.get_with(&scratch, (0, 0), &build).unwrap();
+            for wrap in [10497, 33648, 33071] {
+                for filter in [9728, 9729] {
+                    let sampler = crops::SourceSampler {
+                        wrap_s: wrap,
+                        wrap_t: wrap,
+                        min_filter: 9987,
+                        mag_filter: filter,
+                    };
+                    for lod in [0., 0.25, 1., 2.7, 7., 8., 30.] {
+                        for uv in [
+                            [0., 0.],
+                            [-0.1, 1.1],
+                            [0.499, 0.999],
+                            [0.5, 0.5],
+                            [0.999, 0.01],
+                        ] {
+                            assert_eq!(
+                                sample(&a, class, sampler, uv, lod).unwrap(),
+                                sample(&b, class, sampler, uv, lod).unwrap()
+                            );
+                        }
+                    }
+                }
+            }
+            assert!(tiled.stats().peak_resident_bytes <= 66048);
+        }
     }
 
     #[test]
@@ -880,9 +841,14 @@ mod tests {
             rgba,
         };
         let next = halve(&base, mips::Class::Colour);
+        let scratch = crate::spill::Scratch::create(None, 0).unwrap();
+        let store = crate::mesh_large::image_tiles::Store::new(100, 100);
         let chain = Chain {
             base: 0,
-            levels: vec![base, next],
+            levels: vec![base, next]
+                .into_iter()
+                .map(|l| store.put(&scratch, l.width, l.height, l.rgba).unwrap())
+                .collect(),
             bytes: 0,
         };
         let s = crops::SourceSampler {
@@ -891,11 +857,14 @@ mod tests {
             min_filter: 9729,
             mag_filter: 9729,
         };
-        let v = sample(&chain, mips::Class::Colour, s, [0.25, 0.25], 0.);
+        let v = sample(&chain, mips::Class::Colour, s, [0.25, 0.25], 0.).unwrap();
         assert!(v[0] < 1e-9);
         // Repeat wrap: u = 1.25 is u = 0.25.
-        assert_eq!(sample(&chain, mips::Class::Colour, s, [1.25, 0.25], 0.), v);
-        let mean = sample(&chain, mips::Class::Colour, s, [0.3, 0.7], 1.);
+        assert_eq!(
+            sample(&chain, mips::Class::Colour, s, [1.25, 0.25], 0.).unwrap(),
+            v
+        );
+        let mean = sample(&chain, mips::Class::Colour, s, [0.3, 0.7], 1.).unwrap();
         assert!((mean[0] - 0.5).abs() < 0.01, "{mean:?}");
     }
 }

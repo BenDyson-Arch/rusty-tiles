@@ -63,6 +63,7 @@ pub(crate) struct Phases<'a> {
     emit: Option<&'a Emit<'a>>,
     started: Instant,
     seconds: Mutex<PhaseSeconds>,
+    cpu: Mutex<(Option<f64>, PhaseSeconds)>,
 }
 impl<'a> Phases<'a> {
     pub(crate) fn new(emit: &'a Emit<'a>) -> Self {
@@ -78,6 +79,10 @@ impl<'a> Phases<'a> {
             emit,
             started: Instant::now(),
             seconds: Mutex::new(PhaseSeconds::default()),
+            cpu: Mutex::new((
+                super::resources::process_cpu_seconds(),
+                PhaseSeconds::default(),
+            )),
         }
     }
     fn lock(&self) -> std::sync::MutexGuard<'_, PhaseSeconds> {
@@ -110,6 +115,16 @@ impl<'a> Phases<'a> {
     }
     /// A finished phase: add its wall seconds and log them.
     pub(crate) fn finished(&self, phase: Phase, seconds: f64) -> Result<(), JobError> {
+        // Process CPU includes all workers and the admission work between phases.
+        let now = super::resources::process_cpu_seconds();
+        {
+            let mut cpu = self.cpu.lock().unwrap_or_else(|e| e.into_inner());
+            if let (Some(start), Some(end)) = (cpu.0, now) {
+                *cpu.1.slot(phase) += (end - start).max(0.);
+            }
+            cpu.0 = now;
+        }
+
         let total = {
             let mut state = self.lock();
             let slot = state.slot(phase);
@@ -127,6 +142,10 @@ impl<'a> Phases<'a> {
     }
     pub(crate) fn elapsed(&self) -> f64 {
         self.started.elapsed().as_secs_f64()
+    }
+    pub(crate) fn cpu_seconds(&self) -> Option<PhaseSeconds> {
+        let cpu = self.cpu.lock().unwrap_or_else(|e| e.into_inner());
+        cpu.0.map(|_| cpu.1.clone())
     }
     pub(crate) fn seconds(&self) -> PhaseSeconds {
         self.lock().clone()

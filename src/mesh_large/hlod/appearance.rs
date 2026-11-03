@@ -912,7 +912,8 @@ fn bake_pages(
                     let i = i as usize;
                     let hit = &q.hits[i];
                     let (_, sampler, set) = bindings[&(hit.material, slot_order(slot))].unwrap();
-                    let value = bake::sample(&chain, source_class(slot), sampler, hit.uv[set], lod);
+                    let value =
+                        bake::sample(&chain, source_class(slot), sampler, hit.uv[set], lod)?;
                     let frame = (slot == TextureSlot::Normal).then(|| {
                         let (_, gf, w) = chunk[i];
                         let face = tile.triangles[p.layout_face(gf)];

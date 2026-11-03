@@ -11,6 +11,7 @@ mod delivery;
 mod full;
 #[allow(dead_code)] // HLOD item cleanup deferred to its concurrent owner; see cleanup evidence.
 mod hlod;
+mod image_tiles;
 mod images;
 mod input;
 mod leaves;

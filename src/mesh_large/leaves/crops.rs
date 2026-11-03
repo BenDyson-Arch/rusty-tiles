@@ -571,6 +571,7 @@ fn tap(i: i64, n: u32, wrap: u32) -> Result<u32, JobError> {
     };
     Ok(v as u32)
 }
+#[cfg(test)]
 pub(crate) fn copy_crop(
     source_rgba: &[u8],
     source_width: u32,
@@ -578,6 +579,45 @@ pub(crate) fn copy_crop(
     crop: &Crop,
     sampler: SourceSampler,
     memory_limit: u64,
+) -> Result<Vec<u8>, JobError> {
+    if source_rgba.len() as u64 != u64::from(source_width) * u64::from(source_height) * 4 {
+        return Err(invalid("source RGBA shape"));
+    }
+    copy_crop_pixels(
+        source_width,
+        source_height,
+        crop,
+        sampler,
+        memory_limit,
+        |x, y| {
+            let i = (y * source_width as usize + x) * 4;
+            Ok(source_rgba[i..i + 4].try_into().expect("pixel"))
+        },
+    )
+}
+pub(crate) fn copy_crop_tiled(
+    source: &crate::mesh_large::image_tiles::Raster,
+    crop: &Crop,
+    sampler: SourceSampler,
+    memory_limit: u64,
+) -> Result<Vec<u8>, JobError> {
+    let mut reader = source.reader();
+    copy_crop_pixels(
+        source.width,
+        source.height,
+        crop,
+        sampler,
+        memory_limit,
+        |x, y| reader.pixel(x, y),
+    )
+}
+fn copy_crop_pixels(
+    source_width: u32,
+    source_height: u32,
+    crop: &Crop,
+    sampler: SourceSampler,
+    memory_limit: u64,
+    mut pixel: impl FnMut(usize, usize) -> Result<[u8; 4], JobError>,
 ) -> Result<Vec<u8>, JobError> {
     validate_crop(crop)?;
     if source_width == 0 || source_height == 0 {
@@ -590,9 +630,7 @@ pub(crate) fn copy_crop(
             .ok_or_else(resource)
     };
     let source_bytes = bytes(source_width, source_height)?;
-    if u64::try_from(source_rgba.len()).map_err(|_| resource())? != source_bytes {
-        return Err(invalid("source RGBA shape"));
-    }
+    let _ = source_bytes;
     let count = bytes(crop.width, crop.height)?;
     if count > memory_limit {
         return Err(resource());
@@ -616,12 +654,10 @@ pub(crate) fn copy_crop(
                 source_width,
                 sampler.wrap_s,
             )?;
-            let src =
-                usize::try_from((u64::from(sy) * u64::from(source_width) + u64::from(sx)) * 4)
-                    .map_err(|_| resource())?;
+
             let dst = usize::try_from((u64::from(y) * u64::from(crop.width) + u64::from(x)) * 4)
                 .map_err(|_| resource())?;
-            out[dst..dst + 4].copy_from_slice(&source_rgba[src..src + 4]);
+            out[dst..dst + 4].copy_from_slice(&pixel(sx as usize, sy as usize)?);
         }
     }
     Ok(out)

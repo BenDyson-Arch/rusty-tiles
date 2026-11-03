@@ -4,7 +4,7 @@ use super::super::{
     config::{Profile, TILE_BYTES},
     full::FullCaptured,
 };
-use super::schedule::{Decoded, MemoryGate, SourceCache};
+use super::schedule::{Decoded, MemoryGate, SourceCache, Stored};
 use super::{
     crops::{self, Block, Crop, SourceSampler, CLAMP},
     delivery::{self, MaskDelivery},
@@ -500,23 +500,25 @@ fn source_image(
     services: &Services<'_>,
     index: usize,
     check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<Arc<Decoded>, JobError> {
-    services.cache.get((index, 0), || {
-        let snapshot = services.captured.images.get(index).ok_or_else(invariant)?;
-        let encoded = timing::time(Stage::SourceReconstruct, || snapshot.reconstruct(check))?;
-        let (info, rgba) = timing::time(Stage::SourceDecode, || {
-            source::decode_image_admitted(
-                &encoded,
-                snapshot.identity.mime.as_deref(),
-                source::DecodeAdmission::LARGE_MESH,
-                &mut || check(),
-            )
-        })?;
-        Ok(Decoded {
-            size: [info.width, info.height],
-            rgba,
+) -> Result<Arc<Stored>, JobError> {
+    services
+        .cache
+        .get(&services.captured.scratch, (index, 0), || {
+            let snapshot = services.captured.images.get(index).ok_or_else(invariant)?;
+            let encoded = timing::time(Stage::SourceReconstruct, || snapshot.reconstruct(check))?;
+            let (info, rgba) = timing::time(Stage::SourceDecode, || {
+                source::decode_image_admitted(
+                    &encoded,
+                    snapshot.identity.mime.as_deref(),
+                    source::DecodeAdmission::LARGE_MESH,
+                    &mut || check(),
+                )
+            })?;
+            Ok(Decoded {
+                size: [info.width, info.height],
+                rgba,
+            })
         })
-    })
 }
 
 fn density_image(
@@ -525,11 +527,12 @@ fn density_image(
     slot: TextureSlot,
     drop: u32,
     check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<Arc<Decoded>, JobError> {
+) -> Result<Arc<Stored>, JobError> {
     if drop == 0 {
         return source_image(services, index, check);
     }
     let original = source_image(services, index, check)?;
+    let drop = drop.min(31 - original.size[0].max(original.size[1]).leading_zeros());
     // The density level depends on the image's class; key it by slot class.
     let class_key = match class(slot) {
         Class::Colour => 0,
@@ -537,34 +540,35 @@ fn density_image(
         Class::Data => 2,
         Class::Id => 3,
     };
-    services.cache.get((index, drop * 4 + class_key), || {
-        let memory = usize::try_from(services.memory).map_err(|_| resource())?;
-        let mut chain = timing::time(Stage::DensityMips, || {
-            mips::build(
-                original.size[0],
-                original.size[1],
-                original.rgba.clone(),
-                class(slot),
-                None,
-                memory,
-            )
-        })?;
-        let index = (drop as usize).min(chain.levels.len() - 1);
-        let level = chain.levels.swap_remove(index);
-        Ok(Decoded {
-            size: [level.width, level.height],
-            rgba: level.rgba,
+    if drop == 0 {
+        return Ok(original);
+    }
+    services
+        .cache
+        .density(&services.captured.scratch, (index, class_key), drop, || {
+            let memory = usize::try_from(services.memory).map_err(|_| resource())?;
+            timing::time(Stage::DensityMips, || {
+                mips::build(
+                    original.size[0],
+                    original.size[1],
+                    original.rgba.materialize()?,
+                    class(slot),
+                    None,
+                    memory,
+                )
+            })
+            .map(|chain| chain.levels)
         })
-    })
 }
 
 fn source_alpha(
-    rgba: &[u8],
+    rgba: &crate::mesh_large::image_tiles::Raster,
     size: [u32; 2],
     uv: [f64; 2],
     sampler: SourceSampler,
     linear: bool,
-) -> f64 {
+) -> Result<f64, JobError> {
+    let mut reader = rgba.reader();
     let wrap = |i: i64, n: u32, w: u32| {
         let n = i64::from(n);
         (match w {
@@ -580,13 +584,13 @@ fn source_alpha(
             _ => i.clamp(0, n - 1),
         }) as usize
     };
-    let tap = |x: i64, y: i64| {
-        f64::from(
-            rgba[(wrap(y, size[1], sampler.wrap_t) * size[0] as usize
-                + wrap(x, size[0], sampler.wrap_s))
-                * 4
-                + 3],
-        ) / 255.
+    let mut tap = |x: i64, y: i64| -> Result<f64, JobError> {
+        Ok(f64::from(
+            reader.pixel(
+                wrap(x, size[0], sampler.wrap_s),
+                wrap(y, size[1], sampler.wrap_t),
+            )?[3],
+        ) / 255.)
     };
     let x = uv[0] * f64::from(size[0]);
     let y = uv[1] * f64::from(size[1]);
@@ -599,8 +603,10 @@ fn source_alpha(
     let iy = y.floor() as i64;
     let fx = x - ix as f64;
     let fy = y - iy as f64;
-    (tap(ix, iy) * (1. - fx) + tap(ix + 1, iy) * fx) * (1. - fy)
-        + (tap(ix, iy + 1) * (1. - fx) + tap(ix + 1, iy + 1) * fx) * fy
+    Ok(
+        (tap(ix, iy)? * (1. - fx) + tap(ix + 1, iy)? * fx) * (1. - fy)
+            + (tap(ix, iy + 1)? * (1. - fx) + tap(ix + 1, iy + 1)? * fx) * fy,
+    )
 }
 /// Sixteen equal-area subtriangle centroids; geometric multiplicity is retained.
 fn barycentrics() -> Vec<[f64; 3]> {
@@ -626,7 +632,7 @@ fn samples(
     b: &Binding,
     lattice: &LatticePlan,
     depth: u8,
-    source: &[u8],
+    source: &crate::mesh_large::image_tiles::Raster,
     source_size: [u32; 2],
     (factor, cutoff): (f64, f64),
 ) -> Result<Vec<SurfaceSample>, JobError> {
@@ -685,7 +691,7 @@ fn samples(
                 uv: output,
                 alpha,
                 weight: area / 16.,
-                source_pass: source_alpha(source, source_size, uv, b.sampler, linear)
+                source_pass: source_alpha(source, source_size, uv, b.sampler, linear)?
                     * alpha
                     * factor
                     >= cutoff,
@@ -1082,6 +1088,7 @@ fn page_charge(
     codec
         .checked_add(assembly)
         .and_then(|n| n.checked_add(decode))
+        .and_then(|n| n.checked_add(2 * crate::mesh_large::image_tiles::READER_BYTES))
         .ok_or_else(resource)
 }
 
@@ -1247,8 +1254,7 @@ fn encode_page(
                         b.offset[0] + island.offset[0],
                         b.offset[1] + island.offset[1],
                     ];
-                    let copied =
-                        crops::copy_crop(&source.rgba, size[0], size[1], crop, b.sampler, memory)?;
+                    let copied = crops::copy_crop_tiled(&source.rgba, crop, b.sampler, memory)?;
                     // The island's spans of crop texels: its mask cells (other islands may
                     // interlock into the rest of its rectangle), or the whole crop.
                     let spans: Vec<(u32, u32, u32)> = match &island.mask {

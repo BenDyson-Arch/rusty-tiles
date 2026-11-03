@@ -314,18 +314,17 @@ pub(crate) fn stage_plan(
     captured: &full::FullCaptured,
 ) -> Result<StagePlan, JobError> {
     let requested = config.jobs;
-    let total_source = captured
-        .image_info
-        .iter()
-        .try_fold(0u64, |n, i| {
-            n.checked_add(u64::from(i.width) * u64::from(i.height) * 4)
-        })
-        .ok_or_else(|| resource("leaf source byte overflow"))?;
+    let total_source = super::super::image_tiles::bound(captured, true);
     let global_bytes = captured
         .report
         .memory
         .owned_metadata_bytes
         .checked_add(captured.report.memory.geometry.document_bytes)
+        .and_then(|n| {
+            n.checked_add(
+                captured.images.len() as u64 * super::super::image_tiles::IMAGE_METADATA_BYTES,
+            )
+        })
         .ok_or_else(|| resource("leaf global ownership overflow"))?;
     // The largest page lease any leaf's delivery takes, from the same physical
     // crop/packing projection final preparation uses (page assembly, codec, sampler
@@ -344,7 +343,12 @@ pub(crate) fn stage_plan(
         .checked_add(2 * TILE_BYTES)
         .ok_or_else(|| resource("leaf ownership overflow"))?;
     let tmpfs = if captured.scratch.memory_backed() {
-        captured.report.scratch.need_bytes
+        captured
+            .report
+            .scratch
+            .need_bytes
+            .saturating_add(total_source)
+            .saturating_add(super::super::image_tiles::file_rounding(captured))
     } else {
         0
     };
@@ -730,7 +734,23 @@ pub(crate) fn produce(
         .thread_name(|i| format!("rt-leaf-{i}"))
         .build()
         .map_err(|e| resource(&format!("delivery worker pool: {e}")))?;
-    let cache = SourceCache::new(stage.cache_bytes);
+    let image_bound = super::super::image_tiles::bound(captured, true);
+    let image_scratch_bound = if image_bound <= stage.cache_bytes {
+        0
+    } else {
+        image_bound
+    };
+    let image_scratch_bound =
+        image_scratch_bound.saturating_add(super::super::image_tiles::file_rounding(captured));
+    crate::spill::preflight(
+        captured.scratch.path(),
+        image_scratch_bound,
+        crate::spill::SpaceRole::Scratch,
+        crate::spill::PreflightStage::Texture,
+    )?;
+    let image_scratch_base = captured.scratch.live_bytes();
+    captured.scratch.begin_stage();
+    let cache = SourceCache::new(stage.cache_bytes, image_bound);
     let gate = MemoryGate::new(stage.gate_bytes);
     // Set when the ordered writer stops: queued leaves then end promptly.
     let stopped = AtomicBool::new(false);
@@ -849,6 +869,10 @@ pub(crate) fn produce(
     // observations, then release the decoded images and the pool before its own
     // admission takes effect (the gate and services own no memory).
     let stats = cache.stats();
+    let image_scratch_peak = captured.scratch.stage_peak_bytes();
+    if image_scratch_peak > image_scratch_base.saturating_add(image_scratch_bound) {
+        return Err(resource("leaf image scratch exceeded admission"));
+    }
     let gate_peak = gate.peak();
     drop(cache);
     drop(pool);
@@ -896,6 +920,11 @@ pub(crate) fn produce(
             cache_peak_resident_bytes: stats.peak_resident_bytes,
             cache_hits: stats.hits,
             cache_misses: stats.misses,
+            image_scratch_bound_bytes: image_scratch_base.saturating_add(image_scratch_bound),
+            image_scratch_peak_bytes: image_scratch_peak,
+            image_scratch_bytes: stats.scratch_bytes,
+            source_decode_count: stats.decode_count,
+            timing: leaf_timing,
             hlod_incidence_scratch_peak_bytes: hlod_diagnostics.incidence_scratch_peak_bytes,
         },
         hlod: hlod_diagnostics,
@@ -918,6 +947,11 @@ pub struct LeafStageDiagnostics {
     pub cache_peak_resident_bytes: u64,
     pub cache_hits: u64,
     pub cache_misses: u64,
+    pub image_scratch_bound_bytes: u64,
+    pub image_scratch_peak_bytes: u64,
+    pub image_scratch_bytes: u64,
+    pub source_decode_count: u64,
+    pub timing: Option<serde_json::Value>,
     /// Measured scratch peak of the HLOD incidence pass, retained capture files included.
     pub hlod_incidence_scratch_peak_bytes: u64,
 }
