@@ -51,7 +51,7 @@ fn committed_path() -> std::path::PathBuf {
     support::repo_root().join("tests/fixtures/output_digests.json")
 }
 
-fn assert_etc1s_colour(path: &Path) {
+fn assert_uastc_colour(path: &Path) {
     let mut archive = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
     let mut pages = 0;
     for i in 0..archive.len() {
@@ -69,7 +69,12 @@ fn assert_etc1s_colour(path: &Path) {
             let start = 28 + json_len + view["byteOffset"].as_u64().unwrap_or(0) as usize;
             let ktx = &glb[start..];
             let dfd = u32::from_le_bytes(ktx[48..52].try_into().unwrap()) as usize;
-            assert_eq!(ktx[dfd + 12], 163, "balanced golden must exercise ETC1S");
+            assert_eq!(ktx[dfd + 12], 166, "balanced golden must exercise UASTC");
+            assert_eq!(
+                u32::from_le_bytes(ktx[44..48].try_into().unwrap()),
+                2,
+                "UASTC must use zstd"
+            );
             pages += 1;
         }
     }
@@ -90,7 +95,7 @@ fn produce(inputs: &Path, outputs: &Path) -> Digests {
         let path = outputs.join(recipe.output);
         let mut entries = digests(&path, recipe.vector);
         if recipe.name == "mesh-balanced" {
-            assert_etc1s_colour(&path);
+            assert_uastc_colour(&path);
             // One complete default-lossy archive is pinned in addition to its
             // entry digests/order. The recipe deliberately omits --profile.
             entries.insert(
@@ -128,10 +133,14 @@ fn first_difference(
 #[test]
 fn outputs_match_committed_digests() {
     let work = tempfile::tempdir().unwrap();
-    let inputs = work.path().join("inputs");
+    // Retain actual recipes for semantic review of intentional digest changes.
+    let root = std::env::var_os("RT_OUTPUT_DIGEST_EVIDENCE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| work.path().to_owned());
+    let inputs = root.join("inputs");
     write_inputs(&inputs);
-    let produced = produce(&inputs, &work.path().join("first"));
-    let again = produce(&inputs, &work.path().join("second"));
+    let produced = produce(&inputs, &root.join("first"));
+    let again = produce(&inputs, &root.join("second"));
     let unstable: Vec<String> = produced
         .iter()
         .filter_map(|(name, want)| first_difference(name, want, &again[name]))

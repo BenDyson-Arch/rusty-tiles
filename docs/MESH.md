@@ -350,17 +350,28 @@ codec step can deliver within its gates falls back to the same exact PNG, with
 viewer-generated mips outside the guarantee (see the encoder ladder below). Leaf coordinate
 encoding and provenance still follow the tiler contract.
 
-Colour-class pages (base colour and emissive), in **both leaves and coarse
-tiles**, use the following initial codec. The single policy owner is
-`src/mesh_large/leaves/delivery.rs::codec_settings`; coarse delivery calls it
-through the shared authored-chain encoder.
+Colour-class leaf pages (base colour and emissive) in `balanced` (the default)
+use **KTX2 UASTC level 0 + Zstd**, without RDO, following the owner's
+2026-11-03 decision. Coarse tiles keep ETC1S quality 90/effort 0. MASK pages
+keep their existing codec and coverage policy: the measurement covers opaque
+colour fidelity, not alpha coverage. The shared delivery encoder resolves the
+leaf/coarse policy at its owning boundary.
 
-| Profile | Colour codec | ETC1S quality / effort |
+| Profile | Leaf colour codec | Coarse colour codec |
 | --- | --- | --- |
-| `fast` | KTX2 ETC1S (BasisLZ) | 50 / 0 (lean) |
-| `balanced` (default) | KTX2 ETC1S (BasisLZ) | 90 / 0 (good) |
-| `quality` | KTX2 UASTC + Zstd | unchanged |
-| `lossless` | PNG | unchanged |
+| `fast` | ETC1S quality 50 / effort 0 | ETC1S quality 50 / effort 0 |
+| `balanced` (default) | UASTC level 0 + Zstd | ETC1S quality 90 / effort 0 |
+| `quality` | UASTC + Zstd (unchanged) | UASTC + Zstd (unchanged) |
+| `lossless` | PNG | PNG |
+
+The [Walem leaf measurement](../bench/architecture_audit/leaf_uastc/README.md)
+measured 35.83 dB / 0.9432 SSIM for delivered ETC1S versus 46.08 dB /
+0.9956 for UASTC0 + Zstd against the bake input. Projected all-leaf bytes
+increase from 531.9 MB to 753.0 MB; this does not recover detail removed
+before baking. Higher pack levels offer little additional source fidelity.
+Existing per-mip quality, decode, MASK and source-sampler gates and escalation
+remain in force. The existing UASTC-specific decode floors apply automatically;
+shared profile/class floors remain conservative minima, with no relaxation.
 
 Quality uses the wrapper's 1–100 scale; effort 0 maps to native ETC1S
 compression level 0. The initial effort-3 setting mapped to native level 2;
@@ -370,7 +381,7 @@ sRGB with class-correct authored mips. Normal and metallic-roughness remain UAST
 occlusion remains scalar ETC1S q90/effort 0 in fast/balanced and UASTC in
 quality. ID pages remain exact PNG in every profile.
 
-The processing tradeoff is explicit: the matched two-worker tex3 sweep took
+The earlier ETC1S processing tradeoff (before the leaf amendment): the matched two-worker tex3 sweep took
 47.1/56.5 CPU-s for fast/balanced ETC1S, versus 16.1/18.2 CPU-s for their
 previous UASTC pack 0 codec. Effort 0 cuts the initial effort 3 cost substantially
 and balanced meets the 91.2 CPU-s quality-reference budget, while costing about

@@ -1193,6 +1193,7 @@ fn encode_page(
     check()?;
     let ladder = delivery::Ladder {
         check: services.check,
+        tier: delivery::Tier::Leaf,
     };
     let _permit = services.gate.acquire(page_charge(
         page,

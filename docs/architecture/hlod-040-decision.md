@@ -337,6 +337,19 @@ penalty and preserve spatial streaming. **Evidence:** E2, E3, C/H28 and mesh gui
 
 ### D7 — KTX2/mips and presets
 
+**Owner amendment, 2026-11-03:** balanced/default opaque leaf colour and
+base-colour pages use UASTC pack level 0 with Zstd, without RDO. Coarse policy
+is unchanged, as are fast/quality/lossless and non-colour/MASK policies. The
+[Walem measurement](../../bench/architecture_audit/leaf_uastc/README.md) found
+46.08 dB / 0.9956 SSIM against input versus ETC1S's 35.83 dB / 0.9432;
+projected leaf bytes rise 531.9 → 753.0 MB at about 136 encode CPU seconds.
+The max-honest-G floor remains 5/12; the input's prior resolution reduction
+remains the main loss. Keep all decoded quality and sampler gates, including
+existing conservative floors; they remain acceptance minima, not codec targets.
+Page planning and leases already cover the full UASTC escalation ladder and
+worst-case retained delivery bytes; the default must use those same bounds.
+This supersedes only the balanced leaf-colour part of the following amendment.
+
 **Owner amendment, 2026-10-24:** bring the colour default forward independently
 of S8: fast uses ETC1S quality 50 (lean), balanced uses quality 90 (good), both
 at effort 0 after the processing-cost sweep (initially 3), for leaf and coarse

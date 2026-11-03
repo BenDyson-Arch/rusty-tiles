@@ -98,6 +98,7 @@ pub(crate) struct Escalation {
 /// Page-owned ladder facts, resolved by the atlas.
 #[derive(Clone, Copy)]
 pub(in crate::mesh_large) struct Ladder<'a> {
+    pub tier: Tier,
     /// Run cancellation, polled before every re-encode.
     pub check: &'a dyn Fn() -> Result<(), JobError>,
 }
@@ -105,9 +106,17 @@ pub(in crate::mesh_large) struct Ladder<'a> {
 fn no_check() -> Result<(), JobError> {
     Ok(())
 }
-/// Tests: a page that is never cancelled.
+/// Page owner: coarse keeps its existing codec policy.
+#[derive(Clone, Copy)]
+pub(in crate::mesh_large) enum Tier {
+    Leaf,
+    Coarse,
+}
 #[cfg(test)]
-pub(super) const LADDER: Ladder<'static> = Ladder { check: &no_check };
+pub(super) const LADDER: Ladder<'static> = Ladder {
+    check: &no_check,
+    tier: Tier::Leaf,
+};
 /// A typed gate refusal becomes a ladder miss; every other error stays hard.
 fn missed(error: JobError, step: Step, mip: Option<usize>) -> Result<GateMiss, JobError> {
     if error.kind() == JobErrorKind::Unsupported {
@@ -591,6 +600,21 @@ pub(in crate::mesh_large) fn codec_settings(
     slot: TextureSlot,
     profile: Profile,
 ) -> (codec::Mode, codec::Params) {
+    let (mode, params) = coarse_codec_settings(slot, profile);
+    if class(slot) == Class::Colour && profile == Profile::Balanced {
+        (
+            codec::Mode::Uastc { zstd: true },
+            codec::Params {
+                effort: 0,
+                ..params
+            },
+        )
+    } else {
+        (mode, params)
+    }
+}
+/// Retained HLOD policy; also used for MASK pages, outside the colour measurement.
+fn coarse_codec_settings(slot: TextureSlot, profile: Profile) -> (codec::Mode, codec::Params) {
     let scalar = scalar_occlusion(slot, profile);
     // Quality's effort of 2 is deliberately not pinned by a test: lowering it
     // only changes encoder time and size, while every output is still held to
@@ -633,7 +657,18 @@ pub(super) fn step_settings(
     profile: Profile,
     step: Step,
 ) -> Result<(codec::Mode, codec::Params), JobError> {
-    let (mode, params) = codec_settings(slot, profile);
+    step_settings_for(Tier::Leaf, slot, profile, step)
+}
+fn step_settings_for(
+    tier: Tier,
+    slot: TextureSlot,
+    profile: Profile,
+    step: Step,
+) -> Result<(codec::Mode, codec::Params), JobError> {
+    let (mode, params) = match tier {
+        Tier::Leaf => codec_settings(slot, profile),
+        Tier::Coarse => coarse_codec_settings(slot, profile),
+    };
     let effort = match step {
         Step::Profile => return Ok((mode, params)),
         Step::UastcLevel2 => 5,
@@ -671,6 +706,9 @@ pub(in crate::mesh_large) fn workspace_charge(
         w = (w / 2).max(1);
         h = (h / 2).max(1);
     }
+    // Worst-case ladder lease, including UASTC + zstd, irrespective of the
+    // initial codec. Planning and delivery both use this bound; never charge
+    // an ETC1S compression ratio here (D8 / #314).
     let borrowed = base.checked_mul(8).ok_or_else(resource)?;
     let charge = if profile == Profile::Lossless {
         base.checked_mul(32)
@@ -992,6 +1030,12 @@ fn escalate(
     if charge > memory_limit {
         return Err(resource());
     }
+    // MASK appearance was not measured by the colour-only Walem study.
+    let tier = if mask.is_some() {
+        Tier::Coarse
+    } else {
+        ladder.tier
+    };
     let mut prepared = prepare_levels(chain, mask)?;
     let scalar = scalar_occlusion(slot, profile);
     let mut misses = Vec::new();
@@ -1031,6 +1075,7 @@ fn escalate(
             profile,
             step,
             (mask, rrr, charge),
+            tier,
             &mut validate,
             tamper,
             &mut witnesses,
@@ -1189,6 +1234,7 @@ fn lossy_step(
     profile: Profile,
     step: Step,
     (mask, scalar, charge): (Option<MaskDelivery<'_>>, bool, u64),
+    tier: Tier,
     validate: &mut impl FnMut(&[mips::Level]) -> Result<Value, JobError>,
     tamper: Tamper<'_>,
     witnesses: &mut Vec<(usize, Vec<u32>)>,
@@ -1204,7 +1250,7 @@ fn lossy_step(
             height: level.height,
         });
     }
-    let (mode, params) = step_settings(slot, profile, step)?;
+    let (mode, params) = step_settings_for(tier, slot, profile, step)?;
     let effort = params.effort;
     // The codec's verification runs in full at every step; a decoded-level
     // floor miss is a ladder miss like a gate miss, never accepted.
@@ -1678,8 +1724,8 @@ mod tests {
             }
         }
     }
-    /// Colour and scalar occlusion use ETC1S in fast/balanced; quality,
-    /// normal and metallic-roughness use UASTC. Read from the output KTX2 DFD
+    /// Fast colour and fast/balanced scalar occlusion use ETC1S; balanced
+    /// colour, quality, normal and metallic-roughness use UASTC. Read from the output KTX2 DFD
     /// colour model itself (basic block word 2, byte 0): 163 is ETC1S, 166 is UASTC.
     #[test]
     fn occlusion_is_scalar_etc1s_except_in_quality() {
@@ -1718,7 +1764,7 @@ mod tests {
                     out.bytes[dfd + 12],
                     if scalar
                         || (matches!(slot, TextureSlot::BaseColor | TextureSlot::Emissive)
-                            && profile != Profile::Quality)
+                            && profile == Profile::Fast)
                     {
                         ETC1S
                     } else {
@@ -2150,11 +2196,20 @@ mod tests {
     }
 
     #[test]
-    fn etc1s_colour_policy_and_sensitive_controls() {
+    fn colour_policy_and_sensitive_controls() {
         for (profile, quality) in [(Profile::Fast, 50), (Profile::Balanced, 90)] {
             for slot in [TextureSlot::BaseColor, TextureSlot::Emissive] {
                 let (mode, params) = codec_settings(slot, profile);
-                assert_eq!(mode, codec::Mode::Etc1s { quality });
+                let expected = if profile == Profile::Balanced {
+                    codec::Mode::Uastc { zstd: true }
+                } else {
+                    codec::Mode::Etc1s { quality }
+                };
+                assert_eq!(mode, expected);
+                assert_eq!(
+                    coarse_codec_settings(slot, profile).0,
+                    codec::Mode::Etc1s { quality }
+                );
                 assert_eq!(params.effort, 0);
                 assert_eq!(params.transfer, codec::Transfer::Srgb);
                 let edge = 64;
@@ -2772,7 +2827,10 @@ mod tests {
             polls.set(polls.get() + 1);
             Err(JobError::new(JobErrorKind::Cancelled, "cancelled"))
         };
-        let ladder = Ladder { check: &cancelled };
+        let ladder = Ladder {
+            check: &cancelled,
+            tier: Tier::Leaf,
+        };
         let rgba = hard_block_page(128, 10);
         let error = encode(
             [128; 2],
@@ -2857,33 +2915,48 @@ mod tests {
         assert!(refused
             .message()
             .contains("detail does not follow the input"));
-        // ETC1S retains its own corruption floor; this witness instead misses
-        // the colour-class gate and is delivered at UASTC level 2.
-        let out = encode(
-            [edge as u32; 2],
-            &rgba,
-            &vec![1; edge * edge],
-            TextureSlot::BaseColor,
-            profile,
-            MEMORY,
-            None,
-            LADDER,
-        )
-        .unwrap();
-        let escalation = out.escalation.as_ref().unwrap();
-        assert_eq!(escalation.step, Step::UastcLevel2);
-        assert_eq!(escalation.misses.len(), 1);
-        let miss = &escalation.misses[0];
-        assert_eq!(
-            (miss.step, miss.mip, miss.reason),
-            (Step::Profile, Some(0), MissReason::Gate)
-        );
-        assert!(miss.gate.contains("PSNR"), "{miss:?}");
-        // The delivered step passes the codec's own verification and the run gates.
-        let (mode, params) =
-            step_settings(TextureSlot::BaseColor, profile, Step::UastcLevel2).unwrap();
-        codec::verify_ktx2_mips(&out.bytes, &levels, mode, params).unwrap();
-        independently_gated(&out, &chain, profile);
+        for tier in [Tier::Leaf, Tier::Coarse] {
+            // The same witness exercises codec verification for the UASTC leaf
+            // default and the retained ETC1S class gate for coarse delivery.
+            let out = encode(
+                [edge as u32; 2],
+                &rgba,
+                &vec![1; edge * edge],
+                TextureSlot::BaseColor,
+                profile,
+                MEMORY,
+                None,
+                Ladder { tier, ..LADDER },
+            )
+            .unwrap();
+            let escalation = out.escalation.as_ref().unwrap();
+            assert_eq!(escalation.step, Step::UastcLevel2);
+            assert_eq!(escalation.misses.len(), 1);
+            let miss = &escalation.misses[0];
+            assert_eq!(
+                (miss.step, miss.mip, miss.reason),
+                (
+                    Step::Profile,
+                    Some(0),
+                    match tier {
+                        Tier::Leaf => MissReason::CodecVerify,
+                        Tier::Coarse => MissReason::Gate,
+                    }
+                )
+            );
+            assert!(
+                match tier {
+                    Tier::Leaf => miss.gate.contains("detail does not follow the input"),
+                    Tier::Coarse => miss.gate.contains("PSNR"),
+                },
+                "{miss:?}"
+            );
+            // The delivered step passes the codec's own verification and the run gates.
+            let (mode, params) =
+                step_settings(TextureSlot::BaseColor, profile, Step::UastcLevel2).unwrap();
+            codec::verify_ktx2_mips(&out.bytes, &levels, mode, params).unwrap();
+            independently_gated(&out, &chain, profile);
+        }
     }
     #[test]
     fn doomed_uastc_steps_are_decided_by_block_probes() {
@@ -2985,6 +3058,7 @@ mod tests {
                     profile,
                     step,
                     (None, false, 0),
+                    Tier::Leaf,
                     &mut |_| Ok(Value::Null),
                     &|_, _, _| {},
                     sink,
