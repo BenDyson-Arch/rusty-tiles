@@ -110,6 +110,10 @@ impl SourceCache {
             state: Mutex::new(CacheState::default()),
         }
     }
+    /// Bytes the image store may spill to scratch (zero when every image fits).
+    pub(super) fn spill_bound(&self) -> u64 {
+        self.store.spill_bound()
+    }
     pub(super) fn stats(&self) -> CacheStats {
         let s = lock(&self.state);
         CacheStats {
@@ -144,9 +148,16 @@ impl SourceCache {
         };
         cell.get_or_init(|| {
             let d = load()?;
+            let level = super::mips::Level {
+                width: d.size[0],
+                height: d.size[1],
+                rgba: d.rgba,
+            };
+            let rgba = self.store.put(scratch, vec![level])?.pop();
             Ok(Arc::new(Stored {
                 size: d.size,
-                rgba: self.store.put(scratch, d.size[0], d.size[1], d.rgba)?,
+                rgba: rgba
+                    .ok_or_else(|| JobError::new(JobErrorKind::InvalidState, "stored image"))?,
             }))
         })
         .clone()
@@ -174,16 +185,19 @@ impl SourceCache {
         };
         let levels = cell
             .get_or_init(|| {
-                load()?
+                // Level 0 is the source image, already stored once under (image, 0).
+                let reduced: Vec<_> = load()?.into_iter().skip(1).collect();
+                Ok(self
+                    .store
+                    .put(scratch, reduced)?
                     .into_iter()
-                    .skip(1)
-                    .map(|l| {
-                        Ok(Arc::new(Stored {
-                            size: [l.width, l.height],
-                            rgba: self.store.put(scratch, l.width, l.height, l.rgba)?,
-                        }))
+                    .map(|rgba| {
+                        Arc::new(Stored {
+                            size: [rgba.width, rgba.height],
+                            rgba,
+                        })
                     })
-                    .collect()
+                    .collect())
             })
             .as_ref()
             .map_err(Clone::clone)?;

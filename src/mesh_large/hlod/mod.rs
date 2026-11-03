@@ -301,7 +301,7 @@ fn appearance_plan(
     let largest_chain = bake::chain_bytes(largest.0 as u32, largest.1 as u32);
     // One image decode transient (encoded bytes, RGBA, chain build copy) and the chain a
     // worker holds while sampling, besides the shared cache.
-    let decode = super::image_tiles::READER_BYTES * 2
+    let decode = bake::CHAIN_READER_BYTES
         + (largest.0 * largest.1)
             .saturating_mul(16)
             .saturating_add(32 << 20)
@@ -874,17 +874,16 @@ pub(crate) fn produce(
         .zip(index_start)
         .map(|(b, a)| b - a);
     // S3: the shared decoded source-chain cache and what every appearance job reads.
-    let image_bound = super::image_tiles::bound(captured, false);
-    let image_scratch_bound = if image_bound <= input.plan.image_cache_bytes {
-        0
-    } else {
-        image_bound
-    };
+    let cache = bake::ImageCache::new(
+        input.plan.image_cache_bytes,
+        super::image_tiles::bound(captured, false),
+    );
     let image_lease = ledger.admit(
         "image_tiles",
-        image_scratch_bound.saturating_add(super::image_tiles::file_rounding(captured)),
+        cache
+            .spill_bound()
+            .saturating_add(super::image_tiles::file_rounding(captured)),
     )?;
-    let cache = bake::ImageCache::new(input.plan.image_cache_bytes, image_bound);
     let layout = captured.triangles.layout().0;
     let services = appearance::Services {
         captured,

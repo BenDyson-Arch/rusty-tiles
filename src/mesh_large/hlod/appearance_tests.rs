@@ -1183,7 +1183,6 @@ fn evidence_appearance() {
                         &captured,
                         image,
                         crate::mesh_large::leaves::mips::Class::Colour,
-                        0,
                         &check,
                     )
                     .unwrap();

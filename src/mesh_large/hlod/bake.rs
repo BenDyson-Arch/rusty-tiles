@@ -367,10 +367,9 @@ pub(crate) fn resolve(
 // ----------------------------------------------------------------------------------------
 // Decoded source chains and sampling.
 
-/// A decoded source image's chain from level `base` down to 1x1 (RGBA8, colour
-/// classes sRGB-encoded): `levels[0]` is source level `base`.
+/// A decoded source image's complete chain down to 1x1 (RGBA8, colour classes
+/// sRGB-encoded): `levels[0]` is the source image.
 pub(crate) struct Chain<L = mips::Level> {
-    pub base: u32,
     pub levels: Vec<L>,
     pub bytes: u64,
 }
@@ -415,6 +414,10 @@ impl ImageCache {
             state: Mutex::new(CacheState::default()),
         }
     }
+    /// Bytes the chain store may spill to scratch (zero when every chain fits).
+    pub(crate) fn spill_bound(&self) -> u64 {
+        self.store.spill_bound()
+    }
     pub(crate) fn stats(&self) -> CacheStats {
         let s = lock(&self.state);
         CacheStats {
@@ -431,11 +434,10 @@ impl ImageCache {
         captured: &FullCaptured,
         image: usize,
         class: mips::Class,
-        _need: u32,
         check: &dyn Fn() -> Result<(), JobError>,
     ) -> Result<Arc<StoredChain>, JobError> {
         self.get_with(&captured.scratch, (image, class_rank(class)), &|| {
-            load(captured, image, class, 0, check)
+            load(captured, image, class, check)
         })
     }
     fn get_with(
@@ -460,13 +462,8 @@ impl ImageCache {
             let started = super::error::thread_cpu();
             let result = (|| {
                 let chain = load()?;
-                let levels = chain
-                    .levels
-                    .into_iter()
-                    .map(|l| self.store.put(scratch, l.width, l.height, l.rgba))
-                    .collect::<Result<Vec<_>, _>>()?;
+                let levels = self.store.put(scratch, chain.levels)?;
                 Ok(Arc::new(Chain {
-                    base: chain.base,
                     levels,
                     bytes: chain.bytes,
                 }))
@@ -536,7 +533,6 @@ fn load(
     captured: &FullCaptured,
     image: usize,
     class: mips::Class,
-    base: u32,
     check: &dyn Fn() -> Result<(), JobError>,
 ) -> Result<Chain, JobError> {
     let snapshot = captured
@@ -551,16 +547,11 @@ fn load(
         &mut || check(),
     )?;
     drop(encoded);
-    let mut level = mips::Level {
+    let level = mips::Level {
         width: info.width,
         height: info.height,
         rgba,
     };
-    let mut index = 0;
-    while index < base && (level.width > 1 || level.height > 1) {
-        level = halve(&level, class);
-        index += 1;
-    }
     check()?;
     let mut levels = vec![level];
     loop {
@@ -572,11 +563,7 @@ fn load(
         levels.push(next);
     }
     let bytes = levels.iter().map(|l| l.rgba.len() as u64).sum::<u64>() + 4096;
-    Ok(Chain {
-        base: index,
-        levels,
-        bytes,
-    })
+    Ok(Chain { levels, bytes })
 }
 
 fn wrap(i: i64, n: u32, mode: u32) -> usize {
@@ -642,19 +629,49 @@ pub(crate) fn sample(
     uv: [f32; 2],
     lod: f64,
 ) -> Result<[f64; 4], JobError> {
+    sample_with(&mut ChainReader::new(chain), class, sampler, uv, lod)
+}
+
+/// Texel readers for every level of one chain, kept across a group's samples so
+/// neighbouring samples reuse the tiles they hold.
+pub(crate) struct ChainReader<'a> {
+    chain: &'a StoredChain,
+    readers: Vec<crate::mesh_large::image_tiles::Reader<'a>>,
+}
+/// Bytes a [`ChainReader`] can hold outside the shared tile cache (at most 32 levels).
+pub(crate) const CHAIN_READER_BYTES: u64 = 32 * crate::mesh_large::image_tiles::READER_BYTES;
+impl<'a> ChainReader<'a> {
+    pub(crate) fn new(chain: &'a StoredChain) -> Self {
+        Self {
+            chain,
+            readers: chain.levels.iter().map(|l| l.reader()).collect(),
+        }
+    }
+}
+
+/// [`sample`] through a reusable [`ChainReader`].
+pub(crate) fn sample_with(
+    reader: &mut ChainReader<'_>,
+    class: mips::Class,
+    sampler: crops::SourceSampler,
+    uv: [f32; 2],
+    lod: f64,
+) -> Result<[f64; 4], JobError> {
+    let chain = reader.chain;
     let levels = &chain.levels;
     let top = (levels.len() - 1) as f64;
     let l = if lod.is_finite() {
-        (lod - f64::from(chain.base)).clamp(0., top)
+        lod.clamp(0., top)
     } else {
         0.
     };
     let a = l.floor() as usize;
     let b = (a + 1).min(levels.len() - 1);
     let f = l - a as f64;
-    let nearest = chain.base == 0 && l <= 0. && matches!(sampler.mag_filter, 9728);
-    let fetch = |level: &crate::mesh_large::image_tiles::Raster| -> Result<[f64; 4], JobError> {
-        let mut reader = level.reader();
+    let nearest = l <= 0. && matches!(sampler.mag_filter, 9728);
+    let mut fetch = |index: usize| -> Result<[f64; 4], JobError> {
+        let level = &levels[index];
+        let reader = &mut reader.readers[index];
         let x = f64::from(uv[0]) * f64::from(level.width) - 0.5;
         let y = f64::from(uv[1]) * f64::from(level.height) - 0.5;
         let lut = linear_lut();
@@ -693,11 +710,11 @@ pub(crate) fn sample(
             top + (bottom - top) * fy
         }))
     };
-    let p = fetch(&levels[a])?;
+    let p = fetch(a)?;
     if b == a || f == 0. {
         return Ok(p);
     }
-    let q = fetch(&levels[b])?;
+    let q = fetch(b)?;
     Ok(std::array::from_fn(|c| p[c] + (q[c] - p[c]) * f))
 }
 
@@ -734,39 +751,64 @@ pub(crate) fn binding(
 mod tests {
     use super::*;
 
-    /// Many source images through a small cache: resident chains stay within the budget
-    /// plus the one being served, eviction is least recently used, and a coarser request
-    /// is served by a cached finer chain.
+    /// Many source images through budgets from nothing to everything, in cyclic,
+    /// reverse and strided orders and from concurrent workers: every (image, class) is
+    /// decoded exactly once, texels never change and memory stays within the budget.
     #[test]
     fn image_cache_scale_decode_count_is_independent_of_access_order() {
-        let scratch = crate::spill::Scratch::create(None, 0).unwrap();
-        let cache = ImageCache::new(256, 32 * 256);
-        let loads = std::cell::Cell::new(0);
-        for round in 0..8 {
-            for image in 0..32 {
-                let chain = cache
-                    .get_with(&scratch, (image, 0), &|| {
-                        loads.set(loads.get() + 1);
-                        Ok(Chain {
-                            base: 0,
-                            levels: vec![mips::Level {
-                                width: 8,
-                                height: 8,
-                                rgba: vec![image as u8; 256],
-                            }],
-                            bytes: 256,
-                        })
-                    })
-                    .unwrap();
-                assert_eq!(
-                    chain.levels[0].materialize().unwrap(),
-                    vec![image as u8; 256]
-                );
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let bound = 32 * chain_bytes(8, 8);
+        let build = |image: usize| -> Chain {
+            let mut levels = vec![mips::Level {
+                width: 8,
+                height: 8,
+                rgba: (0..256).map(|i| (i * 7 + image * 13) as u8).collect(),
+            }];
+            while levels.last().unwrap().width > 1 {
+                levels.push(halve(levels.last().unwrap(), mips::Class::Data));
             }
-            assert!(loads.get() <= 32, "round {round}: {} loads", loads.get());
-            assert!(cache.stats().peak_resident_bytes <= 256);
+            Chain {
+                levels,
+                bytes: chain_bytes(8, 8),
+            }
+        };
+        let orders: [Vec<usize>; 3] = [
+            (0..32).cycle().take(32 * 8).collect(),
+            (0..32).rev().cycle().take(32 * 8).collect(),
+            (0..32 * 8).map(|k| (k * 7) % 32).collect(),
+        ];
+        for budget in [0, 256, 1024, bound] {
+            for order in &orders {
+                let scratch = crate::spill::Scratch::create(None, 0).unwrap();
+                let cache = ImageCache::new(budget, bound);
+                let loads = AtomicUsize::new(0);
+                std::thread::scope(|scope| {
+                    for worker in 0..3 {
+                        let (cache, loads, scratch) = (&cache, &loads, &scratch);
+                        scope.spawn(move || {
+                            for &image in order.iter().skip(worker) {
+                                let chain = cache
+                                    .get_with(scratch, (image, 2), &|| {
+                                        loads.fetch_add(1, Ordering::SeqCst);
+                                        Ok(build(image))
+                                    })
+                                    .unwrap();
+                                for (level, expected) in
+                                    chain.levels.iter().zip(build(image).levels)
+                                {
+                                    assert_eq!(level.materialize().unwrap(), expected.rgba);
+                                }
+                            }
+                        });
+                    }
+                });
+                assert_eq!(loads.load(Ordering::SeqCst), 32, "budget {budget}");
+                let stats = cache.stats();
+                assert_eq!(stats.misses, 32);
+                assert!(stats.peak_resident_bytes <= budget);
+                assert_eq!(stats.scratch_bytes == 0, budget >= bound);
+            }
         }
-        assert_eq!(cache.stats().scratch_bytes, 32 * 256);
     }
 
     #[test]
@@ -790,7 +832,6 @@ mod tests {
                     levels.push(halve(levels.last().unwrap(), class));
                 }
                 Ok(Chain {
-                    base: 0,
                     bytes: chain_bytes(257, 129),
                     levels,
                 })
@@ -844,11 +885,7 @@ mod tests {
         let scratch = crate::spill::Scratch::create(None, 0).unwrap();
         let store = crate::mesh_large::image_tiles::Store::new(100, 100);
         let chain = Chain {
-            base: 0,
-            levels: vec![base, next]
-                .into_iter()
-                .map(|l| store.put(&scratch, l.width, l.height, l.rgba).unwrap())
-                .collect(),
+            levels: store.put(&scratch, vec![base, next]).unwrap(),
             bytes: 0,
         };
         let s = crops::SourceSampler {

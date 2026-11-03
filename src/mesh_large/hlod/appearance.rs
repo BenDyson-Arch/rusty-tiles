@@ -907,13 +907,26 @@ fn bake_pages(
                     .max(0.) as u32;
                 let chain = services
                     .cache
-                    .get(captured, image, source_class(slot), need, check)?;
+                    .get(captured, image, source_class(slot), check)?;
+                let mut reader = bake::ChainReader::new(&chain);
                 for (&(_, i), &lod) in requests[start..end].iter().zip(&lods) {
                     let i = i as usize;
                     let hit = &q.hits[i];
                     let (_, sampler, set) = bindings[&(hit.material, slot_order(slot))].unwrap();
-                    let value =
-                        bake::sample(&chain, source_class(slot), sampler, hit.uv[set], lod)?;
+                    // A non-finite footprint samples the group's finest requested level,
+                    // as a chain built from that level did.
+                    let lod = if lod.is_finite() {
+                        lod
+                    } else {
+                        f64::from(need)
+                    };
+                    let value = bake::sample_with(
+                        &mut reader,
+                        source_class(slot),
+                        sampler,
+                        hit.uv[set],
+                        lod,
+                    )?;
                     let frame = (slot == TextureSlot::Normal).then(|| {
                         let (_, gf, w) = chunk[i];
                         let face = tile.triangles[p.layout_face(gf)];

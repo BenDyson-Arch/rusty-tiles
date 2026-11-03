@@ -562,13 +562,12 @@ fn density_image(
 }
 
 fn source_alpha(
-    rgba: &crate::mesh_large::image_tiles::Raster,
+    reader: &mut crate::mesh_large::image_tiles::Reader<'_>,
     size: [u32; 2],
     uv: [f64; 2],
     sampler: SourceSampler,
     linear: bool,
 ) -> Result<f64, JobError> {
-    let mut reader = rgba.reader();
     let wrap = |i: i64, n: u32, w: u32| {
         let n = i64::from(n);
         (match w {
@@ -654,6 +653,7 @@ fn samples(
         )
         .map_err(|_| resource())?;
     let linear = b.sampler.mag_filter == 9729;
+    let mut reader = source.reader();
     for (index, t) in primitive.triangles.iter().enumerate() {
         let p = &geometry.decoded[index * 3..index * 3 + 3];
         let a: [f64; 3] = std::array::from_fn(|i| f64::from(p[1][i]) - f64::from(p[0][i]));
@@ -691,7 +691,7 @@ fn samples(
                 uv: output,
                 alpha,
                 weight: area / 16.,
-                source_pass: source_alpha(source, source_size, uv, b.sampler, linear)?
+                source_pass: source_alpha(&mut reader, source_size, uv, b.sampler, linear)?
                     * alpha
                     * factor
                     >= cutoff,
@@ -1088,7 +1088,6 @@ fn page_charge(
     codec
         .checked_add(assembly)
         .and_then(|n| n.checked_add(decode))
-        .and_then(|n| n.checked_add(2 * crate::mesh_large::image_tiles::READER_BYTES))
         .ok_or_else(resource)
 }
 

@@ -629,8 +629,7 @@ fn copy_crop_pixels(
             .and_then(|n| n.checked_mul(4))
             .ok_or_else(resource)
     };
-    let source_bytes = bytes(source_width, source_height)?;
-    let _ = source_bytes;
+    bytes(source_width, source_height)?;
     let count = bytes(crop.width, crop.height)?;
     if count > memory_limit {
         return Err(resource());

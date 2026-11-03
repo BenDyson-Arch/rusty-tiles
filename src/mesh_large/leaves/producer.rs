@@ -320,11 +320,6 @@ pub(crate) fn stage_plan(
         .memory
         .owned_metadata_bytes
         .checked_add(captured.report.memory.geometry.document_bytes)
-        .and_then(|n| {
-            n.checked_add(
-                captured.images.len() as u64 * super::super::image_tiles::IMAGE_METADATA_BYTES,
-            )
-        })
         .ok_or_else(|| resource("leaf global ownership overflow"))?;
     // The largest page lease any leaf's delivery takes, from the same physical
     // crop/packing projection final preparation uses (page assembly, codec, sampler
@@ -734,14 +729,21 @@ pub(crate) fn produce(
         .thread_name(|i| format!("rt-leaf-{i}"))
         .build()
         .map_err(|e| resource(&format!("delivery worker pool: {e}")))?;
+    // Page leases (and through them leaf planning's density schedule) are unchanged by
+    // the tile store: its image records and each worker's two tile readers are carved
+    // out of the cache's own budget.
     let image_bound = super::super::image_tiles::bound(captured, true);
-    let image_scratch_bound = if image_bound <= stage.cache_bytes {
-        0
-    } else {
-        image_bound
-    };
-    let image_scratch_bound =
-        image_scratch_bound.saturating_add(super::super::image_tiles::file_rounding(captured));
+    let image_reserve = (captured.images.len() as u64)
+        .saturating_mul(super::super::image_tiles::IMAGE_METADATA_BYTES)
+        .saturating_add(
+            stage
+                .jobs
+                .saturating_mul(2 * super::super::image_tiles::READER_BYTES),
+        );
+    let cache = SourceCache::new(stage.cache_bytes.saturating_sub(image_reserve), image_bound);
+    let image_scratch_bound = cache
+        .spill_bound()
+        .saturating_add(super::super::image_tiles::file_rounding(captured));
     crate::spill::preflight(
         captured.scratch.path(),
         image_scratch_bound,
@@ -750,7 +752,6 @@ pub(crate) fn produce(
     )?;
     let image_scratch_base = captured.scratch.live_bytes();
     captured.scratch.begin_stage();
-    let cache = SourceCache::new(stage.cache_bytes, image_bound);
     let gate = MemoryGate::new(stage.gate_bytes);
     // Set when the ordered writer stops: queued leaves then end promptly.
     let stopped = AtomicBool::new(false);
