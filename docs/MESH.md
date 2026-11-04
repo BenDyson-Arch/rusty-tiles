@@ -583,10 +583,25 @@ Each capture stage rechecks free space for its own working set on entry and
 fails closed if its measured peak exceeds its declared bound; the diagnostics
 report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). The HLOD
 incidence pass is measured the same way (`leaf_delivery.hlod_incidence_scratch_peak_bytes`), and the
-whole-run spill peak (`run_scratch_peak_bytes`) must stay within what was declared: the
-larger of capture's up-front need and the HLOD stage's own bound
-(`diagnostics.hlod.stage_scratch_bound_bytes`), whose phases are each declared and
-admitted as they start. Isolated triangles reach the incidence pass's worst case of six
+whole-run spill peak (`run_scratch_peak_bytes`) must stay within what was declared
+(`run_scratch_bound_bytes`): the largest of capture's up-front need, the leaf stage's
+image-store bound (`leaf_delivery.image_scratch_bound_bytes`) and the HLOD stage's own
+bound (`diagnostics.hlod.stage_scratch_bound_bytes`), whose phases are each declared and
+admitted as they start.
+
+Source textures are decoded once per stage for each image and sampling class (HLOD:
+colour or data chain; leaves: the source image and, when a density step needs one, a
+reduced chain per class), never again on cache pressure. Decoded images and chains stay
+resident while they fit the stage's image cache. The rest spill to scratch as 128×128
+texel tiles, one file per chain, read through a bounded tile cache with a small bounded
+set of open handles. The spill is admitted before it is written (the HLOD stage's scratch
+admission or the leaf stage preflight, then checked against the measured stage peak) and reported
+as `leaf_delivery.image_scratch_bound_bytes`, `image_scratch_peak_bytes`,
+`image_scratch_bytes` and `hlod.image_cache.scratchBytes`. `leaf_delivery.source_decode_count`
+counts leaf source decodes. On memory-backed scratch the tiles are charged to memory only
+when the planned cache cannot hold every source image (a run whose images fit plans
+exactly as without spilling); leaf density chains never spill there and are rebuilt from
+the decoded source per request when they do not fit. Isolated triangles reach the incidence pass's worst case of six
 interface items per triangle, beyond any capture stage, without a refusal.
 The coarse walk's own scratch is admitted through its memory leases
 (`diagnostics.hlod.scratch_components`) and is not in the capture figures. A preflight is
@@ -818,7 +833,13 @@ stage's `hlod` facts (tiles, workers, CPU seconds, lease peak, `error_measuremen
 and the per-depth appearance summary: page texels, covered texels, cap hits and the
 requested and achieved spacing). `memory` and `hlod` are present in every result.
 `phase_seconds` holds the wall seconds of `capture`, `leaf_build`, `hlod_incidence`,
-`hlod_geometry` and `archive`. Stage objects describe worker admission and owned
+`hlod_geometry` and `archive`. `phase_cpu_seconds` holds the process CPU seconds of the same
+phases (all workers, including admission work between phases; null where process CPU is
+unavailable). `leaf_delivery.timing` is the leaf stage's timing, process-wide counters
+over this job's leaf-stage interval (a concurrent job in the same process adds to them): summed per-thread
+seconds, CPU seconds and calls per step (`source_reconstruct`, `source_decode`,
+`density_mips`, `basis_encode`, `codec_verify`, `glb_write`, `member_write`, ...) and
+texel counters. Stage objects describe worker admission and owned
 memory/scratch resources; their declared accounting is not an automatically
 measured RSS guarantee. Absolute scratch paths and resource observations are
 diagnostics, not semantic profile constants.

@@ -4548,7 +4548,7 @@ fn tmpfs_exhaustion_is_admitted_before_border_or_frontier_writes() {
     let disk_min = super::plan(&captured, &config, &generous, &settings)
         .unwrap()
         .minimum_bytes;
-    let need = super::memory_backed_need(&captured, &config, settings.cap).unwrap();
+    let need = super::memory_backed_need(&captured, &config, settings.cap, false).unwrap();
     let volume = |available_bytes| Volume {
         available_bytes,
         memory_backed: true,

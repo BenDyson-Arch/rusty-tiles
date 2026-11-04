@@ -1136,7 +1136,7 @@ fn evidence_appearance() {
     fs::create_dir_all(&scratch).unwrap();
     config.scratch_dir = Some(scratch.clone());
     let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
-    let cache = super::bake::ImageCache::new(u64::MAX);
+    let cache = super::bake::ImageCache::new(u64::MAX, u64::MAX);
     let source: Vec<crate::mesh_large::attributes::FullTriangle> = captured
         .triangles
         .reader()
@@ -1187,7 +1187,6 @@ fn evidence_appearance() {
                         &captured,
                         image,
                         crate::mesh_large::leaves::mips::Class::Colour,
-                        0,
                         &check,
                     )
                     .unwrap();
@@ -1202,7 +1201,8 @@ fn evidence_appearance() {
                     sampler,
                     uv,
                     0.,
-                );
+                )
+                .unwrap();
                 [s[0], s[1], s[2]]
             }
             None => [1.; 3],

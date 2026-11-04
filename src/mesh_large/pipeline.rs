@@ -301,8 +301,9 @@ pub struct CaptureDiagnostics {
     /// Output-side admission reservation on the work directory and output filesystems.
     pub output_reserve_bytes: u64,
     /// Whole-run spill peak, including the HLOD stage; at most the larger of
-    /// `scratch_logical_need_bytes` and `hlod.stage_scratch_bound_bytes`.
+    /// the capture, leaf image-store and HLOD stage declarations.
     pub run_scratch_peak_bytes: u64,
+    pub run_scratch_bound_bytes: u64,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct TilerDiagnostics {
@@ -313,6 +314,8 @@ pub struct TilerDiagnostics {
     pub peak_held_records: u64,
     /// Wall seconds of each named phase of the run.
     pub phase_seconds: PhaseSeconds,
+    /// Process CPU by sequential phase, including intervening admission work.
+    pub phase_cpu_seconds: Option<PhaseSeconds>,
     /// The declared budget and each stage's admission.
     pub memory: MemoryDiagnostics,
     /// HLOD stage run facts.
@@ -810,7 +813,8 @@ pub fn mesh_to_tileset(
         let declared = c
             .scratch
             .logical_need_bytes
-            .max(leaf.hlod.stage_scratch_bound_bytes);
+            .max(leaf.hlod.stage_scratch_bound_bytes)
+            .max(leaf.diagnostics.image_scratch_bound_bytes);
         if run_scratch_peak_bytes > declared {
             return Err(JobError::new(
                 JobErrorKind::ResourceLimit,
@@ -836,11 +840,13 @@ pub fn mesh_to_tileset(
                 scratch_stage_peak_bytes: c.scratch_stage_peaks,
                 output_reserve_bytes: c.scratch.output_reserve_bytes,
                 run_scratch_peak_bytes,
+                run_scratch_bound_bytes: declared,
             },
             leaf_delivery: leaf.diagnostics,
             archive_bytes,
             peak_held_records: delivered.peak_held_records,
             phase_seconds: phases.seconds(),
+            phase_cpu_seconds: phases.cpu_seconds(),
             memory,
             hlod: leaf.hlod,
         };
