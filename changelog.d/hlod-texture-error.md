@@ -7,7 +7,9 @@
   refines to the sharper children instead of drawing a blurry coarse tile beside
   sharp leaves. `fast` keeps the measured error. Every HLOD archive declares the rule
   in `asset.extras.rustyTiles.textureError` (`pxPerTexel` null in `fast`); `validate`
-  refuses an HLOD tileset without it and recomputes the term from the archive's
-  pages, UVs and hierarchy. In `quality` and `lossless` the root's error can rise.
+  refuses an HLOD tileset without it, refuses textured HLOD payloads in any archive
+  that lacks it, checks `pxPerTexel` against the profile recorded in
+  `conversion.json`, and recomputes the term from the archive's pages, UVs and
+  hierarchy. In `quality` and `lossless` the root's error can rise.
   Leaf/HLOD stage directories written before this change have no texture rule and
   cannot be published; re-run the bake.

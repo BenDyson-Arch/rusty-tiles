@@ -219,14 +219,16 @@ declaration does not itself authorize bypass or certify source-distance maxima.
 An HLOD archive declares its texture-aware error rule (D5 amendment A3,
 [MESH](MESH.md#texture-aware-published-g)) as `asset.extras.rustyTiles.textureError`: a
 strict object with exactly `version` (the integer 1), `refinableRatio` (1.25) and
-`pxPerTexel` (2, 1.25 or `null`). A null or otherwise different declaration is invalid
-(`textureError`), as is one on an archive validation does not hold to HLOD (by
-`--expect-profile hlod`, the tileset's `lod` or `conversion.json`'s `lod`). A tileset
-declaring `lod: "hlod"` must declare it. Stripping it never switches the check off: in
-any archive without it, an HLOD identity payload whose material binds a base-colour
-texture is invalid. When `conversion.json` records a `mesh_tiler` profile, `pxPerTexel`
-must match it (fast `null`, balanced 2, quality and lossless 1.25). Without that report
-the declaration is the producer's claim: `null`, the honest fast form, binds nothing.
+`pxPerTexel` (2, 1.25 or `null`; `pxPerTexel: null` is the fast form). `textureError:
+null`, any other shape or value, and a declaration on an archive validation does not
+hold to HLOD (by `--expect-profile hlod`, the tileset's `lod` or `conversion.json`'s
+`lod`) are invalid (`textureError`). A tileset declaring `lod: "hlod"` must declare it.
+Stripping it never switches the check off: in any archive without it, an HLOD identity
+payload whose material binds a base-colour texture is invalid. When `conversion.json`
+records a `mesh_tiler` profile, `pxPerTexel` must match it (fast `null`, balanced 2,
+quality and lossless 1.25). That is a consistency check, not forgery resistance:
+`conversion.json` is not hash-bound to the tileset, and without it the declaration is
+the producer's claim (`pxPerTexel: null`, the honest fast form, binds nothing).
 With a number `t`, every content tile T whose mean
 base-colour texel spacing `s(T)` exceeds 1.25 times its children's pooled spacing must
 have `geometricError >= 16 · s(T) / t` (relative slack 1e-4). `s = sqrt(A / X)` is
