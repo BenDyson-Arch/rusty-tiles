@@ -14,7 +14,7 @@ permission prevents replacement; after permission, publication owns the outcome.
 
 CreateNew retains the D1 contract. Replace uses the same supported local
 filesystem matrix and exclusive rename primitives described in
-[platforms.md](../../bench/architecture_audit/directory/platforms.md). The parent
+[platforms.md](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/directory/platforms.md). The parent
 must exist and its namespace and mount topology must remain stable. Private
 staging and recovery containers must not be modified by unrelated actors.
 

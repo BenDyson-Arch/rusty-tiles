@@ -9,7 +9,7 @@
 > Paths below that no longer exist refer to that snapshot.
 
 The 30 verbose JSON receipts are stored verbatim as adjacent `.json.gz` files.
-[storage-index.json](storage-index.json) maps their original paths to storage
+[storage-index.json](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/f1c2/storage-index.json) maps their original paths to storage
 paths and records both uncompressed and compressed sizes and SHA256 values.
 The smaller source/artifact manifests, browser ledgers, correction records,
 specification snapshots, independent audits and replay drivers remain readable.
@@ -56,6 +56,6 @@ The verifier checks gzip integrity, both sizes and hashes, JSON decoding, unique
 index mappings and confined storage paths. It does not rerun the archived domain
 checks or promote historical receipts to new source acceptance. For fresh
 executions use the original driver commands in
-[tests/f1c2_oracle.md](../../../tests/f1c2_oracle.md), the independent
-[wrapping audit](audits/wrapping.md), and the retained scripts under
+[tests/f1c2_oracle.md](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/tests/f1c2_oracle.md), the independent
+[wrapping audit](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/f1c2/audits/wrapping.md), and the retained scripts under
 `review_probes/`. Their output arguments still write ordinary JSON files.

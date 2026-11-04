@@ -11,13 +11,13 @@
 **Retired 2026-10-11.** The user retired `convert-to-implicit` for 0.4.0 instead
 of resolving the terminal external-template gate; producers already emit
 implicit tiling by default. See the contract's
-[disposition](../../../docs/architecture/implicit-rewrite-contract.md#disposition-2026-10-11).
+[disposition](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/implicit-rewrite-contract.md#disposition-2026-10-11).
 The evidence below is retained as history. Its drivers that invoke the legacy
 command or API need source at or before `develop` `f2ed077`.
 
 This is preparation for the next operation under #126, not acceptance or an
-implementation of its replacement. The [draft contract](../../../docs/architecture/implicit-rewrite-contract.md)
-and [ownership audit](audits/ownership.md) distinguish settled ownership from
+implementation of its replacement. The [draft contract](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/implicit-rewrite-contract.md)
+and [ownership audit](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/implicit_rewrite/audits/ownership.md) distinguish settled ownership from
 unproved admission, numerical, format and resource choices. Existing point/vector
 use cases need explicit dispositions before their legacy operation can disappear.
 
@@ -25,9 +25,9 @@ use cases need explicit dispositions before their legacy operation can disappear
 
 The A2 continuation at accepted merge
 `34a76152d18b02553691f472207225f116307a67` adds three bounded lanes:
-[primary semantics and authored frame/availability fixtures](a2_semantics/README.md),
-[actual point/vector byte/geometry/resource probes](a2_real_sources/README.md),
-and [captured-source/resource/lifecycle models](a2_capture_resources/README.md).
+[primary semantics and authored frame/availability fixtures](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/implicit_rewrite/a2_semantics/README.md),
+[actual point/vector byte/geometry/resource probes](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/implicit_rewrite/a2_real_sources/README.md),
+and [captured-source/resource/lifecycle models](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/implicit_rewrite/a2_capture_resources/README.md).
 Their individual receipts bind their own executed drivers and source/artifact
 identities. They do not overwrite or promote the historical baseline below.
 
@@ -42,12 +42,12 @@ metadata disposition and maximum Rust resources remain separately gated.
 
 ## Executed baseline observations
 
-[Compact receipt](probes/baseline-receipt.json) pins the frozen portable CLI,
+[Compact receipt](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/implicit_rewrite/probes/baseline-receipt.json) pins the frozen portable CLI,
 authored eight-point GeoJSON, independent replay driver and generated archives.
 The CLI is bound by the unchanged 91 production inputs in the retained
-[source manifest](../f1c2/receipts/source-artifacts.json); the merged tree at
+[source manifest](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/f1c2/receipts/source-artifacts.json); the merged tree at
 `e3d222a4c27a86e1f06e1e4b47db4e6a4fa5e24e` retains those inputs. The full
-command/stdout receipt is stored verbatim as [baseline-raw.json.gz](probes/baseline-raw.json.gz),
+command/stdout receipt is stored verbatim as [baseline-raw.json.gz](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/implicit_rewrite/probes/baseline-raw.json.gz),
 with its uncompressed hash recorded in the compact receipt. No binary or output
 archive is committed.
 

@@ -22,7 +22,7 @@ components or modifying the private tree.
 Supported combinations are Linux >=4.9 on ext/btrfs/tmpfs/xfs, macOS local
 APFS/HFS+ advertising exclusive rename, and Windows fixed local NTFS. The exact
 primitives and primary-source evidence are in
-[platforms.md](../../bench/architecture_audit/directory/platforms.md).
+[platforms.md](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/directory/platforms.md).
 Other platforms/filesystems return Unsupported before staging. Failures of a
 previously admitted primitive remain failures; no ordinary rename or copy/delete
 fallback weakens CreateNew. Filesystem admission is conservative and does not

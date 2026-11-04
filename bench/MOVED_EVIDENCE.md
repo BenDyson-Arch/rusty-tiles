@@ -48,3 +48,25 @@ path and last held by commit `e5c475f3`.
 | `bench/architecture_audit/c2_decoded_containment/oracle/mutants/slice3-report.json` | 12274 | `19b0937499aa82014e0546bfb365efeb0613c28cc212885018f2b40f90cfdbf7` |
 | `bench/release_04_review_results.json` | 6259 | `cf37f6aa9801b867c698869c28a1a71ee06563ca0b5dd1bd4435c0acaccfcfdd` |
 | `bench/release_readiness_results.json` | 3205 | `2a6dfd036d5e1493a53d221c79a88b8e94210165a1f101e4667e6cbc7d13c972` |
+
+## Pre-0.4.0 tree cleanup (2026-11-04)
+
+Deleted outright, not copied to the evidence cache, so this section lists paths and sizes without SHA-256 values: records of retired producers and slices
+(F1a–F1d `mesh-local-to-3tz`, H27 proxy bake, H17-era `cmp_h28.py`), the #113 first-pass
+probe stubs, superseded architecture write-ups, the orphaned `oracle/` npm pin and fixtures
+that only those retired probes read. Nothing in CI, the tests or the build read them. All
+were last held by develop `112044668e8a39394a96832833a0ebaa17c4c0db`; recover a file with
+`git show 11204466:<path>` or a directory with `git archive 11204466 <dir> | tar -x`.
+
+| Path | Files | Bytes |
+| --- | ---: | ---: |
+| `bench/architecture_audit/{f1a/README.md,f1b1,f1b2,f1b3,f1c1}` | 9 | 102269 |
+| `bench/architecture_audit/{mesh_approximation,mesh_approximation_f1d2,mesh_large_h27}` | 8 | 82728 |
+| `bench/architecture_audit/{api,runtime,post_f0,c1_replay,bake_time_history}` | 5 | 29015 |
+| `bench/architecture_audit/h28_tile_batching/cmp_h28.py` | 1 | 8079 |
+| `docs/architecture/`: F1a–F1d and F1c2 contracts, implementations and evidence | 11 | 100951 |
+| `docs/architecture/`: `implicit-rewrite-contract`, `04-track-dispositions`, `bake-time-history`, `api-contract`, `boundary-audit`, `f0-evidence` | 6 | 116604 |
+| `changelog.d/bake-time-history.md` | 1 | 216 |
+| `tests/fixtures/{f1b2,f1b3,f1c1}` | 165 | 633049 |
+| `oracle/package.json`, `oracle/package-lock.json` | 2 | 112531 |
+| `scripts/build-basisu.sh` | 1 | 1004 |

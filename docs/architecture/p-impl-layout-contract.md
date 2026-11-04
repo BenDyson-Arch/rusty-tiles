@@ -17,7 +17,7 @@ The design's preparation package (versions v1 and v2, open decisions PD-1 to PD-
 plan, and the `evidence/` scripts and results cited in §5 and §9), the precode review
 (`review.md` `16205c1c…`, NO-GO) and the v3 delta review (`delta-review.md` `09044be8…`,
 GO-WITH-CHANGES) are retained in
-[bench/architecture_audit/implicit_layout/preparation/](../../bench/architecture_audit/implicit_layout/preparation/README.md),
+[bench/architecture_audit/implicit_layout/preparation/](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/implicit_layout/preparation/README.md),
 with the large regenerable models and builds listed there. Paths under `evidence/` below are
 relative to its `design-20261011/` directory. Every `src/` line reference is to `origin/develop`
 `f2ed077`.
@@ -857,7 +857,7 @@ recorded separately.
 
 ## 7. Proof limits and remaining gates
 
-See [open-decisions.md](../../bench/architecture_audit/implicit_layout/preparation/design-20261011/open-decisions.md), "Proof limits":
+See [open-decisions.md](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/implicit_layout/preparation/design-20261011/open-decisions.md), "Proof limits":
 - SwiftShader timings;
 - sampled views;
 - one client;

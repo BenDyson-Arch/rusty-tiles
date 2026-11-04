@@ -12,14 +12,14 @@ The [authoring contract](../../../docs/architecture/r2-raster-contract.md)
 defines the replacement source/COG/display/grid/tile consumer. R2 production
 acceptance is unfinished.
 
-[Initial retention index](precode_evidence/20261011-initial/index.json) retains
+[Initial retention index](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/raster_source/precode_evidence/20261011-initial/index.json) retains
 729 records from 68 preparation, selected execution and review epochs in 562
 deduplicated deterministic gzip blobs (2511549 compressed bytes). Every retained
 text/fixture/observation is lossless, with original and compressed SHA-256.
 The index SHA-256 is
 `68de2ab0125f8b7140c1dc769bfc9640e90e2eccd8e8030075ac85f2aeb08b6a`.
 
-[Follow-up retention index](precode_evidence/20261011-followup/index.json)
+[Follow-up retention index](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/raster_source/precode_evidence/20261011-followup/index.json)
 adds 47 records from six roots, with 39 blobs (148070 compressed bytes) and
 three external binary/package/keyring identity records. Its SHA-256 is
 `b6eae403f591e082e57e2ce1231e65ba0be90e43a29719d84cef8bbe38e10a87`.
@@ -31,7 +31,7 @@ decision SHA-256 is
 `4c8a19445b52f0d15751b276ababae08f63324cf3ae84e4ae9ab5fca2cf82945`.
 Readiness permits the assigned implementation. It does not accept production.
 
-The [separate retention review](retention_review/20261011/decision.json)
+The [separate retention review](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/raster_source/retention_review/20261011/decision.json)
 verified compressed and decompressed identities and all original record bytes.
 Its integrity SHA-256 is
 `6c0a1acc12d971c4cafe31bb56b505a6d9438fa0f46900c2b01046ef8f3f3a27`.
@@ -51,7 +51,7 @@ actual callbacks, sample/component facts and private temporary-file operations
 have bounded scope; actual Rust lifecycle, resource ownership, final artifact,
 CI, wheel and Blender acceptance still require implementation and evidence.
 
-[Local production retention](production_evidence/20261011-local/index.json)
+[Local production retention](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/raster_source/production_evidence/20261011-local/index.json)
 adds 1260 original records, 622 lossless blobs (3979625 compressed bytes)
 and 84 selected external or compiled artifact identities. Index SHA-256:
 `3ce6560371f80f4d9808353634f239aebc3773bf38ce3d406186662fd698df42`. Original compiler failures in epochs01/04/06 and
@@ -84,7 +84,7 @@ The local source/artifact records require a separate final review and exact
 remote CI, wheel and official Blender acceptance before an evidence-backed
 develop merge. They do not close #113/#121/#125/#126 or authorize release.
 
-[Final local acceptance retention](production_evidence/20261011-final-local/index.json)
+[Final local acceptance retention](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/raster_source/production_evidence/20261011-final-local/index.json)
 adds the separate epoch08 actual local acceptance and fresh final formatting
 receipt. Index SHA-256: `7125e176d23a382fd46e4c7da01474d82eae0631a5019a574e978d461191f269`. Independent review integrity
 `63058547cadcc500a118d132a1b5b0cfa016056b4591fd304cbbdd2c98c57079`
@@ -93,7 +93,7 @@ The final formatting check passed on the same 112-file production source pin.
 Exact remote CI, installed wheel, official Blender and final package/tree gates
 remain required before merging into develop.
 
-[Packaging check migration](production_evidence/20261011-packaged-check/index.json)
+[Packaging check migration](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/raster_source/production_evidence/20261011-packaged-check/index.json)
 retains the original failure and corrected real script execution. The script
 now requires R2 `report.json`; its original `conversion.json` assertion failed
 after successful raster publication. With that sole filename change the script
@@ -102,7 +102,7 @@ Source08 production remains byte-identical and the script is separately pinned.
 Index SHA-256: `b072cb45f79d5e8de11f67a4d04def6448a6762b13a81498da2acc4d94d533bc`. This current-host check does not establish Docker
 or network isolation; the exact-head container job remains required.
 
-[First CI and owning corrections](production_evidence/20261011-ci-corrections/index.json)
+[First CI and owning corrections](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/raster_source/production_evidence/20261011-ci-corrections/index.json)
 retain the exact original c376 package review and failed CI: both GDAL jobs
 passed 478 library tests before the stale raster no-count CLI assertion failed;
 the offline runtime correctly refused directory publication on Docker overlay.

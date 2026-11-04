@@ -46,7 +46,7 @@ defaults, report and typed failures.
 
 ## Finite source domain and capability disposition
 
-Retain the F1b3/F1c1 static source admission domain, with any source metadata
+Retain the [F1b3](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/f1b3-contract.md)/[F1c1](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/f1c1-contract.md) static source admission domain, with any source metadata
 admission changed by #144 separately named and independently proved. This means
 the admitted selected scene, forest/depth/instance policy, complete TRIANGLES,
 validated POSITION/index payloads, finite admitted node transforms, authored

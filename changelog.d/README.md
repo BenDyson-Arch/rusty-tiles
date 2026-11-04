@@ -47,3 +47,5 @@ for 0.4.0 (no shipped API or output change):
 - #282: deduplicate C1 specification copies.
 - #305: deduplicate fixtures with shared references.
 - Tree headroom: lossless C2 witness report storage and reader updates (internal only).
+- Pre-0.4.0 tree cleanup: retired-slice evidence, superseded architecture write-ups, orphaned
+  fixtures and the unused `oracle/` npm pin removed (`bench/MOVED_EVIDENCE.md`; internal only).

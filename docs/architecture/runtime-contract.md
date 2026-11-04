@@ -4,7 +4,7 @@ Status: proposed for [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/
 This describes independently required target behavior; current code has no
 presumption of correctness. Retention requires the evidence in the component
 ledger, not merely a passing existing test suite. See [architecture scope](README.md) and the
-[API proposal](api-contract.md).
+[API proposal](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/api-contract.md).
 
 The [F0 foundation contract](foundation-contracts.md) controls the first
 implementation scope. This broader document includes later directory, vector and

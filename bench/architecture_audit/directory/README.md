@@ -10,8 +10,8 @@
 
 The [directory contract](../../../docs/architecture/d1-directory-contract.md)
 and [raster contract](../../../docs/architecture/d1-raster-contract.md) define
-this slice. D2 replacement remains open in #118. [Platform sources](platforms.md)
-and the [#82 feasibility review](portable-raster-feasibility.md) distinguish
+this slice. D2 replacement remains open in #118. [Platform sources](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/directory/platforms.md)
+and the [#82 feasibility review](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/directory/portable-raster-feasibility.md) distinguish
 implementation decisions from executed proof.
 
 Production source `a299e6c` passes 340 portable and 375 native Rust tests
@@ -92,7 +92,7 @@ runtime tests; overlay filesystem admission remains unchanged.
 The [D2 contract](../../../docs/architecture/d2-directory-contract.md) declares
 current-at-hold replacement, an absent-output interval, conditional restoration,
 and native-path recovery transport. The independent review is in
-[d2-review.md](d2-review.md). `d2-oracle.json` proves six replacement leaf cases,
+[d2-review.md](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/directory/d2-review.md). `d2-oracle.json` proves six replacement leaf cases,
 six preservation checks and eight unscheduled subprocess races through the real
 CLI. Deterministic fault and cross-process schedules are separate runtime tests;
 unscheduled CLI successes do not prove a failed-restoration schedule.

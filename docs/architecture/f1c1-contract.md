@@ -6,7 +6,7 @@ Implementation [#142](https://github.com/BenDyson-Arch/rusty-tiles/issues/142), 
 #120/#121/#113. Baseline is merged F1b3 #141 at
 `71cd11dcdb226ce7639912dba85adf0b2f35048b`. This contract precedes implementation.
 The existing local-metre/Y-up source profile and immutable resource capture
-remain bounded by [F1b3](f1b3-contract.md). This slice does not accept arbitrary
+remain bounded by [F1b3](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/f1b3-contract.md). This slice does not accept arbitrary
 CRS conversion, identity/picking, approximation or implicit delivery.
 
 ## Invariants and ownership

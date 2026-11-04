@@ -11,8 +11,8 @@ algorithm inputs only.
 
 Admit one static glTF 2.0/GLB scene in local metres through the retained finite
 source profile, with explicit JSON/count/per-item limits and no total payload
-byte or triangle limit. Coordinate and transform eligibility remain the F1a
-profile, including its local coordinate range. Bake selected-scene positions
+byte or triangle limit. Coordinate and transform eligibility remain the [F1a
+profile](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/f1a-contract.md), including its local coordinate range. Bake selected-scene positions
 once using its node matrices and reflected corner order; canonicalize signed
 zero. Preserve authored primitive and vertex references for later attributes.
 Validate every declared accessor and authored primitive, including unselected

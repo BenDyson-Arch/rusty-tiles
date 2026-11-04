@@ -187,7 +187,6 @@ These are ignored by default and run only when asked.
 
 | Test | Command | Needs |
 | --- | --- | --- |
-| Wrapper conventions against `3d-tiles-tools@0.5.4` | `cargo test --test golden -- --ignored` | npx, with network or a cached install |
 | Leaf triangle audit of a real model | `cargo test --release --test fidelity full_model_leaf_triangle_audit -- --ignored --nocapture` | `RUSTY_TILES_FIDELITY_SOURCE`, `RUSTY_TILES_FIDELITY_ARCHIVE`, optional `RUSTY_TILES_FIDELITY_OFFSET` |
 | Checks on your own GLB | `cargo test --release --test demo_mesh -- --ignored` | `RUSTY_TILES_DEMO_GLB` |
 | GeoPackage diff cross-apply | `python3 -m unittest discover -s tests -p 'test_geodiff_compat.py'` | `GEODIFF_CPP_BIN`, `GO_GEODIFF_DRIVER` |
@@ -391,7 +390,7 @@ A new version changes converter and cache identity. Consumers must invalidate de
 
 These files record measured runs. Read them for numbers. They describe one machine and run, not guarantees.
 
-Runs whose result files left the tree to save space link to [`bench/MOVED_EVIDENCE.md`](bench/MOVED_EVIDENCE.md), which gives each file's SHA-256 and the commit that last held it.
+Runs whose result files left the tree to save space link to [`bench/MOVED_EVIDENCE.md`](bench/MOVED_EVIDENCE.md), which gives the commit that last held each file and, for files copied to the evidence cache, its SHA-256.
 
 | Evidence | What it covers | Reproduce with |
 | --- | --- | --- |

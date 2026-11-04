@@ -18,8 +18,8 @@ collected evidence, not that the release gate passes.
 
 | Evidence | Method | Scope |
 | --- | --- | --- |
-| [API probes](api/README.md) / [results](api/results.json) | Build unmodified portable CLI/core/Python binding, generate invented GLBs, compare decoded archive members and inspect output after exceptions | Geographic offsets, rotation-only requests, omitted texture choice, callback failure/publication |
-| [Runtime probes](runtime/README.md) / [results](runtime/evidence/publication-vector.json) | Natural vector conversions plus clearly identified isolated source fault injection | Feature rollback/reporting, source callback I/O failure, directory publication race, orphan-content control |
+| [API probes](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/bench/architecture_audit/api/README.md) / [results](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/api/results.json) | Build unmodified portable CLI/core/Python binding, generate invented GLBs, compare decoded archive members and inspect output after exceptions | Geographic offsets, rotation-only requests, omitted texture choice, callback failure/publication |
+| [Runtime probes](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/bench/architecture_audit/runtime/README.md) / [results](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/runtime/evidence/publication-vector.json) | Natural vector conversions plus clearly identified isolated source fault injection | Feature rollback/reporting, source callback I/O failure, directory publication race, orphan-content control |
 | [Foundation design model](foundation/README.md) / [results](../MOVED_EVIDENCE.md) | Exhaustive finite state/history exploration with seven negative controls | Proposed gate, seal/drain, primary failure, publication and recovery contracts; no production execution |
 
 The individual READMEs contain replay commands and prerequisites. Build targets

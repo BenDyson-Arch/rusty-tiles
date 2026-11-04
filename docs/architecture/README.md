@@ -11,8 +11,8 @@ coarse geometry and H27's per-texel bake; S6 removed both, and HLOD is the only
 coarse path. Its integrated acceptance is pending. The roadmap also proposes #267's finite non-mesh bar for owner approval
 in this review; it is not yet an accepted exception to the foundation gate below.
 Draft experiments may inform design, but draft-format viewer support does not
-block 0.4. The [interrupted-track ledger](04-track-dispositions.md) records what
-continues, what is superseded, and how unfinished source can be recovered.
+block 0.4. The interrupted-track ledger (removed 2026-11-04; [last version](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/04-track-dispositions.md))
+recorded what continued, what was superseded, and how unfinished source could be recovered.
 
 This accepted correction supersedes PR #171's new-format shipping target for
 0.4, while retaining its consolidated sequence, recovery evidence and retirement
@@ -71,7 +71,7 @@ rewrite is downstream work. This narrows the earlier mesh-first plan: F0 must
 prove its own contracts without inheriting geometry, CRS or LOD complexity.
 
 See [foundation contracts](foundation-contracts.md), the
-[boundary audit](boundary-audit.md), and [publication primitive evidence](platform-evidence.md).
+[boundary audit](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/boundary-audit.md) (removed 2026-11-04), and [publication primitive evidence](platform-evidence.md).
 These are the current sequencing authority; the larger API and runtime proposals
 remain the target direction, not a checklist to squeeze into F0.
 
@@ -88,7 +88,6 @@ wherever the concrete scope has not adopted them.
 ## Audit documents
 
 - [0.4 delivery and 0.6 format-transition roadmap](04-tiles2-roadmap.md)
-- [Interrupted-track dispositions and recovery](04-track-dispositions.md)
 - [H1 streamed mesh capture and tree contract](h1-capture-tree-contract.md)
 - [H1 independent capture, tree and resource evidence](../../bench/architecture_audit/mesh_large_h1/README.md)
 - [H16 streamed hierarchy and 3TZ delivery contract](h16-delivery-contract.md)
@@ -107,30 +106,16 @@ wherever the concrete scope has not adopted them.
 - [C1 external-tileset per-document memo amendment (EM)](c1-external-tileset-memo-amendment.md)
 - [R2 retained preparation and selected native evidence](../../bench/architecture_audit/raster_source/README.md)
 
-- [F1d2 bounded adaptive surface certificate contract](f1d2-certificate-contract.md)
-- [F1d2 implementation and remaining approximation gates](f1d2-implementation.md)
-- [F1d2 independent artifact and consumer evidence](../../bench/architecture_audit/mesh_approximation_f1d2/README.md)
-- [F1d1 certified root proxy contract](mesh-approximation-contract.md)
-- [F1d1 implementation and remaining approximation gates](f1d1-implementation.md)
-- [F1d1 independent artifact and consumer evidence](../../bench/architecture_audit/mesh_approximation/README.md)
-
-- [Implicit rewrite contract draft, retired 2026-10-11](implicit-rewrite-contract.md)
 - [Implicit rewrite baseline probes and proof limits (historical)](../../bench/architecture_audit/implicit_rewrite/README.md)
 - [Lossless F1c2 evidence storage and verification](../../bench/architecture_audit/f1c2/README.md)
-- [F1c2/W1 implementation and remaining removal gates](f1c2-implementation.md)
-- [F1c2/W1 evidence](f1c2-evidence.md)
-- [F1c2 source identity and picking contract](f1c2-contract.md)
 - [Static model wrapping and sibling manifest contract](model-wrapping-contract.md)
 - [Packaging facade removal contract](pack-api-removal-contract.md)
 
 - [Post-F0 audit and ordered scopes](next-foundation-scopes.md)
 - [F0 implementation and migrations](f0-implementation.md)
-- [F0 acceptance evidence](f0-evidence.md)
 - [Vector feature acceptance and publication contract](vector-acceptance-contract.md)
 - [Foundation contracts and first implementation slice](foundation-contracts.md)
-- [Boundary/conditional-complexity audit](boundary-audit.md)
 - [Publication primitive evidence](platform-evidence.md)
-- [Public API and subsequent mesh slice](api-contract.md)
 - [Runtime contracts and acceptance matrix](runtime-contract.md)
 - [Component evidence and disposition ledger](evidence-ledger.md)
 - [Executable audit evidence](../../bench/architecture_audit/README.md)
