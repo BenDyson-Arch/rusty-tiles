@@ -83,6 +83,14 @@ pub(crate) enum Mutation {
     OmitRecoveryInputNoRecovery,
     #[cfg(test)]
     RefuseRecoveryRoot,
+    /// Cap coarse pages at a 64-texel edge, so a small dense fixture has page-capped,
+    /// refinable coarse tiles (D5 amendment A3).
+    #[cfg(test)]
+    SmallPages,
+    /// `SmallPages`, publishing geometric G only while the archive still declares the
+    /// texture term.
+    #[cfg(test)]
+    UnderstateTextureError,
 }
 
 impl Mutation {
@@ -121,6 +129,14 @@ impl Mutation {
             return false;
         }
         true
+    }
+    /// The coarse page edge cap (D5).
+    pub(crate) fn max_page_edge(self) -> u32 {
+        #[cfg(test)]
+        if matches!(self, Self::SmallPages | Self::UnderstateTextureError) {
+            return 64;
+        }
+        super::appearance::MAX_PAGE_EDGE
     }
     /// The hard cap the border relief trigger is a share of (A1).
     pub(crate) fn relief_cap(self, cap: usize) -> usize {

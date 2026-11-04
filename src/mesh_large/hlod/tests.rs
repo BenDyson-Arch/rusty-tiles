@@ -1792,6 +1792,8 @@ fn parent_jobs_allocate_within_their_charge() {
             primitives: Vec::new(),
             interface: Vec::new(),
             geometric_error: 0.,
+            published_error: 0.,
+            texture: Default::default(),
             lease: None,
         };
         let at = |x: f32, z: f32, y: f32| {
@@ -1983,6 +1985,8 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
         }],
         interface: vec![row(a), row(b)],
         geometric_error: 0.,
+        published_error: 0.,
+        texture: Default::default(),
         lease: None,
     };
     let locked = [true, true, false, false];
@@ -2058,6 +2062,8 @@ fn coarse_weld_keeps_uv_and_normal_seams() {
         }],
         interface: Vec::new(),
         geometric_error: 0.,
+        published_error: 0.,
+        texture: Default::default(),
         lease: None,
     };
     let mut appearance = plain_appearance(&tile);
@@ -2600,6 +2606,8 @@ fn adversarial_held_tile_fits_its_admitted_charge() {
         primitives: Vec::with_capacity(n),
         interface: Vec::with_capacity(6 * n),
         geometric_error: 0.,
+        published_error: 0.,
+        texture: Default::default(),
         lease: None,
     };
     for t in 0..n {
@@ -5280,6 +5288,8 @@ fn ordinary_drops_under_pressure_go_smallest_first() {
         }],
         interface: vec![],
         geometric_error: 0.,
+        published_error: 0.,
+        texture: Default::default(),
         lease: None,
     };
     let contract = Contract {
@@ -5417,6 +5427,8 @@ fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
         }],
         interface: vec![],
         geometric_error: 0.,
+        published_error: 0.,
+        texture: Default::default(),
         lease: None,
     };
     let contract = Contract {

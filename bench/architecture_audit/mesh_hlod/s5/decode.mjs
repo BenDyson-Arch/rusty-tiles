@@ -108,12 +108,16 @@ export async function decode(input) {
     normalTolerance=directions.reduce((bound,n)=>Math.max(bound,Math.min(2,2*Math.hypot(...nm)*error/Math.hypot(...direction(nm,n))+64*Number.EPSILON)),0);
    }
    const uvTolerance=uvs?accessorTolerance(p.attributes.TEXCOORD_0,uvs,2):null;
+   // Further TEXCOORD sets, for a base colour bound to one of them (texture-aware G).
+   const extraSets={};
+   for(const [name,a] of Object.entries(p.attributes)){const m_=/^TEXCOORD_([1-9][0-9]*)$/.exec(name);if(!m_)continue;const v=await acc(a);if(v.length!==pos.length||j.accessors[a].type!=='VEC2')throw Error('accessorValues: TEXCOORD shape');extraSets[m_[1]]=v;}
+   const hasExtra=Object.keys(extraSets).length>0;
    for(const f of p.extensions?.EXT_mesh_features?.featureIds??[]){if(f.attribute===undefined){if(['source_primitive','source_triangle'].includes(f.label))throw Error('featureIdentity');continue;}if(p.attributes[`_FEATURE_ID_${f.attribute}`]===undefined)throw Error('featureIdentity');const values=(await acc(p.attributes[`_FEATURE_ID_${f.attribute}`])).flat();const table=tables[f.propertyTable];
     if(!table||table.class!==f.label||f.featureCount!==table.count||values.length!==pos.length||values.some(i=>!Number.isInteger(i)||i<0||i>=table.count||i===f.nullFeatureId))throw Error('featureIdentity');sets.push({label:f.label,values,table});}
    if(idx.length%3||idx.some(i=>!Number.isSafeInteger(i)||i<0||i>=pos.length))throw Error('primitiveIndices');
    for(let k=0;k<idx.length;k+=3){const ids={};for(const s of sets){const a=s.values[idx[k]];if([1,2].some(c=>s.values[idx[k+c]]!==a))throw Error('featureIdentity');ids[s.label]=Object.fromEntries(Object.entries(s.table.props).map(([key,col])=>[key,col[a]]));}
     const corners=idx.slice(k,k+3);
-    faces.push({xyz:corners.map(i=>pos[i]),normals:normals?corners.map(i=>normals[i]):null,uvs:uvs?corners.map(i=>uvs[i]):null,positionTolerance:tolerance,...grid,normalTolerance,uvTolerance,ids,source:[id,n.mesh,pi,k/3],material:p.material===undefined?null:j.materials[p.material]});
+    faces.push({xyz:corners.map(i=>pos[i]),normals:normals?corners.map(i=>normals[i]):null,uvs:uvs?corners.map(i=>uvs[i]):null,positionTolerance:tolerance,...grid,normalTolerance,uvTolerance,ids,source:[id,n.mesh,pi,k/3],material:p.material===undefined?null:j.materials[p.material],...(hasExtra?{texcoords:Object.fromEntries(Object.entries(extraSets).map(([k,v])=>[k,corners.map(i=>v[i])]))}:{})});
    }
   }
   for(const child of n.children??[])await visit(child,m,stack);

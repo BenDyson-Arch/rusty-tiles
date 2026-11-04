@@ -195,7 +195,8 @@ def generate(root):
             for uri in list(files):
                 files[uri] = stripped(files[uri])
             if declare == 'asset':
-                doc['asset']['extras'] = {'rustyTiles': {'lod': 'hlod'}}
+                doc['asset']['extras'] = {'rustyTiles': {'lod': 'hlod', 'textureError': {
+                    'version': 1, 'pxPerTexel': 2.0, 'refinableRatio': 1.25}}}
             if declare == 'report':
                 files['conversion.json'] = json.dumps({'lod': 'hlod'}).encode()
         case(name, strip, check='hlodFeatureIds', source='source-left.json',

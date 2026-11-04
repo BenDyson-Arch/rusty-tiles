@@ -1267,6 +1267,8 @@ enum DocumentKind {
     Root {
         build_state: Option<[u8; 32]>,
         hlod: bool,
+        /// The HLOD texture-error rule (`rustyTiles.textureError`, D5 amendment A3).
+        texture_error: Option<Value>,
     },
     /// An external document `tileset-d{m}.json`.
     External,
@@ -1297,6 +1299,7 @@ impl TilesetDocument {
             kind: DocumentKind::Root {
                 build_state: None,
                 hlod: false,
+                texture_error: None,
             },
             geometric_error,
             extensions_used: extensions_used.into_iter().collect(),
@@ -1335,10 +1338,18 @@ impl TilesetDocument {
     }
 
     /// Declare the archive an HLOD delivery (`asset.extras.rustyTiles.lod = "hlod"`), which
-    /// makes a validator hold every payload to HLOD identity and continuity.
-    pub(crate) fn declaring_hlod(mut self) -> Result<Self, Error> {
+    /// makes a validator hold every payload to HLOD identity and continuity, and the
+    /// texture-error rule its coarse G was published under (`textureError`).
+    pub(crate) fn declaring_hlod(mut self, texture: Option<Value>) -> Result<Self, Error> {
         match &mut self.kind {
-            DocumentKind::Root { hlod, .. } => *hlod = true,
+            DocumentKind::Root {
+                hlod,
+                texture_error,
+                ..
+            } => {
+                *hlod = true;
+                *texture_error = texture;
+            }
             DocumentKind::External => {
                 return Err(invalid("only tileset.json declares the archive's LOD"))
             }
@@ -1370,10 +1381,19 @@ impl TilesetDocument {
     pub(crate) fn head(&self) -> Map<String, Value> {
         let mut asset = Map::new();
         asset.insert("version".into(), Value::from("1.1"));
-        if let DocumentKind::Root { build_state, hlod } = &self.kind {
+        if let DocumentKind::Root {
+            build_state,
+            hlod,
+            texture_error,
+        } = &self.kind
+        {
             let mut extras = Map::new();
             if *hlod {
-                extras.insert("rustyTiles".into(), serde_json::json!({"lod": "hlod"}));
+                let mut declared = serde_json::json!({"lod": "hlod"});
+                if let Some(rule) = texture_error {
+                    declared["textureError"] = rule.clone();
+                }
+                extras.insert("rustyTiles".into(), declared);
             }
             if let Some(sha256) = build_state {
                 extras.insert("vectorBuildStateSha256".into(), Value::from(hex(sha256)));
@@ -1768,12 +1788,12 @@ mod record_tests {
         );
         assert_eq!(head["geometricError"].to_string(), "2.5");
         assert!(is_data(external.clone().with_build_state([0; 32])).contains("build state"));
-        let declared = document.clone().declaring_hlod().unwrap();
+        let declared = document.clone().declaring_hlod(None).unwrap();
         assert_eq!(
             Value::Object(declared.head())["asset"].to_string(),
             r#"{"extras":{"rustyTiles":{"lod":"hlod"}},"version":"1.1"}"#
         );
-        assert!(is_data(external.declaring_hlod()).contains("declares"));
+        assert!(is_data(external.declaring_hlod(None)).contains("declares"));
         let empty = TilesetDocument::root(GeometricError::new(1.).unwrap(), []);
         assert!(!empty.head().contains_key("extensionsUsed"));
     }

@@ -175,18 +175,8 @@ fn f32_exact(value: &Value) -> Result<f32, JobError> {
     Ok(f)
 }
 
-/// Decode a leaf or coarse-tile GLB: every triangle's positions in client order and its
-/// feature IDs, plus every property table.
-pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
-    decode_checked(bytes, &|| Ok(()))
-}
-
-/// [`decode`], polling `check` before every scene node, glTF primitive and property table.
-pub(crate) fn decode_checked(
-    bytes: &[u8],
-    check: &dyn Fn() -> Result<(), JobError>,
-) -> Result<Decoded, JobError> {
-    check()?;
+/// The GLB 2.0 framing: its JSON document and BIN chunk.
+fn open(bytes: &[u8]) -> Result<Reader<'_>, JobError> {
     let u32_at = |i: usize| -> Result<u32, JobError> {
         Ok(u32::from_le_bytes(
             bytes
@@ -218,7 +208,108 @@ pub(crate) fn decode_checked(
     } else {
         &[][..]
     };
-    let reader = Reader { doc, bin };
+    Ok(Reader { doc, bin })
+}
+
+/// A primitive's POSITION in client order (`u*s + t` in f32, u16 or f32 storage): the
+/// stored words and the decoded positions.
+#[allow(clippy::type_complexity)]
+fn positions(
+    reader: &Reader<'_>,
+    attributes: &Value,
+    translation: [f32; 3],
+    scale: [f32; 3],
+) -> Result<(Vec<[u32; 3]>, Vec<[f32; 3]>, u64), JobError> {
+    let (positions, component, _) = reader.accessor(
+        attributes["POSITION"]
+            .as_u64()
+            .ok_or_else(|| invalid("no POSITION"))? as usize,
+    )?;
+    let raw: Vec<[u32; 3]> = positions
+        .iter()
+        .map(|e| {
+            std::array::from_fn(|a| match component {
+                5123 => u32::from(u16::from_le_bytes([e[2 * a], e[2 * a + 1]])),
+                _ => u32::from_le_bytes(e[4 * a..4 * a + 4].try_into().unwrap()),
+            })
+        })
+        .collect();
+    let decoded: Vec<[f32; 3]> = positions
+        .iter()
+        .map(|e| {
+            std::array::from_fn(|a| match component {
+                5123 => {
+                    let u = u16::from_le_bytes([e[2 * a], e[2 * a + 1]]);
+                    // Client order: exact u*s, then one rounded addition.
+                    let p = f32::from(u) * scale[a] + translation[a];
+                    if p == 0. {
+                        0.
+                    } else {
+                        p
+                    }
+                }
+                _ => {
+                    let v = f32::from_le_bytes(e[4 * a..4 * a + 4].try_into().unwrap());
+                    v * scale[a] + translation[a]
+                }
+            })
+        })
+        .collect();
+    Ok((raw, decoded, component))
+}
+
+/// A primitive's triangle corner indices (all vertices in order when unindexed).
+fn indices(
+    reader: &Reader<'_>,
+    primitive: &Value,
+    vertices: usize,
+) -> Result<Vec<usize>, JobError> {
+    let indices: Vec<usize> = match primitive.get("indices").and_then(Value::as_u64) {
+        Some(index) => {
+            let (values, component, _) = reader.accessor(index as usize)?;
+            values
+                .iter()
+                .map(|e| match component {
+                    5125 => u32::from_le_bytes(e[..4].try_into().unwrap()) as usize,
+                    5123 => usize::from(u16::from_le_bytes([e[0], e[1]])),
+                    _ => usize::from(e[0]),
+                })
+                .collect()
+        }
+        None => (0..vertices).collect(),
+    };
+    if !indices.len().is_multiple_of(3) || indices.iter().any(|&i| i >= vertices) {
+        return Err(invalid("triangle indices out of range"));
+    }
+    Ok(indices)
+}
+
+/// A scene node's translation and scale, exact f32 values (identity when absent).
+fn node_trs(node: &Value) -> Result<([f32; 3], [f32; 3]), JobError> {
+    let translation = match node.get("translation") {
+        Some(t) => [f32_exact(&t[0])?, f32_exact(&t[1])?, f32_exact(&t[2])?],
+        None => [0.; 3],
+    };
+    let scale = match node.get("scale") {
+        Some(s) => [f32_exact(&s[0])?, f32_exact(&s[1])?, f32_exact(&s[2])?],
+        None => [1.; 3],
+    };
+    Ok((translation, scale))
+}
+
+/// Decode a leaf or coarse-tile GLB: every triangle's positions in client order and its
+/// feature IDs, plus every property table.
+pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
+    decode_checked(bytes, &|| Ok(()))
+}
+
+/// [`decode`], polling `check` before every scene node, glTF primitive and property table.
+pub(crate) fn decode_checked(
+    bytes: &[u8],
+    check: &dyn Fn() -> Result<(), JobError>,
+) -> Result<Decoded, JobError> {
+    check()?;
+    let reader = open(bytes)?;
     let doc = &reader.doc;
     let mut faces = Vec::new();
     let mut decoded_primitives = Vec::new();
@@ -229,14 +320,7 @@ pub(crate) fn decode_checked(
     {
         check()?;
         let node = &doc["nodes"][root.as_u64().ok_or_else(|| invalid("node index"))? as usize];
-        let translation = match node.get("translation") {
-            Some(t) => [f32_exact(&t[0])?, f32_exact(&t[1])?, f32_exact(&t[2])?],
-            None => [0.; 3],
-        };
-        let scale = match node.get("scale") {
-            Some(s) => [f32_exact(&s[0])?, f32_exact(&s[1])?, f32_exact(&s[2])?],
-            None => [1.; 3],
-        };
+        let (translation, scale) = node_trs(node)?;
         let Some(mesh) = node.get("mesh").and_then(Value::as_u64) else {
             continue;
         };
@@ -252,41 +336,7 @@ pub(crate) fn decode_checked(
                 return Err(invalid("non-triangle primitive"));
             }
             let attributes = &primitive["attributes"];
-            let (positions, component, _) = reader.accessor(
-                attributes["POSITION"]
-                    .as_u64()
-                    .ok_or_else(|| invalid("no POSITION"))? as usize,
-            )?;
-            let raw: Vec<[u32; 3]> = positions
-                .iter()
-                .map(|e| {
-                    std::array::from_fn(|a| match component {
-                        5123 => u32::from(u16::from_le_bytes([e[2 * a], e[2 * a + 1]])),
-                        _ => u32::from_le_bytes(e[4 * a..4 * a + 4].try_into().unwrap()),
-                    })
-                })
-                .collect();
-            let decoded: Vec<[f32; 3]> = positions
-                .iter()
-                .map(|e| {
-                    std::array::from_fn(|a| match component {
-                        5123 => {
-                            let u = u16::from_le_bytes([e[2 * a], e[2 * a + 1]]);
-                            // Client order: exact u*s, then one rounded addition.
-                            let p = f32::from(u) * scale[a] + translation[a];
-                            if p == 0. {
-                                0.
-                            } else {
-                                p
-                            }
-                        }
-                        _ => {
-                            let v = f32::from_le_bytes(e[4 * a..4 * a + 4].try_into().unwrap());
-                            v * scale[a] + translation[a]
-                        }
-                    })
-                })
-                .collect();
+            let (raw, decoded, component) = positions(&reader, attributes, translation, scale)?;
             let feature = |name: &str| -> Result<Option<Vec<u32>>, JobError> {
                 let Some(index) = attributes.get(name).and_then(Value::as_u64) else {
                     return Ok(None);
@@ -331,23 +381,7 @@ pub(crate) fn decode_checked(
                     sets.push((values, table));
                 }
             }
-            let indices: Vec<usize> = match primitive.get("indices").and_then(Value::as_u64) {
-                Some(index) => {
-                    let (values, component, _) = reader.accessor(index as usize)?;
-                    values
-                        .iter()
-                        .map(|e| match component {
-                            5125 => u32::from_le_bytes(e[..4].try_into().unwrap()) as usize,
-                            5123 => usize::from(u16::from_le_bytes([e[0], e[1]])),
-                            _ => usize::from(e[0]),
-                        })
-                        .collect()
-                }
-                None => (0..decoded.len()).collect(),
-            };
-            if !indices.len().is_multiple_of(3) || indices.iter().any(|&i| i >= decoded.len()) {
-                return Err(invalid("triangle indices out of range"));
-            }
+            let indices = indices(&reader, primitive, decoded.len())?;
             let primitive_slot = decoded_primitives.len() as u32;
             decoded_primitives.push(DecodedPrimitive {
                 node: node_index,
@@ -436,4 +470,92 @@ pub(crate) fn decode_checked(
         tables,
         primitives: decoded_primitives,
     })
+}
+
+/// The texture-term sums of one published payload (D5 amendment A3, [`super::texture_error`]),
+/// from its bytes in client order: over every triangle whose material has a base-colour
+/// texture, its decoded surface area and its base-level texel area (UV area times the
+/// embedded KTX2/PNG page's width x height).
+pub(crate) fn texture_sums(bytes: &[u8]) -> Result<super::texture_error::Sums, JobError> {
+    let reader = open(bytes)?;
+    let doc = &reader.doc;
+    // Per material: (texels per unit UV area, TEXCOORD set) of its base-colour page.
+    let mut pages = Vec::new();
+    for material in doc["materials"].as_array().into_iter().flatten() {
+        let Some(base) = material["pbrMetallicRoughness"].get("baseColorTexture") else {
+            pages.push(None);
+            continue;
+        };
+        if base.get("extensions").is_some() {
+            return Err(invalid("base-colour texture transform"));
+        }
+        let texture = &doc["textures"][base["index"]
+            .as_u64()
+            .ok_or_else(|| invalid("base-colour texture index"))?
+            as usize];
+        let image = texture["extensions"]["KHR_texture_basisu"]["source"]
+            .as_u64()
+            .or_else(|| texture["source"].as_u64())
+            .ok_or_else(|| invalid("base-colour texture without image"))?;
+        let view = doc["images"][image as usize]["bufferView"]
+            .as_u64()
+            .ok_or_else(|| invalid("base-colour image is not embedded"))?;
+        let [w, h] = super::texture_error::image_size(&reader.view(view as usize)?)?;
+        pages.push(Some((
+            f64::from(w) * f64::from(h),
+            base["texCoord"].as_u64().unwrap_or(0),
+        )));
+    }
+    let mut sums = super::texture_error::Sums::default();
+    let scene = doc["scene"].as_u64().unwrap_or(0) as usize;
+    for root in doc["scenes"][scene]["nodes"]
+        .as_array()
+        .ok_or_else(|| invalid("GLB without scene nodes"))?
+    {
+        let node = &doc["nodes"][root.as_u64().ok_or_else(|| invalid("node index"))? as usize];
+        let (translation, scale) = node_trs(node)?;
+        let Some(mesh) = node.get("mesh").and_then(Value::as_u64) else {
+            continue;
+        };
+        for primitive in doc["meshes"][mesh as usize]["primitives"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            let page = primitive["material"]
+                .as_u64()
+                .and_then(|m| pages.get(m as usize).copied().flatten());
+            let Some((texels, set)) = page else { continue };
+            let attributes = &primitive["attributes"];
+            let (_, decoded, _) = positions(&reader, attributes, translation, scale)?;
+            let (uvs, component, width) = reader.accessor(
+                attributes[format!("TEXCOORD_{set}")]
+                    .as_u64()
+                    .ok_or_else(|| invalid("textured primitive without its TEXCOORD"))?
+                    as usize,
+            )?;
+            if width != 2 || uvs.len() != decoded.len() {
+                return Err(invalid("TEXCOORD shape"));
+            }
+            let uv: Vec<[f64; 2]> = uvs
+                .iter()
+                .map(|e| {
+                    std::array::from_fn(|a| match component {
+                        5126 => {
+                            f64::from(f32::from_le_bytes(e[4 * a..4 * a + 4].try_into().unwrap()))
+                        }
+                        5123 => f64::from(u16::from_le_bytes([e[2 * a], e[2 * a + 1]])) / 65535.,
+                        _ => f64::from(e[a]) / 255.,
+                    })
+                })
+                .collect();
+            for t in indices(&reader, primitive, decoded.len())?
+                .as_chunks::<3>()
+                .0
+            {
+                sums.add_triangle(t.map(|i| decoded[i]), t.map(|i| uv[i]), texels);
+            }
+        }
+    }
+    Ok(sums)
 }

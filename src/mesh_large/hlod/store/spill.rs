@@ -93,6 +93,9 @@ impl Spilled {
             Ok(b)
         };
         let header = read(24)?;
+        // Published G and the texture sums (D5 amendment A3).
+        let extra = read(24)?;
+        let word = |i: usize| f64::from_le_bytes(extra[i * 8..i * 8 + 8].try_into().unwrap());
         let sizes: [usize; 4] = std::array::from_fn(|i| {
             u32::from_le_bytes(header[i * 4..i * 4 + 4].try_into().unwrap()) as usize
         });
@@ -113,6 +116,11 @@ impl Spilled {
             primitives: Vec::with_capacity(primitives),
             interface: Vec::with_capacity(interfaces),
             geometric_error: f64::from_le_bytes(header[16..24].try_into().unwrap()),
+            published_error: word(0),
+            texture: crate::mesh_large::hlod::texture_error::Sums {
+                area: word(1),
+                texels: word(2),
+            },
             lease: None,
         };
         for _ in 0..vertices {
@@ -187,7 +195,7 @@ impl<'l, 's> Manager<'l, 's> {
         if self.lease.is_none() {
             self.lease = Some(self.ledger.admit("s1b-held-tiles", self.bound)?);
         }
-        let size = 24
+        let size = 48
             + 13 * tile.positions.len() as u64
             + 16 * tile.triangles.len() as u64
             + 24 * tile.primitives.len() as u64
@@ -207,7 +215,14 @@ impl<'l, 's> Manager<'l, 's> {
         ] {
             writer.append(&(n as u32).to_le_bytes())?;
         }
-        writer.append(&tile.geometric_error.to_le_bytes())?;
+        for v in [
+            tile.geometric_error,
+            tile.published_error,
+            tile.texture.area,
+            tile.texture.texels,
+        ] {
+            writer.append(&v.to_le_bytes())?;
+        }
         for (p, ell) in tile.positions.iter().zip(&tile.ells) {
             writer.append(&[*ell])?;
             for c in p {
@@ -315,6 +330,11 @@ mod tests {
             }],
             interface: vec![InterfaceRow::new(1, key(p[0]), key(p[1]), 1, 3)],
             geometric_error: 0.125,
+            published_error: 0.5,
+            texture: crate::mesh_large::hlod::texture_error::Sums {
+                area: 2.,
+                texels: 3.,
+            },
             lease: None,
         };
         let disk = manager.spill(tile).unwrap();
@@ -325,6 +345,8 @@ mod tests {
         assert_eq!(loaded.primitives[0].expanded_ordinal, u64::MAX - 1);
         assert_eq!(loaded.interface[0].a, key(p[0]));
         assert_eq!(loaded.geometric_error, 0.125);
+        assert_eq!(loaded.published_error, 0.5);
+        assert_eq!((loaded.texture.area, loaded.texture.texels), (2., 3.));
         assert_eq!(manager.stats.tiles, 1);
         assert!(manager.stats.peak_bytes > 0);
         drop(disk);

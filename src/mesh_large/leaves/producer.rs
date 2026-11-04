@@ -571,6 +571,8 @@ struct LeafEncoded {
     primitives: usize,
     /// Triangles whose decoded-UV footprint shares a page texel area with another's.
     shared_triangles: u64,
+    /// Texture-term sums of the published bytes (HLOD D5 amendment A3).
+    texture: crate::mesh_large::hlod::texture_error::Sums,
 }
 fn read_leaf(
     node: NodeRecord,
@@ -691,6 +693,7 @@ fn leaf_encode(
     let name = format!("{index:012}.glb");
     let member = leaves.join(&name);
     timing::time(Stage::MemberWrite, || write_file(&member, &glb.glb))?;
+    let texture = crate::mesh_large::hlod::decode::texture_sums(&glb.glb)?;
     Ok(LeafEncoded {
         name,
         sha256: hex(Sha256::digest(&glb.glb)),
@@ -703,6 +706,7 @@ fn leaf_encode(
         density_reasons,
         primitives: glb.primitives,
         shared_triangles: glb.shared_triangles,
+        texture,
     })
 }
 
@@ -1027,12 +1031,13 @@ fn write_leaf(
         density_reasons,
         primitives,
         shared_triangles,
+        texture,
     } = encoded;
     if name != format!("{:012}.glb", report.leaves) {
         return Err(invariant("leaf member order differs from manifest order"));
     }
     timing::count(Counter::Leaves, 1);
-    let receipt = json!({"schemaVersion":1,"uri":format!("leaves/{name}"),"sha256":sha256,"bytes":bytes,"first":node.first,"end":node.end,"cellDepth":node.cell_depth,"cell":node.cell,"pathLength":node.path_len,"path":node.path,"lastOctant":node.last_octant,"depth":node.depth(),"packed":node.is_packed(),"bounds":{"min":bounds.min.map(f64::from),"max":bounds.max.map(f64::from)},"geometryError":geometry_error,"densityDrop":density_drop,"densityReasons":density_reasons,"primitives":primitives,"texelOwnership":if shared_triangles == 0 {"unique"} else {"shared"},"sharedTriangles":shared_triangles,"plannedFootprint":{"densityDrop":plan.density_drop,"memoryDrops":plan.memory_drops,"pages":plan.pages,"baseTexels":plan.base_texels,"chainTexels":plan.chain_texels,"geometryBytes":plan.geometry_bytes,"planningOwnedBytes":plan.owned_bytes},"appearance":appearance});
+    let receipt = json!({"schemaVersion":1,"uri":format!("leaves/{name}"),"sha256":sha256,"bytes":bytes,"first":node.first,"end":node.end,"cellDepth":node.cell_depth,"cell":node.cell,"pathLength":node.path_len,"path":node.path,"lastOctant":node.last_octant,"depth":node.depth(),"packed":node.is_packed(),"bounds":{"min":bounds.min.map(f64::from),"max":bounds.max.map(f64::from)},"geometryError":geometry_error,"texture":texture,"densityDrop":density_drop,"densityReasons":density_reasons,"primitives":primitives,"texelOwnership":if shared_triangles == 0 {"unique"} else {"shared"},"sharedTriangles":shared_triangles,"plannedFootprint":{"densityDrop":plan.density_drop,"memoryDrops":plan.memory_drops,"pages":plan.pages,"baseTexels":plan.base_texels,"chainTexels":plan.chain_texels,"geometryBytes":plan.geometry_bytes,"planningOwnedBytes":plan.owned_bytes},"appearance":appearance});
     serde_json::to_writer(&mut *manifest, &receipt)
         .map_err(|e| invariant(&format!("leaf manifest serialization: {e}")))?;
     manifest
