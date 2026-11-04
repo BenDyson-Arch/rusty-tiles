@@ -1503,7 +1503,8 @@ fn checkerboard_normal_and_mask_borders_agree_across_mixed_lod() {
 /// their geometric G (t = 2 for balanced), G' stays monotone through every child, the
 /// archive declares the rule and the native validator recomputes it from pages, UVs and
 /// the hierarchy. The same build publishing geometric G under the declaration is refused;
-/// fast declares and raises nothing; at the production page edge nothing is refinable.
+/// producer and validator count the same refinable and texture-bound tiles; fast declares
+/// the null form and raises nothing; at the production page edge nothing is refinable.
 #[test]
 fn capped_pages_publish_texture_aware_g_that_the_validator_recomputes() {
     use super::{encode::Mutation, tests::test_settings, texture_error, Settings};
@@ -1593,7 +1594,17 @@ fn capped_pages_publish_texture_aware_g_that_the_validator_recomputes() {
     let checked = inspect(ValidationRequest::new(&honest)).unwrap();
     let census = checked.interface_census.unwrap();
     assert!(census.texture_bound_tiles > 0, "{census:?}");
-    assert!(census.texture_refinable_tiles >= census.texture_bound_tiles);
+    // Every coarse tile is published once here (no chain copies): the producer's counts.
+    assert_eq!(
+        census.texture_refinable_tiles,
+        report["refinable"].as_u64().unwrap(),
+        "{report}"
+    );
+    assert_eq!(
+        census.texture_bound_tiles,
+        report["raisedByTexture"].as_u64().unwrap(),
+        "{report}"
+    );
     let understated = build(
         "understated.3tz",
         Mutation::UnderstateTextureError,
@@ -1606,6 +1617,12 @@ fn capped_pages_publish_texture_aware_g_that_the_validator_recomputes() {
     let fast = build("fast.3tz", Mutation::SmallPages, TilerProfile::Fast);
     let checked = inspect(ValidationRequest::new(&fast)).unwrap();
     assert_eq!(checked.interface_census.unwrap().texture_refinable_tiles, 0);
+    let mut zip = zip::ZipArchive::new(fs::File::open(&fast).unwrap()).unwrap();
+    let tileset: Value = serde_json::from_reader(zip.by_name("tileset.json").unwrap()).unwrap();
+    assert_eq!(
+        tileset["asset"]["extras"]["rustyTiles"]["textureError"],
+        json!({"version": 1, "pxPerTexel": null, "refinableRatio": 1.25})
+    );
     let production = build("production.3tz", Mutation::None, TilerProfile::Balanced);
     let census = inspect(ValidationRequest::new(&production))
         .unwrap()

@@ -23,21 +23,37 @@ SSE = 16.0
 SLACK = 1e-4
 
 
+REFINABLE_RATIO = 1.25
+PX_PER_TEXEL = (2.0, 1.25)
+
+
 def declaration(tileset, require):
-    """The declared (t, r), or None when the archive declares no texture term."""
+    """The declared (t, r); None for no HLOD declaration or the fast form (pxPerTexel null).
+    An HLOD tileset (rustyTiles.lod == "hlod") must declare exactly {version: 1,
+    pxPerTexel: 2 | 1.25 | null, refinableRatio: 1.25}; any other tileset must not."""
     extras = tileset.get('asset', {}).get('extras', {})
-    value = extras.get('rustyTiles', {}) if isinstance(extras, dict) else {}
-    value = value.get('textureError') if isinstance(value, dict) else None
-    if value is None:
+    rusty = extras.get('rustyTiles', {}) if isinstance(extras, dict) else {}
+    rusty = rusty if isinstance(rusty, dict) else {}
+    hlod = rusty.get('lod') == 'hlod'
+    present = 'textureError' in rusty
+    if not hlod:
+        require(not present, 'textureError', 'textureError is declared outside an HLOD tileset')
         return None
-    require(isinstance(value, dict) and value.get('version') == 1, 'textureError',
-            'textureError declaration is not version 1')
-    numbers = [value.get('pxPerTexel'), value.get('refinableRatio')]
-    require(all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v >= 1
-                for v in numbers), 'textureError', 'pxPerTexel/refinableRatio must be finite numbers >= 1')
-    require(extras.get('rustyTiles', {}).get('lod') == 'hlod', 'textureError',
-            'textureError is declared outside an HLOD tileset')
-    return float(numbers[0]), float(numbers[1])
+    require(present, 'textureError', 'an HLOD tileset must declare its texture rule')
+    value = rusty['textureError']
+    require(isinstance(value, dict), 'textureError', 'declaration is not an object')
+    require(set(value) == {'version', 'pxPerTexel', 'refinableRatio'}, 'textureError',
+            'declaration must hold exactly version, pxPerTexel and refinableRatio')
+    require(type(value['version']) is int and value['version'] == 1, 'textureError',
+            'version must be the integer 1')
+    number = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+    require(number(value['refinableRatio']) and value['refinableRatio'] == REFINABLE_RATIO,
+            'textureError', 'refinableRatio must be 1.25')
+    t = value['pxPerTexel']
+    if t is None:
+        return None
+    require(number(t) and float(t) in PX_PER_TEXEL, 'textureError', 'pxPerTexel must be 2, 1.25 or null')
+    return float(t), REFINABLE_RATIO
 
 
 def image_size(data, require):
@@ -65,35 +81,41 @@ def measure(glb, faces, require):
             texels.append(None)
             continue
         require('extensions' not in ref, 'textureError', 'base-colour texture transform')
-        require(ref.get('texCoord', 0) == 0, 'textureError', 'base colour on a TEXCOORD set other than 0')
+        texcoord = ref.get('texCoord', 0)
+        require(type(texcoord) is int and texcoord >= 0, 'textureError', 'base-colour texCoord')
         texture = doc['textures'][ref['index']]
         source = texture.get('extensions', {}).get('KHR_texture_basisu', {}).get('source', texture.get('source'))
         require(source is not None, 'textureError', 'base-colour texture without image')
         view = doc['bufferViews'][doc['images'][source]['bufferView']]
         start = view.get('byteOffset', 0)
         w, h = image_size(binary[start:start + min(28, view['byteLength'])], require)
-        texels.append(w * h)
+        texels.append((w * h, texcoord))
     materials = doc.get('materials', [])
     area = texel_area = 0.0
     for f in faces:
         if f.get('material') is None:
             continue
-        scale = texels[materials.index(f['material'])]
-        if scale is None:
+        page = texels[materials.index(f['material'])]
+        if page is None:
             continue
-        require(f.get('uvs') is not None, 'textureError', 'textured face without TEXCOORD_0')
+        scale, texcoord = page
+        uvs = f.get('uvs') if texcoord == 0 else f.get('texcoords', {}).get(str(texcoord))
+        require(uvs is not None, 'textureError', f'textured face without TEXCOORD_{texcoord}')
         a, b, c = f['xyz']
         u = [b[k] - a[k] for k in range(3)]
         v = [c[k] - a[k] for k in range(3)]
         n = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
         area += 0.5 * math.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
-        p, q, r = f['uvs']
+        p, q, r = uvs
         texel_area += 0.5 * abs((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])) * scale
     return area, texel_area
 
 
 def spacing(area, texels):
-    return math.sqrt(area / texels) if area > 0 and texels > 0 else None
+    """Mean texel spacing; textured area over no UV area is infinitely coarse."""
+    if area <= 0 and texels <= 0:
+        return None
+    return math.inf if texels <= 0 else math.sqrt(area / texels)
 
 
 def children(t, digest):

@@ -267,8 +267,9 @@ tile T is therefore
 `G'(T) = max(G(T), 16 · s(T) / t if T is refinable, max child G')`
 
 - `s(X) = sqrt(A / X)` over the textured triangles of X's payload: `A` is their
-  decoded surface area and `X` their base-colour texel area (UV area times the page's
-  base-level width × height). It is the mean texel spacing in metres.
+  decoded surface area and `X` their base-colour texel area (UV area, on the TEXCOORD
+  set the material names, times the page's base-level width × height). It is the mean
+  texel spacing in metres; textured area with no UV area counts as infinitely coarse.
 - T is **refinable** when `s(T) > 1.25 · s(C)`, with `C` T's children pooled: refining
   actually delivers texels at least 1.25× finer. Where the source limits the children
   as much as T, nothing is raised.
@@ -278,15 +279,21 @@ tile T is therefore
 
 `G'` is an upper bound like `G`, so the error stays honest, and it is monotone down
 the tree. Only the published value changes: simplification, root competition, D5
-page spacing, sampling, seams and caps all use the measured `G`. The rule is declared
-in `tileset.json` as `asset.extras.rustyTiles.textureError`
-(`{"version": 1, "pxPerTexel": t, "refinableRatio": 1.25}`), and `validate`
-recomputes `s` from every payload's pages, UVs and positions and the hierarchy, and
-refuses any refinable tile whose `geometricError` is below `16 · s / t`.
-`diagnostics.hlod.texture_error` counts the tiles the term raised and those raised
-only to stay above a child. On the 2048² Walem input this changes no selection at
-balanced; on its 8192² original it removes the blurry coarse tiles beside leaves at
-10–20 m for about 28% more bytes per view.
+page spacing, sampling, seams and caps all use the measured `G`. Every HLOD archive
+declares its rule in `tileset.json` as `asset.extras.rustyTiles.textureError`:
+exactly `{"version": 1, "pxPerTexel": t, "refinableRatio": 1.25}`, with
+`"pxPerTexel": null` in `fast`. `validate` refuses an HLOD tileset without it or with
+any other value, recomputes `s` from every payload's pages, UVs and positions and the
+hierarchy, and refuses any refinable tile whose `geometricError` is below
+`16 · s / t` ([VALIDATION](VALIDATION.md)). `diagnostics.hlod.texture_error` counts the
+refinable tiles, those the term raised and those raised only to stay above a child.
+
+In `quality` and `lossless` the term can raise the root: on the Walem inputs its page
+is cap-limited and the root's `G` rises from 5.82 m to 6.28 m. In `balanced` it does
+not. Replays of the stock CesiumJS selection on existing Walem bakes (G changed
+offline by the same rule; the payloads are unchanged) give: on the 2048² input, no
+selection change at `balanced`; on its 8192² original, the blurry coarse tiles beside
+leaves at 10–20 m go and views cost about 29% more bytes there.
 
 ### Coarse appearance
 

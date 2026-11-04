@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """D5 amendment A3 controls: texture-aware published G (owner decision 2026-11-04).
 
-Literal archives; no producer imports. A coarse root holds the faces of two textured
-leaves (8 m right triangles, base-colour PNG pages): leaves at 256 x 256 texels per unit
-UV, the root at 32 x 32, so the root is refinable (spacing 0.25 m against 0.03125 m) and
-its texture-implied error at t = 2 is 16 * 0.25 / 2 = 2 m. The oracle and, with --binary,
-native validation must accept the honest G, and refuse it understated, under a stricter
-declared t, with the root's UVs shrunk (coarser texels) and with a malformed declaration.
-An undeclared archive and a source-limited root (page as fine as its leaves) bind nothing.
+Literal archives; no producer imports. Four 8 m right triangles, base-colour PNG pages:
+leaves at 256 x 256 texels per unit UV (spacing 0.03125 m). `flat` is a coarse root over
+two leaves (root page 32: spacing 0.25 m, implied G at t = 2 of 2 m). `deep` is a root
+(page 16, 0.5 m) over two middle tiles (page 64, 0.125 m, implied 1 m: refinable at
+depth 2) over four leaves; the root's implied G is 4 m. `copy` repeats the flat root's
+payload on a single-child tile between root and leaves (a single-child chain).
+
+The oracle and, with --binary, native validation must accept honest G and refuse it
+understated (at the root, at depth 2, on a copy, under a stricter t, with UVs shrunk or
+on TEXCOORD_1), below a child it must stay above, and under every malformed or missing
+declaration. The fast form (pxPerTexel null) binds nothing.
 """
 import argparse
 import json
@@ -20,6 +24,7 @@ import controls
 
 TEXTURED = {'pbrMetallicRoughness': {'baseColorTexture': {'index': 0}, 'metallicFactor': 0.0}}
 FACES = [[[16 * i, 0, 0], [16 * i + 8, 0, 0], [16 * i, 8, 0]] for i in range(4)]
+BALANCED = dict(version=1, pxPerTexel=2.0, refinableRatio=1.25)
 
 
 def png(edge):
@@ -30,18 +35,31 @@ def png(edge):
             + chunk(b'IDAT', zlib.compress(row * edge)) + chunk(b'IEND', b''))
 
 
-def textured(data, edge):
-    """The payload with one base-colour PNG page of `edge` x `edge` on its material."""
+def textured(data, edge, texcoord=None):
+    """The payload with one base-colour PNG page of `edge` x `edge` on its material. With
+    `texcoord` (a UV scale), the page binds TEXCOORD_1 = TEXCOORD_0 x scale in its own view."""
     length = int.from_bytes(data[12:16], 'little')
     doc, binary = json.loads(data[20:20 + length]), bytearray(data[28 + length:])
-    binary.extend(bytes(-len(binary) % 8))
-    image = png(edge)
-    doc['bufferViews'].append(dict(buffer=0, byteOffset=len(binary), byteLength=len(image)))
-    binary.extend(image)
+
+    def view(blob):
+        binary.extend(bytes(-len(binary) % 8))
+        doc['bufferViews'].append(dict(buffer=0, byteOffset=len(binary), byteLength=len(blob)))
+        binary.extend(blob)
+        return len(doc['bufferViews']) - 1
+    material = json.loads(json.dumps(TEXTURED))
+    if texcoord is not None:
+        prim = doc['meshes'][0]['primitives'][0]
+        src = doc['accessors'][prim['attributes']['TEXCOORD_0']]
+        sv = doc['bufferViews'][src['bufferView']]
+        uv = struct.unpack(f'<{2 * src["count"]}f', binary[sv['byteOffset']:sv['byteOffset'] + 8 * src['count']])
+        doc['accessors'].append(dict(src, bufferView=view(struct.pack(f'<{len(uv)}f', *(v * texcoord for v in uv))),
+                                     byteOffset=0))
+        prim['attributes']['TEXCOORD_1'] = len(doc['accessors']) - 1
+        material['pbrMetallicRoughness']['baseColorTexture']['texCoord'] = 1
+    doc['images'] = [dict(bufferView=view(png(edge)), mimeType='image/png')]
     binary.extend(bytes(-len(binary) % 4))
     doc['buffers'][0]['byteLength'] = len(binary)
-    doc['materials'] = [TEXTURED]
-    doc['images'] = [dict(bufferView=len(doc['bufferViews']) - 1, mimeType='image/png')]
+    doc['materials'] = [material]
     doc['textures'] = [dict(source=0, sampler=0)]
     doc['samplers'] = [dict(magFilter=9729, minFilter=9729, wrapS=33071, wrapT=33071)]
     text = json.dumps(doc, separators=(',', ':')).encode()
@@ -50,48 +68,97 @@ def textured(data, edge):
             + struct.pack('<I', len(binary)) + b'BIN\0' + bytes(binary))
 
 
+ABSENT = object()
+
+
 def generate(root):
     from exact_controls import payload, tile
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     cases = []
-    left, right = FACES[:2], FACES[2:]
 
-    def case(name, g, coarse_edge=32, declaration=dict(version=1, pxPerTexel=2.0, refinableRatio=1.25),
-             uv_scale=1.0, check=None, bound=None):
+    def case(name, g, *, shape='flat', edge=32, mid=(1.001, 1.001), mid_edge=(64, 64), copy_g=None,
+             declaration=BALANCED, uv_scale=1.0, texcoord=None, check=None, native=None, bound=None):
         folder = root / name
         folder.mkdir(exist_ok=True)
-        uvs = controls.UVS
-        controls.UVS = [(u * uv_scale, v * uv_scale) for u, v in uvs]
-        try:
-            (folder / 'coarse.glb').write_bytes(textured(payload(FACES, leaf=False), coarse_edge))
-        finally:
-            controls.UVS = uvs
-        (folder / 'left.glb').write_bytes(textured(payload(left, leaf=True), 256))
-        (folder / 'right.glb').write_bytes(textured(payload(right, leaf=True, first=len(left)), 256))
-        top = tile('coarse.glb', [tile('left.glb'), tile('right.glb')])
+        files = {}
+
+        def coarse(uri, faces, page, scale=1.0):
+            uvs = controls.UVS
+            controls.UVS = [(u * scale, v * scale) for u, v in uvs]
+            try:
+                files[uri] = textured(payload(faces, leaf=False), page, texcoord)
+            finally:
+                controls.UVS = uvs
+
+        leaves = []
+        for i, face in enumerate(FACES if shape == 'deep' else [FACES[:2], FACES[2:]]):
+            faces = [face] if shape == 'deep' else face
+            first = i if shape == 'deep' else 2 * i
+            files[f'leaf{i}.glb'] = textured(payload(faces, leaf=True, first=first), 256,
+                                             None if texcoord is None else 1.0)
+            leaves.append(tile(f'leaf{i}.glb'))
+        coarse('coarse.glb', FACES, edge, uv_scale)
+        if shape == 'deep':
+            kids = []
+            for k in range(2):
+                coarse(f'mid{k}.glb', FACES[2 * k:2 * k + 2], mid_edge[k])
+                m = tile(f'mid{k}.glb', leaves[2 * k:2 * k + 2])
+                m['geometricError'] = mid[k]
+                kids.append(m)
+        elif shape == 'copy':
+            m = tile('coarse.glb', leaves)
+            m['geometricError'] = g if copy_g is None else copy_g
+            kids = [m]
+        else:
+            kids = leaves
+        top = tile('coarse.glb', kids)
         top['geometricError'] = g
         rusty = {'lod': 'hlod'}
-        if declaration is not None:
+        if declaration is not ABSENT:
             rusty['textureError'] = declaration
+        for uri, data in files.items():
+            (folder / uri).write_bytes(data)
         (folder / 'tileset.json').write_text(json.dumps(dict(
             asset={'version': '1.1', 'extras': {'rustyTiles': rusty}}, geometricError=g, root=top)))
         source = root / (name + '-source.json')
         source.write_text(json.dumps({'triangles': {f'0,0,0,{i}': dict(
             xyz=t, vertices=[i * 3 + k for k in range(3)], expanded_ordinal=0, material_index=0,
-            material=TEXTURED, normals=controls.NORMALS, uvs=controls.UVS)
+            material=json.loads(files['leaf0.glb'][20:20 + int.from_bytes(files['leaf0.glb'][12:16], 'little')])['materials'][0],
+            normals=controls.NORMALS, uvs=controls.UVS)
             for i, t in enumerate(FACES)}}) + '\n')
-        cases.append(dict(name=name, check=check, bound=bound, source=source.name))
+        cases.append(dict(name=name, check=check, native=native or check, bound=bound, source=source.name))
 
+    # One level.
     case('texture-honest', 2.001, bound=1)
     case('texture-understated', 1.9, check='textureError')
-    case('texture-undeclared', 0.5, declaration=None, bound=None)
-    case('texture-stricter-t', 2.001, declaration=dict(version=1, pxPerTexel=1.25, refinableRatio=1.25),
-         check='textureError')
-    case('texture-source-limited', 0.5, coarse_edge=256, bound=0)
+    case('texture-stricter-t', 2.001, declaration=dict(BALANCED, pxPerTexel=1.25), check='textureError')
+    case('texture-quality-honest', 3.201, declaration=dict(BALANCED, pxPerTexel=1.25), bound=1)
+    case('texture-source-limited', 0.5, edge=256, bound=0)
     case('texture-uv-shrunk', 2.001, uv_scale=0.5, check='textureError')
-    case('texture-bad-declaration', 2.001, declaration=dict(version=2, pxPerTexel=2.0, refinableRatio=1.25),
-         check='textureError')
+    # Textured surface with no UV area is infinitely coarse, never untextured.
+    case('texture-uv-zero', 1000.0, uv_scale=0.0, check='textureError')
+    # Base colour on TEXCOORD_1: honest, and that set (not TEXCOORD_0) shrunk on the root.
+    case('texture-texcoord1-honest', 2.001, texcoord=1.0, bound=1)
+    case('texture-texcoord1-understated', 2.001, texcoord=0.5, check='textureError')
+    # Declarations: the fast form binds nothing; anything else malformed or missing refuses.
+    case('texture-fast', 0.5, declaration=dict(BALANCED, pxPerTexel=None), bound=None)
+    for name, declaration in (
+            ('missing', ABSENT), ('null', None), ('ratio-1e6', dict(BALANCED, refinableRatio=1e6)),
+            ('px-1e9', dict(BALANCED, pxPerTexel=1e9)), ('extra-key', dict(BALANCED, extra=1)),
+            ('version-true', dict(BALANCED, version=True)), ('version-1.0', dict(BALANCED, version=1.0)),
+            ('version-2', dict(BALANCED, version=2)), ('px-string', dict(BALANCED, pxPerTexel='2')),
+            ('no-ratio', dict(version=1, pxPerTexel=2.0))):
+        case(f'texture-declaration-{name}', 2.001, declaration=declaration, check='textureError')
+    # Two levels: refinable at depth 2, understated there, and parent propagation.
+    case('texture-deep-honest', 4.001, shape='deep', edge=16, bound=3)
+    case('texture-deep-understated-depth2', 4.001, shape='deep', edge=16, mid=(0.9, 1.001), check='textureError')
+    case('texture-deep-propagated', 8.003, shape='deep', edge=16, mid=(8.002, 1.001), mid_edge=(8, 64), bound=2)
+    case('texture-deep-parent-below-child', 4.001, shape='deep', edge=16, mid=(8.002, 1.001), mid_edge=(8, 64),
+         check='geometricErrorOrder', native='geometricError increases')
+    # A single-child copy chain: the copy and the tile above it both look through to leaves.
+    case('texture-copy-honest', 2.001, shape='copy', bound=2)
+    case('texture-copy-low', 2.001, shape='copy', copy_g=1.0, check='textureError')
     return cases
 
 
@@ -121,8 +188,8 @@ def run(root, binary=None):
             report = json.loads(checked.stdout)
             if c['check']:
                 message = report['error']['message']
-                assert checked.returncode == 3 and c['check'] in message, (c['name'], report)
-                native = c['check']
+                assert checked.returncode == 3 and c['native'] in message, (c['name'], report)
+                native = c['native']
             else:
                 assert checked.returncode == 0, (c['name'], report)
                 assert report['interfaceCensus']['textureBoundTiles'] == (c['bound'] or 0), (c['name'], report['interfaceCensus'])

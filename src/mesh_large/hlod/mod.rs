@@ -534,7 +534,7 @@ pub(crate) struct HlodReport {
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TextureReport {
-    pub rule: Option<texture_error::Rule>,
+    pub rule: texture_error::Rule,
     pub refinable: u64,
     pub raised_by_texture: u64,
     pub raised_by_children: u64,
@@ -631,6 +631,8 @@ pub struct HlodDiagnostics {
     pub image_cache: bake::CacheStats,
     /// The manifest's per-depth appearance summary, repeated for the run report.
     pub appearance_by_depth: Vec<DepthAppearance>,
+    /// D5 amendment A3 counts, repeated for the run report.
+    pub(crate) texture_error: TextureReport,
 }
 
 pub(crate) struct HlodInput<'a> {
@@ -771,11 +773,7 @@ pub(crate) fn produce(
             .collect(),
         error_measurement: error::ErrorReport::new(settings.nearest_steps, settings.sampling),
         texture_error: TextureReport {
-            rule: input
-                .config
-                .profile
-                .texture_px_per_texel()
-                .map(texture_error::Rule::new),
+            rule: texture_error::Rule::new(input.config.profile.texture_px_per_texel()),
             ..Default::default()
         },
         ..Default::default()
@@ -1001,6 +999,7 @@ pub(crate) fn produce(
     diagnostics.omitted_by_depth = report.omitted_by_depth.clone();
     diagnostics.borders_by_depth = report.borders_by_depth.clone();
     diagnostics.appearance_by_depth = report.appearance_by_depth.clone();
+    diagnostics.texture_error = report.texture_error.clone();
     diagnostics.lease_peak_bytes = lease_peak;
     diagnostics.cpu_seconds = resources::process_cpu_seconds()
         .zip(cpu_started)
@@ -1753,19 +1752,19 @@ fn build_tile(
         return Err(state("coarse error is nonfinite or below its children's"));
     }
     // A3: publish G' from the published bytes; geometric G made every decision above.
-    let rule = job
-        .services
-        .profile
-        .texture_px_per_texel()
-        .map(texture_error::Rule::new);
+    let px_per_texel = job.services.profile.texture_px_per_texel();
     #[cfg(test)]
-    let rule = rule.filter(|_| settings.mutation != Mutation::UnderstateTextureError);
+    let px_per_texel =
+        px_per_texel.filter(|_| settings.mutation != Mutation::UnderstateTextureError);
     let texture = texture_error::publish(
-        rule,
+        texture_error::Rule::new(px_per_texel),
         error.geometric_error,
         decode::texture_sums(&encoded.glb)?,
         child_texture,
     );
+    if !texture.error.is_finite() {
+        return Err(state("textured coarse tile publishes no UV area"));
+    }
     let uri = tile.key.uri();
     let path = job.input.stage.join(&uri);
     let mut file = crate::storage_meter::create(&path)

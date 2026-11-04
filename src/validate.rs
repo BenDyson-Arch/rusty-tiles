@@ -3543,9 +3543,6 @@ fn inspect_run(
         }
         // D5 amendment A3: a declared texture term binds every content tile's G.
         if let Some(rule) = hlod_delivery::texture::Rule::declared(&manifest)? {
-            if manifest["asset"]["extras"]["rustyTiles"]["lod"].as_str() != Some("hlod") {
-                return Err(invalid("textureError is declared outside an HLOD tileset"));
-            }
             check.delivery.expect_texture(rule);
         }
         if let Some(expected) = manifest["asset"]["extras"]["vectorBuildStateSha256"].as_str() {

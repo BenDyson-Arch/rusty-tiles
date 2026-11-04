@@ -21,7 +21,7 @@
  },
  "omission": {
   "files": 99,
-  "sha256": "dfdbb2e93bd892fe04a3f09ad2af2558fc8dd784307ccbab3b303833265d7c14"
+  "sha256": "785ebfa832bf5a2ce6f2bac96126fd072ae2bcfff57ed2ad4d5fcfa32ea68a7e"
  },
  "last_resort": {
   "files": 845,
@@ -30,5 +30,9 @@
  "recovery": {
   "files": 260,
   "sha256": "a1fdfb6aed50511628c6c85c52894d6ee38ef3e3e8ba00d7b7d06b872843891c"
+ },
+ "texture": {
+  "files": 146,
+  "sha256": "eafebcbeae04125fe82d448fa433368804d62bf49ab80a997b0486f12d811ff2"
  }
 }

@@ -316,8 +316,22 @@ refines on G alone, keeps them beside sharp leaves (texture study, section 8).
 - **Why 1.25.** On the 2048² input, source-limited parents measure 1.0–1.1× their
   children (chart distortion); cap-limited parents sit above. At 1.25 balanced changes no
   selection on that input (54 views, 12 Metashape positions identical).
+- **Declaration (review r1).** Every HLOD archive declares exactly
+  `{version: 1, pxPerTexel: 2 | 1.25 | null, refinableRatio: 1.25}`; `null` is fast.
+  Validators refuse a missing, null or different declaration, and one outside HLOD.
+  `s` uses the material's TEXCOORD set; textured area with no UV area is infinitely
+  coarse (never "untextured"). The native pass interns each tile's payload set as one
+  SHA-256, so walking a copy chain costs O(1) per step.
+- **The root.** At t = 1.25 (quality, lossless) the term can raise the root: on both
+  Walem inputs the cap-limited root goes 5.815 → 6.281 m (offline replay). Balanced
+  leaves it unchanged there.
+- **Known limit: pooled average.** `s` is a mean over a payload, so local blur inside an
+  otherwise fine payload is diluted: one face's UVs inflated ×64 in a four-face root
+  hides its coarse texels from the term. The producer's charts never do this; the rule
+  bounds the pooled spacing, not every face's.
 - **Side effects.** Drop classification and the published-G Metashape floor read the
-  raised value (looser, still honest); D10's R trial would start from G'.
+  raised value (looser, still honest); D10's R trial would start from G'. S5 topology
+  receipts keep S2's geometric G (the audit sidecar's `texture.geometricError`).
 
 Retain all admitted PBR slots, material factors, MASK coverage, source sampler
 semantics, lit/unlit attribute parity and normal-map tangent-frame conversion.

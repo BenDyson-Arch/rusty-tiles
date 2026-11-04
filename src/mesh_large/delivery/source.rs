@@ -630,13 +630,12 @@ impl LeafDirectory {
                         .map_err(|e| input(format!("invalid recovery: {e}")))
                 })
                 .transpose()?,
-            texture_rule: match manifest["hlod"]["textureError"].get("rule") {
-                None | Some(Value::Null) => None,
-                Some(r) => Some(
-                    serde_json::from_value(r.clone())
-                        .map_err(|e| input(format!("invalid HLOD texture rule: {e}")))?,
-                ),
-            },
+            texture_rule: proxies
+                .then(|| {
+                    serde_json::from_value(manifest["hlod"]["textureError"]["rule"].clone())
+                        .map_err(|e| input(format!("missing or invalid HLOD texture rule: {e}")))
+                })
+                .transpose()?,
             omitted_proxies,
             omitted_by_depth,
             max_glb_json: MAX_GLB_JSON,

@@ -10,6 +10,7 @@
 //! payload at ingest; one preorder pass over tiles and references checks every tile.
 //! No producer receipt is read.
 use super::{bad, decode, identity, sql, Accessor, Effort, Error, Matrix, Point, Store};
+use sha2::{Digest, Sha256};
 
 /// Producer arithmetic slack (the producer's `texture_error::SLACK`): G is compared at
 /// `(1 - SLACK)`, refinability needs `s(T) > r·(1 + SLACK)·s(C)`.
@@ -18,9 +19,13 @@ const SLACK: f64 = 1e-4;
 /// `texture_work_cost_probe`).
 pub(super) const TRIANGLE_UNITS: usize = 6;
 /// Units per tile/reference row of the preorder pass and per ancestor contribution.
-pub(super) const ROW_UNITS: usize = 32;
+pub(super) const ROW_UNITS: usize = 48;
 
-/// The declared rule.
+/// The declared rule (`version` 1). `refinableRatio` is pinned to 1.25 and `pxPerTexel` to a
+/// profile value: 2 (balanced), 1.25 (quality, lossless) or null (fast: no texture term).
+pub(super) const REFINABLE_RATIO: f64 = 1.25;
+const PX_PER_TEXEL: [f64; 2] = [2., 1.25];
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(in crate::validate) struct Rule {
     pub px_per_texel: f64,
@@ -28,27 +33,47 @@ pub(in crate::validate) struct Rule {
 }
 
 impl Rule {
-    /// `asset.extras.rustyTiles.textureError`, if declared.
+    /// `asset.extras.rustyTiles.textureError`: required, exactly `{version, pxPerTexel,
+    /// refinableRatio}`, on a tileset declaring `rustyTiles.lod = "hlod"`, refused on any
+    /// other. `Ok(None)`: no HLOD declaration, or the fast form (no texture term).
     pub(in crate::validate) fn declared(
         tileset: &serde_json::Value,
     ) -> Result<Option<Self>, Error> {
-        let Some(value) = tileset["asset"]["extras"]["rustyTiles"].get("textureError") else {
-            return Ok(None);
+        let rusty = &tileset["asset"]["extras"]["rustyTiles"];
+        let hlod = rusty["lod"].as_str() == Some("hlod");
+        let value = rusty.get("textureError");
+        let refuse = |why: &str| Err(bad("textureError", why));
+        let value = match (hlod, value) {
+            (false, None) => return Ok(None),
+            (false, Some(_)) => return refuse("declared outside an HLOD tileset"),
+            (true, None) => return refuse("an HLOD tileset must declare its texture rule"),
+            (true, Some(v)) => v,
         };
-        let number = |k: &str| value[k].as_f64().filter(|v| v.is_finite() && *v >= 1.);
-        match (
-            value["version"].as_u64(),
-            number("pxPerTexel"),
-            number("refinableRatio"),
-        ) {
-            (Some(1), Some(px_per_texel), Some(refinable_ratio)) => Ok(Some(Self {
-                px_per_texel,
-                refinable_ratio,
-            })),
-            _ => Err(bad(
-                "textureError",
-                "declaration is not version 1 with finite pxPerTexel and refinableRatio >= 1",
-            )),
+        let Some(object) = value.as_object() else {
+            return refuse("declaration is not an object");
+        };
+        if object.len() != 3
+            || !["version", "pxPerTexel", "refinableRatio"]
+                .iter()
+                .all(|k| object.contains_key(*k))
+        {
+            return refuse("declaration must hold exactly version, pxPerTexel and refinableRatio");
+        }
+        if !value["version"].is_u64() || value["version"].as_u64() != Some(1) {
+            return refuse("version must be the integer 1");
+        }
+        if value["refinableRatio"].as_f64() != Some(REFINABLE_RATIO) {
+            return refuse("refinableRatio must be 1.25");
+        }
+        match &value["pxPerTexel"] {
+            serde_json::Value::Null => Ok(None),
+            v => match v.as_f64().filter(|t| PX_PER_TEXEL.contains(t)) {
+                Some(px_per_texel) => Ok(Some(Self {
+                    px_per_texel,
+                    refinable_ratio: REFINABLE_RATIO,
+                })),
+                None => refuse("pxPerTexel must be 2, 1.25 or null"),
+            },
         }
     }
 }
@@ -161,8 +186,9 @@ struct Pool {
     texels: f64,
 }
 impl Pool {
+    /// Textured area over no UV area is infinitely coarse, never untextured.
     fn spacing(self) -> Option<f64> {
-        (self.area > 0. && self.texels > 0.).then(|| (self.area / self.texels).sqrt())
+        (self.area > 0. || self.texels > 0.).then(|| (self.area / self.texels).sqrt())
     }
 }
 
@@ -174,16 +200,24 @@ impl Store {
             error: f64,
             /// The placement's similarity scale (`None`: not a similarity).
             scale: Option<f64>,
-            /// Sorted payload digests (empty: no content).
-            digest: Vec<Vec<u8>>,
+            /// The tile's payload set, interned as SHA-256 over its sorted payload digests
+            /// once its rows are read (`None`: no content), so chain steps compare in O(1).
+            key: Option<[u8; 32]>,
+            hasher: Option<Sha256>,
             own: Pool,
             below: Pool,
             /// Stack index of the nearest content ancestor.
             up: Option<usize>,
         }
         let mut counts = (0u64, 0u64);
-        let mut close = |frame: Frame, stack: &mut [Frame]| -> Result<(), Error> {
-            if frame.digest.is_empty() {
+        fn seal(frame: &mut Frame) {
+            if let Some(h) = frame.hasher.take() {
+                frame.key = Some(h.finalize().into());
+            }
+        }
+        let mut close = |mut frame: Frame, stack: &mut [Frame]| -> Result<(), Error> {
+            seal(&mut frame);
+            if frame.key.is_none() {
                 return Ok(());
             }
             if let (Some(s), Some(sc)) = (frame.own.spacing(), frame.below.spacing()) {
@@ -205,16 +239,11 @@ impl Store {
             }
             // Contribute to the nearest content ancestor and to its copies above it,
             // unless this tile is itself a copy of that ancestor's payload.
-            let mut at = frame.up;
-            if let Some(a) = at {
-                if stack[a].digest == frame.digest {
-                    at = None;
-                }
-            }
-            let chain = at.map(|a| stack[a].digest.clone());
+            let mut at = frame.up.filter(|&a| stack[a].key != frame.key);
+            let chain = at.map(|a| stack[a].key);
             while let Some(a) = at {
                 effort.charge(ROW_UNITS)?;
-                if Some(&stack[a].digest) != chain.as_ref() {
+                if Some(stack[a].key) != chain {
                     break;
                 }
                 stack[a].below.area += frame.own.area;
@@ -233,6 +262,9 @@ impl Store {
             effort.charge(ROW_UNITS)?;
             let id: i64 = row.get(0).map_err(sql)?;
             if stack.last().map(|f| f.id) != Some(id) {
+                if let Some(top) = stack.last_mut() {
+                    seal(top);
+                }
                 let parent: Option<i64> = row.get(1).map_err(sql)?;
                 while stack.last().map(|f| f.id) != parent {
                     let frame = stack.pop().ok_or_else(|| {
@@ -241,7 +273,7 @@ impl Store {
                     close(frame, &mut stack)?;
                 }
                 let up = stack.len().checked_sub(1).and_then(|p| {
-                    if stack[p].digest.is_empty() {
+                    if stack[p].key.is_none() {
                         stack[p].up
                     } else {
                         Some(p)
@@ -252,7 +284,8 @@ impl Store {
                     id,
                     error: row.get::<_, Option<f64>>(2).map_err(sql)?.unwrap_or(0.),
                     scale: scale(decode::<16>(&world)?),
-                    digest: Vec::new(),
+                    key: None,
+                    hasher: None,
                     own: Pool::default(),
                     below: Pool::default(),
                     up,
@@ -264,7 +297,7 @@ impl Store {
             let frame = stack.last_mut().expect("frame pushed above");
             let area: f64 = row.get(5).map_err(sql)?;
             let texels: f64 = row.get(6).map_err(sql)?;
-            if texels > 0. {
+            if area > 0. || texels > 0. {
                 let scale = frame.scale.ok_or_else(|| {
                     Error::unsupported(
                         "textureError: a textured tile placement is not a similarity",
@@ -273,7 +306,7 @@ impl Store {
                 frame.own.area += area * scale * scale;
                 frame.own.texels += texels;
             }
-            frame.digest.push(digest);
+            frame.hasher.get_or_insert_with(Sha256::new).update(&digest);
         }
         while let Some(frame) = stack.pop() {
             close(frame, &mut stack)?;
@@ -366,6 +399,53 @@ mod cost {
                 println!(
                     "TEXTURE_COST {}",
                     serde_json::json!({"case":"pass","n":tiles,"ns":ns,"units":units,"nsPerUnit":ns/units as f64})
+                );
+            }
+        }
+        // Review r1 P2-2: a chain of `n` copies, each holding `n` references, over `n`
+        // distinct content tiles: every content tile walks the whole chain.
+        for n in [100i64, 400] {
+            let mut s = super::super::tests::store();
+            s.materialize().unwrap();
+            let identity = super::super::encode(&IDENTITY_WORLD);
+            let c = &s.connection;
+            for j in 0..n {
+                c.execute("INSERT INTO payloads(rank,identity_present,triangle_present,digest,texture_area,texture_texels) VALUES(?,1,0,?,1e4,1e6)",
+                    params![j, [j.to_le_bytes().to_vec(), vec![7u8; 24]].concat()]).unwrap();
+            }
+            for i in 0..n {
+                c.execute(
+                    "INSERT INTO tiles(id,parent,world,error) VALUES(?,?,?,?)",
+                    params![i, (i > 0).then(|| i - 1), &identity, 1000.0],
+                )
+                .unwrap();
+                for j in 0..n {
+                    c.execute("INSERT INTO refs VALUES(?,?)", params![i, j])
+                        .unwrap();
+                }
+            }
+            for q in 0..n {
+                c.execute(
+                    "INSERT INTO tiles(id,parent,world,error) VALUES(?,?,?,?)",
+                    params![n + q, n - 1, &identity, 1000.0],
+                )
+                .unwrap();
+                c.execute("INSERT INTO payloads(rank,identity_present,triangle_present,digest,texture_area,texture_texels) VALUES(?,1,0,?,1e4,1e8)",
+                    params![n + q, [(n + q).to_le_bytes().to_vec(), vec![9u8; 24]].concat()]).unwrap();
+                c.execute("INSERT INTO refs VALUES(?,?)", params![n + q, n + q])
+                    .unwrap();
+            }
+            c.execute_batch("CREATE INDEX tile_parent ON tiles(parent); CREATE INDEX refs_tile ON refs(tile); CREATE INDEX refs_rank ON refs(rank);").unwrap();
+            for _ in 0..3 {
+                let mut effort = super::super::tests::effort_for_tests();
+                effort.budget.value = u64::MAX;
+                let start = cpu();
+                s.texture_error(rule, &effort).unwrap();
+                let ns = (cpu() - start) * 1e9;
+                let units = effort.used.load(Ordering::Relaxed);
+                println!(
+                    "TEXTURE_COST {}",
+                    serde_json::json!({"case":"chain","n":n,"ns":ns,"units":units,"nsPerUnit":ns/units as f64})
                 );
             }
         }

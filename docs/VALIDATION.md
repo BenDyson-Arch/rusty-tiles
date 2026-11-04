@@ -216,6 +216,24 @@ exceeds the cap or border-touching open boundaries cannot survive the last resor
 it propagates upward unless bounded declared root recovery succeeds. The last-resort
 declaration does not itself authorize bypass or certify source-distance maxima.
 
+A tileset declaring `asset.extras.rustyTiles.lod = "hlod"` must also declare its
+texture-aware error rule (D5 amendment A3, [MESH](MESH.md#texture-aware-published-g)):
+`asset.extras.rustyTiles.textureError` is a strict object with exactly `version` (the
+integer 1), `refinableRatio` (1.25) and `pxPerTexel` (2, 1.25 or `null`). A missing,
+null or otherwise different declaration is invalid (`textureError`), as is one on a
+tileset that does not declare HLOD. With a number `t`, every content tile T whose mean
+base-colour texel spacing `s(T)` exceeds 1.25 times its children's pooled spacing must
+have `geometricError >= 16 · s(T) / t` (relative slack 1e-4). `s = sqrt(A / X)` is
+recomputed from each payload: `A` the decoded area of triangles whose material has a
+base-colour texture, `X` their UV area on the material's TEXCOORD set times the
+embedded KTX2/PNG base level's width × height (textured area with no UV area is
+infinitely coarse). Children are the nearest content descendants, through content-less
+tiles and single-child copies of the same payloads. `null` (`fast`) binds nothing.
+Sums are taken once per payload at ingest; one preorder pass over tiles and references
+checks every tile, both charged to the payload-element budget. The report's
+`interfaceCensus` gives `textureRefinableTiles` and `textureBoundTiles` (refinable
+tiles whose `geometricError` is within 1% of the term).
+
 Supported payloads are GLB 2.0 and archive-local glTF 2.0. Unavailable versions
 or legacy interpretations do not receive an opaque successful pass.
 
