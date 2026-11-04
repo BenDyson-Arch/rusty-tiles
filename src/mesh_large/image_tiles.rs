@@ -207,11 +207,24 @@ impl Store {
             }
             total += bytes;
         }
-        self.stored
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
-                n.checked_add(total).filter(|b| *b <= self.bound)
-            })
-            .map_err(|_| limit("image tile store exceeded admitted bound"))?;
+        // Admit against the bound (an explicit CAS loop: `fetch_update` is deprecated
+        // on newer toolchains and its replacement is not on older ones).
+        let mut stored = self.stored.load(Ordering::Relaxed);
+        loop {
+            let next = stored
+                .checked_add(total)
+                .filter(|b| *b <= self.bound)
+                .ok_or_else(|| limit("image tile store exceeded admitted bound"))?;
+            match self.stored.compare_exchange_weak(
+                stored,
+                next,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(current) => stored = current,
+            }
+        }
         let resident = {
             let mut s = lock(&self.cache.state);
             let reserved = if primary {
