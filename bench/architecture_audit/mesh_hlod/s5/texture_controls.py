@@ -27,12 +27,22 @@ FACES = [[[16 * i, 0, 0], [16 * i + 8, 0, 0], [16 * i, 8, 0]] for i in range(4)]
 BALANCED = dict(version=1, pxPerTexel=2.0, refinableRatio=1.25)
 
 
+def stored_zlib(data):
+    """A zlib stream of stored (uncompressed) deflate blocks: byte-identical under every
+    zlib build (zlib.compress differs between stock zlib and zlib-ng)."""
+    out = bytearray(b'\x78\x01')
+    for at in range(0, max(len(data), 1), 65535):
+        block = data[at:at + 65535]
+        out += bytes([at + 65535 >= len(data)]) + struct.pack('<HH', len(block), 0xFFFF ^ len(block)) + block
+    return bytes(out) + struct.pack('>I', zlib.adler32(data))
+
+
 def png(edge):
     row = b'\0' + b'\x80\x40\x20\xff' * edge
     def chunk(kind, data):
         return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
     return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', edge, edge, 8, 6, 0, 0, 0))
-            + chunk(b'IDAT', zlib.compress(row * edge)) + chunk(b'IEND', b''))
+            + chunk(b'IDAT', stored_zlib(row * edge)) + chunk(b'IEND', b''))
 
 
 def textured(data, edge, texcoord=None):
