@@ -12,7 +12,7 @@ claimed here. This document is the frozen contract text v3.1 (`contract-draft.md
 The preparation package (contract versions v1 to v3.1, change log, open decisions, ownership plan,
 producer inventory and probes), the precode review (`review.md` `92eee8f0…`) and the delta check
 (`delta-check.md` `abd37595…`) are retained in
-[bench/architecture_audit/implicit_read/preparation/](../../bench/architecture_audit/implicit_read/preparation/README.md),
+[bench/architecture_audit/implicit_read/preparation/](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/implicit_read/preparation/README.md),
 with the large regenerable samples listed there. Evidence paths in the text below, such as
 `probes/receipt.json`, are relative to its `contract-20261011/` directory.
 

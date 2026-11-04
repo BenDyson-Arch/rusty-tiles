@@ -74,7 +74,7 @@ Python-binding Clippy passed with warnings denied.
 A separately adjudicated control found an inherited false InvalidInput on the
 earlier `2ebfb74` candidate: an unused tightly packed SCALAR accessor over a
 decoded meshopt view was incorrectly required to match the codec record stride.
-The [primary-backed decision](../../bench/architecture_audit/c1_payload_integrity/final_source_review/2026-10-10-meshopt-stride-adjudication/decision.md)
+The [primary-backed decision](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/c1_payload_integrity/final_source_review/2026-10-10-meshopt-stride-adjudication/decision.md)
 settles codec grouping separately from accessor layout. The correction removes
 only that equality check and its unused tracking. Defined parent stride
 agreement, decoded length, ordinary ranges/alignment/finite values and budgets
@@ -101,7 +101,7 @@ All 1,961 ordinary members are byte-identical to committed source. The original
 manifest remains exact; root-package lock normalization prunes only eight
 Python-only package tables and leaves all 288 retained tables identical.
 
-The [82 lossless final records](../../bench/architecture_audit/c1_payload_integrity/candidate_evidence/local-e4ec3cc/index.json)
+The [82 lossless final records](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/c1_payload_integrity/candidate_evidence/local-e4ec3cc/index.json)
 bind 97 production and 237 selected acceptance inputs, separate unit/portable/
 native artifacts, actual logs, raw CLI streams and source archive compilation.
 They also preserve the earlier corrected library parser stop, test-only Clippy
@@ -109,12 +109,12 @@ failure, sensitive old-binary failures and a pre-case executable-copy permission
 failure. Restoring the copied executables' execute bits changes no artifact
 bytes; the successful integration run uses a separate evidence directory.
 
-Earlier [45 local records](../../bench/architecture_audit/c1_payload_integrity/candidate_evidence/local-2ebfb74/index.json),
-[local review](../../bench/architecture_audit/c1_payload_integrity/final_source_review/2026-10-10-final-checkpoint/review.md)
-and [source-package compilation](../../bench/architecture_audit/c1_payload_integrity/candidate_evidence/2026-10-10-source-compilation/index.json)
+Earlier [45 local records](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/c1_payload_integrity/candidate_evidence/local-2ebfb74/index.json),
+[local review](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/c1_payload_integrity/final_source_review/2026-10-10-final-checkpoint/review.md)
+and [source-package compilation](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/c1_payload_integrity/candidate_evidence/2026-10-10-source-compilation/index.json)
 retain their original `2ebfb74`/`2ef8db1` source identities. They do not establish
 acceptance of this corrected candidate. Fresh corrected-source
-[independent review](../../bench/architecture_audit/c1_payload_integrity/final_source_review/2026-10-10-stride-final-e4ec3cc/review.md)
+[independent review](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/c1_payload_integrity/final_source_review/2026-10-10-stride-final-e4ec3cc/review.md)
 and exact final-head remote CI, installed-wheel and official Blender acceptance
 are separate merge gates.
 

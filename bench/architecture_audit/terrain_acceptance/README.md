@@ -68,25 +68,25 @@ Functional source: `1c87f0c704728c0c0f602eb17fb59196859ec45e`. Immutable native
 binary SHA256: `3bd3d8b2986b8b84ea110d500a6d058329159203f9bfabcf26a69d9ba02c8bc2`.
 Evidence-only commits can follow this source pin without changing the producer
 or preview. Each execution record retains the tested files' hashes; the complete
-[build manifest](build-manifest.json) pins the binary's Rust/preview inputs.
+[build manifest](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/terrain_acceptance/build-manifest.json) pins the binary's Rust/preview inputs.
 
-- [Independent implementation review](independent-review.md) records author
+- [Independent implementation review](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/terrain_acceptance/independent-review.md) records author
   independence, reproduced defects, corrections and bounded review scope.
-- [Oracle summary](oracle-final-summary.json) records analytic source-to-GLB
+- [Oracle summary](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/terrain_acceptance/oracle-final-summary.json) records analytic source-to-GLB
   truth for complete single- and six-leaf meshes, exact shared seams and bounds,
   report inventories and deliberate corruption controls.
-- [Browser evidence](browser-final.json) records Cesium 1.146.0, Playwright
+- [Browser evidence](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/terrain_acceptance/browser-final.json) records Cesium 1.146.0, Playwright
   1.63.0 and Khronos glTF Validator 2.0.0-dev.3.10. Four GLBs have zero validator
   errors/warnings. Actual positive/negative-height queries and clamping match
   independently decoded triangles; imagery changes rendered terrain pixels;
   unrelated surfaces, outside-domain queries, invalid coordinates and uncached
   reload are exercised. Tileset imagery is an experimental Cesium API.
-- [Resource evidence](resources-final.json) records ten fresh-process runs,
+- [Resource evidence](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/terrain_acceptance/resources-final.json) records ten fresh-process runs,
   source/patch scaling, native-handle closure before observed staging, file
   descriptors, exact output accounting and rejected oversized native blocks.
   Observed peak RSS is 65,060–76,608 KiB; this is not a whole-job memory guarantee
   or a throughput promise.
-- [Boundary counterexample](chord-roi-counterexample.json) shows why Cartesian
+- [Boundary counterexample](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/terrain_acceptance/chord-roi-counterexample.json) shows why Cartesian
   boundary chords can intersect outside the source rectangle. Preview helpers
   explicitly fence the query domain; raw scene intersections retain mesh
   semantics.

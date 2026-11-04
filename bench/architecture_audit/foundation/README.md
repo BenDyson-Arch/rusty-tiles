@@ -153,7 +153,7 @@ grant on any path; the deliberately invalid producer revival occurs only once.
 
 ## F0 production evidence
 
-The separate [F0 implementation evidence](../../../docs/architecture/f0-evidence.md)
+The separate [F0 implementation evidence](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/f0-evidence.md)
 links real runtime/package/frontend tests and installed-wheel/resource results.
 `implementation-results.json` and `package-resources.json` are implementation
 measurements; `results.json` remains solely the bounded model report.

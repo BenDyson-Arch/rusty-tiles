@@ -4,7 +4,7 @@
 governs new work: 0.4 ships Tiles 1.1/glTF 2.0; 0.6 makes the official format
 transition. The obligations and bounded evidence below remain relevant, but
 headings describing the "next" operation are historical. Consult the
-[track ledger](04-track-dispositions.md) before resuming an interrupted branch.
+[track ledger](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/04-track-dispositions.md) before resuming an interrupted branch.
 
 > Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
 > moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
@@ -34,8 +34,8 @@ retains the checked resolved path for all destination side effects and the
 returned output identity. The subprocess regression avoids mutating the CWD of
 parallel tests. This is a required F0 fix, not a new mesh feature.
 
-See [F0 contract](f0-implementation.md), [acceptance evidence](f0-evidence.md)
-and [final review](../../bench/architecture_audit/post_f0/f0-acceptance-review.md).
+See [F0 contract](f0-implementation.md), [acceptance evidence](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/f0-evidence.md)
+and [final review](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/post_f0/f0-acceptance-review.md).
 The earlier agents' statements that their narrower audits found no F0 blocker
 precede this targeted review; they are not contrary evidence. The fixed head `dd0e0af` passed all active PR and wheel/Blender checks and merged
 in #116 at `519e8c1`. The merged tree exactly matches the accepted tree. This
@@ -169,7 +169,7 @@ withdrawn after cleanup inspection and controls; this audit does not resurrect i
 
 ## New observations and oracle limits
 
-The [replay evidence](../../bench/architecture_audit/post_f0/README.md) records:
+The [replay evidence](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/bench/architecture_audit/post_f0/README.md) records:
 
 - **Missing GLB payload:** `validate` accepts a POSITION bufferView declaring 36
   bytes with an actual zero-byte BIN. This is a payload-check coverage gap. F0
@@ -221,15 +221,15 @@ production validator nor a file move substitutes for independent acceptance.
 ### Current mesh follow-on after C1
 
 C1 merged through #137. The first bounded #121 slice is
-[F1b1](f1b-contract.md): the existing local mesh producer now carries embedded
+[F1b1](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/f1b-contract.md): the existing local mesh producer now carries embedded
 PNG/JPEG base-color textures, complete UV/material/sampler associations, and a
 shared image closure under F0. It forwards source bytes without invoking legacy
 atlas, LOD or encoder paths. This deliberately advances the existing operation
 and report profile rather than maintaining an F1a compatibility mode.
 
-[F1b2](f1b2-contract.md) merged through #139 with bounded local glTF/GLB
+[F1b2](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/f1b2-contract.md) merged through #139 with bounded local glTF/GLB
 resource binding, source stability, a pure decoder and consumer-owned capture.
-[F1b3](f1b3-contract.md) merged through #141 with five core PBR texture bindings
+[F1b3](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/f1b3-contract.md) merged through #141 with five core PBR texture bindings
 and authored UV1/tangent/color companions, exact resource closure and the bounded
 tangent-frame bake profile.
 
@@ -289,7 +289,7 @@ mesh approximation, legacy raster pyramid or implicit rewrite semantics.
 User directed continued work on #126. Three Sol 6.1 audits cover the current
 explicit-to-implicit operation's ownership/representation, independent
 availability/resource evidence and lossless audit-storage compaction. The
-[implicit rewrite contract draft](implicit-rewrite-contract.md) records the
+[implicit rewrite contract draft](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/implicit-rewrite-contract.md) records the
 next real operation and its unresolved proof gates. Existing checks share the
 production implicit expander and cannot independently establish semantic
 metadata or availability correctness. Source provenance labels cannot supply
@@ -309,13 +309,13 @@ Parent #113/#120/#121/#125/#126 and release gates remain open.
 F1d1 and F1d2 merged through #149/#150. Accepted F1d2 merge
 `34a76152d18b02553691f472207225f116307a67` has the identical tree to reviewed
 head `43d14b1708c92d8bba9d2567da695558fd5320ac`; all 21 active final-head checks
-passed. [Post-merge uploaded-artifact review and CI identities](../../bench/architecture_audit/mesh_approximation_f1d2/remote_acceptance/README.md)
+passed. [Post-merge uploaded-artifact review and CI identities](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/mesh_approximation_f1d2/remote_acceptance/README.md)
 remain losslessly retained. This proves one adaptive local certificate over
 unchanged leaves, not recursive/textured LOD or release readiness.
 
-The current operation remains #126 A2. Its fresh [semantic audit](../../bench/architecture_audit/implicit_rewrite/a2_semantics/README.md),
-[real-source audit](../../bench/architecture_audit/implicit_rewrite/a2_real_sources/README.md)
-and [capture/resource audit](../../bench/architecture_audit/implicit_rewrite/a2_capture_resources/README.md)
+The current operation remains #126 A2. Its fresh [semantic audit](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/implicit_rewrite/a2_semantics/README.md),
+[real-source audit](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/implicit_rewrite/a2_real_sources/README.md)
+and [capture/resource audit](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/implicit_rewrite/a2_capture_resources/README.md)
 precede implementation. The finite selected plan uses source-child ordinals
 and mandatory effective box/error rows, rather than treating producer padding,
 center uniqueness or nominal cells as geometric truth. Actual decoded-content
@@ -339,7 +339,7 @@ exact-tree pins and applicable CI. The proposed owned-root implicit rewrite has
 an unresolved literal external-template standards gate. Its tolerant-client
 materialization is bounded interoperability evidence only; no easier different
 partial-implicit product is selected as a fallback. See the updated
-[A2 proposal](implicit-rewrite-contract.md).
+[A2 proposal](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/implicit-rewrite-contract.md).
 
 Proceed independently with the [stored-archive reader prerequisite](archive-read-foundation-contract.md)
 under #125/#126, using the existing C1 inspector as a real consumer. The concrete

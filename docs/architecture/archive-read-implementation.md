@@ -7,7 +7,7 @@
 Status: source implemented and local controls executed; separate final review and
 applicable PR CI/wheel acceptance precede a develop merge. The
 [reviewed contract](archive-read-foundation-contract.md) and its
-[preimplementation review](../../bench/architecture_audit/implicit_rewrite/archive_prereq_review/review.md)
+[preimplementation review](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/implicit_rewrite/archive_prereq_review/review.md)
 remain the baseline. That review pins the original source bytes before coding;
 it must not be rebound to later implementation bytes. Final-source review and candidate receipts bind the new owner separately.
 
@@ -55,7 +55,7 @@ The raw scanner's selected directory therefore cannot establish which directory
 that constructor will allocate/read. Post-construction agreement checks would
 occur too late to prove admission before allocation. The exact small controls
 and current-source observations are recorded in the
-[final-review findings](../../bench/architecture_audit/implicit_rewrite/archive_final_review/findings.md).
+[final-review findings](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/implicit_rewrite/archive_final_review/findings.md).
 These are baseline executions and candidate source observations, not an accepted
 candidate result.
 

@@ -187,7 +187,6 @@ These are ignored by default and run only when asked.
 
 | Test | Command | Needs |
 | --- | --- | --- |
-| Wrapper conventions against `3d-tiles-tools@0.5.4` | `cargo test --test golden -- --ignored` | npx, with network or a cached install |
 | Leaf triangle audit of a real model | `cargo test --release --test fidelity full_model_leaf_triangle_audit -- --ignored --nocapture` | `RUSTY_TILES_FIDELITY_SOURCE`, `RUSTY_TILES_FIDELITY_ARCHIVE`, optional `RUSTY_TILES_FIDELITY_OFFSET` |
 | Checks on your own GLB | `cargo test --release --test demo_mesh -- --ignored` | `RUSTY_TILES_DEMO_GLB` |
 | GeoPackage diff cross-apply | `python3 -m unittest discover -s tests -p 'test_geodiff_compat.py'` | `GEODIFF_CPP_BIN`, `GO_GEODIFF_DRIVER` |

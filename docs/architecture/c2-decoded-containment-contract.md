@@ -5,7 +5,7 @@
 > note ([index](../../bench/architecture_audit/README.md)).
 
 Status: implemented on `feat/c2-decoded-containment` (PR #157). Acceptance evidence is indexed in
-[the C2 acceptance record](../../bench/architecture_audit/c2_decoded_containment/acceptance/README.md);
+[the C2 acceptance record](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/c2_decoded_containment/acceptance/README.md);
 the separate nonauthor review and its resolution are recorded on PR #157.
 This document is the frozen v3.3 contract text, plus the coordinator amendments listed at
 the end. Its preparation, reviews and decision log are retained

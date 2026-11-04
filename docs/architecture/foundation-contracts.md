@@ -1,6 +1,6 @@
 # F0: small, explicit runtime foundations
 
-Status: scoped as [implementation issue #115](https://github.com/BenDyson-Arch/rusty-tiles/issues/115) under [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113), originally reviewed against `7f6abf0`; subsequently implemented in PR #116. The concrete [implementation decisions](f0-implementation.md) and [evidence](f0-evidence.md) control F0 behavior. This document narrows the first implementation slice. The [mesh API proposal](api-contract.md) becomes downstream F1, not a prerequisite for F0. Read with the [runtime contract](runtime-contract.md) and [architecture plan](README.md).
+Status: scoped as [implementation issue #115](https://github.com/BenDyson-Arch/rusty-tiles/issues/115) under [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113), originally reviewed against `7f6abf0`; subsequently implemented in PR #116. The concrete [implementation decisions](f0-implementation.md) and [evidence](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/f0-evidence.md) control F0 behavior. This document narrows the first implementation slice. The [mesh API proposal](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/api-contract.md) becomes downstream F1, not a prerequisite for F0. Read with the [runtime contract](runtime-contract.md) and [architecture plan](README.md).
 
 Current code is an untrusted candidate. Build the smallest correct plumbing around a real operation; retain code only when independently tested against the requirements below. F0 does not promise perfect software or every filesystem guarantee. It gives failures and ownership explicit places, so converters do not accumulate policy branches.
 
@@ -21,13 +21,13 @@ Locations below refer to unchanged production sources at the design baseline. Th
 
 | Finding | Evidence | Foundation consequence |
 | --- | --- | --- |
-| Job setup creates output parents before all checks in some callers | [job setup](../../src/output.rs):65; [mesh entry point](../../src/tile.rs):183,199 | Consumer validation/resolution precedes job creation; producer-specific errors can still occur in execution |
+| Job setup creates output parents before all checks in some callers | [job setup](../../src/output.rs):65; [mesh entry point](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/src/tile.rs):183,199 | Consumer validation/resolution precedes job creation; producer-specific errors can still occur in execution |
 | Packaging invokes `Job`, and `Job` invokes packaging serialization | [pack orchestration](../../src/pack.rs):33; [archive publication](../../src/output.rs):116,118 | Put format encoding below the publisher; conversion orchestration owns both |
 | Archive construction and destination installation are one method | [archive publication](../../src/output.rs):111 | Separate seal from install; no required producer work occurs in publishing |
 | Directory existence preflight can race with rename | [directory publisher](../../src/output.rs):161,162 | No-clobber is a platform installation property, not an `exists()` branch |
 | Restore failure is encoded as an ordinary message with a recovery path | [directory restore](../../src/output.rs):173 | Recovery state must be structured; this directory path is outside F0 implementation |
 | SQL rollback does not own counters/report writes | [feature insertion](../../src/vector/pipeline/store.rs):626,638,647 | Later vector slice needs one accepted delta; SQL savepoints alone are insufficient |
-| Event sink is infallible and defaults to process stderr | [events](../../src/report.rs):32,40 | Observer failure is an abort input; frontend transport stays outside runtime |
+| Event sink is infallible and defaults to process stderr | [events](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/src/report.rs):32,40 | Observer failure is an abort input; frontend transport stays outside runtime |
 | Python checks callback errors/signals after converter return | [binding runner](../../bindings/python/src/lib.rs):137,143 | Observe failures before commit permission; preserve committed core classification afterward |
 | Error kinds also encode CLI statuses | [error mapping](../../src/error.rs):55 | Adapters map domain kinds; skip policy must never inspect display text/category |
 

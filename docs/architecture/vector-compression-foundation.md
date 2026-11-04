@@ -13,7 +13,7 @@ wheel and official Blender jobs pass; two prescribed conditional skips remain
 skips. This completes this bounded vector foundation, while #126's remaining
 consumer/removal and full A2 obligations stay open.
 
-The [accepted remote evidence](../../bench/architecture_audit/vector_compression/candidate_evidence/pr154-remote-accepted-20261011/index.json)
+The [accepted remote evidence](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/candidate_evidence/pr154-remote-accepted-20261011/index.json)
 retains 234 selected full records as 165 shared gzip blobs: exact source/final
 reviews, API/job/log/report identities and actual merge records. Fifteen downloaded
 artifact ZIPs and five actual wheels remain externally hash-bound. Ten installed
@@ -95,7 +95,7 @@ caps. All sixteen archives pass retained C1 inspection, whose explicit
 These observations do not prove coordinate-error bounds, triangle union,
 rendering, exhaustive native plugin loading, RSS or platform acceptance.
 
-The [local implementation bundle](../../bench/architecture_audit/vector_compression/candidate_evidence/local-implementation-20261011/index.json)
+The [local implementation bundle](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/candidate_evidence/local-implementation-20261011/index.json)
 losslessly retains 5,062 selected records as 1,743 shared gzip blobs, including
 original preparation errors, failed source epochs, corrected inputs, current
 actual output bytes and scoped nonauthor reviews. It binds production pin
@@ -151,16 +151,16 @@ Prequantization geometry size is no longer used as this byte metric. The actual
 paired producer output/report checks above cover its finite observed cases;
 optimal fitting and broader resource guarantees remain separate obligations.
 
-The [codec draft](../../bench/architecture_audit/vector_compression/codec/contract-draft.md),
-[additive lifecycle draft](../../bench/architecture_audit/vector_compression/lifecycle/revision-20261010/contract-draft.md)
-and [independent precode checklist](../../bench/architecture_audit/vector_compression/precode_review/revision-20261010/checklist.md)
+The [codec draft](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/codec/contract-draft.md),
+[additive lifecycle draft](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/lifecycle/revision-20261010/contract-draft.md)
+and [independent precode checklist](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/precode_review/revision-20261010/checklist.md)
 remain immutable historical preparation. Their pending-C1 statements describe
 their original epochs; this checkpoint resolves that prerequisite through the
 actual accepted merge without rewriting their bytes. The additive authoring
 adjudication below settles choices; empirical resource claims and implementation
 acceptance remain separate gates.
 
-The [P2 preparation](../../bench/architecture_audit/vector_compression/codec/p2-proof-preparation-20261010/README.md)
+The [P2 preparation](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/codec/p2-proof-preparation-20261010/README.md)
 contains independent expected records, small isolated Rust probes, raw JSON
 serializer/framing inputs, allocation sensitivity controls and locked native
 codec cases. Only preparation generation, syntax, shape and hash checks had run
@@ -176,7 +176,7 @@ failure records remain unchanged. The additive selector revision preserves the
 checker and now passes 15 baseline/restored cases and 33 actual faulty-byte or
 association rejections.
 
-The [independent actual P2 review](../../bench/architecture_audit/vector_compression/precode_review/actual-p2-20261010/review.md)
+The [independent actual P2 review](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/precode_review/actual-p2-20261010/review.md)
 accepts bounded scaffold mechanics: 10 admission cases, 78 exact fixed-edit
 serializer cases and 424 native bound/canary/unaligned-input cases. The formal
 runs bind Rust 1.98.0, selected serde features, native objects and 205 supplied
@@ -184,24 +184,24 @@ artifact hashes before and after execution. The reviewer separately rehashed
 the 18 copied compiled dependencies, source/package records and command outputs;
 did not repeat all large compiler/sysroot hashes. This is current artifact
 binding, not exhaustive OS file-access tracing or historical registry-source
-immutability. The [250 lossless records](../../bench/architecture_audit/vector_compression/candidate_evidence/p2-actual-20261010/index.json)
+immutability. The [250 lossless records](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/candidate_evidence/p2-actual-20261010/index.json)
 retain actual outputs, commands, receipts and original tooling failures. Binary
 artifacts remain external with explicit hashes.
 
 The original allocation evaluator actually exits 2: the long escaped-key case
 requests a construction peak of 196,987 bytes, exceeding the draft planning term
 134,604. Its retained allocation is 66,676 bytes. The
-[additive owner ledger](../../bench/architecture_audit/vector_compression/codec/allocation-adjudication-20261010/proposal.md)
+[additive owner ledger](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/codec/allocation-adjudication-20261010/proposal.md)
 reconciles scratch, owned keys and slots exactly. Its 12 boundary and 11 faulty
 ledger controls pass as a model only. The
-[separate allocation review](../../bench/architecture_audit/vector_compression/precode_review/allocation-20261010/review.md)
+[separate allocation review](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/precode_review/allocation-20261010/review.md)
 accepts the bounded owner/drop schedule and isolated representation preparation.
 A conditional construction `3J` / retained `J` schedule was proposed; subsequent
 concrete representation probes below settle its bounded authoring prerequisite.
 This incremental term finding does not establish a whole-operation threshold
 violation or an RSS guarantee.
 
-The [separate parser source audit](../../bench/architecture_audit/vector_compression/precode_review/parser-coefficients-20261010/review.md)
+The [separate parser source audit](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/precode_review/parser-coefficients-20261010/review.md)
 supports a requested-storage core bound `4J + 188K_upper + 8` for the matched
 target's `json::admit`, with `K_upper = min(node_limit, J)`. It accounts for slot
 growth overlap, insert-only decoded-key tables, escaped-key ownership and serde
@@ -211,20 +211,20 @@ guarantee. The separate Value adapter, startup OS/TLS storage, allocator overhea
 and RSS are outside this bound. Actual production capacities and integrated
 resource/default claims still require their implementation evidence.
 
-The [separate actual owned-Plan review](../../bench/architecture_audit/vector_compression/precode_review/owned-plan-actual-20261010/review.md)
+The [separate actual owned-Plan review](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/precode_review/owned-plan-actual-20261010/review.md)
 accepts 52 focused commands, 204 measured stages and 25,737 allocation events,
 with 18 changed-record accounting rejections. The concrete matched-target types
 are 40-byte fields, 96-byte views, 32-byte edits and 16-byte raw references.
 The long escaped-root witness requests 197,449 construction bytes and retains
 66,480; counting adds no heap allocation and final emission requests one exact
 66,136-byte candidate. One-below planning refusal has zero Plan allocation after
-nonzero JSON admission. The [119 lossless actual records](../../bench/architecture_audit/vector_compression/candidate_evidence/owned-plan-actual-20261010/index.json)
+nonzero JSON admission. The [119 lossless actual records](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/candidate_evidence/owned-plan-actual-20261010/index.json)
 retain commands, events, artifact bindings and the additive frozen-document pin
 correction. These synthetic serializer/JSON identity seams do not establish
 native source classification, two-buffer compressed identity or production
 resource defaults.
 
-The [whole precode adjudication](../../bench/architecture_audit/vector_compression/precode_review/whole-authoring-20261010/adjudication.md)
+The [whole precode adjudication](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/precode_review/whole-authoring-20261010/adjudication.md)
 resolves the smallest constrained authoring gate without requiring execution of
 nonexistent production code. It chooses nine finite policy defaults and concrete
 retain/rework/replace/remove decisions, with joint resource refusal permitted
@@ -238,13 +238,13 @@ ownership. A fresh separate nonauthor review and actual implementation/platform/
 consumer/artifact gates follow source authoring. Policy choice grants no RSS,
 global OOM, empirical-default, production or release acceptance.
 
-The [generated-source preparation](../../bench/architecture_audit/vector_compression/codec/p3-generated-preparation-20261010/README.md)
-and [lifecycle proof inputs](../../bench/architecture_audit/vector_compression/lifecycle/proof-inputs-20261010-4dc/README.md)
+The [generated-source preparation](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/codec/p3-generated-preparation-20261010/README.md)
+and [lifecycle proof inputs](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/lifecycle/proof-inputs-20261010-4dc/README.md)
 are immutable authored inputs. Separate coordinator observations of unchanged
 accepted producer binaries may resolve source/domain retention questions after
 P0; they do not depend on approval of a future Plan estimate. Implementation
 acceptance still requires the actual representation and all applicable gates.
-The [separate actual P3 review](../../bench/architecture_audit/vector_compression/precode_review/p3-actual-20261010/review.md)
+The [separate actual P3 review](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/precode_review/p3-actual-20261010/review.md)
 accepts finite observations of the unchanged accepted producer: eight portable
 and native raw/meshopt pairs preserve 402 complete logical views at 38 content
 slots, exact selected metadata states and associations, and fill wrapper feature
@@ -268,7 +268,7 @@ Every observed fill inner GLB, and ordinary typed/raw large-ID outputs, fail the
 selected absolute-eight-byte JSON-end/BIN-start profile. Total-length alignment
 does not prove those boundaries. The producer writer requires rework; existing
 bytes are evidence, not a specification to grandfather or silently repair.
-The [lossless P3 bundle](../../bench/architecture_audit/vector_compression/candidate_evidence/p3-existing-producer-20261010/index.json)
+The [lossless P3 bundle](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/candidate_evidence/p3-existing-producer-20261010/index.json)
 retains all 2,603 actual indexed files as 687 full byte-identical shared blobs.
 The reviewer independently verified every hash, length and source byte. This
 accepts the existing-producer baseline, not new-codec profile admission.
@@ -288,9 +288,9 @@ Linux probes of unchanged accepted F0 code pass: a competing entry installed in
 that window is overwritten by the complete candidate, and copying Unix 0640
 permissions before sealing preserves that mode after Replace. Their original
 module-path compile failure and additive layout-only retry remain separate
-immutable phases. The [actual F0 records](../../bench/architecture_audit/vector_compression/candidate_evidence/f0-module-path-actual-20261010/index.json)
+immutable phases. The [actual F0 records](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/candidate_evidence/f0-module-path-actual-20261010/index.json)
 bind the compiler, dependencies, exact source and executable. The
-[separate actual F0 review](../../bench/architecture_audit/vector_compression/precode_review/f0-actual-20261010/review.md)
+[separate actual F0 review](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/vector_compression/precode_review/f0-actual-20261010/review.md)
 accepts only those two observations, independently verifying 254 before/after
 artifact pins, exact source copies, test causes and persistent linker inputs.
 Unix permission copying is an explicit caller action, not automatic F0 behavior.

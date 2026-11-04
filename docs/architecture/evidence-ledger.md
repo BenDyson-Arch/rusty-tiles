@@ -55,7 +55,7 @@ assign every remaining subsystem and operation a proof/migration owner.
 
 | Area | Updated evidence/disposition | Follow-on owner |
 | --- | --- | --- |
-| Opaque package/file lifecycle/3TZ codec | Implemented in #116 with independent readers, fault/concurrency/platform tests; final review found relative-output redirection, fixed in `c777180` with isolated regression. Bounded F0 acceptance only, never scene certification | #115 / [current evidence](f0-evidence.md) |
+| Opaque package/file lifecycle/3TZ codec | Implemented in #116 with independent readers, fault/concurrency/platform tests; final review found relative-output redirection, fixed in `c777180` with isolated regression. Bounded F0 acceptance only, never scene certification | #115 / [current evidence](https://github.com/BenDyson-Arch/rusty-tiles/blob/112044668e8a39394a96832833a0ebaa17c4c0db/docs/architecture/f0-evidence.md) |
 | Mesh orchestration and source boundary | Concrete early-staging, size-dependent admission, raw URI/resource ownership and global-metric problems; one local static milestone before broader support | #117; fidelity #121; spatial #120 |
 | Directory installation/recovery | D1/D2 accepted through #129/#130, including source-overlap correction, exclusive install and typed recovery; bounded single RGB consumer only | #118 complete; broader #124 |
 | Vector acceptance | V1/V2 replaced the defective acceptance/report boundary and passed independent portable/native replay and final platform/wheel checks in #131; feature ownership only | #119 complete; geometry/identity #123 |
@@ -65,7 +65,7 @@ assign every remaining subsystem and operation a proof/migration owner.
 
 Before release, every advertised operation earns scoped support or receives a
 recorded deliberate scope/migration decision. The issue list is not evidence of
-completion. See the [raw evidence audit](../../bench/architecture_audit/post_f0/evidence-audit.md)
+completion. See the [raw evidence audit](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/post_f0/evidence-audit.md)
 for per-oracle provenance and counterexamples to broad historical claims.
 
 ## Initial ledger
@@ -139,7 +139,7 @@ exercise the readers. A fresh nonauthor review found an oracle branch mistake;
 the committed correction `d92acd2` exercises the intended untyped/waveform cases.
 Final candidate artifacts use that corrected reader.
 
-[Local validation](../../bench/architecture_audit/point_acceptance/validation.json)
+[Local validation](https://github.com/BenDyson-Arch/rusty-tiles/blob/e29cd19d2f236dc688e91a80a45170d4a573e20b/bench/architecture_audit/point_acceptance/validation.json)
 records full Rust suites, strict lint, CLI point tests and 33 installed-wheel API
 tests each in clean Python and system Blender. Resource probes record observed
 growth rather than a whole-job memory limit. Cross-platform release/wheel and
