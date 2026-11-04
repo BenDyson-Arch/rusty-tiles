@@ -259,7 +259,11 @@ fn positions(
 }
 
 /// A primitive's triangle corner indices (all vertices in order when unindexed).
-fn indices(reader: &Reader<'_>, primitive: &Value, vertices: usize) -> Result<Vec<usize>, JobError> {
+fn indices(
+    reader: &Reader<'_>,
+    primitive: &Value,
+    vertices: usize,
+) -> Result<Vec<usize>, JobError> {
     let indices: Vec<usize> = match primitive.get("indices").and_then(Value::as_u64) {
         Some(index) => {
             let (values, component, _) = reader.accessor(index as usize)?;
@@ -290,7 +294,7 @@ fn node_trs(node: &Value) -> Result<([f32; 3], [f32; 3]), JobError> {
         Some(s) => [f32_exact(&s[0])?, f32_exact(&s[1])?, f32_exact(&s[2])?],
         None => [1.; 3],
     };
-Ok((translation, scale))
+    Ok((translation, scale))
 }
 
 /// Decode a leaf or coarse-tile GLB: every triangle's positions in client order and its
@@ -537,13 +541,18 @@ pub(crate) fn texture_sums(bytes: &[u8]) -> Result<super::texture_error::Sums, J
                 .iter()
                 .map(|e| {
                     std::array::from_fn(|a| match component {
-                        5126 => f64::from(f32::from_le_bytes(e[4 * a..4 * a + 4].try_into().unwrap())),
+                        5126 => {
+                            f64::from(f32::from_le_bytes(e[4 * a..4 * a + 4].try_into().unwrap()))
+                        }
                         5123 => f64::from(u16::from_le_bytes([e[2 * a], e[2 * a + 1]])) / 65535.,
                         _ => f64::from(e[a]) / 255.,
                     })
                 })
                 .collect();
-            for t in indices(&reader, primitive, decoded.len())?.as_chunks::<3>().0 {
+            for t in indices(&reader, primitive, decoded.len())?
+                .as_chunks::<3>()
+                .0
+            {
                 sums.add_triangle(t.map(|i| decoded[i]), t.map(|i| uv[i]), texels);
             }
         }

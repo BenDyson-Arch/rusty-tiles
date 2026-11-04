@@ -785,9 +785,11 @@ pub(crate) fn write_prepared(
     // a validator applies the HLOD expectation without being asked.
     if leaves.proxies {
         document = document
-            .declaring_hlod(leaves.texture_rule.map(|r| {
-                serde_json::to_value(r).expect("texture rule serializes")
-            }))
+            .declaring_hlod(
+                leaves
+                    .texture_rule
+                    .map(|r| serde_json::to_value(r).expect("texture rule serializes")),
+            )
             .map_err(|e| state(e.to_string()))?;
     }
     let writer = ForestWriter::new(&document, &staging, OCTREE)

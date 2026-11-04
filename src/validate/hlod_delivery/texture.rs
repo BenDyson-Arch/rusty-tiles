@@ -14,8 +14,11 @@ use super::{bad, decode, identity, sql, Accessor, Effort, Error, Matrix, Point, 
 /// Producer arithmetic slack (the producer's `texture_error::SLACK`): G is compared at
 /// `(1 - SLACK)`, refinability needs `s(T) > r·(1 + SLACK)·s(C)`.
 const SLACK: f64 = 1e-4;
-/// Units per textured triangle at ingest: three UV reads and the two areas.
+/// Units per textured triangle at ingest: three UV reads and the two areas (calibrated by
+/// `texture_work_cost_probe`).
 pub(super) const TRIANGLE_UNITS: usize = 6;
+/// Units per tile/reference row of the preorder pass and per ancestor contribution.
+pub(super) const ROW_UNITS: usize = 32;
 
 /// The declared rule.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -26,12 +29,18 @@ pub(in crate::validate) struct Rule {
 
 impl Rule {
     /// `asset.extras.rustyTiles.textureError`, if declared.
-    pub(in crate::validate) fn declared(tileset: &serde_json::Value) -> Result<Option<Self>, Error> {
+    pub(in crate::validate) fn declared(
+        tileset: &serde_json::Value,
+    ) -> Result<Option<Self>, Error> {
         let Some(value) = tileset["asset"]["extras"]["rustyTiles"].get("textureError") else {
             return Ok(None);
         };
         let number = |k: &str| value[k].as_f64().filter(|v| v.is_finite() && *v >= 1.);
-        match (value["version"].as_u64(), number("pxPerTexel"), number("refinableRatio")) {
+        match (
+            value["version"].as_u64(),
+            number("pxPerTexel"),
+            number("refinableRatio"),
+        ) {
             (Some(1), Some(px_per_texel), Some(refinable_ratio)) => Ok(Some(Self {
                 px_per_texel,
                 refinable_ratio,
@@ -67,13 +76,17 @@ pub(super) fn pages(
             .get("source")
             .or_else(|| texture.get("source"))
             .ok_or_else(|| bad("textureError", "base-colour texture without image"))?;
-        let view = &doc["bufferViews"][identity::uint(&doc["images"][identity::uint(image)?]["bufferView"])?];
+        let view = &doc["bufferViews"]
+            [identity::uint(&doc["images"][identity::uint(image)?]["bufferView"])?];
         let start = view["byteOffset"].as_u64().unwrap_or(0) as usize;
         let head = identity::slice(bin, start, 28.min(identity::uint(&view["byteLength"])?))?;
         let size = if head.starts_with(b"\xabKTX 20\xbb\r\n\x1a\n") && head.len() >= 28 {
             let w = |i: usize| u32::from_le_bytes(head[i..i + 4].try_into().unwrap());
             Some((w(20), w(24)))
-        } else if head.starts_with(b"\x89PNG\r\n\x1a\n") && head.len() >= 24 && &head[12..16] == b"IHDR" {
+        } else if head.starts_with(b"\x89PNG\r\n\x1a\n")
+            && head.len() >= 24
+            && &head[12..16] == b"IHDR"
+        {
             let w = |i: usize| u32::from_be_bytes(head[i..i + 4].try_into().unwrap());
             Some((w(16), w(20)))
         } else {
@@ -200,7 +213,7 @@ impl Store {
             }
             let chain = at.map(|a| stack[a].digest.clone());
             while let Some(a) = at {
-                effort.charge(1)?;
+                effort.charge(ROW_UNITS)?;
                 if Some(&stack[a].digest) != chain.as_ref() {
                     break;
                 }
@@ -217,7 +230,7 @@ impl Store {
         let mut rows = query.query([]).map_err(sql)?;
         let mut stack = Vec::<Frame>::new();
         while let Some(row) = rows.next().map_err(sql)? {
-            effort.charge(1)?;
+            effort.charge(ROW_UNITS)?;
             let id: i64 = row.get(0).map_err(sql)?;
             if stack.last().map(|f| f.id) != Some(id) {
                 let parent: Option<i64> = row.get(1).map_err(sql)?;
@@ -227,10 +240,13 @@ impl Store {
                     })?;
                     close(frame, &mut stack)?;
                 }
-                let up = stack
-                    .len()
-                    .checked_sub(1)
-                    .and_then(|p| if stack[p].digest.is_empty() { stack[p].up } else { Some(p) });
+                let up = stack.len().checked_sub(1).and_then(|p| {
+                    if stack[p].digest.is_empty() {
+                        stack[p].up
+                    } else {
+                        Some(p)
+                    }
+                });
                 let world: Vec<u8> = row.get(3).map_err(sql)?;
                 stack.push(Frame {
                     id,
@@ -250,7 +266,9 @@ impl Store {
             let texels: f64 = row.get(6).map_err(sql)?;
             if texels > 0. {
                 let scale = frame.scale.ok_or_else(|| {
-                    Error::unsupported("textureError: a textured tile placement is not a similarity")
+                    Error::unsupported(
+                        "textureError: a textured tile placement is not a similarity",
+                    )
                 })?;
                 frame.own.area += area * scale * scale;
                 frame.own.texels += texels;
@@ -261,5 +279,121 @@ impl Store {
             close(frame, &mut stack)?;
         }
         Ok(counts)
+    }
+}
+
+#[cfg(test)]
+mod cost {
+    //! Retained work-cost probe (CPU-pinned calibration, no acceptance claim).
+    use super::*;
+    use rusqlite::params;
+    use std::sync::atomic::Ordering;
+
+    fn cpu() -> f64 {
+        let mut t = std::mem::MaybeUninit::<libc::timespec>::uninit();
+        // SAFETY: successful clock_gettime initializes the supplied timespec.
+        assert_eq!(
+            unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, t.as_mut_ptr()) },
+            0
+        );
+        // SAFETY: the successful call above initialized t.
+        let t = unsafe { t.assume_init() };
+        t.tv_sec as f64 + t.tv_nsec as f64 * 1e-9
+    }
+    /// A complete octree of `levels` below the root, every tile with its own textured
+    /// payload, coarse pages coarser than their children (every tile refinable).
+    fn store(levels: u32) -> (Store, u64) {
+        let mut s = super::super::tests::store();
+        s.materialize().unwrap();
+        let identity = super::super::encode(&IDENTITY_WORLD);
+        let mut next = 0i64;
+        fn add(
+            s: &Store,
+            id: &mut i64,
+            parent: Option<i64>,
+            level: u32,
+            levels: u32,
+            world: &[u8],
+        ) {
+            let me = *id;
+            *id += 1;
+            let error = 1000. / f64::from(1u32 << level);
+            s.connection
+                .execute(
+                    "INSERT INTO tiles(id,parent,world,error) VALUES(?,?,?,?)",
+                    params![me, parent, world, error],
+                )
+                .unwrap();
+            s.connection
+                .execute(
+                    "INSERT INTO payloads(rank,identity_present,triangle_present,digest,texture_area,texture_texels) VALUES(?,1,0,?,1e4,?)",
+                    params![me, me.to_le_bytes().to_vec(), 4f64.powi(level as i32 + 4)],
+                )
+                .unwrap();
+            s.connection
+                .execute("INSERT INTO refs VALUES(?,?)", params![me, me])
+                .unwrap();
+            if level < levels {
+                for _ in 0..8 {
+                    add(s, id, Some(me), level + 1, levels, world);
+                }
+            }
+        }
+        add(&s, &mut next, None, 0, levels, &identity);
+        s.connection.execute_batch("CREATE INDEX tile_parent ON tiles(parent); CREATE INDEX refs_tile ON refs(tile); CREATE INDEX refs_rank ON refs(rank);").unwrap();
+        (s, next as u64)
+    }
+    const IDENTITY_WORLD: [f64; 16] = [
+        1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.,
+    ];
+
+    #[test]
+    #[ignore = "CPU-pinned calibration; runs no geometry or archive acceptance"]
+    fn texture_work_cost_probe() {
+        let rule = Rule {
+            px_per_texel: 2.,
+            refinable_ratio: 1.25,
+        };
+        for levels in [3, 4, 5] {
+            let (s, tiles) = store(levels);
+            for _ in 0..3 {
+                let effort = super::super::tests::effort_for_tests();
+                let start = cpu();
+                let (refinable, _) = s.texture_error(rule, &effort).unwrap();
+                let ns = (cpu() - start) * 1e9;
+                let units = effort.used.load(Ordering::Relaxed);
+                assert_eq!(refinable + 8u64.pow(levels), tiles);
+                println!(
+                    "TEXTURE_COST {}",
+                    serde_json::json!({"case":"pass","n":tiles,"ns":ns,"units":units,"nsPerUnit":ns/units as f64})
+                );
+            }
+        }
+        // Ingest: the same published coarse payload with and without the declaration.
+        let Some(path) = std::env::var_os("RT_TEXTURE_PROBE_GLB") else {
+            return;
+        };
+        let bytes = std::fs::read(path).unwrap();
+        let budget = super::super::tests::budget();
+        for _ in 0..3 {
+            let mut runs = [(0f64, 0u64); 2];
+            for (k, declared) in [false, true].into_iter().enumerate() {
+                for rank in 0..20u64 {
+                    let mut s = super::super::tests::store();
+                    if declared {
+                        s.expect_texture(rule);
+                    }
+                    let start = cpu();
+                    let units = s.ingest(rank, &bytes, budget, 0, 1 << 30).unwrap();
+                    runs[k].0 += (cpu() - start) * 1e9;
+                    runs[k].1 += units;
+                }
+            }
+            let (ns, units) = (runs[1].0 - runs[0].0, runs[1].1 - runs[0].1);
+            println!(
+                "TEXTURE_COST {}",
+                serde_json::json!({"case":"ingest","ns":ns,"units":units,"nsPerUnit":ns/units as f64,"baseNsPerUnit":runs[0].0/runs[0].1 as f64})
+            );
+        }
     }
 }

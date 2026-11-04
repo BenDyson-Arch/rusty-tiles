@@ -1523,11 +1523,20 @@ fn capped_pages_publish_texture_aware_g_that_the_validator_recomputes() {
         mutation,
         ..test_settings(300)
     };
-    let dir = stage_settings(&input, &work.path().join("out"), small(Mutation::SmallPages));
+    let dir = stage_settings(
+        &input,
+        &work.path().join("out"),
+        small(Mutation::SmallPages),
+    );
     let rows = rows(&dir.join("proxies.jsonl"));
     let published: std::collections::HashMap<_, _> = rows
         .iter()
-        .map(|r| (r["uri"].as_str().unwrap().to_owned(), r["geometricError"].as_f64().unwrap()))
+        .map(|r| {
+            (
+                r["uri"].as_str().unwrap().to_owned(),
+                r["geometricError"].as_f64().unwrap(),
+            )
+        })
         .collect();
     let mut raised = 0;
     for r in &rows {
@@ -1535,10 +1544,15 @@ fn capped_pages_publish_texture_aware_g_that_the_validator_recomputes() {
         let g = t["geometricError"].as_f64().unwrap();
         let p = r["geometricError"].as_f64().unwrap();
         let implied = t["textureError"].as_f64().unwrap();
-        assert_eq!(p, g.max(implied).max(t["childrenPublished"].as_f64().unwrap()), "{t}");
+        assert_eq!(
+            p,
+            g.max(implied).max(t["childrenPublished"].as_f64().unwrap()),
+            "{t}"
+        );
         // Recompute the term from the published bytes and the children's sums.
-        let own = super::decode::texture_sums(&fs::read(dir.join(r["uri"].as_str().unwrap())).unwrap())
-            .unwrap();
+        let own =
+            super::decode::texture_sums(&fs::read(dir.join(r["uri"].as_str().unwrap())).unwrap())
+                .unwrap();
         assert_eq!(own.area, t["sums"]["area"].as_f64().unwrap());
         let (s, sc) = (
             own.spacing().unwrap(),
@@ -1580,13 +1594,22 @@ fn capped_pages_publish_texture_aware_g_that_the_validator_recomputes() {
     let census = checked.interface_census.unwrap();
     assert!(census.texture_bound_tiles > 0, "{census:?}");
     assert!(census.texture_refinable_tiles >= census.texture_bound_tiles);
-    let understated = build("understated.3tz", Mutation::UnderstateTextureError, TilerProfile::Balanced);
-    let e = inspect(ValidationRequest::new(&understated)).unwrap_err().to_string();
+    let understated = build(
+        "understated.3tz",
+        Mutation::UnderstateTextureError,
+        TilerProfile::Balanced,
+    );
+    let e = inspect(ValidationRequest::new(&understated))
+        .unwrap_err()
+        .to_string();
     assert!(e.contains("textureError"), "{e}");
     let fast = build("fast.3tz", Mutation::SmallPages, TilerProfile::Fast);
     let checked = inspect(ValidationRequest::new(&fast)).unwrap();
     assert_eq!(checked.interface_census.unwrap().texture_refinable_tiles, 0);
     let production = build("production.3tz", Mutation::None, TilerProfile::Balanced);
-    let census = inspect(ValidationRequest::new(&production)).unwrap().interface_census.unwrap();
+    let census = inspect(ValidationRequest::new(&production))
+        .unwrap()
+        .interface_census
+        .unwrap();
     assert_eq!(census.texture_bound_tiles, 0, "{census:?}");
 }

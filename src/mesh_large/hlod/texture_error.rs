@@ -154,12 +154,13 @@ pub(crate) fn publish(
 ) -> Published {
     let (children_published, children_sums) = children
         .into_iter()
-        .fold((0f64, Sums::default()), |(e, s), (ce, cs)| (e.max(ce), s.add(cs)));
+        .fold((0f64, Sums::default()), |(e, s), (ce, cs)| {
+            (e.max(ce), s.add(cs))
+        });
     let (refinable, texture_error) = match (rule, sums.spacing(), children_sums.spacing()) {
-        (Some(rule), Some(s), Some(sc)) if s > rule.refinable_ratio * sc => (
-            true,
-            SSE * s / rule.px_per_texel * (1. + 2. * SLACK),
-        ),
+        (Some(rule), Some(s), Some(sc)) if s > rule.refinable_ratio * sc => {
+            (true, SSE * s / rule.px_per_texel * (1. + 2. * SLACK))
+        }
         _ => (false, 0.),
     };
     Published {

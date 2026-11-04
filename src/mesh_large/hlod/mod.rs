@@ -35,9 +35,9 @@ mod root_competition;
 pub(crate) mod scratch;
 pub(crate) mod source_index;
 pub(crate) mod store;
-pub(crate) mod texture_error;
 #[cfg(test)]
 mod tests;
+pub(crate) mod texture_error;
 #[cfg(test)]
 pub(crate) use tests::test_settings;
 
@@ -1926,7 +1926,9 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     t.raised_by_texture += u64::from(row.texture.by_texture());
     t.raised_by_children += u64::from(row.texture.by_children());
     if row.texture.error > row.texture.geometric_error {
-        t.max_raise = t.max_raise.max(row.texture.error / row.texture.geometric_error);
+        t.max_raise = t
+            .max_raise
+            .max(row.texture.error / row.texture.geometric_error);
         t.root_raised |= row.depth == 0;
     }
     let cpu = &mut report.error_cpu_by_depth;
