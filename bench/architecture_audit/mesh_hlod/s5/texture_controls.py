@@ -45,9 +45,14 @@ def png(edge):
             + chunk(b'IDAT', stored_zlib(row * edge)) + chunk(b'IEND', b''))
 
 
+KTX2 = (Path(__file__).resolve().parents[2] / 'c1_payload_integrity/production_controls/'
+        'ktx2_basisu_amendment/2026-10-13/primary/rgba-mipmap-reference-basis.ktx2')
+
+
 def textured(data, edge, texcoord=None):
-    """The payload with one base-colour PNG page of `edge` x `edge` on its material. With
-    `texcoord` (a UV scale), the page binds TEXCOORD_1 = TEXCOORD_0 x scale in its own view."""
+    """The payload with one base-colour PNG page of `edge` x `edge` on its material (`edge`
+    'ktx2': the committed 64 x 64 ETC1S KTX2 page). With `texcoord` (a UV scale), the page
+    binds TEXCOORD_1 = TEXCOORD_0 x scale in its own view."""
     length = int.from_bytes(data[12:16], 'little')
     doc, binary = json.loads(data[20:20 + length]), bytearray(data[28 + length:])
 
@@ -66,11 +71,17 @@ def textured(data, edge, texcoord=None):
                                      byteOffset=0))
         prim['attributes']['TEXCOORD_1'] = len(doc['accessors']) - 1
         material['pbrMetallicRoughness']['baseColorTexture']['texCoord'] = 1
-    doc['images'] = [dict(bufferView=view(png(edge)), mimeType='image/png')]
+    if edge == 'ktx2':
+        doc['images'] = [dict(bufferView=view(KTX2.read_bytes()), mimeType='image/ktx2')]
+        doc['textures'] = [dict(sampler=0, extensions={'KHR_texture_basisu': {'source': 0}})]
+        for key in ('extensionsUsed', 'extensionsRequired'):
+            doc[key] = sorted(set(doc.get(key, [])) | {'KHR_texture_basisu'})
+    else:
+        doc['images'] = [dict(bufferView=view(png(edge)), mimeType='image/png')]
+        doc['textures'] = [dict(source=0, sampler=0)]
     binary.extend(bytes(-len(binary) % 4))
     doc['buffers'][0]['byteLength'] = len(binary)
     doc['materials'] = [material]
-    doc['textures'] = [dict(source=0, sampler=0)]
     doc['samplers'] = [dict(magFilter=9729, minFilter=9729, wrapS=33071, wrapT=33071)]
     text = json.dumps(doc, separators=(',', ':')).encode()
     text += b' ' * (-len(text) % 4)
@@ -88,7 +99,8 @@ def generate(root):
     cases = []
 
     def case(name, g, *, shape='flat', edge=32, mid=(1.001, 1.001), mid_edge=(64, 64), copy_g=None,
-             declaration=BALANCED, uv_scale=1.0, texcoord=None, check=None, native=None, bound=None):
+             declaration=BALANCED, uv_scale=1.0, texcoord=None, check=None, native=None, bound=None,
+             extras=True, report=None, expect=True):
         folder = root / name
         folder.mkdir(exist_ok=True)
         files = {}
@@ -127,17 +139,20 @@ def generate(root):
         rusty = {'lod': 'hlod'}
         if declaration is not ABSENT:
             rusty['textureError'] = declaration
+        if report is not None:
+            files['conversion.json'] = json.dumps(report).encode()
         for uri, data in files.items():
             (folder / uri).write_bytes(data)
-        (folder / 'tileset.json').write_text(json.dumps(dict(
-            asset={'version': '1.1', 'extras': {'rustyTiles': rusty}}, geometricError=g, root=top)))
+        asset = {'version': '1.1', 'extras': {'rustyTiles': rusty}} if extras else {'version': '1.1'}
+        (folder / 'tileset.json').write_text(json.dumps(dict(asset=asset, geometricError=g, root=top)))
         source = root / (name + '-source.json')
         source.write_text(json.dumps({'triangles': {f'0,0,0,{i}': dict(
             xyz=t, vertices=[i * 3 + k for k in range(3)], expanded_ordinal=0, material_index=0,
             material=json.loads(files['leaf0.glb'][20:20 + int.from_bytes(files['leaf0.glb'][12:16], 'little')])['materials'][0],
             normals=controls.NORMALS, uvs=controls.UVS)
             for i, t in enumerate(FACES)}}) + '\n')
-        cases.append(dict(name=name, check=check, native=native or check, bound=bound, source=source.name))
+        cases.append(dict(name=name, check=check, native=native or check, bound=bound, source=source.name,
+                          expect=expect))
 
     # One level.
     case('texture-honest', 2.001, bound=1)
@@ -146,6 +161,12 @@ def generate(root):
     case('texture-quality-honest', 3.201, declaration=dict(BALANCED, pxPerTexel=1.25), bound=1)
     case('texture-source-limited', 0.5, edge=256, bound=0)
     case('texture-uv-shrunk', 2.001, uv_scale=0.5, check='textureError')
+    # The 1e-4 relative slack, both sides of the edge (implied G 2).
+    case('texture-tolerance-inside', 2 * (1 - 0.9e-4), bound=1)
+    case('texture-tolerance-outside', 2 * (1 - 1.1e-4), check='textureError')
+    # A KTX2 root page (64 x 64: spacing 0.125 m, implied G 1).
+    case('texture-ktx2-honest', 1.001, edge='ktx2', bound=1)
+    case('texture-ktx2-understated', 0.9, edge='ktx2', check='textureError')
     # Textured surface with no UV area is infinitely coarse, never untextured.
     case('texture-uv-zero', 1000.0, uv_scale=0.0, check='textureError')
     # Base colour on TEXCOORD_1: honest, and that set (not TEXCOORD_0) shrunk on the root.
@@ -160,6 +181,17 @@ def generate(root):
             ('version-2', dict(BALANCED, version=2)), ('px-string', dict(BALANCED, pxPerTexel='2')),
             ('no-ratio', dict(version=1, pxPerTexel=2.0))):
         case(f'texture-declaration-{name}', 2.001, declaration=declaration, check='textureError')
+    # Review r2: stripping the declaration never switches the check off. Native holds the
+    # archive to HLOD by the caller, by conversion.json or by its payload identity.
+    case('texture-stripped-expected', 0.5, extras=False, check='textureError')
+    case('texture-stripped-report', 0.5, extras=False, report={'lod': 'hlod'}, expect=False, check='textureError')
+    case('texture-stripped-identity', 0.5, extras=False, expect=False, check='textureError')
+    # The producer records its profile in conversion.json: fast must declare null.
+    mesh = dict(operation='mesh_tiler')
+    case('texture-profile-balanced', 2.001, report=dict(mesh, profile='balanced'), bound=1)
+    case('texture-profile-relabelled-fast', 0.5, declaration=dict(BALANCED, pxPerTexel=None),
+         report=dict(mesh, profile='balanced'), check='textureError')
+    case('texture-profile-fast-declares-t', 2.001, report=dict(mesh, profile='fast'), check='textureError')
     # Two levels: refinable at depth 2, understated there, and parent propagation.
     case('texture-deep-honest', 4.001, shape='deep', edge=16, bound=3)
     case('texture-deep-understated-depth2', 4.001, shape='deep', edge=16, mid=(0.9, 1.001), check='textureError')
@@ -193,7 +225,8 @@ def run(root, binary=None):
             packed = subprocess.run([str(binary), 'convert', '-i', str(folder), '-o', str(archive), '--force', '--json'],
                                     capture_output=True, timeout=30)
             assert packed.returncode == 0, (c['name'], packed.stderr[-2000:])
-            checked = subprocess.run([str(binary), 'validate', str(archive), '--json', '--expect-profile', 'hlod'],
+            flags = ['--expect-profile', 'hlod'] if c['expect'] else []
+            checked = subprocess.run([str(binary), 'validate', str(archive), '--json', *flags],
                                      capture_output=True, timeout=30)
             report = json.loads(checked.stdout)
             if c['check']:

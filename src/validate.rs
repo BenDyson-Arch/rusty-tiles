@@ -3535,16 +3535,22 @@ fn inspect_run(
         let (manifest, _) = check.resources.read_json("tileset.json")?;
         // HLOD expectation is owned by the caller or the archive's own declaration, never
         // inferred from payload labels whose removal it must detect (review r12).
-        if expected_hlod
+        let hlod = expected_hlod
             || manifest["asset"]["extras"]["rustyTiles"]["lod"].as_str() == Some("hlod")
-            || check.reports["lod"].as_str() == Some("hlod")
-        {
+            || check.reports["lod"].as_str() == Some("hlod");
+        if hlod {
             check.delivery.expect_identity();
         }
-        // D5 amendment A3: a declared texture term binds every content tile's G.
-        if let Some(rule) = hlod_delivery::texture::Rule::declared(&manifest)? {
-            check.delivery.expect_texture(rule);
-        }
+        // D5 amendment A3: the texture term binds every content tile's G, under the
+        // resolved HLOD expectation and the producer's recorded profile.
+        let profile = (check.reports["operation"].as_str() == Some("mesh_tiler"))
+            .then(|| check.reports["profile"].as_str())
+            .flatten();
+        check
+            .delivery
+            .expect_texture(hlod_delivery::texture::Declaration::read(
+                &manifest, hlod, profile,
+            )?);
         if let Some(expected) = manifest["asset"]["extras"]["vectorBuildStateSha256"].as_str() {
             check.resources.reference("vector-build.json".into())?;
             if vector_build.as_deref() != Some(expected) {

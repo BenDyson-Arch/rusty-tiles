@@ -1019,7 +1019,7 @@ pub(super) struct Store {
     common_root: Option<Matrix>,
     profile_exclusion: Option<&'static str>,
     /// The declared texture-error rule (D5 amendment A3).
-    texture: Option<texture::Rule>,
+    texture: texture::Declaration,
     decoded_limit: usize,
     census: Option<DecodedInterfaceCensus>,
     /// Original vertex rows, appended per payload at ingest; the alias pass consumes them.
@@ -1044,7 +1044,7 @@ impl Store {
             checked: false,
             common_root: None,
             profile_exclusion: None,
-            texture: None,
+            texture: texture::Declaration::Absent,
             decoded_limit: 0,
             census: None,
             originals: None,
@@ -1338,8 +1338,17 @@ impl Store {
         let mut originals = BTreeMap::<(Source, u64), Point>::new();
         // A3: base-colour pages and the payload's textured surface and texel areas.
         let pages = match self.texture {
-            Some(_) => texture::pages(&doc, bin, &mut work)?,
-            None => Vec::new(),
+            texture::Declaration::Rule(_) => texture::pages(&doc, bin, &mut work)?,
+            texture::Declaration::Fast => Vec::new(),
+            texture::Declaration::Absent => {
+                if texture::textured(&doc, &mut work)? {
+                    return Err(bad(
+                        "textureError",
+                        "a textured HLOD payload needs the tileset's textureError declaration",
+                    ));
+                }
+                Vec::new()
+            }
         };
         let (mut texture_area, mut texture_texels) = (0f64, 0f64);
         let tables = doc["extensions"]["EXT_structural_metadata"]["propertyTables"]
@@ -1592,8 +1601,8 @@ impl Store {
         self.checked = true;
     }
     /// Hold every content tile's G to the declared texture term (D5 amendment A3).
-    pub(super) fn expect_texture(&mut self, rule: texture::Rule) {
-        self.texture = Some(rule);
+    pub(super) fn expect_texture(&mut self, declaration: texture::Declaration) {
+        self.texture = declaration;
     }
 
     pub(super) fn finish(
@@ -1698,7 +1707,7 @@ impl Store {
         }
         let mut census = DecodedInterfaceCensus::default();
         self.triangle_cap(&mut census)?;
-        if let Some(rule) = self.texture {
+        if let texture::Declaration::Rule(rule) = self.texture {
             (census.texture_refinable_tiles, census.texture_bound_tiles) =
                 self.texture_error(rule, effort)?;
         }

@@ -288,7 +288,11 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
         require(barrier['ok'],'replaceContentContinuity',str(barrier['violations']))
         doc=archive.json(archive.root_name)
         import texture_error
-        texture_declared=texture_error.declaration(doc,require)
+        try:
+            conversion=archive.json('conversion.json')
+        except ValueError:
+            conversion=None
+        texture_declared=texture_error.declaration(doc,require,conversion)
         g=doc.get('geometricError')
         require(type(g) in (int,float) and math.isfinite(g) and g>=0,'geometricErrorFinite','tileset G')
         for name in {name for t in tiles for name in t.get('external_uris',[])}:
@@ -355,7 +359,9 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                             key,want=check_leaf(f,manifest,attributes,geometry=False)
                             require(store.source_face(key,want,t['lo'],actual=f,depth=t['depth']),'leafCoverage','duplicate '+key)
                             leaf_count+=1
-                    if texture_declared is not None:
+                    if texture_declared is texture_error.ABSENT:
+                        texture_error.undeclared(data,require)
+                    elif texture_declared is not texture_error.FAST:
                         area,texels=texture_error.measure(data,faces,require)
                         t['texture'][0]+=area;t['texture'][1]+=texels
                     store.put_faces(int(t['id']),faces)

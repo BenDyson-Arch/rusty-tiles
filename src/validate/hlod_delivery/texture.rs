@@ -32,21 +32,38 @@ pub(in crate::validate) struct Rule {
     pub refinable_ratio: f64,
 }
 
-impl Rule {
-    /// `asset.extras.rustyTiles.textureError`: required, exactly `{version, pxPerTexel,
-    /// refinableRatio}`, on a tileset declaring `rustyTiles.lod = "hlod"`, refused on any
-    /// other. `Ok(None)`: no HLOD declaration, or the fast form (no texture term).
-    pub(in crate::validate) fn declared(
+/// What the archive declares about the texture term.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(in crate::validate) enum Declaration {
+    /// No declaration (and the tileset does not itself declare HLOD): any HLOD payload
+    /// with a base-colour texture is refused at ingest.
+    #[default]
+    Absent,
+    /// `pxPerTexel: null`: the fast form, no texture term.
+    Fast,
+    Rule(Rule),
+}
+
+impl Declaration {
+    /// `asset.extras.rustyTiles.textureError`, strict: exactly `{version: 1, pxPerTexel:
+    /// 2 | 1.25 | null, refinableRatio: 1.25}`. `hlod` is the resolved expectation (caller,
+    /// tileset or conversion report); a declaration outside it is refused, and a tileset
+    /// declaring `lod: "hlod"` must declare it. `profile` is the conversion report's
+    /// `mesh_tiler` profile, if any: fast must declare null, balanced 2, quality and
+    /// lossless 1.25.
+    pub(in crate::validate) fn read(
         tileset: &serde_json::Value,
-    ) -> Result<Option<Self>, Error> {
+        hlod: bool,
+        profile: Option<&str>,
+    ) -> Result<Self, Error> {
         let rusty = &tileset["asset"]["extras"]["rustyTiles"];
-        let hlod = rusty["lod"].as_str() == Some("hlod");
-        let value = rusty.get("textureError");
         let refuse = |why: &str| Err(bad("textureError", why));
-        let value = match (hlod, value) {
-            (false, None) => return Ok(None),
+        let value = match (hlod, rusty.get("textureError")) {
+            (_, None) if rusty["lod"].as_str() == Some("hlod") => {
+                return refuse("an HLOD tileset must declare its texture rule")
+            }
+            (_, None) => return Ok(Self::Absent),
             (false, Some(_)) => return refuse("declared outside an HLOD tileset"),
-            (true, None) => return refuse("an HLOD tileset must declare its texture rule"),
             (true, Some(v)) => v,
         };
         let Some(object) = value.as_object() else {
@@ -65,17 +82,45 @@ impl Rule {
         if value["refinableRatio"].as_f64() != Some(REFINABLE_RATIO) {
             return refuse("refinableRatio must be 1.25");
         }
-        match &value["pxPerTexel"] {
-            serde_json::Value::Null => Ok(None),
+        let declared = match &value["pxPerTexel"] {
+            serde_json::Value::Null => None,
             v => match v.as_f64().filter(|t| PX_PER_TEXEL.contains(t)) {
-                Some(px_per_texel) => Ok(Some(Self {
-                    px_per_texel,
-                    refinable_ratio: REFINABLE_RATIO,
-                })),
-                None => refuse("pxPerTexel must be 2, 1.25 or null"),
+                Some(t) => Some(t),
+                None => return refuse("pxPerTexel must be 2, 1.25 or null"),
             },
+        };
+        let expected = match profile {
+            Some("fast") => Some(None),
+            Some("balanced") => Some(Some(2.)),
+            Some("quality" | "lossless") => Some(Some(1.25)),
+            _ => None,
+        };
+        if expected.is_some_and(|e| e != declared) {
+            return refuse("pxPerTexel disagrees with the conversion report's profile");
+        }
+        Ok(match declared {
+            None => Self::Fast,
+            Some(px_per_texel) => Self::Rule(Rule {
+                px_per_texel,
+                refinable_ratio: REFINABLE_RATIO,
+            }),
+        })
+    }
+}
+
+/// Whether a payload binds a base-colour texture on any material (an undeclared HLOD
+/// archive must not).
+pub(super) fn textured(doc: &serde_json::Value, work: &mut identity::Work) -> Result<bool, Error> {
+    for material in doc["materials"].as_array().into_iter().flatten() {
+        work.charge(1)?;
+        if material["pbrMetallicRoughness"]
+            .get("baseColorTexture")
+            .is_some()
+        {
+            return Ok(true);
         }
     }
+    Ok(false)
 }
 
 /// Per material of one payload: its base-colour texels per unit UV area and TEXCOORD set.
@@ -461,7 +506,7 @@ mod cost {
                 for rank in 0..20u64 {
                     let mut s = super::super::tests::store();
                     if declared {
-                        s.expect_texture(rule);
+                        s.expect_texture(Declaration::Rule(rule));
                     }
                     let start = cpu();
                     let units = s.ingest(rank, &bytes, budget, 0, 1 << 30).unwrap();

@@ -318,7 +318,11 @@ refines on G alone, keeps them beside sharp leaves (texture study, section 8).
   selection on that input (54 views, 12 Metashape positions identical).
 - **Declaration (review r1).** Every HLOD archive declares exactly
   `{version: 1, pxPerTexel: 2 | 1.25 | null, refinableRatio: 1.25}`; `null` is fast.
-  Validators refuse a missing, null or different declaration, and one outside HLOD.
+  Validators refuse a null or different declaration, one outside HLOD, a missing one on a
+  tileset declaring `lod: "hlod"`, and (review r2) any textured HLOD payload in an
+  archive without it, however HLOD is established (caller, tileset, conversion report or
+  payload identity). A `mesh_tiler` conversion report's profile must match `pxPerTexel`;
+  without the report, `null` is the producer's claim (known limit).
   `s` uses the material's TEXCOORD set; textured area with no UV area is infinitely
   coarse (never "untextured"). The native pass interns each tile's payload set as one
   SHA-256, so walking a copy chain costs O(1) per step.

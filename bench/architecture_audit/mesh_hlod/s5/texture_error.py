@@ -27,19 +27,23 @@ REFINABLE_RATIO = 1.25
 PX_PER_TEXEL = (2.0, 1.25)
 
 
-def declaration(tileset, require):
-    """The declared (t, r); None for no HLOD declaration or the fast form (pxPerTexel null).
-    An HLOD tileset (rustyTiles.lod == "hlod") must declare exactly {version: 1,
-    pxPerTexel: 2 | 1.25 | null, refinableRatio: 1.25}; any other tileset must not."""
+FAST = 'fast'
+ABSENT = 'absent'
+PROFILES = {'fast': None, 'balanced': 2.0, 'quality': 1.25, 'lossless': 1.25}
+
+
+def declaration(tileset, require, report=None):
+    """The declared (t, r), FAST (pxPerTexel null) or ABSENT. The oracle always holds the
+    archive to HLOD, so the declaration is allowed without `lod`, and a tileset declaring
+    `lod: "hlod"` must carry it; ABSENT refuses any textured payload (`undeclared`). The
+    strict form is exactly {version: 1, pxPerTexel: 2 | 1.25 | null, refinableRatio: 1.25}.
+    `report` is conversion.json: a mesh_tiler profile must match pxPerTexel."""
     extras = tileset.get('asset', {}).get('extras', {})
     rusty = extras.get('rustyTiles', {}) if isinstance(extras, dict) else {}
     rusty = rusty if isinstance(rusty, dict) else {}
-    hlod = rusty.get('lod') == 'hlod'
-    present = 'textureError' in rusty
-    if not hlod:
-        require(not present, 'textureError', 'textureError is declared outside an HLOD tileset')
-        return None
-    require(present, 'textureError', 'an HLOD tileset must declare its texture rule')
+    if 'textureError' not in rusty:
+        require(rusty.get('lod') != 'hlod', 'textureError', 'an HLOD tileset must declare its texture rule')
+        return ABSENT
     value = rusty['textureError']
     require(isinstance(value, dict), 'textureError', 'declaration is not an object')
     require(set(value) == {'version', 'pxPerTexel', 'refinableRatio'}, 'textureError',
@@ -50,10 +54,20 @@ def declaration(tileset, require):
     require(number(value['refinableRatio']) and value['refinableRatio'] == REFINABLE_RATIO,
             'textureError', 'refinableRatio must be 1.25')
     t = value['pxPerTexel']
-    if t is None:
-        return None
-    require(number(t) and float(t) in PX_PER_TEXEL, 'textureError', 'pxPerTexel must be 2, 1.25 or null')
-    return float(t), REFINABLE_RATIO
+    require(t is None or (number(t) and float(t) in PX_PER_TEXEL), 'textureError',
+            'pxPerTexel must be 2, 1.25 or null')
+    if isinstance(report, dict) and report.get('operation') == 'mesh_tiler' and report.get('profile') in PROFILES:
+        require(PROFILES[report['profile']] == (None if t is None else float(t)), 'textureError',
+                "pxPerTexel disagrees with the conversion report's profile")
+    return FAST if t is None else (float(t), REFINABLE_RATIO)
+
+
+def undeclared(glb, require):
+    """An undeclared archive must not bind a base-colour texture on any payload."""
+    length = int.from_bytes(glb[12:16], 'little')
+    doc = json.loads(glb[20:20 + length])
+    require(not any('baseColorTexture' in m.get('pbrMetallicRoughness', {}) for m in doc.get('materials', [])),
+            'textureError', "a textured HLOD payload needs the tileset's textureError declaration")
 
 
 def image_size(data, require):
@@ -131,8 +145,8 @@ def children(t, digest):
 def inspect(tiles, declared, require):
     """Each content tile carries 'texture' (A, X) and 'textureDigest' (sorted payload hashes).
     Refuse a refinable tile whose geometricError is below its texture-implied error."""
-    if declared is None:
-        return dict(declared=False)
+    if declared in (FAST, ABSENT):
+        return dict(declared=declared == FAST)
     t_px, ratio = declared
     refinable = bound = 0
     worst = 0.0

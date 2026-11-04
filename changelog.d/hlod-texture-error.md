@@ -9,3 +9,5 @@
   in `asset.extras.rustyTiles.textureError` (`pxPerTexel` null in `fast`); `validate`
   refuses an HLOD tileset without it and recomputes the term from the archive's
   pages, UVs and hierarchy. In `quality` and `lossless` the root's error can rise.
+  Leaf/HLOD stage directories written before this change have no texture rule and
+  cannot be published; re-run the bake.

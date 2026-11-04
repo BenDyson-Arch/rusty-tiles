@@ -282,8 +282,9 @@ the tree. Only the published value changes: simplification, root competition, D5
 page spacing, sampling, seams and caps all use the measured `G`. Every HLOD archive
 declares its rule in `tileset.json` as `asset.extras.rustyTiles.textureError`:
 exactly `{"version": 1, "pxPerTexel": t, "refinableRatio": 1.25}`, with
-`"pxPerTexel": null` in `fast`. `validate` refuses an HLOD tileset without it or with
-any other value, recomputes `s` from every payload's pages, UVs and positions and the
+`"pxPerTexel": null` in `fast`, matching the profile in `conversion.json`. `validate`
+refuses any other value, an HLOD archive with textured payloads but no declaration, and
+a profile mismatch; it recomputes `s` from every payload's pages, UVs and positions and the
 hierarchy, and refuses any refinable tile whose `geometricError` is below
 `16 · s / t` ([VALIDATION](VALIDATION.md)). `diagnostics.hlod.texture_error` counts the
 refinable tiles, those the term raised and those raised only to stay above a child.
