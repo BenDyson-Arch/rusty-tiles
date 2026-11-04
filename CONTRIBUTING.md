@@ -390,7 +390,7 @@ A new version changes converter and cache identity. Consumers must invalidate de
 
 These files record measured runs. Read them for numbers. They describe one machine and run, not guarantees.
 
-Runs whose result files left the tree to save space link to [`bench/MOVED_EVIDENCE.md`](bench/MOVED_EVIDENCE.md), which gives each file's SHA-256 and the commit that last held it.
+Runs whose result files left the tree to save space link to [`bench/MOVED_EVIDENCE.md`](bench/MOVED_EVIDENCE.md), which gives the commit that last held each file and, for files copied to the evidence cache, its SHA-256.
 
 | Evidence | What it covers | Reproduce with |
 | --- | --- | --- |

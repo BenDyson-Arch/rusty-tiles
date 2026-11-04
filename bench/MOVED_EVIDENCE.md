@@ -51,7 +51,7 @@ path and last held by commit `e5c475f3`.
 
 ## Pre-0.4.0 tree cleanup (2026-11-04)
 
-Deleted outright, not copied to the evidence cache: records of retired producers and slices
+Deleted outright, not copied to the evidence cache, so this section lists paths and sizes without SHA-256 values: records of retired producers and slices
 (F1a–F1d `mesh-local-to-3tz`, H27 proxy bake, H17-era `cmp_h28.py`), the #113 first-pass
 probe stubs, superseded architecture write-ups, the orphaned `oracle/` npm pin and fixtures
 that only those retired probes read. Nothing in CI, the tests or the build read them. All
