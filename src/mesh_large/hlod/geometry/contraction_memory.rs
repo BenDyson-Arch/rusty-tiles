@@ -247,6 +247,8 @@ fn children(n: usize, fixture: Fixture) -> (TileKey, Vec<TileGeometry>) {
             primitives: Vec::new(),
             interface: Vec::new(),
             geometric_error: 0.,
+            published_error: 0.,
+            texture: Default::default(),
             lease: None,
         };
         if slot == 0 {

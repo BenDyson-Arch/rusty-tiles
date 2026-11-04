@@ -294,6 +294,49 @@ making that the default. Final constants remain S8 decisions.
   D10.
 - KTX2 quality is unchanged (D7).
 
+**Owner amendment, 2026-11-04 — texture-aware published G (A3, 0.4.0).** The page cap
+breaks the spacing promise on dense inputs: on the 8192² Walem original, 509 of 831
+coarse tiles are cap-limited, at a median 5× their G-implied spacing, and CesiumJS, which
+refines on G alone, keeps them beside sharp leaves (texture study, section 8).
+- **Rule.** Publish `G' = max(G, 16·s/t if refinable, max child G')`, where
+  `s = sqrt(A/X)` is the payload's mean base-colour texel spacing (decoded textured area
+  over UV area × base-level page texels) and a tile is refinable when
+  `s > 1.25·s(children pooled)`. `t` (screen pixels per texel at SSE 16): balanced 2,
+  quality and lossless 1.25; fast publishes G (bytes first).
+- **Geometric G still decides construction.** Simplification, root competition, D5
+  spacing, S2 sampling, D11 seams and caps read G; only the published value and the
+  parents' published floor read G'. G' ≥ G keeps it an honest upper bound; G' is
+  monotone by construction.
+- **Archive-checkable.** `s` is measured from the published bytes (client-order
+  decode), and the rule is declared in `asset.extras.rustyTiles.textureError`. The native
+  validator and the S5 checker recompute `s` from pages, UVs, positions and the
+  hierarchy (children through content-less tiles and single-child copies) and refuse an
+  understated refinable tile. Validators allow a 1e-4 arithmetic slack; the producer
+  publishes 2e-4 above the term.
+- **Why 1.25.** On the 2048² input, source-limited parents measure 1.0–1.1× their
+  children (chart distortion); cap-limited parents sit above. At 1.25 balanced changes no
+  selection on that input (54 views, 12 Metashape positions identical).
+- **Declaration (review r1).** Every HLOD archive declares exactly
+  `{version: 1, pxPerTexel: 2 | 1.25 | null, refinableRatio: 1.25}`; `null` is fast.
+  Validators refuse a null or different declaration, one outside HLOD, a missing one on a
+  tileset declaring `lod: "hlod"`, and (review r2) any textured HLOD payload in an
+  archive without it, however HLOD is established (caller, tileset, conversion report or
+  payload identity). A `mesh_tiler` conversion report's profile must match `pxPerTexel`;
+  without the report, `null` is the producer's claim (known limit).
+  `s` uses the material's TEXCOORD set; textured area with no UV area is infinitely
+  coarse (never "untextured"). The native pass interns each tile's payload set as one
+  SHA-256, so walking a copy chain costs O(1) per step.
+- **The root.** At t = 1.25 (quality, lossless) the term can raise the root: on both
+  Walem inputs the cap-limited root goes 5.815 → 6.281 m (offline replay). Balanced
+  leaves it unchanged there.
+- **Known limit: pooled average.** `s` is a mean over a payload, so local blur inside an
+  otherwise fine payload is diluted: one face's UVs inflated ×64 in a four-face root
+  hides its coarse texels from the term. The producer's charts never do this; the rule
+  bounds the pooled spacing, not every face's.
+- **Side effects.** Drop classification and the published-G Metashape floor read the
+  raised value (looser, still honest); D10's R trial would start from G'. S5 topology
+  receipts keep S2's geometric G (the audit sidecar's `texture.geometricError`).
+
 Retain all admitted PBR slots, material factors, MASK coverage, source sampler
 semantics, lit/unlit attribute parity and normal-map tangent-frame conversion.
 These are small per-page/semantic checks, not a per-texel source ledger. No

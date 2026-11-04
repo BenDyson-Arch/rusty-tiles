@@ -552,6 +552,9 @@ pub(crate) struct LeafDirectory {
     /// HLOD coarse tiles are present (`proxyManifest`, with the stage's `hlod` record).
     pub proxies: bool,
     pub recovery: Option<crate::mesh_large::hlod::recovery::Recovery>,
+    /// The texture term coarse G was published under (D5 amendment A3), declared in
+    /// `tileset.json` so validators recompute it.
+    pub texture_rule: Option<crate::mesh_large::hlod::texture_error::Rule>,
     /// HLOD cells whose coarse tile was omitted (`hlod.omittedProxies`): they publish no
     /// content and are not measured.
     omitted_proxies: u64,
@@ -625,6 +628,12 @@ impl LeafDirectory {
                 .map(|r| {
                     serde_json::from_value(r.clone())
                         .map_err(|e| input(format!("invalid recovery: {e}")))
+                })
+                .transpose()?,
+            texture_rule: proxies
+                .then(|| {
+                    serde_json::from_value(manifest["hlod"]["textureError"]["rule"].clone())
+                        .map_err(|e| input(format!("missing or invalid HLOD texture rule: {e}")))
                 })
                 .transpose()?,
             omitted_proxies,

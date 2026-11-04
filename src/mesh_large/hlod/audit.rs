@@ -374,6 +374,8 @@ mod tests {
                 representative: Vec::new(),
                 interface: Vec::new(),
                 geometric_error: 0.,
+                published_error: 0.,
+                texture: Default::default(),
                 lease: None,
             },
             locked: vec![false; 3],

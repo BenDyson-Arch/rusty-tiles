@@ -352,5 +352,9 @@ fn policy_statements_match_the_implementation() {
     assert!(pipeline.contains("fn storage_charges") && pipeline.contains("charges.archive"));
     // The producer declares HLOD, so validation needs no flag.
     assert!(guide.contains("`asset.extras.rustyTiles.lod`"));
-    assert!(read("src/mesh_large/delivery.rs").contains(".declaring_hlod()"));
+    assert!(read("src/mesh_large/delivery.rs").contains(".declaring_hlod("));
+    // D5 amendment A3: the texture-aware G rule is declared and validated.
+    assert!(guide.contains("`asset.extras.rustyTiles.textureError`"));
+    assert!(read("src/mesh_large/delivery.rs").contains("texture_rule"));
+    assert!(read("src/validate.rs").contains("expect_texture"));
 }

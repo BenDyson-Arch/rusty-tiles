@@ -65,6 +65,9 @@ pub(super) fn project(raw: &RawValue, kind: &str) -> Result<Value, Error> {
         "nodes" => Some("node"),
         "scenes" => Some("scene"),
         "numbers" => Some("number"),
+        "materials" => Some("material"),
+        "textures" => Some("texture"),
+        "images" => Some("image"),
         _ => None,
     };
     if let Some(element) = element {
@@ -106,6 +109,19 @@ pub(super) fn project(raw: &RawValue, kind: &str) -> Result<Value, Error> {
             ("buffer", "byteLength") => Some("number"),
             ("buffer", "uri") => Some("present"),
             ("doc", "extensionsRequired") => Some("leaf"),
+            // D5 amendment A3: base-colour pages (texture-aware published G).
+            ("doc", "materials") => Some("materials"),
+            ("doc", "textures") => Some("textures"),
+            ("doc", "images") => Some("images"),
+            ("primitive", "material")
+            | ("textureInfo", "index" | "texCoord")
+            | ("texture" | "basisu", "source")
+            | ("image", "bufferView") => Some("number"),
+            ("material", "pbrMetallicRoughness") => Some("pbr"),
+            ("pbr", "baseColorTexture") => Some("textureInfo"),
+            ("textureInfo", "extensions") | ("image", "uri") => Some("present"),
+            ("texture", "extensions") => Some("textureExtensions"),
+            ("textureExtensions", "KHR_texture_basisu") => Some("basisu"),
             (_, "extensions")
                 if matches!(kind, "doc" | "primitive" | "view" | "buffer" | "node") =>
             {

@@ -1994,6 +1994,8 @@ fn attempt_mode(
         primitives: Vec::new(),
         interface: interface.to_vec(),
         geometric_error: 0.,
+        published_error: 0.,
+        texture: Default::default(),
         lease: None,
     };
     let mut out_locked = Vec::new();
@@ -2226,6 +2228,8 @@ mod tests {
                 InterfaceRow::new(0, middle, b, 0, 1),
             ],
             geometric_error: 0.,
+            published_error: 0.,
+            texture: Default::default(),
             lease: None,
         };
         let calls = std::cell::Cell::new(0);

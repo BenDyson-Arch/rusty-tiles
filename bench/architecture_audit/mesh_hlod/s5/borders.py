@@ -1188,9 +1188,16 @@ class Audit:
         children = self.cell_children(t)
         while len(children) == 1 and self.records.get(int(children[0]['id'])) is r:
             children = self.cell_children(children[0])
-        child_g = max((c['g'] for c in children if c['contents']), default=0.0)
+        # D5 amendment A3: topology receipts are construction accounting, in S2's
+        # geometric G (the sidecar row's texture.geometricError); the published G may only
+        # be larger. Honesty checks below keep the published G.
+        def construction(c):
+            record = self.records.get(int(c['id']))
+            return record['tile'].get('texture', {}).get('geometricError', c['g']) if record else c['g']
+        child_g = max((construction(c) for c in children if c['contents']), default=0.0)
         floor = max(e, child_g)
-        g = t['g']
+        g = construction(t)
+        require(g <= t['g'], 'topologyReceipt', f'tile {tid}: construction G {g} above the published {t["g"]}')
         for kind, count, local, increase, final in (
                 ('closedHoles', 'closedHoles', ('holePatchToSource', 'holeBoundaryToPatch'), 'holeGIncrease', 'closedHoleFinalG'),
                 ('openedHoles', 'openedHoles', ('openedHoleToProxy', 'openedHoleBoundaryToSource'), 'openedHoleGIncrease', 'openedHoleFinalG'),
