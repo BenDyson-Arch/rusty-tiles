@@ -644,8 +644,25 @@ impl<'a> ChainReader<'a> {
     pub(crate) fn new(chain: &'a StoredChain) -> Self {
         Self {
             chain,
-            readers: chain.levels.iter().map(|l| l.reader()).collect(),
+            // Resident levels are read directly; only a spilled chain needs readers.
+            readers: if chain.levels.iter().all(|l| l.resident().is_some()) {
+                Vec::new()
+            } else {
+                chain.levels.iter().map(|l| l.reader()).collect()
+            },
         }
+    }
+}
+
+/// The source level a texel samples for footprint `lod` in a group whose finest
+/// requested level is `need`. A non-finite footprint samples level `need`: the
+/// level a chain freshly built from `need` sampled on develop. (Develop's result
+/// there depended on cache history; a cached finer chain served level 0.)
+pub(crate) fn footprint_lod(lod: f64, need: u32) -> f64 {
+    if lod.is_finite() {
+        lod
+    } else {
+        f64::from(need)
     }
 }
 
@@ -671,44 +688,19 @@ pub(crate) fn sample_with(
     let nearest = l <= 0. && matches!(sampler.mag_filter, 9728);
     let mut fetch = |index: usize| -> Result<[f64; 4], JobError> {
         let level = &levels[index];
-        let reader = &mut reader.readers[index];
-        let x = f64::from(uv[0]) * f64::from(level.width) - 0.5;
-        let y = f64::from(uv[1]) * f64::from(level.height) - 0.5;
-        let lut = linear_lut();
-        let mut get = |x: i64, y: i64| -> Result<[f64; 4], JobError> {
-            let pixel = reader.pixel(
-                wrap(x, level.width, sampler.wrap_s),
-                wrap(y, level.height, sampler.wrap_t),
-            )?;
-            Ok(std::array::from_fn(|c| {
-                let v = pixel[c];
-                if class == mips::Class::Colour && c < 3 {
-                    lut[v as usize]
-                } else {
-                    f64::from(v) / 255.
-                }
-            }))
-        };
-        if !(x.is_finite() && y.is_finite()) {
-            return get(0, 0);
+        let (w, h) = (level.width, level.height);
+        // Resident levels index their bytes directly, as develop's chains did; only
+        // spilled levels go through the tile reader.
+        match level.resident() {
+            Some(rgba) => bilinear(w, h, class, sampler, uv, nearest, |x, y| {
+                let i = (y * w as usize + x) * 4;
+                Ok([rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]])
+            }),
+            None => {
+                let reader = &mut reader.readers[index];
+                bilinear(w, h, class, sampler, uv, nearest, |x, y| reader.pixel(x, y))
+            }
         }
-        if nearest {
-            return get((x + 0.5).floor() as i64, (y + 0.5).floor() as i64);
-        }
-        let (x0, y0) = (x.floor(), y.floor());
-        let (fx, fy) = (x - x0, y - y0);
-        let (x0, y0) = (x0 as i64, y0 as i64);
-        let p = [
-            get(x0, y0)?,
-            get(x0 + 1, y0)?,
-            get(x0, y0 + 1)?,
-            get(x0 + 1, y0 + 1)?,
-        ];
-        Ok(std::array::from_fn(|c| {
-            let top = p[0][c] + (p[1][c] - p[0][c]) * fx;
-            let bottom = p[2][c] + (p[3][c] - p[2][c]) * fx;
-            top + (bottom - top) * fy
-        }))
     };
     let p = fetch(a)?;
     if b == a || f == 0. {
@@ -716,6 +708,57 @@ pub(crate) fn sample_with(
     }
     let q = fetch(b)?;
     Ok(std::array::from_fn(|c| p[c] + (q[c] - p[c]) * f))
+}
+
+/// One level's bilinear (or nearest) sample through `texel`, in linear value space for
+/// colour RGB and raw [0, 1] otherwise. Generic so the resident path inlines its reads.
+#[inline(always)]
+fn bilinear(
+    width: u32,
+    height: u32,
+    class: mips::Class,
+    sampler: crops::SourceSampler,
+    uv: [f32; 2],
+    nearest: bool,
+    mut texel: impl FnMut(usize, usize) -> Result<[u8; 4], JobError>,
+) -> Result<[f64; 4], JobError> {
+    let x = f64::from(uv[0]) * f64::from(width) - 0.5;
+    let y = f64::from(uv[1]) * f64::from(height) - 0.5;
+    let lut = linear_lut();
+    let mut get = |x: i64, y: i64| -> Result<[f64; 4], JobError> {
+        let pixel = texel(
+            wrap(x, width, sampler.wrap_s),
+            wrap(y, height, sampler.wrap_t),
+        )?;
+        Ok(std::array::from_fn(|c| {
+            let v = pixel[c];
+            if class == mips::Class::Colour && c < 3 {
+                lut[v as usize]
+            } else {
+                f64::from(v) / 255.
+            }
+        }))
+    };
+    if !(x.is_finite() && y.is_finite()) {
+        return get(0, 0);
+    }
+    if nearest {
+        return get((x + 0.5).floor() as i64, (y + 0.5).floor() as i64);
+    }
+    let (x0, y0) = (x.floor(), y.floor());
+    let (fx, fy) = (x - x0, y - y0);
+    let (x0, y0) = (x0 as i64, y0 as i64);
+    let p = [
+        get(x0, y0)?,
+        get(x0 + 1, y0)?,
+        get(x0, y0 + 1)?,
+        get(x0 + 1, y0 + 1)?,
+    ];
+    Ok(std::array::from_fn(|c| {
+        let top = p[0][c] + (p[1][c] - p[0][c]) * fx;
+        let bottom = p[2][c] + (p[3][c] - p[2][c]) * fx;
+        top + (bottom - top) * fy
+    }))
 }
 
 /// The texture of `slot` in source material `material`: (image, sampler, texcoord set).
@@ -808,6 +851,66 @@ mod tests {
                 assert!(stats.peak_resident_bytes <= budget);
                 assert_eq!(stats.scratch_bytes == 0, budget >= bound);
             }
+        }
+    }
+
+    /// A non-finite footprint samples the group's finest requested level `need`
+    /// exactly as develop's chain built from `need` (its level 0) did.
+    #[test]
+    fn non_finite_footprints_sample_the_finest_requested_level() {
+        let scratch = crate::spill::Scratch::create(None, 0).unwrap();
+        let mut levels = vec![mips::Level {
+            width: 37,
+            height: 19,
+            rgba: (0..37 * 19 * 4)
+                .map(|i| ((i * 29 + i / 7) % 256) as u8)
+                .collect(),
+        }];
+        while levels.last().unwrap().width > 1 || levels.last().unwrap().height > 1 {
+            levels.push(halve(levels.last().unwrap(), mips::Class::Colour));
+        }
+        let copy = |l: &mips::Level| mips::Level {
+            width: l.width,
+            height: l.height,
+            rgba: l.rgba.clone(),
+        };
+        let store = crate::mesh_large::image_tiles::Store::new(u64::MAX, u64::MAX);
+        let full = Chain {
+            levels: store
+                .put(&scratch, levels.iter().map(copy).collect())
+                .unwrap(),
+            bytes: 0,
+        };
+        for (filter, need) in [(9729, 0), (9729, 1), (9729, 3), (9729, 40), (9728, 0)] {
+            let sampler = crops::SourceSampler {
+                wrap_s: 10497,
+                wrap_t: 33071,
+                min_filter: 9987,
+                mag_filter: filter,
+            };
+            let base = (need as usize).min(levels.len() - 1);
+            // Develop's fresh chain from `need`: levels[need..], sampled at its level 0.
+            let fresh = Chain {
+                levels: store
+                    .put(&scratch, levels[base..].iter().map(copy).collect())
+                    .unwrap(),
+                bytes: 0,
+            };
+            for lod in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+                for uv in [[0.3, 0.6], [-0.2, 1.4], [0.99, 0.01]] {
+                    let got = sample(
+                        &full,
+                        mips::Class::Colour,
+                        sampler,
+                        uv,
+                        footprint_lod(lod, need),
+                    )
+                    .unwrap();
+                    let want = sample(&fresh, mips::Class::Colour, sampler, uv, 0.).unwrap();
+                    assert_eq!(got, want, "need {need} filter {filter} lod {lod}");
+                }
+            }
+            assert_eq!(footprint_lod(2.5, need), 2.5);
         }
     }
 

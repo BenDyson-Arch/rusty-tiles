@@ -913,13 +913,7 @@ fn bake_pages(
                     let i = i as usize;
                     let hit = &q.hits[i];
                     let (_, sampler, set) = bindings[&(hit.material, slot_order(slot))].unwrap();
-                    // A non-finite footprint samples the group's finest requested level,
-                    // as a chain built from that level did.
-                    let lod = if lod.is_finite() {
-                        lod
-                    } else {
-                        f64::from(need)
-                    };
+                    let lod = bake::footprint_lod(lod, need);
                     let value = bake::sample_with(
                         &mut reader,
                         source_class(slot),

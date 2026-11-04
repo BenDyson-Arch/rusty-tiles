@@ -217,10 +217,75 @@ pub(crate) fn encode<T>(base_texels: u64, chain_texels: u64, f: impl FnOnce() ->
     out
 }
 
-/// The accumulated document so far (stages, counters, encode buckets and per-level work),
-/// when enabled: lets a caller separate the leaf stage from the HLOD stage.
-pub(crate) fn snapshot() -> Option<Value> {
-    totals().map(|totals| document(totals, Value::Null))
+/// The process totals at one instant. Totals are process-wide and never reset, so a
+/// job reports [`since`] a mark taken at its start: sequential jobs in one process
+/// (Python API, tests) each see only their own work.
+#[derive(Clone)]
+pub(crate) struct Mark(Raw);
+
+/// The current totals, to pass to [`since`].
+pub(crate) fn mark() -> Option<Mark> {
+    totals().map(|t| Mark(Raw::load(t)))
+}
+
+/// The document (stages, counters, encode buckets and per-level work) of everything
+/// accumulated after `mark`.
+pub(crate) fn since(mark: &Option<Mark>) -> Option<Value> {
+    let now = Raw::load(totals()?);
+    let delta = match mark {
+        Some(Mark(start)) => now.minus(start),
+        None => now,
+    };
+    Some(delta.document(Value::Null))
+}
+
+#[derive(Clone)]
+struct Raw {
+    cpu_nanos: [u64; STAGES.len()],
+    nanos: [u64; STAGES.len()],
+    calls: [u64; STAGES.len()],
+    counters: [u64; COUNTERS.len()],
+    encode_nanos: [u64; ENCODE_BUCKETS],
+    encode_texels: [u64; ENCODE_BUCKETS],
+    encode_calls: [u64; ENCODE_BUCKETS],
+    level_cpu_nanos: [[u64; LEVELS]; 3],
+    level_texels: [[u64; LEVELS]; 3],
+}
+fn load<const N: usize>(a: &[AtomicU64; N]) -> [u64; N] {
+    std::array::from_fn(|i| a[i].load(Ordering::Relaxed))
+}
+fn minus<const N: usize>(a: &[u64; N], b: &[u64; N]) -> [u64; N] {
+    std::array::from_fn(|i| a[i].saturating_sub(b[i]))
+}
+impl Raw {
+    fn load(t: &Totals) -> Self {
+        Self {
+            cpu_nanos: load(&t.cpu_nanos),
+            nanos: load(&t.nanos),
+            calls: load(&t.calls),
+            counters: load(&t.counters),
+            encode_nanos: load(&t.encode_nanos),
+            encode_texels: load(&t.encode_texels),
+            encode_calls: load(&t.encode_calls),
+            level_cpu_nanos: std::array::from_fn(|k| load(&t.level_cpu_nanos[k])),
+            level_texels: std::array::from_fn(|k| load(&t.level_texels[k])),
+        }
+    }
+    fn minus(&self, o: &Self) -> Self {
+        Self {
+            cpu_nanos: minus(&self.cpu_nanos, &o.cpu_nanos),
+            nanos: minus(&self.nanos, &o.nanos),
+            calls: minus(&self.calls, &o.calls),
+            counters: minus(&self.counters, &o.counters),
+            encode_nanos: minus(&self.encode_nanos, &o.encode_nanos),
+            encode_texels: minus(&self.encode_texels, &o.encode_texels),
+            encode_calls: minus(&self.encode_calls, &o.encode_calls),
+            level_cpu_nanos: std::array::from_fn(|k| {
+                minus(&self.level_cpu_nanos[k], &o.level_cpu_nanos[k])
+            }),
+            level_texels: std::array::from_fn(|k| minus(&self.level_texels[k], &o.level_texels[k])),
+        }
+    }
 }
 
 /// Writes the accumulated document to the configured path, when enabled.
@@ -229,51 +294,73 @@ pub(crate) fn finish(extra: Value) {
     else {
         return;
     };
-    let document = document(totals, extra);
+    let document = Raw::load(totals).document(extra);
     let _ = std::fs::write(
         path,
         serde_json::to_vec_pretty(&document).unwrap_or_default(),
     );
 }
 
-fn document(totals: &Totals, extra: Value) -> Value {
-    let mut stages = Map::new();
-    for (i, (_, name)) in STAGES.iter().enumerate() {
-        let calls = totals.calls[i].load(Ordering::Relaxed);
-        if calls == 0 {
-            continue;
-        }
-        stages.insert(
+impl Raw {
+    fn document(&self, extra: Value) -> Value {
+        let totals = self;
+        let mut stages = Map::new();
+        for (i, (_, name)) in STAGES.iter().enumerate() {
+            let calls = totals.calls[i];
+            if calls == 0 {
+                continue;
+            }
+            stages.insert(
             (*name).into(),
-            json!({"seconds": totals.nanos[i].load(Ordering::Relaxed) as f64 / 1e9, "calls": calls, "cpu_seconds": cfg!(target_os = "linux").then(|| totals.cpu_nanos[i].load(Ordering::Relaxed) as f64 / 1e9)}),
+            json!({"seconds": totals.nanos[i] as f64 / 1e9, "calls": calls, "cpu_seconds": cfg!(target_os = "linux").then(|| totals.cpu_nanos[i] as f64 / 1e9)}),
         );
-    }
-    let mut counters = Map::new();
-    for (i, (_, name)) in COUNTERS.iter().enumerate() {
-        counters.insert(
-            (*name).into(),
-            json!(totals.counters[i].load(Ordering::Relaxed)),
-        );
-    }
-    let mut encode = Vec::new();
-    for bucket in 0..ENCODE_BUCKETS {
-        let calls = totals.encode_calls[bucket].load(Ordering::Relaxed);
-        if calls == 0 {
-            continue;
         }
-        let seconds = totals.encode_nanos[bucket].load(Ordering::Relaxed) as f64 / 1e9;
-        let texels = totals.encode_texels[bucket].load(Ordering::Relaxed);
-        encode.push(json!({"base_texels_log2": bucket, "calls": calls, "seconds": seconds, "chain_texels": texels, "seconds_per_megapixel": seconds / (texels as f64 / 1e6)}));
-    }
-    let mut levels = Map::new();
-    for (kind, name) in LEVEL_KINDS.iter().enumerate() {
-        let rows: Vec<Value> = (0..LEVELS)
-            .filter(|&l| totals.level_texels[kind][l].load(Ordering::Relaxed) > 0)
+        let mut counters = Map::new();
+        for (i, (_, name)) in COUNTERS.iter().enumerate() {
+            counters.insert((*name).into(), json!(totals.counters[i]));
+        }
+        let mut encode = Vec::new();
+        for bucket in 0..ENCODE_BUCKETS {
+            let calls = totals.encode_calls[bucket];
+            if calls == 0 {
+                continue;
+            }
+            let seconds = totals.encode_nanos[bucket] as f64 / 1e9;
+            let texels = totals.encode_texels[bucket];
+            encode.push(json!({"base_texels_log2": bucket, "calls": calls, "seconds": seconds, "chain_texels": texels, "seconds_per_megapixel": seconds / (texels as f64 / 1e6)}));
+        }
+        let mut levels = Map::new();
+        for (kind, name) in LEVEL_KINDS.iter().enumerate() {
+            let rows: Vec<Value> = (0..LEVELS)
+            .filter(|&l| totals.level_texels[kind][l] > 0)
             .map(|l| {
-                json!({"level": l, "cpu_seconds": totals.level_cpu_nanos[kind][l].load(Ordering::Relaxed) as f64 / 1e9, "texels": totals.level_texels[kind][l].load(Ordering::Relaxed)})
+                json!({"level": l, "cpu_seconds": totals.level_cpu_nanos[kind][l] as f64 / 1e9, "texels": totals.level_texels[kind][l]})
             })
             .collect();
-        levels.insert((*name).into(), json!(rows));
+            levels.insert((*name).into(), json!(rows));
+        }
+        json!({"schema": "rusty_tiles_stage_timing_v1", "note": "summed per-thread wall time; parallel stages overlap", "stages": stages, "counters": counters, "basis_encode_by_base_size": encode, "levels": levels, "run": extra})
     }
-    json!({"schema": "rusty_tiles_stage_timing_v1", "note": "summed per-thread wall time; parallel stages overlap", "stages": stages, "counters": counters, "basis_encode_by_base_size": encode, "levels": levels, "run": extra})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    /// A job's report excludes work timed before its mark (other tests may time
+    /// concurrently, so only the excluded work is pinned).
+    #[test]
+    fn a_mark_excludes_earlier_work() {
+        let calls = |doc: Option<Value>| {
+            doc.unwrap()["stages"]["png_verify"]["calls"]
+                .as_u64()
+                .unwrap_or(0)
+        };
+        let first = mark();
+        time(Stage::PngVerify, || ());
+        let second = mark();
+        time(Stage::PngVerify, || ());
+        let (from_first, from_second) = (calls(since(&first)), calls(since(&second)));
+        assert!(from_first >= 2);
+        assert!(from_second >= 1 && from_second < from_first);
+    }
 }

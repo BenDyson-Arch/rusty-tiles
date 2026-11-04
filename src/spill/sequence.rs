@@ -318,6 +318,61 @@ impl ByteWriter {
     }
 }
 
+impl ByteWriter {
+    /// Like [`ByteWriter::finish`], but the completed log holds no open handle: many
+    /// such logs can live at once without consuming file descriptors.
+    pub(crate) fn finish_closed(mut self) -> Result<ClosedByteFile, SpillError> {
+        self.writer
+            .flush()
+            .map_err(|e| SpillError::io("write spill log", self.file.path(), e))?;
+        let Self {
+            writer,
+            file,
+            io,
+            len,
+        } = self;
+        drop(writer);
+        Ok(ClosedByteFile { file, io, len })
+    }
+}
+
+/// A completed byte log without an open handle; reads go through a handle from
+/// [`ClosedByteFile::open`]. Its file is removed when it is dropped.
+pub(crate) struct ClosedByteFile {
+    file: SpillFile,
+    io: Arc<dyn SpillIo>,
+    len: u64,
+}
+
+impl ClosedByteFile {
+    /// A handle for positioned reads; it may outlive other handles but not the log.
+    pub(crate) fn open(&self) -> Result<File, SpillError> {
+        self.io
+            .open_random(self.file.path())
+            .map_err(|e| SpillError::io("open spill log", self.file.path(), e))
+    }
+
+    /// Reads exactly `bytes.len()` bytes at `offset` through `handle` (from [`Self::open`]).
+    pub(crate) fn read_at(
+        &self,
+        handle: &File,
+        offset: u64,
+        bytes: &mut [u8],
+    ) -> Result<(), SpillError> {
+        if offset
+            .checked_add(bytes.len() as u64)
+            .is_none_or(|end| end > self.len)
+        {
+            return Err(SpillError::CorruptRun {
+                path: self.file.path().to_owned(),
+                detail: format!("range at {offset} outside the log"),
+            });
+        }
+        read_exact_at(handle, bytes, offset)
+            .map_err(|e| SpillError::io("read spill log", self.file.path(), e))
+    }
+}
+
 /// A completed byte log; its file is removed when it is dropped.
 pub(crate) struct ByteFile {
     // Declared before `file` so the handle closes before the file is removed.

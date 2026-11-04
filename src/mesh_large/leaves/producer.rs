@@ -347,130 +347,148 @@ pub(crate) fn stage_plan(
     let leaf_bytes = leaf_owned
         .checked_add(2 * TILE_BYTES)
         .ok_or_else(|| resource("leaf ownership overflow"))?;
-    let tmpfs = if captured.scratch.memory_backed() {
-        captured
-            .report
-            .scratch
-            .need_bytes
-            // Spilled image tiles live in memory too.
-            .saturating_add(super::super::image_tiles::bound(captured, true))
-            .saturating_add(super::super::image_tiles::file_rounding(captured))
-    } else {
-        0
-    };
-    let available = config.available_memory();
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as u64;
-    // The cache always holds at least two decoded images (or every source).
-    let cache_floor = cache_floor(&captured.image_info);
-    // Workers share one page-workspace gate, which must admit the largest
-    // page. A running leaf owns its closure and encoded pages; a finished
-    // leaf waiting for the ordered writer keeps only its closure and receipts
-    // (its member is already written), so the window is four leaves per
-    // worker and absorbs slow leaves without idling the others.
-    let per_job = leaf_bytes
-        .checked_add(
-            leaf_owned
-                .checked_mul(4)
-                .ok_or_else(|| resource("window"))?,
-        )
-        .ok_or_else(|| resource("per-job overflow"))?;
-    let fixed_for = |cache: u64| {
-        cache
-            .checked_add(page_bytes)
-            .and_then(|n| n.checked_add(2 * leaf_owned))
-            .ok_or_else(|| resource("leaf fixed memory overflow"))
-    };
-    // What one leaf job needs besides the cache.
-    let one_job = fixed_for(0)?
-        .checked_add(per_job)
-        .ok_or_else(|| resource("leaf job memory overflow"))?;
-    // The planner's density schedule (`planning::preflight`) uses the same formula.
-    debug_assert_eq!(Some(one_job), leaf_job_bytes(page_bytes, leaf_owned));
-    // Cache every decoded source when it fits half the usable memory, otherwise half the
-    // usable memory, but never so much that one leaf job no longer fits beside it and
-    // never below the floor. Monotone in `u`, and `u - cache(u)` never decreases.
-    let cache_for = |usable: Option<u64>| match usable {
-        Some(u) => total_source.min(cache_floor.max((u / 2).min(u.saturating_sub(one_job)))),
-        None => total_source.min(cache_floor.saturating_mul(4)),
-    };
-    // One leaf job fits usable memory `u` when `u >= cache floor + page + one job's window`.
-    let fits = |u: u64| -> bool {
-        cache_floor
-            .checked_add(one_job)
-            .is_some_and(|need| u >= need)
-    };
-    let minimum_usable = {
-        let (mut lo, mut hi) = (0u64, u64::MAX / 2);
-        if !fits(hi) {
-            return Err(resource("one leaf job's memory exceeds any budget"));
-        }
-        while lo < hi {
-            let mid = lo + (hi - lo) / 2;
-            if fits(mid) {
-                hi = mid;
+    // The cache holds every source image beside the tile store's reserve (no job
+    // count exceeds the cores), so sources that fit stay resident as on develop.
+    let cache_total = total_source.saturating_add(image_reserve(captured, cores));
+    // Memory-backed scratch charges spilled source images only when the planned
+    // cache cannot hold them all (density chains never spill there).
+    let plan_with = |image_tiles: bool| -> Result<StagePlan, JobError> {
+        let tmpfs = if captured.scratch.memory_backed() {
+            let images = if image_tiles {
+                total_source.saturating_add(super::super::image_tiles::file_rounding(captured))
             } else {
-                lo = mid + 1;
+                0
+            };
+            captured.report.scratch.need_bytes.saturating_add(images)
+        } else {
+            0
+        };
+        let available = config.available_memory();
+        // The cache always holds at least two decoded images (or every source).
+        let cache_floor = cache_floor(&captured.image_info);
+        // Workers share one page-workspace gate, which must admit the largest
+        // page. A running leaf owns its closure and encoded pages; a finished
+        // leaf waiting for the ordered writer keeps only its closure and receipts
+        // (its member is already written), so the window is four leaves per
+        // worker and absorbs slow leaves without idling the others.
+        let per_job = leaf_bytes
+            .checked_add(
+                leaf_owned
+                    .checked_mul(4)
+                    .ok_or_else(|| resource("window"))?,
+            )
+            .ok_or_else(|| resource("per-job overflow"))?;
+        let fixed_for = |cache: u64| {
+            cache
+                .checked_add(page_bytes)
+                .and_then(|n| n.checked_add(2 * leaf_owned))
+                .ok_or_else(|| resource("leaf fixed memory overflow"))
+        };
+        // What one leaf job needs besides the cache.
+        let one_job = fixed_for(0)?
+            .checked_add(per_job)
+            .ok_or_else(|| resource("leaf job memory overflow"))?;
+        // The planner's density schedule (`planning::preflight`) uses the same formula.
+        debug_assert_eq!(Some(one_job), leaf_job_bytes(page_bytes, leaf_owned));
+        // Cache every decoded source when it fits half the usable memory, otherwise half the
+        // usable memory, but never so much that one leaf job no longer fits beside it and
+        // never below the floor. Monotone in `u`, and `u - cache(u)` never decreases.
+        let cache_for = |usable: Option<u64>| match usable {
+            Some(u) => cache_total.min(cache_floor.max((u / 2).min(u.saturating_sub(one_job)))),
+            None => cache_total.min(cache_floor.saturating_mul(4)),
+        };
+        // One leaf job fits usable memory `u` when `u >= cache floor + page + one job's window`.
+        let fits = |u: u64| -> bool {
+            cache_floor
+                .checked_add(one_job)
+                .is_some_and(|need| u >= need)
+        };
+        let minimum_usable = {
+            let (mut lo, mut hi) = (0u64, u64::MAX / 2);
+            if !fits(hi) {
+                return Err(resource("one leaf job's memory exceeds any budget"));
             }
-        }
-        lo
-    };
-    let minimum_bytes = minimum_usable
-        .checked_add(tmpfs)
-        .and_then(|n| n.checked_add(global_bytes))
-        .and_then(|n| n.checked_add(STAGE_RESERVE))
-        .ok_or_else(|| resource("leaf minimum overflow"))?;
-    let usable = available.map(|a| {
-        a.saturating_sub(tmpfs)
-            .saturating_sub(global_bytes)
-            .saturating_sub(STAGE_RESERVE)
-    });
-    if usable.is_some_and(|u| !fits(u)) {
-        return Err(resource(&format!(
+            while lo < hi {
+                let mid = lo + (hi - lo) / 2;
+                if fits(mid) {
+                    hi = mid;
+                } else {
+                    lo = mid + 1;
+                }
+            }
+            lo
+        };
+        let minimum_bytes = minimum_usable
+            .checked_add(tmpfs)
+            .and_then(|n| n.checked_add(global_bytes))
+            .and_then(|n| n.checked_add(STAGE_RESERVE))
+            .ok_or_else(|| resource("leaf minimum overflow"))?;
+        let usable = available.map(|a| {
+            a.saturating_sub(tmpfs)
+                .saturating_sub(global_bytes)
+                .saturating_sub(STAGE_RESERVE)
+        });
+        if usable.is_some_and(|u| !fits(u)) {
+            return Err(resource(&format!(
             "one leaf job cannot fit available memory including owned scratch: needs {minimum_bytes} bytes, has {} (an explicit --memory-budget at or below the available memory lets leaf texture density step down to fit)",
             available.unwrap_or(0)
         )));
-    }
-    let cache_bytes = cache_for(usable);
-    let fixed = fixed_for(cache_bytes)?;
-    let plan = config::plan_jobs(requested, cores as usize, usable, 0, fixed, per_job);
-    let jobs = plan.jobs;
-    let limited_by = plan.limited_by;
-    let window = jobs
-        .checked_mul(4)
-        .and_then(|n| n.checked_add(2))
-        .ok_or_else(|| resource("window"))?;
-    let leaves = jobs
-        .checked_mul(leaf_bytes)
-        .and_then(|n| n.checked_add(window.checked_mul(leaf_owned)?))
-        .ok_or_else(|| resource("leaf window overflow"))?;
-    let gate_bytes = match usable {
-        Some(u) => u.saturating_sub(cache_bytes).saturating_sub(leaves),
-        None => page_bytes.saturating_mul(jobs),
+        }
+        let cache_bytes = cache_for(usable);
+        let fixed = fixed_for(cache_bytes)?;
+        let plan = config::plan_jobs(requested, cores as usize, usable, 0, fixed, per_job);
+        let jobs = plan.jobs;
+        let limited_by = plan.limited_by;
+        let window = jobs
+            .checked_mul(4)
+            .and_then(|n| n.checked_add(2))
+            .ok_or_else(|| resource("window"))?;
+        let leaves = jobs
+            .checked_mul(leaf_bytes)
+            .and_then(|n| n.checked_add(window.checked_mul(leaf_owned)?))
+            .ok_or_else(|| resource("leaf window overflow"))?;
+        let gate_bytes = match usable {
+            Some(u) => u.saturating_sub(cache_bytes).saturating_sub(leaves),
+            None => page_bytes.saturating_mul(jobs),
+        };
+        if gate_bytes < page_bytes {
+            return Err(resource(
+                "one leaf job cannot fit available memory including owned scratch",
+            ));
+        }
+        let bound_bytes = global_bytes
+            .checked_add(STAGE_RESERVE)
+            .and_then(|n| n.checked_add(cache_bytes))
+            .and_then(|n| n.checked_add(gate_bytes))
+            .and_then(|n| n.checked_add(leaves))
+            .ok_or_else(|| resource("leaf declared memory overflow"))?;
+        Ok(StagePlan {
+            bound_bytes,
+            page_bytes,
+            gate_bytes,
+            cache_bytes,
+            global_bytes,
+            leaf_bytes,
+            window,
+            jobs,
+            jobs_limited_by: limited_by,
+            available_bytes: available,
+            minimum_bytes,
+        })
     };
-    if gate_bytes < page_bytes {
-        return Err(resource(
-            "one leaf job cannot fit available memory including owned scratch",
-        ));
+    let plan = plan_with(false)?;
+    if !captured.scratch.memory_backed() || plan.cache_bytes >= cache_total {
+        return Ok(plan);
     }
-    let bound_bytes = global_bytes
-        .checked_add(STAGE_RESERVE)
-        .and_then(|n| n.checked_add(cache_bytes))
-        .and_then(|n| n.checked_add(gate_bytes))
-        .and_then(|n| n.checked_add(leaves))
-        .ok_or_else(|| resource("leaf declared memory overflow"))?;
-    Ok(StagePlan {
-        bound_bytes,
-        page_bytes,
-        gate_bytes,
-        cache_bytes,
-        global_bytes,
-        leaf_bytes,
-        window,
-        jobs,
-        jobs_limited_by: limited_by,
-        available_bytes: available,
-        minimum_bytes,
-    })
+    plan_with(true)
+}
+/// Memory the leaf image store keeps outside its cached texels: image records and
+/// each worker's two tile readers. Carved out of the cache budget.
+fn image_reserve(captured: &full::FullCaptured, jobs: u64) -> u64 {
+    (captured.images.len() as u64)
+        .saturating_mul(super::super::image_tiles::IMAGE_METADATA_BYTES)
+        .saturating_add(jobs.saturating_mul(2 * super::super::image_tiles::READER_BYTES))
 }
 impl StagePlan {
     pub(crate) fn minimum_bytes(&self) -> u64 {
@@ -700,6 +718,8 @@ pub(crate) fn produce(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<LeafStageOutput, JobError> {
     let leaf_started = std::time::Instant::now();
+    // Timing totals are process-wide: this job reports its own share from here.
+    let timing_mark = timing::mark();
     let total_leaves = captured.tree.stats.leaves;
     phases.progress(Phase::LeafBuild, 0, Some(total_leaves))?;
     let leaves = path.join("leaves");
@@ -744,17 +764,13 @@ pub(crate) fn produce(
     // the tile store: its image records and each worker's two tile readers are carved
     // out of the cache's own budget.
     let image_bound = super::super::image_tiles::bound(captured, true);
-    let image_reserve = (captured.images.len() as u64)
-        .saturating_mul(super::super::image_tiles::IMAGE_METADATA_BYTES)
-        .saturating_add(
-            stage
-                .jobs
-                .saturating_mul(2 * super::super::image_tiles::READER_BYTES),
-        );
     let cache = SourceCache::new(
-        stage.cache_bytes.saturating_sub(image_reserve),
+        stage
+            .cache_bytes
+            .saturating_sub(image_reserve(captured, stage.jobs)),
         image_bound,
         source_bytes(captured)?,
+        !captured.scratch.memory_backed(),
     );
     let image_scratch_bound = cache
         .spill_bound()
@@ -880,7 +896,7 @@ pub(crate) fn produce(
     phases.finished(Phase::LeafBuild, leaf_started.elapsed().as_secs_f64())?;
     let Coarse { plan, settings } = coarse;
     // Opt-in stage timing: the leaf stage's share, before HLOD adds its own.
-    let leaf_timing = timing::snapshot();
+    let leaf_timing = timing::since(&timing_mark);
     // HLOD needs no decoded image or leaf worker: record the cache and page-gate
     // observations, then release the decoded images and the pool before its own
     // admission takes effect (the gate and services own no memory).

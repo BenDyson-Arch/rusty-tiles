@@ -79,7 +79,10 @@ pub(super) struct Stored {
     pub rgba: crate::mesh_large::image_tiles::Raster,
 }
 type Cell = Arc<OnceLock<Result<Arc<Stored>, JobError>>>;
-type ChainCell = Arc<OnceLock<Result<Vec<Arc<Stored>>, JobError>>>;
+/// A density chain's reduced levels, or `None` when it could not be stored (memory-
+/// backed scratch without room): each request then rebuilds it, as develop did after
+/// an eviction (a mip build from the stored source, never a decode).
+type ChainCell = Arc<OnceLock<Result<Option<Vec<Arc<Stored>>>, JobError>>>;
 #[derive(Default)]
 struct CacheState {
     entries: std::collections::BTreeMap<(usize, u32), Cell>,
@@ -105,10 +108,15 @@ pub(super) struct CacheStats {
 impl SourceCache {
     /// `primary` bounds the source images, which take residency before density
     /// chains; `bound` covers both.
-    pub(super) fn new(budget: u64, bound: u64, primary: u64) -> Self {
+    pub(super) fn new(budget: u64, bound: u64, primary: u64, spill_density: bool) -> Self {
+        let store = crate::mesh_large::image_tiles::Store::with_primary(budget, bound, primary);
         Self {
             budget,
-            store: crate::mesh_large::image_tiles::Store::with_primary(budget, bound, primary),
+            store: if spill_density {
+                store
+            } else {
+                store.without_secondary_spill()
+            },
             state: Mutex::new(CacheState::default()),
         }
     }
@@ -185,28 +193,50 @@ impl SourceCache {
                 cell
             }
         };
-        let levels = cell
-            .get_or_init(|| {
-                // Level 0 is the source image, already stored once under (image, 0).
-                let reduced: Vec<_> = load()?.into_iter().skip(1).collect();
-                Ok(self
-                    .store
-                    .put_secondary(scratch, reduced)?
-                    .into_iter()
-                    .map(|rgba| {
-                        Arc::new(Stored {
-                            size: [rgba.width, rgba.height],
-                            rgba,
+        let outside = || JobError::new(JobErrorKind::InvalidState, "density level outside chain");
+        let mut load = Some(load);
+        // Level 0 is the source image, already stored once under (image, 0).
+        let mut reduced = || -> Result<Vec<super::mips::Level>, JobError> {
+            Ok((load.take().ok_or_else(outside)?)()?
+                .into_iter()
+                .skip(1)
+                .collect())
+        };
+        let mut handed = None;
+        let entry = cell.get_or_init(|| {
+            Ok(match self.store.put_secondary(scratch, reduced()?)? {
+                Ok(rasters) => Some(
+                    rasters
+                        .into_iter()
+                        .map(|rgba| {
+                            Arc::new(Stored {
+                                size: [rgba.width, rgba.height],
+                                rgba,
+                            })
                         })
-                    })
-                    .collect())
+                        .collect(),
+                ),
+                Err(levels) => {
+                    handed = Some(levels);
+                    None
+                }
             })
-            .as_ref()
-            .map_err(Clone::clone)?;
-        levels
-            .get(drop.saturating_sub(1) as usize)
-            .cloned()
-            .ok_or_else(|| JobError::new(JobErrorKind::InvalidState, "density level outside chain"))
+        });
+        let index = drop.saturating_sub(1) as usize;
+        match entry.as_ref().map_err(Clone::clone)? {
+            Some(levels) => levels.get(index).cloned().ok_or_else(outside),
+            None => {
+                let levels = match handed {
+                    Some(levels) => levels,
+                    None => reduced()?,
+                };
+                let level = levels.into_iter().nth(index).ok_or_else(outside)?;
+                Ok(Arc::new(Stored {
+                    size: [level.width, level.height],
+                    rgba: crate::mesh_large::image_tiles::Raster::transient(level),
+                }))
+            }
+        }
     }
 }
 
@@ -217,7 +247,7 @@ mod tests {
     #[test]
     fn source_cache_scale_decode_count_is_independent_of_access_order() {
         let scratch = crate::spill::Scratch::create(None, 0).unwrap();
-        let cache = SourceCache::new(256, 32 * 256, 32 * 256);
+        let cache = SourceCache::new(256, 32 * 256, 32 * 256, true);
         let decodes = AtomicUsize::new(0);
         for round in 0..8 {
             for image in 0..32 {
@@ -243,7 +273,7 @@ mod tests {
     #[test]
     fn cache_shares_one_decode_and_retains_failures() {
         let scratch = crate::spill::Scratch::create(None, 0).unwrap();
-        let cache = SourceCache::new(8, 12, 12);
+        let cache = SourceCache::new(8, 12, 12, true);
         let loads = AtomicUsize::new(0);
         std::thread::scope(|scope| {
             for _ in 0..8 {
@@ -295,7 +325,7 @@ mod tests {
     #[test]
     fn density_requests_build_a_class_chain_once() {
         let scratch = crate::spill::Scratch::create(None, 0).unwrap();
-        let cache = SourceCache::new(16, 84, 0);
+        let cache = SourceCache::new(16, 84, 0, true);
         let builds = AtomicUsize::new(0);
         for drop in [3, 1, 2, 1, 3, 2] {
             let level = cache
@@ -316,6 +346,36 @@ mod tests {
             );
         }
         assert_eq!(builds.load(Ordering::SeqCst), 1);
+    }
+
+    /// Memory-backed scratch without room: density chains are rebuilt per request
+    /// (never spilled) and serve the same levels.
+    #[test]
+    fn unstored_density_chains_are_rebuilt_not_spilled() {
+        let scratch = crate::spill::Scratch::create(None, 0).unwrap();
+        let cache = SourceCache::new(16, 84, 0, false);
+        let builds = AtomicUsize::new(0);
+        for drop in [3, 1, 2, 1] {
+            let level = cache
+                .density(&scratch, (0, 0), drop, || {
+                    builds.fetch_add(1, Ordering::SeqCst);
+                    Ok((0..4)
+                        .map(|i| super::super::mips::Level {
+                            width: 8 >> i,
+                            height: 8 >> i,
+                            rgba: vec![i as u8; (8usize >> i) * (8usize >> i) * 4],
+                        })
+                        .collect())
+                })
+                .unwrap();
+            assert_eq!(
+                level.rgba.materialize().unwrap(),
+                vec![drop as u8; (8usize >> drop) * (8usize >> drop) * 4]
+            );
+        }
+        assert_eq!(builds.load(Ordering::SeqCst), 4);
+        assert_eq!(cache.stats().scratch_bytes, 0);
+        assert_eq!(std::fs::read_dir(scratch.path()).unwrap().count(), 0);
     }
 
     #[test]

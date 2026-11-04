@@ -385,78 +385,87 @@ pub(crate) fn plan(
                 .saturating_add(appearance.cache_floor),
         ),
     );
-    let mut tmpfs = if captured.scratch.memory_backed() {
-        memory_backed_need(captured, config, settings.cap)?
-    } else {
-        0
-    };
-    if let Some(path) = &settings.audit_dir {
-        if audit::memory_backed(path)? {
-            tmpfs = tmpfs.saturating_add(audit::admitted_bound(
-                audit::bound(
-                    captured
-                        .triangles
-                        .len()
-                        .saturating_mul(6)
-                        .saturating_mul(u64::from(captured.tree.stats.height)),
-                    captured.tree.stats.nodes,
-                    captured
-                        .triangles
-                        .len()
-                        .checked_mul(u64::from(captured.tree.stats.height))
-                        .ok_or_else(|| resource("audit triangle-depth bound overflows"))?,
-                )
-                .ok_or_else(|| resource("audit memory bound overflows"))?,
-                true,
-            ));
+    // Memory-backed scratch charges the image tiles only when the plan's cache cannot
+    // hold every chain (nothing spills otherwise), so such a run plans as on develop.
+    let plan_with = |image_tiles: bool| -> Result<HlodMemoryPlan, JobError> {
+        let mut tmpfs = if captured.scratch.memory_backed() {
+            memory_backed_need(captured, config, settings.cap, image_tiles)?
+        } else {
+            0
+        };
+        if let Some(path) = &settings.audit_dir {
+            if audit::memory_backed(path)? {
+                tmpfs = tmpfs.saturating_add(audit::admitted_bound(
+                    audit::bound(
+                        captured
+                            .triangles
+                            .len()
+                            .saturating_mul(6)
+                            .saturating_mul(u64::from(captured.tree.stats.height)),
+                        captured.tree.stats.nodes,
+                        captured
+                            .triangles
+                            .len()
+                            .checked_mul(u64::from(captured.tree.stats.height))
+                            .ok_or_else(|| resource("audit triangle-depth bound overflows"))?,
+                    )
+                    .ok_or_else(|| resource("audit memory bound overflows"))?,
+                    true,
+                ));
+            }
         }
-    }
-    let ceiling = budget
-        .ceiling(config::available_memory())
-        .saturating_sub(tmpfs);
-    if ceiling < minimum {
-        return Err(resource(format!(
-            "HLOD stage needs at least {minimum} bytes (fixed {fixed}, incidence {incidence}, \
+        let ceiling = budget
+            .ceiling(config::available_memory())
+            .saturating_sub(tmpfs);
+        if ceiling < minimum {
+            return Err(resource(format!(
+                "HLOD stage needs at least {minimum} bytes (fixed {fixed}, incidence {incidence}, \
              child window {window}, one parent job {job}) but the memory budget allows \
              {ceiling} (budget {}, memory-backed scratch {tmpfs})",
-            budget.resolved_bytes
-        )));
-    }
-    let ledger = ceiling - fixed;
-    let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as u64;
-    let (jobs, limited_by) = worker_admission(
-        (ledger - window).saturating_sub(appearance.cache_floor),
-        job,
-        config.jobs,
-        cores,
-    );
-    // The cache takes what the admitted jobs leave, up to every chain, at least its floor.
-    let image_cache = if appearance.cache_floor == 0 {
-        0
-    } else {
-        appearance.cache_total.min(
-            (ledger - window)
-                .saturating_sub(jobs.saturating_mul(job))
-                .max(appearance.cache_floor),
-        )
+                budget.resolved_bytes
+            )));
+        }
+        let ledger = ceiling - fixed;
+        let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as u64;
+        let (jobs, limited_by) = worker_admission(
+            (ledger - window).saturating_sub(appearance.cache_floor),
+            job,
+            config.jobs,
+            cores,
+        );
+        // The cache takes what the admitted jobs leave, up to every chain, at least its floor.
+        let image_cache = if appearance.cache_floor == 0 {
+            0
+        } else {
+            appearance.cache_total.min(
+                (ledger - window)
+                    .saturating_sub(jobs.saturating_mul(job))
+                    .max(appearance.cache_floor),
+            )
+        };
+        Ok(HlodMemoryPlan {
+            budget_bytes: budget.resolved_bytes,
+            ceiling_bytes: ceiling,
+            fixed_bytes: fixed,
+            incidence_bytes: incidence,
+            window_bytes: window,
+            job_bytes: job,
+            minimum_bytes: minimum.saturating_add(tmpfs),
+            ledger_bytes: ledger,
+            texture_workspace_bytes: appearance.texture,
+            color_workspace_bytes: appearance.color,
+            image_cache_bytes: image_cache,
+            page_bytes: appearance.page,
+            tile_page_bytes: appearance.tile_pages,
+            jobs,
+            jobs_limited_by: limited_by,
+        })
     };
-    Ok(HlodMemoryPlan {
-        budget_bytes: budget.resolved_bytes,
-        ceiling_bytes: ceiling,
-        fixed_bytes: fixed,
-        incidence_bytes: incidence,
-        window_bytes: window,
-        job_bytes: job,
-        minimum_bytes: minimum.saturating_add(tmpfs),
-        ledger_bytes: ledger,
-        texture_workspace_bytes: appearance.texture,
-        color_workspace_bytes: appearance.color,
-        image_cache_bytes: image_cache,
-        page_bytes: appearance.page,
-        tile_page_bytes: appearance.tile_pages,
-        jobs,
-        jobs_limited_by: limited_by,
-    })
+    let plan = plan_with(false)?;
+    if !captured.scratch.memory_backed() || plan.image_cache_bytes >= appearance.cache_total {
+        return Ok(plan);
+    }
+    plan_with(true)
 }
 
 /// What the stage records in the leaf manifest (deterministic for a given input).
@@ -878,12 +887,11 @@ pub(crate) fn produce(
         input.plan.image_cache_bytes,
         super::image_tiles::bound(captured, false),
     );
-    let image_lease = ledger.admit(
-        "image_tiles",
-        cache
-            .spill_bound()
-            .saturating_add(super::image_tiles::file_rounding(captured)),
-    )?;
+    let image_spill = match cache.spill_bound() {
+        0 => 0,
+        b => b.saturating_add(super::image_tiles::file_rounding(captured)),
+    };
+    let image_lease = ledger.admit("image_tiles", image_spill)?;
     let layout = captured.triangles.layout().0;
     let services = appearance::Services {
         captured,
@@ -1166,7 +1174,14 @@ fn memory_backed_need(
     captured: &FullCaptured,
     config: &TreeConfig,
     cap: usize,
+    image_tiles: bool,
 ) -> Result<u64, JobError> {
+    let images = if image_tiles {
+        super::image_tiles::bound(captured, false)
+            .saturating_add(super::image_tiles::file_rounding(captured))
+    } else {
+        0
+    };
     let need = &captured.report.scratch;
     let n = captured.triangles.len();
     interfaces::memory_backed_need(n, config.sorter(1))
@@ -1185,8 +1200,7 @@ fn memory_backed_need(
             )?)
         })
         .and_then(|b| b.checked_add(held_spill_bound(captured, config, cap)?))
-        .and_then(|b| b.checked_add(super::image_tiles::bound(captured, false)))
-        .and_then(|b| b.checked_add(super::image_tiles::file_rounding(captured)))
+        .and_then(|b| b.checked_add(images))
         .map(|b| b.max(need.need_bytes))
         .ok_or_else(|| resource("HLOD memory-backed scratch need overflows"))
 }
@@ -1216,7 +1230,7 @@ fn admit_scratch(
     let need = &captured.report.scratch;
     let scratch = &captured.scratch;
     if scratch.memory_backed() {
-        let charged = memory_backed_need(captured, config, cap)?;
+        let charged = memory_backed_need(captured, config, cap, false)?;
         if bound > charged {
             return Err(resource(format!(
                 "HLOD incidence needs {bound} bytes of memory-backed scratch, past the \
