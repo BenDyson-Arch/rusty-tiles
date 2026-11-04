@@ -1,0 +1,1 @@
+../../production_controls/validator_caps_amendment/2026-10-11/stride_controls/primary/meshopt_decoder.test.js

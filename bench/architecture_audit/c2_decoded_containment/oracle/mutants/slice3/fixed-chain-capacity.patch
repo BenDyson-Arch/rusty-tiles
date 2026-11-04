@@ -1,0 +1,11 @@
+--- a/oracle/c2o/implicit.py
++++ b/oracle/c2o/implicit.py
+@@ -296,6 +296,8 @@
+                                 "slot": slot}
+                 self.implicit_references += 1
+                 self.max_chain = max(self.max_chain, len(ref.levels))
++                if len(ref.levels) > 13:  # hierarchy_depth + 1 at S3-16's hierarchy_depth 12
++                    raise OracleUndecided("fixed chain capacity exceeded")
+ 
+ 
+ class ImplicitOracle(Oracle):

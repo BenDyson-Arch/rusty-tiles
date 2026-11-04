@@ -1,0 +1,1253 @@
+{
+ "inventory": {
+  "file": "/tmp/rusty-tiles-c2-contract-20261011/producer-inventory.md",
+  "sha256": "e391734cc5ef6070528d92d4b913eba1fe27db035095f5cde0f5dcc9dec1e080"
+ },
+ "producerManifest": {
+  "binarySha256": "369c3c815f95a64018e49f360b605f84740c3c4f9f145c5fde33dbd4148749b9",
+  "features": "native-geospatial release",
+  "path": "run2/manifest.json",
+  "sha256": "28e4bee6c457de66580b5fb0d125d77d062aca7aba2df34a4cba0940be0d37e4",
+  "sourceCommit": "f2238cd0c718a076024f844d120b3a819527852e"
+ },
+ "record": "C2 O-explicit oracle outcome per producer artifact (R corpus run2).",
+ "rows": [
+  {
+   "argv": [
+    "vector",
+    "-i",
+    "$OUT/inputs/vector.geojson",
+    "--reproducible",
+    "--jobs",
+    "2",
+    "-o",
+    "$OUT/artifacts/vector-points-lines-implicit.3tz"
+   ],
+   "artifact": "artifacts/vector-points-lines-implicit.3tz",
+   "bytes": 18398,
+   "caveats": [
+    "implicit tile at tileset.json:root: its subtree and template payloads are not expanded, so their records are not admission-checked by the oracle"
+   ],
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "NotInspected(implicitTiling)",
+   "inventoryRow": "Vector, default (implicit)",
+   "maxNodeDepth": 0,
+   "mode": "implicit",
+   "name": "vector-points-lines-implicit",
+   "outcome": "NotInspected",
+   "payloadKinds": [],
+   "producerExit": 0,
+   "reasons": [
+    "implicitTiling"
+   ],
+   "sha256": "bc9425c702cf3699cfba93abdbbd25d8f547abbf446c21d4f03558fc2f930b7b"
+  },
+  {
+   "argv": [
+    "vector",
+    "-i",
+    "$OUT/inputs/vector.geojson",
+    "--reproducible",
+    "--jobs",
+    "2",
+    "--explicit",
+    "-o",
+    "$OUT/artifacts/vector-points-lines-explicit.3tz"
+   ],
+   "artifact": "artifacts/vector-points-lines-explicit.3tz",
+   "bytes": 11229,
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [
+    "EXT_mesh_features",
+    "EXT_mesh_polygon",
+    "EXT_structural_metadata"
+   ],
+   "inventoryPrediction": "Contained, or Outside on 1-ulp edge cases",
+   "inventoryRow": "Vector --explicit (plain, --quantize, --meshopt)",
+   "maxLevels": 1,
+   "maxNodeDepth": 1,
+   "maxSpan": 277,
+   "mode": "explicit",
+   "name": "vector-points-lines-explicit",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "glb"
+   ],
+   "polygonAllVertices": {
+    "outsideAnyVolume": 0,
+    "primitives": 1,
+    "vertices": 12
+   },
+   "precheckTotals": {
+    "bytes": 4416,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 10939
+   },
+   "producerExit": 0,
+   "references": 1,
+   "sha256": "2dd76f9f64cee443e040588facd27addbcf062b9a5d6a6bc90237e0b0da18c0d",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 0,
+    "role": "own",
+    "row": 0,
+    "slack": 1.6442173844666286e-07,
+    "ulps": 46280605.0,
+    "vertex": 0
+   }
+  },
+  {
+   "argv": [
+    "vector",
+    "-i",
+    "$OUT/inputs/vector.geojson",
+    "--reproducible",
+    "--jobs",
+    "2",
+    "--quantize",
+    "-o",
+    "$OUT/artifacts/vector-points-lines-quantize-implicit.3tz"
+   ],
+   "artifact": "artifacts/vector-points-lines-quantize-implicit.3tz",
+   "bytes": 18455,
+   "caveats": [
+    "implicit tile at tileset.json:root: its subtree and template payloads are not expanded, so their records are not admission-checked by the oracle"
+   ],
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "NotInspected(implicitTiling)",
+   "inventoryRow": "Vector, default (implicit)",
+   "maxNodeDepth": 0,
+   "mode": "implicit",
+   "name": "vector-points-lines-quantize-implicit",
+   "outcome": "NotInspected",
+   "payloadKinds": [],
+   "producerExit": 0,
+   "reasons": [
+    "implicitTiling"
+   ],
+   "sha256": "5adc1ed48564cfd99d280a25b4414ea289cc1d360ce5e5cb5e77f4972ce7386d"
+  },
+  {
+   "argv": [
+    "vector",
+    "-i",
+    "$OUT/inputs/vector.geojson",
+    "--reproducible",
+    "--jobs",
+    "2",
+    "--quantize",
+    "--explicit",
+    "-o",
+    "$OUT/artifacts/vector-points-lines-quantize-explicit.3tz"
+   ],
+   "artifact": "artifacts/vector-points-lines-quantize-explicit.3tz",
+   "bytes": 11258,
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [
+    "EXT_mesh_features",
+    "EXT_mesh_polygon",
+    "EXT_structural_metadata",
+    "KHR_mesh_quantization"
+   ],
+   "inventoryPrediction": "Contained, or Outside on 1-ulp edge cases",
+   "inventoryRow": "Vector --explicit (plain, --quantize, --meshopt)",
+   "maxLevels": 1,
+   "maxNodeDepth": 1,
+   "maxSpan": 69,
+   "mode": "explicit",
+   "name": "vector-points-lines-quantize-explicit",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "glb"
+   ],
+   "polygonAllVertices": {
+    "outsideAnyVolume": 0,
+    "primitives": 1,
+    "vertices": 12
+   },
+   "precheckTotals": {
+    "bytes": 4392,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 11362
+   },
+   "producerExit": 0,
+   "references": 1,
+   "sha256": "45f5be4eab91342be51c72681968bed6b6ec8e333d62352c927ab042cbc78744",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 0,
+    "role": "own",
+    "row": 0,
+    "slack": 0.0006075909162390758,
+    "ulps": 171021638998.0,
+    "vertex": 0
+   }
+  },
+  {
+   "argv": [
+    "vector",
+    "-i",
+    "$OUT/inputs/vector.geojson",
+    "--reproducible",
+    "--jobs",
+    "2",
+    "--meshopt",
+    "-o",
+    "$OUT/artifacts/vector-points-lines-meshopt-implicit.3tz"
+   ],
+   "artifact": "artifacts/vector-points-lines-meshopt-implicit.3tz",
+   "bytes": 22796,
+   "caveats": [
+    "implicit tile at tileset.json:root: its subtree and template payloads are not expanded, so their records are not admission-checked by the oracle"
+   ],
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "NotInspected(implicitTiling)",
+   "inventoryRow": "Vector, default (implicit)",
+   "maxNodeDepth": 0,
+   "mode": "implicit",
+   "name": "vector-points-lines-meshopt-implicit",
+   "outcome": "NotInspected",
+   "payloadKinds": [],
+   "producerExit": 0,
+   "reasons": [
+    "implicitTiling"
+   ],
+   "sha256": "67e147f8acb3affd336a36d414b37078398bac954da7f441297742c538f5d00a"
+  },
+  {
+   "argv": [
+    "vector",
+    "-i",
+    "$OUT/inputs/vector.geojson",
+    "--reproducible",
+    "--jobs",
+    "2",
+    "--meshopt",
+    "--explicit",
+    "-o",
+    "$OUT/artifacts/vector-points-lines-meshopt-explicit.3tz"
+   ],
+   "artifact": "artifacts/vector-points-lines-meshopt-explicit.3tz",
+   "bytes": 13427,
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [
+    "EXT_mesh_features",
+    "EXT_mesh_polygon",
+    "EXT_meshopt_compression",
+    "EXT_structural_metadata"
+   ],
+   "inventoryPrediction": "Contained, or Outside on 1-ulp edge cases",
+   "inventoryRow": "Vector --explicit (plain, --quantize, --meshopt)",
+   "maxLevels": 1,
+   "maxNodeDepth": 1,
+   "maxSpan": 277,
+   "meshoptPositionMinMax": {
+    "components": 9,
+    "mismatches": 0
+   },
+   "mode": "explicit",
+   "name": "vector-points-lines-meshopt-explicit",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "glb"
+   ],
+   "polygonAllVertices": {
+    "outsideAnyVolume": 0,
+    "primitives": 1,
+    "vertices": 12
+   },
+   "precheckTotals": {
+    "bytes": 6616,
+    "decoded": 464,
+    "maxNodeDepth": 1,
+    "units": 15459
+   },
+   "producerExit": 0,
+   "references": 1,
+   "sha256": "7e91d2fddb8e3faef5e3b43e7438f80498e70da6d28cd5162531c51ae6953eb7",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 0,
+    "role": "own",
+    "row": 0,
+    "slack": 1.6442173844666286e-07,
+    "ulps": 46280605.0,
+    "vertex": 0
+   }
+  },
+  {
+   "argv": [
+    "vector",
+    "-i",
+    "$OUT/inputs/countries-source.geojson",
+    "--reproducible",
+    "--jobs",
+    "2",
+    "-o",
+    "$OUT/artifacts/vector-polygons-implicit.3tz"
+   ],
+   "artifact": "artifacts/vector-polygons-implicit.3tz",
+   "bytes": 64991,
+   "caveats": [
+    "implicit tile at tileset.json:root: its subtree and template payloads are not expanded, so their records are not admission-checked by the oracle"
+   ],
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "NotInspected(implicitTiling)",
+   "inventoryRow": "Vector, default (implicit)",
+   "maxNodeDepth": 0,
+   "mode": "implicit",
+   "name": "vector-polygons-implicit",
+   "outcome": "NotInspected",
+   "payloadKinds": [],
+   "producerExit": 0,
+   "reasons": [
+    "implicitTiling"
+   ],
+   "sha256": "00a6c35e40bc78d9542fc4675b0ab1920fa70366c8e7feee174eefb2223d2b24"
+  },
+  {
+   "argv": [
+    "vector",
+    "-i",
+    "$OUT/inputs/countries-source.geojson",
+    "--reproducible",
+    "--jobs",
+    "2",
+    "--explicit",
+    "-o",
+    "$OUT/artifacts/vector-polygons-explicit.3tz"
+   ],
+   "artifact": "artifacts/vector-polygons-explicit.3tz",
+   "bytes": 36657,
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [
+    "EXT_mesh_features",
+    "EXT_mesh_polygon",
+    "EXT_structural_metadata"
+   ],
+   "inventoryPrediction": "Contained, or Outside on 1-ulp edge cases",
+   "inventoryRow": "Vector --explicit (plain, --quantize, --meshopt)",
+   "maxLevels": 1,
+   "maxNodeDepth": 1,
+   "maxSpan": 277,
+   "mode": "explicit",
+   "name": "vector-polygons-explicit",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "glb"
+   ],
+   "polygonAllVertices": {
+    "outsideAnyVolume": 0,
+    "primitives": 1,
+    "vertices": 733
+   },
+   "precheckTotals": {
+    "bytes": 25584,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 73934
+   },
+   "producerExit": 0,
+   "references": 1,
+   "sha256": "c5c3ae8216f3d6ed7bd4da2c2e5830a9e159b898aed25dc1516e6ca99f62fd13",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 0,
+    "role": "own",
+    "row": 2,
+    "slack": 0.4785472545772791,
+    "ulps": 513836202.0,
+    "vertex": 0
+   }
+  },
+  {
+   "argv": [
+    "vector",
+    "-i",
+    "$OUT/inputs/countries-source.geojson",
+    "--reproducible",
+    "--jobs",
+    "2",
+    "--quantize",
+    "-o",
+    "$OUT/artifacts/vector-polygons-quantize-implicit.3tz"
+   ],
+   "artifact": "artifacts/vector-polygons-quantize-implicit.3tz",
+   "bytes": 59514,
+   "caveats": [
+    "implicit tile at tileset.json:root: its subtree and template payloads are not expanded, so their records are not admission-checked by the oracle"
+   ],
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "NotInspected(implicitTiling)",
+   "inventoryRow": "Vector, default (implicit)",
+   "maxNodeDepth": 0,
+   "mode": "implicit",
+   "name": "vector-polygons-quantize-implicit",
+   "outcome": "NotInspected",
+   "payloadKinds": [],
+   "producerExit": 0,
+   "reasons": [
+    "implicitTiling"
+   ],
+   "sha256": "5f045a9c41a91aeb74ff911d62c22c9d1b4c309f2d10aa69aa1607ffea75d668"
+  },
+  {
+   "argv": [
+    "vector",
+    "-i",
+    "$OUT/inputs/countries-source.geojson",
+    "--reproducible",
+    "--jobs",
+    "2",
+    "--quantize",
+    "--explicit",
+    "-o",
+    "$OUT/artifacts/vector-polygons-quantize-explicit.3tz"
+   ],
+   "artifact": "artifacts/vector-polygons-quantize-explicit.3tz",
+   "bytes": 33917,
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [
+    "EXT_mesh_features",
+    "EXT_mesh_polygon",
+    "EXT_structural_metadata",
+    "KHR_mesh_quantization"
+   ],
+   "inventoryPrediction": "Contained, or Outside on 1-ulp edge cases",
+   "inventoryRow": "Vector --explicit (plain, --quantize, --meshopt)",
+   "maxLevels": 1,
+   "maxNodeDepth": 1,
+   "maxSpan": 69,
+   "mode": "explicit",
+   "name": "vector-polygons-quantize-explicit",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "glb"
+   ],
+   "polygonAllVertices": {
+    "outsideAnyVolume": 0,
+    "primitives": 1,
+    "vertices": 733
+   },
+   "precheckTotals": {
+    "bytes": 22800,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 67948
+   },
+   "producerExit": 0,
+   "references": 1,
+   "sha256": "cbbc109a5487218a086ffed6b58dcda906b57b0e5fad5c4dd8697809ac889eb0",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 0,
+    "role": "own",
+    "row": 2,
+    "slack": 100.84707814548165,
+    "ulps": 108283725633.0,
+    "vertex": 0
+   }
+  },
+  {
+   "argv": [
+    "vector",
+    "-i",
+    "$OUT/inputs/countries-source.geojson",
+    "--reproducible",
+    "--jobs",
+    "2",
+    "--meshopt",
+    "-o",
+    "$OUT/artifacts/vector-polygons-meshopt-implicit.3tz"
+   ],
+   "artifact": "artifacts/vector-polygons-meshopt-implicit.3tz",
+   "bytes": 37453,
+   "caveats": [
+    "implicit tile at tileset.json:root: its subtree and template payloads are not expanded, so their records are not admission-checked by the oracle"
+   ],
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "NotInspected(implicitTiling)",
+   "inventoryRow": "Vector, default (implicit)",
+   "maxNodeDepth": 0,
+   "mode": "implicit",
+   "name": "vector-polygons-meshopt-implicit",
+   "outcome": "NotInspected",
+   "payloadKinds": [],
+   "producerExit": 0,
+   "reasons": [
+    "implicitTiling"
+   ],
+   "sha256": "25334e417c1651b98e69b0302d5a644979283ca17dd5d09ee65a6754b9a25167"
+  },
+  {
+   "argv": [
+    "vector",
+    "-i",
+    "$OUT/inputs/countries-source.geojson",
+    "--reproducible",
+    "--jobs",
+    "2",
+    "--meshopt",
+    "--explicit",
+    "-o",
+    "$OUT/artifacts/vector-polygons-meshopt-explicit.3tz"
+   ],
+   "artifact": "artifacts/vector-polygons-meshopt-explicit.3tz",
+   "bytes": 22887,
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [
+    "EXT_mesh_features",
+    "EXT_mesh_polygon",
+    "EXT_meshopt_compression",
+    "EXT_structural_metadata"
+   ],
+   "inventoryPrediction": "Contained, or Outside on 1-ulp edge cases",
+   "inventoryRow": "Vector --explicit (plain, --quantize, --meshopt)",
+   "maxLevels": 1,
+   "maxNodeDepth": 1,
+   "maxSpan": 277,
+   "meshoptPositionMinMax": {
+    "components": 3,
+    "mismatches": 0
+   },
+   "mode": "explicit",
+   "name": "vector-polygons-meshopt-explicit",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "glb"
+   ],
+   "polygonAllVertices": {
+    "outsideAnyVolume": 0,
+    "primitives": 1,
+    "vertices": 733
+   },
+   "precheckTotals": {
+    "bytes": 11816,
+    "decoded": 23332,
+    "maxNodeDepth": 1,
+    "units": 84490
+   },
+   "producerExit": 0,
+   "references": 1,
+   "sha256": "de59efdf493215794bcfddfd60059b62b6786b260c43a8160123cb81bd0ae9e7",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 0,
+    "role": "own",
+    "row": 2,
+    "slack": 0.4785472545772791,
+    "ulps": 513836202.0,
+    "vertex": 0
+   }
+  },
+  {
+   "argv": [
+    "point-cloud",
+    "-i",
+    "$OUT/inputs/cloud.las",
+    "--sourceCrs",
+    "local",
+    "--maxPoints",
+    "1000",
+    "-o",
+    "$OUT/artifacts/pointcloud-implicit.3tz"
+   ],
+   "artifact": "artifacts/pointcloud-implicit.3tz",
+   "bytes": 3070622,
+   "caveats": [
+    "implicit tile at tileset.json:root: its subtree and template payloads are not expanded, so their records are not admission-checked by the oracle"
+   ],
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "NotInspected(implicitTiling)",
+   "inventoryRow": "Point cloud, default (implicit)",
+   "maxNodeDepth": 0,
+   "mode": "implicit",
+   "name": "pointcloud-implicit",
+   "outcome": "NotInspected",
+   "payloadKinds": [],
+   "producerExit": 0,
+   "reasons": [
+    "implicitTiling"
+   ],
+   "sha256": "a4d9578b3d3a344cd75e60104ef3354a984bc1d49a36e1c6c2bb7dc117db54a7"
+  },
+  {
+   "argv": [
+    "point-cloud",
+    "-i",
+    "$OUT/inputs/cloud.las",
+    "--sourceCrs",
+    "local",
+    "--maxPoints",
+    "1000",
+    "--explicit",
+    "-o",
+    "$OUT/artifacts/pointcloud-explicit.3tz"
+   ],
+   "artifact": "artifacts/pointcloud-explicit.3tz",
+   "bytes": 4750956,
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [
+    "EXT_mesh_features",
+    "EXT_structural_metadata",
+    "KHR_materials_unlit"
+   ],
+   "inventoryPrediction": "Contained; possible Outside on 1-ulp edge cases",
+   "inventoryRow": "Point cloud --explicit",
+   "maxLevels": 6,
+   "maxNodeDepth": 1,
+   "maxSpan": 282,
+   "mode": "explicit",
+   "name": "pointcloud-explicit",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "glb"
+   ],
+   "precheckTotals": {
+    "bytes": 4661848,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 17492428
+   },
+   "producerExit": 0,
+   "references": 63,
+   "sha256": "36cd6ec617a33f384658c3699b2264621e33505e31e05485feb202984bf8bad5",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 55,
+    "role": "own",
+    "row": 1,
+    "slack": 3.051757673233624e-07,
+    "ulps": 42949671.0,
+    "vertex": 263
+   }
+  },
+  {
+   "argv": [
+    "mesh-local-to-3tz",
+    "-i",
+    "$OUT/inputs/example.gltf",
+    "--leaf-triangles",
+    "1000",
+    "-o",
+    "$OUT/artifacts/mesh-local.3tz"
+   ],
+   "inventoryPrediction": null,
+   "inventoryRow": null,
+   "mode": "explicit (producer has no implicit mode)",
+   "name": "mesh-local",
+   "oracle": "no artifact (producer refused, exit 2)",
+   "producerExit": 2
+  },
+  {
+   "argv": [
+    "mesh-local-to-3tz",
+    "-i",
+    "$OUT/inputs/split.gltf",
+    "--leaf-triangles",
+    "512",
+    "-o",
+    "$OUT/artifacts/mesh-local-split.3tz"
+   ],
+   "artifact": "artifacts/mesh-local-split.3tz",
+   "bytes": 676260,
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [
+    "EXT_mesh_features",
+    "EXT_structural_metadata"
+   ],
+   "inventoryPrediction": "Contained",
+   "inventoryRow": "F1c2/F1d mesh",
+   "maxLevels": 2,
+   "maxNodeDepth": 1,
+   "maxSpan": 278,
+   "mode": "explicit (producer has no implicit mode)",
+   "name": "mesh-local-split",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "glb"
+   ],
+   "precheckTotals": {
+    "bytes": 670080,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 2731984
+   },
+   "producerExit": 0,
+   "references": 16,
+   "sha256": "8f53d03a10d729f3f340ff89afad96d32ef9ea52e078552d2088984a067cf80b",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 5,
+    "role": "own",
+    "row": 1,
+    "slack": 1.7763568394002505e-15,
+    "ulps": 0.125,
+    "vertex": 1441
+   }
+  },
+  {
+   "argv": [
+    "mesh-local-to-3tz",
+    "-i",
+    "$OUT/inputs/split.gltf",
+    "--leaf-triangles",
+    "512",
+    "--anchor",
+    "153.02",
+    "-27.47",
+    "25",
+    "--orientation-xyzw",
+    "0.1",
+    "0.2",
+    "0.3",
+    "0.9273618495495703",
+    "--scene-offset",
+    "10",
+    "2",
+    "-5",
+    "-o",
+    "$OUT/artifacts/mesh-local-split-wgs84.3tz"
+   ],
+   "artifact": "artifacts/mesh-local-split-wgs84.3tz",
+   "bytes": 676767,
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [
+    "EXT_mesh_features",
+    "EXT_structural_metadata"
+   ],
+   "inventoryPrediction": "Contained",
+   "inventoryRow": "F1c2/F1d mesh",
+   "maxLevels": 2,
+   "maxNodeDepth": 1,
+   "maxSpan": 278,
+   "mode": "explicit (producer has no implicit mode)",
+   "name": "mesh-local-split-wgs84",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "glb"
+   ],
+   "precheckTotals": {
+    "bytes": 670080,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 2731984
+   },
+   "producerExit": 0,
+   "references": 16,
+   "sha256": "ea216a528594a64c7a09b6587883207d4d24d9650726e31bf7258be40db9e400",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 5,
+    "role": "own",
+    "row": 1,
+    "slack": 1.7763568394002505e-15,
+    "ulps": 0.125,
+    "vertex": 1441
+   }
+  },
+  {
+   "argv": [
+    "glb-to-3tz",
+    "-i",
+    "$OUT/inputs/plain.gltf",
+    "-o",
+    "$OUT/artifacts/w1-plain-local.3tz"
+   ],
+   "artifact": "artifacts/w1-plain-local.3tz",
+   "bytes": 4094,
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "Contained; NotInspected(numericSpan) beyond about 16 generic box levels",
+   "inventoryRow": "W1 local / Wgs84",
+   "maxLevels": 1,
+   "maxNodeDepth": 1,
+   "maxSpan": 278,
+   "mode": "explicit (producer has no implicit mode)",
+   "name": "w1-plain-local",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "gltf"
+   ],
+   "precheckTotals": {
+    "bytes": 2479,
+    "decoded": 1740,
+    "maxNodeDepth": 1,
+    "units": 11597
+   },
+   "producerExit": 0,
+   "references": 1,
+   "sha256": "7efd6da4bdb7b1beb769684dcfb6fa6acc091cde80ee7973d6b289cd3498825e",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 0,
+    "role": "own",
+    "row": 1,
+    "slack": 7.105427357601002e-15,
+    "ulps": 8.0,
+    "vertex": 0
+   }
+  },
+  {
+   "argv": [
+    "glb-to-3tz",
+    "-i",
+    "$OUT/inputs/plain.gltf",
+    "--anchor",
+    "153.02",
+    "-27.47",
+    "25",
+    "--orientation-xyzw",
+    "0.1",
+    "0.2",
+    "0.3",
+    "0.9273618495495703",
+    "--scene-offset",
+    "10",
+    "2",
+    "-5",
+    "-o",
+    "$OUT/artifacts/w1-plain-wgs84.3tz"
+   ],
+   "artifact": "artifacts/w1-plain-wgs84.3tz",
+   "bytes": 4601,
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "Contained; NotInspected(numericSpan) beyond about 16 generic box levels",
+   "inventoryRow": "W1 local / Wgs84",
+   "maxLevels": 1,
+   "maxNodeDepth": 1,
+   "maxSpan": 278,
+   "mode": "explicit (producer has no implicit mode)",
+   "name": "w1-plain-wgs84",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "gltf"
+   ],
+   "precheckTotals": {
+    "bytes": 2479,
+    "decoded": 1740,
+    "maxNodeDepth": 1,
+    "units": 11597
+   },
+   "producerExit": 0,
+   "references": 1,
+   "sha256": "f411030957aa0d981ed07222930545cdb06535f604fb540eb33c7af0380fbbde",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 0,
+    "role": "own",
+    "row": 1,
+    "slack": 7.105427357601002e-15,
+    "ulps": 8.0,
+    "vertex": 0
+   }
+  },
+  {
+   "argv": [
+    "glb-to-3tz",
+    "-i",
+    "$OUT/inputs/near-window.gltf",
+    "-o",
+    "$OUT/artifacts/w1-near-window-local.3tz"
+   ],
+   "artifact": "artifacts/w1-near-window-local.3tz",
+   "bytes": 4424,
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "Contained; NotInspected(numericSpan) beyond about 16 generic box levels",
+   "inventoryRow": "W1 local / Wgs84",
+   "maxLevels": 1,
+   "maxNodeDepth": 2,
+   "maxQuaternionNormSqExcess": 1.8000008101740779e-06,
+   "maxSpan": 518,
+   "mode": "explicit (producer has no implicit mode)",
+   "name": "w1-near-window-local",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "gltf"
+   ],
+   "precheckTotals": {
+    "bytes": 2752,
+    "decoded": 1740,
+    "maxNodeDepth": 2,
+    "units": 23837
+   },
+   "producerExit": 0,
+   "references": 1,
+   "sha256": "773db7e42b4577f2e7c8d02a6b758d23c62e67e626e6ed59ad7a7036078d2f55",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 0,
+    "role": "own",
+    "row": 2,
+    "slack": 1.4189675540041487e-06,
+    "ulps": 798807718.4329885,
+    "vertex": 72
+   }
+  },
+  {
+   "argv": [
+    "glb-to-3tz",
+    "-i",
+    "$OUT/inputs/near-window.gltf",
+    "--anchor",
+    "153.02",
+    "-27.47",
+    "25",
+    "--orientation-xyzw",
+    "0.1",
+    "0.2",
+    "0.3",
+    "0.9273618495495703",
+    "--scene-offset",
+    "10",
+    "2",
+    "-5",
+    "-o",
+    "$OUT/artifacts/w1-near-window-wgs84.3tz"
+   ],
+   "artifact": "artifacts/w1-near-window-wgs84.3tz",
+   "bytes": 4931,
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "Contained; NotInspected(numericSpan) beyond about 16 generic box levels",
+   "inventoryRow": "W1 local / Wgs84",
+   "maxLevels": 1,
+   "maxNodeDepth": 2,
+   "maxQuaternionNormSqExcess": 1.8000008101740779e-06,
+   "maxSpan": 518,
+   "mode": "explicit (producer has no implicit mode)",
+   "name": "w1-near-window-wgs84",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "gltf"
+   ],
+   "precheckTotals": {
+    "bytes": 2752,
+    "decoded": 1740,
+    "maxNodeDepth": 2,
+    "units": 23837
+   },
+   "producerExit": 0,
+   "references": 1,
+   "sha256": "f99708537aaa229c72224143d4834ed21c3d5f276eb42a7a122217e99b103eab",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 0,
+    "role": "own",
+    "row": 2,
+    "slack": 1.4189675540041487e-06,
+    "ulps": 798807718.4329885,
+    "vertex": 72
+   }
+  },
+  {
+   "argv": [
+    "glb-to-3tz",
+    "-i",
+    "$OUT/inputs/deep20.gltf",
+    "-o",
+    "$OUT/artifacts/w1-deep20-local.3tz"
+   ],
+   "artifact": "artifacts/w1-deep20-local.3tz",
+   "bytes": 7161,
+   "disposition": "confirmed Contained; corrected: depth 20 generic rotated nodes stay within the 4096-bit cap (see spans), so 'numericSpan beyond about 16 box levels' does not hold for this chain",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "Contained; NotInspected(numericSpan) beyond about 16 generic box levels",
+   "inventoryRow": "W1 local / Wgs84",
+   "maxLevels": 1,
+   "maxNodeDepth": 20,
+   "maxQuaternionNormSqExcess": 3.358587122975616e-16,
+   "maxSpan": 2589,
+   "mode": "explicit (producer has no implicit mode)",
+   "name": "w1-deep20-local",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "gltf"
+   ],
+   "precheckTotals": {
+    "bytes": 5491,
+    "decoded": 1740,
+    "maxNodeDepth": 20,
+    "units": 1535056
+   },
+   "producerExit": 0,
+   "references": 1,
+   "sha256": "420810c98832e6505b9ee55941a00d0fcae27e4f16f1f62136faf7af71a1219d",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 0,
+    "role": "own",
+    "row": 0,
+    "slack": 2.3127908750809884e-10,
+    "ulps": 32549.637885001946,
+    "vertex": 80
+   }
+  },
+  {
+   "argv": [
+    "glb-to-3tz",
+    "-i",
+    "$OUT/inputs/deep20.gltf",
+    "--anchor",
+    "153.02",
+    "-27.47",
+    "25",
+    "--orientation-xyzw",
+    "0.1",
+    "0.2",
+    "0.3",
+    "0.9273618495495703",
+    "--scene-offset",
+    "10",
+    "2",
+    "-5",
+    "-o",
+    "$OUT/artifacts/w1-deep20-wgs84.3tz"
+   ],
+   "artifact": "artifacts/w1-deep20-wgs84.3tz",
+   "bytes": 7668,
+   "disposition": "confirmed Contained; corrected: depth 20 generic rotated nodes stay within the 4096-bit cap (see spans), so 'numericSpan beyond about 16 box levels' does not hold for this chain",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "Contained; NotInspected(numericSpan) beyond about 16 generic box levels",
+   "inventoryRow": "W1 local / Wgs84",
+   "maxLevels": 1,
+   "maxNodeDepth": 20,
+   "maxQuaternionNormSqExcess": 3.358587122975616e-16,
+   "maxSpan": 2589,
+   "mode": "explicit (producer has no implicit mode)",
+   "name": "w1-deep20-wgs84",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "gltf"
+   ],
+   "precheckTotals": {
+    "bytes": 5491,
+    "decoded": 1740,
+    "maxNodeDepth": 20,
+    "units": 1535056
+   },
+   "producerExit": 0,
+   "references": 1,
+   "sha256": "c9f25553ec297cf0f2a1074b566b1d4e03afba3626ef660e1a59a580fca44f9f",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 0,
+    "role": "own",
+    "row": 0,
+    "slack": 2.3127908750809884e-10,
+    "ulps": 32549.637885001946,
+    "vertex": 80
+   }
+  },
+  {
+   "argv": [
+    "mesh-to-3tz",
+    "-i",
+    "$OUT/inputs/split.gltf",
+    "--maxBytes",
+    "0",
+    "--maxTriangles",
+    "512",
+    "-o",
+    "$OUT/artifacts/legacy-mesh-implicit.3tz"
+   ],
+   "artifact": "artifacts/legacy-mesh-implicit.3tz",
+   "bytes": 227531,
+   "caveats": [
+    "implicit tile at tileset.json:root: its subtree and template payloads are not expanded, so their records are not admission-checked by the oracle"
+   ],
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "NotInspected(implicitTiling)",
+   "inventoryRow": "Legacy mesh-to-3tz, implicit",
+   "maxNodeDepth": 0,
+   "mode": "implicit",
+   "name": "legacy-mesh-implicit",
+   "outcome": "NotInspected",
+   "payloadKinds": [],
+   "producerExit": 0,
+   "reasons": [
+    "implicitTiling"
+   ],
+   "sha256": "f8865ce628aef3511ff0bd0781835990c817c5549edc8c86b0116466ff971e3e"
+  },
+  {
+   "argv": [
+    "mesh-to-3tz",
+    "-i",
+    "$OUT/inputs/example.gltf",
+    "-o",
+    "$OUT/artifacts/legacy-mesh-small-implicit.3tz"
+   ],
+   "artifact": "artifacts/legacy-mesh-small-implicit.3tz",
+   "bytes": 3936,
+   "caveats": [
+    "implicit tile at tileset.json:root: its subtree and template payloads are not expanded, so their records are not admission-checked by the oracle"
+   ],
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "NotInspected(implicitTiling)",
+   "inventoryRow": "Legacy mesh-to-3tz, implicit",
+   "maxNodeDepth": 0,
+   "mode": "implicit",
+   "name": "legacy-mesh-small-implicit",
+   "outcome": "NotInspected",
+   "payloadKinds": [],
+   "producerExit": 0,
+   "reasons": [
+    "implicitTiling"
+   ],
+   "sha256": "a7be1bcd9de3315cd43d31aafb1f36cc855938416386ad5ebe198a766a89946b"
+  },
+  {
+   "argv": [
+    "mesh-to-3tz",
+    "-i",
+    "$OUT/inputs/split.gltf",
+    "--maxBytes",
+    "0",
+    "--maxTriangles",
+    "512",
+    "--explicit",
+    "-o",
+    "$OUT/artifacts/legacy-mesh-explicit.3tz"
+   ],
+   "artifact": "artifacts/legacy-mesh-explicit.3tz",
+   "bytes": 106383,
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [
+    "EXT_meshopt_compression"
+   ],
+   "inventoryPrediction": "Contained, or Outside on mixed magnitudes",
+   "inventoryRow": "Legacy mesh-to-3tz, explicit",
+   "maxLevels": 3,
+   "maxNodeDepth": 1,
+   "maxSpan": 278,
+   "meshoptPositionMinMax": {
+    "components": 75,
+    "mismatches": 0
+   },
+   "mode": "explicit",
+   "name": "legacy-mesh-explicit",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "glb"
+   ],
+   "precheckTotals": {
+    "bytes": 98264,
+    "decoded": 141612,
+    "maxNodeDepth": 1,
+    "units": 979358
+   },
+   "producerExit": 0,
+   "references": 25,
+   "sha256": "67d5f6e92e896f9a2dc0b10bf0f525befc7b5a510112a225c0417ad5813a0b41",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 0,
+    "role": "own",
+    "row": 0,
+    "slack": 0.0,
+    "ulps": 0.0,
+    "vertex": 0
+   }
+  },
+  {
+   "argv": [
+    "mesh-to-3tz",
+    "-i",
+    "$OUT/inputs/example.gltf",
+    "--explicit",
+    "-o",
+    "$OUT/artifacts/legacy-mesh-small-explicit.3tz"
+   ],
+   "artifact": "artifacts/legacy-mesh-small-explicit.3tz",
+   "bytes": 2252,
+   "disposition": "consistent: Contained (the predicted possible Outside did not occur for this input)",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "Outside possible; NotInspected for unlisted source extensions, ambiguous scenes, skins and animation",
+   "inventoryRow": "Legacy small-model wrap",
+   "maxLevels": 1,
+   "maxNodeDepth": 1,
+   "maxSpan": 278,
+   "mode": "explicit",
+   "name": "legacy-mesh-small-explicit",
+   "outcome": "Contained",
+   "payloadKinds": [
+    "gltf"
+   ],
+   "precheckTotals": {
+    "bytes": 1474,
+    "decoded": 96,
+    "maxNodeDepth": 1,
+    "units": 4060
+   },
+   "producerExit": 0,
+   "references": 1,
+   "sha256": "51aded3b22301a34af545ab2aa8dcba4f9547357e6af4b4d1aa49b9e77b203f9",
+   "tightestBoxMargin": {
+    "level": 0,
+    "reference": 0,
+    "role": "own",
+    "row": 0,
+    "slack": 0.0,
+    "ulps": 0.0,
+    "vertex": 0
+   }
+  },
+  {
+   "argv": [
+    "convert-to-implicit",
+    "-i",
+    "$OUT/artifacts/pointcloud-explicit.3tz",
+    "-o",
+    "$OUT/artifacts/convert-implicit-from-pointcloud-explicit.3tz"
+   ],
+   "inventoryPrediction": "NotInspected(implicitTiling)",
+   "inventoryRow": "convert-to-implicit",
+   "mode": "implicit",
+   "name": "convert-implicit-from-pointcloud-explicit",
+   "oracle": "no artifact (producer refused, exit 3)",
+   "producerExit": 3
+  },
+  {
+   "argv": [
+    "convert-to-implicit",
+    "-i",
+    "$OUT/artifacts/vector-points-lines-explicit.3tz",
+    "-o",
+    "$OUT/artifacts/convert-implicit-from-vector-points-lines-explicit.3tz"
+   ],
+   "artifact": "artifacts/convert-implicit-from-vector-points-lines-explicit.3tz",
+   "bytes": 18670,
+   "caveats": [
+    "implicit tile at tileset.json:root: its subtree and template payloads are not expanded, so their records are not admission-checked by the oracle"
+   ],
+   "disposition": "confirmed",
+   "gltfExtensionsUsed": [],
+   "inventoryPrediction": "NotInspected(implicitTiling)",
+   "inventoryRow": "convert-to-implicit",
+   "maxNodeDepth": 0,
+   "mode": "implicit",
+   "name": "convert-implicit-from-vector-points-lines-explicit",
+   "outcome": "NotInspected",
+   "payloadKinds": [],
+   "producerExit": 0,
+   "reasons": [
+    "implicitTiling"
+   ],
+   "sha256": "460c2505ce75acff67586f0b331f739daddfc77ca38605b353ee0812c7496650"
+  }
+ ]
+}

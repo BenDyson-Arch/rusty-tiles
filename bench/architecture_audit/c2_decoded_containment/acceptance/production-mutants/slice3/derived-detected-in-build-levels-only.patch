@@ -1,0 +1,25 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 88ee84a..4457ff1 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -619,7 +619,7 @@ impl Containment {
+         fact.chain |= fact
+             .volume
+             .as_ref()
+-            .map_or(Reason::DerivedImplicitVolume.bit(), shape_bit)
++            .map_or(0, shape_bit)
+             | fact.external.as_ref().map_or(0, shape_bit)
+             | fact.parent.map_or(0, |p| self.tiles[p].chain);
+         try_push(&mut self.tiles, fact)?;
+@@ -695,7 +695,10 @@ impl Containment {
+         if self.exclusions != 0 || self.precheck.is_some() {
+             return Ok(());
+         }
+-        self.build_levels(tile, content)?;
++        if self.build_levels(tile, content).is_err() {
++            self.exclude(Reason::DerivedImplicitVolume);
++            return Ok(());
++        }
+         self.precheck = self.precheck_step(&facts);
+         Ok(())
+     }

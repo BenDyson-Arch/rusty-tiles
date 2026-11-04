@@ -1,0 +1,13 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 9d3448e..3c2cf04 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -1394,7 +1394,7 @@ impl Check<'_> {
+         }
+         #[cfg(test)]
+         let refine = match node["refine"].as_str() {
+-            Some("ADD") => Some("ADD"),
++            Some("ADD") => Some("REPLACE"),
+             Some(_) => Some("REPLACE"),
+             None => refine,
+         };

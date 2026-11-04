@@ -1,0 +1,13 @@
+diff --git a/src/content_integrity/implicit.rs b/src/content_integrity/implicit.rs
+index da1999c..cbd77aa 100644
+--- a/src/content_integrity/implicit.rs
++++ b/src/content_integrity/implicit.rs
+@@ -672,7 +672,7 @@ impl Normalized {
+         // Digits can never complete ".json": only the static tail counts.
+         let tail = self.vars[vars..].last().map_or(start, |(at, _)| *at);
+         let tail = &self.text[tail..];
+-        tail.len() >= 5 && tail[tail.len() - 5..].eq_ignore_ascii_case(b".json")
++        tail.len() >= 5 && &tail[tail.len() - 5..] == b".json"
+     }
+ 
+     fn into_template(self) -> Result<Template, FormatError> {

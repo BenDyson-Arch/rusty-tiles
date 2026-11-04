@@ -1,0 +1,8 @@
+### Changed
+
+- User documentation now leads with `rusty-tiles mesh` and Python `mesh_to_tileset` as the one public mesh entry point. The README command table, quick start, conversion examples and library snippets, the converter guide, install and demo guides use `mesh`, and the legacy `mesh-to-3tz` and `mesh-local-to-3tz` commands are described as deprecated with a link to the mesh migration notes. The quick start converts the new `tests/fixtures/example.glb`, the README pyramid packed as one GLB, because `mesh` refuses the `data:` URI buffer in `example.gltf`. The README licence line states the Cargo licence expression `MIT AND Apache-2.0 AND BSD-3-Clause`, with the vendored Basis Universal and Zstandard terms explained, and the Cesium sRGB note in the mesh guide gives the measured worst case instead of a private evidence path.
+- Release binaries and the native container now smoke-test `mesh` and validate its output, including a textured source that exercises the in-process KTX2 encoder.
+
+### Fixed
+
+- Documentation: `doctor` exits with code 2, not 4, when a selected command is not ready. The README `validate` line is now the real `Inspected ...: N tiles, M content references` output. The command reference lists `validate --maxVolume` and `--scratchDir`. The statements that `mesh` parent tiles have no coarse content (command reference, Python guide, `doctor --command mesh` limitations and the mesh changelog entry) now describe the HLOD coarse levels and their textures. Removed the orphaned F1d2 paragraph from the README and stale `--explicit` recipe and `tiny_http` notes from the contributor guide.

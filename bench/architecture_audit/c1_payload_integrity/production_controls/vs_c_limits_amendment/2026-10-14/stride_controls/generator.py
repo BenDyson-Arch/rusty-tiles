@@ -1,0 +1,1 @@
+../../../validator_caps_amendment/2026-10-11/stride_controls/generator.py

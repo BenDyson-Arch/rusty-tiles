@@ -1,0 +1,13 @@
+diff --git a/src/content_integrity/implicit/metadata.rs b/src/content_integrity/implicit/metadata.rs
+index 82c0d96..90636ec 100644
+--- a/src/content_integrity/implicit/metadata.rs
++++ b/src/content_integrity/implicit/metadata.rs
+@@ -53,7 +53,7 @@ pub(super) enum Float {
+ impl Float {
+     pub(super) fn size(self) -> usize {
+         match self {
+-            Self::F32 => 4,
++            Self::F32 => 8,
+             Self::F64 => 8,
+         }
+     }

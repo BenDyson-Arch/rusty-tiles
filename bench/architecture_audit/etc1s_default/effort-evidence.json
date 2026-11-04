@@ -1,0 +1,79 @@
+{
+  "evidence_directory": "/home/bend/.cache/rusty-tiles-evidence/etc1s-effort-20261024",
+  "manifest_sha256": "a8bb5805f03383d86e080a721716d5174bb379eb18a4859afb295bb576c0076f",
+  "manifest_files": 21685,
+  "baseline_commit": "60a76db11da00551c0a9f18839095ff678675be1",
+  "base_commit": "8df9cf4db3f5edf01c690add117506b797ff046b",
+  "historical_manifest_sha256": "0d2ec723fcf481126cbaf243d28c090c9d1f8be4307244c192a740d1aa4c2799",
+  "archives": {
+    "capture-tex3-fast": {
+      "archive_sha256": "703ab71131e75a2b21df6d7e938515426e1757462c40376917bdaec0b0903a60",
+      "archive_bytes": 55554440,
+      "texture_bytes": 10373367,
+      "jobs": 2,
+      "binary_sha256": "9d66f7303baf77ae49943632b666b671c8ba6f799e7efe675da23de08135bd64"
+    },
+    "diagnostic-capture-tex3-balanced": {
+      "archive_sha256": "2ea4bdd185001d7795338cf948971b465621232239eb508f56ef9c9f0dbdec08",
+      "archive_bytes": 61466844,
+      "texture_bytes": 16205284,
+      "jobs": 1,
+      "binary_sha256": "942b8017be37c0dd1b2dd2aaf5f9a75c1d02eaa2f6b7bb768a8e0c736e5d2c9f"
+    },
+    "final-crop3-balanced": {
+      "archive_sha256": "c94cbbf690f04d499c409f6e734f973e30642e7940c01a2f047bbd4e15afeb16",
+      "archive_bytes": 78863873,
+      "texture_bytes": 0,
+      "jobs": 2,
+      "binary_sha256": "6f7fba6088554ca8e9f919451688c042e76ff1be73884d29e6223c0e6fde22e3"
+    },
+    "final-diagnostic-tex3-balanced": {
+      "archive_sha256": "2ea4bdd185001d7795338cf948971b465621232239eb508f56ef9c9f0dbdec08",
+      "archive_bytes": 61466844,
+      "texture_bytes": 16205284,
+      "jobs": 2,
+      "binary_sha256": "942b8017be37c0dd1b2dd2aaf5f9a75c1d02eaa2f6b7bb768a8e0c736e5d2c9f"
+    },
+    "final-diagnostic-tex3-fast": {
+      "archive_sha256": "ab089e2df2596d0dcd363675eae7501b7ba16a3a6958ba0a22ad65d5e34a42d3",
+      "archive_bytes": 56546087,
+      "texture_bytes": 11364524,
+      "jobs": 2,
+      "binary_sha256": "942b8017be37c0dd1b2dd2aaf5f9a75c1d02eaa2f6b7bb768a8e0c736e5d2c9f"
+    },
+    "replay-diagnostic-tex3-fast": {
+      "archive_sha256": "ab089e2df2596d0dcd363675eae7501b7ba16a3a6958ba0a22ad65d5e34a42d3",
+      "archive_bytes": 56546087,
+      "texture_bytes": 11364524,
+      "jobs": 1,
+      "binary_sha256": "942b8017be37c0dd1b2dd2aaf5f9a75c1d02eaa2f6b7bb768a8e0c736e5d2c9f"
+    }
+  },
+  "final_review": {
+    "status": "accepted",
+    "scope": "Bounded source and retained execution evidence; no owner-policy or merge acceptance.",
+    "task_id": "node:delegated-task:command%3Amcp%3Ab6740fa4-6893-432b-a0ad-dd970fb37db7%3Adelegate-task%3Aetc1s-effort-independent-final-r4",
+    "record": "review-final-r4.json",
+    "sha256": "7072e8c8cf8774aa6e4b962815779dea3e49cc796f4a1ffcf65f43b7526b0dc0"
+  },
+  "scope": "tex3 diagnostics retain every gate and ownership charge with explicit 8GiB stage allowance inside 10GiB hard cap; stock H17 automatic-budget tex3 completion unestablished; crop3 uses shipping binary; historical uncapped captures/build identified in effort.md",
+  "post_seal_cleanup": {
+    "result": {
+      "cargo_exit": 0,
+      "scratch_deleted": true,
+      "scratch": "/home/bend/scratch/rusty-tiles-scratch/etc1s-default",
+      "target": "/home/bend/.cache/rt-wt/target-etc1s-default",
+      "target_exists_after_clean": false,
+      "source_hashes_unchanged": true,
+      "elapsed_s": 1.9236841201782227
+    },
+    "record": "cleanup-result.json",
+    "sha256": "9fdbcff774f626da7de10d189709b57d96cf97185eaed6c95b4e066b5bfca4cb",
+    "log": "cleanup.log",
+    "log_sha256": "3188df1af21bda527f268fd091bcb66dea157ec8c45c8cb1e086bd3d04e1a398"
+  },
+  "post_seal_tree_budget": {
+    "log": "tree-budget-final.log",
+    "sha256": "dbc882acdef6620230ee9d087cc059e7244b7e84f441f585e3f467f950461a34"
+  }
+}

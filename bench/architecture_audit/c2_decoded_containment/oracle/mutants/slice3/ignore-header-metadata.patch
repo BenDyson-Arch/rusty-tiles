@@ -1,0 +1,11 @@
+--- a/oracle/c2o/implicit.py
++++ b/oracle/c2o/implicit.py
+@@ -209,7 +209,7 @@
+             for ci, content in enumerate(TS._contents(tile)):
+                 cwhere = "%s.content[%d]" % (where, ci)
+                 self._check_extensions(content, cwhere)
+-                if "metadata" in content:
++                if "metadata" in content and not implicit:
+                     # I6: a template header's `metadata` is copied to every emitted content.
+                     self.exclude("tileMetadata", cwhere + ".metadata")
+                 cvol = None

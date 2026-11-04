@@ -1,0 +1,1996 @@
+{
+ "cases": [
+  {
+   "bytes": 3070291,
+   "construction": null,
+   "control": "witness",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "evidence:F-W1.3tz",
+   "i1Limits": {},
+   "id": "F-W1",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "ffb3eccbab629f34e18a4b111eb1e9d18211b8d6cedd6c35953f40a893d2c900",
+   "source": "W1",
+   "what": "producer archive, unchanged"
+  },
+  {
+   "bytes": 37304,
+   "construction": null,
+   "control": "witness",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/F-W4-polygons.3tz",
+   "i1Limits": {},
+   "id": "F-W4-polygons",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "5cc559a671e8c170d914d9f824e75b336b739edf0b6b3a1a2d53d8fdb0dcd757",
+   "source": "W4-polygons",
+   "what": "producer archive, unchanged"
+  },
+  {
+   "bytes": 17736303,
+   "construction": null,
+   "control": "witness",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "evidence:F-W5-vec-perf-quantize.3tz",
+   "i1Limits": {},
+   "id": "F-W5-vec-perf-quantize",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "057a79103f1bbce10bbb25c7bd67337b32163b29090a4ecf9abd705f58b7780b",
+   "source": "W5-vec-perf-quantize",
+   "what": "producer archive, unchanged"
+  },
+  {
+   "bytes": 227685,
+   "construction": null,
+   "control": "witness",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "evidence:F-W6.3tz",
+   "i1Limits": {},
+   "id": "F-W6",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "751e6fbbe86cb18b1f7c71135edc72b307db55bb054aae93945de478f34187dd",
+   "source": "W6",
+   "what": "producer archive, unchanged"
+  },
+  {
+   "bytes": 3666,
+   "construction": null,
+   "control": "witness",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/F-W7.3tz",
+   "i1Limits": {},
+   "id": "F-W7",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "1f8ec4df9356557b8663dfa5a085c77f290c4dbb876cfa0181f57a20ecd99ffe",
+   "source": "W7",
+   "what": "producer archive, unchanged"
+  },
+  {
+   "bytes": 227685,
+   "construction": {
+    "axis": 0,
+    "sign": 1,
+    "tile": "2/0/0/0"
+   },
+   "control": "S3-1",
+   "expected": {
+    "facts": {
+     "depth": 2,
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "evidence:S3-1.W6.3tz",
+   "i1Limits": {},
+   "id": "S3-1.W6",
+   "limits": {},
+   "pair": "F-W6",
+   "role": "mutant",
+   "sha256": "a9a4812ce850f51f20a0a1d5b8f158c82ffd460f480551ce0c150c832386dde0",
+   "source": "W6",
+   "what": "zero-slack leaf row half-length on axis 0 one ulp smaller"
+  },
+  {
+   "bytes": 1930,
+   "construction": null,
+   "control": "S3-10",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/S3-10.3tz",
+   "i1Limits": {},
+   "id": "S3-10",
+   "limits": {},
+   "pair": "S3-9",
+   "role": "control",
+   "sha256": "56c353393d84c8273d8e8cb4e565cead02228c789490eba7296cd2fc8c42a7ea",
+   "source": "synthetic",
+   "what": "rowless; only I_0 (DerivedRoot) has content, so no chain holds a derived tile"
+  },
+  {
+   "bytes": 1928,
+   "construction": null,
+   "control": "S3-11",
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-11.3tz",
+   "i1Limits": {},
+   "id": "S3-11",
+   "limits": {},
+   "pair": "S3-11.base",
+   "role": "mutant",
+   "sha256": "297a11f48dd16bfec43cc948a37bf820677114b4e3dd6a7a5d74d71d9fb99fba",
+   "source": "synthetic",
+   "what": "V_R x half-length one ulp smaller (V_0 = V_R, tested first: own)"
+  },
+  {
+   "bytes": 1914,
+   "construction": null,
+   "control": "S3-11",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/S3-11.base.3tz",
+   "i1Limits": {},
+   "id": "S3-11.base",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "75b0860659e6e8b9f4847458be1c1d273d3853ffa73775ad2ef0da8ae786cad6",
+   "source": "synthetic",
+   "what": "rowless single tile (DerivedRoot); the point is on V_R's +x face"
+  },
+  {
+   "bytes": 3528,
+   "construction": null,
+   "control": "S3-12",
+   "expected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "tileMetadata"
+    ]
+   },
+   "file": "fixtures/S3-12.header.3tz",
+   "i1Limits": {},
+   "id": "S3-12.header",
+   "limits": {},
+   "pair": "S3-9.base",
+   "role": "mutant",
+   "sha256": "98dd5ad30f7b9dd088012337421aae9d61f07a180639d6b41ec59c10b983650d",
+   "source": "synthetic",
+   "what": "template header metadata (I6, F step 7)"
+  },
+  {
+   "bytes": 3512,
+   "construction": null,
+   "control": "S3-12",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/S3-12.subtree.3tz",
+   "i1Limits": {},
+   "id": "S3-12.subtree",
+   "limits": {},
+   "pair": "S3-9.base",
+   "role": "control",
+   "sha256": "622f50fc8b0a2d11880b832822cb5cf18316f094ad747d53a7662366c010c4a6",
+   "source": "synthetic",
+   "what": "an extra opaque BOOLEAN tileMetadata column in the subtree (I6: not tileMetadata)"
+  },
+  {
+   "bytes": 2182,
+   "construction": null,
+   "control": "S3-13",
+   "expected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "rotatedBox"
+    ]
+   },
+   "file": "fixtures/S3-13.3tz",
+   "i1Limits": {},
+   "id": "S3-13",
+   "limits": {},
+   "pair": "S3-13.base",
+   "role": "mutant",
+   "sha256": "dcc8a782274ddf77d75bfacb55bc9af4e9403dda08a356017dce6a469e986493",
+   "source": "synthetic",
+   "what": "I_0 row half-axes rotated 45 degrees about z"
+  },
+  {
+   "bytes": 2182,
+   "construction": null,
+   "control": "S3-13",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/S3-13.base.3tz",
+   "i1Limits": {},
+   "id": "S3-13.base",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "3181bad791126f7268c17e491ecf593cf310cf271361439887a66d63754697da",
+   "source": "synthetic",
+   "what": "axis-aligned I_0 row"
+  },
+  {
+   "bytes": 2214,
+   "construction": null,
+   "control": "S3-14",
+   "expected": {
+    "facts": {
+     "depth": 1,
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-14.syn.3tz",
+   "i1Limits": {},
+   "id": "S3-14.syn",
+   "limits": {},
+   "pair": "S3-14.syn.base",
+   "role": "mutant",
+   "sha256": "0e1ccc191b3af128019c3d0c00495d452f8494d851b6804f050641ff7ef07f0c",
+   "source": "synthetic",
+   "what": "leaf x half-length pred in binary32"
+  },
+  {
+   "bytes": 2214,
+   "construction": null,
+   "control": "S3-14",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/S3-14.syn.base.3tz",
+   "i1Limits": {},
+   "id": "S3-14.syn.base",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "288ce388a71bf6c597024c8d3949b1675922903ea40fb5674ce489c3c032ab0f",
+   "source": "synthetic",
+   "what": "FLOAT32 rows; leaf x face 1 + h = 2.000000238418579 is tight to the point (k = 2)"
+  },
+  {
+   "bytes": 5759,
+   "construction": null,
+   "control": "S3-16",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/S3-16.3tz",
+   "i1Limits": {
+    "hierarchy_depth": 12
+   },
+   "id": "S3-16",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "a49d39f4e586754b80e2c5dd2c74846fbe2c40bdc6bc9f364ae886f0ec8d1387",
+   "source": "synthetic",
+   "what": "content at level 12 under a tileset root: depth 12, chain 14 levels = hierarchy_depth + 2"
+  },
+  {
+   "bytes": 5759,
+   "construction": null,
+   "control": "S3-16",
+   "expected": {
+    "limit": "hierarchy_depth",
+    "outcome": "ResourceLimit"
+   },
+   "file": "fixtures/S3-16.3tz",
+   "i1Limits": {
+    "hierarchy_depth": 11
+   },
+   "id": "S3-16.depth-1",
+   "limits": {},
+   "pair": "S3-16",
+   "role": "mutant",
+   "sha256": "a49d39f4e586754b80e2c5dd2c74846fbe2c40bdc6bc9f364ae886f0ec8d1387",
+   "source": "synthetic",
+   "what": "hierarchy_depth 11: refused in C1 (I1)"
+  },
+  {
+   "bytes": 2882,
+   "construction": null,
+   "control": "S3-17",
+   "expected": {
+    "facts": {
+     "depth": 3,
+     "volume": "ancestor:1"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-17.ancestor1.3tz",
+   "i1Limits": {},
+   "id": "S3-17.ancestor1",
+   "limits": {},
+   "pair": "S3-17.base",
+   "role": "mutant",
+   "sha256": "244ecf4e4265261d777bd9d910d4e21227383133e0d68c20cbe4e515efd570f0",
+   "source": "synthetic",
+   "what": "the ancestor:1 volume's x half-length one ulp smaller"
+  },
+  {
+   "bytes": 2882,
+   "construction": null,
+   "control": "S3-17/S3-4",
+   "expected": {
+    "facts": {
+     "depth": 3,
+     "volume": "ancestor:2"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-17.ancestor2.3tz",
+   "i1Limits": {},
+   "id": "S3-17.ancestor2",
+   "limits": {},
+   "pair": "S3-17.base",
+   "role": "mutant",
+   "sha256": "311c4e3c2052004f170b09960f63c3aa28db6aa1eec30fab906aa5d28354e26d",
+   "source": "synthetic",
+   "what": "the ancestor:2 volume's x half-length one ulp smaller"
+  },
+  {
+   "bytes": 2896,
+   "construction": null,
+   "control": "S3-17/S3-5",
+   "expected": {
+    "facts": {
+     "depth": 3,
+     "volume": "ancestor:3"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-17.ancestor3.3tz",
+   "i1Limits": {},
+   "id": "S3-17.ancestor3",
+   "limits": {},
+   "pair": "S3-17.base",
+   "role": "mutant",
+   "sha256": "141d2649829b7e82d13980881b0821fff93c2035e03536b3f9276f79ac443bde",
+   "source": "synthetic",
+   "what": "the ancestor:3 volume's x half-length one ulp smaller"
+  },
+  {
+   "bytes": 2896,
+   "construction": null,
+   "control": "S3-17",
+   "expected": {
+    "facts": {
+     "depth": 3,
+     "volume": "ancestor:4"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-17.ancestor4.3tz",
+   "i1Limits": {},
+   "id": "S3-17.ancestor4",
+   "limits": {},
+   "pair": "S3-17.base",
+   "role": "mutant",
+   "sha256": "684a1c305837445837b3c48e6ffb2fa197e8be4a8aba7959e2a5c473452fa31a",
+   "source": "synthetic",
+   "what": "the ancestor:4 volume's x half-length one ulp smaller"
+  },
+  {
+   "bytes": 2882,
+   "construction": null,
+   "control": "S3-17",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/S3-17.base.3tz",
+   "i1Limits": {},
+   "id": "S3-17.base",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "d66074325547eb0cad544360cfa91ef7e6a2a061f7320fad30c07db37d5259fb",
+   "source": "synthetic",
+   "what": "external implicit root, l = 2; the point lies on every chain volume's +x face"
+  },
+  {
+   "bytes": 2896,
+   "construction": null,
+   "control": "S3-17/S3-15",
+   "expected": {
+    "facts": {
+     "depth": 3,
+     "volume": "externalContent:4"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-17.externalContent4.3tz",
+   "i1Limits": {},
+   "id": "S3-17.externalContent4",
+   "limits": {},
+   "pair": "S3-17.base",
+   "role": "mutant",
+   "sha256": "1a8c2a7d5fa711ada3445c56c713d49b40b5a3431fc90d720d9a052266a7ec63",
+   "source": "synthetic",
+   "what": "the externalContent:4 volume's x half-length one ulp smaller"
+  },
+  {
+   "bytes": 2882,
+   "construction": null,
+   "control": "S3-17",
+   "expected": {
+    "facts": {
+     "depth": 3,
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-17.own.3tz",
+   "i1Limits": {},
+   "id": "S3-17.own",
+   "limits": {},
+   "pair": "S3-17.base",
+   "role": "mutant",
+   "sha256": "0ec8e97085056b2c6fa40941f92ae3a6e3b1fd301836de1d4485169556a51e11",
+   "source": "synthetic",
+   "what": "the own volume's x half-length one ulp smaller"
+  },
+  {
+   "bytes": 37318,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.A-11.base.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.A-11.base",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "80dd2314e2af04a4ca73a8fbbf9ef30098ab0740bcde776f8408e4d393e7c7a6",
+   "source": "implicit_read pre-amendment-6 fixtures/A-11.base.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 40548,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.A-13.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.A-13",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "9b3ba61aa32e4c4a6bf1f5ba6e5de459d7843c1a33065d4b1fae0e522dec6771",
+   "source": "implicit_read pre-amendment-6 fixtures/A-13.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 41172,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.A-13.base.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.A-13.base",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "1117008fe69cae5d64549e246e710f7272b77b36adcd9acc8ab0d4f3b19c8f90",
+   "source": "implicit_read pre-amendment-6 fixtures/A-13.base.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 19716,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.A-2.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.A-2",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "4b69da45c98b23ea45551b9e34e72255665bd00ee7194ebe391dcdd6783d0c42",
+   "source": "implicit_read pre-amendment-6 fixtures/A-2.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 19095,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.A-9.32.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.A-9.32",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "bc5c9922f1339602bd4a5e8c194edd9cd4b523b34c21d193cb2ee0bb85afe58a",
+   "source": "implicit_read pre-amendment-6 fixtures/A-9.32.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 19094,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.B-1.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.B-1",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "1634ebca91397b1641810ec7e0a8ba101d51985893902a85181840fc3b67cfdc",
+   "source": "implicit_read pre-amendment-6 fixtures/B-1.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 18440,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.B-10.normal.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.B-10.normal",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "88638aca1f46055b450e5db4f03649dc180a1baec576e7f59afc7e3a537498b5",
+   "source": "implicit_read pre-amendment-6 fixtures/B-10.normal.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 18494,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.B-12.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.B-12",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "dc49e0fa991053129c6452bc96e598f14545c7420b4e051f8477d4531a7c9844",
+   "source": "implicit_read pre-amendment-6 fixtures/B-12.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 19094,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.B-2.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.B-2",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "e19400bed395bc3ede80b639a07b59223e5547cc3375d06ddc5ec2794c81d100",
+   "source": "implicit_read pre-amendment-6 fixtures/B-2.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 19123,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.B-3.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.B-3",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "973de3651e277997717b427b855843a891a33c171b00aee64a663701fb2bee68",
+   "source": "implicit_read pre-amendment-6 fixtures/B-3.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 19060,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.B-4e.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.B-4e",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "b271412831daede1350b8a8f3fcbb938d7f10d5bb4ae759d3b8f72c719923621",
+   "source": "implicit_read pre-amendment-6 fixtures/B-4e.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 17862,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.B-6.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.B-6",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "42a63e788700b07b5bbb0f8e56d45b3a48c291f1966ed31abed77ce6b94a5133",
+   "source": "implicit_read pre-amendment-6 fixtures/B-6.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 11023,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.BO.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.BO",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "42808d67093ba6655c185c5ee9d7431ccba92b5cac49c4ed4b25b845f38b33a4",
+   "source": "implicit_read pre-amendment-6 fixtures/BO.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 19094,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.BQ.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.BQ",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "65d06540e41b352f7a8f31e4e36c9eaa4bcbdd1ce8998247b7646f07bb17b3f1",
+   "source": "implicit_read pre-amendment-6 fixtures/BQ.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 11485,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.C-11.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.C-11",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "8639db78eeda547ca870349b70958e85883094420b78c2f534f4ad1ee15b2006",
+   "source": "implicit_read pre-amendment-6 fixtures/C-11.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 11969,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.C-12.base.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.C-12.base",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "3d787d6cef979e8298b7bd56bc5e812b01d51f72a7b3fc2ddbcdee4df70eda32",
+   "source": "implicit_read pre-amendment-6 fixtures/C-12.base.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 11538,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.C-13.base.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.C-13.base",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "e474f474eb7db06ee14c072d40c98e8fd1bce8776f4e8086344066a8432276ac",
+   "source": "implicit_read pre-amendment-6 fixtures/C-13.base.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 19206,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.C-15.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.C-15",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "85a3887ff7b331f6a903012885c45acf792a3b0c7227d14847858ded5655d994",
+   "source": "implicit_read pre-amendment-6 fixtures/C-15.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 10549,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.C-4.base.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.C-4.base",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "38f9a9424c2bdf47d5132e48d5f1f0b0f1539cb1839a52050d6f7447e062a929",
+   "source": "implicit_read pre-amendment-6 fixtures/C-4.base.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 11075,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.C-5.base.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.C-5.base",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "7ec1c1e4ddfb1bdbd91fc35336e85202ff679b80c41022ec2c5df9da2e4cf989",
+   "source": "implicit_read pre-amendment-6 fixtures/C-5.base.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 14219,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.C-6.base.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.C-6.base",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "8acd1ece12e8edcd343c02b65be9e8c5c72ff64e94409fc3322658141a21fcd9",
+   "source": "implicit_read pre-amendment-6 fixtures/C-6.base.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 10993,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.C-7b.base.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.C-7b.base",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "f34fde3cf26c8bd7a8d42bd460950aa988537fa965bccfc3cce564fc4ceb42fb",
+   "source": "implicit_read pre-amendment-6 fixtures/C-7b.base.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 11023,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.C-7c.base.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.C-7c.base",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "65bc1c1ad2c2b1b9d7c4cd6d3e4d001b41b94002da0c68f8522f21b5b160c1ff",
+   "source": "implicit_read pre-amendment-6 fixtures/C-7c.base.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 10998,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.C-7d.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.C-7d",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "d536a604dcc2c11d8937a84afb0ced1f3c4f75628b36c1b9ae039e28ed08d2bc",
+   "source": "implicit_read pre-amendment-6 fixtures/C-7d.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 10993,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.C-7d.base.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.C-7d.base",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "31328a261e32218acd71cd8b12d4a912acd0bc7fe12dde96dfef0d2a0465574b",
+   "source": "implicit_read pre-amendment-6 fixtures/C-7d.base.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 11057,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.C-7e.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.C-7e",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "09d38ab3dfe28d13e5d7f3279c26e050a861c2cdb5b2b0fbd9fa6149cfa3d2b9",
+   "source": "implicit_read pre-amendment-6 fixtures/C-7e.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 19833,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.C-8.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.C-8",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "06d5f32cfc2aa5d4c8ff13f44e1d44cabe6dc8966af591c4dbcae337cda9d1f0",
+   "source": "implicit_read pre-amendment-6 fixtures/C-8.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 19150,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.D-11b.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.D-11b",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "3f4d1e55cf9f0589dd92adba17fcc214a1e9cc0d3739c893da171494abbb3181",
+   "source": "implicit_read pre-amendment-6 fixtures/D-11b.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 19240,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.D-6.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.D-6",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "5d113137dfc573fdfaa84df9ab073fbc9ff5992425bbd47b36425e312cbe6db4",
+   "source": "implicit_read pre-amendment-6 fixtures/D-6.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 19094,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.D-8.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.D-8",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "41bb063b648ea2a60141fb3d8de5ae2aac0bc18161b8ec15fb1c29d9e273f04a",
+   "source": "implicit_read pre-amendment-6 fixtures/D-8.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 19094,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.BQ.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 5,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.R4",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "65d06540e41b352f7a8f31e4e36c9eaa4bcbdd1ce8998247b7646f07bb17b3f1",
+   "source": "implicit_read pre-amendment-6 fixtures/BQ.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 4525,
+   "construction": null,
+   "control": "S3-19",
+   "expected": {
+    "facts": {
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-19.R8b.1024.3tz",
+   "i1Limits": {
+    "document_decoded_bytes": 67108864,
+    "document_items": 65536,
+    "hierarchy_depth": 128,
+    "hierarchy_visits": 65536,
+    "json_bytes": 8388608,
+    "json_depth": 64,
+    "member_bytes": 67108864,
+    "references": 262144,
+    "total_bytes_read": 2147483648
+   },
+   "id": "S3-19.R8b.1024",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "49ef5cf029b75f129984723fa19dc20376e2dc1965a0a4e617c278ab39c0e713",
+   "source": "implicit_read pre-amendment-6 fixtures/R8b.1024.3tz",
+   "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
+  },
+  {
+   "bytes": 3070291,
+   "construction": {
+    "X": "2/0/0/0",
+    "axis": 0,
+    "c'": -187.6400017766188,
+    "e": "-4416342422171157/35184372088832",
+    "eApprox": -125.52000106811525,
+    "h'": 62.12000070850354,
+    "rows": 1,
+    "sign": 1
+   },
+   "control": "S3-2",
+   "expected": {
+    "facts": {
+     "depth": 2,
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "evidence:S3-2.W1.3tz",
+   "i1Limits": {},
+   "id": "S3-2.W1",
+   "limits": {},
+   "pair": "S3-2.W1.base",
+   "role": "mutant",
+   "sha256": "b4d5e2c936ac9c42baf7e3f633c441667f0c83adf696be2e64b1b66505d48963",
+   "source": "W1",
+   "what": "pred(h') on X"
+  },
+  {
+   "bytes": 3070291,
+   "construction": {
+    "X": "2/0/0/0",
+    "axis": 0,
+    "c'": -187.6400017766188,
+    "e": "-4416342422171157/35184372088832",
+    "eApprox": -125.52000106811525,
+    "h'": 62.12000070850354,
+    "rows": 1,
+    "sign": 1
+   },
+   "control": "S3-2",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "evidence:S3-2.W1.base.3tz",
+   "i1Limits": {},
+   "id": "S3-2.W1.base",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "73a9281e2655195c53f3af479abaae08795b54131d3f135d3221941a1c1914aa",
+   "source": "W1",
+   "what": "whole-subtree-tight base at leaf 2/0/0/0, axis 0 sign +1"
+  },
+  {
+   "bytes": 37304,
+   "construction": {
+    "X": "0/0/0/0",
+    "axis": 0,
+    "c'": -0.17358665284700692,
+    "e": "5464689/2",
+    "eApprox": 2732344.5,
+    "h'": 2732344.673586653,
+    "rows": 1,
+    "sign": 1
+   },
+   "control": "S3-2",
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-2.W4-polygons.3tz",
+   "i1Limits": {},
+   "id": "S3-2.W4-polygons",
+   "limits": {},
+   "pair": "S3-2.W4-polygons.base",
+   "role": "mutant",
+   "sha256": "1cdf84296b4784ca25bd00381bf044b47fef057efc8c7f68a9d9fea15f26904d",
+   "source": "W4-polygons",
+   "what": "pred(h') on X"
+  },
+  {
+   "bytes": 37304,
+   "construction": {
+    "X": "0/0/0/0",
+    "axis": 0,
+    "c'": -0.17358665284700692,
+    "e": "5464689/2",
+    "eApprox": 2732344.5,
+    "h'": 2732344.673586653,
+    "rows": 1,
+    "sign": 1
+   },
+   "control": "S3-2",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/S3-2.W4-polygons.base.3tz",
+   "i1Limits": {},
+   "id": "S3-2.W4-polygons.base",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "4920d7b1b8e12811c7644959856f601728f8a1f102689aa2de1be29c11e64bd8",
+   "source": "W4-polygons",
+   "what": "whole-subtree-tight base at leaf 0/0/0/0, axis 0 sign +1"
+  },
+  {
+   "bytes": 17736303,
+   "construction": {
+    "X": "3/0/0/0",
+    "axis": 2,
+    "c'": -0.6963089611465654,
+    "e": "241696296581/1099511627776",
+    "eApprox": 0.2198215011785578,
+    "h'": 0.9161304623251232,
+    "rows": 1,
+    "sign": 1
+   },
+   "control": "S3-2",
+   "expected": {
+    "facts": {
+     "depth": 8,
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "evidence:S3-2.W5-vec-perf-quantize.3tz",
+   "i1Limits": {},
+   "id": "S3-2.W5-vec-perf-quantize",
+   "limits": {},
+   "pair": "S3-2.W5-vec-perf-quantize.base",
+   "role": "mutant",
+   "sha256": "f5c596730916dbb66e832a8dc13ab7977d576ebe14ea21ea9d13d72eef8f5d6e",
+   "source": "W5-vec-perf-quantize",
+   "what": "pred(h') on X"
+  },
+  {
+   "bytes": 17736303,
+   "construction": {
+    "X": "3/0/0/0",
+    "axis": 2,
+    "c'": -0.6963089611465654,
+    "e": "241696296581/1099511627776",
+    "eApprox": 0.2198215011785578,
+    "h'": 0.9161304623251232,
+    "rows": 1,
+    "sign": 1
+   },
+   "control": "S3-2",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "evidence:S3-2.W5-vec-perf-quantize.base.3tz",
+   "i1Limits": {},
+   "id": "S3-2.W5-vec-perf-quantize.base",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "c04774d7fa7fd8aa0a10e7c1d01a0a4102eced14effa385aa40c98fab1a7bf8f",
+   "source": "W5-vec-perf-quantize",
+   "what": "whole-subtree-tight base at leaf 3/0/0/0, axis 2 sign +1"
+  },
+  {
+   "bytes": 3780,
+   "construction": null,
+   "control": "S3-20",
+   "expected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "derivedImplicitVolume"
+    ]
+   },
+   "file": "fixtures/S3-20.3tz",
+   "i1Limits": {},
+   "id": "S3-20",
+   "limits": {
+    "containmentWorkUnits": 1
+   },
+   "pair": "S3-20.base",
+   "role": "mutant",
+   "sha256": "96a8d6a4a270da78efe2abe6abfe769118c8b9d3de826647a8df3a5b207d0c5a",
+   "source": "synthetic",
+   "what": "same, the implicit root rowless: derivedImplicitVolume, not workLimit"
+  },
+  {
+   "bytes": 4240,
+   "construction": null,
+   "control": "S3-20",
+   "expected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "workLimit"
+    ]
+   },
+   "file": "fixtures/S3-20.base.3tz",
+   "i1Limits": {},
+   "id": "S3-20.base",
+   "limits": {
+    "containmentWorkUnits": 1
+   },
+   "pair": null,
+   "role": "base",
+   "sha256": "65df2a27b5d2c516f539d11ed1f28d1f3832ce6fc20c50abc4f35884bdad271b",
+   "source": "synthetic",
+   "what": "explicit a.glb first, then an implicit root with rows; cap 1 unit"
+  },
+  {
+   "bytes": 3070291,
+   "construction": {
+    "X": "1/0/0/0",
+    "axis": 0,
+    "firstOutside": "2/1/0/0",
+    "rows": 9,
+    "sign": 1
+   },
+   "control": "S3-3",
+   "expected": {
+    "facts": {
+     "depth": 2,
+     "volume": "ancestor:1"
+    },
+    "outcome": "Outside"
+   },
+   "file": "evidence:S3-3.W1.3tz",
+   "i1Limits": {},
+   "id": "S3-3.W1",
+   "limits": {},
+   "pair": "S3-3.W1.base",
+   "role": "mutant",
+   "sha256": "0dae326fc8119e3f1c6452e74e402279e57c4c56f27060142289e5e70534b76b",
+   "source": "W1",
+   "what": "pred(h') on X; X's own content stays inside, 2/1/0/0's does not"
+  },
+  {
+   "bytes": 3070291,
+   "construction": {
+    "X": "1/0/0/0",
+    "axis": 0,
+    "firstOutside": "2/1/0/0",
+    "rows": 9,
+    "sign": 1
+   },
+   "control": "S3-3",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "evidence:S3-3.W1.base.3tz",
+   "i1Limits": {},
+   "id": "S3-3.W1.base",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "8cbcf49c2f1a048a056305542470bf15c7f14d9d99422cad9acd42a84f5ca247",
+   "source": "W1",
+   "what": "whole-subtree-tight base at ancestor 1/0/0/0"
+  },
+  {
+   "bytes": 227685,
+   "construction": {
+    "axis": 0,
+    "note": "I_0's own content attains the face, so the first Outside is own (l = 0)",
+    "sign": 1,
+    "tile": "0/0/0/0"
+   },
+   "control": "S3-4",
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "evidence:S3-4.W6.3tz",
+   "i1Limits": {},
+   "id": "S3-4.W6",
+   "limits": {},
+   "pair": "F-W6",
+   "role": "mutant",
+   "sha256": "e53e9bec8ee1ccb176093aa09ccaa7f4cfa02016a1bd327b19047309e537bff7",
+   "source": "W6",
+   "what": "V_0 (I_0 row) half-length on axis 0 one ulp smaller; V_R untouched"
+  },
+  {
+   "bytes": 3666,
+   "construction": {
+    "axis": 0,
+    "note": "I_0's own content attains the face, so the first Outside is own (l = 0)",
+    "sign": 1,
+    "tile": "0/0/0/0"
+   },
+   "control": "S3-4",
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-4.W7.3tz",
+   "i1Limits": {},
+   "id": "S3-4.W7",
+   "limits": {},
+   "pair": "F-W7",
+   "role": "mutant",
+   "sha256": "116d2c31c3fb0bd201aadeb6573c4c3774e2b0abf2c0fd582801d810653f4895",
+   "source": "W7",
+   "what": "V_0 (I_0 row) half-length on axis 0 one ulp smaller; V_R untouched"
+  },
+  {
+   "bytes": 227698,
+   "construction": {
+    "VR": "V_0 = V_R in this witness",
+    "axis": 0
+   },
+   "control": "S3-5",
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "volume": "ancestor:1"
+    },
+    "outcome": "Outside"
+   },
+   "file": "evidence:S3-5.W6.3tz",
+   "i1Limits": {},
+   "id": "S3-5.W6",
+   "limits": {},
+   "pair": "F-W6",
+   "role": "mutant",
+   "sha256": "0d1605c2cadb0c305e5592f9f25bcd263f466a89621f2797abdada9dfb76f468",
+   "source": "W6",
+   "what": "V_R half-length on axis 0 one ulp smaller in tileset.json; V_0 untouched"
+  },
+  {
+   "bytes": 3678,
+   "construction": {
+    "VR": "V_0 = V_R in this witness",
+    "axis": 0
+   },
+   "control": "S3-5",
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "volume": "ancestor:1"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-5.W7.3tz",
+   "i1Limits": {},
+   "id": "S3-5.W7",
+   "limits": {},
+   "pair": "F-W7",
+   "role": "mutant",
+   "sha256": "66a3e26c36abcde9cbeb1f1175f401662a7686dc6e080397f68c76aaf5b9cff6",
+   "source": "W7",
+   "what": "V_R half-length on axis 0 one ulp smaller in tileset.json; V_0 untouched"
+  },
+  {
+   "bytes": 3070279,
+   "construction": {
+    "X": "2/0/0/0",
+    "axis": 0,
+    "c'": -187.6400017766188,
+    "e": "-4416342422171157/35184372088832",
+    "eApprox": -125.52000106811525,
+    "h'": 62.12000070850354,
+    "member": "implicit-content/r0-2-0-0-0-0.glb",
+    "rows": 1,
+    "sign": 1,
+    "translationIndex": 0
+   },
+   "control": "S3-6",
+   "expected": {
+    "facts": {
+     "depth": 2,
+     "volume": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "evidence:S3-6.W1.3tz",
+   "i1Limits": {},
+   "id": "S3-6.W1",
+   "limits": {},
+   "pair": "S3-2.W1.base",
+   "role": "mutant",
+   "sha256": "b50c5c00a0bea6bc81a1e4b8e49221f5c11f79d1cb492674140a84f0adaf5631",
+   "source": "W1",
+   "what": "X's payload root translation moved one ulp toward the tight face (JSON text edit)"
+  },
+  {
+   "bytes": 17736303,
+   "construction": null,
+   "control": "S3-7",
+   "expected": {
+    "outcome": "Outside"
+   },
+   "file": "evidence:S3-7.W5-vec-perf-quantize.3tz",
+   "i1Limits": {},
+   "id": "S3-7.W5-vec-perf-quantize",
+   "limits": {},
+   "pair": "F-W5-vec-perf-quantize",
+   "role": "mutant",
+   "sha256": "5e149894f1d01397414fe8846e572424814dec78ea13c49321caaab5a0bd6042",
+   "source": "W5-vec-perf-quantize",
+   "what": "first implicit payload with a root translation: (d0, d1, d2) written instead of (d0, d2, -d1)"
+  },
+  {
+   "bytes": 2817,
+   "construction": null,
+   "control": "S3-8",
+   "expected": {
+    "facts": {
+     "depth": 3,
+     "volume": "ancestor:4"
+    },
+    "outcome": "Outside"
+   },
+   "file": "fixtures/S3-8.syn.3tz",
+   "i1Limits": {},
+   "id": "S3-8.syn",
+   "limits": {},
+   "pair": "S3-8.syn.base",
+   "role": "mutant",
+   "sha256": "082325cc3171b8036bdde7e1afdc4a9ac6fd411d0a0360c2342d8debadf97dd2",
+   "source": "synthetic",
+   "what": "R.transform x translation + 1 ulp"
+  },
+  {
+   "bytes": 2803,
+   "construction": null,
+   "control": "S3-8",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/S3-8.syn.base.3tz",
+   "i1Limits": {},
+   "id": "S3-8.syn.base",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "316e8f38e91c2623e513c020b23fa9ed2d364e15d41ba6f8a1e9a7483ea7b194",
+   "source": "synthetic",
+   "what": "role base without the referencing content volume"
+  },
+  {
+   "bytes": 2946,
+   "construction": null,
+   "control": "S3-9",
+   "expected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "derivedImplicitVolume"
+    ]
+   },
+   "file": "fixtures/S3-9.3tz",
+   "i1Limits": {},
+   "id": "S3-9",
+   "limits": {},
+   "pair": "S3-9.base",
+   "role": "mutant",
+   "sha256": "392b745f905c4c189f34a2fa398efeaa90765a9dd4700d68b46121bee549c10a",
+   "source": "synthetic",
+   "what": "TILE_BOUNDING_BOX column removed; content at level 1"
+  },
+  {
+   "bytes": 3406,
+   "construction": null,
+   "control": "S3-9",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/S3-9.base.3tz",
+   "i1Limits": {},
+   "id": "S3-9.base",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "f6f6f86822680987f916e39d2ce0fd76fd8dd04a8f3241166431f1fbb1566562",
+   "source": "synthetic",
+   "what": "SQ with rows"
+  },
+  {
+   "bytes": 5834,
+   "construction": null,
+   "control": "self-test 3",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/multi-root.3tz",
+   "i1Limits": {},
+   "id": "multi-root",
+   "limits": {},
+   "pair": null,
+   "role": "control",
+   "sha256": "a792d26d3d390b3bc60f190413cf8e2fbdf5d128a6f2e723a6019ea1c408d86a",
+   "source": "synthetic",
+   "what": "two implicit roots (QUADTREE then OCTREE) under one explicit tile"
+  },
+  {
+   "bytes": 3609,
+   "construction": null,
+   "control": "9.D repeated URI",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/repeated-uri.base.3tz",
+   "i1Limits": {},
+   "id": "repeated-uri.at-cap",
+   "limits": {
+    "containmentWorkUnits": 20562
+   },
+   "pair": "repeated-uri.base",
+   "role": "pair",
+   "sha256": "65a3b27f44711aae503d4df9240cf8251aab9cc327864158f152e7cc2177404f",
+   "source": null,
+   "what": "containmentWorkUnits = O's total 20562 over 9 references (3 per tile)"
+  },
+  {
+   "bytes": 3609,
+   "construction": null,
+   "control": "9.D repeated URI",
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "fixtures/repeated-uri.base.3tz",
+   "i1Limits": {},
+   "id": "repeated-uri.base",
+   "limits": {},
+   "pair": null,
+   "role": "base",
+   "sha256": "65a3b27f44711aae503d4df9240cf8251aab9cc327864158f152e7cc2177404f",
+   "source": "synthetic",
+   "what": "R9 shape, K = 3 identical slots; at-cap pair from O's total"
+  },
+  {
+   "bytes": 3609,
+   "construction": null,
+   "control": "9.D repeated URI",
+   "expected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "workLimit"
+    ]
+   },
+   "file": "fixtures/repeated-uri.base.3tz",
+   "i1Limits": {},
+   "id": "repeated-uri.cap-1",
+   "limits": {
+    "containmentWorkUnits": 20561
+   },
+   "pair": "repeated-uri.at-cap",
+   "role": "pair",
+   "sha256": "65a3b27f44711aae503d4df9240cf8251aab9cc327864158f152e7cc2177404f",
+   "source": null,
+   "what": "one unit under O's total"
+  }
+ ],
+ "contract": "8bc534290c5a90ace963e345336dea1e04c45fafb3c869672ee4af1ba03331d6",
+ "evidenceDir": "/home/bend/.cache/c2s3-evidence/slice3",
+ "forestInputs": {
+  "W1": "ffb3eccbab629f34e18a4b111eb1e9d18211b8d6cedd6c35953f40a893d2c900",
+  "W2": "29ac8851a677eb948dae6f75cb68d06219299f7d15c002f96116e34d23af8ae9",
+  "W4-polygons": "5cc559a671e8c170d914d9f824e75b336b739edf0b6b3a1a2d53d8fdb0dcd757",
+  "W5-vec-perf-quantize": "057a79103f1bbce10bbb25c7bd67337b32163b29090a4ecf9abd705f58b7780b",
+  "W6": "751e6fbbe86cb18b1f7c71135edc72b307db55bb054aae93945de478f34187dd",
+  "W7": "1f8ec4df9356557b8663dfa5a085c77f290c4dbb876cfa0181f57a20ecd99ffe"
+ },
+ "generator": "controls/slice3/generate.py",
+ "small": 120000
+}

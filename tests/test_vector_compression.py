@@ -51,10 +51,23 @@ class VectorCompressionTests(unittest.TestCase):
                     self.assertEqual(report['encoding']['meshopt'],'--meshopt' in flags)
                     self.assertLessEqual(report['maximumTileBytes'],32768)
                     manifest=json.loads(archive.read('tileset.json'))
+                    def payload(data):
+                        n=struct.unpack_from('<I',data,12)[0];doc=json.loads(data[20:20+n])
+                        if '--meshopt' in flags:self.assertIn('EXT_meshopt_compression',doc['extensionsRequired'])
+                    implicit=0
                     def check(node):
-                        if 'content' in node:
+                        nonlocal implicit
+                        if 'implicitTiling' in node:
+                            # Forest implicit roots carry a content template; their tiles have
+                            # rows, not extras, so check every published member of this root.
+                            prefix=node['content']['uri'].split('{',1)[0]
+                            members=[name for name in archive.namelist() if name.startswith(prefix)]
+                            self.assertTrue(members,prefix)
+                            for name in members:
+                                data=archive.read(name);self.assertLessEqual(len(data),32768);payload(data)
+                            implicit+=len(members)
+                        elif 'content' in node:
                             data=archive.read(node['content']['uri']);self.assertEqual(len(data),node['extras']['encodedBytes'])
-                            n=struct.unpack_from('<I',data,12)[0];doc=json.loads(data[20:20+n])
-                            if '--meshopt' in flags:self.assertIn('EXT_meshopt_compression',doc['extensionsRequired'])
+                            payload(data)
                         for child in node.get('children',[]):check(child)
                     check(manifest['root'])

@@ -1,0 +1,13 @@
+diff --git a/src/content_integrity/implicit/walk.rs b/src/content_integrity/implicit/walk.rs
+index 943e617..266af07 100644
+--- a/src/content_integrity/implicit/walk.rs
++++ b/src/content_integrity/implicit/walk.rs
+@@ -48,7 +48,7 @@ pub(crate) struct Walk<'r> {
+ }
+ 
+ fn child(coords: [u32; 3], c: u64) -> [u32; 3] {
+-    std::array::from_fn(|k| 2 * coords[k] + ((c >> k) & 1) as u32)
++    std::array::from_fn(|k| 2 * coords[k] + ((c >> [1, 0, 2][k]) & 1) as u32)
+ }
+ 
+ /// `e_R·2^−level`: exact when `e_R = 0` or the result is normal (§4, deeper

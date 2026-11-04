@@ -1,0 +1,21 @@
+diff --git a/src/validate/containment.rs b/src/validate/containment.rs
+index e59fa24..c616b0d 100644
+--- a/src/validate/containment.rs
++++ b/src/validate/containment.rs
+@@ -953,13 +953,13 @@ pub(crate) fn walk_marked(
+     for (chunk, words) in bitmap.chunks(CHUNK_WORDS).enumerate() {
+         let first = chunk * CHUNK_WORDS;
+         let marked: u64 = words.iter().map(|w| u64::from(w.count_ones())).sum();
+-        let extent = (marked > 1 && credit.covers(1))
++        let extent = (marked > 1)
+             .then(|| raw_box(words, first, &vertex))
+             .flatten();
+         if let Some((lo, hi)) = extent {
+             let count = corners(lo, hi, diagonal).count() as u64;
+-            if count < marked && credit.covers(count) {
+-                credit.spend(count);
++            if count < marked {
++                credit.left = credit.left.saturating_sub(count * CREDIT_DIVISOR);
+                 credit.tests += 1;
+                 let mut contained = true;
+                 for corner in corners(lo, hi, diagonal) {

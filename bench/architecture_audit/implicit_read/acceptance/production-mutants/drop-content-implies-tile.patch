@@ -1,0 +1,13 @@
+diff --git a/src/content_integrity/implicit/availability.rs b/src/content_integrity/implicit/availability.rs
+index 31e0563..e7fb253 100644
+--- a/src/content_integrity/implicit/availability.rs
++++ b/src/content_integrity/implicit/availability.rs
+@@ -311,7 +311,7 @@ impl Availability {
+                     .all(|(c, t)| c & !t == 0),
+                 (Source::Const0, Some(_)) => true,
+             };
+-            if !holds {
++            if false && !holds {
+                 return Err(invalid("content belongs to an unavailable tile"));
+             }
+         }

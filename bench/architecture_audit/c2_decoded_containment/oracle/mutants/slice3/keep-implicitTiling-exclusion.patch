@@ -1,0 +1,10 @@
+--- a/oracle/c2o/implicit.py
++++ b/oracle/c2o/implicit.py
+@@ -238,6 +238,7 @@
+             if implicit:
+                 if tile.get("children"):
+                     raise OracleUndecided("implicit root with children at %s (I1 refuses)" % where)
++                self.exclude("implicitTiling", where)
+                 self._walk_implicit(tile, member, where, path)
+                 continue
+             children = tile.get("children", [])

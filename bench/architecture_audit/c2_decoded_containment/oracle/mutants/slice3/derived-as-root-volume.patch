@@ -1,0 +1,11 @@
+--- a/oracle/c2o/implicit.py
++++ b/oracle/c2o/implicit.py
+@@ -151,7 +151,7 @@
+     if vol.startswith("derived:"):
+         if rec["level"] == 0:
+             raise OracleUndecided("derived cell at level 0 (%s)" % where)
+-        return DerivedVolume(vol)
++        return root_volume
+     raise OracleUndecided("unknown I1 volume form %r at %s" % (vol[:40], where))
+ 
+ 

@@ -1,0 +1,93 @@
+# Legacy mesh retirement record
+
+Status: **done, 2026-10-23.** `mesh-to-3tz` (alias `meshTo3tz`),
+`mesh-local-to-3tz`, their Rust and Python APIs and their private closure were
+deleted before 0.4.0. The owner decided on 2026-10-21 that 0.4.0 ships without
+them ([roadmap](04-tiles2-roadmap.md)). On 2026-10-23 the owner waived the
+staged gates this ledger used to list (full tiler acceptance at scale before
+deletion): "we can be destructive, no need for careful backward compatibility,
+can just remove deprecated code." The preparation PR (#250) migrated the shared
+producers first. The deletion followed, and its compiler census replaced the
+static one recorded here earlier.
+
+## Removed
+
+- CLI: `mesh-to-3tz`, `meshTo3tz` and `mesh-local-to-3tz`. The names are now
+  clap unknown-subcommand usage errors (exit 2); `tests/cli_contract.rs` and a
+  `main.rs` unit test pin that. With them went the stderr deprecation warning,
+  the `doctor` entries and the `meshTo3tz` alias.
+- Rust: `tile::{mesh_to_3tz, mesh_to_3tz_reported, MeshTo3tzOptions,
+  TextureFormat, DEFAULT_*}`, `mesh_to_archive`, `MeshRequest`,
+  `MeshApproximation`, `MeshApproximationReport`, `MeshCertificateReport`,
+  `MeshReport`, `MeshResult`, the `report` module (`Reporter`, `Event`,
+  `EventSink`, `ConversionResult`, `ndjson`), the public `mesh`, `texture`,
+  `hlod`, `grid` and `glb_write` modules, `georef::{SourceCrs, CrsKind,
+  parse_metashape_offset}` and the legacy Web Mercator/geographic adapters,
+  `bbox::bounding_box_from_gltf[_path]` and the AABB helpers,
+  `fixtures::geographic_glb`, `metadata::attach_node_features` (crate-private)
+  and `Error::{TextureProjection, InputNotFound, NoContent}`.
+- Python: `mesh_to_3tz` (with its `texture_format`, `explicit` and
+  `node_features` keywords), `mesh_local_to_3tz`, `MeshResult` and
+  `ConversionResult`.
+- Private modules: `tile.rs`, `mesh.rs`, `mesh_crs.rs`, `texture.rs`, `hlod.rs`,
+  `grid.rs`, `jpeg.rs`, `gpu_texture.rs` (the external `basisu` process runner),
+  `lossless.rs`, `glb_write.rs`, `tileset.rs`, `tileset/resources.rs`,
+  `report.rs`, `mesh_archive/{encode, encode/identity, encode/proxy_identity,
+  approximation, approximation/certificate}.rs`, `output::Job` and the legacy
+  `archive3tz::write_archive`.
+- Build and dependencies: the `native-jpeg` feature, its `build.rs`
+  libjpeg-turbo probe and `RUSTY_TILES_DISABLE_NATIVE_JPEG`; the `zenwebp`
+  crate (AGPL), `jpeg-decoder`, the direct `bytemuck` dependency and the
+  `image` WebP feature, which removes 18 packages from `Cargo.lock`.
+- Also deprecated and removed: the `RUSTY_TILES_PYTHON_TRACEBACK` alias of
+  `RUSTY_TILES_NATIVE_DIAGNOSTICS`.
+
+## Kept
+
+`crs_jacobian.rs` (source-CRS capture), `crs::Transform`, the retained
+`georef` frames (`Cartographic`, `EnuFrame`, `SourceAxes`, `SourceOffset`,
+`root_transform`, ECEF conversions), `mesh_archive::{model, placement}` and
+the W1 publication plumbing (`Workspace`, `write_member`, `ProducerOperations`,
+`partition::Bounds`), `output::write_report`, `glb.rs`, `bbox::{BoundingBox,
+Obb, jacobi_eigenvectors}`, `fixtures::triangle_glb`, the `metadata` public
+types, `gltf_source/**`, `tests/support::write_glb` and `preview --mesh`.
+`gltf_source::source::decode` stays whole as W1's admission check, although W1
+reads only its triangle count.
+
+## Tests and evidence
+
+- Legacy-only suites were deleted: `tests/{mesh_tile, mesh_crs, fidelity,
+  demo_mesh, mesh_archive, mesh_local_frontends, f1b_lifecycle}.rs`, the legacy
+  cases of `gltf_resources.rs`, `shared_metadata.rs` and `native_implicit.rs`,
+  the legacy Python tests, the source-CRS legacy parity test and the F1a–F1d2
+  oracle, wheel, Khronos and viewer drivers with their CI steps. Each ran
+  `mesh-local-to-3tz` and verified its output format. W1 keeps
+  `tests/model_wrapping_oracle.py` and its browser probe. `placement.rs` unit
+  tests pin the placement magnitude boundary that the F1c1 oracle derived.
+- The deep implicit forest validator test reads
+  `tests/fixtures/implicit_forest_witness.3tz`, a 136 KB archive written by
+  `mesh-to-3tz` at `5096214c` (32×1 untextured quad strip, `--maxTriangles 2
+  --maxBytes 0 --tileSize 64`), pinned by sha256. No retained producer writes
+  implicit roots below explicit tiles at test size.
+- `tests/glb_writer_oracle.rs` keeps the pinned 32-bit-index and no-normals
+  digests of the test GLB writer; they matched the legacy writer byte for byte
+  before its deletion.
+- The six demo-corpus `mesh-to-3tz` cases (`mesh-milktruck`,
+  `flight-helmet-external`, `mesh-lantern`, `mesh-corset`, `mesh-floreat`,
+  `mesh-delft`) and the exact-float triangle audit were deleted. A `mesh` case
+  needs a quantization-aware audit and expectations re-pinned from a real
+  corpus run. The corpus file list is unchanged.
+- Validator corpora (`bench/architecture_audit/c2_decoded_containment/corpus`,
+  `implicit_read/acceptance/scripts/produce.py`) were generated by the legacy
+  commands. Their pinned artifacts live outside the repository, and the parity
+  tests skip missing files, so nothing executes the removed producers. They
+  stay as history, with the other `bench/architecture_audit/**` receipts,
+  `bench/scale_gates/validation_pass.sh` and the perf-lane report.
+
+## Disclosure
+
+The deletion edits `src/metadata.rs`, `src/bbox.rs`, `src/georef.rs` and other
+files that the vector reuse fingerprint hashes whole. Existing
+`--reuse-tileset` vector caches are therefore invalidated a second time (the
+first was #250): the first reuse run after upgrading rebuilds every tile.
+Vector output bytes are otherwise unchanged.

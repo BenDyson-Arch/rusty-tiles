@@ -54,9 +54,5 @@ mod tests {
             [2., 3., 4.]
         );
         assert_eq!(y_up_to_z_up([1., 2., 3.]), [1., -3., 2.]);
-        assert_eq!(
-            y_up_to_z_up([1_f32, 2., 3.]),
-            crate::bbox::y_up_to_z_up([1., 2., 3.])
-        );
     }
 }

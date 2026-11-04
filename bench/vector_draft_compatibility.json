@@ -1,0 +1,449 @@
+{
+  "recordedDate": "2026-10-09",
+  "platform": "Linux x86_64",
+  "sourceRevision": "5544766bb2e1bf164207db10a1e4dbeb30833832",
+  "converter": {
+    "sha256": "ac03d0bfb34957850c870c072c4ddc2ff767a2c9a3e3f323e60cac8b82f8dea5",
+    "backend": "native GDAL/GEOS",
+    "gdal": "3.13.3",
+    "proj": "9.8.1",
+    "encoderBytesChanged": false
+  },
+  "cesium": {
+    "version": "1.146.0",
+    "revision": "b8d3a36fe98a3e432eb89253c95d5f20e605e0f1",
+    "browser": "system Chromium",
+    "renderer": "SwiftShader"
+  },
+  "commands": {
+    "generate": "RUSTY_TILES_BIN=BIN python tests/fixtures/vector_compat.py OUTPUT --batch --aggregate-points [--quantize --meshopt-helper ignored]",
+    "preview": "BIN preview --cesium CESIUM_1_146/Build/Cesium --annotations OUTPUT --port PORT",
+    "browser": "NODE_PATH=PLAYWRIGHT_MODULES node tests/fixtures/vector_compat.cjs URL --require-native --require-aggregates",
+    "validator": "node tests/fixtures/implicit_validator.cjs VALIDATOR_0_6_1 OUTPUT/CASE/tileset.json --fix-multiple-content-traversal",
+    "batching": "RUSTY_TILES_BIN=BIN python -m unittest discover -s tests -p test_vector_batching.py"
+  },
+  "draftSchema": {
+    "file": "docs/vector-schema/3DTILES_content_gltf_vector.schema.json",
+    "sha256": "7ab77592be01c10ce854a6518300c13ec3031b4230f5fbbc12aa2a17ff712cdd",
+    "validator": "Rust jsonschema 0.33.0",
+    "emittedMarkersChecked": 136,
+    "malformedDeclarationsRejected": 3
+  },
+  "browser": {
+    "batch": [
+      {
+        "load": "initial",
+        "cases": [
+          {
+            "case": "line",
+            "coarseVertices": 4,
+            "fineVertices": 402,
+            "fineSourceId": "\"line\"",
+            "sampleSourceIds": [
+              "\"line\"",
+              "\"line-second\""
+            ],
+            "holeEmpty": null,
+            "tileFailures": 0
+          },
+          {
+            "case": "polygon",
+            "coarseVertices": 48,
+            "fineVertices": 280,
+            "fineSourceId": "\"polygon\"",
+            "sampleSourceIds": [
+              "\"polygon\"",
+              "\"polygon-second\""
+            ],
+            "holeEmpty": true,
+            "tileFailures": 0
+          },
+          {
+            "case": "fragmented",
+            "coarseVertices": 150,
+            "fineVertices": 600,
+            "fineSourceId": "\"fragmented\"",
+            "sampleSourceIds": [
+              "\"fragmented\"",
+              "\"fragmented-second\""
+            ],
+            "holeEmpty": true,
+            "tileFailures": 0
+          },
+          {
+            "case": "outline",
+            "coarseVertices": 6,
+            "fineVertices": 10,
+            "fineSourceId": "\"outline\"",
+            "sampleSourceIds": [
+              "\"outline\"",
+              "\"outline-second\""
+            ],
+            "holeEmpty": null,
+            "tileFailures": 0
+          },
+          {
+            "case": "point",
+            "coarseVertices": 2,
+            "fineVertices": 2,
+            "fineSourceId": "\"point\"",
+            "sampleSourceIds": [
+              "\"point\"",
+              "\"point-second\""
+            ],
+            "holeEmpty": null,
+            "tileFailures": 0
+          },
+          {
+            "case": "point-aggregates",
+            "coarseVertices": 7,
+            "fineVertices": 64,
+            "fineSourceId": "0",
+            "sampleSourceIds": [],
+            "holeEmpty": null,
+            "tileFailures": 0
+          }
+        ],
+        "browserErrors": []
+      },
+      {
+        "load": "hard-refresh",
+        "cases": [
+          {
+            "case": "line",
+            "coarseVertices": 4,
+            "fineVertices": 402,
+            "fineSourceId": "\"line\"",
+            "sampleSourceIds": [
+              "\"line\"",
+              "\"line-second\""
+            ],
+            "holeEmpty": null,
+            "tileFailures": 0
+          },
+          {
+            "case": "polygon",
+            "coarseVertices": 48,
+            "fineVertices": 280,
+            "fineSourceId": "\"polygon\"",
+            "sampleSourceIds": [
+              "\"polygon\"",
+              "\"polygon-second\""
+            ],
+            "holeEmpty": true,
+            "tileFailures": 0
+          },
+          {
+            "case": "fragmented",
+            "coarseVertices": 150,
+            "fineVertices": 600,
+            "fineSourceId": "\"fragmented\"",
+            "sampleSourceIds": [
+              "\"fragmented\"",
+              "\"fragmented-second\""
+            ],
+            "holeEmpty": true,
+            "tileFailures": 0
+          },
+          {
+            "case": "outline",
+            "coarseVertices": 6,
+            "fineVertices": 10,
+            "fineSourceId": "\"outline\"",
+            "sampleSourceIds": [
+              "\"outline\"",
+              "\"outline-second\""
+            ],
+            "holeEmpty": null,
+            "tileFailures": 0
+          },
+          {
+            "case": "point",
+            "coarseVertices": 2,
+            "fineVertices": 2,
+            "fineSourceId": "\"point\"",
+            "sampleSourceIds": [
+              "\"point\"",
+              "\"point-second\""
+            ],
+            "holeEmpty": null,
+            "tileFailures": 0
+          },
+          {
+            "case": "point-aggregates",
+            "coarseVertices": 7,
+            "fineVertices": 64,
+            "fineSourceId": "0",
+            "sampleSourceIds": [],
+            "holeEmpty": null,
+            "tileFailures": 0
+          }
+        ],
+        "browserErrors": []
+      }
+    ],
+    "compressed": [
+      {
+        "load": "initial",
+        "cases": [
+          {
+            "case": "line",
+            "coarseVertices": 4,
+            "fineVertices": 402,
+            "fineSourceId": "\"line\"",
+            "sampleSourceIds": [
+              "\"line\"",
+              "\"line-second\""
+            ],
+            "holeEmpty": null,
+            "tileFailures": 0
+          },
+          {
+            "case": "polygon",
+            "coarseVertices": 48,
+            "fineVertices": 280,
+            "fineSourceId": "\"polygon\"",
+            "sampleSourceIds": [
+              "\"polygon\"",
+              "\"polygon-second\""
+            ],
+            "holeEmpty": true,
+            "tileFailures": 0
+          },
+          {
+            "case": "fragmented",
+            "coarseVertices": 150,
+            "fineVertices": 600,
+            "fineSourceId": "\"fragmented\"",
+            "sampleSourceIds": [
+              "\"fragmented\"",
+              "\"fragmented-second\""
+            ],
+            "holeEmpty": true,
+            "tileFailures": 0
+          },
+          {
+            "case": "outline",
+            "coarseVertices": 6,
+            "fineVertices": 10,
+            "fineSourceId": "\"outline\"",
+            "sampleSourceIds": [
+              "\"outline\"",
+              "\"outline-second\""
+            ],
+            "holeEmpty": null,
+            "tileFailures": 0
+          },
+          {
+            "case": "point",
+            "coarseVertices": 2,
+            "fineVertices": 2,
+            "fineSourceId": "\"point\"",
+            "sampleSourceIds": [
+              "\"point\"",
+              "\"point-second\""
+            ],
+            "holeEmpty": null,
+            "tileFailures": 0
+          },
+          {
+            "case": "point-aggregates",
+            "coarseVertices": 7,
+            "fineVertices": 64,
+            "fineSourceId": "0",
+            "sampleSourceIds": [],
+            "holeEmpty": null,
+            "tileFailures": 0
+          }
+        ],
+        "browserErrors": []
+      },
+      {
+        "load": "hard-refresh",
+        "cases": [
+          {
+            "case": "line",
+            "coarseVertices": 4,
+            "fineVertices": 402,
+            "fineSourceId": "\"line\"",
+            "sampleSourceIds": [
+              "\"line\"",
+              "\"line-second\""
+            ],
+            "holeEmpty": null,
+            "tileFailures": 0
+          },
+          {
+            "case": "polygon",
+            "coarseVertices": 48,
+            "fineVertices": 280,
+            "fineSourceId": "\"polygon\"",
+            "sampleSourceIds": [
+              "\"polygon\"",
+              "\"polygon-second\""
+            ],
+            "holeEmpty": true,
+            "tileFailures": 0
+          },
+          {
+            "case": "fragmented",
+            "coarseVertices": 150,
+            "fineVertices": 600,
+            "fineSourceId": "\"fragmented\"",
+            "sampleSourceIds": [
+              "\"fragmented\"",
+              "\"fragmented-second\""
+            ],
+            "holeEmpty": true,
+            "tileFailures": 0
+          },
+          {
+            "case": "outline",
+            "coarseVertices": 6,
+            "fineVertices": 10,
+            "fineSourceId": "\"outline\"",
+            "sampleSourceIds": [
+              "\"outline\"",
+              "\"outline-second\""
+            ],
+            "holeEmpty": null,
+            "tileFailures": 0
+          },
+          {
+            "case": "point",
+            "coarseVertices": 2,
+            "fineVertices": 2,
+            "fineSourceId": "\"point\"",
+            "sampleSourceIds": [
+              "\"point\"",
+              "\"point-second\""
+            ],
+            "holeEmpty": null,
+            "tileFailures": 0
+          },
+          {
+            "case": "point-aggregates",
+            "coarseVertices": 7,
+            "fineVertices": 64,
+            "fineSourceId": "0",
+            "sampleSourceIds": [],
+            "holeEmpty": null,
+            "tileFailures": 0
+          }
+        ],
+        "browserErrors": []
+      }
+    ]
+  },
+  "pythonOracle": [
+    {
+      "case": "small-lines",
+      "features": 24,
+      "propertyAndGeometryMatch": true,
+      "maxWorldDifferenceMetres": 0
+    },
+    {
+      "case": "polygons-with-holes",
+      "features": 12,
+      "propertyAndGeometryMatch": true,
+      "maxWorldDifferenceMetres": 0
+    },
+    {
+      "case": "dense-points",
+      "features": 64,
+      "propertyAndGeometryMatch": true,
+      "maxWorldDifferenceMetres": 0
+    }
+  ],
+  "upstreamValidator": {
+    "version": "0.6.1",
+    "multipleContentTraversalFix": true,
+    "mode": "batch, unquantized, uncompressed",
+    "cases": [
+      {
+        "case": "line",
+        "errors": 3,
+        "warnings": 3,
+        "infos": 0
+      },
+      {
+        "case": "polygon",
+        "errors": 0,
+        "warnings": 4,
+        "infos": 4
+      },
+      {
+        "case": "fragmented",
+        "errors": 8,
+        "warnings": 0,
+        "infos": 0
+      },
+      {
+        "case": "outline",
+        "errors": 2,
+        "warnings": 2,
+        "infos": 0
+      },
+      {
+        "case": "point",
+        "errors": 0,
+        "warnings": 1,
+        "infos": 1
+      },
+      {
+        "case": "point-aggregates",
+        "errors": 0,
+        "warnings": 11,
+        "infos": 11
+      }
+    ],
+    "limitation": "The bundled glTF validator does not implement KHR_mesh_primitive_restart. It rejects valid unsigned maximum restart values in batched lines and repaired outlines, including fragmented polygon boundary contents. The zero-error cases do not establish draft extension conformance."
+  },
+  "limitations": [
+    "Browser checks use invented fixtures and software rendering, not performance evidence.",
+    "The 3D Tiles 2.0 RFC and glTF 2.1 are outside this compatibility audit.",
+    "Plain fragmented triangle-fill GLBs still fail the tileset-wide vector decoder on 1.146.0; b3dm wrappers remain."
+  ],
+  "tests": {
+    "vectorPythonAcceptance": {
+      "pattern": "test_vector*.py",
+      "passed": 55,
+      "skipped": 0
+    },
+    "nativeVectorAcceptance": {
+      "pattern": "test_native_vector.py",
+      "passed": 6,
+      "skipped": 0
+    }
+  },
+  "pythonOracleRecipe": {
+    "fixtureGenerator": "bench/benchmark_vector.py:fixture",
+    "comparisonReader": "tests/test_vector_reuse.py:details",
+    "oracle": "tests/fixtures/vector_oracle/vector.py:run",
+    "options": {
+      "source_crs": "local",
+      "max_features": 128,
+      "max_vertices": 1000000,
+      "max_bytes": 128000000,
+      "lod_levels": 1
+    },
+    "cases": [
+      [
+        "small-lines",
+        24,
+        64
+      ],
+      [
+        "polygons-with-holes",
+        12,
+        16
+      ],
+      [
+        "dense-points",
+        64,
+        1
+      ]
+    ],
+    "comparison": "Decoded property dictionaries, semantic fragment counts, vertex counts and positions; polygon loop vertices sorted before comparison."
+  }
+}

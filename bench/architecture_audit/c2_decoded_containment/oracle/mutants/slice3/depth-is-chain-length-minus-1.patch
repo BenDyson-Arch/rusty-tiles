@@ -1,0 +1,10 @@
+--- a/oracle/c2o/implicit.py
++++ b/oracle/c2o/implicit.py
+@@ -291,7 +291,6 @@
+                 cwhere = "%s.content[%d]" % (twhere, slot)
+                 self._reference(target, target, cwhere, chain, None)
+                 ref = self.references[-1]
+-                ref.depth = rec["depth"]  # section 3: depth(R) + l, not the chain length - 1
+                 ref.implicit = {"root": where, "level": level, "x": rec["x"], "y": rec["y"], "z": rec["z"],
+                                 "slot": slot}
+                 self.implicit_references += 1

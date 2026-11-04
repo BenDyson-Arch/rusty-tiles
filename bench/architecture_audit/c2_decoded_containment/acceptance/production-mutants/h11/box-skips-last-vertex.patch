@@ -1,0 +1,14 @@
+diff --git a/src/validate/containment.rs b/src/validate/containment.rs
+index e59fa24..221b48a 100644
+--- a/src/validate/containment.rs
++++ b/src/validate/containment.rs
+@@ -851,6 +851,9 @@ fn raw_box(
+         while bits != 0 {
+             let v = 64 * (first + w) + bits.trailing_zeros() as usize;
+             bits &= bits - 1;
++            if bits == 0 && words[w + 1..].iter().all(|&x| x == 0) {
++                break;
++            }
+             extent = Some(match (extent, vertex(v)) {
+                 (_, RawVertex::F32(a)) if !a.iter().all(|c| c.is_finite()) => return None,
+                 (None, raw) => (raw, raw),

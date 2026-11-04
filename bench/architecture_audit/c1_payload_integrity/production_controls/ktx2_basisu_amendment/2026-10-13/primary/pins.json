@@ -1,0 +1,67 @@
+{
+  "files": [
+    {
+      "file": "KHR_texture_basisu.README.md",
+      "source": "github.com/KhronosGroup/glTF extensions/2.0/Khronos/KHR_texture_basisu/README.md @ 1bde276f7a173876e24c0f403a14dd827dc7912b (ML0 pin 2026-10-12)",
+      "bytes": 12510,
+      "sha256": "6f6d0767b95a8ac4f197c9394a28e8d4c71a2ff3ced2c4fd9357ed1c869b83a6"
+    },
+    {
+      "file": "texture.KHR_texture_basisu.schema.json",
+      "source": "github.com/KhronosGroup/glTF extensions/2.0/Khronos/KHR_texture_basisu/schema/ @ 1bde276f7a173876e24c0f403a14dd827dc7912b (ML0 pin 2026-10-12)",
+      "bytes": 604,
+      "sha256": "cc1d31267bb69991807ff5e73a9a3e6029ad3b3b4a76dd2d48f44061abe1c013"
+    },
+    {
+      "file": "basislz-gdata.adoc",
+      "source": "github.com/KhronosGroup/KTX-Specification appendices/basislz-gdata.adoc @ v2.0.4 30cb4530a1120ddaf883fd98787edbee0e53270b (included by ktxspec.adoc; fetched 2026-10-13)",
+      "bytes": 5649,
+      "sha256": "162ceee529a978a411040d644e5d21c1b241b5b2abdb6e8b24147fb9cd72d45c"
+    },
+    {
+      "file": "alpha_simple_basis.ktx2",
+      "source": "github.com/KhronosGroup/KTX-Software tests/testimages @ v4.4.0 beef80159525d9fb7abb8645ea85f4c4f6842e8f (Git LFS oid = sha256)",
+      "bytes": 431,
+      "sha256": "fc21f2c39480383c7943733a18c5a543e89ecb7f035e9f97d501982a4948c8dd"
+    },
+    {
+      "file": "rgba-mipmap-reference-basis.ktx2",
+      "source": "KTX-Software tests/testimages @ beef8015 (Git LFS oid = sha256)",
+      "bytes": 719,
+      "sha256": "267b18c4badb42fb9739ef42b5e5cd9c2d95872e55ae298a82000fb402c33958"
+    },
+    {
+      "file": "rg_reference_basis.ktx2",
+      "source": "KTX-Software tests/testimages @ beef8015 (Git LFS oid = sha256)",
+      "bytes": 531,
+      "sha256": "4c772d8db01425f0ba95ed72d0d8b1fe41cdd437456eb61acb27beb229333392"
+    },
+    {
+      "file": "cyan_rgb_reference_uastc.ktx2",
+      "source": "KTX-Software tests/testimages @ beef8015 (Git LFS oid = sha256)",
+      "bytes": 4368,
+      "sha256": "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+    },
+    {
+      "file": "ktx_document_uastc_rdo4_zstd5.ktx2",
+      "source": "KTX-Software tests/testimages @ beef8015 (Git LFS oid = sha256)",
+      "bytes": 63166,
+      "sha256": "e8dc335cc59f1ef969808f3394aab3bc945833b4e32e3781baa4e7e8e0d987f5"
+    },
+    {
+      "file": "h8-quality-leaf4-uastc-zstd.ktx2",
+      "source": "image 0 of leaves/000000000004.glb (sha256 528a203a6fad61d63f69318291b848d017139d3025d02075bae2d0d608b0be80) from rt-v8 (ml/h8-throughput 1eff758, sha256 63b21a0cb91a715809800d91819865da4c768c15ff564336eafc2c16ea1cc4d6) mesh-leaf-payloads --profile quality on crop15m-2048.glb; in-repo vendored Basis Universal encoder",
+      "bytes": 33883,
+      "sha256": "d33fbcbb6676acc4d59c23ae28bfd4651d69d911a514f63a3bbb4e273d3c020b"
+    }
+  ],
+  "untracked": [
+    {
+      "file": "ktxspec-v2.0.4.adoc",
+      "source": "github.com/KhronosGroup/KTX-Specification ktxspec.adoc @ v2.0.4 30cb4530a1120ddaf883fd98787edbee0e53270b",
+      "bytes": 106109,
+      "sha256": "900cfd73fa8db623807f1c43dfe7631a89e02d48b153eef26eb9008fcc361ebb",
+      "retained": "~/.cache/rusty-tiles-evidence/ml0-spec-pins-20261012/raw/ (not tracked: size)"
+    }
+  ]
+}

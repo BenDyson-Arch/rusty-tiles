@@ -1,0 +1,554 @@
+# Bounded archive and payload inspection
+
+C1 implements read-only inspection of self-contained 3TZ archives. Rust uses
+`validate::inspect(ValidationRequest::new(path))` (or `inspect_with(request, &RunControl)`
+for cancellation and progress); CLI uses `validate PATH [--maxVolume KEY=N]...
+[--scratchDir DIR] [--expectProfile hlod]`; Python uses `validate(path, *,
+lazy_payloads=False, max_volume=None, scratch_dir=None, expect_profile=None,
+callback=None)`. Rust returns a typed `ValidationReport`, which
+adapters serialize without adding domain decisions. There is no external-tool
+option or subprocess fallback. The limits are described under "Limits" below.
+
+An archive that declares the 0.4 HLOD profile (`asset.extras.rustyTiles.lod` or the
+conversion report's `lod` equal to `"hlod"`) is held to the HLOD checks: every payload
+must carry source identity, and the HLOD identity, interface and continuity checks run.
+`--expectProfile hlod` (Rust `ValidationRequest::expect_profile(ExpectedProfile::Hlod)`,
+Python `expect_profile="hlod"`) requires that profile whatever the archive's labels say, so
+an archive stripped of its labels cannot pass as a plain one. `hlod` is the only value; any
+other is refused as `usage` (Python `ValueError`) before the archive is opened. The checks
+are listed in the [HLOD acceptance record](../bench/architecture_audit/mesh_hlod/s5/README.md).
+Declared descendant recovery uses an explicit REPLACE ownership root. Its GLB marks
+`asset.extras.rustyTiles.descendantRecovery: 1`; the root tile's `extras.recovery`
+contains exactly `version`, `root`, `encodedDepth`, `frontier` and `omitted`.
+Version is 1. Ownership keys contain `first`, `end`, `depth`, `leafBegin` and
+`leafEnd`; each frontier entry contains a `key` and its decoded `triangles` count.
+There are one to eight capped inputs, at most 65,536 input triangles, and one to
+256 skipped ownership cells. Source and DFS-leaf intervals must form complete,
+disjoint covers. Internal ownership depths are at most 30; frontier leaves may
+reach depth 31. The actual refinement children, resolving document links, must
+be precisely that frontier, with G no greater than the recovered root's.
+An explicit root or frontier tile must carry its own valid ownership label;
+an external document link cannot supply or repair it. Only the generated root
+cell of an admitted implicit header inherits that header's ownership. Malformed
+or partial labels remain distinct from absent metadata and are rejected when
+recovery consumes them.
+
+Native and S5 count terminal payload triangles/leaves independently, compare the
+intervals, verify ownership identities and reconstruct the skipped ownership tree.
+D11 uses those ownership parents for exact and mixed-depth borders; drop and G
+checks use actual refinement. Graph depth does not change ownership depth. Missing
+or inconsistent declarations fail `recoveryRelation`; coverage defects fail
+`recoveryCoverage`; cap/input limits fail `recoveryBounds`; ownership defects fail
+`recoveryOwnership`; an error below the frontier fails `recoveryError` or the
+existing geometric-error ordering check. Empty delivery cells below content remain
+invalid: declared omitted nodes must be spliced out. These checks do not certify
+unpublished source-distance maxima; the producer's decoded source-S2 measurement
+remains required. Construction omissions and bypassed cells are recorded separately
+from content-less cells remaining in delivery.
+Archive-only inspection verifies the declared ownership scaffold against delivered
+terminal coverage; it cannot recover an unpublished pre-bypass hierarchy. Source
+truth remains an obligation of the source oracle and audit evidence.
+
+Recovery inspection uses the existing C1 payload-work budget (R = 224), including
+metadata reads and memo replay, bounded declaration serialization, raw payload
+marker scans, registered tile/reference scans, the terminal census, indexed
+coverage/ownership lookups, scaffold comparisons and D11 ownership joins. Charges
+precede those operations; a budget refusal does not permit truncated coverage.
+Rank strings use canonical unsigned decimal spelling (at most 20 digits). Before
+serialization, a declaration is bounded to 64 KiB of raw key/string bytes plus
+value nodes, with at most eight nested levels; serialization also stops at 64 KiB.
+These bounds include the supported schema and stop oversized malformed values
+before string scanning. Coverage endpoints use
+indexed terminal prefixes; a declared frontier does not cause repeated subtree
+scans. See the [work calibration](architecture/validator-limits-amendment.md#recovery-relation-work)
+for the P/E-core measurements and proof limits.
+
+A coarse payload that drops whole components of its children declares how many in glTF
+`asset.extras.rustyTiles.droppedComponents`. Validation recounts the drops from decoded keys
+and fails `coarseDrops` (`invalid_input`) when the count differs from the declaration; when a
+dropped point, or a fixed sample point of a dropped face, lies farther than the payload's
+geometricError from its surface. Outside N3, drops at or above the children's largest
+geometricError also require cap pressure (children above 8,192 faces) and go smallest first
+among border-free components. A payload that declares last-resort stage 3
+(`asset.extras.rustyTiles.lastResort`, verified first) is exempt from those two rules, as
+the [N3 decision](architecture/hlod-040-decision.md) allows: its border-free components may
+drop at any size, with loss measured into G, and only the count and the geometricError bound
+apply. For stage 3 this is a continuous bound on every point of each decoded dropped
+child triangle: distance to the retained surface is at most `G*(1+1e-6)+1e-6`,
+without child-G slack. A region is certified when centroid distance plus its
+farthest-corner radius fits that bound (distance is 1-Lipschitz), or when all
+three corners fit it against one retained triangle (distance to a convex set is
+convex). Otherwise four-way midpoint subdivision continues to depth 32. Unresolved
+regions fail `coarseDrops`; exhausted effort refuses with the existing budget
+error. Every region and point/retained-face test is charged. The depth-first stack
+holds at most 97 regions. Native first rejects query boxes outside an outward-expanded face bounding box
+(the expansion is the same reach, rounded outwards), then uses a binary64 static filter; the interval routine is the slow
+path for undecided comparisons. The filter never relies on a projection being the
+true closest point. Edge parameters and two nested interpolation parameters are
+finite binary64 values clamped to [0,1]. Their exact interpolations therefore
+choose a point q on the closed retained triangle, even if a rounded projection
+is inaccurate. Let x be the midpoint of the query's interval box, M the maximum
+absolute coordinate of x and the three retained vertices, and B an upward
+rounded L1 radius of that box. With e = 2^-52 the filter uses
+`E = up(256*e*M + B)`. It is enabled only for `1e-100 <= M <= 1e100` and finite B.
+The computed witness distance d gives the upper bound `up(d+E)`.
+
+For the lower bound, the computed vector n = x-q is treated as an exact vector,
+not as a certified surface normal. For every nonzero n,
+`min_v n·(x-v)/|n| <= distance(x,triangle)`; the minimum is over its three vertices.
+The filter evaluates that expression as s and returns `max(0, down(s-E))`.
+If the computed normal length is below 1e-100 it uses zero as the lower bound.
+Thus a strict lower-bound rejection or an upper-bound acceptance implies the
+corresponding exact distance predicate. Neither bound increases the published
+reach. Both the centroid reach and its radius-reduced reach must be decided;
+otherwise the original interval witness routine runs. Region centroids, radii
+and midpoint subdivisions still use outward intervals. Squared comparisons
+also enclose rounding. Python remains the exact-rational reference.
+
+The error bound follows from round-to-nearest binary64 arithmetic, without
+fast-math reassociation. A nested interpolation has coordinate error at most
+16eM; subtraction and the three-term squared norm/square root give total distance
+error below 64eM. For the supporting-plane expression, treating the computed n
+as exact, subtraction, three products, two additions, norm and division give
+absolute error below 64eM (use `|n_i|/|n| <= 1` and `|x_i-v_i| <= 2M`).
+For the operation counts: one interpolation costs at most 5eM per coordinate;
+its composition costs less than 16eM. The final subtraction adds at most 2eM,
+so vector error is below 32eM in Euclidean norm. Five norm operations plus
+square root add less than 12eM. For the support expression, numerator error is
+below 24eM|n|; the norm's relative error (below 4e) and final division add less
+than 20eM after division. Minimum selection preserves this uniform error bound.
+These estimates use the standard product accumulation bound
+`gamma_k = k*u/(1-k*u)`, with `u=2^-53`, and exact binary64 chosen parameters.
+This does not divide by a triangle determinant or assume a well-conditioned
+projection. The enabled exponent range prevents overflow in the interpolation,
+distance norm and support enclosure operations. It does not protect the
+fourth-degree determinant products used to propose an interior projection:
+those may overflow or produce NaN. Proposal arithmetic carries no distance
+guarantee; only finite clamped interpolation parameters are used, so even an
+inaccurate proposal still selects an exact convex witness. Underflow errors
+in the distance norm are below 1e-161; in the
+support calculation, whose denominator is at least 1e-100, below 1e-220.
+Both are smaller than eM even at the minimum M. The factor 256 leaves more than
+a factor of three beyond these bounds, including evaluation of E itself;
+next-up/down encloses the final additions/subtractions and squaring. Adding B
+extends each bound from x to every point in its box by 1-Lipschitz continuity.
+Outside this domain, or in an unresolved band, the interval path runs and
+uncertified cases refuse. Each query increments a fast counter;
+interval fallbacks increment a separate slow counter. Each distance test is
+charged 9 units before it runs and 795 more when it falls to the interval path
+(the measured fast and slow costs over τ; see the
+[limits amendment](architecture/validator-limits-amendment.md)). In the
+certificate, the last answering face's decoded coordinates are reused only at its
+original position in the current cell's candidate list; there is no extra probe
+or reordering. With or without this cache, each certificate query sees identical
+coordinates, candidate order and distance results, and therefore identical early
+exits and charges. Induction over regions gives identical subdivisions and total
+effort, so the cache cannot change the certificate's verdict or a refusal at the
+effort limit. The sampled stage 0–2 checks (`within`) try the cached face first
+instead: their charged work depends on the cache, but the cache is a pure
+function of the archive (the queries run in a fixed order), so verdicts stay
+deterministic and every distance test is charged.
+
+For stage-3 region scans, an outward reach-expanded face box also provides a
+safe pruning test. If the entire centroid interval box lies strictly outside it
+on any axis, the exact centroid is farther than the same reach R from the face.
+That face cannot certify all three region corners: distance to one closed convex
+triangle is convex, so three corner distances at most R would put their exact
+centroid within R too. The scan therefore charges/counts this centroid box test
+once and skips that face's corner queries. It does not skip on a rounded midpoint
+alone, an uncertain upper distance, or a partially overlapping box.
+
+The budget contract is deterministic in the archive and budget: every executed
+unit of work is charged, and cache state never changes the certificate's charged
+work or verdicts (the stage 0–2 point queries above try the cached face first,
+deterministically).
+Deterministic pruning need not preserve a previous version's budget threshold.
+It preserves geometric decisions, subdivision and the original face order,
+removing only queries which cannot certify the region or set `center_near`.
+Required work therefore only decreases: an old accept cannot become a refusal,
+while an input previously refused solely for effort may now pass. For example,
+one region, a separated centroid and a certifying centroid require three units;
+the unpruned scan needed four because it also queried an impossible corner.
+Cached and uncached scans still have identical queries, charges and verdicts at
+every budget. No weights, global reach or numerical tolerances change.
+
+This is a sufficient certificate and can refuse a valid
+surface when its budget/depth is insufficient. Stages 0–2 and undeclared drops
+retain fixed samples, with child G added off vertices; those samples provide only
+lower bounds, not continuous surface certification. None of these checks proves
+fallback history or a distance bound to unpublished source geometry.
+HLOD archives from before this check, whose
+small drops are undeclared, fail it. The report's `interfaceCensus` gives
+`droppedComponents` and `droppedByDepth` (by delivered cell depth).
+
+`asset.extras.rustyTiles.lastResort` is a strict object with exactly two required
+integer fields: `stage` in 0–3 and `foldFaces` in 0–18446744073709551615; unknown
+fields, missing fields and other types are invalid. Absence means no declaration.
+N1 (stage 1) admits new shared-point faces/edges only in their deterministic seam
+owner. N2 (stage 2) also admits folds, turns reversed faces to source orientation
+and removes coincident copies beyond source multiplicity. N3 (stage 3) clusters
+per input component while fixing interface points, opening pins and border-touching
+open boundaries; border-free components and holes may drop or close at any size,
+with loss measured into G rather than bounded by E. Stage 0 declares inherited
+folds retained above a stage-2/3 descendant, not another reduction strategy.
+
+`foldFaces` counts decoded faces in a coincident group (at least two faces on the
+same corner set, either orientation) or incident to an edge used in the same
+direction by at least two faces. Count each qualifying face once, not each pair
+or edge. Validation recounts this value (`lastResort` on mismatch), requires a
+fold-admitting descendant for stage 0, rejects any declaration on a leaf, requires
+all declaring payloads of a tile to agree on both stage and foldFaces, and permits admitted folds from stage 2
+or in a declared ancestor of such a stage. On every coarse tile, `seamOwner`
+rejects new shared-point edges/faces outside their deterministic owner, using
+whole-source holding-leaf runs; see the [HLOD decision](architecture/hlod-040-decision.md) for the hash rule.
+
+For example, inside a GLB's `asset`:
+
+```json
+{"extras":{"rustyTiles":{"lastResort":{"stage":2,"foldFaces":4}}}}
+```
+
+This declares four qualifying decoded faces, which must match the recount.
+Conversion `diagnostics.hlod` reports `last_resort_tiles`, `last_resort_stages`
+(N1/N2/N3 counts), `fold_faces` and `declared_tiles` (including stage-0 tiles,
+with stage and fold count). Residual omission occurs only when the contract alone
+exceeds the cap or border-touching open boundaries cannot survive the last resort;
+it propagates upward unless bounded declared root recovery succeeds. The last-resort
+declaration does not itself authorize bypass or certify source-distance maxima.
+
+An HLOD archive declares its texture-aware error rule (D5 amendment A3,
+[MESH](MESH.md#texture-aware-published-g)) as `asset.extras.rustyTiles.textureError`: a
+strict object with exactly `version` (the integer 1), `refinableRatio` (1.25) and
+`pxPerTexel` (2, 1.25 or `null`; `pxPerTexel: null` is the fast form). `textureError:
+null`, any other shape or value, and a declaration on an archive validation does not
+hold to HLOD (by `--expect-profile hlod`, the tileset's `lod` or `conversion.json`'s
+`lod`) are invalid (`textureError`). A tileset declaring `lod: "hlod"` must declare it.
+Stripping it never switches the check off: in any archive without it, an HLOD identity
+payload whose material binds a base-colour texture is invalid. When `conversion.json`
+records a `mesh_tiler` profile, `pxPerTexel` must match it (fast `null`, balanced 2,
+quality and lossless 1.25). That is a consistency check, not forgery resistance:
+`conversion.json` is not hash-bound to the tileset, and without it the declaration is
+the producer's claim (`pxPerTexel: null`, the honest fast form, binds nothing).
+With a number `t`, every content tile T whose mean
+base-colour texel spacing `s(T)` exceeds 1.25 times its children's pooled spacing must
+have `geometricError >= 16 · s(T) / t` (relative slack 1e-4). `s = sqrt(A / X)` is
+recomputed from each payload: `A` the decoded area of triangles whose material has a
+base-colour texture, `X` their UV area on the material's TEXCOORD set times the
+embedded KTX2/PNG base level's width × height (textured area with no UV area is
+infinitely coarse). Children are the nearest content descendants, through content-less
+tiles and single-child copies of the same payloads. `null` (`fast`) binds nothing.
+Sums are taken once per payload at ingest; one preorder pass over tiles and references
+checks every tile, both charged to the payload-element budget. The report's
+`interfaceCensus` gives `textureRefinableTiles` and `textureBoundTiles` (refinable
+tiles whose `geometricError` is within 1% of the term).
+
+Supported payloads are GLB 2.0 and archive-local glTF 2.0. Unavailable versions
+or legacy interpretations do not receive an opaque successful pass.
+
+Legacy 3D Tiles 1.0 content (b3dm, i3dm, pnts and cmpt) is Unsupported, never
+InvalidInput, and is never partially inspected. A payload counts as legacy in
+two cases:
+
+- its archive member name ends in `.b3dm`, `.i3dm`, `.pnts` or `.cmpt` (ASCII,
+  case-insensitive). This is decided before the payload is read;
+- its first four bytes are one of those magics, for example b3dm bytes in a `.glb`
+  or `.bin` member. The magic decides under any non-legacy suffix (a legacy suffix
+  decides first, before any read); only those four bytes of the existing read
+  are examined.
+
+An implicit content template whose normalized last segment has one of those
+suffixes is Unsupported at root admission, and no subtree is read. Nothing after
+the four-byte magic is interpreted, so the version, the tables, `RTC_CENTER` and
+cmpt inner tiles make no difference: a cmpt that wraps a GLB is Unsupported too.
+A missing member is still InvalidInput. The message names the format and the
+member, for example
+`legacy b3dm content is unsupported (glTF 2.0 content only): tile.b3dm`.
+Producers write only GLB; convert older archives again. See the
+[C1 H7 amendment](architecture/c1-legacy-content-unsupported-amendment.md).
+
+The glTF contract uses the published [glTF 2.0.1 registry specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html),
+identified by revision `8e798b02d254cea97659a333cfcb20875b62bdd4`.
+`asset.version` must be `2.0`. Optional `asset.minVersion` must have numeric
+major.minor syntax: requirements through 2.0 are admitted, later requirements
+are Unsupported, and malformed or non-string values are InvalidInput. This gate
+does not infer support for future specifications. It admits core
+numeric buffers, accessor layouts and primitive indices. Finite stored values and declared accessor bounds do not
+prove unit-length normals, rendered material meaning or source/LOD fidelity.
+KHR_mesh_quantization permits
+its specified extra attribute representations. EXT_meshopt_compression supports
+bounded decoding with the NONE and OCTAHEDRAL filters; QUATERNION and EXPONENTIAL
+are unsupported. OCTAHEDRAL needs ATTRIBUTES mode and a 4- or 8-byte stride, and
+every element must be a valid K-bit code (the third component encodes 1.0 as
+`(1 << (K - 1)) - 1`, and |x|, |y| do not exceed it); anything else is invalid.
+Because the extension specifies filter output only to one unit, declared bounds on a
+filtered BYTE/SHORT accessor may differ from the decoded values by one unit; all other
+bounds are exact. A compressed view may serve any role, including property-table values. See the
+[meshopt OCTAHEDRAL amendment](architecture/c1-meshopt-octahedral-amendment.md). Each
+compressed stream must start with the header byte the extension requires for its
+mode (`0xa0` ATTRIBUTES, `0xe1` TRIANGLES, `0xd1` INDICES); other codec versions,
+such as vertex v1 (`0xa1`) or index and sequence v0 (`0xe0`, `0xd0`), are invalid
+even though the linked decoder can read them. The header is checked after the
+filter, mode, stride and count checks: a stream with an unsupported filter is
+reported unsupported whatever its header, because C1 refuses filtered streams
+before reading their bytes.
+All buffer consumers, including compressed streams, are restricted to declared
+buffer lengths. Required meshopt may use URI-less fallback placeholders, including
+an unused placeholder or GLB buffer zero without a BIN chunk. The optional fallback
+marker has the same buffer-role restrictions whether actual bytes are provided or not.
+Application-owned `extras` and extension-owned JSON remain opaque to the generic
+extension-declaration walk.
+`KHR_texture_basisu` ([KhronosGroup/glTF `1bde276f`](https://github.com/KhronosGroup/glTF/blob/1bde276f7a173876e24c0f403a14dd827dc7912b/extensions/2.0/Khronos/KHR_texture_basisu/README.md))
+may be required. The image its `source` references must be KTX2: a `mimeType`, required
+for bufferView images, must be `image/ktx2`, and a URI image without one is judged by its
+bytes (no file-name suffix is required). A data URI stays Unsupported. A core fallback
+`source` may not be a KTX2 image, and a texture without a fallback requires the extension in
+`extensionsRequired`. Each image resource is inspected once (one pass per bufferView, however
+many images share it). Each such image is
+checked as a KTX 2.0 (v2.0.4) container only: identifier and header, 2D type (non-2D is
+invalid for material maps and unsupported otherwise), `VK_FORMAT_UNDEFINED`, dimensions that
+are multiples of 4, a `levelCount` the dimensions allow, ETC1S with BasisLZ or UASTC with no
+or Zstandard supercompression and the extension's channel sets, no sRGB for Red and
+Red-Green textures, no premultiplied alpha for material textures, the DFD basic block,
+key/value framing with `KTXswizzle` `rgba` and `KTXorientation` `rd`, BasisLZ global data and
+image descriptors, and every level packed inside the image with lengths that agree with its
+size. Level data is never inflated, transcoded or decoded; the report lists
+`KTX2 level data and transcoding` and `image decoding`. See the
+[KTX2 amendment](architecture/c1-ktx2-basisu-amendment.md).
+C1 also inspects the experimental `KHR_mesh_primitive_restart` draft at
+[CesiumGS/glTF revision `9811e8407d4533500cfc6b10e3bc408345035a6f`](https://github.com/CesiumGS/glTF/blob/9811e8407d4533500cfc6b10e3bc408345035a6f/extensions/2.0/Khronos/KHR_mesh_primitive_restart/README.md).
+Its admitted draw mode is indexed LINE_STRIP: the maximum unsigned component
+value is a restart command when the extension appears in both `extensionsUsed`
+and `extensionsRequired`. Core POINTS, LINES and TRIANGLES keep their ordinary
+index rules. Each admitted restart-delimited strip has at least two vertices;
+leading, trailing, consecutive or singleton segments are Unsupported in this
+finite profile, rather than declared malformed by the draft. Other restart
+draw modes are outside C1. This is pinned draft
+compatibility, not a claim of ratified glTF extension or glTF 2.1 conformance;
+see the [vector draft audit](vector-schema/README.md).
+
+Buffer data URIs are admitted only for `application/octet-stream` or
+`application/gltf-buffer` with standard base64 encoding. Decoded size is admitted
+before allocation and its bytes receive the same buffer/accessor/index proof.
+Malformed base64 is InvalidInput; other inline media/encodings are Unsupported.
+Image data URIs remain Unsupported, with no image decoder claim.
+
+Sparse accessors, remote resources and unknown required extensions are
+outside this first profile. Valid unsupported content is distinct from malformed
+content and from an exceeded resource ceiling.
+
+Inspection checks the actual GLB envelope and buffer/view/accessor/index bytes,
+not merely declared JSON counts. A permitted accessor without a bufferView is
+zero-initialized under glTF semantics; its values have no stored source bytes.
+This case is distinct from a referenced buffer or BIN payload that is missing. It checks decoded floating-point values,
+attribute agreement and applicable declared accessor bounds. Local resource
+references resolve within the admitted archive; no network lookup occurs.
+Archive-local URI segments decode percent escapes exactly once as UTF-8 before
+member lookup. Encoded separators, controls, malformed escapes and paths escaping
+the archive fail as InvalidInput. A decoded literal percent remains filename
+data; aliases resolve against the referring document directory. Independent
+controls include escaped spaces, a literal percent, and a wrong encoded member
+name that must not satisfy the decoded reference.
+Known optional metadata and material extensions do not grant a semantic
+validation claim: the report records what was not inspected. Reading their
+ordinary buffer views is not proof of feature identity, metadata meaning,
+texture correctness or material rendering.
+
+The report separates payload checks from archive CRC/index/hash/reference and
+hierarchy checks. `hierarchyBounds` means containment of declared tile volumes.
+`decodedContentContainment` is the separate [C2 check](architecture/c2-decoded-containment-contract.md):
+every drawn vertex of every selected static glTF scene instance lies inside its own tile's
+volume, its content volume, any referencing external-content volume and every ancestor volume.
+The vertex is placed after node transforms, the glTF y-up to z-up step and tile transforms.
+The predicate is exact, with zero tolerance. It covers `.3tz` archives with
+axis-aligned (signed-permutation) boxes and spheres, explicit and implicit alike (C2 slice 3).
+Below an implicit root, every content the I1 reader emits is a reference, and its vertices are
+tested against the tile's effective volume (its `TILE_BOUNDING_BOX` row, FLOAT32 rows widened
+exactly, or the root's box for a rowless level-0 tile), every implicit ancestor's, the
+level-0 tile's, the implicit root's own JSON volume, the referencing external-content volume
+when the root roots an external tileset (after the root's transform), and every explicit
+ancestor's. A tile at level 1 or deeper without a row has a derived volume that C2 does not
+evaluate; a reference through one is `notInspected` as `derivedImplicitVolume`. A template
+header with `metadata` is `tileMetadata`; subtree metadata tables are not. It is reported only
+when the whole archive is in domain. Otherwise `notInspected` lists
+`decodedContentBounds.<reason>` entries, for example `derivedImplicitVolume`, `regionVolume`,
+`numericSpan` or `workLimit`. A proven escape fails as InvalidInput, and the
+message names the member, tile depth, volume, node, mesh, primitive and vertex; for implicit
+content, `depth` is the root's depth plus the level, and `ancestor:k` counts implicit levels,
+then the root, then explicit ancestors. C2 runs only after C1 succeeds. Its own caps
+(`containmentSpanBits` 4096 bits and `containmentNodeDepth` 64, fixed; and the budgets
+`containmentWorkUnits` max(2^29, 128·S) units, `containmentBytesRead` max(2 GiB, 4·S) and
+`containmentDecodedBytes` max(2 GiB, 16·S), with S the archive's stored member bytes) yield
+`notInspected`, never ResourceLimit. Units are charged per operation
+(per volume test and transform step at each level, per node, index, element, re-read and
+re-decoded byte, JSON value node, external resource, instance primitive and reference); the
+formula is in the C2 contract's work bound (C2-WB amendment). The unit budget is set from a
+measured class matrix, not a proof: on the measurement host (Intel i7-12700KF, Linux, release
+build) every class in the C2-WB matrix cost at most 14.65 ns per unit on an E-core and 8.10 ns
+on a P-core (median of 7 clean A/B runs per class), so the precheck and streaming of one
+validation stay within about 7.9 s plus 1,875 s per stored GB on an E-core (about 4.4 s plus
+1,037 s per stored GB on a P-core) at the default budget.
+Classes outside that matrix, other hosts, debug builds and C1's own inspection time are not
+covered. Archives over the budget are reported as `workLimit`. The
+frozen reasons are `derivedImplicitVolume` (slice 3; it replaces `implicitTiling`), `tilesetExtension`, `tileMetadata`, `upAxisOverride`,
+`regionVolume`, `rotatedBox`, `gltfExtension`, `sceneSelection`, `skin`,
+`morphTargets`, `animation`, `quaternionWindow`, `numericSpan` and `workLimit`. H7 removed
+`rtcCenter`: its only carrier, a b3dm feature table, is Unsupported. Neither report success nor a matching
+stored geometric error establishes a source-surface or LOD error bound. The
+`notInspected` field records these boundaries explicitly. Unsupported glTF extension
+names declared by payloads are listed as they are named, at most the 64 byte-smallest
+of at most 256 bytes each; when any is left out the report adds
+`notInspectedTruncated: true`. Decoded containment streams only after the whole archive
+passed C1 with no exclusion and no precheck stop, from a log of the tiles and references
+seen while in domain, and replays each payload against digests of its own first, full
+inspection instead of inspecting it again. A required unsupported
+feature prevents success; an external validator run separately owns its own
+coverage and provenance.
+
+ZIP admission uses one selected central-directory catalog for index validation,
+member lookup, CRC verification and exact stored-range reads. The catalog holds one
+fixed-width row per member in `@3dtilesIndex1@` MD5 order and the names in a log. It
+stays in memory up to 96 MiB (every archive of at most 524,288 entries and a 32 MiB
+directory); a larger catalog moves to a scratch directory, created at its first spilled
+file, so resident memory does not grow with the entry count except for one bit per
+member (21.3 MiB at the member ceiling). Scratch goes to the first disk-backed
+directory with room among `$TMPDIR`, the user cache directory (`rusty-tiles/scratch`)
+and the system temporary directory; memory-backed scratch is used only when nothing
+else is available, and the report's `scratch.memoryBacked` then says so. The index is checked by one streamed merge against the catalog. More than 16
+unreferenced members are reported as the first 16 names in byte order and a count. A
+failure of the validator's own scratch storage is `io`, `resource_limit` or
+`invalid_state` with the prefix "validation scratch:", never a verdict on the archive.
+`--scratchDir DIR` (Python `scratch_dir`) puts the scratch inside exactly `DIR`, which must
+exist (otherwise the request is refused as `usage` before the archive is opened); a
+memory-backed `DIR` is used and labelled. The report-less `validate_3tz` facade never puts
+its catalog in RAM: with only memory-backed candidates it is refused as `environment`
+(exit 4, Rust `Error::Scratch(ScratchRefusal::MemoryBackedOnly)`); set `TMPDIR` to a
+disk-backed directory.
+The report's `payloads` rows are read on demand: the CLI streams them, and Python's
+`validate(input, lazy_payloads=True)` returns them as a lazy read-only sequence (by
+default they are a list). See the
+[catalog-at-scale amendment](architecture/c1-archive-catalog-scale-amendment.md). The report's
+`archiveStoredRecordLayout` check requires disjoint local-header/data/descriptor
+extents; coherent nested member records are Unsupported. Ordinary nested ZIP
+bytes within one opaque payload are permitted. Duplicate logical names and
+malformed framing are InvalidInput.
+
+The finite identity profile accepts ASCII names and flagged valid UTF-8 names.
+Legacy non-ASCII encodings, Unicode Path overrides and AES extras are Unsupported.
+All extra-field TLVs are framed, and ZIP64 values follow their sentinels exactly.
+A local ZIP64 declaration selects 64-bit descriptor sizes; central-only ZIP64
+with a descriptor is Unsupported. Signed and unsigned descriptors are reconciled
+against CRC, sizes and the next physical boundary. Other well-framed extra fields
+remain opaque. This is a bounded stored-3TZ profile; see the
+[archive reader contract](architecture/archive-read-foundation-contract.md).
+
+Nonregular inputs are Unsupported; POSIX FIFO admission does not wait for a
+writer. Underlying archive read/seek errors retain their I/O causes, while actual
+premature byte exhaustion is InvalidInput.
+
+## Limits
+
+Every key of the report's `limits` belongs to one of three classes
+([limits amendment](architecture/validator-limits-amendment.md)). S, the report's
+`storedBytes`, is the sum of the stored sizes of every central-directory member (the 3TZ
+index included), fixed when the catalog is admitted.
+
+- **Per-item format limits** are fixed and cannot be changed: 8 MiB JSON (`jsonBytes`) with
+  depth 64, 131,072 JSON value nodes per document (`documentItems`), 128 MiB per member
+  (`memberBytes`), 4 million accessor elements per payload, 128 MiB decoded views per
+  document (which also holds an implicit subtree path's members, external buffers and
+  availability index tables), 128 levels of hierarchy depth, 256 MiB of tileset documents
+  held at once on the external-tileset path (raw bytes plus 128 bytes per JSON value node,
+  `liveDocumentBytes`) and the C2 span and node-depth limits.
+- **Volume caps** (`sourceArchiveBytes`, `archiveEntries`, `centralDirectoryBytes`,
+  `archiveStoredBytes`) are opt-in and `null` unless set. Without them the archive is bounded
+  by the file and the format: the 3TZ member ceiling (Unsupported), at least 46 directory
+  bytes per entry, a directory inside the file, and disjoint member extents inside the file.
+- **Amplification budgets** are `max(floor, ⌊S·p/q⌋)`: `hierarchyVisits` max(262,144, S/8),
+  `references` max(1,048,576, S/8), `totalBytesRead` max(2 GiB, 4·S) (explicit member-hash
+  and payload/document reads, including repeated reads and constructor index reads),
+  and the three C2 budgets above. `totalPayloadElements` adds its floor instead: 16 million +
+  224·S, so every legitimate dense output measured (up to about 144 units per stored byte) validates
+  with a 1.5× margin. Archives up to
+  2,097,159 stored bytes have exactly the max-rule floors. The report's `limitDerivation` gives
+  each budget's floor, its ratio `perStoredByte`, its `source` (`floor`, `scaled` or
+  `explicit`) and, for `totalPayloadElements`, `"additive": true`; `storedBytes`, `limits` and `limitDerivation` depend only on S and the
+  request's overrides. S is fixed before any budgeted work and every byte of it is hashed, so
+  a budget cannot grow from what traversal finds
+  ([traversal amendment](architecture/validator-traversal-scale-amendment.md)).
+
+`--maxVolume KEY=N` (repeatable; `--max-volume`), Python `max_volume={KEY: N}` and Rust
+`ValidationRequest::max_volume(LimitKey, N)` set a volume cap or replace a budget. Values may
+be below the defaults (a stricter profile for untrusted input); per-item limits cannot be
+given. An unknown or per-item key, a value that is not a decimal integer below 2^64, or a
+repeated key is refused as `usage` (Python `InvalidRequestError`) before the input is opened.
+A refused charge of a cap or budget is `resource_limit` whose message ends with
+`(limit KEY=VALUE, SOURCE)` (`SOURCE` is `floor`, `scaled`, `explicit` or `cap`); the CLI
+error carries `"limit": {"limit", "value", "observed", "derivation"}`, Python
+`ResourceLimitError.limit` the same dict, and Rust `ValidationFailure::exceeded()`.
+
+Each placement of a shared external tileset is charged its full visits,
+references and document bytes, as if it were read and walked again. In fact each
+external-tileset document is parsed and checked once, while its summaries fit
+64 MiB (beyond that, later placements are walked again with the same result). Later placements re-check
+only what depends on the placement: the root's bounds and geometric error against
+the referencing tile, the depth limits, and decoded containment through that
+placement's ancestors. So `total_bytes_read` counts logical reads, which may exceed
+physical reads. Verdicts, messages and report counts are the same as a full
+re-walk ([memo amendment](architecture/c1-external-tileset-memo-amendment.md)).
+
+The 3TZ index is not a payload member: it is admitted at exactly 24 bytes per
+other member, as the central-directory count fixes it, and read in 64 KiB chunks.
+The 178,956,970-member 3TZ ceiling, which producers also enforce, is a format
+rule rather than a limit: a larger declared count is Unsupported before the entry
+limit and before any directory allocation. At the ceiling the index is
+4,294,967,256 bytes.
+Implicit availability scans count toward the same `totalBytesRead` work
+counter; an archive whose reads and scans together exceed it is refused with
+"availability scan exceeds total_bytes_read work limit".
+Separately bounded ZIP envelope/tail/header reads are outside that member-work
+counter. These admission limits
+are engineering bounds, not a total-process RSS promise. The serialized `limits` are the
+effective values of the validation.
+Validation memory does not grow with tiles, references or payloads: the traversal
+keeps only its current path, per-payload facts go to scratch once they exceed
+100 MiB, and summaries of shared external tilesets are capped at 64 MiB.
+
+The entry, visit, reference, central-directory, value-node, member and decoded
+ceilings are sized for default (implicit) vector output at its 100,000-tile
+`--maxTiles` default: measured pre-forest archives use about 2.4-2.5 entries, 1.2-1.3
+presentation nodes (hierarchy visits under I1), one `tileset.json` value node and 920 `vector-build.json`
+bytes per tile. Content volume is bounded separately; the budgets grow with the archive's
+stored bytes, so dense content is not refused for its size alone.
+Explicit vector archives, written by the `--explicit` mode removed in 0.4.0,
+keep their whole hierarchy in one `tileset.json` of about 50.5 value nodes per
+tile. They reach the 131,072 value-node ceiling at about 2,595 tiles. Measured costs at these ceilings are recorded in
+[bench/architecture_audit/validator_caps](../bench/architecture_audit/validator_caps/README.md).
+The pinned C1 contract record
+([c1-payload-integrity-contract.md](architecture/c1-payload-integrity-contract.md),
+JSON value nodes, payload bytes and view bytes) still states the earlier
+65,536 value nodes and 64 MiB member and decoded-view bytes. The values above
+supersede it; the meanings are unchanged.
+
+Rust failures are `ValidationFailure::{InvalidInput, Unsupported, ResourceLimit,
+Io, Scratch, InvalidRequest, Cancelled, Observer, InvalidState}`. CLI JSON codes are
+respectively `invalid_input`, `unsupported`, `resource_limit`, `io`, `io` (or `environment`
+for memory-backed-only scratch), `usage`, `cancelled`, `observer_failure` and
+`invalid_state`; exit codes are 3, 2, 3, 1, 1 (or 4), 2, 1, 1 and 1. Python maps them to
+`DataError`, `UnsupportedError`, `ResourceLimitError`, `TilesIOError` (or
+`EnvironmentError`), `InvalidRequestError`, `CancelledError`, `ObserverError` (a callback's
+own exception, including `KeyboardInterrupt`, propagates unchanged) and `TilesError`.
+Cancellation (`inspect_with`'s control, a Python callback or Ctrl-C) is checked before each
+hashed member, traversal task, memo-replayed event, implicit tile and phase-2 stream entry;
+progress events have the phases `validate.hash`, `validate.traverse`, `validate.stream` (only
+when decoded content bounds are streamed) and `validate.rows` (CLI `--progress json`). The phase list is open and conditional, and `done` never decreases within a phase, but an event may repeat: a memo replay re-sends the current `validate.traverse` event every 1,024 replayed events as a heartbeat. `InvalidState` reports an internal invariant breach (a C2 exact-arithmetic
+capacity fault); it is never a verdict about the archive.
+No job/publication failure wrapper is used for this read-only operation.
+
+Acceptance requires independent valid payload fixtures and sensitive corruption
+controls, resource admission and Rust/CLI/installed-wheel parity. This finite
+slice does not certify every glTF extension, decoded world-space bounds outside the
+C2 domain (when `decodedContentContainment` is absent), metadata semantics, source fidelity, or the #125/#113 release gates.
+
+Primary byte-layout authority is the published [glTF 2.0.1 registry specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html), identified there as source commit `8e798b02d254cea97659a333cfcb20875b62bdd4`. Its matrix-alignment rule permits omitted final column padding. Unpublished GitHub main revisions can differ; they are not silently substituted for this contract.
+
+Implicit roots are read by the I1 implicit reader, on any explicit tile, including tiles inside explicit external tilesets. Every subtree reachable through child-subtree availability is read from a confined archive member, availability is checked bit by bit, and every available tile is visited once at its exact coordinates. Each implicit tile then receives the explicit-tile checks: payload integrity, `hierarchyBounds`, `geometricErrorOrder`, `resourceReferences` and the report-level `conversion.json` budgets. The report lists `implicitAddressingAndAvailability` in `checks`; it lists `recordedBudgets.implicitTileExtras` in `notInspected`, because per-tile `extras` budgets are not compared below an implicit root. Decoded containment of implicit content is the C2 check above (C2 slice 3); uninterpreted metadata (`metadataSemantics`) remains uninspected. The subtrees on the current path share the 128 MiB `document_decoded_bytes` limit; no expanded presentation tree is built. JSON content templates are Unsupported ("implicit: unsupported external tileset content template in <member>"), as are JSON-format subtrees, region and S2 implicit roots, and `subtreeLevels` or `availableLevels` above 32. Consequently, default point-cloud, vector and deep `mesh-to-3tz` archives written before the bounded implicit forest layout, which split their hierarchy into `implicit-tileset-*.json` documents, are Unsupported; convert them again. Archives written by `convert-to-implicit`, which was removed before 0.4.0, are Unsupported when they have more than one node. Single-node convert archives have no JSON template and still validate; they list their retained original payloads in `conversion.json` `retainedContentUris`, and validation still references and checks those payloads. See the [I1 implicit read contract](architecture/i1-implicit-read-contract.md).

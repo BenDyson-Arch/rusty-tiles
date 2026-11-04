@@ -1,0 +1,89 @@
+{
+  "references": [
+    {
+      "bytes": 12593,
+      "file": "KHR_mesh_quantization.md",
+      "httpStatus": 200,
+      "repository": "KhronosGroup/glTF",
+      "retrievedAtUtc": "2026-10-10T08:53:43.247689+00:00",
+      "revision": "70b5e4101725950fb8f3f94dd72c37e758ce5daf",
+      "sha256": "f59a411d42b52ff7099b98d57fcb2bf4cb2835e7f543d55ab2b08e40c9bec6dc",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/70b5e4101725950fb8f3f94dd72c37e758ce5daf/extensions/2.0/Khronos/KHR_mesh_quantization/README.md"
+    },
+    {
+      "bytes": 35576,
+      "file": "EXT_meshopt_compression.md",
+      "httpStatus": 200,
+      "repository": "KhronosGroup/glTF",
+      "retrievedAtUtc": "2026-10-10T08:53:43.533364+00:00",
+      "revision": "5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3",
+      "sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3/extensions/2.0/Vendor/EXT_meshopt_compression/README.md"
+    },
+    {
+      "bytes": 11172,
+      "file": "modern-b3dm.adoc",
+      "httpStatus": 200,
+      "repository": "CesiumGS/3d-tiles",
+      "retrievedAtUtc": "2026-10-10T08:53:43.900567+00:00",
+      "revision": "4d781014b52294759834018a931223b98ac1ce47",
+      "sha256": "539762ac799aa8b685035647682b54a40b728904c51ee0685838e29a1ce04f3e",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/TileFormats/Batched3DModel/README.adoc"
+    },
+    {
+      "bytes": 4364,
+      "file": "KHR_mesh_primitive_restart-draft.md",
+      "httpStatus": 200,
+      "repository": "CesiumGS/glTF",
+      "retrievedAtUtc": "2026-10-10T08:53:44.224076+00:00",
+      "revision": "9811e8407d4533500cfc6b10e3bc408345035a6f",
+      "sha256": "44276f9cd67e65efe0c8ccc1cae23f2a845c1e34bf190935eb0c0333a2536707",
+      "url": "https://raw.githubusercontent.com/CesiumGS/glTF/9811e8407d4533500cfc6b10e3bc408345035a6f/extensions/2.0/Khronos/KHR_mesh_primitive_restart/README.md"
+    },
+    {
+      "bytes": 16220,
+      "file": "meshopt_decoder.test.js",
+      "httpStatus": 200,
+      "repository": "zeux/meshoptimizer",
+      "retrievedAtUtc": "2026-10-10T08:53:44.507280+00:00",
+      "revision": "3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d",
+      "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac",
+      "url": "https://raw.githubusercontent.com/zeux/meshoptimizer/3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d/js/meshopt_decoder.test.js"
+    },
+    {
+      "bytes": 1033,
+      "file": "b3dm.featureTable.schema.json",
+      "httpStatus": 200,
+      "repository": "CesiumGS/3d-tiles",
+      "retrievedAtUtc": "2026-10-10T08:54:23.365702+00:00",
+      "revision": "4d781014b52294759834018a931223b98ac1ce47",
+      "role": "Supplemental exact-pinned dependency for BATCH_LENGTH/table JSON scope.",
+      "sha256": "c34c532c835f1bc73d4737b36a9f8b0e665421671f9d57830c970299637eb8d7",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/schema/TileFormats/b3dm.featureTable.schema.json"
+    },
+    {
+      "bytes": 5937,
+      "file": "featureTable.schema.json",
+      "httpStatus": 200,
+      "repository": "CesiumGS/3d-tiles",
+      "retrievedAtUtc": "2026-10-10T08:54:23.629022+00:00",
+      "revision": "4d781014b52294759834018a931223b98ac1ce47",
+      "role": "Supplemental exact-pinned dependency for BATCH_LENGTH/table JSON scope.",
+      "sha256": "a6500378c38d9af3f756bc8c3b23347f8329b37b12e0017a8729e2484a674587",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/schema/TileFormats/featureTable.schema.json"
+    },
+    {
+      "bytes": 6905,
+      "file": "feature-table.adoc",
+      "httpStatus": 200,
+      "repository": "CesiumGS/3d-tiles",
+      "retrievedAtUtc": "2026-10-10T08:54:23.900025+00:00",
+      "revision": "4d781014b52294759834018a931223b98ac1ce47",
+      "role": "Supplemental exact-pinned dependency for BATCH_LENGTH/table JSON scope.",
+      "sha256": "3158281f21460941ccfd90a41dc0bffda04aeae5e5de296a5ba8197cc1934ece",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/TileFormats/FeatureTable/README.adoc"
+    }
+  ],
+  "schemaVersion": 1,
+  "scope": "Fresh exact-pinned primary text retrieval only; no new payload execution or broad semantics certification."
+}

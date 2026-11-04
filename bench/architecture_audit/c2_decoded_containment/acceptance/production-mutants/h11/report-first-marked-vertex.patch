@@ -1,0 +1,18 @@
+diff --git a/src/validate/containment.rs b/src/validate/containment.rs
+index e59fa24..2305666 100644
+--- a/src/validate/containment.rs
++++ b/src/validate/containment.rs
+@@ -964,7 +964,12 @@ pub(crate) fn walk_marked(
+                 let mut contained = true;
+                 for corner in corners(lo, hi, diagonal) {
+                     credit.walks += 1;
+-                    contained = walk(arena, n, corner, levels) == Verdict::Contained;
++                    let verdict = walk(arena, n, corner, levels);
++                    contained = verdict == Verdict::Contained;
++                    if !contained && !arena.fault() {
++                        let w = words.iter().position(|&b| b != 0).unwrap();
++                        return Some((64 * (first + w) + words[w].trailing_zeros() as usize, verdict));
++                    }
+                     if arena.fault() {
+                         return None;
+                     }

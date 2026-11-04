@@ -1,0 +1,53 @@
+{
+  "scope": "H18 combined synthetic fixture, not completed roadmap validation gate",
+  "base": "820256ba3fa60b5ec5b42622c5c40da71efec1e7",
+  "source_sha256": {
+    "bench/scale_gates/gen_archive.py": "d1196c365e25c367b1f21896e8ea400629e2563c5099d2b6d43563f90e7d5869",
+    "bench/scale_gates/test_scale_gates.py": "17bd4c1c21babfb465ee8a10ad01f0b8907261e1b3cce6580c69ee69936ec1a5",
+    "bench/scale_gates/budgets.toml": "08063ec3484f04b200058a7b66f970b9ce3fcd01041d098fec68da1807777a43",
+    "bench/scale_gates/README.md": "7f83a52ec131213b3994948942ea803d973c2966a3ccaeb17c1f6bf0a58c2278",
+    "bench/scale_gates/check_combined_archive.py": "65501e6ca2dd7c722c789480c1d615f63b1073e9d04bf6c4096a4d33e6949b2c"
+  },
+  "evidence_root": "/home/bend/.cache/rusty-tiles-evidence/h18-combined-scale-20261013",
+  "evidence_sha256": {
+    "implementation-audit.json": "dcbed61036e0b33d25e5a7d5d3a03bca1e8d4580ac409377ce09b82cc384b959",
+    "final-nonauthor-review.json": "3b5aa134e3b61c74a00282204f15cbd9846a11dd0439d0a47f09e49f3d501584",
+    "selftests.log": "12a80f28777428510e58b275e3839c5fa7663015891e459477adb264329ab646",
+    "full-generation.log": "9cb6f3473d755879e7712300912434ab7bda62a6e45e208fdcbf4fd552e1a9c5",
+    "check-full-archive.py": "9dc7ab7c25e72a60eb116a671ac24971bb00dd7146cbdd0fd56787789d2a9e46",
+    "full-archive-oracle.json": "7eb758a0f49815792643b872e50573c7b62172092ad91c345fd27a077122bbcf",
+    "combined-d/manifest.json": "6e3fc1de537fa1c31f1cca53d3bd69fab7e721fa88c612853242de3013a923c6",
+    "validator-run/report.json": "48e3a3d50b7289f05c8d424eba4f61515db3928ea0eea3b43919b8b21487627e",
+    "validator-run/validate.stdout": "1513668f3212e486d47d3b2f4a121695c2d1f952b1f13e3c75775d43c288382e",
+    "final-runtime-nonauthor-review.json": "7f4376c11464c32f46234461d0a1c8b40600c50ea5fd123f1e041146ccc66087",
+    "retained-full-archive-oracle.json": "7eb758a0f49815792643b872e50573c7b62172092ad91c345fd27a077122bbcf",
+    "retained-full-oracle.log": "fb86e174bc147ba2de5ceacaaa1ce3ff25ae054cbcc3a7be51f496abfa73ef9f",
+    "final-documentation-nonauthor-addendum.json": "72baf9e964506c4bbdf64bd9e8bf33c79fe17d64f2fd07d0125cc90a20327618",
+    "final-retained-oracle-nonauthor-addendum.json": "18cde77c86a83013f2cf9cbb609f7338436eecc8d3f5a294ad0a55d24cdc1edb",
+    "final-checker-completeness-nonauthor-addendum.json": "296aa349828f2a86d3190f0405be17fb554f09fcb812a7f902d21c0bbdf75bec"
+  },
+  "archive": {
+    "passed": true,
+    "scope": "Independent full sparse archive tile/count/content/CRC/index/ZIP64/bounds inventory, not successful validator traversal or browser acceptance",
+    "archive": "/home/bend/.cache/rusty-tiles-evidence/h18-combined-scale-20261013/combined-d/archive.3tz",
+    "sha256": "8fbb0aa846dc781fede7b60ea11ea4eba6760a9e31228d15af4272fa44697e19",
+    "tiles": 5592405,
+    "archive_bytes": 4992428223,
+    "allocated_bytes": 1597440,
+    "members": 4184,
+    "subtrees": 4097,
+    "contents": 85,
+    "max_member_bytes": 58720256,
+    "both_scale_thresholds": true
+  },
+  "validator_binary_sha256": "318ea177f2269c7863f460e42f87e4e9fb4a260868182f83c97ec36623f99968",
+  "checks": {
+    "selftests": "16 passed",
+    "independent_full_archive_inventory": "passed",
+    "both_scale_predicates": "passed",
+    "validator_harness": "FAIL; resource_limit; source archive exceeds byte limit",
+    "roadmap_gate_d": "unmet",
+    "browser": "not run",
+    "retained_full_archive_reader": "passed with manifest SHA, exact content bits/tail, all CRCs, index, ZIP64 and bounds"
+  }
+}

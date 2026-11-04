@@ -1,0 +1,21 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index b5c9dc0..df5edd7 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -643,6 +643,16 @@ impl Containment {
+             try_push(&mut self.levels, fact)?;
+             current = parent;
+         }
++        let mut path = Vec::new();
++        let mut at = Some(tile);
++        while let Some(t) = at {
++            path.push(self.tiles[t].transform);
++            at = self.tiles[t].parent;
++        }
++        path.reverse();
++        for (l, level) in self.levels.iter_mut().enumerate().skip(1) {
++            level.to_parent = path[l - 1];
++        }
+         Ok(())
+     }
+     /// Collect chain exclusions in O(1) and run the precheck step for one

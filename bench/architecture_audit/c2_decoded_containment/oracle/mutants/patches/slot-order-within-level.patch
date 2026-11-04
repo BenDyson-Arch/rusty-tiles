@@ -1,0 +1,11 @@
+--- a/oracle/c2o/tileset.py
++++ b/oracle/c2o/tileset.py
+@@ -13,7 +13,7 @@
+ from .volumes import parse_volume
+ 
+ TILESET_ALLOWLIST = {"3DTILES_content_gltf_vector"}
+-ROLE_ORDER = {"own": 0, "content": 1, "externalContent": 2, "ancestor": 3}
++ROLE_ORDER = {"own": 0, "content": 1, "externalContent": 4, "ancestor": 3}
+ 
+ 
+ class TilesetInvalid(Exception):

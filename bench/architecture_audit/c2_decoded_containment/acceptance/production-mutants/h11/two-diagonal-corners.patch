@@ -1,0 +1,13 @@
+diff --git a/src/validate/containment.rs b/src/validate/containment.rs
+index e59fa24..29f331e 100644
+--- a/src/validate/containment.rs
++++ b/src/validate/containment.rs
+@@ -949,7 +949,7 @@ pub(crate) fn walk_marked(
+     credit: &mut Credit,
+     vertex: impl Fn(usize) -> RawVertex,
+ ) -> Option<(usize, Verdict)> {
+-    let diagonal = diagonal_suffices(arena, levels);
++    let diagonal = true;
+     for (chunk, words) in bitmap.chunks(CHUNK_WORDS).enumerate() {
+         let first = chunk * CHUNK_WORDS;
+         let marked: u64 = words.iter().map(|w| u64::from(w.count_ones())).sum();

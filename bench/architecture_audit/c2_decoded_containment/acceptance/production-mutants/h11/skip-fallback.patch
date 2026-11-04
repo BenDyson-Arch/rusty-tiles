@@ -1,0 +1,13 @@
+diff --git a/src/validate/containment.rs b/src/validate/containment.rs
+index e59fa24..ba28899 100644
+--- a/src/validate/containment.rs
++++ b/src/validate/containment.rs
+@@ -972,7 +972,7 @@ pub(crate) fn walk_marked(
+                         break;
+                     }
+                 }
+-                if contained {
++                if contained || credit.tests > 0 {
+                     credit.skips += 1;
+                     credit.refund(marked);
+                     continue;
