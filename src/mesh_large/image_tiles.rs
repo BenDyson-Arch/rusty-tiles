@@ -48,6 +48,8 @@ struct Tiles {
     order: BTreeSet<(u64, Key)>,
     /// Bytes of resident rasters and of cached tiles (with overhead).
     resident: u64,
+    /// Primary raster bytes not yet stored: secondary rasters never take their room.
+    primary_left: u64,
     cached: u64,
     peak: u64,
 }
@@ -119,6 +121,7 @@ impl Cache {
 pub(crate) struct Store {
     /// Rasters stay resident while their total is at most this.
     resident_limit: u64,
+    budget: u64,
     bound: u64,
     stored: AtomicU64,
     spilled: AtomicU64,
@@ -127,19 +130,33 @@ pub(crate) struct Store {
 }
 impl Store {
     /// `budget` bounds resident rasters plus cached tiles; `bound` is the admitted
-    /// total of every raster the store will hold (all classes and levels). When the
-    /// bound fits the budget everything stays resident; otherwise half the budget
-    /// holds resident chains and the rest caches spilled tiles.
+    /// total of every raster the store will hold (all classes and levels). Every
+    /// raster is primary.
     pub(crate) fn new(budget: u64, bound: u64) -> Self {
+        Self::with_primary(budget, bound, bound)
+    }
+    /// A store whose primary rasters ([`Store::put`], at most `primary` bytes) take
+    /// residency before secondary ones ([`Store::put_secondary`]). While the primary
+    /// total fits the budget it all stays resident. Beyond that, residency shrinks
+    /// by the overflow, down to half the budget, leaving the tile cache room for the
+    /// spilled bytes: a small overflow spills little and keeps it cached.
+    pub(crate) fn with_primary(budget: u64, bound: u64, primary: u64) -> Self {
+        let primary = primary.min(bound);
         Self {
-            resident_limit: if bound <= budget { budget } else { budget / 2 },
+            resident_limit: budget
+                .saturating_sub(primary.saturating_sub(budget))
+                .max(budget / 2),
+            budget,
             bound,
             stored: AtomicU64::new(0),
             spilled: AtomicU64::new(0),
             next: AtomicU64::new(0),
             cache: Arc::new(Cache {
                 budget,
-                state: Mutex::new(Tiles::default()),
+                state: Mutex::new(Tiles {
+                    primary_left: primary,
+                    ..Tiles::default()
+                }),
             }),
         }
     }
@@ -149,7 +166,7 @@ impl Store {
     }
     /// Raster bytes this store may spill: zero when everything stays resident.
     pub(crate) fn spill_bound(&self) -> u64 {
-        if self.bound <= self.resident_limit {
+        if self.bound <= self.budget {
             0
         } else {
             self.bound
@@ -159,12 +176,28 @@ impl Store {
     pub(crate) fn scratch_bytes(&self) -> u64 {
         self.spilled.load(Ordering::Relaxed)
     }
-    /// Stores one chain (or a single image as a one-level chain), resident or spilled
-    /// to one scratch file. Admission against the bound precedes any write.
+    /// Stores one primary chain (or a single image as a one-level chain), resident
+    /// or spilled to one scratch file. Admission against the bound precedes any write.
     pub(crate) fn put(
         &self,
         scratch: &Scratch,
         levels: Vec<Level>,
+    ) -> Result<Vec<Raster>, JobError> {
+        self.store(scratch, levels, true)
+    }
+    /// [`Store::put`] for a secondary chain: resident only beside every primary.
+    pub(crate) fn put_secondary(
+        &self,
+        scratch: &Scratch,
+        levels: Vec<Level>,
+    ) -> Result<Vec<Raster>, JobError> {
+        self.store(scratch, levels, false)
+    }
+    fn store(
+        &self,
+        scratch: &Scratch,
+        levels: Vec<Level>,
+        primary: bool,
     ) -> Result<Vec<Raster>, JobError> {
         let mut total = 0u64;
         for l in &levels {
@@ -181,7 +214,13 @@ impl Store {
             .map_err(|_| limit("image tile store exceeded admitted bound"))?;
         let resident = {
             let mut s = lock(&self.cache.state);
-            let fits = s.resident + total <= self.resident_limit;
+            let reserved = if primary {
+                s.primary_left = s.primary_left.saturating_sub(total);
+                0
+            } else {
+                s.primary_left
+            };
+            let fits = s.resident + total + reserved <= self.resident_limit;
             if fits {
                 s.resident += total;
                 s.evict_for(self.cache.budget, 0);
@@ -468,6 +507,35 @@ mod tests {
         }
         assert_eq!(all.scratch_bytes(), 0);
         assert_eq!(all.peak(), 8 * one);
+    }
+    #[test]
+    fn primaries_keep_residency_and_small_overflows_stay_cached() {
+        let scratch = Scratch::create(None, 0).unwrap();
+        let one = u64::from(64 * 64 * 4u32);
+        // Eight primaries fit exactly; secondaries requested first must not take
+        // their room.
+        let store = Store::with_primary(8 * one, 12 * one, 8 * one);
+        let mut held = Vec::new();
+        for seed in 0..4 {
+            held.push(
+                store
+                    .put_secondary(&scratch, chain(&[(64, 64)], seed))
+                    .unwrap(),
+            );
+        }
+        assert_eq!(store.scratch_bytes(), 4 * one);
+        for seed in 0..8 {
+            held.push(store.put(&scratch, chain(&[(64, 64)], seed)).unwrap());
+        }
+        assert_eq!(store.scratch_bytes(), 4 * one);
+        // A primary total one image over the budget spills two images, not half.
+        let store = Store::new(8 * one, 9 * one);
+        for seed in 0..9 {
+            held.push(store.put(&scratch, chain(&[(64, 64)], seed)).unwrap());
+        }
+        assert_eq!(store.scratch_bytes(), 2 * one);
+        assert!(store.spill_bound() > 0);
+        drop(held);
     }
     #[test]
     fn concurrent_readers_see_identical_texels_within_the_budget() {

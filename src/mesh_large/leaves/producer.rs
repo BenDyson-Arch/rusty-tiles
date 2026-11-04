@@ -309,12 +309,22 @@ pub(in crate::mesh_large) fn cache_floor(images: &[crate::gltf_source::source::I
             .saturating_mul(8),
     )
 }
+/// Decoded bytes of every source image: what the cache is sized to hold resident.
+fn source_bytes(captured: &full::FullCaptured) -> Result<u64, JobError> {
+    captured
+        .image_info
+        .iter()
+        .try_fold(0u64, |n, i| {
+            n.checked_add(u64::from(i.width) * u64::from(i.height) * 4)
+        })
+        .ok_or_else(|| resource("leaf source byte overflow"))
+}
 pub(crate) fn stage_plan(
     config: &TreeConfig,
     captured: &full::FullCaptured,
 ) -> Result<StagePlan, JobError> {
     let requested = config.jobs;
-    let total_source = super::super::image_tiles::bound(captured, true);
+    let total_source = source_bytes(captured)?;
     let global_bytes = captured
         .report
         .memory
@@ -342,7 +352,8 @@ pub(crate) fn stage_plan(
             .report
             .scratch
             .need_bytes
-            .saturating_add(total_source)
+            // Spilled image tiles live in memory too.
+            .saturating_add(super::super::image_tiles::bound(captured, true))
             .saturating_add(super::super::image_tiles::file_rounding(captured))
     } else {
         0
@@ -740,7 +751,11 @@ pub(crate) fn produce(
                 .jobs
                 .saturating_mul(2 * super::super::image_tiles::READER_BYTES),
         );
-    let cache = SourceCache::new(stage.cache_bytes.saturating_sub(image_reserve), image_bound);
+    let cache = SourceCache::new(
+        stage.cache_bytes.saturating_sub(image_reserve),
+        image_bound,
+        source_bytes(captured)?,
+    );
     let image_scratch_bound = cache
         .spill_bound()
         .saturating_add(super::super::image_tiles::file_rounding(captured));

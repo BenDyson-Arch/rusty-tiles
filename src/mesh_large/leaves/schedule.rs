@@ -103,10 +103,12 @@ pub(super) struct CacheStats {
     pub decode_count: u64,
 }
 impl SourceCache {
-    pub(super) fn new(budget: u64, bound: u64) -> Self {
+    /// `primary` bounds the source images, which take residency before density
+    /// chains; `bound` covers both.
+    pub(super) fn new(budget: u64, bound: u64, primary: u64) -> Self {
         Self {
             budget,
-            store: crate::mesh_large::image_tiles::Store::new(budget, bound),
+            store: crate::mesh_large::image_tiles::Store::with_primary(budget, bound, primary),
             state: Mutex::new(CacheState::default()),
         }
     }
@@ -189,7 +191,7 @@ impl SourceCache {
                 let reduced: Vec<_> = load()?.into_iter().skip(1).collect();
                 Ok(self
                     .store
-                    .put(scratch, reduced)?
+                    .put_secondary(scratch, reduced)?
                     .into_iter()
                     .map(|rgba| {
                         Arc::new(Stored {
@@ -215,7 +217,7 @@ mod tests {
     #[test]
     fn source_cache_scale_decode_count_is_independent_of_access_order() {
         let scratch = crate::spill::Scratch::create(None, 0).unwrap();
-        let cache = SourceCache::new(256, 32 * 256);
+        let cache = SourceCache::new(256, 32 * 256, 32 * 256);
         let decodes = AtomicUsize::new(0);
         for round in 0..8 {
             for image in 0..32 {
@@ -241,7 +243,7 @@ mod tests {
     #[test]
     fn cache_shares_one_decode_and_retains_failures() {
         let scratch = crate::spill::Scratch::create(None, 0).unwrap();
-        let cache = SourceCache::new(8, 12);
+        let cache = SourceCache::new(8, 12, 12);
         let loads = AtomicUsize::new(0);
         std::thread::scope(|scope| {
             for _ in 0..8 {
@@ -293,7 +295,7 @@ mod tests {
     #[test]
     fn density_requests_build_a_class_chain_once() {
         let scratch = crate::spill::Scratch::create(None, 0).unwrap();
-        let cache = SourceCache::new(16, 84);
+        let cache = SourceCache::new(16, 84, 0);
         let builds = AtomicUsize::new(0);
         for drop in [3, 1, 2, 1, 3, 2] {
             let level = cache
