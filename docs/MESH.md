@@ -549,8 +549,8 @@ colour or data chain; leaves: the source image and, when a density step needs on
 reduced chain per class), never again on cache pressure. Decoded images and chains stay
 resident while they fit the stage's image cache. The rest spill to scratch as 128×128
 texel tiles, one file per chain, read through a bounded tile cache with a small bounded
-set of open handles. The spill is admitted before it is written (the HLOD scratch ledger
-or the leaf stage preflight, then checked against the measured stage peak) and reported
+set of open handles. The spill is admitted before it is written (the HLOD stage's scratch
+admission or the leaf stage preflight, then checked against the measured stage peak) and reported
 as `leaf_delivery.image_scratch_bound_bytes`, `image_scratch_peak_bytes`,
 `image_scratch_bytes` and `hlod.image_cache.scratchBytes`. `leaf_delivery.source_decode_count`
 counts leaf source decodes. On memory-backed scratch the tiles are charged to memory only
@@ -788,7 +788,7 @@ stage's `hlod` facts (tiles, workers, CPU seconds, lease peak, `error_measuremen
 and the per-depth appearance summary: page texels, covered texels, cap hits and the
 requested and achieved spacing). `memory` and `hlod` are present in every result.
 `phase_seconds` holds the wall seconds of `capture`, `leaf_build`, `hlod_incidence`,
-`hlod_geometry` and `archive`; `phase_cpu_seconds` the process CPU seconds of the same
+`hlod_geometry` and `archive`. `phase_cpu_seconds` holds the process CPU seconds of the same
 phases (all workers, including admission work between phases; null where process CPU is
 unavailable). `leaf_delivery.timing` is this job's leaf-stage timing: summed per-thread
 seconds, CPU seconds and calls per step (`source_reconstruct`, `source_decode`,
