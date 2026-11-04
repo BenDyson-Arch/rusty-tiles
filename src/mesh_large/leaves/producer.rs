@@ -484,8 +484,12 @@ pub(crate) fn stage_plan(
     plan_with(true)
 }
 /// Memory the leaf image store keeps outside its cached texels: image records and
-/// each worker's two tile readers. Carved out of the cache budget.
+/// each worker's two tile readers. Carved out of the cache budget; an image-free
+/// source reserves nothing (D8).
 fn image_reserve(captured: &full::FullCaptured, jobs: u64) -> u64 {
+    if captured.images.is_empty() {
+        return 0;
+    }
     (captured.images.len() as u64)
         .saturating_mul(super::super::image_tiles::IMAGE_METADATA_BYTES)
         .saturating_add(jobs.saturating_mul(2 * super::super::image_tiles::READER_BYTES))
