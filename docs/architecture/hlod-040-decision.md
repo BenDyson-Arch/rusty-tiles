@@ -294,6 +294,31 @@ making that the default. Final constants remain S8 decisions.
   D10.
 - KTX2 quality is unchanged (D7).
 
+**Owner amendment, 2026-11-04 — texture-aware published G (A3, 0.4.0).** The page cap
+breaks the spacing promise on dense inputs: on the 8192² Walem original, 509 of 831
+coarse tiles are cap-limited, at a median 5× their G-implied spacing, and CesiumJS, which
+refines on G alone, keeps them beside sharp leaves (texture study, section 8).
+- **Rule.** Publish `G' = max(G, 16·s/t if refinable, max child G')`, where
+  `s = sqrt(A/X)` is the payload's mean base-colour texel spacing (decoded textured area
+  over UV area × base-level page texels) and a tile is refinable when
+  `s > 1.25·s(children pooled)`. `t` (screen pixels per texel at SSE 16): balanced 2,
+  quality and lossless 1.25; fast publishes G (bytes first).
+- **Geometric G still decides construction.** Simplification, root competition, D5
+  spacing, S2 sampling, D11 seams and caps read G; only the published value and the
+  parents' published floor read G'. G' ≥ G keeps it an honest upper bound; G' is
+  monotone by construction.
+- **Archive-checkable.** `s` is measured from the published bytes (client-order
+  decode), and the rule is declared in `asset.extras.rustyTiles.textureError`. The native
+  validator and the S5 checker recompute `s` from pages, UVs, positions and the
+  hierarchy (children through content-less tiles and single-child copies) and refuse an
+  understated refinable tile. Validators allow a 1e-4 arithmetic slack; the producer
+  publishes 2e-4 above the term.
+- **Why 1.25.** On the 2048² input, source-limited parents measure 1.0–1.1× their
+  children (chart distortion); cap-limited parents sit above. At 1.25 balanced changes no
+  selection on that input (54 views, 12 Metashape positions identical).
+- **Side effects.** Drop classification and the published-G Metashape floor read the
+  raised value (looser, still honest); D10's R trial would start from G'.
+
 Retain all admitted PBR slots, material factors, MASK coverage, source sampler
 semantics, lit/unlit attribute parity and normal-map tangent-frame conversion.
 These are small per-page/semantic checks, not a per-texel source ledger. No

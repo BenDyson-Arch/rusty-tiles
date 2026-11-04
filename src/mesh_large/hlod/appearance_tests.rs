@@ -38,8 +38,9 @@ struct Fixture {
     /// NORMAL (0,1,0) and TANGENT (1,0,0,1) (plane only).
     frame: bool,
     material: Value,
-    /// PNG images (RGBA8, 64x64), by generator.
+    /// PNG images (RGBA8, `edge` x `edge`), by generator.
     images: Vec<fn(u32, u32) -> [u8; 4]>,
+    edge: u32,
 }
 
 fn height(surface: Surface, x: f32, z: f32) -> f32 {
@@ -176,7 +177,8 @@ fn write_fixture(dir: &Path, f: &Fixture) -> PathBuf {
     let mut images = vec![];
     let mut textures = vec![];
     for (i, g) in f.images.iter().enumerate() {
-        let img = image::RgbaImage::from_fn(64, 64, |x, y| image::Rgba(g(x, y)));
+        let k = f.edge / 64;
+        let img = image::RgbaImage::from_fn(f.edge, f.edge, |x, y| image::Rgba(g(x / k, y / k)));
         let name = format!("img{i}.png");
         img.save(dir.join(&name)).unwrap();
         images.push(json!({"uri":name}));
@@ -472,6 +474,7 @@ fn base_fixture() -> Fixture {
         frame: false,
         material: json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicFactor":0.0,"roughnessFactor":0.75}}),
         images: vec![ramp],
+        edge: 64,
     }
 }
 
@@ -872,6 +875,7 @@ fn all_slots_mask_factors_and_the_normal_frame_survive() {
             "emissiveTexture":{"index":3},"emissiveFactor":[0.2,0.1,0.0],
             "alphaMode":"MASK","alphaCutoff":0.4,"doubleSided":true}),
         images: vec![masked, data, bumpy, ramp],
+        edge: 64,
     };
     let dir = stage(
         &write_fixture(&work.path().join("in"), &f),
@@ -1492,4 +1496,97 @@ fn checkerboard_normal_and_mask_borders_agree_across_mixed_lod() {
         checked >= 10,
         "only {checked} decoded mixed-depth border samples"
     );
+}
+
+/// D5 amendment A3 on a dense source (512² over 100 m) whose coarse pages a 64-texel test
+/// edge caps: coarse tiles whose children deliver finer texels publish G' = 16·s/t above
+/// their geometric G (t = 2 for balanced), G' stays monotone through every child, the
+/// archive declares the rule and the native validator recomputes it from pages, UVs and
+/// the hierarchy. The same build publishing geometric G under the declaration is refused;
+/// fast declares and raises nothing; at the production page edge nothing is refinable.
+#[test]
+fn capped_pages_publish_texture_aware_g_that_the_validator_recomputes() {
+    use super::{encode::Mutation, tests::test_settings, texture_error, Settings};
+    use crate::{
+        validate::{inspect, ValidationRequest},
+        TilerJobs, TilerProfile, TilerRequest,
+    };
+    let work = tempfile::tempdir().unwrap();
+    let input = write_fixture(
+        &work.path().join("in"),
+        &Fixture {
+            edge: 512,
+            ..base_fixture()
+        },
+    );
+    let small = |mutation| Settings {
+        mutation,
+        ..test_settings(300)
+    };
+    let dir = stage_settings(&input, &work.path().join("out"), small(Mutation::SmallPages));
+    let rows = rows(&dir.join("proxies.jsonl"));
+    let published: std::collections::HashMap<_, _> = rows
+        .iter()
+        .map(|r| (r["uri"].as_str().unwrap().to_owned(), r["geometricError"].as_f64().unwrap()))
+        .collect();
+    let mut raised = 0;
+    for r in &rows {
+        let t = &r["texture"];
+        let g = t["geometricError"].as_f64().unwrap();
+        let p = r["geometricError"].as_f64().unwrap();
+        let implied = t["textureError"].as_f64().unwrap();
+        assert_eq!(p, g.max(implied).max(t["childrenPublished"].as_f64().unwrap()), "{t}");
+        // Recompute the term from the published bytes and the children's sums.
+        let own = super::decode::texture_sums(&fs::read(dir.join(r["uri"].as_str().unwrap())).unwrap())
+            .unwrap();
+        assert_eq!(own.area, t["sums"]["area"].as_f64().unwrap());
+        let (s, sc) = (
+            own.spacing().unwrap(),
+            texture_error::Sums {
+                area: t["childrenSums"]["area"].as_f64().unwrap(),
+                texels: t["childrenSums"]["texels"].as_f64().unwrap(),
+            }
+            .spacing()
+            .unwrap(),
+        );
+        assert_eq!(t["refinable"].as_bool().unwrap(), s > 1.25 * sc, "{t}");
+        if t["refinable"].as_bool().unwrap() {
+            assert!((implied / (16. * s / 2.) - 1.).abs() < 1e-3, "{t}");
+        }
+        raised += usize::from(p > g);
+        // Geometric G is still S2's: construction never saw the texture term.
+        assert!(g <= p && r["childrenError"].as_f64().unwrap() <= g, "{r}");
+    }
+    assert!(raised > 0, "{raised} of {}", rows.len());
+    // Monotone: the delivery's own child check passes, and so must the archive.
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let report = &manifest["hlod"]["textureError"];
+    assert_eq!(report["rule"]["pxPerTexel"], 2.0, "{report}");
+    assert!(report["raisedByTexture"].as_u64().unwrap() > 0, "{report}");
+    assert!(published.values().all(|g| g.is_finite()));
+    let build = |name: &str, mutation, profile| {
+        let output = work.path().join(name);
+        let request = TilerRequest::new(&input, &output)
+            .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(2).unwrap()))
+            .with_test_leaf_triangles(256)
+            .with_profile(profile)
+            .with_hlod_settings(small(mutation));
+        crate::mesh_large::mesh_to_tileset(request, &RunControl::default()).unwrap();
+        output
+    };
+    let honest = build("honest.3tz", Mutation::SmallPages, TilerProfile::Balanced);
+    let checked = inspect(ValidationRequest::new(&honest)).unwrap();
+    let census = checked.interface_census.unwrap();
+    assert!(census.texture_bound_tiles > 0, "{census:?}");
+    assert!(census.texture_refinable_tiles >= census.texture_bound_tiles);
+    let understated = build("understated.3tz", Mutation::UnderstateTextureError, TilerProfile::Balanced);
+    let e = inspect(ValidationRequest::new(&understated)).unwrap_err().to_string();
+    assert!(e.contains("textureError"), "{e}");
+    let fast = build("fast.3tz", Mutation::SmallPages, TilerProfile::Fast);
+    let checked = inspect(ValidationRequest::new(&fast)).unwrap();
+    assert_eq!(checked.interface_census.unwrap().texture_refinable_tiles, 0);
+    let production = build("production.3tz", Mutation::None, TilerProfile::Balanced);
+    let census = inspect(ValidationRequest::new(&production)).unwrap().interface_census.unwrap();
+    assert_eq!(census.texture_bound_tiles, 0, "{census:?}");
 }

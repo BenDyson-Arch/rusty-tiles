@@ -287,6 +287,8 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
         barrier=check_tiles(tiles)
         require(barrier['ok'],'replaceContentContinuity',str(barrier['violations']))
         doc=archive.json(archive.root_name)
+        import texture_error
+        texture_declared=texture_error.declaration(doc,require)
         g=doc.get('geometricError')
         require(type(g) in (int,float) and math.isfinite(g) and g>=0,'geometricErrorFinite','tileset G')
         for name in {name for t in tiles for name in t.get('external_uris',[])}:
@@ -327,8 +329,10 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                     matrix=IDENTITY if relative==IDENTITY else multiply(inverse(yup),multiply(relative,yup))
                 else:
                     matrix=multiply(t['transform'],yup)
+                t['texture']=[0.0,0.0];t['textureDigest']=[]
                 for uri in t['contents']:
                     data=archive.read(uri)
+                    t['textureDigest'].append(hashlib.sha256(data).hexdigest())
                     if t['children'] and border_audit is not None:
                         t.setdefault('sha256',[]).append(hashlib.sha256(data).hexdigest())
                     decoded=decode(data)
@@ -351,6 +355,9 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                             key,want=check_leaf(f,manifest,attributes,geometry=False)
                             require(store.source_face(key,want,t['lo'],actual=f,depth=t['depth']),'leafCoverage','duplicate '+key)
                             leaf_count+=1
+                    if texture_declared is not None:
+                        area,texels=texture_error.measure(data,faces,require)
+                        t['texture'][0]+=area;t['texture'][1]+=texels
                     store.put_faces(int(t['id']),faces)
                 if not t['children']:
                     # Empty terminal availability cells contain no rendered
@@ -447,6 +454,9 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                     result['omission']['producerReport']=compare(result['omission'],json.load(f))
                 require(result['omission']['producerReport']['ok'],'omissionReport',
                         json.dumps(result['omission']['producerReport']['differences'],sort_keys=True))
+            # D5 amendment A3: declared texture term, from pages, UVs and the hierarchy.
+            for t in tiles:t['textureDigest'].sort()
+            result['textureError']=texture_error.inspect(tiles,texture_declared,require)
             result['representativeTies']=ties
             result.update(ok=True,leafTriangles=leaf_count,tiles=len(tiles),representatives=representatives,
                           coordinateFrame=coordinate_frame,profile=profile,

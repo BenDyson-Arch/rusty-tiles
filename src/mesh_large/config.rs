@@ -46,6 +46,16 @@ impl Profile {
         }
     }
 
+    /// D5 amendment A3: at most this many screen pixels per base texel when a refinable
+    /// coarse tile is refined (SSE 16). `fast` publishes geometric G only (bytes first).
+    pub(crate) fn texture_px_per_texel(self) -> Option<f64> {
+        match self {
+            Self::Fast => None,
+            Self::Balanced => Some(2.),
+            Self::Quality | Self::Lossless => Some(1.25),
+        }
+    }
+
     /// Leaf `NORMAL` storage (provisional): `Some(K)` stores K-bit octahedral codes through
     /// the `EXT_meshopt_compression` OCTAHEDRAL filter, decoded by clients to normalized
     /// SHORT VEC3 (KHR_mesh_quantization); `None` keeps the source f32 values. 12 bits keep

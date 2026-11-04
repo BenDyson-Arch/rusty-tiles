@@ -295,6 +295,10 @@ pub struct InterfaceCensus {
     /// Each matches its payload's declaration and lies within its geometricError.
     pub dropped_components: u64,
     pub dropped_by_depth: Vec<u64>,
+    /// D5 amendment A3 (declared `textureError`): content tiles refinable to finer
+    /// texels, and those whose geometricError is within 1% of the texture-implied error.
+    pub texture_refinable_tiles: u64,
+    pub texture_bound_tiles: u64,
 }
 /// The validation's scratch use, reported whenever any spill file was written.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]

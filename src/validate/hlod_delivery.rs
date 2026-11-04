@@ -40,6 +40,7 @@ mod borders;
 mod bulk;
 mod drops;
 pub(super) mod recovery;
+pub(super) mod texture;
 use crate::archive3tz::CatalogConfig;
 use crate::spill::{
     ExternalSorter, Record, Scratch, Sequence, SequenceWriter, SlotFile, SortConfig,
@@ -763,6 +764,10 @@ pub(super) struct DecodedInterfaceCensus {
     /// D11 coarse drops: child components a coarse payload no longer holds, recounted
     /// and checked against its declaration and geometricError, by cell depth.
     pub(super) dropped_by_depth: Vec<u64>,
+    /// D5 amendment A3: refinable content tiles, and those whose G is within 1% of the
+    /// texture-implied error (0 without a declaration).
+    pub(super) texture_refinable_tiles: u64,
+    pub(super) texture_bound_tiles: u64,
 }
 /// Payload-element units charged for each scratch-store row a validation writes (sorted and
 /// appended in key order, `bulk`), and for each ancestor-walk or placement-frame lookup. A row
@@ -1013,6 +1018,8 @@ pub(super) struct Store {
     pub(super) checked: bool,
     common_root: Option<Matrix>,
     profile_exclusion: Option<&'static str>,
+    /// The declared texture-error rule (D5 amendment A3).
+    texture: Option<texture::Rule>,
     decoded_limit: usize,
     census: Option<DecodedInterfaceCensus>,
     /// Original vertex rows, appended per payload at ingest; the alias pass consumes them.
@@ -1037,6 +1044,7 @@ impl Store {
             checked: false,
             common_root: None,
             profile_exclusion: None,
+            texture: None,
             decoded_limit: 0,
             census: None,
             originals: None,
@@ -1059,7 +1067,7 @@ impl Store {
             CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER,rank_first INTEGER,ownership_depth INTEGER,ownership_invalid INTEGER NOT NULL DEFAULT 0,implicit_root INTEGER NOT NULL DEFAULT 0,recovery TEXT);
             CREATE TABLE recovery_cells(id INTEGER PRIMARY KEY,first INTEGER NOT NULL,last INTEGER NOT NULL);
             CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL);
-            CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL,dropped INTEGER NOT NULL DEFAULT 0,last_stage INTEGER NOT NULL DEFAULT 0,fold_faces INTEGER NOT NULL DEFAULT 0,recovery INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL,dropped INTEGER NOT NULL DEFAULT 0,last_stage INTEGER NOT NULL DEFAULT 0,fold_faces INTEGER NOT NULL DEFAULT 0,recovery INTEGER NOT NULL DEFAULT 0,texture_area REAL NOT NULL DEFAULT 0,texture_texels REAL NOT NULL DEFAULT 0);
             CREATE TABLE placements(id INTEGER PRIMARY KEY,tile INTEGER NOT NULL,rank INTEGER NOT NULL,frame BLOB NOT NULL,leaf INTEGER NOT NULL);
             CREATE TABLE leaf_points(key BLOB NOT NULL,tile INTEGER NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
             CREATE TABLE leaf_segments(key BLOB NOT NULL,tile INTEGER NOT NULL,nf INTEGER NOT NULL,nr INTEGER NOT NULL,PRIMARY KEY(key,tile)) WITHOUT ROWID;
@@ -1328,6 +1336,12 @@ impl Store {
                 as usize,
         )?;
         let mut originals = BTreeMap::<(Source, u64), Point>::new();
+        // A3: base-colour pages and the payload's textured surface and texel areas.
+        let pages = match self.texture {
+            Some(_) => texture::pages(&doc, bin, &mut work)?,
+            None => Vec::new(),
+        };
+        let (mut texture_area, mut texture_texels) = (0f64, 0f64);
         let tables = doc["extensions"]["EXT_structural_metadata"]["propertyTables"]
             .as_array()
             .ok_or_else(|| bad("hlodFeatureIds", "missing tables"))?;
@@ -1412,6 +1426,29 @@ impl Store {
                     let primitive = Feature::new(&doc, bin, p, "source_primitive", &mut work)?
                         .ok_or_else(|| bad("hlodFeatureIds", "missing primitive identity"))?;
                     let triangle = Feature::new(&doc, bin, p, "source_triangle", &mut work)?;
+                    let page = p["material"]
+                        .as_u64()
+                        .and_then(|m| pages.get(m as usize).copied().flatten());
+                    let mut textured = match page {
+                        Some((texels, set)) => {
+                            let uv = Accessor::new(
+                                &doc,
+                                bin,
+                                identity::uint(&p["attributes"][format!("TEXCOORD_{set}")])?,
+                                &mut work,
+                            )?;
+                            if uv.components != 2 || uv.count != positions.count {
+                                return Err(bad("textureError", "base-colour TEXCOORD shape"));
+                            }
+                            Some(texture::Sums {
+                                uv,
+                                texels,
+                                area: &mut texture_area,
+                                texel_area: &mut texture_texels,
+                            })
+                        }
+                        None => None,
+                    };
                     let count = indices.as_ref().map_or(positions.count, |a| a.count);
                     if count % 3 != 0 || p["mode"].as_u64().unwrap_or(4) != 4 {
                         return Err(bad("hlodFeatureIds", "identity primitive is not triangles"));
@@ -1430,6 +1467,9 @@ impl Store {
                         let mut xyz = [[0.; 3]; 3];
                         for (j, p) in xyz.iter_mut().enumerate() {
                             *p = positions.position(ids[j], m)?;
+                        }
+                        if let Some(textured) = &mut textured {
+                            textured.triangle(ids, xyz, &mut work)?;
                         }
                         let (_, source) = primitive.row(ids[0], &mut work)?;
                         if let Some(triangle) = &triangle {
@@ -1475,8 +1515,13 @@ impl Store {
         }
         self.connection
             .execute(
-                "UPDATE payloads SET triangles=? WHERE rank=?",
-                params![integer(triangles)?, integer(rank)?],
+                "UPDATE payloads SET triangles=?,texture_area=?,texture_texels=? WHERE rank=?",
+                params![
+                    integer(triangles)?,
+                    texture_area,
+                    texture_texels,
+                    integer(rank)?
+                ],
             )
             .map_err(sql)?;
         if used.iter().any(|v| v.iter().any(|used| !*used)) {
@@ -1545,6 +1590,10 @@ impl Store {
     /// payload's identity was stripped. Call before finish; traversal order is immaterial.
     pub(super) fn expect_identity(&mut self) {
         self.checked = true;
+    }
+    /// Hold every content tile's G to the declared texture term (D5 amendment A3).
+    pub(super) fn expect_texture(&mut self, rule: texture::Rule) {
+        self.texture = Some(rule);
     }
 
     pub(super) fn finish(
@@ -1649,6 +1698,10 @@ impl Store {
         }
         let mut census = DecodedInterfaceCensus::default();
         self.triangle_cap(&mut census)?;
+        if let Some(rule) = self.texture {
+            (census.texture_refinable_tiles, census.texture_bound_tiles) =
+                self.texture_error(rule, effort)?;
+        }
         self.recovery(effort)?;
         census.omission = self.omission(effort)?;
         self.single_cover(effort)?;

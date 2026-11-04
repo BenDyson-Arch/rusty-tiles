@@ -3541,6 +3541,13 @@ fn inspect_run(
         {
             check.delivery.expect_identity();
         }
+        // D5 amendment A3: a declared texture term binds every content tile's G.
+        if let Some(rule) = hlod_delivery::texture::Rule::declared(&manifest)? {
+            if manifest["asset"]["extras"]["rustyTiles"]["lod"].as_str() != Some("hlod") {
+                return Err(invalid("textureError is declared outside an HLOD tileset"));
+            }
+            check.delivery.expect_texture(rule);
+        }
         if let Some(expected) = manifest["asset"]["extras"]["vectorBuildStateSha256"].as_str() {
             check.resources.reference("vector-build.json".into())?;
             if vector_build.as_deref() != Some(expected) {
@@ -3684,6 +3691,8 @@ fn inspect_run(
             contracted_border_vertices: c.contracted_border_vertices,
             dropped_components: c.dropped_by_depth.iter().sum(),
             dropped_by_depth: c.dropped_by_depth,
+            texture_refinable_tiles: c.texture_refinable_tiles,
+            texture_bound_tiles: c.texture_bound_tiles,
         }),
         scratch: scratch.is_created().then(|| ScratchReport {
             memory_backed: scratch.memory_backed(),

@@ -67,8 +67,13 @@ pub(crate) struct TileGeometry {
     pub primitives: Vec<SourcePrimitive>,
     /// Outer interface of this tile, one row per shared vertex/edge (`leaf` arbitrary).
     pub interface: Vec<InterfaceRow>,
-    /// Published geometric error of this tile (leaves: their encoding error).
+    /// Geometric error of this tile (leaves: their encoding error): what construction uses.
     pub geometric_error: f64,
+    /// Published G (D5 amendment A3): at least the geometric error, the texture term and
+    /// every child's published G. Leaves publish their geometric error.
+    pub published_error: f64,
+    /// Texture-term sums of the published payload.
+    pub texture: super::texture_error::Sums,
     /// Admission of this resident record against the stage ledger.
     pub lease: Option<Lease>,
 }
@@ -194,7 +199,9 @@ pub(crate) struct HlodRow {
     pub encoded_depth: u32,
     pub leaf_begin: u32,
     pub leaf_end: u32,
+    /// The published G (D5 amendment A3): `texture.error`.
     pub geometric_error: f64,
+    pub texture: super::texture_error::Published,
     pub error_policy: &'static str,
     pub measurement: super::error::Summary,
     #[serde(skip_serializing_if = "Option::is_none")]

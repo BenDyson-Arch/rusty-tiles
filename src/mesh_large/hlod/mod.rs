@@ -35,6 +35,7 @@ mod root_competition;
 pub(crate) mod scratch;
 pub(crate) mod source_index;
 pub(crate) mod store;
+pub(crate) mod texture_error;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
@@ -522,8 +523,23 @@ pub(crate) struct HlodReport {
     pub root_competition_timing: root_competition::Timing,
     /// Coarse appearance per tile depth (S3).
     pub appearance_by_depth: Vec<DepthAppearance>,
+    /// D5 amendment A3: published G raised above geometric G.
+    pub texture_error: TextureReport,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recovery: Option<recovery::Recovery>,
+}
+
+/// D5 amendment A3 counts: tiles whose published G the texture term set, those raised
+/// only to stay at or above a child's published G, and the largest G'/G.
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TextureReport {
+    pub rule: Option<texture_error::Rule>,
+    pub refinable: u64,
+    pub raised_by_texture: u64,
+    pub raised_by_children: u64,
+    pub max_raise: f64,
+    pub root_raised: bool,
 }
 
 /// Coarse appearance of one tile depth: page texels, achieved against requested spacing
@@ -754,6 +770,14 @@ pub(crate) fn produce(
             })
             .collect(),
         error_measurement: error::ErrorReport::new(settings.nearest_steps, settings.sampling),
+        texture_error: TextureReport {
+            rule: input
+                .config
+                .profile
+                .texture_px_per_texel()
+                .map(texture_error::Rule::new),
+            ..Default::default()
+        },
         ..Default::default()
     };
     let mut diagnostics = HlodDiagnostics {
@@ -880,7 +904,7 @@ pub(crate) fn produce(
         captured,
         cache: &cache,
         profile: input.config.profile,
-        max_edge: appearance::MAX_PAGE_EDGE,
+        max_edge: settings.mutation.max_page_edge(),
         page_memory: input.plan.page_bytes,
         tile_page_bytes: input.plan.tile_page_bytes,
         colors: layout & super::attributes::COLOR != 0,
@@ -986,14 +1010,14 @@ pub(crate) fn produce(
     Ok((report, diagnostics))
 }
 
-/// Leaf `geometryError` values in leaf order, from the published leaf rows.
+/// Leaf `geometryError` values and texture sums in leaf order, from the published leaf rows.
 struct LeafErrors {
     lines: std::io::Lines<std::io::BufReader<fs::File>>,
     path: std::path::PathBuf,
 }
 
 impl LeafErrors {
-    fn next(&mut self, first: u64) -> Result<f64, JobError> {
+    fn next(&mut self, first: u64) -> Result<(f64, texture_error::Sums), JobError> {
         let line = self
             .lines
             .next()
@@ -1007,7 +1031,11 @@ impl LeafErrors {
             .as_f64()
             .filter(|e| e.is_finite() && *e >= 0.)
             .ok_or_else(|| state("leaf row without a finite geometryError"))?;
-        Ok(error)
+        let texture = serde_json::from_value::<texture_error::Sums>(row["texture"].clone())
+            .ok()
+            .filter(|t| t.area.is_finite() && t.texels.is_finite())
+            .ok_or_else(|| state("leaf row without texture sums"))?;
+        Ok((error, texture))
     }
 }
 
@@ -1023,7 +1051,7 @@ fn read_leaf(
     leaf: u32,
     captured: &FullCaptured,
     streams: &mut LeafStreams<'_>,
-    error: f64,
+    (error, texture): (f64, texture_error::Sums),
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<TileGeometry, JobError> {
     let LeafStreams {
@@ -1049,6 +1077,8 @@ fn read_leaf(
         primitives: Vec::new(),
         interface: Vec::new(),
         geometric_error: error,
+        published_error: error,
+        texture,
         lease: None,
     };
     let mut reps = Vec::with_capacity(count);
@@ -1639,6 +1669,11 @@ fn build_tile(
     } else {
         0.
     };
+    // D5 amendment A3: the children's published G and texture sums.
+    let child_texture: Vec<(f64, texture_error::Sums)> = children
+        .iter()
+        .map(|c| (c.published_error, c.texture))
+        .collect();
     drop(children);
     built.change = Default::default();
     built.controls = Default::default();
@@ -1717,6 +1752,20 @@ fn build_tile(
     if !error.geometric_error.is_finite() || error.geometric_error < built.children_error {
         return Err(state("coarse error is nonfinite or below its children's"));
     }
+    // A3: publish G' from the published bytes; geometric G made every decision above.
+    let rule = job
+        .services
+        .profile
+        .texture_px_per_texel()
+        .map(texture_error::Rule::new);
+    #[cfg(test)]
+    let rule = rule.filter(|_| settings.mutation != Mutation::UnderstateTextureError);
+    let texture = texture_error::publish(
+        rule,
+        error.geometric_error,
+        decode::texture_sums(&encoded.glb)?,
+        child_texture,
+    );
     let uri = tile.key.uri();
     let path = job.input.stage.join(&uri);
     let mut file = crate::storage_meter::create(&path)
@@ -1738,7 +1787,8 @@ fn build_tile(
         encoded_depth: tile.key.depth,
         leaf_begin: tile.key.leaf_begin,
         leaf_end: tile.key.leaf_end,
-        geometric_error: error.geometric_error,
+        geometric_error: texture.error,
+        texture,
         error_policy: error.policy,
         measurement,
         root_competition,
@@ -1795,6 +1845,8 @@ fn build_tile(
     };
     let mut geometry = built.geometry;
     geometry.geometric_error = error.geometric_error;
+    geometry.published_error = texture.error;
+    geometry.texture = texture.sums;
     shrink(&mut geometry);
     Ok((
         vec![geometry],
@@ -1864,7 +1916,19 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     if by_depth.len() <= encoded {
         by_depth.resize_with(encoded + 1, Default::default);
     }
-    by_depth[encoded].add(row.measurement, row.geometric_error, row.nearest_search);
+    by_depth[encoded].add(
+        row.measurement,
+        row.texture.geometric_error,
+        row.nearest_search,
+    );
+    let t = &mut report.texture_error;
+    t.refinable += u64::from(row.texture.refinable);
+    t.raised_by_texture += u64::from(row.texture.by_texture());
+    t.raised_by_children += u64::from(row.texture.by_children());
+    if row.texture.error > row.texture.geometric_error {
+        t.max_raise = t.max_raise.max(row.texture.error / row.texture.geometric_error);
+        t.root_raised |= row.depth == 0;
+    }
     let cpu = &mut report.error_cpu_by_depth;
     if cpu.len() <= encoded {
         cpu.resize(encoded + 1, 0.);
