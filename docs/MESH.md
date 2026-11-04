@@ -790,7 +790,8 @@ requested and achieved spacing). `memory` and `hlod` are present in every result
 `phase_seconds` holds the wall seconds of `capture`, `leaf_build`, `hlod_incidence`,
 `hlod_geometry` and `archive`. `phase_cpu_seconds` holds the process CPU seconds of the same
 phases (all workers, including admission work between phases; null where process CPU is
-unavailable). `leaf_delivery.timing` is this job's leaf-stage timing: summed per-thread
+unavailable). `leaf_delivery.timing` is the leaf stage's timing, process-wide counters
+over this job's leaf-stage interval (a concurrent job in the same process adds to them): summed per-thread
 seconds, CPU seconds and calls per step (`source_reconstruct`, `source_decode`,
 `density_mips`, `basis_encode`, `codec_verify`, `glb_write`, `member_write`, ...) and
 texel counters. Stage objects describe worker admission and owned

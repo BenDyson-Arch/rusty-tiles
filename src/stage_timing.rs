@@ -217,9 +217,10 @@ pub(crate) fn encode<T>(base_texels: u64, chain_texels: u64, f: impl FnOnce() ->
     out
 }
 
-/// The process totals at one instant. Totals are process-wide and never reset, so a
-/// job reports [`since`] a mark taken at its start: sequential jobs in one process
-/// (Python API, tests) each see only their own work.
+/// The process totals at one instant. Totals are process-wide and never reset; a job
+/// reports the process-wide counters over its own interval ([`since`] a mark taken at
+/// its start). Sequential jobs in one process (Python API, tests) see only their own
+/// work; jobs running concurrently in one process also count each other's.
 #[derive(Clone)]
 pub(crate) struct Mark(Raw);
 

@@ -722,7 +722,7 @@ pub(crate) fn produce(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<LeafStageOutput, JobError> {
     let leaf_started = std::time::Instant::now();
-    // Timing totals are process-wide: this job reports its own share from here.
+    // Timing totals are process-wide: report their change over this stage's interval.
     let timing_mark = timing::mark();
     let total_leaves = captured.tree.stats.leaves;
     phases.progress(Phase::LeafBuild, 0, Some(total_leaves))?;
