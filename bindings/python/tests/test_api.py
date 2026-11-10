@@ -1382,7 +1382,9 @@ class WheelAPI(unittest.TestCase):
             (data / "a.glb").write_bytes(glb)
             asset = {"version": "1.1"}
             if name == "asset":
-                asset["extras"] = {"rustyTiles": {"lod": "hlod"}}
+                # An HLOD declaration also declares its texture rule (the fast form here).
+                asset["extras"] = {"rustyTiles": {"lod": "hlod", "textureError": {
+                    "version": 1, "pxPerTexel": None, "refinableRatio": 1.25}}}
             if name == "report":
                 (data / "conversion.json").write_text(json.dumps({"lod": "hlod"}))
             (data / "tileset.json").write_text(json.dumps({

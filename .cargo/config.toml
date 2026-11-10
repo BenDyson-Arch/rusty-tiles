@@ -1,0 +1,13 @@
+# Bundled C/C++ (meshoptimizer, Basis Universal, SQLite) must not fuse multiplies and adds:
+# GCC and Clang contract to FMA by default on aarch64, which changes simplifier choices and
+# so the output bytes. Baseline x86-64 has no FMA, so these flags leave its builds unchanged.
+# MSVC does not contract by default and does not take the flag.
+[env]
+CFLAGS_aarch64_unknown_linux_gnu = "-ffp-contract=off"
+CXXFLAGS_aarch64_unknown_linux_gnu = "-ffp-contract=off"
+CFLAGS_aarch64_apple_darwin = "-ffp-contract=off"
+CXXFLAGS_aarch64_apple_darwin = "-ffp-contract=off"
+CFLAGS_x86_64_unknown_linux_gnu = "-ffp-contract=off"
+CXXFLAGS_x86_64_unknown_linux_gnu = "-ffp-contract=off"
+CFLAGS_x86_64_apple_darwin = "-ffp-contract=off"
+CXXFLAGS_x86_64_apple_darwin = "-ffp-contract=off"
