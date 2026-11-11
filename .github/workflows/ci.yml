@@ -136,8 +136,12 @@ jobs:
           rustup update stable --no-self-update
           rustup default stable
           rustup component add rustfmt
+      # Only develop and main write Rust caches; pull requests restore their base branch's
+      # cache and no longer evict it (the repository's cache space is shared).
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
       - name: Check Rust third-party licence files and allow-list
         # Seconds: cargo tree and metadata only, nothing is compiled.
         run: |
@@ -263,6 +267,7 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: python-wheel-${{ matrix.python }}
+          save-if: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
       - name: Check Python bindings
         run: cargo clippy --locked -p rusty-tiles-python -- -D warnings
       - name: Test Python error and recovery mappings
@@ -323,22 +328,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # `slow`: the runners that took 46-60 minutes with `cargo test`. They use the
+        # nextest `portable` profile (.config/nextest.toml), which runs tests in parallel
+        # across binaries and leaves the long platform-independent acceptance suites to the
+        # other three targets.
         include:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            slow: false
           - os: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
+            slow: false
           - os: macos-15-intel
             target: x86_64-apple-darwin
+            slow: true
           - os: macos-15
             target: aarch64-apple-darwin
+            slow: false
           - os: windows-2022
             target: x86_64-pc-windows-msvc
+            slow: true
     defaults:
       run:
         shell: bash
     env:
       RELEASE_TARGET: ${{ matrix.target }}
+      SLOW: ${{ matrix.slow }}
       BUILD_VERSION: ${{ needs.version.outputs.version }}
       PYTHON: ${{ startsWith(matrix.os, 'windows') && 'python' || 'python3' }}
     steps:
@@ -354,8 +369,21 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: portable-${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
+      - name: Install cargo-nextest
+        if: matrix.slow
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-nextest@0.9.148 # versions: NEXTEST_VERSION
       - name: Test the portable release CLI
-        run: cargo test --locked --target "$RELEASE_TARGET"
+        run: |
+          set -eu
+          if [ "$SLOW" = true ]; then
+            cargo nextest run --locked --target "$RELEASE_TARGET" --profile portable --no-tests=fail
+            cargo test --locked --target "$RELEASE_TARGET" --doc
+          else
+            cargo test --locked --target "$RELEASE_TARGET"
+          fi
       - name: Report vendored KTX2 encoder digests and round trips
         run: cargo test --locked --target "$RELEASE_TARGET" --lib basisu_ktx2 -- --nocapture --test-threads=1
       # The release archive of this commit: release.yml and dev-build.yml publish it as is.
@@ -416,6 +444,7 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: encoder-link-${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
       - name: Check stdio isolation and measure encoder link size
         run: |
           mkdir -p "$RUNNER_TEMP/encoder-link"
@@ -469,6 +498,7 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: gdal-${{ matrix.gdal }}
+          save-if: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
       - name: Test native geospatial build
         env:
           LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'
@@ -582,6 +612,7 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: python-gdal-3.12
+          save-if: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
       - name: Build CLI for derivative acceptance
         env:
           LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'
