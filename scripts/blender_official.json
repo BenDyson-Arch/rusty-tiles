@@ -1,5 +1,9 @@
 {
   "support_url": "https://developer.blender.org/docs/release_notes/compatibility/",
+  "mirrors": [
+    "https://mirrors.ocf.berkeley.edu/blender/release/",
+    "https://ftp.nluug.nl/pub/graphics/blender/release/"
+  ],
   "releases": {
     "4.5": {
       "version": "4.5.14",

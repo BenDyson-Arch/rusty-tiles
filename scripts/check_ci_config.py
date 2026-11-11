@@ -9,7 +9,9 @@ literals and end each such line with `# versions: KEY [KEY ...]`. This check fai
 - a job that runs steps (not a reusable-workflow call) has no `timeout-minutes`, or a
   `timeout-minutes` line has no marker;
 - a pinned tool version (maturin, Node, Python, cargo-nextest) is written without a marker;
-- a Dockerfile `ARG` named like a key has a different default.
+- a Dockerfile `ARG` named like a key has a different default, an `ADD --checksum` is not a
+  listed SHA-256, or `GEOBASE` is neither `geospatial-source` nor the base image of the
+  listed GDAL and PROJ versions pinned by digest.
 
 `python3 scripts/check_ci_config.py` checks the repository; `--root` checks another tree.
 """
@@ -98,6 +100,11 @@ def check_dockerfile(path, name, values):
         match = re.match(r"^ARG ([A-Z0-9_]+)=(\S*)$", line)
         if match and match.group(1) in values and match.group(2) != values[match.group(1)]:
             errors.append(f"{name}:{number}: ARG {match.group(1)} should default to {values[match.group(1)]}")
+        if match and match.group(1) == "GEOBASE" and match.group(2) != "geospatial-source":
+            expected = "{}:{}-{}".format(values.get("GEOBASE_REPOSITORY"), values.get("GDAL_VERSION"),
+                                         values.get("PROJ_VERSION"))
+            if re.fullmatch(re.escape(expected) + r"@sha256:[0-9a-f]{64}", match.group(2)) is None:
+                errors.append(f"{name}:{number}: GEOBASE must be geospatial-source or {expected}@sha256:<digest>")
         for checksum in re.findall(r"--checksum=sha256:([0-9a-f]{64})", line):
             if checksum not in values.values():
                 errors.append(f"{name}:{number}: checksum {checksum} is not in ci/versions.env")

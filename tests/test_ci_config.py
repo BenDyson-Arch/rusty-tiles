@@ -18,6 +18,8 @@ TIMEOUT_SHORT=5
 TIMEOUT_LONG=90
 GDAL_VERSION=3.12.4
 GDAL_SHA256=68844ae29557b7efae4292c3b4cb3a3b8a79d14b765b89c5a7b17cbae7fa715a
+PROJ_VERSION=9.8.1
+GEOBASE_REPOSITORY=ghcr.io/example/geobase
 """
 
 WORKFLOW = """\
@@ -99,6 +101,20 @@ class CheckCiConfigTests(unittest.TestCase):
         self.assertEqual(len(errors), 2)
         self.assertIn("ARG GDAL_VERSION should default to 3.12.4", errors[0])
         self.assertIn("is not in ci/versions.env", errors[1])
+
+    def test_geobase_is_the_source_stage_or_the_pinned_image_of_these_versions(self):
+        digest = "@sha256:" + "0" * 64
+        cases = {
+            "geospatial-source": True,
+            "ghcr.io/example/geobase:3.12.4-9.8.1" + digest: True,
+            "ghcr.io/example/geobase:3.12.4-9.8.1": False,
+            "ghcr.io/example/geobase:3.12.3-9.8.1" + digest: False,
+            "ghcr.io/other/geobase:3.12.4-9.8.1" + digest: False,
+        }
+        for value, valid in cases.items():
+            with self.subTest(value=value):
+                errors = self.errors(dockerfile=f"ARG GEOBASE={value}\n" + DOCKERFILE)
+                self.assertEqual(errors == [], valid, errors)
 
     def test_malformed_versions_file_is_refused(self):
         with self.assertRaises(SystemExit):

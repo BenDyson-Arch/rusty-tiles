@@ -162,11 +162,32 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1 libgl1 libx11-6 libxi6 libxfixes3 libxrender1 libxxf86vm1 libxkbcommon0
+      # The archive is cached under its pinned SHA-256 and checked again when used; a miss
+      # downloads it from download.blender.org or a listed mirror. Only develop, where the
+      # full tier runs nightly, writes the cache (pull requests into develop can read it), so
+      # these large archives take one copy of the repository's cache space.
+      - id: blender-pin
+        name: Look up the pinned archive
+        run: >-
+          python -c "import json, os; m = json.load(open('scripts/blender_official.json'));
+          print('sha256=' + m['releases'][os.environ['BLENDER_RELEASE']]['platforms'][os.environ['BLENDER_PLATFORM']]['sha256'])"
+          >> "$GITHUB_OUTPUT"
+      - id: blender-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/blender-archive
+          key: official-blender-${{ steps.blender-pin.outputs.sha256 }}
       - name: Verify and unpack official Blender
         run: >-
           python scripts/download_blender.py --release "$BLENDER_RELEASE" --platform "$BLENDER_PLATFORM"
           --directory "$RUNNER_TEMP/official-blender"
+          --cache-dir "$RUNNER_TEMP/blender-archive"
           --report-json evidence/blender-distribution.json
+      - if: steps.blender-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/develop'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/blender-archive
+          key: official-blender-${{ steps.blender-pin.outputs.sha256 }}
       - name: Install and test using official Blender's embedded Python
         run: |
           blender=$(python -c "import json; print(json.load(open('evidence/blender-distribution.json'))['executable'])")
