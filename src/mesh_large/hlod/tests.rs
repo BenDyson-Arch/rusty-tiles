@@ -2072,12 +2072,10 @@ fn coarse_weld_keeps_uv_and_normal_seams() {
         [[0., 0.], [1., 0.], [0., 1.]],
         [[1., 0.], [1., 1.], [0.5, 1.]],
     ]);
+    // Faces [0, 1, 2] and [4, 3, 2]: vertex 4 carries a different normal.
     appearance.normals = Some(vec![
-        [0., 0., 1.],
-        [0., 0., 1.],
-        [0., 0., 1.],
-        [0., 0., 1.],
-        [0., 1., 0.],
+        [[0., 0., 1.], [0., 0., 1.], [0., 0., 1.]],
+        [[0., 1., 0.], [0., 0., 1.], [0., 0., 1.]],
     ]);
     let locked = [false; 5];
     let encoded_positions = || {

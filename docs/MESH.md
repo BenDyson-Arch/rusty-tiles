@@ -365,6 +365,26 @@ published only when the source carries normals, so leaves and coarse tiles of
 one source shade the same way. Coarse pages need not reproduce leaf texels:
 they approximate the surface's appearance, with no appearance certificate.
 
+Coarse `NORMAL` comes from the coarse tile's own geometry, not from the source
+normals. It is crease-aware. Around each vertex, faces whose normals differ by
+less than 60° across a shared edge share one area-weighted normal. Sharper
+edges, and edges between faces wound opposite ways, keep a separate normal on
+each side. Where a run of smooth edges turns that shared normal more than 60°
+from one of its faces, that face's corner averages only the faces at the vertex
+within 60° of its own. Every corner normal is therefore within 60° of its
+face's normal, and no face is shaded against its own winding. Earlier coarse
+tiles averaged all faces at a vertex, which gave rough surfaces such as rock
+walls starburst gradients and, under double-sided lighting, inverted facets.
+Splitting adds coarse vertices, never triangles: on the measured meshes, coarse
+tiles of sources with normals grew by about 13–28% in bytes. Coarse tiles do
+not carry the source's fine shading detail (untextured classes get no normal
+map). Leaves are unaffected.
+
+Simplification can still leave a small share of coarse faces wound against the
+source surface they replace (about 1–3% of the area of the coarsest measured
+tiles). Double-sided materials shade them consistently; single-sided materials
+cull them, as before.
+
 Coarse pages go through the same encoder and decoded-image gates as leaf pages,
 so a profile chooses one colour codec for both (see
 [Profiles](#profiles-and-resources)). A tile's pages together are bounded to

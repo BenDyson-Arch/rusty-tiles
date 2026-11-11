@@ -14,9 +14,10 @@
 //!   path; colourless input searches nothing).
 //!
 //! NORMAL is published only when the run's source carries normals (leaves without them are
-//! flat shaded, and the coarse tiles must match). Pages are handed to the shared leaf
-//! delivery encoder ([`deliver`], S4 owns codec and mip delivery); [`CoarsePage`] is the
-//! pre-encode page. Geometry, triangle order and representative IDs are never changed.
+//! flat shaded, and the coarse tiles must match). It is crease-aware and per face corner
+//! ([`corner_normals`]): within [`CREASE_DEGREES`] of each corner's face. Pages are handed
+//! to the shared leaf delivery encoder ([`deliver`], S4 owns codec and mip delivery);
+//! [`CoarsePage`] is the pre-encode page. Geometry, triangle order and representative IDs are never changed.
 //!
 //! S3 holds no walk scratch (`scratch::ScratchLedger`): charts, page rasters, bake chunks,
 //! donor frontiers, mip chains and codec workspace are memory, charged in the parent job's
@@ -187,8 +188,8 @@ pub struct Timing {
 
 pub(crate) struct Appearance {
     pub groups: Vec<Group>,
-    /// Smooth per-vertex normals over the decoded positions, when published.
-    pub normals: Option<Vec<[f32; 3]>>,
+    /// Per tile face corner: the published normal, when published.
+    pub normals: Option<Vec<[[f32; 3]; 3]>>,
     pub facts: TileAppearance,
     pub timing: Timing,
 }
@@ -212,34 +213,143 @@ pub(crate) struct TileView<'a> {
     pub geometric_error: f64,
 }
 
-/// Area-weighted smooth normal per vertex over decoded positions.
-pub(crate) fn smooth_normals(decoded: &[[f32; 3]], faces: &[[u32; 3]]) -> Vec<[f32; 3]> {
-    let mut sum = vec![[0f64; 3]; decoded.len()];
-    for f in faces {
-        let p = f.map(|i| decoded[i as usize].map(f64::from));
-        let e1 = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]];
-        let e2 = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]];
-        let n = [
-            e1[1] * e2[2] - e1[2] * e2[1],
-            e1[2] * e2[0] - e1[0] * e2[2],
-            e1[0] * e2[1] - e1[1] * e2[0],
-        ];
-        for &i in f {
-            for a in 0..3 {
-                sum[i as usize][a] += n[a];
+/// Largest angle, in degrees, between a coarse face's geometric normal and the NORMAL
+/// published at any of its corners ([`corner_normals`]).
+pub(crate) const CREASE_DEGREES: f64 = 60.;
+
+/// The published coarse NORMAL of every tile face corner, from the tile's own decoded
+/// geometry. Around each vertex, faces joined by an edge whose two face normals differ by
+/// less than [`CREASE_DEGREES`] form one smooth wedge, and a corner takes the
+/// area-weighted mean normal of its wedge. Sharper edges, and edges between faces of
+/// opposite winding, are creases: their sides do not share a normal. A chain of smooth
+/// edges can still turn a wedge's mean beyond the crease angle from one of its faces; such
+/// a corner instead takes the area-weighted mean of only the faces at its vertex within
+/// the crease angle of its own face.
+///
+/// So every corner normal of a face with nonzero area lies within [`CREASE_DEGREES`] of
+/// that face's normal (a mean of unit vectors that each do), and no face is shaded against
+/// its own winding. A zero-area face, which covers no pixels, takes the area-weighted mean
+/// over all faces at the vertex (+Y where none has area). Splits only add welded vertices,
+/// never triangles.
+pub(crate) fn corner_normals(decoded: &[[f32; 3]], faces: &[[u32; 3]]) -> Vec<[[f32; 3]; 3]> {
+    let cos_crease = CREASE_DEGREES.to_radians().cos();
+    let point = |v: u32| decoded[v as usize].map(f64::from);
+    let sub = |a: [f64; 3], b: [f64; 3]| -> [f64; 3] { std::array::from_fn(|i| a[i] - b[i]) };
+    // Per face: area vector (twice the area along the unit normal) and unit normal.
+    let area: Vec<[f64; 3]> = faces
+        .iter()
+        .map(|f| {
+            let q = f.map(point);
+            cross3(sub(q[1], q[0]), sub(q[2], q[0]))
+        })
+        .collect();
+    let unit: Vec<Option<[f64; 3]>> = area
+        .iter()
+        .map(|&c| {
+            let l = dot3(c, c).sqrt();
+            (l > 0. && l.is_finite()).then(|| c.map(|x| x / l))
+        })
+        .collect();
+    let smooth = |f: usize, g: usize| match (unit[f], unit[g]) {
+        (Some(a), Some(b)) => dot3(a, b) >= cos_crease,
+        _ => false,
+    };
+    // Wedges: union the two corners at each end of every smooth edge (a corner is
+    // `3·face + slot`). Edges are matched by sorting, not hashing.
+    let mut edges: Vec<(u32, u32, u32, u8, u8)> = Vec::with_capacity(faces.len() * 3);
+    for (fi, f) in faces.iter().enumerate() {
+        for k in 0..3 {
+            let (a, b) = (f[k], f[(k + 1) % 3]);
+            let (ka, kb) = (k as u8, ((k + 1) % 3) as u8);
+            if a < b {
+                edges.push((a, b, fi as u32, ka, kb));
+            } else if b < a {
+                edges.push((b, a, fi as u32, kb, ka));
             }
         }
     }
-    sum.iter()
-        .map(|n| {
-            let length = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-            if length > 0. && length.is_finite() {
-                n.map(|v| (v / length) as f32)
-            } else {
-                [0., 1., 0.]
+    edges.sort_unstable();
+    let mut parent: Vec<u32> = (0..faces.len() as u32 * 3).collect();
+    fn root(parent: &mut [u32], mut x: u32) -> u32 {
+        while parent[x as usize] != x {
+            parent[x as usize] = parent[parent[x as usize] as usize];
+            x = parent[x as usize];
+        }
+        x
+    }
+    for group in edges.chunk_by(|x, y| (x.0, x.1) == (y.0, y.1)) {
+        for (i, &(_, _, f, fa, fb)) in group.iter().enumerate() {
+            for &(_, _, g, ga, gb) in &group[i + 1..] {
+                if !smooth(f as usize, g as usize) {
+                    continue;
+                }
+                for (x, y) in [
+                    (f * 3 + u32::from(fa), g * 3 + u32::from(ga)),
+                    (f * 3 + u32::from(fb), g * 3 + u32::from(gb)),
+                ] {
+                    let (x, y) = (root(&mut parent, x), root(&mut parent, y));
+                    if x != y {
+                        parent[x.max(y) as usize] = x.min(y);
+                    }
+                }
             }
-        })
-        .collect()
+        }
+    }
+    let mut wedge = vec![[0f64; 3]; parent.len()];
+    for (fi, c) in area.iter().enumerate() {
+        if unit[fi].is_some() {
+            for k in 0..3 {
+                let r = root(&mut parent, (fi * 3 + k) as u32) as usize;
+                for i in 0..3 {
+                    wedge[r][i] += c[i];
+                }
+            }
+        }
+    }
+    // Faces at each vertex, for the crease-angle fallback and zero-area faces.
+    let mut start = vec![0usize; decoded.len() + 1];
+    for &v in faces.iter().flatten() {
+        start[v as usize + 1] += 1;
+    }
+    for i in 0..decoded.len() {
+        start[i + 1] += start[i];
+    }
+    let mut next = start.clone();
+    let mut around = vec![0u32; start[decoded.len()]];
+    for (fi, f) in faces.iter().enumerate() {
+        for &v in f {
+            around[next[v as usize]] = fi as u32;
+            next[v as usize] += 1;
+        }
+    }
+    let mean = |v: u32, keep: &dyn Fn(usize) -> bool| {
+        let mut sum = [0f64; 3];
+        for &g in &around[start[v as usize]..start[v as usize + 1]] {
+            if unit[g as usize].is_some() && keep(g as usize) {
+                for i in 0..3 {
+                    sum[i] += area[g as usize][i];
+                }
+            }
+        }
+        normalize(sum)
+    };
+    let mut out = Vec::with_capacity(faces.len());
+    for (fi, f) in faces.iter().enumerate() {
+        out.push(std::array::from_fn(|k| {
+            let n = match unit[fi] {
+                Some(own) => {
+                    let w = normalize(wedge[root(&mut parent, (fi * 3 + k) as u32) as usize]);
+                    match w {
+                        Some(w) if dot3(w, own) >= cos_crease => w,
+                        _ => mean(f[k], &|g| smooth(fi, g)).unwrap_or(own),
+                    }
+                }
+                None => mean(f[k], &|_| true).unwrap_or([0., 1., 0.]),
+            };
+            n.map(|x| x as f32)
+        }));
+    }
+    out
 }
 
 fn slot_order(slot: TextureSlot) -> u8 {
@@ -327,7 +437,7 @@ pub(crate) fn build(
             .is_some_and(|m| m.has_normal_texture())
     });
     let normals =
-        (services.normals || any_normal_map).then(|| smooth_normals(tile.decoded, tile.triangles));
+        (services.normals || any_normal_map).then(|| corner_normals(tile.decoded, tile.triangles));
     let started = clock();
     let mut searcher = bake::Searcher::new(query)?;
     timing.surface = clock() - started;
@@ -437,7 +547,7 @@ fn textured(
     group: &mut Group,
     slots: Vec<TextureSlot>,
     (target, floor, max_texels): (f64, f64, u64),
-    normals: Option<&[[f32; 3]]>,
+    normals: Option<&[[[f32; 3]; 3]]>,
     (timing, facts): (&mut Timing, &mut TileAppearance),
 ) -> Result<(), JobError> {
     let captured = services.captured;
@@ -476,13 +586,14 @@ fn textured(
     drop(owner);
     let tangents = match (normals, slots.contains(&TextureSlot::Normal)) {
         (Some(n), true) => Some(
-            corners
+            group
+                .faces
                 .iter()
                 .enumerate()
-                .map(|(gf, f)| {
+                .map(|(gf, &f)| {
                     let x = layout.charts[layout.chart_of[gf] as usize].x;
-                    f.map(|v| {
-                        let nv = n[v as usize].map(f64::from);
+                    n[f].map(|nv| {
+                        let nv = nv.map(f64::from);
                         let t = orthogonal(x, nv)
                             .or_else(|| orthogonal([1., 0., 0.], nv))
                             .or_else(|| orthogonal([0., 1., 0.], nv))
@@ -815,7 +926,7 @@ fn bake_pages(
     searcher: &mut bake::Searcher<'_, '_>,
     p: &Pending,
     class: u32,
-    normals: Option<&[[f32; 3]]>,
+    normals: Option<&[[[f32; 3]; 3]]>,
     tile: &TileView<'_>,
     (timing, facts): (&mut Timing, &mut TileAppearance),
 ) -> Result<Vec<CoarsePage>, JobError> {
@@ -923,9 +1034,8 @@ fn bake_pages(
                     )?;
                     let frame = (slot == TextureSlot::Normal).then(|| {
                         let (_, gf, w) = chunk[i];
-                        let face = tile.triangles[p.layout_face(gf)];
                         let n = normals
-                            .map(|n| face.map(|v| n[v as usize]))
+                            .map(|n| n[p.layout_face(gf)])
                             .unwrap_or([[0., 1., 0.]; 3]);
                         let t = p
                             .tangents
@@ -1094,6 +1204,148 @@ pub(crate) fn page_charge(size: [u32; 2], slots: u64, profile: Profile) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn face_unit(p: &[[f32; 3]], f: [u32; 3]) -> [f64; 3] {
+        let q = f.map(|v| p[v as usize].map(f64::from));
+        let e = |a: usize| std::array::from_fn(|i| q[a][i] - q[0][i]);
+        normalize(cross3(e(1), e(2))).unwrap()
+    }
+
+    fn angle(a: [f64; 3], b: [f32; 3]) -> f64 {
+        let b = normalize(b.map(f64::from)).unwrap();
+        dot3(a, b).clamp(-1., 1.).acos().to_degrees()
+    }
+
+    /// A rough grid (deterministic noise up to twice the spacing) with every 7th face
+    /// reversed: each corner normal stays within the crease angle of its own face, so no
+    /// face is shaded against its winding.
+    #[test]
+    fn corner_normals_stay_within_the_crease_angle_of_their_face() {
+        let n = 24u32;
+        let mut seed = 0x9e37_79b9_u32;
+        let mut noise = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            f32::from(u16::try_from(seed >> 16).unwrap()) / 65535. * 4. - 2.
+        };
+        let positions: Vec<[f32; 3]> = (0..n * n)
+            .map(|i| [(i % n) as f32, (i / n) as f32, noise()])
+            .collect();
+        let mut faces = Vec::new();
+        for y in 0..n - 1 {
+            for x in 0..n - 1 {
+                let v = y * n + x;
+                faces.push([v, v + 1, v + n]);
+                faces.push([v + 1, v + n + 1, v + n]);
+            }
+        }
+        for f in faces.iter_mut().step_by(7) {
+            f.swap(1, 2);
+        }
+        let normals = corner_normals(&positions, &faces);
+        let mut creased = 0;
+        for (f, corners) in faces.iter().zip(&normals) {
+            let own = face_unit(&positions, *f);
+            for c in corners {
+                assert!(angle(own, *c) <= CREASE_DEGREES + 1e-4);
+                creased += usize::from(angle(own, *c) > 1e-3);
+            }
+        }
+        assert!(creased > 0);
+    }
+
+    /// Where every edge is smooth, a vertex keeps one area-weighted normal (no split
+    /// vertices), equal at all its corners.
+    #[test]
+    fn smooth_surfaces_keep_one_normal_per_vertex() {
+        let n = 9u32;
+        let positions: Vec<[f32; 3]> = (0..n * n)
+            .map(|i| {
+                let (x, y) = ((i % n) as f32 - 4., (i / n) as f32 - 4.);
+                [x, y, 0.05 * (x * x + y * y)]
+            })
+            .collect();
+        let mut faces = Vec::new();
+        for y in 0..n - 1 {
+            for x in 0..n - 1 {
+                let v = y * n + x;
+                faces.push([v, v + 1, v + n]);
+                faces.push([v + 1, v + n + 1, v + n]);
+            }
+        }
+        let normals = corner_normals(&positions, &faces);
+        let mut at: Vec<Option<[f32; 3]>> = vec![None; positions.len()];
+        for (f, corners) in faces.iter().zip(&normals) {
+            for (v, c) in f.iter().zip(corners) {
+                assert_eq!(*at[*v as usize].get_or_insert(*c), *c);
+            }
+        }
+        let centre = at[(4 * n + 4) as usize].unwrap();
+        assert!(angle([0., 0., 1.], centre) < 1e-4);
+    }
+
+    /// A cube corner's three faces meet at 90°: each keeps its own flat normal. A face
+    /// reversed against its neighbour (180°) also keeps its own side.
+    #[test]
+    fn creases_and_reversed_faces_split_the_vertex_normal() {
+        let positions = [
+            [0., 0., 0.],
+            [1., 0., 0.],
+            [0., 1., 0.],
+            [0., 0., 1.],
+            [1., 1., 0.],
+        ];
+        let faces = [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 4]];
+        let normals = corner_normals(&positions, &faces);
+        for (f, corners) in faces.iter().zip(&normals) {
+            let own = face_unit(&positions, *f);
+            for c in corners {
+                assert!(angle(own, *c) < 1e-4, "{f:?} {c:?}");
+            }
+        }
+    }
+
+    /// An open fan at a cone apex: neighbouring faces differ by ~50° (one smooth wedge),
+    /// but the wedge mean is ~69° from the end faces, so their apex corners average only
+    /// the faces within the crease angle of their own, and the middle faces keep the
+    /// shared wedge normal.
+    #[test]
+    fn a_wedge_turned_past_the_crease_angle_falls_back_per_corner() {
+        let mut positions = vec![[0f32, 0., 0.]];
+        for t in [0f32, 55., 110., 165., 220.] {
+            let t = t.to_radians();
+            positions.push([t.cos(), t.sin(), -2.]);
+        }
+        let faces: Vec<[u32; 3]> = (1..5).map(|i| [0, i, i + 1]).collect();
+        let units: Vec<_> = faces.iter().map(|f| face_unit(&positions, *f)).collect();
+        for w in units.windows(2) {
+            assert!(dot3(w[0], w[1]) > CREASE_DEGREES.to_radians().cos());
+        }
+        let normals = corner_normals(&positions, &faces);
+        let apex: Vec<[f32; 3]> = normals.iter().map(|c| c[0]).collect();
+        assert_eq!(apex[1], apex[2]);
+        assert_ne!(apex[0], apex[1]);
+        assert_ne!(apex[3], apex[2]);
+        for (u, a) in units.iter().zip(&apex) {
+            assert!(angle(*u, *a) <= CREASE_DEGREES + 1e-4);
+        }
+        // Face 0's apex corner: the area-weighted mean of faces 0 and 1 only.
+        let mean = normalize(std::array::from_fn(|i| units[0][i] + units[1][i])).unwrap();
+        assert!(angle(mean, apex[0]) < 1e-4);
+    }
+
+    /// A zero-area face takes the vertex's mean over all its faces; a vertex with no
+    /// face of nonzero area takes +Y.
+    #[test]
+    fn zero_area_faces_take_the_vertex_mean() {
+        let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [2., 0., 0.]];
+        let faces = [[0, 1, 2], [0, 1, 3]];
+        let normals = corner_normals(&positions, &faces);
+        assert!(angle([0., 0., 1.], normals[1][0]) < 1e-4);
+        assert!(angle([0., 0., 1.], normals[1][1]) < 1e-4);
+        assert_eq!(normals[1][2], [0., 1., 0.]);
+    }
 
     /// Review probe (round 1): a MASK base-colour coarse page (cutoff 0.75) whose texels
     /// alternate around the cutoff. The shared coverage-preserving delivery keeps every
