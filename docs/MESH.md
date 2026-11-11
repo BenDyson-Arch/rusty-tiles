@@ -375,15 +375,16 @@ within 60° of its own. Every corner normal is therefore within 60° of its
 face's normal, and no face is shaded against its own winding. Earlier coarse
 tiles averaged all faces at a vertex, which gave rough surfaces such as rock
 walls starburst gradients and, under double-sided lighting, inverted facets.
-Splitting adds coarse vertices, never triangles: on the measured meshes, coarse
-tiles of sources with normals grew by about 13–28% in bytes. Coarse tiles do
-not carry the source's fine shading detail (untextured classes get no normal
-map). Leaves are unaffected.
+Splitting adds coarse vertices, never triangles: on the measured meshes (0.8 M
+to 10 M triangles), coarse tiles of sources with normals gained 15–18% vertices
+and 13–15% bytes. Coarse tiles do not carry the source's fine shading detail
+(untextured classes get no normal map). Leaves are unaffected.
 
-Simplification can still leave a small share of coarse faces wound against the
-source surface they replace (about 1–3% of the area of the coarsest measured
-tiles). Double-sided materials shade them consistently; single-sided materials
-cull them, as before.
+Simplification can still leave some coarse faces wound against the source
+surface they replace: on one 10 M-triangle photogrammetry mesh, a
+nearest-source estimate put about 7% of the root tile's area and 3–5% at the
+next three depths against the source. Double-sided materials
+shade them on the viewer's side; single-sided materials cull them, as before.
 
 Coarse pages go through the same encoder and decoded-image gates as leaf pages,
 so a profile chooses one colour codec for both (see
