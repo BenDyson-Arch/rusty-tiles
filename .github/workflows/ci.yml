@@ -381,10 +381,15 @@ jobs:
         run: |
           set -eu
           if [ "$SLOW" = true ]; then
+            echo "Fast portable mode: nextest portable profile (without hlod_acceptance), then doctests."
             cargo nextest run --locked --target "$RELEASE_TARGET" --profile portable --no-tests=fail
             cargo test --locked --target "$RELEASE_TARGET" --doc
           else
-            cargo test --locked --target "$RELEASE_TARGET"
+            # Every target in the nightly run, and the fast targets always: the whole suite.
+            echo "Whole suite: cargo test, hlod_acceptance included."
+            cargo test --locked --target "$RELEASE_TARGET" 2>&1 | tee "$RUNNER_TEMP/portable-tests.log"
+            grep -Eq 'Running tests[/\\]hlod_acceptance\.rs' "$RUNNER_TEMP/portable-tests.log" \
+              || { echo "::error::cargo test did not run tests/hlod_acceptance.rs"; exit 1; }
           fi
       - name: Report vendored KTX2 encoder digests and round trips
         run: cargo test --locked --target "$RELEASE_TARGET" --lib basisu_ktx2 -- --nocapture --test-threads=1
