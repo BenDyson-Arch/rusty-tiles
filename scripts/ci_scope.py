@@ -9,9 +9,12 @@ runs when:
 
 - the pull request targets `main` (the release branch, where `Full matrix` is required);
 - it carries the `full-ci` label;
-- a changed path (or a renamed file's old path) matches ci/full-tier-paths.txt;
-- a Rust diff adds or removes a line with platform-conditional code (cfg(windows),
-  cfg!(target_os = ...) and similar), or a Rust file's diff is not shown;
+- a changed path (or a renamed file's old path) matches ci/full-tier-paths.txt (Cargo.toml,
+  Cargo.lock and build.rs at any depth, among others);
+- a changed Rust file contains platform-conditional code (cfg(windows),
+  cfg!(target_os = ...) and similar) anywhere in the checkout, so an edit inside an existing
+  platform block counts; or its diff adds or removes such a line (a removed file, or code
+  moved out of the file); or its diff is not shown;
 - the comparison is unreadable or lists 300 files, GitHub's cap (any doubt runs it).
 """
 import argparse
@@ -41,7 +44,18 @@ def changes_platform_code(patch):
     return False
 
 
-def reasons(compare, labels, base, patterns=None):
+def has_platform_code(path):
+    try:
+        return PLATFORM_CFG.search(path.read_text(encoding="utf-8", errors="replace")) is not None
+    except OSError:
+        return False
+
+
+def reasons(compare, labels, base, patterns=None, root=ROOT):
+    """Why the full tier must run (empty: the fast tier is enough).
+
+    root is the checkout of the pull request's merge commit, where changed files are read.
+    """
     patterns = load_patterns() if patterns is None else patterns
     found = []
     if base == "main":
@@ -61,10 +75,12 @@ def reasons(compare, labels, base, patterns=None):
             found.append(f"{matched[0]} matches ci/full-tier-paths.txt")
         elif any(path.endswith(".rs") for path in paths):
             patch = entry.get("patch")
-            if patch is None and entry.get("status") != "renamed":
-                found.append(f"{paths[0]} changed and its diff is not shown")
+            if entry.get("status") != "removed" and has_platform_code(root / paths[0]):
+                found.append(f"{paths[0]} contains platform-conditional code")
             elif patch is not None and changes_platform_code(patch):
                 found.append(f"{paths[0]} changes platform-conditional code")
+            elif patch is None and entry.get("status") != "renamed":
+                found.append(f"{paths[0]} changed and its diff is not shown")
     return found
 
 
@@ -75,12 +91,13 @@ def main():
     full.add_argument("compare", type=Path)
     full.add_argument("--label", action="append", default=[])
     full.add_argument("--base", default="")
+    full.add_argument("--root", type=Path, default=ROOT, help="Checkout to read changed files from")
     args = parser.parse_args()
     try:
         compare = json.loads(args.compare.read_text())
     except (OSError, ValueError):
         compare = None
-    found = reasons(compare, set(args.label), args.base)
+    found = reasons(compare, set(args.label), args.base, root=args.root)
     for reason in found:
         print(f"Full tier: {reason}", file=sys.stderr)
     if not found:

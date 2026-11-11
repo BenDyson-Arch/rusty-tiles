@@ -2,17 +2,17 @@
 # matched against the whole repository-relative path) run the full CI tier: every platform,
 # the wheels and the container, not just the fast Linux tier (#346). scripts/ci_scope.py
 # reads this file. A changed Rust file that contains platform-conditional code
-# (cfg(windows), cfg(unix), target_os and similar) also runs it, whatever its path, so new
-# platform code needs no entry here.
+# (cfg(windows), cfg(unix), target_os and similar) anywhere in it, or whose diff adds or
+# removes such code, also runs it, whatever its path, so platform code needs no entry here.
 
-# Build configuration and toolchain inputs.
-Cargo\.toml
-Cargo\.lock
-build\.rs
+# Build configuration and toolchain inputs, at any depth.
+(.*/)?Cargo\.toml
+(.*/)?Cargo\.lock
+(.*/)?build\.rs
 rust-toolchain(\.toml)?
 \.cargo/.*
 pyproject\.toml
-bindings/python/(Cargo\.toml|pyproject\.toml|build\.rs)
+bindings/python/pyproject\.toml
 # Vendored C/C++ and the Rust code that binds or compiles it.
 vendor/.*
 src/basisu_ktx2(\.rs|/.*)

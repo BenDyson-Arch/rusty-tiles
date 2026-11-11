@@ -36,13 +36,10 @@ jobs:
       # 'false' only when sure: a failed classifier runs the full tier.
       full: ${{ steps.scope.outputs.full }}
     steps:
+      # The whole tree (shallow): ci_scope.py reads each changed Rust file for platform code.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-          sparse-checkout: |
-            scripts/ci_scope.py
-            ci/full-tier-paths.txt
-          sparse-checkout-cone-mode: false
       # Docs-only means every changed path is Markdown under docs/ or changelog.d/
       # or at the repository root. Markdown under bench/ and tests/ is hashed by oracles,
       # so it counts as code, and so does any removal or rename (a missing
@@ -77,7 +74,7 @@ jobs:
             # Labels from the API, not the event payload, so a re-run sees a label added later.
             labels=(); names=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/labels" --jq '.[].name') || names=full-ci
             while IFS= read -r name; do if [ -n "$name" ]; then labels+=(--label "$name"); fi; done <<< "$names"
-            python3 -I scripts/ci_scope.py full "$compare" --base "$BASE_REF" "${labels[@]}" | tee -a "$GITHUB_OUTPUT"
+            python3 -I scripts/ci_scope.py full "$compare" --root "$GITHUB_WORKSPACE" --base "$BASE_REF" "${labels[@]}" | tee -a "$GITHUB_OUTPUT"
           else
             echo 'full=true' | tee -a "$GITHUB_OUTPUT"
           fi
