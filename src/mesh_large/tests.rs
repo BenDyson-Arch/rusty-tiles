@@ -837,6 +837,9 @@ fn published_textures_match_their_samplers_and_the_archive_declares_hlod() {
 /// with every stored file inside what was admitted, and the same archive results; a tight
 /// charge is refused as `resource_limit` at the write that would pass it, publishing nothing
 /// and leaving no work files.
+// Memory-backed work storage is detected only on Linux, and the stored-model cross-check
+// counts hard links by link count, which stable Rust exposes only on Unix.
+#[cfg(unix)]
 #[test]
 fn tight_memory_backed_work_charge_is_refused_before_it_is_exceeded() {
     let work = tempfile::tempdir().unwrap();

@@ -521,7 +521,14 @@ mod implementation {
         }
         // Resolve relative paths against the actual working directory. GetVolumePathNameW
         // otherwise interprets an unqualified relative path using the boot volume.
-        let canonical = std::fs::canonicalize(path)?;
+        let mut canonical = std::fs::canonicalize(path)?;
+        // GetDiskFreeSpaceExW takes a directory (ERROR_DIRECTORY for a file); statvfs on
+        // Unix accepts either, so inspect a file's containing directory, on the same volume.
+        if !canonical.is_dir() {
+            if let Some(parent) = canonical.parent() {
+                canonical = parent.to_owned();
+            }
+        }
         let mut wide: Vec<u16> = canonical.as_os_str().encode_wide().collect();
         wide.push(0);
         // The mount-point string is no longer than this full path plus its trailing slash.

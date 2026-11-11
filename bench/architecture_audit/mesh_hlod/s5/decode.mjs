@@ -1,5 +1,7 @@
 // Independent published-byte decoder. No Rust/producer decoder, facts or locks.
 import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 const I=[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
 const mul=(a,b)=>I.map((_,i)=>[0,1,2,3].reduce((s,k)=>s+a[i%4+k*4]*b[k+Math.floor(i/4)*4],0));
@@ -63,7 +65,7 @@ export async function decode(input) {
   if(e){
    if(e.buffer!==0)throw Error('external meshopt buffer');
    if(!Number.isSafeInteger(e.count)||!Number.isSafeInteger(e.byteStride)||e.count<=0||e.byteStride<=0||e.count*e.byteStride!==v.byteLength||(v.byteStride!==undefined&&v.byteStride!==e.byteStride)||!Number.isSafeInteger(e.byteLength)||e.byteLength<=0||!Number.isSafeInteger(e.byteOffset??0)||(e.byteOffset??0)<0||(e.byteOffset??0)+e.byteLength>bin.length)throw Error('codecStructure: meshopt layout');
-   const r=spawnSync('python3',[new URL('meshopt.py',import.meta.url).pathname,e.mode,String(e.count),String(e.byteStride),e.filter??'NONE','--tolerances'],{input:bin.subarray(e.byteOffset??0,(e.byteOffset??0)+e.byteLength),maxBuffer:64*1024*1024});
+   const r=spawnSync('python3',[fileURLToPath(new URL('meshopt.py',import.meta.url)),e.mode,String(e.count),String(e.byteStride),e.filter??'NONE','--tolerances'],{input:bin.subarray(e.byteOffset??0,(e.byteOffset??0)+e.byteLength),maxBuffer:64*1024*1024});
    if(r.status!==0)throw Error('codecStructure: '+r.stderr);data=r.stdout;
    viewTolerances.set(id,JSON.parse(r.stderr.toString()));
   }else {if(v.buffer!==0)throw Error('external oracle buffer');data=bin.subarray(v.byteOffset??0,(v.byteOffset??0)+v.byteLength);}
@@ -126,6 +128,6 @@ export async function decode(input) {
  const hasHlodIdentity=tables.some(t=>['source_primitive','source_triangle'].includes(t.class))||faces.some(f=>Object.keys(f.ids).some(k=>['source_primitive','source_triangle'].includes(k)));
  return {faces,tables,hasHlodIdentity,positionStorageStats};
 }
-if(process.argv[1]===new URL(import.meta.url).pathname){
+if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{process.stdout.write(JSON.stringify(await decode(process.argv[2]==='-'?fs.readFileSync(0):process.argv[2])));}catch(e){console.error(e.stack);process.exitCode=1;}
 }

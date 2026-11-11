@@ -360,7 +360,7 @@ impl Store {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod cost {
     //! Retained work-cost probe (CPU-pinned calibration, no acceptance claim).
     use super::*;
