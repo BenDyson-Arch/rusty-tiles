@@ -144,8 +144,10 @@ const { chromium } = require('playwright');
             }
             await wait(400);
           }
+          // Far enough that only the voxel-aggregate root is selected, but near enough that
+          // the tileset's own geometricError still asks for it (at 600 radii it is skipped).
           frame(entry.name === 'point-aggregates' ?
-            Math.max(tiles.boundingSphere.radius * 600, 1000) :
+            Math.max(tiles.boundingSphere.radius * 400, 1000) :
             Math.max(tiles.boundingSphere.radius * 30, 60));
           await settle();
           const coarse = await inspect(tiles, entry);

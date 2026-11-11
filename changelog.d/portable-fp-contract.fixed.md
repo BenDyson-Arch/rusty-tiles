@@ -13,3 +13,6 @@
 - CI: the independent HLOD oracle's Node decoder runs on Windows (its entry-point check compared
   a Windows path with a file URL path), and the native-geospatial and portable CLI jobs get
   40 and 60 minutes, which the slower runners need for the full suite.
+- CI: release-acceptance browser probes render until the mesh reports loaded and view the
+  point-aggregate case from 400 rather than 600 radii, where its published geometric error
+  still selects the tileset; HLOD acceptance digests name members with `/` on Windows too.

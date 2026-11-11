@@ -56,7 +56,8 @@ fn family_lines(work: &Path, family: &str) -> Vec<String> {
                 .unwrap()
                 .to_str()
                 .unwrap()
-                .to_owned();
+                // Digests name members with `/`, whatever the platform's separator.
+                .replace('\\', "/");
             let first = relative.split('/').next().unwrap();
             let member = matches!(
                 path.extension().and_then(|e| e.to_str()),
