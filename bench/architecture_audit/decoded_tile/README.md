@@ -21,8 +21,20 @@ Inputs: `crop3.glb` (vertex colours, normals) and `tex3.glb` (89 JPEG pages)
 from the H17 crop, tiled with `--anchor 133.0584598837835 -12.33625061681309 100`
 by the release CLI built from this branch. Each archive has 217 tiles (156 leaves).
 
-RESULTS_TABLE
+| Check | crop3 balanced | crop3 lossless | tex3 balanced | tex3 fast |
+| --- | --- | --- | --- | --- |
+| `parity.py` faces (all 217 tiles) | 1,283,946 | 1,283,940 | 1,283,946 | 1,283,946 |
+| positions, indices, corner order, IDs | exact | exact | exact | exact |
+| largest normal gap (arrays / plain GLB) | 3.05e-5 / 3.05e-5, within tolerance | 0 | none | none |
+| KTX2 pages equal to both transcoders | none | none | 215 | 215 |
+| Blender 5.2.4: plain GLB, root + largest leaf | imports; colours, IDs | imports; colours, IDs | imports; page, UVs, IDs | imports; page, UVs, IDs |
+| Blender 5.2.4: published member | `TypeError` in meshopt `filter: "NONE"` | same | KTX2 refused | KTX2 refused |
+
+In Blender every polygon count equals the decoded triangle count, world-space
+corners equal the arrays exactly, and all faces keep the decoded per-face
+`source_primitive` and `source_triangle` (stored as POINT/FLOAT attributes).
 
 Evidence is external at `~/.cache/rusty-tiles-evidence/decoded-tile-329/`
-(never held in git); `manifest.json` there lists every file's SHA-256 and binds
-the source commit, wheel and archives.
+(never held in git); `manifest.json` (SHA-256
+`9aecacaaa4ad19a41fc65f39bc28c44787488dde2a284649a0c44edd03796e46`) lists every
+file's SHA-256 and binds the wheels, archives and inputs.
