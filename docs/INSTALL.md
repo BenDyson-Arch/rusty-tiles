@@ -87,7 +87,7 @@ The rolling [`dev` pre-release](https://github.com/BenDyson-Arch/rusty-tiles/rel
 
 > **Warning:** a development build is not a release. Output, options and APIs can change from one development build to the next, and its changes may not have changelog entries yet. Each build has a new version, which changes converter and cache identity, so derivative caches and baselines made with an earlier build must be rebuilt. Use a release for work you keep or compare.
 
-The version is a development version of the next release, for example `0.4.1.dev202611121734` (the number is the UTC commit time). `rusty-tiles --version` prints the same version in Cargo's spelling, `rusty-tiles 0.4.1-dev.202611121734`. It sorts after the previous release and before the next one.
+The version is a development version of the next release, for example `0.4.1.dev202611121734` (the number is the UTC commit time). `rusty-tiles --version` prints the same version in Cargo's spelling, `rusty-tiles 0.4.1-dev.202611121734`. It sorts after the previous release and before the next one. While a release candidate is out, dev builds are versioned between it and the next candidate, such as `0.4.1rc2.dev202611121734` after `0.4.1rc1`.
 
 CLI on macOS and Linux (the installer on `develop` knows `--version dev`):
 

@@ -43,8 +43,8 @@ A pull request runs the full tier instead (everything except `Release acceptance
 
 - targets `main`;
 - has the `full-ci` label (adding the label reruns the pull request);
-- changes a path listed in [`ci/full-tier-paths.txt`](ci/full-tier-paths.txt): Cargo files, `build.rs`, `.cargo/`, `vendor/`, the KTX2 binding, spill and directory code, workflows, `ci/` and the scripts only the full tier runs;
-- adds or removes a line of platform-conditional Rust (`cfg(windows)`, `cfg!(target_os = ...)` and similar), in any file.
+- changes a path listed in [`ci/full-tier-paths.txt`](ci/full-tier-paths.txt): `Cargo.toml`, `Cargo.lock` and `build.rs` at any depth, `.cargo/`, `vendor/`, the KTX2 binding, spill and directory code, workflows, `ci/` and the scripts only the full tier runs;
+- changes a Rust file that contains platform-conditional code (`cfg(windows)`, `cfg!(target_os = ...)` and similar) anywhere, even when the edit is outside that code, or whose diff adds or removes such a line. This is deliberately broad: about 55 Rust files, including `src/main.rs` and `tests/support/mod.rs`, contain some, so many code pull requests run the full tier.
 
 If the classifier cannot tell, the full tier runs. Add a path to the list when it holds platform-specific behaviour that a `cfg` line does not mark.
 
@@ -421,7 +421,9 @@ The rolling `dev` pre-release is a separate path ([dev-build.yml](.github/workfl
 gh workflow run dev-build.yml --ref develop -f force=true
 ```
 
-On any other branch the workflow builds and tests everything but publishes nothing, so a change to it can be tried before it merges (dispatch `ci.yml` on that branch first). The `dev` tag moves with each build; a clone that fetched it needs `git fetch --tags --force` to follow it.
+On any other branch the workflow builds and tests everything but publishes nothing, so a change to it can be tried before it merges (dispatch `ci.yml` on that branch first). [`scripts/dev_release.sh`](scripts/dev_release.sh) updates the published release in place: it moves the `dev` tag with a ref update, renames the new assets into place (`SHA256SUMS` last) and then deletes the old ones, so downloads keep working. If GitHub refuses the ref update, it replaces the release instead, which leaves a few seconds of 404. The `dev` tag moves with each build; a clone that fetched it needs `git fetch --tags --force` to follow it.
+
+While the workspace version is a release candidate `X.Y.Z-rc.K` (or `alpha.K`, `beta.K`), dev builds are `X.Y.Z-rc.K.dev.N` until `vX.Y.Z-rc.K` is tagged and `X.Y.Z-rc.(K+1).dev.N` after, so pip orders them between the candidates (`0.4.1rc1 < 0.4.1rc2.devN < 0.4.1rc2 < 0.4.1`). Other pre-release forms are refused.
 
 ## Verification evidence
 
