@@ -10,3 +10,6 @@
   default encoding is not UTF-8.
 - Windows: scratch-volume checks on a file (such as the HLOD audit sidecar) query its
   directory, because `GetDiskFreeSpaceExW` refuses a file path.
+- CI: the independent HLOD oracle's Node decoder runs on Windows (its entry-point check compared
+  a Windows path with a file URL path), and the native-geospatial and portable CLI jobs get
+  40 and 60 minutes, which the slower runners need for the full suite.
