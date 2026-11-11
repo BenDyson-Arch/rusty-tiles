@@ -1201,6 +1201,83 @@ class WheelAPI(unittest.TestCase):
             )
         self.assertFalse(rejected.exists())
 
+    def test_resolve_source_crs_matches_the_converters(self):
+        keys = {"accepted", "kind", "definition", "crsOperation", "summary", "refusal"}
+        for code, operation_id in (("EPSG:7856", "EPSG:8450"), ("EPSG:28356", "EPSG:1150")):
+            with self.subTest(code=code):
+                check = rusty_tiles.resolve_source_crs(code)
+                self.assertEqual(set(check), keys)
+                self.assertTrue(check["accepted"])
+                self.assertEqual(check["kind"], "allowlist")
+                self.assertIn("+zone=56 +south", check["definition"])
+                self.assertIsNone(check["refusal"])
+                operation = check["crsOperation"]
+                self.assertEqual((operation["source"], operation["kind"]), (code, "null"))
+                self.assertEqual(operation["operationId"], operation_id)
+                self.assertEqual(operation["accuracyMetres"], 3.0)
+                self.assertIn("EPSG v13", operation["verification"])
+                self.assertTrue(check["summary"].endswith("EPSG-stated accuracy 3 m"))
+        # The same operation a conversion reports (geographic GDA2020 suits the LAS degrees).
+        source = self.root / "gda.las"
+        write_las(source)
+        result = rusty_tiles.point_cloud_to_3tz(
+            source, self.root / "gda.3tz", source_crs="EPSG:7844", height_offset=0,
+        )
+        self.assertEqual(result.report["crsOperation"],
+                         rusty_tiles.resolve_source_crs("EPSG:7844")["crsOperation"])
+
+        utm = rusty_tiles.resolve_source_crs(" EPSG:32756 ")
+        self.assertEqual((utm["accepted"], utm["kind"], utm["crsOperation"]), (True, "builtin", None))
+        self.assertEqual(utm["definition"], "+proj=utm +zone=56 +south +datum=WGS84 +units=m")
+        self.assertEqual(utm["summary"], "EPSG:32756: WGS 84, no datum change")
+
+        helmert = "+proj=longlat +ellps=intl +towgs84=-87,-98,-121,0,0,0,0 +no_defs"
+        proj = rusty_tiles.resolve_source_crs(helmert)
+        self.assertEqual((proj["accepted"], proj["kind"], proj["definition"]), (True, "proj", helmert))
+        self.assertIsNone(proj["crsOperation"])
+
+        # A refusal is returned with the converters' own message.
+        refused = rusty_tiles.resolve_source_crs("EPSG:27700")
+        self.assertEqual((refused["accepted"], refused["kind"]), (False, "allowlist"))
+        self.assertIsNone(refused["definition"])
+        self.assertIsNone(refused["crsOperation"])
+        self.assertIn("EPSG:27700 is not in the standard build's GDAL-verified EPSG allow-list",
+                      refused["refusal"])
+        with self.assertRaises(rusty_tiles.UnsupportedError) as caught:
+            rusty_tiles.point_cloud_to_3tz(
+                source, self.root / "bng.3tz", source_crs="EPSG:27700", height_offset=0,
+            )
+        self.assertIn(refused["refusal"], str(caught.exception))
+        self.assertIsNone(rusty_tiles.resolve_source_crs("not a crs")["kind"])
+
+        for bad in (None, 7856, b"EPSG:7856"):
+            with self.subTest(bad=bad), self.assertRaises(TypeError):
+                rusty_tiles.resolve_source_crs(bad)
+        for empty in ("", "   "):
+            with self.subTest(empty=empty), self.assertRaises(rusty_tiles.InvalidRequestError):
+                rusty_tiles.resolve_source_crs(empty)
+
+    def test_supported_epsg_codes_all_resolve(self):
+        codes = rusty_tiles.supported_epsg_codes()
+        numbers = [int(code.removeprefix("EPSG:")) for code in codes]
+        self.assertEqual(codes, [f"EPSG:{number}" for number in numbers])
+        self.assertEqual(numbers, sorted(set(numbers)))
+        info = rusty_tiles.crs_table_info()
+        self.assertEqual(set(info), {"epsg", "proj", "gdal", "codes", "builtin", "allowList"})
+        self.assertEqual(info["codes"], len(codes))
+        self.assertEqual(info["builtin"] + info["allowList"], len(codes))
+        self.assertEqual(info["builtin"], 123)
+        self.assertTrue(info["epsg"].startswith("v") and info["proj"] and info["gdal"])
+        for code in ("EPSG:4326", "EPSG:3857", "EPSG:32601", "EPSG:32760", "EPSG:7856", "EPSG:28356"):
+            self.assertIn(code, codes)
+        self.assertNotIn("EPSG:27700", codes)
+        kinds = {"builtin": 0, "allowlist": 0}
+        for code in codes:
+            check = rusty_tiles.resolve_source_crs(code)
+            self.assertTrue(check["accepted"], (code, check["refusal"]))
+            kinds[check["kind"]] += 1
+        self.assertEqual(kinds, {"builtin": info["builtin"], "allowlist": info["allowList"]})
+
     def test_las_header_crs_matches_explicit_crs(self):
         source = self.root / "header.las"
         write_las(source, epsg=4326)
