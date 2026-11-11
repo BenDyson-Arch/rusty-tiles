@@ -202,12 +202,15 @@ impl<R: Read + Seek> StoredArchive<R> {
         Ok(bytes)
     }
 
-    /// Streams one admitted stored range through CRC-32 and SHA-256.
-    pub(crate) fn hash_range(
+    /// Streams one admitted stored range through CRC-32 and SHA-256, also copying its first
+    /// block (at most 64 KiB, the bytes the hash reads first) into `head` when given. The copy
+    /// costs no further read.
+    pub(crate) fn hash_range_with_head(
         &mut self,
         size: u64,
         offset: u64,
         expected_crc: u32,
+        mut head: Option<&mut Vec<u8>>,
     ) -> Result<[u8; 32], ReadError> {
         let mut remaining = size;
         self.reader.seek(SeekFrom::Start(offset))?;
@@ -217,6 +220,10 @@ impl<R: Read + Seek> StoredArchive<R> {
         while remaining != 0 {
             let count = remaining.min(buffer.len() as u64) as usize;
             read_exact(&mut self.reader, &mut buffer[..count])?;
+            if let Some(head) = head.take() {
+                head.clear();
+                head.extend_from_slice(&buffer[..count]);
+            }
             crc.update(&buffer[..count]);
             sha.update(&buffer[..count]);
             remaining -= count as u64;
@@ -1155,7 +1162,7 @@ pub(crate) mod tests {
                 .into_iter()
                 .nth(index)
                 .ok_or_else(|| ReadError::MissingMember(format!("ordinal {index}")))?;
-            self.hash_range(entry.size, entry.data_offset, entry.crc32)
+            self.hash_range_with_head(entry.size, entry.data_offset, entry.crc32, None)
         }
     }
 

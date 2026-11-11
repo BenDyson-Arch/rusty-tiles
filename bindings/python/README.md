@@ -308,7 +308,8 @@ list, or a lazy sequence when `lazy_payloads=True`.
   rule and default as `mesh_to_tileset`; below 512 MiB raises
   `ResourceLimitError`. `jobs` (a positive `int`, or `None` for auto) caps the
   workers. Neither changes a verdict or any report entry outside `resources`
-  and `scratch`; `resources` states what was resolved.
+  and `scratch`; `resources`, present when either is given, states what was
+  resolved.
 - `callback` receives progress events with totals, including the HLOD
   `validate.delivery` phases; raising from it, or Ctrl-C, stops validation.
 

@@ -41,9 +41,12 @@ mod bulk;
 mod drops;
 pub(super) mod recovery;
 mod replay;
+#[cfg(test)]
+pub(super) use replay::JOB_DECODE_BYTES;
 pub(super) use replay::{Fetch, Payloads};
 pub(super) mod texture;
 mod ticks;
+mod vfs;
 use crate::archive3tz::CatalogConfig;
 use crate::spill::{
     ExternalSorter, Record, Scratch, Sequence, SequenceWriter, SlotFile, SortConfig,
@@ -1172,6 +1175,8 @@ pub(super) struct Store {
     // Registered cardinalities bound recovery SQL before it runs, including refusals.
     recovery_rows: (usize, usize),
     connection: Db,
+    /// Places SQLite's temporary files in the scratch directory; dropped after `connection`.
+    _vfs: Option<vfs::ScratchVfs>,
     _file: Option<tempfile::NamedTempFile>,
     _anchor: Option<SlotFile>,
     _scratch: Arc<Scratch>,
@@ -1228,6 +1233,7 @@ impl Store {
         Ok(Self {
             recovery_rows: (0, 0),
             connection: Db(None),
+            _vfs: None,
             _file: None,
             _anchor: None,
             _scratch: scratch,
@@ -1255,7 +1261,18 @@ impl Store {
             .prefix("hlod-delivery-")
             .tempfile_in(self._scratch.path())
             .map_err(|e| Error::Scratch(ScratchRefusal::Io(e)))?;
-        let connection = Connection::open(file.path()).map_err(sql)?;
+        // SQLite's sorter runs, temporary tables and journals go to the scratch directory too,
+        // the volume the start-of-run bound checked (review P2-2).
+        let scratch_vfs = vfs::ScratchVfs::new(self._scratch.path());
+        let connection = match &scratch_vfs {
+            Some(v) => Connection::open_with_flags_and_vfs(
+                file.path(),
+                rusqlite::OpenFlags::default(),
+                v.name(),
+            ),
+            None => Connection::open(file.path()),
+        }
+        .map_err(sql)?;
         connection
             .execute_batch(&format!(
                 "PRAGMA cache_size=-{}; PRAGMA temp_store={};",
@@ -1326,6 +1343,7 @@ impl Store {
                 .map_err(sql)?;
         }
         self.connection = Db(Some(connection));
+        self._vfs = scratch_vfs;
         self._file = Some(file);
         self._anchor = Some(anchor);
         Ok(())
@@ -4383,69 +4401,243 @@ mod tests {
         assert!(error.exceeded().is_some());
     }
 
-    /// #342: the lookahead replay on worker threads gives the sequential outcome — census,
-    /// work count, error and refusal — at every budget, including budgets that run out
-    /// inside a replay, a placement read or a SQL statement.
+    /// The parallel-replay fixture (#342): `copies` disjoint copies of the `delivery_case`
+    /// hierarchy (an omitted root over a coarse tile with one leaf below and a sibling leaf),
+    /// every third copy with a doubled leaf face so its edges carry two faces in one
+    /// direction (an edge-face replay). Returns the outcome, the census and the work units
+    /// charged when each replayed placement started.
+    fn parallel_case<P: replay::Payloads>(
+        workers: usize,
+        value: u64,
+        payloads: impl FnOnce(Arc<Vec<Vec<u8>>>) -> P,
+    ) -> (String, String, Vec<u64>) {
+        let copies = 24u64;
+        let mut s = Store::new(
+            Arc::new(Scratch::create(None, 4096).unwrap()),
+            &CatalogConfig::selected(),
+            Resources {
+                workers,
+                window_bytes: 1 << 26,
+                ..Resources::FIXED
+            },
+        )
+        .unwrap();
+        s.decoded_limit = 1 << 24;
+        s.tile(0, None, IDENTITY).unwrap();
+        s.kind(0, None, false, 16. * copies as f64, Some(copies as f64))
+            .unwrap();
+        let mut bytes = Vec::new();
+        for k in 0..copies {
+            let x = 10. * k as f64;
+            let (a, b, c, d) = (
+                [x, 0., 0.],
+                [x + 2., 0., 0.],
+                [x, 2., 0.],
+                [x + 2., -2., 0.],
+            );
+            let left = if k % 3 == 0 {
+                replay_fixture(&[[a, b, c], [a, b, c]])
+            } else {
+                replay_fixture(&[[a, b, c]])
+            };
+            let (coarse, leaf, sibling) = (1 + 3 * k, 2 + 3 * k, 3 + 3 * k);
+            s.tile(coarse, Some(0), IDENTITY).unwrap();
+            s.tile(leaf, Some(coarse), IDENTITY).unwrap();
+            s.tile(sibling, Some(0), IDENTITY).unwrap();
+            for (tile, payload) in [
+                (coarse, replay_fixture(&[[a, b, c]])),
+                (leaf, left),
+                (sibling, replay_fixture(&[[b, a, d]])),
+            ] {
+                let rank = bytes.len() as u64;
+                bytes.push(payload);
+                s.reference(tile, rank).unwrap();
+                s.payload(rank, true, tile != coarse).unwrap();
+            }
+        }
+        replay::BOUNDARIES.with(|b| b.borrow_mut().clear());
+        let result = s.finish_with(
+            Budget { value, ..budget() },
+            0,
+            None,
+            &mut payloads(Arc::new(bytes)),
+        );
+        let boundaries = replay::BOUNDARIES.with(|b| std::mem::take(&mut *b.borrow_mut()));
+        (
+            format!("{result:?}"),
+            format!("{:?}", s.census()),
+            boundaries,
+        )
+    }
+
+    fn shared(payloads: Arc<Vec<Vec<u8>>>) -> replay::Shared {
+        replay::Shared {
+            payloads,
+            ..Default::default()
+        }
+    }
+
+    /// #342 (review P3): the lookahead replay on worker threads gives the sequential outcome
+    /// (result, work count, census, error and refusal) at every budget that lands on a
+    /// placement boundary or one unit either side of it, through the leaf, edge-face and
+    /// coarse passes; with worker panics, worker read failures, an admission refusal mid-pass
+    /// and a lookahead that disagrees with its pass.
     #[test]
     fn parallel_replay_matches_the_sequential_replay_at_every_budget() {
-        let run = |workers: usize, value: u64| {
-            let mut payloads = vec![replay_fixture(&[[
-                [0., 0., 0.],
-                [64., 0., 0.],
-                [0., 64., 0.],
-            ]])];
-            let mut s = Store::new(
-                Arc::new(Scratch::create(None, 4096).unwrap()),
-                &CatalogConfig::selected(),
-                Resources {
-                    workers,
-                    window_bytes: 1 << 10,
-                    ..Resources::FIXED
-                },
-            )
-            .unwrap();
-            s.decoded_limit = 1 << 24;
-            s.tile(0, None, IDENTITY).unwrap();
-            s.kind(0, None, false, 1024., Some(1.)).unwrap();
-            s.tile(1, Some(0), IDENTITY).unwrap();
-            s.reference(1, 0).unwrap();
-            s.payload(0, true, false).unwrap();
-            // 48 leaves in a fan of triangles around the origin, several per payload.
-            for leaf in 0..48u64 {
-                let a = leaf as f64;
-                payloads.push(replay_fixture(&[
-                    [[0., 0., 0.], [a + 1., 1., 0.], [a, 2., 0.]],
-                    [[a + 1., 1., 0.], [a + 2., 1., 0.], [a, 2., 0.]],
-                ]));
-                s.tile(leaf + 2, Some(1), IDENTITY).unwrap();
-                s.reference(leaf + 2, leaf + 1).unwrap();
-                s.payload(leaf + 1, true, true).unwrap();
-            }
-            let result = s.finish_with(
-                Budget { value, ..budget() },
-                0,
-                None,
-                &mut replay::Shared(Arc::new(payloads)),
-            );
-            (format!("{result:?}"), format!("{:?}", s.census()))
-        };
-        let full = run(1, budget().value);
-        assert_eq!(run(4, budget().value), full);
+        let (full, census, boundaries) = parallel_case(1, budget().value, shared);
+        assert!(full.starts_with("Ok("), "{full}");
+        assert!(census.starts_with("Some("), "{census}");
+        // Leaf, edge-face and coarse placements were all replayed.
+        assert!(boundaries.len() >= 3 * 24 + 8, "{}", boundaries.len());
         let work: u64 = full
-            .0
             .trim_start_matches("Ok(")
             .trim_end_matches(')')
             .parse()
-            .unwrap_or(0);
-        let mut budgets = vec![1, 10, 100, 1_000, 10_000, 100_000];
-        if work > 0 {
-            budgets.extend((1..16).map(|i| work * i / 16));
-            budgets.extend([work - 1, work, work + 1]);
+            .unwrap();
+        let mut budgets: Vec<u64> = boundaries
+            .iter()
+            .flat_map(|&b| [b.saturating_sub(1), b, b + 1])
+            .chain([1, 100, work - 1, work, work + 1, budget().value])
+            .collect();
+        budgets.sort_unstable();
+        budgets.dedup();
+        for &value in &budgets {
+            let sequential = parallel_case(1, value, shared);
+            for workers in [2, 4] {
+                let parallel = parallel_case(workers, value, shared);
+                assert_eq!(
+                    (&parallel.0, &parallel.1),
+                    (&sequential.0, &sequential.1),
+                    "budget {value}, {workers} workers"
+                );
+            }
         }
-        for value in budgets {
-            assert_eq!(run(4, value), run(1, value), "budget {value}");
-            assert_eq!(run(2, value), run(1, value), "budget {value}");
+        // Worker panics and failed worker reads replay sequentially (review P2-4); an
+        // admission refusal stops the pass where one worker stops; a lookahead that skips a
+        // row disagrees with its pass and the rest of the pass runs sequentially.
+        type Variant = fn(Arc<Vec<Vec<u8>>>) -> replay::Shared;
+        let variants: [(Variant, Option<i64>); 4] = [
+            (
+                |p| replay::Shared {
+                    payloads: p,
+                    panic: vec![4, 31, 55],
+                    ..Default::default()
+                },
+                None,
+            ),
+            (
+                |p| replay::Shared {
+                    payloads: p,
+                    corrupt: vec![1, 7, 40],
+                    ..Default::default()
+                },
+                None,
+            ),
+            (
+                |p| replay::Shared {
+                    payloads: p,
+                    refuse: Some(28),
+                    ..Default::default()
+                },
+                None,
+            ),
+            (shared, Some(13)),
+        ];
+        for (index, (variant, skip)) in variants.into_iter().enumerate() {
+            for value in [budget().value, work / 2, boundaries[boundaries.len() / 3]] {
+                let sequential = parallel_case(1, value, variant);
+                for workers in [2, 4] {
+                    replay::SKIP_AHEAD.with(|s| s.set(skip));
+                    let parallel = parallel_case(workers, value, variant);
+                    replay::SKIP_AHEAD.with(|s| s.set(None));
+                    assert_eq!(
+                        (&parallel.0, &parallel.1),
+                        (&sequential.0, &sequential.1),
+                        "variant {index}, budget {value}, {workers} workers"
+                    );
+                }
+            }
         }
+        // The refusal variant is a refusal, not a pass.
+        assert!(parallel_case(4, budget().value, |p| replay::Shared {
+            payloads: p,
+            refuse: Some(28),
+            ..Default::default()
+        })
+        .0
+        .contains("member reads exceed work limit"));
+    }
+
+    /// A worker panic replays its placement sequentially; a panic there unwinds normally.
+    #[test]
+    fn a_panicking_sequential_replay_unwinds_instead_of_aborting() {
+        // Only the worker panics: the sequential replay gives the ordinary result.
+        struct WorkerOnly(Arc<Vec<Vec<u8>>>, bool);
+        impl replay::Payloads for WorkerOnly {
+            fn admit(&mut self, _: u64) -> Result<(), Error> {
+                Ok(())
+            }
+            fn fetch(&mut self, rank: u64) -> Result<Vec<u8>, Error> {
+                assert!(!self.1 || rank != 31, "injected sequential panic");
+                Ok(self.0[rank as usize].clone())
+            }
+            fn locate(&mut self, _: u64) -> Option<(u64, replay::Fetch)> {
+                Some((1, Box::new(|| panic!("injected worker panic"))))
+            }
+        }
+        let expected = parallel_case(1, budget().value, shared);
+        let got = parallel_case(4, budget().value, |p| WorkerOnly(p, false));
+        assert_eq!((got.0, got.1), (expected.0, expected.1));
+        // The same placement panics sequentially too: an unwind, caught here, not an abort.
+        let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            parallel_case(4, budget().value, |p| WorkerOnly(p, true))
+        }));
+        assert!(unwound.is_err());
+    }
+
+    /// Review P2-2: SQLite's anonymous temporary files (here a sorter that spills past its
+    /// 8 MiB list) are opened inside the scratch directory, not in SQLite's own temp dir.
+    #[test]
+    fn sqlite_temporary_files_live_in_the_scratch_directory() {
+        let mut s = store();
+        s.materialize().unwrap();
+        s.connection
+            .execute_batch(
+                "CREATE TEMP TABLE spill(v BLOB);
+                 WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<200000)
+                 INSERT INTO spill SELECT randomblob(100) FROM n;",
+            )
+            .unwrap();
+        let mut query = s
+            .connection
+            .prepare("SELECT v FROM spill ORDER BY v")
+            .unwrap();
+        let mut rows = query.query([]).unwrap();
+        assert!(rows.next().unwrap().is_some());
+        let opened = s._vfs.as_ref().unwrap().opened();
+        assert!(opened > 0, "the sort and the temporary table opened files");
+        #[cfg(target_os = "linux")]
+        {
+            let dir = s._scratch.path().to_owned();
+            let inside = std::fs::read_dir("/proc/self/fd")
+                .unwrap()
+                .filter_map(|fd| std::fs::read_link(fd.ok()?.path()).ok())
+                .filter(|link| {
+                    link.starts_with(&dir)
+                        && link
+                            .file_name()
+                            .is_some_and(|n| n.to_string_lossy().starts_with("sqlite-"))
+                })
+                .count();
+            assert!(
+                inside > 0,
+                "no SQLite temporary file is open in {}",
+                dir.display()
+            );
+        }
+        drop(rows);
+        drop(query);
+        drop(s);
     }
 
     /// One progress event: phase, done, total.

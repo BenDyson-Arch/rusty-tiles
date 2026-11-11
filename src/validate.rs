@@ -288,6 +288,15 @@ impl<'a> Progress<'a> {
             attempt.check().map_err(|error| self.stopped(error))
         }
     }
+    /// A warning event; without a control a no-op.
+    fn warn(&self, code: &str, message: &str) -> Result<(), Error> {
+        let Some(attempt) = self.attempt else {
+            return Ok(());
+        };
+        attempt
+            .emit(&crate::RunEvent::Warning { code, message })
+            .map_err(|error| self.stopped(error))
+    }
     fn emit(&self) -> Result<(), Error> {
         let Some(attempt) = self.attempt else {
             return Ok(());
@@ -3407,6 +3416,10 @@ fn inspect_run(
     let mut vector_build = None;
     progress.phase("validate.hash", Some(archive.len()))?;
     let mut directory = archive.directory().map_err(archive_admission_error)?;
+    // #342: triangles the GLB members declare, read from the block the hash reads first; they
+    // size the HLOD delivery store's disk bound below.
+    let mut declared_triangles = 0u64;
+    let mut head = Vec::new();
     while let Some(member) = directory.next_entry().map_err(spill_failure)? {
         progress.step()?;
         let name = member.name;
@@ -3419,9 +3432,19 @@ fn inspect_run(
         bytes_read = reads.charge(bytes_read, member.size, || {
             "archive hash reads exceed work limit".into()
         })?;
+        let glb = name.ends_with(".glb");
         let digest = archive
-            .hash_range(member.size, member.data_offset, member.crc32)
+            .hash_range_with_head(
+                member.size,
+                member.data_offset,
+                member.crc32,
+                glb.then_some(&mut head),
+            )
             .map_err(archive_admission_error)?;
+        if glb {
+            declared_triangles =
+                declared_triangles.saturating_add(resources::declared_triangles(&head));
+        }
         let hash = format!("{:x}", sha2::digest::Output::<sha2::Sha256>::from(digest));
         let stem = Path::new(&name)
             .file_stem()
@@ -3566,20 +3589,41 @@ fn inspect_run(
             check.delivery.expect_identity();
         }
         // #342: the scratch-disk bound, before any traversal work: the catalog's estimate plus,
-        // for an HLOD archive, the delivery store's. Refused as typed insufficient space.
+        // for an HLOD archive, the delivery store's terms per declared triangle. Below the
+        // floor the volume is refused as typed insufficient space; below the estimate a
+        // warning is emitted and validation goes on (review P2-1).
         if hlod || check.scratch.is_created() {
-            let hlod_bytes = if hlod {
-                stored_bytes.saturating_mul(resources::hlod_bytes_per_stored_byte())
-            } else {
-                0
+            let per_triangle = |bytes: u64| {
+                if hlod {
+                    declared_triangles.saturating_mul(bytes)
+                } else {
+                    0
+                }
             };
-            let peak = check.scratch.needed().saturating_add(hlod_bytes);
+            let needed = check.scratch.needed();
+            let (floor_rate, estimate_rate) = resources::hlod_bytes_per_triangle();
+            let floor = needed.saturating_add(per_triangle(floor_rate));
+            let estimate = needed
+                .saturating_add(per_triangle(estimate_rate))
+                .max(floor);
             let available = check
                 .scratch
-                .preflight_peak(peak, crate::spill::PreflightStage::Validation)
+                .preflight_peak(floor, crate::spill::PreflightStage::Validation)
                 .map_err(spill_failure)?;
+            let held = check.scratch.live_bytes();
+            if available.saturating_add(held) < estimate {
+                check.progress.warn(
+                    "scratch_space",
+                    &format!(
+                        "validation scratch at {} may run short: estimated peak {estimate} \
+                         bytes, {available} available",
+                        check.scratch.path().display()
+                    ),
+                )?;
+            }
             plan.report.disk = Some(resources::DiskBound {
-                estimated_peak_bytes: peak,
+                estimated_peak_bytes: estimate,
+                refusal_bytes: floor,
                 available_bytes: available,
             });
         }
@@ -3791,8 +3835,9 @@ fn inspect_run(
         .collect(),
         not_inspected: check.not_inspected.into_iter().collect(),
         not_inspected_truncated: labels.truncated,
-        resources: (scratch.is_created() || memory_budget.is_some() || jobs.is_some())
-            .then_some(plan.report),
+        // Host-dependent: only a request that set a budget or jobs gets it back, so a default
+        // report is a function of the archive and the request alone (#342 review P2-3).
+        resources: (memory_budget.is_some() || jobs.is_some()).then_some(plan.report),
     };
     Ok(Inspection {
         report,

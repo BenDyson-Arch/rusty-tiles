@@ -26,8 +26,10 @@ pub(crate) const MIN_PLAN_BYTES: u64 = 256 << 20;
 pub(crate) const JOB_BYTES: u64 = 64 << 20;
 /// Largest merge fan-in: open run readers stay well inside common descriptor limits.
 pub(crate) const MAX_FAN_IN: usize = 128;
-/// Bytes of one SQLite temporary-store row bound: the record plus sorter overhead.
-const TEMP_ROW_BYTES: u64 = 128;
+/// Bytes of one SQLite temporary-store row bound: the record plus sorter overhead. The widest
+/// sorted rows carry a 128-byte frame or world blob (`placements`, `tiles`); their sorter
+/// records are about 160 to 200 bytes (review P2-5).
+const TEMP_ROW_BYTES: u64 = 256;
 
 /// How `jobs` was resolved, stated in the report.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -73,9 +75,12 @@ pub struct StorePlan {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiskBound {
-    /// Estimated scratch peak: the catalog's terms plus, for an HLOD archive, the delivery
-    /// store's (`hlodBytesPerStoredByte × S`).
+    /// Estimated scratch peak: the catalog's terms plus, for an HLOD archive, 256 bytes per
+    /// declared payload triangle. Less free space than this is a warning.
     pub estimated_peak_bytes: u64,
+    /// The catalog's terms plus, for an HLOD archive, 16 bytes per declared triangle. Less
+    /// free space than this is refused.
+    pub refusal_bytes: u64,
     /// Free bytes on the scratch volume when the bound was checked.
     pub available_bytes: u64,
 }
@@ -112,22 +117,27 @@ fn invalid_request(message: impl Into<String>) -> Error {
     Error::InvalidRequest(message.into())
 }
 
-/// One external sort's configuration within `memory` bytes: the fan-in `F` at most
-/// [`MAX_FAN_IN`], a merge buffer `b` from 256 KiB to 1 MiB, and the largest run `R` with
-/// `1.5·R + (F + 1)·b + jobs·8 MB + heap ≤ memory` ([`SortConfig::memory_bound`]). `floor`
-/// keeps the 0.4.0 run size as the smallest run.
-fn sort_for(memory: u64, jobs: usize, floor: SortConfig) -> SortConfig {
+/// One external sort's configuration within `memory` bytes: a merge buffer `b` from 256 KiB
+/// to 1 MiB, a fan-in `F` from 16 to [`MAX_FAN_IN`] with `F·b` at most a quarter of `memory`,
+/// at most `threads` run-sorting threads (one per 64 MiB, each an 8 MB margin), and the largest
+/// run `R` with `1.5·R + (F + 1)·b + threads·8 MB + heap ≤ memory`
+/// ([`SortConfig::memory_bound`]), at least [`MIN_RUN_BYTES`].
+fn sort_for(memory: u64, threads: usize) -> SortConfig {
     let buffer = (memory / 1024).clamp(256 << 10, 1 << 20);
-    let fan_in = MAX_FAN_IN as u64;
-    let fixed = (fan_in + 1) * buffer + jobs as u64 * 8_000_000 + fan_in * 96;
-    let run = (memory.saturating_sub(fixed) * 2 / 3).max(floor.run_bytes as u64);
+    let fan_in = (memory / 4 / buffer).clamp(16, MAX_FAN_IN as u64);
+    let threads = threads.min((memory >> 26).max(1) as usize).max(1);
+    let fixed = (fan_in + 1) * buffer + threads as u64 * 8_000_000 + fan_in * 96;
+    let run = (memory.saturating_sub(fixed) * 2 / 3).max(MIN_RUN_BYTES);
     SortConfig {
         run_bytes: usize::try_from(run).unwrap_or(usize::MAX),
-        fan_in: MAX_FAN_IN.max(floor.fan_in),
+        fan_in: fan_in as usize,
         buffer_bytes: buffer as usize,
-        jobs,
+        jobs: threads,
     }
 }
+
+/// The smallest planned sort run.
+const MIN_RUN_BYTES: u64 = 2 << 20;
 
 fn host(bytes: u64) -> usize {
     usize::try_from(bytes).unwrap_or(usize::MAX)
@@ -139,15 +149,12 @@ impl Plan {
         requested: Option<u64>,
         jobs: Option<NonZeroUsize>,
     ) -> Result<Self, Error> {
-        // Unit tests compare whole reports across runs: they see one fixed host.
-        #[cfg(test)]
-        let (detected, cores) = (Some(16 << 30), 4);
-        #[cfg(not(test))]
-        let (detected, cores) = (
+        Self::resolve_with(
+            requested,
+            jobs,
             crate::mesh_large::available_memory(),
             std::thread::available_parallelism().map_or(1, NonZeroUsize::get),
-        );
-        Self::resolve_with(requested, jobs, detected, cores)
+        )
     }
 
     pub(crate) fn resolve_with(
@@ -192,29 +199,29 @@ impl Plan {
         let p = share
             .saturating_sub((workers as u64 - 1) * JOB_BYTES)
             .max(MIN_PLAN_BYTES);
-        let base = CatalogConfig::DEFAULT;
         // Live together at the peak (the delivery stage): catalog (resident P/8 or a P/32
         // page cache), facts P/8, stream log P/32, payload-row sort P/16, one delivery sort
         // P/4, SQLite (page cache P/8 plus a sorter list of at most the same size) and its
-        // temporary store P/16: 0.9·P. At most four workers sort one delivery run (each
-        // costs the sort an 8 MB margin). The catalog's side sorts and the payload-row
-        // passes, never live beside them, sort on one thread: an in-memory sort of one
-        // chunk then needs no scratch (`SortedStream::into_sorted_vec`).
-        let delivery_sort = sort_for(p / 4, workers.min(4), base.side_sort);
-        let side_sort = sort_for(p / 4, 1, base.side_sort);
+        // temporary store P/16: under 0.9·P. No term keeps a fixed 0.4.0 floor: every store
+        // returns the same records resident or spilled, so a small plan only spills more.
+        // At most four workers sort one delivery run. The catalog's side sorts and the
+        // payload-row passes, never live beside them, sort on one thread: an in-memory sort
+        // of one chunk then needs no scratch (`SortedStream::into_sorted_vec`).
+        let delivery_sort = sort_for(p / 4, workers.min(4));
+        let side_sort = sort_for(p / 4, 1);
         let catalog = CatalogConfig {
             // Admission only: the row and extent sorts are live together, nothing else is.
-            sort: sort_for(p / 2, 1, base.sort),
+            sort: sort_for(p / 2, 1),
             side_sort,
-            rows_sort: sort_for(p / 16, 1, base.rows_sort),
-            resident_bytes: (p / 8).max(base.resident_bytes),
-            max_fences: base.max_fences,
-            cache_bytes: (p / 32).max(base.cache_bytes),
-            buffer_bytes: base.buffer_bytes,
-            facts_resident_bytes: (p / 8).max(base.facts_resident_bytes),
-            stream_log_resident_bytes: host((p / 32).max(base.stream_log_resident_bytes as u64)),
+            rows_sort: sort_for(p / 16, 1),
+            resident_bytes: p / 8,
+            max_fences: CatalogConfig::DEFAULT.max_fences,
+            cache_bytes: p / 32,
+            buffer_bytes: CatalogConfig::DEFAULT.buffer_bytes,
+            facts_resident_bytes: p / 8,
+            stream_log_resident_bytes: host(p / 32),
         };
-        let sqlite_cache_bytes = (p / 8).max(8 << 20);
+        let sqlite_cache_bytes = p / 8;
         let sqlite_temp_bytes = p / 16;
         let report = ValidationResources {
             memory_budget: BudgetReport {
@@ -257,7 +264,7 @@ impl Plan {
 
     /// The SQLite temporary-store bound of the delivery store: every row it can sort or keep in
     /// a temporary table is a charged delivery row (`ROW_UNITS` work units each), a tile or a
-    /// reference, so `(elements ÷ ROW_UNITS + visits + references) × 128 B` bounds it.
+    /// reference, so `(elements ÷ ROW_UNITS + visits + references) × 256 B` bounds it.
     pub(crate) fn temp_store_in_memory(
         &self,
         elements: u64,
@@ -273,23 +280,74 @@ impl Plan {
     }
 }
 
-/// Scratch bytes of the HLOD delivery store per admitted stored byte: its main database, the
-/// external sort runs live beside it and SQLite's own temporary files. Measured on mesh-built
-/// HLOD archives: a sampled peak of 2.7 (report 4.4) on Walem 2048 (0.97 GB) and at least
-/// 5.5 (143 GB live after 58 min) on a 26 GB archive; the bound keeps a margin above both.
-pub(crate) const HLOD_BYTES_PER_STORED_BYTE: u64 = 7;
+/// The delivery store's scratch per declared payload triangle, for the start-of-run disk
+/// bound (review P2-1). Its rows are geometry rows (points, segments, faces, requirements,
+/// border images), so the bound follows declared triangles, not stored bytes: texture bytes
+/// add no rows. Measured peaks (scratch directory plus SQLite temporary files): 165 B on
+/// Walem 2048, about 160 B on a 4x Walem archive and 244 B on two 1.3 M-triangle crops.
+///
+/// Below `FLOOR` bytes per triangle, a tenth of the smallest measured peak, the volume cannot
+/// hold the store: refused. Below `ESTIMATE` it may not: a warning, and validation goes on.
+/// Neither is a proven bound; the floor's margin covers stores far smaller than measured.
+pub(crate) const HLOD_FLOOR_BYTES_PER_TRIANGLE: u64 = 16;
+pub(crate) const HLOD_ESTIMATE_BYTES_PER_TRIANGLE: u64 = 256;
 
-/// [`HLOD_BYTES_PER_STORED_BYTE`], or a unit test's override on this thread.
-pub(crate) fn hlod_bytes_per_stored_byte() -> u64 {
+/// The HLOD floor and estimate per declared triangle, or a unit test's override on this thread.
+pub(crate) fn hlod_bytes_per_triangle() -> (u64, u64) {
     #[cfg(test)]
-    if let Some(factor) = HLOD_FACTOR.with(std::cell::Cell::get) {
-        return factor;
+    if let Some(factors) = HLOD_FACTORS.with(std::cell::Cell::get) {
+        return factors;
     }
-    HLOD_BYTES_PER_STORED_BYTE
+    (
+        HLOD_FLOOR_BYTES_PER_TRIANGLE,
+        HLOD_ESTIMATE_BYTES_PER_TRIANGLE,
+    )
 }
 #[cfg(test)]
 thread_local! {
-    static HLOD_FACTOR: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+    static HLOD_FACTORS: std::cell::Cell<Option<(u64, u64)>> = const { std::cell::Cell::new(None) };
+}
+
+/// Triangles a GLB member declares: index (or position) count ÷ 3 of every triangle-list
+/// primitive in its JSON chunk, read from the member's first block (`head`). A member whose
+/// chunk is not entirely in `head`, or does not parse, declares none: the count only sizes the
+/// disk bound, and an undercount can only lower the refusal floor.
+pub(crate) fn declared_triangles(head: &[u8]) -> u64 {
+    let Some(length) = head
+        .get(..20)
+        .filter(|h| h[..4] == *b"glTF" && h[16..20] == *b"JSON")
+        .map(|h| u32::from_le_bytes([h[12], h[13], h[14], h[15]]) as usize)
+    else {
+        return 0;
+    };
+    let Some(Ok(doc)) = head
+        .get(20..20usize.saturating_add(length))
+        .map(serde_json::from_slice::<serde_json::Value>)
+    else {
+        return 0;
+    };
+    let accessors = &doc["accessors"];
+    let mut triangles = 0u64;
+    for primitive in doc["meshes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|mesh| mesh["primitives"].as_array())
+        .flatten()
+    {
+        if primitive.get("mode").is_some_and(|m| m != 4) {
+            continue;
+        }
+        let accessor = primitive
+            .get("indices")
+            .or_else(|| primitive["attributes"].get("POSITION"))
+            .and_then(serde_json::Value::as_u64);
+        let count = accessor
+            .and_then(|a| accessors[a as usize]["count"].as_u64())
+            .unwrap_or(0);
+        triangles = triangles.saturating_add(count / 3);
+    }
+    triangles
 }
 
 #[cfg(test)]
@@ -345,32 +403,52 @@ mod tests {
     /// Every store's declared memory at the delivery peak fits the planned share.
     #[test]
     fn stores_fit_the_plan_at_every_budget_and_job_count() {
-        for budget in [512 << 20, GIB, 2 * GIB, 4 * GIB, 16 * GIB, 64 * GIB] {
-            for jobs in [None, Some(1), Some(2), Some(8), Some(64)] {
+        for budget in [
+            512 << 20,
+            640 << 20,
+            768 << 20,
+            GIB,
+            3 * GIB / 2,
+            2 * GIB,
+            4 * GIB,
+            16 * GIB,
+        ] {
+            for jobs in [None, Some(1), Some(2), Some(3), Some(8), Some(64)] {
                 let p = plan(Some(budget), jobs, Some(128 * GIB));
                 let c = p.catalog;
                 let workers = p.jobs as u64;
-                let live = c.resident_bytes.max(c.cache_bytes + 24 * c.max_fences)
+                // The replay window charges each job its stored bytes and twice the job decode
+                // workspace; a job alone may exceed it by that workspace (review P2-6).
+                let replay = if workers > 1 {
+                    p.window_bytes + 2 * super::super::hlod_delivery::JOB_DECODE_BYTES as u64
+                } else {
+                    0
+                };
+                assert!(replay <= (workers - 1) * JOB_BYTES, "{budget} {jobs:?}");
+                let stores = c.resident_bytes.max(c.cache_bytes + 24 * c.max_fences)
                     + c.facts_resident_bytes
                     + c.stream_log_resident_bytes as u64
                     + c.rows_sort.memory_bound::<crate::archive3tz::Row>()
                     + p.delivery_sort.memory_bound::<crate::archive3tz::Row>()
                     + 2 * p.sqlite_cache_bytes
-                    + p.sqlite_temp_bytes
-                    // The replay window lies inside the further workers' reservation.
-                    + (workers - 1) * JOB_BYTES;
-                assert!(p.window_bytes <= (workers - 1) * JOB_BYTES);
-                let share = (budget - RESERVE_BYTES).max(MIN_PLAN_BYTES);
-                // Floors keep the 0.4.0 sizes, so the smallest plan may sit at the floor
-                // profile; every larger plan fits its share.
-                if budget >= 2 * GIB {
-                    assert!(live <= share, "{budget} {jobs:?}: {live} > {share}");
-                }
-                assert!(c.side_sort.fan_in <= MAX_FAN_IN && c.side_sort.fan_in >= 32);
-                assert!(c.side_sort.run_bytes >= CatalogConfig::DEFAULT.side_sort.run_bytes);
-                assert!(c.cache_bytes >= CatalogConfig::DEFAULT.cache_bytes);
+                    + p.sqlite_temp_bytes;
+                let share = budget - RESERVE_BYTES;
+                let live = stores + (workers - 1) * JOB_BYTES;
+                assert!(live <= share, "{budget} {jobs:?}: {live} > {share}");
+                // Admission: the catalog's two sorts, nothing else.
+                let admission = c.sort.memory_bound::<crate::archive3tz::Row>()
+                    + c.side_sort.memory_bound::<crate::archive3tz::Row>();
+                assert!(admission <= share, "{budget} {jobs:?}");
+                assert!((16..=MAX_FAN_IN).contains(&c.side_sort.fan_in));
             }
         }
+        // From 4 GiB every store is at least its 0.4.0 fixed size.
+        let p = plan(Some(4 * GIB), Some(1), Some(128 * GIB));
+        let old = CatalogConfig::DEFAULT;
+        assert!(p.catalog.resident_bytes >= old.resident_bytes);
+        assert!(p.catalog.facts_resident_bytes >= old.facts_resident_bytes);
+        assert!(p.catalog.cache_bytes >= old.cache_bytes);
+        assert!(p.delivery_sort.run_bytes >= old.side_sort.run_bytes);
     }
 
     /// A few-GiB budget sorts the delivery rows of a 26 GB HLOD archive (about 150 GB of
@@ -408,12 +486,44 @@ mod tests {
         assert_eq!((p.jobs, p.report.jobs.limited_by), (1, "floor"));
     }
 
-    /// The start-of-run disk bound runs before traversal and refuses a short volume as typed
-    /// insufficient space (`io`), naming the validation preflight; with room, the bound is
-    /// reported and the archive gets its own verdict.
+    /// One triangle, three positions and no indices.
+    fn triangle_glb() -> Vec<u8> {
+        let doc = serde_json::json!({
+            "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "buffers":[{"byteLength":36}],"bufferViews":[{"buffer":0,"byteLength":36}],
+            "accessors":[{"bufferView":0,"componentType":5126,"type":"VEC3","count":3,
+                "min":[0,0,0],"max":[1,1,0]}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}]
+        });
+        let positions: Vec<u8> = [0f32, 0., 0., 1., 0., 0., 0., 1., 0.]
+            .iter()
+            .flat_map(|v| v.to_le_bytes())
+            .collect();
+        crate::glb::encode_glb(&doc, &positions).unwrap()
+    }
+
     #[test]
-    fn a_short_scratch_volume_is_refused_before_traversal() {
-        use super::super::i1_fixtures::{package, point_glb, tileset, Files};
+    fn declared_triangles_read_the_json_chunk_only() {
+        assert_eq!(declared_triangles(&triangle_glb()), 1);
+        let mut points = triangle_glb();
+        // Mode 0 (points) declares no triangles; neither do truncated or foreign heads.
+        let at = points
+            .windows(14)
+            .position(|w| w == b"\"attributes\":{")
+            .unwrap();
+        points.splice(at..at, b"\"mode\":0,".iter().copied());
+        assert_eq!(declared_triangles(&points), 0);
+        assert_eq!(declared_triangles(&triangle_glb()[..30]), 0);
+        assert_eq!(declared_triangles(b"PK\x03\x04 not a glb at all"), 0);
+    }
+
+    /// The start-of-run disk bound runs before traversal (review P2-1): below the floor a
+    /// short volume is refused as typed insufficient space (`io`) naming the validation
+    /// preflight; between the floor and the estimate a warning is emitted and the archive
+    /// gets its own verdict; texture bytes declare no triangles and add nothing.
+    #[test]
+    fn a_short_scratch_volume_is_refused_before_traversal_and_a_tight_one_warned() {
+        use super::super::i1_fixtures::{package, tileset, Files};
         use super::super::{inspect_with, ExpectedProfile, ValidationRequest};
         use serde_json::json;
         let files: Files = [
@@ -423,32 +533,39 @@ mod tests {
                 "boundingVolume":{"box":[0,0,0,1,0,0,0,1,0,0,0,1]},
                 "geometricError":0,"content":{"uri":"p.glb"}})),
             ),
-            ("p.glb".to_string(), point_glb()),
+            ("p.glb".to_string(), triangle_glb()),
         ]
         .into();
         let (_work, path) = package(&files);
-        let run = |factor: Option<u64>| {
-            HLOD_FACTOR.with(|f| f.set(factor));
-            let phases = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
-            struct Phases(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
-            impl crate::Observer for Phases {
-                fn observe(&self, event: &crate::RunEvent<'_>) -> Result<(), crate::JobError> {
-                    if let crate::RunEvent::Progress { phase, done: 0, .. } = event {
-                        self.0.lock().unwrap().push((*phase).into());
+        type Seen = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
+        struct Events(Seen);
+        impl crate::Observer for Events {
+            fn observe(&self, event: &crate::RunEvent<'_>) -> Result<(), crate::JobError> {
+                match event {
+                    crate::RunEvent::Progress { phase, done: 0, .. } => {
+                        self.0.lock().unwrap().push((*phase).into())
                     }
-                    Ok(())
+                    crate::RunEvent::Warning { code, .. } => {
+                        self.0.lock().unwrap().push(format!("warning:{code}"))
+                    }
+                    _ => {}
                 }
+                Ok(())
             }
-            let control = crate::RunControl::new(Some(std::sync::Arc::new(Phases(phases.clone()))));
+        }
+        let run = |factors: Option<(u64, u64)>| {
+            HLOD_FACTORS.with(|f| f.set(factors));
+            let seen: Seen = Default::default();
+            let control = crate::RunControl::new(Some(std::sync::Arc::new(Events(seen.clone()))));
             let result = inspect_with(
                 ValidationRequest::new(&path).expect_profile(ExpectedProfile::Hlod),
                 &control,
             );
-            HLOD_FACTOR.with(|f| f.set(None));
-            let phases = phases.lock().unwrap().clone();
-            (result, phases)
+            HLOD_FACTORS.with(|f| f.set(None));
+            let seen = seen.lock().unwrap().clone();
+            (result, seen)
         };
-        let (refused, phases) = run(Some(u64::MAX));
+        let (refused, seen) = run(Some((u64::MAX, u64::MAX)));
         let error = refused.unwrap_err();
         assert_eq!(error.category(), ("io", 1), "{error}");
         assert!(
@@ -462,20 +579,34 @@ mod tests {
             error.to_string().contains("validation preflight"),
             "{error}"
         );
-        assert_eq!(phases, ["validate.hash"], "refused before traversal");
-        // With room, the same archive gets its own verdict: no source identity.
-        let (verdict, phases) = run(None);
+        assert_eq!(seen, ["validate.hash"], "refused before traversal");
+        // Room for the floor, not the estimate: warned, then the archive's own verdict.
+        let (verdict, seen) = run(Some((0, u64::MAX)));
         let error = verdict.unwrap_err();
         assert!(error.to_string().contains("hlodFeatureIds"), "{error}");
-        assert!(phases.iter().any(|p| p == "validate.traverse"));
+        assert_eq!(
+            &seen[..3],
+            [
+                "validate.hash",
+                "warning:scratch_space",
+                "validate.traverse"
+            ]
+        );
+        // The production factors: no warning on this volume.
+        let (verdict, seen) = run(None);
+        assert!(verdict.unwrap_err().to_string().contains("hlodFeatureIds"));
+        assert!(!seen.iter().any(|s| s.starts_with("warning:")));
     }
 
     #[test]
     fn temp_store_is_memory_only_when_the_row_bound_fits() {
-        let p = plan(Some(4 * GIB), Some(1), Some(64 * GIB));
-        // The default floor work budget (16 M elements) of a small archive fits.
+        let p = plan(Some(16 * GIB), Some(1), Some(64 * GIB));
+        // At 256 B a row, the floor work budget (16 M elements) of a small archive fits 16 GiB.
         assert!(p.temp_store_in_memory(16_000_000, 128, 1 << 18, 1 << 20));
         // A 1 GB archive's scaled budget (about 77 G elements) does not.
         assert!(!p.temp_store_in_memory(77_000_000_000, 128, 1 << 22, 1 << 24));
+        // ... but not the 4 GiB default's P/16.
+        let p = plan(Some(4 * GIB), Some(1), Some(64 * GIB));
+        assert!(!p.temp_store_in_memory(16_000_000, 128, 1 << 18, 1 << 20));
     }
 }

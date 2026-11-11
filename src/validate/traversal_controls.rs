@@ -129,7 +129,6 @@ fn inspect_in(path: &Path, budgets: Budgets, mode: Mode) -> (Outcome, u64, usize
             let mut report = serde_json::to_value(&inspection.report).unwrap();
             // The scratch member records where the catalog spilled, not a verdict.
             report.as_object_mut().unwrap().remove("scratch");
-            report.as_object_mut().unwrap().remove("resources");
             (
                 Outcome {
                     result: report.to_string(),

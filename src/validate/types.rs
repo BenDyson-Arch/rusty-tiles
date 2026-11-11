@@ -291,9 +291,8 @@ pub struct ValidationReport {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<ValidationWarning>,
     /// The resolved memory budget, workers, store sizes and scratch-disk bound (#342). Host-
-    /// and request-dependent, never part of a verdict. Like `scratch`, present only when it
-    /// mattered: when scratch was used (every HLOD delivery store is on scratch) or the request
-    /// set a memory budget or jobs, so a default small-archive report is reproducible.
+    /// dependent and never part of a verdict, so present only when the request set a memory
+    /// budget or jobs: a default report depends on the archive and the request alone.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resources: Option<super::resources::ValidationResources>,
 }
