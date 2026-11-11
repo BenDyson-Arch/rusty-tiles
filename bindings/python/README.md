@@ -69,7 +69,7 @@ Place it either with [rigid placement](#rigid-placement) (`anchor`,
 [source CRS](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#source-crs),
 not both. A source CRS uses `source_crs="EPSG:3857"` (for example),
 `source_axes="y-up"` (default) or `"xyz"`, `source_offset=(E, N[, A])` added in
-double precision or a Metashape `source_offset_file`, and `height_offset` in
+double precision or a `source_offset_file` holding `E:`/`N:`/`A:` lines, and `height_offset` in
 metres (default 0), with the CLI's rules. `source_crs=None` or `"local"` keeps
 local input. There is no CRS inference, geoid adjustment, texture-format
 selector or coarse-tile tuning.

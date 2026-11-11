@@ -77,7 +77,7 @@ Tiles one static glTF/GLB scene into a 3D Tiles 1.1 implicit `.3tz`. The scene i
 | `--sourceCrs` | `--source-crs` | `local` | `local`, or a 2D horizontal CRS as an EPSG code, WKT or PROJ string, applied at capture. Cannot be combined with the anchor options. |
 | `--sourceAxes` | `--source-axes` | `y-up` with a source CRS | Axes after node transforms: `y-up` (east, height, −north) or `xyz` (east, north, height). |
 | `--sourceOffset E N [A]` | `--source-offset` | `0 0 0` | Shift added in double precision: E and N in CRS units, A in metres. |
-| `--sourceOffsetFile` | `--source-offset-file` | none | Metashape offset file with exactly the lines `E: <n>`, `N: <n>` and `A: <n>`. Cannot be combined with `--sourceOffset`. |
+| `--sourceOffsetFile` | `--source-offset-file` | none | Offset file you write, with exactly the lines `E: <n>`, `N: <n>` and `A: <n>` (Metashape does not export one). Cannot be combined with `--sourceOffset`. |
 | `--heightOffset` | `--height-offset` | `0` with a source CRS | Metres added to source height plus A to give ellipsoidal height. |
 
 The shared `-i`, `-o` and `--force` options apply. Output is `.3tz` only.

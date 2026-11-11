@@ -87,8 +87,9 @@ invalid number, range or quaternion is `invalid_request`.
 
 ## Source CRS
 
-Projected or geographic sources, such as Metashape GLB exports in EPSG:3857
-with an `offset.txt` shift, declare their CRS instead of a rigid placement:
+Projected or geographic sources, such as a Metashape GLB export in EPSG:3857
+whose coordinates were shifted by an offset typed into the export dialog,
+declare their CRS instead of a rigid placement:
 
 ```sh
 rusty-tiles mesh -i site.glb -o site.3tz \
@@ -104,7 +105,7 @@ rusty-tiles mesh -i site.glb -o site.3tz \
 | `--source-crs` (`--sourceCrs`) | `local` (the default) or a 2D horizontal EPSG, WKT or PROJ definition, resolved by the shared [CRS resolver](FORMATS.md#point-clouds) |
 | `--source-axes` (`--sourceAxes`) | Default `y-up` (glTF is Y up): X=E, Y=height, Z=−N. `xyz` is X=E, Y=N, Z=height. Axes are read after node transforms and never inferred from data |
 | `--source-offset E N [A]` (`--sourceOffset`) | Added in double precision: E/N in horizontal CRS units, A in metres (default 0). Default `0 0 0` |
-| `--source-offset-file` (`--sourceOffsetFile`) | A Metashape offset file holding exactly the lines `E: <number>`, `N: <number>`, `A: <number>` in that order (optional final LF or CRLF, at most 4 KiB). Anything else is `invalid_request`. Excludes `--source-offset` |
+| `--source-offset-file` (`--sourceOffsetFile`) | A text file you write, holding exactly the lines `E: <number>`, `N: <number>`, `A: <number>` in that order (for example the shift entered in Metashape's export dialog, which Metashape does not save) (optional final LF or CRLF, at most 4 KiB). Anything else is `invalid_request`. Excludes `--source-offset` |
 | `--height-offset` (`--heightOffset`) | Default `0`: metres added to source height plus A to give WGS84 **ellipsoidal** height. The default is right only when source height plus A is already ellipsoidal |
 
 A source CRS cannot be combined with `--anchor`, `--orientation-xyzw` or

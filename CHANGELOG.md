@@ -78,7 +78,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
   2D horizontal EPSG/WKT/PROJ definition through the shared conservative resolver) with
   `--source-axes y-up|xyz` (default `y-up`), `--height-offset` (default 0), and either
   `--source-offset E N [A]` added in double precision or `--source-offset-file` holding exactly
-  the Metashape `E:`/`N:`/`A:` lines; Python takes `source_crs`, `source_axes`, `source_offset`,
+  the lines `E:`/`N:`/`A:` (a file you write, for example with a shift typed into Metashape's export); Python takes `source_crs`, `source_axes`, `source_offset`,
   `source_offset_file` and `height_offset`. Capture maps every position exactly in f64 into one
   ENU frame at the mapped source-bounds centre; normals use the Jacobian inverse transpose and
   tangents the Jacobian followed by Gram-Schmidt against the normal, with Jacobians interpolated
