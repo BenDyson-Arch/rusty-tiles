@@ -205,6 +205,7 @@ jobs:
           image="ghcr.io/${RELEASE_REPO,,}:$RELEASE_TAG"
           docker tag rusty-tiles:release "$image"
           docker run --rm --network none \
+            --tmpfs /tmp:rw,nosuid,nodev,size=256m \
             --mount type=bind,src="$PWD/tests/fixtures",dst=/fixtures,readonly \
             --mount type=bind,src="$PWD/scripts/test-packaged-runtime.sh",dst=/test-packaged-runtime.sh,readonly \
             --entrypoint /bin/sh "$image" /test-packaged-runtime.sh /fixtures
