@@ -79,7 +79,7 @@ The [command reference](docs/CLI.md) lists every option, exit code and JSON outp
 
 ## Coordinates and height
 
-rusty-tiles never guesses a vertical datum. A mesh is either local metres (optionally placed with `--anchor lon lat height`) or declared with `--source-crs`. Point clouds and 3D vectors in a horizontal CRS need `--height-offset`; `0` is right only when heights are already ellipsoidal metres. Of EPSG codes, the standard build transforms WGS84 geographic, WGS84 UTM and Web Mercator (plus WKT/PROJ projections with explicit datum shifts); other CRSs need the native-geospatial build, and an operation that needs missing datum grids is refused, never approximated. Each guide gives the rules for its input: [mesh](docs/MESH.md), [point clouds](docs/FORMATS.md), [vectors](docs/VECTOR.md).
+rusty-tiles never guesses a vertical datum. A mesh is either local metres (optionally placed with `--anchor lon lat height`) or declared with `--source-crs`. Point clouds and 3D vectors in a horizontal CRS need `--height-offset`; `0` is right only when heights are already ellipsoidal metres. Of EPSG codes, the standard build transforms WGS84 geographic, WGS84 UTM and Web Mercator and about 3,100 codes from a [GDAL-verified allow-list](docs/FORMATS.md#gdal-verified-epsg-allow-list), such as GDA2020/GDA94 MGA, NZTM2000 and ETRS89 UTM (plus WKT/PROJ projections with explicit datum shifts); other CRSs need the native-geospatial build, and an operation that needs missing datum grids is refused, never approximated. Each guide gives the rules for its input: [mesh](docs/MESH.md), [point clouds](docs/FORMATS.md), [vectors](docs/VECTOR.md).
 
 ## Python and Rust
 

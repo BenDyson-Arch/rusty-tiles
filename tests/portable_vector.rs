@@ -898,3 +898,25 @@ fn selected_geopackage_epochs_need_native_or_explicit_crs_override() {
     );
     assert!(!all.exists());
 }
+
+#[test]
+fn allow_listed_epsg_layers_report_their_datum_operation() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("gda2020.geojson");
+    // GDA2020 geographic (EPSG:7844), Brisbane; the GDA2020 to WGS 84 null transformation.
+    geojson(
+        &source,
+        vec![point(json!(1), json!({}), [153.02, -27.47, 5.])],
+    );
+    let output = root.path().join("gda2020.3tz");
+    let report = convert(
+        &source,
+        &output,
+        &["--source-crs", "EPSG:7844", "--height-offset", "0"],
+    );
+    let operation = &report["layers"][0]["crsOperation"];
+    assert_eq!(operation["source"], "EPSG:7844", "{report}");
+    assert_eq!(operation["kind"], "null");
+    assert_eq!(operation["operation"], "GDA2020 to WGS 84 (2)");
+    assert_eq!(operation["accuracyMetres"], 3.0);
+}

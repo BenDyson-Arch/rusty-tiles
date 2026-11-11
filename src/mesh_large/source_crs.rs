@@ -180,6 +180,9 @@ pub struct MeshSourceCrsReport {
     pub height_offset_metres: f64,
     /// `portable` (pure Rust) or `native` (strict PROJ), fixed for the whole capture.
     pub operation: &'static str,
+    /// The allow-listed EPSG datum operation and its EPSG-stated accuracy, when one is used.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datum_operation: Option<crate::crs::CrsOperation>,
     /// The local ENU origin: the mapped centre of the used post-node source bounds.
     pub origin_degrees_metres: [f64; 3],
     /// Jacobian lattice cells per post-node source axis.
@@ -374,6 +377,7 @@ impl SourceFrame {
                 #[cfg(feature = "native-geospatial")]
                 Transform::Native(_) => "native",
             },
+            datum_operation: operation.operation().cloned(),
             origin_degrees_metres: anchor,
             jacobian_lattice_cells: [0; 3],
             jacobian_exact_cells: 0,

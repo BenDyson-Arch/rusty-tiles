@@ -34,20 +34,39 @@ rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs header --h
 The standard build transforms to ECEF with `proj4rs`, using only verified grid-free operations. This tier is shared by mesh `--source-crs` and standard vector conversion. It accepts:
 
 - WGS84 geographic (`EPSG:4326`), UTM north and south (`EPSG:32601–32660`, `EPSG:32701–32760`), Web Mercator (`EPSG:3857`) and World Mercator (`EPSG:3395`). EPSG codes may contain whitespace after the colon, such as `EPSG: 32632`.
+- About 3,100 further EPSG codes from a [GDAL-verified allow-list](#gdal-verified-epsg-allow-list), including GDA2020 and GDA94 MGA zones, GDA94/GDA2020 geographic, GDA94 Lambert and Albers, NZTM2000, ETRS89 UTM and TM35FIN.
 - WKT1/WKT2 and PROJ definitions using transverse Mercator, Mercator, Lambert conformal conic, Albers equal area, stereographic or oblique stereographic, when the datum is explicitly WGS84 or the definition supplies a three- or seven-parameter Helmert shift (`TOWGS84`/`+towgs84`). The [parameter rules](#projection-parameter-rules) below apply.
 
 Horizontal feet and other supported units leave source Z unscaled: heights stay source Z plus the offset, in metres.
 
+### GDAL-verified EPSG allow-list
+
+The standard build embeds a table of EPSG codes whose definition, run through this resolver, reproduces GDAL/PROJ's best operation. Each listed code maps to an explicit PROJ or WKT1 definition with a three- or seven-parameter Helmert shift or a null shift, never a grid. A code is listed only when all 18 samples, a 3×3 lattice over its area of use at heights 0 m and 1,000 m, land within 1 mm in ECEF of GDAL's only-best, no-ballpark, network-off result, and GDAL answers at every sample. The table records the EPSG dataset, PROJ and GDAL versions it was generated with (EPSG v13.102, PROJ 9.9.0 and GDAL 3.13.3), and CI regenerates it to catch drift. Sampling is evidence over the area of use, not a proof for every coordinate.
+
+Covered families include GDA2020 MGA (`EPSG:7846–7859`), GDA94 MGA (`EPSG:28348–28358`), GDA94 Lambert and Albers (`EPSG:3112`, `EPSG:3577`), GDA94 and GDA2020 geographic (`EPSG:4283`, `EPSG:7844`), NZTM2000 (`EPSG:2193`), ETRS89 UTM (`EPSG:25829–25835`), TM35FIN (`EPSG:3067`), RGF93 Lambert-93, SWEREF99 TM, the JGD2000/JGD2011 plane rectangular systems, NAD83(2011) and NAD83(CSRS) codes, and many national grids defined by Helmert transformations.
+
+`conversion.json` names the datum operation each listed code uses, with EPSG's stated accuracy, as `crsOperation` (point clouds), per layer (vectors) or `source_crs.datum_operation` (meshes); the CLI prints it after the conversion. A null transformation, for example GDA2020 to WGS 84 (2), is reported with its stated accuracy of 3 m, never as exact: the numbers match GDAL, but the datums still differ by up to that amount. `rusty-tiles doctor --sourceCrs EPSG:7856` resolves one definition without converting anything and reports its operation.
+
+These stay refused in the standard build and need the native-geospatial build:
+
+- grid-based operations: British National Grid (`EPSG:27700`, OSTN15), NAD27, the original NAD83 State Plane and UTM codes, NAD83 BC and Canada Albers and similar, about 740 codes;
+- CRSs with no non-ballpark operation offline, such as CGCS2000;
+- methods outside the portable set, such as ETRS89 LAEA Europe (`EPSG:3035`), Swiss Oblique Mercator and Krovak;
+- coordinate epochs (`EPSG:7856@2020`) and compound CRSs;
+- CRSs on a dynamic reference frame, such as ITRF2014 (`EPSG:9000`), WGS 84 (G1762) (`EPSG:9057`) and WGS 72 (`EPSG:4322` and its UTM zones), even where GDAL answers without an epoch. Datum ensembles such as WGS 84 and ETRS89 are not dynamic frames and are covered.
+
+A native build keeps resolving every EPSG code other than the WGS84 cases with strict native PROJ; the table serves the standard build only.
+
 These need strict native GDAL/PROJ instead:
 
-- other EPSG codes, unknown datums, non-Greenwich prime meridians and geographic `+lon_0` offsets;
+- EPSG codes outside the allow-list, unknown datums, non-Greenwich prime meridians and geographic `+lon_0` offsets;
 - non-decimal PROJ angles, quoted PROJ values, PROJ `+init` references or spaced assignments, and unsupported WKT syntax, including mixed delimiters;
 - spherical transverse Mercator, Lambert azimuthal equal area, projection parameters outside the portable domain and unusual axes;
 - coordinate epochs, including `EPSG:32632@2020`, and grid parameters.
 
 Lambert azimuthal equal area uses native PROJ because the portable implementation exceeds the 1 mm ECEF accuracy threshold for some definitions. An ellipsoid alone does not establish a datum.
 
-A native build falls back to native PROJ automatically. The standard build refuses the input with `pure-Rust point-cloud CRS transform unavailable: …; use a build with --features native-geospatial (GDAL >= 3.12, PROJ >= 9.2) and the required local PROJ database/grids`. It also refuses compound CRS headers that declare a geoid with this message. Even a native build requires a 2D horizontal CRS and explicitly established ellipsoidal heights for point clouds. No datum shift or grid requirement is silently dropped. `doctor --command point-cloud` lists the tier, CRS classes and native fallback readiness.
+A native build falls back to native PROJ automatically. The standard build refuses the input with `pure-Rust CRS transform unavailable: …; use a build with --features native-geospatial (GDAL >= 3.12, PROJ >= 9.2) and the required local PROJ database/grids`. It also refuses compound CRS headers that declare a geoid with this message. Even a native build requires a 2D horizontal CRS and explicitly established ellipsoidal heights for point clouds. No datum shift or grid requirement is silently dropped. `doctor --command point-cloud` lists the tier, CRS classes, the allow-list's size and versions, and native fallback readiness.
 
 ### What the output keeps
 

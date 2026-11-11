@@ -39,6 +39,7 @@ mod tileset_node;
 mod vec3;
 pub mod vector;
 
+pub use crs::{CrsOperation, OperationKind};
 pub use error::Error;
 pub use georef::{Cartographic, RotationDegrees, SourceAxes, SourceOffset};
 pub use mesh_archive::{

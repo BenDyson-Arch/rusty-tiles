@@ -12,7 +12,9 @@ Most users need only the **standard package**. It converts meshes, LAS/LAZ point
 | Container `ghcr.io/bendyson-arch/rusty-tiles` | Native-geospatial | CLI plus GDAL, PROJ, GEOS and SQLite runtime libraries |
 | Cargo with `--features native-geospatial` | Native-geospatial | CLI or Rust library linked to system geospatial libraries |
 
-The [native-geospatial build](#native-geospatial-cli) is optional. Use it only for imagery, terrain, Shapefile and other OGR vector formats, or a CRS operation outside the standard package's verified grid-free tier. It is a build-time Cargo feature, not a runtime switch or a Python extra. Installing GDAL alongside a standard binary or wheel does not enable it. There is no native wheel or native ZIP/tarball.
+The [native-geospatial build](#native-geospatial-cli) is optional. Use it only for imagery, terrain, Shapefile and other OGR vector formats, or a CRS operation outside the standard package's verified grid-free tier.
+
+The standard package resolves WGS84 geographic, UTM and Mercator codes and about 3,100 further EPSG codes from a [GDAL-verified allow-list](FORMATS.md#gdal-verified-epsg-allow-list), including GDA2020/GDA94 MGA, GDA94/GDA2020 geographic, NZTM2000 and ETRS89 UTM. Codes whose best operation needs a grid, such as British National Grid (OSTN15), NAD27 and the original NAD83, and coordinate epochs need the native build. Check one with `rusty-tiles doctor --sourceCrs EPSG:<code>`. It is a build-time Cargo feature, not a runtime switch or a Python extra. Installing GDAL alongside a standard binary or wheel does not enable it. There is no native wheel or native ZIP/tarball.
 
 The [converter guide](CONVERTERS.md) lists input and placement limits for each build. Conversion runs offline in both builds. The CLI preview needs a separately installed Cesium runtime.
 

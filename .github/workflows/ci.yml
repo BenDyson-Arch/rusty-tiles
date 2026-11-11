@@ -417,6 +417,50 @@ jobs:
           rustup component add clippy
           cargo clippy --locked --all-targets --features native-geospatial -- -D warnings
 
+  crs-allowlist:
+    name: CRS allow-list regeneration
+    needs: changes
+    # Full tier only: about 15 minutes of GDAL sampling and a release lib-test build. Pull
+    # requests check the committed table, its parser and GDAL reference fixtures in `Rust`.
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Read the table's GDAL and PROJ versions
+        id: pins
+        run: python3 -I scripts/crs-allowlist/generate.py versions | tee -a "$GITHUB_OUTPUT"
+      - uses: mamba-org/setup-micromamba@add3a49764cedee8ee24e82dfde87f5bc2914462 # v2
+        with:
+          environment-name: crs-allowlist
+          create-args: >-
+            python=3.13
+            gdal=${{ steps.pins.outputs.gdal }}
+            libgdal-core=${{ steps.pins.outputs.gdal }}
+            proj=${{ steps.pins.outputs.proj }}
+            -c conda-forge
+          init-shell: bash
+      - name: Select stable Rust
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: crs-allowlist
+      - name: Regenerate the EPSG allow-list and fail on drift or any code over 1 mm
+        shell: bash -el {0}
+        run: python -I scripts/crs-allowlist/generate.py check --summary "${{ runner.temp }}/crs-allowlist-summary.json"
+      - name: Retain the regeneration summary
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: crs-allowlist-summary
+          path: ${{ runner.temp }}/crs-allowlist-summary.json
+          if-no-files-found: ignore
+
   python:
     name: Python
     needs: changes
@@ -646,6 +690,7 @@ jobs:
       - portable
       - encoder-link
       - native-geospatial
+      - crs-allowlist
       - python
       - python-free-runtime
       - wheel-acceptance
@@ -666,7 +711,7 @@ jobs:
           fi
           # Docs-only changes skip the matrix by design; anything else must have run it.
           if [ "$DOCS_ONLY" != true ]; then
-            printf '%s\n' "$NEEDS" | jq -e '.rust.result == "success" and .python.result == "success" and .portable.result == "success" and .["native-geospatial"].result == "success" and .["wheel-acceptance"].result == "success"' >/dev/null \
+            printf '%s\n' "$NEEDS" | jq -e '.rust.result == "success" and .python.result == "success" and .portable.result == "success" and .["native-geospatial"].result == "success" and .["crs-allowlist"].result == "success" and .["wheel-acceptance"].result == "success"' >/dev/null \
               || { echo "::error::a required full-tier job was skipped"; exit 1; }
           fi
 
