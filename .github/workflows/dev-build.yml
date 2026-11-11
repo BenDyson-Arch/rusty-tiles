@@ -189,36 +189,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           BUILD_SHA: ${{ github.sha }}
-        run: |
-          set -eu
-          api="repos/$GH_REPO"
-          title='Development build'
-          # Staging drafts left by a failed earlier run.
-          for id in $(gh api --paginate "$api/releases" --jq ".[] | select(.draft and .name == \"$title\" and (.tag_name | startswith(\"dev-staging-\"))) | .id"); do
-            gh api -X DELETE "$api/releases/$id"
-          done
-          # Stage the new build as a draft with every asset, so the published dev release is
-          # replaced in one step. A draft creates no tag; publishing it as `dev` creates the tag
-          # at the build commit (a release-created tag, not a ref update). The tag moves only
-          # once a build is out: a run that fails earlier leaves the previous build, and the next
-          # run rebuilds.
-          draft=$(gh api -X POST "$api/releases" -f tag_name="dev-staging-$GITHUB_RUN_ID" \
-            -f target_commitish="$BUILD_SHA" -f name="$title" -F body=@notes.md \
-            -F draft=true -F prerelease=true --jq .id)
-          for asset in dist/*.tgz dist/*.zip dist/*.whl dist/SHA256SUMS; do
-            curl --fail --silent --show-error --retry 3 -X POST -o /dev/null \
-              -H "Authorization: Bearer $GH_TOKEN" -H 'Content-Type: application/octet-stream' \
-              --data-binary @"$asset" \
-              "https://uploads.github.com/$api/releases/$draft/assets?name=${asset#dist/}"
-          done
-          test "$(gh api "$api/releases/$draft" --jq '.assets | length')" -eq 11
-          # releases/tags/ returns only a published release, never the draft.
-          if previous=$(gh api "$api/releases/tags/dev" --jq .id 2>/dev/null); then
-            gh api -X DELETE "$api/releases/$previous"
-          fi
-          if gh api "$api/git/ref/tags/dev" >/dev/null 2>&1; then
-            gh api -X DELETE "$api/git/refs/tags/dev"
-          fi
-          gh api -X PATCH "$api/releases/$draft" -f tag_name=dev -f target_commitish="$BUILD_SHA" \
-            -F draft=false -F prerelease=true --jq .html_url
-          test "$(gh api "$api/git/ref/tags/dev" --jq .object.sha)" = "$BUILD_SHA"
+        # Moves the tag and swaps the assets of the published release in place, so downloads
+        # keep working, then proves the tag and asset set through the API (see the script).
+        run: scripts/dev_release.sh notes.md dist
