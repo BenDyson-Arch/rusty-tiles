@@ -17,7 +17,8 @@
 //! flat shaded, and the coarse tiles must match). It is crease-aware and per face corner
 //! ([`corner_normals`]): within [`CREASE_DEGREES`] of each corner's face. Pages are handed
 //! to the shared leaf delivery encoder ([`deliver`], S4 owns codec and mip delivery);
-//! [`CoarsePage`] is the pre-encode page. Geometry, triangle order and representative IDs are never changed.
+//! [`CoarsePage`] is the pre-encode page. Geometry, triangle order and representative IDs
+//! are never changed.
 //!
 //! S3 holds no walk scratch (`scratch::ScratchLedger`): charts, page rasters, bake chunks,
 //! donor frontiers, mip chains and codec workspace are memory, charged in the parent job's
