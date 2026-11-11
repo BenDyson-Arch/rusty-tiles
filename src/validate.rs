@@ -33,8 +33,9 @@ pub use limits::{
 use limits::{LimitPlan, Sources};
 pub use rows::{PayloadRows, PayloadRowsIter};
 pub use types::{
-    ExpectedProfile, InterfaceCensus, PayloadReport, ScratchRefusal, ScratchReport,
-    ValidationFailure, ValidationLimits, ValidationReport, ValidationRequest,
+    CoarseNormalCensus, ExpectedProfile, InterfaceCensus, PayloadReport, ScratchRefusal,
+    ScratchReport, ValidationFailure, ValidationLimits, ValidationReport, ValidationRequest,
+    ValidationWarning,
 };
 type Error = ValidationFailure;
 use facts::{FactStore, Stored};
@@ -3671,14 +3672,29 @@ fn inspect_run(
     check.progress.phase("validate.rows", None)?;
     let payloads = check.rows.finish(names, scratch.clone())?;
     check.progress.step()?;
+    let census = check.delivery.census();
+    if census
+        .as_ref()
+        .is_some_and(|c| c.coarse_normals.skipped_tiles > 0)
+    {
+        check
+            .not_inspected
+            .insert("coarseNormalInversion.meshoptFilteredNormal".into());
+    }
+    let warnings = census
+        .as_ref()
+        .and_then(|c| coarse_normal_warning(&c.coarse_normals))
+        .into_iter()
+        .collect();
     let report = ValidationReport {
         ok: true,
+        warnings,
         archive: path.into(),
         tiles: check.tiles as u64,
         content_references: check.contents as u64,
         entries,
         payloads,
-        interface_census: check.delivery.census().map(|c| InterfaceCensus {
+        interface_census: census.map(|c| InterfaceCensus {
             basis: "decoded leaf canonical f32 keys",
             shared_points: c.shared_points,
             shared_segments: c.shared_segments,
@@ -3696,6 +3712,7 @@ fn inspect_run(
             dropped_by_depth: c.dropped_by_depth,
             texture_refinable_tiles: c.texture_refinable_tiles,
             texture_bound_tiles: c.texture_bound_tiles,
+            coarse_normals: coarse_normal_census(&c.coarse_normals),
         }),
         scratch: scratch.is_created().then(|| ScratchReport {
             memory_backed: scratch.memory_backed(),
@@ -3891,6 +3908,43 @@ mod i1_fixtures {
         (work, output)
     }
 }
+/// Corner NORMALs more than this from their coarse face shade the face against its
+/// winding (the inversion bound; producers since #336 stay within 60°, so snorm8 and
+/// position rounding cannot reach it).
+const COARSE_NORMAL_BOUND_DEGREES: u32 = 90;
+fn coarse_normal_census(c: &hlod_delivery::CoarseNormals) -> CoarseNormalCensus {
+    CoarseNormalCensus {
+        bound_degrees: COARSE_NORMAL_BOUND_DEGREES,
+        tiles: c.tiles,
+        faces: c.faces,
+        skipped_tiles: c.skipped_tiles,
+        inverted_tiles: c.inverted_tiles_by_depth.iter().sum(),
+        inverted_faces: c.inverted_faces_by_depth.iter().sum(),
+        inverted_tiles_by_depth: c.inverted_tiles_by_depth.clone(),
+        inverted_faces_by_depth: c.inverted_faces_by_depth.clone(),
+    }
+}
+/// The `coarseNormalInversion` warning: never a failure (`ok` stays true).
+fn coarse_normal_warning(c: &hlod_delivery::CoarseNormals) -> Option<ValidationWarning> {
+    let census = coarse_normal_census(c);
+    (census.inverted_faces > 0).then(|| ValidationWarning {
+        code: "coarseNormalInversion",
+        message: format!(
+            "{} of {} coarse tiles with NORMAL ({} of {} faces) have a corner NORMAL more than \
+             {}° from its face, so those faces shade against their winding; by cell depth, \
+             tiles {:?}, faces {:?} (interfaceCensus.coarseNormals). Rebuild with a \
+             producer that includes #336.",
+            census.inverted_tiles,
+            census.tiles,
+            census.inverted_faces,
+            census.faces,
+            census.bound_degrees,
+            census.inverted_tiles_by_depth,
+            census.inverted_faces_by_depth,
+        ),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

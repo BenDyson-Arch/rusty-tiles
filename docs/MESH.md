@@ -380,11 +380,22 @@ to 10 M triangles), coarse tiles of sources with normals gained 15–18% vertice
 and 13–15% bytes. Coarse tiles do not carry the source's fine shading detail
 (untextured classes get no normal map). Leaves are unaffected.
 
+60° is the single crease angle, with no option. Any angle below 90° keeps every
+face from shading against its own winding, for every input. 60° sits between
+the measured alternatives on a synthetic rock wall: 45° shaded closest to the
+source but cost 36% more coarse bytes (60°: 15%), and 80° cost only 4% but
+shaded further from the source, close to the earlier averaged normals at the
+coarsest levels. At 45–60°, rough coarse tiles look faceted where their own
+geometry is, instead of blurred. `validate` reports any coarse corner normal
+more than 90° from its face as the `coarseNormalInversion` warning
+([VALIDATION.md](VALIDATION.md#coarse-normals)); archives written before this
+change usually carry it.
+
 Simplification can still leave some coarse faces wound against the source
-surface they replace: on one 10 M-triangle photogrammetry mesh, a
+surface they replace (issue #372): on one 10 M-triangle photogrammetry mesh, a
 nearest-source estimate put about 7% of the root tile's area and 3–5% at the
-next three depths against the source. Double-sided materials
-shade them on the viewer's side; single-sided materials cull them, as before.
+next three depths against the source. Double-sided materials shade them on the
+viewer's side; single-sided materials cull them, as before.
 
 Coarse pages go through the same encoder and decoded-image gates as leaf pages,
 so a profile chooses one colour codec for both (see

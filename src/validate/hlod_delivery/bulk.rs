@@ -696,7 +696,7 @@ mod tests {
         for (i, bytes) in payloads.iter().enumerate() {
             let tile = i as i64 + 1;
             let surface =
-                replay_surface(bytes, delivery_frame(IDENTITY), 1 << 24, &effort).unwrap();
+                replay_surface(bytes, delivery_frame(IDENTITY), 1 << 24, &effort, false).unwrap();
             for p in &surface.points {
                 points.insert((point_bytes(*p), tile));
             }

@@ -265,6 +265,37 @@ pub struct ValidationReport {
     /// Present only when the catalog or the payload rows spilled to scratch.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scratch: Option<ScratchReport>,
+    /// Observations that do not fail validation (`ok` stays true), in a fixed order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<ValidationWarning>,
+}
+/// A named observation that does not fail validation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidationWarning {
+    /// Stable name, for example `coarseNormalInversion`.
+    pub code: &'static str,
+    pub message: String,
+}
+/// Coarse tiles publishing NORMAL and their faces compared, and those with a face some
+/// corner NORMAL of which points more than `boundDegrees` from the face's own normal
+/// (wound by its corners, after the node transform): such a face is shaded against its
+/// winding. By cell depth (links and implicit roots are not cells). Reported as the
+/// `coarseNormalInversion` warning, never a failure: coarse tiles before #336 averaged
+/// every face at a vertex and commonly show it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoarseNormalCensus {
+    pub bound_degrees: u32,
+    pub tiles: u64,
+    pub faces: u64,
+    /// Coarse tiles whose NORMAL uses an `EXT_meshopt_compression` filter: not compared
+    /// (`notInspected` names them).
+    pub skipped_tiles: u64,
+    pub inverted_tiles: u64,
+    pub inverted_faces: u64,
+    pub inverted_tiles_by_depth: Vec<u64>,
+    pub inverted_faces_by_depth: Vec<u64>,
 }
 /// Archive-only incidence, cap and omission observations; no producer counters are used.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -299,6 +330,7 @@ pub struct InterfaceCensus {
     /// texels, and those whose geometricError is within 1% of the texture-implied error.
     pub texture_refinable_tiles: u64,
     pub texture_bound_tiles: u64,
+    pub coarse_normals: CoarseNormalCensus,
 }
 /// The validation's scratch use, reported whenever any spill file was written.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -333,6 +365,9 @@ impl ValidationReport {
         }
         if let Some(scratch) = self.scratch {
             value["scratch"] = serde_json::to_value(scratch)?;
+        }
+        if !self.warnings.is_empty() {
+            value["warnings"] = serde_json::to_value(&self.warnings)?;
         }
         Ok(value)
     }

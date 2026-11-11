@@ -30,6 +30,7 @@ The JSON report contains:
 | `payloads` | One row per payload URI, in byte order: `uri`, `accessorsChecked`, `primitivesChecked`, `vertices` |
 | `interfaceCensus` | HLOD archives only: border and omission counts (see [HLOD archives](#hlod-archives)) |
 | `scratch` | Present only when scratch files were written: `memoryBacked` and `peakBytes` |
+| `warnings` | Present only when some warning applies: a list of `{code, message}`. Warnings never fail validation; `ok` stays `true`. The CLI prints each as `warning: <code>: <message>` on stderr. The one code so far is [`coarseNormalInversion`](#coarse-normals) |
 
 Payload rows are read on demand. The CLI streams them. Python returns a list by default, or a lazy read-only sequence with `validate(input, lazy_payloads=True)`.
 
@@ -234,6 +235,13 @@ The report's `interfaceCensus` is derived from the archive alone, using decoded 
 | `contractedBorderArcs`, `contractedBorderVertices` | Shared borders delivered as one chord over two or more leaf edges, and the leaf border vertices those chords remove |
 | `droppedComponents`, `droppedByDepth` | Child components that coarse payloads no longer hold, by delivered cell depth |
 | `textureRefinableTiles`, `textureBoundTiles` | Tiles refinable to finer texels, and those whose `geometricError` is within 1% of the texture term |
+| `coarseNormals` | Coarse tiles that publish `NORMAL` and their faces (`tiles`, `faces`), tiles whose `NORMAL` is meshopt-filtered and not compared (`skippedTiles`), and those with a face shaded against its winding (`invertedTiles`, `invertedFaces`, and the same `ByDepth`, by cell depth), against `boundDegrees` (90); see [coarse normals](#coarse-normals) |
+
+### Coarse normals
+
+For every coarse tile that publishes `NORMAL`, validation compares each face's corner normals with the face's own normal (wound by its corners, after the node transform). A corner normal more than 90° from its face means the face shades against its winding: under double-sided lighting it renders inverted. Such faces are counted in `interfaceCensus.coarseNormals` by cell depth and reported as the `coarseNormalInversion` warning. They never fail validation.
+
+The bound is 90° because that is where shading inverts, whatever smoothing a producer chose. `mesh` keeps every coarse corner normal within 60° of its face ([coarse normals](MESH.md#coarse-appearance)), so normal and position rounding stay far from the bound. Archives written before that change (issue #336) average every face at a vertex and usually carry the warning; rebuilding them removes it. Leaves are not compared: they keep the source's own normals. The comparison is charged to the existing work budget (6 units per face). It does not compare coarse orientation with the source surface, which remains not inspected. A coarse `NORMAL` stored behind an `EXT_meshopt_compression` filter (for example `OCTAHEDRAL`) is not decoded for this comparison: such tiles are counted as `skippedTiles`, and `notInspected` lists `coarseNormalInversion.meshoptFilteredNormal`. `mesh` writes coarse normals without a filter.
 
 ### Border rules
 
