@@ -6,8 +6,9 @@ release.yml (for a tag or a dry run) and dev-build.yml publish only a commit tha
 count, even when they ran the full tier. Such a run's portable and wheel jobs upload the
 archives and wheels they tested (`binary-<target>`, `wheel-<target>`), and its `Build
 version` job uploads `ci-build-<version>`, naming the version they carry. A run whose 11
-artifacts are all unexpired and whose version is the one being published is reused, so
-the release publishes what CI tested instead of rebuilding it.
+artifacts are all unexpired, whose version is the one being published, and whose
+ci-build.json names that version, this commit and that run, is reused, so the release
+publishes what CI tested instead of rebuilding it.
 
     ci_run.py select --repo OWNER/REPO --commit SHA --version VERSION [--in-progress]
 
@@ -20,8 +21,10 @@ with GH_TOKEN; stdlib only.
 """
 import argparse
 import json
+from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 TARGETS = (
     "x86_64-unknown-linux-gnu",
@@ -44,6 +47,30 @@ def gh_api(path, jq, paginate=False):
         command.insert(2, "--paginate")
     completed = subprocess.run(command, check=True, capture_output=True, text=True)
     return [line for line in completed.stdout.splitlines() if line]
+
+
+def gh_manifest(repo, run, version):
+    """The ci-build.json of a run, or None if it cannot be downloaded or parsed."""
+    with tempfile.TemporaryDirectory(prefix="rusty-tiles-ci-build-") as temp:
+        completed = subprocess.run(["gh", "run", "download", str(run), "--repo", repo,
+                                    "--name", f"ci-build-{version}", "--dir", temp],
+                                   capture_output=True, text=True)
+        if completed.returncode != 0:
+            return None
+        try:
+            return json.loads((Path(temp) / "ci-build.json").read_text())
+        except (OSError, ValueError):
+            return None
+
+
+def manifest_problem(manifest, commit, run, version):
+    """Why a run's ci-build.json does not describe this build (None: it does)."""
+    if not isinstance(manifest, dict):
+        return "ci-build.json could not be read"
+    expected = {"version": version, "commit": commit, "run": str(run)}
+    wrong = [f"{key}={manifest.get(key)!r} (expected {value!r})"
+             for key, value in expected.items() if str(manifest.get(key)) != value]
+    return "ci-build.json has " + ", ".join(wrong) if wrong else None
 
 
 def candidate_runs(api, repo, commit, in_progress):
@@ -72,7 +99,8 @@ def live_artifacts(api, repo, run):
                    '.artifacts[] | select(.expired | not) | .name', paginate=True))
 
 
-def select(api, repo, commit, version, in_progress):
+def select(api, repo, commit, version, in_progress, manifest=None):
+    manifest = (lambda run: gh_manifest(repo, run, version)) if manifest is None else manifest
     gate, reusable = None, None
     required = required_artifacts(version)
     for run in candidate_runs(api, repo, commit, in_progress):
@@ -81,11 +109,16 @@ def select(api, repo, commit, version, in_progress):
         if gate is None:
             gate = run
         missing = [name for name in required if name not in live_artifacts(api, repo, run)]
-        if not missing:
-            reusable = run
-            break
-        print(f"Run {run} passed but cannot be reused; missing or expired: {', '.join(missing)}",
-              file=sys.stderr)
+        if missing:
+            print(f"Run {run} passed but cannot be reused; missing or expired: {', '.join(missing)}",
+                  file=sys.stderr)
+            continue
+        problem = manifest_problem(manifest(run), commit, run, version)
+        if problem:
+            print(f"Run {run} passed but cannot be reused: {problem}", file=sys.stderr)
+            continue
+        reusable = run
+        break
     return gate, reusable
 
 

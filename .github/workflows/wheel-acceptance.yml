@@ -190,6 +190,8 @@ jobs:
           key: official-blender-${{ steps.blender-pin.outputs.sha256 }}
       - name: Install and test using official Blender's embedded Python
         run: |
+          # The evidence must be for this matrix row's release and platform.
+          python -c "import json, os, sys; e = json.load(open('evidence/blender-distribution.json')); want = (os.environ['BLENDER_RELEASE'], os.environ['BLENDER_PLATFORM']); got = (e.get('release'), e.get('distribution_platform')); sys.exit(None if got == want else f'Blender evidence is for {got}, this row is {want}')"
           blender=$(python -c "import json; print(json.load(open('evidence/blender-distribution.json'))['executable'])")
           python scripts/test_blender_wheel.py candidate/*.whl --blender "$blender" --distribution-json evidence/blender-distribution.json --report-json evidence/blender-acceptance.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

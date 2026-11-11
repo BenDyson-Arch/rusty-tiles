@@ -3,7 +3,11 @@
 `resolve` prints the development version of the checked-out commit as GitHub output lines.
 The base is the next patch after the workspace version when that version is already tagged
 `vX.Y.Z`, and otherwise the workspace version itself (develop often bumps it before the
-release). The development number is the commit's UTC committer time, YYYYMMDDHHMM, so later
+release). A pre-release workspace version `X.Y.Z-rc.K` (or alpha.K, beta.K) gives
+`X.Y.Z-rc.K.dev.N` before `vX.Y.Z-rc.K` is tagged and `X.Y.Z-rc.(K+1).dev.N` after, so a
+dev build sorts between the release candidates around it, in pip's order (0.4.1rc1 <
+0.4.1rc2.devN < 0.4.1rc2 < 0.4.1); a plain `X.Y.Z-dev.N` would sort before every candidate.
+Other pre-release forms are refused. The development number is the commit's UTC committer time, YYYYMMDDHHMM, so later
 commits sort later and a rebuild of the same commit keeps its version. Cargo spells it
 `0.4.1-dev.202611121734`; maturin writes `0.4.1.dev202611121734` into the wheel metadata,
 which pip orders after 0.4.0 and before 0.4.1.
@@ -51,14 +55,28 @@ def release_core(version):
     return tuple(int(part) for part in match.groups()[:3])
 
 
-def development_version(core, tagged, committed):
-    """Cargo and PEP 440 spellings of the development version after release `core`."""
+PRE_RELEASE = re.compile(r"(alpha|beta|rc)\.(0|[1-9][0-9]*)")
+
+
+def development_version(core, tagged, committed, pre=None):
+    """Cargo and PEP 440 spellings of the development version after release `core`.
+
+    pre is the workspace version's pre-release (such as "rc.1"), or None for a release.
+    tagged says whether the workspace version itself is tagged.
+    """
     major, minor, patch = core
-    if tagged:
-        patch += 1
-    base = f"{major}.{minor}.{patch}"
     number = committed.astimezone(timezone.utc).strftime("%Y%m%d%H%M")
-    return f"{base}-dev.{number}", f"{base}.dev{number}"
+    if pre is None:
+        if tagged:
+            patch += 1
+        base = f"{major}.{minor}.{patch}"
+        return f"{base}-dev.{number}", f"{base}.dev{number}"
+    match = PRE_RELEASE.fullmatch(pre)
+    if match is None:
+        raise SystemExit(f"error: dev builds support alpha.N, beta.N and rc.N pre-releases, not {pre!r}")
+    kind, count = match.group(1), int(match.group(2)) + (1 if tagged else 0)
+    cargo = f"{major}.{minor}.{patch}-{kind}.{count}.dev.{number}"
+    return cargo, python_version(cargo)
 
 
 def python_version(cargo):
@@ -101,9 +119,10 @@ def write(path, text, newline):
 def development():
     version, _ = workspace_version(read(ROOT / "Cargo.toml")[0])
     core = release_core(version)
-    tagged = bool(git("tag", "--list", "v{}.{}.{}".format(*core)))
+    pre = version.partition("-")[2] or None
+    tagged = bool(git("tag", "--list", f"v{version}"))
     committed = datetime.fromtimestamp(int(git("show", "-s", "--format=%ct", "HEAD")), timezone.utc)
-    return development_version(core, tagged, committed)
+    return development_version(core, tagged, committed, pre)
 
 
 def resolve():

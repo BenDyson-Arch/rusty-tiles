@@ -38,8 +38,17 @@ class FakeApi:
         raise AssertionError(path)
 
 
+def manifest_of(runs):
+    def manifest(run):
+        spec = runs[run]
+        if "manifest" in spec:
+            return spec["manifest"]
+        return {"version": VERSION, "python-version": VERSION, "kind": "release", "commit": SHA, "run": str(run)}
+    return manifest
+
+
 def select(runs, in_progress=False, version=VERSION):
-    return ci_run.select(FakeApi(runs), REPO, SHA, version, in_progress)
+    return ci_run.select(FakeApi(runs), REPO, SHA, version, in_progress, manifest=manifest_of(runs))
 
 
 class SelectTests(unittest.TestCase):
@@ -72,6 +81,18 @@ class SelectTests(unittest.TestCase):
 
     def test_artifacts_of_another_version_are_not_reused(self):
         self.assertEqual(select({10: {"event": "push"}}, version="0.4.1-dev.202611121734"), (10, None))
+
+    def test_the_manifest_must_name_this_version_commit_and_run(self):
+        good = {"version": VERSION, "commit": SHA, "run": "10"}
+        for wrong in ({"commit": "b" * 40}, {"run": "9"}, {"version": "0.4.0"}):
+            with self.subTest(wrong=wrong):
+                runs = {10: {"event": "push", "manifest": {**good, **wrong}}}
+                self.assertEqual(select(runs), (10, None))
+        self.assertEqual(select({10: {"event": "push", "manifest": None}}), (10, None))
+        self.assertEqual(select({10: {"event": "push", "manifest": good}}), (10, 10))
+        # An older run with a good manifest is reused instead.
+        runs = {10: {"event": "push", "manifest": {**good, "run": "3"}}, 9: {"event": "push"}}
+        self.assertEqual(select(runs), (10, 9))
 
     def test_required_artifacts(self):
         self.assertEqual(len(ALL), 11)
