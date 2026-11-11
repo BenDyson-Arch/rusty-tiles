@@ -361,9 +361,9 @@ fn policy_statements_match_the_implementation() {
 
 #[test]
 fn documented_capture_steps_are_the_reported_steps() {
-    // The step names `CaptureStep::name` returns, read from its definition.
+    // The step names `Step::name` returns, read from its definition.
     let phases = read("src/mesh_large/phases.rs");
-    let start = phases.find("impl CaptureStep {").unwrap();
+    let start = phases.find("impl Step {").unwrap();
     let end = start + phases[start..].find("\n}\n").unwrap();
     let steps: BTreeSet<String> = phases[start..end]
         .split('"')
@@ -371,15 +371,16 @@ fn documented_capture_steps_are_the_reported_steps() {
         .step_by(2)
         .map(String::from)
         .collect();
-    assert_eq!(steps.len(), 11, "{steps:?}");
+    assert_eq!(steps.len(), 15, "{steps:?}");
     for (document, text) in [
         ("docs/MESH.md", read("docs/MESH.md")),
         ("docs/CLI.md", read("docs/CLI.md")),
     ] {
-        // Every `capture_…` code span that is not a report field.
-        let documented: BTreeSet<String> = text
-            .match_indices("`capture_")
-            .filter_map(|(at, _)| {
+        // Every `capture_…` and `hlod_incidence_…` code span that is not a report field.
+        let documented: BTreeSet<String> = ["`capture_", "`hlod_incidence_"]
+            .iter()
+            .flat_map(|prefix| text.match_indices(prefix).map(|(at, _)| at))
+            .filter_map(|at| {
                 let name = &text[at + 1..];
                 Some(name[..name.find('`')?].to_owned())
             })

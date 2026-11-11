@@ -4,7 +4,7 @@
 use super::{
     capture::{canonical, source_position, triangle_bytes, vertices, SourceScan},
     input::{ElementReader, StreamSource},
-    phases::{CaptureProgress, CaptureStep},
+    phases::{Step, StepProgress},
     records::{Bounds, CornerPosition, CornerRef, Cube, Provenance, TriangleRecord},
     source_crs::{Jacobian, SourceFrame},
 };
@@ -321,7 +321,7 @@ pub(crate) fn capture_full<'s>(
     scratch: &'s Scratch,
     sort: SortConfig,
     scan: &SourceScan,
-    progress: &'s CaptureProgress<'_>,
+    progress: &'s StepProgress<'_>,
 ) -> Result<SortedStream<'s, FullTriangle>> {
     let mut scan = *scan;
     capture_full_in(
@@ -346,9 +346,9 @@ pub(crate) fn capture_full_in<'s>(
     sort: SortConfig,
     layout: Layout,
     scan: &mut SourceScan,
-    progress: &'s CaptureProgress<'_>,
+    progress: &'s StepProgress<'_>,
 ) -> Result<SortedStream<'s, FullTriangle>> {
-    progress.begin(CaptureStep::Validate, 1)?;
+    progress.begin(Step::Validate, 1)?;
     source.validate_payload(sort.buffer_bytes, &mut || progress.check())?;
     progress.end()?;
     let corners_total = scan.triangles.checked_mul(3).ok_or_else(overflow)?;
@@ -363,7 +363,7 @@ pub(crate) fn capture_full_in<'s>(
             "attribute layout omits a selected primitive's attribute",
         ));
     }
-    progress.begin(CaptureStep::Corners, corners_total)?;
+    progress.begin(Step::Corners, corners_total)?;
     let mut corners = ExternalSorter::<CornerRef>::new(scratch, sort)?.observed(progress);
     let mut read = 0u64;
     for (ordinal, p) in source.document.scene_primitives().enumerate() {
@@ -391,7 +391,7 @@ pub(crate) fn capture_full_in<'s>(
     // Finishing waits for run writers and may merge: still inside the step.
     let mut corners = corners.finish()?;
     progress.end()?;
-    progress.begin(CaptureStep::Positions, corners_total)?;
+    progress.begin(Step::Positions, corners_total)?;
     let mut next = corners.next().transpose()?;
     let mut positioned =
         ExternalSorter::<FullCorner>::with_layout(scratch, sort, layout)?.observed(progress);
@@ -477,7 +477,7 @@ pub(crate) fn capture_full_in<'s>(
     }
     let mut positioned = positioned.finish()?;
     progress.end()?;
-    progress.begin(CaptureStep::Triangles, scan.triangles)?;
+    progress.begin(Step::Triangles, scan.triangles)?;
     let mut triangles =
         ExternalSorter::<FullTriangle>::with_layout(scratch, sort, layout)?.observed(progress);
     let cube = Cube::around(&scan.bounds);
@@ -849,7 +849,7 @@ mod tests {
                 writers: 0,
             },
             &scan,
-            CaptureProgress::silent(),
+            StepProgress::silent(),
         )
         .unwrap();
         let rows = captured
@@ -901,7 +901,7 @@ mod tests {
                 sort,
                 layout,
                 &mut scan,
-                CaptureProgress::silent(),
+                StepProgress::silent(),
             )?;
             let spilled = sorted.stats().spilled_bytes;
             let rows = sorted.map(|row| row.map(|row| wire(&row)));
@@ -994,7 +994,7 @@ mod tests {
                     writers,
                 },
                 &scan,
-                CaptureProgress::silent(),
+                StepProgress::silent(),
             )
             .unwrap();
             let rows = sorted.collect::<std::result::Result<Vec<_>, _>>().unwrap();
@@ -1016,7 +1016,7 @@ mod tests {
                 writers: 0,
             },
             &scan,
-            CaptureProgress::silent(),
+            StepProgress::silent(),
         )
         .unwrap();
         drop(source);
@@ -1085,7 +1085,7 @@ mod position_only_tests {
             .next()
             .unwrap()
             .unwrap();
-        let full = capture_full(&source, &scratch, sort, &scan, CaptureProgress::silent())
+        let full = capture_full(&source, &scratch, sort, &scan, StepProgress::silent())
             .unwrap()
             .next()
             .unwrap()

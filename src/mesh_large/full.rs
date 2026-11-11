@@ -3,7 +3,7 @@
 use super::{
     attributes::{self, FullTriangle},
     capture::{self, SourceScan},
-    capture_sort::{self, CaptureSortPlan, SortLoad},
+    capture_sort::{self, SortLoad, SortPlan},
     config::{self, JobsPlan, MemoryBound, TreeConfig},
     images::{self, ImageCaptureBounds, ImageSnapshot},
     input::StreamSource,
@@ -12,7 +12,7 @@ use super::{
         geometry::LatticePlan,
         planning::{self, LeafPlan},
     },
-    phases::{CaptureProgress, CaptureStep},
+    phases::{Step, StepProgress},
     records::TriangleRecord,
     source_crs::{MeshSourceCrsReport, SourceFrame},
     tree::{self, RetainedTree},
@@ -110,7 +110,7 @@ pub(crate) struct FullCaptureReport {
     pub jobs: JobsPlan,
     pub memory: FullMemoryBound,
     /// The sorts inside capture, as planned under the budget.
-    pub sort: CaptureSortPlan,
+    pub sort: SortPlan,
     pub scratch: FullScratchNeed,
     pub image_capture: ImageCaptureBounds,
     pub scratch_logical_peak_bytes: u64,
@@ -578,15 +578,15 @@ pub(crate) fn capture(
     let source = StreamSource::open(input, check).map_err(super::failure)?;
     let check = std::cell::RefCell::new(check);
     let check = || (check.borrow_mut())();
-    capture_admitted(source, config, &CaptureProgress::new(&check, None))
+    capture_admitted(source, config, &StepProgress::new(&check, None))
 }
 
 /// Captures an admitted source. `progress` is capture's cancellation check and receives its
-/// steps ([`CaptureStep`]).
+/// steps ([`Step`]).
 pub(crate) fn capture_admitted(
     source: StreamSource,
     config: &TreeConfig,
-    progress: &CaptureProgress<'_>,
+    progress: &StepProgress<'_>,
 ) -> Result<FullCaptured, JobFailure> {
     let mut check_progress = || progress.check();
     let check: &mut dyn FnMut() -> Result<(), JobError> = &mut check_progress;
@@ -606,7 +606,7 @@ pub(crate) fn capture_admitted(
         .check_triangles(source.document.triangle_count() as u64)
         .map_err(super::failure)?;
     progress
-        .begin(CaptureStep::Scan, source.document.triangle_count() as u64)
+        .begin(Step::Scan, source.document.triangle_count() as u64)
         .map_err(super::failure)?;
     // The scan holds two bounded readers per worker, within the per-job term; its workers
     // are planned like capture's own before capture's larger base is known.
@@ -738,9 +738,14 @@ pub(crate) fn capture_admitted(
     let loads = capture_sort_loads(scan, config);
     // The producing thread plus its writers stay within the planned workers.
     let max_writers = workers.saturating_sub(1);
-    let (sort, sort_plan) = capture_sort::plan(config.sort, &loads, blocked, max_writers, |c| {
-        candidate(c).is_some()
-    });
+    let (sort, sort_plan) = capture_sort::plan(
+        config.sort,
+        &loads,
+        blocked,
+        max_writers,
+        &capture_sort::FAN_INS,
+        |c| candidate(c).is_some(),
+    );
     let (capture_config, need, memory) = if sort == config.sort {
         (config.clone(), need, floor_memory)
     } else {
@@ -791,7 +796,7 @@ pub(crate) fn capture_admitted(
             progress,
         )?;
         peaks.capture = end_stage(&scratch, stages.capture, "attribute capture")?;
-        progress.begin(CaptureStep::Sequence, scan.triangles)?;
+        progress.begin(Step::Sequence, scan.triangles)?;
         begin_stage(&scratch, &need, stages.projection)?;
         let mut full_writer = SequenceWriter::<FullTriangle>::with_layout(
             &scratch,
@@ -827,7 +832,7 @@ pub(crate) fn capture_admitted(
         peaks.projection = end_stage(&scratch, stages.projection, "projection")?;
         begin_stage(&scratch, &need, stages.images)?;
         // Two units per image: its snapshot and its admission decode.
-        progress.begin(CaptureStep::Images, image_count.saturating_mul(2))?;
+        progress.begin(Step::Images, image_count.saturating_mul(2))?;
         let (images, image_capture) =
             images::capture_images(&source, &scratch, config.sort.buffer_bytes, check)?;
         peaks.images = end_stage(&scratch, stages.images, "image capture")?;
@@ -924,7 +929,7 @@ pub(crate) fn capture_admitted(
         source.verify_unchanged()?;
         drop(source); // All subsequent operations read owned snapshot records only.
         begin_stage(&scratch, &need, stages.tree)?;
-        progress.begin(CaptureStep::Tree, triangles.len())?;
+        progress.begin(Step::Tree, triangles.len())?;
         // The full-triangle sequence is already in strict rank order (checked as it was
         // written): the tree is built over it directly, with no projected copy.
         let tree = tree::build_ranked(
@@ -979,7 +984,7 @@ pub(crate) fn capture_admitted(
             image_info: &image_info,
         };
         begin_stage(&scratch, &need, stages.leaf_plans)?;
-        progress.begin(CaptureStep::LeafPlans, tree.stats.leaves)?;
+        progress.begin(Step::LeafPlans, tree.stats.leaves)?;
         // The declared budget (explicit, else the 4 GiB default ceiling; never detected
         // headroom) left for one leaf job after every term the leaf stage charges besides
         // the job itself, memory-backed scratch and work/archive storage included.
@@ -1229,7 +1234,7 @@ fn join_corner_depths(
     ranked: &dyn tree::RankedTriangles,
     config: &TreeConfig,
     jobs: usize,
-    progress: &CaptureProgress<'_>,
+    progress: &StepProgress<'_>,
 ) -> Result<Sequence<CornerDepth>, JobError> {
     // Defence: capture refused the count as soon as it knew it.
     let limits = RecordLimits::of(config);
@@ -1239,7 +1244,7 @@ fn join_corner_depths(
         return Err(invariant("tree height exceeds the packed corner depth"));
     }
     // Seven units per triangle: three corners sorted, three joined, one written.
-    progress.begin(CaptureStep::CornerDepths, mul(triangles, 7)?)?;
+    progress.begin(Step::CornerDepths, mul(triangles, 7)?)?;
     let mut corners =
         ExternalSorter::<RankCorner>::new(scratch, config.sorter(jobs))?.observed(progress);
     let mut rank = 0_u64;
@@ -1867,7 +1872,7 @@ pub(super) mod tests {
                 &triangles,
                 config,
                 1,
-                CaptureProgress::silent(),
+                StepProgress::silent(),
             )
             .map(|_| ())
         };

@@ -333,9 +333,14 @@ struct Step {
 
 /// Capture steps in order (consecutive events of one phase), with their first and last counts.
 fn capture_steps(events: &[(String, u64, Option<u64>)]) -> Vec<Step> {
+    steps_with(events, "capture_")
+}
+
+/// Steps whose phase starts with `prefix`, as [`capture_steps`].
+fn steps_with(events: &[(String, u64, Option<u64>)], prefix: &str) -> Vec<Step> {
     let mut steps: Vec<Step> = Vec::new();
     for (phase, done, total) in events {
-        if !phase.starts_with("capture_") {
+        if !phase.starts_with(prefix) {
             continue;
         }
         let total = total.expect("capture steps declare totals");
@@ -361,7 +366,8 @@ fn capture_steps(events: &[(String, u64, Option<u64>)]) -> Vec<Step> {
 #[test]
 fn capture_reports_every_step_with_its_total_and_honours_a_cancel_inside_capture() {
     let work = tempfile::tempdir().unwrap();
-    let side = 64;
+    // Above one 8,192-triangle leaf, so the coarse stage (and its incidence pass) runs.
+    let side = 96;
     let triangles = u64::from(2 * side * side);
     let input = grid_fixture(work.path(), side);
     let scratch = work.path().join("scratch");
@@ -409,6 +415,30 @@ fn capture_reports_every_step_with_its_total_and_honours_a_cancel_inside_capture
     for step in &steps {
         assert_eq!((step.first, step.last), (0, step.total), "{step:?}");
     }
+    // The coarse stage's incidence pass reports its steps the same way, inside its phase.
+    let incidence = steps_with(&events, "hlod_incidence_");
+    let names: Vec<&str> = incidence.iter().map(|s| s.phase.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "hlod_incidence_items",
+            "hlod_incidence_reduce",
+            "hlod_incidence_ends"
+        ]
+    );
+    assert_eq!(incidence[0].total, triangles);
+    assert!(incidence[1].total >= triangles, "{incidence:?}");
+    for step in &incidence {
+        assert_eq!((step.first, step.last), (0, step.total), "{step:?}");
+    }
+    let at = |phase: &str, done| {
+        events
+            .iter()
+            .position(|e| e.0 == phase && e.1 == done)
+            .unwrap()
+    };
+    assert!(at("hlod_incidence", 0) < at("hlod_incidence_items", 0));
+    assert!(at("hlod_incidence", 1) > at("hlod_incidence_ends", incidence[2].total));
     // The capture steps sit between the capture phase's own start and end events.
     let position = |phase: &str, done| {
         events
@@ -451,13 +481,14 @@ fn capture_reports_every_step_with_its_total_and_honours_a_cancel_inside_capture
     assert_empty(&scratch);
 }
 
-/// Plumbing control: this grid fits one floor run, so every budget plans the floor and only
-/// the worker count varies. Plan dependence is covered by the capture-level sort tests and
-/// the recorded real-data matrix.
+/// Plumbing control: this grid (three leaves, so the coarse stage and its incidence pass
+/// run) fits one floor run, so every budget plans floor-sized runs and only the worker and
+/// writer counts vary. Plan dependence is covered by the capture- and incidence-level sort
+/// tests and the recorded real-data matrix.
 #[test]
 fn archives_are_identical_across_workers_and_budgets() {
     let work = tempfile::tempdir().unwrap();
-    let input = grid_fixture(work.path(), 48);
+    let input = grid_fixture(work.path(), 96);
     let scratch = work.path().join("scratch");
     fs::create_dir(&scratch).unwrap();
     let mut archives = Vec::new();

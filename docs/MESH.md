@@ -613,6 +613,16 @@ and reported as `diagnostics.capture.sort`: `run_bytes`, `fan_in`,
 each sort's output is the stable sort of its input order for every run size,
 fan-in and writer count, so the archive does not depend on the plan.
 
+The coarse stage's incidence pass (`hlod_incidence`) plans its item and
+open-edge endpoint sorts the same way inside the coarse stage's admission,
+before the walk admits any parent job: runs grow toward one pass at the
+floor's fan-in, at which no staged scratch declaration exceeds the floor's, and
+run writers are added as the stage's memory admits. The row sort, whose stream the walk
+reads later, keeps the floor. The plan is charged as
+`diagnostics.memory.hlod.incidence_bytes` and reported as
+`diagnostics.memory.hlod.incidence_sort`; the coarse stage's minimum is computed
+with the floor.
+
 Before starting, the run checks for enough free scratch for its largest
 declared stage working set: files kept from earlier stages, the HLOD incidence
 pass and source index, and each external sort's runs. Sort runs are 8 MiB chunk
@@ -942,7 +952,12 @@ too small for one pass needs, is reported as `capture_merge` (records
 rewritten), after which the interrupted step resumes. While capture runs, the
 current step's latest count is repeated at least every 250 ms. These events are
 capture's cancellation checkpoints, also for a Python callback, so a cancel or
-callback exception lands within about a second, as in the leaf stage. Required
+callback exception lands within about a second, as in the leaf stage. The coarse
+stage's `hlod_incidence` phase reports its steps the same way:
+`hlod_incidence_items` (triangles read into their leaves' interface items),
+`hlod_incidence_reduce` (items merged into shared rows) and `hlod_incidence_ends`
+(two units per open-edge endpoint), with `hlod_incidence_merge` for an
+intermediate merge pass. Required
 events finish before publication; a successful result means the archive is
 installed. A cleanup problem after installation is still success, with cleanup
 diagnostics.

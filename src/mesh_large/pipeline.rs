@@ -6,7 +6,7 @@ use super::{
     hlod::{HlodDiagnostics, HlodMemoryPlan},
     input::StreamSource,
     leaves::producer,
-    phases::{CaptureProgress, Phase, PhaseSeconds, Phases},
+    phases::{Phase, PhaseSeconds, Phases, StepProgress},
     resources::MemoryBudget,
     source_crs::{MeshSourceCrs, MeshSourceCrsReport},
 };
@@ -289,7 +289,7 @@ pub struct CaptureDiagnostics {
     pub jobs: u64,
     pub jobs_limited_by: &'static str,
     /// The sorts inside capture as planned under the memory budget.
-    pub sort: super::capture_sort::CaptureSortPlan,
+    pub sort: super::capture_sort::SortPlan,
     pub available_memory_bytes: Option<u64>,
     pub memory_bound_bytes: u64,
     pub scratch_need_bytes: u64,
@@ -611,7 +611,7 @@ pub fn mesh_to_tileset(
     let emit = |event: &RunEvent<'_>| attempt.emit(event);
     let phases = Phases::new(&emit);
     let capture_check = || attempt.check();
-    let capture_progress = CaptureProgress::new(&capture_check, Some(&emit));
+    let capture_progress = StepProgress::new(&capture_check, Some(&emit));
     let capture_started = std::time::Instant::now();
     let captured = match attempt
         .emit(&RunEvent::Progress {

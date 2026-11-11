@@ -100,6 +100,10 @@ impl<'a> Phases<'a> {
     fn send(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
         self.emit.map_or(Ok(()), |emit| emit(event))
     }
+    /// The run's event sink, for a stepped phase's [`StepProgress`].
+    pub(crate) fn emitter(&self) -> Option<&'a Emit<'a>> {
+        self.emit
+    }
     /// A progress event. With a known total, at most about 200 per phase are emitted:
     /// the first, the last, and evenly spaced ones between.
     pub(crate) fn progress(
@@ -160,10 +164,11 @@ impl<'a> Phases<'a> {
     }
 }
 
-/// A step inside the capture phase. Each is reported as an ordinary progress phase whose
-/// total is known before it starts: events at `0`, at the total, and between them.
+/// A step inside the capture or HLOD incidence phase. Each is reported as an ordinary
+/// progress phase whose total is known before it starts: events at `0`, at the total, and
+/// between them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum CaptureStep {
+pub(crate) enum Step {
     /// Preflight scan of the selected triangles.
     Scan,
     /// Accessor payload validation before any spill (one unit).
@@ -186,8 +191,17 @@ pub(crate) enum CaptureStep {
     CornerDepths,
     /// Leaf planning over the tree's leaves.
     LeafPlans,
+    /// HLOD incidence: triangles read into their leaves' interface items, sorted into runs.
+    IncidenceItems,
+    /// HLOD incidence: merged items reduced to shared rows and open-edge ends.
+    IncidenceReduce,
+    /// HLOD incidence: open-edge second endpoints sorted, then joined with the shared
+    /// points (one unit per endpoint each).
+    IncidenceEnds,
+    /// HLOD incidence: an intermediate merge pass of one of its sorts.
+    IncidenceMerge,
 }
-impl CaptureStep {
+impl Step {
     pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Scan => "capture_scan",
@@ -201,36 +215,43 @@ impl CaptureStep {
             Self::Tree => "capture_tree",
             Self::CornerDepths => "capture_corner_depths",
             Self::LeafPlans => "capture_leaf_plans",
+            Self::IncidenceItems => "hlod_incidence_items",
+            Self::IncidenceReduce => "hlod_incidence_reduce",
+            Self::IncidenceEnds => "hlod_incidence_ends",
+            Self::IncidenceMerge => "hlod_incidence_merge",
         }
     }
 }
 
-/// Longest interval between capture events while capture is checked.
-pub(crate) const CAPTURE_HEARTBEAT: Duration = Duration::from_millis(250);
+/// Longest interval between step events while a stepped phase is checked.
+pub(crate) const STEP_HEARTBEAT: Duration = Duration::from_millis(250);
 
 #[derive(Clone, Copy)]
 struct StepState {
-    step: CaptureStep,
+    step: Step,
     done: u64,
     total: u64,
     last: Instant,
 }
 
-/// Capture's progress reporter and cancellation checkpoint, driven from the capture thread.
+/// A stepped phase's progress reporter and cancellation checkpoint (capture, HLOD
+/// incidence), driven from the phase's own thread.
 ///
-/// [`CaptureProgress::check`] is capture's only cancellation check. It also re-emits the
-/// current step's latest count whenever [`CAPTURE_HEARTBEAT`] has passed since the last
+/// [`StepProgress::check`] is the phase's only cancellation check. It also re-emits the
+/// current step's latest count whenever [`STEP_HEARTBEAT`] has passed since the last
 /// event, so an observer that checks for interruption (the Python callback) runs at least
 /// that often wherever capture checks, including inside sort run writes and merge passes.
 /// Diagnostics only: nothing here reaches the archive.
-pub(crate) struct CaptureProgress<'a> {
+pub(crate) struct StepProgress<'a> {
     check: &'a (dyn Fn() -> Result<(), JobError> + 'a),
     emit: Option<&'a Emit<'a>>,
     state: Cell<Option<StepState>>,
     /// The step a sort's merge pass interrupted, resumed when the pass ends.
     suspended: Cell<Option<StepState>>,
+    /// The step a merge pass reports as.
+    merge: Step,
 }
-impl<'a> CaptureProgress<'a> {
+impl<'a> StepProgress<'a> {
     pub(crate) fn new(
         check: &'a (dyn Fn() -> Result<(), JobError> + 'a),
         emit: Option<&'a Emit<'a>>,
@@ -240,7 +261,13 @@ impl<'a> CaptureProgress<'a> {
             emit,
             state: Cell::new(None),
             suspended: Cell::new(None),
+            merge: Step::Merge,
         }
+    }
+    /// Reports sort merge passes as `merge` (capture's is [`Step::Merge`]).
+    pub(crate) fn merging_as(mut self, merge: Step) -> Self {
+        self.merge = merge;
+        self
     }
     fn send(&self, state: &mut StepState) -> Result<(), JobError> {
         state.last = Instant::now();
@@ -253,7 +280,7 @@ impl<'a> CaptureProgress<'a> {
         })
     }
     /// Starts `step` of `total` units: checks, then emits its `0` event.
-    pub(crate) fn begin(&self, step: CaptureStep, total: u64) -> Result<(), JobError> {
+    pub(crate) fn begin(&self, step: Step, total: u64) -> Result<(), JobError> {
         (self.check)()?;
         let mut state = StepState {
             step,
@@ -277,7 +304,7 @@ impl<'a> CaptureProgress<'a> {
     pub(crate) fn check(&self) -> Result<(), JobError> {
         (self.check)()?;
         match self.state.get() {
-            Some(mut state) if state.last.elapsed() >= CAPTURE_HEARTBEAT => {
+            Some(mut state) if state.last.elapsed() >= STEP_HEARTBEAT => {
                 let sent = self.send(&mut state);
                 self.state.set(Some(state));
                 sent
@@ -298,13 +325,13 @@ impl<'a> CaptureProgress<'a> {
     }
 }
 #[cfg(test)]
-impl CaptureProgress<'static> {
+impl StepProgress<'static> {
     /// Never cancelled; emits nothing. Leaked so fixtures can borrow it for any scratch.
     pub(crate) fn silent() -> &'static Self {
         Box::leak(Box::new(Self::new(&|| Ok(()), None)))
     }
 }
-impl SortObserver for CaptureProgress<'_> {
+impl SortObserver for StepProgress<'_> {
     /// Run writes are heartbeats of the current step. A merge pass is its own step; the step
     /// it interrupted (if any) resumes when the pass ends.
     fn checkpoint(&self, progress: SortProgress) -> Result<(), SpillError> {
@@ -313,7 +340,7 @@ impl SortObserver for CaptureProgress<'_> {
             SortProgress::Wrote => self.check().map_err(stop),
             SortProgress::MergeStart { total } => {
                 self.suspended.set(self.state.take());
-                self.begin(CaptureStep::Merge, total).map_err(stop)
+                self.begin(self.merge, total).map_err(stop)
             }
             SortProgress::Merged { done } => self.advance(done).map_err(stop),
             SortProgress::MergeEnd => {
@@ -394,21 +421,21 @@ mod tests {
             checks.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             Ok(())
         };
-        let progress = CaptureProgress::new(&check, Some(&emit));
-        progress.begin(CaptureStep::Corners, 30).unwrap();
+        let progress = StepProgress::new(&check, Some(&emit));
+        progress.begin(Step::Corners, 30).unwrap();
         // Checks within the heartbeat interval emit nothing.
         for done in 0..10 {
             progress.advance(done).unwrap();
         }
         assert_eq!(events.lock().unwrap().len(), 1);
-        std::thread::sleep(CAPTURE_HEARTBEAT + Duration::from_millis(20));
+        std::thread::sleep(STEP_HEARTBEAT + Duration::from_millis(20));
         progress.advance(12).unwrap();
         // A plain check re-emits the latest count once the interval has passed again.
-        std::thread::sleep(CAPTURE_HEARTBEAT + Duration::from_millis(20));
+        std::thread::sleep(STEP_HEARTBEAT + Duration::from_millis(20));
         progress.check().unwrap();
         progress.end().unwrap();
         // Outside a step nothing is emitted, but the check still runs.
-        std::thread::sleep(CAPTURE_HEARTBEAT + Duration::from_millis(20));
+        std::thread::sleep(STEP_HEARTBEAT + Duration::from_millis(20));
         let before = checks.load(std::sync::atomic::Ordering::Relaxed);
         progress.check().unwrap();
         assert_eq!(
@@ -429,8 +456,8 @@ mod tests {
     #[test]
     fn a_merge_pass_is_its_own_step_and_resumes_the_step_it_interrupted() {
         let (events, emit) = recorder();
-        let progress = CaptureProgress::new(&|| Ok(()), Some(&emit));
-        progress.begin(CaptureStep::CornerDepths, 70).unwrap();
+        let progress = StepProgress::new(&|| Ok(()), Some(&emit));
+        progress.begin(Step::CornerDepths, 70).unwrap();
         progress.advance(30).unwrap();
         let sort: &dyn SortObserver = &progress;
         sort.checkpoint(SortProgress::MergeStart { total: 500 })
@@ -438,7 +465,7 @@ mod tests {
         sort.checkpoint(SortProgress::Merged { done: 100 }).unwrap();
         sort.checkpoint(SortProgress::Wrote).unwrap();
         sort.checkpoint(SortProgress::MergeEnd).unwrap();
-        std::thread::sleep(CAPTURE_HEARTBEAT + Duration::from_millis(20));
+        std::thread::sleep(STEP_HEARTBEAT + Duration::from_millis(20));
         progress.advance(40).unwrap();
         progress.end().unwrap();
         assert_eq!(
@@ -461,7 +488,7 @@ mod tests {
                 "operation cancelled",
             ))
         };
-        let progress = CaptureProgress::new(&cancelled, None);
+        let progress = StepProgress::new(&cancelled, None);
         let error = SortObserver::checkpoint(&progress, SortProgress::Wrote).unwrap_err();
         let error: JobError = error.into();
         assert_eq!(error.kind(), crate::JobErrorKind::Cancelled);

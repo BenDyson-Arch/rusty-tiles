@@ -419,7 +419,7 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 
 | Command | Phases |
 | --- | --- |
-| `mesh` | `capture` (its steps `capture_scan`, `capture_validate`, `capture_corners`, `capture_positions`, `capture_triangles`, `capture_sequence`, `capture_images`, `capture_tree`, `capture_corner_depths`, `capture_leaf_plans` and, when a sort needs one, `capture_merge`, each with its total and repeated at least every 250 ms), `leaf_build`, `hlod_incidence`, `hlod_geometry`, `leaf_payloads`, `archive`, `ready_to_publish`; required events finish before installation. See the [mesh guide](MESH.md). |
+| `mesh` | `capture` (its steps `capture_scan`, `capture_validate`, `capture_corners`, `capture_positions`, `capture_triangles`, `capture_sequence`, `capture_images`, `capture_tree`, `capture_corner_depths`, `capture_leaf_plans` and, when a sort needs one, `capture_merge`, each with its total and repeated at least every 250 ms), `leaf_build`, `hlod_incidence` (its steps `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends` and, when a sort needs one, `hlod_incidence_merge`, reported the same way), `hlod_geometry`, `leaf_payloads`, `archive`, `ready_to_publish`; required events finish before installation. See the [mesh guide](MESH.md). |
 | `point-cloud` | `ingestion`, `tiling`, `point_archive`, `ready_to_publish`; these finish before installation |
 | `vector` | `ingestion`, `encoding` |
 | `raster` | `source_cog` and `aligned_warp` report progress out of 1,000,000. `tiling` reports completed tiles on the same scale and resets for each zoom. `raster_complete` reports the actual tile count before sealing and installation. |

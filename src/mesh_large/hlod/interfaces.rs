@@ -29,6 +29,7 @@ use crate::{
         config::{self, SortSpill},
         full::CornerDepth,
         leaves::geometry::LatticePlan,
+        phases::{Step, StepProgress},
         records::{NodeKind, NodeRecord},
     },
     spill::{
@@ -227,20 +228,39 @@ pub struct ScratchPhases {
     pub walk: u64,
 }
 
-/// Phase bounds (without the retained files) from the counts known when each phase starts.
-fn items_phase(items: u64, sorter: SortConfig) -> Option<u64> {
-    Some(spill::<Item>(items, sorter)?.finish_peak)
+/// The pass's two sorter configurations: `items` for the item and open-edge endpoint sorts,
+/// whose streams end inside the pass (the stage's budget plan may grow it), and `rows` for
+/// the row sort, whose stream the walk consumes after the pass (the request's floor).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Sorters {
+    pub items: SortConfig,
+    pub rows: SortConfig,
 }
-fn reduce_phase(items: u64, sorter: SortConfig) -> Option<u64> {
-    let item = spill::<Item>(items, sorter)?;
+impl Sorters {
+    pub(crate) fn uniform(sorter: SortConfig) -> Self {
+        Self {
+            items: sorter,
+            rows: sorter,
+        }
+    }
+}
+
+/// Phase bounds (without the retained files) from the counts known when each phase starts.
+/// At one fan-in each is non-increasing in the run buffer, so a grown `items` run never
+/// declares more than the floor's.
+fn items_phase(items: u64, sorters: Sorters) -> Option<u64> {
+    Some(spill::<Item>(items, sorters.items)?.finish_peak)
+}
+fn reduce_phase(items: u64, sorters: Sorters) -> Option<u64> {
+    let item = spill::<Item>(items, sorters.items)?;
     item.bytes
         .checked_add(item.stream_slack)?
-        .checked_add(spill::<InterfaceRow>(items, sorter)?.push_peak)?
+        .checked_add(spill::<InterfaceRow>(items, sorters.rows)?.push_peak)?
         .checked_add(items.checked_mul(3 * KeyRecord::SIZE as u64 + Item::SIZE as u64)?)
 }
-fn ends_phase(rows: u64, points: u64, ends: u64, sorter: SortConfig) -> Option<u64> {
-    let sort = spill::<KeyRecord>(ends, sorter)?;
-    spill::<InterfaceRow>(rows, sorter)?
+fn ends_phase(rows: u64, points: u64, ends: u64, sorters: Sorters) -> Option<u64> {
+    let sort = spill::<KeyRecord>(ends, sorters.items)?;
+    spill::<InterfaceRow>(rows, sorters.rows)?
         .push_peak
         .checked_add(
             points
@@ -250,8 +270,8 @@ fn ends_phase(rows: u64, points: u64, ends: u64, sorter: SortConfig) -> Option<u
         .checked_add(sort.finish_peak)?
         .checked_add(sort.stream_slack)
 }
-fn walk_phase(rows: u64, sorter: SortConfig) -> Option<u64> {
-    let row = spill::<InterfaceRow>(rows, sorter)?;
+fn walk_phase(rows: u64, sorters: Sorters) -> Option<u64> {
+    let row = spill::<InterfaceRow>(rows, sorters.rows)?;
     row.finish_peak.checked_add(row.stream_slack)
 }
 
@@ -259,6 +279,7 @@ fn walk_phase(rows: u64, sorter: SortConfig) -> Option<u64> {
 /// memory-backed (staged admission cannot take memory nobody charged): a triangle gives at
 /// most six items (three points, three segments), each at most one row.
 pub(crate) fn memory_backed_need(triangles: u64, sorter: SortConfig) -> Option<u64> {
+    let sorter = Sorters::uniform(sorter);
     let items = triangles.checked_mul(6)?;
     Some(
         items_phase(items, sorter)?
@@ -286,15 +307,32 @@ pub(crate) const INCIDENCE_MAX_FILES: u64 = 4;
 /// Resident bound of the pass: two sorters live at once (items streamed into rows, then the
 /// rows beside the endpoints' sort), one leaf's deduplicated items, one item group (at most
 /// one item per leaf, in a vector at most twice that) and two sequence writers.
-pub(crate) fn memory_need(sorter: SortConfig, leaf_triangles: u64, _leaves: u64) -> u64 {
+pub(crate) fn memory_need(sorters: Sorters, leaf_triangles: u64, _leaves: u64) -> u64 {
     let item = std::mem::size_of::<Item>() as u64;
-    sorter
+    sorters
+        .items
         .memory_bound::<Item>()
-        .max(sorter.memory_bound::<KeyRecord>())
-        .saturating_add(sorter.memory_bound::<InterfaceRow>())
+        .max(sorters.items.memory_bound::<KeyRecord>())
+        .saturating_add(sorters.rows.memory_bound::<InterfaceRow>())
         .saturating_add(leaf_triangles.saturating_mul(12 * item))
         .saturating_add(GROUP_MEMORY as u64 * item)
-        .saturating_add(3 * sorter.buffer_bytes as u64)
+        .saturating_add(3 * sorters.rows.buffer_bytes as u64)
+}
+
+/// Each sort of the pass, by its worst-case count and resident record size, for the stage's
+/// budget plan: at most six items per triangle, as many open-edge endpoints.
+pub(crate) fn sort_loads(triangles: u64) -> [crate::mesh_large::capture_sort::SortLoad; 2] {
+    let items = triangles.saturating_mul(6);
+    [
+        crate::mesh_large::capture_sort::SortLoad {
+            records: items,
+            record_bytes: std::mem::size_of::<Item>() as u64,
+        },
+        crate::mesh_large::capture_sort::SortLoad {
+            records: items,
+            record_bytes: std::mem::size_of::<KeyRecord>() as u64,
+        },
+    ]
 }
 
 /// Totals of the pass, for the report.
@@ -422,17 +460,18 @@ fn leaf_items(
 /// (leaf, a, b).
 ///
 /// `admit` preflights free space for a phase's whole declared bound (live bytes included)
-/// before the phase writes (`ScratchPhases`).
+/// before the phase writes (`ScratchPhases`). `progress` is the pass's cancellation check and
+/// receives its steps (`hlod_incidence_items`, `_reduce`, `_ends`) and every sort checkpoint.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build<'s>(
     scratch: &'s Scratch,
-    sorter: SortConfig,
+    sorters: Sorters,
     nodes: &Sequence<NodeRecord>,
     triangles: &Sequence<FullTriangle>,
     depths: &Sequence<CornerDepth>,
     lattice: &LatticePlan,
     admit: &dyn Fn(u64) -> Result<(), JobError>,
-    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    progress: &'s StepProgress<'_>,
 ) -> Result<
     (
         SortedStream<'s, InterfaceRow>,
@@ -445,9 +484,10 @@ pub(crate) fn build<'s>(
     let mut stats = IncidenceStats::default();
     let retained = scratch.live_bytes();
     stats.scratch.retained = retained;
-    let mut items = ExternalSorter::<Item>::new(scratch, sorter)?;
+    progress.begin(Step::IncidenceItems, triangles.len())?;
+    let mut items = ExternalSorter::<Item>::new(scratch, sorters.items)?.observed(progress);
     // Items are admitted one run ahead of those pushed (a run spills only once full).
-    let item_run = (sorter.run_bytes / std::mem::size_of::<Item>()).max(1) as u64;
+    let item_run = (sorters.items.run_bytes / std::mem::size_of::<Item>()).max(1) as u64;
     let mut admitted_items = item_run;
     let mut source = triangles.reader()?;
     let mut ells = depths.reader()?;
@@ -467,7 +507,7 @@ pub(crate) fn build<'s>(
         faces.clear();
         for _ in node.first..node.end {
             if rank.is_multiple_of(4096) {
-                check()?;
+                progress.advance(rank)?;
             }
             let t = source
                 .next()
@@ -488,7 +528,7 @@ pub(crate) fn build<'s>(
         let after = stats.items + buffer.len() as u64;
         if after > admitted_items {
             admitted_items = after + item_run;
-            let spilled = spill::<Item>(admitted_items, sorter).ok_or_else(overflow)?;
+            let spilled = spill::<Item>(admitted_items, sorters.items).ok_or_else(overflow)?;
             admit(retained + spilled.push_peak)?;
         }
         stats.items = after;
@@ -504,18 +544,15 @@ pub(crate) fn build<'s>(
     }
     stats.leaves = u64::from(leaf);
     drop((faces, segments, buffer));
-    stats.scratch.items = items_phase(stats.items, sorter)
+    stats.scratch.items = items_phase(stats.items, sorters)
         .and_then(|b| b.checked_add(retained))
         .ok_or_else(overflow)?;
     admit(stats.scratch.items)?;
+    // Finishing waits for run writers and may merge: still inside the step.
+    let sorted = items.finish()?;
+    progress.end()?;
     let (rows, open_ends) = reduce(
-        scratch,
-        sorter,
-        items.finish()?,
-        &mut stats,
-        retained,
-        admit,
-        check,
+        scratch, sorters, sorted, &mut stats, retained, admit, progress,
     )?;
     Ok((rows, stats, open_ends))
 }
@@ -572,19 +609,21 @@ impl OwnerGroup {
 /// Reduce sorted items to rows and the source-defect counts (see `build`).
 fn reduce<'s>(
     scratch: &'s Scratch,
-    sorter: SortConfig,
+    sorters: Sorters,
     items: impl Iterator<Item = Result<Item, crate::spill::SpillError>>,
     stats: &mut IncidenceStats,
     retained: u64,
     admit: &dyn Fn(u64) -> Result<(), JobError>,
-    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    progress: &'s StepProgress<'_>,
 ) -> Result<(SortedStream<'s, InterfaceRow>, Sequence<KeyRecord>), JobError> {
     let overflow = || state("incidence scratch bound overflows");
-    stats.scratch.reduce = reduce_phase(stats.items, sorter)
+    let sorter = sorters.rows;
+    stats.scratch.reduce = reduce_phase(stats.items, sorters)
         .and_then(|b| b.checked_add(retained))
         .ok_or_else(overflow)?;
     admit(stats.scratch.reduce)?;
-    let mut rows = ExternalSorter::<InterfaceRow>::new(scratch, sorter)?;
+    progress.begin(Step::IncidenceReduce, stats.items)?;
+    let mut rows = ExternalSorter::<InterfaceRow>::new(scratch, sorter)?.observed(progress);
     let mut shared =
         SequenceWriter::<KeyRecord>::new(scratch, "hlod-shared-points", sorter.buffer_bytes)?;
     let mut ends =
@@ -640,8 +679,8 @@ fn reduce<'s>(
     for item in items {
         let item = item?;
         seen += 1;
-        if seen.is_multiple_of(1 << 16) {
-            check()?;
+        if seen.is_multiple_of(4096) {
+            progress.advance(seen)?;
         }
         if group
             .memory
@@ -663,23 +702,35 @@ fn reduce<'s>(
         flush(&mut group, stats, &mut point)?;
     }
     drop(group);
+    progress.end()?;
     let (shared, ends, open_ends) = (shared.finish()?, ends.finish()?, open_ends.finish()?);
     let open_bytes = open_ends.len() * KeyRecord::SIZE as u64;
     // Second endpoints: the open edges whose first endpoint is shared, sorted by their second
     // and merged against the shared points (both ascending).
-    stats.scratch.ends = ends_phase(stats.rows, shared.len(), ends.len(), sorter)
+    stats.scratch.ends = ends_phase(stats.rows, shared.len(), ends.len(), sorters)
         .and_then(|b| b.checked_add(retained))
         .and_then(|b| b.checked_add(open_bytes))
         .ok_or_else(overflow)?;
     admit(stats.scratch.ends)?;
-    let mut sorted = ExternalSorter::<KeyRecord>::new(scratch, sorter)?;
+    let endpoints = ends.len();
+    progress.begin(Step::IncidenceEnds, endpoints.saturating_mul(2))?;
+    let mut sorted = ExternalSorter::<KeyRecord>::new(scratch, sorters.items)?.observed(progress);
+    let mut done = 0u64;
     for e in ends.reader()? {
         sorted.push(e?)?;
+        done += 1;
+        if done.is_multiple_of(4096) {
+            progress.advance(done)?;
+        }
     }
     drop(ends);
     let mut points = shared.reader()?.peekable();
     for e in sorted.finish()? {
         let e = e?;
+        done += 1;
+        if done.is_multiple_of(4096) {
+            progress.advance(done)?;
+        }
         while points
             .next_if(|p| matches!(p, Ok(p) if p.0 < e.0))
             .is_some()
@@ -694,12 +745,15 @@ fn reduce<'s>(
     }
     drop(points);
     drop(shared);
-    stats.scratch.walk = walk_phase(stats.rows, sorter)
+    stats.scratch.walk = walk_phase(stats.rows, sorters)
         .and_then(|b| b.checked_add(retained))
         .and_then(|b| b.checked_add(open_bytes))
         .ok_or_else(overflow)?;
     admit(stats.scratch.walk)?;
-    Ok((rows.finish()?, open_ends))
+    // The rows sort finishes (and may merge) inside the last step.
+    let rows = rows.finish()?;
+    progress.end()?;
+    Ok((rows, open_ends))
 }
 
 #[cfg(test)]
@@ -720,9 +774,17 @@ mod tests {
 
     /// The rows and stats of the exact pass over leaves given as triangles of keys.
     fn incidence(leaves: &[Vec<[Key; 3]>]) -> (Vec<InterfaceRow>, IncidenceStats) {
+        incidence_with(leaves, Sorters::uniform(SORT))
+    }
+
+    fn incidence_with(
+        leaves: &[Vec<[Key; 3]>],
+        sorters: Sorters,
+    ) -> (Vec<InterfaceRow>, IncidenceStats) {
         let dir = tempfile::tempdir().unwrap();
         let scratch = Scratch::create(Some(dir.path()), 0).unwrap();
-        let mut sorter = ExternalSorter::<Item>::new(&scratch, SORT).unwrap();
+        scratch.set_chunk_bytes(1 << 10);
+        let mut sorter = ExternalSorter::<Item>::new(&scratch, sorters.items).unwrap();
         let mut stats = IncidenceStats {
             leaves: leaves.len() as u64,
             ..Default::default()
@@ -737,12 +799,12 @@ mod tests {
         }
         let (rows, _open_ends) = reduce(
             &scratch,
-            SORT,
+            sorters,
             sorter.finish().unwrap(),
             &mut stats,
             0,
             &|_| Ok(()),
-            &|| Ok(()),
+            StepProgress::silent(),
         )
         .unwrap();
         let mut rows: Vec<InterfaceRow> = rows.map(Result::unwrap).collect();
@@ -870,8 +932,86 @@ mod tests {
     /// A group of one item per leaf is charged in the stage's resident bound.
     #[test]
     fn item_groups_have_fixed_memory_independent_of_leaf_count() {
-        let base = memory_need(SORT, 256, 0);
-        let more = memory_need(SORT, 256, 1 << 20);
+        let base = memory_need(Sorters::uniform(SORT), 256, 0);
+        let more = memory_need(Sorters::uniform(SORT), 256, 1 << 20);
         assert_eq!(more, base);
+    }
+
+    /// A strip of `n` unit squares split into leaves of `per` squares: every inner edge and
+    /// its endpoints are shared between neighbouring leaves.
+    fn strip(n: usize, per: usize) -> Vec<Vec<[Key; 3]>> {
+        let p = |x: usize, y: usize| k([x as f64, y as f64, 0.]);
+        (0..n)
+            .collect::<Vec<_>>()
+            .chunks(per)
+            .map(|xs| {
+                xs.iter()
+                    .flat_map(|&x| {
+                        [
+                            [p(x, 0), p(x + 1, 0), p(x + 1, 1)],
+                            [p(x, 0), p(x + 1, 1), p(x, 1)],
+                        ]
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// The pass's rows and counts are those of the floor for any item-sort run size, fan-in
+    /// and writer count, from one-record runs merged twice to background writers.
+    #[test]
+    fn rows_and_stats_are_identical_for_every_item_sort_plan() {
+        let leaves = strip(3_000, 7);
+        let (rows, stats) = incidence(&leaves);
+        assert!(
+            stats.items > 15_000 && stats.shared_segments > 400,
+            "{stats:?}"
+        );
+        let tiny = |records: usize, fan_in, writers| SortConfig {
+            run_bytes: records * std::mem::size_of::<Item>(),
+            fan_in,
+            writers,
+            ..SORT
+        };
+        for items in [
+            tiny(1, 2, 0),
+            tiny(100, 3, 2),
+            tiny(997, 4, 3),
+            tiny(1 << 15, 4, 7),
+        ] {
+            let (planned_rows, planned) = incidence_with(&leaves, Sorters { items, rows: SORT });
+            assert_eq!(planned_rows, rows, "{items:?}");
+            assert_eq!(
+                serde_json::to_value(planned).unwrap(),
+                serde_json::to_value(stats).unwrap(),
+                "{items:?}"
+            );
+        }
+    }
+
+    /// At the floor's fan-in, a larger item run never declares a larger phase, for any
+    /// counts: the stage plan may grow the item sort without new scratch refusals.
+    #[test]
+    fn grown_item_runs_never_declare_more_scratch_at_one_fan_in() {
+        let floor = Sorters::uniform(SORT);
+        for scale in [1u64, 2, 3, 8, 64, 1 << 10, 1 << 16] {
+            let grown = Sorters {
+                items: SortConfig {
+                    run_bytes: SORT.run_bytes * scale as usize,
+                    writers: 3,
+                    ..SORT
+                },
+                rows: SORT,
+            };
+            for items in [0u64, 1, 1_000, 1 << 20, 1 << 26, 1 << 32] {
+                let rows = items / 3;
+                assert!(items_phase(items, grown) <= items_phase(items, floor));
+                assert!(reduce_phase(items, grown) <= reduce_phase(items, floor));
+                assert!(
+                    ends_phase(rows, rows, items, grown) <= ends_phase(rows, rows, items, floor)
+                );
+                assert_eq!(walk_phase(rows, grown), walk_phase(rows, floor));
+            }
+        }
     }
 }

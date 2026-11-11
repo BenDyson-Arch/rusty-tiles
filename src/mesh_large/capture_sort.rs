@@ -30,7 +30,7 @@ pub(crate) struct SortLoad {
 
 /// What the plan chose and why; reported in the capture diagnostics.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-pub struct CaptureSortPlan {
+pub struct SortPlan {
     /// `R`: each live sorter's run buffer.
     pub run_bytes: u64,
     /// `F`: runs merged at once.
@@ -50,6 +50,19 @@ pub struct CaptureSortPlan {
     /// `memory_backed_scratch`: kept at the floor because the budget cannot be planned against
     /// (no detected memory) or the spill itself is charged to memory.
     pub limited_by: &'static str,
+}
+
+impl SortPlan {
+    /// The planned configuration of one live sorter with `jobs` sorting threads.
+    pub(crate) fn sorter(&self, jobs: usize) -> SortConfig {
+        SortConfig {
+            run_bytes: self.run_bytes as usize,
+            fan_in: self.fan_in as usize,
+            buffer_bytes: self.buffer_bytes as usize,
+            jobs,
+            writers: self.writers as usize,
+        }
+    }
 }
 
 /// Run buffer bytes at which every load has at most `fan_in` runs.
@@ -86,20 +99,22 @@ fn shared(floor: SortConfig, run_bytes: u64, fan_in: usize, writers: usize) -> O
 /// Resolves capture's sort configuration. `floor` is the request's shared configuration
 /// (`run_bytes` split between two live sorters); `loads` are the sorts inside capture;
 /// `fits` is the caller's admission of a candidate shared configuration. `blocked` names a
-/// reason the plan must stay at the floor; `max_writers` caps the background run writers.
+/// reason the plan must stay at the floor; `max_writers` caps the background run writers;
+/// `fan_ins` are the fan-ins tried, ascending ([`FAN_INS`] for capture).
 /// Returns the shared configuration and its report.
 pub(crate) fn plan(
     floor: SortConfig,
     loads: &[SortLoad],
     blocked: Option<&'static str>,
     max_writers: usize,
+    fan_ins: &[usize],
     fits: impl Fn(SortConfig) -> bool,
-) -> (SortConfig, CaptureSortPlan) {
+) -> (SortConfig, SortPlan) {
     let floor_run = (floor.run_bytes / 2).max(1) as u64;
     let report = |config: SortConfig, limited_by| {
         let run_bytes = (config.run_bytes / 2).max(1) as u64;
         let runs = max_runs(loads, run_bytes);
-        CaptureSortPlan {
+        SortPlan {
             run_bytes,
             fan_in: config.fan_in as u64,
             buffer_bytes: config.buffer_bytes as u64,
@@ -116,7 +131,7 @@ pub(crate) fn plan(
     // One-pass candidates: the smallest one-pass run (never below the floor's) at each
     // fan-in, with as many writers as fit; the most writers wins, then the smaller fan-in.
     let mut best: Option<SortConfig> = None;
-    for fan_in in FAN_INS.into_iter().filter(|&f| f >= floor.fan_in) {
+    for fan_in in fan_ins.iter().copied().filter(|&f| f >= floor.fan_in) {
         let Some(run) = one_pass_run_bytes(loads, fan_in as u64).map(|run| run.max(floor_run))
         else {
             continue;
@@ -161,7 +176,7 @@ pub(crate) fn plan(
     }
     // Otherwise the largest run buffer that fits, at the largest fan-in that fits. The
     // admission is monotone in the run buffer, so bisect in MiB steps above the floor.
-    for fan_in in FAN_INS.into_iter().rev().filter(|&f| f >= floor.fan_in) {
+    for fan_in in fan_ins.iter().copied().rev().filter(|&f| f >= floor.fan_in) {
         let at = |run: u64| shared(floor, run, fan_in, 0).filter(|&c| fits(c));
         let Some(mut best) = at(floor_run) else {
             continue;
@@ -226,10 +241,12 @@ mod tests {
 
     #[test]
     fn small_inputs_keep_the_floor_run_and_add_the_writers_that_fit() {
-        let (config, report) = plan(FLOOR, &loads(1_000_000), None, 0, |_| true);
+        let (config, report) = plan(FLOOR, &loads(1_000_000), None, 0, &FAN_INS, |_| true);
         assert_eq!(config, FLOOR);
         assert_eq!((report.limited_by, report.single_pass), ("floor", true));
-        let (config, report) = plan(FLOOR, &loads(1_000_000), None, 7, |c| cost(c) <= 1 << 30);
+        let (config, report) = plan(FLOOR, &loads(1_000_000), None, 7, &FAN_INS, |c| {
+            cost(c) <= 1 << 30
+        });
         assert_eq!(config.run_bytes, FLOOR.run_bytes);
         assert_eq!((config.fan_in, config.writers), (64, 3));
         assert!(
@@ -241,16 +258,16 @@ mod tests {
         assert_eq!((report.limited_by, report.writers), ("single_pass", 3));
         // Writers beyond the runs they could take are never charged: 3M corners of 112
         // bytes fill 5 runs of 80 MiB, so at most 4 writers, whatever the budget.
-        let (config, report) = plan(FLOOR, &loads(1_000_000), None, 7, |_| true);
+        let (config, report) = plan(FLOOR, &loads(1_000_000), None, 7, &FAN_INS, |_| true);
         assert_eq!((report.max_runs, config.writers), (5, 4));
-        let (config, _) = plan(FLOOR, &loads(100_000), None, 7, |_| true);
+        let (config, _) = plan(FLOOR, &loads(100_000), None, 7, &FAN_INS, |_| true);
         assert_eq!(config, FLOOR, "one run: no writer");
     }
 
     #[test]
     fn runs_grow_to_exactly_one_pass_when_the_budget_allows() {
         let loads = loads(828_000_000);
-        let (config, report) = plan(FLOOR, &loads, None, 0, |c| cost(c) <= 24 << 30);
+        let (config, report) = plan(FLOOR, &loads, None, 0, &FAN_INS, |c| cost(c) <= 24 << 30);
         assert_eq!((report.limited_by, report.fan_in), ("single_pass", 64));
         assert!(report.single_pass && report.max_runs <= 64);
         // The smallest such run: one record fewer would need a 65th run.
@@ -263,17 +280,17 @@ mod tests {
     #[test]
     fn fan_in_rises_when_a_larger_run_does_not_fit_or_admits_more_writers() {
         let loads = loads(828_000_000);
-        let (_, at_8) = plan(FLOOR, &loads, None, 0, |c| cost(c) <= 8 << 30);
+        let (_, at_8) = plan(FLOOR, &loads, None, 0, &FAN_INS, |c| cost(c) <= 8 << 30);
         assert_eq!((at_8.limited_by, at_8.fan_in), ("single_pass", 128));
-        let (_, at_4) = plan(FLOOR, &loads, None, 0, |c| cost(c) <= 4 << 30);
+        let (_, at_4) = plan(FLOOR, &loads, None, 0, &FAN_INS, |c| cost(c) <= 4 << 30);
         assert_eq!((at_4.limited_by, at_4.fan_in), ("single_pass", 256));
         assert!(at_4.max_runs <= 256);
         // With writers allowed, the fan-in that admits the most of them wins: at 24 GiB,
         // F = 64 admits 1, F = 128 admits 3 and F = 256 all 7.
-        let (config, report) = plan(FLOOR, &loads, None, 7, |c| cost(c) <= 24 << 30);
+        let (config, report) = plan(FLOOR, &loads, None, 7, &FAN_INS, |c| cost(c) <= 24 << 30);
         assert_eq!((report.fan_in, report.writers), (256, 7));
         assert!(report.single_pass && cost(config) <= 24 << 30);
-        let (_, report) = plan(FLOOR, &loads, None, 2, |c| cost(c) <= 24 << 30);
+        let (_, report) = plan(FLOOR, &loads, None, 2, &FAN_INS, |c| cost(c) <= 24 << 30);
         assert_eq!(
             (report.fan_in, report.writers),
             (128, 2),
@@ -285,7 +302,7 @@ mod tests {
     fn a_tight_budget_takes_the_largest_run_that_fits_and_never_goes_below_the_floor() {
         let loads = loads(828_000_000);
         let limit = 2 << 30;
-        let (config, report) = plan(FLOOR, &loads, None, 7, |c| cost(c) <= limit);
+        let (config, report) = plan(FLOOR, &loads, None, 7, &FAN_INS, |c| cost(c) <= limit);
         assert_eq!(
             (report.limited_by, report.fan_in, report.writers),
             ("budget", 256, 0)
@@ -301,10 +318,10 @@ mod tests {
             "within one MiB of the largest fitting run"
         );
         // Nothing above the floor fits: the floor, unchanged.
-        let (config, report) = plan(FLOOR, &loads, None, 7, |c| c == FLOOR);
+        let (config, report) = plan(FLOOR, &loads, None, 7, &FAN_INS, |c| c == FLOOR);
         assert_eq!((config, report.limited_by), (FLOOR, "floor"));
         // Blocked plans never grow.
-        let (config, report) = plan(FLOOR, &loads, Some("unknown_memory"), 7, |_| true);
+        let (config, report) = plan(FLOOR, &loads, Some("unknown_memory"), 7, &FAN_INS, |_| true);
         assert_eq!((config, report.limited_by), (FLOOR, "unknown_memory"));
     }
 }
