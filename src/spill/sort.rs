@@ -489,9 +489,9 @@ fn write_run<T: Record>(
 }
 
 /// Stable-sorts `buffer` as consecutive pieces and returns the piece length. There are
-/// `jobs` pieces, or more when that would make one larger than [`PIECE_BYTES`] (at most
-/// `max(jobs, MAX_PIECES)`); they are sorted `jobs` at a time on their own threads, and
-/// `checkpoint` runs before each such batch, so a check waits for at most one batch.
+/// `jobs` pieces, or more so that none exceeds twice [`PIECE_BYTES`] whatever the run size;
+/// they are sorted `jobs` at a time on their own threads, and `checkpoint` runs before each
+/// such batch, so a check waits for at most one batch of bounded pieces.
 fn sort_pieces<T: Record>(
     buffer: &mut [T],
     jobs: usize,
@@ -500,9 +500,7 @@ fn sort_pieces<T: Record>(
 ) -> Result<usize, SpillError> {
     let jobs = jobs.clamp(1, buffer.len().max(1));
     let bytes = buffer.len().saturating_mul(size_of::<T>());
-    let pieces = (bytes / PIECE_BYTES)
-        .clamp(jobs, jobs.max(MAX_PIECES))
-        .min(buffer.len().max(1));
+    let pieces = (bytes / PIECE_BYTES).max(jobs).min(buffer.len().max(1));
     let piece = buffer.len().div_ceil(pieces).max(1);
     for batch in buffer.chunks_mut(piece.saturating_mul(jobs)) {
         checkpoint()?;
@@ -556,11 +554,10 @@ type Writer<T> = JoinHandle<Result<(Run, Vec<T>), SpillError>>;
 /// How often a sorter waiting for a background writer reports a checkpoint.
 const WAIT_POLL: Duration = Duration::from_millis(2);
 
-/// A background writer sorts at most this many bytes of records at once, so stopping it
-/// waits for at most one such piece; pieces are merged as the run is written.
+/// Run buffers are sorted as pieces of under twice this many bytes, so a check or a stop
+/// waits for at most one such piece (about a tenth of a second) at any run size; pieces are
+/// merged as the run is written.
 const PIECE_BYTES: usize = 64 << 20;
-/// At most this many pieces per run (a larger run uses larger pieces).
-const MAX_PIECES: usize = 16;
 
 /// Sorts `buffer` as consecutive pieces and writes it as one run, checking `stop` between
 /// pieces and after each chunk file. Returns the run and the emptied buffer.
@@ -578,7 +575,9 @@ fn write_sorted<T: Record>(
             Ok(())
         }
     };
-    let pieces = (buffer.len().saturating_mul(size_of::<T>()) / PIECE_BYTES).clamp(1, MAX_PIECES);
+    let pieces = (buffer.len().saturating_mul(size_of::<T>()) / PIECE_BYTES)
+        .max(1)
+        .min(buffer.len().max(1));
     let piece = buffer.len().div_ceil(pieces).max(1);
     for part in buffer.chunks_mut(piece) {
         stopped()?;

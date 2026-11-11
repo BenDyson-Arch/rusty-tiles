@@ -618,10 +618,12 @@ open-edge endpoint sorts the same way inside the coarse stage's admission,
 before the walk admits any parent job: runs grow toward one pass at the
 floor's fan-in, at which no staged scratch declaration exceeds the floor's, and
 run writers are added as the stage's memory admits. The row sort, whose stream the walk
-reads later, keeps the floor. The plan is charged as
-`diagnostics.memory.hlod.incidence_bytes` and reported as
-`diagnostics.memory.hlod.incidence_sort`; the coarse stage's minimum is computed
-with the floor.
+reads later, keeps the floor. The planned pass must fit the stage's memory
+after its fixed terms; its resident need is reported as
+`diagnostics.memory.hlod.incidence_bytes` and the plan as
+`diagnostics.memory.hlod.incidence_sort` (whose `max_runs` assumes the worst
+case of six items per triangle). The coarse stage's minimum is computed with the
+floor.
 
 Before starting, the run checks for enough free scratch for its largest
 declared stage working set: files kept from earlier stages, the HLOD incidence

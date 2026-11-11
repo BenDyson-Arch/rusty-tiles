@@ -482,9 +482,9 @@ fn capture_reports_every_step_with_its_total_and_honours_a_cancel_inside_capture
 }
 
 /// Plumbing control: this grid (three leaves, so the coarse stage and its incidence pass
-/// run) fits one floor run, so every budget plans floor-sized runs and only the worker and
-/// writer counts vary. Plan dependence is covered by the capture- and incidence-level sort
-/// tests and the recorded real-data matrix.
+/// run) fits one floor run, so every budget plans the floor and only the worker count
+/// varies. Plan dependence is covered by the capture- and incidence-level sort tests and the
+/// recorded real-data matrix.
 #[test]
 fn archives_are_identical_across_workers_and_budgets() {
     let work = tempfile::tempdir().unwrap();

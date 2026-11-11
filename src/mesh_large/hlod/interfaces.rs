@@ -486,8 +486,12 @@ pub(crate) fn build<'s>(
     stats.scratch.retained = retained;
     progress.begin(Step::IncidenceItems, triangles.len())?;
     let mut items = ExternalSorter::<Item>::new(scratch, sorters.items)?.observed(progress);
-    // Items are admitted one run ahead of those pushed (a run spills only once full).
-    let item_run = (sorters.items.run_bytes / std::mem::size_of::<Item>()).max(1) as u64;
+    // Items are admitted ahead of those pushed. The lookahead is the floor's run (the row
+    // sorter's), not a grown item run: a grown run spills later, never more, so with the
+    // same lookahead no admission declares more than the floor's would.
+    let item_run = (sorters.items.run_bytes.min(sorters.rows.run_bytes)
+        / std::mem::size_of::<Item>())
+    .max(1) as u64;
     let mut admitted_items = item_run;
     let mut source = triangles.reader()?;
     let mut ells = depths.reader()?;
@@ -774,13 +778,15 @@ mod tests {
 
     /// The rows and stats of the exact pass over leaves given as triangles of keys.
     fn incidence(leaves: &[Vec<[Key; 3]>]) -> (Vec<InterfaceRow>, IncidenceStats) {
-        incidence_with(leaves, Sorters::uniform(SORT))
+        let (rows, stats, _) = incidence_with(leaves, Sorters::uniform(SORT));
+        (rows, stats)
     }
 
+    /// Rows, counts and the source open-edge endpoints the borders read.
     fn incidence_with(
         leaves: &[Vec<[Key; 3]>],
         sorters: Sorters,
-    ) -> (Vec<InterfaceRow>, IncidenceStats) {
+    ) -> (Vec<InterfaceRow>, IncidenceStats, Vec<KeyRecord>) {
         let dir = tempfile::tempdir().unwrap();
         let scratch = Scratch::create(Some(dir.path()), 0).unwrap();
         scratch.set_chunk_bytes(1 << 10);
@@ -797,7 +803,7 @@ mod tests {
                 sorter.push(*i).unwrap();
             }
         }
-        let (rows, _open_ends) = reduce(
+        let (rows, open_ends) = reduce(
             &scratch,
             sorters,
             sorter.finish().unwrap(),
@@ -809,7 +815,8 @@ mod tests {
         .unwrap();
         let mut rows: Vec<InterfaceRow> = rows.map(Result::unwrap).collect();
         rows.sort_unstable();
-        (rows, stats)
+        let ends: Vec<KeyRecord> = open_ends.reader().unwrap().map(Result::unwrap).collect();
+        (rows, stats, ends)
     }
 
     fn rows_of(rows: &[InterfaceRow], leaf: u32) -> Vec<(Key, Key)> {
@@ -962,9 +969,9 @@ mod tests {
     #[test]
     fn rows_and_stats_are_identical_for_every_item_sort_plan() {
         let leaves = strip(3_000, 7);
-        let (rows, stats) = incidence(&leaves);
+        let (rows, stats, ends) = incidence_with(&leaves, Sorters::uniform(SORT));
         assert!(
-            stats.items > 15_000 && stats.shared_segments > 400,
+            stats.items > 15_000 && stats.shared_segments > 400 && ends.len() > 1_000,
             "{stats:?}"
         );
         let tiny = |records: usize, fan_in, writers| SortConfig {
@@ -973,14 +980,17 @@ mod tests {
             writers,
             ..SORT
         };
+        // Spilled runs with and without writers, multi-pass merges, and one in-memory run.
         for items in [
             tiny(1, 2, 0),
             tiny(100, 3, 2),
             tiny(997, 4, 3),
             tiny(1 << 15, 4, 7),
         ] {
-            let (planned_rows, planned) = incidence_with(&leaves, Sorters { items, rows: SORT });
+            let (planned_rows, planned, planned_ends) =
+                incidence_with(&leaves, Sorters { items, rows: SORT });
             assert_eq!(planned_rows, rows, "{items:?}");
+            assert_eq!(planned_ends, ends, "{items:?}");
             assert_eq!(
                 serde_json::to_value(planned).unwrap(),
                 serde_json::to_value(stats).unwrap(),
