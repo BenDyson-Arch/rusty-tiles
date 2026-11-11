@@ -27,7 +27,8 @@ const assert=require('node:assert/strict');
         const C=Cesium,viewer=window.viewer,mesh=window.tiles;
         window.annotations.show=false;window.pointCloud.show=false;
         viewer.scene.globe.show=false;
-        for(let i=0;i<100 && !mesh.tilesLoaded;i++)await new Promise(r=>setTimeout(r,50));
+        // Software rendering (CI) can be slow: keep rendering until the tileset reports loaded.
+        for(let i=0;i<600 && !mesh.tilesLoaded;i++){viewer.scene.render();await new Promise(r=>setTimeout(r,50));}
         await new Promise(r=>setTimeout(r,500));
         let picked;
         for(let i=0;i<100 && !picked;i++) {
@@ -36,6 +37,8 @@ const assert=require('node:assert/strict');
           picked=center && viewer.scene.pick(center,3,3);
           if(!picked)await new Promise(r=>setTimeout(r,50));
         }
+        // Picking can render the frame that finishes the tile; settle tilesLoaded after it.
+        for(let i=0;i<600 && picked && !mesh.tilesLoaded;i++){viewer.scene.render();await new Promise(r=>setTimeout(r,50));}
         // Real imagery data and IIFE worker/runtime routes must decode too.
         const image=await window.orthophoto.imageryProvider.requestImage(546,380,10);
         return {version:C.VERSION,meshLoaded:mesh.tilesLoaded,meshPicked:!!picked,
