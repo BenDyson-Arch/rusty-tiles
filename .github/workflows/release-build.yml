@@ -1,20 +1,28 @@
 name: Release build
 
-# The five-platform CLI archives and the Linux amd64 native image, built and tested for a
-# version. release.yml calls it for a vX.Y.Z tag (the version is the committed one) and
-# dev-build.yml for the rolling dev build (the version is stamped into the checkout, never
-# committed). It uploads the archives as binary-<target> artifacts and pushes the tested image
-# as ghcr.io/<repository>:<image-tag> when a tag is given; publishing a release is left to the
-# caller.
+# The five-platform CLI archives, the five Python wheels and the Linux amd64 native image of
+# one version. release.yml calls it for a vX.Y.Z tag or a dry run, and dev-build.yml for the
+# rolling dev build; publishing is left to the caller.
+#
+# Build once (#346): when the caller passes `ci-run-id`, a full-matrix ci.yml run of this
+# commit that built this version, the archives and wheels are taken from that run, which
+# tested them, and only smoke-tested here on their own platforms. Without it (no such run, or
+# its artifacts expired) they are built and tested from source, as before. Either way the
+# caller gets `binary-<target>` and `wheel-*` artifacts in this run. The image is always
+# built here and pushed as ghcr.io/<repository>:<image-tag> when a tag is given.
 on:
   workflow_call:
     inputs:
       version:
-        description: Cargo version to build; stamped into the checkout if it is not the committed one
+        description: Cargo version to publish; stamped into the checkout if it is not the committed one
         type: string
         required: true
       image-tag:
         description: GHCR image tag to push, such as v0.4.0 or dev; empty builds and tests without pushing
+        type: string
+        default: ''
+      ci-run-id:
+        description: ci.yml run whose tested archives and wheels to reuse; empty builds them here
         type: string
         default: ''
 
@@ -26,7 +34,7 @@ jobs:
     name: Binary (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     # Intel macOS took 68-82 minutes in the v0.4.0 release and was cancelled once at 90.
-    timeout-minutes: ${{ matrix.target == 'x86_64-apple-darwin' && 120 || 90 }} # versions: TIMEOUT_FALLBACK_BUILD_INTEL_MACOS TIMEOUT_FALLBACK_BUILD
+    timeout-minutes: ${{ inputs.ci-run-id != '' && 20 || (matrix.target == 'x86_64-apple-darwin' && 120 || 90) }} # versions: TIMEOUT_SMOKE TIMEOUT_FALLBACK_BUILD_INTEL_MACOS TIMEOUT_FALLBACK_BUILD
     strategy:
       fail-fast: false
       matrix:
@@ -47,64 +55,108 @@ jobs:
     env:
       RELEASE_VERSION: ${{ inputs.version }}
       RELEASE_TARGET: ${{ matrix.target }}
+      PYTHON: ${{ startsWith(matrix.os, 'windows') && 'python' || 'python3' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - name: Take the archive the CI run tested
+        if: inputs.ci-run-id != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: dist
+          run-id: ${{ inputs.ci-run-id }}
+          github-token: ${{ github.token }}
       - name: Select stable Rust
+        if: inputs.ci-run-id == ''
         run: |
           rustup update stable --no-self-update
           rustup default stable
           rustup target add "$RELEASE_TARGET"
       - name: Cache Rust dependencies
+        if: inputs.ci-run-id == ''
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: portable-${{ matrix.target }}
+          save-if: false
       # After the cache step, so its key comes from the committed Cargo files.
       - name: Set the build version
-        run: |
-          python=python3
-          if [[ "$RELEASE_TARGET" == *windows* ]]; then python=python; fi
-          "$python" scripts/dev_version.py stamp "$RELEASE_VERSION"
-      - name: Build and test the default CLI
+        if: inputs.ci-run-id == ''
+        run: '"$PYTHON" scripts/dev_version.py stamp "$RELEASE_VERSION"'
+      - name: Build, test and package the default CLI
+        if: inputs.ci-run-id == ''
         run: |
           # Peak-RSS slack in this test is sensitive to shared runner load; CI runs it
           # for the same source, so it does not gate publication here.
           cargo test --locked --target "$RELEASE_TARGET" -- \
             --skip spill::tests::spill_memory_is_flat_in_input_size
           cargo build --locked --release --target "$RELEASE_TARGET"
-      - name: Package and smoke test
-        run: |
-          set -eu
           suffix=
           if [[ "$RELEASE_TARGET" == *windows* ]]; then suffix=.exe; fi
-          binary="target/$RELEASE_TARGET/release/rusty-tiles$suffix"
-          reported=$("$binary" --version | tr -d '\r')
-          echo "$reported"
-          test "$reported" = "rusty-tiles $RELEASE_VERSION"
-          mkdir -p smoke dist stage
-          "$binary" doctor --command mesh
-          "$binary" mesh -i tests/fixtures/example.glb -o smoke/mesh.3tz --anchor 153.02 -27.47 0
-          "$binary" validate smoke/mesh.3tz
-          # A textured source exercises the in-process KTX2/Basis encoder of this binary.
-          "$binary" mesh -i tests/fixtures/f1b/basecolor-jpeg.glb -o smoke/mesh-ktx2.3tz --anchor 153.02 -27.47 0
-          "$binary" validate smoke/mesh-ktx2.3tz
-          cp "$binary" LICENSE stage/
-          cp licenses/THIRD_PARTY_LICENSES-cli.md stage/THIRD_PARTY_LICENSES.md
-          python=python3
-          if [[ "$RELEASE_TARGET" == *windows* ]]; then python=python; fi
-          "$python" scripts/third_party_notices.py stage stage
-          asset="rusty-tiles-$RELEASE_VERSION-$RELEASE_TARGET"
-          if [[ "$RELEASE_TARGET" == *windows* ]]; then
-            (cd stage && 7z a -tzip "../dist/$asset.zip" "rusty-tiles$suffix" LICENSE THIRD_PARTY_LICENSES.md third_party)
-          else
-            tar -czf "dist/$asset.tgz" -C stage "rusty-tiles$suffix" LICENSE THIRD_PARTY_LICENSES.md third_party
-          fi
-          "$python" scripts/third_party_notices.py check --rust-licenses cli dist/"$asset".*
+          scripts/package_cli.sh "$RELEASE_TARGET" "$RELEASE_VERSION" "target/$RELEASE_TARGET/release/rusty-tiles$suffix" dist
+      - name: Smoke test the archive
+        run: |
+          set -eu
+          files=(dist/*)
+          printf '%s\n' "${files[@]}"
+          test "${#files[@]}" -eq 1
+          scripts/smoke_cli.sh "$RELEASE_TARGET" "$RELEASE_VERSION" dist/rusty-tiles-"$RELEASE_VERSION-$RELEASE_TARGET".*
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: binary-${{ matrix.target }}
           path: dist/*
+          if-no-files-found: error
+
+  wheels:
+    name: Python wheel acceptance
+    if: inputs.ci-run-id == ''
+    uses: ./.github/workflows/wheel-acceptance.yml
+    with:
+      version: ${{ inputs.version }}
+
+  wheels-from-ci:
+    name: Python wheels from CI
+    if: inputs.ci-run-id != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20 # versions: TIMEOUT_SMOKE
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.14' # versions: PYTHON_MAX
+      # The CI run built these wheels and passed them through installed-wheel and official
+      # Blender acceptance on every platform; this checks the set and one install.
+      - name: Take the wheels the CI run tested
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: wheel-*
+          merge-multiple: true
+          path: dist
+          run-id: ${{ inputs.ci-run-id }}
+          github-token: ${{ github.token }}
+      - name: Check the wheel set and install the Linux x86_64 wheel
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          python_version=$(python scripts/dev_version.py python "$RELEASE_VERSION")
+          (cd dist && ls -1) | tee wheels.txt
+          test "$(grep -c "^rusty_tiles-$python_version-cp310-abi3-.*\.whl\$" wheels.txt)" -eq 5
+          test "$(wc -l < wheels.txt)" -eq 5
+          python scripts/third_party_notices.py check --rust-licenses python dist/*.whl
+          python -m venv "$RUNNER_TEMP/smoke"
+          "$RUNNER_TEMP/smoke/bin/python" -m pip install --no-index --no-deps dist/*manylinux*_x86_64.whl
+          (cd "$RUNNER_TEMP" && smoke/bin/python -I -c 'import importlib.metadata as metadata, sys, rusty_tiles
+          installed = metadata.version("rusty-tiles")
+          assert rusty_tiles.__version__ == installed == sys.argv[1], (rusty_tiles.__version__, installed)
+          print("rusty_tiles", installed)' "$python_version")
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wheel-from-ci
+          path: dist/*.whl
           if-no-files-found: error
 
   container:

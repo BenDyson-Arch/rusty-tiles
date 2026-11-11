@@ -154,6 +154,39 @@ class Checkout(unittest.TestCase):
         git("tag", "v0.4.0")
         self.assertEqual(resolve(), ["version=0.4.1-dev.202611121734", "python-version=0.4.1.dev202611121734"])
 
+        def build(ref):
+            output = io.StringIO()
+            with mock.patch.dict(os.environ, environment), contextlib.redirect_stdout(output):
+                dev_version.build(ref)
+            return output.getvalue().splitlines()
+
+        release = ["version=0.4.0", "python-version=0.4.0", "kind=release"]
+        for ref in ("refs/heads/main", "refs/tags/v0.4.0", "refs/pull/12/merge"):
+            with self.subTest(ref=ref):
+                self.assertEqual(build(ref), release)
+        dev = ["version=0.4.1-dev.202611121734", "python-version=0.4.1.dev202611121734", "kind=dev"]
+        for ref in ("refs/heads/develop", "refs/heads/ci/streamline", "refs/heads/mainline"):
+            with self.subTest(ref=ref):
+                self.assertEqual(build(ref), dev)
+
+    def test_python_spelling_matches_the_bindings(self):
+        # The same cases as `version_tests` in bindings/python/src/lib.rs.
+        cases = {
+            "0.4.0": "0.4.0",
+            "0.4.0-rc.1": "0.4.0rc1",
+            "0.4.0-alpha.2": "0.4.0a2",
+            "0.4.0-beta.3": "0.4.0b3",
+            "0.4.1-dev.202611121734": "0.4.1.dev202611121734",
+            "0.4.0-rc.1.dev.2": "0.4.0rc1.dev2",
+            "0.4.0-dev.0": "0.4.0.dev0",
+            "0.4.0-nightly.1": "0.4.0-nightly.1",
+            "0.4.0-rc": "0.4.0-rc",
+            "0.4.0-rc.x": "0.4.0-rc.x",
+        }
+        for cargo, python in cases.items():
+            with self.subTest(cargo=cargo):
+                self.assertEqual(dev_version.python_version(cargo), python)
+
 
 if __name__ == "__main__":
     unittest.main()

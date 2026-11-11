@@ -12,6 +12,12 @@ which pip orders after 0.4.0 and before 0.4.1.
 `[workspace.package]` version in Cargo.toml and the Cargo.lock entries of the workspace
 crates (the lock packages without a `source`), so `--locked` builds still pass. It refuses a
 checkout whose workspace crates do not all have the current workspace version.
+
+`build REF` prints the version a CI build of REF carries, so a release or dev build can
+reuse the CI run's archives and wheels (#346): the committed version on `main`, tags and
+pull requests, and the development version on every other branch (develop included). It
+adds `kind=release` or `kind=dev`. `python VERSION` prints the PEP 440 spelling maturin and
+`rusty_tiles.__version__` use for a Cargo version.
 """
 import argparse
 from datetime import datetime, timezone
@@ -55,6 +61,27 @@ def development_version(core, tagged, committed):
     return f"{base}-dev.{number}", f"{base}.dev{number}"
 
 
+def python_version(cargo):
+    """PEP 440 spelling of a Cargo version, as maturin writes it into the wheel metadata.
+
+    Mirrors `python_version` in bindings/python/src/lib.rs: alpha, beta, rc and dev
+    pre-release pairs become a, b, rc and .dev; anything else is returned unchanged.
+    """
+    release, separator, pre = cargo.partition("-")
+    if not separator:
+        return cargo
+    identifiers = pre.split(".")
+    if len(identifiers) % 2:
+        return cargo
+    python = release
+    for kind, number in zip(identifiers[::2], identifiers[1::2]):
+        spelling = {"alpha": "a", "beta": "b", "rc": "rc", "dev": ".dev"}.get(kind)
+        if spelling is None or not number.isascii() or not number.isdigit():
+            return cargo
+        python += spelling + number
+    return python
+
+
 def git(*arguments):
     return subprocess.run(["git", "-C", str(ROOT), *arguments], check=True,
                           capture_output=True, text=True).stdout.strip()
@@ -71,14 +98,35 @@ def write(path, text, newline):
         output.write(text)
 
 
-def resolve():
+def development():
     version, _ = workspace_version(read(ROOT / "Cargo.toml")[0])
     core = release_core(version)
     tagged = bool(git("tag", "--list", "v{}.{}.{}".format(*core)))
     committed = datetime.fromtimestamp(int(git("show", "-s", "--format=%ct", "HEAD")), timezone.utc)
-    cargo, python = development_version(core, tagged, committed)
+    return development_version(core, tagged, committed)
+
+
+def resolve():
+    cargo, python = development()
     print(f"version={cargo}")
     print(f"python-version={python}")
+
+
+def releases_committed_version(ref):
+    """Whether a CI build of REF carries the committed version (otherwise a dev version)."""
+    return ref == "refs/heads/main" or ref.startswith(("refs/tags/", "refs/pull/"))
+
+
+def build(ref):
+    if releases_committed_version(ref):
+        cargo, _ = workspace_version(read(ROOT / "Cargo.toml")[0])
+        release_core(cargo)
+        python, kind = python_version(cargo), "release"
+    else:
+        (cargo, python), kind = development(), "dev"
+    print(f"version={cargo}")
+    print(f"python-version={python}")
+    print(f"kind={kind}")
 
 
 def stamp(version):
@@ -111,9 +159,19 @@ def main():
     commands.add_parser("resolve", help="Print version= and python-version= for this commit")
     stamp_parser = commands.add_parser("stamp", help="Write a Cargo version into the checkout")
     stamp_parser.add_argument("version")
+    build_parser = commands.add_parser("build", help="Print the version a CI build of a Git ref carries")
+    build_parser.add_argument("ref", help="Full Git ref, such as refs/heads/develop")
+    python_parser = commands.add_parser("python", help="Print the PEP 440 spelling of a Cargo version")
+    python_parser.add_argument("version")
     args = parser.parse_args()
     if args.command == "resolve":
         resolve()
+    elif args.command == "build":
+        build(args.ref)
+    elif args.command == "python":
+        if SEMVER.fullmatch(args.version) is None:
+            raise SystemExit(f"error: {args.version!r} is not a SemVer version")
+        print(python_version(args.version))
     else:
         stamp(args.version)
 

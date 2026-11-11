@@ -21,6 +21,10 @@ on:
         description: Cargo version to stamp into the uncommitted checkout (default, the committed one)
         type: string
         default: ''
+      retention-days:
+        description: Days to keep the wheel-<target> artifacts, which release and dev builds reuse
+        type: number
+        default: 14 # versions: ARTIFACT_RETENTION_DAYS
 
 permissions:
   contents: read
@@ -89,6 +93,7 @@ jobs:
           name: wheel-${{ matrix.target }}
           path: dist/*.whl
           if-no-files-found: error
+          retention-days: ${{ inputs.retention-days || 14 }} # versions: ARTIFACT_RETENTION_DAYS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
