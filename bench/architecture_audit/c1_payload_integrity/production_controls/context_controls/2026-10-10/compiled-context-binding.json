@@ -1,0 +1,8 @@
+{
+  "original": "context_controls.rs",
+  "originalSha256": "3a2959b544285ed568236d62fa1533592e1eeb49f800e215c7560a393e2287fd",
+  "compiled": "compiled_context_controls.rs",
+  "compiledSha256": "327dee099efab3f4ff66906a08b738cac408bad309a9e28bc8b5b2ff990a65e9",
+  "transformation": "rustfmt --edition 2021 only; independent original source retained unchanged",
+  "preparationManifestSha256": "ffeac52001d016e030d0cbdf49d59b682f72a39cd780dd56e169d3a28d879fa7"
+}

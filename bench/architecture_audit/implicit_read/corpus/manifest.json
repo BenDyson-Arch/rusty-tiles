@@ -1,0 +1,366 @@
+{
+ "artifacts": [
+  {
+   "expected": "Accepted",
+   "id": "W2.f2238cd",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
+   "ref": "W2 (428 tiles, 234 subtrees; visits 431)",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Accepted",
+   "id": "R1.431",
+   "limits": {
+    "hierarchy_visits": 431
+   },
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
+   "ref": "R1",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "ResourceLimit:hierarchy_visits",
+   "id": "R1.430",
+   "limits": {
+    "hierarchy_visits": 430
+   },
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
+   "ref": "R1",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Accepted",
+   "id": "R2b.W2.190944",
+   "limits": {
+    "document_decoded_bytes": 190944
+   },
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
+   "ref": "R2b lower bound (DC-8; R confirms C1's threshold by execution)",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Accepted",
+   "id": "R2b.W2.246583",
+   "limits": {
+    "document_decoded_bytes": 246583
+   },
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
+   "ref": "R2b upper bound (cumulative 246,584 - 1)",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Accepted",
+   "id": "R2b.W2.190943",
+   "limits": {
+    "document_decoded_bytes": 190943
+   },
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
+   "production": "ResourceLimit (C1 payload view budget; outside the oracle)",
+   "ref": "R2b below C1's view budget",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Accepted",
+   "id": "R2.W2.live",
+   "limits": {
+    "document_decoded_bytes": 23864
+   },
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
+   "production": "ResourceLimit (C1)",
+   "ref": "live-path cap = W2 maximum live sum 23,864 (C1 alone refuses first in production)",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "ResourceLimit:document_decoded_bytes",
+   "id": "R2.W2.live-1",
+   "limits": {
+    "document_decoded_bytes": 23863
+   },
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
+   "ref": "live-path cap - 1",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Unsupported",
+   "id": "W3u.f2238cd",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-deep.3tz",
+   "ref": "W3u (chunked point default, JSON template)",
+   "sha256": "162db1e400c79179850dbd8914c5a19e5843bb0f3c0697288fcbc1baaf0779ab",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Unsupported",
+   "id": "W5u.f2238cd",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/vec-perf.3tz",
+   "ref": "W5u (vector default on perf input, JSON template)",
+   "sha256": "d3415b764baf0b0c597e51cf87a73d482a7cc2c13a1c3a0b39a6cbfae905ac54",
+   "source": "regenerate.py with producer f2238cd; re-pinned 2026-10-13 (was 3fae0aca...): the bytes embed PROJ in vector-build.json and PROJ 9.8.1 -> 9.9.0 landed that day; verdict is the JSON-template refusal, unchanged",
+   "verdictOnly": true
+  },
+  {
+   "expected": "Unsupported",
+   "id": "W9u.coordinator.octree-none",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/a2fix/octree-none.3tz",
+   "ref": "W9u (coordinator's convert of the #151 fixture, schema.id corrected)",
+   "sha256": "ec03367bd6f60c238119e09d6dab9559efc3294d45f3d306d7234ac1409cb186",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Unsupported",
+   "id": "W9u.coordinator.octree-rename-class",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/a2fix/octree-rename-class.3tz",
+   "ref": "W9u (coordinator's convert of the #151 fixture, schema.id corrected)",
+   "sha256": "8207c53993c7d2c12441f1b3eca5b7e1600b5332291cb538f452d5f514cfae61",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Unsupported",
+   "id": "W9u.coordinator.quadtree-none",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/a2fix/quadtree-none.3tz",
+   "ref": "W9u (coordinator's convert of the #151 fixture, schema.id corrected)",
+   "sha256": "95555c703170dc0b3a0c478800d029098e35f1f5a91434b5585f0f92132ab8fe",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Unsupported",
+   "id": "W9u.coordinator.quadtree-rename-class",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/a2fix/quadtree-rename-class.3tz",
+   "ref": "W9u (coordinator's convert of the #151 fixture, schema.id corrected)",
+   "sha256": "2fbaffdc639f495b35896238782cba45d7414c26c474e41cf3711fb275500415",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "id": "W1",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W1.3tz",
+   "sha256": "572e664409802600da9827fb508e31fbb99d3517f37ae6032616135f693e343d",
+   "ref": "W1 point-cloud default (73 tiles): rusty-tiles --json point-cloud -i cloud.las --sourceCrs local --maxPoints 1000",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W2",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W2.3tz",
+   "sha256": "29ac8851a677eb948dae6f75cb68d06219299f7d15c002f96116e34d23af8ae9",
+   "ref": "W2 point-cloud default perf --maxPoints 2000: rusty-tiles --json point-cloud -i points.las --sourceCrs EPSG:32756 --heightOffset 0 --maxPoints 2000",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W3",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W3-pc-deep.3tz",
+   "sha256": "3628339df5c680f56d045436e8133f157d804401d0c77b2d2fcd46cf3691a007",
+   "ref": "W3 pc-deep: point-cloud --maxPoints 40 (W3u on f2238cd): rusty-tiles --json point-cloud -i cloud.las --sourceCrs local --maxPoints 40",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W4.points-lines",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W4-points-lines.3tz",
+   "sha256": "e709c2dbc10ea60597621683d3f67990abf5c2e8cefae0c1792ae772f1e8330d",
+   "ref": "W4 vector default x6 (points-lines): rusty-tiles --json vector -i vector.geojson --reproducible --jobs 2",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W4.points-lines-quantize",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W4-points-lines-quantize.3tz",
+   "sha256": "95a5c535da7012ceb6ca859adbbef3d3d40a3a20a3ebdfdf71583a3c0b5dfab8",
+   "ref": "W4 vector default x6 (points-lines-quantize): rusty-tiles --json vector -i vector.geojson --reproducible --jobs 2 --quantize",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W4.points-lines-meshopt",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W4-points-lines-meshopt.3tz",
+   "sha256": "0c5c9cbb94e200a0d6c1e6fd0811b840ad734c73731e5d4ced221fc5d34122ca",
+   "ref": "W4 vector default x6 (points-lines-meshopt): rusty-tiles --json vector -i vector.geojson --reproducible --jobs 2 --meshopt",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W4.polygons",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W4-polygons.3tz",
+   "sha256": "fac1b346e03223abbb71170438d3107b8861722f63a5106294374d7ba93af156",
+   "ref": "W4 vector default x6 (polygons): rusty-tiles --json vector -i countries-source.geojson --reproducible --jobs 2",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W4.polygons-quantize",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W4-polygons-quantize.3tz",
+   "sha256": "5e12a311d0814db2b60d83014f112562249f6a5ce6064b3db2b73126c84b0309",
+   "ref": "W4 vector default x6 (polygons-quantize): rusty-tiles --json vector -i countries-source.geojson --reproducible --jobs 2 --quantize",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W4.polygons-meshopt",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W4-polygons-meshopt.3tz",
+   "sha256": "560e0903acec87ebb8109fc41920cb7a6440d0e44b3ac8b362dae7b1586f41df",
+   "ref": "W4 vector default x6 (polygons-meshopt): rusty-tiles --json vector -i countries-source.geojson --reproducible --jobs 2 --meshopt",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W5",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W5-vec-perf.3tz",
+   "sha256": "ecf728ee458b04a25b0b96796bd48b3267980f8bf58c729adbd587ea9a6e3c04",
+   "production": "InvalidInput (pre-#301 empty vector root)",
+   "ref": "W5 vec-perf: vector default perf (W5u on f2238cd): rusty-tiles --json vector -i perf-vector.geojson --reproducible --jobs 2",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W5.quantize",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W5-vec-perf-quantize.3tz",
+   "sha256": "605c7c32b20f76feb3f69b6f8d3f74ccf737f9e4a7ba693b810621849a027e60",
+   "production": "InvalidInput (pre-#301 empty vector root)",
+   "ref": "W5 vec-perf --quantize: rusty-tiles --json vector -i perf-vector.geojson --reproducible --jobs 2 --quantize",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W5.meshopt",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W5-vec-perf-meshopt.3tz",
+   "sha256": "b8a217d750c728c31f4df16818a72d7633d682e7c51a29da075dd9c6d66e1313",
+   "production": "InvalidInput (pre-#301 empty vector root)",
+   "ref": "W5 vec-perf --meshopt: rusty-tiles --json vector -i perf-vector.geojson --reproducible --jobs 2 --meshopt",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W6",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W6.3tz",
+   "sha256": "751e6fbbe86cb18b1f7c71135edc72b307db55bb054aae93945de478f34187dd",
+   "ref": "W6 legacy mesh-to-3tz split.gltf: rusty-tiles --json mesh-to-3tz -i split.gltf --maxBytes 0 --maxTriangles 512",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W6d",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W6d.3tz",
+   "sha256": "9af81d4242850b5dd3c4601d596a69cf60b6f36592e8b04030483d64f9d1cbe0",
+   "ref": "W6d legacy deep mesh (native_implicit.rs recipe; stdlib textured_grid_glb(12) port, input sha256 5442ba6c...): rusty-tiles --json mesh-to-3tz -i deep-mesh.glb --maxTriangles 2 --maxBytes 0 --tileSize 64",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W7",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/W7.3tz",
+   "sha256": "1f8ec4df9356557b8663dfa5a085c77f290c4dbb876cfa0181f57a20ecd99ffe",
+   "ref": "W7 legacy small mesh (ADD, .gltf; M2 wrapper): rusty-tiles --json mesh-to-3tz -i example.gltf",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W11.mf2-lod3",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-native/mf2-lod3.3tz",
+   "sha256": "f795a4f1ece91c34e124c193789add7cf94c51463fc8ef155d03ad25e3448356",
+   "production": "InvalidInput (pre-#301 empty vector root)",
+   "ref": "W11 deep vector LOD chains, 12.5k tiles, 189 documents and 188 links: rusty-tiles --json vector -i perf-vector.geojson --reproducible --jobs 2 --maxFeatures 2 --lodLevels 3",
+   "source": "combined head e3a67bf, release native-geospatial, rusty-tiles sha256 a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+  },
+  {
+   "id": "W8s",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/inputs/W8s-convert-implicit.3tz",
+   "sha256": "460c2505ce75acff67586f0b331f739daddfc77ca38605b353ee0812c7496650",
+   "ref": "W8s single-node convert archive (c2-corpus run2)",
+   "source": "producer f2238cd (already written)"
+  },
+  {
+   "id": "W8m",
+   "expected": "Unsupported",
+   "path": "/home/bend/.cache/forest-acc/work/inputs/W8m-vector-flat-rounded-implicit.3tz",
+   "sha256": "d1d19138a199cfcc567ea9ea36da572284a7bc59a714164563558b0d6751ea76",
+   "ref": "W8m multi-node convert archive (A2-retained vector-flat-rounded-implicit.3tz; receipt hash)",
+   "source": "A2 probe artifact (already written)"
+  },
+  {
+   "id": "W10.portable.W4.points-lines",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-portable/W4-points-lines.3tz",
+   "sha256": "7d715d846c2b3a9dfbfa6fa68843bdd805ddc2875034fbb3f2a2a7e9b53eed13",
+   "ref": "W10 portable build of W4.points-lines: rusty-tiles --json vector -i vector.geojson --reproducible --jobs 2",
+   "source": "combined head e3a67bf, release portable, rusty-tiles sha256 1ace7782ad6fb6ec0ad3d96fb5971e7ae43da7ccf3f7ca3e3863ef523cff71be"
+  },
+  {
+   "id": "W10.portable.W4.points-lines-quantize",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-portable/W4-points-lines-quantize.3tz",
+   "sha256": "c0a7343803aca07b42353cd4cf559a7918f51c69f43370c01f083c267b136830",
+   "ref": "W10 portable build of W4.points-lines-quantize: rusty-tiles --json vector -i vector.geojson --reproducible --jobs 2 --quantize",
+   "source": "combined head e3a67bf, release portable, rusty-tiles sha256 1ace7782ad6fb6ec0ad3d96fb5971e7ae43da7ccf3f7ca3e3863ef523cff71be"
+  },
+  {
+   "id": "W10.portable.W4.points-lines-meshopt",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-portable/W4-points-lines-meshopt.3tz",
+   "sha256": "309e390cbd60b0d17c06dfb1bed8da0cc7c4860a0f632c790e69be981cfdb0c9",
+   "ref": "W10 portable build of W4.points-lines-meshopt: rusty-tiles --json vector -i vector.geojson --reproducible --jobs 2 --meshopt",
+   "source": "combined head e3a67bf, release portable, rusty-tiles sha256 1ace7782ad6fb6ec0ad3d96fb5971e7ae43da7ccf3f7ca3e3863ef523cff71be"
+  },
+  {
+   "id": "W10.portable.W4.polygons",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-portable/W4-polygons.3tz",
+   "sha256": "0cbebf8f742d450aa989d0d113c24d3daacc2052daed139ab02f3c9828de6639",
+   "ref": "W10 portable build of W4.polygons: rusty-tiles --json vector -i countries-source.geojson --reproducible --jobs 2",
+   "source": "combined head e3a67bf, release portable, rusty-tiles sha256 1ace7782ad6fb6ec0ad3d96fb5971e7ae43da7ccf3f7ca3e3863ef523cff71be"
+  },
+  {
+   "id": "W10.portable.W4.polygons-quantize",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-portable/W4-polygons-quantize.3tz",
+   "sha256": "d4123c683c133364a9a51bda8602e0f4e89806755b70215116510449f2b8bdba",
+   "ref": "W10 portable build of W4.polygons-quantize: rusty-tiles --json vector -i countries-source.geojson --reproducible --jobs 2 --quantize",
+   "source": "combined head e3a67bf, release portable, rusty-tiles sha256 1ace7782ad6fb6ec0ad3d96fb5971e7ae43da7ccf3f7ca3e3863ef523cff71be"
+  },
+  {
+   "id": "W10.portable.W4.polygons-meshopt",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-portable/W4-polygons-meshopt.3tz",
+   "sha256": "ef5d7600838a91a318df06a262d89f1f619068693c547f6ff51a2f1f7644f5f9",
+   "ref": "W10 portable build of W4.polygons-meshopt: rusty-tiles --json vector -i countries-source.geojson --reproducible --jobs 2 --meshopt",
+   "source": "combined head e3a67bf, release portable, rusty-tiles sha256 1ace7782ad6fb6ec0ad3d96fb5971e7ae43da7ccf3f7ca3e3863ef523cff71be"
+  },
+  {
+   "id": "W10.portable.W5",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-portable/W5-vec-perf.3tz",
+   "sha256": "a533edb9573e2d0a3554ae71532927e2e001a6306153c997e3bb68d461014747",
+   "production": "InvalidInput (pre-#301 empty vector root)",
+   "ref": "W10 portable build of W5: rusty-tiles --json vector -i perf-vector.geojson --reproducible --jobs 2",
+   "source": "combined head e3a67bf, release portable, rusty-tiles sha256 1ace7782ad6fb6ec0ad3d96fb5971e7ae43da7ccf3f7ca3e3863ef523cff71be"
+  },
+  {
+   "id": "W10.portable.W5.quantize",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-portable/W5-vec-perf-quantize.3tz",
+   "sha256": "c31f56e1355c2eb3d07e609009e049345cf831d77fbc4abe2b6ca864bd82846d",
+   "production": "InvalidInput (pre-#301 empty vector root)",
+   "ref": "W10 portable build of W5.quantize: rusty-tiles --json vector -i perf-vector.geojson --reproducible --jobs 2 --quantize",
+   "source": "combined head e3a67bf, release portable, rusty-tiles sha256 1ace7782ad6fb6ec0ad3d96fb5971e7ae43da7ccf3f7ca3e3863ef523cff71be"
+  },
+  {
+   "id": "W10.portable.W5.meshopt",
+   "expected": "Accepted",
+   "path": "/home/bend/.cache/forest-acc/work/head-portable/W5-vec-perf-meshopt.3tz",
+   "sha256": "a0ee4497dfd1521a03627414c6424f4c40c1197ca26b5617322e2ae536470321",
+   "production": "InvalidInput (pre-#301 empty vector root)",
+   "ref": "W10 portable build of W5.meshopt: rusty-tiles --json vector -i perf-vector.geojson --reproducible --jobs 2 --meshopt",
+   "source": "combined head e3a67bf, release portable, rusty-tiles sha256 1ace7782ad6fb6ec0ad3d96fb5971e7ae43da7ccf3f7ca3e3863ef523cff71be"
+  }
+ ],
+ "contract": "9674e60b959eea0a4a985b6beec7a278ec79c08579f6c19e58f5a070aee03496",
+ "rulings": "52b01d2b71436bcae5ecfb005693122559a794020c9d4522af40803a0c6898a3",
+ "pendingResolved": "2026-10-11 R-helper acceptance of e3a67bf: W1-W8, W10 and W11 (P outputs: every W above built on the combined head) supplied; the explicit --explicit builds are outside I1 (explicit-only) and not listed"
+}

@@ -1,0 +1,53 @@
+#!/bin/sh
+# Focused installed-release acceptance in the offline, Python-free runtime image.
+set -eu
+
+fixtures=${1:-/fixtures}
+for interpreter in python python3; do
+    if command -v "$interpreter" >/dev/null 2>&1; then
+        printf 'packaged runtime must not contain %s\n' "$interpreter" >&2
+        exit 1
+    fi
+done
+command -v rusty-tiles >/dev/null 2>&1
+notices=/usr/share/doc/rusty-tiles
+for notice in LICENSE THIRD_PARTY_LICENSES.md third_party/system/gdal/LICENSE.TXT third_party/system/proj/COPYING third_party/basis_universal/LICENSE third_party/basis_universal/NOTICE \
+    third_party/basis_universal/LICENSES/Apache-2.0.txt third_party/basis_universal/LICENSES/BSD-3-clause.txt \
+    third_party/basis_universal/LICENSES/MIT.txt third_party/basis_universal/zstd/LICENSE; do
+    [ -s "$notices/$notice" ] || { printf 'packaged runtime lacks %s\n' "$notices/$notice" >&2; exit 1; }
+done
+grep -q '^## System libraries linked in the container image' "$notices/THIRD_PARTY_LICENSES.md"
+[ -s "$fixtures/vector.geojson" ]
+[ -s "$fixtures/d1-rgb.tif" ]
+[ -s "$fixtures/example.glb" ]
+[ -s "$fixtures/f1b/basecolor-jpeg.glb" ]
+
+# The CI container also disables networking; this prevents PROJ grid downloads.
+PROJ_NETWORK=OFF
+export PROJ_NETWORK
+work=$(mktemp -d "${TMPDIR:-/tmp}/rusty-packaged-runtime.XXXXXX")
+trap 'rm -rf "$work"' 0
+trap 'exit 1' HUP INT TERM
+
+rusty-tiles doctor --command vector --json
+rusty-tiles doctor --command raster --json
+rusty-tiles vector -i "$fixtures/vector.geojson" -o "$work/vector.3tz" \
+    --max-features 2 --reproducible --json
+[ -s "$work/vector.3tz" ]
+rusty-tiles validate "$work/vector.3tz" --json
+
+rusty-tiles doctor --command mesh --json
+rusty-tiles mesh -i "$fixtures/example.glb" -o "$work/mesh.3tz" --anchor 153.02 -27.47 0 --json
+rusty-tiles validate "$work/mesh.3tz" --json
+rusty-tiles mesh -i "$fixtures/f1b/basecolor-jpeg.glb" -o "$work/mesh-ktx2.3tz" \
+    --anchor 153.02 -27.47 0 --json
+rusty-tiles validate "$work/mesh-ktx2.3tz" --json
+
+rusty-tiles raster -i "$fixtures/d1-rgb.tif" -o "$work/imagery" \
+    --min-zoom 0 --max-zoom 0 --json
+[ -s "$work/imagery/tilejson.json" ]
+[ -s "$work/imagery/report.json" ]
+[ -s "$work/imagery/source.cog.tif" ]
+[ -s "$work/imagery/tiles/0/0/0.png" ]
+# validate accepts .3tz archives; raster directory readiness is checked above.
+printf 'packaged runtime acceptance passed (mesh and vector archives, native raster)\n'

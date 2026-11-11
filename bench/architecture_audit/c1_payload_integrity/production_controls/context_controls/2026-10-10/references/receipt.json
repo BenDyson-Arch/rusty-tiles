@@ -1,0 +1,29 @@
+{
+  "scope": "Pinned primary source retrieval and bytes only; no target execution.",
+  "references": [
+    {
+      "path": "references/implicit-tiling.adoc",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/ImplicitTiling/README.adoc",
+      "bytes": 32526,
+      "sha256": "14a37a3425520e46dd266c8afe82d884fdbcd4a8044739e0311198551f5ec672",
+      "httpStatus": 200,
+      "revision": "4d781014b52294759834018a931223b98ac1ce47"
+    },
+    {
+      "path": "references/metadata.adoc",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/Metadata/README.adoc",
+      "bytes": 36602,
+      "sha256": "4797a8836ca4899129828fcccbaefcedabbf29350ed0a264ccc83fbd1361ceaa",
+      "httpStatus": 200,
+      "revision": "4d781014b52294759834018a931223b98ac1ce47"
+    },
+    {
+      "path": "references/metadata-semantics.adoc",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/Metadata/Semantics/README.adoc",
+      "bytes": 15134,
+      "sha256": "02ac07db39258c67e702e0b51dcc3411f96c1caee873aeec2894dbad625e85a2",
+      "httpStatus": 200,
+      "revision": "4d781014b52294759834018a931223b98ac1ce47"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 88ee84a..9fb9f86 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -1704,7 +1704,9 @@ impl Check<'_> {
+                 volume: match &tile.volume {
+                     EffectiveVolume::Row(b) => Some(VolumeFacts::Box(*b)),
+                     EffectiveVolume::DerivedRoot => Some(volume_facts(&r.bounds)),
+-                    EffectiveVolume::Derived(_) => None,
++                    EffectiveVolume::Derived(cell) => {
++                        Some(VolumeFacts::Box(cell.rounded_for_hierarchy_bounds()))
++                    }
+                 },
+                 external: None,
+                 parent: Some(parent_tile),

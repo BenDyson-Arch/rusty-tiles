@@ -1,0 +1,14 @@
+--- a/oracle/c2o/check.py
++++ b/oracle/c2o/check.py
+@@ -425,7 +425,11 @@
+         budget = self.oracle_limits["maxVertexLevelTests"]
+         used = 0
+         outside = None
++        seen = set()
+         for ref in references:
++            if ref.member in seen:
++                continue
++            seen.add(ref.member)
+             facts = self.uri_facts[ref.member]
+             if not facts.has_instances():
+                 continue

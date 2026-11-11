@@ -1,0 +1,23 @@
+diff --git a/src/validate/containment.rs b/src/validate/containment.rs
+index e59fa24..406d240 100644
+--- a/src/validate/containment.rs
++++ b/src/validate/containment.rs
+@@ -870,7 +870,17 @@ fn raw_box(
+             });
+         }
+     }
+-    extent
++    extent.map(|(lo, hi)| match (lo, hi) {
++        (RawVertex::F32(l), RawVertex::F32(h)) => (
++            RawVertex::F32(std::array::from_fn(|c| if l[c] < h[c] { l[c].next_up() } else { l[c] })),
++            RawVertex::F32(std::array::from_fn(|c| if l[c] < h[c] { h[c].next_down() } else { h[c] })),
++        ),
++        (RawVertex::Int(l), RawVertex::Int(h)) => (
++            RawVertex::Int(std::array::from_fn(|c| if l[c] < h[c] { l[c] + 1 } else { l[c] })),
++            RawVertex::Int(std::array::from_fn(|c| if l[c] < h[c] { h[c] - 1 } else { h[c] })),
++        ),
++        other => other,
++    })
+ }
+ /// Whether every tested quantity is a function of at most one decoded coordinate and every test is
+ /// a box row: each row `r < 3` of the top composite and of every level step has at most one nonzero

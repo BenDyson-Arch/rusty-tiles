@@ -1,0 +1,9 @@
+{
+  "originalIndependentModuleSha256": "99d5b29c96b84ede9050d3e2a7977f40614e23c2733fd0e34cae336ae0faec74",
+  "historicalFormatterOnlyModuleSha256": "403c05f33da985f6e9c165d95a480f0b77d171f342f5a371311f72b8f194dbc7",
+  "selectedCompiledModuleSha256": "dfa9ce48083905b4058710925f11a4690125381fc1e20836145b4b33400da227",
+  "change": "Collapse duplicate else-if branches: count1 returns member_bytes-3; everyothercount returns2. Original frozen modules unchanged. Same resolver-overreturn test inputs/assertions.",
+  "failedClippyPhase": "/tmp/rusty-tiles-payload-final-evidence/context-build/native-clippy.log",
+  "failedClippyExitCode": 101,
+  "productionBehaviorChange": false
+}

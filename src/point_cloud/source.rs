@@ -3,19 +3,126 @@
 use crate::Error;
 use std::{
     fs::File,
-    io::{BufReader, Seek, SeekFrom},
+    io::{BufReader, Read, Seek, SeekFrom},
     path::Path,
 };
 
-pub(super) fn read_source(input: &Path) -> Result<(las::Reader, las::Header), Error> {
+pub(super) fn read_source(
+    input: &Path,
+    admitted: &same_file::Handle,
+) -> Result<(las::Reader, las::Header), Error> {
     let mut file = BufReader::new(File::open(input)?);
+    // Compare the opened descriptor with the admitted pathname before decoding.
+    if &same_file::Handle::from_file(file.get_ref().try_clone()?)? != admitted {
+        return Err(Error::Data(
+            "point-cloud source identity changed before open".into(),
+        ));
+    }
+    const MAX_METADATA: u64 = 16 * 1024 * 1024;
+    const MAX_RECORDS: u64 = 65_536;
+    let mut prefix = [0u8; 26];
+    file.read_exact(&mut prefix)
+        .map_err(|e| las_error(e.into()))?;
+    if &prefix[..4] != b"LASF" {
+        return Err(Error::Data("invalid LAS file signature".into()));
+    }
+    let minimum_header = match (prefix[24], prefix[25]) {
+        (1, 0..=2) => 227,
+        (1, 3) => 235,
+        (1, 4) => 375,
+        version => {
+            return Err(Error::Environment(format!(
+                "point-cloud source profile admits LAS versions 1.0 through 1.4; got {}.{}",
+                version.0, version.1
+            )))
+        }
+    };
+    file.rewind()?;
     let raw_header = las::raw::Header::read_from(&mut file).map_err(las_error)?;
+    let length = file.get_ref().metadata()?.len();
+    if raw_header.header_size < minimum_header
+        || u32::from(raw_header.header_size) > raw_header.offset_to_point_data
+        || u64::from(raw_header.offset_to_point_data) > length
+    {
+        return Err(Error::Data(
+            "LAS header and point-data offsets exceed the declared header or actual source extent"
+                .into(),
+        ));
+    }
+    let mut metadata_bytes = 0u64;
+    let evlr_count = raw_header.evlr.map_or(0, |e| u64::from(e.number_of_evlrs));
+    if u64::from(raw_header.number_of_variable_length_records) + evlr_count > MAX_RECORDS {
+        return Err(Error::Environment(
+            "point-cloud metadata profile admits at most 65536 VLR/EVLR records".into(),
+        ));
+    }
+    file.seek(SeekFrom::Start(u64::from(raw_header.header_size)))?;
+    for _ in 0..raw_header.number_of_variable_length_records {
+        let start = file.stream_position()?;
+        let mut header = [0u8; 54];
+        file.read_exact(&mut header)
+            .map_err(|e| las_error(e.into()))?;
+        let payload = u64::from(u16::from_le_bytes(header[20..22].try_into().unwrap()));
+        let end = start.checked_add(54).and_then(|n| n.checked_add(payload));
+        if end.is_none_or(|n| n > length || n > u64::from(raw_header.offset_to_point_data)) {
+            return Err(Error::Data(
+                "VLR payload exceeds source metadata extent".into(),
+            ));
+        }
+        metadata_bytes += payload + 54;
+        if metadata_bytes > MAX_METADATA {
+            return Err(Error::Environment(
+                "point-cloud metadata profile admits at most 16 MiB".into(),
+            ));
+        }
+        file.seek(SeekFrom::Start(end.unwrap()))?;
+    }
+    // Bound VLR padding too: las::Reader allocates the header-to-points gap.
+    if u64::from(raw_header.offset_to_point_data).saturating_sub(u64::from(raw_header.header_size))
+        > MAX_METADATA
+    {
+        return Err(Error::Environment(
+            "point-cloud metadata and padding profile admits at most 16 MiB".into(),
+        ));
+    }
     let mut evlrs = Vec::new();
     // las 0.11.1 loads only the first EVLR. Use the declared on-disk count and
     // offset for both LAS and LAZ, before resolving CRS or Extra Bytes metadata.
     if let Some(evlr) = raw_header.evlr {
+        let length = file.get_ref().metadata()?.len();
+        let minimum = u64::from(evlr.number_of_evlrs)
+            .checked_mul(60)
+            .and_then(|n| evlr.start_of_first_evlr.checked_add(n));
+        if minimum.is_none_or(|n| n > length) {
+            return Err(Error::Data("EVLR declaration exceeds source extent".into()));
+        }
         file.seek(SeekFrom::Start(evlr.start_of_first_evlr))?;
         for _ in 0..evlr.number_of_evlrs {
+            let start = file.stream_position()?;
+            let mut prefix = [0u8; 28];
+            file.read_exact(&mut prefix)
+                .map_err(|e| las_error(e.into()))?;
+            let payload = u64::from_le_bytes(prefix[20..28].try_into().unwrap());
+            if start
+                .checked_add(60)
+                .and_then(|n| n.checked_add(payload))
+                .is_none_or(|n| n > length)
+                || usize::try_from(payload).is_err()
+                || payload > isize::MAX as u64
+            {
+                return Err(Error::Data(
+                    "EVLR payload exceeds source extent or platform limits".into(),
+                ));
+            }
+            metadata_bytes = metadata_bytes
+                .checked_add(payload + 60)
+                .ok_or_else(|| Error::Data("metadata length overflow".into()))?;
+            if metadata_bytes > MAX_METADATA {
+                return Err(Error::Environment(
+                    "point-cloud metadata profile admits at most 16 MiB".into(),
+                ));
+            }
+            file.seek(SeekFrom::Start(start))?;
             evlrs.push(las::Vlr::new(
                 las::raw::Vlr::read_from(&mut file, true).map_err(las_error)?,
             ));
@@ -47,6 +154,82 @@ pub(super) enum Scalar {
 }
 
 impl Scalar {
+    fn declaration(self, bytes: &[u8]) -> Result<serde_json::Value, Error> {
+        use serde_json::json;
+        let value = match self {
+            Self::U8 => {
+                let v = u64::from_le_bytes(bytes.try_into().unwrap());
+                if v > u8::MAX as u64 {
+                    return Err(Error::Data(
+                        "Extra Bytes UINT8 declaration out of range".into(),
+                    ));
+                }
+                json!(v)
+            }
+            Self::U16 => {
+                let v = u64::from_le_bytes(bytes.try_into().unwrap());
+                if v > u16::MAX as u64 {
+                    return Err(Error::Data(
+                        "Extra Bytes UINT16 declaration out of range".into(),
+                    ));
+                }
+                json!(v)
+            }
+            Self::U32 => {
+                let v = u64::from_le_bytes(bytes.try_into().unwrap());
+                if v > u32::MAX as u64 {
+                    return Err(Error::Data(
+                        "Extra Bytes UINT32 declaration out of range".into(),
+                    ));
+                }
+                json!(v)
+            }
+            Self::U64 => json!(u64::from_le_bytes(bytes.try_into().unwrap())),
+            Self::I8 => {
+                let v = i64::from_le_bytes(bytes.try_into().unwrap());
+                if i8::try_from(v).is_err() {
+                    return Err(Error::Data(
+                        "Extra Bytes INT8 declaration out of range".into(),
+                    ));
+                }
+                json!(v)
+            }
+            Self::I16 => {
+                let v = i64::from_le_bytes(bytes.try_into().unwrap());
+                if i16::try_from(v).is_err() {
+                    return Err(Error::Data(
+                        "Extra Bytes INT16 declaration out of range".into(),
+                    ));
+                }
+                json!(v)
+            }
+            Self::I32 => {
+                let v = i64::from_le_bytes(bytes.try_into().unwrap());
+                if i32::try_from(v).is_err() {
+                    return Err(Error::Data(
+                        "Extra Bytes INT32 declaration out of range".into(),
+                    ));
+                }
+                json!(v)
+            }
+            Self::I64 => json!(i64::from_le_bytes(bytes.try_into().unwrap())),
+            Self::F32 | Self::F64 => {
+                // LAS Extra Bytes stores floating declarations as DOUBLE regardless of source width.
+                let v = f64::from_le_bytes(bytes.try_into().unwrap());
+                if !v.is_finite() || (matches!(self, Self::F32) && !(v as f32).is_finite()) {
+                    return Err(Error::Data("nonfinite Extra Bytes declaration".into()));
+                }
+                if matches!(self, Self::F32) && (v as f32) as f64 != v {
+                    return Err(Error::Environment(
+                        "FLOAT32 Extra Bytes declaration must equal a widened FLOAT32 value".into(),
+                    ));
+                }
+                json!(v)
+            }
+        };
+        Ok(value)
+    }
+
     pub fn width(self) -> usize {
         match self {
             Self::U8 | Self::I8 => 1,
@@ -98,11 +281,12 @@ impl Scalar {
             8 => Self::I64,
             9 => Self::F32,
             10 => Self::F64,
-            _ => {
-                return Err(Error::Data(
+            0 | 11..=30 => {
+                return Err(Error::Environment(
                     "unsupported LAS dimension: array or untyped Extra Bytes".into(),
                 ))
             }
+            _ => return Err(Error::Data("invalid Extra Bytes scalar type code".into())),
         })
     }
 }
@@ -128,9 +312,17 @@ pub(super) struct Dimension {
     pub name: String,
     pub kind: Scalar,
     decode: Decode,
+    declarations: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Dimension {
+    pub fn schema(&self) -> serde_json::Value {
+        let mut schema = self.declarations.clone();
+        schema.insert("type".into(), "SCALAR".into());
+        schema.insert("componentType".into(), self.kind.component().into());
+        serde_json::Value::Object(schema)
+    }
+
     pub fn append(&self, row: &[u8], output: &mut Vec<u8>) {
         match self.decode {
             Decode::Raw(at) => output.extend_from_slice(&row[at..at + self.kind.width()]),
@@ -189,7 +381,7 @@ impl Layout {
             7 => 36,
             8 => 38,
             4 | 5 | 9 | 10 => {
-                return Err(Error::Data(
+                return Err(Error::Environment(
                     "waveform LAS point formats are unsupported".into(),
                 ))
             }
@@ -220,6 +412,7 @@ impl Layout {
                 name: name.into(),
                 kind,
                 decode: Decode::Raw(at),
+                declarations: Default::default(),
             });
         }
         for (name, kind, at) in [
@@ -316,6 +509,9 @@ impl Layout {
                     return Err(Error::Data("unsupported Extra Bytes option bits".into()));
                 }
                 if flags & 24 != 0 {
+                    if matches!(input, U64 | I64) {
+                        return Err(Error::Environment(format!("scaled INT64/UINT64 Extra Bytes are unsupported without lossless scaling semantics: {name}")));
+                    }
                     let scale = if flags & 8 != 0 {
                         f64_at(descriptor, 112)
                     } else {
@@ -326,7 +522,7 @@ impl Layout {
                     } else {
                         0.
                     };
-                    if !scale.is_finite() || !offset.is_finite() {
+                    if !scale.is_finite() || scale <= 0. || !offset.is_finite() {
                         return Err(Error::Data(format!(
                             "nonfinite Extra Bytes scale/offset: {name}"
                         )));
@@ -334,6 +530,7 @@ impl Layout {
                     result.dimensions.push(Dimension {
                         name,
                         kind: F64,
+                        declarations: Default::default(),
                         decode: Decode::Scaled {
                             at: RAW + at,
                             input,
@@ -344,11 +541,42 @@ impl Layout {
                 } else {
                     result.raw(&name, input, at);
                 }
+                let dim = result.dimensions.last_mut().unwrap();
+                for (flag, offset, key) in [(1, 40, "noData"), (2, 64, "min"), (4, 88, "max")] {
+                    if flags & flag != 0 {
+                        let value = input.declaration(&descriptor[offset..offset + 8])?;
+                        let value = match dim.decode {
+                            Decode::Scaled { scale, offset, .. } => {
+                                let value = value.as_f64().unwrap() * scale + offset;
+                                if !value.is_finite() {
+                                    return Err(Error::Data(
+                                        "nonfinite scaled Extra Bytes declaration".into(),
+                                    ));
+                                }
+                                serde_json::json!(value)
+                            }
+                            _ => value,
+                        };
+                        dim.declarations.insert(key.into(), value);
+                    }
+                }
+                if let (Some(lo), Some(hi)) =
+                    (dim.declarations.get("min"), dim.declarations.get("max"))
+                {
+                    let reversed = match dim.kind {
+                        U64 => lo.as_u64().unwrap() > hi.as_u64().unwrap(),
+                        I64 => lo.as_i64().unwrap() > hi.as_i64().unwrap(),
+                        _ => lo.as_f64().unwrap() > hi.as_f64().unwrap(),
+                    };
+                    if reversed {
+                        return Err(Error::Data("Extra Bytes minimum exceeds maximum".into()));
+                    }
+                }
                 at += width;
             }
         }
         if RAW + at != result.record_len {
-            return Err(Error::Data(
+            return Err(Error::Environment(
                 "unsupported LAS dimension: undocumented Extra Bytes record tail".into(),
             ));
         }
@@ -360,6 +588,7 @@ impl Layout {
             name: name.into(),
             kind,
             decode: Decode::Raw(RAW + at),
+            declarations: Default::default(),
         });
     }
 
@@ -367,6 +596,7 @@ impl Layout {
         self.dimensions.push(Dimension {
             name: name.into(),
             kind: Scalar::U8,
+            declarations: Default::default(),
             decode: Decode::Bits {
                 at: RAW + at,
                 shift,
@@ -437,6 +667,16 @@ pub(super) fn header_crs(header: &las::Header) -> Result<String, Error> {
         {
             return Err(Error::Data("malformed LAS GeoTIFF key directory".into()));
         }
+        // Refuse ambiguity before interpreting any key, including ignored zero values.
+        let mut relevant = std::collections::BTreeSet::new();
+        for at in (8..8 + word(6) as usize * 8).step_by(8) {
+            let key = word(at);
+            if matches!(key, 1024 | 2048 | 3072 | 4096) && !relevant.insert(key) {
+                return Err(Error::Data(format!(
+                    "duplicate LAS CRS GeoKey {key} is ambiguous"
+                )));
+            }
+        }
         let mut geographic = None;
         let mut projected = None;
         for at in (8..8 + word(6) as usize * 8).step_by(8) {
@@ -474,5 +714,10 @@ pub(super) fn header_crs(header: &las::Header) -> Result<String, Error> {
 }
 
 pub(super) fn las_error(error: las::Error) -> Error {
-    Error::Data(format!("invalid LAS/LAZ: {error}"))
+    match error {
+        las::Error::Io(error) if error.kind() != std::io::ErrorKind::UnexpectedEof => {
+            Error::Io(error)
+        }
+        other => Error::Data(format!("invalid LAS/LAZ: {other}")),
+    }
 }

@@ -1,0 +1,47 @@
+diff --git a/src/validate/containment.rs b/src/validate/containment.rs
+index e59fa24..bd5a70b 100644
+--- a/src/validate/containment.rs
++++ b/src/validate/containment.rs
+@@ -707,8 +707,11 @@ fn inside(a: &mut Arena, p: [D; 3], w: D, v: &VolumeFacts) -> bool {
+         d.sub(dd, p[j], cw);
+         match (v, sphere) {
+             (VolumeFacts::Box(b), _) => {
+-                d.float(input, half(b, j).abs());
+-                d.mul(hw, input, w);
++                let x = d.to_f64(p[j]) / d.to_f64(w);
++                d.float(dd, x);
++                d.float(input, c[j]);
++                d.sub(dd, dd, input);
++                d.float(hw, half(b, j).abs());
+                 if d.cmp_abs(dd, hw) == Ordering::Greater {
+                     return false;
+                 }
+diff --git a/src/validate/containment/dyadic.rs b/src/validate/containment/dyadic.rs
+index 1f50ca2..5ad0abd 100644
+--- a/src/validate/containment/dyadic.rs
++++ b/src/validate/containment/dyadic.rs
+@@ -146,6 +146,24 @@ impl Dyadics {
+         self.word(d, x.is_sign_negative(), m, exp);
+         true
+     }
++    /// A binary64 approximation of a value (top two limbs).
++    pub(super) fn to_f64(&self, d: D) -> f64 {
++        let h = self.head(d);
++        if h.len == 0 {
++            return 0.0;
++        }
++        let k = h.len.min(2);
++        let m = (h.len - k..h.len)
++            .rev()
++            .fold(0f64, |m, i| m * 18446744073709551616.0 + self.v[h.at + i] as f64);
++        let e = h.exp + 64 * (h.len - k) as i64;
++        let x = m * 2f64.powi((e / 2) as i32) * 2f64.powi((e - e / 2) as i32);
++        if h.neg {
++            -x
++        } else {
++            x
++        }
++    }
+     pub(super) fn copy(&mut self, dst: D, src: D) {
+         if dst == src {
+             return;

@@ -1,0 +1,201 @@
+{
+ "provenance": {
+  "upstream": {
+   "repository": "https://github.com/zeux/meshoptimizer",
+   "tag": "v0.22",
+   "commit": "4affad044571506a5724c9a6f15424f43e86f731",
+   "file": "demo/tests.cpp",
+   "url": "https://raw.githubusercontent.com/zeux/meshoptimizer/v0.22/demo/tests.cpp",
+   "sha256": "365b75f5580b68656e3c3f56943e3d186c49fe206e8e0d248aea2c4a9d4ba70b",
+   "use": "self-test only (R9); the decoder is written from primary/EXT_meshopt_compression.md"
+  },
+  "spec": "primary/EXT_meshopt_compression.md sha256 602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0",
+  "octahedral": {
+   "repository": "https://github.com/zeux/meshoptimizer",
+   "commit": "3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d",
+   "file": "js/meshopt_decoder.test.js",
+   "copy": "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/meshopt_decoder.test.js",
+   "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac",
+   "use": "self-test only; the filter is written from primary/EXT_meshopt_compression.md Appendix B"
+  }
+ },
+ "triangles": [
+  {
+   "name": "kIndexDataV1 -> kIndexBufferTricky (tests.cpp lines 31-37; exercises restart and last)",
+   "count": 15,
+   "encoded": "e1f010fe1f3d000a007687566778a9866589689801690000",
+   "decoded": [
+    0,
+    1,
+    2,
+    2,
+    1,
+    3,
+    0,
+    1,
+    2,
+    2,
+    1,
+    5,
+    2,
+    1,
+    4
+   ]
+  }
+ ],
+ "indices": [
+  {
+   "name": "kIndexSequenceV1 -> kIndexSequence (tests.cpp lines 39-43)",
+   "count": 6,
+   "encoded": "d10004cd010407981f00000000",
+   "decoded": [
+    0,
+    1,
+    51,
+    2,
+    49,
+    1000
+   ]
+  }
+ ],
+ "attributes": [
+  {
+   "name": "kVertexDataV0 -> kVertexBuffer, PV = 3 x u16, 2 x u8, 2 x u16 (tests.cpp lines 14-19, 45-57)",
+   "count": 4,
+   "stride": 12,
+   "struct": "<3H2B2H",
+   "encoded": "a0013f0000005857580126000000010c00000058010800000000000000013f0000001718170126000000010c0000001701080000000000000000000000000000000000000000000000000000000000000000000000",
+   "decoded": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     300,
+     0,
+     0,
+     0,
+     0,
+     500,
+     0
+    ],
+    [
+     0,
+     300,
+     0,
+     0,
+     0,
+     0,
+     500
+    ],
+    [
+     300,
+     300,
+     0,
+     0,
+     0,
+     500,
+     500
+    ]
+   ]
+  }
+ ],
+ "specExamples": {
+  "fourBitSentinelGroup": {
+   "source": "spec Appendix A, Mode 0 complete example",
+   "bytes": "175ff0bc77a9210034b5",
+   "deltas": [
+    -1,
+    -4,
+    -3,
+    26,
+    -91,
+    0,
+    -6,
+    6,
+    -4,
+    -4,
+    5,
+    -5,
+    1,
+    -1,
+    0,
+    0
+   ]
+  },
+  "varint": {
+   "source": "spec Appendix A, Mode 1/2 varint-7 examples",
+   "cases": [
+    [
+     "7f",
+     127
+    ],
+    [
+     "8104",
+     513
+    ]
+   ],
+   "erratum": {
+    "bytes": "ffa005",
+    "specStates": "0x1fd005 (2084869)",
+    "lebValue": 86143,
+    "note": "The third spec example is not unsigned LEB128 (it reads the first byte as the most significant group). The spec text, the other example and the upstream vectors (0xcd 0x01 -> 205, 0x98 0x1f -> 3992) are LEB128; the decoder follows LEB128."
+   }
+  }
+ },
+ "octahedral": [
+  {
+   "name": "decodeFilterOct8",
+   "count": 4,
+   "stride": 4,
+   "encoded": "a001070000001e013f0000008b8cfd0001260000000000000000000000000000000000000000000000000000000000000000017f00",
+   "decoded": [
+    0,
+    1,
+    127,
+    0,
+    0,
+    159,
+    82,
+    1,
+    255,
+    1,
+    127,
+    0,
+    1,
+    130,
+    241,
+    1
+   ]
+  },
+  {
+   "name": "decodeFilterOct12",
+   "count": 4,
+   "stride": 8,
+   "encoded": "a0010f0000003d5a010f0000000e0d013f0000009a9926013f0000000e0d0a000001260000000000000000000000000000000000000000000000000000000000000100ff070000",
+   "decoded": [
+    0,
+    16,
+    32767,
+    0,
+    0,
+    32621,
+    3088,
+    1,
+    32764,
+    16,
+    471,
+    0,
+    307,
+    28541,
+    16093,
+    1
+   ]
+  }
+ ]
+}

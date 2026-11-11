@@ -16,10 +16,10 @@ const assert=require('node:assert/strict');
     await page.goto(process.argv[2]);
     const inspect=async()=>{
       await page.waitForFunction(()=>window.tiles && window.annotations && window.pointCloud && window.orthophoto && window.terrain,null,{timeout:30000});
-      const toggles=page.locator('#layers input');assert.equal(await toggles.count(),4);
-      for(let i=0;i<4;i++){
+      const toggles=page.locator('#layers input');assert.equal(await toggles.count(),5);
+      for(let i=0;i<5;i++){
         await toggles.nth(i).uncheck();
-        assert.equal(await page.evaluate(i=>[window.orthophoto,window.tiles,window.annotations,window.pointCloud][i].show,i),false);
+        assert.equal(await page.evaluate(i=>[window.terrain,window.orthophoto,window.tiles,window.annotations,window.pointCloud][i].show,i),false);
         await toggles.nth(i).check();
       }
       await page.getByRole('button',{name:'3D mesh extent',exact:true}).click();
@@ -27,7 +27,8 @@ const assert=require('node:assert/strict');
         const C=Cesium,viewer=window.viewer,mesh=window.tiles;
         window.annotations.show=false;window.pointCloud.show=false;
         viewer.scene.globe.show=false;
-        for(let i=0;i<100 && !mesh.tilesLoaded;i++)await new Promise(r=>setTimeout(r,50));
+        // Software rendering (CI) can be slow: keep rendering until the tileset reports loaded.
+        for(let i=0;i<600 && !mesh.tilesLoaded;i++){viewer.scene.render();await new Promise(r=>setTimeout(r,50));}
         await new Promise(r=>setTimeout(r,500));
         let picked;
         for(let i=0;i<100 && !picked;i++) {
@@ -36,6 +37,8 @@ const assert=require('node:assert/strict');
           picked=center && viewer.scene.pick(center,3,3);
           if(!picked)await new Promise(r=>setTimeout(r,50));
         }
+        // Picking can render the frame that finishes the tile; settle tilesLoaded after it.
+        for(let i=0;i<600 && picked && !mesh.tilesLoaded;i++){viewer.scene.render();await new Promise(r=>setTimeout(r,50));}
         // Real imagery data and IIFE worker/runtime routes must decode too.
         const image=await window.orthophoto.imageryProvider.requestImage(546,380,10);
         return {version:C.VERSION,meshLoaded:mesh.tilesLoaded,meshPicked:!!picked,
@@ -47,7 +50,7 @@ const assert=require('node:assert/strict');
     await page.reload({waitUntil:'load'});const refreshed=await inspect();
     console.log(JSON.stringify({first,refreshed,browserErrors:errors,externalRequests:external},null,2));
     for(const result of [first,refreshed]){
-      assert.equal(result.version,'1.143.0');assert.equal(result.meshLoaded,true);assert.equal(result.meshPicked,true);
+      assert.equal(result.version,'1.146.0');assert.equal(result.meshLoaded,true);assert.equal(result.meshPicked,true);
       assert.deepEqual(result.imagerySize,[256,256]);assert.deepEqual(result.failures,[]);
     }
     assert.deepEqual(errors,[]);assert.deepEqual(external,[]);

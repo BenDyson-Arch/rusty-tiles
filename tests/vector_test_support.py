@@ -1,9 +1,11 @@
-"""Native vector CLI helpers for the Python acceptance tests.
+"""Vector CLI helpers for the Python acceptance tests.
 
-Acceptance always invokes the selected native CLI. Tests that compare with
+Acceptance always invokes the selected CLI. Tests that compare with
 the frozen Python oracle import it from tests/fixtures/vector_oracle directly.
 """
 import os
+import functools
+import json
 import pathlib
 import subprocess
 import sys
@@ -13,6 +15,15 @@ import unittest
 import zipfile
 
 from cli_bin import BIN
+
+@functools.cache
+def portable_vectors():
+    """Read the actual selected build's capabilities instead of trusting an env flag."""
+    if not BIN:
+        raise unittest.SkipTest('RUSTY_TILES_BIN is not set')
+    result = subprocess.run([BIN, 'doctor', '--command', 'vector', '--json'],
+                            capture_output=True, text=True, check=True)
+    return json.loads(result.stdout)['commands']['vector'].get('backend') == 'portable Rust/SQLite'
 
 def native_run(args):
     if not BIN:
@@ -48,10 +59,45 @@ def native_run(args):
             raise ValueError(result.stderr.strip())
         output.mkdir(parents=True, exist_ok=True)
         (output / 't').mkdir(exist_ok=True)
+        # The published archive stays beside the directory for reuse tests.
+        published(output).write_bytes(archive.read_bytes())
         with zipfile.ZipFile(archive) as tiles:
+            if getattr(args, 'hierarchy_view', True):
+                hierarchy_view(tiles, output)
+                return
             for name in tiles.namelist():
                 if name != '@3dtilesIndex1@':
                     tiles.extract(name, output)
+
+
+def published(output):
+    """The archive `native_run` published for the directory `output`."""
+    output = pathlib.Path(output)
+    return output.with_name(output.name + '.published.3tz')
+
+
+def hierarchy_view(tiles, output):
+    """Materialize the producer hierarchy H of a published forest archive.
+
+    Explicit vector output retired in 0.4.0 (H6). Hierarchy audits read H as the
+    producer recorded it: `tileset.json` is the published manifest with its root
+    replaced by `explicitRoot` from `vector-build.json`, and every raw payload is
+    written to its content address `t/<sha256>.glb`, published in place or
+    restored byte for byte (sha256-checked) from its rebased forest member by the
+    independent acceptance oracle. Build state and reports are copied unchanged;
+    forest-only members (implicit content, subtrees, external documents) are not.
+    Tests of the published layout pass hierarchy_view=False."""
+    from vector_acceptance_oracle import raw_payloads
+    state = json.loads(tiles.read('vector-build.json'))
+    manifest = json.loads(tiles.read('tileset.json'))
+    view = {key: manifest[key] for key in ('asset', 'extensionsUsed', 'geometricError') if key in manifest}
+    view['root'] = state['explicitRoot']
+    (output / 'tileset.json').write_text(json.dumps(view))
+    for name, data in raw_payloads(tiles, state).items():
+        (output / name).write_bytes(data)
+    for name in ('vector-build.json', 'conversion.json', 'geometry-reports.jsonl'):
+        if name in tiles.namelist():
+            tiles.extract(name, output)
 
 
 # Tests call vector.run and vector.emit; both use the native CLI.

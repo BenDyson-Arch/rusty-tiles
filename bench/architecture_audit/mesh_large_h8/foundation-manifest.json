@@ -1,0 +1,211 @@
+{
+  "schema": 1,
+  "status": "LocalH8helperfoundation;actualleafproducerUNIMPLEMENTED",
+  "base_commit": "645a8e970f6e0b050ce97870082200680197bfd1",
+  "source_identity_algorithm": "sorted tracked source/build/vendor path UTF8 + NUL + raw SHA256 digest; includes current staged new files",
+  "source_identity_sha256": "303cd306d636eaa974f7b020fa0e6020f92863bdc41572643e8830ecf3be9d34",
+  "source_files": 250,
+  "source_scope_sha256": {
+    "Cargo.lock": "5f415d7b9c8651f59137e6291e524e9071fe1758a558d5483d02af9a1b418229",
+    "Cargo.toml": "2c9844487ac438d16cf7da922ec63dfc92cddddf0d033b389b5c39cfce0ca2f5",
+    "build.rs": "19db211d65b8ec23c09ab82b8638f93907c193f350488db64d17f286f501269a",
+    "src/gltf_source/binding.rs": "8d695d3757e66f1dfd24e136f04458168248705af6b1040402b640f6e52f3c74",
+    "src/gltf_source/mod.rs": "8f7bd76c291e3d23e5ff3c31ee58b7ba711a54947087805ece54cbe4348355de",
+    "src/gltf_source/source.rs": "fc69662f475c7a721e226993ea9b473255294c5fa95581502c733492d1f5a7e0",
+    "src/gltf_source/source/json.rs": "507e43a6448915f7a6a200f601378eaed73a1e1fbb541fb70d84356942dca512",
+    "src/gltf_source/source/material.rs": "345770ea721235c53b5c81c7eaf13a5fe3d6aa1036be505a0e75d822388c9ef4",
+    "src/gltf_source/source/original_bounds.rs": "c5deb31a0cf3ce80c0ba512c417a9bac7549a5ac14195f49a31b27a654223be3",
+    "src/gltf_source/source/texture.rs": "6ec032674becbf5eee599764b81e6c8fed0e853b9c8c1525a674b3d6502159b7",
+    "src/mesh_large/attributes.rs": "4b067240164d2e53bbe0ad06027e472ca07df6083445b5e102083aade4f88f29",
+    "src/mesh_large/capture.rs": "a63fc7ac4147fbf52aefca240940dbbbd38042910d286dfb498d80d64bc7e0cd",
+    "src/mesh_large/config.rs": "1f1e3a90d0da8af6e342e5f098cde34ab83e9580aa43adae120826cb96026cbc",
+    "src/mesh_large/full.rs": "e88e1727b9daa2382b43a47c2f82592e64c70fdb54adb24869ce93e037edddf1",
+    "src/mesh_large/images.rs": "fd10e2c69e01dd00b06810603505c5a8f651bc1acc9376f9a71de250a8e20111",
+    "src/mesh_large/input.rs": "24084a4fd3c9fa5edd5fc046abfbaf37013377cf3954b5cdecf893db06c25eed",
+    "src/mesh_large/leaves/geometry.rs": "511a2e68715dbd7a71f5fb890228772bc4d5bd9fb2272e7ad85ab4de14e8513d",
+    "src/mesh_large/leaves/mip_oracle_tests.rs": "08bbbcda470819397f49ac00b1e79a1b7b236d41b1d6eb2f9a98abb8358bd6f9",
+    "src/mesh_large/leaves/mips.rs": "7a0003f733d4dcdd939760ef1144d40cf5fa9d4678a6ca72b173e5281df0afca",
+    "src/mesh_large/leaves/mod.rs": "b90e22ad80c4541da5f30f1bba6620e3377f576820e57c65cf96e6b68197b7cd",
+    "src/mesh_large/mod.rs": "d11a82cd32f47094e243ff184869cde3504bf20c0bf4c7f57adc00bca8cd0a54",
+    "src/mesh_large/records.rs": "ecae5846f21fb5ebeb1042d6ee878ed17087b8d07e6ed51c156a93c665ab0b43",
+    "src/mesh_large/tests.rs": "b9523a59ec1c99da65ff49015cdd3a1b76a2043c507cc15557af73b154be952a",
+    "src/mesh_large/tree.rs": "e5a00422d05fabffea80eba3e9b69ae73a3df21910ae2f289be1fe2f581c1933"
+  },
+  "artifacts": [
+    {
+      "path": "/home/bend/.cache/rusty-tiles-h8-leaf-target/debug/deps/rusty_tiles-c5a67a26f88d4634",
+      "sha256": "447a1b04433b1777ae7516827949e49d3966fcf452a39dc1230eda0b708ea28c",
+      "execution_log": "foundation-native-tests-typed-errors.log",
+      "retained_at_path": false,
+      "note": "Historical pre-rebase execution hash; rebuilt binary now occupies this path. Raw execution/source records retained."
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-h8-leaf-target/debug/deps/rusty_tiles-20fd29d463789220",
+      "sha256": "828d63e4db109c4843999920d1c755e989e2cc6a306f39a51f58dbac70b6db53",
+      "execution_log": "foundation-portable-tests-typed-errors.log",
+      "retained_at_path": false,
+      "note": "Historical pre-rebase execution hash; rebuilt binary now occupies this path. Raw execution/source records retained."
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-h8-leaf-target/debug/deps/rusty_tiles-c5a67a26f88d4634",
+      "sha256": "8f5c13e51eae960579a998cd7c978cb1a542fb65069e02dae221f7d67ef0f299",
+      "execution_log": "foundation-rebased-native-tests.log",
+      "source_commit": "b8ef74f2feebc7e80c5493cb25d187490d3361a2",
+      "retained_at_path": true
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-h8-leaf-target/debug/deps/rusty_tiles-20fd29d463789220",
+      "sha256": "7a9b9651aad2d4bb01d4c9be92c5c7c93517bac44d029d708750959244633a18",
+      "execution_log": "foundation-rebased-portable-tests.log",
+      "source_commit": "b8ef74f2feebc7e80c5493cb25d187490d3361a2",
+      "retained_at_path": true
+    }
+  ],
+  "evidence": [
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/foundation-native-tests-typed-errors.log",
+      "sha256": "4cdc860f791ca39f216d20d5f7c9e7e2b45901b02ec10a02493595b550182a7e",
+      "classification": "PASS46,ignored9"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/foundation-portable-tests-typed-errors.log",
+      "sha256": "67fedfb61ceff2176823481445f6261e610b86ca9b9ee69da2fcff32660b66b9",
+      "classification": "PASS46,ignored9"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/foundation-native-clippy-typed-errors.log",
+      "sha256": "2095e3c84d2f1090fce98075bb031c67dd301a116f412db14041e452a5374723",
+      "classification": "PASSalltargets-Dwarnings"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/foundation-portable-clippy-typed-errors.log",
+      "sha256": "cc18930ef730a046e873190a418481771dd44591723c604168eba81276b9ccb4",
+      "classification": "PASSalltargets-Dwarnings"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/semantic-policy-probes-typed-errors.log",
+      "sha256": "be2df1011e9a10577a465405763b0fb95d6c784c2ffc7c0692c266fede476960",
+      "classification": "PASS7boundedprobes;Gprovesguardlimitation"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/semantic-original-policy-inventory-typed-errors.log",
+      "sha256": "33360b5188682766153184b83a996d79a04407a074e7cf444d96fc5ce871ceb8",
+      "classification": "EXPECTED_FAILURE16unchangedviolations;notsemanticacceptance"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/retained-source-tests.log",
+      "sha256": "d15079977eb140b36a27530b7eb3ca8c16bf430d657ff89e490511b7ec6f250d",
+      "classification": "PASS27samegltf_source/source/texture.rscode;historicalselectedsourcecheck"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/five-uv-consumer-probe.json",
+      "sha256": "d95eadc60778476afbc79205ef6e97e2cc0724d8043d13d8a6a184ca28a3562a",
+      "classification": "PASSpinnedlayout-and-diagnostic-sampling-only"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/five-uv-independent-evidence-review.json",
+      "sha256": "75058a7c0c1c76b23f3fa1af36a3ffc41b8e99d2c92d90f92d65cf266e31fed2",
+      "classification": "Nonauthorpinnedlayoutreview"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/final-helper-foundation-review.md",
+      "sha256": "ebac5cef67926a1cf5bca0ce1e5da806084179051c7f23795396bc13bb4b93ed",
+      "classification": "Nonauthorlocalhelperstaticscope"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/final-helper-execution-doc-addendum.md",
+      "sha256": "6d29c2b3ee01fcfd1f9dba916fec4c9aeb0c2865231fdf3d79cae59357e25f9d",
+      "classification": "Nonauthornative46+7completionatpredeltahead"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/final-oracle-independent-review.md",
+      "sha256": "65f16785b3964d3c3dfd3149fdb96b82445a7f66cab7b9bbfc80aada1026694a",
+      "classification": "Nonauthorindependentoraclefinal08bbbcda"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/semantic-mips-typed-failure-delta-review.json",
+      "sha256": "a5a5580e937c03850856f38cb96df935fa95b54e024356e18ea55614f7c65e6e",
+      "classification": "Nonauthortypedfailurefinal7a0003"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/portable-typed-mask-search-completed-addendum.md",
+      "sha256": "06278844a256fbdf503ba93dac6f0fd5dbbafffacd0a15679c3e098462c4db3e",
+      "classification": "Nonauthorportable46andfiniteMASKprobe"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/leaf-mask-search-probe.py",
+      "sha256": "1454c353798d6a12b795f2197a414b56950b184406b6749e6f6d747b0aff0721",
+      "classification": "Finiteprecode/referenceprototype,notproductionoracle"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/leaf-mask-search-probe-final.json",
+      "sha256": "8f5b9efcecd2e124094e41764b0cf384090cf4d98c63eeb25ed7d3d2dc5a718e",
+      "classification": "PASS6finitefixtures5referencecontrols,total<=129scans"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/leaf-atlas-precode.json",
+      "sha256": "1321bfac3d0a3d853a037d69e6b0e34271d68f283e771b613be83f51c3cfa517",
+      "classification": "PROVISIONALnoatlascode;losslesspolicyawaitinguser"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/source-snap-exactness.md",
+      "sha256": "a9e22938d23a3b46d3d9d3e29d296fc5e78bf8f8c16685bfdebac9a803f655e8",
+      "classification": "Staticexactf32source-snap/local-TRSproofwithf64JSONobligation"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/leaf-normal-scale-independent-brief.md",
+      "sha256": "e4a5a928ef7f9a78f133efd20412eaec4db7bcef4f000ac9687d0d45e5951088",
+      "classification": "IndependentLINEARcounterexample;leafscaleownershipcorrection"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/final-typed-native-portable-completion-review.json",
+      "sha256": "52c3560e124b0ff726cc00a4ae2f5178c844a1458a46d37590e4c8a436b3af5b",
+      "classification": "Freshnonauthorfinalsource/artifact/completionGOlocalhelpersONLY"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/foundation-rebased-native-tests.log",
+      "sha256": "ae7d9cd537bbc13ed0498e989f5aa089ca27f33f2dfa4db36c100c181b184607",
+      "classification": "PASSrebasedintegration;scopedhelpersonly"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/foundation-rebased-portable-tests.log",
+      "sha256": "a23f8492c33c17c52ce2d5127751ce152ac36885cb4b1cc18f7c99bbe4cdaa7d",
+      "classification": "PASSrebasedintegration;scopedhelpersonly"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/foundation-rebased-native-clippy.log",
+      "sha256": "e00a67a0242fed68c75960326db66bab1a912c5f856e8e9140a213cb0efc1659",
+      "classification": "PASSrebasedintegration;scopedhelpersonly"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/foundation-rebased-portable-clippy.log",
+      "sha256": "dad14de8b485d8e4677a41bc650fb38e362eb17491606da8a2b887edbca7a044",
+      "classification": "PASSrebasedintegration;scopedhelpersonly"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/semantic-policy-probes-rebased.log",
+      "sha256": "27cd76b31055e68ceb1f159857c583891814ab89814fed7de776813feadaf563",
+      "classification": "PASS7boundedpolicyprobes;notatlasacceptance"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/final-rebased-integration-review.json",
+      "sha256": "976e7630cfcf56b047e2bbfa54e6c0a981035cf7a0d85d71e907e13b02515b19",
+      "classification": "Freshnonauthorfinalrebasedsource/artifact/manifestGOprivatehelpersDRAFTONLY"
+    }
+  ],
+  "remaining_gates": [
+    "Actualcrop/pack/allslotUVsamplerandnormalframes",
+    "Sparseclassmips/MASKgeometrycoverageandindependentfixedsemanticattainability",
+    "LosslessPNG/authoredmipdecision",
+    "GLBmetadata/meshopt/decodedboundsandpicking",
+    "Actualencoder/assemblyresidentandscratchjobsonefit",
+    "10milliontexturedproductionanddeterminism",
+    "FinalGPUacceptanceanduserCI/merge"
+  ],
+  "release_authorized": false,
+  "prior_execution_source_identity_sha256": "dc932884159c33cf0b0e1073c5f3451634230f537a159930e3523b735dfa9196",
+  "rebased_source_commit": "b8ef74f2feebc7e80c5493cb25d187490d3361a2",
+  "develop_base": "a4f14e616ba323b9aa5d20cbe1fa1e55f02750a3",
+  "rebase_scope": "PrivateH8/glTFsource/ML1/build/vendorfiles identical to9485880; only CI step order conflicts resolved retaining both steps. Point/terrain/vector updates are inherited from coordinator develop.",
+  "atlas_precode_current_sha256": "1321bfac3d0a3d853a037d69e6b0e34271d68f283e771b613be83f51c3cfa517"
+}

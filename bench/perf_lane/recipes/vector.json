@@ -1,0 +1,9 @@
+{
+  "set": "vector-leaves",
+  "dataset": "corpus vector.geojson (3,600 polygons, 400 lines, 6,000 points near Rome)",
+  "description": "Vector leaf size: the default 64 feature fragments per leaf against 16",
+  "recipes": [
+    {"name": "vector-default", "convert": ["vector", "-i", "{corpus}/vector.geojson", "-o", "{out}.3tz", "--jobs", "2", "--reproducible"]},
+    {"name": "vector-leaf16", "convert": ["vector", "-i", "{corpus}/vector.geojson", "-o", "{out}.3tz", "--jobs", "2", "--reproducible", "--maxFeatures", "16"]}
+  ]
+}

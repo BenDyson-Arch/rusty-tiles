@@ -4,4 +4,8 @@ output
 __pycache__
 **/__pycache__
 .venv
-bench
+bench/*
+!bench/demodata_suite.rs
+!bench/demodata_manifest.json
+!bench/demodata/
+!bench/demodata/**

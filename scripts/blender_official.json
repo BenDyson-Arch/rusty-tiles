@@ -1,0 +1,36 @@
+{
+  "version": "4.5.14",
+  "base_url": "https://download.blender.org/release/Blender4.5/",
+  "checksum_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256",
+  "support_url": "https://developer.blender.org/docs/release_notes/compatibility/",
+  "platforms": {
+    "linux-x64": {
+      "system": "Linux",
+      "machines": ["x86_64", "amd64"],
+      "archive": "blender-4.5.14-linux-x64.tar.xz",
+      "sha256": "9ba871ff2ecd36526b77432745980b7e6664ecd0c7ca11c48849073dcfe06da3",
+      "executable": "blender-4.5.14-linux-x64/blender"
+    },
+    "windows-x64": {
+      "system": "Windows",
+      "machines": ["amd64", "x86_64"],
+      "archive": "blender-4.5.14-windows-x64.zip",
+      "sha256": "b9533d2397ac1984db4466fb23a7a4649391cca93f6e84209f9bcc60d071c8b9",
+      "executable": "blender-4.5.14-windows-x64/blender.exe"
+    },
+    "macos-x64": {
+      "system": "Darwin",
+      "machines": ["x86_64", "amd64"],
+      "archive": "blender-4.5.14-macos-x64.dmg",
+      "sha256": "613e73339e97bd113adeeb28d9155beeacf2df7119ee4dbd6bdce234843645f6",
+      "executable": "Blender.app/Contents/MacOS/Blender"
+    },
+    "macos-arm64": {
+      "system": "Darwin",
+      "machines": ["arm64", "aarch64"],
+      "archive": "blender-4.5.14-macos-arm64.dmg",
+      "sha256": "65134d9b07b20e2fa8d3c9e44f6f44ffb5c9774dd521b95f50387310241ca170",
+      "executable": "Blender.app/Contents/MacOS/Blender"
+    }
+  }
+}

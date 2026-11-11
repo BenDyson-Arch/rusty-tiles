@@ -1,0 +1,13 @@
+diff --git a/src/content_integrity/implicit/metadata.rs b/src/content_integrity/implicit/metadata.rs
+index 82c0d96..7df0c38 100644
+--- a/src/content_integrity/implicit/metadata.rs
++++ b/src/content_integrity/implicit/metadata.rs
+@@ -124,7 +124,7 @@ impl ImplicitSchema {
+ 
+     /// The class's record for `use_`: classified on first use, then reused.
+     pub(super) fn admit(&self, class: &str, use_: Use) -> Result<Rc<ClassRecord>, FormatError> {
+-        let cached = self.records.borrow().get(class).cloned();
++        let cached: Option<Rc<ClassRecord>> = None;
+         let record = match cached {
+             Some(record) => record,
+             None => {

@@ -1,0 +1,72 @@
+{
+  "scope": "Real-output gate: an H8-encoded, H16-packaged crop of the real 10M-triangle mesh validates with containment.",
+  "sourceCommit": "0693ea1",
+  "validatorBinarySha256": "c029bbecdac8b5a1358a5bbab26f289cbc79c6f8321dcbd32ad492f5e5c5dbab",
+  "producer": {
+    "h8": {
+      "binary": "rt-v8 (ml/h8-throughput 1eff758)",
+      "sha256": "33924418b7c13260ef1c119ae8baf3eb6f9bbafda9e5ffe4798ee4fe3aec1060",
+      "command": "mesh-leaf-payloads --profile quality --jobs 2",
+      "input": "crop15m-2048.glb",
+      "inputSha256": "ae8f589b7fd094b534afd8e20b02ca099e25fc389891d2bb1e5f2adc24274c24",
+      "leaves": 9,
+      "triangles": 39456,
+      "textures": "9 KTX2 UASTC+Zstd pages, 128..512 x 256..2048, full mip chains"
+    },
+    "h16": {
+      "binary": "rusty-tiles ml/h16-delivery d5502e7",
+      "sha256": "9e2876f1af5824fea559185be4f4c1c243972ee5b4ef8522b389582c3962c586",
+      "command": "mesh-leaves-to-3tz --anchor 133.0584598837835 -12.33625061681309 100"
+    }
+  },
+  "archive": {
+    "name": "crop15-quality.3tz",
+    "sha256": "b30fac633441877b191bd8e91e39a60222a8306110e5797e25fa1fd31704bb20",
+    "bytes": 5831187
+  },
+  "result": {
+    "ok": true,
+    "tiles": 12,
+    "contentReferences": 9,
+    "checks": [
+      "archiveIndex",
+      "archiveCrc",
+      "archiveStoredRecordLayout",
+      "contentHashes",
+      "tilesetSchema",
+      "payloadEnvelope",
+      "bufferRanges",
+      "accessorValues",
+      "primitiveIndices",
+      "hierarchyBounds",
+      "implicitAddressingAndAvailability",
+      "geometricErrorOrder",
+      "resourceReferences",
+      "recordedBudgets",
+      "decodedContentContainment"
+    ],
+    "notInspected": [
+      "EXT_mesh_features",
+      "EXT_structural_metadata",
+      "KTX2 level data and transcoding",
+      "geometricErrorAccuracy",
+      "image decoding",
+      "materialAndImageSemantics",
+      "metadata and feature semantics",
+      "metadataSemantics",
+      "recordedBudgets.implicitTileExtras",
+      "skins, animations, morph targets and rendered extent"
+    ],
+    "stdoutSha256": "1ed1f832e48f31badf1752fd051f3d770cff902c2a3fa2d59d2e88614603eac5"
+  },
+  "before": {
+    "error": {
+      "code": "unsupported",
+      "message": "required extension KHR_texture_basisu"
+    },
+    "exitCode": 2,
+    "ok": false
+  },
+  "bulkEvidence": "~/.cache/rusty-tiles-evidence/ktx2-validate-20261013/ (real/, runs/0693ea1/)",
+  "limits": "The balanced profile leaves of #199 exceed H16's 8,192-triangle leaf cap, so the quality profile (smaller leaves) is used; all pages are UASTC+Zstd, so ETC1S is covered by upstream references only."
+}

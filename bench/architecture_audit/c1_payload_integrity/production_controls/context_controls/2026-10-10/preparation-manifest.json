@@ -1,0 +1,589 @@
+{
+  "aggregateCases": 5,
+  "cfgTests": 13,
+  "contexts": 12,
+  "date": "2026-10-10",
+  "files": {
+    "README.md": {
+      "bytes": 4505,
+      "sha256": "0079719caa79f051ca395aa177f3cf06d0199f4abb3e477f1f99ec3e2f8b49fd"
+    },
+    "context_controls.rs": {
+      "bytes": 7113,
+      "sha256": "3a2959b544285ed568236d62fa1533592e1eeb49f800e215c7560a393e2287fd"
+    },
+    "fixtures/b3dm-batch-table/input.3tz": {
+      "bytes": 4406,
+      "sha256": "2b5a8bf891e35031e4ba78c00f697cdc8be433c3290005d4be12024e3d0ec30a"
+    },
+    "fixtures/b3dm-batch-table/interpreted-b3dm-batch-table.json": {
+      "bytes": 3144,
+      "sha256": "9d7ba99167ea82e2570f442c607357474d6278c1277b73339db8c8661c0ced2b"
+    },
+    "fixtures/b3dm-batch-table/interpreted-b3dm-feature-table.json": {
+      "bytes": 20,
+      "sha256": "8444e5bb865c6cdbe25c55ef3ef43b514328838291700e96f4117f04d7fdf89f"
+    },
+    "fixtures/b3dm-batch-table/interpreted-glb-json.json": {
+      "bytes": 452,
+      "sha256": "613850903089b8807195f0d2bb05c8d94410053d883529788e53cb43fcf0d35a"
+    },
+    "fixtures/b3dm-batch-table/interpreted-root-tileset.json": {
+      "bytes": 185,
+      "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+    },
+    "fixtures/b3dm-batch-table/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/b3dm-batch-table/point.b3dm": {
+      "bytes": 3688,
+      "sha256": "d47e8de43c3564236f87af0e928d391fb405c518abf24e2771ccd6b2f530f02f"
+    },
+    "fixtures/b3dm-batch-table/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/b3dm-batch-table/tileset.json": {
+      "bytes": 185,
+      "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+    },
+    "fixtures/b3dm-embedded-glb/input.3tz": {
+      "bytes": 4334,
+      "sha256": "cf16bff34af499c10a141240a0bc6e7cb2c9a5aa69c35da3db2cb13ad847666f"
+    },
+    "fixtures/b3dm-embedded-glb/interpreted-b3dm-embedded-glb.json": {
+      "bytes": 3528,
+      "sha256": "58b179ed189c1a8ded41407c1673c0e8501d4e435c8bfcb8f88e80eaca56cb2c"
+    },
+    "fixtures/b3dm-embedded-glb/interpreted-b3dm-feature-table.json": {
+      "bytes": 20,
+      "sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892"
+    },
+    "fixtures/b3dm-embedded-glb/interpreted-root-tileset.json": {
+      "bytes": 185,
+      "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+    },
+    "fixtures/b3dm-embedded-glb/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/b3dm-embedded-glb/point.b3dm": {
+      "bytes": 3616,
+      "sha256": "0440cf5d9e0730b5b83e6678e68e309f99046a55db2f56921f9f9139f312bd56"
+    },
+    "fixtures/b3dm-embedded-glb/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/b3dm-embedded-glb/tileset.json": {
+      "bytes": 185,
+      "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+    },
+    "fixtures/b3dm-feature-table/input.3tz": {
+      "bytes": 4342,
+      "sha256": "782bc10758152cefda98029d04084f0a7b89a695b9eca445bfee762c929be38f"
+    },
+    "fixtures/b3dm-feature-table/interpreted-b3dm-feature-table.json": {
+      "bytes": 3164,
+      "sha256": "ad64b1f3789fd07f4c368e2aa93701324ba3d077eb10a221fb9e1ff69f67ac63"
+    },
+    "fixtures/b3dm-feature-table/interpreted-glb-json.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "fixtures/b3dm-feature-table/interpreted-root-tileset.json": {
+      "bytes": 185,
+      "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+    },
+    "fixtures/b3dm-feature-table/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/b3dm-feature-table/point.b3dm": {
+      "bytes": 3624,
+      "sha256": "4ec5cbd7496017988db84c1276b286725287821b94ed5019036eb10becb9b909"
+    },
+    "fixtures/b3dm-feature-table/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/b3dm-feature-table/tileset.json": {
+      "bytes": 185,
+      "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+    },
+    "fixtures/conversion-report/conversion.json": {
+      "bytes": 3142,
+      "sha256": "2ff66a74d95de77033277558fd4eab7f4a6ebedc7604fb8904034c9de639cf88"
+    },
+    "fixtures/conversion-report/input.3tz": {
+      "bytes": 4415,
+      "sha256": "09cf3099dff01a1fc0b9f80abab7c80940e4e112a43f2249d7282b9dc60a437f"
+    },
+    "fixtures/conversion-report/interpreted-conversion-report.json": {
+      "bytes": 3142,
+      "sha256": "2ff66a74d95de77033277558fd4eab7f4a6ebedc7604fb8904034c9de639cf88"
+    },
+    "fixtures/conversion-report/interpreted-glb-json.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "fixtures/conversion-report/interpreted-root-tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "fixtures/conversion-report/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/conversion-report/point.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "fixtures/conversion-report/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/conversion-report/tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "fixtures/distinct-byte-identical-members/alias.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "fixtures/distinct-byte-identical-members/input.3tz": {
+      "bytes": 1807,
+      "sha256": "903bf1adc338c2d967e22700fb38e02e9f95ad0b6e1e9cb7c2965667f711c5cb"
+    },
+    "fixtures/distinct-byte-identical-members/interpreted-glb.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "fixtures/distinct-byte-identical-members/interpreted-root.json": {
+      "bytes": 302,
+      "sha256": "33c05ed28546bb77120dc19f6f733a3932621f5394a62b6a73a9bdb7282a1dc5"
+    },
+    "fixtures/distinct-byte-identical-members/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/distinct-byte-identical-members/point.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "fixtures/distinct-byte-identical-members/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/distinct-byte-identical-members/tileset.json": {
+      "bytes": 302,
+      "sha256": "33c05ed28546bb77120dc19f6f733a3932621f5394a62b6a73a9bdb7282a1dc5"
+    },
+    "fixtures/external-tileset/external.json": {
+      "bytes": 3325,
+      "sha256": "52c1addb0b0a407dd8e41dabeb2bdd05b687edda52af131a3b874301582b8b3e"
+    },
+    "fixtures/external-tileset/input.3tz": {
+      "bytes": 4598,
+      "sha256": "20c9065440985368f3c6039beb40594577d9bfdabc0bc83dd8b9d329264608a2"
+    },
+    "fixtures/external-tileset/interpreted-external-tileset.json": {
+      "bytes": 3325,
+      "sha256": "52c1addb0b0a407dd8e41dabeb2bdd05b687edda52af131a3b874301582b8b3e"
+    },
+    "fixtures/external-tileset/interpreted-glb-json.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "fixtures/external-tileset/interpreted-root-tileset.json": {
+      "bytes": 188,
+      "sha256": "2c1eabcbbec8e59ca7cf0f080e50ef4065cae9755ae5c5b9861c35ac1acfb7f0"
+    },
+    "fixtures/external-tileset/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/external-tileset/point.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "fixtures/external-tileset/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/external-tileset/tileset.json": {
+      "bytes": 188,
+      "sha256": "2c1eabcbbec8e59ca7cf0f080e50ef4065cae9755ae5c5b9861c35ac1acfb7f0"
+    },
+    "fixtures/glb-json/input.3tz": {
+      "bytes": 4283,
+      "sha256": "eebb69abaea9db237cd7de5eefe45a48f1cb8a5af8ef38205ae506ed18962040"
+    },
+    "fixtures/glb-json/interpreted-glb-json.json": {
+      "bytes": 3528,
+      "sha256": "58b179ed189c1a8ded41407c1673c0e8501d4e435c8bfcb8f88e80eaca56cb2c"
+    },
+    "fixtures/glb-json/interpreted-root-tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "fixtures/glb-json/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/glb-json/point.glb": {
+      "bytes": 3568,
+      "sha256": "3f3c32ad2434a38809a6f56ff0ad5fb9123406bc5aa6a04f43884ac31da293a0"
+    },
+    "fixtures/glb-json/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/glb-json/tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "fixtures/local-gltf/input.3tz": {
+      "bytes": 4391,
+      "sha256": "6b3385c32fc16c7947131080af935148ae9b2978ba88e8b37f33b214a361cdaf"
+    },
+    "fixtures/local-gltf/interpreted-local-gltf.json": {
+      "bytes": 3545,
+      "sha256": "c96eacb9e26d18266f1ec3c6927cbb806d66e87607d2852dc6f479eb003b57b0"
+    },
+    "fixtures/local-gltf/interpreted-root-tileset.json": {
+      "bytes": 185,
+      "sha256": "7934c427bf8062cf813d05bcbf8180e19cff9c903c779bf22c2a6fcdd7dc8d90"
+    },
+    "fixtures/local-gltf/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/local-gltf/point.gltf": {
+      "bytes": 3545,
+      "sha256": "c96eacb9e26d18266f1ec3c6927cbb806d66e87607d2852dc6f479eb003b57b0"
+    },
+    "fixtures/local-gltf/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/local-gltf/tileset.json": {
+      "bytes": 185,
+      "sha256": "7934c427bf8062cf813d05bcbf8180e19cff9c903c779bf22c2a6fcdd7dc8d90"
+    },
+    "fixtures/local-gltf/zero.bin": {
+      "bytes": 12,
+      "sha256": "15ec7bf0b50732b49f8228e07d24365338f9e3ab994b00af08e5a3bffe55fd8b"
+    },
+    "fixtures/manifest.json": {
+      "bytes": 52375,
+      "sha256": "22d3f83568de464d7227da273d1419f9dca5390dbf38f665b40b16e819b6f51d"
+    },
+    "fixtures/metadata-schema-payload/input.3tz": {
+      "bytes": 4258,
+      "sha256": "9474d0853c149f6ef2fe865cf2b6576cf859b94c20cad79e4da5d6ad1ef48887"
+    },
+    "fixtures/metadata-schema-payload/interpreted-glb-json.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "fixtures/metadata-schema-payload/interpreted-metadata-schema-payload.json": {
+      "bytes": 3180,
+      "sha256": "c21651deca40c5509f8d941de49f65dae8ce265555601ca974e05a18df883e3b"
+    },
+    "fixtures/metadata-schema-payload/interpreted-root-tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "fixtures/metadata-schema-payload/point.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "fixtures/metadata-schema-payload/schema.json": {
+      "bytes": 3180,
+      "sha256": "c21651deca40c5509f8d941de49f65dae8ce265555601ca974e05a18df883e3b"
+    },
+    "fixtures/metadata-schema-payload/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "fixtures/metadata-schema-root/input.3tz": {
+      "bytes": 4260,
+      "sha256": "103ae0a8c092b3d2a64b138af0918521315a91e5f5b36ad8331809312b257b82"
+    },
+    "fixtures/metadata-schema-root/interpreted-glb-json.json": {
+      "bytes": 364,
+      "sha256": "33245e3855da6f0583b97b5e10f09863eeba57278841a5e2f0b43e1e60524833"
+    },
+    "fixtures/metadata-schema-root/interpreted-metadata-schema-root.json": {
+      "bytes": 3180,
+      "sha256": "c21651deca40c5509f8d941de49f65dae8ce265555601ca974e05a18df883e3b"
+    },
+    "fixtures/metadata-schema-root/interpreted-root-tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "fixtures/metadata-schema-root/point.glb": {
+      "bytes": 404,
+      "sha256": "b2302dc14f2f5eaed47c8db951c24e5414bef2f7adb5883299ad655a00a060f4"
+    },
+    "fixtures/metadata-schema-root/schema.json": {
+      "bytes": 3180,
+      "sha256": "c21651deca40c5509f8d941de49f65dae8ce265555601ca974e05a18df883e3b"
+    },
+    "fixtures/metadata-schema-root/tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "fixtures/nested-metadata-extras/0-0-0.subtree": {
+      "bytes": 3832,
+      "sha256": "2260060f33b105cfcbfc4d4dd68a2805a55bb8f0e8c73273df763013c8c205fa"
+    },
+    "fixtures/nested-metadata-extras/input.3tz": {
+      "bytes": 5550,
+      "sha256": "c17bad1fbcab3cb8b17f7a7794f9ae61210ab7a0e435d49bfec865ad20ce9f55"
+    },
+    "fixtures/nested-metadata-extras/interpreted-glb-json.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "fixtures/nested-metadata-extras/interpreted-nested-metadata-extras.json": {
+      "bytes": 3131,
+      "sha256": "5af37d232c5054fc14b1fefd3145a00cee57616fd6e79a8ea94ed2c6d0a7b84b"
+    },
+    "fixtures/nested-metadata-extras/interpreted-root-tileset.json": {
+      "bytes": 621,
+      "sha256": "d494df4b87ba4c5c1f82be34568567f1301d7bcd7f73cd0cba33a1d613cfff7d"
+    },
+    "fixtures/nested-metadata-extras/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/nested-metadata-extras/interpreted-subtree-json.json": {
+      "bytes": 560,
+      "sha256": "21734d44b6c1a3add15c03f1dc69434edce7a5ab74d2caa56bf6e599d5a2c41d"
+    },
+    "fixtures/nested-metadata-extras/point-0-0-0.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "fixtures/nested-metadata-extras/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/nested-metadata-extras/tileset.json": {
+      "bytes": 621,
+      "sha256": "d494df4b87ba4c5c1f82be34568567f1301d7bcd7f73cd0cba33a1d613cfff7d"
+    },
+    "fixtures/resolved-alias-cache/input.3tz": {
+      "bytes": 1263,
+      "sha256": "2fee5ae155fdd2ea6ae9f62078cac8d17bd194431ebcf81fdd8f159b1a40275a"
+    },
+    "fixtures/resolved-alias-cache/interpreted-glb.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "fixtures/resolved-alias-cache/interpreted-root.json": {
+      "bytes": 304,
+      "sha256": "c8945b6528b8424d97b00f848080b4cfd7b4707f6ad616db089ebb38a305394d"
+    },
+    "fixtures/resolved-alias-cache/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/resolved-alias-cache/point.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "fixtures/resolved-alias-cache/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/resolved-alias-cache/tileset.json": {
+      "bytes": 304,
+      "sha256": "c8945b6528b8424d97b00f848080b4cfd7b4707f6ad616db089ebb38a305394d"
+    },
+    "fixtures/root-tileset/input.3tz": {
+      "bytes": 4284,
+      "sha256": "6d1ccd3303c9f999cc2c0cac64be6e3721d224a5a0897548e8d38073f2d170aa"
+    },
+    "fixtures/root-tileset/interpreted-glb-json.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "fixtures/root-tileset/interpreted-root-tileset.json": {
+      "bytes": 3325,
+      "sha256": "52c1addb0b0a407dd8e41dabeb2bdd05b687edda52af131a3b874301582b8b3e"
+    },
+    "fixtures/root-tileset/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/root-tileset/point.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "fixtures/root-tileset/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/root-tileset/tileset.json": {
+      "bytes": 3325,
+      "sha256": "52c1addb0b0a407dd8e41dabeb2bdd05b687edda52af131a3b874301582b8b3e"
+    },
+    "fixtures/same-uri-cache/input.3tz": {
+      "bytes": 1261,
+      "sha256": "de9e51602dedf23f488f45935b759827430fec6077a9c99de693ab97864523d9"
+    },
+    "fixtures/same-uri-cache/interpreted-glb.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "fixtures/same-uri-cache/interpreted-root.json": {
+      "bytes": 302,
+      "sha256": "8b0e294c5578f3b7151ba56afc124a316fba703dade37b9082897dae1f1c6a0e"
+    },
+    "fixtures/same-uri-cache/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/same-uri-cache/point.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "fixtures/same-uri-cache/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/same-uri-cache/tileset.json": {
+      "bytes": 302,
+      "sha256": "8b0e294c5578f3b7151ba56afc124a316fba703dade37b9082897dae1f1c6a0e"
+    },
+    "fixtures/shared-position-primitives/input.3tz": {
+      "bytes": 1183,
+      "sha256": "b68a252c72f16e2625c5339155f22b8aa49aded41764b07294d21a0d2de1cf24"
+    },
+    "fixtures/shared-position-primitives/interpreted-glb.json": {
+      "bytes": 428,
+      "sha256": "adb073d3f319dd9455c5c1e5665e4b7b47fe38bd80fe96219736857913c9aaaa"
+    },
+    "fixtures/shared-position-primitives/interpreted-root.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "fixtures/shared-position-primitives/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/shared-position-primitives/point.glb": {
+      "bytes": 468,
+      "sha256": "c100157eb20f50724c2141875b9982fc3a630d97fc051f2edaba67d199ba0362"
+    },
+    "fixtures/shared-position-primitives/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/shared-position-primitives/tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "fixtures/subtree-json/0-0-0.subtree": {
+      "bytes": 3288,
+      "sha256": "f7fbd2fe2f13d891b34705e62713c981a0dace1d30bdf3ac40a15302d66807c4"
+    },
+    "fixtures/subtree-json/input.3tz": {
+      "bytes": 4718,
+      "sha256": "eeeacdc497e16f2e8935c9e2400e1ba52dd4462f99e99372a95737f570c3ab3d"
+    },
+    "fixtures/subtree-json/interpreted-glb-json.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "fixtures/subtree-json/interpreted-root-tileset.json": {
+      "bytes": 333,
+      "sha256": "cefae185f1927e7559a2c812713e5afb229382149580823288733eceb4f089be"
+    },
+    "fixtures/subtree-json/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/subtree-json/interpreted-subtree-json.json": {
+      "bytes": 3264,
+      "sha256": "e4f248460ce05b241ed8e908a59c940bc8a54e8b2005076cd8476ab2ea6aad2c"
+    },
+    "fixtures/subtree-json/point-0-0-0.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "fixtures/subtree-json/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/subtree-json/tileset.json": {
+      "bytes": 333,
+      "sha256": "cefae185f1927e7559a2c812713e5afb229382149580823288733eceb4f089be"
+    },
+    "fixtures/unused-viewless-accessor/input.3tz": {
+      "bytes": 1191,
+      "sha256": "1b8a57d97596b33eb6f94d940e7bf0981417f83b9db6197d050e6e7ae60e7f86"
+    },
+    "fixtures/unused-viewless-accessor/interpreted-glb.json": {
+      "bytes": 436,
+      "sha256": "b8b8cc7bc8652822d57b46f3528fdc98333b0690e4c8d075dc0df3438ec28279"
+    },
+    "fixtures/unused-viewless-accessor/interpreted-root.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "fixtures/unused-viewless-accessor/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/unused-viewless-accessor/point.glb": {
+      "bytes": 476,
+      "sha256": "b8838da02df68bc8eb1b4550d18e3044fe90d8c0b636a5c318dcf72caf7e6aab"
+    },
+    "fixtures/unused-viewless-accessor/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "fixtures/unused-viewless-accessor/tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "generate.py": {
+      "bytes": 18509,
+      "sha256": "8734c2017b00d64967644203b1de0669e5e4894c5d6dfb06a074cb68557af429"
+    },
+    "references/implicit-tiling.adoc": {
+      "bytes": 32526,
+      "sha256": "14a37a3425520e46dd266c8afe82d884fdbcd4a8044739e0311198551f5ec672"
+    },
+    "references/metadata-semantics.adoc": {
+      "bytes": 15134,
+      "sha256": "02ac07db39258c67e702e0b51dcc3411f96c1caee873aeec2894dbad625e85a2"
+    },
+    "references/metadata.adoc": {
+      "bytes": 36602,
+      "sha256": "4797a8836ca4899129828fcccbaefcedabbf29350ed0a264ccc83fbd1361ceaa"
+    },
+    "references/receipt.json": {
+      "bytes": 1314,
+      "sha256": "716e2d24719413b20f2d8a7d44dead67f45d8c653fdf75cce6aeb964079a0780"
+    }
+  },
+  "fixtureManifestSha256": "22d3f83568de464d7227da273d1419f9dca5390dbf38f665b40b16e819b6f51d",
+  "generatorSha256": "8734c2017b00d64967644203b1de0669e5e4894c5d6dfb06a074cb68557af429",
+  "moduleSha256": "3a2959b544285ed568236d62fa1533592e1eeb49f800e215c7560a393e2287fd",
+  "original205RecordsUnchanged": true,
+  "plannedActualC1Executions": 82,
+  "preparedFiles": 142,
+  "proofLimits": [
+    "Target execution and source/artifact identity bindings remain coordinator obligations.",
+    "No full A2 external-template conformance, complete implicit semantics, metadata certification or release authority.",
+    "Complete reports/selected-limit/cache outcomes are declared oracles, not observed outcomes until real C1 tests execute."
+  ],
+  "schemaVersion": 1,
+  "status": "Frozen additive independently authored source/reference/fixtures/expectations; no target executions or acceptance claimed."
+}

@@ -1,0 +1,23 @@
+[
+  {
+    "file": "meshopt_decoder.test.js",
+    "bytes": 16220,
+    "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac",
+    "url": "https://raw.githubusercontent.com/zeux/meshoptimizer/3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d/js/meshopt_decoder.test.js",
+    "revision": "3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d"
+  },
+  {
+    "file": "EXT_meshopt_compression.md",
+    "bytes": 35576,
+    "sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0",
+    "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3/extensions/2.0/Vendor/EXT_meshopt_compression/README.md",
+    "revision": "5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3"
+  },
+  {
+    "file": "glTF-core.adoc",
+    "bytes": 148067,
+    "sha256": "77e2f07e8f705d10e9c1201a31d398994f45aa08cc91545ee378c5aff9d46175",
+    "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/70b5e4101725950fb8f3f94dd72c37e758ce5daf/specification/2.0/Specification.adoc",
+    "revision": "70b5e4101725950fb8f3f94dd72c37e758ce5daf"
+  }
+]

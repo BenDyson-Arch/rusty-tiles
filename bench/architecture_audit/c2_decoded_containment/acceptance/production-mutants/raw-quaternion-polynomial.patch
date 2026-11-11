@@ -1,0 +1,15 @@
+diff --git a/src/validate/containment.rs b/src/validate/containment.rs
+index b10acb5..733dc94 100644
+--- a/src/validate/containment.rs
++++ b/src/validate/containment.rs
+@@ -509,9 +509,7 @@ fn trs_local(a: &mut Arena, t: [f64; 3], q: [f64; 4], sc: [f64; 3]) -> bool {
+     for (sq, v) in [(xx, x), (yy, y), (zz, z), (ww, w)] {
+         d.mul(sq, v, v);
+     }
+-    d.add(n, xx, yy);
+-    d.add(n, n, zz);
+-    d.add(n, n, ww);
++    d.int(n, 1);
+     // H00 = Σ[w·w, x·x, −y·y, −z·z], H11 = Σ[w·w, −x·x, y·y, −z·z], H22 = Σ[w·w, −x·x, −y·y, z·z].
+     for (r, signs) in [
+         [true, false, false],

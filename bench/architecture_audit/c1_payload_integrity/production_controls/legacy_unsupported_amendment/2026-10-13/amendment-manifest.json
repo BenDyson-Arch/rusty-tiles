@@ -1,0 +1,84 @@
+{
+  "record": "H7 legacy-content amendment of the C2-WB-amended C1 payload-control expectations (additive; input unchanged).",
+  "input": "corrected-205-c2wb-fixtures.tar.gz",
+  "inputSha256": "7d844ecf1fc99719b0807f2859bbc6e988ee110283d5f001c25a0eee563fdb7e",
+  "inputManifestSha256": "3ef63c08433e1b69573e83c9aef0fe00972f94b9160e7934b07974bad956ae35",
+  "amended": "corrected-205-legacy-fixtures.tar.gz",
+  "amendedSha256": "7fe07fd1341d8fdbc743be9cb7cd0b1fa063731b5678621d652e799ad0101b8d",
+  "amendedManifestSha256": "f4ce9c7bd60e7788ca9ec7d6af5c7edf20f08e2c2cc8f25ced32a2d2c9a01815",
+  "cases": 205,
+  "changes": [
+    {
+      "case": "b3dm-zero",
+      "member": "tile.b3dm",
+      "before": "admitted",
+      "after": "unsupported"
+    },
+    {
+      "case": "b3dm-decimal",
+      "member": "tile.b3dm",
+      "before": "admitted",
+      "after": "unsupported"
+    },
+    {
+      "case": "b3dm-exponent",
+      "member": "tile.b3dm",
+      "before": "admitted",
+      "after": "unsupported"
+    },
+    {
+      "case": "b3dm-nonzero",
+      "member": "tile.b3dm",
+      "before": "admitted",
+      "after": "unsupported"
+    },
+    {
+      "case": "b3dm-fraction",
+      "member": "tile.b3dm",
+      "before": "invalid_input",
+      "after": "unsupported"
+    },
+    {
+      "case": "b3dm-u32-overflow",
+      "member": "tile.b3dm",
+      "before": "invalid_input",
+      "after": "unsupported"
+    },
+    {
+      "case": "b3dm-huge",
+      "member": "tile.b3dm",
+      "before": "invalid_input",
+      "after": "unsupported"
+    },
+    {
+      "case": "b3dm-null",
+      "member": "tile.b3dm",
+      "before": "invalid_input",
+      "after": "unsupported"
+    },
+    {
+      "case": "b3dm-missing",
+      "member": "tile.b3dm",
+      "before": "invalid_input",
+      "after": "unsupported"
+    },
+    {
+      "case": "b3dm-duplicate",
+      "member": "tile.b3dm",
+      "before": "invalid_input",
+      "after": "unsupported"
+    },
+    {
+      "case": "b3dm-feature-unicode",
+      "member": "tile.b3dm",
+      "before": "invalid_input",
+      "after": "unsupported"
+    },
+    {
+      "case": "b3dm-batch-unicode",
+      "member": "tile.b3dm",
+      "before": "invalid_input",
+      "after": "unsupported"
+    }
+  ]
+}

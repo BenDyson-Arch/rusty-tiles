@@ -5,8 +5,10 @@ use std::{io::Read, path::Path, process::Command};
 mod support;
 
 fn call(input: &Path, output: &Path, options: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
-        .args(["--json", "point-cloud", "-i"])
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"));
+    command.args(["--json", "point-cloud", "--metadata"]);
+    command
+        .arg("-i")
         .arg(input)
         .arg("-o")
         .arg(output)
@@ -14,6 +16,128 @@ fn call(input: &Path, output: &Path, options: &[&str]) -> std::process::Output {
         .env("PATH", "")
         .output()
         .unwrap()
+}
+
+#[test]
+fn implicit_las_laz_keep_every_record_and_placement_across_the_bounded_forest() {
+    for (suffix, identical) in [("las", false), ("laz", false), ("laz", true)] {
+        let work = tempfile::tempdir().unwrap();
+        let input = work.path().join(format!("source.{suffix}"));
+        fixture(&input, 257, identical, vec![]);
+        let output = work.path().join("implicit.3tz");
+        let options = [
+            "--sourceCrs",
+            "local",
+            "--maxPoints",
+            "1",
+            "--chunkPoints",
+            "11",
+        ];
+        let result = call(&input, &output, &options);
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+        let manifest = document(&mut zip, "tileset.json");
+        // The spread clouds are deeper than the skeleton bound, so implicit
+        // roots hang below explicit skeleton tiles. Identical points split by
+        // ordinal into a short tree, which is one implicit root at the top.
+        let forest = forest(&mut zip);
+        if identical {
+            assert_eq!(forest.implicit_roots, 1);
+            assert_eq!(forest.explicit, 0);
+            assert!(manifest["root"].get("implicitTiling").is_some());
+        } else {
+            assert!(manifest["root"].get("implicitTiling").is_none());
+            assert!(forest.explicit >= 1 && forest.implicit_roots > 1);
+        }
+        let expanded = rusty_tiles::implicit::expand_tileset(&manifest, |uri| {
+            let mut bytes = Vec::new();
+            zip.by_name(uri).unwrap().read_to_end(&mut bytes).unwrap();
+            Ok(bytes)
+        })
+        .unwrap();
+        let mut seen = Vec::new();
+        audit_leaves(&mut zip, &expanded["root"], &mut seen, 1);
+        seen.sort_unstable();
+        assert_eq!(seen, (0..257).collect::<Vec<_>>());
+        let expected: Vec<_> = las::Reader::from_path(&input)
+            .unwrap()
+            .read_all()
+            .unwrap()
+            .points()
+            .map(Result::unwrap)
+            .collect();
+        // Skeleton tiles and implicit roots keep the producer's translations;
+        // implicit tiles carry theirs in the GLB scene root. Compose both.
+        fn placement(
+            zip: &mut zip::ZipArchive<std::fs::File>,
+            node: &Value,
+            parent: [f64; 3],
+            expected: &[las::Point],
+        ) {
+            let mut root = parent;
+            if let Some(transform) = node["transform"].as_array() {
+                for (i, value) in transform.iter().enumerate().take(12) {
+                    assert_eq!(value.as_f64().unwrap(), f64::from(u8::from(i % 5 == 0)));
+                }
+                for (i, value) in root.iter_mut().enumerate() {
+                    *value += transform[12 + i].as_f64().unwrap();
+                }
+            }
+            if let Some(children) = node["children"].as_array() {
+                for child in children {
+                    placement(zip, child, root, expected);
+                }
+                return;
+            }
+            let glb = Glb::read(zip, node["content"]["uri"].as_str().unwrap());
+            let id = u64::from_le_bytes(glb.column("source_index").try_into().unwrap()) as usize;
+            let (positions, t) = glb.positions();
+            let p = positions[0];
+            let actual = [
+                root[0] + p[0] + t[0],
+                root[1] - p[2] - t[2],
+                root[2] + p[1] + t[1],
+            ];
+            for (a, e) in actual
+                .into_iter()
+                .zip([expected[id].x, expected[id].y, expected[id].z])
+            {
+                assert!((a - e).abs() < 1e-5, "{id}: {a} != {e}");
+            }
+            for (name, expected) in [
+                ("red", (id * 233) as u16),
+                ("green", (id * 431) as u16),
+                ("blue", (id * 717) as u16),
+                ("nir", (id * 103) as u16),
+            ] {
+                assert_eq!(
+                    u16::from_le_bytes(glb.column(name).try_into().unwrap()),
+                    expected
+                );
+            }
+        }
+        placement(&mut zip, &expanded["root"], [0.; 3], &expected);
+        let report = support::rusty_tiles()
+            .args(["validate", "--json"])
+            .arg(&output)
+            .output()
+            .unwrap();
+        assert!(
+            report.status.success(),
+            "{}",
+            String::from_utf8_lossy(&report.stdout)
+        );
+        let repeated = work.path().join("repeated.3tz");
+        assert!(call(&input, &repeated, &options).status.success());
+        assert_eq!(
+            std::fs::read(output).unwrap(),
+            std::fs::read(repeated).unwrap()
+        );
+    }
 }
 
 fn fixture(path: &Path, count: usize, identical: bool, vlrs: Vec<las::Vlr>) {
@@ -86,6 +210,30 @@ impl Glb {
         &self.binary[at..at + view["byteLength"].as_u64().unwrap() as usize]
     }
 
+    /// POSITION (float32, or quantized through the scene root's scale) in the glTF frame,
+    /// and the scene root's translation.
+    fn positions(&self) -> (Vec<[f64; 3]>, [f64; 3]) {
+        let (node, accessor) = (&self.doc["nodes"][0], &self.doc["accessors"][0]);
+        let bytes = self.view(accessor["bufferView"].as_u64().unwrap() as usize);
+        let read = |v: &Value| serde_json::from_value(v.clone()).unwrap_or([0.; 3]);
+        let positions = if accessor["componentType"] == 5126 {
+            let floats = bytes.as_chunks::<4>().0.iter();
+            let floats: Vec<_> = floats.map(|c| f64::from(f32::from_le_bytes(*c))).collect();
+            floats.as_chunks::<3>().0.to_vec()
+        } else {
+            let scale: [f64; 3] = read(&node["scale"]);
+            let codes = bytes.as_chunks::<8>().0.iter();
+            codes
+                .map(|c| {
+                    std::array::from_fn(|i| {
+                        scale[i] * f64::from(u16::from_le_bytes([c[2 * i], c[2 * i + 1]])) / 65535.
+                    })
+                })
+                .collect()
+        };
+        (positions, read(&node["translation"]))
+    }
+
     fn column(&self, name: &str) -> &[u8] {
         self.view(
             self.doc["extensions"]["EXT_structural_metadata"]["propertyTables"][0]["properties"]
@@ -96,8 +244,121 @@ impl Glb {
     }
 }
 
+/// The archive's tile tree with every implicit subtree expanded.
+fn expanded_root(zip: &mut zip::ZipArchive<std::fs::File>) -> Value {
+    let manifest = document(zip, "tileset.json");
+    let mut expanded = rusty_tiles::implicit::expand_tileset(&manifest, |uri| {
+        let mut bytes = Vec::new();
+        zip.by_name(uri).unwrap().read_to_end(&mut bytes).unwrap();
+        Ok(bytes)
+    })
+    .unwrap();
+    expanded["root"].take()
+}
+
 fn document(zip: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Value {
     serde_json::from_reader(zip.by_name(name).unwrap()).unwrap()
+}
+
+/// The written forest, read from the archive without the product expander.
+#[derive(Default)]
+struct Forest {
+    /// Explicit tiles of the producer hierarchy; a link and its document root
+    /// count once.
+    explicit: usize,
+    implicit_roots: usize,
+    documents: Vec<String>,
+}
+
+/// Walk every document and check the forest's root, link and subtree rules:
+/// one subtree per implicit root with `subtreeLevels == availableLevels <= 4`,
+/// no child subtrees, a row for every tile, no JSON content template, the
+/// metadata schema on every document holding a root and on `tileset.json`,
+/// and no `implicitChildIndex` in any written tile.
+fn forest(zip: &mut zip::ZipArchive<std::fs::File>) -> Forest {
+    fn walk(
+        zip: &mut zip::ZipArchive<std::fs::File>,
+        tile: &Value,
+        has_schema: bool,
+        out: &mut Forest,
+    ) {
+        assert!(tile["extras"].get("implicitChildIndex").is_none());
+        if let Some(tiling) = tile.get("implicitTiling") {
+            assert!(has_schema, "implicit root in a document without the schema");
+            assert!(tile.get("children").is_none());
+            assert_eq!(tiling["subdivisionScheme"], "OCTREE");
+            let levels = tiling["subtreeLevels"].as_u64().unwrap();
+            assert_eq!(tiling["availableLevels"].as_u64(), Some(levels));
+            assert!((1..=4).contains(&levels), "{levels} subtree levels");
+            let templates = tile["contents"]
+                .as_array()
+                .cloned()
+                .unwrap_or_else(|| tile.get("content").cloned().into_iter().collect());
+            for template in templates {
+                let uri = template["uri"].as_str().unwrap();
+                assert!(!uri.ends_with(".json"), "JSON content template {uri}");
+            }
+            let name = ["level", "x", "y", "z"].iter().fold(
+                tiling["subtrees"]["uri"].as_str().unwrap().to_owned(),
+                |name, key| name.replace(&format!("{{{key}}}"), "0"),
+            );
+            let mut bytes = Vec::new();
+            zip.by_name(&name).unwrap().read_to_end(&mut bytes).unwrap();
+            assert_eq!(&bytes[..4], b"subt");
+            let length = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
+            let subtree: Value = serde_json::from_slice(&bytes[24..24 + length]).unwrap();
+            assert_eq!(
+                subtree["childSubtreeAvailability"],
+                serde_json::json!({"constant": 0})
+            );
+            assert!(subtree["tileMetadata"].is_u64(), "missing tile rows");
+            out.implicit_roots += 1;
+            return;
+        }
+        let uri = tile["content"]["uri"].as_str().unwrap_or_default();
+        if uri.ends_with(".json") {
+            assert!(tile.get("children").is_none());
+            let linked = document(zip, uri);
+            out.documents.push(uri.to_owned());
+            assert!(linked["root"].get("transform").is_none());
+            assert_eq!(linked["root"]["boundingVolume"], tile["boundingVolume"]);
+            assert_eq!(linked["root"]["geometricError"], tile["geometricError"]);
+            let schema = linked.get("schema").is_some();
+            return walk(zip, &linked["root"], schema, out);
+        }
+        out.explicit += 1;
+        for child in tile["children"].as_array().into_iter().flatten() {
+            walk(zip, child, has_schema, out);
+        }
+    }
+    let manifest = document(zip, "tileset.json");
+    let mut out = Forest {
+        documents: vec!["tileset.json".into()],
+        ..Default::default()
+    };
+    walk(
+        zip,
+        &manifest["root"],
+        manifest.get("schema").is_some(),
+        &mut out,
+    );
+    assert_eq!(manifest.get("schema").is_some(), out.implicit_roots > 0);
+    let subtrees = zip.file_names().filter(|n| n.ends_with(".subtree")).count();
+    assert_eq!(
+        subtrees, out.implicit_roots,
+        "one subtree per implicit root"
+    );
+    // Each tileset document is reached by exactly one link.
+    let mut documents: Vec<_> = zip
+        .file_names()
+        .filter(|n| n.ends_with(".json") && *n != "conversion.json")
+        .map(str::to_owned)
+        .collect();
+    documents.sort();
+    let mut linked = out.documents.clone();
+    linked.sort();
+    assert_eq!(documents, linked);
+    out
 }
 
 fn audit_leaves(
@@ -191,9 +452,9 @@ fn las_and_laz_stream_without_python_keep_leaf_records_and_reproduce_archives() 
                 .all(|p| p[0]["done"].as_u64() <= p[1]["done"].as_u64()));
         }
         let mut zip = zip::ZipArchive::new(std::fs::File::open(&out).unwrap()).unwrap();
-        let manifest = document(&mut zip, "tileset.json");
+        let root = expanded_root(&mut zip);
         let mut seen = Vec::new();
-        audit_leaves(&mut zip, &manifest["root"], &mut seen, 16);
+        audit_leaves(&mut zip, &root, &mut seen, 16);
         seen.sort_unstable();
         assert_eq!(seen, (0..257).collect::<Vec<_>>());
         assert!(zip.file_names().all(|n| !n.contains("scratch")));
@@ -247,9 +508,9 @@ fn duplicates_terminate_and_force_replaces_only_after_success() {
         String::from_utf8_lossy(&result.stdout)
     );
     let mut zip = zip::ZipArchive::new(std::fs::File::open(&out).unwrap()).unwrap();
-    let manifest = document(&mut zip, "tileset.json");
+    let root = expanded_root(&mut zip);
     let mut seen = Vec::new();
-    audit_leaves(&mut zip, &manifest["root"], &mut seen, 16);
+    audit_leaves(&mut zip, &root, &mut seen, 16);
     seen.sort_unstable();
     assert_eq!(seen, (0..257).collect::<Vec<_>>());
     assert_eq!(std::fs::read_dir(work.path()).unwrap().count(), 3);
@@ -268,10 +529,10 @@ fn force_replaces_only_successful_output() {
     );
 }
 
-/// tempfile creates 0600 files. The published archive must follow the umask.
+/// F0 publishes the private candidate permissions (0600, subject to umask).
 #[cfg(unix)]
 #[test]
-fn published_archive_mode_follows_umask() {
+fn point_cloud_and_packaging_use_private_publication() {
     let work = tempfile::tempdir().unwrap();
     let input = work.path().join("cloud.las");
     fixture(&input, 2, false, vec![]);
@@ -290,7 +551,7 @@ fn published_archive_mode_follows_umask() {
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
-    assert_eq!(support::mode(&output), 0o644);
+    assert_eq!(support::mode(&output), 0o600);
     let tree = work.path().join("tree");
     std::fs::create_dir(&tree).unwrap();
     std::fs::write(tree.join("tileset.json"), "{}").unwrap();
@@ -307,35 +568,299 @@ fn published_archive_mode_follows_umask() {
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
-    assert_eq!(support::mode(&rebuilt), 0o644);
+    assert_eq!(support::mode(&rebuilt), 0o600);
 }
 
+/// Pinned CesiumJS 1.146 cannot build the GPU metadata texture of a property
+/// table wider than 8192 rows, and a model picks through one table only, so
+/// every emitted table, leaf or sampled parent, has at most 8192 rows. The
+/// default is that cap; 8192 is admitted and 8193 refused before any output.
 #[test]
-fn large_tiles_use_exact_float_feature_ids_instead_of_wrapping_u16() {
+fn property_tables_fit_the_cesium_texture_width() {
     let work = tempfile::tempdir().unwrap();
     let input = work.path().join("cloud.las");
-    fixture(&input, 65_537, true, vec![]);
-    let output = work.path().join("cloud.3tz");
-    assert!(call(
+    fixture(&input, 65_537, false, vec![]);
+    let refused = work.path().join("refused.3tz");
+    let result = call(
         &input,
-        &output,
-        &["--sourceCrs", "local", "--maxPoints", "70000"]
-    )
-    .status
-    .success());
-    let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
-    let glb = Glb::read(&mut zip, "t/0.glb");
-    let accessor = &glb.doc["accessors"][glb.doc["meshes"][0]["primitives"][0]["attributes"]
-        ["_FEATURE_ID_0"]
-        .as_u64()
-        .unwrap() as usize];
-    assert_eq!(accessor["componentType"], 5126);
-    let ids = glb.view(accessor["bufferView"].as_u64().unwrap() as usize);
-    assert_eq!(
-        f32::from_le_bytes(ids[65_536 * 4..].try_into().unwrap()),
-        65_536.
+        &refused,
+        &["--sourceCrs", "local", "--maxPoints", "8193"],
     );
-    assert_eq!(glb.column("source_index").len(), 65_537 * 8);
+    assert_eq!(result.status.code(), Some(2));
+    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(report["error"]["kind"], "invalid_request");
+    assert!(report["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("at most 8192"));
+    assert!(!refused.exists());
+    // Coincident points split by record order into children of 8192 or 8193
+    // rows, the leaf/split boundary itself.
+    let coincident = work.path().join("coincident.las");
+    fixture(&coincident, 65_537, true, vec![]);
+    for (index, (source, options)) in [
+        (&input, vec![]),
+        (&input, vec!["--maxPoints", "8192", "--metadata-attributes"]),
+        (&coincident, vec![]),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let output = work.path().join(format!("cloud-{index}.3tz"));
+        let mut args = vec!["--sourceCrs", "local"];
+        args.extend(&options);
+        let result = call(source, &output, &args);
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+        let conversion = document(&mut zip, "conversion.json");
+        assert_eq!(conversion["maxPoints"], 8192);
+        let glbs: Vec<_> = zip
+            .file_names()
+            .filter(|n| n.ends_with(".glb"))
+            .map(str::to_owned)
+            .collect();
+        let mut widest = 0;
+        for name in &glbs {
+            let glb = Glb::read(&mut zip, name);
+            let tables = glb.doc["extensions"]["EXT_structural_metadata"]["propertyTables"]
+                .as_array()
+                .unwrap();
+            assert_eq!(tables.len(), 1, "{name}");
+            let count = tables[0]["count"].as_u64().unwrap();
+            assert!(count <= 8192, "{name}: {count} rows");
+            widest = widest.max(count);
+            let primitive = &glb.doc["meshes"][0]["primitives"][0];
+            let features = &primitive["extensions"]["EXT_mesh_features"]["featureIds"][0];
+            assert_eq!(
+                (
+                    features["featureCount"].as_u64(),
+                    features["propertyTable"].as_u64()
+                ),
+                (Some(count), Some(0))
+            );
+            let ids = &glb.doc["accessors"]
+                [primitive["attributes"]["_FEATURE_ID_0"].as_u64().unwrap() as usize];
+            assert_eq!(
+                (ids["count"].as_u64(), ids["componentType"].as_u64()),
+                (Some(count), Some(5123))
+            );
+            let ids = glb.view(ids["bufferView"].as_u64().unwrap() as usize);
+            for (row, id) in ids.as_chunks::<4>().0.iter().enumerate() {
+                assert_eq!(*id, [(row & 255) as u8, (row >> 8) as u8, 0, 0]);
+            }
+        }
+        // Sampled parents fill their voxel budget, so the widest table is near the cap.
+        assert!(widest > 4096, "{widest}");
+        // Leaves keep every source record exactly once.
+        let mut seen = Vec::new();
+        let root = expanded_root(&mut zip);
+        audit_leaves(&mut zip, &root, &mut seen, 8192);
+        seen.sort_unstable();
+        assert_eq!(seen, (0..65_537).collect::<Vec<_>>());
+    }
+}
+
+/// The exact sign of `Σ terms` over the reals (Shewchuk's grow-expansion with zero
+/// elimination; the largest component carries the sign).
+fn exact_sign(terms: &[f64]) -> std::cmp::Ordering {
+    let mut expansion: Vec<f64> = Vec::new();
+    for &term in terms {
+        let mut q = term;
+        let mut grown = Vec::with_capacity(expansion.len() + 1);
+        for &e in &expansion {
+            let s = q + e;
+            let b = s - q;
+            let error = (q - (s - b)) + (e - b);
+            if error != 0. {
+                grown.push(error);
+            }
+            q = s;
+        }
+        if q != 0. {
+            grown.push(q);
+        }
+        expansion = grown;
+    }
+    expansion
+        .last()
+        .map_or(std::cmp::Ordering::Equal, |v| v.total_cmp(&0.))
+}
+
+/// Whether `|Σ offset| <= Σ half` holds exactly.
+fn within(half: &[f64], offset: &[f64]) -> bool {
+    [1., -1.].iter().all(|sign| {
+        let mut terms = half.to_vec();
+        terms.extend(offset.iter().map(|v| sign * v));
+        exact_sign(&terms) != std::cmp::Ordering::Less
+    })
+}
+
+/// One tile on the path from the root: its box centre and half lengths (axis aligned) and
+/// its translation to its parent's frame.
+struct Level {
+    centre: [f64; 3],
+    half: [f64; 3],
+    translation: [f64; 3],
+}
+
+impl Level {
+    fn of(tile: &Value) -> Self {
+        let b: Vec<f64> = tile["boundingVolume"]["box"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .collect();
+        assert!(
+            [4, 5, 6, 8, 9, 10].iter().all(|&k| b[k] == 0.),
+            "rotated box"
+        );
+        let translation = tile["transform"].as_array().map_or([0.; 3], |t| {
+            std::array::from_fn(|i| t[12 + i].as_f64().unwrap())
+        });
+        Self {
+            centre: [b[0], b[1], b[2]],
+            half: [b[3].abs(), b[7].abs(), b[11].abs()],
+            translation,
+        }
+    }
+}
+
+/// C2 decoded-content containment for axis-aligned point archives: every decoded position,
+/// placed by its GLB scene-root translation and scale and the tile transforms, lies in its own tile's box and in every ancestor's. Returns the
+/// vertices checked.
+fn contained(
+    zip: &mut zip::ZipArchive<std::fs::File>,
+    tile: &Value,
+    path: &mut Vec<Level>,
+) -> usize {
+    path.push(Level::of(tile));
+    let mut checked = 0;
+    if let Some(uri) = tile["content"]["uri"].as_str() {
+        let glb = Glb::read(zip, uri);
+        let (positions, root) = glb.positions();
+        // glTF (x, y, z) is z-up (x, -z, y).
+        let root = [root[0], -root[2], root[1]];
+        for (vertex, p) in positions.into_iter().enumerate() {
+            let p = [p[0], -p[2], p[1]];
+            for i in 0..3 {
+                // In the frame of path[k]: p + root + the translations of the tiles below k.
+                let mut offset = vec![p[i], root[i]];
+                for k in (0..path.len()).rev() {
+                    let mut terms = offset.clone();
+                    terms.push(-path[k].centre[i]);
+                    assert!(
+                        within(&[path[k].half[i]], &terms),
+                        "{uri}: vertex {vertex} axis {i} outside the volume at depth {k} of {}",
+                        path.len() - 1
+                    );
+                    offset.push(path[k].translation[i]);
+                }
+            }
+            checked += 1;
+        }
+    }
+    for child in tile["children"].as_array().into_iter().flatten() {
+        checked += contained(zip, child, path);
+    }
+    path.pop();
+    checked
+}
+
+/// Deterministic xorshift64* in [0, 1).
+fn uniform(state: &mut u64) -> f64 {
+    *state ^= *state >> 12;
+    *state ^= *state << 25;
+    *state ^= *state >> 27;
+    (state.wrapping_mul(0x2545_f491_4f6c_dd1d) >> 11) as f64 / (1u64 << 53) as f64
+}
+
+/// Point bounds are rounded outward wherever f64 rounding could put a box inside what it
+/// must contain: a tile's half extent covers its decoded positions (a thin cloud's tile
+/// 2/1/1/3 sat 2^-52 inside its vertex 0), a parent encloses each child's box exactly, and
+/// implicit rows grow by the drift of their accumulated f64 translations. Fixed clouds,
+/// sequential and random, are converted and checked as C2
+/// decodedContentContainment checks them (exact arithmetic, every ancestor).
+#[test]
+fn point_bounds_contain_decoded_content_exactly_across_fixed_clouds() {
+    let work = tempfile::tempdir().unwrap();
+    // (points, x, y, z extents, LAS scale, sequential)
+    let clouds: &[(u32, f64, f64, f64, f64, bool)] = &[
+        (60, 10., 1e-6, 0., 1e-7, true),
+        (200, 10., 1e-6, 1e-6, 1e-7, true),
+        (300, 3., 3., 0., 1e-7, true),
+        (500, 1000., 1e-3, 1e-3, 1e-6, true),
+        (800, 7.3, 1e-5, 2e-5, 1e-7, true),
+        (1000, 123.4, 0.5, 1e-6, 1e-6, true),
+        (400, 1e-3, 1e-3, 1e-3, 1e-7, false),
+        (700, 50., 50., 50., 1e-7, false),
+        (600, 10., 1e-6, 0., 1e-7, false),
+        (900, 31.7, 2.9, 0.4, 1e-6, false),
+        // Sequential clouds whose implicit rows need the δ drift widening.
+        (100, 7.3, 0., 0., 1e-6, true),
+        (257, 7.3, 0., 0., 1e-3, true),
+        (400, 10., 0., 0., 1e-6, true),
+        (400, 31.7, 0., 0., 1e-7, true),
+        (640, 100., 0., 0., 1e-3, true),
+        (1000, 123.4, 0., 0., 1e-7, true),
+    ];
+    let mut vertices = 0;
+    for (index, &(count, sx, sy, sz, scale, sequential)) in clouds.iter().enumerate() {
+        let input = work.path().join(format!("cloud-{index}.las"));
+        let mut builder = las::Builder::from((1, 2));
+        builder.point_format = las::point::Format::new(3).unwrap();
+        let transform = las::Transform { scale, offset: 0.0 };
+        builder.transforms = las::Vector {
+            x: transform,
+            y: transform,
+            z: transform,
+        };
+        let mut writer = las::Writer::from_path(&input, builder.into_header().unwrap()).unwrap();
+        let mut state = 0x9e37_79b9_7f4a_7c15 ^ index as u64;
+        for i in 0..count {
+            let t = f64::from(i) / f64::from(count - 1);
+            let (x, y) = if sequential {
+                (t * sx, t * sy)
+            } else {
+                (uniform(&mut state) * sx, uniform(&mut state) * sy)
+            };
+            writer
+                .write_point(las::Point {
+                    x,
+                    y,
+                    z: uniform(&mut state) * sz,
+                    gps_time: Some(0.0),
+                    color: Some(las::Color::default()),
+                    ..Default::default()
+                })
+                .unwrap();
+        }
+        writer.close().unwrap();
+        for max_points in ["3", "10", "37"] {
+            let output = work.path().join(format!("cloud-{index}-{max_points}.3tz"));
+            let options = ["--sourceCrs", "local", "--maxPoints", max_points];
+            let result = call(&input, &output, &options);
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stdout)
+            );
+            let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+            let manifest = document(&mut zip, "tileset.json");
+            let expanded = rusty_tiles::implicit::expand_tileset(&manifest, |uri| {
+                let mut bytes = Vec::new();
+                zip.by_name(uri).unwrap().read_to_end(&mut bytes).unwrap();
+                Ok(bytes)
+            })
+            .unwrap();
+            vertices += contained(&mut zip, &expanded["root"], &mut Vec::new());
+        }
+    }
+    assert!(vertices > 10_000, "{vertices}");
 }
 
 #[test]
@@ -376,7 +901,22 @@ fn doctor_reports_native_local_readiness_without_python_and_keeps_other_requirem
     assert_eq!(report["commands"]["point-cloud"]["local"]["ready"], true);
     assert_eq!(
         report["commands"]["point-cloud"]["geospatial"]["ready"],
+        true
+    );
+    assert_eq!(
+        report["commands"]["point-cloud"]["geospatial"]["backend"],
+        "pure Rust (proj4rs)"
+    );
+    assert_eq!(
+        report["commands"]["point-cloud"]["geospatial"]["nativeFallback"]["ready"],
         cfg!(feature = "native-geospatial")
+    );
+    assert!(
+        report["commands"]["point-cloud"]["geospatial"]["crsClasses"]
+            .as_array()
+            .unwrap()
+            .len()
+            >= 4
     );
     let result = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
         .args(["doctor", "--json"])
@@ -388,20 +928,17 @@ fn doctor_reports_native_local_readiness_without_python_and_keeps_other_requirem
         Some(if cfg!(feature = "native-geospatial") {
             0
         } else {
-            4
+            2 // raster/terrain are unsupported by the portable build
         })
     );
     let report: Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(report["commands"]["point-cloud"]["ready"], true);
-    assert_eq!(
-        report["commands"]["vector"]["ready"],
-        cfg!(feature = "native-geospatial")
-    );
+    assert_eq!(report["commands"]["vector"]["ready"], true);
 }
 
 #[cfg(not(feature = "native-geospatial"))]
 #[test]
-fn geospatial_placement_on_a_default_build_names_the_required_feature() {
+fn unverified_datum_on_a_default_build_names_the_required_feature() {
     let work = tempfile::tempdir().unwrap();
     let input = work.path().join("cloud.las");
     fixture(&input, 1, false, vec![]);
@@ -409,10 +946,11 @@ fn geospatial_placement_on_a_default_build_names_the_required_feature() {
     let result = call(
         &input,
         &out,
-        &["--sourceCrs", "EPSG:32631", "--heightOffset", "0"],
+        &["--sourceCrs", "EPSG:26910", "--heightOffset", "0"],
     );
-    assert_eq!(result.status.code(), Some(4));
+    assert_eq!(result.status.code(), Some(2));
     let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(report["error"]["kind"], "unsupported");
     assert!(report["error"]["message"]
         .as_str()
         .unwrap()
@@ -420,7 +958,6 @@ fn geospatial_placement_on_a_default_build_names_the_required_feature() {
     assert!(!out.exists());
 }
 
-#[cfg(feature = "native-geospatial")]
 #[test]
 fn geotiff_header_and_explicit_crs_place_xyz_with_original_source_metadata() {
     use rusty_tiles::georef::{geodetic_to_ecef, Cartographic};
@@ -468,7 +1005,11 @@ fn geotiff_header_and_explicit_crs_place_xyz_with_original_source_metadata() {
                     < 1e-6
             );
         }
-        let glb = Glb::read(&mut zip, "t/0.glb");
+        let uri = expanded_root(&mut zip)["content"]["uri"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let glb = Glb::read(&mut zip, &uri);
         assert_eq!(
             i32::from_le_bytes(glb.column("X").try_into().unwrap()),
             500_000_000
@@ -483,12 +1024,812 @@ fn geotiff_header_and_explicit_crs_place_xyz_with_original_source_metadata() {
         reference = Some(manifest);
     }
     let output = work.path().join("rejected.3tz");
-    for options in [
-        vec!["--sourceCrs", "header"],
-        vec!["--sourceCrs", "EPSG:4979", "--heightOffset", "0"],
-        vec!["--sourceCrs", "local", "--heightOffset", "0"],
+    for (options, exit) in [
+        (vec!["--sourceCrs", "header"], 2),
+        (vec!["--sourceCrs", "EPSG:4979", "--heightOffset", "0"], 3),
+        (vec!["--sourceCrs", "local", "--heightOffset", "0"], 2),
     ] {
-        assert_eq!(call(&input, &output, &options).status.code(), Some(3));
+        let result = call(&input, &output, &options);
+        assert_eq!(result.status.code(), Some(exit));
+        if exit == 2 {
+            let response: Value = serde_json::from_slice(&result.stdout).unwrap();
+            assert_eq!(response["error"]["code"], "invalid_request");
+        }
         assert!(!output.exists());
     }
+}
+
+#[test]
+fn wkt_las_and_laz_headers_place_globe_coordinates_without_external_resources() {
+    use rusty_tiles::georef::{geodetic_to_ecef, Cartographic};
+    let wkt = r#"GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]"#;
+    for suffix in ["las", "laz"] {
+        let work = tempfile::tempdir().unwrap();
+        let input = work.path().join(format!("cloud.{suffix}"));
+        let mut builder = las::Builder::from((1, 4));
+        builder.vlrs.push(las::Vlr {
+            user_id: "LASF_Projection".into(),
+            record_id: 2112,
+            data: format!("{wkt}\0").into_bytes(),
+            ..Default::default()
+        });
+        let mut writer = las::Writer::from_path(&input, builder.into_header().unwrap()).unwrap();
+        writer
+            .write_point(las::Point {
+                x: 153.02,
+                y: -27.47,
+                z: 123.,
+                ..Default::default()
+            })
+            .unwrap();
+        writer.close().unwrap();
+        let output = work.path().join("cloud.3tz");
+        let result = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
+            .args(["--json", "point-cloud", "-i"])
+            .arg(&input)
+            .arg("-o")
+            .arg(&output)
+            .args(["--source-crs", "header", "--height-offset", "7"])
+            .env("PATH", "")
+            .env("PROJ_DATA", work.path().join("absent-database"))
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(output).unwrap()).unwrap();
+        let manifest = document(&mut zip, "tileset.json");
+        let expected = geodetic_to_ecef(Cartographic::new(153.02, -27.47, 130.));
+        for (i, expected) in expected.iter().enumerate() {
+            assert!(
+                (manifest["root"]["transform"][12 + i].as_f64().unwrap() - expected).abs() < 0.001
+            );
+        }
+    }
+}
+
+#[cfg(not(feature = "native-geospatial"))]
+#[test]
+fn compound_geoid_header_refuses_default_build_without_publishing() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("cloud.las");
+    let wkt = r#"COMPD_CS["WGS84 + invented geoid",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],VERT_CS["Invented geoid height",VERT_DATUM["Invented geoid",2005,EXTENSION["PROJ4_GRIDS","missing.gtx"]],UNIT["metre",1],AXIS["Up",UP]]]"#;
+    fixture(
+        &input,
+        1,
+        false,
+        vec![las::Vlr {
+            user_id: "LASF_Projection".into(),
+            record_id: 2112,
+            data: format!("{wkt}\0").into_bytes(),
+            ..Default::default()
+        }],
+    );
+    let output = work.path().join("cloud.3tz");
+    let result = call(
+        &input,
+        &output,
+        &["--source-crs", "header", "--height-offset", "0"],
+    );
+    assert_eq!(result.status.code(), Some(2));
+    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(report["error"]["kind"], "unsupported");
+    let message = report["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("--features native-geospatial"),
+        "{message}"
+    );
+    assert!(message.contains("grids"), "{message}");
+    assert!(!output.exists());
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
+#[test]
+fn invalid_projection_parameters_and_units_never_publish() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("cloud.las");
+    fixture(&input, 1, false, vec![]);
+    let wkt = r#"PROJCS["Invented invalid scale",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["scale_factor",0],UNIT["metre",1]]"#;
+    for definition in [
+        "+proj=stere +lat_0=45 +k=0 +datum=WGS84",
+        "+proj=stere +lat_0=45 +k=-1 +datum=WGS84",
+        "+proj=stere +lat_0=45 +k_0=0 +datum=WGS84",
+        "+proj=stere +lat_0=45 +k_0=-1 +datum=WGS84",
+        "+proj=utm +datum=WGS84",
+        "+proj=utm +lon_0=10 +datum=WGS84",
+        "+proj=tmerc +lat_0=100 +datum=WGS84",
+        "+proj=tmerc +lat_0=-100 +datum=WGS84",
+        "+proj=aea +lat_1=100 +lat_2=45 +datum=WGS84",
+        "+proj=merc +lat_ts=-100 +datum=WGS84",
+        "+proj=lcc +lat_1=-90 +lat_2=45 +datum=WGS84",
+        "+proj=utm +zone=32 +datum=WGS84 +units=degrees",
+        "+proj=stere +lat_0=90 +lat_ts=70 +k=0.99 +datum=WGS84",
+        "+proj=stere +lat_0=-90 +lat_ts=-70 +k_0=2 +datum=WGS84",
+        "+proj=stere +lat_0=90 +lat_ts=-90 +k=0.99 +datum=WGS84",
+        "+proj=stere +lat_0=-90 +lat_ts=90 +k_0=0.99 +datum=WGS84",
+        "+proj=aea +lat_1=30 +lat_2=-29.99999999 +datum=WGS84",
+        "+proj=lcc +lat_1=30 +lat_2=-29.99999999 +lat_0=0 +datum=WGS84",
+        wkt,
+    ] {
+        let output = work.path().join("rejected.3tz");
+        let result = call(
+            &input,
+            &output,
+            &["--source-crs", definition, "--height-offset", "7"],
+        );
+        assert_eq!(
+            result.status.code(),
+            Some(3),
+            "{definition}: {}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+        let message = report["error"]["message"].as_str().unwrap();
+        assert!(
+            message.contains("positive")
+                || message.contains("explicit +zone")
+                || message.contains("projection latitude")
+                || message.contains("linear +units")
+                || message.contains("conflicts")
+                || message.contains("conic standard parallels"),
+            "{definition}: {message}"
+        );
+        assert!(!output.exists());
+    }
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
+#[test]
+fn native_crs_guards_preserve_placement_or_refuse_without_publishing() {
+    let work = tempfile::tempdir().unwrap();
+    for (point_index, point) in [
+        [1000., 2000., 123.],
+        [200000., 567890., 123.],
+        [3000000., -3000000., 500.],
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let input = work.path().join(format!("cloud-{point_index}.las"));
+        let mut builder = las::Builder::from((1, 4));
+        builder.transforms.x.scale = 0.01;
+        builder.transforms.y.scale = 0.01;
+        let header = builder.into_header().unwrap();
+        let mut writer = las::Writer::from_path(&input, header).unwrap();
+        writer
+            .write_point(las::Point {
+                x: point[0],
+                y: point[1],
+                z: point[2],
+                ..Default::default()
+            })
+            .unwrap();
+        writer.close().unwrap();
+        for (index, definition) in [
+            "+proj=tmerc +ellps=WGS84 +towgs84=0,0,0 +pm=0dE",
+            "+proj=tmerc +a=6371000 +b=6371000 +towgs84=0,0,0",
+            "+proj=sterea +lat_0=-90 +datum=WGS84",
+            "+proj=sterea +lat_0=90 +datum=WGS84",
+            "+proj=sterea +lat_0=89.99999999 +datum=WGS84",
+            "+proj=sterea +lat_0=-89.99999999 +datum=WGS84",
+            "+proj=sterea +lat_0=80 +datum=WGS84",
+            "+proj=sterea +lat_0=-80 +datum=WGS84",
+            "+proj=stere +lat_0=89.99999999 +datum=WGS84",
+            "+proj=stere +lat_0=-89.99999999 +datum=WGS84",
+            "+proj=lcc +lat_1=-80 +lat_2=-79.99999999 +lat_0=-80 +datum=WGS84",
+            "+proj=lcc +lat_1=33 +datum=WGS84",
+            "+proj=lcc +lat_1=-89.999999 +lat_2=-89.999999 +lat_0=-89.999999 +datum=WGS84",
+            "+proj=aea +lat_1=-80 +lat_2=-79.99999999 +lat_0=-80 +datum=WGS84",
+            "+init=epsg:32632",
+            "+proj=utm +zone = 32 +datum=WGS84",
+            "EPSG:32632@2020",
+            r#"+proj=tmerc +k="0.9996" +datum=WGS84"#,
+            r#"+proj=tmerc +ellps=WGS84 +towgs84="1,2,3""#,
+            "+proj=laea +lat_0=-15 +lon_0=135 +datum=WGS84",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let output = work.path().join(format!("{point_index}-{index}.3tz"));
+            let result = call(
+                &input,
+                &output,
+                &["--source-crs", definition, "--height-offset", "7"],
+            );
+            #[cfg(feature = "native-geospatial")]
+            {
+                use rusty_tiles::geospatial::{Crs, EcefTransform};
+                assert!(
+                    result.status.success(),
+                    "{definition}: {}",
+                    String::from_utf8_lossy(&result.stdout)
+                );
+                let expected =
+                    EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.))
+                        .unwrap()
+                        .transform(&[point])
+                        .unwrap()[0];
+                let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+                let manifest = document(&mut zip, "tileset.json");
+                let distance = expected
+                    .iter()
+                    .enumerate()
+                    .map(|(i, expected)| {
+                        (manifest["root"]["transform"][12 + i].as_f64().unwrap() - expected).powi(2)
+                    })
+                    .sum::<f64>()
+                    .sqrt();
+                assert!(
+                    distance < 0.001,
+                    "{definition}: ECEF difference {distance} m"
+                );
+                rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(
+                    &output,
+                ))
+                .unwrap();
+            }
+            #[cfg(not(feature = "native-geospatial"))]
+            {
+                assert_eq!(
+                    result.status.code(),
+                    Some(2),
+                    "{definition}: {}",
+                    String::from_utf8_lossy(&result.stdout)
+                );
+                let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+                assert_eq!(report["error"]["kind"], "unsupported");
+                assert!(report["error"]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("--features native-geospatial"));
+                assert!(!output.exists());
+            }
+        }
+    }
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
+fn exact_point_fixture(input: &Path, point: [f64; 3]) {
+    let mut builder = las::Builder::from((1, 4));
+    builder.transforms.x.offset = point[0];
+    builder.transforms.y.offset = point[1];
+    builder.transforms.z.offset = point[2];
+    let mut writer = las::Writer::from_path(input, builder.into_header().unwrap()).unwrap();
+    writer
+        .write_point(las::Point {
+            x: point[0],
+            y: point[1],
+            z: point[2],
+            ..Default::default()
+        })
+        .unwrap();
+    writer.close().unwrap();
+}
+
+#[test]
+fn wkt_method_parameters_and_albers_preserve_native_or_refuse() {
+    let work = tempfile::tempdir().unwrap();
+    let incomplete = include_str!("fixtures/crs/lcc-2sp-missing-parallel.wkt");
+    let extra_scale = incomplete.replace(r#",PARAMETER["false_easting""#,
+        r#",PARAMETER["standard_parallel_2",45],PARAMETER["scale_factor",2],PARAMETER["false_easting""#);
+    for (index, (definition, point, outside_accuracy_domain)) in [
+        (incomplete, [200000., 567890., 123.], false),
+        (extra_scale.as_str(), [200000., 567890., 123.], false),
+        (
+            include_str!("fixtures/crs/mercator-redundant-origin.wkt"),
+            [200000., 567890., 123.],
+            false,
+        ),
+        (
+            include_str!("fixtures/crs/mercator-wrong-parallel.wkt"),
+            [200000., 567890., 123.],
+            false,
+        ),
+        (
+            "+proj=aea +lat_1=33 +lat_2=45 +lat_0=10 +datum=WGS84",
+            [0., 7279556.2302497085, 123.],
+            true,
+        ),
+        (
+            "+proj=aea +lat_1=-33 +lat_2=-45 +lat_0=-10 +datum=WGS84",
+            [0., -7279556.2302497085, 123.],
+            true,
+        ),
+        (
+            "+proj=aea +lat_1=80 +lat_2=80 +lat_0=80 +ellps=sphere +towgs84=0,0,0",
+            [612606.1867269421, 13949033.598816177, 123.],
+            true,
+        ),
+        (
+            include_str!("fixtures/crs/lcc-michigan-near-equator.wkt"),
+            [5000., 6000., 123.],
+            true,
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let input = work.path().join(format!("source-{index}.las"));
+        exact_point_fixture(&input, point);
+        let output = work.path().join(format!("source-{index}.3tz"));
+        let result = call(
+            &input,
+            &output,
+            &["--source-crs", definition, "--height-offset", "7"],
+        );
+        #[cfg(not(feature = "native-geospatial"))]
+        {
+            let _ = outside_accuracy_domain;
+            assert_eq!(
+                result.status.code(),
+                Some(if definition.starts_with("+proj=aea") {
+                    3
+                } else {
+                    2
+                }),
+                "{definition}: {}",
+                String::from_utf8_lossy(&result.stdout)
+            );
+            let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+            assert_eq!(
+                report["error"]["kind"],
+                if definition.starts_with("+proj=aea") {
+                    "invalid_input"
+                } else {
+                    "unsupported"
+                }
+            );
+            assert!(!output.exists());
+        }
+        #[cfg(feature = "native-geospatial")]
+        {
+            use rusty_tiles::geospatial::{Crs, EcefTransform};
+            if outside_accuracy_domain {
+                assert_eq!(result.status.code(), Some(3));
+                let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+                assert!(report["error"]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("verified point-cloud accuracy"));
+                assert!(!output.exists());
+                continue;
+            }
+            assert!(
+                result.status.success(),
+                "{definition}: {}",
+                String::from_utf8_lossy(&result.stdout)
+            );
+            let expected = EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.))
+                .unwrap()
+                .transform(&[point])
+                .unwrap()[0];
+            let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+            let manifest = document(&mut zip, "tileset.json");
+            let distance = expected
+                .iter()
+                .enumerate()
+                .map(|(i, expected)| {
+                    (manifest["root"]["transform"][12 + i].as_f64().unwrap() - expected).powi(2)
+                })
+                .sum::<f64>()
+                .sqrt();
+            assert!(
+                distance < 0.001,
+                "{definition}: ECEF difference {distance} m"
+            );
+            rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
+                .unwrap();
+        }
+    }
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
+#[test]
+fn stereographic_points_and_hemispheres_use_native_or_refuse_without_publishing() {
+    let work = tempfile::tempdir().unwrap();
+    for (index, (definition, point)) in [
+        (
+            "+proj=sterea +lat_0=45 +datum=WGS84",
+            [0.9141389405141953, 5290076.530007198, 123.],
+        ),
+        (
+            "+proj=sterea +lat_0=79.999999 +ellps=airy +towgs84=12,-34,56",
+            [0.00112530269295305, 1119554.6907156024, 123.],
+        ),
+        (
+            "+proj=stere +lat_0=75 +datum=WGS84",
+            [0., 1685039.1152903102, 123.],
+        ),
+        (
+            "+proj=stere +lat_0=-75 +datum=WGS84",
+            [0., -1685039.1152903102, 123.],
+        ),
+        (
+            "+proj=stere +lat_0=90 +lat_ts=-70 +datum=WGS84",
+            [0., 0., 123.],
+        ),
+        (
+            "+proj=stere +lat_0=-90 +lat_ts=70 +datum=WGS84",
+            [0., 0., 123.],
+        ),
+        (
+            "+proj=stere +lat_0=-90 +lat_ts=0 +datum=WGS84",
+            [0., 0., 123.],
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let input = work.path().join(format!("polar-point-{index}.las"));
+        exact_point_fixture(&input, point);
+        let output = work.path().join(format!("polar-point-{index}.3tz"));
+        let result = call(
+            &input,
+            &output,
+            &["--source-crs", definition, "--height-offset", "7"],
+        );
+        #[cfg(feature = "native-geospatial")]
+        {
+            use rusty_tiles::geospatial::{Crs, EcefTransform};
+            let expected = EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.))
+                .unwrap()
+                .transform(&[point]);
+            let expected = match expected {
+                Ok(expected) => {
+                    assert!(
+                        result.status.success(),
+                        "{definition}: {}",
+                        String::from_utf8_lossy(&result.stdout)
+                    );
+                    expected[0]
+                }
+                Err(error) => {
+                    assert!(matches!(error, rusty_tiles::Error::Data(_)), "{error}");
+                    assert_eq!(result.status.code(), Some(3), "{definition}");
+                    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+                    assert_eq!(report["error"]["code"], "invalid_input");
+                    assert_eq!(report["error"]["kind"], "invalid_input");
+                    assert!(!output.exists());
+                    continue;
+                }
+            };
+            let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+            let manifest = document(&mut zip, "tileset.json");
+            let distance = expected
+                .iter()
+                .enumerate()
+                .map(|(i, expected)| {
+                    (manifest["root"]["transform"][12 + i].as_f64().unwrap() - expected).powi(2)
+                })
+                .sum::<f64>()
+                .sqrt();
+            assert!(distance < 0.001, "ECEF difference {distance} m");
+            rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
+                .unwrap();
+        }
+        #[cfg(not(feature = "native-geospatial"))]
+        {
+            assert_eq!(result.status.code(), Some(2));
+            let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+            assert_eq!(report["error"]["kind"], "unsupported");
+            assert!(report["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("pure-Rust point-cloud CRS transform unavailable"));
+            assert!(!output.exists());
+        }
+    }
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
+#[test]
+fn native_lcc_variant_b_conditioning_cannot_be_bypassed_with_alternate_syntax() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("cloud.las");
+    fixture(&input, 1, false, vec![]);
+    for definition in [
+        r#"+proj=lcc +lat_1="1e-08" +lat_0=5 +datum=WGS84"#,
+        "+proj=lcc +lat_1 = 1e-08 +lat_0=5 +datum=WGS84",
+    ] {
+        let output = work.path().join("rejected.3tz");
+        let result = call(
+            &input,
+            &output,
+            &["--source-crs", definition, "--height-offset", "7"],
+        );
+        #[cfg(feature = "native-geospatial")]
+        let (code, message) = (3, "conic standard parallels");
+        #[cfg(not(feature = "native-geospatial"))]
+        let (code, message) = (2, "pure-Rust point-cloud CRS transform unavailable");
+        assert_eq!(
+            result.status.code(),
+            Some(code),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+        #[cfg(not(feature = "native-geospatial"))]
+        assert_eq!(report["error"]["kind"], "unsupported");
+        assert!(report["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains(message));
+        assert!(!output.exists());
+    }
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
+#[test]
+fn metadata_attributes_match_source_tables_through_las_laz_lods() {
+    for suffix in ["las", "laz"] {
+        let work = tempfile::tempdir().unwrap();
+        let input = work.path().join(format!("source.{suffix}"));
+        fixture(&input, 257, false, vec![]);
+        {
+            let output = work.path().join("cloud.3tz");
+            let result = call(
+                &input,
+                &output,
+                &[
+                    "--source-crs",
+                    "local",
+                    "--max-points",
+                    "16",
+                    "--chunk-points",
+                    "11",
+                    "--metadata-attributes",
+                ],
+            );
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stdout)
+            );
+            let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+            let files: Vec<_> = zip
+                .file_names()
+                .filter(|s| s.ends_with(".glb"))
+                .map(str::to_owned)
+                .collect();
+            assert!(files.len() > 1);
+            for file in files {
+                let glb = Glb::read(&mut zip, &file);
+                let metadata = &glb.doc["extensions"]["EXT_structural_metadata"];
+                let primitive = &glb.doc["meshes"][0]["primitives"][0];
+                let classes = &metadata["schema"]["classes"];
+                assert_eq!(metadata["propertyAttributes"][0]["class"], "pointAttribute");
+                for name in classes["pointAttribute"]["properties"]
+                    .as_object()
+                    .unwrap()
+                    .keys()
+                {
+                    assert!(
+                        classes["point"]["properties"].get(name).is_none(),
+                        "duplicate shader property {name}"
+                    );
+                }
+                assert_eq!(
+                    primitive["extensions"]["EXT_structural_metadata"]["propertyAttributes"],
+                    serde_json::json!([0])
+                );
+                let count = metadata["propertyTables"][0]["count"].as_u64().unwrap() as usize;
+                for (name, width, component) in [
+                    ("classification", 1, 5121),
+                    ("intensity", 2, 5123),
+                    ("return_number", 1, 5121),
+                ] {
+                    let attribute = metadata["propertyAttributes"][0]["properties"]
+                        [format!("vertex_{name}")]["attribute"]
+                        .as_str()
+                        .unwrap();
+                    let accessor = &glb.doc["accessors"]
+                        [primitive["attributes"][attribute].as_u64().unwrap() as usize];
+                    assert_eq!(accessor["count"], count);
+                    assert_eq!(accessor["componentType"], component);
+                    assert!(accessor.get("normalized").is_none());
+                    let v = accessor["bufferView"].as_u64().unwrap() as usize;
+                    assert_eq!(glb.doc["bufferViews"][v]["byteStride"], 4);
+                    let data = glb.view(v);
+                    let table = glb.column(name);
+                    for i in 0..count {
+                        assert_eq!(
+                            &data[i * 4..i * 4 + width],
+                            &table[i * width..(i + 1) * width]
+                        );
+                    }
+                }
+            }
+            rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
+                .unwrap();
+            if suffix == "las" {
+                if let Some(dir) = std::env::var_os("RUSTY_TILES_METADATA_ACCEPTANCE_DIR") {
+                    let dir = std::path::PathBuf::from(dir).join("point");
+                    std::fs::create_dir_all(&dir).unwrap();
+                    zip.extract(dir).unwrap();
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn metadata_attributes_decode_legacy_classification_flags_and_extended_returns() {
+    for (format, returns) in [(0, 6), (3, 7), (6, 14), (8, 15)] {
+        let work = tempfile::tempdir().unwrap();
+        let input = work.path().join("source.las");
+        let mut builder = las::Builder::from((1, 4));
+        builder.point_format = las::point::Format::new(format).unwrap();
+        let mut writer = las::Writer::from_path(&input, builder.into_header().unwrap()).unwrap();
+        for i in 0..17 {
+            writer
+                .write_point(las::Point {
+                    x: i as f64,
+                    intensity: 65000 + i,
+                    return_number: returns,
+                    number_of_returns: returns,
+                    classification: las::point::Classification::new(17).unwrap(),
+                    is_synthetic: true,
+                    is_key_point: true,
+                    is_withheld: true,
+                    gps_time: (format != 0).then_some(1.),
+                    color: matches!(format, 3 | 8).then_some(las::Color {
+                        red: 1,
+                        green: 2,
+                        blue: 3,
+                    }),
+                    nir: (format == 8).then_some(4),
+                    ..Default::default()
+                })
+                .unwrap();
+        }
+        writer.close().unwrap();
+        let output = work.path().join("cloud.3tz");
+        let result = call(
+            &input,
+            &output,
+            &[
+                "--source-crs",
+                "local",
+                "--max-points",
+                "4",
+                "--metadata-attributes",
+            ],
+        );
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+        let files: Vec<_> = zip
+            .file_names()
+            .filter(|s| s.ends_with(".glb"))
+            .map(str::to_owned)
+            .collect();
+        for file in files {
+            let glb = Glb::read(&mut zip, &file);
+            let primitive = &glb.doc["meshes"][0]["primitives"][0];
+            for (i, id) in glb
+                .column("source_index")
+                .as_chunks::<8>()
+                .0
+                .iter()
+                .enumerate()
+            {
+                let source = u64::from_le_bytes(*id) as u16;
+                for (attribute, expected) in [
+                    ("_CLASSIFICATION", 17),
+                    ("_INTENSITY", 65000 + source),
+                    ("_RETURN_NUMBER", returns as u16),
+                ] {
+                    let accessor = &glb.doc["accessors"]
+                        [primitive["attributes"][attribute].as_u64().unwrap() as usize];
+                    let values = glb.view(accessor["bufferView"].as_u64().unwrap() as usize);
+                    let actual = if attribute == "_INTENSITY" {
+                        u16::from_le_bytes(values[i * 4..i * 4 + 2].try_into().unwrap())
+                    } else {
+                        values[i * 4] as u16
+                    };
+                    assert_eq!(actual, expected, "LAS format {format}: {attribute}");
+                }
+            }
+        }
+    }
+}
+
+/// Structure-audit controls at the defaults on a tilted plane with one far point:
+/// rendering-only payload, parents filled to the budget, and refinement that lowers the
+/// error here (the far point once made chains of one-octant duplicate tiles).
+#[test]
+fn default_surface_payload_parent_fill_and_one_octant_error_ladder() {
+    use rusty_tiles::point_cloud::*;
+    let work = tempfile::tempdir().unwrap();
+    let (input, output) = (
+        work.path().join("surface.las"),
+        work.path().join("surface.3tz"),
+    );
+    let mut writer = las::Writer::from_path(&input, Default::default()).unwrap();
+    for i in 0..40_001u32 {
+        let (x, y) = (f64::from(i % 200), f64::from(i / 200));
+        let (x, y, z) = match i {
+            40_000 => (2000., 2000., 500.),
+            _ => (x, y, 0.05 * x + 0.2 * (y / 7.).sin()),
+        };
+        let point = las::Point {
+            x,
+            y,
+            z,
+            ..Default::default()
+        };
+        writer.write_point(point).unwrap();
+    }
+    writer.close().unwrap();
+    let options = PointCloudOptions {
+        max_points: 1024,
+        ..Default::default()
+    };
+    let request =
+        PointCloudRequest::new(&input, &output, PointCloudCoordinates::LocalMetres, options);
+    point_cloud_to_archive(request, &rusty_tiles::RunControl::default()).unwrap();
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+    let (mut bytes, mut points, mut fill, mut failures) = (0, 0, vec![], vec![]);
+    let mut stack = vec![expanded_root(&mut zip)];
+    while let Some(tile) = stack.pop() {
+        let uri = tile["content"]["uri"].as_str().unwrap();
+        let glb = Glb::read(&mut zip, uri);
+        let count = glb.doc["accessors"][0]["count"].as_u64().unwrap();
+        bytes += zip.by_name(uri).unwrap().size();
+        points += count;
+        if glb.doc.get("extensions").is_some() {
+            failures.push(format!("{uri}: metadata in default output"));
+        }
+        let children = tile["children"].as_array().cloned().unwrap_or_default();
+        if !children.is_empty() {
+            fill.push(count);
+        }
+        for child in &children {
+            if child["geometricError"].as_f64() >= tile["geometricError"].as_f64() {
+                failures.push(format!("{uri}: child error is not below its parent's"));
+            }
+        }
+        stack.extend(children);
+    }
+    fill.sort_unstable();
+    if bytes > 16 * points {
+        failures.push(format!("{} bytes per point", bytes as f64 / points as f64));
+    }
+    if fill[fill.len() / 2] < 512 {
+        failures.push(format!(
+            "median parent holds {} of 1024 points",
+            fill[fill.len() / 2]
+        ));
+    }
+    failures.dedup_by(|a, b| a.split(": ").last() == b.split(": ").last());
+    assert!(failures.is_empty(), "{failures:#?}");
 }

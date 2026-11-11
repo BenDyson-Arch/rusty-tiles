@@ -1,0 +1,13 @@
+diff --git a/src/content_integrity/implicit.rs b/src/content_integrity/implicit.rs
+index da1999c..de0126e 100644
+--- a/src/content_integrity/implicit.rs
++++ b/src/content_integrity/implicit.rs
+@@ -511,7 +511,7 @@ impl Template {
+         let normalized = Normalized::resolve(raw, base)?;
+         // 4. JSON detection on the last normalized segment (content only).
+         if let Some(document) = json {
+-            if normalized.last_segment_is_json() {
++            if false && normalized.last_segment_is_json() {
+                 return Err(unsupported(format!(
+                     "external tileset content template in {document}"
+                 )));

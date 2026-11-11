@@ -1,0 +1,975 @@
+{
+  "record": "Literal independently authored semantic/frame witnesses; materializer and all target executions remain unexecuted",
+  "authority": "Selected primary rules plus manual elementary arithmetic; expected records are not produced by any repository transform/decoder",
+  "cases": [
+    {
+      "id": "W01-ordered-node-U-RTC-tile-chain",
+      "kind": "b3dm",
+      "positions": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "componentType": 5126,
+      "nodes": [
+        {
+          "matrix": [
+            0,
+            2,
+            0,
+            0,
+            -3,
+            0,
+            0,
+            0,
+            0,
+            0,
+            4,
+            0,
+            10,
+            20,
+            30,
+            1
+          ],
+          "mesh": 0
+        }
+      ],
+      "scenes": [
+        {
+          "nodes": [
+            0
+          ]
+        }
+      ],
+      "scene": 0,
+      "rtc": [
+        100,
+        200,
+        300
+      ],
+      "tile_chain_root_first": [
+        [
+          0,
+          1,
+          0,
+          0,
+          -1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          1000,
+          2000,
+          3000,
+          1
+        ],
+        [
+          2,
+          0,
+          0,
+          0,
+          0,
+          -1,
+          0,
+          0,
+          0,
+          0,
+          3,
+          0,
+          7,
+          11,
+          13,
+          1
+        ]
+      ],
+      "expected": {
+        "node_yp": [
+          [
+            4,
+            22,
+            42
+          ]
+        ],
+        "own_tile_local": [
+          [
+            104,
+            158,
+            322
+          ]
+        ],
+        "parent_tile_local": [
+          [
+            215,
+            -147,
+            979
+          ]
+        ],
+        "world": [
+          [
+            1147,
+            2215,
+            3979
+          ]
+        ],
+        "draw_visits": 1
+      },
+      "arithmetic": "(1,2,3)->(2,6,12)->(-6,2,12)->(4,22,42)->(4,-42,22)->(104,158,322)->(215,-147,979)->(1147,2215,3979)",
+      "faults": [
+        "swap T/R/S",
+        "omit U",
+        "apply U twice",
+        "RTC before U",
+        "RTC after tile scale",
+        "reverse tile parent/local order",
+        "row-major interpretation"
+      ]
+    },
+    {
+      "id": "W02-selected-scene-one-not-zero",
+      "positions": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "componentType": 5126,
+      "nodes": [
+        {
+          "translation": [
+            1000,
+            0,
+            0
+          ],
+          "mesh": 0
+        },
+        {
+          "translation": [
+            5,
+            0,
+            0
+          ],
+          "mesh": 0
+        }
+      ],
+      "scenes": [
+        {
+          "nodes": [
+            0
+          ]
+        },
+        {
+          "nodes": [
+            1
+          ]
+        }
+      ],
+      "scene": 1,
+      "expected": {
+        "selected_nodes": [
+          1
+        ],
+        "own_tile_local": [
+          [
+            6,
+            -3,
+            2
+          ]
+        ],
+        "draw_visits": 1
+      },
+      "faults": [
+        "always scene0",
+        "visit all nodes",
+        "use array index of mesh as node"
+      ]
+    },
+    {
+      "id": "W03-shared-mesh-two-distinct-node-instances",
+      "positions": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "componentType": 5126,
+      "nodes": [
+        {
+          "mesh": 0
+        },
+        {
+          "translation": [
+            10,
+            0,
+            0
+          ],
+          "mesh": 0
+        }
+      ],
+      "scenes": [
+        {
+          "nodes": [
+            0,
+            1
+          ]
+        }
+      ],
+      "scene": 0,
+      "expected": {
+        "selected_nodes": [
+          0,
+          1
+        ],
+        "own_tile_local": [
+          [
+            1,
+            -3,
+            2
+          ],
+          [
+            11,
+            -3,
+            2
+          ]
+        ],
+        "draw_visits": 2
+      },
+      "faults": [
+        "deduplicate by mesh",
+        "deduplicate by URI",
+        "omit second instance"
+      ]
+    },
+    {
+      "id": "W04-unreferenced-indexed-outlier",
+      "positions": [
+        [
+          1,
+          2,
+          3
+        ],
+        [
+          1000,
+          1000,
+          1000
+        ]
+      ],
+      "componentType": 5126,
+      "indices": [
+        0
+      ],
+      "nodes": [
+        {
+          "mesh": 0
+        }
+      ],
+      "scenes": [
+        {
+          "nodes": [
+            0
+          ]
+        }
+      ],
+      "scene": 0,
+      "expected": {
+        "own_tile_local": [
+          [
+            1,
+            -3,
+            2
+          ]
+        ],
+        "draw_visits": 1,
+        "integrity_position_count": 2
+      },
+      "faults": [
+        "treat all accessor vertices as drawn",
+        "use accessor declared extrema as content truth"
+      ]
+    },
+    {
+      "id": "W05-viewless-arbitrary-bounds-actual-zero",
+      "positions": [
+        [
+          0,
+          0,
+          0
+        ]
+      ],
+      "componentType": 5126,
+      "viewless": true,
+      "declared_min": [
+        -10,
+        -20,
+        -30
+      ],
+      "declared_max": [
+        10,
+        20,
+        30
+      ],
+      "nodes": [
+        {
+          "translation": [
+            2,
+            3,
+            4
+          ],
+          "mesh": 0
+        }
+      ],
+      "scenes": [
+        {
+          "nodes": [
+            0
+          ]
+        }
+      ],
+      "scene": 0,
+      "expected": {
+        "own_tile_local": [
+          [
+            2,
+            -4,
+            3
+          ]
+        ],
+        "draw_visits": 1
+      },
+      "faults": [
+        "trust exempt declared extrema as values",
+        "invent missing BIN",
+        "omit viewless zero positions"
+      ]
+    },
+    {
+      "id": "W06-quantized-U16-normalized-node-dequant",
+      "positions": [
+        [
+          65535,
+          0,
+          32767
+        ]
+      ],
+      "componentType": 5123,
+      "normalized": true,
+      "nodes": [
+        {
+          "translation": [
+            10,
+            20,
+            30
+          ],
+          "scale": [
+            2,
+            4,
+            6
+          ],
+          "mesh": 0
+        }
+      ],
+      "scenes": [
+        {
+          "nodes": [
+            0
+          ]
+        }
+      ],
+      "scene": 0,
+      "expected": {
+        "own_tile_local_rational": [
+          [
+            "12",
+            "-30-196602/65535",
+            "20"
+          ]
+        ],
+        "draw_visits": 1
+      },
+      "faults": [
+        "skip normalization",
+        "normalize twice",
+        "invent separate quantization transform",
+        "use raw accessor bounds after normalization"
+      ]
+    },
+    {
+      "id": "W07-quantized-I16-unnormalized",
+      "positions": [
+        [
+          2,
+          -3,
+          4
+        ]
+      ],
+      "componentType": 5122,
+      "nodes": [
+        {
+          "translation": [
+            1,
+            2,
+            3
+          ],
+          "scale": [
+            0.5,
+            2,
+            -1
+          ],
+          "mesh": 0
+        }
+      ],
+      "scenes": [
+        {
+          "nodes": [
+            0
+          ]
+        }
+      ],
+      "scene": 0,
+      "expected": {
+        "own_tile_local": [
+          [
+            2,
+            1,
+            -4
+          ]
+        ],
+        "draw_visits": 1
+      },
+      "faults": [
+        "normalize all integer POSITION",
+        "discard reflection",
+        "wrong up-axis sign"
+      ]
+    },
+    {
+      "id": "W08-signed-min-normalization-clamp",
+      "positions": [
+        [
+          -128,
+          127,
+          0
+        ]
+      ],
+      "componentType": 5120,
+      "normalized": true,
+      "nodes": [
+        {
+          "mesh": 0
+        }
+      ],
+      "scenes": [
+        {
+          "nodes": [
+            0
+          ]
+        }
+      ],
+      "scene": 0,
+      "expected": {
+        "own_tile_local": [
+          [
+            -1,
+            0,
+            1
+          ]
+        ],
+        "draw_visits": 1
+      },
+      "faults": [
+        "divide -128 by127 without clamp",
+        "divide signed by128"
+      ]
+    },
+    {
+      "id": "W09-normative-zup-root-cancellation",
+      "positions": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "componentType": 5126,
+      "nodes": [
+        {
+          "matrix": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1
+          ],
+          "mesh": 0
+        }
+      ],
+      "scenes": [
+        {
+          "nodes": [
+            0
+          ]
+        }
+      ],
+      "scene": 0,
+      "expected": {
+        "node_yp": [
+          [
+            1,
+            3,
+            -2
+          ]
+        ],
+        "own_tile_local": [
+          [
+            1,
+            2,
+            3
+          ]
+        ],
+        "draw_visits": 1
+      },
+      "faults": [
+        "omit root matrix",
+        "omit U",
+        "double conversion"
+      ]
+    },
+    {
+      "id": "W10-zero-node-scale-valid-forward-position",
+      "positions": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "componentType": 5126,
+      "nodes": [
+        {
+          "scale": [
+            0,
+            1,
+            1
+          ],
+          "translation": [
+            5,
+            0,
+            0
+          ],
+          "mesh": 0
+        }
+      ],
+      "scenes": [
+        {
+          "nodes": [
+            0
+          ]
+        }
+      ],
+      "scene": 0,
+      "expected": {
+        "own_tile_local": [
+          [
+            5,
+            -3,
+            2
+          ]
+        ],
+        "draw_visits": 1
+      },
+      "faults": [
+        "require inverse node transform",
+        "reject zero scale",
+        "skip flattened instance"
+      ]
+    },
+    {
+      "id": "W11-external-tileset-root-in-chain",
+      "positions": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "componentType": 5126,
+      "nodes": [
+        {
+          "mesh": 0
+        }
+      ],
+      "scenes": [
+        {
+          "nodes": [
+            0
+          ]
+        }
+      ],
+      "scene": 0,
+      "tile_chain_root_first": [
+        [
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          10,
+          20,
+          30,
+          1
+        ],
+        [
+          2,
+          0,
+          0,
+          0,
+          0,
+          3,
+          0,
+          0,
+          0,
+          0,
+          4,
+          0,
+          100,
+          200,
+          300,
+          1
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          7,
+          11,
+          13,
+          1
+        ]
+      ],
+      "external_root_chain_index": 1,
+      "expected": {
+        "own_tile_local": [
+          [
+            1,
+            -3,
+            2
+          ]
+        ],
+        "external_root_local": [
+          [
+            8,
+            8,
+            15
+          ]
+        ],
+        "parent_tile_local": [
+          [
+            116,
+            224,
+            360
+          ]
+        ],
+        "world": [
+          [
+            126,
+            244,
+            390
+          ]
+        ],
+        "draw_visits": 1
+      },
+      "faults": [
+        "reset transform at external tileset",
+        "skip external root transform",
+        "apply root twice"
+      ]
+    },
+    {
+      "id": "W12-TRS-half-turn-order",
+      "positions": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "componentType": 5126,
+      "nodes": [
+        {
+          "translation": [
+            10,
+            20,
+            30
+          ],
+          "rotation": [
+            0,
+            0,
+            1,
+            0
+          ],
+          "scale": [
+            2,
+            3,
+            4
+          ],
+          "mesh": 0
+        }
+      ],
+      "scenes": [
+        {
+          "nodes": [
+            0
+          ]
+        }
+      ],
+      "scene": 0,
+      "expected": {
+        "node_yp": [
+          [
+            8,
+            14,
+            42
+          ]
+        ],
+        "own_tile_local": [
+          [
+            8,
+            -42,
+            14
+          ]
+        ],
+        "draw_visits": 1
+      },
+      "faults": [
+        "apply translation first",
+        "quaternion WXYZ",
+        "normalize repaired malformed quaternion"
+      ]
+    },
+    {
+      "id": "W13-valid-local-TRS-cumulative-shear",
+      "positions": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "componentType": 5126,
+      "nodes": [
+        {
+          "scale": [
+            2,
+            1,
+            1
+          ],
+          "children": [
+            1
+          ]
+        },
+        {
+          "rotation": [
+            0,
+            0,
+            0.6,
+            0.8
+          ],
+          "scale": [
+            3,
+            5,
+            1
+          ],
+          "mesh": 0
+        }
+      ],
+      "scenes": [
+        {
+          "nodes": [
+            0
+          ]
+        }
+      ],
+      "scene": 0,
+      "expected": {
+        "draw_visits": 1,
+        "selected_nodes": [
+          0,
+          1
+        ],
+        "own_tile_local_exact_expression": [
+          [
+            "6*(1-2*a*a)-40*a*b",
+            "-3",
+            "6*a*b+10*(1-2*a*a)"
+          ]
+        ],
+        "constants": {
+          "a": "5404319552844595/9007199254740992",
+          "b": "3602879701896397/4503599627370496"
+        },
+        "interpretation": "a/b are exact binary64 representations of JSON0.6/0.8; quaternion admission is the proposed encoding window, not exact unit norm. Each local TRS is permitted; cumulative basis is not required orthogonal."
+      },
+      "faults": [
+        "reject cumulative nonorthogonality as local matrix violation",
+        "normalize source quaternion",
+        "drop parent nonuniform scale"
+      ]
+    }
+  ],
+  "context_controls": [
+    {
+      "id": "same-URI-other-reference-outside",
+      "base": "W03-shared-mesh-two-distinct-node-instances",
+      "mutation": "two tile content references share scene URI, first volume contains both points, second transformed volume excludes second point",
+      "expected": "second reference cannot reuse first containment verdict; outside => InvalidInput once math owner proves it"
+    },
+    {
+      "id": "child-volume-escapes-but-content-inside",
+      "literal": {
+        "parent_sphere": [
+          0,
+          0,
+          0,
+          2
+        ],
+        "child_sphere": [
+          0,
+          0,
+          0,
+          3
+        ],
+        "actual_position_tile_local": [
+          0,
+          0,
+          0
+        ]
+      },
+      "expected": "normative decoded coherence contained; old declared hierarchy check fails; public migration decision must name this distinction"
+    },
+    {
+      "id": "sole-scene-no-default",
+      "base": "W12-TRS-half-turn-order",
+      "mutation": "remove scene property",
+      "expected": "sole scene selected by proposed explicit engineering policy"
+    },
+    {
+      "id": "ambiguous-scene-no-default",
+      "base": "W02-selected-scene-one-not-zero",
+      "mutation": "remove scene property",
+      "expected": "C2 Unsupported; do not infer scene0"
+    },
+    {
+      "id": "node-cycle",
+      "base": "W12-TRS-half-turn-order",
+      "mutation": "node0.children=[0]",
+      "expected": "InvalidInput"
+    },
+    {
+      "id": "shared-child-not-shared-mesh",
+      "base": "W03-shared-mesh-two-distinct-node-instances",
+      "mutation": "add node2 as child of node0 and node1",
+      "expected": "InvalidInput strict-tree violation"
+    },
+    {
+      "id": "matrix-and-TRS",
+      "base": "W01-ordered-node-U-RTC-tile-chain",
+      "mutation": "add node0.translation=[0,0,0]",
+      "expected": "InvalidInput present matrix plus TRS, even identity TRS"
+    },
+    {
+      "id": "zero-quaternion",
+      "base": "W12-TRS-half-turn-order",
+      "mutation": "rotation=[0,0,0,0]",
+      "expected": "InvalidInput"
+    },
+    {
+      "id": "unknown-node-position-extension",
+      "base": "W12-TRS-half-turn-order",
+      "mutation": "declare optional ACME_position and actual node extensions.ACME_position={offset:[100,0,0]}",
+      "expected": "C2 Unsupported, not success using unchanged core POSITION"
+    },
+    {
+      "id": "opaque-extras-position-like-data",
+      "base": "W12-TRS-half-turn-order",
+      "mutation": "node.extras.extensions.ACME_position={offset:[100,0,0]}",
+      "expected": "core position truth unchanged; opaque extras not treated as node extension"
+    },
+    {
+      "id": "selected-morph-even-zero-weight",
+      "base": "W12-TRS-half-turn-order",
+      "mutation": "selected primitive targets=[{POSITION:separately valid delta accessor}], selected node weights=[0]",
+      "expected": "C2 Unsupported; no static base-only success"
+    },
+    {
+      "id": "selected-skin",
+      "base": "W12-TRS-half-turn-order",
+      "mutation": "selected node skin references valid skin plus correctly typed JOINTS/WEIGHTS",
+      "expected": "C2 Unsupported; C1 existing semantic disposition may refuse earlier"
+    },
+    {
+      "id": "animation-no-chosen-playback",
+      "base": "W12-TRS-half-turn-order",
+      "mutation": "nonempty valid animations array",
+      "expected": "C2 Unsupported; do not assume t=0"
+    },
+    {
+      "id": "GPU-instancing-not-core-instances",
+      "base": "W12-TRS-half-turn-order",
+      "mutation": "valid EXT_mesh_gpu_instancing actual node payload",
+      "expected": "C2 Unsupported; required form may already fail C1"
+    },
+    {
+      "id": "region-bound",
+      "base": "W12-TRS-half-turn-order",
+      "mutation": "use valid region ancestor volume",
+      "expected": "C2 Unsupported pending geographic proof; C1 region hierarchy remains separate"
+    },
+    {
+      "id": "RTC-binary-form",
+      "base": "W01-ordered-node-U-RTC-tile-chain",
+      "mutation": "featureTable RTC_CENTER={byteOffset:4}, prefix4bytes plus little-endian f32[100,200,300], padded to8",
+      "expected": "identical positions; real binary-range/alignment consumed"
+    },
+    {
+      "id": "RTC-range-overrun",
+      "base": "RTC-binary-form",
+      "mutation": "byteOffset moves last component beyond actual feature binary body",
+      "expected": "InvalidInput"
+    }
+  ],
+  "limits": "No target limits chosen/approved here. Math/resource sibling package supplies proposals; exact/equal/one-over checks must use actual instance and ancestor counts.",
+  "proof_limit": "Context mutations are recipes, not materialized targets. The materializer handles only literal cases; root must bind actual artifact/report and independent changed-output sensitivity later. No assertions of current CLI behavior."
+}

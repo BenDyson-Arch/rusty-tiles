@@ -12,6 +12,7 @@ from osgeo import gdal
 from test_vector_lod import vector
 
 from cli_bin import BIN, requires_bin
+from vector_test_support import portable_vectors
 
 class GeometryWarningTests(unittest.TestCase):
     @requires_bin('set RUSTY_TILES_BIN for native stderr acceptance')
@@ -34,7 +35,7 @@ class GeometryWarningTests(unittest.TestCase):
                 result = subprocess.run([BIN,'vector','-i',str(source),'-o',str(output),
                     '--sourceCrs','local',*flags],capture_output=True,text=True,env=env)
                 self.assertEqual(result.returncode,0,result.stderr)
-                self.assertEqual('Warning 1:' in result.stderr,debug,result.stderr)
+                self.assertEqual('Warning 1:' in result.stderr, debug and not portable_vectors(), result.stderr)
                 with zipfile.ZipFile(output) as archive:
                     reports = [json.loads(line) for line in archive.read('geometry-reports.jsonl').decode().splitlines()]
                 if '--skipInvalid' in flags:

@@ -1,0 +1,544 @@
+{
+  "record": "C2 amendment of the C1 payload-control expectations (additive; originals unchanged).",
+  "bundles": [
+    {
+      "original": "corrected-205-fixtures.tar.gz",
+      "originalSha256": "c05406cdb264e386d1ad209abfded1ecc0b2b97da8c8b32ad8ff911263aa46a4",
+      "originalManifestSha256": "40fae6bf9a0dec2fbdf6e900ac257e61a8732f0987fbdb9e1d84bd6e52510620",
+      "amended": "corrected-205-c2-fixtures.tar.gz",
+      "amendedSha256": "ebf8437f1fc0711688fdef74f7b076939dd55f177bc663159a3527049e5b8481",
+      "amendedManifestSha256": "fd6004a4cd4074553d5ff08542fdd9b355d2db86c6035c695dc4513be5e3408c",
+      "cases": 205,
+      "admitted": 77,
+      "c2": [
+        {
+          "name": "primary-stored-zero-control",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "primary-count-decimal",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "primary-component-exponent",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "primary-position-reference-exponent",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "primary-buffer-length-decimal",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "primary-local-gltf-integer-representations",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "primary-viewless-zero-control",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "primary-viewless-arbitrary-bounds",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "exact-count-1e0",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "exact-count-10em1",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "exact-count-1000_000em3",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "exact-count-1_0000000000000000",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "reference-zero-m0",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "reference-zero-m0_0",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "reference-zero-0e999999999999999999999999999999",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "reference-zero-m0em999999999999999999999999999999",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-accessor-offset-absent",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-accessor-offset-typed",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-view-offset-absent",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-view-offset-typed",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-view-stride-absent",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-view-stride-typed",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-view-target-absent",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-view-target-typed",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-accessor-normalized-absent",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-accessor-normalized-typed",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-primitive-mode-absent",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-primitive-mode-typed",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-root-extensions-absent",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-root-extensions-typed",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-root-used-absent",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-root-used-typed",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-root-required-absent",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "presence-root-required-typed",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "opaque-huge-number",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "opaque-numeric-marker",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "opaque-nested-marker",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "opaque-valid-surrogate",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "owned-root-marker",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "owned-conversion-marker",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "schema-uri-absent",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "schema-uri-local",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "viewless-inverted-arbitrary-bounds",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "stored-rounded-decimal-bound",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "viewless-rounded-decimal-bound",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "unknown-glb-chunk",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "core-mode-0",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "core-mode-1",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "core-mode-3",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "core-mode-4",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "stored-indexed-triangle",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "base64-octet-stream",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "base64-gltf-buffer",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "base64-padded-1",
+          "c2": {
+            "outcome": "NotInspected",
+            "reasons": [
+              "sceneSelection"
+            ]
+          }
+        },
+        {
+          "name": "base64-padded-2",
+          "c2": {
+            "outcome": "NotInspected",
+            "reasons": [
+              "sceneSelection"
+            ]
+          }
+        },
+        {
+          "name": "quantized-signed-endpoints",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "matrix-final-padding-MAT2-5121",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "matrix-final-padding-MAT3-5121",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "matrix-final-padding-MAT3-5123",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "meshopt-none-placeholder-glb",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "meshopt-none-placeholder-gltf",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "meshopt-fallback-marker-true",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "meshopt-fallback-marker-false",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "meshopt-actual-fallback",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "meshopt-unused-placeholder",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "restart-two-segments",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "b3dm-zero",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "b3dm-decimal",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "b3dm-exponent",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "b3dm-nonzero",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "shared-position-two-primitives",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "unused-viewless-accessor",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "same-uri-cache",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "resolved-alias-cache",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "distinct-member-identical-bytes",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "repeated-resource-declarations",
+          "c2": {
+            "outcome": "Contained"
+          }
+        },
+        {
+          "name": "polygon-optional-reference-profile",
+          "c2": {
+            "outcome": "NotInspected",
+            "reasons": [
+              "sceneSelection"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "original": "polygon-sensitive-5-fixtures.tar.gz",
+      "originalSha256": "add990418822a1118c9c3be2faff04fa0722ae926c2d97769353f90c928a6f2c",
+      "originalManifestSha256": "a26782e50b63b5449652bcd3ccb1370723d1b2f3493e7678705b9f3fc7dc9a84",
+      "amended": "polygon-sensitive-5-c2-fixtures.tar.gz",
+      "amendedSha256": "94ae2cefc6214ac4ecf1ef972187ecbcd2275f2d44526152be13c46719e50189",
+      "amendedManifestSha256": "61237a250af51352098dbabeb282859aa38a0528aa9048c19f8aee82aaccca00",
+      "cases": 5,
+      "admitted": 1,
+      "c2": [
+        {
+          "name": "polygon-integral-notation",
+          "c2": {
+            "outcome": "NotInspected",
+            "reasons": [
+              "sceneSelection"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "strideLane": {
+    "original": "stride_controls/2026-10-10",
+    "originalManifestSha256": "a3c07122e5fc902272bcf668a85e694601551a66556a7be3806132febd592aee",
+    "amended": "c2_amendment/2026-10-11/stride_controls",
+    "amendedManifestSha256": "8516d51342c559d983e9f7fa83adeb3dc320078a21bf7ff9438c2fb9783e3557",
+    "cases": 6,
+    "admitted": 4,
+    "c2": [
+      {
+        "name": "absent-parent-baseline",
+        "c2": {
+          "outcome": "Contained"
+        }
+      },
+      {
+        "name": "unused-packed-scalar",
+        "c2": {
+          "outcome": "Contained"
+        }
+      },
+      {
+        "name": "unused-packed-scalar-offset",
+        "c2": {
+          "outcome": "Contained"
+        }
+      },
+      {
+        "name": "explicit-parent-stride",
+        "c2": {
+          "outcome": "Contained"
+        }
+      }
+    ]
+  },
+  "behaviourChanges": []
+}

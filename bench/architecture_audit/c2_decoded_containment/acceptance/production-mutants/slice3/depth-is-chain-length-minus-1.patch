@@ -1,0 +1,13 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 88ee84a..dfe0541 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -1708,7 +1708,7 @@ impl Check<'_> {
+                 },
+                 external: None,
+                 parent: Some(parent_tile),
+-                depth,
++                depth: depth + 1,
+                 chain: 0,
+             })?;
+             path.truncate(level);
