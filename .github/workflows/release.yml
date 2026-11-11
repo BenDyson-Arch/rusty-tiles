@@ -101,15 +101,19 @@ jobs:
     with:
       version: ${{ needs.check.outputs.version }}
       # A dry run builds and tests the image without pushing it.
-      image-tag: ${{ github.event_name == 'push' && github.ref_name || '' }}
+      image-tag: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) && github.ref_name || '' }}
       ci-run-id: ${{ needs.check.outputs.ci-run-id }}
 
   pypi:
     name: Publish Python wheels to PyPI
     needs: [check, build]
-    # PyPI uploads cannot be replaced; release candidates stay on GitHub only, and a dry run
-    # (a manual run) never gets here.
-    if: github.event_name == 'push' && needs.check.outputs.prerelease == 'false'
+    # PyPI uploads cannot be replaced; release candidates stay on GitHub only. Only a pushed
+    # vX.Y.Z tag can get here: a dry run (workflow_dispatch, on any ref) is excluded by the
+    # event and the ref, not only by the check job's outputs. The pypi environment should
+    # also allow deployments from v* tags only (repository settings).
+    if: >-
+      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') &&
+      needs.check.outputs.prerelease == 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 15 # versions: TIMEOUT_PUBLISH
     environment:
@@ -156,14 +160,14 @@ jobs:
           sha256sum -- *.tgz *.zip > SHA256SUMS
           cat SHA256SUMS
       - name: Keep the dry run's checksums
-        if: github.event_name != 'push'
+        if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-dry-run
           path: dist/SHA256SUMS
           if-no-files-found: error
       - name: Attach checksums and publish
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
