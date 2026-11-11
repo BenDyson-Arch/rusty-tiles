@@ -1632,6 +1632,9 @@ fn repeated_chain_content_stays_inside_its_tile() {
 /// within what was admitted; a tight charge is refused at the write, never past it; a write
 /// that bypasses the meter is caught by the stored-model cross-check; and a charged archive
 /// is admitted to its exact length.
+// Memory-backed work storage is detected only on Linux, and the stored-model cross-check
+// counts hard links by link count, which stable Rust exposes only on Unix.
+#[cfg(unix)]
 #[test]
 fn memory_backed_work_is_admitted_before_it_is_written() {
     use crate::storage_meter::{register, stored_bytes, Meter};

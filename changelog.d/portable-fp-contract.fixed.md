@@ -8,3 +8,5 @@
   and the Python HLOD-expectation test declares the texture rule an HLOD tileset now requires.
 - CI: the installed-wheel tests read repository text as UTF-8, so they pass on Windows, whose
   default encoding is not UTF-8.
+- Windows: scratch-volume checks on a file (such as the HLOD audit sidecar) query its
+  directory, because `GetDiskFreeSpaceExW` refuses a file path.
