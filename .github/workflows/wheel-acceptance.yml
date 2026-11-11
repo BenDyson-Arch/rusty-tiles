@@ -35,7 +35,7 @@ jobs:
   wheels:
     name: Installed wheel (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 45 # versions: TIMEOUT_WHEEL
     strategy:
       fail-fast: false
       matrix:
@@ -61,7 +61,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: '3.10'
+          python-version: '3.10' # versions: PYTHON_MIN
       - name: Set the build version
         if: inputs.version != ''
         env:
@@ -70,7 +70,7 @@ jobs:
       - name: Build the candidate release wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
-          maturin-version: '1.15.0'
+          maturin-version: '1.15.0' # versions: MATURIN_VERSION
           rust-toolchain: stable
           target: ${{ matrix.target }}
           manylinux: '2_28'
@@ -81,7 +81,7 @@ jobs:
         run: python scripts/test_python_wheel.py dist/*.whl --report-json evidence/python-3.10.json
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: '3.14'
+          python-version: '3.14' # versions: PYTHON_MAX
       - name: Test the same stable ABI wheel with Python 3.14
         run: python scripts/test_python_wheel.py dist/*.whl --report-json evidence/python-3.14.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -102,7 +102,7 @@ jobs:
     name: Official Blender ${{ matrix.release }} (${{ matrix.platform }})
     needs: wheels
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 40 # versions: TIMEOUT_BLENDER
     strategy:
       fail-fast: false
       matrix:
@@ -147,7 +147,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: '3.14'
+          python-version: '3.14' # versions: PYTHON_MAX
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: wheel-${{ matrix.target }}
@@ -178,14 +178,14 @@ jobs:
     needs: wheels
     if: inputs.test-blender
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 15 # versions: TIMEOUT_BLENDER_DISTRIBUTION
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: '3.14'
+          python-version: '3.14' # versions: PYTHON_MAX
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: wheel-x86_64-unknown-linux-gnu

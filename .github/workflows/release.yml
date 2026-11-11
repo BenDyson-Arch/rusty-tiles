@@ -15,6 +15,7 @@ jobs:
   check:
     name: Check release tag
     runs-on: ubuntu-22.04
+    timeout-minutes: 15 # versions: TIMEOUT_GATE
     permissions:
       contents: read
       actions: read
@@ -88,6 +89,7 @@ jobs:
     # PyPI uploads cannot be replaced; release candidates stay on GitHub only.
     if: needs.check.outputs.prerelease == 'false'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15 # versions: TIMEOUT_PUBLISH
     environment:
       name: pypi
       url: https://pypi.org/project/rusty-tiles/
@@ -110,6 +112,7 @@ jobs:
       !cancelled() && needs.build.result == 'success' && needs.wheels.result == 'success' &&
       (needs.pypi.result == 'success' || (needs.pypi.result == 'skipped' && needs.check.outputs.prerelease == 'true'))
     runs-on: ubuntu-24.04
+    timeout-minutes: 15 # versions: TIMEOUT_PUBLISH
     permissions:
       contents: write
       packages: write

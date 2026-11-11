@@ -37,7 +37,7 @@ jobs:
   check:
     name: Check the commit and resolve its version
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15 # versions: TIMEOUT_GATE
     permissions:
       contents: read
       actions: read
@@ -116,7 +116,7 @@ jobs:
     needs: [check, build, wheels]
     if: needs.check.outputs.build == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 15 # versions: TIMEOUT_PUBLISH
     permissions:
       contents: write
     steps:

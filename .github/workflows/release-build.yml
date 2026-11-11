@@ -26,26 +26,21 @@ jobs:
     name: Binary (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     # Intel macOS took 68-82 minutes in the v0.4.0 release and was cancelled once at 90.
-    timeout-minutes: ${{ matrix.timeout }}
+    timeout-minutes: ${{ matrix.target == 'x86_64-apple-darwin' && 120 || 90 }} # versions: TIMEOUT_FALLBACK_BUILD_INTEL_MACOS TIMEOUT_FALLBACK_BUILD
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            timeout: 90
           - os: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
-            timeout: 90
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            timeout: 120
           - os: macos-15
             target: aarch64-apple-darwin
-            timeout: 90
           - os: windows-2022
             target: x86_64-pc-windows-msvc
-            timeout: 90
     defaults:
       run:
         shell: bash
@@ -116,7 +111,7 @@ jobs:
     name: Native geospatial image (Linux amd64)
     needs: binaries
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 90 # versions: TIMEOUT_FALLBACK_BUILD
     permissions:
       contents: read
       packages: write

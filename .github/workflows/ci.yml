@@ -26,7 +26,7 @@ jobs:
   changes:
     name: Change scope
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 5 # versions: TIMEOUT_SHORT
     outputs:
       docs_only: ${{ steps.scope.outputs.docs_only }}
     steps:
@@ -59,7 +59,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs_only == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 5 # versions: TIMEOUT_SHORT
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -75,7 +75,7 @@ jobs:
     # Skipped jobs satisfy required checks; a failed classifier runs everything.
     if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    timeout-minutes: 50 # versions: TIMEOUT_RUST
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -91,6 +91,10 @@ jobs:
           df -h /
       - name: Check tracked size budget
         run: python3 scripts/check_tree_budget.py
+      - name: Check CI versions and time limits against ci/versions.env
+        run: |
+          python3 -I -m unittest discover -s tests -p test_ci_config.py
+          python3 -I scripts/check_ci_config.py
       - name: Check changelog fragments
         run: |
           python3 -I scripts/test_changelog.py
@@ -208,11 +212,11 @@ jobs:
     # Skipped jobs satisfy required checks; a failed classifier runs everything.
     if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-22.04
-    timeout-minutes: 25
+    timeout-minutes: 25 # versions: TIMEOUT_PYTHON_WHEEL
     strategy:
       fail-fast: false
       matrix:
-        python: ['3.10', '3.14']
+        python: ['3.10', '3.14'] # versions: PYTHON_MIN PYTHON_MAX
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -237,7 +241,7 @@ jobs:
         run: cargo test --locked -p rusty-tiles-python
       - name: Build wheel
         run: |
-          python -m pip install 'maturin==1.15.0'
+          python -m pip install 'maturin==1.15.0' # versions: MATURIN_VERSION
           maturin build --release --locked --out target/wheels
       - name: Build the CLI for CLI/Python parity
         run: cargo build --locked
@@ -252,7 +256,7 @@ jobs:
     # Skipped jobs satisfy required checks; a failed classifier runs everything.
     if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 90 # versions: TIMEOUT_PORTABLE
     strategy:
       fail-fast: false
       matrix:
@@ -295,7 +299,7 @@ jobs:
     # Full tier only; see "CI tiers" in CONTRIBUTING.md.
     if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 45 # versions: TIMEOUT_ENCODER_LINK
     strategy:
       fail-fast: false
       matrix:
@@ -346,7 +350,7 @@ jobs:
     # Skipped jobs satisfy required checks; a failed classifier runs everything.
     if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 40 # versions: TIMEOUT_NATIVE
     strategy:
       fail-fast: false
       matrix:
@@ -424,7 +428,7 @@ jobs:
     # requests check the committed table, its parser and GDAL reference fixtures in `Rust`.
     if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 60 # versions: TIMEOUT_CRS_ALLOWLIST
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -467,7 +471,7 @@ jobs:
     # Skipped jobs satisfy required checks; a failed classifier runs everything.
     if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 30 # versions: TIMEOUT_PYTHON
     env:
       RUSTY_TILES_REQUIRE_BIN: '1'
     steps:
@@ -516,7 +520,7 @@ jobs:
           RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_*.py'
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '22'
+          node-version: '22' # versions: NODE_VERSION
       - name: Install pinned terrain consumer
         run: |
           npm install --prefix target/terrain-browser --no-save --package-lock=false cesium@1.146.0 three@0.180.0 playwright@1.63.0 gltf-validator@2.0.0-dev.3.10
@@ -571,7 +575,7 @@ jobs:
       - name: Pair point CLI and installed Python results
         shell: bash -el {0}
         run: |
-          python -m pip install maturin==1.15.0
+          python -m pip install maturin==1.15.0 # versions: MATURIN_VERSION
           maturin build --locked --profile dev --out "${{ runner.temp }}/point-wheel"
           python -m pip install --no-deps "${{ runner.temp }}"/point-wheel/*.whl
           python -B tests/p1_point_frontends.py --binary "$PWD/target/debug/rusty-tiles" --json-output "${{ runner.temp }}/point-frontends.json"
@@ -582,7 +586,7 @@ jobs:
     # Skipped jobs satisfy required checks; a failed classifier runs everything.
     if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 45 # versions: TIMEOUT_CONTAINER
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -610,7 +614,7 @@ jobs:
     name: Release acceptance
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 30 # versions: TIMEOUT_RELEASE_ACCEPTANCE
     env:
       ACCEPTANCE_REQUIRE_BROWSER: '1'
       ACCEPTANCE_WORK: ${{ github.workspace }}/target/release-acceptance
@@ -636,7 +640,7 @@ jobs:
           init-shell: bash
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '22'
+          node-version: '22' # versions: NODE_VERSION
       - name: Install pinned browser acceptance runtime
         run: |
           npm install --prefix target/release-browser --no-save --package-lock=false cesium@1.146.0 playwright@1.63.0
@@ -696,7 +700,7 @@ jobs:
       - wheel-acceptance
       - release-acceptance
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 5 # versions: TIMEOUT_SHORT
     steps:
       - name: Require every job to have passed or been skipped on purpose
         env:
@@ -725,7 +729,7 @@ jobs:
       ${{ !cancelled() && github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch' &&
       inputs.nightly && needs.full-matrix.result == 'success' && needs.rust.result == 'success' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 5 # versions: TIMEOUT_SHORT
     permissions:
       contents: read
       actions: write
@@ -745,7 +749,7 @@ jobs:
       ${{ !cancelled() && github.ref == 'refs/heads/develop' &&
       (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.nightly)) }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 5 # versions: TIMEOUT_SHORT
     permissions:
       contents: read
       actions: read

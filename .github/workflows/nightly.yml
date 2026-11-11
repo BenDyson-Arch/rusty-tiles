@@ -15,7 +15,7 @@ jobs:
   dispatch:
     name: Dispatch full CI on develop
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 5 # versions: TIMEOUT_SHORT
     permissions:
       contents: read
       actions: write
