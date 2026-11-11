@@ -836,6 +836,29 @@ as the original Python exception. Python errors raised after installation, while
 building the result or from unrelated asynchronous sources, are outside the
 installation guarantee.
 
+### Decoded tile views
+
+Viewers that read neither `EXT_meshopt_compression` nor `KHR_texture_basisu`
+can show a tile through the Python view functions. Blender 5.2's bundled glTF
+importer is one: it has no KTX2 support, and it fails on the explicit
+`"filter": "NONE"` that every rusty-tiles meshopt view carries.
+
+- `rusty_tiles.list_tiles(archive)` lists each content URI with its depth,
+  `leaf` or `coarse` role, geometric error and accumulated transform.
+- `rusty_tiles.decode_tile(archive, uri)` returns a plain glTF 2.0 GLB: meshopt
+  views decoded, KTX2 pages transcoded to PNG at level 0. Samplers, materials,
+  quantized accessors, feature IDs and property tables are kept.
+- `rusty_tiles.decode_tile(archive, uri, format="arrays")` returns NumPy arrays
+  per primitive, RGBA pages and property tables.
+
+`archive` is a `.3tz` or an unpacked tileset directory. Positions are in the
+Z-up tile frame. Only the root carries a transform, so every tile shares the
+local frame described in [How source positions are mapped](#how-source-positions-are-mapped)
+or [rigid placement](#source-and-placement), and `transform` maps it to ECEF.
+A decoded tile is a view for display and inspection, not a reversible round
+trip: an edited view cannot be re-encoded or published back. See the
+[Python reference](../bindings/python/README.md#decoded-tile-views).
+
 ## Reports and errors
 
 `--json` writes one stdout object with `ok`, resolved `output`, `tilerReport`,

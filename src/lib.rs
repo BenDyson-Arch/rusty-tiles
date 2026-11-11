@@ -35,6 +35,7 @@ mod storage_meter;
 pub mod terrain;
 #[cfg(test)]
 mod test_alloc;
+pub mod tile_view;
 mod tileset_node;
 mod vec3;
 pub mod vector;

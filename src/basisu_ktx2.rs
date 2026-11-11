@@ -513,6 +513,43 @@ pub(crate) fn decode_level_rgba(
     Ok(out)
 }
 
+/// Level 0 of a published Basis Universal page, transcoded to tightly packed
+/// RGBA8 by the same vendored transcoder that verifies every encode, for decoded
+/// views of published tiles. Returns `(width, height, rgba)`. The domain is one
+/// 2D ETC1S or UASTC LDR 4x4 image within [`MAX_EDGE`] and [`MAX_TEXELS`]; any
+/// other container is `Unsupported`, and a page the container reader or the
+/// transcoder rejects is `InvalidInput`. Further levels are not read.
+pub(crate) fn transcode_base_rgba(ktx2: &[u8]) -> Result<(u32, u32, Vec<u8>), JobError> {
+    let input = |message: String| JobError::new(JobErrorKind::InvalidInput, message);
+    let parsed = container::parse(ktx2).map_err(|e| input(format!("KTX2 page: {e}")))?;
+    let basis = parsed.vk_format == 0
+        && matches!(
+            parsed.color_model,
+            container::MODEL_ETC1S | container::MODEL_UASTC
+        );
+    if !basis || parsed.depth > 1 || parsed.layers > 1 || parsed.faces != 1 {
+        return Err(JobError::new(
+            JobErrorKind::Unsupported,
+            "KTX2 page is not one 2D ETC1S or UASTC LDR 4x4 image",
+        ));
+    }
+    let (width, height) = (parsed.width, parsed.height);
+    if width == 0
+        || height == 0
+        || width > MAX_EDGE
+        || height > MAX_EDGE
+        || u64::from(width) * u64::from(height) > MAX_TEXELS
+    {
+        return Err(JobError::new(
+            JobErrorKind::ResourceLimit,
+            format!("KTX2 page is {width}x{height}, outside 1..={MAX_EDGE} per edge and {MAX_TEXELS} texels"),
+        ));
+    }
+    let rgba = decode_level_rgba(ktx2, 0, width, height)
+        .map_err(|e| input(format!("KTX2 page did not transcode: {}", e.message())))?;
+    Ok((width, height, rgba))
+}
+
 /// Sum of squared byte differences of two equal-length buffers.
 pub(crate) fn sse(a: &[u8], b: &[u8]) -> u64 {
     debug_assert_eq!(a.len(), b.len());

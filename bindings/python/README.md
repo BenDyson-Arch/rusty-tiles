@@ -42,6 +42,8 @@ Converter inputs and outputs are filesystem paths (`str` or `os.PathLike`). All 
 | `resolve_source_crs(definition)` | Resolves one CRS definition as the converters do, without converting; returns a `dict`, see [Source CRS checks](#source-crs-checks) |
 | `supported_epsg_codes()` | Every EPSG code this package resolves, as `"EPSG:nnnn"` strings in numeric order |
 | `crs_table_info()` | The EPSG table's `epsg`, `proj` and `gdal` versions and its `codes`, `builtin` and `allowList` counts, as a `dict` |
+| `list_tiles(archive)` | Lists the content tiles of a `.3tz` archive or unpacked tileset directory; returns a `list` of `dict`s; see [Decoded tile views](#decoded-tile-views) |
+| `decode_tile(archive, member, ...)` | `format="glb"` (plain GLB `bytes`) or `"arrays"` (a `dict` of NumPy arrays); see [Decoded tile views](#decoded-tile-views) |
 | `raster_tile_to_directory(input, output, *, zoom, x, y, force=False, callback=None)` | Always raises `UnsupportedError` in this package; see [Not included](#not-included) |
 
 Every result has `output` (the resolved absolute path) and `cleanup_diagnostics`. `PackageResult` has a `receipt`; the others have a required `report` dictionary, and `TilerResult` also has `diagnostics`. `TilerResult`, `PointCloudResult`, `VectorResult` and `PackageResult` have `archive=True`. Results are frozen, but their dictionaries are not deeply immutable.
@@ -307,6 +309,63 @@ list, or a lazy sequence when `lazy_payloads=True`.
 
 A limit refusal raises `ResourceLimitError` whose `limit` attribute is
 `{"limit", "value", "observed", "derivation"}`.
+
+### Decoded tile views
+
+`list_tiles` and `decode_tile` read one tile of a `.3tz` archive or an unpacked
+tileset directory for viewers that read neither `EXT_meshopt_compression` nor
+`KHR_texture_basisu`, such as Blender's bundled glTF importer. A decoded tile
+is a view for display and inspection, not a reversible round trip: nothing is
+re-encoded, and an edited view cannot be published back.
+
+```python
+tiles = rusty_tiles.list_tiles("site.3tz")
+leaf = max((t for t in tiles if t["role"] == "leaf"), key=lambda t: t["depth"])
+Path("leaf.glb").write_bytes(rusty_tiles.decode_tile("site.3tz", leaf["uri"]))
+arrays = rusty_tiles.decode_tile("site.3tz", leaf["uri"], format="arrays")
+```
+
+- `list_tiles(archive)` returns one dict per content URI, parent before
+  children, with external documents and implicit subtrees expanded: `uri`,
+  `depth` (hops from the root, which is 0; this can differ from the level in a
+  member's file name), `role` (`"leaf"` for a tile without children,
+  otherwise `"coarse"`), `geometric_error` and `transform`, the accumulated
+  tile transform as four row lists (tile frame to the tileset's world, ECEF
+  for placed output).
+- `decode_tile(archive, member, *, format="glb")` takes a `uri` from
+  `list_tiles`; any other member raises `InvalidRequestError`.
+- `format="glb"` returns the `bytes` of a plain glTF 2.0 GLB with one embedded
+  buffer. Meshopt views are decoded, and KTX2/Basis pages are transcoded to PNG
+  at level 0; their other mip levels are dropped. Everything else is kept:
+  accessors (so `KHR_mesh_quantization`, which Blender reads), samplers,
+  materials, `_FEATURE_ID_n` attributes with `EXT_mesh_features`, and
+  `EXT_structural_metadata` property tables.
+- `format="arrays"` needs NumPy (Blender bundles it); without it the call
+  raises `EnvironmentError`. It returns a dict with the tile's `uri`, `depth`,
+  `role` and `geometric_error`, `transform` and `root_transform` as (4, 4)
+  float64 arrays, `primitives`, `pages`, `property_tables`, and the document's
+  `materials`, `textures` and `samplers`. A texture's `source` indexes `pages`.
+- Each primitive has `node`, `mesh`, `primitive`, `material`, `positions`
+  ((N, 3) float64), `indices` ((T, 3) uint32), `normals` ((N, 3) float32 or
+  `None`), `uvs` (a list of (N, 2) float32 arrays, `TEXCOORD_0` first),
+  `colors` ((N, 4) float32 or `None`) and `feature_ids`. Each feature-ID set is
+  a dict with `label`, `feature_count`, `null_feature_id`, `property_table` and
+  per-vertex `values` ((N,) uint32). Leaves carry `source_primitive` and
+  `source_triangle`; coarse tiles carry `source_primitive` only. A face's ID
+  is the value at any of its corners.
+- `pages` holds one (H, W, 4) uint8 RGBA array per glTF image, top row first.
+  Each property table is a dict with `class`, `count` and `properties` (name
+  to a 1-D array of the schema's component type).
+- Positions and normals are in the tile frame: node transforms are applied and
+  glTF Y-up is turned to Z-up, `(x, -z, y)`, which is the frame Blender's
+  importer shows. `transform @ [x, y, z, 1]` is the world position. Mesh tiler
+  output has a transform on the root only, so positions are already in its
+  local frame (see the
+  [mesh guide](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#decoded-tile-views)).
+
+Both functions release the GIL while reading and decoding. Malformed content
+raises `DataError`; other codecs, external resources and legacy tile formats
+raise `UnsupportedError`.
 
 ## Callbacks and threads
 
