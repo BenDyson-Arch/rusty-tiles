@@ -220,7 +220,7 @@ struct SourceCrsArgs {
         allow_hyphen_values = true
     )]
     source_offset: Vec<f64>,
-    /// Metashape offset file with exactly the lines "E: <n>", "N: <n>", "A: <n>"
+    /// Offset file you write, with exactly the lines "E: <n>", "N: <n>", "A: <n>"
     #[arg(long = "sourceOffsetFile", visible_alias = "source-offset-file")]
     source_offset_file: Option<PathBuf>,
     /// Metres added to source height plus A to give ellipsoidal height (default 0 with a source CRS)
