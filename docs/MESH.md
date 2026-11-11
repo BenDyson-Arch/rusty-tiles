@@ -47,7 +47,10 @@ The source must have a default or sole scene, TRIANGLES primitives, local
 resources and core PBR materials. Supported:
 
 - authored normals and tangents, UV0/UV1 and `COLOR_0`;
-- all five core PBR texture slots, from PNG or JPEG images;
+- all five core PBR texture slots, from PNG or JPEG images with 8-bit
+  channels, at most 16,384 px per edge and 1 GiB encoded each. 1 GiB is only a
+  sanity ceiling: each image is charged against the
+  [memory budget](#memory-budget) at its actual encoded size;
 - normal maps, when the source has authored normals and tangents;
 - tangent-bearing geometry, when the accumulated transform is conformal
   (supported reflections included).
@@ -756,6 +759,17 @@ One declared ceiling governs the whole run, with the same rule on every surface:
   capture scratch and the archive stage's resident buffers
   (`archive_minimum_bytes`). A source without images reserves no texture,
   chart, mip or codec workspace.
+- **Source images.** Each decode of a source image is charged at the image's
+  actual encoded length, which decoding holds whole, plus the decoder's working
+  memory (at most 8 bytes per texel) and the decoded RGBA8 copy. There is no
+  fixed encoded-size allowance. Capture checks the largest
+  encoded image against what its own resident bound leaves for decoding before
+  it writes any scratch, and each decode once its header is read. An image the
+  budget cannot hold is a `resource_limit` refusal; over 1 GiB encoded or
+  16,384 px per edge is `unsupported` whatever the budget. For example, an
+  8192² PNG of 110 MB built under a 4 GiB budget with a peak resident set of
+  about 0.83 GiB; the reported `minimum_bytes` of that run was 3.6 GiB, mostly
+  the leaf stage's page workspace for the full-size image.
 - **Memory-backed storage.** Files on memory-backed (tmpfs) storage are charged
   too. Capture scratch there is charged at its declared need. After capture,
   each other location on tmpfs is charged one copy of the output-side

@@ -305,12 +305,19 @@ fn appearance_plan(
         .max_by_key(|(w, h)| w * h)
         .unwrap_or((0, 0));
     let largest_chain = bake::chain_bytes(largest.0 as u32, largest.1 as u32);
-    // One image decode transient (encoded bytes, RGBA, chain build copy) and the chain a
-    // worker holds while sampling, besides the shared cache.
+    let largest_encoded = captured
+        .image_info
+        .iter()
+        .map(|i| i.encoded_bytes)
+        .max()
+        .unwrap_or(0);
+    // One image decode transient (the encoded bytes at their actual length, decoder
+    // output, RGBA and chain build copy) and the chain a worker holds while sampling,
+    // besides the shared cache.
     let decode = bake::CHAIN_READER_BYTES
         + (largest.0 * largest.1)
             .saturating_mul(16)
-            .saturating_add(32 << 20)
+            .saturating_add(largest_encoded)
             .saturating_add(largest_chain);
     // One group's page workspace at a time, plus the tile's delivered pages and the GLB
     // being assembled from them (each at most `tile_pages`).

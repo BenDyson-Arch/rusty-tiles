@@ -983,3 +983,209 @@ fn planned_capture_and_incidence_sorts_publish_the_floor_archive() {
         "the planned run publishes the floor's archive"
     );
 }
+
+/// Rewrites the PNG at `path` to exactly `length` bytes by inserting one private ancillary
+/// chunk of zeros after the image data. The chunk data is a sparse hole, so a gigabyte-scale
+/// source costs no disk until something reads it; decoders skip the chunk, so the pixels
+/// are unchanged.
+fn pad_png(path: &Path, length: u64) {
+    use std::io::{Seek, SeekFrom};
+    let png = fs::read(path).unwrap();
+    let body = &png[..png.len() - 12];
+    assert_eq!(&png[png.len() - 8..png.len() - 4], b"IEND");
+    let data = length - body.len() as u64 - 24;
+    let mut crc = crc32fast::Hasher::new();
+    crc.update(b"ruTi");
+    let zeros = vec![0u8; 1 << 20];
+    let mut left = data;
+    while left > 0 {
+        let n = left.min(zeros.len() as u64) as usize;
+        crc.update(&zeros[..n]);
+        left -= n as u64;
+    }
+    let mut file = fs::File::create(path).unwrap();
+    file.write_all(body).unwrap();
+    file.write_all(&u32::try_from(data).unwrap().to_be_bytes())
+        .unwrap();
+    file.write_all(b"ruTi").unwrap();
+    file.seek(SeekFrom::Current(data as i64)).unwrap();
+    file.write_all(&crc.finalize().to_be_bytes()).unwrap();
+    file.write_all(&png[png.len() - 12..]).unwrap();
+    drop(file);
+    assert_eq!(fs::metadata(path).unwrap().len(), length);
+}
+
+/// #338: an encoded image is charged at its actual length instead of being refused at a
+/// fixed 32 MiB. One byte over the old ceiling builds, and every archive member is
+/// byte-identical to the same sheet with its unpadded image: admission and accounting do not
+/// change output. The one exception is the report's source fact `external_bytes`, which
+/// counts the padding.
+#[test]
+fn encoded_image_past_the_old_32_mib_ceiling_is_admitted_and_builds_identically() {
+    use std::io::Read;
+    let work = tempfile::tempdir().unwrap();
+    let run = |dir: &str, pad: Option<u64>| {
+        let input = textured_sheet(&work.path().join(dir), 4);
+        if let Some(length) = pad {
+            pad_png(&input.with_file_name("a.png"), length);
+        }
+        let output = work.path().join(format!("{dir}.3tz"));
+        super::mesh_to_tileset(
+            super::TilerRequest::new(&input, &output)
+                .with_jobs(super::TilerJobs::Maximum(NonZeroUsize::new(2).unwrap()))
+                .with_memory_budget(2 << 30),
+            &crate::RunControl::default(),
+        )
+        .unwrap();
+        let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
+        (0..zip.len())
+            .map(|i| {
+                let mut member = zip.by_index(i).unwrap();
+                let mut bytes = Vec::new();
+                member.read_to_end(&mut bytes).unwrap();
+                (member.name().to_owned(), bytes)
+            })
+            .collect::<Vec<_>>()
+    };
+    let padded = run("padded", Some((32 << 20) + 1));
+    let plain = run("plain", None);
+    assert_eq!(padded.len(), plain.len());
+    assert!(padded.iter().any(|(name, _)| name.ends_with(".glb")));
+    for ((name, a), (other, b)) in padded.iter().zip(&plain) {
+        assert_eq!(name, other);
+        if name != "conversion.json" {
+            assert!(a == b, "{name} differs");
+            continue;
+        }
+        let [mut a, mut b] =
+            [a, b].map(|v| serde_json::from_slice::<serde_json::Value>(v).unwrap());
+        let padding = a["external_bytes"].as_u64().unwrap() - b["external_bytes"].as_u64().unwrap();
+        assert_eq!(
+            padding,
+            (32 << 20) + 1 - fs::metadata(work.path().join("plain/a.png")).unwrap().len()
+        );
+        a["external_bytes"] = 0.into();
+        b["external_bytes"] = 0.into();
+        assert_eq!(a, b);
+    }
+}
+
+/// A large encoded image the budget cannot hold is a typed resource refusal naming the
+/// image stage, raised before any scratch or output exists; over the 1 GiB sanity ceiling
+/// it stays `unsupported`. Both sources are sparse, so neither run reads gigabytes. The
+/// work directory must be disk-backed: memory-backed scratch would charge the 1 GiB
+/// snapshot to the budget and refuse earlier, at capture's resident bound.
+#[test]
+fn large_encoded_images_are_refused_by_budget_or_sanity_ceiling() {
+    let parent = [
+        std::env::temp_dir(),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+    ]
+    .into_iter()
+    .find(|dir| crate::spill::inspect_volume(dir).is_ok_and(|volume| !volume.memory_backed))
+    .expect("a disk-backed temporary or manifest directory");
+    let work = tempfile::Builder::new()
+        .prefix(".image-admission-")
+        .tempdir_in(parent)
+        .unwrap();
+    let request = |dir: &str, budget: u64| {
+        let input = textured_sheet(&work.path().join(dir), 4);
+        let scratch = work.path().join(format!("{dir}-scratch"));
+        fs::create_dir(&scratch).unwrap();
+        let output = work.path().join(format!("{dir}.3tz"));
+        let request = super::TilerRequest::new(&input, &output)
+            .with_scratch_dir(&scratch)
+            .with_jobs(super::TilerJobs::Maximum(NonZeroUsize::new(1).unwrap()))
+            .with_memory_budget(budget);
+        (input, scratch, output, request)
+    };
+    // Capture's own resident bound for this sheet, from an admitted run of its plain image.
+    let (_, _, _, plain) = request("plain", 2 << 30);
+    let bound = super::mesh_to_tileset(plain, &crate::RunControl::default())
+        .unwrap()
+        .diagnostics
+        .memory
+        .capture_bound_bytes;
+    // Capture's bound fits with 512 MiB to spare, so image decoding has those 512 MiB plus
+    // the 192 MiB decoder allowance: less than the 1 GiB image.
+    for (dir, length, budget, kind, needle) in [
+        (
+            "budget",
+            1u64 << 30,
+            bound + (512 << 20),
+            JobErrorKind::ResourceLimit,
+            "image capture: an encoded source image of 1073741824 bytes does not fit",
+        ),
+        (
+            "ceiling",
+            (1 << 30) + 1,
+            64 << 30,
+            JobErrorKind::Unsupported,
+            "encoded image exceeds 1 GiB admission ceiling",
+        ),
+    ] {
+        let (input, scratch, output, request) = request(dir, budget);
+        pad_png(&input.with_file_name("a.png"), length);
+        let failure = match super::mesh_to_tileset(request, &crate::RunControl::default()) {
+            Ok(_) => panic!("{dir}: a {length}-byte image must be refused"),
+            Err(failure) => failure,
+        };
+        assert_eq!(failure.error.kind(), kind, "{dir}: {}", failure.error);
+        let message = failure.error.to_string();
+        assert!(message.contains(needle), "{dir}: {message}");
+        assert!(!output.exists(), "{dir}");
+        assert_eq!(fs::read_dir(&scratch).unwrap().count(), 0, "{dir}");
+    }
+}
+
+/// #338 evidence lane: an 8192² RGB noise PNG of about 100 MB (three times the old ceiling)
+/// admits under a 4 GiB budget and builds. The noise is drawn from 16 levels per channel and
+/// left unfiltered, so deflate cannot shrink it much below 4 bits per sample. Generated
+/// here, never committed.
+/// Run with `cargo test --release --lib -- --ignored eight_k_noise_png`.
+#[test]
+#[ignore = "slow: generates and tiles a ~100 MB 8192² PNG"]
+fn eight_k_noise_png_admits_under_a_few_gib_budget_and_builds() {
+    let work = tempfile::tempdir().unwrap();
+    let input = textured_sheet(&work.path().join("src"), 4);
+    let mut state = 0x9E37_79B9_7F4A_7C15_u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    let mut raw = vec![0u8; 8192 * 8192 * 3];
+    for chunk in raw.chunks_mut(16) {
+        let bits = next();
+        for (i, byte) in chunk.iter_mut().enumerate() {
+            *byte = ((bits >> (4 * i)) & 15) as u8 * 17;
+        }
+    }
+    {
+        use image::{codecs::png, ImageEncoder};
+        let file = BufWriter::new(fs::File::create(input.with_file_name("a.png")).unwrap());
+        png::PngEncoder::new_with_quality(
+            file,
+            png::CompressionType::Level(1),
+            png::FilterType::NoFilter,
+        )
+        .write_image(&raw, 8192, 8192, image::ExtendedColorType::Rgb8)
+        .unwrap();
+    }
+    let encoded = fs::metadata(input.with_file_name("a.png")).unwrap().len();
+    assert!(encoded > 2 * (32 << 20), "{encoded} bytes");
+    let output = work.path().join("noise.3tz");
+    let result = super::mesh_to_tileset(
+        super::TilerRequest::new(&input, &output)
+            .with_jobs(super::TilerJobs::Maximum(NonZeroUsize::new(2).unwrap()))
+            .with_memory_budget(4 << 30),
+        &crate::RunControl::default(),
+    )
+    .unwrap();
+    assert!(output.exists());
+    eprintln!(
+        "encoded {encoded} bytes; minimum budget {} bytes",
+        result.diagnostics.memory.minimum_bytes
+    );
+}

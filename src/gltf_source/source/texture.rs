@@ -11,16 +11,20 @@ const MAX_DIMENSION: u32 = 4096;
 const MAX_IMAGE_PIXELS: u64 = 4 * 1024 * 1024;
 const MAX_TOTAL_PIXELS: u64 = 16 * 1024 * 1024;
 
-/// Per-image decoder admission: edge, texel and decoder-allocation ceilings.
+/// Per-image decoder admission: encoded-length, edge, texel and decoder-allocation
+/// ceilings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct DecodeAdmission {
+    /// Encoded bytes of one image; a whole number of MiB (it is named in refusals).
+    pub max_encoded: u64,
     pub max_edge: u32,
     pub max_pixels: u64,
     pub max_alloc: u64,
 }
 impl DecodeAdmission {
-    /// The retained finite-source consumer: 4096 edge, 4 Mi texels.
+    /// The retained finite-source consumer: 32 MiB encoded, 4096 edge, 4 Mi texels.
     pub(crate) const FINITE: Self = Self {
+        max_encoded: MAX_SOURCE_BYTES as u64,
         max_edge: MAX_DIMENSION,
         max_pixels: MAX_IMAGE_PIXELS,
         max_alloc: 128 * 1024 * 1024,
@@ -31,7 +35,11 @@ impl DecodeAdmission {
     /// admitted texel (component planes plus RGB(A) output). Whether the
     /// decoded RGBA8 owner fits is a separate, memory-derived refusal of the
     /// consuming stage, which charges every decode against available memory.
+    /// The encoded length is likewise charged at its actual size by each
+    /// consumer; 1 GiB is only a sanity ceiling, above any legitimate 16384²
+    /// RGBA8 PNG or JPEG (at most about 4 bytes per texel plus framing).
     pub(crate) const LARGE_MESH: Self = Self {
+        max_encoded: 1 << 30,
         max_edge: 16_384,
         max_pixels: 16_384 * 16_384,
         max_alloc: 8 * 16_384 * 16_384,
@@ -256,6 +264,8 @@ pub(crate) struct ImageInfo {
     pub extension: &'static str,
     pub width: u32,
     pub height: u32,
+    /// Length of the admitted encoded image, which decoding holds beside its output.
+    pub encoded_bytes: u64,
 }
 fn admitted_decoder<'a>(
     encoded: &'a [u8],
@@ -263,6 +273,7 @@ fn admitted_decoder<'a>(
     admission: DecodeAdmission,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<(impl ImageDecoder + 'a, ImageInfo)> {
+    encoded_admission(encoded, admission)?;
     let detected =
         image::guess_format(encoded).map_err(|_| invalid("image signature is invalid"))?;
     let (mime_type, extension, format) = match mime {
@@ -322,6 +333,7 @@ fn admitted_decoder<'a>(
             extension,
             width,
             height,
+            encoded_bytes: encoded.len() as u64,
         },
     ))
 }
@@ -337,6 +349,16 @@ pub(crate) fn decode_image(
     decode_image_admitted(encoded, mime, DecodeAdmission::FINITE, check)
 }
 
+fn encoded_admission(encoded: &[u8], admission: DecodeAdmission) -> Result<()> {
+    if encoded.len() as u64 > admission.max_encoded {
+        return Err(unsupported(format!(
+            "image exceeds {} MiB encoded-byte admission ceiling",
+            admission.max_encoded >> 20
+        )));
+    }
+    Ok(())
+}
+
 /// Admits one image's header under `admission` and returns its dimensions
 /// without decoding pixels, so callers can charge the decode before it runs.
 pub(crate) fn probe_image_admitted(
@@ -345,11 +367,6 @@ pub(crate) fn probe_image_admitted(
     admission: DecodeAdmission,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<ImageInfo> {
-    if encoded.len() > MAX_SOURCE_BYTES {
-        return Err(unsupported(
-            "image exceeds 32 MiB encoded-byte admission ceiling",
-        ));
-    }
     admitted_decoder(encoded, mime, admission, check).map(|(_, info)| info)
 }
 
@@ -360,11 +377,6 @@ pub(crate) fn decode_image_admitted(
     admission: DecodeAdmission,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<(ImageInfo, Vec<u8>)> {
-    if encoded.len() > MAX_SOURCE_BYTES {
-        return Err(unsupported(
-            "image exceeds 32 MiB encoded-byte admission ceiling",
-        ));
-    }
     let (decoder, info) = admitted_decoder(encoded, mime, admission, check)?;
     check()?;
     let rgba = DynamicImage::from_decoder(decoder)
@@ -447,4 +459,59 @@ pub(super) fn decode(
         });
     }
     Ok(images)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::JobErrorKind;
+
+    /// `png` with one private ancillary chunk of zeros inserted before IEND, so the
+    /// result is exactly `length` bytes and decodes to the same pixels.
+    fn padded(png: &[u8], length: usize) -> Vec<u8> {
+        let (body, end) = png.split_at(png.len() - 12);
+        let data = length - png.len() - 12;
+        let mut out = Vec::with_capacity(length);
+        out.extend_from_slice(body);
+        out.extend_from_slice(&u32::try_from(data).unwrap().to_be_bytes());
+        let start = out.len();
+        out.extend_from_slice(b"ruTi");
+        out.resize(out.len() + data, 0);
+        let crc = crc32fast::hash(&out[start..]);
+        out.extend_from_slice(&crc.to_be_bytes());
+        out.extend_from_slice(end);
+        assert_eq!(out.len(), length);
+        out
+    }
+
+    #[test]
+    fn encoded_ceiling_belongs_to_the_admission_profile() {
+        let mut png = Vec::new();
+        image::RgbaImage::from_fn(3, 2, |x, y| {
+            image::Rgba([x as u8 * 80, y as u8 * 90, 7, 255])
+        })
+        .write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
+        .unwrap();
+        assert_eq!(DecodeAdmission::FINITE.max_encoded, 32 << 20);
+        assert_eq!(DecodeAdmission::LARGE_MESH.max_encoded, 1 << 30);
+        let over = padded(&png, (32 << 20) + 1);
+        let finite =
+            probe_image_admitted(&over, None, DecodeAdmission::FINITE, &mut || Ok(())).unwrap_err();
+        assert_eq!(finite.kind(), JobErrorKind::Unsupported);
+        assert!(finite
+            .to_string()
+            .contains("image exceeds 32 MiB encoded-byte admission ceiling"));
+        let at = padded(&png, 32 << 20);
+        let info =
+            probe_image_admitted(&at, None, DecodeAdmission::FINITE, &mut || Ok(())).unwrap();
+        assert_eq!(info.encoded_bytes, 32 << 20);
+        let (_, plain) =
+            decode_image_admitted(&png, None, DecodeAdmission::LARGE_MESH, &mut || Ok(())).unwrap();
+        let (info, rgba) =
+            decode_image_admitted(&over, None, DecodeAdmission::LARGE_MESH, &mut || Ok(()))
+                .unwrap();
+        assert_eq!((info.width, info.height), (3, 2));
+        assert_eq!(info.encoded_bytes, (32 << 20) + 1);
+        assert_eq!(rgba, plain);
+    }
 }

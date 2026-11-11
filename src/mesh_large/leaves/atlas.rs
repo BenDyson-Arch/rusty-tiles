@@ -1080,10 +1080,19 @@ fn page_charge(
     for &bi in &page.bindings {
         let info = image_info.get(bindings[bi].image).ok_or_else(invariant)?;
         let texels = u64::from(info.width) * u64::from(info.height);
-        // Encoded bytes (<=4/texel), decoder RGB(A) output and RGBA8 copy;
-        // a density drop also builds the full-resolution class chain.
-        let per_texel = if drop > 0 { 32 } else { 12 };
-        decode = decode.max(texels.checked_mul(per_texel).ok_or_else(resource)?);
+        // The encoded bytes at their actual length, at least 4 per texel, plus decoder
+        // RGB(A) output and the RGBA8 copy (8 per texel); a density drop also builds the
+        // full-resolution class chain (20 more per texel).
+        let per_texel = if drop > 0 { 28 } else { 8 };
+        let encoded = info
+            .encoded_bytes
+            .max(texels.checked_mul(4).ok_or_else(resource)?);
+        decode = decode.max(
+            texels
+                .checked_mul(per_texel)
+                .and_then(|n| n.checked_add(encoded))
+                .ok_or_else(resource)?,
+        );
     }
     codec
         .checked_add(assembly)
@@ -1505,6 +1514,7 @@ mod tests {
             extension: "png",
             width: 8186,
             height: 8186,
+            encoded_bytes: 1,
         }];
         let classes = crate::mesh_large::batching::MaterialClasses::default();
         let resources = AtlasResources {

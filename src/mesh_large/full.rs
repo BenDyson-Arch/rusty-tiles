@@ -240,32 +240,33 @@ fn mul(a: u64, b: u64) -> Result<u64, JobError> {
     a.checked_mul(b)
         .ok_or_else(|| exhausted("full capture byte arithmetic overflow"))
 }
+/// Declared images: their count, snapshot scratch bytes and the largest encoded length.
+struct ImagePreflight {
+    count: u64,
+    scratch_bytes: u64,
+    largest_encoded_bytes: u64,
+}
 fn image_preflight(
     source: &StreamSource,
     check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<(u64, u64), JobError> {
+) -> Result<ImagePreflight, JobError> {
     let count = u64::try_from(source.document.image_sources().len())
         .map_err(|_| exhausted("image count overflow"))?;
     let mut bytes = 0;
+    let mut largest = 0;
     for index in 0..source.document.image_sources().len() {
         check()?;
         let length = source.image_len(index)?;
-        if length == 0 {
-            return Err(JobError::new(
-                JobErrorKind::InvalidInput,
-                "encoded image is empty",
-            ));
-        }
-        if length > images::MAX_ENCODED_IMAGE_BYTES {
-            return Err(JobError::new(
-                JobErrorKind::Unsupported,
-                "encoded image exceeds 32 MiB admission ceiling",
-            ));
-        }
+        images::admitted_length(length)?;
+        largest = largest.max(length);
         let chunks = add(length, 4093)? / 4094;
         bytes = add(bytes, mul(chunks, 4096)?)?;
     }
-    Ok((count, bytes))
+    Ok(ImagePreflight {
+        count,
+        scratch_bytes: bytes,
+        largest_encoded_bytes: largest,
+    })
 }
 /// Declared scratch of every capture stage. `inside` configures the sorts inside capture
 /// (its [`capture_sort`](super::capture_sort) plan); `config` is the request, whose floor
@@ -670,7 +671,8 @@ pub(crate) fn capture_admitted(
         Some(spec) => SourceFrame::resolve(spec, source_bounds).map_err(super::failure)?,
     };
     let source_crs = frame.placement();
-    let (image_count, image_bytes) = image_preflight(&source, check).map_err(super::failure)?;
+    let preflight = image_preflight(&source, check).map_err(super::failure)?;
+    let (image_count, image_bytes) = (preflight.count, preflight.scratch_bytes);
     let layout = attributes::attribute_layout(&source);
     let parent = config
         .scratch_dir
@@ -788,6 +790,25 @@ pub(crate) fn capture_admitted(
             .ok_or_else(|| super::failure(invariant("capture sort plan does not fit")))?
     };
     let capture_config = &capture_config;
+    // Image admission decodes beside capture's resident bound, within the declared decoder
+    // allowance plus whatever available memory that bound leaves free. Each image is first
+    // rebuilt contiguously at its actual encoded length, so the largest must fit before
+    // any scratch exists; its decode charge is checked again once its header is read.
+    let decode_budget = jobs.available_memory_bytes.map(|available| {
+        available
+            .saturating_sub(required_memory)
+            .saturating_add(DECODER_ALLOWANCE)
+    });
+    if let Some(budget) = decode_budget.filter(|b| preflight.largest_encoded_bytes > *b) {
+        return Err(super::failure(JobError::new(
+            JobErrorKind::ResourceLimit,
+            format!(
+                "image capture: an encoded source image of {} bytes does not fit the {budget} \
+                 bytes the memory budget leaves for image decoding",
+                preflight.largest_encoded_bytes
+            ),
+        )));
+    }
     // All checked counts, memory and physical allocation happen before creation.
     check().map_err(super::failure)?;
     let scratch_admission = output_admission(
@@ -871,7 +892,10 @@ pub(crate) fn capture_admitted(
         let (images, image_capture) =
             images::capture_images(&source, &scratch, config.sort.buffer_bytes, check)?;
         peaks.images = end_stage(&scratch, stages.images, "image capture")?;
-        if image_capture.scratch_bytes != image_bytes || image_capture.images != image_count {
+        if image_capture.scratch_bytes != image_bytes
+            || image_capture.images != image_count
+            || image_capture.largest_encoded_bytes != preflight.largest_encoded_bytes
+        {
             return Err(invariant("image capture disagrees with preflight"));
         }
         let mut image_info = Vec::new();
@@ -880,8 +904,9 @@ pub(crate) fn capture_admitted(
             .map_err(|_| exhausted("image info allocation failed"))?;
         // Every declared image is decoded once here to admit it; pixels are
         // dropped and delivery decodes again on demand. Each decode is
-        // charged from its admitted header dimensions: the encoded snapshot
-        // plus 12 bytes per texel (decoder output and the RGBA8 copy). The
+        // charged from its admitted header dimensions: the encoded snapshot at
+        // its actual length plus 12 bytes per texel (the decoder's admitted
+        // allocation of at most 8 bytes per texel and the RGBA8 copy). The
         // budget is the declared decoder allowance plus whatever available
         // memory capture's own resident bound leaves free. An image that
         // cannot fit is refused; the others decode in parallel batches that
@@ -901,13 +926,9 @@ pub(crate) fn capture_admitted(
                 &mut || check(),
             )?;
             let texels = u64::from(info.width) * u64::from(info.height);
-            charges.push(add(mul(texels, 12)?, encoded.len() as u64)?);
+            charges.push(add(mul(texels, 12)?, info.encoded_bytes)?);
         }
-        let budget = jobs.available_memory_bytes.map(|available| {
-            available
-                .saturating_sub(required_memory)
-                .saturating_add(DECODER_ALLOWANCE)
-        });
+        let budget = decode_budget;
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(workers.max(1))
             .build()
