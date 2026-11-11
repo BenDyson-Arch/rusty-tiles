@@ -162,11 +162,15 @@ CPython 3.10 and newer. See [the Python API guide](bindings/python/README.md).
 The separate [Wheel acceptance workflow](.github/workflows/wheel-acceptance.yml)
 runs in the full CI tier (not on pull requests) and is a mandatory release-workflow gate.
 It tests all five wheels with CPython 3.10 and 3.14, then installs the matching
-candidate wheels inside checksum-pinned official Blender 4.5.14 LTS bundles on
-Linux x86_64, Windows x64, Intel macOS and Apple Silicon macOS. Its uploaded JSON
-records the archive and executable hashes, actual runtime and wheel identity,
-and completed API tests. The optional Linux distribution Blender job is
-distinct; Linux ARM64 has no official Blender 4.5 bundle. See the
+candidate wheels inside checksum-pinned official Blender bundles: 4.5.14 LTS on
+Linux x86_64, Windows x64, Intel macOS and Apple Silicon macOS, and 5.2.4 LTS on
+Linux x86_64, Windows x64 and Apple Silicon macOS (Blender 5.x has no Intel macOS
+build). Its uploaded JSON records the archive and executable hashes, actual
+Blender and Python runtime, wheel identity and completed API tests. The optional
+Linux distribution Blender job is distinct; no supported Blender series has an
+official Linux ARM64 bundle. To add or update a series, copy each archive's
+SHA-256 from that release's `blender-VERSION.sha256` on download.blender.org into
+`scripts/blender_official.json` and add its matrix rows to the workflow. See the
 [local reproduction and pin-update instructions](bindings/python/README.md).
 
 The Python suite drives the built CLI and checks its output with independent readers. It needs GDAL Python bindings that match your native GDAL, NumPy, laspy and pyproj.

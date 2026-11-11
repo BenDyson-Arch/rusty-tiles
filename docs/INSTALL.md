@@ -67,7 +67,7 @@ Install into the Python environment that will call it, including Blender's bundl
 - macOS 15+ on Intel and Apple Silicon
 - Windows x64
 
-Wheels are tested inside official Blender 4.5.14 LTS on Linux x64, Windows x64 and both macOS architectures. Linux ARM64 has no official Blender 4.5 bundle.
+Wheels are tested inside official Blender 4.5.14 LTS (Python 3.11) on Linux x64, Windows x64 and both macOS architectures, and inside official Blender 5.2.4 LTS (Python 3.13) on Linux x64, Windows x64 and Apple Silicon macOS. Blender 5.x has no Intel macOS build, and neither series has an official Linux ARM64 build.
 
 The wheel contains **only the standard conversion APIs**: meshes, local and grid-free LAS/LAZ, GeoJSON/GeoPackage vectors, tileset packaging and archive validation. It does not include the CLI, `doctor` or `preview`, and it cannot convert imagery, terrain or OGR-only inputs or use native CRS operations. Installing GDAL or its Python bindings does not change this. See the [Python API guide](../bindings/python/README.md).
 

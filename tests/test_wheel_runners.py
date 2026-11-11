@@ -128,41 +128,46 @@ class WheelRunnerEvidence(unittest.TestCase):
     def test_official_bundle_requires_pinned_runtime_version_and_architecture(self):
         launcher = self.root / "blender"
         manifest = json.loads(download_blender.MANIFEST.read_text())
-        spec = manifest["platforms"]["linux-x64"]
-        pinned_version = [int(part) for part in manifest["version"].split(".")]
-        for version, machine, expected in (
-            ([0, 0, 0], "x86_64", "different Blender version"),
-            (pinned_version, "aarch64", "different architecture"),
-            (pinned_version, "x86_64", None),
-        ):
-            with self.subTest(expected=expected):
-                launcher.write_text(
-                    f"#!{sys.executable}\n"
-                    "import json, os\nfrom pathlib import Path\n"
-                    "Path(os.environ['RUSTY_TILES_ACCEPTANCE_REPORT']).write_text("
-                    "json.dumps({'ok': True, 'tests_run': 12, 'blender': 'test-launcher', "
-                    f"'blender_version': {version!r}, 'machine': {machine!r}, "
-                    "'wheel_sha256': os.environ['RUSTY_TILES_ACCEPTANCE_WHEEL_SHA256']}))\n"
-                )
-                launcher.chmod(0o755)
-                distribution = self.root / "distribution.json"
-                distribution.write_text(json.dumps({
-                    "distribution_platform": "linux-x64", "version": manifest["version"],
-                    "archive_url": manifest["base_url"] + spec["archive"],
-                    "archive_sha256": spec["sha256"], "executable": str(launcher),
-                    "executable_sha256": download_blender.sha256_file(launcher),
-                }))
-                result = self.run_runner("test_blender_wheel.py", "--blender", str(launcher),
-                                         "--distribution-json", str(distribution))
-                evidence = json.loads(self.report.read_text())
-                if expected is None:
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertIs(evidence["ok"], True)
-                    self.assertEqual(evidence["blender_distribution"], json.loads(distribution.read_text()))
-                else:
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertIs(evidence["ok"], False)
-                    self.assertIn(expected, evidence["runner_error"])
+        for series, release in manifest["releases"].items():
+            spec = release["platforms"]["linux-x64"]
+            pinned_version = [int(part) for part in release["version"].split(".")]
+            pinned_python = f"{release['python']}.0 (main) [test]"
+            other_python = f"{int(release['python'].split('.')[0]) + 1}.0.0 (main) [test]"
+            for version, python, machine, expected in (
+                ([0, 0, 0], pinned_python, "x86_64", "different Blender version"),
+                (pinned_version, other_python, "x86_64", "different Python version"),
+                (pinned_version, pinned_python, "aarch64", "different architecture"),
+                (pinned_version, pinned_python, "x86_64", None),
+            ):
+                with self.subTest(release=series, expected=expected):
+                    launcher.write_text(
+                        f"#!{sys.executable}\n"
+                        "import json, os\nfrom pathlib import Path\n"
+                        "Path(os.environ['RUSTY_TILES_ACCEPTANCE_REPORT']).write_text("
+                        "json.dumps({'ok': True, 'tests_run': 12, 'blender': 'test-launcher', "
+                        f"'blender_version': {version!r}, 'python': {python!r}, 'machine': {machine!r}, "
+                        "'wheel_sha256': os.environ['RUSTY_TILES_ACCEPTANCE_WHEEL_SHA256']}))\n"
+                    )
+                    launcher.chmod(0o755)
+                    distribution = self.root / "distribution.json"
+                    distribution.write_text(json.dumps({
+                        "release": series, "distribution_platform": "linux-x64",
+                        "version": release["version"],
+                        "archive_url": release["base_url"] + spec["archive"],
+                        "archive_sha256": spec["sha256"], "executable": str(launcher),
+                        "executable_sha256": download_blender.sha256_file(launcher),
+                    }))
+                    result = self.run_runner("test_blender_wheel.py", "--blender", str(launcher),
+                                             "--distribution-json", str(distribution))
+                    evidence = json.loads(self.report.read_text())
+                    if expected is None:
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertIs(evidence["ok"], True)
+                        self.assertEqual(evidence["blender_distribution"], json.loads(distribution.read_text()))
+                    else:
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIs(evidence["ok"], False)
+                        self.assertIn(expected, evidence["runner_error"])
 
 
 class OfficialBlenderIntegrity(unittest.TestCase):
@@ -201,12 +206,13 @@ class OfficialBlenderIntegrity(unittest.TestCase):
 
     def test_changed_executable_cannot_reuse_verified_distribution_evidence(self):
         manifest = json.loads(download_blender.MANIFEST.read_text())
-        spec = manifest["platforms"]["linux-x64"]
+        release = manifest["releases"]["4.5"]
+        spec = release["platforms"]["linux-x64"]
         executable = self.root / "blender"
         executable.write_bytes(b"original executable")
         record = {
-            "distribution_platform": "linux-x64", "version": manifest["version"],
-            "archive_url": manifest["base_url"] + spec["archive"],
+            "release": "4.5", "distribution_platform": "linux-x64", "version": release["version"],
+            "archive_url": release["base_url"] + spec["archive"],
             "archive_sha256": spec["sha256"], "executable": str(executable),
             "executable_sha256": download_blender.sha256_file(executable),
         }
@@ -214,6 +220,40 @@ class OfficialBlenderIntegrity(unittest.TestCase):
         executable.write_bytes(b"substituted executable")
         with self.assertRaisesRegex(RuntimeError, "does not match the verified distribution"):
             download_blender.validate_distribution(record, executable)
+
+    def test_evidence_cannot_claim_another_release_or_platform(self):
+        manifest = json.loads(download_blender.MANIFEST.read_text())
+        release = manifest["releases"]["4.5"]
+        spec = release["platforms"]["linux-x64"]
+        executable = self.root / "blender"
+        executable.write_bytes(b"executable")
+        record = {
+            "release": "4.5", "distribution_platform": "linux-x64", "version": release["version"],
+            "archive_url": release["base_url"] + spec["archive"],
+            "archive_sha256": spec["sha256"], "executable": str(executable),
+            "executable_sha256": download_blender.sha256_file(executable),
+        }
+        download_blender.validate_distribution(record, executable)
+        # 5.2 has no Intel macOS bundle, and 4.5 archive evidence cannot pass as 5.2.
+        for changes in ({"release": "5.2"}, {"release": None}, {"release": "5.2", "distribution_platform": "macos-x64"}):
+            with self.subTest(changes=changes):
+                with self.assertRaisesRegex(RuntimeError, "does not match the pinned official bundle"):
+                    download_blender.validate_distribution({**record, **changes}, executable)
+
+    def test_manifest_pins_are_internally_consistent(self):
+        manifest = json.loads(download_blender.MANIFEST.read_text())
+        self.assertIn("4.5", manifest["releases"])
+        self.assertIn("5.2", manifest["releases"])
+        for series, release in manifest["releases"].items():
+            with self.subTest(release=series):
+                version = release["version"]
+                self.assertTrue(version.startswith(series + "."))
+                self.assertEqual(release["base_url"], f"https://download.blender.org/release/Blender{series}/")
+                self.assertEqual(release["checksum_url"], f"{release['base_url']}blender-{version}.sha256")
+                self.assertRegex(release["python"], r"^3\.[0-9]+$")
+                for name, spec in release["platforms"].items():
+                    self.assertTrue(spec["archive"].startswith(f"blender-{version}-{name}."))
+                    self.assertRegex(spec["sha256"], "^[0-9a-f]{64}$")
 
 
 if __name__ == "__main__":
