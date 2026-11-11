@@ -233,6 +233,7 @@ fn isolated_triangles_spill_within_the_declared_bound() {
         fan_in: 4,
         buffer_bytes: 4096,
         jobs: 1,
+        writers: 0,
     };
     let scratch = work.path().join("scratch");
     fs::create_dir(&scratch).unwrap();
@@ -264,6 +265,7 @@ fn chunked_sort_runs_publish_identical_archives() {
         fan_in: 4,
         buffer_bytes: 4096,
         jobs: 1,
+        writers: 0,
     };
     let mut archives = Vec::new();
     for (tag, spill) in [

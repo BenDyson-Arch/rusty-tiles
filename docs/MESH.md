@@ -590,6 +590,28 @@ on the output filesystem beside the destination. Prefer disk-backed scratch for
 large sources, especially when the output directory is memory-backed;
 memory-backed scratch counts against the [memory budget](#memory-budget).
 
+Capture's external sorts (corner references, positioned corners, triangles,
+the cell tree's nodes and weld depths, and the corner-depth join) are planned
+once against the [memory budget](#memory-budget). The fixed sort configuration,
+an 80 MiB run buffer per live sort with fan-in 64, is the floor: capture's
+worker plan and `capture_minimum_bytes` are computed with it, so a budget that
+admits it is never refused for want of larger runs. Above the floor, runs grow
+to the smallest size at which every capture sort has at most `F` initial runs,
+so each sort writes its records once and merges them once, in the stream that
+feeds the next step. `F` is 64, 128 or 256, whichever admits the most background
+run writers. Writers sort and write full runs on their own threads while the
+next run fills, at most one fewer than capture's workers, so `--jobs 1` writes
+runs on the capturing thread. A budget too small for one pass even at `F = 256`
+gets the largest run buffer that fits, without writers. Larger runs never make
+the scratch admission refuse where the floor would not. The plan is charged in
+capture's declared resident bound (`diagnostics.memory.capture_bound_bytes`)
+and reported as `diagnostics.capture.sort`: `run_bytes`, `fan_in`,
+`buffer_bytes`, `writers`, `max_runs`, `single_pass` and `limited_by`
+(`floor`, `single_pass`, `budget`, or `unknown_memory` and
+`memory_backed_scratch`, which keep the floor). It changes resources only:
+each sort's output is the stable sort of its input order for every run size,
+fan-in and writer count, so the archive does not depend on the plan.
+
 Before starting, the run checks for enough free scratch for its largest
 declared stage working set: files kept from earlier stages, the HLOD incidence
 pass and source index, and each external sort's runs. Sort runs are 8 MiB chunk
@@ -681,7 +703,9 @@ One declared ceiling governs the whole run, with the same rule on every surface:
   ceiling that is never silently raised: every stage plans against the lesser
   of the budget and the detected headroom.
 - **What it covers.** Capture, the leaf stage and the coarse stage admit their
-  work against it before allocating: source and JSON metadata, sort buffers,
+  work against it before allocating: source and JSON metadata, sort buffers
+  (capture grows its sort runs and run writers into the budget it is given; see
+  [workers and scratch](#workers-and-scratch)),
   interface incidence, child tiles held for their parents and the active
   parents, decoded source images, chart/page/codec workspace, memory-backed
   capture scratch and the archive stage's resident buffers
@@ -903,7 +927,20 @@ are present in every result.
 nullable totals: `conversion`, `capture`, then inside the leaf stage
 `leaf_build` (leaves), `hlod_incidence` and `hlod_geometry` (coarse stage),
 then `leaf_payloads`, `archive` and `ready_to_publish`. Each finished phase also
-logs its wall seconds and the run's elapsed seconds as a `log` event. Required
+logs its wall seconds and the run's elapsed seconds as a `log` event. Inside
+`capture`, each step is a phase whose total is known when it starts:
+`capture_scan` (triangles), `capture_validate` (one unit), `capture_corners`
+(corner references read and sorted), `capture_positions` (corners joined with
+their attributes), `capture_triangles` (triangles reassembled),
+`capture_sequence` (triangles written in rank order), `capture_images` (two
+units per image), `capture_tree` (triangles), `capture_corner_depths` (seven
+units per triangle) and `capture_leaf_plans` (leaves). Each step reports `0`,
+its total and counts between. An intermediate sort merge pass, which a budget
+too small for one pass needs, is reported as `capture_merge` (records
+rewritten), after which the interrupted step resumes. While capture runs, the
+current step's latest count is repeated at least every 250 ms. These events are
+capture's cancellation checkpoints, also for a Python callback, so a cancel or
+callback exception lands within about a second, as in the leaf stage. Required
 events finish before publication; a successful result means the archive is
 installed. A cleanup problem after installation is still success, with cleanup
 diagnostics.

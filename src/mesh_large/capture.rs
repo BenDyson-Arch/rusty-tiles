@@ -110,48 +110,169 @@ pub(crate) fn scan(
     buffer_bytes: usize,
     check: &mut dyn FnMut() -> Result<()>,
 ) -> Result<SourceScan> {
-    Ok(scan_with_source_bounds(source, buffer_bytes, check)?.0)
+    Ok(scan_with_source_bounds(source, buffer_bytes, 1, &mut |_| check())?.0)
+}
+
+/// Triangles one scan task reads.
+const SCAN_TASK_TRIANGLES: usize = 1 << 16;
+/// The scan reads POSITION in index order, which jumps around the accessor: each refill
+/// re-reads its whole window, so a small one copies far fewer bytes for a few more reads
+/// (on the 10M-triangle Walem scene, 64 KiB instead of 1 MiB reads about 7× fewer bytes
+/// for twice the refills). Indices are read in order and keep the full stream buffer.
+const SCAN_POSITION_WINDOW: usize = 64 << 10;
+/// How often the scanning thread reports progress while its tasks run.
+const SCAN_POLL: std::time::Duration = std::time::Duration::from_millis(5);
+
+/// One task's box: the f64 post-node source bounds and the baked f32 bounds.
+struct TaskScan {
+    source_bounds: [[f64; 3]; 2],
+    bounds: Bounds,
+}
+
+fn include_source(bounds: &mut [[f64; 3]; 2], world: [f64; 3]) {
+    for axis in 0..3 {
+        bounds[0][axis] = bounds[0][axis].min(world[axis]);
+        bounds[1][axis] = bounds[1][axis].max(world[axis]);
+    }
+}
+
+/// Scans `triangles` of `p` with its own bounded readers, adding to `done` as it goes and
+/// giving up (with any error; the caller reports its own) once `stop` is set.
+fn scan_task(
+    source: &StreamSource,
+    p: &ScenePrimitive<'_>,
+    triangles: std::ops::Range<usize>,
+    buffer_bytes: usize,
+    done: &std::sync::atomic::AtomicU64,
+    stop: &std::sync::atomic::AtomicBool,
+) -> Result<TaskScan> {
+    use std::sync::atomic::Ordering::Relaxed;
+    let mut out = TaskScan {
+        source_bounds: [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]],
+        bounds: Bounds::EMPTY,
+    };
+    let mut positions = source.reader(&p.position, buffer_bytes.min(SCAN_POSITION_WINDOW));
+    let mut indices = p.indices.map(|v| source.reader(&v, buffer_bytes));
+    let mut counted = triangles.start;
+    for triangle in triangles.clone() {
+        if triangle.is_multiple_of(1024) {
+            if stop.load(Relaxed) {
+                return Err(JobError::new(JobErrorKind::Cancelled, "scan stopped"));
+            }
+            done.fetch_add((triangle - counted) as u64, Relaxed);
+            counted = triangle;
+        }
+        for vertex in vertices(p, &mut indices, triangle)? {
+            let world = source_position(p, &mut positions, vertex)?;
+            include_source(&mut out.source_bounds, world);
+            out.bounds.include(canonical(world.map(|x| x as f32)));
+        }
+    }
+    done.fetch_add((triangles.end - counted) as u64, Relaxed);
+    Ok(out)
 }
 
 /// [`scan`] plus the f64 bounds `[min, max]` of the used post-node corners, from which a
 /// source CRS chooses its origin. With a source CRS the f32 box is a local-frame placeholder
-/// that capture replaces with its mapped box.
+/// that capture replaces with its mapped box. `progress` is the cancellation check, given the
+/// triangles scanned so far; it runs on the calling thread.
+///
+/// Up to `workers` threads scan consecutive triangle ranges with their own bounded readers.
+/// Their boxes are combined in input order, and a failure reports the first failing range in
+/// input order (its first failing triangle), so counts, boxes and verdicts are those of one
+/// sequential pass for any worker count.
 pub(crate) fn scan_with_source_bounds(
     source: &StreamSource,
     buffer_bytes: usize,
-    check: &mut dyn FnMut() -> Result<()>,
+    workers: usize,
+    progress: &mut dyn FnMut(u64) -> Result<()>,
 ) -> Result<(SourceScan, [[f64; 3]; 2])> {
-    let mut source_bounds = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
-    let mut bounds = Bounds::EMPTY;
+    use std::sync::{
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering::Relaxed},
+        Mutex,
+    };
+    let primitives: Vec<_> = source.document.scene_primitives().collect();
     let mut triangles = 0u64;
     let mut geometry_bytes = 0u64;
-    for p in source.document.scene_primitives() {
-        check()?;
+    let mut tasks = Vec::new();
+    for (index, p) in primitives.iter().enumerate() {
         let count = u64::try_from(p.triangles).map_err(|_| overflow())?;
         triangles = triangles.checked_add(count).ok_or_else(overflow)?;
         geometry_bytes = geometry_bytes
             .checked_add(
                 count
-                    .checked_mul(u64::from(triangle_bytes(&p)))
+                    .checked_mul(u64::from(triangle_bytes(p)))
                     .ok_or_else(overflow)?,
             )
             .ok_or_else(overflow)?;
-        let mut positions = source.reader(&p.position, buffer_bytes);
-        let mut indices = p.indices.map(|v| source.reader(&v, buffer_bytes));
-        for triangle in 0..p.triangles {
-            if triangle.is_multiple_of(1024) {
-                check()?;
-            }
-            for vertex in vertices(&p, &mut indices, triangle)? {
-                let world = source_position(&p, &mut positions, vertex)?;
-                for axis in 0..3 {
-                    source_bounds[0][axis] = source_bounds[0][axis].min(world[axis]);
-                    source_bounds[1][axis] = source_bounds[1][axis].max(world[axis]);
-                }
-                bounds.include(canonical(world.map(|x| x as f32)));
-            }
+        for start in (0..p.triangles).step_by(SCAN_TASK_TRIANGLES) {
+            tasks.push((index, start..(start + SCAN_TASK_TRIANGLES).min(p.triangles)));
         }
     }
+    progress(0)?;
+    let results: Vec<Mutex<Option<Result<TaskScan>>>> =
+        tasks.iter().map(|_| Mutex::new(None)).collect();
+    let (next, done, stop) = (
+        AtomicUsize::new(0),
+        AtomicU64::new(0),
+        AtomicBool::new(false),
+    );
+    // Ranges after the first failed one are not needed: an earlier failure reports first.
+    let first_failed = AtomicUsize::new(usize::MAX);
+    let stopped = std::thread::scope(|scope| {
+        let worker = || loop {
+            let task = next.fetch_add(1, Relaxed);
+            if task >= tasks.len() || task > first_failed.load(Relaxed) || stop.load(Relaxed) {
+                break;
+            }
+            let (index, range) = &tasks[task];
+            let scanned = scan_task(
+                source,
+                &primitives[*index],
+                range.clone(),
+                buffer_bytes,
+                &done,
+                &stop,
+            );
+            if scanned.is_err() {
+                first_failed.fetch_min(task, Relaxed);
+            }
+            *results[task].lock().unwrap_or_else(|e| e.into_inner()) = Some(scanned);
+        };
+        let threads = (0..workers.clamp(1, tasks.len().max(1)))
+            .map(|_| scope.spawn(worker))
+            .collect::<Vec<_>>();
+        let mut stopped = None;
+        while !threads.iter().all(|thread| thread.is_finished()) {
+            if let Err(error) = progress(done.load(Relaxed)) {
+                stop.store(true, Relaxed);
+                stopped = Some(error);
+                break;
+            }
+            std::thread::sleep(SCAN_POLL);
+        }
+        for thread in threads {
+            if let Err(panic) = thread.join() {
+                std::panic::resume_unwind(panic);
+            }
+        }
+        stopped
+    });
+    if let Some(error) = stopped {
+        return Err(error);
+    }
+    let mut source_bounds = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
+    let mut bounds = Bounds::EMPTY;
+    for result in results {
+        let task = result
+            .into_inner()
+            .unwrap_or_else(|e| e.into_inner())
+            .ok_or_else(|| JobError::new(JobErrorKind::InvalidState, "scan task did not run"))??;
+        include_source(&mut source_bounds, task.source_bounds[0]);
+        include_source(&mut source_bounds, task.source_bounds[1]);
+        bounds.union(&task.bounds);
+    }
+    progress(triangles)?;
     source.verify_unchanged()?;
     Ok((
         SourceScan {
@@ -340,6 +461,7 @@ mod tests {
             fan_in: 2,
             buffer_bytes: 16,
             jobs: 1,
+            writers: 0,
         };
         let captured = capture(&source, &scratch, sort, &scan, &mut || Ok(())).unwrap();
         fs::remove_file(dir.path().join("data.bin")).unwrap();

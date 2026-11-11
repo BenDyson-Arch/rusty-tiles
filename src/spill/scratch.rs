@@ -137,7 +137,7 @@ pub(crate) struct Scratch {
     created: OnceLock<Created>,
     io: Arc<dyn SpillIo>,
     accounting: Arc<Accounting>,
-    next_file: AtomicU64,
+    next_file: Arc<AtomicU64>,
     /// Largest sort run chunk file ([`super::CHUNK_BYTES`]; tests may shrink it).
     chunk_bytes: std::sync::atomic::AtomicUsize,
 }
@@ -267,7 +267,7 @@ impl Scratch {
             created: OnceLock::new(),
             io,
             accounting: Arc::default(),
-            next_file: AtomicU64::new(0),
+            next_file: Arc::new(AtomicU64::new(0)),
             chunk_bytes: std::sync::atomic::AtomicUsize::new(super::CHUNK_BYTES),
         }
     }
@@ -462,6 +462,18 @@ impl Scratch {
         self.io.clone()
     }
 
+    /// An owned handle that creates files in this scratch from another thread, creating a
+    /// deferred scratch first. Its holders must finish before the directory is closed.
+    pub(super) fn file_maker(&self) -> Result<FileMaker, SpillError> {
+        Ok(FileMaker {
+            dir: self.created()?.dir.path().to_owned(),
+            next_file: self.next_file.clone(),
+            io: self.io.clone(),
+            accounting: self.accounting.clone(),
+            chunk_bytes: self.chunk_bytes(),
+        })
+    }
+
     /// A new file name in the scratch directory, creating a deferred scratch first.
     pub(super) fn new_file(&self, stem: &str) -> Result<SpillFile, SpillError> {
         let dir = self.created()?.dir.path();
@@ -471,6 +483,35 @@ impl Scratch {
             bytes: 0,
             accounting: self.accounting.clone(),
         })
+    }
+}
+
+/// Creates spill files in one scratch directory; see [`Scratch::file_maker`].
+#[derive(Clone)]
+pub(super) struct FileMaker {
+    dir: PathBuf,
+    next_file: Arc<AtomicU64>,
+    io: Arc<dyn SpillIo>,
+    accounting: Arc<Accounting>,
+    chunk_bytes: usize,
+}
+
+impl FileMaker {
+    pub(super) fn new_file(&self, stem: &str) -> SpillFile {
+        let id = self.next_file.fetch_add(1, Ordering::Relaxed);
+        SpillFile {
+            path: self.dir.join(format!("{stem}-{id}.spill")),
+            bytes: 0,
+            accounting: self.accounting.clone(),
+        }
+    }
+
+    pub(super) fn io(&self) -> &dyn SpillIo {
+        &*self.io
+    }
+
+    pub(super) fn chunk_bytes(&self) -> usize {
+        self.chunk_bytes
     }
 }
 

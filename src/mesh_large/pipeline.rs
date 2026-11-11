@@ -6,7 +6,7 @@ use super::{
     hlod::{HlodDiagnostics, HlodMemoryPlan},
     input::StreamSource,
     leaves::producer,
-    phases::{Phase, PhaseSeconds, Phases},
+    phases::{CaptureProgress, Phase, PhaseSeconds, Phases},
     resources::MemoryBudget,
     source_crs::{MeshSourceCrs, MeshSourceCrsReport},
 };
@@ -288,6 +288,8 @@ impl TilerReport {
 pub struct CaptureDiagnostics {
     pub jobs: u64,
     pub jobs_limited_by: &'static str,
+    /// The sorts inside capture as planned under the memory budget.
+    pub sort: super::capture_sort::CaptureSortPlan,
     pub available_memory_bytes: Option<u64>,
     pub memory_bound_bytes: u64,
     pub scratch_need_bytes: u64,
@@ -608,6 +610,8 @@ pub fn mesh_to_tileset(
     config.output_parents = Some((work_parent.to_owned(), parent.to_owned()));
     let emit = |event: &RunEvent<'_>| attempt.emit(event);
     let phases = Phases::new(&emit);
+    let capture_check = || attempt.check();
+    let capture_progress = CaptureProgress::new(&capture_check, Some(&emit));
     let capture_started = std::time::Instant::now();
     let captured = match attempt
         .emit(&RunEvent::Progress {
@@ -616,7 +620,7 @@ pub fn mesh_to_tileset(
             total: None,
         })
         .map_err(super::failure)
-        .and_then(|_| full::capture_admitted(source, &config, &mut || attempt.check()))
+        .and_then(|_| full::capture_admitted(source, &config, &capture_progress))
     {
         Ok(captured) => captured,
         Err(inner) => {
@@ -830,6 +834,7 @@ pub fn mesh_to_tileset(
             capture: CaptureDiagnostics {
                 jobs: c.jobs.jobs,
                 jobs_limited_by: c.jobs.limited_by,
+                sort: c.sort,
                 available_memory_bytes: c.jobs.available_memory_bytes,
                 memory_bound_bytes: c.memory.bound_bytes,
                 scratch_need_bytes: c.scratch.need_bytes,

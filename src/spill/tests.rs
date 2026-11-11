@@ -103,6 +103,7 @@ fn config<T>(run_records: usize, fan_in: usize, jobs: usize, buffer_bytes: usize
         fan_in,
         buffer_bytes,
         jobs,
+        writers: 0,
     }
 }
 
@@ -241,6 +242,7 @@ fn invalid_configuration_is_typed() {
         fan_in: usize::MAX,
         buffer_bytes: usize::MAX,
         jobs: usize::MAX,
+        writers: 0,
     };
     assert_eq!(
         huge.memory_bound::<Wide>(),
@@ -832,6 +834,7 @@ fn deferred_scratch_exists_only_after_the_first_spill_file() {
         fan_in: 2,
         buffer_bytes: 64,
         jobs: 1,
+        writers: 0,
     };
     let records = |n: u32| {
         (0..n).map(move |seq| Keyed {
@@ -922,6 +925,7 @@ fn disk_placement_skips_memory_backed_candidates_and_reports_a_last_resort() {
             fan_in: 2,
             buffer_bytes: 64,
             jobs: 1,
+            writers: 0,
         },
     )
     .unwrap();
@@ -969,6 +973,7 @@ fn memory_config() -> SortConfig {
         fan_in: 4,
         buffer_bytes: 16 << 10,
         jobs: 2,
+        writers: 0,
     }
 }
 
@@ -1396,4 +1401,194 @@ fn chunked_runs_free_as_consumed_and_bound_merge_slack() {
     assert_eq!(got, expected, "chunking changes no order or content");
     assert_eq!(scratch.live_bytes(), 0);
     assert_eq!(entries(scratch.path()), 0);
+}
+
+/// Counts sort checkpoints; fails once `stop_after` checkpoints have passed.
+struct Checkpoints {
+    events: std::sync::Mutex<Vec<SortProgress>>,
+    stop_after: usize,
+}
+impl SortObserver for Checkpoints {
+    fn checkpoint(&self, progress: SortProgress) -> Result<(), SpillError> {
+        let mut events = self.events.lock().unwrap();
+        events.push(progress);
+        if events.len() > self.stop_after {
+            return Err(SpillError::Stopped(Box::new(JobError::new(
+                JobErrorKind::Cancelled,
+                "operation cancelled",
+            ))));
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn sorts_check_after_every_chunk_and_report_merge_totals() {
+    // 20 runs of 100 records at F = 3, written as 25-record chunks (400 bytes).
+    let input = spilling_input();
+    let mut expected = input.clone();
+    expected.sort();
+    let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+    scratch.set_chunk_bytes(400);
+    let observer = Checkpoints {
+        events: Default::default(),
+        stop_after: usize::MAX,
+    };
+    let mut sorter = ExternalSorter::new(&scratch, spilling_config())
+        .unwrap()
+        .observed(&observer);
+    sorter.extend(input.iter().copied()).unwrap();
+    let output: Vec<_> = sorter.finish().unwrap().collect::<Result<_, _>>().unwrap();
+    assert_eq!(output, expected);
+    let events = observer.events.into_inner().unwrap();
+    // Run generation: one checkpoint per chunk file, so at least one per R / chunk records.
+    let wrote = events
+        .iter()
+        .take_while(|e| **e == SortProgress::Wrote)
+        .count();
+    assert_eq!(wrote, 20 * 4);
+    // Two passes (20 → 7 → 3 runs): each declares the records it rewrites, reports them
+    // after every chunk, and ends at its total.
+    let passes: Vec<_> = events
+        .iter()
+        .filter_map(|e| match e {
+            SortProgress::MergeStart { total } => Some(*total),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(passes, [2_000, 1_800]);
+    let mut done = 0;
+    for event in &events[wrote..] {
+        match *event {
+            SortProgress::MergeStart { .. } => done = 0,
+            SortProgress::Merged { done: now } => {
+                assert!(now > done && now - done <= 25, "{done} -> {now}");
+                done = now;
+            }
+            SortProgress::MergeEnd => assert!(passes.contains(&done)),
+            SortProgress::Wrote => panic!("run writes end before the merge passes"),
+        }
+    }
+}
+
+#[test]
+fn an_observer_error_stops_the_sort_unchanged_and_removes_its_files() {
+    let input = spilling_input();
+    for stop_after in [3, 85, 170] {
+        let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+        scratch.set_chunk_bytes(400);
+        let observer = Checkpoints {
+            events: Default::default(),
+            stop_after,
+        };
+        let result = (|| {
+            let mut sorter = ExternalSorter::new(&scratch, spilling_config())?.observed(&observer);
+            sorter.extend(input.iter().copied())?;
+            sorter.finish().map(|_| ())
+        })();
+        let error: JobError = result.unwrap_err().into();
+        assert_eq!(
+            error.kind(),
+            JobErrorKind::Cancelled,
+            "stop after {stop_after}"
+        );
+        assert_eq!(observer.events.lock().unwrap().len(), stop_after + 1);
+        assert_eq!(entries(scratch.path()), 0);
+        assert_eq!(scratch.live_bytes(), 0);
+    }
+}
+
+#[test]
+fn background_writers_replay_the_stable_sort_with_the_same_runs() {
+    let keyed = keyed_input(5_000, 7, 21);
+    let mut expected = keyed.clone();
+    expected.sort();
+    for (r, f, jobs, writers) in [
+        (100, 3, 1, 1),
+        (100, 3, 2, 3),
+        (37, 8, 1, 2),
+        (5_000, 2, 1, 4),
+        (64, 64, 1, 8),
+        (10, 2, 1, 2),
+    ] {
+        let run = |writers| {
+            let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+            scratch.set_chunk_bytes(96);
+            let config = SortConfig {
+                writers,
+                ..config::<Keyed>(r, f, jobs, 32)
+            };
+            let (output, stats) = sort(&scratch, config, &keyed).unwrap();
+            assert_eq!(entries(scratch.path()), 0);
+            (encoded(&output), pairs(&output), stats)
+        };
+        let (bytes, order, stats) = run(writers);
+        let (sync_bytes, _, sync_stats) = run(0);
+        assert_eq!(order, pairs(&expected), "R={r} F={f} w={writers}");
+        assert_eq!(bytes, sync_bytes, "R={r} F={f} w={writers}");
+        assert_eq!(stats, sync_stats, "R={r} F={f} w={writers}");
+    }
+}
+
+#[test]
+fn a_cancel_while_writers_run_stops_them_and_removes_every_file() {
+    let input = spilling_input();
+    for stop_after in [0, 2, 9] {
+        let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+        scratch.set_chunk_bytes(400);
+        let observer = Checkpoints {
+            events: Default::default(),
+            stop_after,
+        };
+        let config = SortConfig {
+            writers: 3,
+            ..spilling_config()
+        };
+        let result = (|| {
+            let mut sorter = ExternalSorter::new(&scratch, config)?.observed(&observer);
+            sorter.extend(input.iter().copied())?;
+            sorter.finish().map(|_| ())
+        })();
+        let error: JobError = result.unwrap_err().into();
+        assert_eq!(
+            error.kind(),
+            JobErrorKind::Cancelled,
+            "stop after {stop_after}"
+        );
+        assert_eq!(entries(scratch.path()), 0);
+        assert_eq!(scratch.live_bytes(), 0);
+    }
+    // Dropping a sorter with writers still running joins them and removes their runs.
+    let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+    let mut sorter = ExternalSorter::new(
+        &scratch,
+        SortConfig {
+            writers: 4,
+            ..spilling_config()
+        },
+    )
+    .unwrap();
+    sorter.extend(input.iter().copied()).unwrap();
+    drop(sorter);
+    assert_eq!(entries(scratch.path()), 0);
+    assert_eq!(scratch.live_bytes(), 0);
+}
+
+#[test]
+fn writer_memory_bound_charges_each_writer_its_run_and_sort_scratch() {
+    let sync = config::<Wide>(1_000, 8, 2, 4096);
+    let with = |writers| SortConfig { writers, ..sync };
+    let run = sync.run_bytes as u64;
+    assert_eq!(with(0).memory_bound::<Wide>(), sync.memory_bound::<Wide>());
+    // One writer: the filling buffer R plus the writer's R + R/2, its buffer b and margin.
+    assert_eq!(
+        with(1).memory_bound::<Wide>() - sync.memory_bound::<Wide>(),
+        run + 4096 + 8_000_000
+    );
+    for writers in 1..6 {
+        assert_eq!(
+            with(writers + 1).memory_bound::<Wide>() - with(writers).memory_bound::<Wide>(),
+            run + run.div_ceil(2) + 4096 + 8_000_000
+        );
+    }
 }

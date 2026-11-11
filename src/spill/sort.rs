@@ -7,14 +7,23 @@
 //! chunk as soon as it is consumed, so a streamed merge and its consumer's output share disk
 //! space instead of adding up, and an intermediate merge frees its inputs while it writes.
 //! Chunking changes no record order or content.
-use super::{record_size, scratch::SpillFile, Layout, Record, Scratch, SpillError};
+use super::{
+    record_size,
+    scratch::{FileMaker, SpillFile},
+    Layout, Record, Scratch, SpillError,
+};
 use std::{
     cmp::Ordering,
     collections::{BinaryHeap, VecDeque},
     io::{self, BufReader, BufWriter, Read, Write},
     marker::PhantomData,
     path::Path,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering as AtomicOrdering},
+        Arc,
+    },
+    thread::JoinHandle,
+    time::Duration,
 };
 
 /// Spill sort resources. Resident memory is bounded by [`SortConfig::memory_bound`].
@@ -28,6 +37,10 @@ pub(crate) struct SortConfig {
     pub buffer_bytes: usize,
     /// Threads sorting one run buffer. Does not affect output.
     pub jobs: usize,
+    /// `w`: background run writers. With `w > 0`, each full run buffer is sorted and written
+    /// on its own thread while the next one fills, at most `w` at once; runs keep their input
+    /// order. Does not affect output.
+    pub writers: usize,
 }
 
 impl Default for SortConfig {
@@ -39,6 +52,7 @@ impl Default for SortConfig {
             fan_in: 64,
             buffer_bytes: 1 << 20,
             jobs: 1,
+            writers: 0,
         }
     }
 }
@@ -65,16 +79,21 @@ impl SortConfig {
         }
     }
 
-    /// Upper bound on resident bytes: `1.5·R + (F + 1)·b` plus a margin.
+    /// Upper bound on resident bytes: `1.5·R + (F + 1)·b` plus a margin, or with `w` run
+    /// writers `R + 1.5·w·R + (F + 1 + w)·b` plus a margin.
     ///
     /// - `R`: the run buffer. It grows to at most `R / 2` before jumping to `R`, so a
     ///   reallocation never holds more than `1.5·R` either.
     /// - `R / 2`: the standard library's stable sort scratch, `ceil(n / 2)` elements per sorted
     ///   chunk of `n`, live only while a run is sorted.
+    /// - With writers, the filling buffer is reserved at exactly `R` once a run has been
+    ///   handed off, and each writer holds its buffer `R` plus the sort scratch of one piece
+    ///   (at most `R / 2`) and its own writer buffer `b`; before the first hand-off the single
+    ///   buffer's `1.5·R` is within `R + 1.5·R`.
     /// - `(F + 1)·b`: merge readers plus the run or merge writer.
     /// - **Margin:** the stable sort allocates at least `min(n, 8 MB / size_of::<T>())`
     ///   elements per sorting thread, which exceeds `n / 2` for small chunks, so the margin is
-    ///   `jobs × 8 MB`, plus the merge heap (`F` entries).
+    ///   `(jobs + w) × 8 MB`, plus the merge heap (`F` entries).
     ///
     /// Run payload/sort scratch and merge payload phases do not overlap, so their sum is
     /// conservative. The owner must additionally account for the bounded run inventory
@@ -82,17 +101,30 @@ impl SortConfig {
     /// Saturates at `u64::MAX` rather than wrapping.
     pub(crate) fn memory_bound<T: Record>(&self) -> u64 {
         const SORT_MIN_SCRATCH: u64 = 8_000_000;
-        let (run, buffer, fan_in, jobs) = (
+        let (run, buffer, fan_in, jobs, writers) = (
             self.run_bytes as u64,
             self.buffer_bytes as u64,
             self.fan_in as u64,
             self.jobs as u64,
+            self.writers as u64,
         );
         let heap = fan_in.saturating_mul(size_of::<T>() as u64 + 16);
-        run.saturating_add(run.div_ceil(2))
-            .saturating_add(fan_in.saturating_add(1).saturating_mul(buffer))
-            .saturating_add(jobs.saturating_mul(SORT_MIN_SCRATCH))
-            .saturating_add(heap)
+        let runs = if writers == 0 {
+            run.saturating_add(run.div_ceil(2))
+        } else {
+            run.saturating_add(writers.saturating_mul(run.saturating_add(run.div_ceil(2))))
+        };
+        runs.saturating_add(
+            fan_in
+                .saturating_add(1)
+                .saturating_add(writers)
+                .saturating_mul(buffer),
+        )
+        .saturating_add(
+            jobs.saturating_add(writers)
+                .saturating_mul(SORT_MIN_SCRATCH),
+        )
+        .saturating_add(heap)
     }
 
     /// Scratch bytes one sort of `records` can hold at once: two generations of runs, because
@@ -115,6 +147,26 @@ pub(crate) struct SortStats {
     pub merge_levels: u64,
     /// Total bytes written to scratch.
     pub spilled_bytes: u64,
+}
+
+/// What a sort reports at its checkpoints, so a long run write or merge pass stays
+/// interruptible and its progress visible. Reporting never changes the output.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SortProgress {
+    /// A run chunk file was written while generating or compacting runs.
+    Wrote,
+    /// An intermediate merge pass in `finish` starts; it rewrites `total` records.
+    MergeStart { total: u64 },
+    /// The pass has rewritten `done` records (after each chunk file).
+    Merged { done: u64 },
+    /// The pass is complete.
+    MergeEnd,
+}
+
+/// Receives a sort's checkpoints on the thread that drives the sort. An error stops the sort
+/// (it is poisoned and its files removed) and is returned to the caller unchanged.
+pub(crate) trait SortObserver {
+    fn checkpoint(&self, progress: SortProgress) -> Result<(), SpillError>;
 }
 
 /// Largest run chunk file. Smaller chunks free disk sooner and raise the file count; with the
@@ -376,14 +428,16 @@ impl OpenChunk {
     }
 }
 
+/// Writes `records` as one run; `tick` runs after each chunk file with the records written.
 fn write_run<T: Record>(
-    scratch: &Scratch,
+    files: &FileMaker,
     buffer_bytes: usize,
     layout: Layout,
     records: &mut impl Cursor<T>,
+    tick: &mut dyn FnMut(u64) -> Result<(), SpillError>,
 ) -> Result<Run, SpillError> {
     let size = record_size::<T>(layout)?;
-    let per_chunk = chunk_records_of(scratch.chunk_bytes(), size);
+    let per_chunk = chunk_records_of(files.chunk_bytes(), size);
     let mut chunks = VecDeque::new();
     let mut open: Option<OpenChunk> = None;
     let mut encoded = vec![0; size];
@@ -392,11 +446,12 @@ fn write_run<T: Record>(
         if open.as_ref().is_none_or(|chunk| chunk.records == per_chunk) {
             if let Some(full) = open.take() {
                 chunks.push_back(full.close(size)?);
+                tick(count)?;
             }
-            let file = scratch.new_file("run")?;
+            let file = files.new_file("run");
             let writer = BufWriter::with_capacity(
                 buffer_bytes,
-                scratch
+                files
                     .io()
                     .create(file.path())
                     .map_err(|e| SpillError::io("create spill run", file.path(), e))?,
@@ -424,6 +479,7 @@ fn write_run<T: Record>(
     }
     if let Some(last) = open.take() {
         chunks.push_back(last.close(size)?);
+        tick(count)?;
     }
     Ok(Run {
         chunks,
@@ -469,6 +525,80 @@ pub(crate) struct ExternalSorter<'s, T: Record> {
     runs: Vec<Run>,
     stats: SortStats,
     poisoned: bool,
+    observer: Option<&'s dyn SortObserver>,
+    /// Runs being sorted and written by background writers, oldest (earliest input) first.
+    pending: VecDeque<Writer<T>>,
+    /// Emptied buffers returned by writers, reused before allocating another.
+    spare: Vec<Vec<T>>,
+    /// Tells background writers to stop at their next piece or chunk (failure or drop).
+    stop: Arc<AtomicBool>,
+}
+
+/// A background run writer: its run and the emptied buffer it returns.
+type Writer<T> = JoinHandle<Result<(Run, Vec<T>), SpillError>>;
+
+/// How often a sorter waiting for a background writer reports a checkpoint.
+const WAIT_POLL: Duration = Duration::from_millis(2);
+
+/// A background writer sorts at most this many bytes of records at once, so stopping it
+/// waits for at most one such piece; pieces are merged as the run is written.
+const PIECE_BYTES: usize = 64 << 20;
+/// At most this many pieces per run (a larger run uses larger pieces).
+const MAX_PIECES: usize = 16;
+
+/// Sorts `buffer` as consecutive pieces and writes it as one run, checking `stop` between
+/// pieces and after each chunk file. Returns the run and the emptied buffer.
+fn write_sorted<T: Record>(
+    mut buffer: Vec<T>,
+    files: FileMaker,
+    buffer_bytes: usize,
+    layout: Layout,
+    stop: &AtomicBool,
+) -> Result<(Run, Vec<T>), SpillError> {
+    let stopped = || {
+        if stop.load(AtomicOrdering::Relaxed) {
+            Err(SpillError::Poisoned)
+        } else {
+            Ok(())
+        }
+    };
+    let pieces = (buffer.len().saturating_mul(size_of::<T>()) / PIECE_BYTES).clamp(1, MAX_PIECES);
+    let piece = buffer.len().div_ceil(pieces).max(1);
+    for part in buffer.chunks_mut(piece) {
+        stopped()?;
+        part.sort();
+    }
+    let run = {
+        let mut parts: Vec<_> = buffer
+            .chunks(piece)
+            .map(|part| SliceCursor(part.iter()))
+            .collect();
+        let mut tick = |_| stopped();
+        if parts.len() == 1 {
+            write_run(&files, buffer_bytes, layout, &mut parts[0], &mut tick)?
+        } else {
+            write_run(
+                &files,
+                buffer_bytes,
+                layout,
+                &mut Merger::new(parts)?,
+                &mut tick,
+            )?
+        }
+    };
+    buffer.clear();
+    Ok((run, buffer))
+}
+
+impl<T: Record> Drop for ExternalSorter<'_, T> {
+    /// Background writers stop at their next piece or chunk and are joined, so none
+    /// outlives the sorter (and none writes after its scratch directory is closed).
+    fn drop(&mut self) {
+        self.stop.store(true, AtomicOrdering::Relaxed);
+        for writer in self.pending.drain(..) {
+            let _ = writer.join();
+        }
+    }
 }
 
 impl<'s, T: Record> ExternalSorter<'s, T> {
@@ -493,7 +623,22 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
             runs: Vec::new(),
             stats: SortStats::default(),
             poisoned: false,
+            observer: None,
+            pending: VecDeque::new(),
+            spare: Vec::new(),
+            stop: Arc::new(AtomicBool::new(false)),
         })
+    }
+
+    /// Reports checkpoints to `observer` (see [`SortObserver`]).
+    pub(crate) fn observed(mut self, observer: &'s dyn SortObserver) -> Self {
+        self.observer = Some(observer);
+        self
+    }
+
+    fn checkpoint(&self, progress: SortProgress) -> Result<(), SpillError> {
+        self.observer
+            .map_or(Ok(()), |observer| observer.checkpoint(progress))
     }
 
     pub(crate) fn push(&mut self, record: T) -> Result<(), SpillError> {
@@ -501,11 +646,13 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
             return Err(SpillError::Poisoned);
         }
         if self.buffer.len() == self.run_records {
-            if let Err(error) = self.flush_run() {
-                // Drop every run file now; later calls report the poisoned state.
-                self.poisoned = true;
-                self.runs = Vec::new();
-                self.buffer = Vec::new();
+            let flushed = if self.config.writers == 0 {
+                self.flush_run()
+            } else {
+                self.hand_off()
+            };
+            if let Err(error) = flushed {
+                self.fail();
                 return Err(error);
             }
         }
@@ -542,6 +689,74 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
         self.runs.len()
     }
 
+    /// Stops and joins every writer and drops every run file now; later calls report the
+    /// poisoned state.
+    fn fail(&mut self) {
+        self.poisoned = true;
+        self.stop.store(true, AtomicOrdering::Relaxed);
+        for writer in self.pending.drain(..) {
+            let _ = writer.join();
+        }
+        self.runs = Vec::new();
+        self.buffer = Vec::new();
+        self.spare = Vec::new();
+    }
+
+    /// Hands the full buffer to a background writer, first waiting for the oldest when `w`
+    /// are busy; the next buffer is a returned one or is reserved at exactly `R`.
+    fn hand_off(&mut self) -> Result<(), SpillError> {
+        while self.pending.len() >= self.config.writers {
+            self.join_oldest()?;
+        }
+        let next = match self.spare.pop() {
+            Some(spare) => spare,
+            None => {
+                let mut next = Vec::new();
+                next.try_reserve_exact(self.run_records).map_err(|_| {
+                    SpillError::io(
+                        "reserve spill run buffer",
+                        self.scratch.path(),
+                        io::Error::from(io::ErrorKind::OutOfMemory),
+                    )
+                })?;
+                next
+            }
+        };
+        let buffer = std::mem::replace(&mut self.buffer, next);
+        let files = self.scratch.file_maker()?;
+        let stop = self.stop.clone();
+        let (buffer_bytes, layout) = (self.config.buffer_bytes, self.layout);
+        let writer = std::thread::Builder::new()
+            .name("rusty-tiles-spill-run".into())
+            .spawn(move || write_sorted(buffer, files, buffer_bytes, layout, &stop))
+            .map_err(|e| SpillError::io("start spill run writer", self.scratch.path(), e))?;
+        self.pending.push_back(writer);
+        Ok(())
+    }
+
+    /// Waits for the oldest writer, reporting checkpoints meanwhile, and adds its run in
+    /// input order.
+    fn join_oldest(&mut self) -> Result<(), SpillError> {
+        let Some(oldest) = self.pending.front() else {
+            return Ok(());
+        };
+        while !oldest.is_finished() {
+            self.checkpoint(SortProgress::Wrote)?;
+            std::thread::sleep(WAIT_POLL);
+        }
+        let oldest = self.pending.pop_front().expect("a writer is pending");
+        let (run, buffer) = match oldest.join() {
+            Ok(written) => written?,
+            Err(panic) => std::panic::resume_unwind(panic),
+        };
+        self.spare.push(buffer);
+        self.checkpoint(SortProgress::Wrote)?;
+        self.stats.runs += 1;
+        self.stats.spilled_bytes += run.file_bytes();
+        self.runs.push(run);
+        self.compact_inventory()
+    }
+
     fn flush_run(&mut self) -> Result<(), SpillError> {
         let chunk = sort_chunks(&mut self.buffer, self.config.jobs, self.scratch.path())?;
         let mut parts: Vec<_> = self
@@ -549,20 +764,24 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
             .chunks(chunk)
             .map(|part| SliceCursor(part.iter()))
             .collect();
+        let observer = self.observer;
+        let mut tick = |_| observer.map_or(Ok(()), |o| o.checkpoint(SortProgress::Wrote));
         let run = if parts.len() == 1 {
             write_run(
-                self.scratch,
+                &self.scratch.file_maker()?,
                 self.config.buffer_bytes,
                 self.layout,
                 &mut parts[0],
+                &mut tick,
             )?
         } else {
             let mut merger = Merger::new(parts)?;
             write_run(
-                self.scratch,
+                &self.scratch.file_maker()?,
                 self.config.buffer_bytes,
                 self.layout,
                 &mut merger,
+                &mut tick,
             )?
         };
         self.stats.runs += 1;
@@ -611,11 +830,13 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             let mut merger = Merger::new(readers)?;
+            let observer = self.observer;
             let mut run = write_run(
-                self.scratch,
+                &self.scratch.file_maker()?,
                 self.config.buffer_bytes,
                 self.layout,
                 &mut merger,
+                &mut |_| observer.map_or(Ok(()), |o| o.checkpoint(SortProgress::Wrote)),
             )?;
             run.generation = generation.checked_add(1).ok_or(SpillError::Overflow)?;
             self.stats.spilled_bytes += run.file_bytes();
@@ -669,6 +890,19 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
     /// breaks ties by lower source index, so order stays the stable sort of the input.
     fn merge_level(&mut self) -> Result<(), SpillError> {
         let groups = Self::pass_groups(self.runs.len(), self.config.fan_in);
+        // The records this pass rewrites: every group of more than one run.
+        let mut total = 0u64;
+        let mut start = 0;
+        for &size in &groups {
+            let end = (start + size).min(self.runs.len());
+            if end - start > 1 {
+                total += self.runs[start..end].iter().map(|r| r.records).sum::<u64>();
+            }
+            start = end;
+        }
+        let mut done = 0u64;
+        self.checkpoint(SortProgress::MergeStart { total })?;
+        let observer = self.observer;
         let mut pending = std::mem::take(&mut self.runs).into_iter();
         let mut merged = Vec::with_capacity(pending.len());
         for size in groups {
@@ -690,11 +924,16 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
                         .collect::<Result<Vec<_>, _>>()?;
                     let mut merger = Merger::new(readers)?;
                     let run = write_run(
-                        self.scratch,
+                        &self.scratch.file_maker()?,
                         self.config.buffer_bytes,
                         self.layout,
                         &mut merger,
+                        &mut |written| {
+                            let done = done + written;
+                            observer.map_or(Ok(()), |o| o.checkpoint(SortProgress::Merged { done }))
+                        },
                     )?;
+                    done += run.records;
                     self.stats.spilled_bytes += run.file_bytes();
                     // Inputs were removed chunk by chunk as the merge read them; dropping
                     // the merger removes any remainder (e.g. after an error).
@@ -706,7 +945,7 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
         merged.extend(pending);
         self.runs = merged;
         self.stats.merge_levels += 1;
-        Ok(())
+        self.checkpoint(SortProgress::MergeEnd)
     }
 
     /// Ends input. Inputs that never filled a run stay in memory; otherwise runs are merged
@@ -715,6 +954,13 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
         if self.poisoned {
             return Err(SpillError::Poisoned);
         }
+        while !self.pending.is_empty() {
+            if let Err(error) = self.join_oldest() {
+                self.fail();
+                return Err(error);
+            }
+        }
+        self.spare = Vec::new();
         let remaining = self.stats.records;
         if self.runs.is_empty() {
             let mut buffer = std::mem::take(&mut self.buffer);
