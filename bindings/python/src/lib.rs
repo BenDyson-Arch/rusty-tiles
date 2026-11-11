@@ -1091,6 +1091,41 @@ fn validate(
     Ok(report)
 }
 
+fn serialized_to_python(py: Python<'_>, value: serde_json::Result<Value>) -> PyResult<Py<PyAny>> {
+    json_to_python(py, &value.map_err(|e| TilesError::new_err(e.to_string()))?)
+}
+
+/// Resolve a source CRS exactly as the converters do, without converting anything.
+/// Returns a dict with `accepted`, `kind`, `definition`, `crsOperation`, `summary` and
+/// `refusal`; an unsupported definition is a result, not an exception.
+#[pyfunction]
+fn resolve_source_crs(py: Python<'_>, definition: String) -> PyResult<Py<PyAny>> {
+    if definition.trim().is_empty() {
+        return Err(InvalidRequestError::new_err(
+            "definition must be a non-empty CRS definition",
+        ));
+    }
+    // The first call decompresses the embedded EPSG table.
+    let resolution = py.detach(|| tiles_core::resolve_source_crs(&definition));
+    serialized_to_python(py, serde_json::to_value(resolution))
+}
+
+/// Every EPSG code this package resolves, as `EPSG:<code>` in numeric order.
+#[pyfunction]
+fn supported_epsg_codes(py: Python<'_>) -> Vec<String> {
+    py.detach(tiles_core::supported_epsg_codes)
+        .into_iter()
+        .map(|code| format!("EPSG:{code}"))
+        .collect()
+}
+
+/// The embedded EPSG table's EPSG, PROJ and GDAL versions and its code counts.
+#[pyfunction]
+fn crs_table_info(py: Python<'_>) -> PyResult<Py<PyAny>> {
+    let info = py.detach(tiles_core::crs_table_info);
+    serialized_to_python(py, serde_json::to_value(info))
+}
+
 #[pymodule]
 fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
@@ -1137,6 +1172,9 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(vector_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(convert_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(validate, module)?)?;
+    module.add_function(wrap_pyfunction!(resolve_source_crs, module)?)?;
+    module.add_function(wrap_pyfunction!(supported_epsg_codes, module)?)?;
+    module.add_function(wrap_pyfunction!(crs_table_info, module)?)?;
     Ok(())
 }
 
