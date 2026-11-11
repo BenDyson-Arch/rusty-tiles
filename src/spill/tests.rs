@@ -1441,12 +1441,12 @@ fn sorts_check_after_every_chunk_and_report_merge_totals() {
     let output: Vec<_> = sorter.finish().unwrap().collect::<Result<_, _>>().unwrap();
     assert_eq!(output, expected);
     let events = observer.events.into_inner().unwrap();
-    // Run generation: one checkpoint per chunk file, so at least one per R / chunk records.
+    // Run generation: one checkpoint before each run's sort and one per chunk file.
     let wrote = events
         .iter()
         .take_while(|e| **e == SortProgress::Wrote)
         .count();
-    assert_eq!(wrote, 20 * 4);
+    assert_eq!(wrote, 20 * (1 + 4));
     // Two passes (20 → 7 → 3 runs): each declares the records it rewrites, reports them
     // after every chunk, and ends at its total.
     let passes: Vec<_> = events
@@ -1474,7 +1474,7 @@ fn sorts_check_after_every_chunk_and_report_merge_totals() {
 #[test]
 fn an_observer_error_stops_the_sort_unchanged_and_removes_its_files() {
     let input = spilling_input();
-    for stop_after in [3, 85, 170] {
+    for stop_after in [3, 105, 190] {
         let (_parent, scratch) = new_scratch(Arc::new(FileIo));
         scratch.set_chunk_bytes(400);
         let observer = Checkpoints {

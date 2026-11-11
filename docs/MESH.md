@@ -602,8 +602,9 @@ feeds the next step. `F` is 64, 128 or 256, whichever admits the most background
 run writers. Writers sort and write full runs on their own threads while the
 next run fills, at most one fewer than capture's workers, so `--jobs 1` writes
 runs on the capturing thread. A budget too small for one pass even at `F = 256`
-gets the largest run buffer that fits, without writers. Larger runs never make
-the scratch admission refuse where the floor would not. The plan is charged in
+gets the largest run buffer that fits, without writers. A plan never declares
+more scratch than the floor, so no scratch admission refuses a run the floor
+would admit. The plan is charged in
 capture's declared resident bound (`diagnostics.memory.capture_bound_bytes`)
 and reported as `diagnostics.capture.sort`: `run_bytes`, `fan_in`,
 `buffer_bytes`, `writers`, `max_runs`, `single_pass` and `limited_by`
@@ -934,8 +935,9 @@ logs its wall seconds and the run's elapsed seconds as a `log` event. Inside
 their attributes), `capture_triangles` (triangles reassembled),
 `capture_sequence` (triangles written in rank order), `capture_images` (two
 units per image), `capture_tree` (triangles), `capture_corner_depths` (seven
-units per triangle) and `capture_leaf_plans` (leaves). Each step reports `0`,
-its total and counts between. An intermediate sort merge pass, which a budget
+units per triangle) and `capture_leaf_plans` (leaves). Each step reports `0`
+and its total; all but `capture_validate`, `capture_tree` and
+`capture_leaf_plans` also report counts between. An intermediate sort merge pass, which a budget
 too small for one pass needs, is reported as `capture_merge` (records
 rewritten), after which the interrupted step resumes. While capture runs, the
 current step's latest count is repeated at least every 250 ms. These events are

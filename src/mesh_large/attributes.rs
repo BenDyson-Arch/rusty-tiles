@@ -388,8 +388,9 @@ pub(crate) fn capture_full_in<'s>(
             }
         }
     }
-    progress.end()?;
+    // Finishing waits for run writers and may merge: still inside the step.
     let mut corners = corners.finish()?;
+    progress.end()?;
     progress.begin(CaptureStep::Positions, corners_total)?;
     let mut next = corners.next().transpose()?;
     let mut positioned =
@@ -466,7 +467,6 @@ pub(crate) fn capture_full_in<'s>(
         return Err(invariant("unmatched corner reference after POSITION join"));
     }
     drop(corners);
-    progress.end()?;
     if let Some(expected) = frame.source_bounds() {
         if source_bounds != expected {
             return Err(invalid(
@@ -476,6 +476,7 @@ pub(crate) fn capture_full_in<'s>(
         scan.bounds = mapped_bounds;
     }
     let mut positioned = positioned.finish()?;
+    progress.end()?;
     progress.begin(CaptureStep::Triangles, scan.triangles)?;
     let mut triangles =
         ExternalSorter::<FullTriangle>::with_layout(scratch, sort, layout)?.observed(progress);
@@ -551,8 +552,9 @@ pub(crate) fn capture_full_in<'s>(
             "mesh source geometry changed between preflight and capture",
         ));
     }
+    let triangles = triangles.finish()?;
     progress.end()?;
-    Ok(triangles.finish()?)
+    Ok(triangles)
 }
 
 #[cfg(test)]

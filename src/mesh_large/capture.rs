@@ -530,4 +530,127 @@ mod tests {
         output.close().unwrap();
         assert_eq!(fs::read_dir(&parent).unwrap().count(), 0);
     }
+
+    /// An indexed grid of `side × side` quads plus one extra vertex `extra`; `bad` replaces
+    /// triangles' first index (by triangle number).
+    fn indexed_grid(
+        dir: &std::path::Path,
+        side: u32,
+        extra: [f32; 3],
+        bad: &[(usize, u32)],
+    ) -> std::path::PathBuf {
+        let row = side + 1;
+        let mut bytes = Vec::new();
+        for y in 0..row {
+            for x in 0..row {
+                for v in [x as f32, ((x * 3 + y) % 7) as f32, y as f32] {
+                    bytes.extend(v.to_le_bytes());
+                }
+            }
+        }
+        for v in extra {
+            bytes.extend(v.to_le_bytes());
+        }
+        let positions = bytes.len();
+        let mut indices = Vec::new();
+        for y in 0..side {
+            for x in 0..side {
+                let a = y * row + x;
+                indices.extend([a, a + row, a + 1, a + 1, a + row, a + row + 1]);
+            }
+        }
+        for &(triangle, index) in bad {
+            indices[triangle * 3] = index;
+        }
+        bytes.extend(indices.iter().flat_map(|i| i.to_le_bytes()));
+        fs::write(dir.join("grid.bin"), &bytes).unwrap();
+        let doc = json!({
+            "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+            "nodes":[{"mesh":0}],"meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1}]}],
+            "buffers":[{"uri":"grid.bin","byteLength":bytes.len()}],
+            "bufferViews":[{"buffer":0,"byteLength":positions},
+                {"buffer":0,"byteOffset":positions,"byteLength":bytes.len()-positions}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":row*row+1,"type":"VEC3",
+                    "min":[0,0,0],"max":[side as f32,6,side as f32]},
+                {"bufferView":1,"componentType":5125,"count":indices.len(),"type":"SCALAR"}]
+        });
+        let input = dir.join("grid.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        input
+    }
+
+    #[test]
+    fn parallel_scan_matches_one_sequential_pass_and_reports_the_first_failure_in_order() {
+        // 2 × 300² = 180,000 triangles: three scan tasks.
+        let dir = tempfile::tempdir().unwrap();
+        let input = indexed_grid(dir.path(), 300, [1.0, 2.0, 3.0], &[]);
+        let source = StreamSource::open(&input, &mut || Ok(())).unwrap();
+        let scan = |workers| {
+            let mut seen = 0;
+            let result = scan_with_source_bounds(&source, 1 << 12, workers, &mut |done| {
+                assert!(done >= seen, "progress never goes back");
+                seen = done;
+                Ok(())
+            });
+            (result, seen)
+        };
+        let (sequential, seen) = scan(1);
+        let (sequential, bounds) = sequential.unwrap();
+        assert_eq!((sequential.triangles, seen), (180_000, 180_000));
+        for workers in [2, 3, 8] {
+            let (parallel, seen) = scan(workers);
+            let (parallel, parallel_bounds) = parallel.unwrap();
+            assert_eq!(seen, 180_000);
+            assert_eq!(
+                (parallel.triangles, parallel.geometry_bytes),
+                (sequential.triangles, sequential.geometry_bytes)
+            );
+            assert_eq!(parallel.bounds, sequential.bounds);
+            assert_eq!(
+                parallel_bounds.map(|c| c.map(f64::to_bits)),
+                bounds.map(|c| c.map(f64::to_bits))
+            );
+        }
+        // A failing progress check (here the first one taken while tasks run, or the last)
+        // is returned unchanged.
+        let mut calls = 0;
+        let error = scan_with_source_bounds(&source, 1 << 12, 4, &mut |_| {
+            calls += 1;
+            if calls > 1 {
+                Err(JobError::new(
+                    JobErrorKind::Cancelled,
+                    "operation cancelled",
+                ))
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::Cancelled);
+        drop(source);
+
+        // Task 0 references a nonfinite vertex at its end, task 2 an index past the accessor
+        // at its start, so task 2 usually fails first in time. Every worker count reports
+        // task 0's failure, as one sequential pass does.
+        let dir = tempfile::tempdir().unwrap();
+        let extra = 301 * 301;
+        let input = indexed_grid(
+            dir.path(),
+            300,
+            [f32::NAN, 0.0, 0.0],
+            &[(131_100, 1 << 30), (65_500, extra)],
+        );
+        let source = StreamSource::open(&input, &mut || Ok(())).unwrap();
+        let message = |workers| {
+            let error =
+                scan_with_source_bounds(&source, 1 << 12, workers, &mut |_| Ok(())).unwrap_err();
+            (error.kind(), error.to_string())
+        };
+        let sequential = message(1);
+        assert_eq!(sequential.0, JobErrorKind::InvalidInput);
+        assert!(sequential.1.contains("nonfinite"), "{}", sequential.1);
+        for workers in [2, 3, 8] {
+            assert_eq!(message(workers), sequential, "{workers} workers");
+        }
+    }
 }

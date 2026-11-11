@@ -719,10 +719,9 @@ pub(crate) fn capture_admitted(
             image_bytes,
         )
         .ok()?;
-        // Never a scratch refusal the floor would not have met.
-        let disk = grown.need_bytes <= need.need_bytes
-            || add(grown.need_bytes, grown.output_reserve_bytes)
-                .is_ok_and(|bytes| bytes <= volume.available_bytes);
+        // Never more declared scratch than the floor's, so no scratch admission (now or at
+        // the texture recheck) refuses a run the floor would admit.
+        let disk = grown.need_bytes <= need.need_bytes;
         let memory = memory_bound(
             &capture,
             source.json_bytes,
@@ -934,6 +933,7 @@ pub(crate) fn capture_admitted(
             capture_config,
             workers,
             Some(add(stages.tree, need.file_rounding_bytes)?),
+            Some(progress),
             check,
         )?;
         progress.end()?;
@@ -1628,14 +1628,49 @@ pub(super) mod tests {
         let parent = dir.path().join("scratch");
         fs::create_dir(&parent).unwrap();
         let input = shuffled_grid(&dir.path().join("source"), 20, 0x5eed_c0de_2026);
-        let run = |jobs: usize, run_bytes: usize, fan_in: usize| -> Outputs {
+        // The plan needs disk-backed scratch (memory-backed spill keeps the floor), and the
+        // system temporary directory may be tmpfs: plan beside the test binary instead.
+        let disk =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let planned = |jobs: usize, run_bytes: usize, fan_in: usize, plan: bool| {
             let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(16);
             config.jobs = Jobs::Fixed(NonZeroUsize::new(jobs).unwrap());
-            config.scratch_dir = Some(parent.clone());
+            config.scratch_dir = Some(if plan {
+                disk.path().to_owned()
+            } else {
+                parent.clone()
+            });
             config.sort.run_bytes = run_bytes;
             config.sort.fan_in = fan_in;
             config.sort.buffer_bytes = 61;
+            if plan {
+                // The budget plan grows these floors: one pass, with writers when jobs allow.
+                config.test_sort_plan = true;
+                config.memory_budget = Some(
+                    super::super::resources::MemoryBudget::resolve_with(Some(2 << 30), None)
+                        .unwrap(),
+                );
+            }
             let output = capture(&input, &config, &mut || Ok(())).unwrap();
+            let sort = output.report.sort;
+            if plan {
+                assert!(
+                    !output.report.scratch_memory_backed,
+                    "planned scratch on disk"
+                );
+                assert_eq!((sort.limited_by, sort.single_pass), ("single_pass", true));
+                assert_eq!(sort.writers > 0, jobs > 1, "{sort:?}");
+                assert!(output.report.memory.bound_bytes <= 2 << 30);
+            } else if output.report.scratch_memory_backed {
+                // Spill in RAM is charged to memory: the plan stays at the floor.
+                assert_eq!(sort.limited_by, "memory_backed_scratch");
+            } else {
+                assert_eq!(sort.limited_by, "floor");
+            }
+            output
+        };
+        let run_planned = |jobs: usize, run_bytes: usize, fan_in: usize, plan: bool| -> Outputs {
+            let output = planned(jobs, run_bytes, fan_in, plan);
             let depths: Vec<_> = output
                 .corner_depths
                 .reader()
@@ -1670,6 +1705,9 @@ pub(super) mod tests {
             output.close().unwrap();
             (depths, ranks, weld)
         };
+        let run = |jobs: usize, run_bytes: usize, fan_in: usize| -> Outputs {
+            run_planned(jobs, run_bytes, fan_in, false)
+        };
         let expected = run(1, 64 << 20, 64);
         assert_eq!(
             expected.0.len(),
@@ -1684,8 +1722,13 @@ pub(super) mod tests {
                     "jobs {jobs}, run bytes {run_bytes}, fan-in {fan_in}"
                 );
             }
+            assert!(
+                run_planned(jobs, smallest, 2, true) == expected,
+                "planned, jobs {jobs}"
+            );
         }
         assert_eq!(fs::read_dir(parent).unwrap().count(), 0);
+        assert_eq!(fs::read_dir(disk.path()).unwrap().count(), 0);
     }
     /// The packed rank-order corner record keeps its limits: the largest rank, every corner
     /// and depths up to the tree height cap; more triangles than the

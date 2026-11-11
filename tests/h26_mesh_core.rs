@@ -450,3 +450,26 @@ fn capture_reports_every_step_with_its_total_and_honours_a_cancel_inside_capture
     assert!(!output.exists());
     assert_empty(&scratch);
 }
+
+/// Plumbing control: this grid fits one floor run, so every budget plans the floor and only
+/// the worker count varies. Plan dependence is covered by the capture-level sort tests and
+/// the recorded real-data matrix.
+#[test]
+fn archives_are_identical_across_workers_and_budgets() {
+    let work = tempfile::tempdir().unwrap();
+    let input = grid_fixture(work.path(), 48);
+    let scratch = work.path().join("scratch");
+    fs::create_dir(&scratch).unwrap();
+    let mut archives = Vec::new();
+    for (jobs, budget) in [(1, 2u64 << 30), (4, 2 << 30), (1, 6 << 30), (4, 6 << 30)] {
+        let output = work.path().join(format!("grid-{jobs}-{budget}.3tz"));
+        let request = TilerRequest::new(&input, &output)
+            .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(jobs).unwrap()))
+            .with_scratch_dir(&scratch)
+            .with_memory_budget(budget);
+        mesh_to_tileset(request, &RunControl::default()).unwrap();
+        archives.push(fs::read(&output).unwrap());
+        assert_empty(&scratch);
+    }
+    assert!(archives.windows(2).all(|pair| pair[0] == pair[1]));
+}

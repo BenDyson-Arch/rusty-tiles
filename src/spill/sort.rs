@@ -488,30 +488,46 @@ fn write_run<T: Record>(
     })
 }
 
-/// Stable-sorts `buffer` as at most `jobs` consecutive chunks; returns the chunk length.
-fn sort_chunks<T: Record>(buffer: &mut [T], jobs: usize, at: &Path) -> Result<usize, SpillError> {
+/// Stable-sorts `buffer` as consecutive pieces and returns the piece length. There are
+/// `jobs` pieces, or more when that would make one larger than [`PIECE_BYTES`] (at most
+/// `max(jobs, MAX_PIECES)`); they are sorted `jobs` at a time on their own threads, and
+/// `checkpoint` runs before each such batch, so a check waits for at most one batch.
+fn sort_pieces<T: Record>(
+    buffer: &mut [T],
+    jobs: usize,
+    at: &Path,
+    checkpoint: &mut dyn FnMut() -> Result<(), SpillError>,
+) -> Result<usize, SpillError> {
     let jobs = jobs.clamp(1, buffer.len().max(1));
-    let chunk = buffer.len().div_ceil(jobs).max(1);
-    if jobs == 1 {
-        buffer.sort();
-        return Ok(chunk);
-    }
-    std::thread::scope(|scope| {
-        let mut workers = Vec::with_capacity(jobs);
-        for part in buffer.chunks_mut(chunk) {
-            let worker = std::thread::Builder::new()
-                .name("rusty-tiles-spill-sort".into())
-                .spawn_scoped(scope, move || part.sort())
-                .map_err(|e| SpillError::io("start spill sort worker", at, e))?;
-            workers.push(worker);
+    let bytes = buffer.len().saturating_mul(size_of::<T>());
+    let pieces = (bytes / PIECE_BYTES)
+        .clamp(jobs, jobs.max(MAX_PIECES))
+        .min(buffer.len().max(1));
+    let piece = buffer.len().div_ceil(pieces).max(1);
+    for batch in buffer.chunks_mut(piece.saturating_mul(jobs)) {
+        checkpoint()?;
+        if batch.len() <= piece {
+            batch.sort();
+            continue;
         }
-        for worker in workers {
-            if let Err(panic) = worker.join() {
-                std::panic::resume_unwind(panic);
+        std::thread::scope(|scope| {
+            let mut workers = Vec::with_capacity(jobs);
+            for part in batch.chunks_mut(piece) {
+                let worker = std::thread::Builder::new()
+                    .name("rusty-tiles-spill-sort".into())
+                    .spawn_scoped(scope, move || part.sort())
+                    .map_err(|e| SpillError::io("start spill sort worker", at, e))?;
+                workers.push(worker);
             }
-        }
-        Ok(chunk)
-    })
+            for worker in workers {
+                if let Err(panic) = worker.join() {
+                    std::panic::resume_unwind(panic);
+                }
+            }
+            Ok::<_, SpillError>(())
+        })?;
+    }
+    Ok(piece)
 }
 
 /// Accepts records in input order and yields them as their stable sort.
@@ -758,13 +774,18 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
     }
 
     fn flush_run(&mut self) -> Result<(), SpillError> {
-        let chunk = sort_chunks(&mut self.buffer, self.config.jobs, self.scratch.path())?;
+        let observer = self.observer;
+        let chunk = sort_pieces(
+            &mut self.buffer,
+            self.config.jobs,
+            self.scratch.path(),
+            &mut || observer.map_or(Ok(()), |o| o.checkpoint(SortProgress::Wrote)),
+        )?;
         let mut parts: Vec<_> = self
             .buffer
             .chunks(chunk)
             .map(|part| SliceCursor(part.iter()))
             .collect();
-        let observer = self.observer;
         let mut tick = |_| observer.map_or(Ok(()), |o| o.checkpoint(SortProgress::Wrote));
         let run = if parts.len() == 1 {
             write_run(
@@ -964,7 +985,13 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
         let remaining = self.stats.records;
         if self.runs.is_empty() {
             let mut buffer = std::mem::take(&mut self.buffer);
-            let chunk = sort_chunks(&mut buffer, self.config.jobs, self.scratch.path())?;
+            let observer = self.observer;
+            let chunk = sort_pieces(
+                &mut buffer,
+                self.config.jobs,
+                self.scratch.path(),
+                &mut || observer.map_or(Ok(()), |o| o.checkpoint(SortProgress::Wrote)),
+            )?;
             let len = buffer.len();
             let data = Arc::new(buffer);
             let parts = (0..len)
@@ -1029,7 +1056,8 @@ impl<T: Record> SortedStream<'_, T> {
     }
 
     /// The whole sorted output as one vector, without a copy, when the input never left
-    /// memory and was sorted as one chunk (`jobs == 1`) and nothing has been read yet.
+    /// memory and was sorted as one piece (`jobs == 1` and at most one [`PIECE_BYTES`] piece)
+    /// and nothing has been read yet.
     /// Otherwise the stream is returned unchanged.
     pub(crate) fn into_sorted_vec(mut self) -> Result<Vec<T>, Self> {
         let untouched = self.remaining == self.stats.records;
