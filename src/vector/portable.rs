@@ -380,9 +380,17 @@ impl Reader {
                     }
                 }
             }
-            self.layer_reports.push(json!({"name":name,"features":accepted,"attributeFilter":options.where_clause,
+            let mut layer_report = json!({"name":name,"features":accepted,"attributeFilter":options.where_clause,
                 "invalidFeatures":rejected,"featuresWithoutGeometry":without,"jsonFields":json_fields,"sourceCrs":definition,
-                "heightMode":if local {"local metres"} else if options.height_offset.is_some() {"explicit offset"} else if geojson {"GeoJSON ellipsoidal metres"} else {"2D ellipsoid zero"},"heightOffset":options.height_offset}));
+                "heightMode":if local {"local metres"} else if options.height_offset.is_some() {"explicit offset"} else if geojson {"GeoJSON ellipsoidal metres"} else {"2D ellipsoid zero"},"heightOffset":options.height_offset});
+            // The allow-listed EPSG datum operation and its EPSG-stated accuracy, when used.
+            if let Some(operation) = transform
+                .as_ref()
+                .and_then(crate::crs::Transform::operation)
+            {
+                layer_report["crsOperation"] = json!(operation);
+            }
+            self.layer_reports.push(layer_report);
         }
         self.schemas.insert("_source_id".into(), "string".into());
         self.schemas.insert("_source_layer".into(), "string".into());

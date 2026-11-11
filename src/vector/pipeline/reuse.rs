@@ -81,6 +81,7 @@ const FINGERPRINT_SOURCES: &[(&str, &str)] = fingerprint_sources![
     "src/vector/pipeline/acceptance.rs",
     "src/vector/portable.rs",
     "src/crs.rs",
+    "src/crs/allowlist.rs",
     "src/vector/pipeline/geometry.rs",
     "src/vector/pipeline/encoding.rs",
     "src/vector/pipeline/aggregation.rs",
@@ -151,6 +152,9 @@ fn encoder_with_framing(framing_source: &str) -> String {
         hasher.update(source.as_bytes());
         hasher.update([0]);
     }
+    // The portable build resolves EPSG codes from this embedded table.
+    #[cfg(not(feature = "native-geospatial"))]
+    hasher.update(crate::crs::ALLOWLIST_TABLE);
     format!("{ENCODER_PREFIX}{:x}", hasher.finalize())
 }
 

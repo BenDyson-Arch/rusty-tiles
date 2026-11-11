@@ -204,9 +204,14 @@ rusty_tiles.point_cloud_to_3tz(
 ```
 
 The package supports verified grid-free WGS84 geographic, UTM and Mercator
-transforms, plus supported WKT/PROJ local projections with explicit WGS84 or
-Helmert datum parameters. Grid-dependent, compound/geoid, dynamic or unknown
-datums raise `UnsupportedError` naming the native build. See the
+transforms, about 3,100 further EPSG codes from the
+[GDAL-verified allow-list](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/FORMATS.md#gdal-verified-epsg-allow-list)
+(such as GDA2020/GDA94 MGA, NZTM2000 and ETRS89 UTM), plus supported WKT/PROJ
+local projections with explicit WGS84 or Helmert datum parameters. A report for an
+allow-listed code names its EPSG datum operation and stated accuracy as
+`crsOperation`. Grid-dependent (such as British National Grid and NAD27),
+compound/geoid, dynamic or unknown datums and coordinate epochs raise
+`UnsupportedError` naming the native build. See the
 [CRS limits](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/FORMATS.md#point-clouds).
 Text `.xyz` files and in-memory buffers are not supported.
 

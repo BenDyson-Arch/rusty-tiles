@@ -315,6 +315,7 @@ rusty-tiles doctor --command vector --command terrain
 | --- | --- | --- |
 | `--command` | all | Check only these commands. Repeat to select several. Aliases are accepted. |
 | `--cesium DIR` | `target/preview-runtime/node_modules/cesium/Build/Cesium`, relative to the working directory | Where to look for a Cesium runtime. This check is informational only. |
+| `--sourceCrs` (`--source-crs`) | none | Also resolve this 2D horizontal EPSG, WKT or PROJ definition as the mesh, point-cloud and vector converters do, and report it as `sourceCrs`: `status`, `backend` (`portable` or `native`), the allow-listed EPSG datum `operation` with its stated accuracy, or the refusal `reason`. Informational: it never changes `status` or the exit code. |
 
 Each selected command has a `status`:
 
@@ -335,7 +336,7 @@ Requirements in the native-geospatial build:
 
 `doctor` reports linked GDAL, PROJ and GEOS versions when present, readiness for the selected commands, the PROJ search paths and the local grid count. `probes` names every check that ran. In a native-geospatial build the version, PROJ offline-policy and PROJ database checks always run. Configured PROJ directories (`PROJ_DATA`, `PROJ_LIB` and GDAL's search paths) are always listed, top level only and capped at 4096 entries per directory. GDAL driver, GEOS and Cesium checks run only for the commands that need them.
 
-Point-cloud readiness lists the pure-Rust CRS classes and native fallback readiness; grid-free placement needs no PROJ database. Standard-build vector readiness lists the GeoJSON and GeoPackage readers, Rust geometry support and grid-free CRS limits. Native vector readiness uses the converter's own GDAL and GEOS driver check.
+Point-cloud readiness lists the pure-Rust CRS classes, the [GDAL-verified EPSG allow-list](FORMATS.md#gdal-verified-epsg-allow-list) (`epsgAllowList`: code count, GDAL/PROJ/EPSG versions and whether this build uses it) and native fallback readiness; grid-free placement needs no PROJ database. Standard-build vector readiness lists the GeoJSON and GeoPackage readers, Rust geometry support and grid-free CRS limits. Native vector readiness uses the converter's own GDAL and GEOS driver check.
 
 `--command` limits the inventory in both human and JSON output; without it every command is listed. `doctor` starts no processes, keeps PROJ networking off, writes no files, installs nothing and fetches no grids. A listed grid does not prove a height operation is available; conversion checks the exact operation offline.
 

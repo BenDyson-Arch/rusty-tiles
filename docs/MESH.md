@@ -116,11 +116,18 @@ are not accepted. Horizontal feet never rescale source height or A. No geoid
 model is applied: orthometric Metashape heights need an explicit
 `--height-offset` to the ellipsoid.
 
-EPSG:4326, EPSG:3857, EPSG:3395, UTM (EPSG:326xx/327xx) and the grid-free PROJ
-methods [listed for point clouds](FORMATS.md#coordinate-reference-systems) work
-in the standard build. Other EPSG codes, coordinate epochs and Lambert
-azimuthal equal area need the native-geospatial build and its PROJ database;
-without it they are `unsupported` before any source is read. One operation
+EPSG:4326, EPSG:3857, EPSG:3395, UTM (EPSG:326xx/327xx), the codes of the
+[GDAL-verified EPSG allow-list](FORMATS.md#gdal-verified-epsg-allow-list) (for
+example GDA2020 MGA EPSG:7856, GDA94 MGA EPSG:28356, NZTM2000 EPSG:2193 and ETRS89
+UTM EPSG:25832) and the grid-free PROJ methods
+[listed for point clouds](FORMATS.md#coordinate-reference-systems) work in the
+standard build. An allow-listed code adds `datum_operation` to the report's
+`source_crs`: the EPSG datum transformation and its stated accuracy (GDA2020 to
+WGS 84 (2) is a null transformation with 3 m accuracy, not an exact one). Other
+EPSG codes, including grid-based ones such as British National Grid EPSG:27700,
+coordinate epochs and Lambert azimuthal equal area need the native-geospatial
+build and its PROJ database; without it they are `unsupported` before any source
+is read. One operation
 serves the whole capture: a source that would need native PROJ for only some
 vertices is refused.
 

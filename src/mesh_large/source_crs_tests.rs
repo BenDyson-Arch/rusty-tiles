@@ -913,3 +913,48 @@ fn lattice_tolerance_edge_at_sixty_degrees_over_150_km() {
     );
     assert!(worst <= 2. * LATTICE_TOLERANCE * condition, "{worst}");
 }
+
+#[test]
+fn allow_listed_epsg_reports_its_datum_operation_and_accuracy() {
+    let spec = MeshSourceCrs::from_parameters(
+        Some("EPSG:7856"),
+        Some(SourceAxes::Xyz),
+        Some(&[502_000., 6_961_000.]),
+        None,
+        None,
+    )
+    .unwrap()
+    .unwrap();
+    let SourceFrame::Crs(frame) =
+        SourceFrame::resolve(&spec, [[-10., -10., 0.], [10., 10., 5.]]).unwrap()
+    else {
+        unreachable!()
+    };
+    let operation = frame.report.datum_operation.as_ref();
+    #[cfg(not(feature = "native-geospatial"))]
+    {
+        let operation = operation.expect("standard build names the table operation");
+        assert_eq!(frame.report.operation, "portable");
+        assert_eq!(operation.operation, "GDA2020 to WGS 84 (2)");
+        assert_eq!(operation.kind, crate::crs::OperationKind::Null);
+        assert_eq!(operation.accuracy_metres, Some(3.));
+    }
+    #[cfg(feature = "native-geospatial")]
+    assert!(operation.is_none());
+    // Built-in WGS 84 codes change no datum and name no operation.
+    let utm = MeshSourceCrs::from_parameters(
+        Some("EPSG:32756"),
+        Some(SourceAxes::Xyz),
+        Some(&[502_000., 6_961_000.]),
+        None,
+        None,
+    )
+    .unwrap()
+    .unwrap();
+    let SourceFrame::Crs(frame) =
+        SourceFrame::resolve(&utm, [[-10., -10., 0.], [10., 10., 5.]]).unwrap()
+    else {
+        unreachable!()
+    };
+    assert!(frame.report.datum_operation.is_none());
+}
