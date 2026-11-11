@@ -7,9 +7,14 @@ name: Release build
 # Build once (#346): when the caller passes `ci-run-id`, a full-matrix ci.yml run of this
 # commit that built this version, the archives and wheels are taken from that run, which
 # tested them, and only smoke-tested here on their own platforms. Without it (no such run, or
-# its artifacts expired) they are built and tested from source, as before. Either way the
-# caller gets `binary-<target>` and `wheel-*` artifacts in this run. The image is always
-# built here and pushed as ghcr.io/<repository>:<image-tag> when a tag is given.
+# its artifacts expired), or when taking them from that run fails, they are built and tested
+# from source as before: `cargo test` and the release build for each archive, and full wheel
+# acceptance for the wheels. Either way the caller gets `binary-<target>` and `wheel-*`
+# artifacts in this run. The image is always built here and pushed as
+# ghcr.io/<repository>:<image-tag> when a tag is given.
+#
+# Reading another run's artifacts needs `actions: read`; only the two jobs that do it get it,
+# and the caller's job must grant it.
 on:
   workflow_call:
     inputs:
@@ -33,8 +38,12 @@ jobs:
   binaries:
     name: Binary (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
-    # Intel macOS took 68-82 minutes in the v0.4.0 release and was cancelled once at 90.
-    timeout-minutes: ${{ inputs.ci-run-id != '' && 20 || (matrix.target == 'x86_64-apple-darwin' && 120 || 90) }} # versions: TIMEOUT_SMOKE TIMEOUT_FALLBACK_BUILD_INTEL_MACOS TIMEOUT_FALLBACK_BUILD
+    # Long enough for the build from source, which a failed download can still lead to. Intel
+    # macOS took 68-82 minutes in the v0.4.0 release and was cancelled once at 90.
+    timeout-minutes: ${{ matrix.target == 'x86_64-apple-darwin' && 120 || 90 }} # versions: TIMEOUT_FALLBACK_BUILD_INTEL_MACOS TIMEOUT_FALLBACK_BUILD
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -60,32 +69,54 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: Take the archive the CI run tested
+      - id: take
+        name: Take the archive the CI run tested
         if: inputs.ci-run-id != ''
+        continue-on-error: true
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: binary-${{ matrix.target }}
           path: dist
           run-id: ${{ inputs.ci-run-id }}
           github-token: ${{ github.token }}
+      - id: source
+        name: Reuse the CI archive or build from source
+        env:
+          CI_RUN: ${{ inputs.ci-run-id }}
+          TAKEN: ${{ steps.take.outcome }}
+        run: |
+          set -eu
+          shopt -s nullglob
+          taken=(dist/rusty-tiles-"$RELEASE_VERSION-$RELEASE_TARGET".*)
+          if [ -z "$CI_RUN" ]; then
+            echo "No reusable CI run: building and testing from source."
+            echo 'build=true' >> "$GITHUB_OUTPUT"
+          elif [ "$TAKEN" = success ] && [ "${#taken[@]}" -eq 1 ]; then
+            echo "Reusing binary-$RELEASE_TARGET from CI run $CI_RUN."
+            echo 'build=false' >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Could not take binary-$RELEASE_TARGET of version $RELEASE_VERSION from CI run $CI_RUN (download $TAKEN); building and testing it from source instead."
+            rm -rf dist
+            echo 'build=true' >> "$GITHUB_OUTPUT"
+          fi
       - name: Select stable Rust
-        if: inputs.ci-run-id == ''
+        if: steps.source.outputs.build == 'true'
         run: |
           rustup update stable --no-self-update
           rustup default stable
           rustup target add "$RELEASE_TARGET"
       - name: Cache Rust dependencies
-        if: inputs.ci-run-id == ''
+        if: steps.source.outputs.build == 'true'
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: portable-${{ matrix.target }}
           save-if: false
       # After the cache step, so its key comes from the committed Cargo files.
       - name: Set the build version
-        if: inputs.ci-run-id == ''
+        if: steps.source.outputs.build == 'true'
         run: '"$PYTHON" scripts/dev_version.py stamp "$RELEASE_VERSION"'
       - name: Build, test and package the default CLI
-        if: inputs.ci-run-id == ''
+        if: steps.source.outputs.build == 'true'
         run: |
           # Peak-RSS slack in this test is sensitive to shared runner load; CI runs it
           # for the same source, so it does not gate publication here.
@@ -108,9 +139,12 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  # Builds and tests the wheels from source when there is no CI run to reuse, or when taking
+  # its wheels failed (wheels-from-ci then reports reused=false).
   wheels:
     name: Python wheel acceptance
-    if: inputs.ci-run-id == ''
+    needs: wheels-from-ci
+    if: ${{ !cancelled() && (inputs.ci-run-id == '' || needs.wheels-from-ci.outputs.reused == 'false') }}
     uses: ./.github/workflows/wheel-acceptance.yml
     with:
       version: ${{ inputs.version }}
@@ -120,6 +154,11 @@ jobs:
     if: inputs.ci-run-id != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 20 # versions: TIMEOUT_SMOKE
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      reused: ${{ steps.source.outputs.reused }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -129,7 +168,9 @@ jobs:
           python-version: '3.14' # versions: PYTHON_MAX
       # The CI run built these wheels and passed them through installed-wheel and official
       # Blender acceptance on every platform; this checks the set and one install.
-      - name: Take the wheels the CI run tested
+      - id: take
+        name: Take the wheels the CI run tested
+        continue-on-error: true
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: wheel-*
@@ -137,7 +178,24 @@ jobs:
           path: dist
           run-id: ${{ inputs.ci-run-id }}
           github-token: ${{ github.token }}
+      # A failed download falls back to wheel acceptance from source (the wheels job); wheels
+      # that downloaded but fail the checks below fail the release.
+      - id: source
+        name: Reuse the CI wheels or build from source
+        env:
+          CI_RUN: ${{ inputs.ci-run-id }}
+          TAKEN: ${{ steps.take.outcome }}
+        run: |
+          set -eu
+          if [ "$TAKEN" = success ] && [ "$(find dist -maxdepth 1 -type f -name '*.whl' | wc -l)" -ge 1 ]; then
+            echo "Reusing the wheels of CI run $CI_RUN."
+            echo 'reused=true' >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Could not take the wheels from CI run $CI_RUN (download $TAKEN); wheel acceptance will build and test them from source instead."
+            echo 'reused=false' >> "$GITHUB_OUTPUT"
+          fi
       - name: Check the wheel set and install the Linux x86_64 wheel
+        if: steps.source.outputs.reused == 'true'
         env:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
@@ -154,6 +212,7 @@ jobs:
           assert rusty_tiles.__version__ == installed == sys.argv[1], (rusty_tiles.__version__, installed)
           print("rusty_tiles", installed)' "$python_version")
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: steps.source.outputs.reused == 'true'
         with:
           name: wheel-from-ci
           path: dist/*.whl
