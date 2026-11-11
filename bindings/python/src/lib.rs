@@ -1126,9 +1126,39 @@ fn crs_table_info(py: Python<'_>) -> PyResult<Py<PyAny>> {
     serialized_to_python(py, serde_json::to_value(info))
 }
 
+/// The PEP 440 spelling of a Cargo version, as maturin writes it into the wheel metadata
+/// (`0.4.0-rc.1` is `0.4.0rc1`, `0.4.1-dev.202611121734` is `0.4.1.dev202611121734`), so
+/// `__version__` matches `importlib.metadata.version("rusty-tiles")`. Pre-release identifiers
+/// other than `alpha.N`, `beta.N`, `rc.N` and `dev.N` keep the Cargo spelling, which the
+/// installed-wheel suite then rejects.
+fn python_version(cargo: &str) -> String {
+    let Some((release, pre)) = cargo.split_once('-') else {
+        return cargo.to_owned();
+    };
+    let identifiers: Vec<&str> = pre.split('.').collect();
+    let mut python = release.to_owned();
+    for pair in identifiers.chunks(2) {
+        let [kind, number] = pair else {
+            return cargo.to_owned();
+        };
+        if number.is_empty() || !number.bytes().all(|byte| byte.is_ascii_digit()) {
+            return cargo.to_owned();
+        }
+        python.push_str(match *kind {
+            "alpha" => "a",
+            "beta" => "b",
+            "rc" => "rc",
+            "dev" => ".dev",
+            _ => return cargo.to_owned(),
+        });
+        python.push_str(number);
+    }
+    python
+}
+
 #[pymodule]
 fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    module.add("__version__", python_version(env!("CARGO_PKG_VERSION")))?;
     module.add_class::<ValidationPayloads>()?;
     module.add_class::<VectorResult>()?;
     module.add_class::<PointCloudResult>()?;
@@ -1176,6 +1206,30 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(supported_epsg_codes, module)?)?;
     module.add_function(wrap_pyfunction!(crs_table_info, module)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::python_version;
+
+    #[test]
+    fn cargo_versions_use_the_wheel_metadata_spelling() {
+        for (cargo, python) in [
+            ("0.4.0", "0.4.0"),
+            ("0.4.0-rc.1", "0.4.0rc1"),
+            ("0.4.0-alpha.2", "0.4.0a2"),
+            ("0.4.0-beta.3", "0.4.0b3"),
+            ("0.4.1-dev.202611121734", "0.4.1.dev202611121734"),
+            ("0.4.0-rc.1.dev.2", "0.4.0rc1.dev2"),
+            ("0.4.0-dev.0", "0.4.0.dev0"),
+            // Not a supported pre-release: kept, so the installed-wheel suite fails.
+            ("0.4.0-nightly.1", "0.4.0-nightly.1"),
+            ("0.4.0-rc", "0.4.0-rc"),
+            ("0.4.0-rc.x", "0.4.0-rc.x"),
+        ] {
+            assert_eq!(python_version(cargo), python, "{cargo}");
+        }
+    }
 }
 
 #[cfg(test)]

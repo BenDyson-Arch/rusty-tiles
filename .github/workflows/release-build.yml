@@ -1,0 +1,164 @@
+name: Release build
+
+# The five-platform CLI archives and the Linux amd64 native image, built and tested for a
+# version. release.yml calls it for a vX.Y.Z tag (the version is the committed one) and
+# dev-build.yml for the rolling dev build (the version is stamped into the checkout, never
+# committed). It uploads the archives as binary-<target> artifacts and pushes the tested image
+# as ghcr.io/<repository>:<image-tag> when a tag is given; publishing a release is left to the
+# caller.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Cargo version to build; stamped into the checkout if it is not the committed one
+        type: string
+        required: true
+      image-tag:
+        description: GHCR image tag to push, such as v0.4.0 or dev; empty builds and tests without pushing
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  binaries:
+    name: Binary (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+    defaults:
+      run:
+        shell: bash
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Select stable Rust
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add "$RELEASE_TARGET"
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: portable-${{ matrix.target }}
+      # After the cache step, so its key comes from the committed Cargo files.
+      - name: Set the build version
+        run: |
+          python=python3
+          if [[ "$RELEASE_TARGET" == *windows* ]]; then python=python; fi
+          "$python" scripts/dev_version.py stamp "$RELEASE_VERSION"
+      - name: Build and test the default CLI
+        run: |
+          # Peak-RSS slack in this test is sensitive to shared runner load; CI runs it
+          # for the same source, so it does not gate publication here.
+          cargo test --locked --target "$RELEASE_TARGET" -- \
+            --skip spill::tests::spill_memory_is_flat_in_input_size
+          cargo build --locked --release --target "$RELEASE_TARGET"
+      - name: Package and smoke test
+        run: |
+          set -eu
+          suffix=
+          if [[ "$RELEASE_TARGET" == *windows* ]]; then suffix=.exe; fi
+          binary="target/$RELEASE_TARGET/release/rusty-tiles$suffix"
+          reported=$("$binary" --version | tr -d '\r')
+          echo "$reported"
+          test "$reported" = "rusty-tiles $RELEASE_VERSION"
+          mkdir -p smoke dist stage
+          "$binary" doctor --command mesh
+          "$binary" mesh -i tests/fixtures/example.glb -o smoke/mesh.3tz --anchor 153.02 -27.47 0
+          "$binary" validate smoke/mesh.3tz
+          # A textured source exercises the in-process KTX2/Basis encoder of this binary.
+          "$binary" mesh -i tests/fixtures/f1b/basecolor-jpeg.glb -o smoke/mesh-ktx2.3tz --anchor 153.02 -27.47 0
+          "$binary" validate smoke/mesh-ktx2.3tz
+          cp "$binary" LICENSE stage/
+          cp licenses/THIRD_PARTY_LICENSES-cli.md stage/THIRD_PARTY_LICENSES.md
+          python=python3
+          if [[ "$RELEASE_TARGET" == *windows* ]]; then python=python; fi
+          "$python" scripts/third_party_notices.py stage stage
+          asset="rusty-tiles-$RELEASE_VERSION-$RELEASE_TARGET"
+          if [[ "$RELEASE_TARGET" == *windows* ]]; then
+            (cd stage && 7z a -tzip "../dist/$asset.zip" "rusty-tiles$suffix" LICENSE THIRD_PARTY_LICENSES.md third_party)
+          else
+            tar -czf "dist/$asset.tgz" -C stage "rusty-tiles$suffix" LICENSE THIRD_PARTY_LICENSES.md third_party
+          fi
+          "$python" scripts/third_party_notices.py check --rust-licenses cli dist/"$asset".*
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  container:
+    name: Native geospatial image (Linux amd64)
+    needs: binaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Set the build version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: python3 scripts/dev_version.py stamp "$RELEASE_VERSION"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - name: Build the packaged runtime
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          target: runtime
+          load: true
+          tags: rusty-tiles:release
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ inputs.image-tag }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=python-free-acceptance
+          cache-to: type=gha,scope=python-free-acceptance,mode=max
+      - name: Check and publish the Python-free runtime
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_TAG: ${{ inputs.image-tag }}
+          RELEASE_REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          image="ghcr.io/${RELEASE_REPO,,}:${IMAGE_TAG:-unpublished}"
+          docker tag rusty-tiles:release "$image"
+          reported=$(docker run --rm --network none "$image" --version)
+          echo "$reported"
+          test "$reported" = "rusty-tiles $RELEASE_VERSION"
+          # Directory publication refuses overlayfs, so /tmp is a tmpfs, as in CI (#373).
+          docker run --rm --network none \
+            --tmpfs /tmp:rw,nosuid,nodev,size=256m \
+            --mount type=bind,src="$PWD/tests/fixtures",dst=/fixtures,readonly \
+            --mount type=bind,src="$PWD/scripts/test-packaged-runtime.sh",dst=/test-packaged-runtime.sh,readonly \
+            --entrypoint /bin/sh "$image" /test-packaged-runtime.sh /fixtures
+          if [ -z "$IMAGE_TAG" ]; then
+            echo "No image tag: the image was tested and not pushed."
+            exit 0
+          fi
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$image"

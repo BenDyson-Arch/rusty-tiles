@@ -715,6 +715,27 @@ jobs:
               || { echo "::error::a required full-tier job was skipped"; exit 1; }
           fi
 
+  # After a nightly full-tier pass on develop, start the rolling dev build (dev-build.yml).
+  # It runs as its own workflow, so a publishing problem cannot fail the full tier, and it
+  # rebuilds only if develop moved since the last dev build.
+  dev-build:
+    name: Start the dev build
+    needs: [full-matrix, rust]
+    if: >-
+      ${{ !cancelled() && github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch' &&
+      inputs.nightly && needs.full-matrix.result == 'success' && needs.rust.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Dispatch dev-build.yml on develop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run dev-build.yml --ref develop
+
   # Keeps one open issue while the full tier fails on develop (pushes and nightly runs) and
   # closes it on the next fully green run. Only this job can write issues.
   tracking-issue:

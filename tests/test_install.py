@@ -97,6 +97,41 @@ class InstallTests(unittest.TestCase):
         self.assertNotIn("/latest", requests)
         self.assertIn("aarch64-apple-darwin.tgz", requests)
 
+    def dev_build(self, version="0.4.1-dev.202611121734", targets=("x86_64-unknown-linux-gnu", "aarch64-apple-darwin")):
+        lines = []
+        for target in targets:
+            self.release(version=version, target=target)
+            lines.append((self.downloads / "SHA256SUMS").read_text())
+        lines.append("0" * 64 + f"  rusty_tiles-{version.replace('-', '.')}-cp310-abi3-win_amd64.whl\n")
+        (self.downloads / "SHA256SUMS").write_text("".join(lines))
+
+    def test_dev_build_finds_this_targets_archive_in_its_checksums(self):
+        self.dev_build()
+        result = self.run_installer("--version", "dev")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        requests = (self.root / "requests").read_text().splitlines()
+        self.assertEqual([url.rsplit("/", 1)[1] for url in requests],
+                         ["SHA256SUMS", "rusty-tiles-0.4.1-dev.202611121734-x86_64-unknown-linux-gnu.tgz"])
+        self.assertTrue(all("/releases/download/dev/" in url for url in requests))
+        self.assertTrue(os.access(self.destination / "rusty-tiles", os.X_OK))
+
+    def test_dev_build_without_this_target_preserves_existing_binary(self):
+        self.dev_build(targets=("aarch64-apple-darwin", "aarch64-unknown-linux-gnu"))
+        self.preserve_old_binary()
+        result = self.run_installer("--version", "dev")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("development build has no binary for x86_64-unknown-linux-gnu", result.stderr)
+        self.assertEqual(len((self.root / "requests").read_text().splitlines()), 1)
+        self.assertEqual((self.destination / "rusty-tiles").read_text(), "existing binary")
+
+    def test_dev_build_checksum_mismatch_never_executes(self):
+        marker = self.root / "executed"
+        self.release(version="0.4.1-dev.1", binary=f"#!/bin/sh\ntouch '{marker}'\n".encode(), checksum="0" * 64)
+        result = self.run_installer("--version", "dev")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("checksum mismatch", result.stderr)
+        self.assertFalse(marker.exists())
+
     def test_arm_linux_and_intel_macos_assets(self):
         for platform, arch, target in (("Linux", "aarch64", "aarch64-unknown-linux-gnu"),
                                        ("Darwin", "x86_64", "x86_64-apple-darwin")):

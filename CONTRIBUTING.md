@@ -390,6 +390,16 @@ The standalone downloads are default builds. Linux builds use Ubuntu 22.04 (glib
 
 A new version changes converter and cache identity. Consumers must invalidate derivative caches. Vector archives from another encoder identity, schema, library version, CRS or setting need a fresh baseline before reuse. The terrain manifest keeps `heightOverlay` version 1 with south-to-north rows. Echidna keeps its own Python raster and height helpers, separate from this runtime.
 
+### Development builds
+
+The rolling `dev` pre-release is a separate path ([dev-build.yml](.github/workflows/dev-build.yml)). The nightly full CI run on `develop` dispatches it once `Full matrix` passes. It builds only a commit with a full-tier pass (`Full matrix` and `Rust`, as the release gate requires), and only when `develop` has moved past the `dev` tag. It reuses the release build ([release-build.yml](.github/workflows/release-build.yml)) and wheel acceptance with a development version that `scripts/dev_version.py` stamps into the checkout and never commits, then replaces the `dev` pre-release and pushes the image tag `dev`. It never publishes to PyPI or crates.io and never moves `latest`. To rebuild by hand, after a full-tier pass on the commit:
+
+```sh
+gh workflow run dev-build.yml --ref develop -f force=true
+```
+
+On any other branch the workflow builds and tests everything but publishes nothing, so a change to it can be tried before it merges (dispatch `ci.yml` on that branch first). The `dev` tag moves with each build; a clone that fetched it needs `git fetch --tags --force` to follow it.
+
 ## Verification evidence
 
 These files record measured runs. Read them for numbers. They describe one machine and run, not guarantees.
