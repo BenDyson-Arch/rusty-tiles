@@ -1,10 +1,12 @@
 # cargo-nextest profiles for CI (#346). Only the Windows and Intel macOS portable jobs use
-# nextest; every other job runs `cargo test`.
+# nextest, and only outside the nightly run; every other job, and those two in the nightly
+# run (which tests the whole suite on all five targets), runs `cargo test`.
 #
 # `portable` runs each test in its own process, across all test binaries at once, and leaves
 # out the long acceptance suites below. They check platform-independent logic (Python oracles
 # over the tiler's output bytes), and the Linux x86_64, Linux ARM64 and Apple Silicon portable
-# jobs, the Rust job and the native geospatial jobs still run them on every full-tier commit.
+# jobs, the Rust job and the native geospatial jobs still run them on every full-tier commit;
+# the nightly run also runs them on Windows and Intel macOS.
 # Library unit tests, binaries, the other integration suites (including output_digests and
 # every platform-conditional test) and doctests (run separately with `cargo test --doc`)
 # still run on Windows and Intel macOS.

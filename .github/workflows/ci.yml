@@ -324,14 +324,18 @@ jobs:
     # Skipped jobs satisfy required checks; a failed classifier runs everything.
     if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.full != 'false' }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90 # versions: TIMEOUT_PORTABLE
+    # The nightly run tests the whole suite on every target and builds the release archive,
+    # so it gets the longer limit.
+    timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.nightly) && 120 || 90 }} # versions: TIMEOUT_PORTABLE_NIGHTLY TIMEOUT_PORTABLE
     strategy:
       fail-fast: false
       matrix:
-        # `slow`: the runners that took 46-60 minutes with `cargo test`. They use the
-        # nextest `portable` profile (.config/nextest.toml), which runs tests in parallel
-        # across binaries and leaves the long platform-independent acceptance suites to the
-        # other three targets.
+        # `slow`: the runners that took 46-60 minutes with `cargo test`. On pull requests,
+        # pushes and manual runs they use the nextest `portable` profile
+        # (.config/nextest.toml), which runs tests in parallel across binaries and leaves the
+        # long platform-independent acceptance suites to the other three targets. The
+        # nightly run (nightly=true) runs the whole `cargo test` suite on all five targets,
+        # so every platform still runs every test daily.
         include:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
@@ -353,7 +357,8 @@ jobs:
         shell: bash
     env:
       RELEASE_TARGET: ${{ matrix.target }}
-      SLOW: ${{ matrix.slow }}
+      # 'true' only for a slow target outside the nightly run.
+      SLOW: ${{ matrix.slow && !(github.event_name == 'workflow_dispatch' && inputs.nightly) }}
       BUILD_VERSION: ${{ needs.version.outputs.version }}
       PYTHON: ${{ startsWith(matrix.os, 'windows') && 'python' || 'python3' }}
     steps:
@@ -371,7 +376,7 @@ jobs:
           key: portable-${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
       - name: Install cargo-nextest
-        if: matrix.slow
+        if: env.SLOW == 'true'
         uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-nextest@0.9.148 # versions: NEXTEST_VERSION
