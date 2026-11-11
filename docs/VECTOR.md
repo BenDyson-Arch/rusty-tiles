@@ -1,12 +1,14 @@
 # Vector guide
 
-This page explains how the `vector` command turns GIS features into 3D Tiles. **GeoPackage and GeoJSON work in the standard package**, including its Python API, subject to the grid-free CRS limits below. **Shapefile and other OGR formats require native-geospatial**, available through the native container or a CLI/Rust source build. Every option and default is in the [command reference](CLI.md#vector).
+This page explains how the `vector` command turns GIS features into 3D Tiles. **GeoPackage and GeoJSON work in the standard package**, including its Python API, subject to the grid-free CRS limits below. **Shapefile and other OGR formats need the [native-geospatial build](INSTALL.md#native-geospatial-cli)**. Every option and default is in the [command reference](CLI.md#vector).
 
 The output is experimental. It uses draft glTF vector extensions inside a 3D Tiles 1.1 `.3tz` archive. It is not a finalized 3D Tiles 2.0 format.
 
-Vector output uses implicit tiling. The existing spatial partition and LOD chains are addressed as a quadtree, with standard `TILE_BOUNDING_BOX` and `TILE_GEOMETRIC_ERROR` metadata preserving padded boxes and refinement errors. These addresses describe the hierarchy; content is not clipped to regular cells. Upper levels stay explicit tiles, and each implicit root covers at most four levels in a single subtree whose rows carry every tile's actual bounds, so Cesium never culls or picks by a regular cell. Large skeletons are split into explicit external tileset documents. The [command reference](CLI.md#conventions) describes the layout. This is the only output layout: the `--explicit` mode, which published the hierarchy as one explicit manifest, was removed in 0.4.0.
+Vector output uses implicit tiling. The spatial partition and LOD chains are addressed as a quadtree, with standard `TILE_BOUNDING_BOX` and `TILE_GEOMETRIC_ERROR` metadata preserving padded boxes and refinement errors. These addresses describe the hierarchy; content is not clipped to regular cells. Upper levels stay explicit tiles, and each implicit root covers at most four levels in a single subtree whose rows carry every tile's actual bounds, so Cesium never culls or picks by a regular cell. Large skeletons are split into explicit external tileset documents. The [command reference](CLI.md#conventions) describes the layout.
 
-## Acceptance and library API
+**Upgrading from 0.3:** 0.3 wrote explicit tilesets; 0.4 writes only implicit tiling, and its polygon triangulation, winding and fill encoding differ. Convert existing archives again from the source. Archives from 0.3 and earlier cannot seed `--reuse-tileset`; see [What must match](#what-must-match).
+
+## Readers, failures and the Rust API
 
 GeoJSON `.geojson` and `.json` inputs use the same bounded Rust semantic reader
 in standard and native builds. Native geometry operations remain independent
@@ -22,10 +24,11 @@ native container's GDAL is built without network support.
 Rust callers use one `vector::vector_to_archive(VectorRequest, &RunControl)`
 entry point. Construct `VectorRequest::new(input, output, VectorOptions)` and
 select `OutputPolicy::Replace` with `with_policy` when replacement is intended.
-`VectorOptions` owns `max_features`, `repair`, and `ambiguous_outlines`; output
-policy belongs to the request. The former `vector_to_3tz`, `_with_lod`,
-`_with_options`, and `_reported` Rust wrappers and ignored `meshopt_encoder`
-option have been removed. CLI and Python map their options to this same path.
+`VectorOptions` holds the conversion options; output policy belongs to the
+request. CLI and Python map their options to this same path. Rust callers
+upgrading from 0.3 replace the `vector_to_3tz`, `_with_lod`, `_with_options`
+and `_reported` wrappers with this entry point; the ignored `meshopt_encoder`
+option is gone.
 
 An explicitly constructed feature rejection is the only skippable failure.
 Under `--skip-invalid`, rejected features contribute no accepted fragments,
@@ -37,16 +40,16 @@ finish before the archive is sealed, and no success callback runs afterward.
 `VectorResult` returns the published path, finalized report and cleanup diagnostics.
 
 Without reuse, the first accepted geometry selects the local frame; rejected
-candidates cannot choose it. Reuse prepares a fixed prior frame. This acceptance
-contract does not certify topology, CRS transformations or geometric error.
+candidates cannot choose it. Reuse keeps the earlier frame. These rules do not
+certify topology, CRS transformations or geometric error.
 
 ## Requirements
 
-The [installation guide](INSTALL.md#choose-a-build) separates the two builds. Installing GDAL does not enable native-geospatial in a standard binary or Python wheel.
+The [installation guide](INSTALL.md#choose-a-build) compares the two builds. Installing GDAL does not enable native-geospatial in a standard binary or Python wheel.
 
 - The standard build reads GeoJSON and GeoPackage using Rust and bundled SQLite. It supports local XYZ and the verified grid-free CRS classes described below, including polygons with holes, repair, LOD, aggregation, metadata, meshopt and reuse.
 - Shapefile, other OGR drivers and CRS operations beyond the grid-free tier need `native-geospatial`: GDAL 3.12 or newer built with GEOS 3.10 or newer, PROJ 9.2 or newer, and SQLite. This build uses the shared Rust reader for GeoJSON and native ingestion for other admitted OGR formats; geometry processing remains native.
-- CesiumJS 1.143.0 to display batched vector content. See [Compatibility](#compatibility).
+- CesiumJS 1.143.0 or later to display batched content; 1.146.0 is the audited version. See [Compatibility](#compatibility).
 
 Conversion runs offline and needs no Python or executable helpers. The standard build needs no system GDAL, GEOS, PROJ database or SQLite installation. `doctor --command vector` reports the enabled reader and geometry backends and CRS limits; readiness does not establish that a particular source's CRS operation is supported.
 
@@ -138,9 +141,7 @@ With `--repair --ambiguous-outlines`, a repair that collapses to lines or points
 
 The portable backend validates polygons in Rust, repairs self-intersections using an even-odd fill rule and uses constrained Delaunay triangulation. Repairs that would discard collapsed boundary material or move source boundary vertices beyond the preservation checks are refused or handled by the explicit outline policy. Native builds retain GDAL/GEOS repair and triangulation. Triangle ordering and diagonals can differ between these backends.
 
-Polygons with a horizontal CRS and a constant source height retain their original XY coordinates for validation and triangulation. The resulting triangles use the corresponding vertices on the globe. This prevents globe curvature from introducing false crossings, such as the missing Sudan polygon in earlier country conversions. Longitude coordinates are used as supplied; pole and longitude-seam aliases retain their source boundaries. Local polygons, surfaces with varying heights and native compound or three-axis CRS inputs keep the existing best-fit 3D policy. Simplification carries the matching source vertices through each LOD, and triangle fragmentation retains the original boundary without adding internal edges.
-
-Reconvert existing vector archives to apply this correction. Previous vector build state is incompatible with the corrected encoder, including archives from the removed explicit mode.
+Polygons with a horizontal CRS and a constant source height retain their original XY coordinates for validation and triangulation. The resulting triangles use the corresponding vertices on the globe. This prevents globe curvature from introducing false crossings that would drop a polygon. Longitude coordinates are used as supplied; pole and longitude-seam aliases retain their source boundaries. Local polygons, surfaces with varying heights and native compound or three-axis CRS inputs keep the existing best-fit 3D policy. Simplification carries the matching source vertices through each LOD, and triangle fragmentation retains the original boundary without adding internal edges.
 
 `--parent-repair` affects parent display only. Leaves are unchanged. A stand-in is used only when its error bound, the source 3D bounding-box diagonal, fits the tolerance. Reports record `substitution: parentOutline`. Parent repair itself drops no feature.
 
@@ -180,7 +181,7 @@ A u16 tile can only hold multiples of its own step, and a tile that spans a larg
 
 Fill copies are matched only with fill copies, and line copies only with line copies. A boundary line over a fill edge is not a crack. The tile's other vertices keep its own finest step. A tile keeps its own range when it has no shared vertices, or when its shared vertices are held only by its ancestors and descendants, which never render with it.
 
-On Natural Earth data with `--maxVertices 64 --maxBytes 16384 --quantize --meshopt`, the median tile error is lower than with a per-tile range, because float32 tiles are almost exact. Antarctica alone: 6.0 m against 10.5 m (maximum 10.7 m against 49.6 m). 1:110m countries: 7.7 m against 14.0 m (maximum 40.3 m against 61.6 m). Sizes are within 0.3%. Unsplit countries, where every border is shared between seven large tiles, are the costly case: six of the seven tiles store float32, so the output is 16% larger, while the median falls from 129.1 m to 2.3 m (maximum 172.3 m against 169.1 m). A u16 tile on the lattice uses a power-of-two step, up to twice a range-fitted one per axis, so Sudan alone reaches a maximum of 23.3 m against 19.5 m (median 8.1 m against 15.7 m). The survey pass roughly doubles encoding time for quantized builds. With `--reuseTileset`, unchanged input restores the previous build as it is, without surveying or encoding. Changed input surveys everything again, and the final pass then reuses the unchanged subtrees. Reuse keys rows by their shared vertices' recorded steps and storage.
+On Natural Earth data with `--max-vertices 64 --max-bytes 16384 --quantize --meshopt`, the median tile error is lower than with a per-tile range, because float32 tiles are almost exact. Antarctica alone: 6.0 m against 10.5 m (maximum 10.7 m against 49.6 m). 1:110m countries: 7.7 m against 14.0 m (maximum 40.3 m against 61.6 m). Sizes are within 0.3%. Unsplit countries, where every border is shared between seven large tiles, are the costly case: six of the seven tiles store float32, so the output is 16% larger, while the median falls from 129.1 m to 2.3 m (maximum 172.3 m against 169.1 m). A u16 tile on the lattice uses a power-of-two step, up to twice a range-fitted one per axis, so Sudan alone reaches a maximum of 23.3 m against 19.5 m (median 8.1 m against 15.7 m). The survey pass roughly doubles encoding time for quantized builds. With `--reuse-tileset`, unchanged input restores the previous build as it is, without surveying or encoding. Changed input surveys everything again, and the final pass then reuses the unchanged subtrees. Reuse keys rows by their shared vertices' recorded steps and storage.
 
 A tile that contains line strips also keeps every strip end's mirror inside its range. Otherwise CesiumJS 1.146's synthetic strip-end neighbour (2c−n, stored as u16) can wrap into a long spike. This padding costs precision, not bytes: the step can be up to three times coarser.
 
@@ -193,18 +194,16 @@ Buffered grid clipping and coverage-wide edge reconciliation are not implemented
 
 ### Fills are glTF only
 
-Fragmented fills used to be plain triangle GLBs inside a `b3dm` wrapper. CesiumJS 1.146.0 uses its vector decoder for every GLB in a tileset that declares `3DTILES_content_gltf_vector`. That decoder needs polygon loops, so unwrapped triangle fills failed to load ([#75](https://github.com/BenDyson-Arch/rusty-tiles/issues/75)). Each fill triangle is now one `EXT_mesh_polygon` polygon. It is stored in the same GLB as the tile's other features, which may include the polygon's boundary lines. Archives contain only glTF content.
+CesiumJS 1.146.0 uses its vector decoder for every GLB in a tileset that declares `3DTILES_content_gltf_vector`, and that decoder needs polygon loops. Plain triangle fills therefore do not load. Each fill triangle is one `EXT_mesh_polygon` polygon, stored in the same GLB as the tile's other features, which may include the polygon's boundary lines. Archives contain only glTF content; earlier versions stored fragmented fills as `b3dm`.
 
 - **Winding.** Rings follow the pinned draft: exteriors are counterclockwise and holes clockwise, seen from local up. Triangles face up: away from the earth's centre for geographic polygons, and towards local up (+Y) on the best-fit plane otherwise. A vertical polygon has no up side, so it gets a fixed horizontal side. Every loop is wound so that its polygon's triangles lie on its left. This holds for thin geographic triangles, whose lon/lat orientation can disagree with their 3D shape, and for rings that span a hemisphere.
 - **Index size.** Loop indices and polygon offsets are 16-bit when every value is below 65535, and 32-bit otherwise.
 - **Loop coverage.** CesiumJS 1.146.0 sizes a per-vertex lookup by the length of the loop list. A triangle corner numbered past that length loses its triangle. A polygon with a vertex outside its loops is refused when its feature is read. The encoder refuses any primitive that would break the rule.
-- **Cost.** Each fill triangle carries its own loop and two polygon offsets. With 16-bit indices that is 12 bytes per triangle before compression. Dropping the `b3dm` wrapper and drawing boundaries as ring runs saves more than this, so fragmented archives are smaller than before.
-
-`--reuse-tileset` refuses an earlier archive that contains `b3dm` fills, with the message "previous archive has legacy b3dm polygon fills". Convert once without `--reuse-tileset` to make a new baseline.
+- **Cost.** Each fill triangle carries its own loop and two polygon offsets. With 16-bit indices that is 12 bytes per triangle before compression. Dropping the `b3dm` wrapper and drawing boundaries as ring runs saves more than this: on test fixtures, fragmented archives are 8–16% smaller than with `b3dm` fills.
 
 ### Memory and scratch disk
 
-Features and a shared-coordinate index are spooled to a SQLite store beside the output. Its cache is 32 MiB. The portable GeoJSON reader also spools collection members to disk. Memory depends on one source feature, one candidate tile per worker, the hierarchy and, in native builds, the OGR driver. Leave scratch disk for transformed coordinates and indexes. Staging files are removed on success and on failure.
+Features and a shared-coordinate index are spooled to a SQLite store beside the output. Its cache is 32 MiB. The portable GeoJSON reader also spools collection members to disk. Memory depends on one source feature, one candidate tile per worker, the hierarchy and, in native builds, the OGR driver; there is no memory bound independent of the source. Leave scratch disk for transformed coordinates and indexes. Staging files are removed on success and on failure.
 
 ## Level of detail
 
@@ -299,11 +298,11 @@ rusty-tiles vector -i updated.gpkg -o output/updated.3tz --layer roads \
 
 ### What must match
 
-Reuse needs the same layer selection, height policy, budgets, LOD, field, list, aggregation and encoding options as the earlier build. It also needs the same encoder revision and backend. Native builds additionally need the same GDAL, GEOS and PROJ versions. Switching between portable and native builds needs a fresh conversion. Archives made by the earlier Python converter also need a fresh build first.
+Reuse needs the same layer selection, height policy, budgets, LOD, field, list, aggregation and encoding options as the earlier build. It also needs the same encoder revision and backend, so a new rusty-tiles version usually needs one fresh build. Native builds also need the same GDAL, GEOS and PROJ versions. Switching between standard and native builds needs a fresh conversion.
 
 A mismatch fails with a reason. Remove `--reuse-tileset` to build afresh. A changed `--where` filter is the exception: it starts a fresh build and records `reuse.incompatibleReason: attribute filter changed`.
 
-Archives written before the bounded implicit forest layout are not reuse baselines; reuse fails with "run a fresh conversion". Explicit-layout archives, from the `--explicit` mode removed in 0.4.0 or the explicit default of 0.3.0 and earlier, are refused with "previous archive uses the retired explicit vector layout". Convert once without `--reuse-tileset` to make a new baseline. Earlier default archives that split their hierarchy into `implicit-tileset-*.json` documents are also reported Unsupported by `validate`; convert them again.
+Archives from 0.3 and earlier are not reuse baselines. Explicit-layout archives are refused with "previous archive uses the retired explicit vector layout", archives with `b3dm` fills with "previous archive has legacy b3dm polygon fills", and other earlier layouts with "run a fresh conversion". Convert once without `--reuse-tileset` to make a new baseline.
 
 ### How reuse works
 
@@ -333,7 +332,7 @@ Use CesiumJS 1.146.0 for the audited draft vector contract. Pin your runtime and
 
 Batched content was checked on 1.143.0 on 2026-10-06. On 2026-10-09, 1.146.0 passed both batched and batched `--quantize --meshopt` fixtures, including point aggregates, holes, fragmentation, LOD, styling and picking after initial load and hard refresh. The combined format was also checked previously on 1.142.0 and 1.143.0. [Recorded results](../bench/vector_draft_compatibility.json) include the validator's unsupported primitive-restart limitation. Other engines are untested. Rendering triangles alone does not prove compatibility.
 
-The encoder follows these draft revisions, audited against CesiumJS 1.146.0 on 2026-10-09. The SHAs remain unchanged: they are still the draft PR heads. The [compatibility audit and schema provenance](vector-schema/README.md) records the fields read by that runtime and the distinction from the 3D Tiles 2.0 RFC. The ratification recheck is tracked in [#87](https://github.com/BenDyson-Arch/rusty-tiles/issues/87).
+The encoder follows these draft revisions, audited against CesiumJS 1.146.0 on 2026-10-09; they were still the draft PR heads then. The [compatibility audit and schema provenance](vector-schema/README.md) records the fields read by that runtime and the differences from the 3D Tiles 2.0 RFC. A recheck after ratification is tracked in [issue 87](https://github.com/BenDyson-Arch/rusty-tiles/issues/87).
 
 | Extension | Reference |
 | --- | --- |
@@ -417,13 +416,3 @@ function integerOrNull(value, schemaNoData) {
 `--list-fields json` values are JSON text strings. Parse them if you need arrays. Repeat this check when you change runtime version, because the INT64 behaviour is specific to 1.143.
 
 Browser probes that check these behaviours are described in [CONTRIBUTING.md](../CONTRIBUTING.md#browser-probes).
-
-## Finite 0.4 acceptance evidence
-
-The [vector acceptance record](../bench/architecture_audit/vector_fidelity/README.md)
-links the analytic published-forest geometry/metadata/identity, placement/bounds,
-fresh/reuse and paired CLI/Python checks, plus the realistic local-data and
-100k mixed-feature resource receipts. These finite fixtures supplement the
-existing transactional admission, seam, LOD and lifecycle suites. They do not
-establish universal topology/repair/CRS correctness or a source-independent RAM
-bound; the experimental consumer and aggregation identity limits above remain.

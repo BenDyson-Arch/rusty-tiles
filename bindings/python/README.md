@@ -1,37 +1,17 @@
-# rusty-tiles for Python
+# rusty-tiles
 
-Convert meshes, GeoJSON and GeoPackage vectors, local or grid-free georeferenced LAS/LAZ point clouds and existing tilesets directly from
-Python, including Blender's bundled Python. The wheels contain the portable
-standard (default) Rust build: no CLI subprocess, GDAL, Rust compiler or extra Python
-packages are needed at runtime.
-
-## Package scope
-
-The wheel supports mesh conversion, local/grid-free georeferenced LAS/LAZ,
-GeoJSON/GeoPackage vectors, tileset packaging and archive validation. The
-function table below is the complete Python API.
-
-**Native-geospatial is a separate CLI/Rust build, not a pip extra or wheel.**
-The Python package does not provide imagery or terrain conversion, Shapefile,
-PostGIS or other OGR-only inputs, or native GDAL/PROJ fallback. Installing GDAL
-or its Python bindings does not add those capabilities to this wheel. Use the
-[native CLI/container or Rust library](../../docs/INSTALL.md#native-geospatial-cli)
-for those operations. The wheel also does not install the `rusty-tiles` CLI or
-expose `doctor` or `preview`. Use `model_to_manifest` for the single-model sibling manifest product.
-
-## Install and convert
-
-After the first PyPI publication, install a released standard wheel with:
+Convert meshes, GeoJSON/GeoPackage vectors and LAS/LAZ point clouds to 3D Tiles from Python, including Blender's bundled Python.
+Self-contained wheels: no GDAL, CLI, Rust compiler or other Python packages are needed at runtime.
 
 ```sh
 python -m pip install rusty-tiles
 ```
 
-Use CPython 3.10 or newer. Release wheels cover Linux x86_64 and ARM64
-(glibc 2.28+), macOS Intel and Apple Silicon (macOS 15+), and Windows x64.
-The CPython stable ABI lets each wheel work across Python minor versions.
+Wheels need CPython 3.10 or newer and use the stable ABI, so one wheel covers later Python versions. They are built for Linux x86_64 and ARM64 (manylinux_2_28, glibc 2.28+), macOS 15+ on Intel and Apple Silicon, and Windows x64. They are tested inside official Blender 4.5.14 LTS on Linux x64, Windows x64 and both macOS architectures; Linux ARM64 has no official Blender 4.5 bundle.
 
-For an admitted local metre/Y-up static `example.glb`, run:
+## Example
+
+Convert a static local `example.glb` (metres, Y up) and place it near Brisbane:
 
 ```python
 from pathlib import Path
@@ -46,201 +26,176 @@ assert result.archive
 assert rusty_tiles.validate(result.output)["ok"]
 ```
 
-All inputs and outputs are filesystem paths (`str` or `os.PathLike`).
-Existing outputs are preserved unless `force=True`; publication uses the Rust
-library's private staging and atomic archive replacement. The mesh,
-point-cloud and vector entry points return their own typed results with
-required reports and cleanup diagnostics, as described below.
+## API
 
-| Function | Keyword arguments |
+All inputs and outputs are filesystem paths (`str` or `os.PathLike`). All keywords are keyword-only. Existing outputs are kept unless `force=True`. Without a callback, functions are silent.
+
+| Function | Keyword arguments and result |
 | --- | --- |
 | `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `memory_budget_bytes=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
-| `model_to_manifest(input, ...)` | Same rigid placement/policy/callback keywords; returns `ModelManifestResult` with fixed sibling output |
-| `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=8192` (at most 8192), `chunk_points=100000`, `metadata=False`, `metadata_attributes=False`, `callback=None` |
-| `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage; returns `VectorResult` |
-| `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; returns `PackageResult` |
-| `raster_tile_to_directory(input, output, *, zoom, x, y, force=False, callback=None)` | Exported refusal-only surface in the standard wheel: raises `UnsupportedError`; no imagery conversion. `RasterDirectoryResult` is exported with `output`, `report`, `cleanup_diagnostics` properties but this wheel cannot produce one. |
-| `validate(input, *, lazy_payloads=False, max_volume=None, scratch_dir=None, expect_profile=None, callback=None)` | Returns the bounded [validation report](../../docs/VALIDATION.md), including completed checks, inspection gaps, `storedBytes`, the effective `limits` and their `limitDerivation`. `max_volume` maps limit keys to ints (opt-in volume caps such as `sourceArchiveBytes`, or replaced budgets such as `hierarchyVisits`); a bad key or value raises `InvalidRequestError` before any I/O. `scratch_dir` places scratch in an existing directory. `expect_profile="hlod"` requires the HLOD profile whatever the archive's labels say (every payload must carry source identity and every HLOD check runs; an archive that declares HLOD itself is held to it anyway); any other value raises `ValueError` before the archive is opened. `callback` receives progress events; raising from it, or Ctrl-C, stops the validation. A limit refusal's `ResourceLimitError.limit` is `{"limit", "value", "observed", "derivation"}` |
+| `model_to_manifest(input, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; writes a sibling `tileset.json` and returns `ModelManifestResult` |
+| `point_cloud_to_3tz(input, output, ...)` | required `source_crs`, `force=False`, `height_offset=None`, `max_points=8192` (also the maximum), `chunk_points=100000`, `metadata=False`, `metadata_attributes=False`, `callback=None`; returns `PointCloudResult` |
+| `vector_to_3tz(input, output, ...)` | GeoJSON or GeoPackage; see [Vectors](#vectors); returns `VectorResult` |
+| `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; packs an existing tileset directory and returns `PackageResult` |
+| `validate(input, ...)` | `lazy_payloads=False`, `max_volume=None`, `scratch_dir=None`, `expect_profile=None`, `callback=None`; returns the validation report as a `dict` |
+| `raster_tile_to_directory(input, output, *, zoom, x, y, force=False, callback=None)` | Always raises `UnsupportedError` in this package; see [Not included](#not-included) |
+
+Every result has `output` (the resolved absolute path) and `cleanup_diagnostics`. `PackageResult` has a `receipt`; the others have a required `report` dictionary, and `TilerResult` also has `diagnostics`. `TilerResult`, `PointCloudResult`, `VectorResult` and `PackageResult` have `archive=True`. Results are frozen, but their dictionaries are not deeply immutable.
+
+### Not included
+
+This package contains the standard (portable) build only. It has no imagery or terrain conversion, no Shapefile, PostGIS or other OGR-only inputs, no native GDAL/PROJ CRS operations, and no CLI, `doctor` or `preview`. Installing GDAL or its Python bindings does not add them, and there is no native wheel or pip extra. Use the [native-geospatial CLI, container or Rust library](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/INSTALL.md#native-geospatial-cli) for those.
+
+`raster_tile_to_directory` and `RasterDirectoryResult` are exported, but this package cannot convert imagery: the function raises `InvalidRequestError` for an invalid XYZ request and otherwise `UnsupportedError`, without creating output or calling the callback. `raster_to_pyramid`, `RasterRequest` and `RasterDisplay` are not exported.
 
 ### Streamed local mesh tiler
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
 scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None,
 scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
-height_offset=None, force=False, callback=None)` is the single new public
-source-mesh operation.
-It runs capture, leaf payloads, coarse levels and implicit hierarchy delivery through
-one core run and publication; leaf directories/manifests are internal. Output has
-exact full-detail leaves under coarse parent tiles built as a classic octree level
-of detail (HLOD). A coarse tile's geometric error is a sampled, measured distance to
-the source, not a certificate; its triangles carry one representative
-`source_primitive` ID while leaves keep exact provenance; and its textures are fresh
-charts sampled from the source, an approximation with no appearance certificate. See
-the [mesh guide](../../docs/MESH.md#coarse-levels-hlod).
+height_offset=None, force=False, callback=None)` converts a source mesh to a
+`.3tz` archive in one run. The output has exact full-detail leaves under
+coarse parent tiles (hierarchical level of detail, HLOD). A coarse tile's
+geometric error is a sampled distance to the source, not a guaranteed bound.
+Its triangles carry one representative `source_primitive` ID, while leaves keep
+exact provenance, and its textures are new charts sampled from the source. See
+the [mesh guide](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#coarse-levels-hlod).
 
-It accepts the local static metre/Y-up/core PBR domain in the [mesh guide](../../docs/MESH.md),
-with optional rigid WGS84 ellipsoidal anchor, active ENU quaternion and source
-scene translation. Alternatively a declared [source CRS](../../docs/MESH.md#source-crs)
-(`source_crs="EPSG:3857"`, `source_axes="y-up"` by default or `"xyz"`, `source_offset=(E, N[, A])`
-added in double precision or a strict Metashape `source_offset_file`, and
-`height_offset` metres defaulting to 0) is mapped at capture,
-with the CLI's rules; it excludes the rigid placement keywords and `None` or
-`"local"` keeps local input. There is no CRS inference, geoid height adjustment,
-texture-format selector, explicit mode or coarse-tile tuning.
-All four profile names (`fast`, default `balanced`, `quality`, `lossless`) are
-provisional; constants will be calibrated together as HLOD acceptance
-progresses. Base-colour and emissive pages, leaf and coarse, are KTX2 ETC1S
-(quality 50 in `fast`, 90 in `balanced`), UASTC in `quality` and PNG in
-`lossless`; KTX2/Basis and meshopt are in-process, and JPEG source decoding
-remains supported.
+Input is the local static metre/Y-up/core PBR domain in the
+[mesh guide](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md).
+Place it either with [rigid placement](#rigid-placement) (`anchor`,
+`orientation_xyzw`, `scene_offset`) or with a declared
+[source CRS](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#source-crs),
+not both. A source CRS uses `source_crs="EPSG:3857"` (for example),
+`source_axes="y-up"` (default) or `"xyz"`, `source_offset=(E, N[, A])` added in
+double precision or a Metashape `source_offset_file`, and `height_offset` in
+metres (default 0), with the CLI's rules. `source_crs=None` or `"local"` keeps
+local input. There is no CRS inference, geoid adjustment, texture-format
+selector or coarse-tile tuning.
 
-A lossy **leaf** texture page that misses a decoded-image gate is re-encoded at UASTC
-level 2, then level 3, then delivered as its exact level-0 PNG; a mip-sampled
-page keeps its sampler, its coarser levels viewer-generated outside the guarantee. A coarse
-page never fails the call this way: it falls back to its exact level-0 PNG, sampled
-without mips, and is counted in `result.diagnostics["hlod"]["appearance_by_depth"]`. Escalated
-pages are larger than the profile's own encoding (PNG fallback pages most of
-all). `result.report["escalated_pages"]` (`uastc_level2`, `uastc_level3`),
-`["lossless_fallback_pages"]` (level-0-sampled), `["viewer_mip_fallback_pages"]` and
-`["viewer_mip_fallbacks"]` (every mip-sampled PNG page: first, depth, page, slot),
-`["escalation_diagnostics"]` (the first 32 pages:
-leaf, first, depth, page, slot, sources, step, misses) and
-`["escalation_diagnostics_omitted"]` describe them. Cancellation through the
-callback is polled before every re-encode step. See the
-[mesh guide](../../docs/MESH.md#profiles-and-resources).
+Profiles are `fast`, `balanced` (default), `quality` and `lossless`; their
+settings are provisional and may change in later releases. Base-colour and
+emissive leaf pages are KTX2 ETC1S in `fast`, KTX2 UASTC with Zstd in
+`balanced` and `quality`, and PNG in `lossless`. Coarse pages use ETC1S in
+`fast` and `balanced`. KTX2/Basis and meshopt encoding run in-process; JPEG
+sources are supported. See [profiles and resources](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#profiles-and-resources).
 
-`memory_budget_bytes` is the run's declared memory ceiling in bytes: a positive `int`
-(a `bool`, float or string is a `TypeError`; zero, a negative number or a value above
-2**64 - 1 is `InvalidRequestError`, raised before any file is read). `None` resolves
-the lesser of 4 GiB and half the detected headroom (2 GiB if undetected). The budget
-is never raised, a run that cannot fit under it raises `ResourceLimitError` before it
-allocates, and the archive does not depend on it. `result.diagnostics["memory"]` holds
-the resolved `budget` and each stage's minimum. See the
-[memory budget](../../docs/MESH.md#memory-budget).
+A lossy **leaf** page that misses a decoded-image quality gate is re-encoded
+at UASTC level 2, then level 3, then delivered as its exact level-0 PNG. A
+mip-sampled page keeps its sampler, with viewer-generated coarser levels outside
+the guarantee. A **coarse** page never fails the call: it falls back to its exact
+level-0 PNG, sampled without mips, counted in
+`result.diagnostics["hlod"]["appearance_by_depth"]`. Escalated pages are larger,
+PNG pages most of all. They are described by these `result.report` keys:
 
-`jobs=None` means memory-aware auto. A positive integer is a maximum capped by
-cores and the stage's memory admission. Unknown memory uses one worker; a
-mandatory item that cannot fit is still refused. Booleans/nonintegers are
-rejected. `scratch_dir` selects owned working data, while final archive staging
-stays beside output. Output must be `.3tz`. `force=True` allows completed-file
-replacement while preserving the original on precommit failure.
+- `escalated_pages` (`uastc_level2`, `uastc_level3`)
+- `lossless_fallback_pages` (level-0-sampled)
+- `viewer_mip_fallback_pages` and `viewer_mip_fallbacks` (every mip-sampled PNG page: first, depth, page, slot)
+- `escalation_diagnostics` (the first 32 pages: leaf, first, depth, page, slot, sources, step, misses) and `escalation_diagnostics_omitted`
 
-Frozen `TilerResult` exposes resolved `output`, `archive=True`, required `report`
-and `diagnostics` dictionaries and `cleanup_diagnostics`. `report` is the exact
-snake_case semantic `conversion.json` in the archive; `diagnostics` contains
-requested/admitted stage workers, memory/scratch ownership, archive bytes and
-peak held records outside the archive, so jobs and scratch do not change its
-bytes. Placement/coordinate labels and the actual root transform are reported.
-Declared memory accounting is not a measured RSS guarantee. The dictionaries
-are not deeply immutable.
+The callback is polled for cancellation before every re-encode step.
 
-Required callbacks are precommit and share the existing fallible observer
-contract; the original winning Python callback exception is preserved. Normal
-request/source/I/O/unsupported/conflict/resource kinds use the existing typed
-exceptions. Path binding precedes callbacks, including cwd changes. See the
-[guide's error table and Cesium colour limitation](../../docs/MESH.md#reports-and-errors).
-The standard wheel needs no external encoder or system geospatial dependency.
+`memory_budget_bytes` is the run's declared memory ceiling: a positive `int`.
+A `bool`, float or string raises `TypeError`; zero, a negative value or a value
+above 2**64 - 1 raises `InvalidRequestError` before any file is read. `None`
+uses the lesser of 4 GiB and half the detected headroom (2 GiB if undetected).
+The budget is never raised: a run that cannot fit raises `ResourceLimitError`
+before it allocates. The archive does not depend on it.
+`result.diagnostics["memory"]` holds the resolved `budget` and each stage's
+minimum. Declared memory accounting is not a measured RSS guarantee. See the
+[memory budget](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#memory-budget).
 
-The legacy `mesh_to_3tz` and `mesh_local_to_3tz` functions, with their
-`MeshResult` and `ConversionResult` classes and the `texture_format`, `explicit`
-and `node_features` keywords, were removed in 0.4.0; see the
-[migration notes](../../docs/MESH.md#migration-from-older-mesh-converters).
-Exact wrapping through `glb_to_3tz` and sibling `model_to_manifest` remains a
-separate product. `point_cloud_to_3tz` and `vector_to_3tz` write implicit
-tiling only; their `explicit` keyword was removed in 0.4.0 and now raises
-`TypeError`.
-`metadata=True` keeps every source field in a per-point property table (off by
-default: position and colour only). `metadata_attributes=True` adds point property
-attributes named `vertex_classification`, `vertex_intensity` and `vertex_return_number`.
+`jobs=None` chooses workers automatically from memory. A positive integer is a
+maximum, capped by cores and each stage's memory admission; booleans and
+non-integers are rejected. With unknown memory, one worker is used. A mandatory
+item that cannot fit is still refused. `scratch_dir` holds working data; final
+archive staging stays beside the output. The output must be `.3tz`.
+`force=True` replaces a completed file and keeps the original if the run fails
+before commit.
 
-### Last-resort declarations
+`TilerResult.report` is the snake_case `conversion.json` stored in the archive.
+`diagnostics` holds requested and admitted stage workers, memory and scratch
+use, archive bytes and peak held records, which are kept out of the archive so
+`jobs` and `scratch_dir` do not change its bytes. Placement labels and the
+actual root transform are reported. See the
+[error table and Cesium colour limitation](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#reports-and-errors).
 
-`asset.extras.rustyTiles.lastResort` is a strict object with exactly two required
-integer fields: `stage` in 0–3 and `foldFaces` in 0–18446744073709551615; unknown
-fields, missing fields and other types are invalid. Absence means no declaration.
-N1 (stage 1) admits new shared-point faces/edges only in their deterministic seam
-owner. N2 (stage 2) also admits folds, turns reversed faces to source orientation
-and removes coincident copies beyond source multiplicity. N3 (stage 3) clusters
-per input component while fixing interface points, opening pins and border-touching
-open boundaries; border-free components and holes may drop or close at any size,
-with loss measured into G rather than bounded by E. Stage 0 declares inherited
-folds retained above a stage-2/3 descendant, not another reduction strategy.
-
-`foldFaces` counts decoded faces in a coincident group (at least two faces on the
-same corner set, either orientation) or incident to an edge used in the same
-direction by at least two faces. Count each qualifying face once, not each pair
-or edge. Validation recounts this value (`lastResort` on mismatch), requires a
-fold-admitting descendant for stage 0, and permits admitted folds from stage 2
-or in a declared ancestor of such a stage. On every coarse tile, `seamOwner`
-rejects new shared-point edges/faces outside their deterministic owner, using
-whole-source holding-leaf runs; see the [HLOD decision](../../docs/architecture/hlod-040-decision.md) for the hash rule.
-
-For example, inside a GLB's `asset`:
-
-```json
-{"extras":{"rustyTiles":{"lastResort":{"stage":2,"foldFaces":4}}}}
-```
-
-This declares four qualifying decoded faces, which must match the recount.
-Conversion `diagnostics.hlod` reports `last_resort_tiles`, `last_resort_stages`
-(N1/N2/N3 counts), `fold_faces` and `declared_tiles` (including stage-0 tiles,
-with stage and fold count). Residual omission occurs only when the contract alone
-exceeds the cap or border-touching open boundaries cannot survive the last resort;
-it propagates upward. The declaration does not certify source-distance maxima.
+Coarse tiles that need last-resort reduction declare it in
+`asset.extras.rustyTiles.lastResort`; `result.diagnostics["hlod"]` reports
+`last_resort_tiles`, `last_resort_stages`, `fold_faces` and `declared_tiles`.
+See [last-resort declarations](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#last-resort-declarations).
 
 ### Rigid placement
 
-`mesh_to_tileset`, `glb_to_3tz` and `model_to_manifest` share the [F1c1 placement contract](../../docs/architecture/f1c1-contract.md), which defines the independently checked rigid frame and numerical domain. `anchor` is `(longitude_degrees, latitude_degrees,
-ellipsoidal_height_metres)` on WGS84. Omission keeps local output. An anchor
-permits `orientation_xyzw`, a near-unit right-handed active ENU quaternion
-(scalar W last), and `scene_offset`, a glTF Y-up metre translation after the
-source node chain and before orientation. Their omissions mean identity and zero;
-either without an anchor raises `InvalidRequestError`. The quaternion norm must
-be within 1e-12 of one and is normalized once. Longitude/latitude must be in
-[-180,180]/[-90,90]; nonfinite values are invalid. The finite magnitude ceiling
-is specified in the contract and exceeding it raises `UnsupportedError` before
-source I/O. These domain decisions are shared with Rust/CLI.
+`mesh_to_tileset`, `glb_to_3tz` and `model_to_manifest` share one rigid
+placement. `anchor` is `(longitude_degrees, latitude_degrees,
+ellipsoidal_height_metres)` on WGS84; without it, output stays local.
+With an anchor you may add `orientation_xyzw`, a near-unit right-handed active
+ENU quaternion (scalar W last), and `scene_offset`, a glTF Y-up metre
+translation applied after the source node chain and before orientation. They
+default to identity and zero. Either one without an anchor raises
+`InvalidRequestError`.
 
-The frame uses cartographic latitude/longitude at the ellipsoidal anchor,
-including elevated anchors and poles; supplied longitude defines the pole
-meridian. Placement is an f64 rigid root transform. Offset does not restore a
-projected E/N/A shift, infer source CRS, or correct a geoid.
+The quaternion norm must be within 1e-12 of one; it is normalised once.
+Longitude must be in [-180, 180] and latitude in [-90, 90]; non-finite values
+are invalid. Values above the finite magnitude ceiling in the
+[placement contract](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/architecture/f1c1-contract.md)
+raise `UnsupportedError` before the source is read. These rules match the CLI
+and Rust library.
 
-`glb_to_3tz` now returns frozen `ModelWrapResult` with a required report and cleanup diagnostics, and captures exact admitted source/resource bytes beneath `model/` without new LOD. It accepts the bounded static local metre/Y-up/core PBR profile, explicit rigid placement and fallible callbacks. Animation, skins, morph targets, imported extensions/extras, data URIs and larger models are excluded; the former broader wrapping escape hatch and HPR keywords are retired.
+The frame uses geodetic latitude and longitude at the ellipsoidal anchor,
+including elevated anchors and poles; at a pole, the supplied longitude sets
+the meridian. Placement is an f64 rigid root transform. `scene_offset` does
+not restore a projected easting/northing shift, infer a source CRS or correct
+for a geoid.
 
-`model_to_manifest(input, ...)` returns `ModelManifestResult` and writes fixed sibling `tileset.json` through completed-file F0 publication. The content URI is the escaped original basename; all source resources remain caller owned and must stay unchanged during publication and continued use. Directory discovery and arbitrary manifest output bases are retired. Both products report schema 1/profile `w1-static-model-v1`, original-node conservative bounds, root detail error zero and a separate positive top-level visibility error, captured and emitted byte counts, and actual placement. See the [wrapping contract](../../docs/architecture/model-wrapping-contract.md).
-`convert_to_3tz` packs the regular files beneath a tileset directory or the
-directory containing its exact `tileset.json` path. It returns `PackageResult`
-with `output`, `archive=True`, a `PackageReceipt`, and `cleanup_diagnostics`.
-Its `output` is the resolved absolute destination used for validation and
-installation; later callback changes to the working directory cannot redirect it.
-The receipt has `member_count` (excluding the generated index), `source_bytes`
-and `archive_bytes`. A cleanup diagnostic has `path`, `kind` and `message`;
-it identifies a temporary-name path needing inspection beside a successfully
-installed output. Its message distinguishes cleanup failure from uncertain
-post-installation ownership; do not assume every reported path is disposable.
-Selected source bytes, including `conversion.json`, pass through unchanged;
-the returned receipt is separate from those files. Packaging does not check
-scene semantics or discover resources outside the selected directory.
+### Model wrapping and manifests
 
-Package outputs must end in `.3tz` or `.3dtiles.zip`. Member names may not contain
-either extension, and each member must be smaller than `2**32 - 1` bytes;
-the archive as a whole may exceed that size.
-Package sources must remain stable during the call. Symlinks, special files,
-unsafe/duplicate member names and the reserved `@3dtilesIndex1@` are rejected.
-Remove a generated index explicitly before repacking an extracted archive.
-The destination must be outside the source tree and must not alias a selected
-file. `force=False` refuses a competing destination; `force=True` permits
-completed-file replacement. A failure before installation preserves an
-existing output. Namespace installation and temporary-name cleanup are
-separate; neither policy promises power-loss durability. On Unix, packaged output is
-created with private mode `0600` (subject to umask), including when replacing a previous file;
-change its permissions explicitly if other users need access.
-Point-cloud calls require coordinate intent: pass `source_crs="local"` for
-local XYZ metres with Z up. For globe placement,
-pass `source_crs="header"` or an explicit CRS such as `"EPSG:32656"`, and
-`height_offset=0` only when source Z is already ellipsoidal metres:
+`glb_to_3tz` stores the admitted source and resource bytes unchanged under
+`model/` in a `.3tz`, without new level of detail. `model_to_manifest` writes a
+`tileset.json` beside the source instead; its content URI is the escaped
+original file name, and the source files stay yours and must not change while
+in use. Both accept the bounded static local metre/Y-up/core PBR profile.
+Animation, skins, morph targets, imported extensions and extras, data URIs and
+larger models are refused. Both report schema 1, profile
+`w1-static-model-v1`, conservative bounds from the original nodes, root detail
+error zero with a separate positive top-level visibility error, captured and
+emitted byte counts, and the actual placement. See the
+[wrapping contract](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/architecture/model-wrapping-contract.md).
+
+### Packaging
+
+`convert_to_3tz` packs the regular files beneath a tileset directory, or the
+directory containing a given `tileset.json`. `PackageResult.receipt` is a
+`PackageReceipt` with `member_count` (excluding the generated index),
+`source_bytes` and `archive_bytes`. Source bytes, including `conversion.json`,
+pass through unchanged. Packaging does not check scene semantics or find
+resources outside the selected directory.
+
+Outputs must end in `.3tz` or `.3dtiles.zip`. Member names may not contain
+either extension, and each member must be smaller than `2**32 - 1` bytes; the
+archive itself may be larger. Sources must not change during the call.
+Symlinks, special files, unsafe or duplicate member names and the reserved
+`@3dtilesIndex1@` are rejected, so remove a generated index before repacking an
+extracted archive. The destination must be outside the source tree and must
+not alias a selected file. A failure before installation keeps an existing
+output; neither installation nor cleanup promises power-loss durability. On
+Unix, the archive is created with mode `0600` (subject to umask), including on
+replacement; change its permissions if other users need access.
+
+A `CleanupDiagnostic` has `path`, `kind` and `message`. It names a
+temporary-name path that needs inspection beside a successfully installed
+output. The message distinguishes a cleanup failure from uncertain ownership
+after installation, so do not assume every reported path is disposable.
+
+### Point clouds
+
+`source_crs` is required: `"local"` for local XYZ metres with Z up, `"header"`
+for the LAS horizontal CRS, or an explicit CRS such as `"EPSG:32656"`.
+Georeferenced input also needs a finite `height_offset` in metres to
+ellipsoidal height; use `0` when Z is already ellipsoidal. Local input forbids
+it.
 
 ```python
 rusty_tiles.point_cloud_to_3tz(
@@ -248,18 +203,25 @@ rusty_tiles.point_cloud_to_3tz(
 )
 ```
 
-The wheel supports verified grid-free WGS84 geographic, UTM and Mercator
-transforms, plus supported WKT/PROJ local projections with explicit WGS84
-or Helmert datum parameters. It refuses grid-dependent, compound/geoid,
-dynamic or unknown datum definitions with `UnsupportedError` naming the
-native build. See the [CRS limits](../../docs/FORMATS.md#point-clouds).
-Text `.xyz` files and in-memory buffers are not supported in this release.
+The package supports verified grid-free WGS84 geographic, UTM and Mercator
+transforms, plus supported WKT/PROJ local projections with explicit WGS84 or
+Helmert datum parameters. Grid-dependent, compound/geoid, dynamic or unknown
+datums raise `UnsupportedError` naming the native build. See the
+[CRS limits](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/FORMATS.md#point-clouds).
+Text `.xyz` files and in-memory buffers are not supported.
+
+`metadata=True` keeps every source field in a per-point property table (by
+default only position and colour are kept). `metadata_attributes=True` adds
+point attributes named `vertex_classification`, `vertex_intensity` and
+`vertex_return_number`.
+
+### Vectors
 
 Vector conversion uses the same disk-backed tiling, metadata, LOD and encoding
-pipeline as the CLI. GeoJSON defaults to WGS84 longitude/latitude; GeoPackage
-uses its layer CRS. Use required `source_crs` for metre XYZ coordinates. A 3D
-GeoPackage with a horizontal CRS requires an explicit `height_offset`; GeoJSON
-Z is ellipsoidal metres. The same grid-free CRS restrictions apply to vectors.
+as the CLI. GeoJSON defaults to WGS84 longitude/latitude with ellipsoidal metre
+Z; GeoPackage uses its layer CRS. Pass `source_crs` for local metre XYZ. A 3D
+GeoPackage with a horizontal CRS needs an explicit `height_offset`. The same
+grid-free CRS limits apply.
 
 ```python
 result = rusty_tiles.vector_to_3tz(
@@ -268,66 +230,91 @@ result = rusty_tiles.vector_to_3tz(
 )
 ```
 
-Vector keyword defaults are `force=False`, `source_crs=None`, `height_offset=None`,
+Keywords and defaults: `force=False`, `source_crs=None`, `height_offset=None`,
 `layers=None`, `all_layers=False`, `fields=None`, `drop_fields=None`,
 `list_fields="error"`, `where_clause=None`, `repair=False`,
 `ambiguous_outlines=False`, `skip_invalid=False`, `max_features=64`,
 `max_vertices=65536`, `max_bytes=4194304`, `max_tiles=100000`,
 `max_source_vertices=1000000`, `lod_tolerance=0.1`, `lod_levels=3`, `jobs=None`
-(available cores), `reproducible=False`, `quantize=False`,
-`meshopt=False`, `parent_repair=False`, `aggregate_points=False`,
-`max_parent_features=4096`, `reuse_tileset=None`, and `callback=None`.
+(available cores), `reproducible=False`, `quantize=False`, `meshopt=False`,
+`parent_repair=False`, `aggregate_points=False`, `max_parent_features=4096`,
+`reuse_tileset=None` and `callback=None`.
+
 Layer and field selections are lists of strings. `where_clause` is a read-only
-SQLite expression, `list_fields="json"` preserves list/object fields as JSON
-strings, and `reuse_tileset` names an earlier compatible portable archive.
-The returned `VectorResult` exposes `output`, `archive=True`, the finalized
-`report`, and `cleanup_diagnostics`. Only explicitly typed feature rejections
-are skippable. I/O, source reads, SQLite, required report writes, cancellation
-and callback failures abort even with `skip_invalid=True`.
-See [vector conversion](../../docs/VECTOR.md) for geometry, filtering, repair
-and reuse limits. Close or checkpoint a GeoPackage with unmerged WAL edits
-before conversion.
+SQLite expression. `list_fields="json"` keeps list and object fields as JSON
+strings. `reuse_tileset` names an earlier compatible archive. Only typed
+feature rejections can be skipped; I/O, source reads, SQLite, required report
+writes, cancellation and callback failures abort even with `skip_invalid=True`.
+Close or checkpoint a GeoPackage with unmerged WAL edits before conversion. See
+the [vector guide](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/VECTOR.md)
+for geometry, filtering, repair and reuse limits.
 
-Callbacks receive dictionaries using the CLI's NDJSON event contract:
-`{"event": "progress", "phase": ..., "done": ..., "total": ...}`,
-`{"event": "warning", ...}` or `{"event": "log", "message": ...}`.
-`total` can be `None`. Structured warnings preserve their detail fields.
-`convert_to_3tz` also accepts a callback, with `encoding` and
-`ready_to_publish` progress phases. Model wrapping/manifest publication also accepts callbacks with `model_capture`, `model_archive` (archive only) and `ready_to_publish` phases.
-Without a callback, converters are silent.
+### Validation
 
-Conversions release the GIL. A callback can run on a Rust worker thread;
-Blender callers should queue events for their main thread before changing
+`validate` returns the [validation report](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/VALIDATION.md)
+as a `dict`, including `ok`, completed checks, inspection gaps, `storedBytes`,
+the effective `limits` and their `limitDerivation`. Its `payloads` entry is a
+list, or a lazy sequence when `lazy_payloads=True`.
+
+- `max_volume` maps limit keys to ints: opt-in volume caps such as
+  `sourceArchiveBytes`, or replacement budgets such as `hierarchyVisits`. A bad
+  key or value raises `InvalidRequestError` before any I/O.
+- `scratch_dir` places scratch in an existing directory.
+- `expect_profile="hlod"` requires the HLOD profile whatever the archive's
+  labels say: every payload must carry source identity and every HLOD check
+  runs. An archive that declares HLOD is held to it anyway. Any other value
+  raises `ValueError` before the archive is opened.
+- `callback` receives progress events; raising from it, or Ctrl-C, stops
+  validation.
+
+A limit refusal raises `ResourceLimitError` whose `limit` attribute is
+`{"limit", "value", "observed", "derivation"}`.
+
+## Callbacks and threads
+
+Callbacks receive dictionaries in the CLI's NDJSON event format:
+`{"event": "progress", "phase": ..., "done": ..., "total": ...}` (`total` can
+be `None`), `{"event": "warning", ...}` with the warning's detail fields, or
+`{"event": "log", "message": ...}`. Packaging adds `encoding` and
+`ready_to_publish` phases; model wrapping and manifests add `model_capture`,
+`model_archive` (archive only) and `ready_to_publish`.
+
+Conversions release the GIL, and a callback can run on a Rust worker thread.
+Blender callers should queue events for the main thread before changing
 Blender state.
 
-Packaging, bounded mesh, model wrapping/manifest, point-cloud, raster directory and vector conversion use a fallible
-synchronous callback. Every callback for these operations finishes
-before sealing and installation, including `ready_to_publish`. A callback
-exception aborts before publication and preserves the existing destination,
-including with `force=True`. The original exception is raised when observer
-failure is the job's selected primary cause; the first fatal cause accepted by
-the job gate is primary and later failures are secondary. Nested calls and
-concurrent calls use independent state. These operations check pending Python
-signals during preparation and events, and does not deliberately check them
-after installation. Python asynchronous interruption or allocation failure
-after commitment can still interrupt caller-side execution.
+Every callback finishes before the output is sealed and installed, including
+`ready_to_publish`. An exception from a callback aborts the job before
+publication and keeps an existing destination, even with `force=True`. Paths
+are resolved before the first callback, so changing the working directory in a
+callback cannot redirect the output. If the callback failure is the job's first
+fatal cause, the original exception is raised. Nested and concurrent calls are
+independent. Pending Python signals are checked during preparation and events,
+not after installation; an asynchronous interruption or allocation failure
+after commit can still interrupt the caller.
 
-Rust failures raise subclasses of `TilesError`: `DataError`, `ResourceLimitError`,
-`EnvironmentError`, `OutputExistsError`, `TilesIOError` or `UnsupportedError`.
-Invalid Python arguments raise `TypeError` or `ValueError`. Original callback
-exceptions are preserved.
+## Errors
 
-Foundation operations additionally raise `InvalidRequestError` for invalid choices or
-reserved names, `CancelledError` for cancellation and `ObserverError` when no
-original Python exception is available. These are `TilesError` subclasses.
-Their domain errors carry `kind`, `secondary_diagnostics` and `retained_paths`.
-Stable kinds are `invalid_request`, `invalid_input`, `unsupported`, `io`,
-`output_conflict`, `cancelled`, `observer_failure` and `invalid_state`.
-Invalid source content maps to `DataError`, source/storage I/O to `TilesIOError`
-and competing outputs to `OutputExistsError`. Original callback exceptions are
-returned unchanged and need not have these domain metadata attributes.
+Rust failures raise subclasses of `TilesError`: `DataError` (invalid source
+content), `ResourceLimitError`, `EnvironmentError`, `OutputExistsError`
+(competing output), `TilesIOError` (source or storage I/O), `UnsupportedError`,
+`InvalidRequestError` (invalid choices or reserved names), `CancelledError` and
+`ObserverError` (callback failure with no original Python exception). An
+internal invariant failure raises `TilesError` itself. Invalid Python argument
+types raise `TypeError` or `ValueError`. Original callback exceptions are
+raised unchanged.
 
-Build and test from a source checkout with stable Rust and a C++ compiler:
+Converter errors carry `kind`, `secondary_diagnostics`, `retained_paths` and
+`recovery`. Kinds are `invalid_request`, `invalid_input`, `unsupported`,
+`resource_limit`, `io`, `output_conflict`, `cancelled`, `observer_failure` and
+`invalid_state`. `retained_paths` names kept scratch. `recovery` is `None`, or
+for a failed directory replacement a dict with `output` and `previous_output`
+paths; if restoration failed, the original entry remains at `previous_output`.
+Original callback exceptions do not have these attributes.
+
+## Build and test from source
+
+With stable Rust, a C++ compiler and CPython 3.10+, from a source checkout:
 
 ```sh
 python -m pip install 'maturin==1.15.0'
@@ -335,50 +322,25 @@ maturin build --release --locked --out target/wheels
 python scripts/test_python_wheel.py target/wheels/*.whl
 ```
 
-The smoke test installs the wheel into a fresh virtual environment, then runs
-this README example and the API tests with an empty executable `PATH`.
+Leave `LIBSQLITE3_SYS_USE_PKG_CONFIG` unset. The test installs the wheel into a
+fresh virtual environment and runs this README's example and the API tests
+with an empty executable `PATH`.
 
-To test installation and conversion inside Blender's Python without changing
-your Blender installation or user preferences:
+To test a wheel inside Blender's Python without changing your Blender
+installation or preferences:
 
 ```sh
 python scripts/test_blender_wheel.py target/wheels/*.whl --blender /path/to/blender --report-json target/blender-acceptance.json
 ```
 
-The runner supplies an isolated pip installer, and Blender's Python checks the
-wheel compatibility and installs into a temporary directory. It then runs the
-same API suite, including vectors, georeferenced point clouds and callbacks, with an
-empty `PATH`. `--blender` defaults to `blender` on your `PATH`. The JSON report
-records the actual Blender/Python versions, platform, wheel SHA-256 and test
-counts. The clean-venv runner also accepts `--report-json`.
-Both runners require fresh suite evidence matching the candidate wheel and
-replace any requested prior report; current failure reports are preserved.
+Blender's Python checks wheel compatibility and installs it into a temporary
+directory using an isolated pip, then runs the same API suite with an empty
+`PATH`. `--blender` defaults to `blender` on your `PATH`. The JSON report
+records the Blender and Python versions, platform, wheel SHA-256 and test
+counts; `test_python_wheel.py` also accepts `--report-json`. Both runners need
+fresh results matching the wheel and replace an earlier report.
 
-The **Wheel acceptance** workflow runs on relevant pull requests into `develop`,
-can be dispatched manually once present on the default branch, and is reused by
-the release workflow. It builds wheels for all five release platforms and tests
-each artifact with CPython 3.10 and 3.14. Its mandatory official Blender matrix
-installs the same wheels inside Blender 4.5.14 LTS on Linux x86_64, Windows x64,
-Intel macOS and Apple Silicon macOS. Archives and SHA-256 checksums are pinned in
-[blender_official.json](../../scripts/blender_official.json) from
-[Blender's published checksums](https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256).
-Blender 4.5 LTS is supported until July 2027 and is the last official Intel macOS
-release series. See [Blender's compatibility notes](https://developer.blender.org/docs/release_notes/compatibility/).
-
-The downloader verifies each archive before extraction. The runner checks the
-extracted executable's hash, actual Blender version and runtime architecture,
-and records the archive identity alongside the wheel SHA-256 and API results.
-CI uploads wheels and JSON evidence without publishing packages or a release.
-The optional Linux distribution Blender check remains separate. Only completed
-runs establish platform acceptance; configuring the matrix alone is not test
-evidence. The Linux ARM64 wheel has CPython acceptance but no official Blender
-4.5 bundle to test. Official Windows ARM64 Blender is outside the project's
-current Windows x64 wheel targets.
-These checks install local candidate wheels. Publishing to PyPI and verifying
-`pip install rusty-tiles` from PyPI inside bundled Blender remain separate
-[release acceptance requirements](https://github.com/BenDyson-Arch/rusty-tiles/issues/77).
-
-To repeat an official check locally with host Python 3.12 or newer, select
+To repeat the official Blender check with host Python 3.12 or newer, pick
 `linux-x64`, `windows-x64`, `macos-x64` or `macos-arm64` for your host:
 
 ```sh
@@ -386,48 +348,15 @@ python scripts/download_blender.py --platform linux-x64 --directory /tmp/officia
 python scripts/test_blender_wheel.py target/wheels/*.whl --blender /tmp/official-blender/blender-4.5.14-linux-x64/blender --distribution-json target/blender-distribution.json --report-json target/blender-acceptance.json
 ```
 
-The downloader requires a new temporary directory and prints the executable
-path, which is also recorded in its JSON. It copies the macOS application from
-a read-only DMG mount and detaches it; it does not modify a system installation.
-Updating the Blender pin requires reviewing the official checksum file,
-updating the manifest and rerunning all four platform jobs.
-
-`convert_to_implicit` was removed in 0.4.0. To obtain implicit tiling for an
-explicit point-cloud or vector archive, re-run `point_cloud_to_3tz` or
-`vector_to_3tz` from the original source; implicit tiling is their only
-output.
-
-`raster_tile_to_directory(input, output, *, zoom, x, y, force=False, callback=None)` exposes
-the bounded raster directory request/error boundary. The standard wheel has no GDAL raster capability
-and raises `UnsupportedError` without creating output or invoking callbacks;
-invalid XYZ requests raise `InvalidRequestError` first. No native wheel or pip
-extra is introduced. R2 imagery pyramid conversion is a native Rust/CLI capability.
-Python exports none of `raster_to_pyramid`, `RasterRequest` or `RasterDisplay`.
-The native Rust/CLI profile and filesystem guarantees are
-specified in `docs/architecture/d1-raster-contract.md` and
-`docs/architecture/d1-directory-contract.md`.
-
-`force=True` selects the same Replace policy as the Rust request and CLI. The
-current final-path entry is held at publication, so replacement has an absent-path
-interval and no snapshot or crash durability promise. Directory failures carry
-`exception.recovery`, either `None` or a dictionary with `output` and
-`previous_output` filesystem paths. If restoration fails, the original entry
-remains at `previous_output`; resolve the current output path before restoration.
-`retained_paths` names scratch separately, and `secondary_diagnostics` includes
-the restoration failure. Native filesystem paths preserve non-UTF-8 Unix names.
-Successful installation remains success if backup cleanup fails, with the backup
-path in the result's existing `cleanup_diagnostics`. Standard wheels still report
-`UnsupportedError` for either policy without changing existing output.
-
-Point-cloud conversion requires an explicit `source_crs` keyword. Choose `"local"`
-for XYZ metres, `"header"` for the LAS horizontal CRS, or an explicit horizontal
-CRS definition. Geospatial input requires finite `height_offset` in metres to
-ellipsoidal height; local input forbids it. The result is `PointCloudResult`,
-with `output`, `archive`, required `report`, and `cleanup_diagnostics`. Callback
-failures abort before publication and preserve an existing output.
-
-Rust callers migrate to `PointCloudRequest::new(input, output, coordinates,
-options).with_policy(policy)` and `point_cloud_to_archive(request, &run)`.
-`PointCloudOptions` contains only tiling options; coordinate selection is typed,
-and publication uses `OutputPolicy` rather than an options `force` field.
-The old Rust `point_cloud_to_3tz` and reported overload are removed.
+The downloader verifies each archive against the checksums pinned in
+`scripts/blender_official.json` (from
+[Blender's published checksums](https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256))
+before extraction. It needs a new directory, prints the executable path and
+records it in its JSON. On macOS it copies the application from a read-only DMG
+mount and detaches it; it does not modify a system installation. The runner
+checks the extracted executable's hash, Blender version and architecture.
+Blender 4.5 LTS is supported until July 2027 and is the last official release
+series for Intel macOS; see
+[Blender's compatibility notes](https://developer.blender.org/docs/release_notes/compatibility/).
+CI acceptance and updating the Blender pin are described in
+[CONTRIBUTING.md](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/CONTRIBUTING.md#python-acceptance).
