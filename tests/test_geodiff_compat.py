@@ -53,9 +53,18 @@ class GeodiffCompatibilityTests(unittest.TestCase):
             for label,binary,changeset in [('cpp-applies-go',cpp,go_diff),('go-applies-cpp',go,cpp_diff)]:
                 applied=root/(label+'.gpkg');shutil.copy2(base,applied);self.run_tool(binary,'apply',applied,changeset)
                 if spatial_index:
+                    # GDAL's bulk and trigger paths may round an R-tree bound outward by
+                    # different float32 steps, and an apply leaves unchanged geometry's row
+                    # alone: require the same ids and boxes that contain each envelope.
                     with closing(sqlite3.connect(modified)) as expected, closing(sqlite3.connect(applied)) as actual:
                         query='SELECT id,minx,maxx,miny,maxy FROM rtree_roads_geom ORDER BY id'
-                        self.assertEqual(actual.execute(query).fetchall(),expected.execute(query).fetchall())
+                        rows=actual.execute(query).fetchall()
+                        self.assertEqual([r[0] for r in rows],[r[0] for r in expected.execute(query).fetchall()])
+                    ds=ogr.Open(str(applied));layer=ds.GetLayer(0)
+                    for fid,minx,maxx,miny,maxy in rows:
+                        feature=layer.GetFeature(fid);ex0,ex1,ey0,ey1=feature.GetGeometryRef().GetEnvelope()
+                        self.assertTrue(minx<=ex0 and maxx>=ex1 and miny<=ey0 and maxy>=ey1,(label,fid))
+                    feature=layer=ds=None
                     # Use OGR's spatial filter as well as checking the index rows.
                     expected=ogr.Open(str(modified));actual=ogr.Open(str(applied))
                     for bounds in [(-101,-1,-99,1),(3999,-1,4021,2),(1699,-1,1761,1),(-1,-1,61,1)]:
