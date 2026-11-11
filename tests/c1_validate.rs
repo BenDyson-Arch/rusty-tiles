@@ -79,9 +79,14 @@ fn independent_corpus_rust_cli_parity_and_read_only_inputs() {
             }
         } else {
             assert_eq!(report["ok"], true, "{name}: {report}");
+            // `resources` states this process's host detection, so two runs may differ there.
+            let without = |mut report: Value| {
+                report.as_object_mut().unwrap().remove("resources");
+                report
+            };
             assert_eq!(
-                serde_json::to_value(inspected.unwrap()).unwrap(),
-                report,
+                without(serde_json::to_value(inspected.unwrap()).unwrap()),
+                without(report),
                 "complete report differs: {name}"
             );
         }

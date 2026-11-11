@@ -110,6 +110,16 @@ enum Command {
             value_parser = ["hlod"]
         )]
         expect_profile: Option<String>,
+        /// Memory budget the scratch stores are sized from: bytes, or with a KiB/MiB/GiB/TiB
+        /// suffix (2GiB). A ceiling, never raised; at least 512MiB. Default: the lesser of 4 GiB
+        /// and half the detected headroom. Verdicts and reports do not depend on it
+        #[arg(long = "memory-budget", visible_alias = "memoryBudget", value_name = "BYTES",
+              value_parser = parse_memory_budget)]
+        memory_budget: Option<u64>,
+        /// Maximum workers or auto (every core); capped by cores and the memory budget.
+        /// Verdicts and reports do not depend on it
+        #[arg(long, default_value = "auto")]
+        jobs: TilerJobs,
     },
     /// Check converter capabilities and local CRS resources
     Doctor(DoctorArgs),
@@ -1233,8 +1243,16 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             max_volume,
             scratch_dir,
             expect_profile,
+            memory_budget,
+            jobs,
         } => {
             let mut request = rusty_tiles::validate::ValidationRequest::new(&input);
+            if let Some(bytes) = memory_budget {
+                request = request.memory_budget(bytes);
+            }
+            if let TilerJobs::Maximum(n) = jobs {
+                request = request.jobs(n);
+            }
             if expect_profile.is_some() {
                 request = request.expect_profile(rusty_tiles::validate::ExpectedProfile::Hlod);
             }

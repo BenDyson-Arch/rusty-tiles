@@ -551,6 +551,37 @@ fn zip64_sizes<const N: usize>(
     Ok((values, disk_number, record.is_some()))
 }
 
+/// One stored member's bytes by position, CRC-checked, from any thread (#342: the validator's
+/// replay workers). The same checks as [`StoredArchive::read_member`] after its lookup.
+pub(crate) fn read_stored_at(
+    file: &std::fs::File,
+    offset: u64,
+    size: u64,
+    crc: u32,
+) -> Result<Vec<u8>, ReadError> {
+    let length =
+        usize::try_from(size).map_err(|_| ReadError::limit("archive member exceeds host range"))?;
+    let mut bytes = bounded_bytes(length)?;
+    let mut at = 0;
+    while at < length {
+        #[cfg(unix)]
+        let read = std::os::unix::fs::FileExt::read_at(file, &mut bytes[at..], offset + at as u64);
+        #[cfg(windows)]
+        let read =
+            std::os::windows::fs::FileExt::seek_read(file, &mut bytes[at..], offset + at as u64);
+        match read {
+            Ok(0) => return Err(malformed("truncated stored archive record")),
+            Ok(count) => at += count,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(ReadError::Io(error)),
+        }
+    }
+    if crc32fast::hash(&bytes) != crc {
+        return Err(malformed("stored member CRC mismatch"));
+    }
+    Ok(bytes)
+}
+
 fn bounded_bytes(size: usize) -> Result<Vec<u8>, ReadError> {
     let mut bytes = Vec::new();
     bytes

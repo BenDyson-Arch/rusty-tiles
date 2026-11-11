@@ -38,7 +38,7 @@ Converter inputs and outputs are filesystem paths (`str` or `os.PathLike`). All 
 | `point_cloud_to_3tz(input, output, ...)` | required `source_crs`, `force=False`, `height_offset=None`, `max_points=8192` (also the maximum), `chunk_points=100000`, `metadata=False`, `metadata_attributes=False`, `callback=None`; returns `PointCloudResult` |
 | `vector_to_3tz(input, output, ...)` | GeoJSON or GeoPackage; see [Vectors](#vectors); returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; packs an existing tileset directory and returns `PackageResult` |
-| `validate(input, ...)` | `lazy_payloads=False`, `max_volume=None`, `scratch_dir=None`, `expect_profile=None`, `callback=None`; returns the validation report as a `dict` |
+| `validate(input, ...)` | `lazy_payloads=False`, `max_volume=None`, `scratch_dir=None`, `expect_profile=None`, `memory_budget_bytes=None`, `jobs=None`, `callback=None`; returns the validation report as a `dict` |
 | `resolve_source_crs(definition)` | Resolves one CRS definition as the converters do, without converting; returns a `dict`, see [Source CRS checks](#source-crs-checks) |
 | `supported_epsg_codes()` | Every EPSG code this package resolves, as `"EPSG:nnnn"` strings in numeric order |
 | `crs_table_info()` | The EPSG table's `epsg`, `proj` and `gdal` versions and its `codes`, `builtin` and `allowList` counts, as a `dict` |
@@ -304,8 +304,13 @@ list, or a lazy sequence when `lazy_payloads=True`.
   labels say: every payload must carry source identity and every HLOD check
   runs. An archive that declares HLOD is held to it anyway. Any other value
   raises `ValueError` before the archive is opened.
-- `callback` receives progress events; raising from it, or Ctrl-C, stops
-  validation.
+- `memory_budget_bytes` (an `int`) sizes the scratch stores, with the same
+  rule and default as `mesh_to_tileset`; below 512 MiB raises
+  `ResourceLimitError`. `jobs` (a positive `int`, or `None` for auto) caps the
+  workers. Neither changes a verdict or any report entry outside `resources`
+  and `scratch`; `resources` states what was resolved.
+- `callback` receives progress events with totals, including the HLOD
+  `validate.delivery` phases; raising from it, or Ctrl-C, stops validation.
 
 A limit refusal raises `ResourceLimitError` whose `limit` attribute is
 `{"limit", "value", "observed", "derivation"}`.

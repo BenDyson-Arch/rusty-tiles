@@ -1397,3 +1397,86 @@ fn chunked_runs_free_as_consumed_and_bound_merge_slack() {
     assert_eq!(scratch.live_bytes(), 0);
     assert_eq!(entries(scratch.path()), 0);
 }
+
+/// A volume inspector reporting 1 MiB free on every existing directory.
+fn one_mib_free(path: &Path) -> Result<Volume, SpillError> {
+    Ok(Volume {
+        available_bytes: 1 << 20,
+        ..ram_named(path)?
+    })
+}
+
+/// #342: the start-of-run bound refuses a short volume as typed insufficient space at the
+/// validation stage before anything is created, raises the need the deferred creation
+/// preflights, and on an existing scratch counts its live bytes as already held.
+#[test]
+fn start_of_run_peak_is_refused_before_scratch_exists_and_counts_live_bytes() {
+    let root = tempfile::tempdir().unwrap();
+    let disk = root.path().join("disk");
+    std::fs::create_dir_all(&disk).unwrap();
+    for placement in [
+        Placement::In(disk.clone()),
+        // The first candidate's refusal is the one reported, as for creation.
+        Placement::Disk {
+            candidates: vec![disk.clone(), root.path().join("missing")],
+            memory_backed_allowed: false,
+        },
+    ] {
+        let scratch = Scratch::deferred_with(placement, 4096, Arc::new(FileIo), one_mib_free);
+        assert_eq!(
+            scratch
+                .preflight_peak(1 << 20, PreflightStage::Validation)
+                .unwrap(),
+            1 << 20
+        );
+        let SpillError::InsufficientSpace(cause) = scratch
+            .preflight_peak((1 << 20) + 1, PreflightStage::Validation)
+            .unwrap_err()
+        else {
+            panic!("typed refusal expected");
+        };
+        assert_eq!(
+            (
+                cause.needed,
+                cause.available,
+                cause.stage,
+                cause.path.as_path()
+            ),
+            (
+                (1 << 20) + 1,
+                1 << 20,
+                PreflightStage::Validation,
+                disk.as_path()
+            )
+        );
+        assert!(
+            cause.to_string().contains("validation preflight"),
+            "{cause}"
+        );
+        // Nothing was created, and the creation now preflights the raised need.
+        assert!(!scratch.is_created());
+        assert_eq!(entries(&disk), 0);
+        assert_eq!(scratch.needed(), (1 << 20) + 1);
+        assert!(matches!(
+            scratch.new_file("x").err(),
+            Some(SpillError::InsufficientSpace(_))
+        ));
+    }
+    // An existing scratch: its live bytes are part of the peak already on disk.
+    let scratch = Scratch::deferred_with(
+        Placement::In(disk.clone()),
+        0,
+        Arc::new(FileIo),
+        one_mib_free,
+    );
+    let mut file = scratch.new_file("held").unwrap();
+    file.completed(4096);
+    assert_eq!(scratch.live_bytes(), 4096);
+    assert!(scratch
+        .preflight_peak((1 << 20) + 4096, PreflightStage::Validation)
+        .is_ok());
+    assert!(scratch
+        .preflight_peak((1 << 20) + 4097, PreflightStage::Validation)
+        .is_err());
+    drop(file);
+}

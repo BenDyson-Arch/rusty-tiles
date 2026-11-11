@@ -40,7 +40,10 @@ mod borders;
 mod bulk;
 mod drops;
 pub(super) mod recovery;
+mod replay;
+pub(super) use replay::{Fetch, Payloads};
 pub(super) mod texture;
+mod ticks;
 use crate::archive3tz::CatalogConfig;
 use crate::spill::{
     ExternalSorter, Record, Scratch, Sequence, SequenceWriter, SlotFile, SortConfig,
@@ -512,19 +515,14 @@ fn point_key(p: Point) -> [u64; 3] {
     p.map(|v| if v == 0. { 0 } else { v.to_bits() })
 }
 
-fn replay_document<'a>(
-    bytes: &'a [u8],
+fn replay_document(
+    bytes: &[u8],
     cap: usize,
-    effort: &Effort,
-) -> Result<(Value, &'a [u8], identity::Work), Error> {
+    budget: Budget,
+    base: u64,
+) -> Result<(Value, &[u8], identity::Work), Error> {
     let length = u32::from_le_bytes(identity::slice(bytes, 12, 4)?.try_into().unwrap()) as usize;
-    let mut work = identity::Work::new(
-        effort.budget,
-        effort
-            .base
-            .saturating_add(effort.used.load(Ordering::Relaxed)),
-        cap,
-    );
+    let mut work = identity::Work::new(budget, base, cap);
     work.charge(length.div_ceil(4))?;
     let raw: &RawValue = serde_json::from_slice(identity::slice(bytes, 20, length)?)?;
     let doc = identity::project(raw, "doc")?;
@@ -804,7 +802,7 @@ pub(super) struct CoarseNormals {
 /// costs far more than an ordinary payload unit (about 6 ns), so it is weighted to keep every
 /// work class within the stated time per unit (`docs/architecture/validator-limits-amendment.md`,
 /// time statement).
-pub(super) const ROW_UNITS: usize = 128;
+pub(crate) const ROW_UNITS: usize = 128;
 /// Units for each seek of a keyed lookup into a complete leaf table (descendant incidences,
 /// edge faces and coincident faces of a coarse tile, a coarse drop's border contacts). A seek
 /// reads pages the cache may not hold: 1.7 µs at 1 M rows, 3.0 µs at 64 M, about 3.4 µs
@@ -821,6 +819,10 @@ pub(super) const OPEN_UNITS: usize = 32;
 /// `fold_stages`, bounded by its preorder `last`.
 const FOLD_STAGE_BELOW: &str = "SELECT EXISTS(SELECT 1 FROM tiles t,fold_stages f
      WHERE t.id=?1 AND f.tile>t.id AND f.tile<=t.last)";
+/// The three geometry replay queries (each also run as its own lookahead, `replay`).
+const LEAVES: &str = "SELECT tile,rank,frame FROM placements WHERE leaf=1 ORDER BY id";
+const EDGE_LEAVES: &str = "SELECT p.tile,p.rank,p.frame FROM placements p WHERE p.leaf=1 AND p.tile IN (SELECT tile FROM replay_tiles) ORDER BY p.id";
+const COARSE: &str = "SELECT tile,rank,frame FROM placements WHERE leaf=0 ORDER BY tile,id";
 /// Units for each original vertex row appended to the spill sequence at ingest.
 pub(super) const ORIGINAL_UNITS: usize = 16;
 /// Units for each placed original key: placement, external sort and ordered scan.
@@ -993,7 +995,34 @@ fn replay_surface(
     effort: &Effort,
     normals: bool,
 ) -> Result<Surface, Error> {
-    let (doc, bin, mut work) = replay_document(bytes, cap, effort)?;
+    let base = effort
+        .base
+        .saturating_add(effort.used.load(Ordering::Relaxed));
+    let (surface, used) = replay_units(bytes, frame, cap, effort.budget, base, normals)?;
+    effort.charge(usize::try_from(used).map_err(|_| super::refused())?)?;
+    Ok(surface)
+}
+/// [`replay_surface`] on a worker (#342): the surface and its work units, charged from zero;
+/// the pass charges them in order ([`replay::Lookahead`]).
+fn replay_surface_free(
+    bytes: &[u8],
+    frame: Matrix,
+    cap: usize,
+    budget: Budget,
+    normals: bool,
+) -> Result<(Surface, u64), Error> {
+    replay_units(bytes, frame, cap, budget, 0, normals)
+}
+/// The replayed surface and the work units of its document, charged from `base`.
+fn replay_units(
+    bytes: &[u8],
+    frame: Matrix,
+    cap: usize,
+    budget: Budget,
+    base: u64,
+    normals: bool,
+) -> Result<(Surface, u64), Error> {
+    let (doc, bin, mut work) = replay_document(bytes, cap, budget, base)?;
     let nodes = doc["nodes"]
         .as_array()
         .ok_or_else(|| bad("interfaceSegments", "missing replay nodes"))?;
@@ -1079,8 +1108,7 @@ fn replay_surface(
             stack.push((children.as_slice(), 0, m));
         }
     }
-    effort.charge(usize::try_from(work.used).map_err(|_| super::refused())?)?;
-    Ok(surface)
+    Ok((surface, work.used))
 }
 
 struct Effort {
@@ -1091,6 +1119,8 @@ struct Effort {
     budget: Budget,
     base: u64,
     used: Arc<AtomicU64>,
+    /// Progress and cancellation checkpoints: every charge is one (#342).
+    ticks: ticks::Ticks,
 }
 impl Effort {
     fn charge(&self, n: usize) -> Result<(), Error> {
@@ -1098,8 +1128,8 @@ impl Effort {
         self.budget
             .charge(self.base.saturating_add(old), n as u64, || {
                 "interfaceSegments: native delivery work exceeds payload element budget".into()
-            })
-            .map(|_| ())
+            })?;
+        self.ticks.check()
     }
 }
 
@@ -1157,6 +1187,32 @@ pub(super) struct Store {
     originals: Option<SequenceWriter<Original>>,
     sort: SortConfig,
     buffer_bytes: usize,
+    resources: Resources,
+    pool: replay::Pool,
+}
+/// The sizes of one store, from the validation's memory plan (#342).
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Resources {
+    /// The store's external sorts; `None` keeps the catalog's side sorts.
+    pub(super) sort: Option<SortConfig>,
+    /// SQLite page cache; the sorter's in-memory list is bounded by the same size.
+    pub(super) cache_bytes: u64,
+    /// SQLite temporary tables and sorts in memory: only when their row bound fits the plan.
+    pub(super) temp_in_memory: bool,
+    /// Geometry replay workers (1: sequential) and their in-flight stored bytes.
+    pub(super) workers: usize,
+    pub(super) window_bytes: u64,
+}
+impl Resources {
+    /// The 0.4.0 sizes: an 8 MiB cache, a disk temporary store and one worker.
+    #[cfg(test)]
+    pub(super) const FIXED: Self = Self {
+        sort: None,
+        cache_bytes: 8 << 20,
+        temp_in_memory: false,
+        workers: 1,
+        window_bytes: 0,
+    };
 }
 /// The open-segment endpoint merge of `segment_requirements`.
 struct OpenEnds<'a> {
@@ -1164,7 +1220,11 @@ struct OpenEnds<'a> {
     higher: SequenceWriter<bulk::End>,
 }
 impl Store {
-    pub(super) fn new(scratch: Arc<Scratch>, config: &CatalogConfig) -> Result<Self, Error> {
+    pub(super) fn new(
+        scratch: Arc<Scratch>,
+        config: &CatalogConfig,
+        resources: Resources,
+    ) -> Result<Self, Error> {
         Ok(Self {
             recovery_rows: (0, 0),
             connection: Db(None),
@@ -1179,8 +1239,10 @@ impl Store {
             decoded_limit: 0,
             census: None,
             originals: None,
-            sort: config.side_sort,
+            sort: resources.sort.unwrap_or(config.side_sort),
             buffer_bytes: config.buffer_bytes,
+            pool: replay::Pool::new(resources.workers, resources.window_bytes),
+            resources,
         })
     }
     /// Create the disk store and replay the pending rows into it, once.
@@ -1194,7 +1256,18 @@ impl Store {
             .tempfile_in(self._scratch.path())
             .map_err(|e| Error::Scratch(ScratchRefusal::Io(e)))?;
         let connection = Connection::open(file.path()).map_err(sql)?;
-        connection.execute_batch("PRAGMA cache_size=-8192; PRAGMA temp_store=FILE; PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;
+        connection
+            .execute_batch(&format!(
+                "PRAGMA cache_size=-{}; PRAGMA temp_store={};",
+                (self.resources.cache_bytes >> 10).max(1),
+                if self.resources.temp_in_memory {
+                    "MEMORY"
+                } else {
+                    "FILE"
+                }
+            ))
+            .map_err(sql)?;
+        connection.execute_batch("PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;
             CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER,rank_first INTEGER,ownership_depth INTEGER,ownership_invalid INTEGER NOT NULL DEFAULT 0,implicit_root INTEGER NOT NULL DEFAULT 0,recovery TEXT);
             CREATE TABLE recovery_cells(id INTEGER PRIMARY KEY,first INTEGER NOT NULL,last INTEGER NOT NULL);
             CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL);
@@ -1736,11 +1809,23 @@ impl Store {
         self.texture = declaration;
     }
 
+    /// [`Store::finish_with`] over a plain read closure (unit tests).
+    #[cfg(test)]
     pub(super) fn finish(
         &mut self,
         budget: Budget,
         already: u64,
+        probe: Option<crate::runtime::AttemptProbe>,
         read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
+    ) -> Result<u64, Error> {
+        self.finish_with(budget, already, probe, &mut replay::Plain(read))
+    }
+    pub(super) fn finish_with(
+        &mut self,
+        budget: Budget,
+        already: u64,
+        probe: Option<crate::runtime::AttemptProbe>,
+        read: &mut dyn replay::Payloads,
     ) -> Result<u64, Error> {
         // Without HLOD identity nothing below applies: no store, no scratch.
         if self.connection.0.is_none() {
@@ -1764,19 +1849,30 @@ impl Store {
             budget,
             base: already,
             used: used.clone(),
+            ticks: ticks::Ticks::new(probe),
         };
         let hook = used.clone();
         let remaining = budget.value.saturating_sub(already);
+        let mut heartbeat = effort.ticks.heartbeat();
         self.connection
             .progress_handler(
                 10_000,
-                Some(move || hook.fetch_add(1, Ordering::Relaxed) >= remaining),
+                Some(move || {
+                    // One work unit per call, whatever the control's state; progress totals
+                    // are not work.
+                    let over =
+                        heartbeat.charged() && hook.fetch_add(1, Ordering::Relaxed) >= remaining;
+                    heartbeat.interrupt() || over
+                }),
             )
             .map_err(sql)?;
         let result = self.finish_inner(&effort, read);
         self.connection
             .progress_handler(0, None::<fn() -> bool>)
             .map_err(sql)?;
+        if let Some(stopped) = effort.ticks.stopped() {
+            return Err(stopped);
+        }
         let count = used.load(Ordering::Relaxed);
         budget.charge(already, count, || {
             "interfaceSegments: native delivery work exceeds payload element budget".into()
@@ -1789,7 +1885,7 @@ impl Store {
     fn finish_inner(
         &mut self,
         effort: &Effort,
-        read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
+        read: &mut dyn replay::Payloads,
     ) -> Result<Option<DecodedInterfaceCensus>, Error> {
         let declared: bool = self
             .connection
@@ -1805,6 +1901,7 @@ impl Store {
         }
         // REPLACE continuity is an HLOD delivery property: other tilesets may keep
         // content-less intermediate tiles (the I1/C2 owners accept them).
+        effort.ticks.pass()?;
         self.hierarchy(effort)?;
         if let Some(reason) = self.profile_exclusion {
             return Err(Error::unsupported(format!("interfaceSegments: {reason}")));
@@ -1816,6 +1913,7 @@ impl Store {
                 "archive expects source identity on every referenced payload",
             ));
         }
+        effort.ticks.pass()?;
         let (coarse_triangle, coarse_rows) = self.coarse_identity(effort)?;
         if coarse_triangle {
             return Err(bad(
@@ -1837,28 +1935,46 @@ impl Store {
             ));
         }
         let mut census = DecodedInterfaceCensus::default();
+        effort.ticks.pass()?;
         self.triangle_cap(&mut census)?;
+        effort.ticks.pass()?;
         if let texture::Declaration::Rule(rule) = self.texture {
             (census.texture_refinable_tiles, census.texture_bound_tiles) =
                 self.texture_error(rule, effort)?;
         }
+        effort.ticks.pass()?;
         self.recovery(effort)?;
+        effort.ticks.pass()?;
         census.omission = self.omission(effort)?;
+        effort.ticks.pass()?;
         self.single_cover(effort)?;
+        effort.ticks.pass()?;
         self.place_references(effort)?;
+        effort.ticks.pass()?;
         self.replay_original_aliases(effort)?;
+        effort.ticks.pass()?;
         self.collect_leaves(effort, read)?;
+        effort.ticks.pass()?;
         self.load_twins()?;
+        effort.ticks.pass()?;
         self.edge_faces(effort, read)?;
         let mut needs = self.sorter()?;
+        effort.ticks.pass()?;
         self.point_requirements(&mut census, &mut needs, effort)?;
+        effort.ticks.pass()?;
         let ends = self.segment_requirements(&mut census, &mut needs, effort)?;
+        effort.ticks.pass()?;
         self.load_requirements(needs)?;
+        effort.ticks.pass()?;
         self.count_shared_ends(&mut census, ends)?;
+        effort.ticks.pass()?;
         self.resolve_last_resorts(effort)?;
         let mut images = self.sorter()?;
+        effort.ticks.pass()?;
         self.check_coarse(&mut census, &mut images, effort, read)?;
+        effort.ticks.pass()?;
         self.coarse_drops(&mut census.dropped_by_depth, effort)?;
+        effort.ticks.pass()?;
         self.border_pairs(images, effort)?;
         Ok(Some(census))
     }
@@ -2346,23 +2462,30 @@ impl Store {
             .execute_batch("CREATE INDEX IF NOT EXISTS placement_rank ON placements(rank,leaf,id)")
             .map_err(sql)
     }
-    fn surface(
+    /// The lookahead copy of a replay query, prepared uncharged; none without workers.
+    fn lookahead_query(
         &self,
-        rank: i64,
-        frame: &[u8],
+        query: &str,
         effort: &Effort,
-        read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
-        normals: bool,
-    ) -> Result<Surface, Error> {
-        effort.charge(1)?;
-        let bytes = read(u64::try_from(rank).map_err(|_| super::refused())?)?;
-        replay_surface(
-            &bytes,
-            decode::<16>(frame)?,
-            self.decoded_limit,
-            effort,
-            normals,
-        )
+    ) -> Result<Option<rusqlite::Statement<'_>>, Error> {
+        if !self.pool.parallel() {
+            return Ok(None);
+        }
+        effort
+            .ticks
+            .uncharged(|| self.connection.prepare(query))
+            .map(Some)
+            .map_err(sql)
+    }
+    fn lookahead_rows<'s>(
+        &self,
+        query: Option<&'s mut rusqlite::Statement<'_>>,
+        effort: &Effort,
+    ) -> Result<Option<rusqlite::Rows<'s>>, Error> {
+        query
+            .map(|q| effort.ticks.uncharged(|| q.query([])))
+            .transpose()
+            .map_err(sql)
     }
     /// One leaf placement's points and segments, bound for the bulk load (`bulk`).
     fn record_leaf(
@@ -2392,22 +2515,32 @@ impl Store {
     fn collect_leaves(
         &self,
         effort: &Effort,
-        read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
+        read: &mut dyn replay::Payloads,
     ) -> Result<(), Error> {
-        let mut query = self
-            .connection
-            .prepare("SELECT tile,rank,frame FROM placements WHERE leaf=1 ORDER BY id")
-            .map_err(sql)?;
+        let mut query = self.connection.prepare(LEAVES).map_err(sql)?;
+        let total = effort.ticks.total(|| {
+            self.connection
+                .query_row("SELECT count(*) FROM placements WHERE leaf=1", [], |r| {
+                    r.get::<_, i64>(0)
+                })
+                .map(|n| n as u64)
+                .map_err(sql)
+        })?;
+        effort.ticks.replay("validate.delivery.leaves", total)?;
+        let mut ahead_query = self.lookahead_query(LEAVES, effort)?;
+        let mut ahead_rows = self.lookahead_rows(ahead_query.as_mut(), effort)?;
+        let mut ahead =
+            replay::Lookahead::new(self, &self.pool, ahead_rows.as_mut(), (1, 2), effort, false);
         let mut rows = query.query([]).map_err(sql)?;
         let mut leaves = self.sorter()?;
         while let Some(row) = rows.next().map_err(sql)? {
+            effort.ticks.step()?;
             effort.charge(1)?;
-            let surface = self.surface(
+            let surface = ahead.surface(
                 row.get(1).map_err(sql)?,
                 &row.get::<_, Vec<u8>>(2).map_err(sql)?,
                 effort,
                 read,
-                false,
             )?;
             let tile: i64 = row.get(0).map_err(sql)?;
             self.record_leaf(tile, &surface, &mut leaves, effort)?;
@@ -2424,17 +2557,17 @@ impl Store {
             }
         }
         drop(rows);
+        // The lookahead's statement is released before the load writes.
+        drop(ahead);
+        drop(ahead_rows);
+        drop(ahead_query);
         self.load_leaves(leaves)
     }
     /// Leaf faces on every edge some direction of which carries two or more
     /// descendant faces: their third corners and directions, so coarse multiplicity
     /// is matched to source faces on its own side rather than counted. A second,
     /// bounded replay of only the leaves holding such edges.
-    fn edge_faces(
-        &self,
-        effort: &Effort,
-        read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
-    ) -> Result<(), Error> {
+    fn edge_faces(&self, effort: &Effort, read: &mut dyn replay::Payloads) -> Result<(), Error> {
         self.connection
             .execute_batch(
                 "INSERT INTO multi_edges SELECT key FROM leaf_segments GROUP BY key HAVING sum(nf)>=2 OR sum(nr)>=2",
@@ -2448,25 +2581,35 @@ impl Store {
                  INSERT OR IGNORE INTO replay_tiles SELECT s.tile FROM multi_edges m JOIN leaf_segments s ON s.key=m.key;",
             )
             .map_err(sql)?;
-        let mut query = self
-            .connection
-            .prepare(
-                "SELECT p.tile,p.rank,p.frame FROM placements p WHERE p.leaf=1 AND p.tile IN (SELECT tile FROM replay_tiles) ORDER BY p.id",
-            )
-            .map_err(sql)?;
+        let mut query = self.connection.prepare(EDGE_LEAVES).map_err(sql)?;
+        let total = effort.ticks.total(|| {
+            self.connection
+                .query_row(
+                    "SELECT count(*) FROM placements p WHERE p.leaf=1 AND p.tile IN (SELECT tile FROM replay_tiles)",
+                    [],
+                    |r| r.get::<_, i64>(0),
+                )
+                .map(|n| n as u64)
+                .map_err(sql)
+        })?;
+        effort.ticks.replay("validate.delivery.edges", total)?;
+        let mut ahead_query = self.lookahead_query(EDGE_LEAVES, effort)?;
+        let mut ahead_rows = self.lookahead_rows(ahead_query.as_mut(), effort)?;
+        let mut ahead =
+            replay::Lookahead::new(self, &self.pool, ahead_rows.as_mut(), (1, 2), effort, false);
         let mut rows = query.query([]).map_err(sql)?;
         // Every face side of the replayed leaves, kept where its segment is a multi edge by
         // the merge join of the bulk load.
         let mut faces = self.sorter()?;
         while let Some(row) = rows.next().map_err(sql)? {
+            effort.ticks.step()?;
             effort.charge(1)?;
             let tile: i64 = row.get(0).map_err(sql)?;
-            let surface = self.surface(
+            let surface = ahead.surface(
                 row.get(1).map_err(sql)?,
                 &row.get::<_, Vec<u8>>(2).map_err(sql)?,
                 effort,
                 read,
-                false,
             )?;
             for f in &surface.faces {
                 for j in 0..3 {
@@ -2480,6 +2623,10 @@ impl Store {
             }
         }
         drop(rows);
+        // The lookahead's statement is released before the load writes.
+        drop(ahead);
+        drop(ahead_rows);
+        drop(ahead_query);
         self.load_edge_faces(faces)
     }
     #[allow(clippy::too_many_arguments)]
@@ -2805,7 +2952,7 @@ impl Store {
         census: &mut DecodedInterfaceCensus,
         images: &mut Sorter<'_, 69>,
         effort: &Effort,
-        read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
+        read: &mut dyn replay::Payloads,
     ) -> Result<(), Error> {
         // The tiles referencing a payload declared at a fold stage (2 or 3), once: each
         // declared coarse tile then finds one below it by a single seek, not by a scan of
@@ -2816,10 +2963,20 @@ impl Store {
                  JOIN refs r ON r.rank=p.rank WHERE p.last_stage>=3",
             )
             .map_err(sql)?;
-        let mut query = self
-            .connection
-            .prepare("SELECT tile,rank,frame FROM placements WHERE leaf=0 ORDER BY tile,id")
-            .map_err(sql)?;
+        let mut query = self.connection.prepare(COARSE).map_err(sql)?;
+        let total = effort.ticks.total(|| {
+            self.connection
+                .query_row("SELECT count(*) FROM placements WHERE leaf=0", [], |r| {
+                    r.get::<_, i64>(0)
+                })
+                .map(|n| n as u64)
+                .map_err(sql)
+        })?;
+        effort.ticks.replay("validate.delivery.coarse", total)?;
+        let mut ahead_query = self.lookahead_query(COARSE, effort)?;
+        let mut ahead_rows = self.lookahead_rows(ahead_query.as_mut(), effort)?;
+        let mut ahead =
+            replay::Lookahead::new(self, &self.pool, ahead_rows.as_mut(), (1, 2), effort, true);
         let mut rows = query.query([]).map_err(sql)?;
         let mut current: Option<(i64, Surface)> = None;
         loop {
@@ -2893,13 +3050,13 @@ impl Store {
             let (Some(row), Some(tile)) = (row, tile) else {
                 break;
             };
+            effort.ticks.step()?;
             effort.charge(1)?;
-            let surface = self.surface(
+            let surface = ahead.surface(
                 row.get(1).map_err(sql)?,
                 &row.get::<_, Vec<u8>>(2).map_err(sql)?,
                 effort,
                 read,
-                true,
             )?;
             match &mut current {
                 Some((_, merged)) => merged.merge(surface, self.decoded_limit)?,
@@ -2931,6 +3088,7 @@ mod tests {
             budget: budget(),
             base: 0,
             used: Arc::new(AtomicU64::new(0)),
+            ticks: Default::default(),
         }
     }
     /// A store with this build's catalog profile: the forced-spill CI run sorts every bulk
@@ -2940,7 +3098,7 @@ mod tests {
     }
     pub(super) fn store_with(config: &CatalogConfig) -> Store {
         let scratch = Scratch::create(None, 4096).unwrap();
-        Store::new(Arc::new(scratch), config).unwrap()
+        Store::new(Arc::new(scratch), config, Resources::FIXED).unwrap()
     }
     #[test]
     fn continuity_is_hlod_only_and_respects_link_placeholders() {
@@ -2957,7 +3115,7 @@ mod tests {
             if hlod {
                 s.expect_identity();
             }
-            let result = s.finish(budget(), 0, &mut |_| panic!("unexpected replay"));
+            let result = s.finish(budget(), 0, None, &mut |_| panic!("unexpected replay"));
             match (hlod, placeholder) {
                 // Other tilesets may keep empty intermediates; no disk store exists.
                 (false, _) => {
@@ -2989,7 +3147,7 @@ mod tests {
                 s.payload(1, true, true).unwrap();
             }
             assert!(s
-                .finish(budget(), 0, &mut |_| panic!("unexpected replay"))
+                .finish(budget(), 0, None, &mut |_| panic!("unexpected replay"))
                 .unwrap_err()
                 .to_string()
                 .contains("hlodFeatureIds"));
@@ -3000,7 +3158,7 @@ mod tests {
         s.payload(0, false, false).unwrap();
         s.expect_identity();
         assert!(s
-            .finish(budget(), 0, &mut |_| panic!("unexpected replay"))
+            .finish(budget(), 0, None, &mut |_| panic!("unexpected replay"))
             .unwrap_err()
             .to_string()
             .contains("hlodFeatureIds"));
@@ -3017,7 +3175,7 @@ mod tests {
             if !same {
                 s.payload(1, true, true).unwrap();
             }
-            let result = s.finish(budget(), 0, &mut |_| Ok(replay_fixture(&[])));
+            let result = s.finish(budget(), 0, None, &mut |_| Ok(replay_fixture(&[])));
             if same {
                 result.unwrap();
             } else {
@@ -3052,7 +3210,7 @@ mod tests {
             for rank in [0, 1, 5, 7] {
                 s.payload(rank, true, true).unwrap();
             }
-            let result = s.finish(budget(), 0, &mut |_| Ok(replay_fixture(&[])));
+            let result = s.finish(budget(), 0, None, &mut |_| Ok(replay_fixture(&[])));
             let d4 = result.is_err_and(|e| e.to_string().contains("D4 coarse"));
             assert_eq!(d4, refused, "{coarse:?} over {leaves:?}");
         }
@@ -3072,7 +3230,7 @@ mod tests {
         for rank in [0, 7] {
             s.payload(rank, true, true).unwrap();
         }
-        let result = s.finish(budget(), 0, &mut |_| Ok(replay_fixture(&[])));
+        let result = s.finish(budget(), 0, None, &mut |_| Ok(replay_fixture(&[])));
         assert!(result.unwrap_err().to_string().contains("D4 coarse"));
     }
     #[test]
@@ -3089,7 +3247,7 @@ mod tests {
         s.payload(2, false, false).unwrap();
         s.expect_identity();
         assert!(s
-            .finish(budget(), 0, &mut |_| panic!("unexpected replay"))
+            .finish(budget(), 0, None, &mut |_| panic!("unexpected replay"))
             .unwrap_err()
             .to_string()
             .contains("replaceContentContinuity"));
@@ -3139,7 +3297,7 @@ mod tests {
             s.reference(0, 0).unwrap();
             s.payload(0, identity, identity).unwrap();
             s.exclude_scene("tileset glTF up-axis override is outside the Y-up profile");
-            let result = s.finish(budget(), 0, &mut |_| panic!("unexpected replay"));
+            let result = s.finish(budget(), 0, None, &mut |_| panic!("unexpected replay"));
             if identity {
                 assert!(matches!(result, Err(Error::Unsupported(_))));
             } else {
@@ -3272,7 +3430,7 @@ mod tests {
         for config in [CatalogConfig::DEFAULT, CatalogConfig::FORCED_SPILL] {
             for gap in [0., ulp] {
                 let scratch = Scratch::create(None, 4096).unwrap();
-                let mut s = Store::new(Arc::new(scratch), &config).unwrap();
+                let mut s = Store::new(Arc::new(scratch), &config, Resources::FIXED).unwrap();
                 s.materialize().unwrap();
                 let placements = ALIAS_FRAMES as i64 * 2 + 1;
                 // Payload 0: many distinct vertices and `placements` identical frames but
@@ -3373,7 +3531,9 @@ mod tests {
             s.payload(rank, true, rank != 0)?;
         }
         assert!(s.census().is_none());
-        s.finish(budget(), 0, &mut |rank| Ok(payloads[rank as usize].clone()))?;
+        s.finish(budget(), 0, None, &mut |rank| {
+            Ok(payloads[rank as usize].clone())
+        })?;
         let mut census = s.census().unwrap();
         // The fixed hierarchy: an omitted root above two rendered cells.
         assert_eq!(
@@ -3600,7 +3760,9 @@ mod tests {
             s.payload(rank, true, rank != 0).unwrap();
         }
         assert!(s
-            .finish(budget(), 0, &mut |rank| Ok(payloads[rank as usize].clone()))
+            .finish(budget(), 0, None, &mut |rank| Ok(
+                payloads[rank as usize].clone()
+            ))
             .unwrap_err()
             .to_string()
             .contains("interfaceWinding"));
@@ -3634,8 +3796,10 @@ mod tests {
             s.reference(rank, rank).unwrap();
             s.payload(rank, true, rank != 0).unwrap();
         }
-        s.finish(budget(), 0, &mut |rank| Ok(payloads[rank as usize].clone()))
-            .unwrap();
+        s.finish(budget(), 0, None, &mut |rank| {
+            Ok(payloads[rank as usize].clone())
+        })
+        .unwrap();
         assert_eq!(s.census().unwrap().shared_segments, 1);
     }
     #[test]
@@ -3656,7 +3820,7 @@ mod tests {
                     params![triangles, tile],
                 )
                 .unwrap();
-            let result = s.finish(budget(), 0, &mut |_| Ok(replay_fixture(&[])));
+            let result = s.finish(budget(), 0, None, &mut |_| Ok(replay_fixture(&[])));
             if ok {
                 result.unwrap();
                 assert_eq!(s.census().unwrap().max_payload_triangles, 8192);
@@ -3683,7 +3847,7 @@ mod tests {
             s.connection
                 .execute("UPDATE payloads SET primitive_rows=8193 WHERE rank=0", [])
                 .unwrap();
-            let result = s.finish(budget(), 0, &mut |_| Ok(replay_fixture(&[])));
+            let result = s.finish(budget(), 0, None, &mut |_| Ok(replay_fixture(&[])));
             if same {
                 result.unwrap();
             } else {
@@ -3726,7 +3890,7 @@ mod tests {
                 }
             }
         }
-        s.finish(budget(), 0, &mut |_| Ok(replay_fixture(&[])))?;
+        s.finish(budget(), 0, None, &mut |_| Ok(replay_fixture(&[])))?;
         Ok(s.census().unwrap().omission)
     }
     fn refusal(result: Result<Omission, Error>, check: &str) {
@@ -4188,7 +4352,7 @@ mod tests {
         }
         s.expect_identity();
         let error = s
-            .finish(budget(), 0, &mut |_| panic!("unexpected replay"))
+            .finish(budget(), 0, None, &mut |_| panic!("unexpected replay"))
             .unwrap_err();
         // The replayed chain is checked: its content-less cells have no G.
         assert!(error.to_string().contains("emptyCellRefinement"), "{error}");
@@ -4212,9 +4376,175 @@ mod tests {
                     ..budget()
                 },
                 0,
+                None,
                 &mut |_| panic!("unexpected replay"),
             )
             .unwrap_err();
         assert!(error.exceeded().is_some());
+    }
+
+    /// #342: the lookahead replay on worker threads gives the sequential outcome — census,
+    /// work count, error and refusal — at every budget, including budgets that run out
+    /// inside a replay, a placement read or a SQL statement.
+    #[test]
+    fn parallel_replay_matches_the_sequential_replay_at_every_budget() {
+        let run = |workers: usize, value: u64| {
+            let mut payloads = vec![replay_fixture(&[[
+                [0., 0., 0.],
+                [64., 0., 0.],
+                [0., 64., 0.],
+            ]])];
+            let mut s = Store::new(
+                Arc::new(Scratch::create(None, 4096).unwrap()),
+                &CatalogConfig::selected(),
+                Resources {
+                    workers,
+                    window_bytes: 1 << 10,
+                    ..Resources::FIXED
+                },
+            )
+            .unwrap();
+            s.decoded_limit = 1 << 24;
+            s.tile(0, None, IDENTITY).unwrap();
+            s.kind(0, None, false, 1024., Some(1.)).unwrap();
+            s.tile(1, Some(0), IDENTITY).unwrap();
+            s.reference(1, 0).unwrap();
+            s.payload(0, true, false).unwrap();
+            // 48 leaves in a fan of triangles around the origin, several per payload.
+            for leaf in 0..48u64 {
+                let a = leaf as f64;
+                payloads.push(replay_fixture(&[
+                    [[0., 0., 0.], [a + 1., 1., 0.], [a, 2., 0.]],
+                    [[a + 1., 1., 0.], [a + 2., 1., 0.], [a, 2., 0.]],
+                ]));
+                s.tile(leaf + 2, Some(1), IDENTITY).unwrap();
+                s.reference(leaf + 2, leaf + 1).unwrap();
+                s.payload(leaf + 1, true, true).unwrap();
+            }
+            let result = s.finish_with(
+                Budget { value, ..budget() },
+                0,
+                None,
+                &mut replay::Shared(Arc::new(payloads)),
+            );
+            (format!("{result:?}"), format!("{:?}", s.census()))
+        };
+        let full = run(1, budget().value);
+        assert_eq!(run(4, budget().value), full);
+        let work: u64 = full
+            .0
+            .trim_start_matches("Ok(")
+            .trim_end_matches(')')
+            .parse()
+            .unwrap_or(0);
+        let mut budgets = vec![1, 10, 100, 1_000, 10_000, 100_000];
+        if work > 0 {
+            budgets.extend((1..16).map(|i| work * i / 16));
+            budgets.extend([work - 1, work, work + 1]);
+        }
+        for value in budgets {
+            assert_eq!(run(4, value), run(1, value), "budget {value}");
+            assert_eq!(run(2, value), run(1, value), "budget {value}");
+        }
+    }
+
+    /// One progress event: phase, done, total.
+    type Seen = Vec<(String, u64, Option<u64>)>;
+    /// Records every event; cancels its control at the `at`-th event.
+    struct Events {
+        at: usize,
+        seen: std::sync::Mutex<Seen>,
+        handle: std::sync::OnceLock<crate::CancellationHandle>,
+    }
+    impl crate::Observer for Events {
+        fn observe(&self, event: &crate::RunEvent<'_>) -> Result<(), crate::JobError> {
+            if let crate::RunEvent::Progress { phase, done, total } = event {
+                let mut seen = self.seen.lock().unwrap();
+                seen.push(((*phase).into(), *done, *total));
+                if seen.len() == self.at {
+                    self.handle.get().unwrap().cancel();
+                }
+            }
+            Ok(())
+        }
+    }
+    /// The `delivery_case` fixture's store, finished under a run control cancelled at the
+    /// `at`-th event; its events and the work count (or the error).
+    fn delivery_events(at: Option<usize>) -> (Seen, Result<u64, Error>) {
+        let (a, b, c, d) = ([0., 0., 0.], [2., 0., 0.], [0., 2., 0.], [2., -2., 0.]);
+        let payloads = [
+            replay_fixture(&[[a, b, c]]),
+            replay_fixture(&[[a, b, c]]),
+            replay_fixture(&[[b, a, d]]),
+        ];
+        let mut s = store();
+        s.decoded_limit = 1 << 24;
+        for (id, parent) in [(0, None), (1, Some(0)), (2, Some(1)), (3, Some(0))] {
+            s.tile(id, parent, IDENTITY).unwrap();
+        }
+        s.kind(0, None, false, 16., Some(1.)).unwrap();
+        for (tile, rank) in [(1, 0), (2, 1), (3, 2)] {
+            s.reference(tile, rank).unwrap();
+            s.payload(rank, true, rank != 0).unwrap();
+        }
+        let mut read = |rank: u64| Ok(payloads[rank as usize].clone());
+        let Some(at) = at else {
+            return (Vec::new(), s.finish(budget(), 0, None, &mut read));
+        };
+        let observer = Arc::new(Events {
+            at,
+            seen: Default::default(),
+            handle: Default::default(),
+        });
+        let control = crate::RunControl::new(Some(observer.clone()));
+        observer.handle.set(control.cancellation_handle()).ok();
+        let attempt = control.begin().map_err(|f| f.error).unwrap();
+        let result = s.finish(budget(), 0, Some(attempt.probe()), &mut read);
+        drop(attempt);
+        let seen = observer.seen.lock().unwrap().clone();
+        (seen, result)
+    }
+    /// #342: the delivery stage reports every pass of `validate.delivery` in order and each
+    /// geometry replay with its placement total; counting the totals charges no work, and a
+    /// cancellation requested at any event stops the stage there.
+    #[test]
+    fn delivery_progress_has_totals_and_every_event_is_a_checkpoint() {
+        let (events, work) = delivery_events(Some(usize::MAX));
+        let work = work.unwrap();
+        let passes: Vec<u64> = events
+            .iter()
+            .filter(|e| e.0 == ticks::DELIVERY)
+            .map(|e| e.1)
+            .collect();
+        assert_eq!(passes, (0..ticks::PASSES).collect::<Vec<_>>());
+        assert!(events
+            .iter()
+            .filter(|e| e.0 == ticks::DELIVERY)
+            .all(|e| e.2 == Some(ticks::PASSES)));
+        let replay = |phase: &str| -> Vec<(u64, Option<u64>)> {
+            events
+                .iter()
+                .filter(|e| e.0 == phase)
+                .map(|e| (e.1, e.2))
+                .collect()
+        };
+        // Two leaf placements and one coarse placement, each phase from 0 to its total.
+        assert_eq!(
+            replay("validate.delivery.leaves"),
+            [(0, Some(2)), (2, Some(2))]
+        );
+        assert_eq!(
+            replay("validate.delivery.coarse"),
+            [(0, Some(1)), (1, Some(1))]
+        );
+        assert_eq!(replay("validate.delivery.edges"), [(0, Some(0))]);
+        // The same work without a run control: counting the totals charges nothing.
+        assert_eq!(delivery_events(None).1.unwrap(), work);
+        for at in 1..=events.len() {
+            let (seen, result) = delivery_events(Some(at));
+            assert!(matches!(result, Err(Error::Cancelled)), "{at}: {result:?}");
+            assert_eq!(seen.len(), at, "stopped at the event that cancelled");
+        }
+        assert!(work > 0);
     }
 }

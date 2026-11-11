@@ -60,7 +60,12 @@ fn inspect_with(path: &Path, limits: ValidationLimits, memoize: bool) -> Outcome
     MEMOIZE.with(|m| m.set(true));
     match inspection {
         Ok(inspection) => Outcome {
-            result: serde_json::to_string(&inspection.report).unwrap(),
+            result: {
+                // #342: the resource plan states free disk space, which varies between runs.
+                let mut report = serde_json::to_value(&inspection.report).unwrap();
+                report.as_object_mut().unwrap().remove("resources");
+                report.to_string()
+            },
             units: inspection.units,
             prepared: inspection.prepared,
             counters: inspection.counters,

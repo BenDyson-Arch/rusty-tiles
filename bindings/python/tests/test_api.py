@@ -1792,6 +1792,33 @@ class WheelAPI(unittest.TestCase):
         with self.assertRaises(KeyboardInterrupt):
             rusty_tiles.validate(archive, callback=interrupt)
 
+        # #342: the memory budget and workers are reported and change nothing else.
+        def verdict(report):
+            return {k: v for k, v in report.items() if k not in ("resources", "scratch")}
+
+        # A default run of a small archive that spilled nothing has no host-dependent members.
+        self.assertNotIn("resources", report)
+        self.assertNotIn("scratch", report)
+        for budget, jobs in ((1 << 30, 1), (4 << 30, None), (512 << 20, 2)):
+            other = rusty_tiles.validate(archive, memory_budget_bytes=budget, jobs=jobs)
+            self.assertEqual(verdict(other), verdict(report))
+            self.assertEqual(other["resources"]["memoryBudget"]["requestedBytes"], budget)
+            self.assertEqual(other["resources"]["memoryBudget"]["source"], "explicit")
+            self.assertEqual(other["resources"]["jobs"]["requested"],
+                             "auto" if jobs is None else str(jobs))
+        with self.assertRaises(rusty_tiles.ResourceLimitError):
+            rusty_tiles.validate(archive, memory_budget_bytes=(512 << 20) - 1)
+        for bad in (0, -1, 2**64):
+            with self.assertRaises(rusty_tiles.InvalidRequestError, msg=repr(bad)):
+                rusty_tiles.validate(missing, memory_budget_bytes=bad)
+        for bad in (True, 1.0, "1GiB"):
+            with self.assertRaises(TypeError, msg=repr(bad)):
+                rusty_tiles.validate(missing, memory_budget_bytes=bad)
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.validate(missing, jobs=0)
+        with self.assertRaises(TypeError):
+            rusty_tiles.validate(missing, jobs="auto")
+
     def test_validate_reads_implicit_roots_with_rust_parity(self):
         """I1 parity with tests/i1_implicit_read.rs: labels, counts and categories."""
         def point_glb():

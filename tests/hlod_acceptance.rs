@@ -269,7 +269,15 @@ fn sampled_hlod_archives_and_named_mutants() {
                 skipped,
                 "{name}"
             );
-            assert_eq!(serde_json::to_value(report).unwrap(), cli_report);
+            // `resources` states each process's host detection (#342).
+            let without = |mut report: serde_json::Value| {
+                report.as_object_mut().unwrap().remove("resources");
+                report
+            };
+            assert_eq!(
+                without(serde_json::to_value(report).unwrap()),
+                without(cli_report)
+            );
         }
     }
     // Review r12: every identity label stripped, through the public API. The expectation

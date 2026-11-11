@@ -28,7 +28,9 @@ fn outcome(result: Result<ValidationReport, Error>) -> String {
                 String::from_utf8(streamed).unwrap(),
                 materialized.to_string()
             );
+            // Host- and profile-dependent: the scratch use and the resource plan.
             materialized.as_object_mut().unwrap().remove("scratch");
+            materialized.as_object_mut().unwrap().remove("resources");
             materialized.to_string()
         }
         Err(error) => format!("{}: {error}", error.category().0),

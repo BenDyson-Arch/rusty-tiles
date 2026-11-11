@@ -18,6 +18,7 @@ mod limits;
 mod limits_controls;
 #[cfg(test)]
 mod memo_controls;
+mod resources;
 mod rows;
 #[cfg(test)]
 mod scale_driver;
@@ -31,6 +32,7 @@ pub use limits::{
     UnknownLimitKey, LIMIT_MODEL,
 };
 use limits::{LimitPlan, Sources};
+pub use resources::{BudgetReport, DiskBound, JobsReport, StorePlan, ValidationResources};
 pub use rows::{PayloadRows, PayloadRowsIter};
 pub use types::{
     CoarseNormalCensus, ExpectedProfile, InterfaceCensus, PayloadReport, ScratchRefusal,
@@ -3337,6 +3339,9 @@ fn inspect_run(
     attempt: Option<&crate::runtime::Attempt>,
 ) -> Result<Inspection, Error> {
     let mut progress = Progress::new(attempt);
+    // #342: the memory budget and workers are resolved once, before anything is touched.
+    let (memory_budget, jobs) = request.requested_resources();
+    let mut plan = resources::Plan::resolve(memory_budget, jobs)?;
     // VS-C-7: an explicit scratch directory is checked before the input is opened.
     let placement = match request.scratch() {
         Some(dir) if dir.is_dir() => crate::spill::Placement::In(dir.to_owned()),
@@ -3368,13 +3373,31 @@ fn inspect_run(
         source.try_clone()?,
         before.len(),
         &archive_limits,
-        crate::archive3tz::CatalogConfig::selected(),
+        crate::archive3tz::CatalogConfig::selected_or(plan.catalog),
         placement,
     )
     .map_err(archive_admission_error)?;
     // VS-C-1: S is fixed by the admitted catalog before any budgeted work.
     let stored_bytes = archive.stored_bytes();
     let (limits, limit_derivation, sources) = budgets.resolve(stored_bytes);
+    let delivery_resources = hlod_delivery::Resources {
+        // The forced-spill parity profile keeps its own tiny side sorts.
+        sort: (*archive.config() == plan.catalog).then_some(plan.delivery_sort),
+        workers: plan.jobs,
+        window_bytes: plan.window_bytes,
+        cache_bytes: plan.sqlite_cache_bytes,
+        temp_in_memory: plan.temp_store_in_memory(
+            limits.total_payload_elements,
+            hlod_delivery::ROW_UNITS as u64,
+            limits.hierarchy_visits,
+            limits.references,
+        ),
+    };
+    plan.report.stores.sqlite_temp_store = if delivery_resources.temp_in_memory {
+        "memory"
+    } else {
+        "file"
+    };
     let reads = budget(&limits, &sources, LimitKey::TotalBytesRead);
     // Count the exact index bytes already consumed by the format owner. Later
     // index/member hashing and repeated content reads consume this same budget.
@@ -3484,7 +3507,7 @@ fn inspect_run(
         },
         reports: report,
         hlod_identity: false,
-        delivery: hlod_delivery::Store::new(scratch.clone(), &config)?,
+        delivery: hlod_delivery::Store::new(scratch.clone(), &config, delivery_resources)?,
         delivery_path: Vec::new(),
         delivery_next: 0,
         tiles: 0,
@@ -3542,6 +3565,24 @@ fn inspect_run(
         if hlod {
             check.delivery.expect_identity();
         }
+        // #342: the scratch-disk bound, before any traversal work: the catalog's estimate plus,
+        // for an HLOD archive, the delivery store's. Refused as typed insufficient space.
+        if hlod || check.scratch.is_created() {
+            let hlod_bytes = if hlod {
+                stored_bytes.saturating_mul(resources::hlod_bytes_per_stored_byte())
+            } else {
+                0
+            };
+            let peak = check.scratch.needed().saturating_add(hlod_bytes);
+            let available = check
+                .scratch
+                .preflight_peak(peak, crate::spill::PreflightStage::Validation)
+                .map_err(spill_failure)?;
+            plan.report.disk = Some(resources::DiskBound {
+                estimated_peak_bytes: peak,
+                available_bytes: available,
+            });
+        }
         // D5 amendment A3: the texture term binds every content tile's G, under the
         // resolved HLOD expectation and the producer's recorded profile.
         let profile = (check.reports["operation"].as_str() == Some("mesh_tiler"))
@@ -3570,24 +3611,19 @@ fn inspect_run(
     let delivery_budget = check.resources.budget(LimitKey::TotalPayloadElements);
     let delivery_reads = check.resources.budget(LimitKey::TotalBytesRead);
     let delivery_member_cap = check.resources.limits.member_bytes;
-    let delivery_resources = &mut check.resources;
+    let probe = check.progress.attempt.map(crate::runtime::Attempt::probe);
     // Selected geometry replays use already C1-admitted payload ranks. Reads
     // retain their ordinary volume charge; the delivery owner charges decoding.
-    let delivery_work = check
-        .delivery
-        .finish(delivery_budget, check.elements, &mut |rank| {
-            let name = delivery_resources
-                .archive
-                .name(rank)
-                .map_err(archive_admission_error)?;
-            read_member(
-                delivery_resources.archive,
-                &name,
-                &mut delivery_resources.bytes_read,
-                delivery_reads,
-                delivery_member_cap,
-            )
-        })?;
+    let mut reads = DeliveryReads {
+        resources: &mut check.resources,
+        reads: delivery_reads,
+        cap: delivery_member_cap,
+        file: worker_file(&source, path).map(std::sync::Arc::new),
+    };
+    let delivery_work =
+        check
+            .delivery
+            .finish_with(delivery_budget, check.elements, probe, &mut reads)?;
     check.elements = check
         .elements
         .checked_add(delivery_work)
@@ -3755,6 +3791,8 @@ fn inspect_run(
         .collect(),
         not_inspected: check.not_inspected.into_iter().collect(),
         not_inspected_truncated: labels.truncated,
+        resources: (scratch.is_created() || memory_budget.is_some() || jobs.is_some())
+            .then_some(plan.report),
     };
     Ok(Inspection {
         report,
@@ -3777,6 +3815,71 @@ fn inspect_run(
         #[cfg(test)]
         implicit: check.implicit_facts,
     })
+}
+
+/// The delivery stage's payload reads (#342): the sequential [`read_member`] split into its
+/// in-order admission and its fetch, plus positional worker fetches for the replay lookahead.
+struct DeliveryReads<'r, 'a> {
+    resources: &'r mut ArchiveResources<'a>,
+    reads: Budget,
+    cap: u64,
+    /// The archive for worker reads; `None` keeps every replay sequential.
+    file: Option<std::sync::Arc<File>>,
+}
+impl hlod_delivery::Payloads for DeliveryReads<'_, '_> {
+    fn admit(&mut self, rank: u64) -> Result<(), Error> {
+        let archive = &mut *self.resources.archive;
+        let name = archive.name(rank).map_err(archive_admission_error)?;
+        let size = archive.member(&name).map_err(archive_admission_error)?.size;
+        if size > self.cap {
+            return Err(Error::limit(format!(
+                "member exceeds admitted byte limit: {name}"
+            )));
+        }
+        self.resources.bytes_read = self.reads.charge(self.resources.bytes_read, size, || {
+            "member reads exceed work limit".into()
+        })?;
+        Ok(())
+    }
+    fn fetch(&mut self, rank: u64) -> Result<Vec<u8>, Error> {
+        let archive = &mut *self.resources.archive;
+        let name = archive.name(rank).map_err(archive_admission_error)?;
+        archive
+            .read_member(&name, self.cap)
+            .map_err(archive_admission_error)
+    }
+    fn locate(&mut self, rank: u64) -> Option<(u64, hlod_delivery::Fetch)> {
+        let file = self.file.clone()?;
+        let archive = &mut *self.resources.archive;
+        let name = archive.name(rank).ok()?;
+        let member = archive.member(&name).ok()?;
+        if member.size > self.cap {
+            return None;
+        }
+        let (offset, size, crc) = (member.data_offset, member.size, member.crc32);
+        Some((
+            size,
+            Box::new(move || {
+                crate::archive3tz::read_stored_at(&file, offset, size, crc)
+                    .map_err(archive_admission_error)
+            }),
+        ))
+    }
+}
+/// A handle for positional worker reads of the archive: a clone of the inspected handle on
+/// Unix; elsewhere a second open, whose own file position the reader's seeks never move (its
+/// bytes are CRC-checked, and the source is compared again after inspection).
+fn worker_file(source: &File, path: &Path) -> Option<File> {
+    #[cfg(unix)]
+    {
+        let _ = path;
+        source.try_clone().ok()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = source;
+        File::open(path).ok()
+    }
 }
 
 /// Small I1 archive builders shared by the in-crate tests.

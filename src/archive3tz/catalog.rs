@@ -111,21 +111,23 @@ impl CatalogConfig {
     /// [`CatalogConfig::FORCED_SPILL`] when `RUSTY_TILES_FORCED_SPILL=1` (or, in unit
     /// tests, through the thread override); production builds always use the default.
     pub(crate) fn selected() -> Self {
+        Self::selected_or(Self::DEFAULT)
+    }
+
+    /// [`CatalogConfig::selected`] with `planned` (a validation's budgeted profile) in place
+    /// of the default.
+    pub(crate) fn selected_or(planned: Self) -> Self {
         #[cfg(any(test, feature = "validate-forced-spill"))]
         {
             #[cfg(test)]
             if let Some(forced) = FORCED.with(std::cell::Cell::get) {
-                return if forced {
-                    Self::FORCED_SPILL
-                } else {
-                    Self::DEFAULT
-                };
+                return if forced { Self::FORCED_SPILL } else { planned };
             }
             if std::env::var_os("RUSTY_TILES_FORCED_SPILL").is_some_and(|v| v == "1") {
                 return Self::FORCED_SPILL;
             }
         }
-        Self::DEFAULT
+        planned
     }
 
     /// Scratch estimate from the end record (design §1.3, labelled an estimate): two

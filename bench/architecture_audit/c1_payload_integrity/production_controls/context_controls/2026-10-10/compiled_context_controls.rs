@@ -135,7 +135,9 @@ fn execution(case: &Value, fact: &str, limits: ValidationLimits, outcome: Outcom
         let report = result.unwrap_or_else(|error| {
             panic!("{} {fact} exact equality refused: {error:?}", case["name"])
         });
-        let actual = serde_json::to_value(report).unwrap();
+        let mut actual = serde_json::to_value(report).unwrap();
+        // #342: the host's resource plan is not part of the declared report.
+        actual.as_object_mut().unwrap().remove("resources");
         let mut expected = case["expectedReport"].clone();
         expected["archive"] = json!(path);
         expected["limits"] = selected.clone();

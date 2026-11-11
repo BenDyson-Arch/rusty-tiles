@@ -1096,8 +1096,10 @@ mod tests {
                 }
             }
         }
-        s.finish(budget(), 0, &mut |rank| Ok(payloads[rank as usize].clone()))
-            .map(|_| ())
+        s.finish(budget(), 0, None, &mut |rank| {
+            Ok(payloads[rank as usize].clone())
+        })
+        .map(|_| ())
     }
     /// root -> A(G_a) -> A0, A1; B(G_b) -> B0, B1.
     fn siblings(a: Vec<[Point; 3]>, g_a: f64, b: Vec<[Point; 3]>, g_b: f64) -> Result<(), Error> {

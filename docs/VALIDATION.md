@@ -31,6 +31,7 @@ The JSON report contains:
 | `interfaceCensus` | HLOD archives only: border and omission counts (see [HLOD archives](#hlod-archives)) |
 | `scratch` | Present only when scratch files were written: `memoryBacked` and `peakBytes` |
 | `warnings` | Present only when some warning applies: a list of `{code, message}`. Warnings never fail validation; `ok` stays `true`. The CLI prints each as `warning: <code>: <message>` on stderr. The one code so far is [`coarseNormalInversion`](#coarse-normals) |
+| `resources` | Present when scratch was used (always for HLOD archives) or the request set a memory budget or jobs: the resolved budget, workers, store sizes and scratch-disk bound (see [memory, workers and disk](#memory-workers-and-disk)) |
 
 Payload rows are read on demand. The CLI streams them. Python returns a list by default, or a lazy read-only sequence with `validate(input, lazy_payloads=True)`.
 
@@ -147,11 +148,35 @@ The 3TZ index is admitted at exactly 24 bytes per other member, as the central-d
 
 ### Scratch space
 
-The catalog holds one fixed-width row per member and a log of names. It stays in memory up to 96 MiB, which covers every archive of at most 524,288 entries and a 32 MiB directory. A larger catalog moves to scratch files, so resident memory grows by only one bit per member (21.3 MiB at the member ceiling). Per-payload facts move to scratch once they exceed 100 MiB.
+The catalog holds one fixed-width row per member and a log of names. It stays in memory up to the larger of 96 MiB and one eighth of the planned memory (see [memory, workers and disk](#memory-workers-and-disk)); 96 MiB covers every archive of at most 524,288 entries and a 32 MiB directory. A larger catalog moves to scratch files, so resident memory grows by only one bit per member (21.3 MiB at the member ceiling). Per-payload facts move to scratch once they exceed the larger of 100 MiB and one eighth of the planned memory.
 
 Scratch goes to the first disk-backed directory with room among `$TMPDIR`, the user cache directory (`rusty-tiles/scratch`) and the system temporary directory. Memory-backed scratch is used only when nothing else is available; the report's `scratch.memoryBacked` then says so. `--scratchDir DIR` (Python `scratch_dir`) puts scratch inside exactly `DIR`, which must exist; otherwise the request is refused as `usage` before the archive is opened. A memory-backed `DIR` is used and labelled.
 
 A failure of scratch storage is `io`, `resource_limit` or `invalid_state` with the prefix `validation scratch:`. It is never a verdict on the archive.
+
+### Memory, workers and disk
+
+| Surface | Memory budget | Workers |
+| --- | --- | --- |
+| CLI | `--memory-budget BYTES` (`--memoryBudget`) | `--jobs N` or `auto` |
+| Python | `validate(..., memory_budget_bytes=None)` | `jobs=None` |
+| Rust | `ValidationRequest::memory_budget(bytes)` | `ValidationRequest::jobs(n)` |
+
+The budget follows `mesh`'s rule and syntax ([memory budget](MESH.md#memory-budget)): the default is the lesser of 4 GiB and half the detected host or cgroup headroom, or 2 GiB when none is detected; an explicit budget is a ceiling that is never raised, and the stores are planned against the lesser of the budget and the detected headroom. Zero or malformed values are `usage` errors. An explicit budget below 512 MiB is `resource_limit`, before the archive is opened. Workers default to every core; an explicit count is a maximum. Each worker beyond the first is admitted against the budget at 64 MiB, and workers take at most half of the planned share: 1 GiB admits 6 workers, 4 GiB admits 30.
+
+The budget sizes the validator's scale stores. Per-item work (one document, one payload decode) stays bounded by the fixed [per-item limits](#limits), so 256 MiB of the budget is left outside the plan for it. Of the rest, P, the stores live at once during the HLOD delivery stage take at most about 0.9·P:
+
+- the delivery store's external sorts: runs of up to about P/6 (at least 24 MiB), merged up to 128 at a time with 256 KiB to 1 MiB buffers, so a sort of up to `singlePassBytes` (128 runs) needs one merge pass. Measured plans on a 16-core host: about 54 GB at 4 GiB with 16 workers (74 GB with one) and 4.4 GB at 1 GiB with its 6 workers (14 GB with one). The fixed 0.4.0 profile merged 32 runs of 24 MiB (0.8 GB) per pass;
+- the delivery store's SQLite page cache, P/8 (it was 8 MiB). SQLite's sorter keeps at most the same amount in memory. Its temporary store is in memory only when its bound fits P/16: every row it can hold is a charged delivery row, a tile or a reference, so the bound is `(totalPayloadElements ÷ 128 + hierarchyVisits + references) × 128` bytes. Otherwise, as for every large archive, it stays on disk;
+- the catalog page cache (P/32), the resident thresholds above and the stream log (P/32), and the payload-row sort (P/16).
+
+Workers replay HLOD payload geometry (the leaf, edge-face and coarse passes) a bounded window ahead of the pass that consumes them, and sort the delivery store's runs. The pass still consumes placements in order and makes every work charge, read admission and refusal at the point a single worker makes it, so work counts, refusals and reports are those of one worker. SQLite statements and the traversal run on one thread.
+
+Before traversal starts, the estimated scratch peak is checked against free space on the scratch volume: the catalog's terms plus, for an HLOD archive, 7 bytes per stored byte for the delivery store and its sorts (measured: about 2.7 on Walem 2048, at least 5.5 on a 26 GB archive). A short volume is refused as typed insufficient space (`io`, Python `TilesIOError`), with the needed and available bytes. Like every preflight it is not a reservation.
+
+SQLite writes the delivery store's sorter files (about 0.4 GB for Walem 2048) to its own temporary directory (on Unix `SQLITE_TMPDIR`, then `TMPDIR`, then `/var/tmp`), not to the scratch directory; they are outside `scratch.peakBytes` and the bound above. Set `SQLITE_TMPDIR` (or `TMPDIR`) to a disk with room when it matters.
+
+The report's `resources` member states `memoryBudget` (`requestedBytes`, `resolvedBytes`, `source`: `explicit`, `default_ceiling`, `default_headroom` or `default_undetected`, `detectedHeadroomBytes`, `plannedBytes`), `jobs` (`requested`, `cores`, `jobs`, `limitedBy`), `stores` (`sortRunBytes`, `sortFanIn`, `sortBufferBytes`, `singlePassBytes`, `catalogCacheBytes`, `sqliteCacheBytes`, `sqliteTempStore`) and, once checked, `disk` (`estimatedPeakBytes`, `availableBytes`). None of these change a verdict. Every report member except `resources` and `scratch` is identical for every budget and worker count.
 
 The report-less Rust facade `validate_3tz` never keeps its catalog in RAM. With only memory-backed candidates it is refused as `environment` (exit 4; Rust `Error::Scratch(ScratchRefusal::MemoryBackedOnly)`). Set `TMPDIR` to a disk-backed directory.
 
@@ -377,7 +402,7 @@ The default ceilings are sized for default vector output at its 100,000-tile `--
 
 A refused charge against a cap or budget is `resource_limit`, with a message ending in `(limit KEY=VALUE, SOURCE)`, where `SOURCE` is `floor`, `scaled`, `explicit` or `cap`. The CLI error carries `"limit": {"limit", "value", "observed", "derivation"}`; Python has the same dict as `ResourceLimitError.limit`; Rust has `ValidationFailure::exceeded()`.
 
-Separately bounded ZIP envelope, tail and header reads are outside `totalBytesRead`. These limits are engineering bounds, not a promise about total process memory. Validation memory does not grow with tiles, references or payloads: the traversal keeps only its current path, per-payload facts spill to scratch above 100 MiB, and shared external-tileset summaries are capped at 64 MiB.
+Separately bounded ZIP envelope, tail and header reads are outside `totalBytesRead`. These limits are engineering bounds, not a promise about total process memory. Validation memory does not grow with tiles, references or payloads: the traversal keeps only its current path, per-payload facts spill to scratch above their [planned](#memory-workers-and-disk) threshold, and shared external-tileset summaries are capped at 64 MiB.
 
 ## Errors, cancellation and progress
 
@@ -395,7 +420,7 @@ Separately bounded ZIP envelope, tail and header reads are outside `totalBytesRe
 
 `InvalidState` reports an internal error, such as an exact-arithmetic capacity fault in decoded containment. It is never a verdict about the archive.
 
-Cancellation, through `inspect_with`'s control, a Python callback or Ctrl-C, is checked before each hashed member, traversal task, replayed external-tileset event, implicit tile and containment stream entry.
+Cancellation, through `inspect_with`'s control, a Python callback or Ctrl-C, is checked before each hashed member, traversal task, replayed external-tileset event, implicit tile and containment stream entry, and in the HLOD delivery stage at every charged row and every 10,000 SQLite operations. A Python callback (and so a Python Ctrl-C) runs at every event.
 
 Progress events use these phases; the CLI prints them with `--progress json`.
 
@@ -403,10 +428,12 @@ Progress events use these phases; the CLI prints them with `--progress json`.
 | --- | --- |
 | `validate.hash` | Hashing members |
 | `validate.traverse` | Walking the hierarchy |
+| `validate.delivery` | HLOD archives: the delivery stage's passes; `done` counts the passes started of `total` (20) |
+| `validate.delivery.leaves`, `.edges`, `.coarse` | HLOD archives: the leaf, edge-face and coarse geometry replays; `done` counts placements replayed of `total`, with an event every 1,024 |
 | `validate.stream` | Streaming decoded content for containment, only when it runs |
 | `validate.rows` | Ordering payload rows |
 
-The phase list is open and conditional. `done` never decreases within a phase, but an event may repeat: replaying a shared external tileset re-sends the current `validate.traverse` event every 1,024 replayed events as a heartbeat.
+The phase list is open and conditional. `done` never decreases within a phase, but an event may repeat: replaying a shared external tileset re-sends the current `validate.traverse` event every 1,024 replayed events as a heartbeat, and the delivery stage re-sends its current event every 65,536 charged rows and every 10,240,000 SQLite operations. The delivery phases alternate: each replay phase sits between two `validate.delivery` events.
 
 ## Design documents
 
