@@ -65,10 +65,18 @@ fn family_lines(work: &Path, family: &str) -> Vec<String> {
             ) || (family == "recovery"
                 && path.extension().is_some_and(|e| e == "jsonl"));
             (member && (family != "base" || !OTHER.contains(&first))).then(|| {
-                format!(
-                    "{relative}\t{:x}\n",
-                    Sha256::digest(fs::read(&path).unwrap())
-                )
+                let mut bytes = fs::read(&path).unwrap();
+                // The Python generators write JSON in text mode, which is CRLF on Windows.
+                if matches!(
+                    path.extension().and_then(|e| e.to_str()),
+                    Some("json" | "jsonl")
+                ) {
+                    bytes = String::from_utf8(bytes)
+                        .unwrap()
+                        .replace("\r\n", "\n")
+                        .into_bytes();
+                }
+                format!("{relative}\t{:x}\n", Sha256::digest(&bytes))
             })
         })
         .collect();
