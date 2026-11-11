@@ -6,3 +6,5 @@
   output is unchanged.
 - CI: the Windows library tests compile again (a Unix-only CPU-time probe is now gated to Unix),
   and the Python HLOD-expectation test declares the texture rule an HLOD tileset now requires.
+- CI: the installed-wheel tests read repository text as UTF-8, so they pass on Windows, whose
+  default encoding is not UTF-8.

@@ -26,7 +26,7 @@ import rusty_tiles
 
 ROOT = Path(sys.argv.pop(1))
 EXAMPLE = ROOT / "tests/fixtures/example.gltf"
-BUDGET_MATRIX = json.loads((ROOT / "tests/fixtures/memory_budget_matrix.json").read_text())
+BUDGET_MATRIX = json.loads((ROOT / "tests/fixtures/memory_budget_matrix.json").read_text(encoding="utf-8"))
 # Optional: the CLI binary for the parity checks (the wheel runner keeps PATH empty).
 CLI = os.environ.get("RUSTY_TILES_BIN") or None
 
@@ -454,7 +454,7 @@ class WheelAPI(unittest.TestCase):
         with self.assertRaises(TypeError):
             rusty_tiles.mesh_to_tileset(self.root / "x.glb", self.root / "x.3tz", _memory_budget_bytes=1)
         for name in ("docs/MESH.md", "bindings/python/README.md"):
-            text = (ROOT / name).read_text()
+            text = (ROOT / name).read_text(encoding="utf-8")
             self.assertNotIn("_lod", text, name)
             self.assertNotIn("_memory_budget_bytes", text, name)
             signature = re.search(r"mesh_to_tileset\(input, output, \*,([^)]*)\)", text, re.S)
@@ -735,7 +735,7 @@ class WheelAPI(unittest.TestCase):
                 self.assertEqual(result.report["layers"][0]["heightOffset"], 7)
                 self.assertEqual(result.report["layers"][0]["heightMode"], cli_report["layers"][0]["heightMode"])
                 if path.suffix == ".geojson":
-                    doc = json.loads(path.read_text())
+                    doc = json.loads(path.read_text(encoding="utf-8"))
                     doc['features'].append(dict(type='Feature',id=8,properties=dict(name='invalid'),
                         geometry=dict(type='LineString',coordinates=[[9,1,17]])))
                     path.write_text(json.dumps(doc))
@@ -788,7 +788,7 @@ class WheelAPI(unittest.TestCase):
         self.assertTrue(Path(rusty_tiles.__file__).resolve().is_relative_to(installed_root))
         self.assertEqual(rusty_tiles.__version__, importlib.metadata.version("rusty-tiles"))
         self.assertFalse(importlib.metadata.requires("rusty-tiles"))
-        readme = (ROOT / "bindings/python/README.md").read_text()
+        readme = (ROOT / "bindings/python/README.md").read_text(encoding="utf-8")
         example = readme.split("```python\n", 1)[1].split("```", 1)[0]
         write_local_mesh(self.root / "example.glb")
         previous = Path.cwd()
