@@ -77,6 +77,10 @@ fn tiled(work: &Path) -> PathBuf {
     output
 }
 
+fn decode(bytes: &[u8]) -> Result<Plain, JobError> {
+    Plain::decode(bytes, &mut Budget::default())
+}
+
 fn parts(bytes: &[u8]) -> (Value, Vec<u8>) {
     let (doc, bin) = glb_parts(bytes).unwrap();
     (doc, bin.to_vec())
@@ -392,45 +396,482 @@ fn refusals_are_typed() {
     let bytes = members(&archive)[&uri].clone();
     let (doc, bin) = parts(&bytes);
     let glb = |doc: &Value, bin: &[u8]| crate::glb::encode_glb(doc, bin).unwrap();
-    assert!(Plain::decode(&glb(&doc, &bin)).unwrap().into_glb().is_ok());
+    assert!(decode(&glb(&doc, &bin))
+        .unwrap()
+        .into_glb(&mut Budget::default())
+        .is_ok());
     let compressed = (0..doc["bufferViews"].as_array().unwrap().len())
         .find(|&i| doc["bufferViews"][i]["extensions"][MESHOPT]["mode"] == "ATTRIBUTES")
         .unwrap();
     let ext = &doc["bufferViews"][compressed]["extensions"][MESHOPT];
     let mut damaged = bin.clone();
     damaged[ext["byteOffset"].as_u64().unwrap_or(0) as usize] ^= 0xff;
-    let failure = Plain::decode(&glb(&doc, &damaged)).err().unwrap();
+    let failure = decode(&glb(&doc, &damaged)).err().unwrap();
     assert_eq!(failure.kind(), JobErrorKind::InvalidInput, "{failure}");
     let mut wrong = doc.clone();
     wrong["bufferViews"][compressed]["extensions"][MESHOPT]["filter"] = json!("EXPONENTIAL");
-    let failure = Plain::decode(&glb(&wrong, &bin)).err().unwrap();
+    let failure = decode(&glb(&wrong, &bin)).err().unwrap();
     assert_eq!(failure.kind(), JobErrorKind::Unsupported, "{failure}");
     let mut wrong = doc.clone();
     wrong["bufferViews"][compressed]["extensions"][MESHOPT]["count"] = json!(1u64 << 40);
-    let failure = Plain::decode(&glb(&wrong, &bin)).err().unwrap();
+    let failure = decode(&glb(&wrong, &bin)).err().unwrap();
     assert_eq!(failure.kind(), JobErrorKind::InvalidInput, "{failure}");
     let mut wrong = doc.clone();
     wrong["bufferViews"][compressed]["byteLength"] = json!(DECODED_LIMIT + 1);
-    let failure = Plain::decode(&glb(&wrong, &bin)).err().unwrap();
+    let failure = decode(&glb(&wrong, &bin)).err().unwrap();
     assert_eq!(failure.kind(), JobErrorKind::ResourceLimit, "{failure}");
     let mut wrong = doc.clone();
     wrong["buffers"][0]["uri"] = json!("data.bin");
-    let failure = Plain::decode(&glb(&wrong, &bin)).err().unwrap();
+    let failure = decode(&glb(&wrong, &bin)).err().unwrap();
     assert_eq!(failure.kind(), JobErrorKind::Unsupported, "{failure}");
     let mut b3dm = bytes.clone();
     b3dm[..4].copy_from_slice(b"b3dm");
     assert_eq!(
-        Plain::decode(&b3dm).err().unwrap().kind(),
+        decode(&b3dm).err().unwrap().kind(),
         JobErrorKind::Unsupported
     );
     let image = doc["images"][0]["bufferView"].as_u64().unwrap() as usize;
     let start = doc["bufferViews"][image]["byteOffset"].as_u64().unwrap() as usize;
     let mut damaged = bin.clone();
     damaged[start + 1] ^= 0xff;
-    let failure = Plain::decode(&glb(&doc, &damaged))
+    let failure = decode(&glb(&doc, &damaged))
         .unwrap()
-        .into_glb()
+        .into_glb(&mut Budget::default())
         .err()
         .unwrap();
     assert_eq!(failure.kind(), JobErrorKind::InvalidInput, "{failure}");
+}
+
+// ---- Hostile content: every path is refused before an unbounded allocation or walk ----
+
+/// One float triangle at `bin` offset 0, as the whole document's only mesh.
+fn triangle_doc() -> (Value, Vec<u8>) {
+    let bin: Vec<u8> = [0f32, 0., 0., 1., 0., 0., 0., 1., 0.]
+        .iter()
+        .flat_map(|v| v.to_le_bytes())
+        .collect();
+    let doc = json!({
+        "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+        "buffers": [{"byteLength": bin.len()}],
+        "bufferViews": [{"buffer": 0, "byteLength": bin.len()}],
+        "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}]
+    });
+    (doc, bin)
+}
+
+fn arrays_of(doc: &Value, bin: &[u8]) -> Result<DecodedTile, JobError> {
+    let bytes = crate::glb::encode_glb(doc, bin).unwrap();
+    let entry = TileEntry {
+        uri: "t.glb".into(),
+        depth: 0,
+        role: TileRole::Leaf,
+        geometric_error: 0.,
+        transform: IDENTITY,
+    };
+    let mut budget = Budget::default();
+    Plain::decode(&bytes, &mut budget)?.into_arrays(entry, IDENTITY, &mut budget)
+}
+
+fn tile_limit(error: &JobError) -> TileLimit {
+    assert_eq!(error.kind(), JobErrorKind::ResourceLimit, "{error}");
+    *std::error::Error::source(error)
+        .and_then(|cause| cause.downcast_ref::<TileLimit>())
+        .unwrap_or_else(|| panic!("no TileLimit cause: {error}"))
+}
+
+#[test]
+fn huge_accessor_counts_are_refused_before_allocation() {
+    let (doc, bin) = triangle_doc();
+    assert_eq!(
+        arrays_of(&doc, &bin).unwrap().primitives[0].indices,
+        [[0, 1, 2]]
+    );
+    for count in [1u64 << 40, u64::MAX / 2, (DECODED_LIMIT / 24) + 1] {
+        for viewless in [true, false] {
+            let mut doc = doc.clone();
+            doc["accessors"][0]["count"] = json!(count);
+            if viewless {
+                doc["accessors"][0]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("bufferView");
+            }
+            let refused = arrays_of(&doc, &bin).err().unwrap();
+            assert_eq!(
+                tile_limit(&refused).limit,
+                "decodedBytes",
+                "{count} {viewless}"
+            );
+        }
+    }
+    // A viewless accessor within the budget is zeros, not a refusal.
+    let mut zeros = doc.clone();
+    zeros["accessors"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("bufferView");
+    let decoded = arrays_of(&zeros, &bin).unwrap();
+    assert!(decoded.primitives[0]
+        .positions
+        .iter()
+        .flatten()
+        .all(|&v| v == 0.));
+}
+
+#[test]
+fn shared_children_and_mass_instancing_are_bounded() {
+    let (mut doc, bin) = triangle_doc();
+    // 2 x 40 nodes; each pair shares the next pair as children: 2^40 paths.
+    let mut nodes = Vec::new();
+    for level in 0..40 {
+        let children = if level < 39 {
+            json!([2 * level + 2, 2 * level + 3])
+        } else {
+            json!([])
+        };
+        nodes.push(json!({"children": children, "mesh": 0}));
+        nodes.push(json!({"children": children}));
+    }
+    doc["nodes"] = Value::Array(nodes);
+    doc["scenes"] = json!([{"nodes": [0, 1]}]);
+    let start = std::time::Instant::now();
+    let refused = arrays_of(&doc, &bin).err().unwrap();
+    assert_eq!(tile_limit(&refused).limit, "sceneWork");
+    assert!(start.elapsed().as_secs() < 10, "{:?}", start.elapsed());
+    let (mut doc, bin) = triangle_doc();
+    let many = SCENE_WORK_LIMIT as usize;
+    doc["nodes"] = Value::Array(vec![json!({"mesh": 0}); many]);
+    doc["scenes"] = json!([{"nodes": (0..many).collect::<Vec<_>>()}]);
+    assert_eq!(
+        tile_limit(&arrays_of(&doc, &bin).err().unwrap()).limit,
+        "sceneWork"
+    );
+    doc["nodes"] = Value::Array(vec![json!({"mesh": 0}); 100]);
+    doc["scenes"] = json!([{"nodes": (0..100).collect::<Vec<_>>()}]);
+    assert_eq!(arrays_of(&doc, &bin).unwrap().primitives.len(), 100);
+}
+
+/// A PNG signature and IHDR claiming `width` x `height` RGBA8, then a bogus IDAT.
+fn png_header(width: u32, height: u32) -> Vec<u8> {
+    let chunk = |kind: &[u8], data: &[u8]| {
+        let mut out = (data.len() as u32).to_be_bytes().to_vec();
+        out.extend(kind);
+        out.extend(data);
+        let crc = crc32fast::hash(&[kind, data].concat());
+        out.extend(crc.to_be_bytes());
+        out
+    };
+    let mut ihdr = width.to_be_bytes().to_vec();
+    ihdr.extend(height.to_be_bytes());
+    ihdr.extend([8, 6, 0, 0, 0]);
+    [
+        b"\x89PNG\r\n\x1a\n".to_vec(),
+        chunk(b"IHDR", &ihdr),
+        chunk(b"IDAT", b"not deflate"),
+        chunk(b"IEND", b""),
+    ]
+    .concat()
+}
+
+#[test]
+fn page_sizes_are_refused_or_charged_from_the_header() {
+    let (doc, bin) = triangle_doc();
+    let with_image = |png: Vec<u8>, mime: &str| {
+        let mut doc = doc.clone();
+        let mut bin = bin.clone();
+        crate::glb::pad_to(&mut bin, 4);
+        let offset = bin.len();
+        bin.extend(&png);
+        doc["bufferViews"].as_array_mut().unwrap().push(json!({
+            "buffer": 0, "byteOffset": offset, "byteLength": png.len()}));
+        doc["buffers"][0]["byteLength"] = json!(bin.len());
+        doc["images"] = json!([{"bufferView": 1, "mimeType": mime}]);
+        arrays_of(&doc, &bin)
+    };
+    let refused = with_image(png_header(20_000, 20_000), "image/png")
+        .err()
+        .unwrap();
+    let limit = tile_limit(&refused);
+    assert_eq!((limit.limit, limit.observed), ("pageTexels", 400_000_000));
+    // 8192² passes the texel limit; its charge (with the caller's copy) then exceeds
+    // what remains of the byte budget only together with another such page.
+    let refused = with_image(png_header(8192, 8192), "image/png")
+        .err()
+        .unwrap();
+    assert_eq!(
+        refused.kind(),
+        JobErrorKind::InvalidInput,
+        "bogus pixel data: {refused}"
+    );
+    let small = image::RgbaImage::from_fn(3, 2, |x, y| image::Rgba([x as u8, y as u8, 7, 255]));
+    let mut png = Vec::new();
+    small
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let page = &with_image(png, "image/png").unwrap().pages[0];
+    assert_eq!((page.width, page.height, page.rgba.len()), (3, 2, 24));
+    let refused = with_image(b"\x89PNG".to_vec(), "image/png").err().unwrap();
+    assert_eq!(refused.kind(), JobErrorKind::InvalidInput);
+}
+
+#[test]
+fn mirrored_nodes_keep_counter_clockwise_front_faces() {
+    let (mut doc, bin) = triangle_doc();
+    doc["nodes"] = json!([{"mesh": 0}, {"mesh": 0, "scale": [-1, 1, 1]},
+                          {"mesh": 0, "scale": [-1, -1, 1]}]);
+    doc["scenes"] = json!([{"nodes": [0, 1, 2]}]);
+    let decoded = arrays_of(&doc, &bin).unwrap();
+    let windings: Vec<_> = decoded.primitives.iter().map(|p| p.indices[0]).collect();
+    assert_eq!(windings, [[0, 1, 2], [0, 2, 1], [0, 1, 2]]);
+    // Every face then faces the same way in the tile frame.
+    let z: Vec<f64> = decoded
+        .primitives
+        .iter()
+        .map(|p| {
+            let [a, b, c] = p.indices[0].map(|i| p.positions[i as usize]);
+            let (u, v) = (
+                [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
+                [c[0] - a[0], c[1] - a[1], c[2] - a[2]],
+            );
+            // Face normal's tile-frame y component (glTF z mirrored by the swizzle).
+            u[2] * v[0] - u[0] * v[2]
+        })
+        .collect();
+    assert!(
+        z.iter().all(|&y| y == z[0]),
+        "same facing for every winding: {z:?}"
+    );
+}
+
+#[test]
+fn property_value_transforms_are_returned_and_other_types_skipped() {
+    let (mut doc, mut bin) = triangle_doc();
+    let offset = bin.len();
+    bin.extend([1u8, 0, 2, 0]);
+    doc["bufferViews"].as_array_mut().unwrap().push(json!({
+        "buffer": 0, "byteOffset": offset, "byteLength": 4}));
+    doc["buffers"][0]["byteLength"] = json!(bin.len());
+    doc["extensions"] = json!({"EXT_structural_metadata": {
+        "schema": {"classes": {"c": {"properties": {
+            "a": {"type": "SCALAR", "componentType": "UINT16", "normalized": true,
+                  "offset": 1.0, "scale": 2.0},
+            "v": {"type": "VEC3", "componentType": "FLOAT32"},
+            "s": {"type": "STRING"},
+            "n": {"type": "SCALAR", "componentType": "UINT8", "array": true}}}}},
+        "propertyTables": [{"class": "c", "count": 2, "properties": {
+            "a": {"values": 1, "scale": 3.0}, "v": {"values": 1},
+            "s": {"values": 1, "stringOffsets": 1}, "n": {"values": 1, "arrayOffsets": 1},
+            "x": {"values": 1}}}]}});
+    let tables = arrays_of(&doc, &bin).unwrap().property_tables;
+    let table = &tables[0];
+    assert_eq!(table.columns.len(), 1);
+    let a = &table.columns[0];
+    assert_eq!(
+        (a.name.as_str(), a.normalized, a.offset, a.scale),
+        ("a", true, Some(1.0), Some(3.0))
+    );
+    assert_eq!(a.bytes, [1, 0, 2, 0]);
+    let skipped: BTreeMap<_, _> = table.skipped.iter().cloned().collect();
+    assert_eq!(skipped.keys().collect::<Vec<_>>(), ["n", "s", "v", "x"]);
+    assert_eq!(skipped["x"], "not declared by the class");
+    assert!(skipped["v"].contains("VEC3"), "{}", skipped["v"]);
+    let mut bad = doc.clone();
+    bad["extensions"]["EXT_structural_metadata"]["propertyTables"][0]["class"] = json!("missing");
+    assert_eq!(
+        arrays_of(&bad, &bin).err().unwrap().kind(),
+        JobErrorKind::InvalidInput
+    );
+}
+
+fn basis_pages() -> Vec<(&'static str, Vec<u8>)> {
+    use crate::basisu_ktx2::{encode_ktx2, Mode, Params, Transfer};
+    let rgba: Vec<u8> = (0..32u32 * 24)
+        .flat_map(|i| [(i * 7) as u8, (i * 3) as u8, (i / 5) as u8, 255])
+        .collect();
+    let params = Params {
+        effort: 0,
+        transfer: Transfer::Srgb,
+        mipmaps: false,
+    };
+    [
+        ("etc1s", Mode::Etc1s { quality: 50 }),
+        ("uastc", Mode::Uastc { zstd: false }),
+        ("uastc-zstd", Mode::Uastc { zstd: true }),
+    ]
+    .into_iter()
+    .map(|(name, mode)| (name, encode_ktx2(&rgba, 32, 24, mode, params).unwrap()))
+    .collect()
+}
+
+#[test]
+fn malformed_ktx2_pages_are_refused_before_the_transcoder() {
+    use crate::basisu_ktx2::transcode_base_rgba;
+    let put = |bytes: &mut [u8], at: usize, value: u32| {
+        bytes[at..at + 4].copy_from_slice(&value.to_le_bytes())
+    };
+    for (name, page) in basis_pages() {
+        let (w, h, rgba) = transcode_base_rgba(&page).unwrap();
+        assert_eq!((w, h, rgba.len()), (32, 24, 32 * 24 * 4), "{name}");
+        let kind = |mutate: &dyn Fn(&mut Vec<u8>)| {
+            let mut bytes = page.clone();
+            mutate(&mut bytes);
+            transcode_base_rgba(&bytes).err().map(|e| e.kind())
+        };
+        use JobErrorKind::*;
+        assert_eq!(
+            kind(&|b| b.truncate(60)),
+            Some(InvalidInput),
+            "{name} truncated"
+        );
+        assert_eq!(
+            kind(&|b| b[1] = b'X'),
+            Some(InvalidInput),
+            "{name} identifier"
+        );
+        assert_eq!(
+            kind(&|b| put(b, 12, 37)),
+            Some(Unsupported),
+            "{name} vkFormat"
+        );
+        assert_eq!(
+            kind(&|b| put(b, 16, 4)),
+            Some(InvalidInput),
+            "{name} typeSize"
+        );
+        assert_eq!(
+            kind(&|b| put(b, 20, 20_000)),
+            Some(ResourceLimit),
+            "{name} width"
+        );
+        assert_eq!(kind(&|b| put(b, 36, 6)), Some(Unsupported), "{name} faces");
+        assert_eq!(kind(&|b| put(b, 44, 3)), Some(Unsupported), "{name} zlib");
+        assert_eq!(
+            kind(&|b| put(b, 40, 40)),
+            Some(InvalidInput),
+            "{name} level count"
+        );
+        // Level 0 entry: byteOffset at 80, byteLength at 88, uncompressedByteLength at 96.
+        assert_eq!(
+            kind(&|b| put(b, 80, u32::MAX)),
+            Some(InvalidInput),
+            "{name} offset"
+        );
+        assert_eq!(
+            kind(&|b| put(b, 96, 5)),
+            Some(InvalidInput),
+            "{name} level length"
+        );
+        if name == "etc1s" {
+            // Supercompression global data is required for BasisLZ.
+            assert_eq!(
+                kind(&|b| put(b, 72, 0)),
+                Some(InvalidInput),
+                "{name} global data"
+            );
+        }
+    }
+}
+
+/// A deterministic mutation sweep over valid pages. Every outcome must be a decode or
+/// a typed refusal; a crash or abort in the transcoder fails the test binary.
+#[test]
+fn mutated_ktx2_pages_never_crash_the_transcoder() {
+    let mut state = 0x9E37_79B9_7F4A_7C15u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    let mut outcomes = BTreeMap::<String, usize>::new();
+    for (name, page) in basis_pages() {
+        for round in 0..1500 {
+            let mut bytes = page.clone();
+            for _ in 0..1 + next() % 4 {
+                // Half the flips land in the header, index and DFD.
+                let span = if round % 2 == 0 {
+                    bytes.len().min(256)
+                } else {
+                    bytes.len()
+                };
+                let at = (next() % span as u64) as usize;
+                bytes[at] ^= 1 << (next() % 8);
+            }
+            if next() % 16 == 0 {
+                let keep = (next() % bytes.len() as u64) as usize;
+                bytes.truncate(keep);
+            }
+            let outcome = match crate::basisu_ktx2::transcode_base_rgba(&bytes) {
+                Ok((w, h, rgba)) => {
+                    assert_eq!(rgba.len(), w as usize * h as usize * 4);
+                    "decoded".to_owned()
+                }
+                Err(e) => {
+                    assert!(
+                        matches!(
+                            e.kind(),
+                            JobErrorKind::InvalidInput
+                                | JobErrorKind::Unsupported
+                                | JobErrorKind::ResourceLimit
+                        ),
+                        "{name}: {e}"
+                    );
+                    format!("{:?}", e.kind())
+                }
+            };
+            *outcomes.entry(format!("{name} {outcome}")).or_default() += 1;
+        }
+    }
+    println!("{outcomes:?}");
+}
+
+#[cfg(unix)]
+#[test]
+fn directory_members_are_regular_files_below_the_root() {
+    let work = tempfile::tempdir().unwrap();
+    let dir = work.path();
+    let (doc, bin) = triangle_doc();
+    fs::write(
+        dir.join("a.glb"),
+        crate::glb::encode_glb(&doc, &bin).unwrap(),
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(dir.join("a.glb"), dir.join("b.glb")).unwrap();
+    let fifo = std::ffi::CString::new(dir.join("c.glb").to_str().unwrap()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+    fs::create_dir(dir.join("real")).unwrap();
+    fs::copy(dir.join("a.glb"), dir.join("real/d.glb")).unwrap();
+    std::os::unix::fs::symlink(dir.join("real"), dir.join("linked")).unwrap();
+    let tile = |uri: &str| {
+        json!({"boundingVolume": {"box": [0,0,0,1,0,0,0,1,0,0,0,1]},
+                                  "geometricError": 0, "content": {"uri": uri}})
+    };
+    let mut root = tile("a.glb");
+    root["geometricError"] = json!(1);
+    root["children"] = json!([
+        tile("b.glb"),
+        tile("c.glb"),
+        tile("real/d.glb"),
+        tile("linked/d.glb")
+    ]);
+    fs::write(
+        dir.join("tileset.json"),
+        serde_json::to_vec(
+            &json!({"asset": {"version": "1.1"}, "geometricError": 1, "root": root}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut set = TileSet::open(dir).unwrap();
+    assert!(set.plain_glb("a.glb").is_ok());
+    assert!(set.plain_glb("real/d.glb").is_ok());
+    for uri in ["b.glb", "c.glb", "linked/d.glb"] {
+        let refused = set.plain_glb(uri).err().unwrap();
+        assert_eq!(
+            refused.kind(),
+            JobErrorKind::Unsupported,
+            "{uri}: {refused}"
+        );
+    }
 }

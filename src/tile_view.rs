@@ -20,8 +20,16 @@
 //! - Arrays are in the tile frame: node transforms applied, then glTF Y-up
 //!   turned to 3D Tiles Z-up (`x, -z, y`). The tile's accumulated
 //!   `transform` maps that frame to the tileset's world (ECEF for placed output).
-//! - Malformed content is `InvalidInput`; reads and decoded bytes are bounded
-//!   (`ResourceLimit`); an unknown member is `InvalidRequest`.
+//!   Indices keep counter-clockwise front faces: under a node transform with a
+//!   negative determinant, corners 1 and 2 of every triangle are swapped.
+//! - Malformed content is `InvalidInput`; an unknown member is `InvalidRequest`.
+//! - Every tile is bounded before allocation by fixed limits ([`TileLimit`]):
+//!   member bytes, the bytes held for one decode (the member, decoded views,
+//!   widened accessor values, outputs and the caller's one copy of each output),
+//!   scene work (node visits and primitive instances) and page texels. A refusal
+//!   is `ResourceLimit` with the [`TileLimit`] as its cause.
+//! - Directory input reads regular files only, never through a symlink below
+//!   the given root.
 use crate::{
     archive3tz::{ReadError, ReadLimits, StoredArchive},
     content_integrity::meshopt::{self, Filter, Mode},
@@ -38,8 +46,12 @@ use std::{
 
 /// Largest member read from a tileset, in bytes.
 const MEMBER_LIMIT: u64 = 1 << 30;
-/// Largest total of decoded views and RGBA pages for one tile, in bytes.
-const DECODED_LIMIT: usize = 1 << 30;
+/// Largest total of bytes held for one tile's decode (see [`Budget`]).
+const DECODED_LIMIT: u64 = 1 << 30;
+/// Largest number of node visits plus primitive instances in one scene walk.
+const SCENE_WORK_LIMIT: u64 = 1 << 16;
+/// Outputs are held once in Rust and copied once by the caller (the Python binding).
+const OUTPUT_COPIES: u64 = 2;
 /// Deepest node nesting walked in one GLB scene.
 const NODE_DEPTH: usize = 64;
 /// Alignment of every view in a written plain GLB (covers 8-byte metadata columns).
@@ -65,6 +77,88 @@ fn unsupported(message: impl Into<String>) -> JobError {
 }
 fn limit(message: impl Into<String>) -> JobError {
     error(JobErrorKind::ResourceLimit, message)
+}
+
+/// A fixed per-tile limit that refused a decode, attached as the `ResourceLimit`
+/// error's cause. `limit` is `memberBytes`, `decodedBytes`, `sceneWork` or
+/// `pageTexels`; `observed` is the total the refused charge would have reached.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TileLimit {
+    pub limit: &'static str,
+    pub value: u64,
+    pub observed: u64,
+}
+
+impl std::fmt::Display for TileLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "tile view {} limit {} exceeded ({})",
+            self.limit, self.value, self.observed
+        )
+    }
+}
+
+impl std::error::Error for TileLimit {}
+
+fn exceeded(limit: &'static str, value: u64, observed: u64) -> JobError {
+    let cause = TileLimit {
+        limit,
+        value,
+        observed,
+    };
+    JobError::with_cause(JobErrorKind::ResourceLimit, cause.to_string(), cause)
+}
+
+/// What one decode may hold and walk, charged before each allocation. Charges
+/// accumulate: memory freed during the decode is not credited back.
+#[derive(Default)]
+struct Budget {
+    bytes: u64,
+    work: u64,
+}
+
+impl Budget {
+    fn bytes(&mut self, bytes: u64) -> Result<(), JobError> {
+        let total = self.bytes.saturating_add(bytes);
+        if total > DECODED_LIMIT {
+            return Err(exceeded("decodedBytes", DECODED_LIMIT, total));
+        }
+        self.bytes = total;
+        Ok(())
+    }
+
+    /// `count * width` bytes, overflow included in the refusal.
+    fn elements(&mut self, count: usize, width: usize) -> Result<(), JobError> {
+        self.bytes((count as u64).saturating_mul(width as u64))
+    }
+
+    /// An output of `count` elements of `width` bytes and the caller's copy of it.
+    fn output(&mut self, count: usize, width: usize) -> Result<(), JobError> {
+        self.bytes(
+            (count as u64)
+                .saturating_mul(width as u64)
+                .saturating_mul(OUTPUT_COPIES),
+        )
+    }
+
+    fn work(&mut self) -> Result<(), JobError> {
+        self.work += 1;
+        if self.work > SCENE_WORK_LIMIT {
+            return Err(exceeded("sceneWork", SCENE_WORK_LIMIT, self.work));
+        }
+        Ok(())
+    }
+}
+
+/// Refuses a page over [`crate::basisu_ktx2::MAX_TEXELS`], then charges its RGBA8 bytes.
+fn charge_page(budget: &mut Budget, width: u32, height: u32, copies: u64) -> Result<(), JobError> {
+    let texels = u64::from(width) * u64::from(height);
+    let max = crate::basisu_ktx2::MAX_TEXELS;
+    if texels > max {
+        return Err(exceeded("pageTexels", max, texels));
+    }
+    budget.bytes(texels * 4 * copies)
 }
 
 /// How a content-bearing tile sits in the expanded hierarchy.
@@ -159,23 +253,59 @@ impl Source {
     fn read(&mut self, uri: &str) -> Result<Vec<u8>, JobError> {
         let parts = segments(uri)?;
         match self {
-            Self::Archive(archive) => archive.read_member(uri, MEMBER_LIMIT).map_err(read_error),
-            Self::Directory(root) => {
-                let path = parts
-                    .iter()
-                    .fold(root.clone(), |path, part| path.join(part));
-                let file = File::open(&path).map_err(|e| JobError::io("read member", &path, e))?;
-                let mut bytes = Vec::new();
-                file.take(MEMBER_LIMIT + 1)
-                    .read_to_end(&mut bytes)
-                    .map_err(|e| JobError::io("read member", &path, e))?;
-                if bytes.len() as u64 > MEMBER_LIMIT {
-                    return Err(limit(format!("member {uri} exceeds {MEMBER_LIMIT} bytes")));
+            Self::Archive(archive) => {
+                let size = archive.member(uri).map_err(read_error)?.size;
+                if size > MEMBER_LIMIT {
+                    return Err(exceeded("memberBytes", MEMBER_LIMIT, size));
                 }
-                Ok(bytes)
+                archive.read_member(uri, MEMBER_LIMIT).map_err(read_error)
             }
+            Self::Directory(root) => read_regular(root, &parts, uri),
         }
     }
+}
+
+/// Reads `root/parts...` as a regular file. No component below `root` may be a
+/// symlink, and the member must be a regular file (never a FIFO, device or
+/// directory). On Unix the open itself refuses a final symlink and cannot block.
+fn read_regular(root: &Path, parts: &[&str], uri: &str) -> Result<Vec<u8>, JobError> {
+    let special = || unsupported(format!("member {uri:?} is a symlink or not a regular file"));
+    let mut path = root.to_owned();
+    for part in parts {
+        path.push(part);
+        let metadata =
+            fs::symlink_metadata(&path).map_err(|e| JobError::io("read member", &path, e))?;
+        if metadata.file_type().is_symlink() {
+            return Err(special());
+        }
+    }
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options
+        .open(&path)
+        .map_err(|e| JobError::io("read member", &path, e))?;
+    let metadata = file
+        .metadata()
+        .map_err(|e| JobError::io("read member", &path, e))?;
+    if !metadata.is_file() {
+        return Err(special());
+    }
+    if metadata.len() > MEMBER_LIMIT {
+        return Err(exceeded("memberBytes", MEMBER_LIMIT, metadata.len()));
+    }
+    let mut bytes = Vec::new();
+    file.take(MEMBER_LIMIT + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| JobError::io("read member", &path, e))?;
+    if bytes.len() as u64 > MEMBER_LIMIT {
+        return Err(exceeded("memberBytes", MEMBER_LIMIT, bytes.len() as u64));
+    }
+    Ok(bytes)
 }
 
 /// An opened tileset: its source and expanded content listing.
@@ -239,22 +369,24 @@ impl TileSet {
             })
     }
 
-    fn plain(&mut self, uri: &str) -> Result<(TileEntry, Plain), JobError> {
+    fn plain(&mut self, uri: &str, budget: &mut Budget) -> Result<(TileEntry, Plain), JobError> {
         let entry = self.entry(uri)?;
         let bytes = self.source.read(uri)?;
-        Ok((entry, Plain::decode(&bytes)?))
+        Ok((entry, Plain::decode(&bytes, budget)?))
     }
 
     /// The member as a plain glTF 2.0 GLB: meshopt views decoded, Basis pages
     /// transcoded to PNG at level 0, everything else kept.
     pub fn plain_glb(&mut self, uri: &str) -> Result<Vec<u8>, JobError> {
-        self.plain(uri)?.1.into_glb()
+        let mut budget = Budget::default();
+        self.plain(uri, &mut budget)?.1.into_glb(&mut budget)
     }
 
     /// The member's primitives, pages and property tables as typed arrays.
     pub fn arrays(&mut self, uri: &str) -> Result<DecodedTile, JobError> {
-        let (entry, plain) = self.plain(uri)?;
-        plain.into_arrays(entry, self.root_transform)
+        let mut budget = Budget::default();
+        let (entry, plain) = self.plain(uri, &mut budget)?;
+        plain.into_arrays(entry, self.root_transform, &mut budget)
     }
 }
 
@@ -418,20 +550,10 @@ fn array<'a>(doc: &'a Value, key: &str) -> Result<&'a [Value], JobError> {
     }
 }
 
-/// Charges `bytes` against the per-tile decoded total.
-fn charge(total: &mut usize, bytes: usize) -> Result<(), JobError> {
-    *total = total
-        .checked_add(bytes)
-        .filter(|&t| t <= DECODED_LIMIT)
-        .ok_or_else(|| limit(format!("decoded tile exceeds {DECODED_LIMIT} bytes")))?;
-    Ok(())
-}
-
 /// A member with every buffer view decoded to plain bytes.
 struct Plain {
     doc: Value,
     views: Vec<Vec<u8>>,
-    decoded: usize,
 }
 
 fn decode_view(view: &Value, bin: &[u8], buffers: &[Value]) -> Result<Vec<u8>, JobError> {
@@ -497,7 +619,9 @@ fn decode_view(view: &Value, bin: &[u8], buffers: &[Value]) -> Result<Vec<u8>, J
 }
 
 impl Plain {
-    fn decode(bytes: &[u8]) -> Result<Self, JobError> {
+    fn decode(bytes: &[u8], budget: &mut Budget) -> Result<Self, JobError> {
+        // The member and its parsed document (bounded by the member's size).
+        budget.elements(bytes.len(), 2)?;
         let (doc, bin) = glb_parts(bytes)?;
         let buffers = array(&doc, "buffers")?;
         if let Some(first) = buffers.first() {
@@ -505,18 +629,13 @@ impl Plain {
                 return Err(unsupported("the first buffer must be the GLB binary chunk"));
             }
         }
-        let mut decoded = 0;
         let mut views = Vec::new();
         for view in array(&doc, "bufferViews")? {
             let length = index(&view["byteLength"], "bufferView.byteLength")?;
-            charge(&mut decoded, length)?;
+            budget.elements(length, 1)?;
             views.push(decode_view(view, bin, buffers)?);
         }
-        Ok(Self {
-            doc,
-            views,
-            decoded,
-        })
+        Ok(Self { doc, views })
     }
 
     /// The view bytes of image `i`, with its declared MIME type.
@@ -533,31 +652,45 @@ impl Plain {
         Ok((bytes, image["mimeType"].as_str().unwrap_or("")))
     }
 
-    /// Level 0 of image `i` as RGBA8.
-    fn page(&mut self, i: usize) -> Result<Page, JobError> {
+    /// Level 0 of image `i` as RGBA8. The size comes from the page header and is
+    /// refused or charged (`copies` times) before anything is decoded.
+    fn page(&self, i: usize, budget: &mut Budget, copies: u64) -> Result<Page, JobError> {
         let (bytes, mime) = self.image(i)?;
         let (width, height, rgba) = match mime {
-            "image/ktx2" => crate::basisu_ktx2::transcode_base_rgba(bytes)?,
+            "image/ktx2" => {
+                let (width, height) = crate::basisu_ktx2::base_dimensions(bytes)?;
+                charge_page(budget, width, height, copies)?;
+                crate::basisu_ktx2::transcode_base_rgba(bytes)?
+            }
             "image/png" | "image/jpeg" => {
                 let format = if mime == "image/png" {
                     image::ImageFormat::Png
                 } else {
                     image::ImageFormat::Jpeg
                 };
-                let mut reader =
-                    image::ImageReader::with_format(std::io::Cursor::new(bytes), format);
+                let reader =
+                    || image::ImageReader::with_format(std::io::Cursor::new(bytes), format);
+                let (width, height) = reader()
+                    .into_dimensions()
+                    .map_err(|e| invalid(format!("image {i} header: {e}")))?;
+                charge_page(budget, width, height, copies)?;
+                let mut decoder = reader();
                 let mut limits = image::Limits::default();
-                limits.max_alloc = Some(DECODED_LIMIT as u64);
-                reader.limits(limits);
-                let image = reader
+                // The header charge covers RGBA8; the decoder may hold up to twice
+                // that (16-bit or palette sources) before conversion.
+                limits.max_alloc = Some(u64::from(width) * u64::from(height) * 16);
+                decoder.limits(limits);
+                let image = decoder
                     .decode()
-                    .map_err(|e| invalid(format!("image {i}: {e}")))?
-                    .into_rgba8();
-                (image.width(), image.height(), image.into_raw())
+                    .map_err(|e| invalid(format!("image {i}: {e}")))?;
+                if (image.width(), image.height()) != (width, height) {
+                    return Err(invalid(format!("image {i} decoded at another size")));
+                }
+                let image = image.into_rgba8();
+                (width, height, image.into_raw())
             }
             other => return Err(unsupported(format!("image {i} has MIME type {other:?}"))),
         };
-        charge(&mut self.decoded, rgba.len())?;
         Ok(Page {
             width,
             height,
@@ -599,7 +732,7 @@ impl Plain {
         Ok(ktx2)
     }
 
-    fn into_glb(mut self) -> Result<Vec<u8>, JobError> {
+    fn into_glb(mut self, budget: &mut Budget) -> Result<Vec<u8>, JobError> {
         let ktx2 = self.retarget()?;
         let mut replaced = BTreeSet::new();
         for &i in &ktx2 {
@@ -608,7 +741,8 @@ impl Plain {
                 self.doc["images"][i]["mimeType"] = Value::from("image/png");
                 continue;
             }
-            let page = self.page(i)?;
+            // The RGBA page, then its PNG (charged at the same size before encoding).
+            let page = self.page(i, budget, 2)?;
             self.doc["images"][i]["mimeType"] = Value::from("image/png");
             let mut png = Vec::new();
             // A view for display: fast deflate, not the smallest file.
@@ -626,6 +760,10 @@ impl Plain {
             .map_err(|e| error(JobErrorKind::InvalidState, format!("PNG encode: {e}")))?;
             self.views[view] = png;
         }
+        // The new binary chunk, the framed GLB and the caller's copy of it.
+        let views: usize = self.views.iter().map(Vec::len).sum();
+        let padded = views.saturating_add(self.views.len().saturating_mul(VIEW_ALIGN));
+        budget.elements(padded, 3)?;
         let mut bin = Vec::new();
         if let Some(Value::Array(views)) = self.doc.get_mut("bufferViews") {
             for (view, bytes) in views.iter_mut().zip(&self.views) {
@@ -699,21 +837,32 @@ pub struct Primitive {
     pub feature_ids: Vec<FeatureIds>,
 }
 
-/// One scalar property column, little-endian values of `component_type`
-/// (`UINT8`, `INT8`, ... `FLOAT64`, as in the metadata schema).
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// One numeric scalar property column: the stored little-endian values of
+/// `component_type` (`UINT8`, `INT8`, ... `FLOAT64`, as in the metadata schema).
+/// The value transform is returned, not applied: a property's value is
+/// `offset + scale * v`, where `v` is the stored value, normalized first when
+/// `normalized` (an omitted offset is 0, an omitted scale 1). `noData` and
+/// `default` are not applied either.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Column {
     pub name: String,
     pub component_type: String,
     pub bytes: Vec<u8>,
+    pub normalized: bool,
+    /// The property's override, else the class's, if any.
+    pub offset: Option<f64>,
+    pub scale: Option<f64>,
 }
 
-/// One `EXT_structural_metadata` property table.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// One `EXT_structural_metadata` property table. Properties that are not
+/// numeric scalars (strings, enums, booleans, arrays, vectors and matrices)
+/// are listed in `skipped` with the reason, not decoded.
+#[derive(Clone, Debug, PartialEq)]
 pub struct PropertyTable {
     pub class: String,
     pub count: u64,
     pub columns: Vec<Column>,
+    pub skipped: Vec<(String, String)>,
 }
 
 /// A decoded member. `materials`, `textures` and `samplers` are the plain
@@ -740,7 +889,12 @@ fn component_width(component_type: u64) -> Option<usize> {
 }
 
 /// Accessor values widened to f64, normalized integers mapped per glTF.
-fn accessor(plain: &Plain, i: usize, width: &[usize]) -> Result<(Vec<f64>, usize), JobError> {
+fn accessor(
+    plain: &Plain,
+    i: usize,
+    width: &[usize],
+    budget: &mut Budget,
+) -> Result<(Vec<f64>, usize), JobError> {
     let a = &plain.doc["accessors"][i];
     if !a.is_object() {
         return Err(invalid(format!("accessor {i} does not exist")));
@@ -763,8 +917,18 @@ fn accessor(plain: &Plain, i: usize, width: &[usize]) -> Result<(Vec<f64>, usize
         component_width(kind).ok_or_else(|| invalid(format!("accessor {i} componentType")))?;
     let count = index(&a["count"], "accessor.count")?;
     let normalized = a["normalized"] == true;
+    // The widened values, charged (overflow included) before anything is allocated.
+    budget.elements(count.saturating_mul(components), 8)?;
+    let values = count
+        .checked_mul(components)
+        .ok_or_else(|| limit("accessor size overflows"))?;
     let Some(view_index) = a.get("bufferView") else {
-        return Ok((vec![0.; count * components], components));
+        let mut zeros = Vec::new();
+        zeros
+            .try_reserve_exact(values)
+            .map_err(|_| limit("accessor allocation failed"))?;
+        zeros.resize(values, 0.);
+        return Ok((zeros, components));
     };
     let view_index = index(view_index, "accessor.bufferView")?;
     let view = plain
@@ -787,7 +951,7 @@ fn accessor(plain: &Plain, i: usize, width: &[usize]) -> Result<(Vec<f64>, usize
         return Err(invalid(format!("accessor {i} exceeds its buffer view")));
     }
     let mut out = Vec::new();
-    out.try_reserve_exact(count * components)
+    out.try_reserve_exact(values)
         .map_err(|_| limit("accessor allocation failed"))?;
     for e in 0..count {
         for c in 0..components {
@@ -857,6 +1021,12 @@ fn node_matrix(node: &Value) -> Result<[f64; 16], JobError> {
     ])
 }
 
+/// Determinant of the linear part of a column-major affine matrix.
+fn determinant(m: &[f64; 16]) -> f64 {
+    m[0] * (m[5] * m[10] - m[6] * m[9]) - m[4] * (m[1] * m[10] - m[2] * m[9])
+        + m[8] * (m[1] * m[6] - m[2] * m[5])
+}
+
 fn point(m: &[f64; 16], p: &[f64]) -> [f64; 3] {
     [0, 1, 2].map(|a| m[a] * p[0] + m[a + 4] * p[1] + m[a + 8] * p[2] + m[a + 12])
 }
@@ -901,6 +1071,7 @@ impl Plain {
         mesh: usize,
         index_in_mesh: usize,
         world: &[f64; 16],
+        budget: &mut Budget,
     ) -> Result<Primitive, JobError> {
         let p = &self.doc["meshes"][mesh]["primitives"][index_in_mesh];
         if p["mode"].as_u64().unwrap_or(4) != 4 {
@@ -912,8 +1083,9 @@ impl Plain {
         let attribute = |name: &str| attributes.get(name).map(|v| index(v, name)).transpose();
         let position =
             attribute("POSITION")?.ok_or_else(|| invalid("primitive has no POSITION"))?;
-        let (local, _) = accessor(self, position, &[3])?;
+        let (local, _) = accessor(self, position, &[3], budget)?;
         let tile = multiply(&Y_UP_TO_Z_UP, world);
+        budget.output(local.len() / 3, 24)?;
         let positions: Vec<[f64; 3]> = local
             .as_chunks::<3>()
             .0
@@ -925,14 +1097,30 @@ impl Plain {
             .collect();
         let vertices = positions.len();
         let indices = match p.get("indices") {
-            None => (0..vertices as u32).collect(),
-            Some(i) => integers(&accessor(self, index(i, "indices")?, &[1])?.0, "indices")?,
+            None => {
+                budget.output(vertices, 4)?;
+                (0..vertices as u32).collect()
+            }
+            Some(i) => {
+                let (values, _) = accessor(self, index(i, "indices")?, &[1], budget)?;
+                budget.output(values.len(), 4)?;
+                integers(&values, "indices")?
+            }
         };
         if indices.len() % 3 != 0 || indices.iter().any(|&i| i as usize >= vertices) {
             return Err(invalid(
                 "primitive indices are not whole triangles within its vertices",
             ));
         }
+        // glTF: a negative determinant reverses the front-face winding. Keep
+        // counter-clockwise front faces in the tile frame.
+        let mirrored = determinant(world) < 0.;
+        let indices: Vec<[u32; 3]> = indices
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|&[a, b, c]| if mirrored { [a, c, b] } else { [a, b, c] })
+            .collect();
         let per_vertex = |name: &str, values: &[f64], n: usize| -> Result<(), JobError> {
             if values.len() != vertices * n {
                 return Err(invalid(format!("{name} count differs from POSITION")));
@@ -942,8 +1130,9 @@ impl Plain {
         let normals = match attribute("NORMAL")? {
             None => None,
             Some(i) => {
-                let (values, _) = accessor(self, i, &[3])?;
+                let (values, _) = accessor(self, i, &[3], budget)?;
                 per_vertex("NORMAL", &values, 3)?;
+                budget.output(vertices, 12)?;
                 let n = normal_matrix(&tile)?;
                 let mut out = Vec::with_capacity(vertices);
                 for v in values.as_chunks::<3>().0 {
@@ -959,8 +1148,9 @@ impl Plain {
         };
         let mut uvs = Vec::new();
         while let Some(i) = attribute(&format!("TEXCOORD_{}", uvs.len()))? {
-            let (values, _) = accessor(self, i, &[2])?;
+            let (values, _) = accessor(self, i, &[2], budget)?;
             per_vertex("TEXCOORD", &values, 2)?;
+            budget.output(vertices, 8)?;
             uvs.push(
                 values
                     .as_chunks::<2>()
@@ -973,8 +1163,9 @@ impl Plain {
         let colors = match attribute("COLOR_0")? {
             None => None,
             Some(i) => {
-                let (values, n) = accessor(self, i, &[3, 4])?;
+                let (values, n) = accessor(self, i, &[3, 4], budget)?;
                 per_vertex("COLOR_0", &values, n)?;
+                budget.output(vertices, 16)?;
                 Some(
                     values
                         .chunks_exact(n)
@@ -991,13 +1182,14 @@ impl Plain {
             if set.get("texture").is_some() {
                 return Err(unsupported("feature ID textures are not read"));
             }
+            budget.output(vertices, 4)?;
             let values = match set.get("attribute") {
                 None => (0..vertices as u32).collect(),
                 Some(n) => {
                     let name = format!("_FEATURE_ID_{}", index(n, "featureIds.attribute")?);
                     let i = attribute(&name)?
                         .ok_or_else(|| invalid(format!("primitive has no {name}")))?;
-                    let (values, _) = accessor(self, i, &[1])?;
+                    let (values, _) = accessor(self, i, &[1], budget)?;
                     per_vertex(&name, &values, 1)?;
                     integers(&values, &name)?
                 }
@@ -1024,7 +1216,7 @@ impl Plain {
                 .map(|m| index(m, "material"))
                 .transpose()?,
             positions,
-            indices: indices.as_chunks::<3>().0.to_vec(),
+            indices,
             normals,
             uvs,
             colors,
@@ -1038,7 +1230,11 @@ impl Plain {
         parent: &[f64; 16],
         path: &mut Vec<usize>,
         out: &mut Vec<Primitive>,
+        budget: &mut Budget,
     ) -> Result<(), JobError> {
+        // Shared children make a DAG whose paths grow exponentially; every visit and
+        // every primitive instance is charged, so the walk is bounded either way.
+        budget.work()?;
         if path.contains(&node) || path.len() >= NODE_DEPTH {
             return Err(invalid("scene nodes are cyclic or nested too deeply"));
         }
@@ -1053,18 +1249,19 @@ impl Plain {
                 .as_array()
                 .ok_or_else(|| invalid(format!("mesh {mesh} has no primitives")))?;
             for i in 0..primitives.len() {
-                out.push(self.primitive(node, mesh, i, &world)?);
+                budget.work()?;
+                out.push(self.primitive(node, mesh, i, &world, budget)?);
             }
         }
         path.push(node);
         for child in array(value, "children")? {
-            self.walk(index(child, "node.children")?, &world, path, out)?;
+            self.walk(index(child, "node.children")?, &world, path, out, budget)?;
         }
         path.pop();
         Ok(())
     }
 
-    fn property_tables(&self) -> Result<Vec<PropertyTable>, JobError> {
+    fn property_tables(&self, budget: &mut Budget) -> Result<Vec<PropertyTable>, JobError> {
         let Some(metadata) = self.doc["extensions"].get("EXT_structural_metadata") else {
             return Ok(Vec::new());
         };
@@ -1077,10 +1274,15 @@ impl Plain {
             let class = table["class"]
                 .as_str()
                 .ok_or_else(|| invalid("property table without a class"))?;
+            if !classes[class].is_object() {
+                return Err(invalid(format!(
+                    "property table class {class:?} is not in the schema"
+                )));
+            }
             let count = table["count"]
                 .as_u64()
                 .ok_or_else(|| invalid("property table count must be a nonnegative integer"))?;
-            let mut columns = Vec::new();
+            let (mut columns, mut skipped) = (Vec::new(), Vec::new());
             let properties = table["properties"].as_object().cloned().unwrap_or_default();
             for (name, property) in &properties {
                 let schema = &classes[class]["properties"][name];
@@ -1092,31 +1294,67 @@ impl Plain {
                     "UINT64" | "INT64" | "FLOAT64" => 8,
                     _ => 0,
                 };
-                if schema["type"] != "SCALAR" || schema["array"] == true || width == 0 {
-                    return Err(unsupported(format!(
-                        "property {class}.{name} is not a numeric scalar"
-                    )));
+                let reason = if !schema.is_object() {
+                    Some("not declared by the class".to_owned())
+                } else if schema["type"] != "SCALAR" || schema["array"] == true {
+                    Some(format!(
+                        "{} {}is not a numeric scalar",
+                        schema["type"].as_str().unwrap_or("untyped"),
+                        if schema["array"] == true {
+                            "array "
+                        } else {
+                            ""
+                        }
+                    ))
+                } else if width == 0 {
+                    Some(format!("component type {component:?} is not numeric"))
+                } else {
+                    None
+                };
+                if let Some(reason) = reason {
+                    skipped.push((name.clone(), reason));
+                    continue;
                 }
+                let number = |key: &str| -> Result<Option<f64>, JobError> {
+                    match property.get(key).or_else(|| schema.get(key)) {
+                        None => Ok(None),
+                        Some(v) => {
+                            v.as_f64()
+                                .filter(|v| v.is_finite())
+                                .map(Some)
+                                .ok_or_else(|| {
+                                    invalid(format!(
+                                        "property {class}.{name} {key} must be a finite number"
+                                    ))
+                                })
+                        }
+                    }
+                };
                 let view = index(&property["values"], "property values")?;
                 let length = usize::try_from(count)
                     .ok()
                     .and_then(|c| c.checked_mul(width))
-                    .ok_or_else(|| limit("property column too large"))?;
+                    .ok_or_else(|| limit("property column size overflows"))?;
                 let bytes = self
                     .views
                     .get(view)
                     .and_then(|v| v.get(..length))
                     .ok_or_else(|| invalid(format!("property {class}.{name} is truncated")))?;
+                budget.output(length, 1)?;
                 columns.push(Column {
                     name: name.clone(),
                     component_type: component.to_owned(),
                     bytes: bytes.to_vec(),
+                    normalized: schema["normalized"] == true,
+                    offset: number("offset")?,
+                    scale: number("scale")?,
                 });
             }
             tables.push(PropertyTable {
                 class: class.to_owned(),
                 count,
                 columns,
+                skipped,
             });
         }
         Ok(tables)
@@ -1126,6 +1364,7 @@ impl Plain {
         mut self,
         tile: TileEntry,
         root_transform: [f64; 16],
+        budget: &mut Budget,
     ) -> Result<DecodedTile, JobError> {
         self.retarget()?;
         let scene = optional_index(&self.doc["scene"], "scene")?;
@@ -1141,13 +1380,14 @@ impl Plain {
                 &IDENTITY,
                 &mut Vec::new(),
                 &mut primitives,
+                budget,
             )?;
         }
         let mut pages = Vec::new();
         for i in 0..array(&self.doc, "images")?.len() {
-            pages.push(self.page(i)?);
+            pages.push(self.page(i, budget, OUTPUT_COPIES)?);
         }
-        let property_tables = self.property_tables()?;
+        let property_tables = self.property_tables(budget)?;
         let take = |doc: &mut Map<String, Value>, key: &str| {
             doc.remove(key).unwrap_or_else(|| Value::Array(Vec::new()))
         };

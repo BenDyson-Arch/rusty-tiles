@@ -266,6 +266,45 @@ class WheelAPI(unittest.TestCase):
             heights = numpy.concatenate([p["positions"][:, 2] for p in decoded["primitives"]])
             self.assertLessEqual(float(abs(heights).max()), 2.01)
 
+    def test_decoded_tile_views_refuse_hostile_content_with_typed_limits(self):
+        def glb(document, payload=b""):
+            encoded = json.dumps(document, separators=(",", ":")).encode()
+            encoded += b" " * (-len(encoded) % 4)
+            payload += b"\0" * (-len(payload) % 4)
+            chunk = struct.pack("<II", len(payload), 0x004E4942) + payload if payload else b""
+            return (struct.pack("<III", 0x46546C67, 2, 20 + len(encoded) + len(chunk))
+                    + struct.pack("<II", len(encoded), 0x4E4F534A) + encoded + chunk)
+
+        tileset = self.root / "hostile"
+        tileset.mkdir()
+        box = [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]
+        tiles = [{"boundingVolume": {"box": box}, "geometricError": 0, "content": {"uri": uri}}
+                 for uri in ("huge.glb", "link.glb")]
+        (tileset / "tileset.json").write_text(json.dumps({
+            "asset": {"version": "1.1"}, "geometricError": 1,
+            "root": {"boundingVolume": {"box": box}, "geometricError": 1, "children": tiles}}))
+        # A viewless POSITION accessor claiming 2**40 vertices: 1 KB that must not allocate.
+        (tileset / "huge.glb").write_bytes(glb({
+            "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+            "accessors": [{"componentType": 5126, "count": 2 ** 40, "type": "VEC3"}]}))
+        os.symlink(tileset / "huge.glb", tileset / "link.glb")
+        self.assertEqual([t["uri"] for t in rusty_tiles.list_tiles(tileset)], ["huge.glb", "link.glb"])
+        with self.assertRaises(rusty_tiles.UnsupportedError):
+            rusty_tiles.decode_tile(tileset, "link.glb")
+        self.assertIsInstance(rusty_tiles.decode_tile(tileset, "huge.glb"), bytes)
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            return
+        with self.assertRaises(rusty_tiles.ResourceLimitError) as caught:
+            rusty_tiles.decode_tile(tileset, "huge.glb", format="arrays")
+        limit = caught.exception.limit
+        self.assertEqual((limit["limit"], limit["value"], limit["derivation"]),
+                         ("decodedBytes", 2 ** 30, "fixed"))
+        self.assertGreater(limit["observed"], limit["value"])
+        self.assertEqual(caught.exception.kind, "resource_limit")
+
     def check_blender_import(self, plain, labels):
         """Blender's bundled glTF importer reads the plain GLB with its page, UVs and IDs."""
         import bpy

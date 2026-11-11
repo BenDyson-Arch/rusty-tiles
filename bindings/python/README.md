@@ -352,10 +352,18 @@ arrays = rusty_tiles.decode_tile("site.3tz", leaf["uri"], format="arrays")
   a dict with `label`, `feature_count`, `null_feature_id`, `property_table` and
   per-vertex `values` ((N,) uint32). Leaves carry `source_primitive` and
   `source_triangle`; coarse tiles carry `source_primitive` only. A face's ID
-  is the value at any of its corners.
+  is the value at any of its corners. Triangles are counter-clockwise front
+  faces in the tile frame: under a mirroring node transform (negative
+  determinant) corners 1 and 2 are swapped relative to the GLB.
 - `pages` holds one (H, W, 4) uint8 RGBA array per glTF image, top row first.
-  Each property table is a dict with `class`, `count` and `properties` (name
-  to a 1-D array of the schema's component type).
+  Each property table is a dict with `class`, `count`, `properties` (name to a
+  1-D array of the stored values in the schema's component type),
+  `value_transforms` and `skipped`. Values are returned as stored: where a
+  property is `normalized` or has an `offset` or `scale`, `value_transforms`
+  holds them, and its value is `offset + scale * v` (normalize `v` first; an
+  omitted offset is 0 and scale 1). `noData` and `default` are not applied.
+  Properties that are not numeric scalars (strings, enums, booleans, arrays,
+  vectors, matrices) are not decoded; `skipped` maps each name to the reason.
 - Positions and normals are in the tile frame: node transforms are applied and
   glTF Y-up is turned to Z-up, `(x, -z, y)`, which is the frame Blender's
   importer shows. `transform @ [x, y, z, 1]` is the world position. Mesh tiler
@@ -364,8 +372,15 @@ arrays = rusty_tiles.decode_tile("site.3tz", leaf["uri"], format="arrays")
   [mesh guide](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#decoded-tile-views)).
 
 Both functions release the GIL while reading and decoding. Malformed content
-raises `DataError`; other codecs, external resources and legacy tile formats
-raise `UnsupportedError`.
+raises `DataError`; other codecs, external resources, legacy tile formats and,
+in a directory, members that are symlinks or not regular files raise
+`UnsupportedError`. Each decode is bounded before it allocates or walks: a
+member of at most 1 GiB, at most 1 GiB held for the decode (including the
+returned arrays or bytes and their one copy into Python), 65,536 node visits
+plus primitive instances, and pages of at most 8192 x 8192 texels, sized from
+their headers. A refusal raises `ResourceLimitError` whose `limit` is
+`{"limit", "value", "observed", "derivation": "fixed"}`, with `limit` one of
+`memberBytes`, `decodedBytes`, `sceneWork` or `pageTexels`.
 
 ## Callbacks and threads
 

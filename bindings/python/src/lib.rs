@@ -13,7 +13,7 @@ use std::{
 use tiles_core::{
     package::{package, PackageRequest},
     point_cloud::{PointCloudCoordinates, PointCloudCrs, PointCloudOptions, PointCloudRequest},
-    tile_view::{DecodedTile, TileSet},
+    tile_view::{DecodedTile, TileLimit, TileSet},
     vector::{VectorLodOptions, VectorOptions},
     Error, JobError, JobErrorKind, JobFailure, MeshPlacement, MeshSourceCrs, ModelManifestRequest,
     ModelWrapRequest, Observer, OutputPolicy, RunControl, RunEvent, SourceAxes, TilerJobs,
@@ -1128,7 +1128,14 @@ fn crs_table_info(py: Python<'_>) -> PyResult<Py<PyAny>> {
 }
 
 fn job_error_to_python(py: Python<'_>, error: JobError) -> PyErr {
-    job_failure_to_python(
+    // A tile-view limit refusal carries its fixed limit as the cause, like `validate`'s
+    // structured `limit`; other resource refusals set `limit` to None.
+    let limit = (error.kind() == JobErrorKind::ResourceLimit).then(|| {
+        std::error::Error::source(&error)
+            .and_then(|cause| cause.downcast_ref::<TileLimit>())
+            .copied()
+    });
+    let exception = job_failure_to_python(
         py,
         JobFailure {
             error,
@@ -1136,7 +1143,22 @@ fn job_error_to_python(py: Python<'_>, error: JobError) -> PyErr {
             retained_paths: Vec::new(),
             recovery: None,
         },
-    )
+    );
+    if let Some(limit) = limit {
+        let value = match limit {
+            Some(limit) => {
+                let dict = PyDict::new(py);
+                let _ = dict.set_item("limit", limit.limit);
+                let _ = dict.set_item("value", limit.value);
+                let _ = dict.set_item("observed", limit.observed);
+                let _ = dict.set_item("derivation", "fixed");
+                dict.into_any().unbind()
+            }
+            None => py.None(),
+        };
+        let _ = exception.value(py).setattr("limit", value);
+    }
+    exception
 }
 
 /// A column-major 4x4 matrix as four row lists.
@@ -1170,31 +1192,72 @@ fn list_tiles(py: Python<'_>, archive: PathBuf) -> PyResult<Py<PyAny>> {
     Ok(list.into_any().unbind())
 }
 
-/// A writable NumPy array over a copy of `bytes`, little-endian `dtype`, in `shape`.
+/// A writable NumPy array over a new `bytearray` of `length` bytes filled by `fill`
+/// (little-endian `dtype`), in `shape`. The bytearray is the only Python copy.
 fn ndarray<'py>(
+    numpy: &Bound<'py, PyModule>,
+    length: usize,
+    fill: impl FnOnce(&mut [u8]),
+    dtype: &str,
+    shape: &[usize],
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = numpy.py();
+    let buffer = PyByteArray::new_with(py, length, |bytes| {
+        fill(bytes);
+        Ok(())
+    })?;
+    numpy
+        .call_method1("frombuffer", (buffer, dtype))?
+        .call_method1("reshape", (PyTuple::new(py, shape)?,))
+}
+
+/// An array of `N`-component rows, each component `W` little-endian bytes.
+fn rows<'py, T: Copy, const N: usize, const W: usize>(
+    numpy: &Bound<'py, PyModule>,
+    values: &[[T; N]],
+    bytes: impl Fn(T) -> [u8; W],
+    dtype: &str,
+    shape: &[usize],
+) -> PyResult<Bound<'py, PyAny>> {
+    ndarray(
+        numpy,
+        values.len() * N * W,
+        |out| {
+            for (chunk, &value) in out
+                .as_chunks_mut::<W>()
+                .0
+                .iter_mut()
+                .zip(values.iter().flatten())
+            {
+                *chunk = bytes(value);
+            }
+        },
+        dtype,
+        shape,
+    )
+}
+
+fn raw<'py>(
     numpy: &Bound<'py, PyModule>,
     bytes: &[u8],
     dtype: &str,
     shape: &[usize],
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py = numpy.py();
-    numpy
-        .call_method1("frombuffer", (PyByteArray::new(py, bytes), dtype))?
-        .call_method1("reshape", (PyTuple::new(py, shape)?,))
-}
-
-fn le_bytes<T: Copy, const N: usize, const W: usize>(
-    values: &[[T; N]],
-    bytes: impl Fn(T) -> [u8; W],
-) -> Vec<u8> {
-    values.iter().flatten().flat_map(|&v| bytes(v)).collect()
+    ndarray(
+        numpy,
+        bytes.len(),
+        |out| out.copy_from_slice(bytes),
+        dtype,
+        shape,
+    )
 }
 
 fn matrix_array<'py>(numpy: &Bound<'py, PyModule>, m: &[f64; 16]) -> PyResult<Bound<'py, PyAny>> {
-    let rows: Vec<[f64; 4]> = (0..4).map(|r| [0, 1, 2, 3].map(|c| m[r + 4 * c])).collect();
-    ndarray(numpy, &le_bytes(&rows, f64::to_le_bytes), "<f8", &[4, 4])
+    let matrix: Vec<[f64; 4]> = (0..4).map(|r| [0, 1, 2, 3].map(|c| m[r + 4 * c])).collect();
+    rows(numpy, &matrix, f64::to_le_bytes, "<f8", &[4, 4])
 }
 
+/// Consumes the decoded tile so each Rust array is released after its copy.
 fn arrays_to_python(
     py: Python<'_>,
     numpy: &Bound<'_, PyModule>,
@@ -1208,7 +1271,7 @@ fn arrays_to_python(
     out.set_item("transform", matrix_array(numpy, &tile.tile.transform)?)?;
     out.set_item("root_transform", matrix_array(numpy, &tile.root_transform)?)?;
     let primitives = PyList::empty(py);
-    for p in &tile.primitives {
+    for p in tile.primitives {
         let d = PyDict::new(py);
         d.set_item("node", p.node)?;
         d.set_item("mesh", p.mesh)?;
@@ -1217,36 +1280,28 @@ fn arrays_to_python(
         let n = p.positions.len();
         d.set_item(
             "positions",
-            ndarray(
-                numpy,
-                &le_bytes(&p.positions, f64::to_le_bytes),
-                "<f8",
-                &[n, 3],
-            )?,
+            rows(numpy, &p.positions, f64::to_le_bytes, "<f8", &[n, 3])?,
         )?;
+        drop(p.positions);
+        let t = p.indices.len();
         d.set_item(
             "indices",
-            ndarray(
-                numpy,
-                &le_bytes(&p.indices, u32::to_le_bytes),
-                "<u4",
-                &[p.indices.len(), 3],
-            )?,
+            rows(numpy, &p.indices, u32::to_le_bytes, "<u4", &[t, 3])?,
         )?;
         let normals = match &p.normals {
             None => py.None().into_bound(py),
-            Some(v) => ndarray(numpy, &le_bytes(v, f32::to_le_bytes), "<f4", &[n, 3])?,
+            Some(v) => rows(numpy, v, f32::to_le_bytes, "<f4", &[n, 3])?,
         };
         d.set_item("normals", normals)?;
         let uvs = p
             .uvs
             .iter()
-            .map(|set| ndarray(numpy, &le_bytes(set, f32::to_le_bytes), "<f4", &[n, 2]))
+            .map(|set| rows(numpy, set, f32::to_le_bytes, "<f4", &[n, 2]))
             .collect::<PyResult<Vec<_>>>()?;
         d.set_item("uvs", uvs)?;
         let colors = match &p.colors {
             None => py.None().into_bound(py),
-            Some(v) => ndarray(numpy, &le_bytes(v, f32::to_le_bytes), "<f4", &[n, 4])?,
+            Some(v) => rows(numpy, v, f32::to_le_bytes, "<f4", &[n, 4])?,
         };
         d.set_item("colors", colors)?;
         let sets = PyList::empty(py);
@@ -1256,22 +1311,22 @@ fn arrays_to_python(
             s.set_item("feature_count", set.feature_count)?;
             s.set_item("null_feature_id", set.null_feature_id)?;
             s.set_item("property_table", set.property_table)?;
-            let values: Vec<u8> = set.values.iter().flat_map(|v| v.to_le_bytes()).collect();
-            s.set_item("values", ndarray(numpy, &values, "<u4", &[n])?)?;
+            let values = set.values.as_chunks::<1>().0;
+            s.set_item(
+                "values",
+                rows(numpy, values, u32::to_le_bytes, "<u4", &[n])?,
+            )?;
             sets.append(s)?;
         }
         d.set_item("feature_ids", sets)?;
         primitives.append(d)?;
     }
     out.set_item("primitives", primitives)?;
-    let pages = tile
-        .pages
-        .iter()
-        .map(|page| {
-            let shape = [page.height as usize, page.width as usize, 4];
-            ndarray(numpy, &page.rgba, "u1", &shape)
-        })
-        .collect::<PyResult<Vec<_>>>()?;
+    let pages = PyList::empty(py);
+    for page in tile.pages {
+        let shape = [page.height as usize, page.width as usize, 4];
+        pages.append(raw(numpy, &page.rgba, "u1", &shape)?)?;
+    }
     out.set_item("pages", pages)?;
     let tables = PyList::empty(py);
     for table in &tile.property_tables {
@@ -1279,6 +1334,7 @@ fn arrays_to_python(
         t.set_item("class", &table.class)?;
         t.set_item("count", table.count)?;
         let properties = PyDict::new(py);
+        let transforms = PyDict::new(py);
         for column in &table.columns {
             let dtype = match column.component_type.as_str() {
                 "UINT8" => "u1",
@@ -1293,12 +1349,22 @@ fn arrays_to_python(
                 _ => "<f8",
             };
             let count = table.count as usize;
-            properties.set_item(
-                &column.name,
-                ndarray(numpy, &column.bytes, dtype, &[count])?,
-            )?;
+            properties.set_item(&column.name, raw(numpy, &column.bytes, dtype, &[count])?)?;
+            if column.normalized || column.offset.is_some() || column.scale.is_some() {
+                let transform = PyDict::new(py);
+                transform.set_item("normalized", column.normalized)?;
+                transform.set_item("offset", column.offset)?;
+                transform.set_item("scale", column.scale)?;
+                transforms.set_item(&column.name, transform)?;
+            }
         }
         t.set_item("properties", properties)?;
+        t.set_item("value_transforms", transforms)?;
+        let skipped = PyDict::new(py);
+        for (name, reason) in &table.skipped {
+            skipped.set_item(name, reason)?;
+        }
+        t.set_item("skipped", skipped)?;
         tables.append(t)?;
     }
     out.set_item("property_tables", tables)?;
