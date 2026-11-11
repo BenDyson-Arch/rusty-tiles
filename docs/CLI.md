@@ -6,13 +6,19 @@ Every value here comes from `rusty-tiles <command> --help` for version 0.4.0. Ru
 
 ## Build availability
 
-The **standard CLI** is the default Cargo build and the binary supplied by release downloads. It supports meshes, local/grid-free LAS/LAZ, GeoJSON/GeoPackage, packaging, validation and preview without system geospatial libraries. **Native-geospatial** is a separate build from the native container or Cargo with `--features native-geospatial`; it adds raster/terrain, OGR-only inputs and eligible native CRS operations. Mesh source-CRS conversion (`mesh --source-crs`) can need native support for CRS outside the verified grid-free tier; the new `mesh` command, its grid-free source CRS and rigid model placement work in the standard build. See [installation](INSTALL.md#choose-a-build).
+Release downloads and the default Cargo build are the standard CLI. It runs `mesh`, `point-cloud`, `vector` (GeoJSON and GeoPackage), the packaging commands, `validate`, `preview` and `doctor` without system geospatial libraries, and covers CRS operations in the verified grid-free tier.
 
-Both builds expose the command help, including commands whose native capability is unavailable. Check `rusty-tiles doctor --command COMMAND` before using a converter. Adding GDAL to a standard installation does not enable the feature. The Python wheel exposes only the [standard Python API](../bindings/python/README.md), not this CLI.
+These need the [native-geospatial build](INSTALL.md#native-geospatial-cli) (GDAL, PROJ and GEOS):
+
+- `raster`, `terrain` and `raster-tile-to-directory`;
+- vector formats read through OGR, such as Shapefile;
+- CRS operations outside the grid-free tier, for `mesh`, `point-cloud` and `vector`.
+
+Both builds list every command in `--help`. A command or operation the build lacks is refused as `unsupported` (exit 2). Run `rusty-tiles doctor --command COMMAND` to check before converting. Installing GDAL next to a standard build does not enable these features. The Python wheel exposes the [Python API](../bindings/python/README.md), not this CLI.
 
 ## Conventions
 
-Options have a camelCase spelling, such as `--sourceCrs`. Each multi-word option also accepts a kebab-case alias, such as `--source-crs`. Both spellings behave the same. The examples in these docs use the kebab-case alias.
+Multi-word options have a camelCase spelling, such as `--sourceCrs`, and a kebab-case alias, such as `--source-crs`. Both behave the same. The examples in these docs use the kebab-case spelling. Options listed without an alias, such as the `terrain` options and the `raster` `--max-*` limits, have only the spelling shown. `mesh --memory-budget` is kebab-case first, with the alias `--memoryBudget`.
 
 Two subcommands also have an alias.
 
@@ -21,119 +27,116 @@ Two subcommands also have an alias.
 | `createTilesetJson` | `create-tileset-json` |
 | `glb-to-3tz` | `glbTo3tz` |
 
-Archive/directory converters share these file options. `createTilesetJson`
-takes `--input` and `--force` and derives a fixed sibling output; it has no
-`--output` option.
+Converters and `convert` share these file options. `createTilesetJson` takes only `-i`/`--input` and `--force` (no `-f`), and has no `--output`.
 
-| Option | Alias | Default | Meaning |
-| --- | --- | --- | --- |
-| `-i`, `--input` | | required | Source file or directory |
-| `-o`, `--output` | | required | Output path |
-| `-f`, `--force` | | off | Replace an existing output after a successful conversion |
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `-i`, `--input` | required | Source file or directory |
+| `-o`, `--output` | required | Output path |
+| `-f`, `--force` | off | Replace an existing output after a successful conversion |
 
 Two global options work before or after the subcommand.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `--json` | off | Print one machine-readable result on stdout. Diagnostics stay on stderr. |
-| `--progress json` | off | Print newline-delimited JSON events on stderr. |
+| `--progress json` | off | Print newline-delimited JSON events on stderr. `json` is the only value. |
 
 See [machine output](#machine-output) for both formats.
 
-`mesh`, `point-cloud` and `vector` produce 3D Tiles 1.1 implicit tiling and write only this layout. The `--explicit` flag of `point-cloud` and `vector` was removed in 0.4.0 and is now an unknown argument; the legacy `mesh-to-3tz`, `meshTo3tz` and `mesh-local-to-3tz` commands were removed in 0.4.0 and are unknown subcommands (exit 2). To move an existing explicit point-cloud or vector archive to implicit tiling, re-run its converter from the original source; there is no archive-to-archive rewrite command. `validate` still reads explicit archives, including those written before 0.4.0. Packaging preserves the selected bytes; its inventory and publication rules are documented under `convert`.
+### Tiled output layout
 
-The shared layout is a bounded implicit forest. Producer naming/partition details vary; the following member naming describes vector and point-cloud output. A tile with at least four levels of descendants stays an explicit tile, as do its leaf children; each other child, with one to three levels of descendants, becomes an implicit root with exactly one binary subtree, `subtrees/r{n}-{level}-{x}-{y}[-{z}].subtree`, which records every tile's actual bounding box and geometric error and has no child subtrees. When the whole hierarchy has fewer than four levels of descendants, the root itself is the only implicit root. Implicit content is published under `implicit-content/r{n}-{level}-{x}-{y}[-{z}]-{slot}.{suffix}`; no implicit content template names a JSON tileset. A large explicit skeleton is split into explicit external tileset documents, `tileset-d{m}.json`, each of at most 16,384 JSON values and 2 MiB, referenced by explicit link tiles. Hierarchies with more than 32 levels are refused. Archives keep each payload once: explicit tiles publish their payloads in place, and implicit tiles publish copies whose glTF scene root carries the tile's translation.
+`mesh`, `point-cloud` and `vector` write 3D Tiles 1.1 implicit tiling as a bounded implicit forest:
+
+- A tile with at least four levels of descendants stays an explicit tile, as do its leaf children.
+- Each other child, with one to three levels of descendants, becomes an implicit root with exactly one binary subtree. The subtree records every tile's actual bounding box and geometric error and has no child subtrees.
+- When the whole hierarchy has fewer than four levels of descendants, the root is the only implicit root.
+- A large explicit skeleton is split into external tileset documents, `tileset-d{m}.json`, each of at most 16,384 JSON values and 2 MiB, referenced by explicit link tiles.
+- Hierarchies with more than 32 levels are refused.
+- Each payload is stored once. Explicit tiles publish their payloads in place. Implicit tiles publish copies whose glTF scene root carries the tile's translation.
+
+In `vector` and `point-cloud` output, subtrees are named `subtrees/r{n}-{level}-{x}-{y}[-{z}].subtree` and implicit content `implicit-content/r{n}-{level}-{x}-{y}[-{z}]-{slot}.{suffix}`. No implicit content template names a JSON tileset. `mesh` naming may differ.
+
+To move an existing explicit archive to implicit tiling, re-run its converter on the original source. There is no archive-to-archive rewrite. `validate` still reads explicit archives.
 
 ## Converters
 
 ### mesh
 
-Streams one static glTF/GLB scene, local metre/Y-up or in a declared source CRS,
-through capture, leaf encoding, HLOD coarse levels and Tiles 1.1 implicit `.3tz` delivery. Leaves are exact;
-every parent tile is built from its children with outer seams exactly shared with its neighbours, a sampled,
-measured geometric error rather than a certificate, a representative source-primitive identity and freshly
-baked textures. See the [mesh guide](MESH.md)
-for admitted sources, placement, resources, migration and the known Cesium
-KTX2 colour-filtering limitation. The preparatory leaf/delivery commands and
-Rust exports are now internal.
+Tiles one static glTF/GLB scene into a 3D Tiles 1.1 implicit `.3tz`. The scene is local (metres, Y-up) or in a declared source CRS. Leaves keep full detail. Each parent tile is built from its children: its outer seams match its neighbours exactly, its geometric error is sampled and measured rather than certified, it keeps a representative source-primitive identity, and its textures are baked fresh. The [mesh guide](MESH.md) covers admitted sources, placement, resources and a known Cesium KTX2 colour-filtering limitation.
 
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
-| `--profile` | | `balanced` | `fast`, `balanced`, `quality` or `lossless`; policies/constants are provisional |
-| `--jobs` | | `auto` | Positive maximum workers or memory-aware auto; actual workers are capped per stage by cores and memory; unknown memory uses one worker |
-| `--scratchDir` | `--scratch-dir` | platform scratch parent | Owned working-data parent; final archive staging stays beside output |
-| `--memory-budget BYTES` | `--memoryBudget` | lesser of 4 GiB and half the detected headroom (2 GiB if undetected) | Declared memory ceiling for every stage, never raised: a positive byte count with an optional `B`, `KiB`, `MiB`, `GiB` or `TiB` suffix (`2GiB`). A run that cannot fit is refused as `resource_limit` before it allocates, and the archive does not depend on the budget. Invalid values are usage errors (exit 2). See the [memory budget](MESH.md#memory-budget) |
-| `--anchor LON LAT HEIGHT` | | none | WGS84 longitude/latitude degrees and ellipsoidal height metres; omission keeps local output |
-| `--orientationXyzw X Y Z W` | `--orientation-xyzw` | identity with anchor | Active ENU near-unit quaternion, scalar W last; requires anchor |
-| `--sceneOffset X Y Z` | `--scene-offset` | zero with anchor | Post-node source Y-up metre translation before orientation; requires anchor |
-| `--sourceCrs` | `--source-crs` | `local` | `local` or a 2D horizontal EPSG/WKT/PROJ definition, mapped at capture; excludes the anchor options |
-| `--sourceAxes` | `--source-axes` | `y-up` with a source CRS | `y-up` (E, height, −N) or `xyz` (E, N, height) after node transforms |
-| `--sourceOffset E N [A]` | `--source-offset` | `0 0 0` | Added in double precision: E/N in horizontal CRS units, A metres |
-| `--sourceOffsetFile` | `--source-offset-file` | none | Metashape offset file of exactly `E: <n>`, `N: <n>`, `A: <n>` lines; excludes `--sourceOffset` |
-| `--heightOffset` | `--height-offset` | `0` with a source CRS | Metres added to source height plus A to give ellipsoidal height |
+| `--profile` | | `balanced` | `fast`, `balanced`, `quality` or `lossless`. Profile settings may change in later releases. |
+| `--jobs` | | `auto` | A positive maximum worker count, or `auto`. Each stage caps workers by cores and memory; `auto` uses one worker when memory is unknown. |
+| `--scratchDir` | `--scratch-dir` | platform scratch directory | Parent directory for working data. Archive staging stays beside the output. |
+| `--memory-budget BYTES` | `--memoryBudget` | lesser of 4 GiB and half the detected headroom (2 GiB if undetected) | Memory ceiling for every stage, never raised. A positive byte count with an optional `B`, `KiB`, `MiB`, `GiB` or `TiB` suffix, such as `2GiB`. A run that cannot fit is refused as `resource_limit` before it allocates. The archive does not depend on the budget. Invalid values are usage errors (exit 2). See [memory budget](MESH.md#memory-budget). |
+| `--anchor LON LAT HEIGHT` | | none | Place a local scene on the globe: WGS84 longitude and latitude in degrees, ellipsoidal height in metres. Without it, output stays local. |
+| `--orientationXyzw X Y Z W` | `--orientation-xyzw` | identity with `--anchor` | Rotation in the anchor's east-north-up frame, as a near-unit quaternion with W last. Requires `--anchor`. |
+| `--sceneOffset X Y Z` | `--scene-offset` | zero with `--anchor` | Translation in source Y-up metres, applied after node transforms and before the orientation. Requires `--anchor`. |
+| `--sourceCrs` | `--source-crs` | `local` | `local`, or a 2D horizontal CRS as an EPSG code, WKT or PROJ string, applied at capture. Cannot be combined with the anchor options. |
+| `--sourceAxes` | `--source-axes` | `y-up` with a source CRS | Axes after node transforms: `y-up` (east, height, −north) or `xyz` (east, north, height). |
+| `--sourceOffset E N [A]` | `--source-offset` | `0 0 0` | Shift added in double precision: E and N in CRS units, A in metres. |
+| `--sourceOffsetFile` | `--source-offset-file` | none | Metashape offset file with exactly the lines `E: <n>`, `N: <n>` and `A: <n>`. Cannot be combined with `--sourceOffset`. |
+| `--heightOffset` | `--height-offset` | `0` with a source CRS | Metres added to source height plus A to give ellipsoidal height. |
 
-Shared `-i`/`-o`/`--force`, `--json` and `--progress json` apply. Output is `.3tz`
-only. `--json` returns `tilerReport` (snake_case, identical to `conversion.json`),
-`diagnostics` (requested/actual workers, the resolved `memory` budget and stage plan, the coarse stage's `hlod` facts and `phase_seconds`; outside the archive),
-`cleanupDiagnostics`, and the resolved output. Input is local with optional
-rigid placement, or in a declared [source CRS](MESH.md#source-crs) whose
-per-vertex map (positions, normals and tangents) is applied at capture and whose
-ENU frame becomes the root transform. There is no CRS inference, geoid
-conversion, coarse-tile tuning, explicit/full-detail mode or texture-format flag. Profiles do not freeze numerical settings and
-`lossless` is not a source-GLB byte-preservation promise.
+The shared `-i`, `-o` and `--force` options apply. Output is `.3tz` only.
+
+With a [source CRS](MESH.md#source-crs), positions, normals and tangents are mapped per vertex at capture, and the CRS's local east-north-up frame becomes the root transform. There is no CRS inference, geoid conversion, coarse-tile tuning, full-detail-only mode or texture-format option. `lossless` does not preserve the source GLB bytes.
+
+`--json` returns:
+
+- `tilerReport`: the conversion report, in snake_case, identical to the archive's `conversion.json`;
+- `diagnostics`: requested and actual workers, the resolved `memory` budget and stage plan, the coarse stage's `hlod` facts and `phase_seconds` (not stored in the archive);
+- `cleanupDiagnostics`;
+- the resolved `output`.
 
 ### point-cloud
 
-Tiles LAS or LAZ points into 3D Tiles with sampled parents and full-detail leaves.
-The typed point-cloud facade validates resolvable source/coordinate requirements
-before output work and uses one run for observation, cancellation and publication.
-`--force` selects replacement policy; it cannot authorize overwriting the source or
-an alias. All required reports and producer work finish before publication.
+Tiles LAS or LAZ points into 3D Tiles with sampled parents and full-detail leaves. Source and coordinate requirements are checked before output work starts. `--force` cannot overwrite the source file or an alias of it. All reports finish before the output is published.
 
-[The P1 contract](architecture/point-acceptance-contract.md) defines admitted LAS
-formats, scalar Extra Bytes, duplicate multiplicity, coordinate precision and
-remaining proof limits. Scaled 64-bit integer Extra Bytes are unsupported; unscaled
-64-bit integers remain exact. No-data/min/max declarations are preserved in schema.
-The point and chunk counts below are not whole-job memory bounds.
+The [point-cloud acceptance contract](architecture/point-acceptance-contract.md) defines admitted LAS formats, scalar Extra Bytes, duplicate points and coordinate precision. Scaled 64-bit integer Extra Bytes are unsupported; unscaled 64-bit integers stay exact. No-data, minimum and maximum declarations are kept in the schema.
 
-Grid-free globe placement works in the default build. CRS selection automatically uses pure Rust for verified definitions and strict native GDAL/PROJ for other operations when enabled. Unsupported grid/datum operations name `--features native-geospatial` in the error. See the [supported CRS classes and height rules](FORMATS.md#point-clouds).
+Grid-free globe placement works in the standard build. Other CRS operations need the native-geospatial build; the error names `--features native-geospatial`. See the [supported CRS classes and height rules](FORMATS.md#point-clouds).
 
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
-| `--sourceCrs` | `--source-crs` | required | `local`, `header`, or a 2D horizontal CRS such as `EPSG:32632` |
+| `--sourceCrs` | `--source-crs` | required | `local` (metre XYZ), `header`, or a 2D horizontal CRS such as `EPSG:32632` |
 | `--heightOffset` | `--height-offset` | none | Metres added to source Z to give ellipsoidal height. Required for geospatial input. |
-| `--maxPoints` | `--max-points` | `8192` | Maximum points per tile, from 1 to 8192. With `--metadata` each point is one row of the tile's property table, and CesiumJS 1.146 cannot build the GPU metadata texture of a table wider than the WebGL maximum texture size (8192 on the pinned target) |
-| `--metadata` | none | off | Keep every source field per point in a property table; off, tiles hold position and colour only |
+| `--maxPoints` | `--max-points` | `8192` | Maximum points per tile, from 1 to 8192. With `--metadata`, each point is one row of the tile's property table; CesiumJS 1.146 cannot build the GPU metadata texture for a table wider than the WebGL maximum texture size (8192 on the supported target). |
+| `--metadata` | | off | Keep every source field per point in a property table. Off, tiles hold position and colour only. |
 | `--metadataAttributes` | `--metadata-attributes` | off | Also expose `vertex_classification`, `vertex_intensity` and `vertex_return_number` as property attributes |
 | `--chunkPoints` | `--chunk-points` | `100000` | Points read per source chunk, at least 1 |
 
+`--maxPoints` and `--chunkPoints` do not bound total memory.
+
 ### vector
 
-Converts GeoJSON or GeoPackage layers into draft glTF vector content in a `.3tz` with the default build. Shapefile, other OGR drivers and CRS operations beyond the verified grid-free tier need `native-geospatial`. Behaviour and limits are in the [vector guide](VECTOR.md).
+Converts GeoJSON or GeoPackage layers into draft glTF vector content in a `.3tz`. Other OGR formats, such as Shapefile, need the native-geospatial build. Behaviour and limits are in the [vector guide](VECTOR.md).
 
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
-| `--layer` | | automatic for one layer | Select a spatial layer. Repeat for several. |
-| `--allLayers` | `--all-layers` | off | Include every spatial layer |
+| `--layer` | | automatic for one layer | Select a spatial layer. Repeat for several. Input with several layers needs `--layer` or `--allLayers`. |
+| `--allLayers` | `--all-layers` | off | Include every spatial layer. Cannot be combined with `--layer`. |
 | `--sourceCrs` | `--source-crs` | layer CRS | Override the input CRS, or `local` for metre XYZ |
 | `--heightOffset` | `--height-offset` | none | Metres added to source heights to give ellipsoidal height |
-| `--where` | | none | Attribute expression applied to every selected layer; SQLite in the default build, OGR in native builds |
-| `--fields` | | all | Comma-separated fields to include |
+| `--where` | | none | Attribute filter applied to every selected layer: SQLite syntax in the standard build, OGR in the native-geospatial build |
+| `--fields` | | all | Comma-separated fields to include. Cannot be combined with `--dropFields`. |
 | `--dropFields` | `--drop-fields` | none | Comma-separated fields to exclude |
 | `--listFields` | `--list-fields` | `error` | `error` rejects list fields. `json` stores them as JSON text. |
 | `--skipInvalid` | `--skip-invalid` | off | Omit unconvertible features and report each one |
 | `--maxFeatures` | `--max-features` | `64` | Feature fragments per leaf tile |
 | `--maxParentFeatures` | `--max-parent-features` | `4096` | Feature fragments per parent tile |
 | `--maxVertices` | `--max-vertices` | `65536` | Encoded POSITION vertices per tile, at least 4 |
-| `--maxBytes` | `--max-bytes` | `4194304` | Encoded bytes per tile, at least 4096 |
+| `--maxBytes` | `--max-bytes` | `4194304` | Encoded GLB bytes per tile, at least 4096 |
 | `--maxTiles` | `--max-tiles` | `100000` | Tiles in the hierarchy |
-| `--maxSourceVertices` | `--max-source-vertices` | `1000000` | Coordinates in one source feature |
-| `--lodTolerance` | `--lod-tolerance` | `0.1` | Tolerance in metres of the first coarse level above each leaf. It doubles at each level above it; parents also scale with their extent. See [level of detail](VECTOR.md#level-of-detail) |
+| `--maxSourceVertices` | `--max-source-vertices` | `1000000` | Coordinates in one source feature; bounds reader memory |
+| `--lodTolerance` | `--lod-tolerance` | `0.1` | Tolerance in metres of the first coarse level above each leaf. It doubles at each level above that; parents also scale with their extent. See [level of detail](VECTOR.md#level-of-detail). |
 | `--lodLevels` | `--lod-levels` | `3` | Coarse levels above each leaf, from 1 to 16 |
 | `--repair` | | off | Repair invalid polygon outlines and report each repair |
 | `--ambiguousOutlines` | `--ambiguous-outlines` | off | Keep ambiguous filled polygons as their source 3D outlines |
 | `--parentRepair` | `--parent-repair` | off | Allow reported outline stand-ins in parent tiles |
-| `--aggregatePoints` | `--aggregate-points` | off | Aggregate every point-only parent; parents whose points exceed their budgets always aggregate |
+| `--aggregatePoints` | `--aggregate-points` | off | Aggregate every point-only parent into per-layer voxel counts. Parents whose points exceed their budgets are always aggregated. |
 | `--quantize` | | off | Lossy 16-bit positions, with the error reported |
 | `--meshopt` | | off | Lossless `EXT_meshopt_compression` of accessor buffers |
 | `--reuseTileset` | `--reuse-tileset` | none | Reuse unchanged content from a compatible earlier archive |
@@ -142,99 +145,108 @@ Converts GeoJSON or GeoPackage layers into draft glTF vector content in a `.3tz`
 
 ### raster
 
-Writes a standalone source COG, directly sampled nearest-neighbour PNG XYZ pyramid,
-TileJSON and typed `report.json`. See the [imagery profile](FORMATS.md#imagery).
+Needs the native-geospatial build. Writes a standalone source COG, a nearest-neighbour PNG XYZ pyramid sampled directly from the source, TileJSON and a typed `report.json` into an output directory. See the [imagery profile](FORMATS.md#imagery).
 
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
-| `--maxZoom` | `--max-zoom` | required | Finest zoom, 0 through 24 |
+| `--maxZoom` | `--max-zoom` | required | Finest zoom, 0 to 24 |
 | `--minZoom` | `--min-zoom` | `0` | Coarsest zoom, at most `--maxZoom` |
-| `--display` | | `image` | Byte RGB, gray or opaque palette imagery; `gray` styles raw numeric samples |
-| `--band` | | `1` for gray | Positive gray band index; an explicit band is invalid for image display |
-| `--alphaBand` | `--alpha-band` | `0` | Explicit opacity band; 0 selects the declared alpha, or opaque when absent |
-| `--displayMin` | `--display-min` | required for gray | Raw value shown as black |
-| `--displayMax` | `--display-max` | required for gray | Raw value shown as white; finite increasing range with finite width |
-| `--jobs` | | `2` | Worker cap, 1 through 4; resolves to min(requested, available CPUs) |
-| `--max-source-bytes` | | `536870912` | Aggregate admitted source and companion bytes |
+| `--display` | | `image` | `image` for byte RGB, grey or opaque palette imagery; `gray` styles raw numeric samples from one band |
+| `--band` | | `1` for `gray` | Positive band index for `gray`. Not allowed with `image`. |
+| `--alphaBand` | `--alpha-band` | `0` | Explicit opacity band. `0` uses the declared alpha band, or opaque when there is none. |
+| `--displayMin` | `--display-min` | required for `gray` | Raw value shown as black |
+| `--displayMax` | `--display-max` | required for `gray` | Raw value shown as white. The range must be finite and increasing, with a finite width. |
+| `--jobs` | | `2` | Worker cap, 1 to 4; resolves to the lesser of the request and available CPUs |
+| `--max-source-bytes` | | `536870912` | Total admitted source and companion bytes |
 | `--max-source-pixels` | | `268435456` | Source pixel count |
 | `--max-decoded-bytes` | | `2147483648` | Decoded source samples and independent mask |
-| `--max-tiles` | | `100000` | Total tiles across requested zooms; see the finest ceiling below |
-| `--max-output-bytes` | | `8589934592` | Closed output members including both JSON files |
-| `--max-working-bytes` | | `17179869184` | Logical source, derivative and concrete owner allowance; also caps closed staged files, including intermediates |
+| `--max-tiles` | | `100000` | Total tiles across requested zooms; see the finest-zoom ceiling below |
+| `--max-output-bytes` | | `8589934592` | Completed output files, including both JSON files; checked after each file is closed |
+| `--max-working-bytes` | | `17179869184` | Logical work and completed working files, including intermediates. Not an RSS quota. |
 
-All six limits must be positive. The finest zoom also has a fixed 2 GiB RGBA
-ceiling: at most 8192 finest 256×256 tiles, which bounds a pyramid over zooms 0
-through 24 to at most 16,451 tiles. The default `--max-tiles` therefore never
-refuses a request the ceiling would admit; set a lower value to cap tile count. JSON success includes `rasterReport`, equal to
-published `report.json`; the precommit `raster_complete` progress reports the actual tile count.
-Replacement occurs only after the complete directory is closed and sealed.
-On Linux the output parent must be on ext, btrfs, tmpfs or xfs (kernel 4.9 or
-newer); other filesystems, such as overlayfs or network mounts, are refused as `unsupported`.
+All six limits must be positive. The finest zoom also has a fixed 2 GiB RGBA ceiling: at most 8192 finest 256×256 tiles. That bounds a pyramid over zooms 0 to 24 to at most 16,451 tiles, so the default `--max-tiles` never refuses a request the ceiling admits. Set a lower value to cap the tile count.
+
+`--json` success includes `rasterReport`, equal to the published `report.json`. The `raster_complete` progress event reports the actual tile count before publication. The old output is replaced only after the new directory is complete and sealed.
+
+On Linux the output parent must be on ext, btrfs, tmpfs or xfs (kernel 4.9 or newer). Other filesystems, such as overlayfs or network mounts, are refused as `unsupported`.
+
+With `--force`, the output cannot be the source file, a hard link to it, or a directory containing it. This is checked before any work; parent aliases are compared by filesystem identity. Replacing an output that is a symlink is allowed, because the symlink's target is kept.
 
 ### terrain
 
-Writes a bounded 3D Tiles 1.1 GLB mesh directory: an implicit level-of-detail
-pyramid over full-detail leaves. See the [terrain guide](TERRAIN.md).
+Needs the native-geospatial build. Writes a bounded 3D Tiles 1.1 GLB mesh directory: an implicit level-of-detail pyramid over full-detail leaves. See the [terrain guide](TERRAIN.md).
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `--cells-per-leaf` | `128` | Source-pixel cells per patch edge: 16, 32, 64 or 128 |
-| `--height-offset` | required | Metres added to raw DEM samples to obtain ellipsoidal height |
+| `--cells-per-leaf` | `128` | Source-pixel cells per leaf patch edge: 16, 32, 64 or 128 |
+| `--height-offset` | required | Metres added to raw DEM samples to give ellipsoidal height; never inferred |
 
-Level of detail is always on: coarser levels decimate the leaf lattice, carry
-certified geometric errors and have skirts on shared edges. There is no flat
-mode, simplification or zoom option. Source, height and precision limits
-are checked before private staging. Queries, clamping and live imagery draping
-are included in the pinned Cesium preview.
+The shared `-i`, `-o` and `--force` options apply. Level of detail is always on: coarser levels decimate the leaf lattice, carry certified geometric errors and have skirts on shared edges. There is no flat mode, simplification or zoom option. Source, height and precision limits are checked before any output is staged. `preview` supports queries, clamping and live imagery draping over terrain.
+
+### raster-tile-to-directory
+
+Needs the native-geospatial build. Copies one 256×256 RGB GeoTIFF, already aligned to an explicit Web Mercator XYZ tile, into a new directory as a PNG tile with `tilejson.json` and `report.json`. Broader imagery conversion is the `raster` command.
+
+```sh
+rusty-tiles raster-tile-to-directory -i aligned.tif -o ./new-tile --zoom 3 --x 5 --y 2
+```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `-i`, `--input` | required | Aligned RGB GeoTIFF |
+| `-o`, `--output` | required | Output directory, in an existing parent on a supported local filesystem |
+| `-f`, `--force` | off | Replace the current output entry after conversion finishes |
+| `--zoom` | required | XYZ zoom of the tile |
+| `--x` | required | XYZ column |
+| `--y` | required | XYZ row |
+
+An existing output is a conflict unless `--force` is given. `--force` replaces whatever entry is at the output path when publication starts, including a file or symlink. During replacement there is a moment when the output path is absent. Replacement does not promise snapshot isolation, protection from unrelated writers, or crash durability. The three files are published together.
+
+`--json` returns the `rasterReport` and `cleanupDiagnostics`. If restoring the previous output fails, the error has `error.recovery: {"output": ..., "previousOutput": ...}`, and the previous output is kept at that backup path. Resolve whatever is at the destination before restoring it. Other failures have `error.recovery: null`. `error.recovery.nativePaths` gives exact filename units for when a name is not valid Unicode: `encoding` is `unix-bytes` or `windows-utf16`, with `output` and `previousOutput` arrays. A backup cleanup failure after installation is still a success, reported in `cleanupDiagnostics`.
+
+The [directory creation](architecture/d1-directory-contract.md) and [replacement](architecture/d2-directory-contract.md) contracts give platform support and guarantees.
 
 ## Packaging commands
 
-These commands package existing content without building spatial level of detail.
+These commands package existing content without building level of detail.
 
 | Command | Input | Output | Extra options |
 | --- | --- | --- | --- |
-| `glb-to-3tz` | Admitted static local metre/Y-up GLB/glTF and confined resources | Exact-byte `.3tz` archive | `--anchor`, `--orientation-xyzw`, `--scene-offset` |
-| `createTilesetJson` | One admitted static local metre/Y-up GLB/glTF | Fixed sibling `tileset.json` | `--anchor`, `--orientation-xyzw`, `--scene-offset`, `--force`; no `-o` |
+| `glb-to-3tz` | One static local GLB/glTF (metres, Y-up) and its resources | `.3tz` archive with the source bytes unchanged | `--anchor`, `--orientation-xyzw`, `--scene-offset` |
+| `createTilesetJson` | One static local GLB/glTF (metres, Y-up) | `tileset.json` beside the source | `--anchor`, `--orientation-xyzw`, `--scene-offset`; `-i` and `--force` only |
 | `convert` | Tileset directory or `tileset.json` | `.3tz` archive | none |
 
-`createTilesetJson -i model.glb` writes beside the source, with an escaped basename URI and full-detail root error zero. Its separate positive top-level visibility error permits ordinary tileset traversal. Keep the source tree unchanged during publication and continued manifest use. Directory discovery and arbitrary output bases are retired. Both model operations use required typed reports (`modelReport` in JSON), fallible precommit progress, and completed-file F0 publication. Wrapping packages captured bytes beneath `model/`; it preserves URI spellings and resource aliases. Legacy HPR flags are replaced with the rigid placement grammar documented below. See the [source limits and capability reductions](architecture/model-wrapping-contract.md). `convert` retains its directory packaging grammar.
+The placement options mean the same as for [`mesh`](#mesh).
 
-`convert` selects every regular file beneath its directory input, or beneath
-the parent of an exact `tileset.json` input. It requires that root member,
-rejects symlinks/special files and unsafe/duplicate names, and rejects the
-reserved generated `@3dtilesIndex1@` instead of silently omitting it. Remove that
-entry explicitly before repacking an extracted archive. Sources must stay
-stable during the call. The output must be outside the source tree and must
-not alias a selected source file. Output names must end in `.3tz` or
-`.3dtiles.zip`; member names may not contain those extensions. Each member must
-be smaller than `2**32 - 1` bytes, though the complete archive may be larger.
+### glb-to-3tz and createTilesetJson
 
-Packaging preserves selected bytes, including an existing `conversion.json`,
-and does not interpret that source report or certify scene/resource semantics.
-Its `--json` result adds `packageReceipt` with `memberCount` (excluding the
-generated index), `sourceBytes` and `archiveBytes`, plus `cleanupDiagnostics`.
-Its `output` is the resolved absolute destination used for validation and
-installation, including when `--output` is relative.
-`conversionReport` is null for this operation: the package receipt is separate
-from source content. Cleanup diagnostics contain `path`, `kind` and `message`
-for retained temporary work beside a committed output.
-JSON path fields use lossy UTF-8 display: non-UTF8 operating-system path bytes
-appear as replacement characters and may not round-trip to the original path.
-The operation uses the original native path.
+`createTilesetJson -i model.glb` writes `tileset.json` beside the source. Its content URI is the escaped file name. The root tile has full-detail geometric error zero, and a separate positive top-level geometric error lets viewers traverse it normally. Keep the source files unchanged while the manifest is in use.
 
-Without `--force`, package installation refuses an existing or competing
-destination. `--force` permits completed-file replacement; encoding, observer
-or finalization failure before installation preserves the old destination.
-Namespace installation and temporary-name cleanup are separate guarantees;
-neither policy promises power-loss durability. On Unix, packaged output is
-created with private mode `0600` (subject to umask), including when replacing a previous file;
-change its permissions explicitly if other users need access.
+`glb-to-3tz` stores the captured source bytes under `model/`, keeping URI spellings and resource aliases. Resources must stay inside the source directory.
 
-Package failures expose `error.kind` alongside `error.code`,
-`secondaryDiagnostics` and `retainedPaths`. The CLI maps these domain kinds to
-process statuses: `invalid_request` and `unsupported` exit 2, `invalid_input`
-exits 3, `output_conflict` exits 5, and `io`, `cancelled`, `observer_failure` or
-`invalid_state` exit 1.
+Both commands return a typed `modelReport` in JSON, finish progress events before publication, and publish only complete files. See the [model wrapping contract](architecture/model-wrapping-contract.md) for source limits and unsupported features.
+
+### convert
+
+`convert` packages every regular file beneath its input directory, or beneath the parent of an exact `tileset.json` input. It requires that root `tileset.json`. It rejects symlinks, special files, unsafe or duplicate names, and a member named `@3dtilesIndex1@` (the generated index); remove that entry before repacking an extracted archive. Sources must not change during the call.
+
+The output must be outside the source tree and must not be a selected source file. Output names must end in `.3tz` or `.3dtiles.zip`; member names may not contain those extensions. Each member must be smaller than `2**32 - 1` bytes; the archive may be larger.
+
+`convert` keeps the selected bytes unchanged, including any existing `conversion.json`, and does not interpret that report or check scene or resource meaning. Its `--json` result adds:
+
+- `packageReceipt`, with `memberCount` (excluding the generated index), `sourceBytes` and `archiveBytes`;
+- `cleanupDiagnostics`, each with `path`, `kind` and `message`, for temporary work left beside a committed output;
+- `output`, the resolved absolute destination, even when `--output` is relative.
+
+`conversionReport` is null, because the receipt describes the package, not its content.
+
+### Package output and errors
+
+JSON path fields are shown as lossy UTF-8: operating-system path bytes that are not UTF-8 appear as replacement characters and may not round-trip. The command itself uses the original path.
+
+Without `--force`, packaging refuses an existing or competing destination. With `--force`, the completed file replaces it. A failure before installation, during encoding, in a progress observer or at finalization, leaves the old destination in place. Neither policy promises power-loss durability. On Unix, packaged output is created with mode `0600` (subject to umask), including when it replaces a file; change its permissions if other users need access.
+
+Package failures carry `error.kind`, `error.code`, `secondaryDiagnostics` and `retainedPaths`. See [exit codes](#exit-codes) for how kinds map to exit status.
 
 ## Checking and viewing
 
@@ -244,42 +256,21 @@ exits 3, `output_conflict` exits 5, and `io`, `cancelled`, `observer_failure` or
 rusty-tiles validate output/example.3tz
 ```
 
-`INPUT` is a self-contained `.3tz` archive. Inspection is read-only and uses the
-fixed [C1 validation profile](VALIDATION.md). Directories, including T1 terrain
-and raster outputs, are rejected as invalid input; package supported content before inspection.
+`INPUT` is a self-contained `.3tz` archive. Validation is read-only and uses the fixed profile described in [validation](VALIDATION.md); `--help` calls it the C1 payload profile. Directories, such as terrain and raster output, are rejected as invalid input; package a tileset directory with `convert` first.
 
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
-| `--maxVolume KEY=N` | `--max-volume` | profile defaults | Set an opt-in volume cap or replace an amplification budget; repeatable, once per key. `KEY` is one of `sourceArchiveBytes`, `archiveEntries`, `centralDirectoryBytes`, `archiveStoredBytes`, `hierarchyVisits`, `references`, `totalBytesRead`, `totalPayloadElements`, `containmentWorkUnits`, `containmentBytesRead` or `containmentDecodedBytes`; `N` is a decimal integer. Values may be below the defaults (stricter); per-item format limits are fixed. See [validation limits](VALIDATION.md) |
-| `--scratchDir DIR` | `--scratch-dir` | `TMPDIR`, then the user cache directory, then the system temporary directory | Put validation scratch files inside this existing directory |
-| `--expectProfile PROFILE` | `--expect-profile` | none | Require a delivery profile whatever the archive's labels say. `hlod` (the only value): every payload must carry source identity and every HLOD check runs; an archive that declares HLOD itself is held to it anyway. Python: `validate(..., expect_profile="hlod")` |
+| `--maxVolume KEY=N` | `--max-volume` | profile defaults | Set an opt-in volume cap or replace an amplification budget. Repeatable, once per key. `KEY` is one of `sourceArchiveBytes`, `archiveEntries`, `centralDirectoryBytes`, `archiveStoredBytes`, `hierarchyVisits`, `references`, `totalBytesRead`, `totalPayloadElements`, `containmentWorkUnits`, `containmentBytesRead` or `containmentDecodedBytes`. `N` is a decimal integer and may be below the default (stricter). Per-item format limits are fixed. See [limits](VALIDATION.md#limits). |
+| `--scratchDir DIR` | `--scratch-dir` | `TMPDIR`, then the user cache directory, then the system temporary directory, disk-backed first | Put validation scratch files inside this existing directory |
+| `--expectProfile PROFILE` | `--expect-profile` | none | Require a delivery profile whatever the archive's labels say. `hlod` is the only value: every payload must carry source identity and every HLOD check runs. An archive that declares HLOD is held to it anyway. |
 
-The typed JSON report lists `checks` and `notInspected`, per-payload accessor,
-primitive and vertex counts, archive counts, and fixed admission `limits`.
-Passing inspection means the listed checks completed within that profile.
-`hierarchyBounds` checks declared child volumes. `decodedContentContainment`
-appears only when every drawn vertex of an explicit, in-domain archive is exactly inside
-its tile, content, external-content and ancestor volumes; otherwise `notInspected` names the
-`decodedContentBounds.<reason>`, and a proven escape is `invalid_input`. See the
-[C2 contract](architecture/c2-decoded-containment-contract.md). Source fidelity,
-geometric-error accuracy, rendered extent and metadata/material semantics are not implied. Optional extensions retain explicit inspection gaps;
-unknown required extensions fail as unsupported. The `archiveStoredRecordLayout`
-check admits one disjoint stored-record layout and one directory interpretation.
-Coherent nested records, alternate name encodings and unsupported ZIP64 descriptor
-declarations receive `unsupported`; duplicate names and malformed records receive
-`invalid_input`. The [validation profile](VALIDATION.md) gives the finite domain.
+The JSON report lists the `checks` that ran and what was `notInspected`, per-payload accessor, primitive and vertex counts, archive counts, and the `limits` used. Passing means the listed checks completed within the profile. It does not imply source fidelity, geometric-error accuracy, rendered extent, or metadata and material meaning. [Validation](VALIDATION.md) describes every check and limit.
 
-Failures use `invalid_input` (exit 3), `unsupported` (exit 2), `resource_limit`
-(exit 3), `io` (exit 1), or `invalid_state` (exit 1, an internal invariant breach). Oversized inputs receive a resource-limit outcome
-before the work covered by that ceiling. Parser usage errors remain exit 2.
-The Rust and Python APIs share the same core inspection and fixed limits.
+Failures use `invalid_input` (exit 3), `unsupported` (exit 2), `resource_limit` (exit 3), `io` (exit 1) or `invalid_state` (exit 1, an internal error). Oversized inputs are refused as `resource_limit` before the work that limit covers. Parser usage errors exit 2. The Rust and Python APIs use the same inspection and limits.
 
-`--external-validator` has been removed. Run an independently installed official
-validator separately when its additional checks are needed; its result cannot
-silently upgrade unsupported built-in inspection. The library launches no
-validator process, fetches no remote resources, and writes no output files.
+`validate` starts no other process, fetches no remote resources and writes no output files. To run the official 3D Tiles validator as well, run it separately; its result does not change this report.
 
-The schema bundle comes from the Cesium GS 3D Tiles specification at commit `4d781014b52294759834018a931223b98ac1ce47`. Its relative references were rewritten to local `$defs`. Attribution and the CC BY 4.0 notice are in [`docs/schema/LICENSE.adoc`](schema/LICENSE.adoc). Schema loading makes no network or file reference lookups.
+The bundled JSON schemas come from the Cesium 3D Tiles specification at commit `4d781014b52294759834018a931223b98ac1ce47`, with relative references rewritten to local `$defs`. Attribution and the CC BY 4.0 notice are in [`docs/schema/LICENSE.adoc`](schema/LICENSE.adoc). Schema loading makes no network or file lookups.
 
 ### preview
 
@@ -301,18 +292,18 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 
 Select at least one layer.
 
-Preview is read-only. Before binding, each selected directory and the Cesium directory are resolved to their real paths. Each must contain its manifest (`tileset.json`, `tilejson.json` or `Cesium.js`) as a regular file inside that directory; otherwise the command exits 3 with `data`. The server answers only `GET` and `HEAD` for `/`, `/config.json` and regular files under a selected layer's route. A path below a route is decoded once; invalid UTF-8 returns 400.
+Preview is read-only and writes nothing, so stopping it needs no cleanup. It runs until signalled, for example with SIGTERM or Ctrl-C. Before binding, each selected directory and the Cesium directory are resolved to their real paths. Each must contain its manifest (`tileset.json`, `tilejson.json` or `Cesium.js`) as a regular file; otherwise the command exits 3 with `data`.
 
-Every platform then applies the same two rules, and any path that fails either returns 404:
+The server answers only `GET` and `HEAD` for `/`, `/config.json` and regular files under a selected layer's route. A path below a route is decoded once; invalid UTF-8 returns 400. Any path that fails either of these rules returns 404:
 
 - **Lexical rule:** the path consists of non-empty `/`-separated segments. No segment may be `.` or `..` or contain a backslash, `:` or a control character, so a trailing slash or `//` also fails.
-- **Exact-name rule:** each segment must name the stored file or directory exactly. On case-sensitive filesystems a case variant names a different, usually missing, file; where the filesystem folds case or normalizes Unicode and reports stored names, the variant fails the exact-name comparison. A Windows short name or trailing dot, or any symlink below the selected directory, fails, as do directories and unselected layers. A file reached by a variant is always inside the selected directory. The selected directory itself may be a symlink.
+- **Exact-name rule:** each segment must name the stored file or directory exactly. On case-sensitive filesystems a case variant names a different, usually missing, file. Where the filesystem folds case or normalizes Unicode, the variant fails the exact-name comparison. A Windows short name or trailing dot, any symlink below the selected directory, a directory and an unselected layer all fail. The selected directory itself may be a symlink.
 
-On the default loopback address, only requests addressed to `localhost`, `127.0.0.1`, `[::1]` or the bound address, with the bound port, are answered. Any other `Host` returns 421, which blocks DNS-rebinding pages. A request without `Host`, such as a bare HTTP/1.0 request, is refused too. The IPv4-mapped `::ffff:127.0.0.1` counts as loopback. A non-loopback `--host`, such as `0.0.0.0`, is an explicit opt-in to serve every host that can reach it: it accepts any `Host` and prints a warning on stderr.
+On the default loopback address, only requests addressed to `localhost`, `127.0.0.1`, `[::1]` or the bound address, with the bound port, are answered. Any other `Host` returns 421, which blocks DNS-rebinding pages. A request without `Host`, such as a bare HTTP/1.0 request, is refused too. The IPv4-mapped `::ffff:127.0.0.1` counts as loopback. A non-loopback `--host`, such as `0.0.0.0`, serves every host that can reach it: it accepts any `Host` and prints a warning on stderr.
 
-Imagery uses the TileJSON `bounds`, `minzoom` and `maxzoom`. The rectangle is inset by 1/1024 of a finest-zoom pixel in longitude (under 1/88 of a pixel in latitude) to work around Cesium 1.146, which stops rendering on tile-aligned bounds.
+Imagery uses the TileJSON `bounds`, `minzoom` and `maxzoom`. The rectangle is inset by 1/1024 of a finest-zoom pixel in longitude (under 1/88 of a pixel in latitude), because Cesium 1.146 stops rendering on tile-aligned bounds.
 
-`--json` prints one startup object, `{"ok":true,"url":…,"layers":{…},"loopback":true}`, after the listener is bound. The server runs until it is signalled (for example, SIGTERM or Ctrl-C). It writes nothing, so stopping it needs no cleanup. See the [T1 tooling contract](architecture/t1-tooling-contract.md).
+`--json` prints one startup object, `{"ok":true,"url":…,"layers":{…},"loopback":true}`, after the listener is bound.
 
 ### doctor
 
@@ -328,18 +319,25 @@ rusty-tiles doctor --command vector --command terrain
 Each selected command has a `status`:
 
 - `ready`: the command can run in this build.
-- `unavailable`: the build includes the capability, but a runtime dependency failed. Examples are the GDAL or PROJ version, the PROJ database, a GDAL driver and GEOS. The `reason` names the failure.
-- `unsupported`: this build does not include the capability. For example, the standard CLI does not include `raster`, `terrain` or `raster-tile-to-directory`; rebuild with `--features native-geospatial`.
+- `unavailable`: the build includes the capability, but a runtime dependency failed, such as the GDAL or PROJ version, the PROJ database, a GDAL driver or GEOS. The `reason` names the failure.
+- `unsupported`: this build does not include the capability. For example, the standard CLI does not include `raster`, `terrain` or `raster-tile-to-directory`.
 
-`ready` is `true` exactly when `status` is `ready`. Each command that is not ready has a `refusal` with the `code` and `exitCode` that the command itself returns for the same cause; readiness uses the command's own capability check where it has one. The first such command in name order sets the `error.code` and exit status of `doctor`. All are currently `unsupported` and exit 2.
+`ready` is `true` exactly when `status` is `ready`. Each command that is not ready has a `refusal` with the `code` and `exitCode` that the command itself returns for the same cause. The first such command in name order sets the `error.code` and exit status of `doctor`. All such refusals are `unsupported` (exit 2). The JSON result keeps the full inventory alongside `error` and `exitCode`.
 
-One known exception: with no GTiff driver, `terrain` and `raster-tile-to-directory` fail to open their source and report `invalid_input` (exit 3), while `doctor` reports `unsupported`. The JSON result keeps the full inventory alongside `error` and `exitCode`.
+One exception: with no GTiff driver, `terrain` and `raster-tile-to-directory` fail to open their source and report `invalid_input` (exit 3), while `doctor` reports `unsupported`.
 
-Terrain and `raster-tile-to-directory` require the GDAL GTiff driver. `raster` requires GTiff and COG, and these three also need the PROJ database for their source CRS. Native vector needs GDAL with GEOS and its drivers but no PROJ database; each source's CRS operation is checked during conversion.
+Requirements in the native-geospatial build:
 
-`probes` names every check that ran. In a native-geospatial build, the version, PROJ offline-policy and PROJ database checks always run. Configured PROJ directories (`PROJ_DATA`, `PROJ_LIB` and, natively, GDAL's search paths) are always listed. GDAL driver, GEOS and Cesium checks run only for the commands that need them. PROJ directory listings are top-level only and capped at 4096 entries per directory. `doctor` starts no processes, keeps PROJ networking off and writes no files.
+- `terrain` and `raster-tile-to-directory` need the GDAL GTiff driver;
+- `raster` needs the GTiff and COG drivers;
+- these three also need the PROJ database for their source CRS;
+- native vector needs GDAL with GEOS and its drivers, but no PROJ database. Each source's CRS operation is checked during conversion.
 
-`doctor` reports linked GDAL, PROJ and GEOS versions when enabled. It also reports readiness for the selected commands, the PROJ search paths and the local grid count. Point-cloud readiness lists the pure-Rust CRS classes and native fallback readiness; grid-free placement needs no PROJ database. Default-build vector readiness lists GeoJSON/GeoPackage readers, Rust geometry support and grid-free CRS limits independently of native dependencies. Native vector readiness uses the vector converter's own GDAL/GEOS driver check. `--command` limits the command inventory in both human and JSON output. Without a filter it lists every command. It never installs anything or fetches grids. A listed grid does not prove a height operation is available. Conversion checks the exact operation offline.
+`doctor` reports linked GDAL, PROJ and GEOS versions when present, readiness for the selected commands, the PROJ search paths and the local grid count. `probes` names every check that ran. In a native-geospatial build the version, PROJ offline-policy and PROJ database checks always run. Configured PROJ directories (`PROJ_DATA`, `PROJ_LIB` and GDAL's search paths) are always listed, top level only and capped at 4096 entries per directory. GDAL driver, GEOS and Cesium checks run only for the commands that need them.
+
+Point-cloud readiness lists the pure-Rust CRS classes and native fallback readiness; grid-free placement needs no PROJ database. Standard-build vector readiness lists the GeoJSON and GeoPackage readers, Rust geometry support and grid-free CRS limits. Native vector readiness uses the converter's own GDAL and GEOS driver check.
+
+`--command` limits the inventory in both human and JSON output; without it every command is listed. `doctor` starts no processes, keeps PROJ networking off, writes no files, installs nothing and fetches no grids. A listed grid does not prove a height operation is available; conversion checks the exact operation offline.
 
 ## Exit codes
 
@@ -354,7 +352,16 @@ Programs should test the exit code or `error.code`, not the message text.
 | 4 | `environment` | Missing native capability, PROJ database or strict CRS operation |
 | 5 | `output_conflict` | The output exists and `--force` was not given |
 
-Mesh, vector, point-cloud and raster conversion use the foundation error categories: `invalid_request` and `unsupported` exit 2, `invalid_input` exits 3, `output_conflict` exits 5, and `io`, `resource_limit`, `cancelled`, `observer_failure` or `invalid_state` exit 1. A build without native raster support refuses `raster` as `unsupported`. Their JSON errors include `kind`, secondary diagnostics and retained paths. For example, vector `--lod-levels 40` names the permitted range and exits 2. Unsupported CRS capability is `unsupported`; malformed source records are `invalid_input`. The categories in the table apply to the other commands.
+`mesh`, `vector`, `point-cloud`, `raster`, `raster-tile-to-directory` and the packaging commands report error kinds instead:
+
+| Exit code | Error kinds |
+| --- | --- |
+| 1 | `io`, `resource_limit`, `cancelled`, `observer_failure`, `invalid_state` |
+| 2 | `invalid_request`, `unsupported` |
+| 3 | `invalid_input` |
+| 5 | `output_conflict` |
+
+Their JSON errors include `kind`, secondary diagnostics and retained paths. For example, `vector --lod-levels 40` names the permitted range and exits 2. An unsupported CRS operation, or a native command in the standard build, is `unsupported`; malformed source records are `invalid_input`. `validate` has its own mapping, listed [above](#validate). The first table applies to the other commands.
 
 ## Machine output
 
@@ -386,7 +393,7 @@ With `--json`, the command prints exactly one JSON object on stdout. A successfu
 }
 ```
 
-The example is shortened. `counts` holds only counts, such as `points`, `tiles` and `features`. `settings` holds every other top-level number from `conversion.json`, such as `heightOffset`, `grid` or `lodLevels`. For legacy directory reports, `conversionReport` is `{"path": ".../conversion.json"}`. Commands without a conversion report return empty `counts` and `settings` and null report fields.
+The example is shortened. `counts` holds only counts, such as `points`, `tiles` and `features`. `settings` holds every other top-level number from `conversion.json`, such as `heightOffset`, `grid` or `lodLevels`. For a report in an output directory, `conversionReport` is `{"path": ".../conversion.json"}`. Commands without a conversion report return empty `counts` and `settings` and null report fields.
 
 A failure has this shape and the matching exit code:
 
@@ -394,7 +401,7 @@ A failure has this shape and the matching exit code:
 {"ok": false, "error": {"code": "data", "message": "input not found: nope.geojson"}, "exitCode": 3}
 ```
 
-`validate --json` returns `ok`, `archive`, `tiles`, `contentReferences`, `entries` and the list of `checks` run. `doctor --json` returns the dependency inventory with `ok`. If a selected command is not ready, it also carries `error` and exits with that capability's refusal status (see [doctor](#doctor)). `preview --json` prints one startup object with `ok`, the bound `url` and the selected `layers`.
+`validate --json` returns `ok`, `archive`, `tiles`, `contentReferences`, `entries` and the list of `checks` run; [validation](VALIDATION.md) lists every field. `doctor --json` returns the dependency inventory with `ok`. If a selected command is not ready, it also carries `error` and exits with that command's refusal status (see [doctor](#doctor)). `preview --json` prints one startup object with `ok`, the bound `url` and the selected `layers`.
 
 ### Progress events
 
@@ -411,12 +418,13 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 
 | Command | Phases |
 | --- | --- |
-| `point-cloud` | `ingestion`, `tiling`, `point_archive`, `ready_to_publish`; domain events finish before installation |
+| `mesh` | `capture`, `leaf_build`, `hlod_incidence`, `hlod_geometry`, `leaf_payloads`, `archive`, `ready_to_publish`; required events finish before installation. See the [mesh guide](MESH.md). |
+| `point-cloud` | `ingestion`, `tiling`, `point_archive`, `ready_to_publish`; these finish before installation |
 | `vector` | `ingestion`, `encoding` |
-| `raster` | `source_cog` and `aligned_warp` use native normalized progress out of 1,000,000; `tiling` reports completed tiles on the same scale and resets for each zoom. `raster_complete` reports actual tile count before sealing and installation. |
+| `raster` | `source_cog` and `aligned_warp` report progress out of 1,000,000. `tiling` reports completed tiles on the same scale and resets for each zoom. `raster_complete` reports the actual tile count before sealing and installation. |
 | `terrain` | `terrain`, counting tiles |
-| `convert` | `encoding`, `ready_to_publish`; these package events finish before installation |
-| `mesh` | `capture`, `leaf_build`, `hlod_incidence`, `hlod_geometry`, `leaf_payloads`, `archive`, `ready_to_publish`; required events finish before installation; see the mesh guide |
+| `convert` | `encoding`, `ready_to_publish`; these finish before installation |
+| `validate` | `validate.hash`, `validate.traverse`, `validate.stream`, `validate.rows`; see [validation](VALIDATION.md#errors-cancellation-and-progress) |
 
 Events report work units, not time remaining.
 
@@ -424,48 +432,21 @@ Events report work units, not time remaining.
 
 | Variable | Used by | Effect |
 | --- | --- | --- |
-| `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` | vector | Print raw GDAL and GEOS warnings. The former alias `RUSTY_TILES_PYTHON_TRACEBACK` was removed in 0.4.0 and is ignored. |
-| `RUSTY_TILES_STORAGE_DISK=1` | mesh | Declare storage whose kind cannot be resolved (a container's overlay root) disk-backed, so it is not charged to the memory budget; never overrides detected tmpfs. See [MESH.md](MESH.md#memory-budget). |
+| `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` | vector | Print raw GDAL and GEOS warnings |
+| `RUSTY_TILES_STORAGE_DISK=1` | mesh | Treat storage whose kind cannot be detected, such as a container's overlay root, as disk-backed, so it is not charged to the memory budget. Never overrides detected tmpfs. See [memory budget](MESH.md#memory-budget). |
 | `PROJ_DATA` | geospatial commands | Directories holding `proj.db` and local grids |
+| `TMPDIR` | validate | First candidate for validation scratch files |
 
 Contributor test variables are listed in [CONTRIBUTING.md](../CONTRIBUTING.md#run-the-tests).
 
-### One RGB raster tile into a directory
+## Changes from 0.3
 
-With a `native-geospatial` build, `raster-tile-to-directory` accepts the bounded
-[D1 RGB profile](architecture/d1-raster-contract.md): one 256×256 RGB GeoTIFF
-already aligned to an explicit Web Mercator XYZ tile.
-
-```sh
-rusty-tiles raster-tile-to-directory -i aligned.tif -o ./new-tile --zoom 3 --x 5 --y 2
-```
-
-The parent directory must exist on a supported local filesystem. Existing
-outputs conflict by default. `--force` (or `-f`) replaces the final-path entry
-present when publication holds the old output, including a file or symlink itself.
-Replacement has an interval when the output path is absent; it does not promise
-snapshot isolation, protection from unrelated writers, or crash durability.
-It publishes the
-PNG tile, `tilejson.json` and `report.json` together. `--json` returns the exact
-`rasterReport` and cleanup diagnostics. Failed restoration returns
-`error.recovery: {"output": ..., "previousOutput": ...}`; the previous output is
-retained at that backup path. Resolve any current destination entry before
-restoring it. Other failures have `error.recovery: null`. Readable path strings use the CLI
-UTF-8 display convention; exact recovery filename units are also included. Backup cleanup failure after installation
-remains success with actionable `cleanupDiagnostics`. Default builds return
-`unsupported`.
-See the [CreateNew contract](architecture/d1-directory-contract.md) and
-[Replace contract](architecture/d2-directory-contract.md) for platform
-support and guarantees. Broader imagery conversion remains the separate
-`raster` command.
-
-For failed directory restoration, `error.recovery.nativePaths` preserves exact
-filename units alongside the readable recovery paths: `encoding` is
-`unix-bytes` or `windows-utf16`, with `output` and `previousOutput` arrays.
-Use these native values when a filename is not representable as a Unicode
-string. Postcommit cleanup diagnostics do not change a successful exit status.
-
-Raster `--force` rejects source/output overlap before work: the output cannot
-be the source file, a hard-link alias, or a directory containing the source.
-Parent aliases are checked by filesystem identity. Replacing a final output
-symlink remains allowed because its referent is preserved.
+- `mesh-to-3tz` (`meshTo3tz`) is removed; use [`mesh`](#mesh). The old name is an unknown subcommand (exit 2). See [migration from older mesh converters](MESH.md#migration-from-older-mesh-converters).
+- `point-cloud` and `vector` write implicit tiling only. Re-run a conversion from the original source to update an archive.
+- `vector --reuseTileset` refuses archives from 0.3 and earlier. Convert once without it to make a new baseline.
+- `glb-to-3tz` and `createTilesetJson` take one GLB/glTF file, not a directory. `--cartographicPositionDegrees` and `--rotationDegrees` are replaced by `--anchor`, `--orientationXyzw` and `--sceneOffset`.
+- `createTilesetJson` always writes `tileset.json` beside the source. It has no `-o` option and no `-f` short form.
+- `validate --external-validator` is removed. Run the official validator separately.
+- `validate` refuses legacy b3dm, i3dm, pnts and cmpt content as `unsupported` (exit 2). Convert such archives again.
+- `doctor` exits 2 (`unsupported`) for a command that is not ready, instead of 4 (`environment`).
+- `RUSTY_TILES_PYTHON_TRACEBACK` is ignored; use `RUSTY_TILES_NATIVE_DIAGNOSTICS`.

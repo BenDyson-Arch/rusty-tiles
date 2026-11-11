@@ -1,13 +1,17 @@
 # Terrain guide
 
 `terrain` converts a bounded elevation GeoTIFF to a **3D Tiles 1.1 directory**
-containing glTF 2.0 GLB meshes. This replaces the prototype quantized-mesh format;
-there is no compatibility mode. Conversion requires the `native-geospatial`
-CLI or Rust build. The Python package exposes no terrain conversion API.
-Standard binaries can preview existing output. If the native GTiff reader is
-unavailable, both `doctor --command terrain` and conversion report `Unsupported`
-before opening the DEM; malformed DEM data with the reader available remains
-`InvalidInput`.
+of glTF 2.0 GLB meshes. Conversion needs the
+[native-geospatial](INSTALL.md#native-geospatial-cli) CLI or Rust build; the
+Python package has no terrain API. Standard binaries can preview existing
+output. If the linked GDAL lacks the GTiff driver, `doctor --command terrain`
+and conversion report `unsupported` before opening the DEM; a malformed DEM is
+`invalid_input`.
+
+**Upgrading from 0.3:** 0.3 wrote quantized-mesh terrain with zoom and
+simplification options such as `--maxError`. Those options and that format are
+gone, with no compatibility mode. Use `--cells-per-leaf` and load the output
+as a `Cesium3DTileset` (see [Queries, clamping and imagery](#queries-clamping-and-imagery)).
 
 ```sh
 rusty-tiles terrain -i elevation.tif -o output/terrain --height-offset 0
@@ -17,9 +21,9 @@ rusty-tiles preview --cesium <Build/Cesium> --terrain output/terrain \
 
 ## Source and height meaning
 
-The first profile accepts a standalone, one-band Float32 or Float64 GeoTIFF with
+Terrain accepts a standalone, one-band Float32 or Float64 GeoTIFF with
 internal EPSG:4326/WGS84 north-up PixelIsArea georeferencing. Samples are raw
-metres; the caller explicitly supplies an offset to obtain ellipsoidal heights.
+metres; `--height-offset` (required) is added to obtain ellipsoidal heights.
 Empty or metre band units are allowed. Other units, nonidentity scale/offset,
 explicit masks, overviews, sidecar dependencies and alternate georeferencing
 are refused. Scalar NoData is supported, including NaN NoData. Valid samples
@@ -33,9 +37,8 @@ there is no fill geometry, and tiles without any triangle at or below them
 are not published. There are no additional geographic tiles or global roots.
 Cartesian boundary chords can project slightly beyond the geographic rectangle.
 
-Sampled vertex heights must be −10,000…8,000 metres. The finite
-profile supports public Cesium surface queries whose downward rays start at
-9,000 metres. These bounds are checked before staging output. They do not
+Sampled vertex heights must be −10,000…8,000 metres, so that public Cesium
+surface queries, whose downward rays start at 9,000 metres, find the surface. These bounds are checked before staging output. They do not
 imply that triangle interiors equal the original raster surface: triangles
 are Cartesian chords between samples.
 
@@ -48,9 +51,8 @@ are Cartesian chords between samples.
 | `implicit-content/*.glb`, `tiles/{level}/{row}/{column}.glb` | Opaque triangle mesh tiles, one primitive each: implicit tiles, and the explicit coarse levels of large pyramids |
 | `conversion.json` | Typed source, sampling, height, level, error, placement and output receipt report |
 
-`--cells-per-leaf` accepts 16, 32, 64 or 128 (the default), with smaller
-boundary patches.
-The full-detail leaves are these patches. A shared local ENU frame places the
+`--cells-per-leaf` accepts 16, 32, 64 or 128 (the default); patches at the
+footprint boundary can be smaller. The full-detail leaves are these patches. A shared local ENU frame places the
 mesh in WGS84 ECEF. There are no encoded normals.
 
 ### Position storage and compression
@@ -94,8 +96,9 @@ surface directly, at every leaf node and diagonal crossing, and adds its
 horizontal diagonal for the coverage difference. On its interior edges a tile
 is also measured against every valid leaf node, so a seam's gap stays within
 its two errors. A tile without triangles takes 16 times the diagonal of its
-published box, so Cesium refines through it while the box spans a pixel; it is exempt from error ordering, and the tiles that draw
-answer only to their nearest drawing ancestor. Errors of drawing tiles never
+published box, so Cesium refines through it while the box spans a pixel. It is
+exempt from error ordering; drawing tiles are ordered only against their
+nearest drawing ancestor. Errors of drawing tiles never
 increase toward the leaves. Over smooth terrain the value is close to the vertical error plus
 the grid errors of the levels below, a few 65,535ths of the tile size. The
 tileset error leaves an interval in which the root renders. These errors do
@@ -142,8 +145,8 @@ largest `skirtDepthMetres` (null without skirts).
 Conversion finishes native decoding and validates the full plan, including
 every level, error and skirt, before staging. Members, including those the
 implicit forest writer creates, are flushed and synced; an exact inventory and
-report finish before exclusive publication. `--force` uses the foundation
-replacement protocol. Source identity and containing-directory overlaps are
+report finish before publication. `--force` replaces an existing output only
+after a successful conversion. Source identity and containing-directory overlaps are
 rejected; replacing a final output symlink replaces that entry and preserves
 its referent.
 
@@ -167,14 +170,13 @@ const clamped = await viewer.scene.clampToHeightMostDetailed(cartesianPositions)
 Set `skipLevelOfDetail: true` for terrain, as the preview does. The levels use
 REPLACE refinement, so by default Cesium loads every ancestor of a tile it
 draws. With skipping it loads only tiles that can be drawn. Fully refined
-(`maximumScreenSpaceError: 0`) on the 1025x1025 perf-lane DEM (289 leaves),
-that is 300 requests instead of 419, 6.6 MB instead of 8.8 MB, and 0.73 s
-instead of 0.87-1.03 s on a GPU. The final frame is pixel-identical, and the
-geometric errors and what each view finally selects are unchanged. While
-tiles load, skipping can show transient holes until the first ancestor draws;
-the settled frame has none. Leave `immediatelyLoadDesiredLevelOfDetail` off: it
-saved only one more request and shows holes until the finest tiles arrive. In a default overview the tileset
-loads 2 requests and 13 KB either way.
+(`maximumScreenSpaceError: 0`) on a 1025 × 1025 test DEM (289 leaves), that
+was 300 requests instead of 419, 6.6 MB instead of 8.8 MB, and 0.73 s instead
+of 0.87–1.03 s on a GPU. The settled frame is pixel-identical and tile
+selection is unchanged. While tiles load, skipping can show transient holes
+until the first ancestor draws. Leave `immediatelyLoadDesiredLevelOfDetail`
+off: it saved only one more request and shows holes until the finest tiles
+arrive. A default overview loads 2 requests and 13 KB either way.
 
 `sampleHeightMostDetailed` and `clampToHeightMostDetailed` traverse to the
 full-detail leaves, so their answers do not depend on the view. Downward rays
@@ -183,14 +185,14 @@ hit the surface above any skirt. Other height queries and
 within their geometric error of the leaves.
 
 Queries intersect the decoded triangle mesh; over a NoData hole they find no
-terrain. They
-require 3D mode and depth texture support. Public scene methods can query other
+terrain. They require 3D mode and depth texture support. Public scene methods can query other
 scene geometry too: isolate the terrain by excluding unrelated primitives and
 hiding the globe. Normalize query positions to ellipsoid height zero before
-calling them so supplied input heights do not alter the pinned implementation's
-ray origin. Raw Cesium methods intersect the Cartesian mesh, including any boundary-chord
-projection beyond the rectangle. Preview helpers separately fence queries to the
-closed source footprint; outside that domain queries/clamps return undefined. `HeightReference.CLAMP_TO_3D_TILE` is available for entity placement.
+calling them, so input heights do not move Cesium's ray origin. Raw Cesium
+methods intersect the Cartesian mesh, including any boundary chord that
+projects beyond the rectangle. The preview helpers also fence queries to the
+closed source footprint and return `undefined` outside it.
+`HeightReference.CLAMP_TO_3D_TILE` is available for entity placement.
 
 The included preview does this isolation and normalization, exposes
 `window.terrainSurface.sampleHeights` and `clampPositions`, and clamps a marker
@@ -198,8 +200,6 @@ when the user clicks the terrain. It hides the global ellipsoid so negative
 heights remain visible. Imagery selected with `--imagery` is draped onto the
 terrain tileset using its georeferenced provider.
 
-Cesium's `tileset.imageryLayers` API is **experimental** in the pinned version.
-Draping acceptance applies to this consumer; other 3D Tiles viewers do not
-necessarily implement that API. The mesh files remain ordinary standard GLBs.
-Archive packaging is a separate `convert` operation. `validate` checks `.3tz`
-archives rather than terrain directories, so pack the directory first.
+Cesium's `tileset.imageryLayers` API is **experimental** in CesiumJS 1.146.0.
+Draping is tested only with that viewer; other 3D Tiles viewers may not
+implement the API. The tiles themselves are ordinary GLBs.
