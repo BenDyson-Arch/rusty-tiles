@@ -21,6 +21,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+import zlib
 
 import rusty_tiles
 
@@ -111,7 +112,223 @@ def write_grid_mesh(path, n=100):
                      + struct.pack("<II", len(payload), 0x004E4942) + payload)
 
 
+def png_rgba(width, height, pixel):
+    """Minimal RGBA8 PNG (filter 0 rows) written with zlib."""
+    rows = b"".join(b"\0" + b"".join(bytes(pixel(x, y)) for x in range(width)) for y in range(height))
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
+
+
+def write_textured_grid(path, n=100):
+    """Indexed n x n grid with TEXCOORD_0 and one embedded PNG base colour page."""
+    points = [struct.unpack("<3f", struct.pack("<3f", i * 0.5, math.sin(i * 0.15) + math.cos(j * 0.08), j * 0.5))
+              for j in range(n + 1) for i in range(n + 1)]
+    positions = b"".join(struct.pack("<3f", *point) for point in points)
+    uvs = b"".join(struct.pack("<2f", i / n, j / n) for j in range(n + 1) for i in range(n + 1))
+    indices = bytearray()
+    for j in range(n):
+        for i in range(n):
+            a = j * (n + 1) + i
+            indices += struct.pack("<6I", a, a + n + 1, a + 1, a + 1, a + n + 1, a + n + 2)
+    image = png_rgba(64, 64, lambda x, y: (x * 4, y * 4, (x + y) * 2, 255))
+    views = [positions, uvs, bytes(indices), image]
+    offsets = [sum(len(v) for v in views[:k]) for k in range(len(views))]
+    payload = b"".join(views)
+    document = {
+        "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "TEXCOORD_0": 1}, "indices": 2,
+                                    "material": 0}]}],
+        "materials": [{"pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}}],
+        "textures": [{"source": 0, "sampler": 0}],
+        "samplers": [{"magFilter": 9729, "minFilter": 9987}],
+        "images": [{"bufferView": 3, "mimeType": "image/png"}],
+        "buffers": [{"byteLength": len(payload)}],
+        "bufferViews": [{"buffer": 0, "byteOffset": o, "byteLength": len(v)} for o, v in zip(offsets, views)],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5126, "count": (n + 1) ** 2, "type": "VEC3",
+             "min": [min(p[a] for p in points) for a in range(3)],
+             "max": [max(p[a] for p in points) for a in range(3)]},
+            {"bufferView": 1, "componentType": 5126, "count": (n + 1) ** 2, "type": "VEC2"},
+            {"bufferView": 2, "componentType": 5125, "count": 6 * n * n, "type": "SCALAR"}],
+    }
+    encoded = json.dumps(document, separators=(",", ":")).encode()
+    encoded += b" " * (-len(encoded) % 4)
+    payload += b"\0" * (-len(payload) % 4)
+    path.write_bytes(struct.pack("<III", 0x46546C67, 2, 28 + len(encoded) + len(payload))
+                     + struct.pack("<II", len(encoded), 0x4E4F534A) + encoded
+                     + struct.pack("<II", len(payload), 0x004E4942) + payload)
+
+
+def glb_document(data):
+    """The JSON chunk and BIN chunk of a GLB."""
+    magic, version, length = struct.unpack_from("<III", data)
+    assert (magic, version, length) == (0x46546C67, 2, len(data))
+    json_length = struct.unpack_from("<I", data, 12)[0]
+    document = json.loads(data[20:20 + json_length])
+    return document, data[28 + json_length:]
+
+
+def view_of(document, binary, index):
+    view = document["bufferViews"][index]
+    start = view.get("byteOffset", 0)
+    return binary[start:start + view["byteLength"]]
+
+
 class WheelAPI(unittest.TestCase):
+    def test_decoded_tile_views_list_members_and_export_plain_glb_and_arrays(self):
+        source = self.root / "textured.glb"
+        write_textured_grid(source)
+        output = rusty_tiles.mesh_to_tileset(source, self.root / "textured.3tz", jobs=1).output
+        tiles = rusty_tiles.list_tiles(output)
+        self.assertEqual(set(tiles[0]), {"uri", "depth", "role", "geometric_error", "transform"})
+        self.assertEqual((tiles[0]["depth"], tiles[0]["role"]), (0, "coarse"))
+        leaves = [tile for tile in tiles if tile["role"] == "leaf"]
+        self.assertGreaterEqual(len(leaves), 2)
+        self.assertTrue(all(tile["depth"] > 0 for tile in leaves))
+        with zipfile.ZipFile(output) as archive:
+            self.assertEqual(sorted(t["uri"] for t in tiles),
+                             sorted(n for n in archive.namelist() if n.endswith(".glb")))
+            published = {t["uri"]: archive.read(t["uri"]) for t in tiles}
+            unpacked = self.root / "unpacked"
+            archive.extractall(unpacked)
+        self.assertEqual(rusty_tiles.list_tiles(unpacked), tiles)
+        for tile, label_set in ((tiles[0], {"source_primitive"}),
+                                (leaves[0], {"source_primitive", "source_triangle"})):
+            source_document, _ = glb_document(published[tile["uri"]])
+            self.assertIn("EXT_meshopt_compression", source_document["extensionsRequired"])
+            self.assertIn("KHR_texture_basisu", source_document["extensionsRequired"])
+            plain = rusty_tiles.decode_tile(output, tile["uri"], format="glb")
+            self.assertIsInstance(plain, bytes)
+            self.assertEqual(rusty_tiles.decode_tile(unpacked, tile["uri"]), plain)
+            document, binary = glb_document(plain)
+            text = json.dumps(document)
+            for codec in ("EXT_meshopt_compression", "KHR_texture_basisu", "image/ktx2"):
+                self.assertNotIn(codec, text)
+            self.assertEqual(len(document["buffers"]), 1)
+            self.assertIn("EXT_structural_metadata", document["extensionsUsed"])
+            self.assertEqual(document["samplers"], source_document["samplers"])
+            self.assertEqual(document["materials"], source_document["materials"])
+            for image in document["images"]:
+                self.assertEqual(image["mimeType"], "image/png")
+                self.assertEqual(view_of(document, binary, image["bufferView"])[:8], b"\x89PNG\r\n\x1a\n")
+            primitive = document["meshes"][0]["primitives"][0]
+            labels = {f["label"] for f in primitive["extensions"]["EXT_mesh_features"]["featureIds"]}
+            self.assertEqual(labels, label_set)
+            if "bpy" in sys.modules:
+                self.check_blender_import(plain, label_set)
+        with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+            rusty_tiles.decode_tile(output, "tileset.json")
+        self.assertEqual(caught.exception.kind, "invalid_request")
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.decode_tile(output, tiles[0]["uri"], format="gltf")
+        with self.assertRaises(TypeError):
+            rusty_tiles.decode_tile(output, tiles[0]["uri"], "glb")
+        with self.assertRaises(rusty_tiles.TilesIOError):
+            rusty_tiles.list_tiles(self.root / "missing.3tz")
+        with self.assertRaises(rusty_tiles.DataError):
+            rusty_tiles.list_tiles(source)
+        try:
+            import numpy
+        except ImportError:
+            with self.assertRaises(rusty_tiles.EnvironmentError):
+                rusty_tiles.decode_tile(output, leaves[0]["uri"], format="arrays")
+            return
+        for tile in (tiles[0], leaves[0]):
+            decoded = rusty_tiles.decode_tile(output, tile["uri"], format="arrays")
+            self.assertEqual((decoded["uri"], decoded["role"]), (tile["uri"], tile["role"]))
+            self.assertEqual(decoded["transform"].tolist(), tile["transform"])
+            self.assertEqual(decoded["root_transform"].shape, (4, 4))
+            self.assertTrue(decoded["pages"])
+            for page in decoded["pages"]:
+                self.assertEqual((page.ndim, page.shape[2], page.dtype), (3, 4, numpy.uint8))
+            for p in decoded["primitives"]:
+                n = len(p["positions"])
+                self.assertEqual((p["positions"].dtype, p["positions"].shape), (numpy.float64, (n, 3)))
+                self.assertEqual(p["indices"].dtype, numpy.uint32)
+                self.assertEqual(p["indices"].shape[1], 3)
+                self.assertLess(int(p["indices"].max()), n)
+                self.assertTrue(numpy.isfinite(p["positions"]).all())
+                if p["material"] is not None:
+                    self.assertEqual(p["uvs"][0].shape, (n, 2))
+                    texture = decoded["materials"][p["material"]]["pbrMetallicRoughness"]["baseColorTexture"]
+                    self.assertLess(decoded["textures"][texture["index"]]["source"], len(decoded["pages"]))
+                for ids in p["feature_ids"]:
+                    corners = ids["values"][p["indices"]]
+                    self.assertTrue((corners == corners[:, :1]).all(), "per-face feature IDs")
+                    table = decoded["property_tables"][ids["property_table"]]
+                    self.assertEqual((table["class"], table["count"]), (ids["label"], ids["feature_count"]))
+                    self.assertLess(int(ids["values"].max()), table["count"])
+            # Positions are in the Z-up tile frame: the grid's height (source glTF y) is z.
+            heights = numpy.concatenate([p["positions"][:, 2] for p in decoded["primitives"]])
+            self.assertLessEqual(float(abs(heights).max()), 2.01)
+
+    def test_decoded_tile_views_refuse_hostile_content_with_typed_limits(self):
+        def glb(document, payload=b""):
+            encoded = json.dumps(document, separators=(",", ":")).encode()
+            encoded += b" " * (-len(encoded) % 4)
+            payload += b"\0" * (-len(payload) % 4)
+            chunk = struct.pack("<II", len(payload), 0x004E4942) + payload if payload else b""
+            return (struct.pack("<III", 0x46546C67, 2, 20 + len(encoded) + len(chunk))
+                    + struct.pack("<II", len(encoded), 0x4E4F534A) + encoded + chunk)
+
+        tileset = self.root / "hostile"
+        tileset.mkdir()
+        box = [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]
+        tiles = [{"boundingVolume": {"box": box}, "geometricError": 0, "content": {"uri": uri}}
+                 for uri in ("huge.glb", "link.glb")]
+        (tileset / "tileset.json").write_text(json.dumps({
+            "asset": {"version": "1.1"}, "geometricError": 1,
+            "root": {"boundingVolume": {"box": box}, "geometricError": 1, "children": tiles}}))
+        # A viewless POSITION accessor claiming 2**40 vertices: 1 KB that must not allocate.
+        (tileset / "huge.glb").write_bytes(glb({
+            "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+            "accessors": [{"componentType": 5126, "count": 2 ** 40, "type": "VEC3"}]}))
+        self.assertEqual([t["uri"] for t in rusty_tiles.list_tiles(tileset)], ["huge.glb", "link.glb"])
+        try:
+            os.symlink(tileset / "huge.glb", tileset / "link.glb")
+        except (OSError, NotImplementedError, AttributeError):
+            pass  # Symlinks need privileges on Windows; the refusal is then not exercised.
+        else:
+            with self.assertRaises(rusty_tiles.UnsupportedError):
+                rusty_tiles.decode_tile(tileset, "link.glb")
+        self.assertIsInstance(rusty_tiles.decode_tile(tileset, "huge.glb"), bytes)
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            return
+        with self.assertRaises(rusty_tiles.ResourceLimitError) as caught:
+            rusty_tiles.decode_tile(tileset, "huge.glb", format="arrays")
+        limit = caught.exception.limit
+        self.assertEqual((limit["limit"], limit["value"], limit["derivation"]),
+                         ("decodedBytes", 2 ** 30, "fixed"))
+        self.assertGreater(limit["observed"], limit["value"])
+        self.assertEqual(caught.exception.kind, "resource_limit")
+
+    def check_blender_import(self, plain, labels):
+        """Blender's bundled glTF importer reads the plain GLB with its page, UVs and IDs."""
+        import bpy
+        path = self.root / "blender-view.glb"
+        path.write_bytes(plain)
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        result = bpy.ops.import_scene.gltf(filepath=str(path))
+        self.assertEqual(result, {"FINISHED"})
+        meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+        self.assertTrue(meshes)
+        textured = [o for o in meshes if any(
+            n.type == "TEX_IMAGE" and n.image is not None and n.image.size[0] > 0
+            for slot in o.material_slots if slot.material and slot.material.use_nodes
+            for n in slot.material.node_tree.nodes)]
+        self.assertTrue(textured, "a base colour image node with pixels")
+        self.assertTrue(all(o.data.uv_layers for o in textured))
+        names = {a.name for o in meshes for a in o.data.attributes}
+        expected = {f"_FEATURE_ID_{i}" for i in range(len(labels))}
+        self.assertTrue(expected <= names, names)
+
     def test_tiler_installed_result_matches_archive_report_and_keeps_diagnostics(self):
         source = self.root / "tiler.glb"
         write_local_mesh(source)
