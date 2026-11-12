@@ -20,6 +20,8 @@ GDAL_VERSION=3.12.4
 GDAL_SHA256=68844ae29557b7efae4292c3b4cb3a3b8a79d14b765b89c5a7b17cbae7fa715a
 PROJ_VERSION=9.8.1
 GEOBASE_REPOSITORY=ghcr.io/example/geobase
+UNSUPPORTED_TARGETS=x86_64-apple-darwin
+UNSUPPORTED_RUNNERS=macos-13,macos-15-intel
 """
 
 WORKFLOW = """\
@@ -115,6 +117,27 @@ class CheckCiConfigTests(unittest.TestCase):
             with self.subTest(value=value):
                 errors = self.errors(dockerfile=f"ARG GEOBASE={value}\n" + DOCKERFILE)
                 self.assertEqual(errors == [], valid, errors)
+
+    def test_unsupported_targets_and_runners_fail_outside_comments(self):
+        row = "          - os: macos-15-intel\n            target: x86_64-apple-darwin\n"
+        workflow = WORKFLOW.replace("    steps:\n      - run: true\n", "    steps:\n      - run: true\n" + row, 1)
+        errors = self.errors(workflow=workflow)
+        self.assertEqual(len(errors), 2, errors)
+        self.assertIn("macos-15-intel is not supported", errors[0])
+        self.assertIn("x86_64-apple-darwin is not supported", errors[1])
+        commented = WORKFLOW + "# Intel macOS (x86_64-apple-darwin, macos-15-intel) is not a target.\n"
+        self.assertEqual(self.errors(workflow=commented), [])
+        # Other runners are fine, and a label is matched whole.
+        self.assertEqual(self.errors(workflow=WORKFLOW.replace("ubuntu-24.04", "macos-15", 1)), [])
+        self.assertEqual(len(self.errors(workflow=WORKFLOW.replace("ubuntu-24.04", "macos-13-xlarge", 1))), 1)
+
+    def test_artifact_reuse_targets_are_checked(self):
+        root = self.tree()
+        (root / "scripts").mkdir()
+        (root / "scripts" / "ci_run.py").write_text('TARGETS = (\n    "x86_64-apple-darwin",\n)\n')
+        errors = check_ci_config.check(root)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("scripts/ci_run.py:2", errors[0])
 
     def test_malformed_versions_file_is_refused(self):
         with self.assertRaises(SystemExit):

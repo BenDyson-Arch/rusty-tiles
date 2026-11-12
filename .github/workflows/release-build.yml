@@ -1,6 +1,6 @@
 name: Release build
 
-# The five-platform CLI archives, the five Python wheels and the Linux amd64 native image of
+# The four-platform CLI archives, the four Python wheels and the Linux amd64 native image of
 # one version. release.yml calls it for a vX.Y.Z tag or a dry run, and dev-build.yml for the
 # rolling dev build; publishing is left to the caller.
 #
@@ -38,9 +38,8 @@ jobs:
   binaries:
     name: Binary (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
-    # Long enough for the build from source, which a failed download can still lead to. Intel
-    # macOS took 68-82 minutes in the v0.4.0 release and was cancelled once at 90.
-    timeout-minutes: ${{ matrix.target == 'x86_64-apple-darwin' && 120 || 90 }} # versions: TIMEOUT_FALLBACK_BUILD_INTEL_MACOS TIMEOUT_FALLBACK_BUILD
+    # Long enough for the build from source, which a failed download can still lead to.
+    timeout-minutes: 90 # versions: TIMEOUT_FALLBACK_BUILD
     permissions:
       contents: read
       actions: read
@@ -52,8 +51,6 @@ jobs:
             target: x86_64-unknown-linux-gnu
           - os: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
           - os: macos-15
             target: aarch64-apple-darwin
           - os: windows-2022
@@ -202,8 +199,8 @@ jobs:
           set -eu
           python_version=$(python scripts/dev_version.py python "$RELEASE_VERSION")
           (cd dist && ls -1) | tee wheels.txt
-          test "$(grep -c "^rusty_tiles-$python_version-cp310-abi3-.*\.whl\$" wheels.txt)" -eq 5
-          test "$(wc -l < wheels.txt)" -eq 5
+          test "$(grep -c "^rusty_tiles-$python_version-cp310-abi3-.*\.whl\$" wheels.txt)" -eq 4
+          test "$(wc -l < wheels.txt)" -eq 4
           python scripts/third_party_notices.py check --rust-licenses python dist/*.whl
           python -m venv "$RUNNER_TEMP/smoke"
           "$RUNNER_TEMP/smoke/bin/python" -m pip install --no-index --no-deps dist/*manylinux*_x86_64.whl

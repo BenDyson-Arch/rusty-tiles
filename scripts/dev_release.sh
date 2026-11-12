@@ -5,7 +5,7 @@
 #   scripts/dev_release.sh NOTES DIST
 #
 # Needs GH_TOKEN, GH_REPO, BUILD_SHA and GITHUB_RUN_ID; uses gh and curl. DIST holds the new
-# assets (five CLI archives, five wheels, SHA256SUMS).
+# assets (four CLI archives, four wheels, SHA256SUMS).
 #
 # With a published `dev` release:
 #   1. move the tag: PATCH git/refs/tags/dev to BUILD_SHA (force). The release keeps

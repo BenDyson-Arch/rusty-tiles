@@ -1,7 +1,7 @@
 name: Dev build
 
 # The rolling development build of develop: one GitHub pre-release on the moving tag `dev`
-# with the five CLI archives, the Python wheels and SHA256SUMS, replaced on each build, and
+# with the four CLI archives, the Python wheels and SHA256SUMS, replaced on each build, and
 # the GHCR image tag `dev`. Nothing goes to PyPI or crates.io, and the image's `latest` tag is
 # untouched. The version is a development version of the next release (see
 # scripts/dev_version.py), stamped into the checkout and never committed.
@@ -139,11 +139,11 @@ jobs:
           SERVER: ${{ github.server_url }}
         run: |
           set -eu
-          # Five CLI archives and five wheels of exactly this build, and nothing else.
+          # Four CLI archives and four wheels of exactly this build, and nothing else.
           (cd dist && ls -1) | tee assets.txt
-          test "$(grep -c "^rusty-tiles-$VERSION-.*\.\(tgz\|zip\)\$" assets.txt)" -eq 5
-          test "$(grep -c "^rusty_tiles-$PYTHON_VERSION-cp310-abi3-.*\.whl\$" assets.txt)" -eq 5
-          test "$(wc -l < assets.txt)" -eq 10
+          test "$(grep -c "^rusty-tiles-$VERSION-.*\.\(tgz\|zip\)\$" assets.txt)" -eq 4
+          test "$(grep -c "^rusty_tiles-$PYTHON_VERSION-cp310-abi3-.*\.whl\$" assets.txt)" -eq 4
+          test "$(wc -l < assets.txt)" -eq 8
           (cd dist && sha256sum -- *.tgz *.zip *.whl > SHA256SUMS)
           repo="$SERVER/$GH_REPO"
           # The latest stable release (GitHub never marks a pre-release as latest).

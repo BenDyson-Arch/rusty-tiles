@@ -267,11 +267,20 @@ class OfficialBlenderIntegrity(unittest.TestCase):
             "executable_sha256": download_blender.sha256_file(executable),
         }
         download_blender.validate_distribution(record, executable)
-        # 5.2 has no Intel macOS bundle, and 4.5 archive evidence cannot pass as 5.2.
-        for changes in ({"release": "5.2"}, {"release": None}, {"release": "5.2", "distribution_platform": "macos-x64"}):
+        # 4.5 archive evidence cannot pass as 5.2, and no release pins an Intel macOS bundle
+        # (Intel macOS is not supported from 0.4.1).
+        for changes in ({"release": "5.2"}, {"release": None}, {"distribution_platform": "macos-x64"},
+                        {"release": "5.2", "distribution_platform": "macos-x64"}):
             with self.subTest(changes=changes):
                 with self.assertRaisesRegex(RuntimeError, "does not match the pinned official bundle"):
                     download_blender.validate_distribution({**record, **changes}, executable)
+
+    def test_no_intel_macos_bundle_is_pinned(self):
+        manifest = json.loads(download_blender.MANIFEST.read_text())
+        for release in manifest["releases"].values():
+            for name, spec in release["platforms"].items():
+                with self.subTest(platform=name):
+                    self.assertFalse(spec["system"] == "Darwin" and "x86_64" in spec["machines"])
 
     def test_manifest_pins_are_internally_consistent(self):
         manifest = json.loads(download_blender.MANIFEST.read_text())

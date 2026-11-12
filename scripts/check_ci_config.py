@@ -9,6 +9,8 @@ literals and end each such line with `# versions: KEY [KEY ...]`. This check fai
 - a job that runs steps (not a reusable-workflow call) has no `timeout-minutes`, or a
   `timeout-minutes` line has no marker;
 - a pinned tool version (maturin, Node, Python, cargo-nextest) is written without a marker;
+- a workflow, a composite action or scripts/ci_run.py names a target in UNSUPPORTED_TARGETS
+  or a runner label in UNSUPPORTED_RUNNERS outside a comment line (0.4.1 drops Intel macOS);
 - a Dockerfile `ARG` named like a key has a different default, an `ADD --checksum` is not a
   listed SHA-256, or `GEOBASE` is neither `geospatial-source` nor the base image of the
   listed GDAL and PROJ versions pinned by digest.
@@ -61,6 +63,20 @@ def check_lines(path, lines, values):
             errors.append(f"{where}: timeout-minutes needs a '# versions: TIMEOUT_...' marker")
         elif PINNED.search(line) and "${{" not in line:
             errors.append(f"{where}: pinned version needs a '# versions: KEY' marker")
+    return errors
+
+
+def check_unsupported(path, lines, values):
+    """Dropped targets and runners must not come back (comment lines may name them)."""
+    names = [name for key in ("UNSUPPORTED_TARGETS", "UNSUPPORTED_RUNNERS")
+             for name in values.get(key, "").split(",") if name]
+    errors = []
+    for number, line in enumerate(lines, 1):
+        if line.lstrip().startswith("#"):
+            continue
+        for name in names:
+            if contains_token(line, name):
+                errors.append(f"{path}:{number}: {name} is not supported (ci/versions.env UNSUPPORTED_*)")
     return errors
 
 
@@ -120,8 +136,12 @@ def check(root):
         lines = path.read_text().splitlines()
         relative = path.relative_to(root)
         errors += check_lines(relative, lines, values)
+        errors += check_unsupported(relative, lines, values)
         if path.parent.name == "workflows":
             errors += check_jobs(relative, lines)
+    reuse = root / "scripts" / "ci_run.py"
+    if reuse.exists():
+        errors += check_unsupported(reuse.relative_to(root), reuse.read_text().splitlines(), values)
     dockerfile = root / "Dockerfile"
     if dockerfile.exists():
         errors += check_dockerfile(dockerfile, dockerfile.relative_to(root), values)

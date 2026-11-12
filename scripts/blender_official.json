@@ -25,13 +25,6 @@
           "sha256": "b9533d2397ac1984db4466fb23a7a4649391cca93f6e84209f9bcc60d071c8b9",
           "executable": "blender-4.5.14-windows-x64/blender.exe"
         },
-        "macos-x64": {
-          "system": "Darwin",
-          "machines": ["x86_64", "amd64"],
-          "archive": "blender-4.5.14-macos-x64.dmg",
-          "sha256": "613e73339e97bd113adeeb28d9155beeacf2df7119ee4dbd6bdce234843645f6",
-          "executable": "Blender.app/Contents/MacOS/Blender"
-        },
         "macos-arm64": {
           "system": "Darwin",
           "machines": ["arm64", "aarch64"],

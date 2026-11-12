@@ -48,8 +48,6 @@ jobs:
             target: x86_64-unknown-linux-gnu
           - os: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
           - os: macos-15
             target: aarch64-apple-darwin
           - os: windows-2022
@@ -101,8 +99,9 @@ jobs:
           path: evidence/*.json
           if-no-files-found: error
 
-  # Every official bundle pinned in scripts/blender_official.json. Blender 5.x has no Intel
-  # macOS build, and no supported release has an official Linux ARM64 build.
+  # Every official bundle pinned in scripts/blender_official.json, on the platforms the wheels
+  # support: Linux x64, Windows x64 and Apple Silicon macOS (Intel macOS is not supported from
+  # 0.4.1). No supported release has an official Linux ARM64 build.
   blender-official:
     name: Official Blender ${{ matrix.release }} (${{ matrix.platform }})
     needs: wheels
@@ -120,10 +119,6 @@ jobs:
             os: windows-2022
             target: x86_64-pc-windows-msvc
             platform: windows-x64
-          - release: '4.5'
-            os: macos-15-intel
-            target: x86_64-apple-darwin
-            platform: macos-x64
           - release: '4.5'
             os: macos-15
             target: aarch64-apple-darwin

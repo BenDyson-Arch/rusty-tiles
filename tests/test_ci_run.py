@@ -95,7 +95,8 @@ class SelectTests(unittest.TestCase):
         self.assertEqual(select(runs), (10, 9))
 
     def test_required_artifacts(self):
-        self.assertEqual(len(ALL), 11)
+        self.assertEqual(len(ALL), 9)
+        self.assertFalse(any("x86_64-apple-darwin" in name for name in ALL))
         self.assertIn("binary-x86_64-pc-windows-msvc", ALL)
         self.assertIn("wheel-aarch64-apple-darwin", ALL)
         self.assertIn("ci-build-0.4.1", ALL)

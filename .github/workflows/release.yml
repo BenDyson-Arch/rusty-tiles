@@ -1,6 +1,6 @@
 name: Release
 
-# A vX.Y.Z tag publishes the release: the GitHub release with the five CLI archives and
+# A vX.Y.Z tag publishes the release: the GitHub release with the four CLI archives and
 # SHA256SUMS, the wheels on PyPI and the GHCR image. The tag must match the committed version
 # and belong to main, and a non-PR ci.yml run must have passed the full matrix on the tagged
 # commit; the archives and wheels that run tested are what gets published (release-build.yml
@@ -76,7 +76,7 @@ jobs:
           set -eu
           # Pull-request runs never count. A qualifying run is a successful push, nightly or
           # manual run of ci.yml on this exact commit in which both "Full matrix" (every job,
-          # including the five-platform and wheel jobs) and "Rust" succeeded. A docs-only push
+          # including the four-platform and wheel jobs) and "Rust" succeeded. A docs-only push
           # skips the matrix and does not qualify (scripts/ci_run.py).
           python3 scripts/ci_run.py select --repo "$GH_REPO" --commit "$RELEASE_SHA" --version "$RELEASE_VERSION" > ci-run.txt
           cat ci-run.txt >> "$GITHUB_OUTPUT"
@@ -155,8 +155,8 @@ jobs:
           set -eu
           cd dist
           printf '%s\n' * | tee ../assets.txt
-          test "$(grep -c "^rusty-tiles-$RELEASE_VERSION-.*\.\(tgz\|zip\)\$" ../assets.txt)" -eq 5
-          test "$(wc -l < ../assets.txt)" -eq 5
+          test "$(grep -c "^rusty-tiles-$RELEASE_VERSION-.*\.\(tgz\|zip\)\$" ../assets.txt)" -eq 4
+          test "$(wc -l < ../assets.txt)" -eq 4
           sha256sum -- *.tgz *.zip > SHA256SUMS
           cat SHA256SUMS
       - name: Keep the dry run's checksums

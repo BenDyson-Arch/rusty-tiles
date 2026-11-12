@@ -5,7 +5,7 @@ release.yml (for a tag or a dry run) and dev-build.yml publish only a commit tha
 `ci.yml` run passed with both `Full matrix` and `Rust` successful. Pull-request runs never
 count, even when they ran the full tier. Such a run's portable and wheel jobs upload the
 archives and wheels they tested (`binary-<target>`, `wheel-<target>`), and its `Build
-version` job uploads `ci-build-<version>`, naming the version they carry. A run whose 11
+version` job uploads `ci-build-<version>`, naming the version they carry. A run whose 9
 artifacts are all unexpired, whose version is the one being published, and whose
 ci-build.json names that version, this commit and that run, is reused, so the release
 publishes what CI tested instead of rebuilding it.
@@ -26,10 +26,10 @@ import subprocess
 import sys
 import tempfile
 
+# The four portable targets (Intel macOS, x86_64-apple-darwin, is not one from 0.4.1).
 TARGETS = (
     "x86_64-unknown-linux-gnu",
     "aarch64-unknown-linux-gnu",
-    "x86_64-apple-darwin",
     "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc",
 )

@@ -321,18 +321,18 @@ jobs:
     # Skipped jobs satisfy required checks; a failed classifier runs everything.
     if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.full != 'false' }}
     runs-on: ${{ matrix.os }}
-    # The nightly run tests the whole suite on every target and builds the release archive,
-    # so it gets the longer limit.
+    # The nightly run tests the whole suite on every target and builds the release archive.
     timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.nightly) && 120 || 90 }} # versions: TIMEOUT_PORTABLE_NIGHTLY TIMEOUT_PORTABLE
     strategy:
       fail-fast: false
       matrix:
-        # `slow`: the runners that took 46-60 minutes with `cargo test`. On pull requests,
-        # pushes and manual runs they use the nextest `portable` profile
+        # `slow`: Windows, the slowest remaining runner with `cargo test` (about 38 minutes).
+        # On pull requests, pushes and manual runs it uses the nextest `portable` profile
         # (.config/nextest.toml), which runs tests in parallel across binaries and leaves the
         # long platform-independent acceptance suites to the other three targets. The
-        # nightly run (nightly=true) runs the whole `cargo test` suite on all five targets,
-        # so every platform still runs every test daily.
+        # nightly run (nightly=true) runs the whole `cargo test` suite on all four targets,
+        # so every platform still runs every test daily. Intel macOS is not a target from
+        # 0.4.1.
         include:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
@@ -340,9 +340,6 @@ jobs:
           - os: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
             slow: false
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            slow: true
           - os: macos-15
             target: aarch64-apple-darwin
             slow: false
@@ -427,8 +424,6 @@ jobs:
             target: x86_64-unknown-linux-gnu
           - os: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
           - os: macos-15
             target: aarch64-apple-darwin
           - os: windows-2022
@@ -833,7 +828,7 @@ jobs:
           path: target/release-acceptance
           if-no-files-found: warn
 
-  # Installed wheels on five platforms and the official Blender check. It is a reusable
+  # Installed wheels on four platforms and the official Blender check. It is a reusable
   # workflow so release.yml can run the same jobs, and so one CI run covers the whole matrix.
   wheel-acceptance:
     name: Wheel acceptance
