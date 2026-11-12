@@ -13,7 +13,9 @@ name: Release build
 # artifacts in this run. The image is always built here and pushed as
 # ghcr.io/<repository>:<image-tag> when a tag is given.
 #
-# Reading another run's artifacts needs `actions: read`; only the two jobs that do it get it,
+# Every reused file is checked against the SHA-256 the CI job recorded when it built it (the
+# sha256-binary-<target> and sha256-wheel-<target> artifacts) before any smoke test or upload;
+# a mismatch fails the release. Reading another run's artifacts needs `actions: read`; only the two jobs that do it get it,
 # and the caller's job must grant it.
 on:
   workflow_call:
@@ -76,26 +78,43 @@ jobs:
           path: dist
           run-id: ${{ inputs.ci-run-id }}
           github-token: ${{ github.token }}
+      # The SHA-256 the CI job recorded when it built the archive (scripts/sha256s.py).
+      - id: take-sums
+        name: Take the archive's SHA-256 from the CI run
+        if: inputs.ci-run-id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: sha256-binary-${{ matrix.target }}
+          path: sums
+          run-id: ${{ inputs.ci-run-id }}
+          github-token: ${{ github.token }}
       - id: source
         name: Reuse the CI archive or build from source
         env:
           CI_RUN: ${{ inputs.ci-run-id }}
           TAKEN: ${{ steps.take.outcome }}
+          TAKEN_SUMS: ${{ steps.take-sums.outcome }}
         run: |
           set -eu
           shopt -s nullglob
           taken=(dist/rusty-tiles-"$RELEASE_VERSION-$RELEASE_TARGET".*)
+          sums=(sums/*.sha256)
           if [ -z "$CI_RUN" ]; then
             echo "No reusable CI run: building and testing from source."
             echo 'build=true' >> "$GITHUB_OUTPUT"
-          elif [ "$TAKEN" = success ] && [ "${#taken[@]}" -eq 1 ]; then
+          elif [ "$TAKEN" = success ] && [ "${#taken[@]}" -eq 1 ] && [ "$TAKEN_SUMS" = success ] && [ "${#sums[@]}" -ge 1 ]; then
             echo "Reusing binary-$RELEASE_TARGET from CI run $CI_RUN."
             echo 'build=false' >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::Could not take binary-$RELEASE_TARGET of version $RELEASE_VERSION from CI run $CI_RUN (download $TAKEN); building and testing it from source instead."
-            rm -rf dist
+            echo "::warning::Could not take binary-$RELEASE_TARGET of version $RELEASE_VERSION and its SHA-256 from CI run $CI_RUN (downloads $TAKEN, $TAKEN_SUMS); building and testing it from source instead."
+            rm -rf dist sums
             echo 'build=true' >> "$GITHUB_OUTPUT"
           fi
+      # A downloaded archive that differs from what CI built fails the release.
+      - name: Check the archive against CI's SHA-256
+        if: steps.source.outputs.build == 'false'
+        run: '"$PYTHON" scripts/sha256s.py check --dir dist sums/*.sha256'
       - name: Select stable Rust
         if: steps.source.outputs.build == 'true'
         run: |
@@ -175,6 +194,16 @@ jobs:
           path: dist
           run-id: ${{ inputs.ci-run-id }}
           github-token: ${{ github.token }}
+      - id: take-sums
+        name: Take the wheels' SHA-256s from the CI run
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: sha256-wheel-*
+          merge-multiple: true
+          path: sums
+          run-id: ${{ inputs.ci-run-id }}
+          github-token: ${{ github.token }}
       # A failed download falls back to wheel acceptance from source (the wheels job); wheels
       # that downloaded but fail the checks below fail the release.
       - id: source
@@ -182,13 +211,15 @@ jobs:
         env:
           CI_RUN: ${{ inputs.ci-run-id }}
           TAKEN: ${{ steps.take.outcome }}
+          TAKEN_SUMS: ${{ steps.take-sums.outcome }}
         run: |
           set -eu
-          if [ "$TAKEN" = success ] && [ "$(find dist -maxdepth 1 -type f -name '*.whl' | wc -l)" -ge 1 ]; then
+          if [ "$TAKEN" = success ] && [ "$(find dist -maxdepth 1 -type f -name '*.whl' | wc -l)" -ge 1 ] \
+            && [ "$TAKEN_SUMS" = success ] && [ "$(find sums -maxdepth 1 -type f -name '*.sha256' 2>/dev/null | wc -l)" -ge 1 ]; then
             echo "Reusing the wheels of CI run $CI_RUN."
             echo 'reused=true' >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::Could not take the wheels from CI run $CI_RUN (download $TAKEN); wheel acceptance will build and test them from source instead."
+            echo "::warning::Could not take the wheels and their SHA-256s from CI run $CI_RUN (downloads $TAKEN, $TAKEN_SUMS); wheel acceptance will build and test them from source instead."
             echo 'reused=false' >> "$GITHUB_OUTPUT"
           fi
       - name: Check the wheel set and install the Linux x86_64 wheel
@@ -197,6 +228,8 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
           set -eu
+          # Every wheel must be byte-identical to what CI built; a mismatch fails the release.
+          python scripts/sha256s.py check --dir dist sums/*.sha256
           python_version=$(python scripts/dev_version.py python "$RELEASE_VERSION")
           (cd dist && ls -1) | tee wheels.txt
           test "$(grep -c "^rusty_tiles-$python_version-cp310-abi3-.*\.whl\$" wheels.txt)" -eq 4

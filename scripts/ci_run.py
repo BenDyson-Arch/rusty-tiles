@@ -4,9 +4,11 @@
 release.yml (for a tag or a dry run) and dev-build.yml publish only a commit that a non-PR
 `ci.yml` run passed with both `Full matrix` and `Rust` successful. Pull-request runs never
 count, even when they ran the full tier. Such a run's portable and wheel jobs upload the
-archives and wheels they tested (`binary-<target>`, `wheel-<target>`), and its `Build
-version` job uploads `ci-build-<version>`, naming the version they carry. A run whose 9
-artifacts are all unexpired, whose version is the one being published, and whose
+archives and wheels they tested (`binary-<target>`, `wheel-<target>`) with the SHA-256s
+they recorded when building them (`sha256-binary-<target>`, `sha256-wheel-<target>`, which
+release-build.yml checks every downloaded file against), and its `Build version` job uploads
+`ci-build-<version>`, naming the version they carry. A run whose 17 artifacts are all
+unexpired, whose version is the one being published, and whose
 ci-build.json names that version, this commit and that run, is reused, so the release
 publishes what CI tested instead of rebuilding it.
 
@@ -37,8 +39,8 @@ VERDICT_JOBS = ("Full matrix", "Rust")
 
 
 def required_artifacts(version):
-    names = [f"binary-{target}" for target in TARGETS] + [f"wheel-{target}" for target in TARGETS]
-    return names + [f"ci-build-{version}"]
+    kinds = ("binary", "wheel", "sha256-binary", "sha256-wheel")
+    return [f"{kind}-{target}" for kind in kinds for target in TARGETS] + [f"ci-build-{version}"]
 
 
 def gh_api(path, jq, paginate=False):

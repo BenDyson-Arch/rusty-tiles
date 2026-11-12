@@ -402,10 +402,19 @@ jobs:
           if [[ "$RELEASE_TARGET" == *windows* ]]; then suffix=.exe; fi
           scripts/package_cli.sh "$RELEASE_TARGET" "$BUILD_VERSION" "target/$RELEASE_TARGET/release/rusty-tiles$suffix" dist
           scripts/smoke_cli.sh "$RELEASE_TARGET" "$BUILD_VERSION" dist/rusty-tiles-"$BUILD_VERSION-$RELEASE_TARGET".*
+      # The hash of the archive as built here; a release that reuses it checks it first.
+      - name: Record the archive's SHA-256
+        run: '"$PYTHON" scripts/sha256s.py write "sums/$RELEASE_TARGET.sha256" dist/*'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: binary-${{ matrix.target }}
           path: dist/*
+          if-no-files-found: error
+          retention-days: ${{ github.ref == 'refs/heads/main' && 90 || 14 }} # versions: ARTIFACT_RETENTION_DAYS_MAIN ARTIFACT_RETENTION_DAYS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sha256-binary-${{ matrix.target }}
+          path: sums/*.sha256
           if-no-files-found: error
           retention-days: ${{ github.ref == 'refs/heads/main' && 90 || 14 }} # versions: ARTIFACT_RETENTION_DAYS_MAIN ARTIFACT_RETENTION_DAYS
 

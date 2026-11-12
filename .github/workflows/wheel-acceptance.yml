@@ -77,6 +77,12 @@ jobs:
           target: ${{ matrix.target }}
           manylinux: '2_28'
           args: --release --locked --out dist
+      # The hash of the wheel as built, before any test touches the directory; a release or
+      # dev build that reuses it checks it first.
+      - name: Record the wheel's SHA-256
+        env:
+          TARGET: ${{ matrix.target }}
+        run: python scripts/sha256s.py write "sums/$TARGET.sha256" dist/*.whl
       - name: Check third-party notices in the wheel
         run: python scripts/third_party_notices.py check --rust-licenses python dist/*.whl
       - name: Test with the minimum Python version
@@ -90,6 +96,12 @@ jobs:
         with:
           name: wheel-${{ matrix.target }}
           path: dist/*.whl
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days || 14 }} # versions: ARTIFACT_RETENTION_DAYS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sha256-wheel-${{ matrix.target }}
+          path: sums/*.sha256
           if-no-files-found: error
           retention-days: ${{ inputs.retention-days || 14 }} # versions: ARTIFACT_RETENTION_DAYS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
