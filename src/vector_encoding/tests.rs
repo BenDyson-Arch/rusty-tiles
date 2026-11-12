@@ -629,3 +629,63 @@ fn existing_stream_with_a_forbidden_header_is_refused_not_passed_through() {
         Err(CodecError::Format(FormatError::InvalidInput(m))) if m.starts_with("meshopt stream header 0xa1")
     ));
 }
+/// `filter` members of every compressed view: `None` when absent.
+fn view_filters(doc: &Value) -> Vec<Option<Value>> {
+    doc["bufferViews"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.get("extensions")?.get("EXT_meshopt_compression"))
+        .map(|e| e.get("filter").cloned())
+        .collect()
+}
+#[test]
+fn encoded_views_omit_the_default_none_filter() {
+    // Issue #370: NONE is the default; Blender 5.2's glTF importer refuses it written.
+    let (doc, bin) = ordinary();
+    let out = compress(&frame(&doc, &bin, false), CompressionLimits::default()).unwrap();
+    assert_eq!(out.receipt.compressed_views, 1);
+    let (doc, _) = glb_parts(&out.bytes);
+    assert_eq!(view_filters(&doc), [None]);
+    let e = &doc["bufferViews"][0]["extensions"]["EXT_meshopt_compression"];
+    // serde_json maps iterate in key order.
+    let keys: Vec<&str> = e.as_object().unwrap().keys().map(String::as_str).collect();
+    assert_eq!(
+        keys,
+        [
+            "buffer",
+            "byteLength",
+            "byteOffset",
+            "byteStride",
+            "count",
+            "mode"
+        ]
+    );
+}
+#[test]
+fn existing_none_filter_in_either_spelling_passes_through_unchanged() {
+    // Already-compressed input selects whole identity: its bytes, explicit "NONE"
+    // included, are passed through, never re-serialized. Other filters are refused.
+    let (doc, bin) = ordinary();
+    let first = compress(&frame(&doc, &bin, false), CompressionLimits::default()).unwrap();
+    let (absent, stream) = glb_parts(&first.bytes);
+    let spelled = |filter: Value| {
+        let mut doc = absent.clone();
+        doc["bufferViews"][0]["extensions"]["EXT_meshopt_compression"]["filter"] = filter;
+        frame(&doc, stream, false)
+    };
+    for source in [first.bytes.clone(), spelled(json!("NONE"))] {
+        let out = compress(&source, CompressionLimits::default()).unwrap();
+        assert_eq!(out.receipt.existing_views, 1);
+        assert_eq!(out.receipt.compressed_views, 0);
+        assert_eq!(out.bytes, source);
+    }
+    assert_eq!(
+        view_filters(&glb_parts(&spelled(json!("NONE"))).0),
+        [Some(json!("NONE"))]
+    );
+    assert!(matches!(
+        compress(&spelled(json!("QUATERNION")), CompressionLimits::default()),
+        Err(CodecError::Format(FormatError::Unsupported(m))) if m.contains("mode/filter")
+    ));
+}

@@ -3,7 +3,7 @@
 //! `KHR_mesh_quantization` integers on the level's power-of-two grid, or
 //! Float32 where a full-detail grid would exceed the storage limit. The vertex
 //! and index views are `EXT_meshopt_compression` streams.
-use crate::glb::{self as container, MeshoptLayout, MeshoptStream};
+use crate::glb::{self as container, MeshoptStream};
 use crate::{JobError, JobErrorKind};
 use serde_json::json;
 /// A tile's surface lattice. Positions are decoded glTF (y-up) coordinates,
@@ -72,10 +72,7 @@ fn failure(message: impl std::fmt::Display) -> JobError {
     )
 }
 /// Every view is a meshopt stream on a four-byte boundary.
-const LAYOUT: MeshoptLayout = MeshoptLayout {
-    align: 4,
-    explicit_filter: false,
-};
+const ALIGN: usize = 4;
 pub(super) fn encode(
     grid: &Grid,
     skirt: &Skirt,
@@ -194,7 +191,7 @@ pub(super) fn encode(
         {"bufferView":1,"componentType":5123,"count":indices,"type":"SCALAR"}]
     });
     checkpoint()?;
-    let packed = container::meshopt_compress(&mut document, &binary, LAYOUT, |view, _| {
+    let packed = container::meshopt_compress(&mut document, &binary, ALIGN, |view, _| {
         Ok(Some(if view == 0 {
             MeshoptStream::Attributes { count, stride }
         } else {

@@ -4,6 +4,7 @@
 use super::{
     capture::{canonical, source_position, triangle_bytes, vertices, SourceScan},
     input::{ElementReader, StreamSource},
+    phases::{Step, StepProgress},
     records::{Bounds, CornerPosition, CornerRef, Cube, Provenance, TriangleRecord},
     source_crs::{Jacobian, SourceFrame},
 };
@@ -320,7 +321,7 @@ pub(crate) fn capture_full<'s>(
     scratch: &'s Scratch,
     sort: SortConfig,
     scan: &SourceScan,
-    check: &mut dyn FnMut() -> Result<()>,
+    progress: &'s StepProgress<'_>,
 ) -> Result<SortedStream<'s, FullTriangle>> {
     let mut scan = *scan;
     capture_full_in(
@@ -330,13 +331,14 @@ pub(crate) fn capture_full<'s>(
         sort,
         attribute_layout(source),
         &mut scan,
-        check,
+        progress,
     )
 }
 /// [`capture_full`] in a resolved frame. A source CRS frame checks the used post-node source
 /// bounds against the scan's and replaces `scan.bounds` with the mapped box before the cube
 /// keys are assigned; the scan never maps positions. Both sorts spill under `layout`, which
-/// must hold every selected primitive's attributes ([`attribute_layout`]).
+/// must hold every selected primitive's attributes ([`attribute_layout`]). `progress`
+/// receives the corner, position and triangle steps and every sort checkpoint.
 pub(crate) fn capture_full_in<'s>(
     source: &StreamSource,
     frame: &mut SourceFrame,
@@ -344,9 +346,12 @@ pub(crate) fn capture_full_in<'s>(
     sort: SortConfig,
     layout: Layout,
     scan: &mut SourceScan,
-    check: &mut dyn FnMut() -> Result<()>,
+    progress: &'s StepProgress<'_>,
 ) -> Result<SortedStream<'s, FullTriangle>> {
-    source.validate_payload(sort.buffer_bytes, check)?;
+    progress.begin(Step::Validate, 1)?;
+    source.validate_payload(sort.buffer_bytes, &mut || progress.check())?;
+    progress.end()?;
+    let corners_total = scan.triangles.checked_mul(3).ok_or_else(overflow)?;
     // Only a primitive's own attributes are ever nonzero, so a layout holding them all drops
     // nothing but zeros. Checked once per primitive, never per record.
     if source
@@ -358,15 +363,18 @@ pub(crate) fn capture_full_in<'s>(
             "attribute layout omits a selected primitive's attribute",
         ));
     }
-    let mut corners = ExternalSorter::<CornerRef>::new(scratch, sort)?;
+    progress.begin(Step::Corners, corners_total)?;
+    let mut corners = ExternalSorter::<CornerRef>::new(scratch, sort)?.observed(progress);
+    let mut read = 0u64;
     for (ordinal, p) in source.document.scene_primitives().enumerate() {
-        check()?;
+        progress.check()?;
         let ordinal = u64::try_from(ordinal).map_err(|_| overflow())?;
         let mut indices = p.indices.map(|v| source.reader(&v, sort.buffer_bytes));
         for triangle in 0..p.triangles {
             if triangle.is_multiple_of(1024) {
-                check()?;
+                progress.advance(read)?;
             }
+            read += 3;
             for (corner, vertex) in vertices(&p, &mut indices, triangle)?
                 .into_iter()
                 .enumerate()
@@ -380,9 +388,14 @@ pub(crate) fn capture_full_in<'s>(
             }
         }
     }
+    // Finishing waits for run writers and may merge: still inside the step.
     let mut corners = corners.finish()?;
+    progress.end()?;
+    progress.begin(Step::Positions, corners_total)?;
     let mut next = corners.next().transpose()?;
-    let mut positioned = ExternalSorter::<FullCorner>::with_layout(scratch, sort, layout)?;
+    let mut positioned =
+        ExternalSorter::<FullCorner>::with_layout(scratch, sort, layout)?.observed(progress);
+    let mut joined = 0u64;
     let mut mapped_bounds = Bounds::EMPTY;
     let mut source_bounds = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
     for (ordinal, p) in source.document.scene_primitives().enumerate() {
@@ -398,7 +411,7 @@ pub(crate) fn capture_full_in<'s>(
         let mut records = 0u64;
         while let Some(corner) = next.filter(|c| c.primitive == ordinal) {
             if records.is_multiple_of(3072) {
-                check()?;
+                progress.advance(joined + records)?;
             }
             let (position, attributes) =
                 if let Some((_, value)) = cached.filter(|(v, _)| *v == corner.vertex) {
@@ -448,6 +461,7 @@ pub(crate) fn capture_full_in<'s>(
                 "corner reference stream disagrees with admitted primitive",
             ));
         }
+        joined += records;
     }
     if next.is_some() {
         return Err(invariant("unmatched corner reference after POSITION join"));
@@ -462,7 +476,10 @@ pub(crate) fn capture_full_in<'s>(
         scan.bounds = mapped_bounds;
     }
     let mut positioned = positioned.finish()?;
-    let mut triangles = ExternalSorter::<FullTriangle>::with_layout(scratch, sort, layout)?;
+    progress.end()?;
+    progress.begin(Step::Triangles, scan.triangles)?;
+    let mut triangles =
+        ExternalSorter::<FullTriangle>::with_layout(scratch, sort, layout)?.observed(progress);
     let cube = Cube::around(&scan.bounds);
     let mut count = 0u64;
     let mut bounds = Bounds::EMPTY;
@@ -472,7 +489,7 @@ pub(crate) fn capture_full_in<'s>(
         let bytes = triangle_bytes(&p);
         for triangle in 0..p.triangles {
             if triangle.is_multiple_of(1024) {
-                check()?;
+                progress.advance(count)?;
             }
             let mut positions = [[0.; 3]; 3];
             let mut vertices = [0; 3];
@@ -535,7 +552,9 @@ pub(crate) fn capture_full_in<'s>(
             "mesh source geometry changed between preflight and capture",
         ));
     }
-    Ok(triangles.finish()?)
+    let triangles = triangles.finish()?;
+    progress.end()?;
+    Ok(triangles)
 }
 
 #[cfg(test)]
@@ -827,9 +846,10 @@ mod tests {
                 fan_in: 2,
                 buffer_bytes: 16,
                 jobs: 1,
+                writers: 0,
             },
             &scan,
-            &mut || Ok(()),
+            StepProgress::silent(),
         )
         .unwrap();
         let rows = captured
@@ -868,6 +888,7 @@ mod tests {
             fan_in: 2,
             buffer_bytes: 16,
             jobs: 1,
+            writers: 0,
         };
         let layout = attribute_layout(&source);
         assert_eq!(layout, expected);
@@ -880,7 +901,7 @@ mod tests {
                 sort,
                 layout,
                 &mut scan,
-                &mut || Ok(()),
+                StepProgress::silent(),
             )?;
             let spilled = sorted.stats().spilled_bytes;
             let rows = sorted.map(|row| row.map(|row| wire(&row)));
@@ -961,7 +982,7 @@ mod tests {
         let scan = super::super::capture::scan(&source, 16, &mut || Ok(())).unwrap();
         let scratch = Scratch::create(Some(dir.path()), 0).unwrap();
         let mut baseline = None;
-        for (run_bytes, fan_in) in [(512, 2), (1024, 3)] {
+        for (run_bytes, fan_in, writers) in [(512, 2, 0), (1024, 3, 0), (512, 2, 1), (700, 2, 3)] {
             let sorted = capture_full(
                 &source,
                 &scratch,
@@ -970,9 +991,10 @@ mod tests {
                     fan_in,
                     buffer_bytes: 16,
                     jobs: 1,
+                    writers,
                 },
                 &scan,
-                &mut || Ok(()),
+                StepProgress::silent(),
             )
             .unwrap();
             let rows = sorted.collect::<std::result::Result<Vec<_>, _>>().unwrap();
@@ -991,9 +1013,10 @@ mod tests {
                 fan_in: 2,
                 buffer_bytes: 16,
                 jobs: 1,
+                writers: 0,
             },
             &scan,
-            &mut || Ok(()),
+            StepProgress::silent(),
         )
         .unwrap();
         drop(source);
@@ -1055,13 +1078,14 @@ mod position_only_tests {
             fan_in: 2,
             buffer_bytes: 16,
             jobs: 1,
+            writers: 0,
         };
         let h1 = super::super::capture::capture(&source, &scratch, sort, &scan, &mut || Ok(()))
             .unwrap()
             .next()
             .unwrap()
             .unwrap();
-        let full = capture_full(&source, &scratch, sort, &scan, &mut || Ok(()))
+        let full = capture_full(&source, &scratch, sort, &scan, StepProgress::silent())
             .unwrap()
             .next()
             .unwrap()

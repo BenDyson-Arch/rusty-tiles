@@ -355,6 +355,11 @@ fn decode(bytes: &[u8]) -> Decoded {
         let v = &doc["bufferViews"][i];
         match v["extensions"].get("EXT_meshopt_compression") {
             Some(e) => {
+                // #370: NONE is the default filter and is never written.
+                assert!(
+                    e.get("filter").is_none_or(|f| f == "OCTAHEDRAL"),
+                    "meshopt filter written: {e}"
+                );
                 let s = e["byteOffset"].as_u64().unwrap_or(0) as usize;
                 let mode = match e["mode"].as_str().unwrap() {
                     "ATTRIBUTES" => Mode::Attributes,
@@ -3379,6 +3384,7 @@ fn public(
                 fan_in: 4,
                 buffer_bytes: 1 << 12,
                 jobs: 1,
+                writers: 0,
             },
             1 << 14,
         );

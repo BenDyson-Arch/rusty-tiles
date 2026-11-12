@@ -62,8 +62,19 @@ fn token(mode: Mode) -> &'static str {
 }
 /// The C1 owner path: extension record, mode/stride/count checks, H-1, decode.
 fn owner(stream: &[u8], count: usize, stride: usize, mode: Mode) -> FormatResult<Vec<u8>> {
+    owner_with_filter(stream, count, stride, mode, None)
+}
+/// [`owner`] with an optional raw JSON `filter` member.
+fn owner_with_filter(
+    stream: &[u8],
+    count: usize,
+    stride: usize,
+    mode: Mode,
+    filter: Option<&str>,
+) -> FormatResult<Vec<u8>> {
+    let filter = filter.map_or_else(String::new, |f| format!(r#","filter":{f}"#));
     let source = format!(
-        r#"{{"buffer":0,"byteLength":{},"count":{count},"byteStride":{stride},"mode":"{}"}}"#,
+        r#"{{"buffer":0,"byteLength":{},"count":{count},"byteStride":{stride},"mode":"{}"{filter}}}"#,
         stream.len(),
         token(mode)
     );
@@ -193,5 +204,32 @@ fn unknown_versions_and_other_mode_headers_fail_as_header_errors() {
                 token(mode)
             );
         }
+    }
+}
+
+/// Issue #370: producers omit the default filter. An absent `filter` and an explicit
+/// `"NONE"` are the same stream for every mode; other filter names stay Unsupported
+/// and a non-string filter is invalid.
+#[test]
+fn absent_and_explicit_none_filters_decode_identically() {
+    for (mode, allowed, _, count, stride, expected) in twins() {
+        let absent = owner_with_filter(allowed, count, stride, mode, None);
+        let explicit = owner_with_filter(allowed, count, stride, mode, Some(r#""NONE""#));
+        assert_eq!(absent.as_ref().unwrap(), &expected, "{}", token(mode));
+        assert_eq!(explicit.unwrap(), expected, "{}", token(mode));
+        for other in [r#""QUATERNION""#, r#""EXPONENTIAL""#, r#""none""#] {
+            let result = owner_with_filter(allowed, count, stride, mode, Some(other));
+            assert!(
+                matches!(&result, Err(FormatError::Unsupported(m)) if m.contains("filters other than NONE")),
+                "{} {other}: {result:?}",
+                token(mode)
+            );
+        }
+        let result = owner_with_filter(allowed, count, stride, mode, Some("0"));
+        assert!(
+            matches!(&result, Err(FormatError::InvalidInput(_))),
+            "{}: {result:?}",
+            token(mode)
+        );
     }
 }

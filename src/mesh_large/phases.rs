@@ -5,9 +5,17 @@
 //! (`phase`, `done`, `total`, unchanged schema), and each finished phase as a `log` event
 //! naming its wall seconds and the run's elapsed seconds. The same seconds go to the run
 //! diagnostics. Diagnostics only: nothing here reaches the archive.
-use crate::{runtime::RunEvent, JobError};
+use crate::{
+    runtime::RunEvent,
+    spill::{SortObserver, SortProgress, SpillError},
+    JobError,
+};
 use serde::Serialize;
-use std::{sync::Mutex, time::Instant};
+use std::{
+    cell::Cell,
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 
 /// A named phase of a mesh run, in run order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -92,6 +100,10 @@ impl<'a> Phases<'a> {
     fn send(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
         self.emit.map_or(Ok(()), |emit| emit(event))
     }
+    /// The run's event sink, for a stepped phase's [`StepProgress`].
+    pub(crate) fn emitter(&self) -> Option<&'a Emit<'a>> {
+        self.emit
+    }
     /// A progress event. With a known total, at most about 200 per phase are emitted:
     /// the first, the last, and evenly spaced ones between.
     pub(crate) fn progress(
@@ -152,6 +164,210 @@ impl<'a> Phases<'a> {
     }
 }
 
+/// A step inside the capture or HLOD incidence phase. Each is reported as an ordinary
+/// progress phase whose total is known before it starts: events at `0`, at the total, and
+/// between them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Step {
+    /// Preflight scan of the selected triangles.
+    Scan,
+    /// Accessor payload validation before any spill (one unit).
+    Validate,
+    /// Corner references read from the index accessors and sorted into runs.
+    Corners,
+    /// Merged corner references joined with their vertex attributes and sorted into runs.
+    Positions,
+    /// Merged positioned corners reassembled into triangles and sorted into runs.
+    Triangles,
+    /// Merged triangles written as the retained rank-ordered sequence.
+    Sequence,
+    /// An intermediate merge pass of one of the sorts (records rewritten).
+    Merge,
+    /// Image snapshots and admission decodes (two units per image).
+    Images,
+    /// The cell tree over the retained triangles.
+    Tree,
+    /// The weld-depth join over every corner.
+    CornerDepths,
+    /// Leaf planning over the tree's leaves.
+    LeafPlans,
+    /// HLOD incidence: triangles read into their leaves' interface items, sorted into runs.
+    IncidenceItems,
+    /// HLOD incidence: merged items reduced to shared rows and open-edge ends.
+    IncidenceReduce,
+    /// HLOD incidence: open-edge second endpoints sorted, then joined with the shared
+    /// points (one unit per endpoint each).
+    IncidenceEnds,
+    /// HLOD incidence: an intermediate merge pass of one of its sorts.
+    IncidenceMerge,
+}
+impl Step {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Scan => "capture_scan",
+            Self::Validate => "capture_validate",
+            Self::Corners => "capture_corners",
+            Self::Positions => "capture_positions",
+            Self::Triangles => "capture_triangles",
+            Self::Sequence => "capture_sequence",
+            Self::Merge => "capture_merge",
+            Self::Images => "capture_images",
+            Self::Tree => "capture_tree",
+            Self::CornerDepths => "capture_corner_depths",
+            Self::LeafPlans => "capture_leaf_plans",
+            Self::IncidenceItems => "hlod_incidence_items",
+            Self::IncidenceReduce => "hlod_incidence_reduce",
+            Self::IncidenceEnds => "hlod_incidence_ends",
+            Self::IncidenceMerge => "hlod_incidence_merge",
+        }
+    }
+}
+
+/// Longest interval between step events while a stepped phase is checked.
+pub(crate) const STEP_HEARTBEAT: Duration = Duration::from_millis(250);
+
+#[derive(Clone, Copy)]
+struct StepState {
+    step: Step,
+    done: u64,
+    total: u64,
+    last: Instant,
+}
+
+/// A stepped phase's progress reporter and cancellation checkpoint (capture, HLOD
+/// incidence), driven from the phase's own thread.
+///
+/// [`StepProgress::check`] is the phase's only cancellation check. It also re-emits the
+/// current step's latest count whenever [`STEP_HEARTBEAT`] has passed since the last
+/// event, so an observer that checks for interruption (the Python callback) runs at least
+/// that often wherever capture checks, including inside sort run writes and merge passes.
+/// Diagnostics only: nothing here reaches the archive.
+pub(crate) struct StepProgress<'a> {
+    check: &'a (dyn Fn() -> Result<(), JobError> + 'a),
+    emit: Option<&'a Emit<'a>>,
+    state: Cell<Option<StepState>>,
+    /// The step a sort's merge pass interrupted, resumed when the pass ends.
+    suspended: Cell<Option<StepState>>,
+    /// The step a merge pass reports as.
+    merge: Step,
+    /// Records rewritten by earlier merge passes: each pass continues the merge step's
+    /// count, so its `done` never goes back however many passes or sorts it covers.
+    merged: Cell<u64>,
+}
+impl<'a> StepProgress<'a> {
+    pub(crate) fn new(
+        check: &'a (dyn Fn() -> Result<(), JobError> + 'a),
+        emit: Option<&'a Emit<'a>>,
+    ) -> Self {
+        Self {
+            check,
+            emit,
+            state: Cell::new(None),
+            suspended: Cell::new(None),
+            merge: Step::Merge,
+            merged: Cell::new(0),
+        }
+    }
+    /// Reports sort merge passes as `merge` (capture's is [`Step::Merge`]).
+    pub(crate) fn merging_as(mut self, merge: Step) -> Self {
+        self.merge = merge;
+        self
+    }
+    fn send(&self, state: &mut StepState) -> Result<(), JobError> {
+        state.last = Instant::now();
+        self.emit.map_or(Ok(()), |emit| {
+            emit(&RunEvent::Progress {
+                phase: state.step.name(),
+                done: state.done,
+                total: Some(state.total),
+            })
+        })
+    }
+    /// Starts `step` of `total` units: checks, then emits its `0` event.
+    pub(crate) fn begin(&self, step: Step, total: u64) -> Result<(), JobError> {
+        self.begin_at(step, 0, total)
+    }
+    fn begin_at(&self, step: Step, done: u64, total: u64) -> Result<(), JobError> {
+        (self.check)()?;
+        let mut state = StepState {
+            step,
+            done,
+            total,
+            last: Instant::now(),
+        };
+        let sent = self.send(&mut state);
+        self.state.set(Some(state));
+        sent
+    }
+    /// Records `done` units of the current step and checks.
+    pub(crate) fn advance(&self, done: u64) -> Result<(), JobError> {
+        if let Some(mut state) = self.state.get() {
+            state.done = done.min(state.total);
+            self.state.set(Some(state));
+        }
+        self.check()
+    }
+    /// Checks for cancellation, emitting a heartbeat of the current step when one is due.
+    pub(crate) fn check(&self) -> Result<(), JobError> {
+        (self.check)()?;
+        match self.state.get() {
+            Some(mut state) if state.last.elapsed() >= STEP_HEARTBEAT => {
+                let sent = self.send(&mut state);
+                self.state.set(Some(state));
+                sent
+            }
+            _ => Ok(()),
+        }
+    }
+    /// Completes the current step: emits its total.
+    pub(crate) fn end(&self) -> Result<(), JobError> {
+        (self.check)()?;
+        match self.state.take() {
+            Some(mut state) => {
+                state.done = state.total;
+                self.send(&mut state)
+            }
+            None => Ok(()),
+        }
+    }
+}
+#[cfg(test)]
+impl StepProgress<'static> {
+    /// Never cancelled; emits nothing. Leaked so fixtures can borrow it for any scratch.
+    pub(crate) fn silent() -> &'static Self {
+        Box::leak(Box::new(Self::new(&|| Ok(()), None)))
+    }
+}
+impl SortObserver for StepProgress<'_> {
+    /// Run writes are heartbeats of the current step. A merge pass is its own step; the step
+    /// it interrupted (if any) resumes when the pass ends.
+    fn checkpoint(&self, progress: SortProgress) -> Result<(), SpillError> {
+        let stop = |error: JobError| SpillError::Stopped(Box::new(error));
+        match progress {
+            SortProgress::Wrote => self.check().map_err(stop),
+            // A pass continues the merge step's count: it starts at the records earlier
+            // passes rewrote and its total adds its own.
+            SortProgress::MergeStart { total } => {
+                self.suspended.set(self.state.take());
+                let base = self.merged.get();
+                self.begin_at(self.merge, base, base.saturating_add(total))
+                    .map_err(stop)
+            }
+            SortProgress::Merged { done } => self
+                .advance(self.merged.get().saturating_add(done))
+                .map_err(stop),
+            SortProgress::MergeEnd => {
+                if let Some(state) = self.state.get() {
+                    self.merged.set(state.total);
+                }
+                let ended = self.end().map_err(stop);
+                self.state.set(self.suspended.take());
+                ended
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,5 +408,111 @@ mod tests {
         let silent = Phases::silent();
         silent.finished(Phase::Archive, 3.).unwrap();
         assert_eq!(silent.seconds().archive, 3.);
+    }
+
+    type Recorded = std::sync::Arc<Mutex<Vec<String>>>;
+
+    fn recorder() -> (
+        Recorded,
+        impl Fn(&RunEvent<'_>) -> Result<(), JobError> + Sync,
+    ) {
+        let events = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let sink = events.clone();
+        let emit = move |e: &RunEvent<'_>| {
+            if let RunEvent::Progress { phase, done, total } = e {
+                sink.lock()
+                    .unwrap()
+                    .push(format!("{phase} {done}/{}", total.unwrap()));
+            }
+            Ok(())
+        };
+        (events, emit)
+    }
+
+    #[test]
+    fn capture_steps_report_totals_and_heartbeats_bound_the_event_interval() {
+        let (events, emit) = recorder();
+        let checks = std::sync::atomic::AtomicU64::new(0);
+        let check = || {
+            checks.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Ok(())
+        };
+        let progress = StepProgress::new(&check, Some(&emit));
+        progress.begin(Step::Corners, 30).unwrap();
+        // Checks within the heartbeat interval emit nothing.
+        for done in 0..10 {
+            progress.advance(done).unwrap();
+        }
+        assert_eq!(events.lock().unwrap().len(), 1);
+        std::thread::sleep(STEP_HEARTBEAT + Duration::from_millis(20));
+        progress.advance(12).unwrap();
+        // A plain check re-emits the latest count once the interval has passed again.
+        std::thread::sleep(STEP_HEARTBEAT + Duration::from_millis(20));
+        progress.check().unwrap();
+        progress.end().unwrap();
+        // Outside a step nothing is emitted, but the check still runs.
+        std::thread::sleep(STEP_HEARTBEAT + Duration::from_millis(20));
+        let before = checks.load(std::sync::atomic::Ordering::Relaxed);
+        progress.check().unwrap();
+        assert_eq!(
+            checks.load(std::sync::atomic::Ordering::Relaxed),
+            before + 1
+        );
+        assert_eq!(
+            *events.lock().unwrap(),
+            [
+                "capture_corners 0/30",
+                "capture_corners 12/30",
+                "capture_corners 12/30",
+                "capture_corners 30/30"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_merge_pass_is_its_own_step_and_resumes_the_step_it_interrupted() {
+        let (events, emit) = recorder();
+        let progress = StepProgress::new(&|| Ok(()), Some(&emit));
+        progress.begin(Step::CornerDepths, 70).unwrap();
+        progress.advance(30).unwrap();
+        let sort: &dyn SortObserver = &progress;
+        sort.checkpoint(SortProgress::MergeStart { total: 500 })
+            .unwrap();
+        sort.checkpoint(SortProgress::Merged { done: 100 }).unwrap();
+        sort.checkpoint(SortProgress::Wrote).unwrap();
+        sort.checkpoint(SortProgress::MergeEnd).unwrap();
+        std::thread::sleep(STEP_HEARTBEAT + Duration::from_millis(20));
+        progress.advance(40).unwrap();
+        // A second pass continues the merge step's count instead of restarting it.
+        sort.checkpoint(SortProgress::MergeStart { total: 300 })
+            .unwrap();
+        sort.checkpoint(SortProgress::MergeEnd).unwrap();
+        progress.end().unwrap();
+        assert_eq!(
+            *events.lock().unwrap(),
+            [
+                "capture_corner_depths 0/70",
+                "capture_merge 0/500",
+                "capture_merge 500/500",
+                "capture_corner_depths 40/70",
+                "capture_merge 500/800",
+                "capture_merge 800/800",
+                "capture_corner_depths 70/70"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_failing_check_stops_a_sort_with_its_own_error() {
+        let cancelled = || {
+            Err(JobError::new(
+                crate::JobErrorKind::Cancelled,
+                "operation cancelled",
+            ))
+        };
+        let progress = StepProgress::new(&cancelled, None);
+        let error = SortObserver::checkpoint(&progress, SortProgress::Wrote).unwrap_err();
+        let error: JobError = error.into();
+        assert_eq!(error.kind(), crate::JobErrorKind::Cancelled);
     }
 }

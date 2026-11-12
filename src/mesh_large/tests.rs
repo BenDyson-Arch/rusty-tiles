@@ -233,6 +233,7 @@ fn isolated_triangles_spill_within_the_declared_bound() {
         fan_in: 4,
         buffer_bytes: 4096,
         jobs: 1,
+        writers: 0,
     };
     let scratch = work.path().join("scratch");
     fs::create_dir(&scratch).unwrap();
@@ -264,6 +265,7 @@ fn chunked_sort_runs_publish_identical_archives() {
         fan_in: 4,
         buffer_bytes: 4096,
         jobs: 1,
+        writers: 0,
     };
     let mut archives = Vec::new();
     for (tag, spill) in [
@@ -351,7 +353,7 @@ fn leaf_normals_follow_the_profile_and_provenance_tables_decode() {
             Some(e) => {
                 let stream = &bin[at(e, "byteOffset")..at(e, "byteOffset") + at(e, "byteLength")];
                 check_header(stream, Mode::Attributes).unwrap();
-                let filter = Filter::parse(e["filter"].as_str().unwrap()).unwrap();
+                let filter = Filter::parse(e["filter"].as_str().unwrap_or("NONE")).unwrap();
                 let out = decode_filtered(
                     stream,
                     at(e, "count"),
@@ -893,4 +895,91 @@ fn tight_memory_backed_work_charge_is_refused_before_it_is_exceeded() {
         );
         assert!(!work.path().join("tight.3tz").exists());
     }
+}
+
+/// The budget plans of capture and of the coarse stage's incidence pass grow their sorts
+/// (single pass, run writers) from small floors, and publish the floor's archive byte for
+/// byte, each stage's measured scratch within its declaration.
+#[test]
+fn planned_capture_and_incidence_sorts_publish_the_floor_archive() {
+    use crate::{mesh_large::TilerJobs, spill::SortConfig, RunControl};
+    let work = tempfile::tempdir().unwrap();
+    // The plan needs disk-backed scratch and the system temporary directory may be tmpfs.
+    let disk = tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+    let input = super::full::tests::shuffled_grid(&work.path().join("src"), 30, 0x7e57_5eed);
+    // Production's floor fan-in with small runs: a larger fan-in would declare a larger file
+    // inventory than the floor's, which the plans never do, so they grow runs and writers.
+    let sort = SortConfig {
+        run_bytes: 8 << 10,
+        fan_in: 64,
+        buffer_bytes: 4096,
+        jobs: 1,
+        writers: 0,
+    };
+    let mut archives = Vec::new();
+    for plan in [false, true] {
+        let scratch = disk.path().join(format!("scratch-{plan}"));
+        fs::create_dir(&scratch).unwrap();
+        let output = work.path().join(format!("plan-{plan}.3tz"));
+        let request = super::TilerRequest::new(&input, &output)
+            .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(4).unwrap()))
+            .with_scratch_dir(&scratch)
+            .with_memory_budget(2 << 30)
+            .with_test_leaf_triangles(64)
+            .with_test_spill(sort, 4096)
+            .with_test_sort_plan(plan);
+        let result = super::mesh_to_tileset(request, &RunControl::default()).unwrap();
+        let diagnostics = &result.diagnostics;
+        let (capture, hlod) = (&diagnostics.capture, &diagnostics.hlod);
+        let incidence = diagnostics.memory.hlod.incidence_sort;
+        assert!(!capture.scratch_memory_backed, "planned scratch on disk");
+        assert!(hlod.tiles > 0, "the coarse stage ran");
+        if plan {
+            assert_eq!(
+                (capture.sort.limited_by, capture.sort.single_pass),
+                ("single_pass", true)
+            );
+            assert!(capture.sort.writers > 0, "{:?}", capture.sort);
+            assert_eq!(
+                (incidence.limited_by, incidence.single_pass),
+                ("single_pass", true)
+            );
+            assert!(incidence.writers > 0, "{incidence:?}");
+            assert_eq!(
+                incidence.fan_in, 64,
+                "the incidence plan keeps the floor's fan-in"
+            );
+            assert!(incidence.run_bytes > 4 << 10, "{incidence:?}");
+        } else {
+            assert_eq!(capture.sort.limited_by, "floor");
+            assert_eq!(incidence.limited_by, "floor");
+        }
+        // Measured scratch within every declaration: capture's stages, the incidence pass's
+        // phases and the whole run.
+        let stages = [
+            (
+                capture.scratch_stage_peak_bytes.capture,
+                capture.scratch_stage_bytes.capture,
+            ),
+            (
+                capture.scratch_stage_peak_bytes.tree,
+                capture.scratch_stage_bytes.tree,
+            ),
+            (
+                capture.scratch_stage_peak_bytes.corner_depths,
+                capture.scratch_stage_bytes.corner_depths,
+            ),
+        ];
+        for (peak, bound) in stages {
+            assert!(peak <= bound, "plan {plan}: {peak} > {bound}");
+        }
+        assert!(hlod.incidence_scratch_peak_bytes <= hlod.incidence_scratch.declared());
+        assert!(capture.run_scratch_peak_bytes <= capture.run_scratch_bound_bytes);
+        archives.push(fs::read(&output).unwrap());
+        assert_eq!(fs::read_dir(&scratch).unwrap().count(), 0);
+    }
+    assert!(
+        archives[0] == archives[1],
+        "the planned run publishes the floor's archive"
+    );
 }
