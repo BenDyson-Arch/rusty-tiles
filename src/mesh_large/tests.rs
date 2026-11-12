@@ -351,7 +351,7 @@ fn leaf_normals_follow_the_profile_and_provenance_tables_decode() {
             Some(e) => {
                 let stream = &bin[at(e, "byteOffset")..at(e, "byteOffset") + at(e, "byteLength")];
                 check_header(stream, Mode::Attributes).unwrap();
-                let filter = Filter::parse(e["filter"].as_str().unwrap()).unwrap();
+                let filter = Filter::parse(e["filter"].as_str().unwrap_or("NONE")).unwrap();
                 let out = decode_filtered(
                     stream,
                     at(e, "count"),
