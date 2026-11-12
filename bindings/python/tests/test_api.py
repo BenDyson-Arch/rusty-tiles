@@ -585,7 +585,10 @@ class WheelAPI(unittest.TestCase):
         self.assertTrue(any(event.get("phase") == "hlod_geometry" for event in events))
         self.assertTrue(any(event.get("phase") == "ready_to_publish" for event in events))
         # The archive validates as HLOD whatever its labels say (the S5 profile requirement).
-        rusty_tiles.validate(output, expect_profile="hlod")
+        checked = rusty_tiles.validate(output, expect_profile="hlod")
+        # Without source normals no coarse tile publishes NORMAL: nothing to compare, no warning.
+        self.assertEqual(checked["interfaceCensus"]["coarseNormals"]["tiles"], 0)
+        self.assertNotIn("warnings", checked)
         # An unset budget resolves the documented default and never exceeds 4 GiB.
         defaulted = rusty_tiles.mesh_to_tileset(source, self.root / "default.3tz", jobs=1)
         default_budget = defaulted.diagnostics["memory"]["budget"]
@@ -1574,6 +1577,24 @@ class WheelAPI(unittest.TestCase):
         for removed in ("mesh_to_3tz", "mesh_local_to_3tz", "MeshResult", "ConversionResult"):
             self.assertFalse(hasattr(rusty_tiles, removed), removed)
         self.assertFalse(output.exists())
+
+    def test_validate_reports_coarse_normal_inversion_as_a_warning(self):
+        # Coarse tiles from before #336 shade some faces against their winding: still ok,
+        # with the named warning and its per-depth census.
+        report = rusty_tiles.validate(ROOT / "tests/fixtures/coarse_normals/prefix.3tz",
+                                      expect_profile="hlod")
+        self.assertIs(report["ok"], True)
+        self.assertEqual([w["code"] for w in report["warnings"]], ["coarseNormalInversion"])
+        self.assertIn("340 of 6143 faces", report["warnings"][0]["message"])
+        census = report["interfaceCensus"]["coarseNormals"]
+        self.assertEqual(
+            {key: census[key] for key in ("boundDegrees", "tiles", "faces", "skippedTiles",
+                                          "invertedTiles", "invertedFaces",
+                                          "invertedTilesByDepth", "invertedFacesByDepth")},
+            {"boundDegrees": 90, "tiles": 1, "faces": 6143, "skippedTiles": 0,
+             "invertedTiles": 1, "invertedFaces": 340,
+             "invertedTilesByDepth": [1], "invertedFacesByDepth": [340]})
+        self.assertNotIn("coarseNormalInversion", report["checks"])
 
     def test_validate_reports_decoded_content_containment(self):
         def package(name, half, position, node):

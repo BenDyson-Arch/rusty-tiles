@@ -365,6 +365,38 @@ published only when the source carries normals, so leaves and coarse tiles of
 one source shade the same way. Coarse pages need not reproduce leaf texels:
 they approximate the surface's appearance, with no appearance certificate.
 
+Coarse `NORMAL` comes from the coarse tile's own geometry, not from the source
+normals. It is crease-aware. Around each vertex, faces whose normals differ by
+less than 60° across a shared edge share one area-weighted normal. Sharper
+edges, and edges between faces wound opposite ways, keep a separate normal on
+each side. Where a run of smooth edges turns that shared normal more than 60°
+from one of its faces, that face's corner averages only the faces at the vertex
+within 60° of its own. Every corner normal is therefore within 60° of its
+face's normal, and no face is shaded against its own winding. Earlier coarse
+tiles averaged all faces at a vertex, which gave rough surfaces such as rock
+walls starburst gradients and, under double-sided lighting, inverted facets.
+Splitting adds coarse vertices, never triangles: on the measured meshes (0.8 M
+to 10 M triangles), coarse tiles of sources with normals gained 15–18% vertices
+and 13–15% bytes. Coarse tiles do not carry the source's fine shading detail
+(untextured classes get no normal map). Leaves are unaffected.
+
+60° is the single crease angle, with no option. Any angle below 90° keeps every
+face from shading against its own winding, for every input. 60° sits between
+the measured alternatives on a synthetic rock wall: 45° shaded closest to the
+source but cost 36% more coarse bytes (60°: 15%), and 80° cost only 4% but
+shaded further from the source, close to the earlier averaged normals at the
+coarsest levels. At 45–60°, rough coarse tiles look faceted where their own
+geometry is, instead of blurred. `validate` reports any coarse corner normal
+more than 90° from its face as the `coarseNormalInversion` warning
+([VALIDATION.md](VALIDATION.md#coarse-normals)); archives written before this
+change usually carry it.
+
+Simplification can still leave some coarse faces wound against the source
+surface they replace (issue #372): on one 10 M-triangle photogrammetry mesh, a
+nearest-source estimate put about 7% of the root tile's area and 3–5% at the
+next three depths against the source. Double-sided materials shade them on the
+viewer's side; single-sided materials cull them, as before.
+
 Coarse pages go through the same encoder and decoded-image gates as leaf pages,
 so a profile chooses one colour codec for both (see
 [Profiles](#profiles-and-resources)). A tile's pages together are bounded to
