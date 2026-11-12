@@ -1235,6 +1235,11 @@ pub(super) fn convert(
     )?;
     db.execute_batch("COMMIT;").map_err(sql)?;
     end_admission(&db)?;
+    // The same handler, renamed for the debug-build test hooks: what follows is the build's
+    // own SQL (fingerprints, grid scans, partitions), not per-feature admission.
+    probe
+        .interrupt_sqlite(&db, "sqlite.spool-build")
+        .map_err(sql)?;
     let mut counters = counters.into_inner();
     counters.skipped_features = failures.get();
     counters.features_without_geometry = reader.without_geometry();

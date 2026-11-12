@@ -568,9 +568,25 @@ struct JsonSpool<'a> {
     large_unsigned: bool,
     failure: Option<Error>,
     options: &'a VectorOptions,
+    /// Checked every 1024 features: each feature is parsed and inserted by its own short
+    /// statement, which never reaches the connection's progress handler.
+    stop: Option<&'a crate::runtime::AttemptProbe>,
 }
 impl JsonSpool<'_> {
     fn feature(&mut self, feature: Value) -> Result<(), Error> {
+        crate::test_hooks::pace("vector.geojson-feature");
+        if self.next % 1024 == 0 {
+            if let Some(stop) = self.stop {
+                stop.check().map_err(|error| {
+                    Error::Job(crate::JobFailure {
+                        error,
+                        secondary: Vec::new(),
+                        retained_paths: Vec::new(),
+                        recovery: None,
+                    })
+                })?;
+            }
+        }
         if feature["type"] != "Feature" {
             return Err(data("GeoJSON collection entries must be Features"));
         }
@@ -768,6 +784,7 @@ fn open_geojson(
         large_unsigned: false,
         failure: None,
         options,
+        stop,
     };
     let mut de = serde_json::Deserializer::from_reader(BufReader::new(File::open(input)?));
     let parsed = RootSeed(&mut spool).deserialize(&mut de);

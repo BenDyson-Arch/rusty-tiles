@@ -91,7 +91,18 @@ fn stop_in(args: &[OsString], env: &[(&str, &str)], site: &str) -> Stopped {
     let pid = guard.0.as_ref().unwrap().id() as libc::pid_t;
     let sent = Instant::now();
     assert_eq!(unsafe { libc::kill(pid, libc::SIGTERM) }, 0);
-    let status = guard.0.take().unwrap().wait().unwrap();
+    // A run that ignores the stop is killed after a minute (KillOnDrop) and fails here.
+    let status = loop {
+        if let Some(status) = guard.0.as_mut().unwrap().try_wait().unwrap() {
+            guard.0 = None;
+            break status;
+        }
+        assert!(
+            sent.elapsed() < Duration::from_secs(60),
+            "{site}: still running 60 s after SIGTERM"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    };
     let after = sent.elapsed();
     Stopped {
         code: status.code(),
@@ -202,6 +213,8 @@ fn validate_hash_of_one_large_member_stops() {
         &[
             ("RUSTY_TILES_TEST_PACE", "validate.hash-block"),
             ("RUSTY_TILES_TEST_PACE_US", "20000"),
+            // Past the small members: inside the 640-block member.
+            ("RUSTY_TILES_TEST_PACE_AFTER", "16"),
         ],
         "validate.hash-block",
     );
@@ -221,10 +234,13 @@ fn geojson(path: &Path, points: usize) {
     fs::write(path, doc.to_string()).unwrap();
 }
 
-fn vector_run(work: &Work, site: &str, pace_us: &str, extra: &[&str]) -> Stopped {
+/// A vector run over `points` features (or the existing `points.geojson`), signalled in
+/// `site`. Enough features that the paced SQLite work left after the signal outlasts the
+/// bound when nothing interrupts it.
+fn vector_run(work: &Work, points: usize, site: &str, pace_us: &str, extra: &[&str]) -> Stopped {
     let input = work.path("points.geojson");
     if !input.exists() {
-        geojson(&input, 30_000);
+        geojson(&input, points);
     }
     let output = work.out().join("points.3tz");
     let mut args = os(&[&"vector", &"-i", &input, &"-o", &output]);
@@ -240,28 +256,32 @@ fn vector_run(work: &Work, site: &str, pace_us: &str, extra: &[&str]) -> Stopped
     )
 }
 
-/// GeoJSON ingestion spools every feature into SQLite with no attempt in scope; the
-/// connection's progress handler now interrupts it.
+/// GeoJSON ingestion spools every feature into SQLite with no attempt in scope; it now
+/// checks every 1024 features.
 #[test]
 fn vector_geojson_ingestion_stops() {
     let work = Work::new();
-    let run = vector_run(&work, "sqlite.geojson", "100000", &[]);
+    let run = vector_run(&work, 30_000, "vector.geojson-feature", "1000", &[]);
     assert_stopped(&run, &work.scratch(), &work.out());
 }
 
-/// Partition statements and per-row fingerprint updates on the feature spool.
+/// Partition statements and per-row fingerprint updates on the feature spool, after
+/// admission (whose per-feature loop already checked).
 #[test]
 fn vector_spool_statements_stop() {
     let work = Work::new();
-    let run = vector_run(&work, "sqlite.spool", "100000", &[]);
+    let run = vector_run(&work, 30_000, "sqlite.spool-build", "400000", &[]);
     assert_stopped(&run, &work.scratch(), &work.out());
 }
 
 /// Tile encoding: prefix totals, OFFSET sorts and aggregation scans on worker connections.
+/// Not sensitive on its own with this fixture (per-encode checks also catch the stop);
+/// `vector_spool_statements_stop` shows the shared interrupt handler is what stops a
+/// long statement.
 #[test]
 fn vector_encoding_statements_stop() {
     let work = Work::new();
-    let run = vector_run(&work, "sqlite.encode", "100000", &[]);
+    let run = vector_run(&work, 200_000, "sqlite.encode", "1000000", &[]);
     assert_stopped(&run, &work.scratch(), &work.out());
 }
 
@@ -280,6 +300,7 @@ fn vector_reuse_restore_stops() {
     assert!(status.status.success(), "{status:?}");
     let run = vector_run(
         &work,
+        30_000,
         "vector.reuse",
         "200000",
         &["--reuse-tileset", previous.to_str().unwrap()],
