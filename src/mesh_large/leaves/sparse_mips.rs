@@ -25,7 +25,6 @@ pub(in crate::mesh_large) const ID_NO_FEATURE: [u8; 4] = [255; 4];
 pub(in crate::mesh_large) struct Chain {
     pub class: Class,
     pub levels: Vec<Level>,
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     /// Owned chain plus reusable gutter scratch bound; borrowed inputs and
     /// native encoder workspace/output must be charged by the caller.
     #[allow(dead_code)] // Retained measurement in the bounded encoding result.
