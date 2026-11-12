@@ -1,10 +1,12 @@
-//! SIGINT/SIGTERM become the run's ordinary cancellation, so Drop guards and tempdir
-//! removal clean spill and scratch directories instead of the process dying with them
-//! on disk. Unix only, behind the default `cli` feature; elsewhere the platform default applies.
+//! SIGINT/SIGTERM (Unix) and Ctrl+C/Ctrl+Break (Windows console) become the run's ordinary
+//! cancellation, so Drop guards and tempdir removal clean spill and scratch directories
+//! instead of the process dying with them on disk. Unix handling is behind the default
+//! `cli` feature; elsewhere the platform default applies.
 //!
 //! The first signal cancels the registered run and the process then exits through the
-//! normal error path with the conventional `128 + signal` status. A second signal, or
-//! any signal while no run is registered, terminates the process by that signal at once.
+//! normal error path with the conventional `128 + signal` status (130 for Ctrl+C and
+//! Ctrl+Break). A second signal, or any signal while no run is registered, terminates the
+//! process at once: by that signal on Unix, by the console's default handler on Windows.
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Mutex;
 
@@ -12,6 +14,15 @@ use rusty_tiles::{CancellationHandle, Observer, RunControl};
 
 static RUN: Mutex<Option<CancellationHandle>> = Mutex::new(None);
 static SIGNAL: AtomicI32 = AtomicI32::new(0);
+
+/// What the watcher does after one signal.
+#[cfg_attr(not(any(all(unix, feature = "cli"), windows)), allow(dead_code))]
+enum Action {
+    /// The run is unwinding (or publishing); keep running.
+    Continue,
+    /// Terminate as the platform would without a handler.
+    Default,
+}
 
 /// Start the signal watcher. Call once, before any work is started.
 pub fn install() {
@@ -25,34 +36,40 @@ pub fn install() {
             .name("signals".into())
             .spawn(move || {
                 for signal in signals.forever() {
-                    on_signal(signal);
+                    if let Action::Default = on_signal(signal) {
+                        die_by(signal);
+                    }
                 }
             });
         drop(spawned);
     }
+    #[cfg(windows)]
+    console::install();
 }
 
-#[cfg(all(unix, feature = "cli"))]
-fn on_signal(signal: i32) {
+#[cfg_attr(not(any(all(unix, feature = "cli"), windows)), allow(dead_code))]
+fn on_signal(signal: i32) -> Action {
     if SIGNAL
         .compare_exchange(0, signal, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
     {
         // The second signal forces the exit; cleanup is abandoned.
-        die_by(signal);
+        return Action::Default;
     }
     let registered = RUN.lock().unwrap_or_else(|e| e.into_inner()).clone();
     match registered {
         Some(handle) if handle.cancel() => {
             errln!("interrupted: cancelling and cleaning up (signal again to force exit)");
+            Action::Continue
         }
         // Past the point where cancellation is possible, the run publishes its result.
         Some(_) => {
             errln!("publishing; signal again to force exit");
+            Action::Continue
         }
         // Nothing to unwind yet, or a command with no cancellation point (such as
         // `preview`): terminate by the signal itself, as without a handler.
-        None => die_by(signal),
+        None => Action::Default,
     }
 }
 
@@ -62,6 +79,36 @@ fn on_signal(signal: i32) {
 fn die_by(signal: i32) -> ! {
     let _ = signal_hook::low_level::emulate_default_handler(signal);
     std::process::exit(128 + signal)
+}
+
+/// Windows console control events. The system runs the handler on a thread of its own,
+/// so it can take the run lock like the Unix watcher thread does.
+#[cfg(windows)]
+mod console {
+    use windows_sys::Win32::System::Console::{
+        SetConsoleCtrlHandler, CTRL_BREAK_EVENT, CTRL_C_EVENT,
+    };
+
+    /// Ctrl+C and Ctrl+Break both report the SIGINT status (130).
+    const SIGINT: i32 = 2;
+
+    pub(super) fn install() {
+        // SAFETY: the handler is a plain function that lives for the whole process.
+        let _ = unsafe { SetConsoleCtrlHandler(Some(handler), 1) };
+    }
+
+    /// TRUE (handled) keeps the process running while the run unwinds; FALSE passes the
+    /// event to the next handler, ending in the default `ExitProcess`. Close, logoff and
+    /// shutdown events always take the default.
+    unsafe extern "system" fn handler(event: u32) -> i32 {
+        if event != CTRL_C_EVENT && event != CTRL_BREAK_EVENT {
+            return 0;
+        }
+        match super::on_signal(SIGINT) {
+            super::Action::Continue => 1,
+            super::Action::Default => 0,
+        }
+    }
 }
 
 /// The signal that interrupted this process, if any.
