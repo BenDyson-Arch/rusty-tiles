@@ -1217,6 +1217,7 @@ mod tests {
             fan_in: 8,
             buffer_bytes: 1 << 16,
             jobs: 1,
+            writers: 0,
         };
         for n in [500_000_000u64, 1_000_000_000] {
             // The production caller's worst-case interface counts, with a full-height
@@ -1275,6 +1276,7 @@ mod tests {
                 fan_in: 8,
                 buffer_bytes: 1 << 16,
                 jobs: 1,
+                writers: 0,
             };
             let mut tree = SequenceWriter::new(&scratch, "tree", 1 << 16).unwrap();
             subtree(&mut tree, 0, 2 * r, 0);
@@ -1378,6 +1380,7 @@ mod tests {
             fan_in: 2,
             buffer_bytes: 1024,
             jobs: 1,
+            writers: 0,
         };
         let mut tree = SequenceWriter::new(&scratch, "tree", 1024).unwrap();
         // Cells A and B are chains to depth 2, each with two depth-3 leaves; A's split
@@ -1500,6 +1503,7 @@ mod tests {
             fan_in: 2,
             buffer_bytes: 1024,
             jobs: 1,
+            writers: 0,
         };
         let mut tree = SequenceWriter::new(&scratch, "tree", 1024).unwrap();
         for (first, end, depth, internal, children) in [
@@ -1648,6 +1652,7 @@ mod tests {
             fan_in: 2,
             buffer_bytes: 1024,
             jobs: 1,
+            writers: 0,
         };
         let mut tree = SequenceWriter::new(&scratch, "tree", 1024).unwrap();
         for &(first, end, depth, internal, children) in nodes {

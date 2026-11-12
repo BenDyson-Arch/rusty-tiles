@@ -3384,6 +3384,7 @@ fn public(
                 fan_in: 4,
                 buffer_bytes: 1 << 12,
                 jobs: 1,
+                writers: 0,
             },
             1 << 14,
         );

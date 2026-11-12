@@ -105,6 +105,10 @@ pub(crate) struct TreeConfig {
     /// Test seam: lowered packed-record limits, to drive capture's refusals.
     #[cfg(test)]
     pub test_record_limits: Option<super::full::RecordLimits>,
+    /// Test seam: let capture grow its sorts under the budget (production always does;
+    /// fixtures otherwise keep their small sort configuration to exercise spilling).
+    #[cfg(test)]
+    pub test_sort_plan: bool,
 }
 
 impl TreeConfig {
@@ -147,6 +151,8 @@ impl TreeConfig {
             test_chunk_bytes: None,
             #[cfg(test)]
             test_record_limits: None,
+            #[cfg(test)]
+            test_sort_plan: false,
         }
     }
 
@@ -175,6 +181,7 @@ impl TreeConfig {
             fan_in: self.sort.fan_in,
             buffer_bytes: self.sort.buffer_bytes,
             jobs,
+            writers: self.sort.writers,
         }
     }
 }
@@ -267,7 +274,6 @@ impl MemoryBound {
         }
     }
 
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     pub(crate) fn base_bytes(&self) -> u64 {
         self.document_bytes
             .saturating_add(self.runtime_bytes)
