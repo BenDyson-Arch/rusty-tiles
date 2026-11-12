@@ -533,11 +533,13 @@ pub(crate) fn encode(
         let mut streams = vec![("POSITION", position.0, position.1, position.2)];
         if let Some(smooth) = &appearance.normals {
             let mut bytes = Vec::with_capacity(count * 4);
-            for v in corners() {
-                for c in smooth[v as usize] {
-                    bytes.push(snorm8(c));
+            for &(t, _, _) in &faces {
+                for corner in smooth[t] {
+                    for c in corner {
+                        bytes.push(snorm8(c));
+                    }
+                    bytes.push(0);
                 }
-                bytes.push(0);
             }
             streams.push((
                 "NORMAL",

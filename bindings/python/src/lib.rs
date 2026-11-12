@@ -3,7 +3,7 @@ use pyo3::{
     create_exception,
     exceptions::{PyBaseException, PyException, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyBool, PyDict, PyInt, PyList},
+    types::{PyBool, PyByteArray, PyBytes, PyDict, PyInt, PyList, PyModule, PyTuple},
 };
 use serde_json::Value;
 use std::{
@@ -13,6 +13,7 @@ use std::{
 use tiles_core::{
     package::{package, PackageRequest},
     point_cloud::{PointCloudCoordinates, PointCloudCrs, PointCloudOptions, PointCloudRequest},
+    tile_view::{DecodedTile, TileLimit, TileSet},
     vector::{VectorLodOptions, VectorOptions},
     Error, JobError, JobErrorKind, JobFailure, MeshPlacement, MeshSourceCrs, ModelManifestRequest,
     ModelWrapRequest, Observer, OutputPolicy, RunControl, RunEvent, SourceAxes, TilerJobs,
@@ -1156,6 +1157,293 @@ fn python_version(cargo: &str) -> String {
     python
 }
 
+fn job_error_to_python(py: Python<'_>, error: JobError) -> PyErr {
+    // A tile-view limit refusal carries its fixed limit as the cause, like `validate`'s
+    // structured `limit`; other resource refusals set `limit` to None.
+    let limit = (error.kind() == JobErrorKind::ResourceLimit).then(|| {
+        std::error::Error::source(&error)
+            .and_then(|cause| cause.downcast_ref::<TileLimit>())
+            .copied()
+    });
+    let exception = job_failure_to_python(
+        py,
+        JobFailure {
+            error,
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        },
+    );
+    if let Some(limit) = limit {
+        let value = match limit {
+            Some(limit) => {
+                let dict = PyDict::new(py);
+                let _ = dict.set_item("limit", limit.limit);
+                let _ = dict.set_item("value", limit.value);
+                let _ = dict.set_item("observed", limit.observed);
+                let _ = dict.set_item("derivation", "fixed");
+                dict.into_any().unbind()
+            }
+            None => py.None(),
+        };
+        let _ = exception.value(py).setattr("limit", value);
+    }
+    exception
+}
+
+/// A column-major 4x4 matrix as four row lists.
+fn matrix_rows(m: &[f64; 16]) -> Vec<Vec<f64>> {
+    (0..4)
+        .map(|r| (0..4).map(|c| m[r + 4 * c]).collect())
+        .collect()
+}
+
+/// The content tiles of a `.3tz` archive or unpacked tileset directory, parent before
+/// children: one dict per content URI with `uri`, `depth` (hops from the root, which is 0), `role` (`"leaf"` without
+/// child tiles, else `"coarse"`), `geometric_error` and `transform` (the accumulated tile
+/// transform as four row lists, tile frame to the tileset's world). The GIL is released while
+/// the tileset is read.
+#[pyfunction]
+#[pyo3(signature = (archive))]
+fn list_tiles(py: Python<'_>, archive: PathBuf) -> PyResult<Py<PyAny>> {
+    let tiles = py
+        .detach(|| TileSet::open(&archive).map(|set| set.tiles().to_vec()))
+        .map_err(|error| job_error_to_python(py, error))?;
+    let list = PyList::empty(py);
+    for tile in tiles {
+        let entry = PyDict::new(py);
+        entry.set_item("uri", tile.uri)?;
+        entry.set_item("depth", tile.depth)?;
+        entry.set_item("role", tile.role.as_str())?;
+        entry.set_item("geometric_error", tile.geometric_error)?;
+        entry.set_item("transform", matrix_rows(&tile.transform))?;
+        list.append(entry)?;
+    }
+    Ok(list.into_any().unbind())
+}
+
+/// A writable NumPy array over a new `bytearray` of `length` bytes filled by `fill`
+/// (little-endian `dtype`), in `shape`. The bytearray is the only Python copy.
+fn ndarray<'py>(
+    numpy: &Bound<'py, PyModule>,
+    length: usize,
+    fill: impl FnOnce(&mut [u8]),
+    dtype: &str,
+    shape: &[usize],
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = numpy.py();
+    let buffer = PyByteArray::new_with(py, length, |bytes| {
+        fill(bytes);
+        Ok(())
+    })?;
+    numpy
+        .call_method1("frombuffer", (buffer, dtype))?
+        .call_method1("reshape", (PyTuple::new(py, shape)?,))
+}
+
+/// An array of `N`-component rows, each component `W` little-endian bytes.
+fn rows<'py, T: Copy, const N: usize, const W: usize>(
+    numpy: &Bound<'py, PyModule>,
+    values: &[[T; N]],
+    bytes: impl Fn(T) -> [u8; W],
+    dtype: &str,
+    shape: &[usize],
+) -> PyResult<Bound<'py, PyAny>> {
+    ndarray(
+        numpy,
+        values.len() * N * W,
+        |out| {
+            for (chunk, &value) in out
+                .as_chunks_mut::<W>()
+                .0
+                .iter_mut()
+                .zip(values.iter().flatten())
+            {
+                *chunk = bytes(value);
+            }
+        },
+        dtype,
+        shape,
+    )
+}
+
+fn raw<'py>(
+    numpy: &Bound<'py, PyModule>,
+    bytes: &[u8],
+    dtype: &str,
+    shape: &[usize],
+) -> PyResult<Bound<'py, PyAny>> {
+    ndarray(
+        numpy,
+        bytes.len(),
+        |out| out.copy_from_slice(bytes),
+        dtype,
+        shape,
+    )
+}
+
+fn matrix_array<'py>(numpy: &Bound<'py, PyModule>, m: &[f64; 16]) -> PyResult<Bound<'py, PyAny>> {
+    let matrix: Vec<[f64; 4]> = (0..4).map(|r| [0, 1, 2, 3].map(|c| m[r + 4 * c])).collect();
+    rows(numpy, &matrix, f64::to_le_bytes, "<f8", &[4, 4])
+}
+
+/// Consumes the decoded tile so each Rust array is released after its copy.
+fn arrays_to_python(
+    py: Python<'_>,
+    numpy: &Bound<'_, PyModule>,
+    tile: DecodedTile,
+) -> PyResult<Py<PyAny>> {
+    let out = PyDict::new(py);
+    out.set_item("uri", &tile.tile.uri)?;
+    out.set_item("depth", tile.tile.depth)?;
+    out.set_item("role", tile.tile.role.as_str())?;
+    out.set_item("geometric_error", tile.tile.geometric_error)?;
+    out.set_item("transform", matrix_array(numpy, &tile.tile.transform)?)?;
+    out.set_item("root_transform", matrix_array(numpy, &tile.root_transform)?)?;
+    let primitives = PyList::empty(py);
+    for p in tile.primitives {
+        let d = PyDict::new(py);
+        d.set_item("node", p.node)?;
+        d.set_item("mesh", p.mesh)?;
+        d.set_item("primitive", p.primitive)?;
+        d.set_item("material", p.material)?;
+        let n = p.positions.len();
+        d.set_item(
+            "positions",
+            rows(numpy, &p.positions, f64::to_le_bytes, "<f8", &[n, 3])?,
+        )?;
+        drop(p.positions);
+        let t = p.indices.len();
+        d.set_item(
+            "indices",
+            rows(numpy, &p.indices, u32::to_le_bytes, "<u4", &[t, 3])?,
+        )?;
+        let normals = match &p.normals {
+            None => py.None().into_bound(py),
+            Some(v) => rows(numpy, v, f32::to_le_bytes, "<f4", &[n, 3])?,
+        };
+        d.set_item("normals", normals)?;
+        let uvs = p
+            .uvs
+            .iter()
+            .map(|set| rows(numpy, set, f32::to_le_bytes, "<f4", &[n, 2]))
+            .collect::<PyResult<Vec<_>>>()?;
+        d.set_item("uvs", uvs)?;
+        let colors = match &p.colors {
+            None => py.None().into_bound(py),
+            Some(v) => rows(numpy, v, f32::to_le_bytes, "<f4", &[n, 4])?,
+        };
+        d.set_item("colors", colors)?;
+        let sets = PyList::empty(py);
+        for set in &p.feature_ids {
+            let s = PyDict::new(py);
+            s.set_item("label", &set.label)?;
+            s.set_item("feature_count", set.feature_count)?;
+            s.set_item("null_feature_id", set.null_feature_id)?;
+            s.set_item("property_table", set.property_table)?;
+            let values = set.values.as_chunks::<1>().0;
+            s.set_item(
+                "values",
+                rows(numpy, values, u32::to_le_bytes, "<u4", &[n])?,
+            )?;
+            sets.append(s)?;
+        }
+        d.set_item("feature_ids", sets)?;
+        primitives.append(d)?;
+    }
+    out.set_item("primitives", primitives)?;
+    let pages = PyList::empty(py);
+    for page in tile.pages {
+        let shape = [page.height as usize, page.width as usize, 4];
+        pages.append(raw(numpy, &page.rgba, "u1", &shape)?)?;
+    }
+    out.set_item("pages", pages)?;
+    let tables = PyList::empty(py);
+    for table in tile.property_tables {
+        let t = PyDict::new(py);
+        t.set_item("class", &table.class)?;
+        t.set_item("count", table.count)?;
+        let properties = PyDict::new(py);
+        let transforms = PyDict::new(py);
+        for column in &table.columns {
+            let dtype = match column.component_type.as_str() {
+                "UINT8" => "u1",
+                "INT8" => "i1",
+                "UINT16" => "<u2",
+                "INT16" => "<i2",
+                "UINT32" => "<u4",
+                "INT32" => "<i4",
+                "UINT64" => "<u8",
+                "INT64" => "<i8",
+                "FLOAT32" => "<f4",
+                _ => "<f8",
+            };
+            let count = table.count as usize;
+            properties.set_item(&column.name, raw(numpy, &column.bytes, dtype, &[count])?)?;
+            if column.normalized || column.offset.is_some() || column.scale.is_some() {
+                let transform = PyDict::new(py);
+                transform.set_item("normalized", column.normalized)?;
+                transform.set_item("offset", column.offset)?;
+                transform.set_item("scale", column.scale)?;
+                transforms.set_item(&column.name, transform)?;
+            }
+        }
+        t.set_item("properties", properties)?;
+        t.set_item("value_transforms", transforms)?;
+        let skipped = PyDict::new(py);
+        for (name, reason) in &table.skipped {
+            skipped.set_item(name, reason)?;
+        }
+        t.set_item("skipped", skipped)?;
+        tables.append(t)?;
+    }
+    out.set_item("property_tables", tables)?;
+    out.set_item("materials", json_to_python(py, &tile.materials)?)?;
+    out.set_item("textures", json_to_python(py, &tile.textures)?)?;
+    out.set_item("samplers", json_to_python(py, &tile.samplers)?)?;
+    Ok(out.into_any().unbind())
+}
+
+/// One content member of a `.3tz` archive or unpacked tileset directory, decoded for
+/// display and inspection. This is a view, not a reversible round trip: nothing is
+/// re-encoded and an edited result cannot be published back.
+///
+/// `member` is a content URI from `list_tiles`. `format="glb"` returns the bytes of a plain
+/// glTF 2.0 GLB: `EXT_meshopt_compression` views decoded, `KHR_texture_basisu` pages
+/// transcoded to PNG at level 0 (further mip levels are dropped), everything else kept,
+/// including samplers, materials, `KHR_mesh_quantization`, `EXT_mesh_features` and
+/// `EXT_structural_metadata`. `format="arrays"` needs NumPy and returns a dict of arrays per
+/// primitive in the tile frame (see the README). The GIL is released while decoding.
+#[pyfunction]
+#[pyo3(signature = (archive, member, *, format = "glb"))]
+fn decode_tile(
+    py: Python<'_>,
+    archive: PathBuf,
+    member: String,
+    format: &str,
+) -> PyResult<Py<PyAny>> {
+    match format {
+        "glb" => {
+            let bytes = py
+                .detach(|| TileSet::open(&archive)?.plain_glb(&member))
+                .map_err(|error| job_error_to_python(py, error))?;
+            Ok(PyBytes::new(py, &bytes).into_any().unbind())
+        }
+        "arrays" => {
+            let numpy = py.import("numpy").map_err(|error| {
+                EnvironmentError::new_err(format!("format=\"arrays\" needs NumPy: {error}"))
+            })?;
+            let tile = py
+                .detach(|| TileSet::open(&archive)?.arrays(&member))
+                .map_err(|error| job_error_to_python(py, error))?;
+            arrays_to_python(py, &numpy, tile)
+        }
+        other => Err(InvalidRequestError::new_err(format!(
+            "format must be \"glb\" or \"arrays\", not {other:?}"
+        ))),
+    }
+}
+
 #[pymodule]
 fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("__version__", python_version(env!("CARGO_PKG_VERSION")))?;
@@ -1205,6 +1493,8 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(resolve_source_crs, module)?)?;
     module.add_function(wrap_pyfunction!(supported_epsg_codes, module)?)?;
     module.add_function(wrap_pyfunction!(crs_table_info, module)?)?;
+    module.add_function(wrap_pyfunction!(list_tiles, module)?)?;
+    module.add_function(wrap_pyfunction!(decode_tile, module)?)?;
     Ok(())
 }
 

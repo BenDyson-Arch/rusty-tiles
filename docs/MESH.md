@@ -365,6 +365,38 @@ published only when the source carries normals, so leaves and coarse tiles of
 one source shade the same way. Coarse pages need not reproduce leaf texels:
 they approximate the surface's appearance, with no appearance certificate.
 
+Coarse `NORMAL` comes from the coarse tile's own geometry, not from the source
+normals. It is crease-aware. Around each vertex, faces whose normals differ by
+less than 60° across a shared edge share one area-weighted normal. Sharper
+edges, and edges between faces wound opposite ways, keep a separate normal on
+each side. Where a run of smooth edges turns that shared normal more than 60°
+from one of its faces, that face's corner averages only the faces at the vertex
+within 60° of its own. Every corner normal is therefore within 60° of its
+face's normal, and no face is shaded against its own winding. Earlier coarse
+tiles averaged all faces at a vertex, which gave rough surfaces such as rock
+walls starburst gradients and, under double-sided lighting, inverted facets.
+Splitting adds coarse vertices, never triangles: on the measured meshes (0.8 M
+to 10 M triangles), coarse tiles of sources with normals gained 15–18% vertices
+and 13–15% bytes. Coarse tiles do not carry the source's fine shading detail
+(untextured classes get no normal map). Leaves are unaffected.
+
+60° is the single crease angle, with no option. Any angle below 90° keeps every
+face from shading against its own winding, for every input. 60° sits between
+the measured alternatives on a synthetic rock wall: 45° shaded closest to the
+source but cost 36% more coarse bytes (60°: 15%), and 80° cost only 4% but
+shaded further from the source, close to the earlier averaged normals at the
+coarsest levels. At 45–60°, rough coarse tiles look faceted where their own
+geometry is, instead of blurred. `validate` reports any coarse corner normal
+more than 90° from its face as the `coarseNormalInversion` warning
+([VALIDATION.md](VALIDATION.md#coarse-normals)); archives written before this
+change usually carry it.
+
+Simplification can still leave some coarse faces wound against the source
+surface they replace (issue #372): on one 10 M-triangle photogrammetry mesh, a
+nearest-source estimate put about 7% of the root tile's area and 3–5% at the
+next three depths against the source. Double-sided materials shade them on the
+viewer's side; single-sided materials cull them, as before.
+
 Coarse pages go through the same encoder and decoded-image gates as leaf pages,
 so a profile chooses one colour codec for both (see
 [Profiles](#profiles-and-resources)). A tile's pages together are bounded to
@@ -835,6 +867,29 @@ installation and can fail the run; the winning callback exception is re-raised
 as the original Python exception. Python errors raised after installation, while
 building the result or from unrelated asynchronous sources, are outside the
 installation guarantee.
+
+### Decoded tile views
+
+Viewers that read neither `EXT_meshopt_compression` nor `KHR_texture_basisu`
+can show a tile through the Python view functions. Blender 5.2's bundled glTF
+importer is one: it has no KTX2 support, and it fails on the explicit
+`"filter": "NONE"` that every rusty-tiles meshopt view carries.
+
+- `rusty_tiles.list_tiles(archive)` lists each content URI with its depth,
+  `leaf` or `coarse` role, geometric error and accumulated transform.
+- `rusty_tiles.decode_tile(archive, uri)` returns a plain glTF 2.0 GLB: meshopt
+  views decoded, KTX2 pages transcoded to PNG at level 0. Samplers, materials,
+  quantized accessors, feature IDs and property tables are kept.
+- `rusty_tiles.decode_tile(archive, uri, format="arrays")` returns NumPy arrays
+  per primitive, RGBA pages and property tables.
+
+`archive` is a `.3tz` or an unpacked tileset directory. Positions are in the
+Z-up tile frame. Only the root carries a transform, so every tile shares the
+local frame described in [How source positions are mapped](#how-source-positions-are-mapped)
+or [rigid placement](#source-and-placement), and `transform` maps it to ECEF.
+A decoded tile is a view for display and inspection, not a reversible round
+trip: an edited view cannot be re-encoded or published back. See the
+[Python reference](../bindings/python/README.md#decoded-tile-views).
 
 ## Reports and errors
 

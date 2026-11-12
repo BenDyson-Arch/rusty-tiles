@@ -258,6 +258,17 @@ fn sampled_hlod_archives_and_named_mutants() {
                 .not_inspected
                 .iter()
                 .any(|s| s == "geometricErrorAccuracy"));
+            // A coarse NORMAL behind a meshopt filter is skipped (and named), never refused.
+            let skipped = census.coarse_normals.skipped_tiles > 0;
+            assert_eq!(skipped, name == "meshopt-octahedral", "{name}: {census:?}");
+            assert_eq!(
+                report
+                    .not_inspected
+                    .iter()
+                    .any(|s| s == "coarseNormalInversion.meshoptFilteredNormal"),
+                skipped,
+                "{name}"
+            );
             assert_eq!(serde_json::to_value(report).unwrap(), cli_report);
         }
     }

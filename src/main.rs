@@ -1266,6 +1266,9 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
                 if !report.not_inspected.is_empty() {
                     outln!("Not inspected: {}", report.not_inspected.join(", "));
                 }
+                for warning in &report.warnings {
+                    errln!("warning: {}: {}", warning.code, warning.message);
+                }
             }
             Outcome::Validation(Box::new(report))
         }
