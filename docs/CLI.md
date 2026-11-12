@@ -342,6 +342,12 @@ Point-cloud readiness lists the pure-Rust CRS classes, the [GDAL-verified EPSG a
 
 `--command` limits the inventory in both human and JSON output; without it every command is listed. `doctor` starts no processes, keeps PROJ networking off, writes no files, installs nothing and fetches no grids. A listed grid does not prove a height operation is available; conversion checks the exact operation offline.
 
+## Stopping a run
+
+SIGINT (Ctrl-C) and SIGTERM stop a running command, as do Ctrl+C and Ctrl+Break in a Windows console. Every converter and `validate` checks for the stop throughout its long phases, including external sorts and merges, archive admission and hashing, SQLite work, payload staging and image processing. The run stops within a few seconds and removes its spill folders, private work folders and output staging. It publishes nothing and fails as `cancelled`, exiting 130 (SIGINT, Ctrl+C, Ctrl+Break) or 143 (SIGTERM). A stop that arrives once the output is being installed lets installation finish, and the command then reports its result.
+
+A few calls cannot see the stop while they run. The main one is a single KTX2 texture page encode, which can take minutes at the highest settings of the lossy escalation ladder. If a stopped run has not finished 20 seconds after the signal, the CLI removes the run's spill, work and staging paths itself and exits with the same status, without a JSON result. A second signal ends the process at once, without cleanup. So does a signal to a command with nothing to cancel, such as `preview` or `doctor`. A service manager's stop therefore ends within about 20 seconds, well inside systemd's default 90-second `TimeoutStopSec`. A killed process (SIGKILL, an out-of-memory kill) cannot clean up.
+
 ## Exit codes
 
 Programs should test the exit code or `error.code`, not the message text.
@@ -354,6 +360,7 @@ Programs should test the exit code or `error.code`, not the message text.
 | 3 | `data` | Invalid input, invalid option value or failed validation |
 | 4 | `environment` | Missing native capability, PROJ database or strict CRS operation |
 | 5 | `output_conflict` | The output exists and `--force` was not given |
+| 130, 143 | `cancelled` | [Stopped](#stopping-a-run) by SIGINT (Ctrl-C, Ctrl+Break) or SIGTERM |
 
 `mesh`, `vector`, `point-cloud`, `raster`, `raster-tile-to-directory` and the packaging commands report error kinds instead:
 
