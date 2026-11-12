@@ -151,6 +151,15 @@ class CheckCiConfigTests(unittest.TestCase):
         self.assertEqual(self.errors(workflow=WORKFLOW.replace("ubuntu-24.04", "macos-15", 1)), [])
         self.assertEqual(len(self.errors(workflow=WORKFLOW.replace("ubuntu-24.04", "macos-13-xlarge", 1))), 1)
 
+    def test_repository_guard_covers_intel_larger_runners(self):
+        values = check_ci_config.load_versions(ROOT / "ci" / "versions.env")
+        for label, refused in (("macos-15-large", True), ("macos-26-large", True), ("macos-13-large", True),
+                               ("macos-15-intel", True), ("macos-15-xlarge", False), ("macos-26-xlarge", False),
+                               ("macos-15", False)):
+            with self.subTest(label=label):
+                errors = check_ci_config.check_unsupported("w.yml", [f"          - os: {label}"], values)
+                self.assertEqual(bool(errors), refused, errors)
+
     def test_artifact_reuse_targets_are_checked(self):
         root = self.tree()
         (root / "scripts").mkdir()

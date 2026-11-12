@@ -44,8 +44,14 @@ case "$(uname -s)" in
         target=$arch-unknown-linux-gnu ;;
     Darwin)
         # A Rosetta shell on Apple Silicon reports x86_64; the native build is the right one.
-        if [ "$arch" = x86_64 ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || true)" = 1 ]; then
-            arch=aarch64
+        # macOS keeps sysctl in /usr/sbin, which a restricted PATH may lack.
+        if [ "$arch" = x86_64 ]; then
+            translated=
+            for sysctl in /usr/sbin/sysctl sysctl; do
+                if translated=$("$sysctl" -n sysctl.proc_translated 2>/dev/null); then break; fi
+                translated=
+            done
+            if [ "$translated" = 1 ]; then arch=aarch64; fi
         fi
         target=$arch-apple-darwin ;;
     *) fail "unsupported operating system: $(uname -s); Windows binaries are on GitHub Releases" ;;
@@ -81,7 +87,8 @@ esac
 if [ "$target" = x86_64-apple-darwin ]; then
     newer=yes
     if [ "$version" != dev ]; then
-        newer=$(printf '%s\n' "$version" | awk -F'[.+-]' '{ print ($1 + 0 > 0 || $2 + 0 > 4 || ($2 + 0 == 4 && $3 + 0 >= 1)) ? "yes" : "no" }')
+        # Plain POSIX awk (macOS ships the BSD one): MAJOR.MINOR.PATCH >= 0.4.1.
+        newer=$(printf '%s\n' "$version" | awk -F'[.+-]' '{ if ($1 + 0 > 0 || $2 + 0 > 4 || ($2 + 0 == 4 && $3 + 0 >= 1)) print "yes"; else print "no" }')
     fi
     if [ "$newer" = yes ]; then
         fail "Intel macOS is not supported from 0.4.1 ($version has no x86_64-apple-darwin build); install 0.4.0 with --version 0.4.0, or build from source with cargo (see docs/INSTALL.md)"
