@@ -30,7 +30,11 @@ rusty-tiles --version
 
 The installer downloads the latest release into `~/.local/bin` and verifies its SHA-256 checksum. It needs no Rust or administrator privileges. Pass options after `sh -s --`: `--version 0.4.0` pins a release and `--prefix DIRECTORY` changes the install directory. Add the `export PATH` line to your shell's startup file to keep it in new terminals.
 
-Binaries cover x86_64 and ARM64. Linux needs glibc 2.35+ and libstdc++; on musl-based systems such as Alpine, build with Cargo or use the container. macOS needs version 15 or later.
+Linux binaries cover x86_64 and ARM64 and need glibc 2.35+ and libstdc++; on musl-based systems such as Alpine, build with Cargo or use the container. macOS binaries are for Apple Silicon only and need macOS 15 or later.
+
+#### Intel Macs
+
+0.4.0 is the last release with Intel macOS (`x86_64-apple-darwin`) binaries and wheels. From 0.4.1 the installer stops on an Intel Mac with a message, and `pip install rusty-tiles` finds no wheel (there is no source distribution). Either keep 0.4.0 (`sh -s -- --version 0.4.0` for the installer, `pip install rusty-tiles==0.4.0` for Python) or build from source with Cargo: `cargo install --locked --git https://github.com/BenDyson-Arch/rusty-tiles --tag vVERSION rusty-tiles` for the CLI, or `maturin build --release` in a clone for the Python wheel (see [Build](../CONTRIBUTING.md#build)). A terminal running under Rosetta on an Apple Silicon Mac gets the native Apple Silicon build.
 
 ### Windows
 
@@ -64,10 +68,10 @@ python -m pip install rusty-tiles
 Install into the Python environment that will call it, including Blender's bundled Python. Wheels need CPython 3.10 or newer and use the stable ABI, so one wheel covers later Python versions. They are built for:
 
 - Linux x86_64 and ARM64 (manylinux_2_28, glibc 2.28+)
-- macOS 15+ on Intel and Apple Silicon
+- macOS 15+ on Apple Silicon (Intel Macs: [build from source or keep 0.4.0](#intel-macs))
 - Windows x64
 
-Wheels are tested inside official Blender 4.5.14 LTS (Python 3.11) on Linux x64, Windows x64 and both macOS architectures, and inside official Blender 5.2.4 LTS (Python 3.13) on Linux x64, Windows x64 and Apple Silicon macOS. Blender 5.x has no Intel macOS build, and neither series has an official Linux ARM64 build.
+Wheels are tested inside official Blender 4.5.14 LTS (Python 3.11) and 5.2.4 LTS (Python 3.13) on Linux x64, Windows x64 and Apple Silicon macOS. Neither series has an official Linux ARM64 build.
 
 The wheel contains **only the standard conversion APIs**: meshes, local and grid-free LAS/LAZ, GeoJSON/GeoPackage vectors, tileset packaging and archive validation. It does not include the CLI, `doctor` or `preview`, and it cannot convert imagery, terrain or OGR-only inputs or use native CRS operations. Installing GDAL or its Python bindings does not change this. See the [Python API guide](../bindings/python/README.md).
 
