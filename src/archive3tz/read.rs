@@ -202,13 +202,20 @@ impl<R: Read + Seek> StoredArchive<R> {
         Ok(bytes)
     }
 
-    /// Streams one admitted stored range through CRC-32 and SHA-256.
-    pub(crate) fn hash_range(
+    /// Streams one admitted stored range through CRC-32 and SHA-256, also copying its first
+    /// block (at most 64 KiB, the bytes the hash reads first) into `head` when given. The copy
+    /// costs no further read.
+    pub(crate) fn hash_range_with_head(
         &mut self,
         size: u64,
         offset: u64,
         expected_crc: u32,
+        mut head: Option<&mut Vec<u8>>,
     ) -> Result<[u8; 32], ReadError> {
+        // An empty range has no first block: its head is empty, never a previous member's.
+        if let Some(head) = head.as_deref_mut() {
+            head.clear();
+        }
         let mut remaining = size;
         self.reader.seek(SeekFrom::Start(offset))?;
         let mut buffer = [0; 64 * 1024];
@@ -217,6 +224,9 @@ impl<R: Read + Seek> StoredArchive<R> {
         while remaining != 0 {
             let count = remaining.min(buffer.len() as u64) as usize;
             read_exact(&mut self.reader, &mut buffer[..count])?;
+            if let Some(head) = head.take() {
+                head.extend_from_slice(&buffer[..count]);
+            }
             crc.update(&buffer[..count]);
             sha.update(&buffer[..count]);
             remaining -= count as u64;
@@ -549,6 +559,37 @@ fn zip64_sizes<const N: usize>(
         }
     }
     Ok((values, disk_number, record.is_some()))
+}
+
+/// One stored member's bytes by position, CRC-checked, from any thread (#342: the validator's
+/// replay workers). The same checks as [`StoredArchive::read_member`] after its lookup.
+pub(crate) fn read_stored_at(
+    file: &std::fs::File,
+    offset: u64,
+    size: u64,
+    crc: u32,
+) -> Result<Vec<u8>, ReadError> {
+    let length =
+        usize::try_from(size).map_err(|_| ReadError::limit("archive member exceeds host range"))?;
+    let mut bytes = bounded_bytes(length)?;
+    let mut at = 0;
+    while at < length {
+        #[cfg(unix)]
+        let read = std::os::unix::fs::FileExt::read_at(file, &mut bytes[at..], offset + at as u64);
+        #[cfg(windows)]
+        let read =
+            std::os::windows::fs::FileExt::seek_read(file, &mut bytes[at..], offset + at as u64);
+        match read {
+            Ok(0) => return Err(malformed("truncated stored archive record")),
+            Ok(count) => at += count,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(ReadError::Io(error)),
+        }
+    }
+    if crc32fast::hash(&bytes) != crc {
+        return Err(malformed("stored member CRC mismatch"));
+    }
+    Ok(bytes)
 }
 
 fn bounded_bytes(size: usize) -> Result<Vec<u8>, ReadError> {
@@ -1124,7 +1165,7 @@ pub(crate) mod tests {
                 .into_iter()
                 .nth(index)
                 .ok_or_else(|| ReadError::MissingMember(format!("ordinal {index}")))?;
-            self.hash_range(entry.size, entry.data_offset, entry.crc32)
+            self.hash_range_with_head(entry.size, entry.data_offset, entry.crc32, None)
         }
     }
 
@@ -1681,6 +1722,42 @@ pub(crate) mod tests {
             member_bytes: length,
             archive_stored_bytes: Some(length),
         }
+    }
+
+    /// #375 review N6: the head is each range's own first block; an empty member's head is
+    /// empty, not the previous member's.
+    #[test]
+    fn hash_head_is_reset_for_every_range() {
+        let large = vec![7u8; 70 * 1024];
+        let bytes = indexed(&[
+            Record::stored(b"tileset.json", b"{}"),
+            Record::stored(b"a.glb", b"glTF-head"),
+            Record::stored(b"b.glb", b""),
+            Record::stored(b"c.glb", &large),
+        ]);
+        let limits = natural_limits(bytes.len());
+        let mut archive =
+            StoredArchive::new(Cursor::new(&bytes), bytes.len() as u64, &limits).unwrap();
+        let mut head = Vec::new();
+        let mut heads = Vec::new();
+        for entry in archive
+            .entries()
+            .into_iter()
+            .filter(|e| e.name.ends_with(".glb"))
+        {
+            archive
+                .hash_range_with_head(entry.size, entry.data_offset, entry.crc32, Some(&mut head))
+                .unwrap();
+            heads.push((entry.name, head.len(), head.first().copied()));
+        }
+        assert_eq!(
+            heads,
+            [
+                ("a.glb".to_string(), 9, Some(b'g')),
+                ("b.glb".to_string(), 0, None),
+                ("c.glb".to_string(), 64 * 1024, Some(7)),
+            ]
+        );
     }
 
     #[test]

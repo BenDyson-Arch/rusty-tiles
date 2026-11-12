@@ -132,7 +132,7 @@ impl Accounting {
 /// sequences stay in memory never touches the filesystem.
 pub(crate) struct Scratch {
     placement: Placement,
-    needed: u64,
+    needed: AtomicU64,
     inspect: fn(&Path) -> Result<Volume, SpillError>,
     created: OnceLock<Created>,
     io: Arc<dyn SpillIo>,
@@ -264,7 +264,7 @@ impl Scratch {
     ) -> Self {
         Self {
             placement,
-            needed,
+            needed: AtomicU64::new(needed),
             inspect,
             created: OnceLock::new(),
             io,
@@ -307,14 +307,16 @@ impl Scratch {
             return Ok(created);
         }
         let created = match &self.placement {
-            Placement::In(parent) => Self::materialize(parent, self.needed, self.inspect)?,
+            Placement::In(parent) => {
+                Self::materialize(parent, self.needed.load(Ordering::Relaxed), self.inspect)?
+            }
             Placement::Disk {
                 candidates,
                 memory_backed_allowed,
             } => Self::place(
                 candidates,
                 *memory_backed_allowed,
-                self.needed,
+                self.needed.load(Ordering::Relaxed),
                 self.inspect,
             )?,
         };
@@ -330,17 +332,41 @@ impl Scratch {
         needed: u64,
         inspect: fn(&Path) -> Result<Volume, SpillError>,
     ) -> Result<Created, SpillError> {
+        Self::select(
+            candidates,
+            memory_backed_allowed,
+            inspect,
+            true,
+            |parent, volume| Self::materialize(parent, needed, |_| Ok(volume)),
+        )
+    }
+
+    /// The first candidate `accept` takes, disk-backed first; see [`Placement::Disk`].
+    /// `create_cache` creates our own cache subdirectory before it is inspected; otherwise a
+    /// missing one is inspected at its nearest existing ancestor.
+    fn select<T>(
+        candidates: &[PathBuf],
+        memory_backed_allowed: bool,
+        inspect: fn(&Path) -> Result<Volume, SpillError>,
+        create_cache: bool,
+        mut accept: impl FnMut(&Path, Volume) -> Result<T, SpillError>,
+    ) -> Result<T, SpillError> {
         let mut memory_backed = Vec::new();
         let mut first_error = None;
         for parent in candidates {
             // Our own cache subdirectory may not exist yet; other candidates must.
+            let mut at = parent.as_path();
             if parent.ends_with(Path::new("rusty-tiles").join("scratch")) {
-                let _ = fs::create_dir_all(parent);
+                if create_cache {
+                    let _ = fs::create_dir_all(parent);
+                } else {
+                    at = parent.ancestors().find(|a| a.exists()).unwrap_or(parent);
+                }
             }
-            match inspect(parent) {
+            match inspect(at) {
                 Ok(volume) if volume.memory_backed => memory_backed.push((parent, volume)),
-                Ok(volume) => match Self::materialize(parent, needed, |_| Ok(volume)) {
-                    Ok(created) => return Ok(created),
+                Ok(volume) => match accept(parent, volume) {
+                    Ok(accepted) => return Ok(accepted),
                     Err(error) => {
                         first_error.get_or_insert(error);
                     }
@@ -352,8 +378,8 @@ impl Scratch {
         }
         if memory_backed_allowed {
             for (parent, volume) in &memory_backed {
-                match Self::materialize(parent, needed, |_| Ok(*volume)) {
-                    Ok(created) => return Ok(created),
+                match accept(parent, *volume) {
+                    Ok(accepted) => return Ok(accepted),
                     Err(error) => {
                         first_error.get_or_insert(error);
                     }
@@ -374,6 +400,45 @@ impl Scratch {
                 io::Error::from(io::ErrorKind::NotFound),
             )
         }))
+    }
+
+    /// The start-of-run bound of a consumer that knows its peak before it spills (#342):
+    /// `peak` scratch bytes in total must fit. A deferred scratch is not created: the volume
+    /// its placement would choose is inspected, and its creation later preflights `peak` again.
+    /// An existing scratch is inspected again and must hold `peak` less the bytes already live
+    /// in it. Refusals are typed `InsufficientSpace` at `stage`. Returns the free bytes
+    /// observed. Like every preflight, not a reservation.
+    pub(crate) fn preflight_peak(
+        &self,
+        peak: u64,
+        stage: PreflightStage,
+    ) -> Result<u64, SpillError> {
+        let check = |path: &Path, volume: Volume, needed: u64| {
+            volume::preflight_with(path, needed, SpaceRole::Scratch, stage, |_| Ok(volume))
+                .map(|volume| volume.available_bytes)
+        };
+        let Some(created) = self.created.get() else {
+            self.needed.fetch_max(peak, Ordering::Relaxed);
+            return match &self.placement {
+                Placement::In(parent) => {
+                    let volume = (self.inspect)(parent)?;
+                    check(parent, volume, peak)
+                }
+                Placement::Disk {
+                    candidates,
+                    memory_backed_allowed,
+                } => Self::select(
+                    candidates,
+                    *memory_backed_allowed,
+                    self.inspect,
+                    false,
+                    |parent, volume| check(parent, volume, peak),
+                ),
+            };
+        };
+        let dir = created.dir.path();
+        let volume = (self.inspect)(dir)?;
+        check(dir, volume, peak.saturating_sub(self.live_bytes()))
     }
 
     /// Whether the scratch directory exists (always, for [`Scratch::create`]).
@@ -409,6 +474,11 @@ impl Scratch {
         self.created
             .get()
             .map_or(0, |created| created.volume.allocation_unit_bytes)
+    }
+
+    /// The free-space need preflighted when the directory is created.
+    pub(crate) fn needed(&self) -> u64 {
+        self.needed.load(Ordering::Relaxed)
     }
 
     /// Bytes currently held by live spill files.

@@ -987,10 +987,14 @@ impl ValidationPayloadsIter {
 /// in that existing directory. `expect_profile="hlod"` requires the 0.4 HLOD profile whatever
 /// the archive's labels say: every payload must carry source identity and every HLOD check
 /// runs (an archive declaring HLOD itself is held to it anyway); any other value raises
-/// `ValueError` before the archive is opened. `callback` receives progress events; raising from
-/// it (or Ctrl-C) stops the validation and the exception propagates.
+/// `ValueError` before the archive is opened. `memory_budget_bytes` (an int, default the
+/// lesser of 4 GiB and half the detected headroom) sizes the scratch stores, as for
+/// `mesh_to_tileset`; `jobs` (a positive int, default `None` for auto) caps parallel workers.
+/// Neither changes a verdict or any report member outside `resources` and `scratch`.
+/// `callback` receives progress events; raising from it (or Ctrl-C) stops the validation and
+/// the exception propagates.
 #[pyfunction]
-#[pyo3(signature = (input, *, lazy_payloads = false, max_volume = None, scratch_dir = None, expect_profile = None, callback = None))]
+#[pyo3(signature = (input, *, lazy_payloads = false, max_volume = None, scratch_dir = None, expect_profile = None, memory_budget_bytes = None, jobs = None, callback = None))]
 #[allow(clippy::too_many_arguments)]
 fn validate(
     py: Python<'_>,
@@ -999,6 +1003,8 @@ fn validate(
     max_volume: Option<Bound<'_, PyAny>>,
     scratch_dir: Option<PathBuf>,
     expect_profile: Option<String>,
+    memory_budget_bytes: Option<Bound<'_, PyAny>>,
+    jobs: Option<Bound<'_, PyAny>>,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<Py<PyAny>> {
     use tiles_core::validate::{ExpectedProfile, LimitKey, ValidationFailure, ValidationRequest};
@@ -1017,7 +1023,15 @@ fn validate(
     {
         return Err(PyTypeError::new_err("callback must be callable"));
     }
+    let memory_budget = tiler_memory_budget(py, memory_budget_bytes)?;
+    let jobs = tiler_jobs(py, jobs)?;
     let mut request = ValidationRequest::new(input);
+    if let Some(bytes) = memory_budget {
+        request = request.memory_budget(bytes);
+    }
+    if let TilerJobs::Maximum(n) = jobs {
+        request = request.jobs(n);
+    }
     if let Some(profile) = expected {
         request = request.expect_profile(profile);
     }
