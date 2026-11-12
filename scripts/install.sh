@@ -9,7 +9,8 @@ Usage: install.sh [--version VERSION] [--prefix DIRECTORY]
 Install rusty-tiles into DIRECTORY (default: $HOME/.local/bin).
 VERSION may include the leading v; the default is the latest stable release.
 VERSION dev installs the rolling development build of the develop branch.
-Supports Linux (glibc) and macOS, on x86_64 and ARM64.
+Supports Linux (glibc) on x86_64 and ARM64, and macOS on Apple Silicon.
+Intel macOS builds stop at 0.4.0: --version 0.4.0 (or older) still installs one.
 Windows: download the x86_64-pc-windows-msvc ZIP from GitHub Releases.
 EOF
 }
@@ -41,7 +42,12 @@ case "$(uname -s)" in
         command -v getconf >/dev/null 2>&1 && getconf GNU_LIBC_VERSION >/dev/null 2>&1 \
             || fail "Linux binaries need glibc; on musl/Alpine, build with Cargo or use the container"
         target=$arch-unknown-linux-gnu ;;
-    Darwin) target=$arch-apple-darwin ;;
+    Darwin)
+        # A Rosetta shell on Apple Silicon reports x86_64; the native build is the right one.
+        if [ "$arch" = x86_64 ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || true)" = 1 ]; then
+            arch=aarch64
+        fi
+        target=$arch-apple-darwin ;;
     *) fail "unsupported operating system: $(uname -s); Windows binaries are on GitHub Releases" ;;
 esac
 
@@ -71,6 +77,16 @@ case "$version" in
     dev|[0-9]*.[0-9]*.[0-9]*) ;;
     *) fail "expected a release version such as 0.3.0, or dev" ;;
 esac
+# 0.4.0 is the last release with Intel macOS (x86_64-apple-darwin) archives.
+if [ "$target" = x86_64-apple-darwin ]; then
+    newer=yes
+    if [ "$version" != dev ]; then
+        newer=$(printf '%s\n' "$version" | awk -F'[.+-]' '{ print ($1 + 0 > 0 || $2 + 0 > 4 || ($2 + 0 == 4 && $3 + 0 >= 1)) ? "yes" : "no" }')
+    fi
+    if [ "$newer" = yes ]; then
+        fail "Intel macOS is not supported from 0.4.1 ($version has no x86_64-apple-darwin build); install 0.4.0 with --version 0.4.0, or build from source with cargo (see docs/INSTALL.md)"
+    fi
+fi
 
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT
