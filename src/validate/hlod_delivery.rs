@@ -1177,6 +1177,8 @@ pub(super) struct Store {
     connection: Db,
     /// Places SQLite's temporary files in the scratch directory; dropped after `connection`.
     _vfs: Option<vfs::ScratchVfs>,
+    /// Why it could not, reported once as a warning event by `finish`.
+    vfs_fallback: Option<String>,
     _file: Option<tempfile::NamedTempFile>,
     _anchor: Option<SlotFile>,
     _scratch: Arc<Scratch>,
@@ -1234,6 +1236,7 @@ impl Store {
             recovery_rows: (0, 0),
             connection: Db(None),
             _vfs: None,
+            vfs_fallback: None,
             _file: None,
             _anchor: None,
             _scratch: scratch,
@@ -1343,6 +1346,9 @@ impl Store {
                 .map_err(sql)?;
         }
         self.connection = Db(Some(connection));
+        if scratch_vfs.is_none() {
+            self.vfs_fallback = Some(vfs::ScratchVfs::fallback_reason(self._scratch.path()));
+        }
         self._vfs = scratch_vfs;
         self._file = Some(file);
         self._anchor = Some(anchor);
@@ -1869,6 +1875,9 @@ impl Store {
             used: used.clone(),
             ticks: ticks::Ticks::new(probe),
         };
+        if let Some(reason) = self.vfs_fallback.take() {
+            effort.ticks.warn("sqlite_temp_dir", &reason)?;
+        }
         let hook = used.clone();
         let remaining = budget.value.saturating_sub(already);
         let mut heartbeat = effort.ticks.heartbeat();
@@ -4444,8 +4453,16 @@ mod tests {
             s.tile(coarse, Some(0), IDENTITY).unwrap();
             s.tile(leaf, Some(coarse), IDENTITY).unwrap();
             s.tile(sibling, Some(0), IDENTITY).unwrap();
+            // Even copies' coarse payloads publish NORMAL (#371), every fourth with one
+            // corner turned against the face, so worker replays count normals too.
+            let up = [0., 0., 1.];
+            let coarse_payload = match k % 4 {
+                0 => normal_fixture(&[([a, b, c], [up, up, [0., 0., -1.]])], [1.; 3]),
+                2 => normal_fixture(&[([a, b, c], [up; 3])], [1.; 3]),
+                _ => replay_fixture(&[[a, b, c]]),
+            };
             for (tile, payload) in [
-                (coarse, replay_fixture(&[[a, b, c]])),
+                (coarse, coarse_payload),
                 (leaf, left),
                 (sibling, replay_fixture(&[[b, a, d]])),
             ] {
@@ -4487,6 +4504,15 @@ mod tests {
         let (full, census, boundaries) = parallel_case(1, budget().value, shared);
         assert!(full.starts_with("Ok("), "{full}");
         assert!(census.starts_with("Some("), "{census}");
+        // Twelve coarse tiles publish NORMAL; six have an inverted face.
+        assert!(
+            census.contains("coarse_normals: CoarseNormals { tiles: 12, faces: 12"),
+            "{census}"
+        );
+        assert!(
+            census.contains("inverted_tiles_by_depth: [0, 6]"),
+            "{census}"
+        );
         // Leaf, edge-face and coarse placements were all replayed.
         assert!(boundaries.len() >= 3 * 24 + 8, "{}", boundaries.len());
         let work: u64 = full

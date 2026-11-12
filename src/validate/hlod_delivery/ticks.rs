@@ -95,6 +95,16 @@ impl Ticks {
         }
     }
 
+    /// A warning event; without a run control a no-op.
+    pub(super) fn warn(&self, code: &str, message: &str) -> Result<(), Error> {
+        let Some(probe) = &self.probe else {
+            return Ok(());
+        };
+        probe
+            .emit(&crate::RunEvent::Warning { code, message })
+            .map_err(run_failure)
+    }
+
     /// The `'static` checkpoint run by SQLite's progress handler.
     pub(super) fn heartbeat(&self) -> Heartbeat {
         Heartbeat {

@@ -212,6 +212,10 @@ impl<R: Read + Seek> StoredArchive<R> {
         expected_crc: u32,
         mut head: Option<&mut Vec<u8>>,
     ) -> Result<[u8; 32], ReadError> {
+        // An empty range has no first block: its head is empty, never a previous member's.
+        if let Some(head) = head.as_deref_mut() {
+            head.clear();
+        }
         let mut remaining = size;
         self.reader.seek(SeekFrom::Start(offset))?;
         let mut buffer = [0; 64 * 1024];
@@ -221,7 +225,6 @@ impl<R: Read + Seek> StoredArchive<R> {
             let count = remaining.min(buffer.len() as u64) as usize;
             read_exact(&mut self.reader, &mut buffer[..count])?;
             if let Some(head) = head.take() {
-                head.clear();
                 head.extend_from_slice(&buffer[..count]);
             }
             crc.update(&buffer[..count]);
@@ -1719,6 +1722,42 @@ pub(crate) mod tests {
             member_bytes: length,
             archive_stored_bytes: Some(length),
         }
+    }
+
+    /// #375 review N6: the head is each range's own first block; an empty member's head is
+    /// empty, not the previous member's.
+    #[test]
+    fn hash_head_is_reset_for_every_range() {
+        let large = vec![7u8; 70 * 1024];
+        let bytes = indexed(&[
+            Record::stored(b"tileset.json", b"{}"),
+            Record::stored(b"a.glb", b"glTF-head"),
+            Record::stored(b"b.glb", b""),
+            Record::stored(b"c.glb", &large),
+        ]);
+        let limits = natural_limits(bytes.len());
+        let mut archive =
+            StoredArchive::new(Cursor::new(&bytes), bytes.len() as u64, &limits).unwrap();
+        let mut head = Vec::new();
+        let mut heads = Vec::new();
+        for entry in archive
+            .entries()
+            .into_iter()
+            .filter(|e| e.name.ends_with(".glb"))
+        {
+            archive
+                .hash_range_with_head(entry.size, entry.data_offset, entry.crc32, Some(&mut head))
+                .unwrap();
+            heads.push((entry.name, head.len(), head.first().copied()));
+        }
+        assert_eq!(
+            heads,
+            [
+                ("a.glb".to_string(), 9, Some(b'g')),
+                ("b.glb".to_string(), 0, None),
+                ("c.glb".to_string(), 64 * 1024, Some(7)),
+            ]
+        );
     }
 
     #[test]

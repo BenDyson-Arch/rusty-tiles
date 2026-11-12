@@ -3836,7 +3836,8 @@ fn inspect_run(
         not_inspected: check.not_inspected.into_iter().collect(),
         not_inspected_truncated: labels.truncated,
         // Host-dependent: only a request that set a budget or jobs gets it back, so a default
-        // report is a function of the archive and the request alone (#342 review P2-3).
+        // report is a function of the archive and the request, `scratch` apart (whether files
+        // spilled, and their peak, follow the resolved budget and workers; review P2-3, N5).
         resources: (memory_budget.is_some() || jobs.is_some()).then_some(plan.report),
     };
     Ok(Inspection {

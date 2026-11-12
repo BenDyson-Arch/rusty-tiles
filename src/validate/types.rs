@@ -292,7 +292,8 @@ pub struct ValidationReport {
     pub warnings: Vec<ValidationWarning>,
     /// The resolved memory budget, workers, store sizes and scratch-disk bound (#342). Host-
     /// dependent and never part of a verdict, so present only when the request set a memory
-    /// budget or jobs: a default report depends on the archive and the request alone.
+    /// budget or jobs. Without them every member but `scratch` depends on the archive and the
+    /// request alone; `scratch` follows the host's resolved budget and workers too.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resources: Option<super::resources::ValidationResources>,
 }
