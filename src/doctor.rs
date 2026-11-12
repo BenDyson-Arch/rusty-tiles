@@ -112,6 +112,8 @@ pub enum Probe {
     GeosTriangulation,
     /// Stat of `Cesium.js` in the given runtime directory.
     CesiumRuntime,
+    /// Read-only listing of rusty-tiles scratch folders in the default scratch locations.
+    ScratchFolders,
 }
 
 /// A status with its reason when not ready. `refusal` is the failure kind
@@ -224,9 +226,45 @@ pub struct Report {
     pub native_geospatial: NativeGeospatial,
     pub proj: ProjInventory,
     pub probes: BTreeSet<Probe>,
+    /// Scratch folders in the default locations. Informational: never changes `status`.
+    pub scratch: ScratchSummary,
     /// The `--sourceCrs` check, when one was requested.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_crs: Option<SourceCrsCheck>,
+}
+
+/// Scratch folders in the default scratch locations, as `rusty-tiles scratch list` sees them.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScratchSummary {
+    pub roots: Vec<String>,
+    pub folders: usize,
+    pub live_folders: usize,
+    pub stale_folders: usize,
+    pub stale_bytes: u64,
+    /// The command that removes the stale folders.
+    pub clean: &'static str,
+}
+
+impl ScratchSummary {
+    fn new(probes: &mut BTreeSet<Probe>) -> Self {
+        use crate::scratch_dirs::{list, State, OWNERLESS_STALE_AFTER};
+        probes.insert(Probe::ScratchFolders);
+        let inventory = list(&[], OWNERLESS_STALE_AFTER);
+        let (stale_folders, stale_bytes) = inventory.stale();
+        Self {
+            roots: inventory.roots.into_iter().map(|root| root.path).collect(),
+            folders: inventory.folders.len(),
+            live_folders: inventory
+                .folders
+                .iter()
+                .filter(|folder| folder.state == State::Live)
+                .count(),
+            stale_folders,
+            stale_bytes,
+            clean: "rusty-tiles scratch clean",
+        }
+    }
 }
 
 /// How this build resolves one source CRS definition, without reading any data.
@@ -326,6 +364,7 @@ pub fn report(selected: &[Command], cesium: Option<&Path>) -> Report {
         .find(|status| commands.values().any(|r| r.capability.status == *status))
         .unwrap_or(Status::Ready);
     let proj = proj_inventory(native.capability.clone(), &mut probes);
+    let scratch = ScratchSummary::new(&mut probes);
     Report {
         ready: status == Status::Ready,
         status,
@@ -334,6 +373,7 @@ pub fn report(selected: &[Command], cesium: Option<&Path>) -> Report {
         native_geospatial: native,
         proj,
         probes,
+        scratch,
         source_crs: None,
     }
 }
@@ -784,6 +824,18 @@ impl fmt::Display for Report {
             writeln!(f, "PROJ data: {path}")?;
         }
         writeln!(f, "PROJ grids: {}", self.proj.available_grids.len())?;
+        let scratch = &self.scratch;
+        if scratch.stale_folders == 0 {
+            writeln!(f, "scratch: no stale folders")?;
+        } else {
+            writeln!(
+                f,
+                "scratch: {} stale folders, {} (informational; remove with: {})",
+                scratch.stale_folders,
+                crate::scratch_dirs::human_bytes(scratch.stale_bytes),
+                scratch.clean
+            )?;
+        }
         for grid in &self.proj.available_grids {
             writeln!(f, "  {grid}")?;
         }

@@ -530,6 +530,7 @@ fn probes_are_named_and_limited_to_the_selection() {
         "proj-offline-policy",
         "proj-database",
         "proj-directory-listing",
+        "scratch-folders",
     ];
     let (output, report) = doctor(&["--command", "convert", "--command", "validate"], None);
     assert!(output.status.success(), "{report}");
@@ -559,7 +560,9 @@ fn probes_are_named_and_limited_to_the_selection() {
     }
     #[cfg(not(feature = "native-geospatial"))]
     assert!(
-        probes.iter().all(|p| p == "proj-directory-listing"),
+        probes
+            .iter()
+            .all(|p| p == "proj-directory-listing" || p == "scratch-folders"),
         "{probes:?}"
     );
     assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);

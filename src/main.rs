@@ -115,6 +115,11 @@ enum Command {
     Doctor(DoctorArgs),
     /// Serve selected output directories with an installed Cesium IIFE runtime
     Preview(PreviewArgs),
+    /// List or remove scratch folders left behind by stopped or killed runs
+    Scratch {
+        #[command(subcommand)]
+        action: ScratchAction,
+    },
     #[command(hide = true)]
     EncodeVectorContent {
         #[arg(short, long)]
@@ -147,6 +152,7 @@ impl Command {
             Self::Validate { .. } => "validate",
             Self::Doctor(_) => "doctor",
             Self::Preview(_) => "preview",
+            Self::Scratch { .. } => "scratch",
             Self::EncodeVectorContent { .. } => "encode-vector-content",
             Self::CreateTilesetJson(_) => "createTilesetJson",
             Self::Convert(_) => "convert",
@@ -311,6 +317,44 @@ struct DoctorArgs {
         default_value = "target/preview-runtime/node_modules/cesium/Build/Cesium"
     )]
     cesium: PathBuf,
+}
+
+#[derive(Subcommand)]
+enum ScratchAction {
+    /// List rusty-tiles scratch folders with their size, age, owner and state
+    List(ScratchDirs),
+    /// Remove scratch folders whose owner process is gone, and report the bytes freed
+    Clean(ScratchCleanArgs),
+}
+
+#[derive(Args)]
+struct ScratchDirs {
+    /// Also look in this existing directory, such as a --scratch-dir or an output's parent
+    /// directory; repeatable. The default locations are always searched
+    #[arg(long = "dir", value_name = "DIR")]
+    dirs: Vec<PathBuf>,
+}
+
+#[derive(Args)]
+struct ScratchCleanArgs {
+    #[command(flatten)]
+    dirs: ScratchDirs,
+    /// Remove only folders unmodified for at least this long (such as 90s, 30m, 24h or 7d).
+    /// It also replaces the 24h wait for folders without an owner record
+    #[arg(
+        long = "olderThan",
+        visible_alias = "older-than",
+        value_name = "DURATION",
+        value_parser = parse_duration
+    )]
+    older_than: Option<std::time::Duration>,
+    /// Report what would be removed without removing anything
+    #[arg(long = "dryRun", visible_alias = "dry-run")]
+    dry_run: bool,
+}
+
+fn parse_duration(value: &str) -> Result<std::time::Duration, String> {
+    rusty_tiles::scratch_dirs::parse_duration(value)
 }
 
 #[derive(Args)]
@@ -1198,6 +1242,142 @@ fn parse_memory_budget(value: &str) -> Result<u64, String> {
     rusty_tiles::parse_memory_budget(value).map_err(|e| e.to_string())
 }
 
+/// `scratch list` and `scratch clean`. Results go to stdout; a folder that could not be
+/// removed makes `clean` an `io` failure (exit 1) that still carries the full report.
+fn scratch(action: ScratchAction, json: bool) -> Result<Outcome, Error> {
+    use rusty_tiles::scratch_dirs::{self, human_bytes};
+    let explicit = match &action {
+        ScratchAction::List(dirs) => &dirs.dirs,
+        ScratchAction::Clean(args) => &args.dirs.dirs,
+    };
+    for dir in explicit {
+        if !dir.is_dir() {
+            return Err(Error::msg(format!(
+                "--dir {}: not an existing directory",
+                dir.display()
+            )));
+        }
+    }
+    let clean_hint = "rusty-tiles scratch clean";
+    match action {
+        ScratchAction::List(dirs) => {
+            let inventory = scratch_dirs::list(&dirs.dirs, scratch_dirs::OWNERLESS_STALE_AFTER);
+            let (stale, stale_bytes) = inventory.stale();
+            if json {
+                let mut value = serde_json::to_value(&inventory)?;
+                value["ok"] = true.into();
+                value["stale"] = json!({"folders": stale, "bytes": stale_bytes});
+                return Ok(Outcome::Report(value));
+            }
+            for folder in &inventory.folders {
+                outln!("{}", scratch_line(folder));
+            }
+            if inventory.folders.is_empty() {
+                let roots: Vec<_> = inventory.roots.iter().map(|r| r.path.as_str()).collect();
+                outln!("no rusty-tiles scratch folders in {}", roots.join(", "));
+            } else if stale == 0 {
+                outln!("{} folders, none stale", inventory.folders.len());
+            } else {
+                outln!(
+                    "{} folders, {stale} stale ({}); remove them with: {clean_hint}",
+                    inventory.folders.len(),
+                    human_bytes(stale_bytes)
+                );
+            }
+            Ok(Outcome::Done)
+        }
+        ScratchAction::Clean(args) => {
+            let report = scratch_dirs::clean(&args.dirs.dirs, args.older_than, args.dry_run);
+            let failure = (!report.failed.is_empty()).then(|| {
+                let paths: Vec<_> = report.failed.iter().map(|f| f.path.as_str()).collect();
+                format!(
+                    "could not remove {} scratch folders: {}",
+                    paths.len(),
+                    paths.join(", ")
+                )
+            });
+            if json {
+                let mut value = serde_json::to_value(&report)?;
+                value["ok"] = failure.is_none().into();
+                if let Some(message) = &failure {
+                    value["error"] = json!({"code": "io", "message": message});
+                    value["exitCode"] = 1.into();
+                }
+                return Ok(Outcome::Report(value));
+            }
+            let verb = if report.dry_run {
+                "would remove"
+            } else {
+                "removed"
+            };
+            for folder in &report.removed {
+                outln!("{verb} {:>10}  {}", human_bytes(folder.bytes), folder.path);
+            }
+            for failed in &report.failed {
+                errln!("error: removing {}: {}", failed.path, failed.message);
+            }
+            let kept = |state| {
+                report
+                    .kept
+                    .iter()
+                    .filter(|folder| folder.state == state)
+                    .count()
+            };
+            outln!(
+                "{} {} from {} folders; kept {} live, {} unverified, {} too recent",
+                if report.dry_run {
+                    "would free"
+                } else {
+                    "freed"
+                },
+                human_bytes(report.bytes_freed),
+                report.removed.len(),
+                kept(scratch_dirs::State::Live),
+                kept(scratch_dirs::State::Unverified),
+                kept(scratch_dirs::State::Stale)
+            );
+            match failure {
+                Some(message) => Err(Error::Io(io::Error::other(message))),
+                None => Ok(Outcome::Done),
+            }
+        }
+    }
+}
+
+/// One `scratch list` line: state, size, age since last change, owner and path.
+fn scratch_line(folder: &rusty_tiles::scratch_dirs::Folder) -> String {
+    use rusty_tiles::scratch_dirs::{human_bytes, Reason};
+    let age = match folder.modified_seconds_ago {
+        s if s < 120 => format!("{s}s"),
+        s if s < 2 * 3600 => format!("{}m", s / 60),
+        s if s < 2 * 86400 => format!("{}h", s / 3600),
+        s => format!("{}d", s / 86400),
+    };
+    let reason = match folder.reason {
+        Reason::OwnerRunning => "running",
+        Reason::OwnerExited => "exited",
+        Reason::PidReused => "PID reused",
+        Reason::OtherHost => "other host",
+        Reason::StartUnverifiable => "start time unverifiable",
+        Reason::OtherUser => "other user",
+        Reason::NoOwnerRecord => "no owner record",
+    };
+    let owner = match &folder.owner {
+        Some(owner) => format!("pid {} {reason}: {}", owner.pid, owner.command),
+        None => reason.to_owned(),
+    };
+    let state = serde_json::to_value(folder.state)
+        .ok()
+        .and_then(|state| state.as_str().map(str::to_owned))
+        .unwrap_or_default();
+    format!(
+        "{state:<10} {:>10} {:>5} ago  {}  ({owner})",
+        human_bytes(folder.bytes),
+        age,
+        folder.path
+    )
+}
+
 fn run(cli: Cli) -> Result<Outcome, Error> {
     let pack_events = cli.progress.is_some();
     let json = cli.json;
@@ -1314,6 +1494,7 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
                 })),
             };
         }
+        Command::Scratch { action } => scratch(action, json)?,
         Command::Preview(a) => {
             let layers: Vec<_> = [
                 ("point-cloud", a.point_cloud),
@@ -1747,7 +1928,11 @@ mod tests {
     #[test]
     fn camel_case_options_and_subcommands_have_visible_kebab_aliases() {
         let cli = Cli::command();
-        for command in cli.get_subcommands().filter(|c| !c.is_hide_set()) {
+        // Nested subcommands (`scratch list|clean`) follow the same spelling rule.
+        let commands = cli
+            .get_subcommands()
+            .flat_map(|c| std::iter::once(c).chain(c.get_subcommands()));
+        for command in commands.filter(|c| !c.is_hide_set()) {
             let name = command.get_name();
             if name.chars().any(|c| c.is_ascii_uppercase()) {
                 let aliases: Vec<_> = command.get_visible_aliases().collect();
@@ -1781,7 +1966,7 @@ mod tests {
         let mut seen = Vec::new();
         for command in cli.get_subcommands().filter(|c| !c.is_hide_set()) {
             let name = command.get_name();
-            if name == "doctor" {
+            if name == "doctor" || name == "scratch" {
                 continue;
             }
             let readiness = doctor::Command::from_name(name)
