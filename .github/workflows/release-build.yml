@@ -25,21 +25,27 @@ jobs:
   binaries:
     name: Binary (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    # Intel macOS took 68-82 minutes in the v0.4.0 release and was cancelled once at 90.
+    timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            timeout: 90
           - os: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
+            timeout: 90
           - os: macos-15-intel
             target: x86_64-apple-darwin
+            timeout: 120
           - os: macos-15
             target: aarch64-apple-darwin
+            timeout: 90
           - os: windows-2022
             target: x86_64-pc-windows-msvc
+            timeout: 90
     defaults:
       run:
         shell: bash
