@@ -856,6 +856,9 @@ pub(crate) fn capture_admitted(
     .map_err(super::failure)?;
     let scratch = Scratch::create(config.scratch_dir.as_deref(), scratch_admission)
         .map_err(|e| super::failure(e.into()))?;
+    if let Some(stop) = &config.stop {
+        scratch.watch(stop.clone());
+    }
     #[cfg(test)]
     if let Some(chunk) = config.test_chunk_bytes {
         scratch.set_chunk_bytes(chunk);
@@ -972,6 +975,8 @@ pub(crate) fn capture_admitted(
             .num_threads(workers.max(1))
             .build()
             .map_err(|_| exhausted("image admission worker pool"))?;
+        // Workers cannot borrow `check`; the run's probe is `Sync`.
+        let stop = || config.stop.as_ref().map_or(Ok(()), |stop| stop.check());
         for range in decode_batches(&charges, budget, workers)? {
             progress.advance(image_count.saturating_add(range.start as u64))?;
             let (start, end) = (range.start, range.end);
@@ -980,12 +985,13 @@ pub(crate) fn capture_admitted(
                 images[start..end]
                     .par_iter()
                     .map(|image| {
-                        let encoded = image.reconstruct(&mut || Ok(()))?;
+                        stop()?;
+                        let encoded = image.reconstruct(&mut || stop())?;
                         let (info, rgba) = source::decode_image_admitted(
                             &encoded,
                             image.identity.mime.as_deref(),
                             admission,
-                            &mut || Ok(()),
+                            &mut || stop(),
                         )?;
                         drop(rgba);
                         Ok(info)

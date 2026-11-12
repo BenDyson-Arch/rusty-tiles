@@ -297,7 +297,7 @@ fn prepare(
         expected,
     })
 }
-struct Workspace(tempfile::TempDir);
+struct Workspace(crate::cleanup::RegisteredDir);
 impl Workspace {
     fn create(output: &Path) -> Result<Self, JobError> {
         let parent = output.parent().expect("resolved output parent");
@@ -306,14 +306,14 @@ impl Workspace {
         tempfile::Builder::new()
             .prefix(".point-work-")
             .tempdir_in(parent)
-            .map(Self)
+            .map(|dir| Self(crate::cleanup::RegisteredDir::new(dir)))
             .map_err(|e| JobError::io("create point-cloud workspace", parent, e))
     }
     fn cleanup(self) -> Result<(), CleanupDiagnostic> {
         self.cleanup_with(&mut SystemIo)
     }
     fn cleanup_with(self, operations: &mut impl ProducerIo) -> Result<(), CleanupDiagnostic> {
-        let path = self.0.keep();
+        let (path, _registered) = self.0.keep();
         operations.cleanup(&path).map_err(|e| CleanupDiagnostic {
             error: JobError::io("remove point-cloud workspace", &path, e),
             path,

@@ -98,6 +98,8 @@ pub(crate) struct TreeConfig {
     pub source_crs: Option<super::MeshSourceCrs>,
     /// D8's resolved run budget: every stage plans against it as a ceiling. Only the
     /// capture-only diagnostic build runs without one.
+    /// The run's stop probe: spill scratch created for this run stops with it.
+    pub(crate) stop: Option<crate::runtime::AttemptProbe>,
     pub memory_budget: Option<super::resources::MemoryBudget>,
     /// Test seam: largest spill chunk of the capture scratch.
     #[cfg(test)]
@@ -146,6 +148,7 @@ impl TreeConfig {
             member_ceiling: MEMBER_CEILING_3TZ,
             output_parents: None,
             source_crs: None,
+            stop: None,
             memory_budget: None,
             #[cfg(test)]
             test_chunk_bytes: None,
