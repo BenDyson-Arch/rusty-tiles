@@ -545,9 +545,9 @@ jobs:
   crs-allowlist:
     name: CRS allow-list regeneration
     needs: changes
-    # Full tier only: about 15 minutes of GDAL sampling and a release lib-test build. Pull
-    # requests check the committed table, its parser and GDAL reference fixtures in `Rust`.
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
+    # Full tier only: about 15 minutes of GDAL sampling and a release lib-test build. Fast-tier
+    # pull requests check the committed table, its parser and GDAL reference fixtures in `Rust`.
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.full != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60 # versions: TIMEOUT_CRS_ALLOWLIST
     steps:
@@ -575,6 +575,7 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: crs-allowlist
+          save-if: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
       - name: Regenerate the EPSG allow-list and fail on drift or any code over 1 mm
         shell: bash -el {0}
         run: python -I scripts/crs-allowlist/generate.py check --summary "${{ runner.temp }}/crs-allowlist-summary.json"
