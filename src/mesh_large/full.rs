@@ -1288,9 +1288,9 @@ fn join_corner_depths(
             progress.advance(rank * 3)?;
         }
         let triangle = triangle?;
-        for corner in 0..3 {
+        for (corner, position) in triangle.positions.iter().enumerate() {
             corners.push(RankCorner {
-                position: triangle.positions[corner].map(f32::to_bits),
+                position: position.map(f32::to_bits),
                 rank,
                 corner: corner as u8,
             })?;
