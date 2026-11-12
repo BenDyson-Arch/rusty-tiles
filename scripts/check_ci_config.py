@@ -5,7 +5,10 @@ ci/versions.env is the one place that sets CI tool versions and job time limits.
 read a file for a job's `timeout-minutes` or an action's inputs, so workflows write those as
 literals and end each such line with `# versions: KEY [KEY ...]`. This check fails when:
 
-- a marked line names an unknown key, or does not contain that key's value as a token;
+- a marked line names an unknown key, or does not contain that key's value as a token; a
+  line marked with several keys must hold exactly that many literals (numbers or versions,
+  outside quoted strings in a ${{ }} expression), the i-th equal to the i-th key's value,
+  so `${{ cond && 120 || 90 }} # versions: A B` binds A to 120 and B to 90;
 - a job that runs steps (not a reusable-workflow call) has no `timeout-minutes`, or a
   `timeout-minutes` line has no marker;
 - a pinned tool version (maturin, Node, Python, cargo-nextest) is written without a marker;
@@ -47,6 +50,22 @@ def contains_token(text, value):
     return re.search(r"(?<![0-9A-Za-z.])" + re.escape(value) + r"(?![0-9A-Za-z])", text) is not None
 
 
+LITERAL = re.compile(r"(?<![\w.-])\d+(?:\.\d+)*(?![\w.])")
+
+
+def literals(body):
+    """The number and version literals of a marked line's value, in order.
+
+    In a ${{ }} expression, quoted strings (such as 'refs/heads/main') are left out; in a
+    plain value, quoted literals count (python: ['3.10', '3.14']).
+    """
+    value = re.sub(r"^\s*(?:-\s+)?[\w.-]+:\s*", "", body, count=1)
+    expression = re.search(r"\$\{\{(.*)\}\}", value)
+    if expression:
+        value = re.sub(r"'[^']*'", "''", expression.group(1))
+    return LITERAL.findall(value)
+
+
 def check_lines(path, lines, values):
     errors = []
     for number, line in enumerate(lines, 1):
@@ -54,11 +73,23 @@ def check_lines(path, lines, values):
         marker = MARKER.search(line)
         if marker:
             body = line[:marker.start()]
-            for key in marker.group(1).split():
-                if key not in values:
-                    errors.append(f"{where}: unknown key {key} in ci/versions.env marker")
-                elif not contains_token(body, values[key]):
-                    errors.append(f"{where}: expected {key}={values[key]} on this line")
+            keys = marker.group(1).split()
+            unknown = [key for key in keys if key not in values]
+            for key in unknown:
+                errors.append(f"{where}: unknown key {key} in ci/versions.env marker")
+            if unknown:
+                continue
+            if len(keys) == 1:
+                if not contains_token(body, values[keys[0]]):
+                    errors.append(f"{where}: expected {keys[0]}={values[keys[0]]} on this line")
+                continue
+            found = literals(body)
+            if len(found) != len(keys):
+                errors.append(f"{where}: {len(keys)} keys but {len(found)} literals ({', '.join(found) or 'none'})")
+                continue
+            for key, literal in zip(keys, found):
+                if literal != values[key]:
+                    errors.append(f"{where}: expected {key}={values[key]} in its position, found {literal}")
         elif re.match(r"\s*timeout-minutes:", line):
             errors.append(f"{where}: timeout-minutes needs a '# versions: TIMEOUT_...' marker")
         elif PINNED.search(line) and "${{" not in line:

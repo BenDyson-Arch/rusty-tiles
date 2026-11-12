@@ -81,6 +81,26 @@ class CheckCiConfigTests(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("TIMEOUT_LONG=90", errors[0])
 
+    def test_each_key_is_bound_to_its_own_position(self):
+        # The r2 review's case: the nightly key held 90 while the expression said 120, and
+        # the 90 of the second key satisfied a whole-line token search.
+        versions = VERSIONS.replace("TIMEOUT_LONG=90", "TIMEOUT_LONG=90\nTIMEOUT_NIGHTLY=90")
+        workflow = WORKFLOW + (
+            "  nightly:\n    runs-on: ubuntu-24.04\n"
+            "    timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.nightly) && 120 || 90 }}"
+            " # versions: TIMEOUT_NIGHTLY TIMEOUT_LONG\n    steps:\n      - run: true\n")
+        errors = self.errors(workflow=workflow, versions=versions)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("expected TIMEOUT_NIGHTLY=90 in its position, found 120", errors[0])
+        self.assertEqual(self.errors(workflow=workflow, versions=versions.replace("TIMEOUT_NIGHTLY=90", "TIMEOUT_NIGHTLY=120")), [])
+        # Swapped keys and a missing literal fail too; quoted strings in an expression do not count.
+        swapped = workflow.replace("TIMEOUT_NIGHTLY TIMEOUT_LONG", "TIMEOUT_LONG TIMEOUT_NIGHTLY")
+        self.assertEqual(len(self.errors(workflow=swapped, versions=versions.replace("TIMEOUT_NIGHTLY=90", "TIMEOUT_NIGHTLY=120"))), 2)
+        short = workflow.replace("&& 120 || 90", "&& 120")
+        self.assertIn("2 keys but 1 literals", self.errors(workflow=short, versions=versions)[0])
+        self.assertEqual(check_ci_config.literals("    retention-days: ${{ github.ref == 'refs/heads/v1.2' && 90 || 14 }} "), ["90", "14"])
+        self.assertEqual(check_ci_config.literals("        python: ['3.10', '3.14'] "), ["3.10", "3.14"])
+
     def test_unknown_key_fails(self):
         errors = self.errors(workflow=WORKFLOW.replace("# versions: MATURIN_VERSION", "# versions: MATURIN"))
         self.assertIn("unknown key MATURIN", errors[0])
