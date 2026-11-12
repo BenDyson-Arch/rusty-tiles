@@ -28,7 +28,7 @@ assert rusty_tiles.validate(result.output)["ok"]
 
 ## API
 
-All inputs and outputs are filesystem paths (`str` or `os.PathLike`). All keywords are keyword-only. Existing outputs are kept unless `force=True`. Without a callback, functions are silent.
+Converter inputs and outputs are filesystem paths (`str` or `os.PathLike`). All keywords are keyword-only. Existing outputs are kept unless `force=True`. Without a callback, functions are silent.
 
 | Function | Keyword arguments and result |
 | --- | --- |
@@ -39,6 +39,9 @@ All inputs and outputs are filesystem paths (`str` or `os.PathLike`). All keywor
 | `vector_to_3tz(input, output, ...)` | GeoJSON or GeoPackage; see [Vectors](#vectors); returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; packs an existing tileset directory and returns `PackageResult` |
 | `validate(input, ...)` | `lazy_payloads=False`, `max_volume=None`, `scratch_dir=None`, `expect_profile=None`, `callback=None`; returns the validation report as a `dict` |
+| `resolve_source_crs(definition)` | Resolves one CRS definition as the converters do, without converting; returns a `dict`, see [Source CRS checks](#source-crs-checks) |
+| `supported_epsg_codes()` | Every EPSG code this package resolves, as `"EPSG:nnnn"` strings in numeric order |
+| `crs_table_info()` | The EPSG table's `epsg`, `proj` and `gdal` versions and its `codes`, `builtin` and `allowList` counts, as a `dict` |
 | `raster_tile_to_directory(input, output, *, zoom, x, y, force=False, callback=None)` | Always raises `UnsupportedError` in this package; see [Not included](#not-included) |
 
 Every result has `output` (the resolved absolute path) and `cleanup_diagnostics`. `PackageResult` has a `receipt`; the others have a required `report` dictionary, and `TilerResult` also has `diagnostics`. `TilerResult`, `PointCloudResult`, `VectorResult` and `PackageResult` have `archive=True`. Results are frozen, but their dictionaries are not deeply immutable.
@@ -219,6 +222,36 @@ Text `.xyz` files and in-memory buffers are not supported.
 default only position and colour are kept). `metadata_attributes=True` adds
 point attributes named `vertex_classification`, `vertex_intensity` and
 `vertex_return_number`.
+
+### Source CRS checks
+
+`resolve_source_crs(definition)` is the package's form of `doctor --sourceCrs`: it runs
+the converters' own resolver on an EPSG code, WKT or PROJ string and reads no data, so
+a tool can show the datum operation before a long conversion.
+
+```python
+check = rusty_tiles.resolve_source_crs("EPSG:7856")
+# {"accepted": True, "kind": "allowlist", "definition": "+proj=utm +zone=56 ...",
+#  "crsOperation": {"source": "EPSG:7856", "kind": "null",
+#                   "operation": "GDA2020 to WGS 84 (2)", "operationId": "EPSG:8450",
+#                   "accuracyMetres": 3.0, "verification": "..."},
+#  "summary": "EPSG:7856: GDA2020 to WGS 84 (2) (EPSG:8450), EPSG-stated accuracy 3 m",
+#  "refusal": None}
+```
+
+`kind` is `"builtin"` (WGS 84 geographic, UTM and Mercator), `"allowlist"` (any other
+EPSG code), `"wkt"` or `"proj"`, or `None` for text of none of those forms.
+`definition` is the text the transform is built from. `crsOperation` has the same
+shape as the reports' `crsOperation` and is `None` except for allow-listed codes;
+`summary` is its one-line form, or `"EPSG:nnnn: WGS 84, no datum change"` for a
+built-in code. An unsupported definition is returned with `accepted=False` and the
+converters' `refusal` message instead of raising. A non-`str` argument raises
+`TypeError` and an empty one `InvalidRequestError`.
+
+`supported_epsg_codes()` lists exactly the codes `resolve_source_crs` accepts (about
+3,200); `crs_table_info()` gives the EPSG, PROJ and GDAL versions they were verified
+with. No CRS names or areas of use are included: take those from your own catalogue,
+such as pyproj.
 
 ### Vectors
 

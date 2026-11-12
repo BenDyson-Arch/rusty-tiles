@@ -39,7 +39,10 @@ mod tileset_node;
 mod vec3;
 pub mod vector;
 
-pub use crs::{CrsOperation, OperationKind};
+pub use crs::{
+    crs_table_info, resolve_source_crs, supported_epsg_codes, CrsOperation, CrsTableInfo,
+    OperationKind, SourceCrsKind, SourceCrsResolution,
+};
 pub use error::Error;
 pub use georef::{Cartographic, RotationDegrees, SourceAxes, SourceOffset};
 pub use mesh_archive::{
