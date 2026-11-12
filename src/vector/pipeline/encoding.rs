@@ -1304,6 +1304,11 @@ pub(super) fn encode(
     let db =
         rusqlite::Connection::open_with_flags(spool, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(sql)?;
+    // Prefix totals, OFFSET sorts and aggregation scans run on this connection.
+    attempt
+        .probe()
+        .interrupt_sqlite(&db, "sqlite.encode")
+        .map_err(sql)?;
     db.execute_batch("PRAGMA cache_size=-32768; PRAGMA temp_store=FILE;")
         .map_err(sql)?;
     let end = format!("{prefix}~");

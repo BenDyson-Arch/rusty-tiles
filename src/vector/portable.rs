@@ -83,20 +83,33 @@ pub(super) struct Reader {
 }
 
 impl Reader {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn new(
         input: &Path,
         options: &VectorOptions,
         frame: Option<Frame>,
         scratch: &Path,
     ) -> Result<Self, Error> {
+        Self::with_stop(input, options, frame, scratch, None)
+    }
+
+    /// [`Reader::new`] whose SQLite work (the GeoJSON spool, GeoPackage scans) is
+    /// interrupted once `stop`'s run has stopped.
+    pub fn with_stop(
+        input: &Path,
+        options: &VectorOptions,
+        frame: Option<Frame>,
+        scratch: &Path,
+        stop: Option<&crate::runtime::AttemptProbe>,
+    ) -> Result<Self, Error> {
         validate_filter(options.where_clause.as_deref())?;
         let extension = input.extension().and_then(|s| s.to_str()).unwrap_or("");
         let source = if extension.eq_ignore_ascii_case("gpkg") {
-            Source::Gpkg(open_gpkg(input, options)?)
+            Source::Gpkg(open_gpkg(input, options, stop)?)
         } else if extension.eq_ignore_ascii_case("geojson")
             || extension.eq_ignore_ascii_case("json")
         {
-            Source::GeoJson(open_geojson(input, options, scratch)?)
+            Source::GeoJson(open_geojson(input, options, scratch, stop)?)
         } else {
             return Err(Error::Environment("portable vector input supports GeoJSON and GeoPackage; use native-geospatial for other drivers".into()));
         };
@@ -736,9 +749,15 @@ fn open_geojson(
     input: &Path,
     options: &VectorOptions,
     scratch: &Path,
+    stop: Option<&crate::runtime::AttemptProbe>,
 ) -> Result<GeoJsonSource, Error> {
     let file = tempfile::NamedTempFile::new_in(scratch)?;
     let db = Connection::open(file.path()).map_err(input_sql)?;
+    // Every feature is one INSERT: the handler bounds the whole ingestion's stop latency.
+    if let Some(stop) = stop {
+        stop.interrupt_sqlite(&db, "sqlite.geojson")
+            .map_err(input_sql)?;
+    }
     db.set_db_config(DbConfig::SQLITE_DBCONFIG_DQS_DML, false)
         .map_err(input_sql)?;
     db.execute_batch("PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA temp_store=FILE; PRAGMA cache_size=-8192; CREATE TABLE rusty_features(seq INTEGER PRIMARY KEY,json TEXT NOT NULL); BEGIN").map_err(input_sql)?;
@@ -1045,7 +1064,11 @@ fn validate_declared_geometry(
     Ok(())
 }
 
-fn open_gpkg(input: &Path, options: &VectorOptions) -> Result<GpkgSource, Error> {
+fn open_gpkg(
+    input: &Path,
+    options: &VectorOptions,
+    stop: Option<&crate::runtime::AttemptProbe>,
+) -> Result<GpkgSource, Error> {
     // immutable avoids journals and source mutations, but ignores an active WAL.
     // Refuse that case so committed features are never silently omitted.
     let canonical = std::fs::canonicalize(input)?;
@@ -1084,6 +1107,11 @@ fn open_gpkg(input: &Path, options: &VectorOptions) -> Result<GpkgSource, Error>
             | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .map_err(input_sql)?;
+    // A selective filter can scan a whole table inside one step.
+    if let Some(stop) = stop {
+        stop.interrupt_sqlite(&db, "sqlite.gpkg")
+            .map_err(input_sql)?;
+    }
     db.set_db_config(DbConfig::SQLITE_DBCONFIG_DQS_DML, false)
         .map_err(input_sql)?;
     db.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)

@@ -1148,11 +1148,16 @@ pub(super) fn convert(
         },
     )?;
     std::fs::create_dir_all(output.join("t"))?;
-    let reuse = Reuse::new(output, options)?;
-    let mut reader = Reader::new(input, options, reuse.frame.clone(), output)?;
+    let mut reuse = Reuse::new(output, options)?;
+    let probe = attempt.probe();
+    reuse.stop = Some(probe.clone());
+    let mut reader = Reader::new(input, options, reuse.frame.clone(), output, Some(&probe))?;
     let scratch = tempfile::tempdir_in(output)?;
     let spool: PathBuf = scratch.path().join("features.sqlite");
     let db = open_spool(&spool)?;
+    // Partition sorts, fingerprint updates and grid scans are single statements or
+    // per-row SQL: a stop interrupts them within 10,000 SQLite operations.
+    probe.interrupt_sqlite(&db, "sqlite.spool").map_err(sql)?;
     db.execute_batch("BEGIN;").map_err(sql)?;
     let counters = RefCell::new(Counters::default());
     let reports = RefCell::new(Reports {
