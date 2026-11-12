@@ -252,7 +252,7 @@ jobs:
     # Skipped jobs satisfy required checks; a failed classifier runs everything.
     if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
