@@ -31,12 +31,14 @@ const assert = (x, message) => { if (!x) throw new Error(message); };
     }
     assert(document.extensionsRequired.includes('EXT_meshopt_compression'), 'meshopt required declaration');
     // NONE is lossless wire compression; OCTAHEDRAL carries the profile's lossy leaf NORMAL.
-    assert(extension.buffer === 0 && extension.mode === 'ATTRIBUTES' && (extension.filter === 'NONE' || (extension.filter === 'OCTAHEDRAL' && extension.byteStride === 8)), 'meshopt mode/filter');
+    // An absent filter is the extension's NONE default (producers omit it, #370).
+    const filter = extension.filter ?? 'NONE';
+    assert(extension.buffer === 0 && extension.mode === 'ATTRIBUTES' && (filter === 'NONE' || (filter === 'OCTAHEDRAL' && extension.byteStride === 8)), 'meshopt mode/filter');
     const compressed = range(extension.byteOffset || 0, extension.byteLength);
     assert(compressed[0] === 0xa0, 'pinned ATTRIBUTES codec header');
     assert(extension.count * extension.byteStride === view.byteLength, 'decoded view size');
     const decoded = new Uint8Array(view.byteLength);
-    Decoder.decodeGltfBuffer(decoded, extension.count, extension.byteStride, compressed, extension.mode, extension.filter);
+    Decoder.decodeGltfBuffer(decoded, extension.count, extension.byteStride, compressed, extension.mode, filter);
     return Buffer.from(decoded).toString('base64');
   });
   const sha = data => crypto.createHash('sha256').update(data).digest('hex');
