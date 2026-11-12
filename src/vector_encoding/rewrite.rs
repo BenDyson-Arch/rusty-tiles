@@ -89,14 +89,15 @@ impl Serialize for Meshopt {
         let Action::Encode { stride, count, .. } = self.action else {
             return Err(serde::ser::Error::custom("encoded action required"));
         };
-        let mut m = s.serialize_map(Some(7))?;
+        // `filter` is left at its NONE default: some importers (Blender 5.2's
+        // glTF importer) reject an explicit "NONE".
+        let mut m = s.serialize_map(Some(6))?;
         m.serialize_entry("buffer", &0u8)?;
         m.serialize_entry("byteOffset", &offset)?;
         m.serialize_entry("byteLength", &length)?;
         m.serialize_entry("byteStride", &stride)?;
         m.serialize_entry("count", &count)?;
         m.serialize_entry("mode", "ATTRIBUTES")?;
-        m.serialize_entry("filter", "NONE")?;
         m.end()
     }
 }

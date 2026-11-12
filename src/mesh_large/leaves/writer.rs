@@ -10,7 +10,7 @@ use super::{
     prepared::PreparedAtlas,
 };
 use crate::{
-    glb::{self, MeshoptLayout, MeshoptStream},
+    glb::{self, MeshoptStream},
     JobError, JobErrorKind,
 };
 use serde_json::{json, Map, Value};
@@ -839,16 +839,9 @@ pub(super) fn encode(
         glb::add_extension(&mut document, "KHR_texture_basisu", true)
             .map_err(|e| invalid(&e.to_string()))?;
     }
-    let compressed = glb::meshopt_compress(
-        &mut document,
-        &wire.binary,
-        MeshoptLayout {
-            align: 8,
-            explicit_filter: true,
-        },
-        |i, _| Ok(wire.streams[i]),
-    )
-    .map_err(|e| invalid(&e.to_string()))?;
+    let compressed =
+        glb::meshopt_compress(&mut document, &wire.binary, 8, |i, _| Ok(wire.streams[i]))
+            .map_err(|e| invalid(&e.to_string()))?;
     drop(wire.binary);
     let json_bytes = serde_json::to_vec(&document).map_err(|e| invalid(&e.to_string()))?;
     let decoded: Value =
@@ -987,7 +980,7 @@ mod tests {
         {
             use crate::content_integrity::meshopt::{self, Filter, Mode};
             assert_eq!(e["mode"], "ATTRIBUTES");
-            let filter = Filter::parse(e["filter"].as_str().unwrap()).unwrap();
+            let filter = Filter::parse(e["filter"].as_str().unwrap_or("NONE")).unwrap();
             let start = e["byteOffset"].as_u64().unwrap() as usize;
             let length = e["byteLength"].as_u64().unwrap() as usize;
             meshopt::check_header(&bin[start..start + length], Mode::Attributes).unwrap();
@@ -1243,14 +1236,11 @@ mod tests {
                     assert!(meshopt.is_none(), "{name}");
                 } else {
                     let e = meshopt.unwrap();
+                    // NONE is the default filter and is not written.
+                    assert!(e.get("filter").is_none(), "{name}");
                     assert_eq!(
-                        (&e["mode"], &e["filter"], &e["byteStride"], &e["count"]),
-                        (
-                            &json!("ATTRIBUTES"),
-                            &json!("NONE"),
-                            &json!(width),
-                            &json!(rows.len())
-                        ),
+                        (&e["mode"], &e["byteStride"], &e["count"]),
+                        (&json!("ATTRIBUTES"), &json!(width), &json!(rows.len())),
                         "{name}"
                     );
                 }
@@ -1315,15 +1305,9 @@ mod tests {
         let mut binary = Vec::new();
         let mut doc = json!({"bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":raw.len(),"byteStride":8}]});
         let count = normals.len();
-        let out = glb::meshopt_compress(
-            &mut doc,
-            &raw,
-            MeshoptLayout {
-                align: 8,
-                explicit_filter: true,
-            },
-            |_, _| Ok(Some(MeshoptStream::Octahedral { count, stride: 8 })),
-        )
+        let out = glb::meshopt_compress(&mut doc, &raw, 8, |_, _| {
+            Ok(Some(MeshoptStream::Octahedral { count, stride: 8 }))
+        })
         .unwrap();
         binary.extend_from_slice(&out);
         let decoded =

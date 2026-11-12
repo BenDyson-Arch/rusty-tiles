@@ -93,7 +93,7 @@ Valid but unsupported content is reported as Unsupported, distinct from malforme
 
 **EXT_meshopt_compression** is decoded within the same limits.
 
-- Filters NONE and OCTAHEDRAL are supported; QUATERNION and EXPONENTIAL are Unsupported. A stream with an unsupported filter is Unsupported whatever its header, because filtered streams are refused before their bytes are read.
+- Filters NONE and OCTAHEDRAL are supported; an absent `filter` is NONE, and an explicit `"NONE"` is accepted too. rusty-tiles writes `filter` only for OCTAHEDRAL. QUATERNION and EXPONENTIAL are Unsupported. A stream with an unsupported filter is Unsupported whatever its header, because filtered streams are refused before their bytes are read.
 - OCTAHEDRAL needs ATTRIBUTES mode and a 4- or 8-byte stride. Every element must be a valid K-bit code: the third component encodes 1.0 as `(1 << (K - 1)) - 1`, and |x| and |y| do not exceed it. Anything else is invalid.
 - The extension defines filter output only to one unit, so declared bounds on a filtered BYTE or SHORT accessor may differ from decoded values by one unit. All other bounds are exact.
 - A compressed view may serve any role, including property-table values.

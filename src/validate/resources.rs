@@ -133,6 +133,8 @@ fn sort_for(memory: u64, threads: usize) -> SortConfig {
         fan_in: fan_in as usize,
         buffer_bytes: buffer as usize,
         jobs: threads,
+        // No background run writers: the plan's bound is `1.5·R`, without `w·1.5·R` more.
+        writers: 0,
     }
 }
 

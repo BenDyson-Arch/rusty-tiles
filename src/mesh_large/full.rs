@@ -3,6 +3,7 @@
 use super::{
     attributes::{self, FullTriangle},
     capture::{self, SourceScan},
+    capture_sort::{self, SortLoad, SortPlan},
     config::{self, JobsPlan, MemoryBound, TreeConfig},
     images::{self, ImageCaptureBounds, ImageSnapshot},
     input::StreamSource,
@@ -11,6 +12,7 @@ use super::{
         geometry::LatticePlan,
         planning::{self, LeafPlan},
     },
+    phases::{Step, StepProgress},
     records::TriangleRecord,
     source_crs::{MeshSourceCrsReport, SourceFrame},
     tree::{self, RetainedTree},
@@ -47,6 +49,35 @@ pub struct ScratchStages {
     /// Everything retained for leaves plus the HLOD stage's declared incidence and source-index
     /// need.
     pub hlod_incidence: u64,
+}
+impl ScratchStages {
+    fn all(&self) -> [u64; 7] {
+        [
+            self.capture,
+            self.projection,
+            self.images,
+            self.tree,
+            self.corner_depths,
+            self.leaf_plans,
+            self.hlod_incidence,
+        ]
+    }
+}
+impl FullScratchNeed {
+    /// What every admission of `self` checks is at most `floor`'s: the whole need, and each
+    /// stage's entry recheck (its bound plus per-file rounding).
+    fn within(&self, floor: &Self) -> bool {
+        let entries = |need: &Self| {
+            need.stages
+                .all()
+                .map(|bound| bound.saturating_add(need.file_rounding_bytes))
+        };
+        self.need_bytes <= floor.need_bytes
+            && entries(self)
+                .iter()
+                .zip(entries(floor))
+                .all(|(grown, floor)| *grown <= floor)
+    }
 }
 impl ScratchStages {
     fn max(&self) -> u64 {
@@ -107,6 +138,8 @@ pub(crate) struct FullCaptureReport {
     pub scan: SourceScan,
     pub jobs: JobsPlan,
     pub memory: FullMemoryBound,
+    /// The sorts inside capture, as planned under the budget.
+    pub sort: SortPlan,
     pub scratch: FullScratchNeed,
     pub image_capture: ImageCaptureBounds,
     pub scratch_logical_peak_bytes: u64,
@@ -234,9 +267,13 @@ fn image_preflight(
     }
     Ok((count, bytes))
 }
+/// Declared scratch of every capture stage. `inside` configures the sorts inside capture
+/// (its [`capture_sort`](super::capture_sort) plan); `config` is the request, whose floor
+/// configuration the HLOD stage's sorts use.
 fn scratch_need(
     scan: SourceScan,
     layout: crate::spill::Layout,
+    inside: &TreeConfig,
     config: &TreeConfig,
     unit: u64,
     image_count: u64,
@@ -247,7 +284,7 @@ fn scratch_need(
         tree::{VertexDepth, WeldDepth},
     };
     let overflow = || exhausted("full capture scratch arithmetic overflow");
-    let sorter = config.sorter(1); // Run sizes do not depend on the worker count.
+    let sorter = inside.sorter(1); // Run sizes do not depend on the worker count.
     let n = scan.triangles;
     let corners = mul(n, 3)?;
     let corner_refs = config::sort_spill::<CornerRef>(corners, sorter).ok_or_else(overflow)?;
@@ -334,16 +371,20 @@ fn scratch_need(
         leaf_plans,
         hlod_incidence,
     };
-    let h1 =
-        config::scratch_need_parts(n, scan.geometry_bytes, config, unit).ok_or_else(overflow)?;
-    let capacity = ((config.sort.run_bytes / 2) / size_of::<FullTriangle>()).max(1) as u64;
-    let counted = add(mul(add(mul(n, 16)?.div_ceil(capacity), 5)?, 2)?, 32)?;
-    let inventory = add(mul(config.sort.fan_in as u64, 256)?, 32)?;
-    // H1 run inventory plus full-capture runs, image sequences and retained sequences.
-    let max_live_files = add(
-        h1.max_live_files,
-        add(add(inventory.min(counted), image_count)?, 5)?,
-    )?;
+    // H1 run inventory plus full-capture runs, image sequences and retained sequences, for
+    // the larger of the capture and request configurations.
+    let mut max_live_files = 0;
+    for config in [inside, config] {
+        let h1 = config::scratch_need_parts(n, scan.geometry_bytes, config, unit)
+            .ok_or_else(overflow)?;
+        let capacity = ((config.sort.run_bytes / 2) / size_of::<FullTriangle>()).max(1) as u64;
+        let counted = add(mul(add(mul(n, 16)?.div_ceil(capacity), 5)?, 2)?, 32)?;
+        let inventory = add(mul(config.sort.fan_in as u64, 256)?, 32)?;
+        max_live_files = max_live_files.max(add(
+            h1.max_live_files,
+            add(add(inventory.min(counted), image_count)?, 5)?,
+        )?);
+    }
     let logical_need_bytes = stages.max();
     // Runs are chunk files of about CHUNK_BYTES each (at least half of it, for any record).
     let chunk_files = logical_need_bytes.div_ceil((crate::spill::CHUNK_BYTES / 2) as u64);
@@ -447,6 +488,30 @@ fn begin_stage(scratch: &Scratch, need: &FullScratchNeed, bound: u64) -> Result<
     Ok(())
 }
 
+/// Every sort inside capture, by count and resident record size.
+fn capture_sort_loads(scan: SourceScan, config: &TreeConfig) -> [SortLoad; 7] {
+    use super::{
+        records::{CornerRef, NodeRecord},
+        tree::VertexDepth,
+    };
+    let n = scan.triangles;
+    let corners = n.saturating_mul(3);
+    let nodes = config::node_bound(n, scan.geometry_bytes, config);
+    let load = |records, bytes: usize| SortLoad {
+        records,
+        record_bytes: bytes as u64,
+    };
+    [
+        load(corners, size_of::<CornerRef>()),
+        load(corners, size_of::<attributes::FullCorner>()),
+        load(n, size_of::<FullTriangle>()),
+        load(nodes, size_of::<NodeRecord>()),
+        load(corners, size_of::<VertexDepth>()),
+        load(corners, size_of::<RankCorner>()),
+        load(corners, size_of::<RankDepth>()),
+    ]
+}
+
 fn memory_bound(
     config: &TreeConfig,
     json_bytes: u64,
@@ -540,14 +605,20 @@ pub(crate) fn capture(
     }
     check().map_err(super::failure)?;
     let source = StreamSource::open(input, check).map_err(super::failure)?;
-    capture_admitted(source, config, check)
+    let check = std::cell::RefCell::new(check);
+    let check = || (check.borrow_mut())();
+    capture_admitted(source, config, &StepProgress::new(&check, None))
 }
 
+/// Captures an admitted source. `progress` is capture's cancellation check and receives its
+/// steps ([`Step`]).
 pub(crate) fn capture_admitted(
     source: StreamSource,
     config: &TreeConfig,
-    check: &mut dyn FnMut() -> Result<(), JobError>,
+    progress: &StepProgress<'_>,
 ) -> Result<FullCaptured, JobFailure> {
+    let mut check_progress = || progress.check();
+    let check: &mut dyn FnMut() -> Result<(), JobError> = &mut check_progress;
     config.validate().map_err(super::failure)?;
     check().map_err(super::failure)?;
     super::member_gate(
@@ -563,9 +634,35 @@ pub(crate) fn capture_admitted(
     limits
         .check_triangles(source.document.triangle_count() as u64)
         .map_err(super::failure)?;
-    let (mut scan, source_bounds) =
-        capture::scan_with_source_bounds(&source, config.sort.buffer_bytes, check)
-            .map_err(super::failure)?;
+    progress
+        .begin(Step::Scan, source.document.triangle_count() as u64)
+        .map_err(super::failure)?;
+    // The scan holds two bounded readers per worker, within the per-job term; its workers
+    // are planned like capture's own before capture's larger base is known.
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let scan_memory = MemoryBound::new(config, source.json_bytes, 1);
+    let scan_workers = config::plan_jobs(
+        config.jobs,
+        cores,
+        config.available_memory(),
+        0,
+        scan_memory.base_bytes(),
+        scan_memory.per_job_bytes,
+    )
+    .jobs;
+    let (mut scan, source_bounds) = capture::scan_with_source_bounds(
+        &source,
+        config.sort.buffer_bytes,
+        usize::try_from(scan_workers).unwrap_or(1),
+        &mut |done| progress.advance(done),
+    )
+    .map_err(super::failure)?;
+    debug_assert_eq!(
+        scan.triangles,
+        source.document.triangle_count() as u64,
+        "the scan step's total is the scanned triangle count"
+    );
+    progress.end().map_err(super::failure)?;
     // One frame, resolved once from the used post-node source bounds, serves capture; with a
     // source CRS, capture replaces the scan's placeholder box with the mapped one.
     let mut frame = match &config.source_crs {
@@ -584,6 +681,7 @@ pub(crate) fn capture_admitted(
         scan,
         layout,
         config,
+        config,
         volume.allocation_unit_bytes,
         image_count,
         image_bytes,
@@ -599,7 +697,7 @@ pub(crate) fn capture_admitted(
     .map_err(super::failure)?;
     let jobs = config::plan_jobs(
         config.jobs,
-        std::thread::available_parallelism().map_or(1, |n| n.get()),
+        cores,
         config.available_memory(),
         if volume.memory_backed {
             need.need_bytes
@@ -611,7 +709,7 @@ pub(crate) fn capture_admitted(
     );
     let workers = usize::try_from(jobs.jobs)
         .map_err(|_| super::failure(exhausted("full worker count overflow")))?;
-    let memory = memory_bound(
+    let floor_memory = memory_bound(
         config,
         source.json_bytes,
         image_count,
@@ -619,8 +717,10 @@ pub(crate) fn capture_admitted(
         need.logical_need_bytes,
     )
     .map_err(super::failure)?;
+    // The floor's resident bound: what capture holds once its sorts have ended (the image
+    // admission decodes below plan against it).
     let required_memory =
-        add(memory.bound_bytes, jobs.memory_backed_scratch_bytes).map_err(super::failure)?;
+        add(floor_memory.bound_bytes, jobs.memory_backed_scratch_bytes).map_err(super::failure)?;
     if jobs
         .available_memory_bytes
         .is_some_and(|available| required_memory > available)
@@ -629,6 +729,65 @@ pub(crate) fn capture_admitted(
             "full capture resident bound and memory-backed scratch do not fit available memory",
         )));
     }
+    // D8: the sorts inside capture grow above the floor into what the budget leaves, judged
+    // by the same scratch and memory admission and charged in the declared bound.
+    let blocked = if volume.memory_backed {
+        Some("memory_backed_scratch")
+    } else if jobs.available_memory_bytes.is_none() {
+        Some("unknown_memory")
+    } else {
+        None
+    };
+    #[cfg(test)]
+    let blocked = blocked.or((!config.test_sort_plan).then_some("floor"));
+    let candidate = |sort: crate::spill::SortConfig| {
+        let mut capture = config.clone();
+        capture.sort = sort;
+        let grown = scratch_need(
+            scan,
+            layout,
+            &capture,
+            config,
+            volume.allocation_unit_bytes,
+            image_count,
+            image_bytes,
+        )
+        .ok()?;
+        // Never more declared scratch than the floor's, in total or at any stage, so no
+        // scratch admission (up front, at a stage's entry or at the texture recheck) refuses
+        // a run the floor would admit.
+        let disk = grown.within(&need);
+        let memory = memory_bound(
+            &capture,
+            source.json_bytes,
+            image_count,
+            workers,
+            grown.logical_need_bytes,
+        )
+        .ok()?;
+        let fits = jobs
+            .available_memory_bytes
+            .is_some_and(|available| memory.bound_bytes <= available);
+        (disk && fits).then_some((capture, grown, memory))
+    };
+    let loads = capture_sort_loads(scan, config);
+    // The producing thread plus its writers stay within the planned workers.
+    let max_writers = workers.saturating_sub(1);
+    let (sort, sort_plan) = capture_sort::plan(
+        config.sort,
+        &loads,
+        blocked,
+        max_writers,
+        &capture_sort::FAN_INS,
+        |c| candidate(c).is_some(),
+    );
+    let (capture_config, need, memory) = if sort == config.sort {
+        (config.clone(), need, floor_memory)
+    } else {
+        candidate(sort)
+            .ok_or_else(|| super::failure(invariant("capture sort plan does not fit")))?
+    };
+    let capture_config = &capture_config;
     // All checked counts, memory and physical allocation happen before creation.
     check().map_err(super::failure)?;
     let scratch_admission = output_admission(
@@ -666,12 +825,13 @@ pub(crate) fn capture_admitted(
             &source,
             &mut frame,
             &scratch,
-            config.sorter(workers),
+            capture_config.sorter(workers),
             layout,
             &mut scan,
-            check,
+            progress,
         )?;
         peaks.capture = end_stage(&scratch, stages.capture, "attribute capture")?;
+        progress.begin(Step::Sequence, scan.triangles)?;
         begin_stage(&scratch, &need, stages.projection)?;
         let mut full_writer = SequenceWriter::<FullTriangle>::with_layout(
             &scratch,
@@ -695,7 +855,7 @@ pub(crate) fn capture_admitted(
             full_writer.push(&row)?;
             count = add(count, 1)?;
             if count.is_multiple_of(1024) {
-                check()?;
+                progress.advance(count)?;
             }
         }
         drop(full_stream);
@@ -703,8 +863,11 @@ pub(crate) fn capture_admitted(
         if count != scan.triangles {
             return Err(invariant("full capture rank count differs from scan"));
         }
+        progress.end()?;
         peaks.projection = end_stage(&scratch, stages.projection, "projection")?;
         begin_stage(&scratch, &need, stages.images)?;
+        // Two units per image: its snapshot and its admission decode.
+        progress.begin(Step::Images, image_count.saturating_mul(2))?;
         let (images, image_capture) =
             images::capture_images(&source, &scratch, config.sort.buffer_bytes, check)?;
         peaks.images = end_stage(&scratch, stages.images, "image capture")?;
@@ -728,8 +891,8 @@ pub(crate) fn capture_admitted(
         charges
             .try_reserve_exact(images.len())
             .map_err(|_| exhausted("image charge allocation failed"))?;
-        for image in &images {
-            check()?;
+        for (index, image) in images.iter().enumerate() {
+            progress.advance(index as u64)?;
             let encoded = image.reconstruct(check)?;
             let info = source::probe_image_admitted(
                 &encoded,
@@ -750,7 +913,7 @@ pub(crate) fn capture_admitted(
             .build()
             .map_err(|_| exhausted("image admission worker pool"))?;
         for range in decode_batches(&charges, budget, workers)? {
-            check()?;
+            progress.advance(image_count.saturating_add(range.start as u64))?;
             let (start, end) = (range.start, range.end);
             let infos: Vec<Result<ImageInfo, JobError>> = pool.install(|| {
                 use rayon::prelude::*;
@@ -773,7 +936,7 @@ pub(crate) fn capture_admitted(
                 image_info.push(info?);
             }
         }
-        check()?;
+        progress.end()?;
         // Second output admission now that texel counts are known: lossless PNG pages can be
         // far larger than the encoded source images.
         let texels = image_info.iter().try_fold(0_u64, |sum, info| {
@@ -801,16 +964,19 @@ pub(crate) fn capture_admitted(
         source.verify_unchanged()?;
         drop(source); // All subsequent operations read owned snapshot records only.
         begin_stage(&scratch, &need, stages.tree)?;
+        progress.begin(Step::Tree, triangles.len())?;
         // The full-triangle sequence is already in strict rank order (checked as it was
         // written): the tree is built over it directly, with no projected copy.
         let tree = tree::build_ranked(
             &scratch,
             &triangles,
-            config,
+            capture_config,
             workers,
             Some(add(stages.tree, need.file_rounding_bytes)?),
+            Some(progress),
             check,
         )?;
+        progress.end()?;
         peaks.tree = end_stage(&scratch, stages.tree, "cell tree")?;
         super::member_gate(tree.stats.nodes, config.member_ceiling)?;
         if tree.stats.triangles != triangles.len() {
@@ -819,8 +985,14 @@ pub(crate) fn capture_admitted(
             ));
         }
         begin_stage(&scratch, &need, stages.corner_depths)?;
-        let corner_depths =
-            join_corner_depths(&scratch, &tree, &triangles, config, workers, check)?;
+        let corner_depths = join_corner_depths(
+            &scratch,
+            &tree,
+            &triangles,
+            capture_config,
+            workers,
+            progress,
+        )?;
         peaks.corner_depths = end_stage(&scratch, stages.corner_depths, "corner depth join")?;
         let height = usize::try_from(tree.stats.height)
             .map_err(|_| invariant("tree height conversion failed"))?;
@@ -847,6 +1019,7 @@ pub(crate) fn capture_admitted(
             image_info: &image_info,
         };
         begin_stage(&scratch, &need, stages.leaf_plans)?;
+        progress.begin(Step::LeafPlans, tree.stats.leaves)?;
         // The declared budget (explicit, else the 4 GiB default ceiling; never detected
         // headroom) left for one leaf job after every term the leaf stage charges besides
         // the job itself, memory-backed scratch and work/archive storage included.
@@ -883,6 +1056,7 @@ pub(crate) fn capture_admitted(
             leaf_memory,
             check,
         )?;
+        progress.end()?;
         peaks.leaf_plans = end_stage(&scratch, stages.leaf_plans, "leaf planning")?;
         if leaf_plans.len() != tree.stats.leaves {
             return Err(invariant("leaf plan count differs from immutable tree"));
@@ -902,6 +1076,7 @@ pub(crate) fn capture_admitted(
             scan,
             jobs,
             memory,
+            sort: sort_plan,
             scratch_logical_peak_bytes: scratch.peak_bytes(),
             scratch_memory_backed: scratch.memory_backed(),
             scratch: FullScratchNeed {
@@ -1094,7 +1269,7 @@ fn join_corner_depths(
     ranked: &dyn tree::RankedTriangles,
     config: &TreeConfig,
     jobs: usize,
-    check: &mut dyn FnMut() -> Result<(), JobError>,
+    progress: &StepProgress<'_>,
 ) -> Result<Sequence<CornerDepth>, JobError> {
     // Defence: capture refused the count as soon as it knew it.
     let limits = RecordLimits::of(config);
@@ -1103,11 +1278,14 @@ fn join_corner_depths(
     if tree.stats.height > config::HEIGHT_CAP {
         return Err(invariant("tree height exceeds the packed corner depth"));
     }
-    let mut corners = ExternalSorter::<RankCorner>::new(scratch, config.sorter(jobs))?;
+    // Seven units per triangle: three corners sorted, three joined, one written.
+    progress.begin(Step::CornerDepths, mul(triangles, 7)?)?;
+    let mut corners =
+        ExternalSorter::<RankCorner>::new(scratch, config.sorter(jobs))?.observed(progress);
     let mut rank = 0_u64;
     for triangle in ranked.ranked()? {
         if rank.is_multiple_of(1024) {
-            check()?;
+            progress.advance(rank * 3)?;
         }
         let triangle = triangle?;
         for corner in 0..3 {
@@ -1126,7 +1304,8 @@ fn join_corner_depths(
     let mut welds = tree.weld_depths.reader()?;
     let mut weld = welds.next().transpose()?;
     let mut previous_position = None;
-    let mut depths = ExternalSorter::<RankDepth>::new(scratch, config.sorter(jobs))?;
+    let mut depths =
+        ExternalSorter::<RankDepth>::new(scratch, config.sorter(jobs))?.observed(progress);
     let mut corner_count = 0_u64;
     for row in corners.by_ref() {
         let row = row?;
@@ -1146,7 +1325,7 @@ fn join_corner_depths(
         })?;
         corner_count = add(corner_count, 1)?;
         if corner_count.is_multiple_of(3072) {
-            check()?;
+            progress.advance(triangles * 3 + corner_count)?;
         }
     }
     drop(corners);
@@ -1159,7 +1338,7 @@ fn join_corner_depths(
         SequenceWriter::<CornerDepth>::new(scratch, "corner-depths", config.sort.buffer_bytes)?;
     for rank in 0..triangles {
         if rank.is_multiple_of(1024) {
-            check()?;
+            progress.advance(triangles * 6 + rank)?;
         }
         let mut result = [0; 3];
         for (corner, result_depth) in result.iter_mut().enumerate() {
@@ -1178,7 +1357,9 @@ fn join_corner_depths(
         return Err(invariant("extra ranked corner depth"));
     }
     drop(depths);
-    Ok(writer.finish()?)
+    let written = writer.finish()?;
+    progress.end()?;
+    Ok(written)
 }
 
 #[cfg(test)]
@@ -1433,7 +1614,7 @@ pub(super) mod tests {
     }
     /// A position-only grid of welded quads in seeded shuffled order, with repeated
     /// triangles so the rank and corner sorts see equal positions from distinct ranks.
-    fn shuffled_grid(parent: &Path, side: usize, seed: u64) -> PathBuf {
+    pub(crate) fn shuffled_grid(parent: &Path, side: usize, seed: u64) -> PathBuf {
         fs::create_dir_all(parent).unwrap();
         let vertex = |x: usize, y: usize| {
             let z = ((x * 7 + y * 13) % 5) as f32 * 0.125;
@@ -1487,14 +1668,49 @@ pub(super) mod tests {
         let parent = dir.path().join("scratch");
         fs::create_dir(&parent).unwrap();
         let input = shuffled_grid(&dir.path().join("source"), 20, 0x5eed_c0de_2026);
-        let run = |jobs: usize, run_bytes: usize, fan_in: usize| -> Outputs {
+        // The plan needs disk-backed scratch (memory-backed spill keeps the floor), and the
+        // system temporary directory may be tmpfs: plan beside the test binary instead.
+        let disk =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let planned = |jobs: usize, run_bytes: usize, fan_in: usize, plan: bool| {
             let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(16);
             config.jobs = Jobs::Fixed(NonZeroUsize::new(jobs).unwrap());
-            config.scratch_dir = Some(parent.clone());
+            config.scratch_dir = Some(if plan {
+                disk.path().to_owned()
+            } else {
+                parent.clone()
+            });
             config.sort.run_bytes = run_bytes;
             config.sort.fan_in = fan_in;
             config.sort.buffer_bytes = 61;
+            if plan {
+                // The budget plan grows these floors: one pass, with writers when jobs allow.
+                config.test_sort_plan = true;
+                config.memory_budget = Some(
+                    super::super::resources::MemoryBudget::resolve_with(Some(2 << 30), None)
+                        .unwrap(),
+                );
+            }
             let output = capture(&input, &config, &mut || Ok(())).unwrap();
+            let sort = output.report.sort;
+            if plan {
+                assert!(
+                    !output.report.scratch_memory_backed,
+                    "planned scratch on disk"
+                );
+                assert_eq!((sort.limited_by, sort.single_pass), ("single_pass", true));
+                assert_eq!(sort.writers > 0, jobs > 1, "{sort:?}");
+                assert!(output.report.memory.bound_bytes <= 2 << 30);
+            } else if output.report.scratch_memory_backed {
+                // Spill in RAM is charged to memory: the plan stays at the floor.
+                assert_eq!(sort.limited_by, "memory_backed_scratch");
+            } else {
+                assert_eq!(sort.limited_by, "floor");
+            }
+            output
+        };
+        let run_planned = |jobs: usize, run_bytes: usize, fan_in: usize, plan: bool| -> Outputs {
+            let output = planned(jobs, run_bytes, fan_in, plan);
             let depths: Vec<_> = output
                 .corner_depths
                 .reader()
@@ -1529,6 +1745,9 @@ pub(super) mod tests {
             output.close().unwrap();
             (depths, ranks, weld)
         };
+        let run = |jobs: usize, run_bytes: usize, fan_in: usize| -> Outputs {
+            run_planned(jobs, run_bytes, fan_in, false)
+        };
         let expected = run(1, 64 << 20, 64);
         assert_eq!(
             expected.0.len(),
@@ -1543,8 +1762,13 @@ pub(super) mod tests {
                     "jobs {jobs}, run bytes {run_bytes}, fan-in {fan_in}"
                 );
             }
+            assert!(
+                run_planned(jobs, smallest, 2, true) == expected,
+                "planned, jobs {jobs}"
+            );
         }
         assert_eq!(fs::read_dir(parent).unwrap().count(), 0);
+        assert_eq!(fs::read_dir(disk.path()).unwrap().count(), 0);
     }
     /// The packed rank-order corner record keeps its limits: the largest rank, every corner
     /// and depths up to the tree height cap; more triangles than the
@@ -1677,8 +1901,15 @@ pub(super) mod tests {
                 weld_depths,
                 stats,
             };
-            join_corner_depths(&scratch, &retained, &triangles, config, 1, &mut || Ok(()))
-                .map(|_| ())
+            join_corner_depths(
+                &scratch,
+                &retained,
+                &triangles,
+                config,
+                1,
+                StepProgress::silent(),
+            )
+            .map(|_| ())
         };
         let mut limited = config.clone();
         for (limits, refusal) in [(3, Some("triangles exceed")), (4, None)] {
@@ -1758,6 +1989,7 @@ pub(super) mod tests {
             fan_in,
             buffer_bytes: 64,
             jobs: 1,
+            writers: 0,
         };
         let row = size_of::<FullTriangle>();
         let chunk = std::cell::Cell::new(crate::spill::CHUNK_BYTES);
@@ -1834,7 +2066,8 @@ pub(super) mod tests {
             },
             geometry_bytes: 2000,
         };
-        let need = scratch_need(scan, crate::spill::Layout::FULL, &cfg, 4096, 2, 8192).unwrap();
+        let need =
+            scratch_need(scan, crate::spill::Layout::FULL, &cfg, &cfg, 4096, 2, 8192).unwrap();
         // 30 corners: CornerRef 750, FullCorner 2910; FullTriangle 2860. One run per sort, so
         // no merge slack: the positioned stream beside the full-triangle sort bounds capture;
         // the full stream and its sequence bound projection (no projected copy is written).
@@ -1876,9 +2109,17 @@ pub(super) mod tests {
             ..scan
         };
         assert_eq!(
-            scratch_need(overflow, crate::spill::Layout::FULL, &cfg, 4096, 2, 8192)
-                .unwrap_err()
-                .kind(),
+            scratch_need(
+                overflow,
+                crate::spill::Layout::FULL,
+                &cfg,
+                &cfg,
+                4096,
+                2,
+                8192
+            )
+            .unwrap_err()
+            .kind(),
             JobErrorKind::ResourceLimit
         );
         let memory = memory_bound(&cfg, 1000, 2, 1, 0).unwrap();

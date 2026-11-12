@@ -6,6 +6,7 @@
 mod attributes;
 mod batching;
 mod capture;
+mod capture_sort;
 mod config;
 mod delivery;
 mod full;
