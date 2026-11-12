@@ -394,11 +394,15 @@ impl Accessor {
         }
         Ok(n as usize)
     }
+    /// A VEC3 element as stored (normalization applied, no node transform).
+    fn vec3(&self, i: usize) -> Result<Point, Error> {
+        Ok([self.at(i, 0)?, self.at(i, 1)?, self.at(i, 2)?])
+    }
     fn position(&self, i: usize, m: Matrix) -> Result<Point, Error> {
         if self.components != 3 {
             return Err(bad("interfaceSegments", "POSITION must be VEC3"));
         }
-        let raw = [self.at(i, 0)?, self.at(i, 1)?, self.at(i, 2)?];
+        let raw = self.vec3(i)?;
         let p = point(m, raw);
         finite(&p)?;
         Ok(p)
@@ -662,6 +666,12 @@ struct Surface {
     /// only to place same-direction faces on the sides of an edge.
     faces: Vec<[CanonicalPoint; 3]>,
     triangles: u64,
+    /// Coarse replay only ([`normal_inversion`]): nondegenerate faces whose primitive
+    /// publishes NORMAL, and those with a corner NORMAL more than 90° from the face.
+    normal_faces: u64,
+    inverted_faces: u64,
+    /// Why some primitive's NORMAL was not compared ([`normal_skip`] bits, OR'd).
+    normal_skips: u8,
 }
 impl Surface {
     fn reserve(&self, bytes: usize, cap: usize) -> Result<(), Error> {
@@ -697,6 +707,9 @@ impl Surface {
         }
         self.reserve(other.faces.len().saturating_mul(36), cap)?;
         self.faces.extend(other.faces);
+        add_count(&mut self.normal_faces, other.normal_faces)?;
+        add_count(&mut self.inverted_faces, other.inverted_faces)?;
+        self.normal_skips |= other.normal_skips;
         add_count(&mut self.triangles, other.triangles)
     }
     fn triangle(
@@ -768,6 +781,23 @@ pub(super) struct DecodedInterfaceCensus {
     /// texture-implied error (0 without a declaration).
     pub(super) texture_refinable_tiles: u64,
     pub(super) texture_bound_tiles: u64,
+    /// Coarse NORMAL census (a warning, never a failure).
+    pub(super) coarse_normals: CoarseNormals,
+}
+/// Coarse tiles publishing NORMAL, and those with faces some corner NORMAL of which points
+/// more than 90° from the face (the face is shaded against its own winding), by cell depth.
+/// Producers since #336 keep every corner within 60°; earlier coarse tiles averaged every
+/// face at a vertex. Counted over all placements of a tile, like its triangles.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) struct CoarseNormals {
+    pub(super) tiles: u64,
+    pub(super) faces: u64,
+    /// Coarse tiles with a NORMAL this comparison does not read ([`normal_skip`]), and
+    /// the reasons met (bits of [`NORMAL_SKIPS`]).
+    pub(super) skipped_tiles: u64,
+    pub(super) skip_reasons: u8,
+    pub(super) inverted_tiles_by_depth: Vec<u64>,
+    pub(super) inverted_faces_by_depth: Vec<u64>,
 }
 /// Payload-element units charged for each scratch-store row a validation writes (sorted and
 /// appended in key order, `bulk`), and for each ancestor-walk or placement-frame lookup. A row
@@ -884,11 +914,84 @@ pub(super) struct Omission {
     pub(super) frontier_tiles: u64,
     pub(super) frontier_leaves: u64,
 }
+/// Units for each face whose corner normals are compared with it (nine decoded components
+/// and a few products; [`normal_inversion`]).
+const NORMAL_UNITS: usize = 6;
+/// The cofactor of a node chain's linear part (columns `c1×c2, c2×c0, c0×c1`): for any
+/// nonsingular `L`, `(La)×(Lb) = cof(L)(a×b)` and the rendered normal is parallel to
+/// `cof(L)·n`, so the sign of their dot product is the rendered one, reflections included.
+fn cofactor(m: Matrix) -> [Point; 3] {
+    let c: [Point; 3] = std::array::from_fn(|k| [m[4 * k], m[4 * k + 1], m[4 * k + 2]]);
+    [cross(c[1], c[2]), cross(c[2], c[0]), cross(c[0], c[1])]
+}
+fn cross(a: Point, b: Point) -> Point {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+fn apply(columns: &[Point; 3], v: Point) -> Point {
+    std::array::from_fn(|i| columns[0][i] * v[0] + columns[1][i] * v[1] + columns[2][i] * v[2])
+}
+fn dot(a: Point, b: Point) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+/// Whether some corner NORMAL of a face points more than 90° from the face's own normal
+/// (wound by the stored corners): the face would be shaded against its winding. `None` for
+/// a face without a normal (zero area). Corners with a zero NORMAL are not compared.
+fn normal_inversion(cof: &[Point; 3], xyz: [Point; 3], normals: [Point; 3]) -> Option<bool> {
+    let e = |k: usize| std::array::from_fn(|i| xyz[k][i] - xyz[0][i]);
+    let face = apply(cof, cross(e(1), e(2)));
+    (dot(face, face) > 0.).then(|| normals.iter().any(|n| dot(face, apply(cof, *n)) < 0.))
+}
+/// Reasons a coarse NORMAL is not compared, as bits, with their `notInspected` suffixes
+/// (`coarseNormalInversion.<suffix>`).
+pub(super) const NORMAL_SKIPS: [(u8, &str); 4] = [
+    (1, "meshoptFilteredNormal"),
+    (2, "sparseNormal"),
+    (4, "viewlessNormal"),
+    (8, "unsupportedNormalAccessor"),
+];
+/// The reason (a [`NORMAL_SKIPS`] bit) a coarse NORMAL accessor is outside what the
+/// comparison reads exactly, or 0 when it is compared: a VEC3 of f32, or of normalized
+/// i8/i16, one per vertex, in a view without a meshopt filter (this decoder undoes none).
+/// Decided from the document alone, before any decode, so this warning-only check never
+/// refuses a payload that the earlier checks admit (for example viewless zero storage).
+fn normal_skip(doc: &Value, attribute: &Value, vertices: usize) -> u8 {
+    let Some(a) = attribute.as_u64().map(|i| &doc["accessors"][i as usize]) else {
+        return 8;
+    };
+    if a.get("sparse").is_some() {
+        return 2;
+    }
+    let Some(view) = a.get("bufferView").and_then(Value::as_u64) else {
+        return 4;
+    };
+    let normalized = a["normalized"] == true;
+    let component = match a["componentType"].as_u64() {
+        Some(5126) => !normalized,
+        Some(5120 | 5122) => normalized,
+        _ => false,
+    };
+    if a["type"] != "VEC3" || !component || a["count"].as_u64() != Some(vertices as u64) {
+        return 8;
+    }
+    let filter =
+        &doc["bufferViews"][view as usize]["extensions"]["EXT_meshopt_compression"]["filter"];
+    if filter.as_str().is_some_and(|f| f != "NONE") {
+        return 1;
+    }
+    0
+}
+/// `normals`: also compare each face's corner NORMALs with the face (coarse payloads only;
+/// leaves carry source normals as authored).
 fn replay_surface(
     bytes: &[u8],
     frame: Matrix,
     cap: usize,
     effort: &Effort,
+    normals: bool,
 ) -> Result<Surface, Error> {
     let (doc, bin, mut work) = replay_document(bytes, cap, effort)?;
     let nodes = doc["nodes"]
@@ -929,18 +1032,46 @@ fn replay_surface(
                     .map(|i| Accessor::new(&doc, bin, identity::uint(i)?, &mut work))
                     .transpose()?;
                 let count = indices.as_ref().map_or(positions.count, |i| i.count);
+                let normal = match p["attributes"].get("NORMAL") {
+                    Some(n) if normals => match normal_skip(&doc, n, positions.count) {
+                        0 => {
+                            let a = Accessor::new(&doc, bin, identity::uint(n)?, &mut work)?;
+                            Some((a, cofactor(m)))
+                        }
+                        reason => {
+                            surface.normal_skips |= reason;
+                            None
+                        }
+                    },
+                    _ => None,
+                };
                 for corner in (0..count).step_by(3) {
                     let mut xyz = [[0.; 3]; 3];
+                    let mut ids = [0; 3];
                     for (j, p) in xyz.iter_mut().enumerate() {
                         let id = match &indices {
                             Some(i) => i.index(corner + j)?,
                             None => corner + j,
                         };
+                        ids[j] = id;
                         // Preserve scene-then-reference f64 evaluation order.
                         *p = point(frame, positions.position(id, m)?);
                         finite(p)?;
                     }
                     surface.triangle(xyz, &mut work, cap)?;
+                    if let Some((n, cof)) = &normal {
+                        work.charge(NORMAL_UNITS)?;
+                        let local = [
+                            positions.vec3(ids[0])?,
+                            positions.vec3(ids[1])?,
+                            positions.vec3(ids[2])?,
+                        ];
+                        let corners = [n.vec3(ids[0])?, n.vec3(ids[1])?, n.vec3(ids[2])?];
+                        if let Some(inverted) = normal_inversion(cof, local, corners) {
+                            add_count(&mut surface.normal_faces, 1)?;
+                            add_count(&mut surface.inverted_faces, u64::from(inverted))?;
+                        }
+                    }
                 }
             }
         }
@@ -2221,10 +2352,17 @@ impl Store {
         frame: &[u8],
         effort: &Effort,
         read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
+        normals: bool,
     ) -> Result<Surface, Error> {
         effort.charge(1)?;
         let bytes = read(u64::try_from(rank).map_err(|_| super::refused())?)?;
-        replay_surface(&bytes, decode::<16>(frame)?, self.decoded_limit, effort)
+        replay_surface(
+            &bytes,
+            decode::<16>(frame)?,
+            self.decoded_limit,
+            effort,
+            normals,
+        )
     }
     /// One leaf placement's points and segments, bound for the bulk load (`bulk`).
     fn record_leaf(
@@ -2269,6 +2407,7 @@ impl Store {
                 &row.get::<_, Vec<u8>>(2).map_err(sql)?,
                 effort,
                 read,
+                false,
             )?;
             let tile: i64 = row.get(0).map_err(sql)?;
             self.record_leaf(tile, &surface, &mut leaves, effort)?;
@@ -2327,6 +2466,7 @@ impl Store {
                 &row.get::<_, Vec<u8>>(2).map_err(sql)?,
                 effort,
                 read,
+                false,
             )?;
             for f in &surface.faces {
                 for j in 0..3 {
@@ -2604,6 +2744,60 @@ impl Store {
         Ok(())
     }
 
+    /// Records one coarse tile's NORMAL census; an inverted tile's cell depth is found by
+    /// one seek per ancestor (links and implicit roots are not cells and add no depth).
+    fn coarse_normals(
+        &self,
+        tile: i64,
+        surface: &Surface,
+        census: &mut CoarseNormals,
+        effort: &Effort,
+    ) -> Result<(), Error> {
+        if surface.normal_skips != 0 {
+            add_count(&mut census.skipped_tiles, 1)?;
+            census.skip_reasons |= surface.normal_skips;
+        }
+        if surface.normal_faces == 0 {
+            return Ok(());
+        }
+        add_count(&mut census.tiles, 1)?;
+        add_count(&mut census.faces, surface.normal_faces)?;
+        if surface.inverted_faces == 0 {
+            return Ok(());
+        }
+        // Cell depth as `omission` counts it: ancestors that are not placeholders (the
+        // `cell` column is rewritten by descendant recovery, so the parent chain is read).
+        let mut depth = 0;
+        let mut at = tile;
+        let mut parent = self
+            .connection
+            .prepare_cached(
+                "SELECT t.parent,p.placeholder FROM tiles t LEFT JOIN tiles p ON p.id=t.parent WHERE t.id=?1",
+            )
+            .map_err(sql)?;
+        loop {
+            effort.charge(SEEK_UNITS)?;
+            let (up, placeholder): (Option<i64>, Option<bool>) = parent
+                .query_row([at], |r| Ok((r.get(0)?, r.get(1)?)))
+                .map_err(sql)?;
+            let Some(up) = up else { break };
+            depth += usize::from(placeholder == Some(false));
+            at = up;
+        }
+        for v in [
+            &mut census.inverted_tiles_by_depth,
+            &mut census.inverted_faces_by_depth,
+        ] {
+            if v.len() <= depth {
+                v.resize(depth + 1, 0);
+            }
+        }
+        add_count(&mut census.inverted_tiles_by_depth[depth], 1)?;
+        add_count(
+            &mut census.inverted_faces_by_depth[depth],
+            surface.inverted_faces,
+        )
+    }
     /// Every coarse tile's decoded surface (all its placements) against its D11
     /// border: exact junctions, one witnessed chord per shared arc, displacement.
     fn check_coarse(
@@ -2686,6 +2880,7 @@ impl Store {
                         self.equal_directions(tile, &surface, &contracted, effort)?;
                     }
                     self.seam_owner(tile, &surface, &contracted, &shared, effort)?;
+                    self.coarse_normals(tile, &surface, &mut census.coarse_normals, effort)?;
                     for path in contracted.values() {
                         add_count(&mut census.contracted_border_arcs, 1)?;
                         add_count(
@@ -2704,6 +2899,7 @@ impl Store {
                 &row.get::<_, Vec<u8>>(2).map_err(sql)?,
                 effort,
                 read,
+                true,
             )?;
             match &mut current {
                 Some((_, merged)) => merged.merge(surface, self.decoded_limit)?,
@@ -3366,7 +3562,8 @@ mod tests {
         let mut s = store();
         s.materialize().unwrap();
         let face = [[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]];
-        let surface = replay_surface(&replay_fixture(&face), IDENTITY, 1 << 20, &effort()).unwrap();
+        let surface =
+            replay_surface(&replay_fixture(&face), IDENTITY, 1 << 20, &effort(), false).unwrap();
         let mut rows = s.sorter().unwrap();
         s.record_leaf(7, &surface, &mut rows, &effort()).unwrap();
         s.record_leaf(7, &surface, &mut rows, &effort()).unwrap();
@@ -3764,19 +3961,214 @@ mod tests {
             .unwrap();
         let frame = decode::<16>(&frame).unwrap();
         let face = [[[0., 10., 0.], [1., 10., 0.], [0., 11., 0.]]];
-        let surface = replay_surface(&replay_fixture(&face), frame, 1 << 20, &effort()).unwrap();
+        let surface =
+            replay_surface(&replay_fixture(&face), frame, 1 << 20, &effort(), false).unwrap();
         assert!(surface.points.contains(&canonical([0., 0., 0.]).unwrap()));
         assert!(!surface
             .points
             .contains(&canonical(point(local, [0., 10., 0.])).unwrap()));
     }
 
+    /// One face per entry, with its three corner NORMALs as snorm8 (`KHR_mesh_quantization`
+    /// style) and an optional node scale.
+    fn normal_fixture(faces: &[([Point; 3], [Point; 3])], scale: [f64; 3]) -> Vec<u8> {
+        let mut bin: Vec<u8> = faces
+            .iter()
+            .flat_map(|f| f.0)
+            .flatten()
+            .flat_map(|v| (v as f32).to_le_bytes())
+            .collect();
+        let offset = bin.len();
+        for n in faces.iter().flat_map(|f| f.1) {
+            bin.extend(n.map(|v| ((v * 127.).round() as i8).to_le_bytes()[0]));
+            bin.push(0);
+        }
+        let count = faces.len() * 3;
+        let doc = serde_json::json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+            "nodes":[{"mesh":0,"scale":scale}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0,"NORMAL":1}}]}],
+            "accessors":[{"bufferView":0,"componentType":5126,"type":"VEC3","count":count},
+                {"bufferView":1,"componentType":5120,"normalized":true,"type":"VEC3","count":count}],
+            "bufferViews":[{"buffer":0,"byteLength":offset},
+                {"buffer":0,"byteOffset":offset,"byteLength":bin.len() - offset,"byteStride":4}],
+            "buffers":[{"byteLength":bin.len()}]});
+        pack_fixture(doc, bin)
+    }
+    /// A corner NORMAL more than 90° from its face (wound by its corners) counts the face
+    /// once; 89° does not; zero-area faces and zero normals are not compared; leaves
+    /// (`normals: false`) are never compared.
+    #[test]
+    fn coarse_replay_counts_faces_shaded_against_their_winding() {
+        let tri = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
+        let up = [0., 0., 1.];
+        let tilt = |deg: f64| {
+            let r = deg.to_radians();
+            [r.sin(), 0., r.cos()]
+        };
+        let faces = [
+            (tri, [up; 3]),
+            (tri, [up, tilt(89.), up]),
+            (tri, [up, up, tilt(91.)]),
+            (tri, [[0., 0., -1.]; 3]),
+            (tri, [[0.; 3], up, up]),
+            (
+                [[0., 0., 0.], [1., 0., 0.], [2., 0., 0.]],
+                [[0., 0., -1.]; 3],
+            ),
+        ];
+        let surface = replay_surface(
+            &normal_fixture(&faces, [1.; 3]),
+            IDENTITY,
+            1 << 20,
+            &effort(),
+            true,
+        )
+        .unwrap();
+        assert_eq!((surface.normal_faces, surface.inverted_faces), (5, 2));
+        let surface = replay_surface(
+            &normal_fixture(&faces, [1.; 3]),
+            IDENTITY,
+            1 << 20,
+            &effort(),
+            false,
+        )
+        .unwrap();
+        assert_eq!((surface.normal_faces, surface.inverted_faces), (0, 0));
+        // A NORMAL behind a meshopt filter is skipped, not decoded (and not refused).
+        let mut doc: Value = {
+            let b = normal_fixture(&faces, [1.; 3]);
+            let l = u32::from_le_bytes(b[12..16].try_into().unwrap()) as usize;
+            serde_json::from_slice(&b[20..20 + l]).unwrap()
+        };
+        doc["bufferViews"][1]["extensions"] = serde_json::json!({"EXT_meshopt_compression":
+            {"buffer":0,"byteLength":1,"byteStride":4,"count":18,"mode":"ATTRIBUTES","filter":"OCTAHEDRAL"}});
+        let bin = {
+            let b = normal_fixture(&faces, [1.; 3]);
+            let l = u32::from_le_bytes(b[12..16].try_into().unwrap()) as usize;
+            b[28 + l..].to_vec()
+        };
+        let surface = replay_surface(
+            &pack_fixture(doc.clone(), bin.clone()),
+            IDENTITY,
+            1 << 20,
+            &effort(),
+            true,
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                surface.normal_faces,
+                surface.inverted_faces,
+                surface.normal_skips
+            ),
+            (0, 0, 1)
+        );
+        // Mutants the comparison does not read are skipped with their reason, never
+        // refused: sparse, viewless (zero storage), and each unsupported shape.
+        doc["bufferViews"][1]
+            .as_object_mut()
+            .unwrap()
+            .remove("extensions");
+        let base = doc.clone();
+        type Mutant = (&'static str, fn(&mut Value), u8);
+        let mutants: [Mutant; 6] = [
+            (
+                "sparse",
+                |d| d["accessors"][1]["sparse"] = serde_json::json!({"count":1}),
+                2,
+            ),
+            (
+                "viewless",
+                |d| {
+                    d["accessors"][1]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("bufferView");
+                },
+                4,
+            ),
+            (
+                "u8",
+                |d| d["accessors"][1]["componentType"] = 5121.into(),
+                8,
+            ),
+            (
+                "unnormalized",
+                |d| d["accessors"][1]["normalized"] = false.into(),
+                8,
+            ),
+            ("vec4", |d| d["accessors"][1]["type"] = "VEC4".into(), 8),
+            ("short", |d| d["accessors"][1]["count"] = 3.into(), 8),
+        ];
+        for (name, mutate, reason) in mutants {
+            let mut d = base.clone();
+            mutate(&mut d);
+            let surface = replay_surface(
+                &pack_fixture(d, bin.clone()),
+                IDENTITY,
+                1 << 20,
+                &effort(),
+                true,
+            )
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(
+                (surface.normal_faces, surface.normal_skips),
+                (0, reason),
+                "{name}"
+            );
+        }
+        // The unmutated document (no filter) is compared.
+        let surface =
+            replay_surface(&pack_fixture(base, bin), IDENTITY, 1 << 20, &effort(), true).unwrap();
+        assert_eq!((surface.normal_faces, surface.normal_skips), (5, 0));
+        // A reflecting, non-uniform node scale reverses the rendered winding and
+        // transforms normals by its inverse transpose: the verdicts do not change.
+        let surface = replay_surface(
+            &normal_fixture(&faces, [-2., 0.5, 3.]),
+            IDENTITY,
+            1 << 20,
+            &effort(),
+            true,
+        )
+        .unwrap();
+        assert_eq!((surface.normal_faces, surface.inverted_faces), (5, 2));
+    }
+    /// The verdict is the world-space one for any nonsingular node transform: the
+    /// rendered normal is `L^-T n` and the face normal `(La)×(Lb)`, flipped when
+    /// `det L < 0` (glTF reverses the winding).
+    #[test]
+    fn normal_inversion_matches_world_space_under_shear_and_reflection() {
+        let local = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
+        let shear: Matrix = [
+            1., 0., 0., 0., 2., -1., 0., 0., 0.5, 0., 3., 0., 0., 0., 0., 1.,
+        ];
+        let l: [Point; 3] =
+            std::array::from_fn(|k| [shear[4 * k], shear[4 * k + 1], shear[4 * k + 2]]);
+        let det = dot(l[0], cross(l[1], l[2]));
+        assert!(det < 0.);
+        let world = local.map(|p| point(shear, p));
+        let e = |k: usize| std::array::from_fn(|i| world[k][i] - world[0][i]);
+        let face = cross(e(1), e(2)).map(|v| v * det.signum());
+        let cof = cofactor(shear);
+        for k in 0..64 {
+            let a = f64::from(k) * 0.1;
+            let n = [a.cos() * 0.6, a.sin() * 0.6, (a * 1.7).sin()];
+            // L^-T n = cof(L) n / det.
+            let rendered = apply(&cof, n).map(|v| v / det);
+            let expected = dot(face, rendered) < 0.;
+            assert_eq!(
+                normal_inversion(&cof, local, [n; 3]),
+                Some(expected),
+                "{n:?}"
+            );
+        }
+    }
     #[test]
     fn replay_charges_json_and_decode_work_before_reduction() {
         let bytes = replay_fixture(&[[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]]);
         let mut e = effort();
         e.budget.value = 1;
-        assert!(replay_surface(&bytes, IDENTITY, 1 << 20, &e)
+        assert!(replay_surface(&bytes, IDENTITY, 1 << 20, &e, false)
             .err()
             .unwrap()
             .exceeded()

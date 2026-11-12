@@ -513,6 +513,96 @@ pub(crate) fn decode_level_rgba(
     Ok(out)
 }
 
+/// The base-level size of a published Basis Universal page, after checking the
+/// container fields the transcoder relies on: one 2D ETC1S (BasisLZ, with
+/// supercompression global data) or UASTC LDR 4x4 (no supercompression or Zstd,
+/// no global data) image, `typeSize` 1, a level count no longer than the full
+/// chain, and a level 0 whose recorded lengths fit its block count. A container
+/// outside that domain is `Unsupported`; one that is malformed is `InvalidInput`;
+/// an edge over [`MAX_EDGE`] or more than [`MAX_TEXELS`] is `ResourceLimit`.
+pub(crate) fn base_dimensions(ktx2: &[u8]) -> Result<(u32, u32), JobError> {
+    let input = |message: String| JobError::new(JobErrorKind::InvalidInput, message);
+    let unsupported = |message: &str| JobError::new(JobErrorKind::Unsupported, message.to_owned());
+    let parsed = container::parse(ktx2).map_err(|e| input(format!("KTX2 page: {e}")))?;
+    let etc1s = parsed.color_model == container::MODEL_ETC1S;
+    if parsed.vk_format != 0 || !(etc1s || parsed.color_model == container::MODEL_UASTC) {
+        return Err(unsupported(
+            "KTX2 page is not Basis Universal ETC1S or UASTC LDR 4x4",
+        ));
+    }
+    if parsed.depth > 1 || parsed.layers > 1 || parsed.faces != 1 {
+        return Err(unsupported("KTX2 page is not one 2D image"));
+    }
+    let scheme_ok = if etc1s {
+        parsed.supercompression == container::SUPERCOMPRESSION_BASIS_LZ
+    } else {
+        matches!(
+            parsed.supercompression,
+            container::SUPERCOMPRESSION_NONE | container::SUPERCOMPRESSION_ZSTD
+        )
+    };
+    if !scheme_ok {
+        return Err(unsupported(
+            "KTX2 page uses an unsupported supercompression scheme",
+        ));
+    }
+    let (width, height) = (parsed.width, parsed.height);
+    if width == 0
+        || height == 0
+        || width > MAX_EDGE
+        || height > MAX_EDGE
+        || u64::from(width) * u64::from(height) > MAX_TEXELS
+    {
+        return Err(JobError::new(
+            JobErrorKind::ResourceLimit,
+            format!("KTX2 page is {width}x{height}, outside 1..={MAX_EDGE} per edge and {MAX_TEXELS} texels"),
+        ));
+    }
+    if parsed.type_size != 1
+        || parsed.level_count > expected_levels(width, height, true)
+        || (parsed.global_data_length != 0) != etc1s
+    {
+        return Err(input(format!(
+            "KTX2 page header is inconsistent (typeSize {}, {} levels for {width}x{height}, {} global bytes)",
+            parsed.type_size, parsed.level_count, parsed.global_data_length
+        )));
+    }
+    let base = parsed.levels[0];
+    let blocks = u64::from(width.div_ceil(4)) * u64::from(height.div_ceil(4));
+    let level_ok = if etc1s {
+        // BasisLZ slices are at most a few bytes per block; the KTX2 text sets
+        // uncompressedByteLength to 0 for this scheme.
+        base.uncompressed_length == 0 && base.length <= blocks * 16
+    } else {
+        base.uncompressed_length == blocks * 16
+            && (parsed.supercompression != container::SUPERCOMPRESSION_NONE
+                || base.length == blocks * 16)
+    };
+    if !level_ok {
+        return Err(input(format!(
+            "KTX2 level 0 holds {} bytes ({} uncompressed) for {blocks} blocks",
+            base.length, base.uncompressed_length
+        )));
+    }
+    Ok((width, height))
+}
+
+/// Level 0 of a published Basis Universal page, transcoded to tightly packed
+/// RGBA8 by the same vendored transcoder that verifies every encode, for decoded
+/// views of published tiles: `(width, height, rgba)`. The container is checked
+/// by [`base_dimensions`] first; a page the transcoder rejects is `InvalidInput`.
+/// Further levels are not read.
+pub(crate) fn transcode_base_rgba(ktx2: &[u8]) -> Result<(u32, u32, Vec<u8>), JobError> {
+    let (width, height) = base_dimensions(ktx2)?;
+    let rgba = decode_level_rgba(ktx2, 0, width, height).map_err(|e| {
+        JobError::new(
+            JobErrorKind::InvalidInput,
+            format!("KTX2 page did not transcode: {}", e.message()),
+        )
+    })?;
+    Ok((width, height, rgba))
+}
+
 /// Sum of squared byte differences of two equal-length buffers.
 pub(crate) fn sse(a: &[u8], b: &[u8]) -> u64 {
     debug_assert_eq!(a.len(), b.len());
