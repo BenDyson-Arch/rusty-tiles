@@ -125,10 +125,13 @@ impl Mutation {
 
     pub(crate) fn last_resorts(self) -> bool {
         #[cfg(test)]
-        if matches!(self, Self::Develop | Self::DevelopNoRelief) {
-            return false;
+        {
+            !matches!(self, Self::Develop | Self::DevelopNoRelief)
         }
-        true
+        #[cfg(not(test))]
+        {
+            true
+        }
     }
     /// The coarse page edge cap (D5).
     pub(crate) fn max_page_edge(self) -> u32 {

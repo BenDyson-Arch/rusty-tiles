@@ -715,9 +715,9 @@ fn vertex_depths(
         if rank < leaf.first || rank >= leaf.end {
             return Err(invalid("leaf rank ranges are not contiguous"));
         }
-        for corner in 0..3 {
+        for (corner, position) in triangle.positions.iter().enumerate() {
             sorter.push(VertexDepth {
-                position: triangle.positions[corner].map(f32::to_bits),
+                position: position.map(f32::to_bits),
                 rank,
                 corner: corner as u8,
                 depth: leaf.depth() as u8,
