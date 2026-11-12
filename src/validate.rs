@@ -3673,13 +3673,14 @@ fn inspect_run(
     let payloads = check.rows.finish(names, scratch.clone())?;
     check.progress.step()?;
     let census = check.delivery.census();
-    if census
-        .as_ref()
-        .is_some_and(|c| c.coarse_normals.skipped_tiles > 0)
-    {
-        check
-            .not_inspected
-            .insert("coarseNormalInversion.meshoptFilteredNormal".into());
+    if let Some(c) = &census {
+        for (bit, suffix) in hlod_delivery::NORMAL_SKIPS {
+            if c.coarse_normals.skip_reasons & bit != 0 {
+                check
+                    .not_inspected
+                    .insert(format!("coarseNormalInversion.{suffix}"));
+            }
+        }
     }
     let warnings = census
         .as_ref()

@@ -217,6 +217,9 @@ pub(crate) struct TileView<'a> {
 /// Largest angle, in degrees, between a coarse face's geometric normal and the NORMAL
 /// published at any of its corners ([`corner_normals`]).
 pub(crate) const CREASE_DEGREES: f64 = 60.;
+/// `cos(CREASE_DEGREES)` as an exact literal: computing it would go through the platform's
+/// libm, which may differ by an ulp and so change which edges are smooth.
+pub(crate) const CREASE_COS: f64 = 0.5;
 
 /// The published coarse NORMAL of every tile face corner, from the tile's own decoded
 /// geometry. Around each vertex, faces joined by an edge whose two face normals differ by
@@ -233,7 +236,7 @@ pub(crate) const CREASE_DEGREES: f64 = 60.;
 /// over all faces at the vertex (+Y where none has area). Splits only add welded vertices,
 /// never triangles.
 pub(crate) fn corner_normals(decoded: &[[f32; 3]], faces: &[[u32; 3]]) -> Vec<[[f32; 3]; 3]> {
-    let cos_crease = CREASE_DEGREES.to_radians().cos();
+    let cos_crease = CREASE_COS;
     let point = |v: u32| decoded[v as usize].map(f64::from);
     let sub = |a: [f64; 3], b: [f64; 3]| -> [f64; 3] { std::array::from_fn(|i| a[i] - b[i]) };
     // Per face: area vector (twice the area along the unit normal) and unit normal.
@@ -278,6 +281,10 @@ pub(crate) fn corner_normals(decoded: &[[f32; 3]], faces: &[[u32; 3]]) -> Vec<[[
         }
         x
     }
+    // Every smooth pair of an edge's faces is joined. A manifold edge has two faces; a
+    // non-manifold one with k faces costs O(k²), and joining only neighbours in the sorted
+    // group would change the result, since smoothness is not transitive. The tile's
+    // 8,192-triangle cap bounds k (and the fallback's per-vertex scan below).
     for group in edges.chunk_by(|x, y| (x.0, x.1) == (y.0, y.1)) {
         for (i, &(_, _, f, fa, fb)) in group.iter().enumerate() {
             for &(_, _, g, ga, gb) in &group[i + 1..] {
@@ -1206,6 +1213,14 @@ pub(crate) fn page_charge(size: [u32; 2], slots: u64, profile: Profile) -> Resul
 mod tests {
     use super::*;
 
+    /// The literal is the crease angle's cosine (to the last bits of the angle), so the
+    /// producer needs no libm call.
+    #[test]
+    fn crease_cosine_is_the_exact_literal_for_the_crease_angle() {
+        assert_eq!(CREASE_COS.to_bits(), 0.5f64.to_bits());
+        assert!((CREASE_COS.acos().to_degrees() - CREASE_DEGREES).abs() < 1e-12);
+    }
+
     fn face_unit(p: &[[f32; 3]], f: [u32; 3]) -> [f64; 3] {
         let q = f.map(|v| p[v as usize].map(f64::from));
         let e = |a: usize| std::array::from_fn(|i| q[a][i] - q[0][i]);
@@ -1321,7 +1336,7 @@ mod tests {
         let faces: Vec<[u32; 3]> = (1..5).map(|i| [0, i, i + 1]).collect();
         let units: Vec<_> = faces.iter().map(|f| face_unit(&positions, *f)).collect();
         for w in units.windows(2) {
-            assert!(dot3(w[0], w[1]) > CREASE_DEGREES.to_radians().cos());
+            assert!(dot3(w[0], w[1]) > CREASE_COS);
         }
         let normals = corner_normals(&positions, &faces);
         let apex: Vec<[f32; 3]> = normals.iter().map(|c| c[0]).collect();

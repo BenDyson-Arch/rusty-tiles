@@ -670,9 +670,8 @@ struct Surface {
     /// publishes NORMAL, and those with a corner NORMAL more than 90° from the face.
     normal_faces: u64,
     inverted_faces: u64,
-    /// Primitives whose NORMAL view uses an `EXT_meshopt_compression` filter, which this
-    /// decoder does not undo: their normals are not compared.
-    normals_skipped: u64,
+    /// Why some primitive's NORMAL was not compared ([`normal_skip`] bits, OR'd).
+    normal_skips: u8,
 }
 impl Surface {
     fn reserve(&self, bytes: usize, cap: usize) -> Result<(), Error> {
@@ -710,7 +709,7 @@ impl Surface {
         self.faces.extend(other.faces);
         add_count(&mut self.normal_faces, other.normal_faces)?;
         add_count(&mut self.inverted_faces, other.inverted_faces)?;
-        add_count(&mut self.normals_skipped, other.normals_skipped)?;
+        self.normal_skips |= other.normal_skips;
         add_count(&mut self.triangles, other.triangles)
     }
     fn triangle(
@@ -793,8 +792,10 @@ pub(super) struct DecodedInterfaceCensus {
 pub(super) struct CoarseNormals {
     pub(super) tiles: u64,
     pub(super) faces: u64,
-    /// Coarse tiles with a NORMAL behind an `EXT_meshopt_compression` filter (not compared).
+    /// Coarse tiles with a NORMAL this comparison does not read ([`normal_skip`]), and
+    /// the reasons met (bits of [`NORMAL_SKIPS`]).
     pub(super) skipped_tiles: u64,
+    pub(super) skip_reasons: u8,
     pub(super) inverted_tiles_by_depth: Vec<u64>,
     pub(super) inverted_faces_by_depth: Vec<u64>,
 }
@@ -944,6 +945,45 @@ fn normal_inversion(cof: &[Point; 3], xyz: [Point; 3], normals: [Point; 3]) -> O
     let face = apply(cof, cross(e(1), e(2)));
     (dot(face, face) > 0.).then(|| normals.iter().any(|n| dot(face, apply(cof, *n)) < 0.))
 }
+/// Reasons a coarse NORMAL is not compared, as bits, with their `notInspected` suffixes
+/// (`coarseNormalInversion.<suffix>`).
+pub(super) const NORMAL_SKIPS: [(u8, &str); 4] = [
+    (1, "meshoptFilteredNormal"),
+    (2, "sparseNormal"),
+    (4, "viewlessNormal"),
+    (8, "unsupportedNormalAccessor"),
+];
+/// The reason (a [`NORMAL_SKIPS`] bit) a coarse NORMAL accessor is outside what the
+/// comparison reads exactly, or 0 when it is compared: a VEC3 of f32, or of normalized
+/// i8/i16, one per vertex, in a view without a meshopt filter (this decoder undoes none).
+/// Decided from the document alone, before any decode, so this warning-only check never
+/// refuses a payload that the earlier checks admit (for example viewless zero storage).
+fn normal_skip(doc: &Value, attribute: &Value, vertices: usize) -> u8 {
+    let Some(a) = attribute.as_u64().map(|i| &doc["accessors"][i as usize]) else {
+        return 8;
+    };
+    if a.get("sparse").is_some() {
+        return 2;
+    }
+    let Some(view) = a.get("bufferView").and_then(Value::as_u64) else {
+        return 4;
+    };
+    let normalized = a["normalized"] == true;
+    let component = match a["componentType"].as_u64() {
+        Some(5126) => !normalized,
+        Some(5120 | 5122) => normalized,
+        _ => false,
+    };
+    if a["type"] != "VEC3" || !component || a["count"].as_u64() != Some(vertices as u64) {
+        return 8;
+    }
+    let filter =
+        &doc["bufferViews"][view as usize]["extensions"]["EXT_meshopt_compression"]["filter"];
+    if filter.as_str().is_some_and(|f| f != "NONE") {
+        return 1;
+    }
+    0
+}
 /// `normals`: also compare each face's corner NORMALs with the face (coarse payloads only;
 /// leaves carry source normals as authored).
 fn replay_surface(
@@ -992,25 +1032,17 @@ fn replay_surface(
                     .map(|i| Accessor::new(&doc, bin, identity::uint(i)?, &mut work))
                     .transpose()?;
                 let count = indices.as_ref().map_or(positions.count, |i| i.count);
-                let filtered = |n: &Value| -> Result<bool, Error> {
-                    let view = &doc["accessors"][identity::uint(n)?]["bufferView"];
-                    Ok(doc["bufferViews"][identity::uint(view)?]["extensions"]
-                        ["EXT_meshopt_compression"]["filter"]
-                        .as_str()
-                        .is_some_and(|f| f != "NONE"))
-                };
                 let normal = match p["attributes"].get("NORMAL") {
-                    Some(n) if normals && filtered(n)? => {
-                        add_count(&mut surface.normals_skipped, 1)?;
-                        None
-                    }
-                    Some(n) if normals => {
-                        let a = Accessor::new(&doc, bin, identity::uint(n)?, &mut work)?;
-                        if a.components != 3 {
-                            return Err(bad("accessorValues", "NORMAL must be VEC3"));
+                    Some(n) if normals => match normal_skip(&doc, n, positions.count) {
+                        0 => {
+                            let a = Accessor::new(&doc, bin, identity::uint(n)?, &mut work)?;
+                            Some((a, cofactor(m)))
                         }
-                        Some((a, cofactor(m)))
-                    }
+                        reason => {
+                            surface.normal_skips |= reason;
+                            None
+                        }
+                    },
                     _ => None,
                 };
                 for corner in (0..count).step_by(3) {
@@ -2721,8 +2753,9 @@ impl Store {
         census: &mut CoarseNormals,
         effort: &Effort,
     ) -> Result<(), Error> {
-        if surface.normals_skipped > 0 {
+        if surface.normal_skips != 0 {
             add_count(&mut census.skipped_tiles, 1)?;
+            census.skip_reasons |= surface.normal_skips;
         }
         if surface.normal_faces == 0 {
             return Ok(());
@@ -4014,16 +4047,80 @@ mod tests {
             let l = u32::from_le_bytes(b[12..16].try_into().unwrap()) as usize;
             b[28 + l..].to_vec()
         };
-        let surface =
-            replay_surface(&pack_fixture(doc, bin), IDENTITY, 1 << 20, &effort(), true).unwrap();
+        let surface = replay_surface(
+            &pack_fixture(doc.clone(), bin.clone()),
+            IDENTITY,
+            1 << 20,
+            &effort(),
+            true,
+        )
+        .unwrap();
         assert_eq!(
             (
                 surface.normal_faces,
                 surface.inverted_faces,
-                surface.normals_skipped
+                surface.normal_skips
             ),
             (0, 0, 1)
         );
+        // Mutants the comparison does not read are skipped with their reason, never
+        // refused: sparse, viewless (zero storage), and each unsupported shape.
+        doc["bufferViews"][1]
+            .as_object_mut()
+            .unwrap()
+            .remove("extensions");
+        let base = doc.clone();
+        type Mutant = (&'static str, fn(&mut Value), u8);
+        let mutants: [Mutant; 6] = [
+            (
+                "sparse",
+                |d| d["accessors"][1]["sparse"] = serde_json::json!({"count":1}),
+                2,
+            ),
+            (
+                "viewless",
+                |d| {
+                    d["accessors"][1]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("bufferView");
+                },
+                4,
+            ),
+            (
+                "u8",
+                |d| d["accessors"][1]["componentType"] = 5121.into(),
+                8,
+            ),
+            (
+                "unnormalized",
+                |d| d["accessors"][1]["normalized"] = false.into(),
+                8,
+            ),
+            ("vec4", |d| d["accessors"][1]["type"] = "VEC4".into(), 8),
+            ("short", |d| d["accessors"][1]["count"] = 3.into(), 8),
+        ];
+        for (name, mutate, reason) in mutants {
+            let mut d = base.clone();
+            mutate(&mut d);
+            let surface = replay_surface(
+                &pack_fixture(d, bin.clone()),
+                IDENTITY,
+                1 << 20,
+                &effort(),
+                true,
+            )
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(
+                (surface.normal_faces, surface.normal_skips),
+                (0, reason),
+                "{name}"
+            );
+        }
+        // The unmutated document (no filter) is compared.
+        let surface =
+            replay_surface(&pack_fixture(base, bin), IDENTITY, 1 << 20, &effort(), true).unwrap();
+        assert_eq!((surface.normal_faces, surface.normal_skips), (5, 0));
         // A reflecting, non-uniform node scale reverses the rendered winding and
         // transforms normals by its inverse transpose: the verdicts do not change.
         let surface = replay_surface(
