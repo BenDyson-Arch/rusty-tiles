@@ -3,6 +3,8 @@
 Convert meshes, GeoJSON/GeoPackage vectors and LAS/LAZ point clouds to 3D Tiles from Python, including Blender's bundled Python.
 Self-contained wheels: no GDAL, CLI, Rust compiler or other Python packages are needed at runtime.
 
+**Status:** pre-1.0 and under active development. Function signatures, report fields, error types and archive bytes can change in any release, including patch releases; each change is listed in the [release notes](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/CHANGELOG.md). Pin the version (for example `rusty-tiles==0.4.1`) in add-ons and scripts you ship. Output archives are standard 3D Tiles 1.1, so viewers are not affected.
+
 ```sh
 python -m pip install rusty-tiles
 ```
