@@ -1,6 +1,7 @@
 //! SIGINT and SIGTERM cancel a running `mesh` through the ordinary cancellation path:
 //! scratch and spill directories are removed, nothing is published, and the process
-//! exits with the shell's conventional `128 + signal` status.
+//! exits with the shell's conventional `128 + signal` status. A SIGKILL cannot be
+//! handled; the folders it leaves carry owner records that `scratch clean` acts on.
 #![cfg(unix)]
 
 use std::{
@@ -161,8 +162,24 @@ fn interrupt(
     }
 }
 
+/// The PID in a scratch folder's owner record.
+fn owner_pid(folder: &Path) -> Option<u64> {
+    let text = fs::read(folder.join("rusty-tiles-owner.json")).ok()?;
+    let record: serde_json::Value = serde_json::from_slice(&text).ok()?;
+    assert_eq!(record["format"], "rusty-tiles-scratch-owner");
+    record["pid"].as_u64()
+}
+
 /// `mesh` with a scratch directory, signalled once its sort is spilling.
 fn interrupted_mesh(signal: i32) -> (Interrupted, Vec<String>, Vec<String>) {
+    let (result, work, scratch, out_dir) = interrupted_mesh_in(signal);
+    let names = (names(&scratch), names(&out_dir));
+    drop(work);
+    (result, names.0, names.1)
+}
+
+/// The signalled run, its work root and its scratch and output directories.
+fn interrupted_mesh_in(signal: i32) -> (Interrupted, tempfile::TempDir, PathBuf, PathBuf) {
     let work = tempfile::tempdir().unwrap();
     let input = work.path().join("grid.glb");
     grid_glb(&input, 700);
@@ -185,13 +202,18 @@ fn interrupted_mesh(signal: i32) -> (Interrupted, Vec<String>, Vec<String>) {
         ],
         signal,
         // The sort's spill directory exists only while the run is deep in its capture.
-        &mut |_, _| {
-            names(&scratch)
-                .iter()
-                .any(|name| name.starts_with("rusty-tiles-spill-"))
+        // It and the tiler's private work directory both carry this run's owner record.
+        &mut |child, _| {
+            let pid = Some(u64::from(child.id()));
+            let owned = |prefix: &str| {
+                names(&scratch)
+                    .iter()
+                    .any(|name| name.starts_with(prefix) && owner_pid(&scratch.join(name)) == pid)
+            };
+            owned("rusty-tiles-spill-") && owned(".tiles-mesh-")
         },
     );
-    (result, names(&scratch), names(&out_dir))
+    (result, work, scratch, out_dir)
 }
 
 /// A packaged archive whose one payload is a 24 MB point cloud: `validate` hashes it in a
@@ -263,17 +285,66 @@ fn sigint_cancels_mesh_cleans_scratch_and_exits_130() {
     assert!(out.is_empty(), "output directory not clean: {out:?}");
 }
 
+/// SIGKILL leaves the run's folders behind with their owner records; once the owner is
+/// gone, `scratch clean` removes exactly those folders and reports the bytes freed.
+#[test]
+fn folders_left_by_sigkill_are_removed_by_scratch_clean() {
+    let (run, work, scratch, out_dir) = interrupted_mesh_in(libc::SIGKILL);
+    assert_eq!(run.code, None, "{}", run.stderr);
+    let left = names(&scratch);
+    assert!(
+        left.iter()
+            .any(|name| name.starts_with("rusty-tiles-spill-"))
+            && left.iter().any(|name| name.starts_with(".tiles-mesh-")),
+        "{left:?}"
+    );
+    // A foreign folder in the same place is not touched.
+    fs::create_dir(scratch.join("not-ours")).unwrap();
+    // Keep the default scratch locations inside this test.
+    let defaults = work.path().join("defaults");
+    fs::create_dir(&defaults).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
+        .args(["scratch", "clean", "--json", "--dir"])
+        .arg(&scratch)
+        .env("TMPDIR", &defaults)
+        .env("XDG_CACHE_HOME", &defaults)
+        .env("HOME", &defaults)
+        .output()
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(
+        report["removed"].as_array().unwrap().len(),
+        left.len(),
+        "{report}"
+    );
+    assert!(report["bytesFreed"].as_u64().unwrap() > 0, "{report}");
+    assert_eq!(names(&scratch), ["not-ours"]);
+    // Output staging beside the output is not scratch; at most the staged archive remains.
+    assert!(
+        names(&out_dir)
+            .iter()
+            .all(|name| name.starts_with(".tiles-stage-")),
+        "{:?}",
+        names(&out_dir)
+    );
+}
+
 /// The validator reports cancellation as its own failure type; it still exits 143.
 #[test]
 fn sigterm_cancels_validate_and_exits_143() {
     let work = tempfile::tempdir().unwrap();
     let archive = point_cloud_archive(work.path());
+    let scratch = work.path().join("scratch");
+    fs::create_dir(&scratch).unwrap();
     let run = interrupt(
         &[
             "--progress".as_ref(),
             "json".as_ref(),
             "validate".as_ref(),
             archive.as_os_str(),
+            "--scratch-dir".as_ref(),
+            scratch.as_os_str(),
         ],
         libc::SIGTERM,
         // Hashing the 24 MB payload takes far longer than the signal does to arrive.
@@ -283,4 +354,5 @@ fn sigterm_cancels_validate_and_exits_143() {
     );
     assert_eq!(run.code, Some(143), "{}", run.stderr);
     assert!(run.stderr.contains("cancelled"), "{}", run.stderr);
+    assert!(names(&scratch).is_empty(), "scratch left behind");
 }
