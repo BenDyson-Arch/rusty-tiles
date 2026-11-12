@@ -6,7 +6,10 @@ use std::{
     fs::{self, File},
     io,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, MutexGuard,
+    },
 };
 use tempfile::{NamedTempFile, PathPersistError, TempPath};
 
@@ -234,14 +237,47 @@ struct State {
 
 struct Control {
     state: Mutex<State>,
+    /// Mirrors `state.phase == Phase::Open`, rewritten each time the state lock is
+    /// released, so the common check of an open run is one atomic load.
+    open: AtomicBool,
     observer: Option<Arc<dyn Observer>>,
 }
 
 impl Control {
-    fn state(&self) -> MutexGuard<'_, State> {
+    fn state(&self) -> StateGuard<'_> {
         // No caller code runs under this mutex. A poisoned lock must still
         // permit cleanup after an unexpected unwind.
-        self.state.lock().unwrap_or_else(|error| error.into_inner())
+        StateGuard {
+            guard: self.state.lock().unwrap_or_else(|error| error.into_inner()),
+            open: &self.open,
+        }
+    }
+}
+
+/// The locked state; releasing it publishes whether the run is still open.
+struct StateGuard<'a> {
+    guard: MutexGuard<'a, State>,
+    open: &'a AtomicBool,
+}
+
+impl std::ops::Deref for StateGuard<'_> {
+    type Target = State;
+    fn deref(&self) -> &State {
+        &self.guard
+    }
+}
+
+impl std::ops::DerefMut for StateGuard<'_> {
+    fn deref_mut(&mut self) -> &mut State {
+        &mut self.guard
+    }
+}
+
+impl Drop for StateGuard<'_> {
+    fn drop(&mut self) {
+        // Stored while the lock is still held, so the mirror never lags a later transition.
+        self.open
+            .store(self.guard.phase == Phase::Open, Ordering::Release);
     }
 }
 
@@ -274,6 +310,7 @@ impl RunControl {
                 primary: None,
                 secondary: Vec::new(),
             }),
+            open: AtomicBool::new(true),
             observer,
         }))
     }
@@ -445,12 +482,39 @@ impl Attempt {
     }
 }
 
-/// See [`Attempt::probe`].
+/// See [`Attempt::probe`]. Checking an open run is one atomic load, so deep loops (spill
+/// merges, SQLite progress handlers, worker threads) may check it every few milliseconds.
+#[derive(Clone)]
 pub(crate) struct AttemptProbe(Arc<Control>);
+
+impl fmt::Debug for AttemptProbe {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AttemptProbe").finish_non_exhaustive()
+    }
+}
 
 impl AttemptProbe {
     pub(crate) fn check(&self) -> Result<(), JobError> {
         check_control(&self.0)
+    }
+
+    /// Interrupt `db`'s statements (with `SQLITE_INTERRUPT`) once this run has stopped,
+    /// checking every 10,000 virtual-machine operations. Replaces any progress handler.
+    /// The interrupted statement's error is then outranked by the run's own failure.
+    /// `site` names the connection for the debug-build test hooks.
+    pub(crate) fn interrupt_sqlite(
+        &self,
+        db: &rusqlite::Connection,
+        site: &'static str,
+    ) -> rusqlite::Result<()> {
+        let probe = self.clone();
+        db.progress_handler(
+            10_000,
+            Some(move || {
+                crate::test_hooks::pace(site);
+                probe.check().is_err()
+            }),
+        )
     }
 
     pub(crate) fn emit(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
@@ -459,6 +523,10 @@ impl AttemptProbe {
 }
 
 fn check_control(control: &Control) -> Result<(), JobError> {
+    // The open run's fast path: no lock. A transition is seen at the next check.
+    if control.open.load(Ordering::Acquire) {
+        return Ok(());
+    }
     let state = control.state();
     match state.phase {
         Phase::Open => Ok(()),
@@ -560,6 +628,8 @@ pub(crate) fn file_publication_supported() -> Result<(), JobError> {
 pub(crate) struct Staging<'a> {
     file: NamedTempFile,
     attempt: &'a Attempt,
+    /// Listed for the CLI's stop backstop until the candidate is installed or removed.
+    _registered: crate::cleanup::Registered,
 }
 
 impl<'a> Staging<'a> {
@@ -576,7 +646,12 @@ impl<'a> Staging<'a> {
             .prefix(".tiles-stage-")
             .tempfile_in(parent)
             .map_err(|error| attempt.fail(JobError::io("create staging file", parent, error)))?;
-        Ok(Self { file, attempt })
+        let _registered = crate::cleanup::register(file.path());
+        Ok(Self {
+            file,
+            attempt,
+            _registered,
+        })
     }
 
     pub(crate) fn path(&self) -> &Path {
