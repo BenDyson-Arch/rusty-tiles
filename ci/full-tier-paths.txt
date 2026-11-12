@@ -27,6 +27,6 @@ ci/.*
 Dockerfile
 scripts/build-native-gdal\.sh
 scripts/(package_cli|smoke_cli|dev_release|basisu_link_check|test-packaged-runtime|release_acceptance|install)\.sh
-scripts/(dev_version|ci_run|ci_scope|check_ci_config|download_blender|test_blender_wheel|test_python_wheel|third_party_notices)\.py
+scripts/(dev_version|ci_run|ci_scope|check_ci_config|release_notes|download_blender|test_blender_wheel|test_python_wheel|third_party_notices)\.py
 scripts/blender_official\.json
 scripts/crs-allowlist/.*
