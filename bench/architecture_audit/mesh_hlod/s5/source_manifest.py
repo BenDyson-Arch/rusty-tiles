@@ -67,13 +67,22 @@ Y_UP = (1., 0., 0., 0., 0., 0., 1., 0., 0., -1., 0., 0., 0., 0., 0., 1.)
 Y_UP_INVERSE = (1., 0., 0., 0., 0., 0., -1., 0., 0., 1., 0., 0., 0., 0., 0., 1.)
 
 
-# The baseline identity decode shares oracle.py's limit and override (decode.mjs is slow on
-# slow CI runners): 600 s unless RUSTY_TILES_ORACLE_TIMEOUT gives seconds.
+# The baseline identity decode and the independent meshopt decode share oracle.py's limit and
+# override (both are slow on slow CI runners): 600 s unless RUSTY_TILES_ORACLE_TIMEOUT gives
+# seconds.
 DECODE_TIMEOUT_DEFAULT = 600
 
 
 class DecodeTimeout(Exception):
-    """decode.mjs ran out of time: an environment limit, not a manifest refusal."""
+    """A decoder ran out of time: an environment limit, not a manifest refusal."""
+
+
+class OracleConfigError(Exception):
+    """RUSTY_TILES_ORACLE_TIMEOUT is not a positive number of seconds: a configuration error.
+
+    Like DecodeTimeout, deliberately outside the exceptions reported as refusals, so it stops
+    the run instead of passing as an oracle or manifest verdict.
+    """
 
 
 def _decode_timeout():
@@ -85,7 +94,7 @@ def _decode_timeout():
     except ValueError:
         seconds = 0
     if not seconds > 0:
-        raise ValueError(f'RUSTY_TILES_ORACLE_TIMEOUT must be a positive number of seconds, not {value!r}')
+        raise OracleConfigError(f'RUSTY_TILES_ORACLE_TIMEOUT must be a positive number of seconds, not {value!r}')
     return seconds
 
 
@@ -460,10 +469,16 @@ class _GLB:
                 _require(start+length <= self.bin_length, 'meshopt outside logical buffer')
                 mode = e.get('mode')
                 _require(mode in ('ATTRIBUTES', 'TRIANGLES', 'INDICES'), 'unsupported meshopt mode')
-                result = subprocess.run(['python3', str(Path(__file__).with_name('meshopt.py')),
-                                         mode, str(count), str(stride), filter_name],
-                                        input=self.data[self.bin_start+start:self.bin_start+start+length],
-                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+                limit = _decode_timeout()
+                try:
+                    result = subprocess.run(['python3', str(Path(__file__).with_name('meshopt.py')),
+                                             mode, str(count), str(stride), filter_name],
+                                            input=self.data[self.bin_start+start:self.bin_start+start+length],
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=limit)
+                except subprocess.TimeoutExpired:
+                    raise DecodeTimeout(f'meshopt.py did not finish within {limit:g} s for bufferView {index}; '
+                                        f'set RUSTY_TILES_ORACLE_TIMEOUT (seconds, default '
+                                        f'{DECODE_TIMEOUT_DEFAULT}) to allow longer') from None
                 _require(result.returncode == 0 and len(result.stdout) == size,
                          'independent meshopt decode failed: '+result.stderr[-1000:].decode(errors='replace'))
                 _require(sum(len(x) for x in self.views.values())+size <= MAX_BASELINE_BYTES,

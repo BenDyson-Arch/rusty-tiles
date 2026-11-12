@@ -29,6 +29,14 @@ ROOT = Path(__file__).parent
 DECODE_TIMEOUT_DEFAULT = 600
 
 
+class OracleConfigError(Exception):
+    """RUSTY_TILES_ORACLE_TIMEOUT is not a positive number of seconds: a configuration error.
+
+    Like DecodeTimeout, deliberately outside the exceptions reported as refusals, so it stops
+    the run instead of passing as an oracle or manifest verdict.
+    """
+
+
 def decode_timeout():
     value = os.environ.get('RUSTY_TILES_ORACLE_TIMEOUT', '')
     if not value:
@@ -38,7 +46,7 @@ def decode_timeout():
     except ValueError:
         seconds = 0
     if not seconds > 0:
-        raise ValueError(f'RUSTY_TILES_ORACLE_TIMEOUT must be a positive number of seconds, not {value!r}')
+        raise OracleConfigError(f'RUSTY_TILES_ORACLE_TIMEOUT must be a positive number of seconds, not {value!r}')
     return seconds
 
 
