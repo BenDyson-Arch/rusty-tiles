@@ -240,32 +240,77 @@ fn mul(a: u64, b: u64) -> Result<u64, JobError> {
     a.checked_mul(b)
         .ok_or_else(|| exhausted("full capture byte arithmetic overflow"))
 }
+/// One image decode's charge: the encoded image at its actual length, which decoding holds
+/// whole, plus 12 bytes per texel (the decoder's admitted allocation of at most 8 bytes per
+/// texel and the RGBA8 copy).
+fn decode_charge(encoded: u64, texels: u64) -> Result<u64, JobError> {
+    add(mul(texels, 12)?, encoded)
+}
+/// Declared images: their count and snapshot scratch bytes, each image's header
+/// dimensions, and the largest single decode charge.
+struct ImagePreflight {
+    count: u64,
+    scratch_bytes: u64,
+    dimensions: Vec<(u32, u32)>,
+    largest_encoded_bytes: u64,
+    /// The largest decode charge, with its encoded length and dimensions.
+    largest_decode: Option<(u64, u64, (u32, u32))>,
+}
+/// Admits every declared image's length and header (format, edge and texel ceilings) from
+/// at most 64 KiB of it, so decode charges are known before capture writes any scratch.
 fn image_preflight(
     source: &StreamSource,
     check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<(u64, u64), JobError> {
-    let count = u64::try_from(source.document.image_sources().len())
-        .map_err(|_| exhausted("image count overflow"))?;
-    let mut bytes = 0;
-    for index in 0..source.document.image_sources().len() {
+) -> Result<ImagePreflight, JobError> {
+    let declared = source.document.image_sources().len();
+    let mut preflight = ImagePreflight {
+        count: u64::try_from(declared).map_err(|_| exhausted("image count overflow"))?,
+        scratch_bytes: 0,
+        dimensions: Vec::new(),
+        largest_encoded_bytes: 0,
+        largest_decode: None,
+    };
+    preflight
+        .dimensions
+        .try_reserve_exact(declared)
+        .map_err(|_| exhausted("image preflight allocation failed"))?;
+    for index in 0..declared {
         check()?;
         let length = source.image_len(index)?;
-        if length == 0 {
-            return Err(JobError::new(
-                JobErrorKind::InvalidInput,
-                "encoded image is empty",
-            ));
+        images::admitted_length(length)?;
+        let (width, height) = source::probe_header_dimensions(
+            length,
+            source.document.image_view(index)?.mime,
+            source::DecodeAdmission::LARGE_MESH,
+            &mut |offset, out| source.read_image_chunk(index, offset, out),
+            check,
+        )?;
+        preflight.dimensions.push((width, height));
+        let charge = decode_charge(length, u64::from(width) * u64::from(height))?;
+        if preflight.largest_decode.is_none_or(|(c, _, _)| charge > c) {
+            preflight.largest_decode = Some((charge, length, (width, height)));
         }
-        if length > images::MAX_ENCODED_IMAGE_BYTES {
-            return Err(JobError::new(
-                JobErrorKind::Unsupported,
-                "encoded image exceeds 32 MiB admission ceiling",
-            ));
-        }
+        preflight.largest_encoded_bytes = preflight.largest_encoded_bytes.max(length);
         let chunks = add(length, 4093)? / 4094;
-        bytes = add(bytes, mul(chunks, 4096)?)?;
+        preflight.scratch_bytes = add(preflight.scratch_bytes, mul(chunks, 4096)?)?;
     }
-    Ok((count, bytes))
+    Ok(preflight)
+}
+/// Refuses, as a typed resource limit, a decode charge `budget` cannot hold.
+fn admit_decode(budget: Option<u64>, preflight: &ImagePreflight) -> Result<(), JobError> {
+    match (budget, preflight.largest_decode) {
+        (Some(budget), Some((charge, encoded, (width, height)))) if charge > budget => {
+            Err(JobError::new(
+                JobErrorKind::ResourceLimit,
+                format!(
+                    "image capture: decoding a source image needs {charge} bytes ({encoded} \
+                     encoded plus 12 per texel of {width}x{height}) but the memory budget \
+                     leaves {budget} for image decoding"
+                ),
+            ))
+        }
+        _ => Ok(()),
+    }
 }
 /// Declared scratch of every capture stage. `inside` configures the sorts inside capture
 /// (its [`capture_sort`](super::capture_sort) plan); `config` is the request, whose floor
@@ -670,7 +715,8 @@ pub(crate) fn capture_admitted(
         Some(spec) => SourceFrame::resolve(spec, source_bounds).map_err(super::failure)?,
     };
     let source_crs = frame.placement();
-    let (image_count, image_bytes) = image_preflight(&source, check).map_err(super::failure)?;
+    let preflight = image_preflight(&source, check).map_err(super::failure)?;
+    let (image_count, image_bytes) = (preflight.count, preflight.scratch_bytes);
     let layout = attributes::attribute_layout(&source);
     let parent = config
         .scratch_dir
@@ -788,6 +834,16 @@ pub(crate) fn capture_admitted(
             .ok_or_else(|| super::failure(invariant("capture sort plan does not fit")))?
     };
     let capture_config = &capture_config;
+    // Image admission decodes beside capture's resident bound, within the declared decoder
+    // allowance plus whatever available memory that bound leaves free. Every decode charge
+    // is known from the preflight headers, so the largest must fit before any scratch
+    // exists; the batches below re-derive each charge from the decoder's own header.
+    let decode_budget = jobs.available_memory_bytes.map(|available| {
+        available
+            .saturating_sub(required_memory)
+            .saturating_add(DECODER_ALLOWANCE)
+    });
+    admit_decode(decode_budget, &preflight).map_err(super::failure)?;
     // All checked counts, memory and physical allocation happen before creation.
     check().map_err(super::failure)?;
     let scratch_admission = output_admission(
@@ -871,7 +927,10 @@ pub(crate) fn capture_admitted(
         let (images, image_capture) =
             images::capture_images(&source, &scratch, config.sort.buffer_bytes, check)?;
         peaks.images = end_stage(&scratch, stages.images, "image capture")?;
-        if image_capture.scratch_bytes != image_bytes || image_capture.images != image_count {
+        if image_capture.scratch_bytes != image_bytes
+            || image_capture.images != image_count
+            || image_capture.largest_encoded_bytes != preflight.largest_encoded_bytes
+        {
             return Err(invariant("image capture disagrees with preflight"));
         }
         let mut image_info = Vec::new();
@@ -880,8 +939,7 @@ pub(crate) fn capture_admitted(
             .map_err(|_| exhausted("image info allocation failed"))?;
         // Every declared image is decoded once here to admit it; pixels are
         // dropped and delivery decodes again on demand. Each decode is
-        // charged from its admitted header dimensions: the encoded snapshot
-        // plus 12 bytes per texel (decoder output and the RGBA8 copy). The
+        // charged from its admitted header dimensions ([`decode_charge`]). The
         // budget is the declared decoder allowance plus whatever available
         // memory capture's own resident bound leaves free. An image that
         // cannot fit is refused; the others decode in parallel batches that
@@ -891,7 +949,7 @@ pub(crate) fn capture_admitted(
         charges
             .try_reserve_exact(images.len())
             .map_err(|_| exhausted("image charge allocation failed"))?;
-        for (index, image) in images.iter().enumerate() {
+        for (index, (image, declared)) in images.iter().zip(&preflight.dimensions).enumerate() {
             progress.advance(index as u64)?;
             let encoded = image.reconstruct(check)?;
             let info = source::probe_image_admitted(
@@ -900,14 +958,16 @@ pub(crate) fn capture_admitted(
                 admission,
                 &mut || check(),
             )?;
+            if (info.width, info.height) != *declared {
+                return Err(JobError::new(
+                    JobErrorKind::InvalidInput,
+                    "image header dimensions disagree with the decoder's",
+                ));
+            }
             let texels = u64::from(info.width) * u64::from(info.height);
-            charges.push(add(mul(texels, 12)?, encoded.len() as u64)?);
+            charges.push(decode_charge(info.encoded_bytes, texels)?);
         }
-        let budget = jobs.available_memory_bytes.map(|available| {
-            available
-                .saturating_sub(required_memory)
-                .saturating_add(DECODER_ALLOWANCE)
-        });
+        let budget = decode_budget;
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(workers.max(1))
             .build()
@@ -1433,6 +1493,69 @@ pub(super) mod tests {
             decode_batches(&[1, 10], Some(9), 8).unwrap_err().kind(),
             JobErrorKind::ResourceLimit
         );
+    }
+    /// #338: decode charges dominated by encoded length (a 100 MB 8192² PNG, a 1 GiB image
+    /// of 64² texels) batch by their whole charge under several workers, and an image whose
+    /// charge alone exceeds the budget is a resource refusal.
+    #[test]
+    fn encoded_dominated_decode_charges_batch_within_the_budget() {
+        let mib = 1u64 << 20;
+        let charges = [
+            decode_charge(100_000_000, 8192 * 8192).unwrap(),
+            decode_charge(1 << 30, 64 * 64).unwrap(),
+            decode_charge(600 * mib, 256 * 256).unwrap(),
+            decode_charge(300 * mib, 1).unwrap(),
+            decode_charge(300 * mib, 1).unwrap(),
+            decode_charge(300 * mib, 1).unwrap(),
+        ];
+        assert_eq!(charges[0], 100_000_000 + 12 * 8192 * 8192);
+        assert_eq!(charges[1], (1 << 30) + 12 * 64 * 64);
+        let budget = 2 << 30;
+        let batches = decode_batches(&charges, Some(budget), 3).unwrap();
+        // 0+1 is 1.84 GiB and +2 exceeds 2 GiB; 2+3+4 is 1.17 GiB, three workers.
+        assert_eq!(batches, vec![0..2, 2..5, 5..6]);
+        for batch in &batches {
+            let leased: u64 = charges[batch.clone()].iter().sum();
+            assert!(leased <= budget && batch.len() <= 3, "{batch:?}");
+        }
+        assert_eq!(
+            decode_batches(&charges, Some(budget), 1).unwrap(),
+            (0..6).map(|i| i..i + 1).collect::<Vec<_>>()
+        );
+        let error = decode_batches(&charges, Some(charges[1] - 1), 3).unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::ResourceLimit);
+        assert!(decode_batches(&charges, Some(charges[1]), 3).is_ok());
+    }
+    /// #338: the pre-scratch refusal admits the largest decode charge exactly at the budget
+    /// and refuses it one byte over, naming the image's encoded length and dimensions.
+    #[test]
+    fn largest_decode_charge_is_admitted_at_the_budget_and_refused_one_byte_over() {
+        let charge = decode_charge(200 << 20, 256 * 256).unwrap();
+        let preflight = ImagePreflight {
+            count: 2,
+            scratch_bytes: 0,
+            dimensions: vec![(256, 256), (16, 16)],
+            largest_encoded_bytes: 200 << 20,
+            largest_decode: Some((charge, 200 << 20, (256, 256))),
+        };
+        assert!(admit_decode(Some(charge), &preflight).is_ok());
+        assert!(admit_decode(None, &preflight).is_ok());
+        let error = admit_decode(Some(charge - 1), &preflight).unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::ResourceLimit);
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "image capture: decoding a source image needs {charge} bytes (209715200 \
+                 encoded plus 12 per texel of 256x256) but the memory budget leaves {} for \
+                 image decoding",
+                charge - 1
+            )
+        );
+        let none = ImagePreflight {
+            largest_decode: None,
+            ..preflight
+        };
+        assert!(admit_decode(Some(0), &none).is_ok());
     }
     #[test]
     fn admitted_large_image_owners_survive_tree_scratch_recheck() {

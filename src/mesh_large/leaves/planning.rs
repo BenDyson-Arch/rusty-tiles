@@ -514,6 +514,7 @@ mod tests {
                 extension: "png",
                 width: 4096,
                 height: 1,
+                encoded_bytes: 1,
             }];
             let classes = crate::mesh_large::batching::MaterialClasses::default();
             let resources = AtlasResources {
