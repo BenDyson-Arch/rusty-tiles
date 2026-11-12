@@ -589,13 +589,15 @@ fn page_sizes_are_refused_or_charged_from_the_header() {
         doc["images"] = json!([{"bufferView": 1, "mimeType": mime}]);
         arrays_of(&doc, &bin)
     };
-    let refused = with_image(png_header(20_000, 20_000), "image/png")
+    let refused = with_image(png_header(16_384, 8_193), "image/png")
         .err()
         .unwrap();
     let limit = tile_limit(&refused);
-    assert_eq!((limit.limit, limit.observed), ("pageTexels", 400_000_000));
-    // 8192² passes the texel limit; its charge (with the caller's copy) then exceeds
-    // what remains of the byte budget only together with another such page.
+    assert_eq!(
+        (limit.limit, limit.observed),
+        ("pageTexels", 16_384 * 8_193)
+    );
+    // 8192² passes the size limits and is charged; its bogus pixel data then fails.
     let refused = with_image(png_header(8192, 8192), "image/png")
         .err()
         .unwrap();
@@ -874,4 +876,143 @@ fn directory_members_are_regular_files_below_the_root() {
             "{uri}: {refused}"
         );
     }
+}
+
+/// The triangle document with `images` appended as views, one image each.
+fn with_images(images: &[(&[u8], &str)]) -> (Value, Vec<u8>) {
+    let (mut doc, mut bin) = triangle_doc();
+    let mut list = Vec::new();
+    for (bytes, mime) in images {
+        crate::glb::pad_to(&mut bin, 4);
+        let view = doc["bufferViews"].as_array().unwrap().len();
+        doc["bufferViews"].as_array_mut().unwrap().push(json!({
+            "buffer": 0, "byteOffset": bin.len(), "byteLength": bytes.len()}));
+        bin.extend(*bytes);
+        list.push(json!({"bufferView": view, "mimeType": mime}));
+    }
+    doc["buffers"][0]["byteLength"] = json!(bin.len());
+    doc["images"] = Value::Array(list);
+    (doc, bin)
+}
+
+#[test]
+fn json_text_is_capped_and_charged_as_parsed() {
+    // A JSON chunk claimed over the cap is refused before the file is examined.
+    let mut claim = b"glTF".to_vec();
+    for word in [2u32, 0, JSON_LIMIT as u32 + 1, 0x4E4F_534A] {
+        claim.extend(word.to_le_bytes());
+    }
+    let refused = decode(&claim).err().unwrap();
+    assert_eq!(tile_limit(&refused).limit, "jsonBytes");
+    // `[0,0,...]` expands about 16x when parsed; the charge covers it.
+    let (mut doc, bin) = triangle_doc();
+    doc["extras"] = json!(vec![0; 1 << 18]);
+    let bytes = crate::glb::encode_glb(&doc, &bin).unwrap();
+    let json = word(&bytes, 12).unwrap() as u64;
+    assert!(json > 1 << 19);
+    let mut budget = Budget::default();
+    Plain::decode(&bytes, &mut budget).unwrap();
+    assert!(
+        budget.held >= JSON_EXPANSION * json,
+        "{} < 16 x {json}",
+        budget.held
+    );
+    // Under a budget below 16x, the same tile is refused before parsing.
+    let mut small = Budget::with_limit(JSON_EXPANSION * json - 1);
+    let refused = Plain::decode(&bytes, &mut small).err().unwrap();
+    assert_eq!(tile_limit(&refused).limit, "decodedBytes");
+    // A tileset document over the cap is refused when the tileset is opened.
+    let work = tempfile::tempdir().unwrap();
+    let mut text = br#"{"asset":{"version":"1.1"}}"#.to_vec();
+    text.resize(JSON_LIMIT as usize + 1, b' ');
+    fs::write(work.path().join("tileset.json"), text).unwrap();
+    let refused = TileSet::open(work.path()).err().unwrap();
+    assert_eq!(tile_limit(&refused).limit, "jsonBytes");
+}
+
+/// A real 8192 bake: two 8192² pages (256 MiB of RGBA each) decode as arrays within
+/// the 1 GiB limit, because transient scratch is credited and the caller copies one
+/// page at a time. A third such page is refused.
+#[test]
+fn two_full_size_pages_decode_within_the_limit() {
+    let mut png = Vec::new();
+    {
+        let page = image::RgbaImage::from_pixel(8192, 8192, image::Rgba([90, 120, 30, 255]));
+        image::codecs::png::PngEncoder::new_with_quality(
+            &mut png,
+            image::codecs::png::CompressionType::Default,
+            image::codecs::png::FilterType::Sub,
+        )
+        .write_image(page.as_raw(), 8192, 8192, image::ExtendedColorType::Rgba8)
+        .unwrap();
+    }
+    assert!(png.len() < 8 << 20, "fixture PNG is {} bytes", png.len());
+    let (doc, bin) = with_images(&[(&png, "image/png"), (&png, "image/png")]);
+    let decoded = arrays_of(&doc, &bin).unwrap();
+    assert_eq!(decoded.pages.len(), 2);
+    assert!(decoded
+        .pages
+        .iter()
+        .all(|p| (p.width, p.height) == (8192, 8192)));
+    assert_eq!(&decoded.pages[1].rgba[..4], &[90, 120, 30, 255]);
+    drop(decoded);
+    let (doc, bin) = with_images(&[
+        (&png, "image/png"),
+        (&png, "image/png"),
+        (&png, "image/png"),
+    ]);
+    assert_eq!(
+        tile_limit(&arrays_of(&doc, &bin).err().unwrap()).limit,
+        "decodedBytes"
+    );
+}
+
+#[test]
+fn transient_pages_are_credited_and_shared_views_decode_once() {
+    let pages = basis_pages();
+    let (ktx2, uastc) = (&pages[0].1, &pages[1].1);
+    let rgba = 32 * 24 * 4u64;
+    // GLB path: each RGBA page is freed once its PNG replaces the view.
+    let (doc, bin) = with_images(&[(ktx2, "image/ktx2"), (uastc, "image/ktx2")]);
+    let bytes = crate::glb::encode_glb(&doc, &bin).unwrap();
+    let mut budget = Budget::default();
+    let plain = Plain::decode(&bytes, &mut budget).unwrap();
+    let before = budget.held;
+    let glb = plain.into_glb(&mut budget).unwrap();
+    // Two pages are never held together, and only the GLB and its copy stay held.
+    assert!(
+        budget.peak < before + 2 * rgba + 4 * glb.len() as u64,
+        "{}",
+        budget.peak
+    );
+    assert!(budget.held <= before + 2 * glb.len() as u64);
+    // Arrays: images sharing one view decode once and are copied.
+    let (mut doc, bin) = with_images(&[(ktx2, "image/ktx2")]);
+    doc["images"] = json!([{"bufferView": 1, "mimeType": "image/ktx2"},
+                           {"bufferView": 1, "mimeType": "image/ktx2"}]);
+    let decoded = arrays_of(&doc, &bin).unwrap();
+    assert_eq!(decoded.pages.len(), 2);
+    assert_eq!(decoded.pages[0], decoded.pages[1]);
+}
+
+#[test]
+fn oversized_ktx2_edges_name_their_limit() {
+    let mut page = basis_pages().remove(0).1;
+    page[20..24].copy_from_slice(&20_000u32.to_le_bytes());
+    let (doc, bin) = with_images(&[(&page, "image/ktx2")]);
+    let limit = tile_limit(&arrays_of(&doc, &bin).err().unwrap());
+    assert_eq!(
+        (limit.limit, limit.value, limit.observed),
+        ("pageEdge", 16_384, 20_000)
+    );
+    let bytes = crate::glb::encode_glb(&doc, &bin).unwrap();
+    let refused = decode(&bytes)
+        .unwrap()
+        .into_glb(&mut Budget::default())
+        .err()
+        .unwrap();
+    assert_eq!(tile_limit(&refused).limit, "pageEdge");
+    let refused = with_images(&[(&png_header(16_385, 2), "image/png")]);
+    let limit = tile_limit(&arrays_of(&refused.0, &refused.1).err().unwrap());
+    assert_eq!(limit.limit, "pageEdge");
 }

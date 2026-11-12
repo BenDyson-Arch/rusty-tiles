@@ -1329,7 +1329,7 @@ fn arrays_to_python(
     }
     out.set_item("pages", pages)?;
     let tables = PyList::empty(py);
-    for table in &tile.property_tables {
+    for table in tile.property_tables {
         let t = PyDict::new(py);
         t.set_item("class", &table.class)?;
         t.set_item("count", table.count)?;

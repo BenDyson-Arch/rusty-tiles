@@ -24,10 +24,9 @@
 //!   negative determinant, corners 1 and 2 of every triangle are swapped.
 //! - Malformed content is `InvalidInput`; an unknown member is `InvalidRequest`.
 //! - Every tile is bounded before allocation by fixed limits ([`TileLimit`]):
-//!   member bytes, the bytes held for one decode (the member, decoded views,
-//!   widened accessor values, outputs and the caller's one copy of each output),
-//!   scene work (node visits and primitive instances) and page texels. A refusal
-//!   is `ResourceLimit` with the [`TileLimit`] as its cause.
+//!   member bytes, JSON text, the bytes held at once by one decode (see
+//!   [`Budget`]), scene work (node visits and primitive instances), and page edge
+//!   and texels. A refusal is `ResourceLimit` with the [`TileLimit`] as its cause.
 //! - Directory input reads regular files only, never through a symlink below
 //!   the given root.
 use crate::{
@@ -46,12 +45,16 @@ use std::{
 
 /// Largest member read from a tileset, in bytes.
 const MEMBER_LIMIT: u64 = 1 << 30;
-/// Largest total of bytes held for one tile's decode (see [`Budget`]).
+/// Largest total of bytes held at once for one tile's decode (see [`Budget`]).
 const DECODED_LIMIT: u64 = 1 << 30;
+/// Largest JSON text parsed at once: a GLB JSON chunk or one tileset document. Real
+/// tiles hold kilobytes; producer documents stay under 2 MiB.
+const JSON_LIMIT: u64 = 64 << 20;
+/// Parsed `serde_json::Value` bytes per JSON text byte, worst case: `[0,0,...]`
+/// spends a 32-byte value on every two bytes.
+const JSON_EXPANSION: u64 = 16;
 /// Largest number of node visits plus primitive instances in one scene walk.
 const SCENE_WORK_LIMIT: u64 = 1 << 16;
-/// Outputs are held once in Rust and copied once by the caller (the Python binding).
-const OUTPUT_COPIES: u64 = 2;
 /// Deepest node nesting walked in one GLB scene.
 const NODE_DEPTH: usize = 64;
 /// Alignment of every view in a written plain GLB (covers 8-byte metadata columns).
@@ -80,8 +83,9 @@ fn limit(message: impl Into<String>) -> JobError {
 }
 
 /// A fixed per-tile limit that refused a decode, attached as the `ResourceLimit`
-/// error's cause. `limit` is `memberBytes`, `decodedBytes`, `sceneWork` or
-/// `pageTexels`; `observed` is the total the refused charge would have reached.
+/// error's cause. `limit` is `memberBytes`, `jsonBytes`, `decodedBytes`,
+/// `sceneWork`, `pageEdge` or `pageTexels`; `observed` is the refused quantity
+/// (for `decodedBytes`, what would have been held).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TileLimit {
     pub limit: &'static str,
@@ -110,22 +114,54 @@ fn exceeded(limit: &'static str, value: u64, observed: u64) -> JobError {
     JobError::with_cause(JobErrorKind::ResourceLimit, cause.to_string(), cause)
 }
 
-/// What one decode may hold and walk, charged before each allocation. Charges
-/// accumulate: memory freed during the decode is not credited back.
-#[derive(Default)]
+/// What one decode may hold at once and walk. Every allocation is charged before
+/// it is made and refused when the bytes held would pass the limit; transient
+/// buffers (the member, widened accessor values, decoder scratch, pages that are
+/// re-encoded) are credited when they are freed. Held for the whole decode: the
+/// parsed document ([`JSON_EXPANSION`] times its JSON), the decoded views and the
+/// outputs. The caller's copy is charged as it happens for a GLB, and for arrays
+/// as the largest single primitive, page or property table (the Python binding
+/// releases each after copying it).
 struct Budget {
-    bytes: u64,
+    limit: u64,
+    held: u64,
+    peak: u64,
     work: u64,
+    unit: u64,
+    largest_unit: u64,
+}
+
+impl Default for Budget {
+    fn default() -> Self {
+        Self::with_limit(DECODED_LIMIT)
+    }
 }
 
 impl Budget {
-    fn bytes(&mut self, bytes: u64) -> Result<(), JobError> {
-        let total = self.bytes.saturating_add(bytes);
-        if total > DECODED_LIMIT {
-            return Err(exceeded("decodedBytes", DECODED_LIMIT, total));
+    fn with_limit(limit: u64) -> Self {
+        Self {
+            limit,
+            held: 0,
+            peak: 0,
+            work: 0,
+            unit: 0,
+            largest_unit: 0,
         }
-        self.bytes = total;
+    }
+
+    fn bytes(&mut self, bytes: u64) -> Result<(), JobError> {
+        let total = self.held.saturating_add(bytes);
+        if total > self.limit {
+            return Err(exceeded("decodedBytes", self.limit, total));
+        }
+        self.held = total;
+        self.peak = self.peak.max(total);
         Ok(())
+    }
+
+    /// Returns `bytes` freed by the decode.
+    fn credit(&mut self, bytes: u64) {
+        self.held = self.held.saturating_sub(bytes);
     }
 
     /// `count * width` bytes, overflow included in the refusal.
@@ -133,13 +169,29 @@ impl Budget {
         self.bytes((count as u64).saturating_mul(width as u64))
     }
 
-    /// An output of `count` elements of `width` bytes and the caller's copy of it.
+    /// An output of `count` elements of `width` bytes, part of the current unit.
     fn output(&mut self, count: usize, width: usize) -> Result<(), JobError> {
-        self.bytes(
-            (count as u64)
-                .saturating_mul(width as u64)
-                .saturating_mul(OUTPUT_COPIES),
-        )
+        let bytes = (count as u64).saturating_mul(width as u64);
+        self.bytes(bytes)?;
+        self.unit = self.unit.saturating_add(bytes);
+        Ok(())
+    }
+
+    /// Counts already charged bytes as output of the current unit.
+    fn adopt(&mut self, bytes: u64) {
+        self.unit = self.unit.saturating_add(bytes);
+    }
+
+    /// Closes one primitive, page or table: the caller copies and frees units one by one.
+    fn end_unit(&mut self) {
+        self.largest_unit = self.largest_unit.max(self.unit);
+        self.unit = 0;
+    }
+
+    /// The caller's copy in flight: its largest unit.
+    fn caller_copy(&mut self) -> Result<(), JobError> {
+        self.end_unit();
+        self.bytes(self.largest_unit)
     }
 
     fn work(&mut self) -> Result<(), JobError> {
@@ -151,14 +203,31 @@ impl Budget {
     }
 }
 
-/// Refuses a page over [`crate::basisu_ktx2::MAX_TEXELS`], then charges its RGBA8 bytes.
-fn charge_page(budget: &mut Budget, width: u32, height: u32, copies: u64) -> Result<(), JobError> {
+/// Refuses a page with an edge over [`crate::basisu_ktx2::MAX_EDGE`] or more than
+/// [`crate::basisu_ktx2::MAX_TEXELS`] texels, from its header size.
+fn check_page(width: u32, height: u32) -> Result<u64, JobError> {
+    let edge = width.max(height);
+    if edge > crate::basisu_ktx2::MAX_EDGE {
+        return Err(exceeded(
+            "pageEdge",
+            u64::from(crate::basisu_ktx2::MAX_EDGE),
+            u64::from(edge),
+        ));
+    }
     let texels = u64::from(width) * u64::from(height);
     let max = crate::basisu_ktx2::MAX_TEXELS;
     if texels > max {
         return Err(exceeded("pageTexels", max, texels));
     }
-    budget.bytes(texels * 4 * copies)
+    Ok(texels)
+}
+
+/// Refuses a JSON text over [`JSON_LIMIT`].
+fn check_json(length: usize) -> Result<(), JobError> {
+    if length as u64 > JSON_LIMIT {
+        return Err(exceeded("jsonBytes", JSON_LIMIT, length as u64));
+    }
+    Ok(())
 }
 
 /// How a content-bearing tile sits in the expanded hierarchy.
@@ -319,12 +388,21 @@ impl TileSet {
     /// Opens a `.3tz` archive or an unpacked tileset directory and expands its hierarchy.
     pub fn open(path: &Path) -> Result<Self, JobError> {
         let mut source = Source::open(path)?;
-        let manifest: Value = serde_json::from_slice(&source.read("tileset.json")?)
-            .map_err(|e| invalid(format!("tileset.json: {e}")))?;
+        let manifest = source.read("tileset.json")?;
+        check_json(manifest.len())?;
+        let manifest: Value =
+            serde_json::from_slice(&manifest).map_err(|e| invalid(format!("tileset.json: {e}")))?;
         // The expander reports through the crate error; keep the first typed read failure.
         let mut failure = None;
         let expanded = crate::implicit::expand_tileset(&manifest, |uri| {
-            source.read(uri).map_err(|error| {
+            let document = uri.to_ascii_lowercase().ends_with(".json");
+            let read = source.read(uri).and_then(|bytes| {
+                if document {
+                    check_json(bytes.len())?;
+                }
+                Ok(bytes)
+            });
+            read.map_err(|error| {
                 let message = error.to_string();
                 failure.get_or_insert(error);
                 crate::Error::Message(message)
@@ -372,7 +450,11 @@ impl TileSet {
     fn plain(&mut self, uri: &str, budget: &mut Budget) -> Result<(TileEntry, Plain), JobError> {
         let entry = self.entry(uri)?;
         let bytes = self.source.read(uri)?;
-        Ok((entry, Plain::decode(&bytes, budget)?))
+        // The member is held until its views are decoded.
+        budget.elements(bytes.len(), 1)?;
+        let plain = Plain::decode(&bytes, budget)?;
+        budget.credit(bytes.len() as u64);
+        Ok((entry, plain))
     }
 
     /// The member as a plain glTF 2.0 GLB: meshopt views decoded, Basis pages
@@ -504,6 +586,7 @@ fn glb_parts(bytes: &[u8]) -> Result<(Value, &[u8]), JobError> {
             "GLB header is not version 2 with a leading JSON chunk",
         ));
     }
+    check_json(header(12)?)?;
     let json_end = header(12)?
         .checked_add(20)
         .filter(|&end| end <= bytes.len())
@@ -619,9 +702,13 @@ fn decode_view(view: &Value, bin: &[u8], buffers: &[Value]) -> Result<Vec<u8>, J
 }
 
 impl Plain {
+    /// Decodes a member the caller holds (and charges). The parsed document is
+    /// charged at [`JSON_EXPANSION`] times its JSON chunk, which is capped first.
     fn decode(bytes: &[u8], budget: &mut Budget) -> Result<Self, JobError> {
-        // The member and its parsed document (bounded by the member's size).
-        budget.elements(bytes.len(), 2)?;
+        if let Some(json) = word(bytes, 12).filter(|_| bytes.starts_with(b"glTF")) {
+            check_json(json)?;
+            budget.elements(json, JSON_EXPANSION as usize)?;
+        }
         let (doc, bin) = glb_parts(bytes)?;
         let buffers = array(&doc, "buffers")?;
         if let Some(first) = buffers.first() {
@@ -632,8 +719,10 @@ impl Plain {
         let mut views = Vec::new();
         for view in array(&doc, "bufferViews")? {
             let length = index(&view["byteLength"], "bufferView.byteLength")?;
-            budget.elements(length, 1)?;
+            // The view, plus the meshopt decoder's word buffer while it decodes.
+            budget.elements(length, 2)?;
             views.push(decode_view(view, bin, buffers)?);
+            budget.credit(length as u64);
         }
         Ok(Self { doc, views })
     }
@@ -653,13 +742,19 @@ impl Plain {
     }
 
     /// Level 0 of image `i` as RGBA8. The size comes from the page header and is
-    /// refused or charged (`copies` times) before anything is decoded.
-    fn page(&self, i: usize, budget: &mut Budget, copies: u64) -> Result<Page, JobError> {
+    /// refused or charged before anything is decoded; the page stays charged (the
+    /// caller credits it when freed), decoder scratch is credited here.
+    fn page(&self, i: usize, budget: &mut Budget) -> Result<Page, JobError> {
         let (bytes, mime) = self.image(i)?;
         let (width, height, rgba) = match mime {
             "image/ktx2" => {
+                // The raw header size first, so an oversized page names its limit.
+                if let (Some(width), Some(height)) = (word(bytes, 20), word(bytes, 24)) {
+                    check_page(width as u32, height as u32)?;
+                }
                 let (width, height) = crate::basisu_ktx2::base_dimensions(bytes)?;
-                charge_page(budget, width, height, copies)?;
+                let texels = check_page(width, height)?;
+                budget.bytes(texels * 4)?;
                 crate::basisu_ktx2::transcode_base_rgba(bytes)?
             }
             "image/png" | "image/jpeg" => {
@@ -668,26 +763,33 @@ impl Plain {
                 } else {
                     image::ImageFormat::Jpeg
                 };
-                let reader =
-                    || image::ImageReader::with_format(std::io::Cursor::new(bytes), format);
-                let (width, height) = reader()
-                    .into_dimensions()
-                    .map_err(|e| invalid(format!("image {i} header: {e}")))?;
-                charge_page(budget, width, height, copies)?;
-                let mut decoder = reader();
-                let mut limits = image::Limits::default();
-                // The header charge covers RGBA8; the decoder may hold up to twice
-                // that (16-bit or palette sources) before conversion.
-                limits.max_alloc = Some(u64::from(width) * u64::from(height) * 16);
-                decoder.limits(limits);
-                let image = decoder
-                    .decode()
-                    .map_err(|e| invalid(format!("image {i}: {e}")))?;
-                if (image.width(), image.height()) != (width, height) {
-                    return Err(invalid(format!("image {i} decoded at another size")));
+                use image::ImageDecoder as _;
+                let decode_error = |e: image::ImageError| invalid(format!("image {i}: {e}"));
+                let mut decoder =
+                    image::ImageReader::with_format(std::io::Cursor::new(bytes), format)
+                        .into_decoder()
+                        .map_err(decode_error)?;
+                let (width, height) = decoder.dimensions();
+                let texels = check_page(width, height)?;
+                // The decoder's own image; an RGBA8 source becomes the page without a
+                // copy, any other is converted into a new RGBA8 page and then freed.
+                let decoded = decoder.total_bytes();
+                let rgba8 = decoder.color_type() == image::ColorType::Rgba8;
+                budget.bytes(decoded)?;
+                if !rgba8 {
+                    budget.bytes(texels * 4)?;
                 }
-                let image = image.into_rgba8();
-                (width, height, image.into_raw())
+                let mut limits = image::Limits::default();
+                limits.max_alloc = Some(decoded + (16 << 20));
+                decoder.set_limits(limits).map_err(decode_error)?;
+                let rgba = image::DynamicImage::from_decoder(decoder)
+                    .map_err(decode_error)?
+                    .into_rgba8()
+                    .into_raw();
+                if !rgba8 {
+                    budget.credit(decoded);
+                }
+                (width, height, rgba)
             }
             other => return Err(unsupported(format!("image {i} has MIME type {other:?}"))),
         };
@@ -741,8 +843,8 @@ impl Plain {
                 self.doc["images"][i]["mimeType"] = Value::from("image/png");
                 continue;
             }
-            // The RGBA page, then its PNG (charged at the same size before encoding).
-            let page = self.page(i, budget, 2)?;
+            // The RGBA page is transient: it is credited once its PNG replaces the view.
+            let page = self.page(i, budget)?;
             self.doc["images"][i]["mimeType"] = Value::from("image/png");
             let mut png = Vec::new();
             // A view for display: fast deflate, not the smallest file.
@@ -758,12 +860,15 @@ impl Plain {
                 image::ExtendedColorType::Rgba8,
             )
             .map_err(|e| error(JobErrorKind::InvalidState, format!("PNG encode: {e}")))?;
-            self.views[view] = png;
+            budget.elements(png.len(), 1)?;
+            let ktx2 = std::mem::replace(&mut self.views[view], png);
+            budget.credit(ktx2.len() as u64 + page.rgba.len() as u64);
         }
-        // The new binary chunk, the framed GLB and the caller's copy of it.
+        // The new binary chunk and the framed GLB, then (views and chunk freed) the
+        // caller's copy of the GLB.
         let views: usize = self.views.iter().map(Vec::len).sum();
         let padded = views.saturating_add(self.views.len().saturating_mul(VIEW_ALIGN));
-        budget.elements(padded, 3)?;
+        budget.elements(padded, 1)?;
         let mut bin = Vec::new();
         if let Some(Value::Array(views)) = self.doc.get_mut("bufferViews") {
             for (view, bytes) in views.iter_mut().zip(&self.views) {
@@ -783,7 +888,16 @@ impl Plain {
                 serde_json::json!([{ "byteLength": bin.len() }]),
             );
         }
-        crate::glb::encode_glb(&self.doc, &bin).map_err(|e| limit(e.to_string()))
+        let json = crate::glb::json_len(&self.doc).map_err(|e| invalid(e.to_string()))?;
+        // Header, chunk headers and padding: under 64 bytes.
+        let framed = padded.saturating_add(json).saturating_add(64);
+        budget.elements(framed, 1)?;
+        let glb = crate::glb::encode_glb(&self.doc, &bin).map_err(|e| limit(e.to_string()))?;
+        drop(bin);
+        self.views = Vec::new();
+        budget.credit((views + padded + framed.saturating_sub(glb.len())) as u64);
+        budget.elements(glb.len(), 1)?;
+        Ok(glb)
     }
 }
 
@@ -1095,18 +1209,25 @@ impl Plain {
                 [x, -z, y]
             })
             .collect();
+        // Widened accessor values are freed once converted.
+        let free = |budget: &mut Budget, values: Vec<f64>| budget.credit(values.len() as u64 * 8);
+        free(budget, local);
         let vertices = positions.len();
+        // The flat index list is scratch for the triangle output below.
         let indices = match p.get("indices") {
             None => {
-                budget.output(vertices, 4)?;
+                budget.elements(vertices, 4)?;
                 (0..vertices as u32).collect()
             }
             Some(i) => {
                 let (values, _) = accessor(self, index(i, "indices")?, &[1], budget)?;
-                budget.output(values.len(), 4)?;
-                integers(&values, "indices")?
+                budget.elements(values.len(), 4)?;
+                let indices = integers(&values, "indices");
+                free(budget, values);
+                indices?
             }
         };
+        budget.output(indices.len(), 4)?;
         if indices.len() % 3 != 0 || indices.iter().any(|&i| i as usize >= vertices) {
             return Err(invalid(
                 "primitive indices are not whole triangles within its vertices",
@@ -1121,6 +1242,7 @@ impl Plain {
             .iter()
             .map(|&[a, b, c]| if mirrored { [a, c, b] } else { [a, b, c] })
             .collect();
+        budget.credit(indices.len() as u64 * 12);
         let per_vertex = |name: &str, values: &[f64], n: usize| -> Result<(), JobError> {
             if values.len() != vertices * n {
                 return Err(invalid(format!("{name} count differs from POSITION")));
@@ -1143,6 +1265,7 @@ impl Plain {
                     }
                     out.push(d.map(|c| (c / length) as f32));
                 }
+                free(budget, values);
                 Some(out)
             }
         };
@@ -1159,6 +1282,7 @@ impl Plain {
                     .map(|v| [v[0] as f32, v[1] as f32])
                     .collect(),
             );
+            free(budget, values);
         }
         let colors = match attribute("COLOR_0")? {
             None => None,
@@ -1166,14 +1290,12 @@ impl Plain {
                 let (values, n) = accessor(self, i, &[3, 4], budget)?;
                 per_vertex("COLOR_0", &values, n)?;
                 budget.output(vertices, 16)?;
-                Some(
-                    values
-                        .chunks_exact(n)
-                        .map(|c| {
-                            [c[0], c[1], c[2], if n == 4 { c[3] } else { 1. }].map(|v| v as f32)
-                        })
-                        .collect(),
-                )
+                let colors = values
+                    .chunks_exact(n)
+                    .map(|c| [c[0], c[1], c[2], if n == 4 { c[3] } else { 1. }].map(|v| v as f32))
+                    .collect();
+                free(budget, values);
+                Some(colors)
             }
         };
         let mut feature_ids = Vec::new();
@@ -1191,7 +1313,9 @@ impl Plain {
                         .ok_or_else(|| invalid(format!("primitive has no {name}")))?;
                     let (values, _) = accessor(self, i, &[1], budget)?;
                     per_vertex(&name, &values, 1)?;
-                    integers(&values, &name)?
+                    let ids = integers(&values, &name);
+                    free(budget, values);
+                    ids?
                 }
             };
             feature_ids.push(FeatureIds {
@@ -1251,6 +1375,7 @@ impl Plain {
             for i in 0..primitives.len() {
                 budget.work()?;
                 out.push(self.primitive(node, mesh, i, &world, budget)?);
+                budget.end_unit();
             }
         }
         path.push(node);
@@ -1356,6 +1481,7 @@ impl Plain {
                 columns,
                 skipped,
             });
+            budget.end_unit();
         }
         Ok(tables)
     }
@@ -1383,11 +1509,32 @@ impl Plain {
                 budget,
             )?;
         }
-        let mut pages = Vec::new();
-        for i in 0..array(&self.doc, "images")?.len() {
-            pages.push(self.page(i, budget, OUTPUT_COPIES)?);
+        // One page per image; images sharing a view decode once and are copied.
+        let mut pages: Vec<Page> = Vec::new();
+        let mut decoded = std::collections::BTreeMap::new();
+        for (i, image) in array(&self.doc, "images")?.iter().enumerate() {
+            let view = image.get("bufferView").and_then(Value::as_u64);
+            let page = match view.and_then(|v| decoded.get(&v)) {
+                Some(&first) => {
+                    let page: &Page = &pages[first];
+                    budget.elements(page.rgba.len(), 1)?;
+                    page.clone()
+                }
+                None => self.page(i, budget)?,
+            };
+            if let Some(view) = view {
+                decoded.entry(view).or_insert(i);
+            }
+            budget.adopt(page.rgba.len() as u64);
+            budget.end_unit();
+            pages.push(page);
         }
         let property_tables = self.property_tables(budget)?;
+        // The views are freed before the caller copies the outputs.
+        let views: usize = self.views.iter().map(Vec::len).sum();
+        self.views = Vec::new();
+        budget.credit(views as u64);
+        budget.caller_copy()?;
         let take = |doc: &mut Map<String, Value>, key: &str| {
             doc.remove(key).unwrap_or_else(|| Value::Array(Vec::new()))
         };

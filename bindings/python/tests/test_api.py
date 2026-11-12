@@ -288,10 +288,14 @@ class WheelAPI(unittest.TestCase):
             "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0}],
             "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
             "accessors": [{"componentType": 5126, "count": 2 ** 40, "type": "VEC3"}]}))
-        os.symlink(tileset / "huge.glb", tileset / "link.glb")
         self.assertEqual([t["uri"] for t in rusty_tiles.list_tiles(tileset)], ["huge.glb", "link.glb"])
-        with self.assertRaises(rusty_tiles.UnsupportedError):
-            rusty_tiles.decode_tile(tileset, "link.glb")
+        try:
+            os.symlink(tileset / "huge.glb", tileset / "link.glb")
+        except (OSError, NotImplementedError, AttributeError):
+            pass  # Symlinks need privileges on Windows; the refusal is then not exercised.
+        else:
+            with self.assertRaises(rusty_tiles.UnsupportedError):
+                rusty_tiles.decode_tile(tileset, "link.glb")
         self.assertIsInstance(rusty_tiles.decode_tile(tileset, "huge.glb"), bytes)
         try:
             import numpy  # noqa: F401

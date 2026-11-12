@@ -374,13 +374,23 @@ arrays = rusty_tiles.decode_tile("site.3tz", leaf["uri"], format="arrays")
 Both functions release the GIL while reading and decoding. Malformed content
 raises `DataError`; other codecs, external resources, legacy tile formats and,
 in a directory, members that are symlinks or not regular files raise
-`UnsupportedError`. Each decode is bounded before it allocates or walks: a
-member of at most 1 GiB, at most 1 GiB held for the decode (including the
-returned arrays or bytes and their one copy into Python), 65,536 node visits
-plus primitive instances, and pages of at most 8192 x 8192 texels, sized from
-their headers. A refusal raises `ResourceLimitError` whose `limit` is
+`UnsupportedError`. Each decode is bounded before it allocates or walks:
+
+- a member of at most 1 GiB, and JSON (a tile's JSON chunk or one tileset
+  document) of at most 64 MiB, counted at 16 times its size once parsed;
+- at most 1 GiB held at once by one decode: the parsed JSON, decoded views and
+  outputs stay held, decode scratch is released as it is freed, and the copy
+  into Python is counted as it happens (one primitive, page or table at a time
+  for arrays, the whole GLB for `format="glb"`), so a tile with two 8192 x 8192
+  pages decodes;
+- 65,536 node visits plus primitive instances;
+- pages of at most 16384 texels per edge and 8192 x 8192 texels in total, sized
+  from their headers.
+
+A refusal raises `ResourceLimitError` whose `limit` is
 `{"limit", "value", "observed", "derivation": "fixed"}`, with `limit` one of
-`memberBytes`, `decodedBytes`, `sceneWork` or `pageTexels`.
+`memberBytes`, `jsonBytes`, `decodedBytes`, `sceneWork`, `pageEdge` or
+`pageTexels`.
 
 ## Callbacks and threads
 
