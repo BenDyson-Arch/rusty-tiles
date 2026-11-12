@@ -164,6 +164,8 @@ jobs:
     uses: ./.github/workflows/wheel-acceptance.yml
     with:
       version: ${{ inputs.version }}
+      # Distribution Blender is a CI-only check (nightly and manual runs); releases skip it.
+      test-blender: false
 
   wheels-from-ci:
     name: Python wheels from CI
