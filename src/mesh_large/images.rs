@@ -133,7 +133,10 @@ impl ImageSnapshot {
 
 /// These explicit charges describe encoded snapshot work only; decoded rasters and
 /// encoder storage must be added by their owners. Metadata is bounded by image count.
-/// Reconstruction holds one encoded image contiguously: the largest captured one.
+/// Reconstruction holds one encoded image contiguously: the largest captured one. The
+/// resident figures are observations recorded in capture's report (the private
+/// `resources.json`); admission does not read them. Decodes are admitted by capture's
+/// own per-image charges (`full::decode_charge`).
 #[derive(Clone, Copy, Debug, Serialize)]
 pub(crate) struct ImageCaptureBounds {
     pub images: u64,

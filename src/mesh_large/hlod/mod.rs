@@ -264,6 +264,26 @@ fn chart_workspace(edge: u32, cap: usize) -> u64 {
     )
 }
 
+/// One worker's source-image decode transient and the chain it holds while sampling,
+/// besides the shared cache, with the largest chain alone: 16 bytes per texel of the
+/// largest image (decoder output, RGBA and chain build copy), the largest encoded image
+/// at its actual length (a different image when that is larger), and the largest chain.
+fn source_decode_bytes(images: &[crate::gltf_source::source::ImageInfo]) -> (u64, u64) {
+    let largest = images
+        .iter()
+        .map(|i| (u64::from(i.width), u64::from(i.height)))
+        .max_by_key(|(w, h)| w * h)
+        .unwrap_or((0, 0));
+    let largest_chain = bake::chain_bytes(largest.0 as u32, largest.1 as u32);
+    let largest_encoded = images.iter().map(|i| i.encoded_bytes).max().unwrap_or(0);
+    let decode = bake::CHAIN_READER_BYTES
+        + (largest.0 * largest.1)
+            .saturating_mul(16)
+            .saturating_add(largest_encoded)
+            .saturating_add(largest_chain);
+    (decode, largest_chain)
+}
+
 fn appearance_plan(
     captured: &FullCaptured,
     profile: config::Profile,
@@ -298,27 +318,7 @@ fn appearance_plan(
         .unwrap_or(0)
         .max(1);
     let page = appearance::page_charge([edge, edge], slots, profile)?;
-    let largest = captured
-        .image_info
-        .iter()
-        .map(|i| (u64::from(i.width), u64::from(i.height)))
-        .max_by_key(|(w, h)| w * h)
-        .unwrap_or((0, 0));
-    let largest_chain = bake::chain_bytes(largest.0 as u32, largest.1 as u32);
-    let largest_encoded = captured
-        .image_info
-        .iter()
-        .map(|i| i.encoded_bytes)
-        .max()
-        .unwrap_or(0);
-    // One image decode transient (the encoded bytes at their actual length, decoder
-    // output, RGBA and chain build copy) and the chain a worker holds while sampling,
-    // besides the shared cache.
-    let decode = bake::CHAIN_READER_BYTES
-        + (largest.0 * largest.1)
-            .saturating_mul(16)
-            .saturating_add(largest_encoded)
-            .saturating_add(largest_chain);
+    let (decode, largest_chain) = source_decode_bytes(&captured.image_info);
     // One group's page workspace at a time, plus the tile's delivered pages and the GLB
     // being assembled from them (each at most `tile_pages`).
     let tile_pages =

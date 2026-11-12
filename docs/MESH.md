@@ -762,9 +762,11 @@ One declared ceiling governs the whole run, with the same rule on every surface:
 - **Source images.** Each decode of a source image is charged at the image's
   actual encoded length, which decoding holds whole, plus the decoder's working
   memory (at most 8 bytes per texel) and the decoded RGBA8 copy. There is no
-  fixed encoded-size allowance. Capture checks the largest
-  encoded image against what its own resident bound leaves for decoding before
-  it writes any scratch, and each decode once its header is read. An image the
+  fixed encoded-size allowance. Before it writes any scratch, capture reads each
+  image's header (PNG `IHDR`, or the first JPEG frame header after skipping
+  earlier segments, holding at most 64 KiB at a time) and checks the largest
+  decode charge against what its own resident bound leaves for decoding. Each decode is checked again against the
+  decoder's own header, which must declare the same dimensions. An image the
   budget cannot hold is a `resource_limit` refusal; over 1 GiB encoded or
   16,384 px per edge is `unsupported` whatever the budget. For example, an
   8192² PNG of 110 MB built under a 4 GiB budget with a peak resident set of

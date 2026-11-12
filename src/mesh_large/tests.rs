@@ -1030,7 +1030,7 @@ fn encoded_image_past_the_old_32_mib_ceiling_is_admitted_and_builds_identically(
             pad_png(&input.with_file_name("a.png"), length);
         }
         let output = work.path().join(format!("{dir}.3tz"));
-        super::mesh_to_tileset(
+        let result = super::mesh_to_tileset(
             super::TilerRequest::new(&input, &output)
                 .with_jobs(super::TilerJobs::Maximum(NonZeroUsize::new(2).unwrap()))
                 .with_memory_budget(2 << 30),
@@ -1038,17 +1038,36 @@ fn encoded_image_past_the_old_32_mib_ceiling_is_admitted_and_builds_identically(
         )
         .unwrap();
         let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
-        (0..zip.len())
+        let members = (0..zip.len())
             .map(|i| {
                 let mut member = zip.by_index(i).unwrap();
                 let mut bytes = Vec::new();
                 member.read_to_end(&mut bytes).unwrap();
                 (member.name().to_owned(), bytes)
             })
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>();
+        (
+            members,
+            result.diagnostics.memory.hlod.texture_workspace_bytes,
+        )
     };
-    let padded = run("padded", Some((32 << 20) + 1));
-    let plain = run("plain", None);
+    let (padded, padded_texture) = run("padded", Some((32 << 20) + 1));
+    let (plain, plain_texture) = run("plain", None);
+    // The coarse stage charges the largest encoded image at its actual length.
+    let largest_plain = ["a.png", "b.png"]
+        .map(|n| {
+            fs::metadata(work.path().join("plain").join(n))
+                .unwrap()
+                .len()
+        })
+        .into_iter()
+        .max()
+        .unwrap();
+    assert!(largest_plain < 1 << 20);
+    assert_eq!(
+        padded_texture - plain_texture,
+        (32 << 20) + 1 - largest_plain
+    );
     assert_eq!(padded.len(), plain.len());
     assert!(padded.iter().any(|(name, _)| name.ends_with(".glb")));
     for ((name, a), (other, b)) in padded.iter().zip(&plain) {
@@ -1070,13 +1089,21 @@ fn encoded_image_past_the_old_32_mib_ceiling_is_admitted_and_builds_identically(
     }
 }
 
-/// A large encoded image the budget cannot hold is a typed resource refusal naming the
-/// image stage, raised before any scratch or output exists; over the 1 GiB sanity ceiling
-/// it stays `unsupported`. Both sources are sparse, so neither run reads gigabytes. The
-/// work directory must be disk-backed: memory-backed scratch would charge the 1 GiB
-/// snapshot to the budget and refuse earlier, at capture's resident bound.
-#[test]
-fn large_encoded_images_are_refused_by_budget_or_sanity_ceiling() {
+/// Rewrites the PNG IHDR at `path` to declare `width` x `height` (CRC kept valid). The pixel
+/// data no longer matches, so only header admission can read the result.
+fn declare_png_size(path: &Path, width: u32, height: u32) {
+    let mut png = fs::read(path).unwrap();
+    assert_eq!(&png[12..16], b"IHDR");
+    png[16..20].copy_from_slice(&width.to_be_bytes());
+    png[20..24].copy_from_slice(&height.to_be_bytes());
+    let crc = crc32fast::hash(&png[12..29]).to_be_bytes();
+    png[29..33].copy_from_slice(&crc);
+    fs::write(path, png).unwrap();
+}
+
+/// A temporary directory on disk-backed storage, so capture scratch is not charged to the
+/// memory budget (which would refuse large sources earlier, at capture's resident bound).
+fn disk_backed_workdir() -> tempfile::TempDir {
     let parent = [
         std::env::temp_dir(),
         PathBuf::from(env!("CARGO_MANIFEST_DIR")),
@@ -1084,10 +1111,20 @@ fn large_encoded_images_are_refused_by_budget_or_sanity_ceiling() {
     .into_iter()
     .find(|dir| crate::spill::inspect_volume(dir).is_ok_and(|volume| !volume.memory_backed))
     .expect("a disk-backed temporary or manifest directory");
-    let work = tempfile::Builder::new()
+    tempfile::Builder::new()
         .prefix(".image-admission-")
         .tempdir_in(parent)
-        .unwrap();
+        .unwrap()
+}
+
+/// A large encoded image the budget cannot hold is a typed resource refusal naming the
+/// image stage, raised before any scratch or output exists; over the 1 GiB sanity ceiling
+/// it stays `unsupported`. Both sources are sparse, so neither run reads gigabytes. The
+/// work directory must be disk-backed: memory-backed scratch would charge the 1 GiB
+/// snapshot to the budget and refuse earlier, at capture's resident bound.
+#[test]
+fn large_encoded_images_are_refused_by_budget_or_sanity_ceiling() {
+    let work = disk_backed_workdir();
     let request = |dir: &str, budget: u64| {
         let input = textured_sheet(&work.path().join(dir), 4);
         let scratch = work.path().join(format!("{dir}-scratch"));
@@ -1107,14 +1144,26 @@ fn large_encoded_images_are_refused_by_budget_or_sanity_ceiling() {
         .memory
         .capture_bound_bytes;
     // Capture's bound fits with 512 MiB to spare, so image decoding has those 512 MiB plus
-    // the 192 MiB decoder allowance: less than the 1 GiB image.
+    // the 192 MiB decoder allowance: less than the 1 GiB image, and less than the decode
+    // of a 16384² image even though its 110 MB encoding would fit. Only capture's header
+    // preflight names "image capture:"; the later decode batches refuse differently.
     for (dir, length, budget, kind, needle) in [
+        (
+            // Review of #378: 110 MB fits the budget but its 16384² decode does not; the
+            // header alone refuses it before the snapshot is written.
+            "texels",
+            110_000_000,
+            bound + (512 << 20),
+            JobErrorKind::ResourceLimit,
+            "image capture: decoding a source image needs 3331225472 bytes (110000000 \
+             encoded plus 12 per texel of 16384x16384)",
+        ),
         (
             "budget",
             1u64 << 30,
             bound + (512 << 20),
             JobErrorKind::ResourceLimit,
-            "image capture: an encoded source image of 1073741824 bytes does not fit",
+            "image capture: decoding a source image needs 1074528256 bytes (1073741824 encoded",
         ),
         (
             "ceiling",
@@ -1125,6 +1174,9 @@ fn large_encoded_images_are_refused_by_budget_or_sanity_ceiling() {
         ),
     ] {
         let (input, scratch, output, request) = request(dir, budget);
+        if dir == "texels" {
+            declare_png_size(&input.with_file_name("a.png"), 16384, 16384);
+        }
         pad_png(&input.with_file_name("a.png"), length);
         let failure = match super::mesh_to_tileset(request, &crate::RunControl::default()) {
             Ok(_) => panic!("{dir}: a {length}-byte image must be refused"),
@@ -1135,6 +1187,69 @@ fn large_encoded_images_are_refused_by_budget_or_sanity_ceiling() {
         assert!(message.contains(needle), "{dir}: {message}");
         assert!(!output.exists(), "{dir}");
         assert_eq!(fs::read_dir(&scratch).unwrap().count(), 0, "{dir}");
+    }
+}
+
+/// #338: capture's pre-scratch refusal sits exactly at the budget. A 256 MiB image (above
+/// the 192 MiB decoder allowance) is refused under a budget that leaves its whole decode
+/// charge less one byte, naming both figures; one byte more budget admits it, and the
+/// run's later decode batches admit the same charge, so the two checks agree.
+#[test]
+fn capture_admits_the_largest_decode_charge_exactly_at_the_budget() {
+    let work = disk_backed_workdir();
+    let input = textured_sheet(&work.path().join("src"), 4);
+    let plain = textured_sheet(&work.path().join("plain"), 4);
+    pad_png(&input.with_file_name("a.png"), 256 << 20);
+    let run = |name: &str, source: &Path, budget: u64| {
+        let scratch = work.path().join(format!("{name}-scratch"));
+        fs::create_dir(&scratch).unwrap();
+        let output = work.path().join(format!("{name}.3tz"));
+        let result = super::mesh_to_tileset(
+            super::TilerRequest::new(source, &output)
+                .with_scratch_dir(&scratch)
+                .with_jobs(super::TilerJobs::Maximum(NonZeroUsize::new(1).unwrap()))
+                .with_memory_budget(budget),
+            &crate::RunControl::default(),
+        );
+        (result, output, scratch)
+    };
+    let figure = |message: &str, before: &str, after: &str| -> u64 {
+        let start = message.find(before).unwrap() + before.len();
+        let end = start + message[start..].find(after).unwrap();
+        message[start..end].parse().unwrap()
+    };
+    let bound = run("plain", &plain, 2 << 30)
+        .0
+        .unwrap()
+        .diagnostics
+        .memory
+        .capture_bound_bytes;
+    // Capture's bound fits with 1 MiB to spare: decoding gets about 193 MiB.
+    let (result, _, _) = run("probe", &input, bound + (1 << 20));
+    let message = result.unwrap_err().error.to_string();
+    let charge = figure(&message, "needs ", " bytes");
+    let leaves = figure(&message, "leaves ", " for");
+    assert_eq!(charge, (256 << 20) + 12 * 256 * 256, "{message}");
+    assert!(leaves < charge, "{message}");
+    let exact = bound + (1 << 20) + (charge - leaves);
+    // Run names keep one length: the bound charges the scratch and output path lengths.
+    let (result, output, scratch) = run("below", &input, exact - 1);
+    let failure = result.unwrap_err();
+    assert_eq!(failure.error.kind(), JobErrorKind::ResourceLimit);
+    let message = failure.error.to_string();
+    assert!(message.starts_with("image capture:"), "{message}");
+    assert_eq!(figure(&message, "leaves ", " for"), charge - 1, "{message}");
+    assert!(!output.exists());
+    assert_eq!(fs::read_dir(&scratch).unwrap().count(), 0);
+    // At exactly the charge, capture runs on. A later stage may still refuse this
+    // budget, but not image admission or its decode batches.
+    if let Err(failure) = run("exact", &input, exact).0 {
+        let message = failure.error.to_string();
+        assert!(
+            !message.starts_with("image capture:")
+                && !message.contains("decoding an admitted image does not fit"),
+            "{message}"
+        );
     }
 }
 
@@ -1186,6 +1301,34 @@ fn eight_k_noise_png_admits_under_a_few_gib_budget_and_builds() {
     assert!(output.exists());
     eprintln!(
         "encoded {encoded} bytes; minimum budget {} bytes",
+        result.diagnostics.memory.minimum_bytes
+    );
+}
+
+/// #338 evidence lane: an image exactly at the 1 GiB sanity ceiling (a sparse 256² PNG
+/// padded with an ancillary chunk) is admitted and builds under a budget that holds it.
+/// Capture writes the whole gigabyte to scratch and each stage rebuilds it to decode.
+/// Run with `cargo test --release --lib -- --ignored one_gib_encoded_image`.
+#[test]
+#[ignore = "slow: captures and decodes a 1 GiB encoded image"]
+fn one_gib_encoded_image_at_the_ceiling_builds() {
+    let work = disk_backed_workdir();
+    let input = textured_sheet(&work.path().join("src"), 4);
+    pad_png(&input.with_file_name("a.png"), 1 << 30);
+    let scratch = work.path().join("scratch");
+    fs::create_dir(&scratch).unwrap();
+    let output = work.path().join("gib.3tz");
+    let result = super::mesh_to_tileset(
+        super::TilerRequest::new(&input, &output)
+            .with_scratch_dir(&scratch)
+            .with_jobs(super::TilerJobs::Maximum(NonZeroUsize::new(1).unwrap()))
+            .with_memory_budget(6 << 30),
+        &crate::RunControl::default(),
+    )
+    .unwrap();
+    assert!(output.exists());
+    eprintln!(
+        "minimum budget {} bytes",
         result.diagnostics.memory.minimum_bytes
     );
 }

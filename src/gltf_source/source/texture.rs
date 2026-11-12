@@ -267,16 +267,15 @@ pub(crate) struct ImageInfo {
     /// Length of the admitted encoded image, which decoding holds beside its output.
     pub encoded_bytes: u64,
 }
-fn admitted_decoder<'a>(
-    encoded: &'a [u8],
+/// The declared MIME type, or the signature when none is declared, resolved to PNG or JPEG.
+/// `prefix` is the encoded image or at least its first 64 bytes, which every signature fits.
+fn resolve_format(
+    prefix: &[u8],
     mime: Option<&str>,
-    admission: DecodeAdmission,
-    check: &mut impl FnMut() -> Result<()>,
-) -> Result<(impl ImageDecoder + 'a, ImageInfo)> {
-    encoded_admission(encoded, admission)?;
+) -> Result<(&'static str, &'static str, ImageFormat)> {
     let detected =
-        image::guess_format(encoded).map_err(|_| invalid("image signature is invalid"))?;
-    let (mime_type, extension, format) = match mime {
+        image::guess_format(prefix).map_err(|_| invalid("image signature is invalid"))?;
+    let resolved = match mime {
         Some("image/png") => ("image/png", "png", ImageFormat::Png),
         Some("image/jpeg") => ("image/jpeg", "jpg", ImageFormat::Jpeg),
         Some(_) => return Err(unsupported("only PNG/JPEG images are supported")),
@@ -286,9 +285,156 @@ fn admitted_decoder<'a>(
             _ => return Err(unsupported("only PNG/JPEG image signatures are supported")),
         },
     };
-    if detected != format {
+    if detected != resolved.2 {
         return Err(invalid("image MIME type does not match encoded bytes"));
     }
+    Ok(resolved)
+}
+
+/// Admits declared dimensions under `admission` and returns the texel count.
+fn admit_dimensions(width: u32, height: u32, admission: DecodeAdmission) -> Result<u64> {
+    let pixels = u64::from(width) * u64::from(height);
+    if width == 0 || height == 0 {
+        return Err(invalid("image dimensions must be nonzero"));
+    }
+    if width > admission.max_edge || height > admission.max_edge || pixels > admission.max_pixels {
+        return Err(unsupported(format!(
+            "image exceeds {} edge or {} pixel admission ceiling",
+            admission.max_edge, admission.max_pixels
+        )));
+    }
+    Ok(pixels)
+}
+
+/// One window of an image read on demand: at most 64 KiB resident, refilled forward.
+struct HeaderWindow<'a> {
+    read: &'a mut dyn FnMut(u64, &mut [u8]) -> Result<()>,
+    length: u64,
+    start: u64,
+    bytes: Vec<u8>,
+}
+impl HeaderWindow<'_> {
+    const BYTES: u64 = 64 * 1024;
+    /// `n` bytes at `offset`, or `None` when the image ends first.
+    fn get(
+        &mut self,
+        offset: u64,
+        n: usize,
+        check: &mut dyn FnMut() -> Result<()>,
+    ) -> Result<Option<&[u8]>> {
+        let end = match offset.checked_add(n as u64) {
+            Some(end) if end <= self.length => end,
+            _ => return Ok(None),
+        };
+        if offset < self.start || end > self.start + self.bytes.len() as u64 {
+            check()?;
+            let take = (self.length - offset).min(Self::BYTES.max(n as u64));
+            self.bytes.resize(take as usize, 0);
+            (self.read)(offset, &mut self.bytes)?;
+            self.start = offset;
+        }
+        let at = (offset - self.start) as usize;
+        Ok(Some(&self.bytes[at..at + n]))
+    }
+}
+
+/// An image's declared dimensions read from its leading header alone, so a consumer can
+/// admit and charge its decode before holding the encoded image. `read(offset, out)` fills
+/// `out` from the encoded image of `length` bytes. Format resolution and the encoded,
+/// edge and texel ceilings are those of [`admitted_decoder`]; PNG's IHDR (with its CRC
+/// and bit depth) or JPEG's first frame header, found by walking marker segments, gives
+/// the dimensions. At most 64 KiB is resident. This is an early refusal only: the
+/// decoder still admits the whole image, and its consumer checks that it reports these
+/// dimensions.
+pub(crate) fn probe_header_dimensions(
+    length: u64,
+    mime: Option<&str>,
+    admission: DecodeAdmission,
+    read: &mut dyn FnMut(u64, &mut [u8]) -> Result<()>,
+    check: &mut dyn FnMut() -> Result<()>,
+) -> Result<(u32, u32)> {
+    encoded_admission(length, admission)?;
+    let mut window = HeaderWindow {
+        read,
+        length,
+        start: 0,
+        bytes: Vec::new(),
+    };
+    let prefix = window
+        .get(0, length.min(64) as usize, check)?
+        .unwrap_or_default();
+    let (_, _, format) = resolve_format(prefix, mime)?;
+    let be16 = |b: &[u8], at: usize| u16::from_be_bytes([b[at], b[at + 1]]);
+    let be32 = |b: &[u8], at: usize| u32::from_be_bytes(b[at..at + 4].try_into().unwrap());
+    let (width, height) = if format == ImageFormat::Png {
+        let ihdr = window
+            .get(8, 25, check)?
+            .ok_or_else(|| invalid("truncated PNG chunk header"))?;
+        if &ihdr[4..8] != b"IHDR" {
+            return Err(invalid("PNG first chunk must be IHDR"));
+        }
+        if be32(ihdr, 0) != 13 {
+            return Err(invalid("PNG requires one 13-byte IHDR"));
+        }
+        if crc32fast::hash(&ihdr[4..21]) != be32(ihdr, 21) {
+            return Err(invalid("PNG chunk CRC mismatch"));
+        }
+        if ihdr[16] == 16 {
+            return Err(unsupported(
+                "only images with 8-bit decoded channels are supported",
+            ));
+        }
+        (be32(ihdr, 8), be32(ihdr, 12))
+    } else {
+        // JPEG: segments after SOI until the first SOFn (not DHT C4, JPG C8 or DAC CC).
+        // Like the decoder, stray bytes before a marker and 0xFF fill or 0x00 stuffing
+        // after one are skipped rather than refused.
+        let mut offset = 2u64;
+        loop {
+            let marker = window
+                .get(offset, 2, check)?
+                .ok_or_else(|| invalid("JPEG ends before its frame header"))?;
+            if marker[0] != 0xff {
+                offset += 1;
+                continue;
+            }
+            match marker[1] {
+                0xff => offset += 1,
+                0x00 | 0x01 | 0xd0..=0xd7 => offset += 2,
+                0xc0..=0xcf if !matches!(marker[1], 0xc4 | 0xc8 | 0xcc) => {
+                    let frame = window
+                        .get(offset + 2, 7, check)?
+                        .ok_or_else(|| invalid("JPEG ends inside its frame header"))?;
+                    break (u32::from(be16(frame, 5)), u32::from(be16(frame, 3)));
+                }
+                0xd8..=0xda => {
+                    return Err(invalid("JPEG frame header missing before scan"));
+                }
+                _ => {
+                    let size = window
+                        .get(offset + 2, 2, check)?
+                        .ok_or_else(|| invalid("JPEG ends inside a segment length"))?;
+                    let size = be16(size, 0);
+                    if size < 2 {
+                        return Err(invalid("JPEG segment length is invalid"));
+                    }
+                    offset += 2 + u64::from(size);
+                }
+            }
+        }
+    };
+    admit_dimensions(width, height, admission)?;
+    Ok((width, height))
+}
+
+fn admitted_decoder<'a>(
+    encoded: &'a [u8],
+    mime: Option<&str>,
+    admission: DecodeAdmission,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<(impl ImageDecoder + 'a, ImageInfo)> {
+    encoded_admission(encoded.len() as u64, admission)?;
+    let (mime_type, extension, format) = resolve_format(encoded, mime)?;
     match format {
         ImageFormat::Png => png_framing(encoded, check)?,
         // A terminal-marker requirement supplements pixel decoding; it
@@ -316,16 +462,7 @@ fn admitted_decoder<'a>(
         ));
     }
     let (width, height) = decoder.dimensions();
-    let pixels = u64::from(width) * u64::from(height);
-    if width == 0 || height == 0 {
-        return Err(invalid("image dimensions must be nonzero"));
-    }
-    if width > admission.max_edge || height > admission.max_edge || pixels > admission.max_pixels {
-        return Err(unsupported(format!(
-            "image exceeds {} edge or {} pixel admission ceiling",
-            admission.max_edge, admission.max_pixels
-        )));
-    }
+    admit_dimensions(width, height, admission)?;
     Ok((
         decoder,
         ImageInfo {
@@ -349,8 +486,8 @@ pub(crate) fn decode_image(
     decode_image_admitted(encoded, mime, DecodeAdmission::FINITE, check)
 }
 
-fn encoded_admission(encoded: &[u8], admission: DecodeAdmission) -> Result<()> {
-    if encoded.len() as u64 > admission.max_encoded {
+fn encoded_admission(length: u64, admission: DecodeAdmission) -> Result<()> {
+    if length > admission.max_encoded {
         return Err(unsupported(format!(
             "image exceeds {} MiB encoded-byte admission ceiling",
             admission.max_encoded >> 20
@@ -513,5 +650,138 @@ mod tests {
         assert_eq!((info.width, info.height), (3, 2));
         assert_eq!(info.encoded_bytes, (32 << 20) + 1);
         assert_eq!(rgba, plain);
+    }
+
+    /// Probes `encoded` as a consumer would, through reads at offsets, returning the
+    /// dimensions and the bytes read.
+    fn probe(
+        encoded: &[u8],
+        mime: Option<&str>,
+        admission: DecodeAdmission,
+    ) -> (Result<(u32, u32)>, u64) {
+        let mut read = 0u64;
+        let result = probe_header_dimensions(
+            encoded.len() as u64,
+            mime,
+            admission,
+            &mut |offset, out| {
+                read += out.len() as u64;
+                let at = offset as usize;
+                out.copy_from_slice(&encoded[at..at + out.len()]);
+                Ok(())
+            },
+            &mut || Ok(()),
+        );
+        (result, read)
+    }
+
+    #[test]
+    fn header_probe_matches_the_decoder_and_reads_only_the_header() {
+        let mut png = Vec::new();
+        image::RgbImage::from_fn(300, 17, |x, y| image::Rgb([x as u8, y as u8, 3]))
+            .write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
+            .unwrap();
+        let mut jpeg = Vec::new();
+        image::RgbImage::from_fn(41, 260, |x, y| image::Rgb([x as u8 * 5, y as u8, 90]))
+            .write_to(&mut Cursor::new(&mut jpeg), ImageFormat::Jpeg)
+            .unwrap();
+        // A large APP15 segment, stray bytes and 0xFF fill before the next marker, all of
+        // which the decoder tolerates, so the walk must cross them too.
+        let mut walked = jpeg[..2].to_vec();
+        walked.extend([0xff, 0xef, 0xff, 0xff]);
+        walked.extend(vec![0x5a; 0xfffd]);
+        walked.extend([0x12, 0x34, 0xff, 0xff]);
+        walked.extend(&jpeg[2..]);
+        let padded = padded(&png, 3 << 20);
+        for (name, encoded, mime) in [
+            ("png", &png, Some("image/png")),
+            ("png-padded", &padded, None),
+            ("jpeg", &jpeg, Some("image/jpeg")),
+            ("jpeg-walked", &walked, None),
+        ] {
+            let (_, info) =
+                admitted_decoder(encoded, mime, DecodeAdmission::LARGE_MESH, &mut || Ok(()))
+                    .unwrap_or_else(|e| panic!("{name}: {e}"));
+            let (dimensions, read) = probe(encoded, mime, DecodeAdmission::LARGE_MESH);
+            assert_eq!(dimensions.unwrap(), (info.width, info.height), "{name}");
+            // One 64 KiB window, or two when the walk crosses the APP15 segment.
+            assert!(read <= 2 * HeaderWindow::BYTES, "{name}: read {read}");
+        }
+        assert_eq!(
+            probe(&png, None, DecodeAdmission::LARGE_MESH).0.unwrap(),
+            (300, 17)
+        );
+        assert_eq!(
+            probe(&walked, None, DecodeAdmission::LARGE_MESH).0.unwrap(),
+            (41, 260)
+        );
+    }
+
+    #[test]
+    fn header_probe_refusals_are_the_decoders() {
+        let mut png = Vec::new();
+        image::RgbaImage::from_fn(5, 4, |_, _| image::Rgba([1, 2, 3, 4]))
+            .write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
+            .unwrap();
+        let large = DecodeAdmission::LARGE_MESH;
+        let kind = |encoded: &[u8], mime: Option<&str>, admission: DecodeAdmission| {
+            probe(encoded, mime, admission).0.unwrap_err().kind()
+        };
+        // Declared length over the encoded ceiling, before any read.
+        let mut reads = 0;
+        let error = probe_header_dimensions(
+            large.max_encoded + 1,
+            None,
+            large,
+            &mut |_, _| {
+                reads += 1;
+                Ok(())
+            },
+            &mut || Ok(()),
+        )
+        .unwrap_err();
+        assert_eq!((error.kind(), reads), (JobErrorKind::Unsupported, 0));
+        // Format resolution: declared non-PNG/JPEG MIME, and MIME disagreeing with bytes.
+        assert_eq!(
+            kind(&png, Some("image/webp"), large),
+            JobErrorKind::Unsupported
+        );
+        assert_eq!(
+            kind(&png, Some("image/jpeg"), large),
+            JobErrorKind::InvalidInput
+        );
+        assert_eq!(
+            kind(b"not an image at all", None, large),
+            JobErrorKind::InvalidInput
+        );
+        // A corrupt IHDR CRC is invalid; a 16-bit IHDR (CRC fixed) is unsupported.
+        let mut crc = png.clone();
+        crc[29] ^= 1;
+        assert_eq!(kind(&crc, None, large), JobErrorKind::InvalidInput);
+        let mut deep = png.clone();
+        deep[24] = 16;
+        let fixed = crc32fast::hash(&deep[12..29]).to_be_bytes();
+        deep[29..33].copy_from_slice(&fixed);
+        assert_eq!(kind(&deep, None, large), JobErrorKind::Unsupported);
+        // Edges over the admission are unsupported; the finite admission's 4096 edge is
+        // the cheap witness of the same shared check.
+        let mut wide = png.clone();
+        wide[16..20].copy_from_slice(&4097u32.to_be_bytes());
+        let fixed = crc32fast::hash(&wide[12..29]).to_be_bytes();
+        wide[29..33].copy_from_slice(&fixed);
+        assert_eq!(probe(&wide, None, large).0.unwrap(), (4097, 4));
+        assert_eq!(
+            kind(&wide, None, DecodeAdmission::FINITE),
+            JobErrorKind::Unsupported
+        );
+        // A JPEG whose scan starts before any frame header, or that ends first.
+        assert_eq!(
+            kind(&[0xff, 0xd8, 0xff, 0xda, 0, 2, 0xff, 0xd9], None, large),
+            JobErrorKind::InvalidInput
+        );
+        assert_eq!(
+            kind(&[0xff, 0xd8, 0xff, 0xe0, 0, 16], None, large),
+            JobErrorKind::InvalidInput
+        );
     }
 }
