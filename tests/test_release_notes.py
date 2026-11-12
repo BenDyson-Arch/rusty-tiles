@@ -108,6 +108,70 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertTrue(all(line.endswith("x" * 200) for line in kept))  # whole lines only
         self.assertGreater(len(kept), 400)
 
+    def test_headings_inside_fences_do_not_end_the_section(self):
+        changelog = textwrap.dedent("""\
+            ## 0.5.0 - 2027-01-01
+
+            ### Changed
+
+            - The config file now looks like:
+
+              ```markdown
+              ## 0.4.0 - not a release
+              # nor this
+              ```
+
+            ~~~~
+            ## still code
+            ~~~
+            ## and still code (a shorter closer does not close)
+            ~~~~
+
+            - After the fences.
+
+            ## 0.4.0 - 2026-11-11
+
+            - Old.
+            """)
+        (self.root / "CHANGELOG.md").write_text(changelog)
+        text = self.notes("0.5.0", "v0.5.0", previous=None)
+        for kept in ("## 0.4.0 - not a release", "## still code", "## and still code", "- After the fences."):
+            self.assertIn(kept, text)
+        self.assertNotIn("- Old.", text)
+        # A fenced "## 0.4.0 - ..." line is not the 0.4.0 section either.
+        self.assertTrue(self.notes("0.4.0", "v0.4.0", previous=None).startswith("- Old.\n"))
+
+    def test_a_section_of_only_a_fenced_block_has_entries(self):
+        (self.root / "CHANGELOG.md").write_text("## 0.5.0\n\n```\n# a comment in code\n```\n")
+        self.assertIn("# a comment in code", self.notes("0.5.0", "v0.5.0", previous=None))
+
+    def test_cut_inside_a_fence_closes_it_before_the_notice(self):
+        for fence in ("```", "~~~~"):
+            with self.subTest(fence=fence):
+                code = "".join(f"line {n} {'y' * 200}\n" for n in range(1000))
+                (self.root / "CHANGELOG.md").write_text(
+                    f"## 0.5.0 - 2027-01-01\n\n- Example:\n\n{fence}text\n{code}{fence}\n\n- After.\n")
+                text = release_notes.notes(self.root, "0.5.0", "v0.5.0", "owner/repo", "v0.4.0")
+                self.assertLessEqual(len(text), release_notes.BODY_LIMIT)
+                before, notice, _ = text.partition("_The changelog is shortened here")
+                self.assertTrue(notice)
+                self.assertTrue(before.rstrip().endswith("\n" + fence), before[-300:])
+                outside, still_open = release_notes.fences(before.split("\n"))
+                self.assertIsNone(still_open)
+                self.assertTrue(text.rstrip().endswith("compare/v0.4.0...v0.5.0)"))
+
+    def test_summary_must_be_bounded_and_close_its_fences(self):
+        (self.root / "release-notes").mkdir()
+        summary = self.root / "release-notes" / "v0.4.1.md"
+        summary.write_text("x" * (release_notes.SUMMARY_LIMIT + 1))
+        with self.assertRaisesRegex(release_notes.NotesError, "at most 20000"):
+            self.notes()
+        summary.write_text("Highlights\n\n```sh\npip install rusty-tiles\n")
+        with self.assertRaisesRegex(release_notes.NotesError, "leaves a code fence open"):
+            self.notes()
+        summary.write_text("Highlights\n\n```sh\npip install rusty-tiles\n```\n")
+        self.assertTrue(self.notes().startswith("Highlights"))
+
     def test_anchor_matches_github(self):
         # Anchors GitHub renders for this repository's CHANGELOG.md at v0.4.0.
         for heading, expected in (("0.4.0 - 2026-11-11", "040---2026-11-11"), ("0.2.0", "020"),
