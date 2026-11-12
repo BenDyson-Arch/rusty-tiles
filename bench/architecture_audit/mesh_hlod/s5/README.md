@@ -273,6 +273,12 @@ python3 bench/architecture_audit/mesh_hlod/s5/oracle.py OUTPUT.3tz SOURCE.sqlite
 python3 bench/architecture_audit/mesh_hlod/s5/continuity.py OUTPUT.3tz
 ```
 
+Each `decode.mjs` run (the oracle's payload decode and the source manifest's baseline
+identity decode) may take 600 seconds; set `RUSTY_TILES_ORACLE_TIMEOUT` (seconds) to change
+that. A run that exceeds it stops with `DecodeTimeout`, naming the limit. That is an
+environment failure, never an oracle verdict, so a mutant control cannot count it as a
+rejection.
+
 H17 archives are outside S5 acceptance. S6 removes the H17/H27 producer without
 backward compatibility. Historical H17 diagnostic results remain evidence of
 legacy depth-mix gaps; no legacy admission path or interface exemption makes

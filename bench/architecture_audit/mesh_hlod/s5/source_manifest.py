@@ -67,6 +67,28 @@ Y_UP = (1., 0., 0., 0., 0., 0., 1., 0., 0., -1., 0., 0., 0., 0., 0., 1.)
 Y_UP_INVERSE = (1., 0., 0., 0., 0., 0., -1., 0., 0., 1., 0., 0., 0., 0., 0., 1.)
 
 
+# The baseline identity decode shares oracle.py's limit and override (decode.mjs is slow on
+# slow CI runners): 600 s unless RUSTY_TILES_ORACLE_TIMEOUT gives seconds.
+DECODE_TIMEOUT_DEFAULT = 600
+
+
+class DecodeTimeout(Exception):
+    """decode.mjs ran out of time: an environment limit, not a manifest refusal."""
+
+
+def _decode_timeout():
+    value = os.environ.get('RUSTY_TILES_ORACLE_TIMEOUT', '')
+    if not value:
+        return DECODE_TIMEOUT_DEFAULT
+    try:
+        seconds = float(value)
+    except ValueError:
+        seconds = 0
+    if not seconds > 0:
+        raise ValueError(f'RUSTY_TILES_ORACLE_TIMEOUT must be a positive number of seconds, not {value!r}')
+    return seconds
+
+
 class ManifestError(ValueError):
     """Malformed, unsupported or resource-limited independent source input."""
 
@@ -699,8 +721,14 @@ def _baseline_faces(path):
     """Existing independent identity decoder, reading GLB via stdin, not a filename API."""
     decoder = Path(__file__).with_name('decode.mjs')
     with Path(path).open('rb') as source, tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
-        result = subprocess.run(['node', '--max-old-space-size=512', str(decoder), '/dev/stdin'],
-                                stdin=source, stdout=output, stderr=errors, timeout=120)
+        limit = _decode_timeout()
+        try:
+            result = subprocess.run(['node', '--max-old-space-size=512', str(decoder), '/dev/stdin'],
+                                    stdin=source, stdout=output, stderr=errors, timeout=limit)
+        except subprocess.TimeoutExpired:
+            raise DecodeTimeout(f'baseline decode.mjs did not finish within {limit:g} s for {path}; set '
+                                f'RUSTY_TILES_ORACLE_TIMEOUT (seconds, default {DECODE_TIMEOUT_DEFAULT}) '
+                                'to allow longer') from None
         errors.seek(0)
         detail = errors.read(2000).decode(errors='replace')
         _require(result.returncode == 0, 'baseline identity decode failed: '+detail)

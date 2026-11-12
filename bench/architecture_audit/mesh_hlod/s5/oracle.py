@@ -11,6 +11,7 @@ import hashlib
 import itertools
 import json
 import math
+import os
 from fractions import Fraction
 from pathlib import Path
 import subprocess
@@ -23,6 +24,31 @@ from spatial import Store, Work, WorkLimit
 from seam_diagnostic import WorkLimit as SeamWorkLimit
 
 ROOT = Path(__file__).parent
+# decode.mjs on a large archive takes minutes on slow CI runners (180 s timed out twice on
+# macOS ARM64). RUSTY_TILES_ORACLE_TIMEOUT (seconds) overrides it.
+DECODE_TIMEOUT_DEFAULT = 600
+
+
+def decode_timeout():
+    value = os.environ.get('RUSTY_TILES_ORACLE_TIMEOUT', '')
+    if not value:
+        return DECODE_TIMEOUT_DEFAULT
+    try:
+        seconds = float(value)
+    except ValueError:
+        seconds = 0
+    if not seconds > 0:
+        raise ValueError(f'RUSTY_TILES_ORACLE_TIMEOUT must be a positive number of seconds, not {value!r}')
+    return seconds
+
+
+class DecodeTimeout(Exception):
+    """decode.mjs ran out of time: an environment limit, never an oracle verdict.
+
+    Deliberately not a ValueError, OSError or SubprocessError, so main() cannot report it as
+    an oracleDomain refusal that a mutant control would count as a rejection.
+    """
+
 
 class Failure(Exception):
     def __init__(self, check, detail):
@@ -35,8 +61,14 @@ def require(ok, check, detail):
 
 def decode(path):
     binary = isinstance(path,(bytes,bytearray))
-    r = subprocess.run(['node', '--max-old-space-size=2048', str(ROOT / 'decode.mjs'), '-' if binary else str(path)],
-                       input=bytes(path) if binary else None,capture_output=True,timeout=180)
+    limit = decode_timeout()
+    try:
+        r = subprocess.run(['node', '--max-old-space-size=2048', str(ROOT / 'decode.mjs'), '-' if binary else str(path)],
+                           input=bytes(path) if binary else None,capture_output=True,timeout=limit)
+    except subprocess.TimeoutExpired:
+        raise DecodeTimeout(f'decode.mjs did not finish within {limit:g} s for '
+                            f'{"an in-memory GLB" if binary else path}; set RUSTY_TILES_ORACLE_TIMEOUT '
+                            f'(seconds, default {DECODE_TIMEOUT_DEFAULT}) to allow longer') from None
     stderr=r.stderr.decode(errors='replace')
     require(r.returncode == 0, 'codecStructure' if 'featureIdentity' not in stderr and 'metadataIntegrity' not in stderr else 'featureIdentity', stderr[-1500:])
     decoded = json.loads(r.stdout)
