@@ -544,7 +544,7 @@ mod tests {
             .collect()
     }
     fn file_count(scratch: &Scratch) -> usize {
-        std::fs::read_dir(scratch.path()).unwrap().count()
+        crate::scratch_dirs::data_entries(scratch.path()).len()
     }
     #[test]
     fn tile_seams_odd_thin_images_and_eviction_preserve_every_byte() {
@@ -796,12 +796,7 @@ mod tests {
         let scratch = Scratch::create(None, 0).unwrap();
         let store = Store::new(0, 4);
         let image = store.put(&scratch, chain(&[(1, 1)], 9)).unwrap();
-        let path = std::fs::read_dir(scratch.path())
-            .unwrap()
-            .next()
-            .unwrap()
-            .unwrap()
-            .path();
+        let path = crate::scratch_dirs::data_entries(scratch.path())[0].clone();
         std::fs::OpenOptions::new()
             .write(true)
             .open(path)

@@ -310,7 +310,7 @@ mod tests {
             );
         }
         drop(snapshots);
-        assert_eq!(fs::read_dir(scratch.path()).unwrap().count(), 0);
+        assert_eq!(crate::scratch_dirs::data_entries(scratch.path()).len(), 0);
     }
     #[test]
     fn shared_decoder_refuses_wrong_mime_corruption_trailing_bytes_and_cancellation() {
@@ -396,7 +396,7 @@ mod tests {
             Err(error) => error,
         };
         assert_eq!(error.kind(), JobErrorKind::Cancelled);
-        assert_eq!(fs::read_dir(scratch.path()).unwrap().count(), 0);
+        assert_eq!(crate::scratch_dirs::data_entries(scratch.path()).len(), 0);
         // The capture reached the next <=64KiB poll after writing real chunks.
         assert_eq!(polls, 4);
     }
@@ -416,7 +416,7 @@ mod tests {
             Err(error) => error,
         };
         assert_eq!(error.kind(), JobErrorKind::Unsupported);
-        assert_eq!(fs::read_dir(scratch.path()).unwrap().count(), 0);
+        assert_eq!(crate::scratch_dirs::data_entries(scratch.path()).len(), 0);
     }
 
     #[test]
@@ -457,6 +457,6 @@ mod tests {
                 JobErrorKind::InvalidInput
             );
         }
-        assert_eq!(fs::read_dir(scratch.path()).unwrap().count(), 0);
+        assert_eq!(crate::scratch_dirs::data_entries(scratch.path()).len(), 0);
     }
 }

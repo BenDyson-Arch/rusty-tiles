@@ -935,7 +935,7 @@ mod tests {
             assert!(result
                 .probes
                 .iter()
-                .all(|p| *p == Probe::ProjDirectoryListing));
+                .all(|p| matches!(p, Probe::ProjDirectoryListing | Probe::ScratchFolders)));
         }
     }
 

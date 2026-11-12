@@ -882,6 +882,10 @@ mod fingerprint_tests {
         ("src/output_path.rs", "resolves the requested output path"),
         ("src/runtime.rs", "run control, events and staging"),
         (
+            "src/scratch_dirs.rs",
+            "creates the private workspace and its owner record; no content bytes",
+        ),
+        (
             "src/storage_meter.rs",
             "D8 write admission under mesh-registered directories; plain calls elsewhere",
         ),

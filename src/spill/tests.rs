@@ -125,8 +125,9 @@ fn sort<T: Record>(
     Ok((stream.collect::<Result<_, _>>()?, stats))
 }
 
+/// Spill entries in a scratch directory; its owner record is not one.
 fn entries(path: &Path) -> usize {
-    std::fs::read_dir(path).unwrap().count()
+    crate::scratch_dirs::data_entries(path).len()
 }
 
 fn pairs(records: &[Keyed]) -> Vec<(u16, u32)> {
@@ -1325,12 +1326,7 @@ fn slot_file_faults_are_typed() {
     let (_parent, scratch) = new_scratch(FaultIo::new(Faults::default()));
     let mut slots = SlotFile::new(&scratch, "slots", 4).unwrap();
     slots.write(9, &[1; 4]).unwrap();
-    let path = std::fs::read_dir(scratch.path())
-        .unwrap()
-        .next()
-        .unwrap()
-        .unwrap()
-        .path();
+    let path = crate::scratch_dirs::data_entries(scratch.path())[0].clone();
     std::fs::OpenOptions::new()
         .write(true)
         .open(&path)

@@ -346,7 +346,8 @@ impl Observer for Tamper {
         }
         let mut done = self.done.lock().unwrap();
         for workspace in workspaces(&self.parent) {
-            let Ok(entries) = fs::read_dir(workspace.join("t")) else {
+            // The converter's tree lives under the workspace's `tree`, beside its owner record.
+            let Ok(entries) = fs::read_dir(workspace.join("tree").join("t")) else {
                 continue;
             };
             for entry in entries {

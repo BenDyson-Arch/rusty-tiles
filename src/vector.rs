@@ -304,15 +304,23 @@ fn prepare(mut request: VectorRequest) -> Result<VectorRequest, JobError> {
     request.output = output;
     Ok(request)
 }
+/// The private workspace. The converter writes the tree it publishes under [`Self::tree`],
+/// so the folder's owner record is never one of its members.
 struct Workspace(tempfile::TempDir);
 impl Workspace {
     fn create(output: &Path) -> Result<Self, JobError> {
         let parent = output.parent().expect("resolved output parent");
         fs::create_dir_all(parent)
             .map_err(|e| JobError::io("create vector output parent", parent, e))?;
-        crate::scratch_dirs::create(parent, crate::scratch_dirs::Kind::VectorWork)
+        let workspace = crate::scratch_dirs::create(parent, crate::scratch_dirs::Kind::VectorWork)
             .map(Self)
-            .map_err(|e| JobError::io("create vector workspace", parent, e))
+            .map_err(|e| JobError::io("create vector workspace", parent, e))?;
+        let tree = workspace.tree();
+        fs::create_dir(&tree).map_err(|e| JobError::io("create vector workspace", &tree, e))?;
+        Ok(workspace)
+    }
+    fn tree(&self) -> PathBuf {
+        self.0.path().join("tree")
     }
     fn cleanup(self) -> Result<(), CleanupDiagnostic> {
         let path = self.0.keep();
@@ -374,7 +382,7 @@ pub fn vector_to_archive(
     let workspace = Workspace::create(&request.output).map_err(|e| attempt.fail(e))?;
     let completed = match pipeline::convert(
         &request.input,
-        workspace.0.path(),
+        &workspace.tree(),
         &request.options,
         &attempt,
     ) {
@@ -393,7 +401,7 @@ pub fn vector_to_archive(
         .map(|member| {
             let metadata = fs::symlink_metadata(&member.path)
                 .map_err(|e| JobError::io("inspect accepted vector member", &member.path, e))?;
-            if !metadata.is_file() || !member.path.starts_with(workspace.0.path()) {
+            if !metadata.is_file() || !member.path.starts_with(workspace.tree()) {
                 return Err(JobError::new(
                     JobErrorKind::InvalidState,
                     "accepted vector member must be a regular file in its workspace",

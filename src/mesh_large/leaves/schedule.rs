@@ -375,7 +375,7 @@ mod tests {
         }
         assert_eq!(builds.load(Ordering::SeqCst), 4);
         assert_eq!(cache.stats().scratch_bytes, 0);
-        assert_eq!(std::fs::read_dir(scratch.path()).unwrap().count(), 0);
+        assert_eq!(crate::scratch_dirs::data_entries(scratch.path()).len(), 0);
     }
 
     #[test]

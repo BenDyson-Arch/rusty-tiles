@@ -116,6 +116,18 @@ pub(crate) fn admit_owner_record(
     }
 }
 
+/// The entries of a scratch folder other than its owner record, in name order.
+#[cfg(test)]
+pub(crate) fn data_entries(dir: &Path) -> Vec<PathBuf> {
+    let mut entries: Vec<_> = fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| !path.ends_with(OWNER_FILE))
+        .collect();
+    entries.sort();
+    entries
+}
+
 /// Whether any ancestor of `path` is a rusty-tiles scratch folder.
 fn nested(path: &Path) -> bool {
     path.components().any(|component| match component {
@@ -182,16 +194,14 @@ impl OwnerRecord {
     }
 }
 
-/// Write `record` into `dir` atomically: a partial file, then a rename over nothing.
+/// Write `record` into `dir` atomically: a partial file, then a rename over nothing. Under
+/// a metered directory the record is admitted before it is written.
 fn write_owner(dir: &Path, record: &OwnerRecord) -> io::Result<()> {
-    let bytes = serde_json::to_vec_pretty(record).map_err(io::Error::other)?;
+    let mut bytes = serde_json::to_vec_pretty(record).map_err(io::Error::other)?;
+    bytes.push(b'\n');
     let partial = dir.join(OWNER_PARTIAL);
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&partial)?;
+    let mut file = crate::storage_meter::create_new(&partial)?;
     file.write_all(&bytes)?;
-    file.write_all(b"\n")?;
     drop(file);
     fs::rename(&partial, dir.join(OWNER_FILE))
 }
