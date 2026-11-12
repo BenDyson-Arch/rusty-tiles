@@ -767,7 +767,7 @@ pub(crate) fn write_prepared(
         conversion,
     } = prepared;
     check()?;
-    let work = crate::storage_meter::tempdir_in(work_parent, ".tiles-h16-")
+    let work = crate::scratch_dirs::create(work_parent, crate::scratch_dirs::Kind::MeshForest)
         .map_err(|e| JobError::io("create forest staging", work_parent, e))?;
     let staging = work.path().join("forest");
     crate::storage_meter::create_dir(&staging)
@@ -859,10 +859,7 @@ pub(crate) fn write_prepared(
                     meter.used()
                 )));
             }
-            // The archive's scratch directory entry; its files are admitted as written.
-            meter
-                .admit(crate::storage_meter::ENTRY_BYTES)
-                .map_err(|e| JobError::io("create archive scratch", work.path(), e))?;
+            // The archive's scratch directory and its files are admitted as they are created.
             Some(stored)
         }
         None => None,

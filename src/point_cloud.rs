@@ -303,9 +303,7 @@ impl Workspace {
         let parent = output.parent().expect("resolved output parent");
         fs::create_dir_all(parent)
             .map_err(|e| JobError::io("create point-cloud output parent", parent, e))?;
-        tempfile::Builder::new()
-            .prefix(".point-work-")
-            .tempdir_in(parent)
+        crate::scratch_dirs::create(parent, crate::scratch_dirs::Kind::PointCloudWork)
             .map(Self)
             .map_err(|e| JobError::io("create point-cloud workspace", parent, e))
     }

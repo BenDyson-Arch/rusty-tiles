@@ -310,9 +310,7 @@ impl Workspace {
         let parent = output.parent().expect("resolved output parent");
         fs::create_dir_all(parent)
             .map_err(|e| JobError::io("create vector output parent", parent, e))?;
-        tempfile::Builder::new()
-            .prefix(".vector-work-")
-            .tempdir_in(parent)
+        crate::scratch_dirs::create(parent, crate::scratch_dirs::Kind::VectorWork)
             .map(Self)
             .map_err(|e| JobError::io("create vector workspace", parent, e))
     }

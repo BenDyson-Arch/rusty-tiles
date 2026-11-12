@@ -31,9 +31,7 @@ impl Workspace {
             .expect("resolved absolute output has parent");
         fs::create_dir_all(parent)
             .map_err(|e| JobError::io("create mesh output parent", parent, e))?;
-        tempfile::Builder::new()
-            .prefix(".mesh-work-")
-            .tempdir_in(parent)
+        crate::scratch_dirs::create(parent, crate::scratch_dirs::Kind::ModelWork)
             .map(Self)
             .map_err(|e| JobError::io("create mesh workspace", parent, e))
     }

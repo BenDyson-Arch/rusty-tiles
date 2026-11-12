@@ -29,6 +29,7 @@ pub mod point_cloud;
 mod point_sampling;
 mod raster_directory;
 mod runtime;
+pub mod scratch_dirs;
 mod spill;
 mod stage_timing;
 mod storage_meter;

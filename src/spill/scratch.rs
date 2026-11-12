@@ -195,6 +195,14 @@ impl Placement {
     }
 }
 
+/// Every default scratch location, as [`Placement::disk`] tries them.
+pub(crate) fn default_scratch_roots() -> Vec<PathBuf> {
+    match Placement::disk(true) {
+        Placement::Disk { candidates, .. } => candidates,
+        Placement::In(path) => vec![path],
+    }
+}
+
 /// The platform's per-user cache directory, if it can be named.
 fn user_cache_dir() -> Option<PathBuf> {
     let absolute = |dir: std::ffi::OsString| Some(PathBuf::from(dir)).filter(|d| d.is_absolute());
@@ -292,9 +300,7 @@ impl Scratch {
             }
             other => other,
         })?;
-        let dir = tempfile::Builder::new()
-            .prefix("rusty-tiles-spill-")
-            .tempdir_in(parent)
+        let dir = crate::scratch_dirs::create(parent, crate::scratch_dirs::Kind::Spill)
             .map_err(|e| SpillError::io("create scratch directory", parent, e))?;
         Ok(Created { dir, volume })
     }

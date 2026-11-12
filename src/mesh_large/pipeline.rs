@@ -594,10 +594,7 @@ pub fn mesh_to_tileset(
     let mut staging = Staging::create(&output, &attempt)?;
     let parent = output.parent().unwrap_or(Path::new("."));
     let work_parent = config.scratch_dir.as_deref().unwrap_or(parent);
-    let work = match tempfile::Builder::new()
-        .prefix(".tiles-mesh-")
-        .tempdir_in(work_parent)
-    {
+    let work = match crate::scratch_dirs::create(work_parent, crate::scratch_dirs::Kind::MeshWork) {
         Ok(work) => work,
         Err(error) => {
             return Err(staging.fail(JobError::io("create mesh intermediate", work_parent, error)))
@@ -676,6 +673,11 @@ pub fn mesh_to_tileset(
                 .find_map(|meter| meter.refusal())
                 .unwrap_or(error)
         };
+        // The work directory's owner record was written before its meter existed.
+        if let Some(meter) = &charges.work {
+            crate::scratch_dirs::admit_owner_record(meter, work.path())
+                .map_err(|e| refused(JobError::io("charge the owner record", work.path(), e)))?;
+        }
         let budget = MemoryBudget {
             memory_backed_storage_bytes: storage,
             ..budget

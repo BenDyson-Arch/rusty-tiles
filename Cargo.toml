@@ -46,7 +46,7 @@ overflow-checks = true
 opt-level = 2
 
 [features]
-# `cli` is what the binary needs beyond the library (signal handling); the Python
+# `cli` is what the binary needs beyond the library (Unix signal handling); the Python
 # bindings depend on the library with default features off.
 default = ["cli"]
 cli = ["dep:signal-hook"]
@@ -109,3 +109,8 @@ zip = { version = "2", default-features = false }
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 signal-hook = { version = "0.3", optional = true, default-features = false, features = ["iterator"] }
+
+# Already in the graph through tempfile: process start times for scratch owner records,
+# and the CLI's Ctrl+C/Ctrl+Break handler.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console", "Win32_System_Threading"] }
