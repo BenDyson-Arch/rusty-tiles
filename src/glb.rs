@@ -154,24 +154,19 @@ pub(crate) fn encode_octahedral(vectors: &[[f32; 3]], bits: u8) -> Result<Vec<u8
     Ok(codes.iter().flat_map(|c| c.to_le_bytes()).collect())
 }
 
-/// Container layout for one family of meshopt-compressed content.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct MeshoptLayout {
-    /// Alignment of every view in the compressed buffer.
-    pub align: usize,
-    /// Write `"filter":"NONE"` explicitly on compressed views.
-    pub explicit_filter: bool,
-}
-
 /// Compress buffer views of `document` (whose binary is `source`) with
 /// `EXT_meshopt_compression`. `classify(view, byte_length)` selects the
 /// stream role of each view; `None` copies the view verbatim. Accessors,
 /// view identities and element order are unchanged. Compressed views retain
-/// source offsets in a fallback buffer spanning `source`. Returns the new binary.
+/// source offsets in a fallback buffer spanning `source`. Every view in the
+/// compressed buffer starts on an `align`-byte boundary. `filter` is written
+/// only for filtered (OCTAHEDRAL) streams: NONE is the extension's default, and
+/// some importers (Blender 5.2's glTF importer) reject it when written. Returns
+/// the new binary.
 pub(crate) fn meshopt_compress(
     document: &mut Value,
     source: &[u8],
-    layout: MeshoptLayout,
+    align: usize,
     mut classify: impl FnMut(usize, usize) -> Result<Option<MeshoptStream>, Error>,
 ) -> Result<Vec<u8>, Error> {
     let views = document["bufferViews"]
@@ -190,7 +185,7 @@ pub(crate) fn meshopt_compress(
         let bytes = source
             .get(offset..end)
             .ok_or_else(|| Error::msg("view outside GLB"))?;
-        pad_to(&mut binary, layout.align);
+        pad_to(&mut binary, align);
         let start = binary.len();
         let Some(stream) = classify(index, length)? else {
             binary.extend_from_slice(bytes);
@@ -242,8 +237,6 @@ pub(crate) fn meshopt_compress(
             "byteStride":stride,"count":count,"mode":mode});
         if let MeshoptStream::Octahedral { .. } = stream {
             extension["filter"] = json!("OCTAHEDRAL");
-        } else if layout.explicit_filter {
-            extension["filter"] = json!("NONE");
         }
         view["extensions"] = json!({ MESHOPT: extension });
     }

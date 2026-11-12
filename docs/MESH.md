@@ -873,7 +873,8 @@ installation guarantee.
 Viewers that read neither `EXT_meshopt_compression` nor `KHR_texture_basisu`
 can show a tile through the Python view functions. Blender 5.2's bundled glTF
 importer is one: it has no KTX2 support, and it fails on the explicit
-`"filter": "NONE"` that every rusty-tiles meshopt view carries.
+`"filter": "NONE"` that meshopt views in archives from 0.4.0 and earlier carry
+(later archives omit it, #370).
 
 - `rusty_tiles.list_tiles(archive)` lists each content URI with its depth,
   `leaf` or `coarse` role, geometric error and accumulated transform.

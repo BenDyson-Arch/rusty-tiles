@@ -11,7 +11,7 @@ use super::{
     store::{SourcePrimitive, TileGeometry},
 };
 use crate::{
-    glb::{self, MeshoptLayout, MeshoptStream},
+    glb::{self, MeshoptStream},
     mesh_large::{
         batching::material_key,
         leaves::geometry::{CoarsePositions, PositionStorage},
@@ -689,16 +689,8 @@ pub(crate) fn encode(
         glb::add_extension(&mut document, "KHR_texture_basisu", true)
             .map_err(|e| invalid(e.to_string()))?;
     }
-    let compressed = glb::meshopt_compress(
-        &mut document,
-        &binary,
-        MeshoptLayout {
-            align: 8,
-            explicit_filter: true,
-        },
-        |i, _| Ok(streams[i]),
-    )
-    .map_err(|e| invalid(e.to_string()))?;
+    let compressed = glb::meshopt_compress(&mut document, &binary, 8, |i, _| Ok(streams[i]))
+        .map_err(|e| invalid(e.to_string()))?;
     let bytes = glb::encode_glb(&document, &compressed).map_err(|e| invalid(e.to_string()))?;
     let quantized = matches!(positions.storage, PositionStorage::Quantized { .. });
     let mut result = Encoded {
