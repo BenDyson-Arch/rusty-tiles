@@ -51,6 +51,35 @@ pub struct ScratchStages {
     pub hlod_incidence: u64,
 }
 impl ScratchStages {
+    fn all(&self) -> [u64; 7] {
+        [
+            self.capture,
+            self.projection,
+            self.images,
+            self.tree,
+            self.corner_depths,
+            self.leaf_plans,
+            self.hlod_incidence,
+        ]
+    }
+}
+impl FullScratchNeed {
+    /// What every admission of `self` checks is at most `floor`'s: the whole need, and each
+    /// stage's entry recheck (its bound plus per-file rounding).
+    fn within(&self, floor: &Self) -> bool {
+        let entries = |need: &Self| {
+            need.stages
+                .all()
+                .map(|bound| bound.saturating_add(need.file_rounding_bytes))
+        };
+        self.need_bytes <= floor.need_bytes
+            && entries(self)
+                .iter()
+                .zip(entries(floor))
+                .all(|(grown, floor)| *grown <= floor)
+    }
+}
+impl ScratchStages {
     fn max(&self) -> u64 {
         [
             self.capture,
@@ -628,6 +657,11 @@ pub(crate) fn capture_admitted(
         &mut |done| progress.advance(done),
     )
     .map_err(super::failure)?;
+    debug_assert_eq!(
+        scan.triangles,
+        source.document.triangle_count() as u64,
+        "the scan step's total is the scanned triangle count"
+    );
     progress.end().map_err(super::failure)?;
     // One frame, resolved once from the used post-node source bounds, serves capture; with a
     // source CRS, capture replaces the scan's placeholder box with the mapped one.
@@ -719,9 +753,10 @@ pub(crate) fn capture_admitted(
             image_bytes,
         )
         .ok()?;
-        // Never more declared scratch than the floor's, so no scratch admission (now or at
-        // the texture recheck) refuses a run the floor would admit.
-        let disk = grown.need_bytes <= need.need_bytes;
+        // Never more declared scratch than the floor's, in total or at any stage, so no
+        // scratch admission (up front, at a stage's entry or at the texture recheck) refuses
+        // a run the floor would admit.
+        let disk = grown.within(&need);
         let memory = memory_bound(
             &capture,
             source.json_bytes,
@@ -1579,7 +1614,7 @@ pub(super) mod tests {
     }
     /// A position-only grid of welded quads in seeded shuffled order, with repeated
     /// triangles so the rank and corner sorts see equal positions from distinct ranks.
-    fn shuffled_grid(parent: &Path, side: usize, seed: u64) -> PathBuf {
+    pub(crate) fn shuffled_grid(parent: &Path, side: usize, seed: u64) -> PathBuf {
         fs::create_dir_all(parent).unwrap();
         let vertex = |x: usize, y: usize| {
             let z = ((x * 7 + y * 13) % 5) as f32 * 0.125;

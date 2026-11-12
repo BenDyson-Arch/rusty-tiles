@@ -507,7 +507,11 @@ fn io_kind(error: &SpillError) -> io::ErrorKind {
 
 /// Feeds the input, finishes and drains; returns the first error.
 fn run_to_error(scratch: &Scratch, input: &[Wide]) -> SpillError {
-    let mut sorter = ExternalSorter::new(scratch, spilling_config()).unwrap();
+    run_to_error_with(scratch, input, spilling_config())
+}
+
+fn run_to_error_with(scratch: &Scratch, input: &[Wide], config: SortConfig) -> SpillError {
+    let mut sorter = ExternalSorter::new(scratch, config).unwrap();
     let result = (|| {
         sorter.extend(input.iter().copied())?;
         Ok::<_, SpillError>(())
@@ -612,13 +616,22 @@ fn write_faults_are_typed_and_clean_up() {
         ),
     ];
     for (faults, kind) in cases {
-        let (_parent, scratch) = new_scratch(FaultIo::new(faults.clone()));
-        let error = run_to_error(&scratch, &input);
-        assert_eq!(io_kind(&error), kind, "{faults:?}");
-        assert_eq!(scratch.live_bytes(), 0);
-        let job = JobError::from(error);
-        assert_eq!(job.kind(), JobErrorKind::Io);
-        assert!(job.path().is_some_and(|p| p.starts_with(scratch.path())));
+        // Synchronous runs, then background writers: a writer's failure surfaces when its
+        // run is joined, typed, with every file removed.
+        for writers in [0, 3] {
+            let (_parent, scratch) = new_scratch(FaultIo::new(faults.clone()));
+            let config = SortConfig {
+                writers,
+                ..spilling_config()
+            };
+            let error = run_to_error_with(&scratch, &input, config);
+            assert_eq!(io_kind(&error), kind, "{faults:?} writers {writers}");
+            assert_eq!(scratch.live_bytes(), 0, "writers {writers}");
+            assert_eq!(entries(scratch.path()), 0, "writers {writers}");
+            let job = JobError::from(error);
+            assert_eq!(job.kind(), JobErrorKind::Io);
+            assert!(job.path().is_some_and(|p| p.starts_with(scratch.path())));
+        }
     }
 }
 
@@ -1591,4 +1604,81 @@ fn writer_memory_bound_charges_each_writer_its_run_and_sort_scratch() {
             run + run.div_ceil(2) + 4096 + 8_000_000
         );
     }
+}
+
+#[test]
+fn tiny_pieces_replay_the_stable_sort_on_every_path() {
+    // Pieces of a few records: synchronous runs sort several batches of `jobs` pieces and
+    // merge them as they write, writers sort and merge their own pieces, and an input that
+    // never spills is sorted the same way in memory.
+    let keyed = keyed_input(3_000, 5, 31);
+    let mut expected = keyed.clone();
+    expected.sort();
+    for (r, jobs, writers) in [
+        (500, 1, 0),
+        (500, 3, 0),
+        (500, 1, 2),
+        (499, 2, 3),
+        (5_000, 3, 0),
+    ] {
+        let run = |piece_bytes: Option<usize>| {
+            let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+            if let Some(bytes) = piece_bytes {
+                scratch.set_piece_bytes(bytes);
+            }
+            let config = SortConfig {
+                writers,
+                ..config::<Keyed>(r, 3, jobs, 64)
+            };
+            let (output, stats) = sort(&scratch, config, &keyed).unwrap();
+            assert_eq!(entries(scratch.path()), 0);
+            (encoded(&output), pairs(&output), stats)
+        };
+        let (bytes, order, stats) = run(None);
+        assert_eq!(order, pairs(&expected), "R={r} jobs={jobs} w={writers}");
+        for piece_bytes in [1, 7 * size_of::<Keyed>(), 64 * size_of::<Keyed>()] {
+            let (piece_output, _, piece_stats) = run(Some(piece_bytes));
+            assert_eq!(
+                piece_output, bytes,
+                "R={r} jobs={jobs} w={writers} piece={piece_bytes}"
+            );
+            assert_eq!(
+                piece_stats, stats,
+                "R={r} jobs={jobs} w={writers} piece={piece_bytes}"
+            );
+        }
+    }
+}
+
+#[test]
+fn piece_batches_each_take_a_checkpoint() {
+    // 2,000 records of 16 bytes in runs of 100, pieces of 10 records, 3 sorting threads:
+    // ten pieces per run in four batches, so four checkpoints before each run's chunks.
+    let input = spilling_input();
+    let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+    scratch.set_chunk_bytes(1 << 20);
+    scratch.set_piece_bytes(10 * size_of::<Wide>());
+    let observer = Checkpoints {
+        events: Default::default(),
+        stop_after: usize::MAX,
+    };
+    let config = SortConfig {
+        jobs: 3,
+        ..spilling_config()
+    };
+    let mut sorter = ExternalSorter::new(&scratch, config)
+        .unwrap()
+        .observed(&observer);
+    sorter.extend(input.iter().copied()).unwrap();
+    let mut expected = input.clone();
+    expected.sort();
+    let output: Vec<_> = sorter.finish().unwrap().collect::<Result<_, _>>().unwrap();
+    assert_eq!(output, expected);
+    let events = observer.events.into_inner().unwrap();
+    let wrote = events
+        .iter()
+        .take_while(|e| **e == SortProgress::Wrote)
+        .count();
+    // Per run: 4 batch checkpoints and one per chunk (each run is one chunk).
+    assert_eq!(wrote, 20 * (4 + 1));
 }

@@ -91,6 +91,10 @@ pub struct TilerRequest {
     /// it were memory-backed.
     #[cfg(test)]
     test_work_charge: Option<u64>,
+    /// Test seam: let capture and the incidence pass grow their sorts under the budget
+    /// (production always does; fixtures otherwise keep `test_spill`'s configuration).
+    #[cfg(test)]
+    test_sort_plan: bool,
 }
 impl TilerRequest {
     pub fn new(input: impl Into<PathBuf>, output: impl Into<PathBuf>) -> Self {
@@ -112,6 +116,8 @@ impl TilerRequest {
             test_spill: None,
             #[cfg(test)]
             test_work_charge: None,
+            #[cfg(test)]
+            test_sort_plan: false,
         }
     }
     /// Declared memory budget in bytes, a ceiling for every stage of the run: never raised,
@@ -141,6 +147,11 @@ impl TilerRequest {
     #[cfg(test)]
     pub(crate) fn with_test_spill(mut self, sort: crate::spill::SortConfig, chunk: usize) -> Self {
         self.test_spill = Some((sort, chunk));
+        self
+    }
+    #[cfg(test)]
+    pub(crate) fn with_test_sort_plan(mut self, plan: bool) -> Self {
+        self.test_sort_plan = plan;
         self
     }
     pub fn with_profile(mut self, profile: TilerProfile) -> Self {
@@ -582,6 +593,10 @@ pub fn mesh_to_tileset(
     if let Some((sort, chunk)) = request.test_spill {
         config.sort = sort;
         config.test_chunk_bytes = Some(chunk);
+    }
+    #[cfg(test)]
+    {
+        config.test_sort_plan = request.test_sort_plan;
     }
     config.scratch_dir = request
         .scratch_dir

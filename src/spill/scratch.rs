@@ -140,6 +140,8 @@ pub(crate) struct Scratch {
     next_file: Arc<AtomicU64>,
     /// Largest sort run chunk file ([`super::CHUNK_BYTES`]; tests may shrink it).
     chunk_bytes: std::sync::atomic::AtomicUsize,
+    /// Run sort piece size ([`super::sort::PIECE_BYTES`]; tests may shrink it).
+    piece_bytes: std::sync::atomic::AtomicUsize,
 }
 
 struct Created {
@@ -269,6 +271,7 @@ impl Scratch {
             accounting: Arc::default(),
             next_file: Arc::new(AtomicU64::new(0)),
             chunk_bytes: std::sync::atomic::AtomicUsize::new(super::CHUNK_BYTES),
+            piece_bytes: std::sync::atomic::AtomicUsize::new(super::sort::PIECE_BYTES),
         }
     }
 
@@ -430,6 +433,18 @@ impl Scratch {
         self.chunk_bytes.store(bytes.max(1), Ordering::Relaxed);
     }
 
+    /// Run sort piece size: sorts check between pieces of under twice this many bytes.
+    pub(crate) fn piece_bytes(&self) -> usize {
+        self.piece_bytes.load(Ordering::Relaxed)
+    }
+
+    /// Test seam: tiny pieces exercise piecewise sorting and merging on small inputs.
+    /// Pieces change no sorted order or content, only where sorts check.
+    #[cfg(test)]
+    pub(crate) fn set_piece_bytes(&self, bytes: usize) {
+        self.piece_bytes.store(bytes.max(1), Ordering::Relaxed);
+    }
+
     /// Starts a stage: its peak restarts from the bytes currently live (retained files).
     pub(crate) fn begin_stage(&self) {
         self.accounting
@@ -471,6 +486,7 @@ impl Scratch {
             io: self.io.clone(),
             accounting: self.accounting.clone(),
             chunk_bytes: self.chunk_bytes(),
+            piece_bytes: self.piece_bytes(),
         })
     }
 
@@ -494,6 +510,7 @@ pub(super) struct FileMaker {
     io: Arc<dyn SpillIo>,
     accounting: Arc<Accounting>,
     chunk_bytes: usize,
+    piece_bytes: usize,
 }
 
 impl FileMaker {
@@ -512,6 +529,10 @@ impl FileMaker {
 
     pub(super) fn chunk_bytes(&self) -> usize {
         self.chunk_bytes
+    }
+
+    pub(super) fn piece_bytes(&self) -> usize {
+        self.piece_bytes
     }
 }
 

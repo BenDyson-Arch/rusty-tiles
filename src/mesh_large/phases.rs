@@ -250,6 +250,9 @@ pub(crate) struct StepProgress<'a> {
     suspended: Cell<Option<StepState>>,
     /// The step a merge pass reports as.
     merge: Step,
+    /// Records rewritten by earlier merge passes: each pass continues the merge step's
+    /// count, so its `done` never goes back however many passes or sorts it covers.
+    merged: Cell<u64>,
 }
 impl<'a> StepProgress<'a> {
     pub(crate) fn new(
@@ -262,6 +265,7 @@ impl<'a> StepProgress<'a> {
             state: Cell::new(None),
             suspended: Cell::new(None),
             merge: Step::Merge,
+            merged: Cell::new(0),
         }
     }
     /// Reports sort merge passes as `merge` (capture's is [`Step::Merge`]).
@@ -281,10 +285,13 @@ impl<'a> StepProgress<'a> {
     }
     /// Starts `step` of `total` units: checks, then emits its `0` event.
     pub(crate) fn begin(&self, step: Step, total: u64) -> Result<(), JobError> {
+        self.begin_at(step, 0, total)
+    }
+    fn begin_at(&self, step: Step, done: u64, total: u64) -> Result<(), JobError> {
         (self.check)()?;
         let mut state = StepState {
             step,
-            done: 0,
+            done,
             total,
             last: Instant::now(),
         };
@@ -338,12 +345,21 @@ impl SortObserver for StepProgress<'_> {
         let stop = |error: JobError| SpillError::Stopped(Box::new(error));
         match progress {
             SortProgress::Wrote => self.check().map_err(stop),
+            // A pass continues the merge step's count: it starts at the records earlier
+            // passes rewrote and its total adds its own.
             SortProgress::MergeStart { total } => {
                 self.suspended.set(self.state.take());
-                self.begin(self.merge, total).map_err(stop)
+                let base = self.merged.get();
+                self.begin_at(self.merge, base, base.saturating_add(total))
+                    .map_err(stop)
             }
-            SortProgress::Merged { done } => self.advance(done).map_err(stop),
+            SortProgress::Merged { done } => self
+                .advance(self.merged.get().saturating_add(done))
+                .map_err(stop),
             SortProgress::MergeEnd => {
+                if let Some(state) = self.state.get() {
+                    self.merged.set(state.total);
+                }
                 let ended = self.end().map_err(stop);
                 self.state.set(self.suspended.take());
                 ended
@@ -467,6 +483,10 @@ mod tests {
         sort.checkpoint(SortProgress::MergeEnd).unwrap();
         std::thread::sleep(STEP_HEARTBEAT + Duration::from_millis(20));
         progress.advance(40).unwrap();
+        // A second pass continues the merge step's count instead of restarting it.
+        sort.checkpoint(SortProgress::MergeStart { total: 300 })
+            .unwrap();
+        sort.checkpoint(SortProgress::MergeEnd).unwrap();
         progress.end().unwrap();
         assert_eq!(
             *events.lock().unwrap(),
@@ -475,6 +495,8 @@ mod tests {
                 "capture_merge 0/500",
                 "capture_merge 500/500",
                 "capture_corner_depths 40/70",
+                "capture_merge 500/800",
+                "capture_merge 800/800",
                 "capture_corner_depths 70/70"
             ]
         );

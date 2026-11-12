@@ -951,7 +951,8 @@ units per triangle) and `capture_leaf_plans` (leaves). Each step reports `0`
 and its total; all but `capture_validate`, `capture_tree` and
 `capture_leaf_plans` also report counts between. An intermediate sort merge pass, which a budget
 too small for one pass needs, is reported as `capture_merge` (records
-rewritten), after which the interrupted step resumes. While capture runs, the
+rewritten, counted on across passes so the count never goes back), after which
+the interrupted step resumes. While capture runs, the
 current step's latest count is repeated at least every 250 ms. These events are
 capture's cancellation checkpoints, also for a Python callback, so a cancel or
 callback exception lands within about a second, as in the leaf stage. The coarse

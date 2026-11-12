@@ -239,11 +239,26 @@ pub(crate) fn scan_with_source_bounds(
             }
             *results[task].lock().unwrap_or_else(|e| e.into_inner()) = Some(scanned);
         };
-        let threads = (0..workers.clamp(1, tasks.len().max(1)))
-            .map(|_| scope.spawn(worker))
-            .collect::<Vec<_>>();
+        let mut threads = Vec::new();
         let mut stopped = None;
-        while !threads.iter().all(|thread| thread.is_finished()) {
+        for _ in 0..workers.clamp(1, tasks.len().max(1)) {
+            match std::thread::Builder::new()
+                .name("rusty-tiles-capture-scan".into())
+                .spawn_scoped(scope, worker)
+            {
+                Ok(thread) => threads.push(thread),
+                Err(error) => {
+                    // The started workers stop at their next check and are joined below.
+                    stop.store(true, Relaxed);
+                    stopped = Some(JobError::new(
+                        JobErrorKind::ResourceLimit,
+                        format!("start capture scan worker: {error}"),
+                    ));
+                    break;
+                }
+            }
+        }
+        while stopped.is_none() && !threads.iter().all(|thread| thread.is_finished()) {
             if let Err(error) = progress(done.load(Relaxed)) {
                 stop.store(true, Relaxed);
                 stopped = Some(error);

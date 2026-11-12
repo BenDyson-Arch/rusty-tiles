@@ -39,7 +39,9 @@ pub(crate) struct SortConfig {
     pub jobs: usize,
     /// `w`: background run writers. With `w > 0`, each full run buffer is sorted and written
     /// on its own thread while the next one fills, at most `w` at once; runs keep their input
-    /// order. Does not affect output.
+    /// order. Does not affect output. A writer's failure (an I/O error) is returned when its
+    /// run is joined in order: by the push that hands off up to `w` runs later, or by
+    /// `finish`; the sorter then stops every writer and removes every run.
     pub writers: usize,
 }
 
@@ -495,12 +497,15 @@ fn write_run<T: Record>(
 fn sort_pieces<T: Record>(
     buffer: &mut [T],
     jobs: usize,
+    piece_bytes: usize,
     at: &Path,
     checkpoint: &mut dyn FnMut() -> Result<(), SpillError>,
 ) -> Result<usize, SpillError> {
     let jobs = jobs.clamp(1, buffer.len().max(1));
     let bytes = buffer.len().saturating_mul(size_of::<T>());
-    let pieces = (bytes / PIECE_BYTES).max(jobs).min(buffer.len().max(1));
+    let pieces = (bytes / piece_bytes.max(1))
+        .max(jobs)
+        .min(buffer.len().max(1));
     let piece = buffer.len().div_ceil(pieces).max(1);
     for batch in buffer.chunks_mut(piece.saturating_mul(jobs)) {
         checkpoint()?;
@@ -551,13 +556,16 @@ pub(crate) struct ExternalSorter<'s, T: Record> {
 /// A background run writer: its run and the emptied buffer it returns.
 type Writer<T> = JoinHandle<Result<(Run, Vec<T>), SpillError>>;
 
-/// How often a sorter waiting for a background writer reports a checkpoint.
+/// How often a sorter waiting for a background writer looks whether it has finished.
 const WAIT_POLL: Duration = Duration::from_millis(2);
+/// How often that wait reports a checkpoint: each may run an observer (the Python callback
+/// takes the GIL), so far less often than it polls, yet well within a cancel's second.
+const WAIT_CHECKPOINT: Duration = Duration::from_millis(25);
 
 /// Run buffers are sorted as pieces of under twice this many bytes, so a check or a stop
 /// waits for at most one such piece (about a tenth of a second) at any run size; pieces are
 /// merged as the run is written.
-const PIECE_BYTES: usize = 64 << 20;
+pub(crate) const PIECE_BYTES: usize = 64 << 20;
 
 /// Sorts `buffer` as consecutive pieces and writes it as one run, checking `stop` between
 /// pieces and after each chunk file. Returns the run and the emptied buffer.
@@ -575,7 +583,7 @@ fn write_sorted<T: Record>(
             Ok(())
         }
     };
-    let pieces = (buffer.len().saturating_mul(size_of::<T>()) / PIECE_BYTES)
+    let pieces = (buffer.len().saturating_mul(size_of::<T>()) / files.piece_bytes().max(1))
         .max(1)
         .min(buffer.len().max(1));
     let piece = buffer.len().div_ceil(pieces).max(1);
@@ -755,8 +763,12 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
         let Some(oldest) = self.pending.front() else {
             return Ok(());
         };
+        let mut checked = std::time::Instant::now();
         while !oldest.is_finished() {
-            self.checkpoint(SortProgress::Wrote)?;
+            if checked.elapsed() >= WAIT_CHECKPOINT {
+                self.checkpoint(SortProgress::Wrote)?;
+                checked = std::time::Instant::now();
+            }
             std::thread::sleep(WAIT_POLL);
         }
         let oldest = self.pending.pop_front().expect("a writer is pending");
@@ -777,6 +789,7 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
         let chunk = sort_pieces(
             &mut self.buffer,
             self.config.jobs,
+            self.scratch.piece_bytes(),
             self.scratch.path(),
             &mut || observer.map_or(Ok(()), |o| o.checkpoint(SortProgress::Wrote)),
         )?;
@@ -988,6 +1001,7 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
             let chunk = sort_pieces(
                 &mut buffer,
                 self.config.jobs,
+                self.scratch.piece_bytes(),
                 self.scratch.path(),
                 &mut || observer.map_or(Ok(()), |o| o.checkpoint(SortProgress::Wrote)),
             )?;
