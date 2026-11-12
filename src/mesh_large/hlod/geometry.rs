@@ -713,6 +713,15 @@ fn simplify_mapped(
     target: usize,
     local: &mut [u32],
 ) -> (Vec<[u32; 3]>, f64) {
+    // meshopt requires `target_index_count <= index_count`; its C++ `assert` is live in
+    // debug builds (CI runs the lib tests in debug, so the vendored asserts fire there;
+    // run touched lib tests in debug, not only `--release`, which defines NDEBUG).
+    // Callers may ask for more than they hold: contraction recovery passes the tile cap,
+    // which `sheets::simplify` splits across sheets in proportion to size. In 0.6.2 every
+    // use of the target is `result_count > target_index_count` with `result_count`
+    // starting at `index_count`, so a larger target behaves exactly as this clamp: the
+    // input unchanged.
+    let target = target.min(faces.len());
     let _cpu = super::cpu_profile::start(super::cpu_profile::Stage::Simplify, faces.len());
     // In pinned meshopt 0.6.2, a satisfied target or all locked vertices leaves
     // the copied index buffer untouched: no collapse, pruning or solve runs for
@@ -2117,6 +2126,64 @@ mod tests {
         let mut wrong = stuck();
         wrong[0].key = b;
         assert_eq!(check(vec![[0, 1, 3], [1, 2, 3]], wrong), None);
+    }
+
+    /// A target above the face count is the target equal to it, on both paths (the
+    /// fixed-sheet shortcut and the FFI, taken for a non-finite extent) and through
+    /// `sheets::simplify`, whose proportional split over-asks per sheet when the whole
+    /// target over-asks (contraction recovery passes the tile cap). Without the clamp a
+    /// debug build aborts in meshopt's `target_index_count <= index_count` assert.
+    #[test]
+    fn simplify_targets_above_the_face_count_keep_the_input() {
+        let grid = |far: bool| {
+            let mut positions = Vec::new();
+            for y in 0..6 {
+                for x in 0..6 {
+                    positions.push([x as f32, y as f32, ((x * 3 + y) % 4) as f32 * 0.1]);
+                }
+            }
+            if far {
+                // A non-finite extent keeps the FFI path for satisfied targets.
+                positions[35] = [f32::MAX, 0., 0.];
+                positions[0] = [-f32::MAX, 0., 0.];
+            }
+            let mut triangles = Vec::new();
+            for y in 0..5u32 {
+                for x in 0..5u32 {
+                    let a = y * 6 + x;
+                    triangles.push([a, a + 1, a + 7]);
+                    triangles.push([a, a + 7, a + 6]);
+                }
+            }
+            Merged {
+                keys: positions.iter().copied().map(key).collect(),
+                ells: vec![1; positions.len()],
+                positions,
+                triangles,
+                representative: vec![],
+            }
+        };
+        for far in [false, true] {
+            let merged = grid(far);
+            let faces = merged.triangles.clone();
+            for locked in [false, true] {
+                let lock = |_: u32| locked;
+                let at = simplify(&merged, &faces, &lock, faces.len());
+                for over in [faces.len() + 1, 2 * faces.len(), 5_077, usize::MAX / 3] {
+                    let above = simplify(&merged, &faces, &lock, over);
+                    assert_eq!(above.0, at.0, "far {far} locked {locked} target {over}");
+                    assert_eq!(above.1.to_bits(), at.1.to_bits());
+                    let sheets = sheets::simplify(&merged, &faces, &lock, over);
+                    let sheets_at = sheets::simplify(&merged, &faces, &lock, faces.len());
+                    assert_eq!(sheets.0, sheets_at.0, "sheets far {far} target {over}");
+                    assert_eq!(sheets.1.to_bits(), sheets_at.1.to_bits());
+                }
+                if !far {
+                    // A satisfied target leaves the input, as meshopt does in release.
+                    assert_eq!(at.0, faces);
+                }
+            }
+        }
     }
 
     #[test]
