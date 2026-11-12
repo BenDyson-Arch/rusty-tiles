@@ -413,7 +413,12 @@ callback cannot redirect the output. If the callback failure is the job's first
 fatal cause, the original exception is raised. Nested and concurrent calls are
 independent. Pending Python signals are checked during preparation and events,
 not after installation; an asynchronous interruption or allocation failure
-after commit can still interrupt the caller.
+after commit can still interrupt the caller. A `KeyboardInterrupt` seen at one
+of these checks fails the job like a cancellation: its scratch and work folders
+are removed before the exception reaches the caller. Between events, for
+example during a long spill merge, the interrupt waits for the next event. A
+killed interpreter leaves its folders behind with an owner record; remove them
+with `rusty-tiles scratch clean`.
 
 ## Errors
 

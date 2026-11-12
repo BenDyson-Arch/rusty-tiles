@@ -340,6 +340,49 @@ Point-cloud readiness lists the pure-Rust CRS classes, the [GDAL-verified EPSG a
 
 `--command` limits the inventory in both human and JSON output; without it every command is listed. `doctor` starts no processes, keeps PROJ networking off, writes no files, installs nothing and fetches no grids. A listed grid does not prove a height operation is available; conversion checks the exact operation offline.
 
+`scratch` lists the [scratch folders](#scratch) in the default scratch locations: `roots`, the `folders` found, `liveFolders`, `staleFolders`, `staleBytes` and the `clean` command that removes the stale ones. The human report prints one `scratch:` line. This check is informational: stale folders never change `status` or the exit code. The `scratch-folders` probe names the listing.
+
+### scratch
+
+```sh
+rusty-tiles scratch list
+rusty-tiles scratch clean --dry-run
+rusty-tiles scratch clean --dir /data/scratch --older-than 2h
+```
+
+Runs keep working data in private folders. Spill files go in `rusty-tiles-spill-*` under `--scratch-dir` or the default scratch locations. Those are `TMPDIR`, then the user cache directory's `rusty-tiles/scratch` (`~/.cache` on Linux, `~/Library/Caches` on macOS, `%LOCALAPPDATA%` on Windows), then the system temporary directory. Work folders go under `--scratch-dir` or beside the output: `.tiles-mesh-*` for `mesh`, `.mesh-work-*` for `glb-to-3tz`, `.point-work-*` for `point-cloud` and `.vector-work-*` for `vector`. A run that fails or is [stopped](#stopping-a-run) removes its folders. A killed run (SIGKILL, power loss, an out-of-memory kill) cannot, and these commands find what it left.
+
+Each folder created directly in a scratch location holds `rusty-tiles-owner.json`. It records the creating process's `pid`, its `processStart` token, `host`, `command`, `rustyTiles` version and `createdUnixSeconds`. The record is written with a rename, so it is either complete or absent. A folder created inside another rusty-tiles folder is covered by the outer record.
+
+| State | Meaning | Removed by `clean` |
+| --- | --- | --- |
+| `live` | The PID runs and its start time matches the record | never |
+| `stale` | No process has the PID (`owner_exited`), or the PID now names a process that started at another time (`pid_reused`) | yes |
+| `stale` | No usable record (folders from 0.4.0, or a run killed before its record landed) and nothing in the folder changed for 24 hours (`no_owner_record`) | yes |
+| `unverified` | The owner cannot be proved gone: the record names another host (`other_host`), the folder belongs to another user (`other_user`), the PID exists but its start time cannot be compared (`start_unverifiable`), or a folder without a record changed in the last 24 hours | never |
+
+Start times are read from `/proc` with the boot ID on Linux, from the process table on macOS, and from the process creation time on Windows. On other platforms an owner whose PID exists stays `unverified`. Inside a container the PID and host name are the container's own. A folder created in a container and inspected from the host is therefore `other_host`, and the reverse case usually is too.
+
+Only names of the form `PREFIX` plus six letters or digits, for the prefixes above, are recognised, and only as real directories. Symlinks and other entries are skipped. Output staging is never listed: `.tiles-dir-*` and `.tiles-stage-*` become the published result, and `.tiles-previous-*` holds the previous output during a replace.
+
+`scratch list [--dir DIR]... [--json]` searches the default scratch locations, then each `--dir`. For each folder it prints its state, size, time since anything in it changed, and the owner's PID and command. JSON output has `ok`, `roots` (`path`, `explicit`, `exists`, `error`), `folders` and `stale` (`folders`, `bytes`), and `ownerlessStaleAfterSeconds` (86400). Each folder has `path`, `kind` (`spill`, `mesh-work`, `mesh-forest`, `model-work`, `point-cloud-work` or `vector-work`) and `bytes`, the total length of its regular files. It also has `sizeComplete` (false if part of it could not be read), `modifiedSecondsAgo`, `ownerRecord` (`present`, `missing`, `invalid`, `unsupported` or `unreadable`), `owner` (the record, or null), `state` and `reason`.
+
+`scratch clean [--dir DIR]... [--olderThan DURATION] [--dryRun] [--json]` removes the stale folders in the same places and reports the bytes freed.
+
+| Option | Alias | Default | Meaning |
+| --- | --- | --- | --- |
+| `--dir DIR` | | default locations only | Also search this existing directory, such as a `--scratch-dir` or an output's parent. Repeatable. A missing directory is `data` (exit 3). |
+| `--olderThan DURATION` | `--older-than` | none | Remove only folders unmodified for at least `DURATION`: a whole number with `s`, `m`, `h`, `d` or `w` (`90s`, `30m`, `24h`, `7d`); a bare number is seconds. It also replaces the 24-hour wait for folders without a record, so `--older-than 1h` removes ownerless folders unmodified for an hour. |
+| `--dryRun` | `--dry-run` | off | Report what would be removed; remove nothing |
+
+Without `--older-than`, a folder whose owner is gone is removed at any age. `clean` inspects each folder again immediately before removing it, removes symlinks inside it without following them, and never removes a live or unverified folder. Its JSON result has `ok`, `dryRun`, `roots`, `removed`, `kept` (folder objects as in `list`), `failed` (`path`, `message`, `bytesFreed`), `bytesFreed`, `olderThanSeconds` and `ownerlessStaleAfterSeconds`. With `--dry-run`, `removed` and `bytesFreed` describe what would be removed. A folder that cannot be removed makes the result an `io` failure (exit 1) that still lists everything else.
+
+## Stopping a run
+
+SIGINT (Ctrl-C) and SIGTERM, and Ctrl+C or Ctrl+Break in a Windows console, cancel the run. This covers `mesh`, `validate`, `point-cloud`, `vector`, `glb-to-3tz`, `createTilesetJson`, `convert`, and in the native build `raster`, `raster-tile-to-directory` and `terrain`. The run stops at its next cancellation check, removes its spill and work folders and any output staging, publishes nothing, and prints `interrupted: cancelling and cleaning up`. A spill merge pass has no check of its own, so a stop during one waits for that pass to finish. It then fails as `cancelled` and exits with the shell's `128 + signal` status: 130 for SIGINT, Ctrl+C and Ctrl+Break, 143 for SIGTERM. A signal that arrives after the output has started to be installed lets installation finish; the command then reports its result. A second signal ends the process at once, without cleanup. So does any signal to a command with nothing to cancel, such as `preview`, `doctor` or `scratch`.
+
+A process killed outright, by SIGKILL or a Windows console close, logoff or shutdown, cannot clean up. Use [`scratch clean`](#scratch) to remove what it left. A service manager that stops rusty-tiles should send SIGTERM and allow time for cleanup before escalating to SIGKILL. With systemd, the default `KillMode` and `TimeoutStopSec` do this; removing a large spill folder can take a few seconds.
+
 ## Exit codes
 
 Programs should test the exit code or `error.code`, not the message text.
@@ -352,6 +395,7 @@ Programs should test the exit code or `error.code`, not the message text.
 | 3 | `data` | Invalid input, invalid option value or failed validation |
 | 4 | `environment` | Missing native capability, PROJ database or strict CRS operation |
 | 5 | `output_conflict` | The output exists and `--force` was not given |
+| 130, 143 | `cancelled` | [Stopped](#stopping-a-run) by SIGINT (Ctrl-C, Ctrl+Break) or SIGTERM |
 
 `mesh`, `vector`, `point-cloud`, `raster`, `raster-tile-to-directory` and the packaging commands report error kinds instead:
 
