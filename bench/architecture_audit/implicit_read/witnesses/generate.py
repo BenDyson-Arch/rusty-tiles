@@ -4,6 +4,7 @@
     python3 -I generate.py            # small fixtures -> ../controls/fixtures, manifest -> ../controls/manifest.json
     python3 -I generate.py --large    # also the large ones -> ../controls/large (gitignored)
     python3 -I generate.py --check    # regenerate in memory and compare every hash with the manifest
+    python3 -I generate.py --fixtures-only   # write the small fixtures only; the committed manifest is kept
 
 Stdlib only; byte-reproducible; never imports the oracle.  Expected verdicts come from the contract text, not from
 running anything.  Inputs outside this directory are pinned by sha256 (see INPUTS).
@@ -1265,6 +1266,7 @@ def build(large):
 def main(argv):
     large = "--large" in argv
     check = "--check" in argv
+    fixtures_only = "--fixtures-only" in argv
     files = build(large)
     out_small = os.path.join(ROOT, "controls", "fixtures")
     out_large = os.path.join(ROOT, "controls", "large")
@@ -1301,6 +1303,9 @@ def main(argv):
         written.add(p)
         with open(p, "wb") as f:
             f.write(c["archive"])
+    if fixtures_only:
+        print(json.dumps({"files": len(written)}))
+        return 0
     if not large and os.path.exists(mpath):
         # Keep the recorded large entries when regenerating only the small set.
         old = json.load(open(mpath))

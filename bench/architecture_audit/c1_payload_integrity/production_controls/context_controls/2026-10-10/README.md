@@ -14,6 +14,11 @@ UBYTE SCALAR ID0, satisfying the pinned wrapper rule while leaving table
 semantics uninspected. Every payload also exercises the actual borrowed
 structural metadata schemaUri path to an independently supplied schema document.
 
+The case directories under `fixtures/` are [generated](../../../../README.md#generated-test-corpora)
+(`generate.py --generate` into a temporary directory, through `scripts/test_corpora.py`), not
+committed. `fixtures/manifest.json` stays committed: its labels were amended by hand after
+generation, and the Rust controls compile it in.
+
 The twelve context fixtures isolate root/external tilesets, both ordinary-root
 and payload metadata schema documents, conversion reports, local glTF, GLB JSON,
 b3dm feature/batch table JSON and embedded GLB JSON, binary subtree JSON and a

@@ -150,6 +150,10 @@ jobs:
           python3 -m unittest discover -s bench/architecture_audit/foundation -p test_monitor.py -v
       - name: Check formatting
         run: cargo fmt --all --check
+      - name: Generate validator test corpora
+        # Seconds: tracked generators write the fixtures the oracle-parity tests read, each
+        # checked against bench/architecture_audit/generated-corpora.sha256.
+        run: python3 scripts/test_corpora.py
       - name: Test performance-lane controls
         run: |
           node --version
@@ -353,10 +357,16 @@ jobs:
       SLOW: ${{ matrix.slow && !(github.event_name == 'workflow_dispatch' && inputs.nightly) }}
       BUILD_VERSION: ${{ needs.version.outputs.version }}
       PYTHON: ${{ startsWith(matrix.os, 'windows') && 'python' || 'python3' }}
+      # The test binaries run scripts/test_corpora.py with this interpreter (setup-python).
+      RUSTY_TILES_PYTHON: python
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          # Generated test corpora need Python 3.12+ (scripts/test_corpora.py).
+          python-version: '3.14' # versions: PYTHON_MAX
       - name: Install the pinned Rust toolchain
         run: |
           rustup toolchain install --no-self-update
@@ -371,6 +381,10 @@ jobs:
         uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-nextest@0.9.148 # versions: NEXTEST_VERSION
+      - name: Generate validator test corpora
+        # Seconds: tracked generators write the fixtures the oracle-parity tests read, each
+        # checked against bench/architecture_audit/generated-corpora.sha256.
+        run: python scripts/test_corpora.py
       - name: Test the portable release CLI
         run: |
           set -eu
@@ -508,6 +522,10 @@ jobs:
         with:
           key: gdal-${{ matrix.gdal }}
           save-if: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
+      - name: Generate validator test corpora
+        # Seconds: tracked generators write the fixtures the oracle-parity tests read, each
+        # checked against bench/architecture_audit/generated-corpora.sha256.
+        run: python3 scripts/test_corpora.py
       - name: Test native geospatial build
         env:
           LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'

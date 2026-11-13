@@ -64,6 +64,8 @@ jobs:
       RELEASE_VERSION: ${{ inputs.version }}
       RELEASE_TARGET: ${{ matrix.target }}
       PYTHON: ${{ startsWith(matrix.os, 'windows') && 'python' || 'python3' }}
+      # The test binaries run scripts/test_corpora.py with this interpreter (setup-python).
+      RUSTY_TILES_PYTHON: python
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -132,6 +134,16 @@ jobs:
       - name: Set the build version
         if: steps.source.outputs.build == 'true'
         run: '"$PYTHON" scripts/dev_version.py stamp "$RELEASE_VERSION"'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        if: steps.source.outputs.build == 'true'
+        with:
+          # Generated test corpora need Python 3.12+ (scripts/test_corpora.py).
+          python-version: '3.14' # versions: PYTHON_MAX
+      - name: Generate validator test corpora
+        if: steps.source.outputs.build == 'true'
+        # Seconds: tracked generators write the fixtures the oracle-parity tests read, each
+        # checked against bench/architecture_audit/generated-corpora.sha256.
+        run: python scripts/test_corpora.py
       - name: Build, test and package the default CLI
         if: steps.source.outputs.build == 'true'
         run: |
