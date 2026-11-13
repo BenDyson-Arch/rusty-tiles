@@ -302,12 +302,17 @@ def repeated_uri_pair(built):
     from c2o.implicit import ImplicitOracle
     data = built.blobs["repeated-uri.base"]
     # A closed file in a temporary directory: Windows cannot reopen an open
-    # NamedTemporaryFile by name.
-    with tempfile.TemporaryDirectory() as tmp:
+    # NamedTemporaryFile by name. The oracle may still hold the archive open when the
+    # directory is removed, which Windows refuses; a leftover temporary file is harmless.
+    import gc
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         path = os.path.join(tmp, "repeated-uri.base.3tz")
         with open(path, "wb") as fh:
             fh.write(data)
-        report = ImplicitOracle(path, precheck_only=True).run()
+        oracle = ImplicitOracle(path, precheck_only=True)
+        report = oracle.run()
+        del oracle
+        gc.collect()
     units = report["precheck"]["totals"]["units"]
     refs = report["references"]
     built.add("repeated-uri.at-cap", data, CONTAINED, "9.D repeated URI", "pair",
