@@ -1905,7 +1905,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rusty-tiles"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "base64 0.22.1",
  "basisu",
@@ -1956,7 +1956,7 @@ dependencies = [
 
 [[package]]
 name = "rusty-tiles-python"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "pyo3",
  "rusty-tiles",
