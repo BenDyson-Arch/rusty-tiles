@@ -108,13 +108,30 @@ pub(crate) struct RetainedTree {
 /// Rank-ordered triangles that can be read from the first rank any number of times: the cell
 /// pass reads them once and the weld pass again. H1 builds over the copy it stores; full
 /// capture builds over its retained full-triangle sequence and stores no projection.
-pub(crate) trait RankedTriangles {
+pub(crate) trait RankedTriangles: Sync {
     fn ranked(&self) -> Result<RankedReader<'_>, JobError>;
+    /// Ranks `[first, end)` only.
+    fn range(&self, first: u64, end: u64) -> Result<RankedReader<'_>, JobError>;
+    /// The Morton key of the triangle at `rank`.
+    fn key_at(&self, rank: u64) -> Result<u64, JobError>;
+    fn count(&self) -> u64;
 }
 pub(crate) type RankedReader<'a> = Box<dyn Iterator<Item = Result<TriangleRecord, JobError>> + 'a>;
 impl RankedTriangles for Sequence<TriangleRecord> {
     fn ranked(&self) -> Result<RankedReader<'_>, JobError> {
         Ok(Box::new(self.reader()?.map(|row| row.map_err(Into::into))))
+    }
+    fn range(&self, first: u64, end: u64) -> Result<RankedReader<'_>, JobError> {
+        let rows = Sequence::range(self, first, end, self.buffer_bytes())?;
+        Ok(Box::new(rows.map(|row| row.map_err(Into::into))))
+    }
+    fn key_at(&self, rank: u64) -> Result<u64, JobError> {
+        let (mut encoded, mut out) = (Vec::new(), Vec::new());
+        self.random()?.read(rank, 1, &mut encoded, &mut out)?;
+        Ok(out[0].key)
+    }
+    fn count(&self) -> u64 {
+        self.len()
     }
 }
 
@@ -164,6 +181,22 @@ fn span_of(node: &NodeRecord) -> Span {
     }
 }
 
+/// Where closed tree nodes go: the node sort, or one parallel subtree's vector.
+pub(crate) trait NodeSink {
+    fn push(&mut self, node: NodeRecord) -> Result<(), JobError>;
+}
+impl NodeSink for ExternalSorter<'_, NodeRecord> {
+    fn push(&mut self, node: NodeRecord) -> Result<(), JobError> {
+        ExternalSorter::push(self, node).map_err(Into::into)
+    }
+}
+impl NodeSink for Vec<NodeRecord> {
+    fn push(&mut self, node: NodeRecord) -> Result<(), JobError> {
+        Vec::push(self, node);
+        Ok(())
+    }
+}
+
 struct OpenCell {
     depth: u8,
     cell: u64,
@@ -188,11 +221,7 @@ impl OpenCell {
         self.children[slot] = Some(child);
         Ok(())
     }
-    fn close(
-        self,
-        config: &TreeConfig,
-        out: &mut ExternalSorter<'_, NodeRecord>,
-    ) -> Result<NodeRecord, JobError> {
+    fn close(self, config: &TreeConfig, out: &mut dyn NodeSink) -> Result<NodeRecord, JobError> {
         if fits(&self.span, config) {
             return Ok(node(
                 self.span,
@@ -308,7 +337,7 @@ impl<'a> KeyGroup<'a> {
     fn close(
         mut self,
         config: &TreeConfig,
-        out: &mut ExternalSorter<'_, NodeRecord>,
+        out: &mut dyn NodeSink,
         stats: &mut TreeStats,
         check: &mut dyn FnMut() -> Result<(), JobError>,
     ) -> Result<NodeRecord, JobError> {
@@ -401,11 +430,7 @@ impl RunOpen {
         self.children += 1;
         debug_assert!(self.children <= 8);
     }
-    fn close(
-        self,
-        cell: u64,
-        out: &mut ExternalSorter<'_, NodeRecord>,
-    ) -> Result<NodeRecord, JobError> {
+    fn close(self, cell: u64, out: &mut dyn NodeSink) -> Result<NodeRecord, JobError> {
         let record = node(
             self.span,
             KEY_DEPTH,
@@ -464,7 +489,8 @@ pub(crate) fn build(
 }
 
 /// The tree over `ranked`, which must be in strict Morton/provenance order (checked); no
-/// copy of the triangles is stored. `observer` receives both sorts' checkpoints.
+/// copy of the triangles is stored. `observer` receives both sorts' checkpoints. With more
+/// than one job, the cell pass runs as parallel subtrees ([`parallel_cells`]).
 pub(crate) fn build_ranked(
     scratch: &Scratch,
     ranked: &dyn RankedTriangles,
@@ -532,74 +558,33 @@ fn build_in(
     }
     let mut nodes = observe(ExternalSorter::new(scratch, config.sorter(jobs))?, observer);
     let mut stats = TreeStats::default();
-    let mut group: Option<KeyGroup<'_>> = None;
-    let mut cells: Vec<OpenCell> = Vec::with_capacity(KEY_DEPTH as usize);
-    let mut previous: Option<TriangleRecord> = None;
-    for triangle in triangles {
-        let triangle = triangle?;
-        if previous
-            .as_ref()
-            .is_some_and(|old| old.cmp(&triangle) != Ordering::Less)
-        {
-            return Err(invalid(
-                "triangle order is not strict Morton/provenance order",
-            ));
-        }
-        if group.as_ref().is_some_and(|g| g.key != triangle.key) {
-            let old = group.take().unwrap();
-            let old_key = old.key;
-            let closed = old.close(config, &mut nodes, &mut stats, check)?;
-            cells.last_mut().unwrap().append(closed)?;
-            let common = common_cell_prefix(old_key, triangle.key);
-            while cells.len() > common as usize + 1 {
-                let closed = cells.pop().unwrap().close(config, &mut nodes)?;
-                cells.last_mut().unwrap().append(closed)?;
+    // Over a re-readable rank order (full capture), the cell pass runs as parallel subtrees.
+    let root = match ranked {
+        Some(ranked) if jobs > 1 => parallel_cells(
+            scratch,
+            ranked,
+            config,
+            jobs,
+            FRONTIER_SPLIT,
+            &mut nodes,
+            &mut stats,
+            check,
+        )?,
+        _ => {
+            let mut cells = CellBuilder::new(scratch, config, 0, 0);
+            for triangle in triangles {
+                let triangle = triangle?;
+                cells.push(&triangle, &mut nodes, check)?;
+                if let Some(stored) = stored.as_mut() {
+                    stored.push(&triangle)?;
+                }
             }
+            let (root, built) = cells.finish(&mut nodes, check)?;
+            stats.triangles = built.triangles;
+            stats.degenerate_cells = built.degenerate_cells;
+            root
         }
-        if group.is_none() {
-            for depth in cells.len() as u8..KEY_DEPTH {
-                cells.push(OpenCell::new(
-                    depth,
-                    prefix(triangle.key, depth),
-                    stats.triangles,
-                ));
-            }
-            group = Some(KeyGroup::new(
-                triangle.key,
-                stats.triangles,
-                scratch,
-                config.sort.buffer_bytes,
-            ));
-        }
-        group
-            .as_mut()
-            .unwrap()
-            .push(&triangle, stats.triangles, config)?;
-        if let Some(stored) = stored.as_mut() {
-            stored.push(&triangle)?;
-        }
-        stats.triangles = stats.triangles.checked_add(1).ok_or_else(|| {
-            JobError::new(JobErrorKind::ResourceLimit, "triangle count overflows u64")
-        })?;
-        previous = Some(triangle);
-        if stats.triangles.is_multiple_of(4096) {
-            check()?;
-        }
-    }
-    if let Some(group) = group {
-        let closed = group.close(config, &mut nodes, &mut stats, check)?;
-        cells.last_mut().unwrap().append(closed)?;
-    } else {
-        return Err(JobError::new(
-            JobErrorKind::InvalidInput,
-            "scene contains no triangles",
-        ));
-    }
-    while cells.len() > 1 {
-        let closed = cells.pop().unwrap().close(config, &mut nodes)?;
-        cells.last_mut().unwrap().append(closed)?;
-    }
-    let root = cells.pop().unwrap().close(config, &mut nodes)?;
+    };
     if root.kind == NodeKind::Leaf {
         nodes.push(root)?;
     }
@@ -679,6 +664,313 @@ fn build_in(
     stats.welded_vertices = weld_depths.len();
     check()?;
     Ok((stored, nodes, weld_depths, stats))
+}
+
+/// What a cell pass built besides its nodes.
+struct CellTotals {
+    triangles: u64,
+    degenerate_cells: u64,
+}
+
+/// The cells over a run of triangles in strict order that all lie in one cell at `base` (the
+/// whole tree for `base == 0`): the grouping by key, degenerate runs and octant packing of the
+/// cell tree. Ranks count from `first`.
+struct CellBuilder<'a> {
+    scratch: &'a Scratch,
+    config: &'a TreeConfig,
+    base: u8,
+    rank: u64,
+    group: Option<KeyGroup<'a>>,
+    cells: Vec<OpenCell>,
+    previous: Option<TriangleRecord>,
+    stats: TreeStats,
+}
+
+impl<'a> CellBuilder<'a> {
+    fn new(scratch: &'a Scratch, config: &'a TreeConfig, base: u8, first: u64) -> Self {
+        Self {
+            scratch,
+            config,
+            base,
+            rank: first,
+            group: None,
+            cells: Vec::with_capacity(KEY_DEPTH as usize),
+            previous: None,
+            stats: TreeStats::default(),
+        }
+    }
+
+    fn push(
+        &mut self,
+        triangle: &TriangleRecord,
+        out: &mut dyn NodeSink,
+        check: &mut dyn FnMut() -> Result<(), JobError>,
+    ) -> Result<(), JobError> {
+        if self
+            .previous
+            .as_ref()
+            .is_some_and(|old| old.cmp(triangle) != Ordering::Less)
+        {
+            return Err(invalid(
+                "triangle order is not strict Morton/provenance order",
+            ));
+        }
+        if self.group.as_ref().is_some_and(|g| g.key != triangle.key) {
+            let old = self.group.take().unwrap();
+            let old_key = old.key;
+            let closed = old.close(self.config, out, &mut self.stats, check)?;
+            self.cells.last_mut().unwrap().append(closed)?;
+            let common = common_cell_prefix(old_key, triangle.key);
+            while usize::from(self.base) + self.cells.len() > common as usize + 1 {
+                let closed = self.cells.pop().unwrap().close(self.config, out)?;
+                self.cells.last_mut().unwrap().append(closed)?;
+            }
+        }
+        if self.group.is_none() {
+            for depth in self.base + self.cells.len() as u8..KEY_DEPTH {
+                self.cells
+                    .push(OpenCell::new(depth, prefix(triangle.key, depth), self.rank));
+            }
+            self.group = Some(KeyGroup::new(
+                triangle.key,
+                self.rank,
+                self.scratch,
+                self.config.sort.buffer_bytes,
+            ));
+        }
+        self.group
+            .as_mut()
+            .unwrap()
+            .push(triangle, self.rank, self.config)?;
+        self.rank = self.rank.checked_add(1).ok_or_else(|| {
+            JobError::new(JobErrorKind::ResourceLimit, "triangle count overflows u64")
+        })?;
+        self.previous = Some(*triangle);
+        if self.rank.is_multiple_of(4096) {
+            check()?;
+        }
+        Ok(())
+    }
+
+    /// Closes every open cell; the returned node is the cell at `base` (the root for 0).
+    fn finish(
+        mut self,
+        out: &mut dyn NodeSink,
+        check: &mut dyn FnMut() -> Result<(), JobError>,
+    ) -> Result<(NodeRecord, CellTotals), JobError> {
+        let Some(group) = self.group.take() else {
+            return Err(JobError::new(
+                JobErrorKind::InvalidInput,
+                "scene contains no triangles",
+            ));
+        };
+        let closed = group.close(self.config, out, &mut self.stats, check)?;
+        self.cells.last_mut().unwrap().append(closed)?;
+        while self.cells.len() > 1 {
+            let closed = self.cells.pop().unwrap().close(self.config, out)?;
+            self.cells.last_mut().unwrap().append(closed)?;
+        }
+        let top = self.cells.pop().unwrap().close(self.config, out)?;
+        Ok((
+            top,
+            CellTotals {
+                triangles: self.rank,
+                degenerate_cells: self.stats.degenerate_cells,
+            },
+        ))
+    }
+}
+
+/// Deepest cell the parallel frontier splits to, and the smallest cell it splits.
+const FRONTIER_DEPTH: u8 = 18;
+const FRONTIER_SPLIT: u64 = 1 << 16;
+
+/// The cell pass over `ranked` as parallel subtrees. A frontier of disjoint octree cells
+/// covering the rank space (the largest cells split until there are about 16 per worker,
+/// found by binary search on the sorted keys) is built cell by cell on `jobs` threads with
+/// [`CellBuilder`]; the levels above the frontier then receive the closed frontier cells in
+/// rank order and close exactly as one pass would. Every node record is the one the serial
+/// pass writes, so the sorted node stream is identical. `check` runs on the calling thread
+/// while the subtrees build; the workers stop at the scratch's stop probe or a failure.
+#[allow(clippy::too_many_arguments)]
+fn parallel_cells(
+    scratch: &Scratch,
+    ranked: &dyn RankedTriangles,
+    config: &TreeConfig,
+    jobs: usize,
+    split: u64,
+    nodes: &mut ExternalSorter<'_, NodeRecord>,
+    stats: &mut TreeStats,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<NodeRecord, JobError> {
+    use std::sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed},
+        Mutex,
+    };
+    let count = ranked.count();
+    if count == 0 {
+        return Err(JobError::new(
+            JobErrorKind::InvalidInput,
+            "scene contains no triangles",
+        ));
+    }
+    // First rank in [lo, hi) whose key has a depth-`depth` prefix of at least `cell`.
+    let lower = |depth: u8, cell: u64, mut lo: u64, mut hi: u64| -> Result<u64, JobError> {
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            if prefix(ranked.key_at(mid)?, depth) < cell {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        Ok(lo)
+    };
+    // (depth, cell, first, end), in rank order.
+    let mut frontier: Vec<(u8, u64, u64, u64)> = vec![(0, 0, 0, count)];
+    let target = jobs.saturating_mul(16);
+    while frontier.len() < target {
+        let Some(at) = frontier
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.0 < FRONTIER_DEPTH && c.3 - c.2 > split)
+            .max_by_key(|(_, c)| c.3 - c.2)
+            .map(|(at, _)| at)
+        else {
+            break;
+        };
+        check()?;
+        let (depth, cell, first, end) = frontier[at];
+        let mut children = Vec::with_capacity(8);
+        let mut start = first;
+        for octant in 0..8u64 {
+            let child = cell << 3 | octant;
+            let stop = if octant == 7 {
+                end
+            } else {
+                lower(depth + 1, child + 1, start, end)?
+            };
+            if stop > start {
+                children.push((depth + 1, child, start, stop));
+            }
+            start = stop;
+        }
+        frontier.splice(at..at + 1, children);
+    }
+    type Job = Result<(NodeRecord, Vec<NodeRecord>, CellTotals), JobError>;
+    let results: Vec<Mutex<Option<Job>>> = frontier.iter().map(|_| Mutex::new(None)).collect();
+    let (next, stop) = (AtomicUsize::new(0), AtomicBool::new(false));
+    let stopped = std::thread::scope(|scope| {
+        let worker = || loop {
+            let task = next.fetch_add(1, Relaxed);
+            if task >= frontier.len() || stop.load(Relaxed) {
+                break;
+            }
+            let (depth, _, first, end) = frontier[task];
+            let job = (|| -> Job {
+                let mut out = Vec::new();
+                let mut cells = CellBuilder::new(scratch, config, depth, first);
+                let mut halt = || -> Result<(), JobError> {
+                    crate::test_hooks::pace("mesh.tree-subtree");
+                    if stop.load(Relaxed) {
+                        return Err(JobError::new(JobErrorKind::Cancelled, "tree stopped"));
+                    }
+                    scratch.check_stop().map_err(Into::into)
+                };
+                for triangle in ranked.range(first, end)? {
+                    cells.push(&triangle?, &mut out, &mut halt)?;
+                }
+                let (top, built) = cells.finish(&mut out, &mut halt)?;
+                if built.triangles != end {
+                    return Err(invalid("tree subtree read the wrong number of triangles"));
+                }
+                Ok((top, out, built))
+            })();
+            if job.is_err() {
+                stop.store(true, Relaxed);
+            }
+            *results[task].lock().unwrap_or_else(|e| e.into_inner()) = Some(job);
+        };
+        let mut threads = Vec::new();
+        let mut stopped = None;
+        for _ in 0..jobs.clamp(1, frontier.len()) {
+            match std::thread::Builder::new()
+                .name("rusty-tiles-tree".into())
+                .spawn_scoped(scope, worker)
+            {
+                Ok(thread) => threads.push(thread),
+                Err(error) => {
+                    stop.store(true, Relaxed);
+                    stopped = Some(JobError::new(
+                        JobErrorKind::ResourceLimit,
+                        format!("start tree worker: {error}"),
+                    ));
+                    break;
+                }
+            }
+        }
+        while stopped.is_none() && !threads.iter().all(|t| t.is_finished()) {
+            if let Err(error) = check() {
+                stop.store(true, Relaxed);
+                stopped = Some(error);
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        for thread in threads {
+            if let Err(panic) = thread.join() {
+                std::panic::resume_unwind(panic);
+            }
+        }
+        stopped
+    });
+    if let Some(error) = stopped {
+        return Err(error);
+    }
+    // The levels above the frontier, closed in rank order as one pass closes them.
+    let mut top: Vec<OpenCell> = Vec::new();
+    let mut last_key: Option<u64> = None;
+    let mut root = None;
+    for (result, &(depth, cell, first, _)) in results.into_iter().zip(&frontier) {
+        let (closed, out, built) = result
+            .into_inner()
+            .unwrap_or_else(|e| e.into_inner())
+            .ok_or_else(|| invalid("tree subtree did not run"))??;
+        stats.degenerate_cells += built.degenerate_cells;
+        for node in out {
+            nodes.push(node)?;
+        }
+        if depth == 0 {
+            root = Some(closed);
+            continue;
+        }
+        let key = cell << (3 * u32::from(KEY_DEPTH - depth));
+        if let Some(last) = last_key {
+            let common = common_cell_prefix(last, key);
+            while top.len() > common as usize + 1 {
+                let c = top.pop().unwrap().close(config, nodes)?;
+                top.last_mut().unwrap().append(c)?;
+            }
+        }
+        for d in top.len() as u8..depth {
+            top.push(OpenCell::new(d, prefix(key, d), first));
+        }
+        top.last_mut().unwrap().append(closed)?;
+        last_key = Some(key);
+    }
+    stats.triangles = count;
+    match root {
+        Some(root) => Ok(root),
+        None => {
+            while top.len() > 1 {
+                let c = top.pop().unwrap().close(config, nodes)?;
+                top.last_mut().unwrap().append(c)?;
+            }
+            top.pop()
+                .ok_or_else(|| invalid("tree has no root"))?
+                .close(config, nodes)
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -811,6 +1103,80 @@ mod tests {
         assert_eq!(scratch.live_bytes(), 0);
         (nodes, weld)
     }
+    /// The parallel cell pass writes the serial pass's node records, for any frontier and job
+    /// count: clustered keys, coincident-key degenerate cells, packing across siblings, empty
+    /// octants and keys spread over the whole range.
+    #[test]
+    fn parallel_cells_equal_the_serial_pass() {
+        let mut state = 0x2545_f491_4f6c_dd1du64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let mut input: Vec<TriangleRecord> = Vec::new();
+        for id in 0..6000u64 {
+            let key = match id % 5 {
+                // Clusters under a few depth-3 cells.
+                0 | 1 => ((next() % 4) << 54) | (next() >> 12) & ((1 << 54) - 1),
+                // Many triangles sharing one key: a degenerate run hierarchy.
+                2 => 7 << 60,
+                // Spread over the whole key range.
+                _ => next() >> 1,
+            };
+            input.push(triangle(key, id));
+        }
+        input.sort();
+        for leaf_triangles in [3, 40, 700] {
+            let config = TreeConfig::new(Profile::Quality).with_leaf_triangles(leaf_triangles);
+            let scratch = Scratch::create(None, 0).unwrap();
+            let mut writer = SequenceWriter::new(&scratch, "ranked", 1 << 12).unwrap();
+            for t in &input {
+                writer.push(t).unwrap();
+            }
+            let ranked = writer.finish().unwrap();
+            let collect = |nodes: ExternalSorter<'_, NodeRecord>| -> Vec<NodeRecord> {
+                nodes.finish().unwrap().map(Result::unwrap).collect()
+            };
+            let mut serial_nodes = ExternalSorter::new(&scratch, config.sorter(1)).unwrap();
+            let mut cells = CellBuilder::new(&scratch, &config, 0, 0);
+            for t in &input {
+                cells.push(t, &mut serial_nodes, &mut || Ok(())).unwrap();
+            }
+            let (root, built) = cells.finish(&mut serial_nodes, &mut || Ok(())).unwrap();
+            if root.kind == NodeKind::Leaf {
+                serial_nodes.push(root).unwrap();
+            }
+            let serial = collect(serial_nodes);
+            for (jobs, split) in [(2, 1), (3, 50), (8, 1), (8, 1 << 20)] {
+                let mut nodes = ExternalSorter::new(&scratch, config.sorter(jobs)).unwrap();
+                let mut stats = TreeStats::default();
+                let root = parallel_cells(
+                    &scratch,
+                    &ranked,
+                    &config,
+                    jobs,
+                    split,
+                    &mut nodes,
+                    &mut stats,
+                    &mut || Ok(()),
+                )
+                .unwrap();
+                if root.kind == NodeKind::Leaf {
+                    nodes.push(root).unwrap();
+                }
+                assert_eq!(
+                    collect(nodes),
+                    serial,
+                    "leaf {leaf_triangles} jobs {jobs} split {split}"
+                );
+                assert_eq!(stats.triangles, built.triangles);
+                assert_eq!(stats.degenerate_cells, built.degenerate_cells);
+            }
+        }
+    }
+
     #[test]
     fn packing_stops_at_an_internal_octant_and_crosses_empty_slots() {
         let config = TreeConfig::new(Profile::Quality).with_leaf_triangles(2);

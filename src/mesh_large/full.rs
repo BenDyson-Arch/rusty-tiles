@@ -1217,6 +1217,18 @@ impl tree::RankedTriangles for Sequence<FullTriangle> {
     fn ranked(&self) -> Result<tree::RankedReader<'_>, JobError> {
         Ok(Box::new(self.reader()?.map(|row| Ok(row?.triangle))))
     }
+    fn range(&self, first: u64, end: u64) -> Result<tree::RankedReader<'_>, JobError> {
+        let rows = Sequence::range(self, first, end, self.buffer_bytes())?;
+        Ok(Box::new(rows.map(|row| Ok(row?.triangle))))
+    }
+    fn key_at(&self, rank: u64) -> Result<u64, JobError> {
+        let (mut encoded, mut out) = (Vec::new(), Vec::new());
+        self.random()?.read(rank, 1, &mut encoded, &mut out)?;
+        Ok(out[0].triangle.key)
+    }
+    fn count(&self) -> u64 {
+        self.len()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]

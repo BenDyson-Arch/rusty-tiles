@@ -648,6 +648,13 @@ and reported as `diagnostics.capture.sort`: `run_bytes`, `fan_in`,
 each sort's output is the stable sort of its input order for every run size,
 fan-in and writer count, so the archive does not depend on the plan.
 
+Capture's cell tree is built as parallel subtrees: the largest octree cells of
+the sorted triangles are split (found by binary search on their Morton keys)
+until there are about 16 per worker, each cell's subtree is built on a worker,
+and the levels above them are closed in rank order. The nodes are those of one
+pass over the triangles, so the archive does not depend on the worker count.
+Workers stop at the run's stop request between units of 4,096 triangles.
+
 The coarse stage's incidence pass (`hlod_incidence`) plans its item and
 open-edge endpoint sorts the same way inside the coarse stage's admission,
 before the walk admits any parent job: runs grow toward one pass at the
