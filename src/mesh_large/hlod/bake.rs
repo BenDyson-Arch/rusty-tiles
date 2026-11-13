@@ -561,6 +561,7 @@ fn load(
         }
         let next = halve(last, class);
         levels.push(next);
+        check()?;
     }
     let bytes = levels.iter().map(|l| l.rgba.len() as u64).sum::<u64>() + 4096;
     Ok(Chain { levels, bytes })

@@ -96,6 +96,8 @@ pub(crate) struct TreeConfig {
     pub output_parents: Option<(PathBuf, PathBuf)>,
     /// Declared source CRS applied at capture; `None` is local metres/Y-up.
     pub source_crs: Option<super::MeshSourceCrs>,
+    /// The run's stop probe: spill scratch created for this run stops with it.
+    pub(crate) stop: Option<crate::runtime::AttemptProbe>,
     /// D8's resolved run budget: every stage plans against it as a ceiling. Only the
     /// capture-only diagnostic build runs without one.
     pub memory_budget: Option<super::resources::MemoryBudget>,
@@ -146,6 +148,7 @@ impl TreeConfig {
             member_ceiling: MEMBER_CEILING_3TZ,
             output_parents: None,
             source_crs: None,
+            stop: None,
             memory_budget: None,
             #[cfg(test)]
             test_chunk_bytes: None,

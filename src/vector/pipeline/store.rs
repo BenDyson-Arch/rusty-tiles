@@ -1148,11 +1148,16 @@ pub(super) fn convert(
         },
     )?;
     std::fs::create_dir_all(output.join("t"))?;
-    let reuse = Reuse::new(output, options)?;
-    let mut reader = Reader::new(input, options, reuse.frame.clone(), output)?;
+    let mut reuse = Reuse::new(output, options)?;
+    let probe = attempt.probe();
+    reuse.stop = Some(probe.clone());
+    let mut reader = Reader::new(input, options, reuse.frame.clone(), output, Some(&probe))?;
     let scratch = tempfile::tempdir_in(output)?;
     let spool: PathBuf = scratch.path().join("features.sqlite");
     let db = open_spool(&spool)?;
+    // Partition sorts, fingerprint updates and grid scans are single statements or
+    // per-row SQL: a stop interrupts them within 10,000 SQLite operations.
+    probe.interrupt_sqlite(&db, "sqlite.spool").map_err(sql)?;
     db.execute_batch("BEGIN;").map_err(sql)?;
     let counters = RefCell::new(Counters::default());
     let reports = RefCell::new(Reports {
@@ -1230,6 +1235,11 @@ pub(super) fn convert(
     )?;
     db.execute_batch("COMMIT;").map_err(sql)?;
     end_admission(&db)?;
+    // The same handler, renamed for the debug-build test hooks: what follows is the build's
+    // own SQL (fingerprints, grid scans, partitions), not per-feature admission.
+    probe
+        .interrupt_sqlite(&db, "sqlite.spool-build")
+        .map_err(sql)?;
     let mut counters = counters.into_inner();
     counters.skipped_features = failures.get();
     counters.features_without_geometry = reader.without_geometry();

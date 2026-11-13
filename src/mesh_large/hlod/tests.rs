@@ -6570,3 +6570,30 @@ fn descendant_recovery_is_complete_measured_and_job_and_spill_invariant() {
     );
     published_and_valid("refused descendant recovery", &dirs[4], work.path());
 }
+
+/// #338: the coarse stage's decode charge follows the largest encoded image at its actual
+/// length, even when a different image has the most texels, with no fixed 32 MiB term.
+#[test]
+fn coarse_decode_charge_follows_the_largest_encoded_image() {
+    let info = |width, height, encoded_bytes| crate::gltf_source::source::ImageInfo {
+        mime_type: "image/png",
+        extension: "png",
+        width,
+        height,
+        encoded_bytes,
+    };
+    let (base, chain) = super::source_decode_bytes(&[info(512, 256, 1), info(64, 64, 1)]);
+    assert_eq!(chain, super::bake::chain_bytes(512, 256));
+    assert_eq!(
+        base,
+        super::bake::CHAIN_READER_BYTES + 512 * 256 * 16 + 1 + chain
+    );
+    for encoded in [100, 32 << 20, (32 << 20) + 1, 1 << 30] {
+        // The small image carries the largest encoded length; texels still come from the
+        // large one.
+        let (decode, same_chain) =
+            super::source_decode_bytes(&[info(512, 256, 7), info(64, 64, encoded)]);
+        assert_eq!(same_chain, chain);
+        assert_eq!(decode, base - 1 + encoded, "{encoded}");
+    }
+}

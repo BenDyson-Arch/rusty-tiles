@@ -23,7 +23,7 @@ pub use model::{
 };
 pub(crate) use placement::ResolvedPlacement;
 pub use placement::{MeshPlacement, MeshPlacementReport};
-struct Workspace(tempfile::TempDir);
+struct Workspace(crate::cleanup::RegisteredDir);
 impl Workspace {
     fn create(output: &Path) -> Result<Self, JobError> {
         let parent = output
@@ -34,7 +34,7 @@ impl Workspace {
         tempfile::Builder::new()
             .prefix(".mesh-work-")
             .tempdir_in(parent)
-            .map(Self)
+            .map(|dir| Self(crate::cleanup::RegisteredDir::new(dir)))
             .map_err(|e| JobError::io("create mesh workspace", parent, e))
     }
     fn path(&self) -> &Path {
@@ -43,7 +43,7 @@ impl Workspace {
     fn cleanup(self) -> Result<(), CleanupDiagnostic> {
         // Explicit ownership transfer prevents a hidden Drop retry after a failed
         // removal has been reported as a retained path.
-        let path = self.0.keep();
+        let (path, _registered) = self.0.keep();
         fs::remove_dir_all(&path).map_err(|e| CleanupDiagnostic {
             error: JobError::io("remove mesh workspace", &path, e),
             path,

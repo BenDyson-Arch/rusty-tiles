@@ -304,7 +304,7 @@ fn prepare(mut request: VectorRequest) -> Result<VectorRequest, JobError> {
     request.output = output;
     Ok(request)
 }
-struct Workspace(tempfile::TempDir);
+struct Workspace(crate::cleanup::RegisteredDir);
 impl Workspace {
     fn create(output: &Path) -> Result<Self, JobError> {
         let parent = output.parent().expect("resolved output parent");
@@ -313,11 +313,11 @@ impl Workspace {
         tempfile::Builder::new()
             .prefix(".vector-work-")
             .tempdir_in(parent)
-            .map(Self)
+            .map(|dir| Self(crate::cleanup::RegisteredDir::new(dir)))
             .map_err(|e| JobError::io("create vector workspace", parent, e))
     }
     fn cleanup(self) -> Result<(), CleanupDiagnostic> {
-        let path = self.0.keep();
+        let (path, _registered) = self.0.keep();
         fs::remove_dir_all(&path).map_err(|error| CleanupDiagnostic {
             error: JobError::io("remove vector workspace", &path, error),
             path,

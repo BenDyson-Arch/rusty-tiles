@@ -169,6 +169,37 @@ class WheelRunnerEvidence(unittest.TestCase):
                         self.assertIs(evidence["ok"], False)
                         self.assertIn(expected, evidence["runner_error"])
 
+    @unittest.skipIf(os.name == "nt", "The test launcher uses a POSIX executable script")
+    def test_required_gltf_import_must_not_be_skipped(self):
+        launcher = self.root / "blender"
+        skip = ("__main__.WheelAPI.test_blender_imports_decoded_plain_glb: "
+                "this Blender's Python lacks numpy, which its glTF importer needs")
+        for skips, required, expected in (
+            ([skip], True, "glTF import of decoded tiles did not run"),
+            ([skip], False, None),
+            (["__main__.WheelAPI.test_other: reason"], True, None),
+        ):
+            with self.subTest(skips=skips, required=required):
+                launcher.write_text(
+                    f"#!{sys.executable}\n"
+                    "import json, os\nfrom pathlib import Path\n"
+                    "Path(os.environ['RUSTY_TILES_ACCEPTANCE_REPORT']).write_text("
+                    "json.dumps({'ok': True, 'tests_run': 12, 'blender': 'test-launcher', "
+                    f"'skipped': 1, 'skips': {skips!r}, "
+                    "'wheel_sha256': os.environ['RUSTY_TILES_ACCEPTANCE_WHEEL_SHA256']}))\n"
+                )
+                launcher.chmod(0o755)
+                flags = ["--require-gltf-import"] if required else []
+                result = self.run_runner("test_blender_wheel.py", "--blender", str(launcher), *flags)
+                evidence = json.loads(self.report.read_text())
+                if expected is None:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIs(evidence["ok"], True)
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIs(evidence["ok"], False)
+                    self.assertIn(expected, evidence["runner_error"])
+
 
 class OfficialBlenderIntegrity(unittest.TestCase):
     def setUp(self):

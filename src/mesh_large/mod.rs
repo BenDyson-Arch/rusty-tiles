@@ -23,6 +23,8 @@ mod records;
 mod resources;
 mod source_crs;
 mod tree;
+/// The validator plans its stores with the same budget, job and headroom rules (#342).
+pub(crate) use config::{available_memory, plan_jobs, Jobs};
 pub use hlod::{DeclaredTile, HlodDiagnostics, HlodMemoryPlan};
 pub use pipeline::{
     mesh_to_tileset, MemoryDiagnostics, StorageDiagnostics, TilerDiagnostics, TilerJobs,
@@ -137,6 +139,9 @@ pub(crate) fn build(
     .ok_or_else(|| failure(exhausted("H1 scratch bound exceeds u64")))?;
     let scratch = Scratch::create(config.scratch_dir.as_deref(), need.need_bytes)
         .map_err(|error| failure(error.into()))?;
+    if let Some(stop) = &config.stop {
+        scratch.watch(stop.clone());
+    }
     let result = (|| {
         let need = config::scratch_need_parts(
             scan.triangles,

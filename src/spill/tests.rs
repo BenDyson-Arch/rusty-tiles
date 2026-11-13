@@ -1416,6 +1416,89 @@ fn chunked_runs_free_as_consumed_and_bound_merge_slack() {
     assert_eq!(entries(scratch.path()), 0);
 }
 
+/// A volume inspector reporting 1 MiB free on every existing directory.
+fn one_mib_free(path: &Path) -> Result<Volume, SpillError> {
+    Ok(Volume {
+        available_bytes: 1 << 20,
+        ..ram_named(path)?
+    })
+}
+
+/// #342: the start-of-run bound refuses a short volume as typed insufficient space at the
+/// validation stage before anything is created, raises the need the deferred creation
+/// preflights, and on an existing scratch counts its live bytes as already held.
+#[test]
+fn start_of_run_peak_is_refused_before_scratch_exists_and_counts_live_bytes() {
+    let root = tempfile::tempdir().unwrap();
+    let disk = root.path().join("disk");
+    std::fs::create_dir_all(&disk).unwrap();
+    for placement in [
+        Placement::In(disk.clone()),
+        // The first candidate's refusal is the one reported, as for creation.
+        Placement::Disk {
+            candidates: vec![disk.clone(), root.path().join("missing")],
+            memory_backed_allowed: false,
+        },
+    ] {
+        let scratch = Scratch::deferred_with(placement, 4096, Arc::new(FileIo), one_mib_free);
+        assert_eq!(
+            scratch
+                .preflight_peak(1 << 20, PreflightStage::Validation)
+                .unwrap(),
+            1 << 20
+        );
+        let SpillError::InsufficientSpace(cause) = scratch
+            .preflight_peak((1 << 20) + 1, PreflightStage::Validation)
+            .unwrap_err()
+        else {
+            panic!("typed refusal expected");
+        };
+        assert_eq!(
+            (
+                cause.needed,
+                cause.available,
+                cause.stage,
+                cause.path.as_path()
+            ),
+            (
+                (1 << 20) + 1,
+                1 << 20,
+                PreflightStage::Validation,
+                disk.as_path()
+            )
+        );
+        assert!(
+            cause.to_string().contains("validation preflight"),
+            "{cause}"
+        );
+        // Nothing was created, and the creation now preflights the raised need.
+        assert!(!scratch.is_created());
+        assert_eq!(entries(&disk), 0);
+        assert_eq!(scratch.needed(), (1 << 20) + 1);
+        assert!(matches!(
+            scratch.new_file("x").err(),
+            Some(SpillError::InsufficientSpace(_))
+        ));
+    }
+    // An existing scratch: its live bytes are part of the peak already on disk.
+    let scratch = Scratch::deferred_with(
+        Placement::In(disk.clone()),
+        0,
+        Arc::new(FileIo),
+        one_mib_free,
+    );
+    let mut file = scratch.new_file("held").unwrap();
+    file.completed(4096);
+    assert_eq!(scratch.live_bytes(), 4096);
+    assert!(scratch
+        .preflight_peak((1 << 20) + 4096, PreflightStage::Validation)
+        .is_ok());
+    assert!(scratch
+        .preflight_peak((1 << 20) + 4097, PreflightStage::Validation)
+        .is_err());
+    drop(file);
+}
+
 /// Counts sort checkpoints; fails once `stop_after` checkpoints have passed.
 struct Checkpoints {
     events: std::sync::Mutex<Vec<SortProgress>>,
@@ -1681,4 +1764,77 @@ fn piece_batches_each_take_a_checkpoint() {
         .count();
     // Per run: 4 batch checkpoints and one per chunk (each run is one chunk).
     assert_eq!(wrote, 20 * (4 + 1));
+}
+
+/// A scratch whose owning run can be stopped through the returned handle.
+fn stoppable_scratch() -> (
+    tempfile::TempDir,
+    Scratch,
+    crate::runtime::Attempt,
+    crate::CancellationHandle,
+) {
+    let (parent, scratch) = new_scratch(Arc::new(FileIo));
+    let control = crate::RunControl::new(None);
+    let handle = control.cancellation_handle();
+    let attempt = control.begin().unwrap();
+    scratch.watch(attempt.probe());
+    (parent, scratch, attempt, handle)
+}
+
+fn assert_stopped<T>(result: Result<T, SpillError>) {
+    match result {
+        Err(SpillError::Stopped(error)) => {
+            assert_eq!(error.kind(), crate::JobErrorKind::Cancelled)
+        }
+        Err(other) => panic!("expected a stop, got {other}"),
+        Ok(_) => panic!("expected a stop, the sort completed"),
+    }
+}
+
+/// A sort with no observer still stops with its scratch's run: run writing ends at its next
+/// checkpoint and every file is removed.
+#[test]
+fn a_watched_scratch_stops_run_generation_without_an_observer() {
+    let (_parent, scratch, _attempt, handle) = stoppable_scratch();
+    let mut sorter = ExternalSorter::new(&scratch, config::<Keyed>(64, 2, 1, 32)).unwrap();
+    let input = keyed_input(4096, 50, 3);
+    sorter.extend(input[..512].iter().copied()).unwrap();
+    assert!(handle.cancel());
+    assert_stopped(sorter.extend(input[512..].iter().copied()));
+    drop(sorter);
+    assert_eq!(entries(scratch.path()), 0);
+}
+
+/// Merge passes in `finish` (more runs than the fan-in) stop with the watched run.
+#[test]
+fn a_watched_scratch_stops_merge_passes_without_an_observer() {
+    let (_parent, scratch, _attempt, handle) = stoppable_scratch();
+    let mut sorter = ExternalSorter::new(&scratch, config::<Keyed>(64, 2, 1, 32)).unwrap();
+    sorter.extend(keyed_input(4096, 50, 5)).unwrap();
+    assert!(handle.cancel());
+    assert_stopped(sorter.finish());
+    assert_eq!(entries(scratch.path()), 0);
+}
+
+/// An in-memory sort checks the watched run between its pieces.
+#[test]
+fn a_watched_scratch_stops_an_in_memory_sort_between_pieces() {
+    let (_parent, scratch, _attempt, handle) = stoppable_scratch();
+    scratch.set_piece_bytes(64);
+    let mut sorter = ExternalSorter::new(&scratch, config::<Keyed>(100_000, 2, 1, 32)).unwrap();
+    sorter.extend(keyed_input(4096, 50, 9)).unwrap();
+    assert!(handle.cancel());
+    assert_stopped(sorter.finish());
+    assert_eq!(entries(scratch.path()), 0);
+}
+
+/// An unwatched scratch, or a watched run still open, never stops a sort.
+#[test]
+fn an_open_run_does_not_change_a_sort() {
+    let (_parent, scratch, _attempt, _handle) = stoppable_scratch();
+    let input = keyed_input(4096, 50, 13);
+    let mut expected = input.clone();
+    expected.sort();
+    let (sorted, _) = sort(&scratch, config::<Keyed>(64, 2, 1, 32), &input).unwrap();
+    assert_eq!(pairs(&sorted), pairs(&expected));
 }

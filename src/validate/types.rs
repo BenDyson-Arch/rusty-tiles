@@ -21,6 +21,8 @@ pub struct ValidationRequest {
     plan: LimitPlan,
     scratch_dir: Option<PathBuf>,
     expected: Option<ExpectedProfile>,
+    memory_budget: Option<u64>,
+    jobs: Option<std::num::NonZeroUsize>,
 }
 impl ValidationRequest {
     pub fn new(input: impl Into<PathBuf>) -> Self {
@@ -29,6 +31,8 @@ impl ValidationRequest {
             plan: LimitPlan::default(),
             scratch_dir: None,
             expected: None,
+            memory_budget: None,
+            jobs: None,
         }
     }
     /// Requires `profile`. An archive declaring HLOD itself (`asset.extras.rustyTiles.lod` or
@@ -49,6 +53,21 @@ impl ValidationRequest {
         self.scratch_dir = Some(dir.into());
         self
     }
+    /// Declares the memory budget the scratch stores are sized from, in bytes: a ceiling that
+    /// is never raised. Default: the lesser of 4 GiB and half the detected headroom (2 GiB when
+    /// none is detected), as for `mesh`. Zero is an invalid request; an explicit budget below
+    /// 512 MiB is a `resource_limit` refusal before the input is opened. The budget changes no
+    /// verdict and no report field outside `resources` and `scratch`.
+    pub fn memory_budget(mut self, bytes: u64) -> Self {
+        self.memory_budget = Some(bytes);
+        self
+    }
+    /// Caps the workers of parallel checks (default: every core, capped by the budget). The
+    /// report is the same for every worker count.
+    pub fn jobs(mut self, jobs: std::num::NonZeroUsize) -> Self {
+        self.jobs = Some(jobs);
+        self
+    }
     pub(crate) fn input(&self) -> &Path {
         &self.input
     }
@@ -60,6 +79,9 @@ impl ValidationRequest {
     }
     pub(crate) fn expected_profile(&self) -> Option<ExpectedProfile> {
         self.expected
+    }
+    pub(crate) fn requested_resources(&self) -> (Option<u64>, Option<std::num::NonZeroUsize>) {
+        (self.memory_budget, self.jobs)
     }
 }
 /// A validator scratch failure (VS-C-5 T1): never a verdict on the archive.
@@ -268,6 +290,12 @@ pub struct ValidationReport {
     /// Observations that do not fail validation (`ok` stays true), in a fixed order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<ValidationWarning>,
+    /// The resolved memory budget, workers, store sizes and scratch-disk bound (#342). Host-
+    /// dependent and never part of a verdict, so present only when the request set a memory
+    /// budget or jobs. Without them every member but `scratch` depends on the archive and the
+    /// request alone; `scratch` follows the host's resolved budget and workers too.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resources: Option<super::resources::ValidationResources>,
 }
 /// A named observation that does not fail validation.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -368,6 +396,9 @@ impl ValidationReport {
         }
         if !self.warnings.is_empty() {
             value["warnings"] = serde_json::to_value(&self.warnings)?;
+        }
+        if let Some(resources) = &self.resources {
+            value["resources"] = serde_json::to_value(resources)?;
         }
         Ok(value)
     }

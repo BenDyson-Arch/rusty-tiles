@@ -10,7 +10,10 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 type Result<T> = std::result::Result<T, JobError>;
-pub(crate) const MAX_ENCODED_IMAGE_BYTES: u64 = 32 * 1024 * 1024;
+/// Sanity ceiling on one encoded image, owned by the large-mesh decode admission.
+/// Memory is not admitted here: every stage charges the actual encoded length.
+pub(crate) const MAX_ENCODED_IMAGE_BYTES: u64 =
+    crate::gltf_source::source::DecodeAdmission::LARGE_MESH.max_encoded;
 const PAYLOAD: usize = 4094;
 fn invalid(message: &'static str) -> JobError {
     JobError::new(JobErrorKind::InvalidInput, message)
@@ -21,14 +24,15 @@ fn overflow() -> JobError {
         "image snapshot arithmetic overflow",
     )
 }
-fn admitted_length(length: u64) -> Result<usize> {
+/// Admits one declared encoded length: nonempty and within the sanity ceiling.
+pub(crate) fn admitted_length(length: u64) -> Result<usize> {
     if length == 0 {
         return Err(invalid("encoded image is empty"));
     }
     if length > MAX_ENCODED_IMAGE_BYTES {
         return Err(JobError::new(
             JobErrorKind::Unsupported,
-            "encoded image exceeds 32 MiB admission ceiling",
+            "encoded image exceeds 1 GiB admission ceiling",
         ));
     }
     usize::try_from(length).map_err(|_| overflow())
@@ -129,10 +133,15 @@ impl ImageSnapshot {
 
 /// These explicit charges describe encoded snapshot work only; decoded rasters and
 /// encoder storage must be added by their owners. Metadata is bounded by image count.
+/// Reconstruction holds one encoded image contiguously: the largest captured one. The
+/// resident figures are observations recorded in capture's report (the private
+/// `resources.json`); admission does not read them. Decodes are admitted by capture's
+/// own per-image charges (`full::decode_charge`).
 #[derive(Clone, Copy, Debug, Serialize)]
 pub(crate) struct ImageCaptureBounds {
     pub images: u64,
     pub encoded_bytes: u64,
+    pub largest_encoded_bytes: u64,
     pub scratch_bytes: u64,
     pub metadata_bytes: u64,
     pub capture_resident_bytes: u64,
@@ -173,20 +182,18 @@ pub(crate) fn capture_images(
         .map_err(|_| overflow())?
         .checked_mul(per_metadata)
         .ok_or_else(overflow)?;
+    let capture_resident_bytes = metadata_bytes
+        .checked_add(buffer)
+        .and_then(|v| v.checked_add(chunks_live))
+        .ok_or_else(overflow)?;
     let mut bounds = ImageCaptureBounds {
         images: count as u64,
         encoded_bytes: 0,
+        largest_encoded_bytes: 0,
         scratch_bytes: 0,
         metadata_bytes,
-        capture_resident_bytes: metadata_bytes
-            .checked_add(buffer)
-            .and_then(|v| v.checked_add(chunks_live))
-            .ok_or_else(overflow)?,
-        reconstruct_resident_bytes: metadata_bytes
-            .checked_add(buffer)
-            .and_then(|v| v.checked_add(chunks_live))
-            .and_then(|v| v.checked_add(MAX_ENCODED_IMAGE_BYTES))
-            .ok_or_else(overflow)?,
+        capture_resident_bytes,
+        reconstruct_resident_bytes: capture_resident_bytes,
     };
     for index in 0..count {
         check()?;
@@ -197,6 +204,7 @@ pub(crate) fn capture_images(
             .encoded_bytes
             .checked_add(length)
             .ok_or_else(overflow)?;
+        bounds.largest_encoded_bytes = bounds.largest_encoded_bytes.max(length);
         bounds.scratch_bytes = bounds
             .scratch_bytes
             .checked_add(
@@ -242,6 +250,9 @@ pub(crate) fn capture_images(
             chunks: writer.finish()?,
         });
     }
+    bounds.reconstruct_resident_bytes = capture_resident_bytes
+        .checked_add(bounds.largest_encoded_bytes)
+        .ok_or_else(overflow)?;
     source.verify_unchanged()?;
     check()?;
     Ok((snapshots, bounds))
@@ -283,6 +294,11 @@ mod tests {
         assert_eq!(bounds.encoded_bytes, 3 * PNG.len() as u64);
         assert_eq!(bounds.scratch_bytes, 3 * ImageChunk::SIZE as u64);
         assert!(bounds.capture_resident_bytes >= 3 * ImageChunk::SIZE as u64);
+        assert_eq!(bounds.largest_encoded_bytes, PNG.len() as u64);
+        assert_eq!(
+            bounds.reconstruct_resident_bytes,
+            bounds.capture_resident_bytes + PNG.len() as u64
+        );
         drop(source);
         fs::remove_file(&input).unwrap();
         fs::remove_file(dir.path().join("data.bin")).unwrap();
@@ -362,6 +378,13 @@ mod tests {
         assert_eq!(
             admitted_length(0).unwrap_err().kind(),
             JobErrorKind::InvalidInput
+        );
+        // The retired fixed 32 MiB charge is no longer a ceiling; 1 GiB is.
+        assert_eq!(MAX_ENCODED_IMAGE_BYTES, 1 << 30);
+        assert_eq!(admitted_length((32 << 20) + 1).unwrap(), (32 << 20) + 1);
+        assert_eq!(
+            admitted_length(MAX_ENCODED_IMAGE_BYTES).unwrap() as u64,
+            MAX_ENCODED_IMAGE_BYTES
         );
         assert_eq!(
             admitted_length(MAX_ENCODED_IMAGE_BYTES + 1)

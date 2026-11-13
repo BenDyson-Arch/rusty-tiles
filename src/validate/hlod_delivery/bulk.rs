@@ -690,6 +690,7 @@ mod tests {
             budget,
             base: 0,
             used: Arc::new(AtomicU64::new(0)),
+            ticks: Default::default(),
             certificate_fast: AtomicU64::new(0),
             certificate_slow: AtomicU64::new(0),
         };
@@ -757,8 +758,10 @@ mod tests {
                 s.payload(leaf - 1, true, true).unwrap();
             }
             work.push(
-                s.finish(budget, 0, &mut |rank| Ok(payloads[rank as usize].clone()))
-                    .unwrap(),
+                s.finish(budget, 0, None, &mut |rank| {
+                    Ok(payloads[rank as usize].clone())
+                })
+                .unwrap(),
             );
             let mut census = s.census().unwrap();
             census.omission = Default::default();
