@@ -73,7 +73,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           maturin-version: '1.15.0' # versions: MATURIN_VERSION
-          rust-toolchain: stable
+          rust-toolchain: '1.100.0' # versions: RUST_VERSION
           target: ${{ matrix.target }}
           manylinux: '2_28'
           args: --release --locked --out dist

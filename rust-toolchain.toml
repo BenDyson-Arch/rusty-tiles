@@ -1,0 +1,7 @@
+# The Rust toolchain for local builds and CI, equal to RUST_VERSION in ci/versions.env
+# (scripts/check_ci_config.py). Bump it in its own pull request; see "CI configuration" in
+# CONTRIBUTING.md.
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
