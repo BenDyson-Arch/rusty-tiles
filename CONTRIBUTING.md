@@ -37,13 +37,36 @@ Both shared branches need a PR, passing `Rust` and `Python` checks, an up-to-dat
 
 ### CI tiers
 
-Pull requests run a fast Linux tier. The change-scope classifier and docs-only path are unchanged. A code change then runs `Rust` (formatting, clippy, tests and receipts), `Python` and `Native geospatial` for the newest GDAL (3.13). `Rust` and `Python` are the required checks; keep those job names. Expect the `Rust` job, about 25 to 30 minutes, to set the wall time. `Rust` also checks, in seconds, that the generated Rust licence files in `licenses/` are current: after changing dependencies or features run `python3 scripts/third_party_licenses.py generate` and commit the result. The tier skips the five-target `Portable CLI` and `KTX2 encoder link` matrices, `Python wheel`, `Wheel acceptance` (installed wheels and Blender), `Python-free runtime`, `Release acceptance` and GDAL 3.12.
+Most pull requests run a fast Linux tier. The change-scope classifier and docs-only path are unchanged. A code change then runs `Rust` (formatting, clippy, tests and receipts), `Python` and `Native geospatial` for the newest GDAL (3.13). `Rust` and `Python` are the required checks; keep those job names. Expect the `Rust` job, about 25 to 30 minutes, to set the wall time. `Rust` also checks, in seconds, that the generated Rust licence files in `licenses/` are current: after changing dependencies or features run `python3 scripts/third_party_licenses.py generate` and commit the result. The tier skips the four-target `Portable CLI` and `KTX2 encoder link` matrices, `Python wheel`, `Wheel acceptance` (installed wheels and Blender), `Python-free runtime`, `CRS allow-list regeneration`, `Release acceptance` and GDAL 3.12.
 
-The full tier runs every job in [`ci.yml`](.github/workflows/ci.yml) on pushes to `main` and `develop`, on manual runs and nightly. [`nightly.yml`](.github/workflows/nightly.yml) dispatches it on `develop` at 17:00 UTC (03:00 in Brisbane); GitHub reads schedules from the default branch, so nightly runs begin once that file reaches `main`. To run the full tier on a branch, use **Actions > CI > Run workflow**, which also adds `Release acceptance`.
+A pull request runs the full tier instead (everything except `Release acceptance`, plus the `Full matrix` verdict) when [`scripts/ci_scope.py`](scripts/ci_scope.py) finds that it:
 
-When a push or nightly run on `develop` fails, the `Full CI tracking issue` job opens one issue titled "Full CI matrix failing on develop" with the run URL and failed jobs, and comments on it for later failures. The next green run that tested code closes it. Cancelled runs and docs-only runs change nothing. The job is the only one with `issues: write`.
+- targets `main`;
+- has the `full-ci` label (adding the label reruns the pull request);
+- changes a path listed in [`ci/full-tier-paths.txt`](ci/full-tier-paths.txt): `Cargo.toml`, `Cargo.lock` and `build.rs` at any depth, `.cargo/`, `vendor/`, the KTX2 binding, spill and directory code, workflows, `ci/` and the scripts only the full tier runs;
+- changes a Rust file that contains platform-conditional code (`cfg(windows)`, `cfg!(target_os = ...)` and similar) anywhere, even when the edit is outside that code, or whose diff adds or removes such a line. This is deliberately broad: about 55 Rust files, including `src/main.rs` and `tests/support/mod.rs`, contain some, so many code pull requests run the full tier.
 
-The release workflow accepts a tag only if a push, nightly or manual `ci.yml` run for that exact commit passed both `Full matrix` and `Rust`; a pull-request run never counts. See the release checklist.
+If the classifier cannot tell, the full tier runs. Add a path to the list when it holds platform-specific behaviour that a `cfg` line does not mark.
+
+The full tier runs every job in [`ci.yml`](.github/workflows/ci.yml) on pushes to `main` and `develop`, on manual runs and nightly. [`nightly.yml`](.github/workflows/nightly.yml) runs from `main`'s schedule at 17:00 UTC (03:00 in Brisbane) and dispatches it on `develop` with `nightly=true`. To run the full tier on a branch, use **Actions > CI > Run workflow**. `Release acceptance` (the browser probes) runs in nightly and manual runs and on pushes to `main`, so the run that gates a release tag includes it.
+
+When a push or nightly run on `develop` fails, the `Full CI tracking issue` job opens one issue titled "Full CI matrix failing on develop" with the run URL and failed jobs, and comments on it for later failures. The next green run that tested code closes it. Cancelled runs and docs-only runs change nothing. If `nightly.yml` cannot start the run at all, it comments on (or opens) the same issue. Only these two jobs have `issues: write`.
+
+The release workflow accepts a tag only if a push, nightly or manual `ci.yml` run for that exact commit passed both `Full matrix` and `Rust`; a pull-request run never counts. It then publishes the archives and wheels that run built and tested (see the release checklist).
+
+On pull requests, pushes and manual runs, the Windows `Portable CLI` job, the slowest remaining target with `cargo test`, runs the [cargo-nextest](https://nexte.st/) `portable` profile in [`.config/nextest.toml`](.config/nextest.toml) and then the doctests. Nextest runs every test in its own process, across all test binaries at once. The profile leaves out `tests/hlod_acceptance.rs`: a single test that drives the Python HLOD oracles and was 60% of the portable test time on Linux. It checks platform-independent logic over the tiler's output, and the Linux x86_64, Linux ARM64 and Apple Silicon portable jobs and the `Rust` job still run it on every full-tier commit. Every other suite, including `output_digests`, the platform-conditional unit tests and the binaries, still runs on Windows. The nightly run (`nightly=true`) runs the whole `cargo test` suite, `hlod_acceptance` included, on all four portable targets, so every platform runs every test daily; its portable jobs get `TIMEOUT_PORTABLE_NIGHTLY` (120 minutes) instead of `TIMEOUT_PORTABLE` (90; #376 raised it from 60 for Intel macOS, which 0.4.1 no longer builds). Only `develop` and `main` write Rust caches; pull requests restore their base branch's cache.
+
+#### Required checks for `main`
+
+`Full matrix` should be a required status check for pull requests into `main`, next to `Rust` and `Python`. Pull requests into `main` run the full tier unless they change only Markdown docs (a skipped required check counts as passed). Repository rulesets are settings, not files: in **Settings > Rules > Rulesets**, edit the ruleset that targets `main`, and under **Require status checks to pass** add `Full matrix` with the source **GitHub Actions**. Keep `Rust` and `Python`. Do not add it to the `develop` ruleset: most pull requests into `develop` skip the full tier, and a skipped required check counts as passed.
+
+#### CI configuration
+
+[`ci/versions.env`](ci/versions.env) sets the CI tool versions (Rust, maturin, Python, Node, cargo-nextest, GDAL, PROJ and their tarball checksums) and every job's time limit. GitHub cannot read a file for `timeout-minutes` or an action's inputs, so workflows repeat those values with a `# versions: KEY` marker, and [`scripts/check_ci_config.py`](scripts/check_ci_config.py) (run by `Rust`) fails when a marked value (on a line with several keys, each in its own position), a Dockerfile default or a tarball checksum disagrees with the file, or when a job or version pin has no marker. Change a value in `ci/versions.env`, then update each line the check names.
+
+The Rust toolchain is pinned to one release, `RUST_VERSION`, so a new stable Rust cannot turn CI red overnight with new lints. [`rust-toolchain.toml`](rust-toolchain.toml) names it with rustfmt and clippy, and `rustup toolchain install` in the checkout installs it (rustup may also install it on first use, depending on its `auto-install` setting); CI jobs install it the same way, the maturin action gets it as its `rust-toolchain` input, and the Dockerfile's build stage uses the `rust:<RUST_VERSION>-trixie` image. The check fails when any of these differs from `RUST_VERSION` or a workflow installs `stable` Rust. Bump the toolchain in its own pull request: change `RUST_VERSION` in `ci/versions.env`, the channel in `rust-toolchain.toml`, the Dockerfile's `ARG RUST_VERSION` and the maturin action's input, then fix the new lints and warnings in the same pull request. It runs the full tier, because `ci/` and `rust-toolchain.toml` are in `ci/full-tier-paths.txt`.
+
+The native image's GDAL and PROJ come from the base image `ghcr.io/bendyson-arch/rusty-tiles-geobase:<gdal>-<proj>`, which [`geobase.yml`](.github/workflows/geobase.yml) builds from the Dockerfile's `geospatial-source` stage. To change GDAL or PROJ, update the versions and SHA-256s in `ci/versions.env` and the Dockerfile, set `ARG GEOBASE=geospatial-source` (the check requires it until a matching image is pinned), merge, then dispatch `geobase.yml` and commit the `ARG GEOBASE=...@sha256:...` line its summary prints. Until a base image is pinned, or when it cannot be pulled, CI builds GDAL and PROJ from tarballs cached in Actions by their SHA-256s. Make the `rusty-tiles-geobase` package public, like the main image, so local Docker builds can pull it. Official Blender archives (keyed by their pinned SHA-256s, with two mirrors), the npm packages in [`ci/browser/package-lock.json`](ci/browser/package-lock.json) and Playwright's Chromium are cached too.
 
 ## Crate layout
 
@@ -85,7 +108,7 @@ Native GDAL handles are created inside each worker. Spatial references and trans
 
 The user docs call the default Cargo build the **standard package**. Release CLI downloads and Python wheels use that build; the native container enables **`native-geospatial`**. This is a compile-time distinction: a standard artifact cannot discover an installed GDAL and gain native converters at runtime. See the [installation comparison](docs/INSTALL.md#choose-a-build).
 
-Use current stable Rust with rustfmt and a C++ compiler. The native feature needs `pkg-config` and its system libraries.
+Use the Rust release pinned in [`rust-toolchain.toml`](rust-toolchain.toml) (rustup installs it, with rustfmt and clippy, the first time Cargo runs in the checkout) and a C++ compiler. The native feature needs `pkg-config` and its system libraries.
 
 | Build | Command | Extra system packages |
 | --- | --- | --- |
@@ -163,12 +186,14 @@ CPython 3.10 and newer. See [the Python API guide](bindings/python/README.md).
 
 The separate [Wheel acceptance workflow](.github/workflows/wheel-acceptance.yml)
 runs in the full CI tier (not on pull requests) and is a mandatory release-workflow gate.
-It tests all five wheels with CPython 3.10 and 3.14, then installs the matching
-candidate wheels inside checksum-pinned official Blender 4.5.14 LTS bundles on
-Linux x86_64, Windows x64, Intel macOS and Apple Silicon macOS. Its uploaded JSON
-records the archive and executable hashes, actual runtime and wheel identity,
-and completed API tests. The optional Linux distribution Blender job is
-distinct; Linux ARM64 has no official Blender 4.5 bundle. See the
+It tests all four wheels with CPython 3.10 and 3.14, then installs the matching
+candidate wheels inside checksum-pinned official Blender bundles, 4.5.14 LTS and
+5.2.4 LTS, on Linux x86_64, Windows x64 and Apple Silicon macOS. Its uploaded JSON records the archive and executable hashes, actual
+Blender and Python runtime, wheel identity and completed API tests. The optional
+Linux distribution Blender job is distinct; no supported Blender series has an
+official Linux ARM64 bundle. To add or update a series, copy each archive's
+SHA-256 from that release's `blender-VERSION.sha256` on download.blender.org into
+`scripts/blender_official.json` and add its matrix rows to the workflow. See the
 [local reproduction and pin-update instructions](bindings/python/README.md).
 
 The Python suite drives the built CLI and checks its output with independent readers. It needs GDAL Python bindings that match your native GDAL, NumPy, laspy and pyproj.
@@ -374,9 +399,11 @@ The `mesh` recipe runs the tiler with the lossless profile, so its digests do no
 4. The geodiff cross-apply test passes with real tools.
 5. The browser probes pass on the pinned Cesium release.
 6. The public-data audits below are repeated when encoders change.
-7. A `changelog.d/` fragment describes every user-visible change (see `changelog.d/README.md`); do not edit `CHANGELOG.md` directly. At release, run `python3 scripts/changelog.py assemble` and commit the result.
-8. Before the first Python release, create the GitHub environment `pypi` and configure a PyPI trusted publisher for owner `BenDyson-Arch`, repository `rusty-tiles`, workflow `release.yml`, environment `pypi`. This uses OIDC and needs no API token. Configure a pending publisher if the PyPI project does not exist yet; see [PyPI's trusted publishing guide](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/).
-9. Update `[workspace.package].version` in `Cargo.toml` to the release version (both Rust crates inherit it), merge to `main`, then push the matching `vVERSION` tag. [The release workflow](.github/workflows/release.yml) checks that the tag matches the crate version and belongs to `main`, tests and packages default binaries and Python wheels for Linux and macOS (x86_64 and ARM64) and Windows x64, then tests and publishes the Linux amd64 native image to GHCR. After all builds pass, it publishes the wheels to PyPI and the GitHub release with `SHA256SUMS`. Linux wheels use manylinux_2_28; no system geospatial libraries or libjpeg-turbo are required. Prereleases do not update the image's `latest` tag.
+7. A `changelog.d/` fragment describes every user-visible change (see `changelog.d/README.md`); do not edit `CHANGELOG.md` directly. At release, run `python3 scripts/changelog.py assemble`, rename the `## Unreleased` heading it fills to `## X.Y.Z - YYYY-MM-DD` (the tag's version and the release date), and commit the result. A release candidate needs its own section: tag `vX.Y.Z-rc.N` only after the heading reads `## X.Y.Z-rc.N - YYYY-MM-DD`, and rename it to the final version when the release follows. The release workflow fails a tag whose section is missing or empty before it builds anything. The release workflow uses that CHANGELOG.md section, `## X.Y.Z - DATE` up to the next `## `, as the GitHub release body ([`scripts/release_notes.py`](scripts/release_notes.py)), followed by links to the section at the tag and to the compare view from the previous stable release. A tag whose section is missing or empty fails before anything is built. To put a hand-written summary above it, commit `release-notes/vX.Y.Z.md` before tagging. A body that would exceed GitHub's limit is shortened at a line and keeps the links.
+8. Before the first Python release, create the GitHub environment `pypi` and configure a PyPI trusted publisher for owner `BenDyson-Arch`, repository `rusty-tiles`, workflow `release.yml`, environment `pypi`. This uses OIDC and needs no API token. In the `pypi` environment's settings, allow deployments only from tags matching `v*` (the workflow already refuses any other run). Configure a pending publisher if the PyPI project does not exist yet; see [PyPI's trusted publishing guide](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/).
+9. Update `[workspace.package].version` in `Cargo.toml` to the release version (both Rust crates inherit it), merge to `main`, wait for the push CI run on `main` to pass `Full matrix`, then push the matching `vVERSION` tag. [The release workflow](.github/workflows/release.yml) checks that the tag matches the crate version and belongs to `main`, and finds that CI run ([`scripts/ci_run.py`](scripts/ci_run.py)). It publishes the default CLI archives (Linux x86_64 and ARM64, Apple Silicon macOS and Windows x64) and Python wheels that the run built and tested, after checking every downloaded file against the SHA-256 the CI job recorded when it built it (a mismatch fails the release) and smoke-testing each archive on its platform and checking and installing the wheels. If the run's artifacts have expired (main keeps them 90 days) it builds and tests them again, which takes up to 90 minutes. It then tests and publishes the Linux amd64 native image to GHCR, the wheels to PyPI and the GitHub release with `SHA256SUMS`. Linux wheels use manylinux_2_28; no system geospatial libraries or libjpeg-turbo are required. Prereleases do not update the image's `latest` tag.
+
+   To rehearse, run the workflow by hand (**Actions > Release > Run workflow**, or `gh workflow run release.yml --ref main`). A dry run needs no tag and publishes nothing. It runs the same CI gate, artifact reuse, smoke tests, wheel checks, image build and asset checks for the version a CI build of that ref carries: the committed version on `main`, the development version elsewhere. It keeps `SHA256SUMS` as the `release-dry-run` artifact. Dispatch `ci.yml` first if the commit has no full-tier run.
 10. Confirm the GHCR package is public in its package settings ([new packages start private](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#pushing-container-images)), then check the installer against the published release and pull the image without authentication:
 
    ```sh
@@ -385,9 +412,21 @@ The `mesh` recipe runs the tiler with the lossless profile, so its digests do no
    docker run --rm --platform linux/amd64 --network none ghcr.io/bendyson-arch/rusty-tiles:vVERSION doctor --json
    ```
 
-The standalone downloads are default builds. Linux builds use Ubuntu 22.04 (glibc 2.35+ and libstdc++); macOS builds use macOS 15. The installer checks the release checksum before running or installing a binary. `cargo-binstall` uses the same archive layout via the manifest metadata; publishing to crates.io is a separate maintainer action.
+The standalone downloads are default builds. Linux builds use Ubuntu 22.04 (glibc 2.35+ and libstdc++); macOS builds use macOS 15 on Apple Silicon. Intel macOS (`x86_64-apple-darwin`) is not built from 0.4.1; 0.4.0 is the last release with it. The installer checks the release checksum before running or installing a binary. `cargo-binstall` uses the same archive layout via the manifest metadata; publishing to crates.io is a separate maintainer action.
 
 A new version changes converter and cache identity. Consumers must invalidate derivative caches. Vector archives from another encoder identity, schema, library version, CRS or setting need a fresh baseline before reuse. The terrain manifest keeps `heightOverlay` version 1 with south-to-north rows. Echidna keeps its own Python raster and height helpers, separate from this runtime.
+
+### Development builds
+
+The rolling `dev` pre-release is a separate path ([dev-build.yml](.github/workflows/dev-build.yml)). The nightly full CI run on `develop` dispatches it once `Full matrix` passes. It builds only a commit with a full-tier pass (`Full matrix` and `Rust`, as the release gate requires), and only when `develop` has moved past the `dev` tag. Every non-PR CI run off `main` builds its archives and wheels with the development version that `scripts/dev_version.py` stamps into the checkout and never commits, so the dev build publishes the archives and wheels that run tested ([release-build.yml](.github/workflows/release-build.yml)); it builds them only if no run has them. It then replaces the `dev` pre-release and pushes the image tag `dev`. It never publishes to PyPI or crates.io and never moves `latest`. To rebuild by hand, after a full-tier pass on the commit:
+
+```sh
+gh workflow run dev-build.yml --ref develop -f force=true
+```
+
+On any other branch the workflow builds and tests everything but publishes nothing, so a change to it can be tried before it merges (dispatch `ci.yml` on that branch first). [`scripts/dev_release.sh`](scripts/dev_release.sh) updates the published release in place: it moves the `dev` tag with a ref update, renames the new assets into place (`SHA256SUMS` last) and then deletes the old ones, so downloads keep working. If GitHub refuses the ref update, it replaces the release instead, which leaves a few seconds of 404. The `dev` tag moves with each build; a clone that fetched it needs `git fetch --tags --force` to follow it.
+
+While the workspace version is a release candidate `X.Y.Z-rc.K` (or `alpha.K`, `beta.K`), dev builds are `X.Y.Z-rc.K.dev.N` until `vX.Y.Z-rc.K` is tagged and `X.Y.Z-rc.(K+1).dev.N` after, so pip orders them between the candidates (`0.4.1rc1 < 0.4.1rc2.devN < 0.4.1rc2 < 0.4.1`). Other pre-release forms are refused.
 
 ## Verification evidence
 

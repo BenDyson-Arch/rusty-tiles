@@ -22,6 +22,15 @@
 #ifndef RT_BASISU_SILENCE_H
 #define RT_BASISU_SILENCE_H
 
+/* Every C++ translation unit that can construct a std::mutex includes this
+ * header first. With MSVC 17.10+'s constexpr std::mutex constructor, locking
+ * such a mutex against an older MSVCP140.dll that a host process loaded first
+ * (Blender 4.5 on Windows) is an access violation inside the runtime; build.rs
+ * defines Microsoft's opt-out for every MSVC C++ compile. */
+#if defined(__cplusplus) && defined(_MSC_VER) && !defined(_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
+#error "MSVC C++ must define _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR (see build.rs)"
+#endif
+
 /* zstd.c defines _GNU_SOURCE ahead of its own libc includes to get glibc's
  * qsort_r. This header now includes libc first, so make the same definition
  * first (g++ already defines it for C++). */

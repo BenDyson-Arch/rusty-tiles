@@ -1765,3 +1765,76 @@ fn piece_batches_each_take_a_checkpoint() {
     // Per run: 4 batch checkpoints and one per chunk (each run is one chunk).
     assert_eq!(wrote, 20 * (4 + 1));
 }
+
+/// A scratch whose owning run can be stopped through the returned handle.
+fn stoppable_scratch() -> (
+    tempfile::TempDir,
+    Scratch,
+    crate::runtime::Attempt,
+    crate::CancellationHandle,
+) {
+    let (parent, scratch) = new_scratch(Arc::new(FileIo));
+    let control = crate::RunControl::new(None);
+    let handle = control.cancellation_handle();
+    let attempt = control.begin().unwrap();
+    scratch.watch(attempt.probe());
+    (parent, scratch, attempt, handle)
+}
+
+fn assert_stopped<T>(result: Result<T, SpillError>) {
+    match result {
+        Err(SpillError::Stopped(error)) => {
+            assert_eq!(error.kind(), crate::JobErrorKind::Cancelled)
+        }
+        Err(other) => panic!("expected a stop, got {other}"),
+        Ok(_) => panic!("expected a stop, the sort completed"),
+    }
+}
+
+/// A sort with no observer still stops with its scratch's run: run writing ends at its next
+/// checkpoint and every file is removed.
+#[test]
+fn a_watched_scratch_stops_run_generation_without_an_observer() {
+    let (_parent, scratch, _attempt, handle) = stoppable_scratch();
+    let mut sorter = ExternalSorter::new(&scratch, config::<Keyed>(64, 2, 1, 32)).unwrap();
+    let input = keyed_input(4096, 50, 3);
+    sorter.extend(input[..512].iter().copied()).unwrap();
+    assert!(handle.cancel());
+    assert_stopped(sorter.extend(input[512..].iter().copied()));
+    drop(sorter);
+    assert_eq!(entries(scratch.path()), 0);
+}
+
+/// Merge passes in `finish` (more runs than the fan-in) stop with the watched run.
+#[test]
+fn a_watched_scratch_stops_merge_passes_without_an_observer() {
+    let (_parent, scratch, _attempt, handle) = stoppable_scratch();
+    let mut sorter = ExternalSorter::new(&scratch, config::<Keyed>(64, 2, 1, 32)).unwrap();
+    sorter.extend(keyed_input(4096, 50, 5)).unwrap();
+    assert!(handle.cancel());
+    assert_stopped(sorter.finish());
+    assert_eq!(entries(scratch.path()), 0);
+}
+
+/// An in-memory sort checks the watched run between its pieces.
+#[test]
+fn a_watched_scratch_stops_an_in_memory_sort_between_pieces() {
+    let (_parent, scratch, _attempt, handle) = stoppable_scratch();
+    scratch.set_piece_bytes(64);
+    let mut sorter = ExternalSorter::new(&scratch, config::<Keyed>(100_000, 2, 1, 32)).unwrap();
+    sorter.extend(keyed_input(4096, 50, 9)).unwrap();
+    assert!(handle.cancel());
+    assert_stopped(sorter.finish());
+    assert_eq!(entries(scratch.path()), 0);
+}
+
+/// An unwatched scratch, or a watched run still open, never stops a sort.
+#[test]
+fn an_open_run_does_not_change_a_sort() {
+    let (_parent, scratch, _attempt, _handle) = stoppable_scratch();
+    let input = keyed_input(4096, 50, 13);
+    let mut expected = input.clone();
+    expected.sort();
+    let (sorted, _) = sort(&scratch, config::<Keyed>(64, 2, 1, 32), &input).unwrap();
+    assert_eq!(pairs(&sorted), pairs(&expected));
+}

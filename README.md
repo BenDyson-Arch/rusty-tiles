@@ -12,7 +12,7 @@ rusty-tiles converts textured GLB/glTF meshes, LAS/LAZ point clouds and GeoJSON/
 
 ## Install
 
-**macOS / Linux** (Intel/AMD or ARM64; macOS 15+, or Linux with glibc 2.35+):
+**macOS / Linux** (Apple Silicon Macs with macOS 15+; Linux on x86_64 or ARM64 with glibc 2.35+; Intel Macs: see [INSTALL](docs/INSTALL.md#intel-macs)):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/BenDyson-Arch/rusty-tiles/main/scripts/install.sh | sh

@@ -6,6 +6,8 @@
 mod archive3tz;
 mod basisu_ktx2;
 pub mod bbox;
+#[doc(hidden)]
+pub mod cleanup;
 mod content_integrity;
 mod crs;
 mod crs_jacobian;
@@ -35,6 +37,7 @@ mod storage_meter;
 pub mod terrain;
 #[cfg(test)]
 mod test_alloc;
+mod test_hooks;
 pub mod tile_view;
 mod tileset_node;
 mod vec3;

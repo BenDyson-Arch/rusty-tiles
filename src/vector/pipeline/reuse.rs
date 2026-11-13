@@ -55,6 +55,8 @@ pub(super) struct Reuse {
     reused_tiles: usize,
     reused_references: usize,
     reused_uris: BTreeSet<String>,
+    /// The run's stop probe: restoring a large subtree copies every reused payload.
+    pub stop: Option<crate::runtime::AttemptProbe>,
 }
 #[cfg(feature = "native-geospatial")]
 const ENCODER_PREFIX: &str = "rusty-tiles-native-vector-v1:";
@@ -207,6 +209,7 @@ impl Reuse {
             reused_tiles: 0,
             reused_references: 0,
             reused_uris: BTreeSet::new(),
+            stop: None,
         };
         if let Some(previous) = &result.previous {
             let mut archive = zip::ZipArchive::new(File::open(previous)?)?;
@@ -437,6 +440,17 @@ impl Reuse {
             counters: &mut Counters,
             max_tiles: usize,
         ) -> Result<VectorTree, Error> {
+            if let Some(stop) = &reuse.stop {
+                stop.check().map_err(|error| {
+                    Error::Job(crate::JobFailure {
+                        error,
+                        secondary: Vec::new(),
+                        retained_paths: Vec::new(),
+                        recovery: None,
+                    })
+                })?;
+            }
+            crate::test_hooks::pace("vector.reuse");
             counters.tiles += 1;
             if counters.tiles > max_tiles {
                 return Err(data("reused hierarchy exceeds maxTiles"));
@@ -881,6 +895,14 @@ mod fingerprint_tests {
         ("src/output.rs", "writes the conversion report file"),
         ("src/output_path.rs", "resolves the requested output path"),
         ("src/runtime.rs", "run control, events and staging"),
+        (
+            "src/cleanup.rs",
+            "registers the private workspace for the CLI's stop backstop; no content bytes",
+        ),
+        (
+            "src/test_hooks.rs",
+            "debug-build pacing for stop tests; compiled out of release builds",
+        ),
         (
             "src/storage_meter.rs",
             "D8 write admission under mesh-registered directories; plain calls elsewhere",

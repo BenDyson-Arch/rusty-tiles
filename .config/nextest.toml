@@ -1,0 +1,22 @@
+# cargo-nextest profiles for CI (#346). Only the Windows portable job uses nextest, and only
+# outside the nightly run; every other job, and Windows in the nightly run (which tests the
+# whole suite on all four targets), runs `cargo test`.
+#
+# `portable` runs each test in its own process, across all test binaries at once, and leaves
+# out the long acceptance suites below. They check platform-independent logic (Python oracles
+# over the tiler's output bytes), and the Linux x86_64, Linux ARM64 and Apple Silicon portable
+# jobs, the Rust job and the native geospatial jobs still run them on every full-tier commit;
+# the nightly run also runs them on Windows.
+# Library unit tests, binaries, the other integration suites (including output_digests and
+# every platform-conditional test) and doctests (run separately with `cargo test --doc`)
+# still run on Windows.
+[profile.portable]
+default-filter = "not binary(hlod_acceptance)"
+fail-fast = false
+slow-timeout = { period = "120s" }
+
+# Peak-RSS slack is measured in a subprocess and is sensitive to load from parallel tests,
+# so this test runs alone.
+[[profile.portable.overrides]]
+filter = "test(=spill::tests::spill_memory_is_flat_in_input_size)"
+threads-required = "num-test-threads"

@@ -418,6 +418,9 @@ fn encode_mips_unverified(
         .collect();
     let mut data = std::ptr::null_mut();
     let mut length = 0usize;
+    // One page encode cannot be interrupted (minutes at the ladder's highest efforts); the
+    // CLI's stop backstop covers it. Tests stand in for a long encode here.
+    crate::test_hooks::stall("ktx2.encode");
     // SAFETY: every mip holds width * height * 4 bytes (checked by the caller);
     // the out-pointers are valid for writes.
     let status = unsafe {

@@ -940,6 +940,15 @@ fn planned_capture_and_incidence_sorts_publish_the_floor_archive() {
                 ("single_pass", true)
             );
             assert!(capture.sort.writers > 0, "{:?}", capture.sort);
+        } else {
+            assert_eq!(capture.sort.limited_by, "floor");
+        }
+        // Capture plans against the explicit budget everywhere; the incidence plan keeps the
+        // floor where the platform reports no available memory (`available_memory()` is
+        // Linux-only), whatever the budget.
+        if config::available_memory().is_none() {
+            assert_eq!(incidence.limited_by, "unknown_memory");
+        } else if plan {
             assert_eq!(
                 (incidence.limited_by, incidence.single_pass),
                 ("single_pass", true)
@@ -951,7 +960,6 @@ fn planned_capture_and_incidence_sorts_publish_the_floor_archive() {
             );
             assert!(incidence.run_bytes > 4 << 10, "{incidence:?}");
         } else {
-            assert_eq!(capture.sort.limited_by, "floor");
             assert_eq!(incidence.limited_by, "floor");
         }
         // Measured scratch within every declaration: capture's stages, the incidence pass's

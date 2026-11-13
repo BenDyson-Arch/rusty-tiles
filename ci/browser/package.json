@@ -1,0 +1,11 @@
+{
+  "name": "rusty-tiles-ci-browser",
+  "private": true,
+  "description": "Pinned browser consumers for CI: Cesium, three.js, Playwright and the glTF validator. package-lock.json pins every package by integrity hash; CI installs it with npm ci and caches it by the lock's hash.",
+  "dependencies": {
+    "cesium": "1.146.0",
+    "gltf-validator": "2.0.0-dev.3.10",
+    "playwright": "1.63.0",
+    "three": "0.180.0"
+  }
+}

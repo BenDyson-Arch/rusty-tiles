@@ -3,7 +3,7 @@ name: Wheel acceptance
 # Run against a candidate commit before creating a release tag. This workflow
 # builds and tests artifacts only; it has no package or release publishing steps.
 # It is part of the full CI tier (ci.yml calls it on pushes, nightly and manual runs), not of
-# pull-request CI, and release.yml calls it for every tag.
+# pull-request CI, release.yml calls it for every tag and dev-build.yml for the dev build.
 on:
   workflow_dispatch:
     inputs:
@@ -17,19 +17,29 @@ on:
         description: Also run the separate Linux distribution Blender check
         type: boolean
         default: false
+      version:
+        description: Cargo version to stamp into the uncommitted checkout (default, the committed one)
+        type: string
+        default: ''
+      retention-days:
+        description: Days to keep the wheel-<target> artifacts, which release and dev builds reuse
+        type: number
+        default: 14 # versions: ARTIFACT_RETENTION_DAYS
 
 permissions:
   contents: read
 
+# A called workflow shares its caller's github context; the workflow name keeps a dev build
+# from queueing behind (or cancelling a pending) CI wheel acceptance of the same branch.
 concurrency:
-  group: wheel-acceptance-${{ github.ref }}
+  group: wheel-acceptance-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   wheels:
     name: Installed wheel (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 45 # versions: TIMEOUT_WHEEL
     strategy:
       fail-fast: false
       matrix:
@@ -38,8 +48,6 @@ jobs:
             target: x86_64-unknown-linux-gnu
           - os: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
           - os: macos-15
             target: aarch64-apple-darwin
           - os: windows-2022
@@ -55,22 +63,33 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: '3.10'
+          python-version: '3.10' # versions: PYTHON_MIN
+      - name: Set the build version
+        if: inputs.version != ''
+        env:
+          BUILD_VERSION: ${{ inputs.version }}
+        run: python scripts/dev_version.py stamp "$BUILD_VERSION"
       - name: Build the candidate release wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
-          maturin-version: '1.15.0'
-          rust-toolchain: stable
+          maturin-version: '1.15.0' # versions: MATURIN_VERSION
+          rust-toolchain: '1.100.0' # versions: RUST_VERSION
           target: ${{ matrix.target }}
           manylinux: '2_28'
           args: --release --locked --out dist
+      # The hash of the wheel as built, before any test touches the directory; a release or
+      # dev build that reuses it checks it first.
+      - name: Record the wheel's SHA-256
+        env:
+          TARGET: ${{ matrix.target }}
+        run: python scripts/sha256s.py write "sums/$TARGET.sha256" dist/*.whl
       - name: Check third-party notices in the wheel
         run: python scripts/third_party_notices.py check --rust-licenses python dist/*.whl
       - name: Test with the minimum Python version
         run: python scripts/test_python_wheel.py dist/*.whl --report-json evidence/python-3.10.json
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: '3.14'
+          python-version: '3.14' # versions: PYTHON_MAX
       - name: Test the same stable ABI wheel with Python 3.14
         run: python scripts/test_python_wheel.py dist/*.whl --report-json evidence/python-3.14.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -78,6 +97,13 @@ jobs:
           name: wheel-${{ matrix.target }}
           path: dist/*.whl
           if-no-files-found: error
+          retention-days: ${{ inputs.retention-days || 14 }} # versions: ARTIFACT_RETENTION_DAYS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sha256-wheel-${{ matrix.target }}
+          path: sums/*.sha256
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days || 14 }} # versions: ARTIFACT_RETENTION_DAYS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -85,31 +111,47 @@ jobs:
           path: evidence/*.json
           if-no-files-found: error
 
+  # Every official bundle pinned in scripts/blender_official.json, on the platforms the wheels
+  # support: Linux x64, Windows x64 and Apple Silicon macOS (Intel macOS is not supported from
+  # 0.4.1). No supported release has an official Linux ARM64 build.
   blender-official:
-    name: Official Blender (${{ matrix.platform }})
+    name: Official Blender ${{ matrix.release }} (${{ matrix.platform }})
     needs: wheels
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 40 # versions: TIMEOUT_BLENDER
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-24.04
+          - release: '4.5'
+            os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             platform: linux-x64
-          - os: windows-2022
+          - release: '4.5'
+            os: windows-2022
             target: x86_64-pc-windows-msvc
             platform: windows-x64
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            platform: macos-x64
-          - os: macos-15
+          - release: '4.5'
+            os: macos-15
+            target: aarch64-apple-darwin
+            platform: macos-arm64
+          - release: '5.2'
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x64
+          - release: '5.2'
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+            platform: windows-x64
+          - release: '5.2'
+            os: macos-15
             target: aarch64-apple-darwin
             platform: macos-arm64
     defaults:
       run:
         shell: bash
     env:
+      BLENDER_RELEASE: ${{ matrix.release }}
       BLENDER_PLATFORM: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -117,7 +159,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: '3.14'
+          python-version: '3.14' # versions: PYTHON_MAX
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: wheel-${{ matrix.target }}
@@ -127,19 +169,42 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1 libgl1 libx11-6 libxi6 libxfixes3 libxrender1 libxxf86vm1 libxkbcommon0
+      # The archive is cached under its pinned SHA-256 and checked again when used; a miss
+      # downloads it from download.blender.org or a listed mirror. Only develop, where the
+      # full tier runs nightly, writes the cache (pull requests into develop can read it), so
+      # these large archives take one copy of the repository's cache space.
+      - id: blender-pin
+        name: Look up the pinned archive
+        run: >-
+          python -c "import json, os; m = json.load(open('scripts/blender_official.json'));
+          print('sha256=' + m['releases'][os.environ['BLENDER_RELEASE']]['platforms'][os.environ['BLENDER_PLATFORM']]['sha256'])"
+          >> "$GITHUB_OUTPUT"
+      - id: blender-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/blender-archive
+          key: official-blender-${{ steps.blender-pin.outputs.sha256 }}
       - name: Verify and unpack official Blender
         run: >-
-          python scripts/download_blender.py --platform "$BLENDER_PLATFORM"
+          python scripts/download_blender.py --release "$BLENDER_RELEASE" --platform "$BLENDER_PLATFORM"
           --directory "$RUNNER_TEMP/official-blender"
+          --cache-dir "$RUNNER_TEMP/blender-archive"
           --report-json evidence/blender-distribution.json
+      - if: steps.blender-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/develop'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/blender-archive
+          key: official-blender-${{ steps.blender-pin.outputs.sha256 }}
       - name: Install and test using official Blender's embedded Python
         run: |
+          # The evidence must be for this matrix row's release and platform.
+          python -c "import json, os, sys; e = json.load(open('evidence/blender-distribution.json')); want = (os.environ['BLENDER_RELEASE'], os.environ['BLENDER_PLATFORM']); got = (e.get('release'), e.get('distribution_platform')); sys.exit(None if got == want else f'Blender evidence is for {got}, this row is {want}')"
           blender=$(python -c "import json; print(json.load(open('evidence/blender-distribution.json'))['executable'])")
-          python scripts/test_blender_wheel.py candidate/*.whl --blender "$blender" --distribution-json evidence/blender-distribution.json --report-json evidence/blender-acceptance.json
+          python scripts/test_blender_wheel.py candidate/*.whl --blender "$blender" --distribution-json evidence/blender-distribution.json --report-json evidence/blender-acceptance.json --require-gltf-import
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
-          name: evidence-official-blender-${{ matrix.platform }}
+          name: evidence-official-blender-${{ matrix.release }}-${{ matrix.platform }}
           path: evidence/*.json
           if-no-files-found: error
 
@@ -148,24 +213,25 @@ jobs:
     needs: wheels
     if: inputs.test-blender
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 15 # versions: TIMEOUT_BLENDER_DISTRIBUTION
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: '3.14'
+          python-version: '3.14' # versions: PYTHON_MAX
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: wheel-x86_64-unknown-linux-gnu
           path: candidate
+      # Distribution Blender runs on the system Python, and its glTF importer needs numpy.
       - name: Install distribution Blender
         run: |
           sudo apt-get update
-          sudo apt-get install -y blender
+          sudo apt-get install -y blender python3-numpy
       - name: Install and test using Blender's embedded Python
-        run: python scripts/test_blender_wheel.py candidate/*.whl --report-json evidence/blender-linux-x86_64.json
+        run: python scripts/test_blender_wheel.py candidate/*.whl --report-json evidence/blender-linux-x86_64.json --require-gltf-import
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:

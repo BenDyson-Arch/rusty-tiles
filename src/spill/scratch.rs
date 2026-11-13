@@ -142,11 +142,16 @@ pub(crate) struct Scratch {
     chunk_bytes: std::sync::atomic::AtomicUsize,
     /// Run sort piece size ([`super::sort::PIECE_BYTES`]; tests may shrink it).
     piece_bytes: std::sync::atomic::AtomicUsize,
+    /// The owning run's stop probe, checked at every sort checkpoint (each piece, chunk file
+    /// and merge step, whether or not the sort has an observer) and at every new spill file.
+    stop: OnceLock<crate::runtime::AttemptProbe>,
 }
 
 struct Created {
     dir: tempfile::TempDir,
     volume: Volume,
+    /// Dropped after `dir` (declaration order), so the path stays registered until removed.
+    _registered: crate::cleanup::Registered,
 }
 
 /// Where a deferred scratch directory is created.
@@ -269,6 +274,7 @@ impl Scratch {
             created: OnceLock::new(),
             io,
             accounting: Arc::default(),
+            stop: OnceLock::new(),
             next_file: Arc::new(AtomicU64::new(0)),
             chunk_bytes: std::sync::atomic::AtomicUsize::new(super::CHUNK_BYTES),
             piece_bytes: std::sync::atomic::AtomicUsize::new(super::sort::PIECE_BYTES),
@@ -299,7 +305,12 @@ impl Scratch {
             .prefix("rusty-tiles-spill-")
             .tempdir_in(parent)
             .map_err(|e| SpillError::io("create scratch directory", parent, e))?;
-        Ok(Created { dir, volume })
+        let _registered = crate::cleanup::register(dir.path());
+        Ok(Created {
+            dir,
+            volume,
+            _registered,
+        })
     }
 
     fn created(&self) -> Result<&Created, SpillError> {
@@ -560,8 +571,26 @@ impl Scratch {
         })
     }
 
-    /// A new file name in the scratch directory, creating a deferred scratch first.
+    /// Stop spill work when `probe`'s run is cancelled or has failed. Set once, by the run
+    /// that owns this scratch; later calls are ignored.
+    pub(crate) fn watch(&self, probe: crate::runtime::AttemptProbe) {
+        let _ = self.stop.set(probe);
+    }
+
+    /// [`SpillError::Stopped`] once the watched run has stopped.
+    pub(crate) fn check_stop(&self) -> Result<(), SpillError> {
+        match self.stop.get() {
+            Some(probe) => probe
+                .check()
+                .map_err(|error| SpillError::Stopped(Box::new(error))),
+            None => Ok(()),
+        }
+    }
+
+    /// A new file name in the scratch directory, creating a deferred scratch first. Every
+    /// spill file starts here, so a stopped run's spill work ends at its next file.
     pub(super) fn new_file(&self, stem: &str) -> Result<SpillFile, SpillError> {
+        self.check_stop()?;
         let dir = self.created()?.dir.path();
         let id = self.next_file.fetch_add(1, Ordering::Relaxed);
         Ok(SpillFile {

@@ -1,0 +1,120 @@
+name: Geospatial base inputs
+description: >-
+  Docker build inputs that keep the native image build off download.osgeo.org. When the
+  Dockerfile pins the GDAL/PROJ base image (GEOBASE) and it can be pulled, the build uses it
+  as is. Otherwise it builds GDAL and PROJ from source tarballs cached in Actions under their
+  SHA-256s; a cache miss downloads them from download.osgeo.org or the GitHub release mirror
+  and checks them. Run it from the repository root after checkout.
+inputs:
+  github-token:
+    description: Token to log in to ghcr.io with before checking the base image (optional)
+    default: ''
+  force-source:
+    description: Build from the cached tarballs even if the base image can be pulled
+    default: 'false'
+outputs:
+  mode:
+    description: image (the pinned base image) or source (GDAL and PROJ built from the tarballs)
+    value: ${{ steps.choose.outputs.mode }}
+  build-args:
+    description: build-args for docker/build-push-action
+    value: ${{ steps.inputs.outputs.build-args }}
+  build-contexts:
+    description: build-contexts for docker/build-push-action
+    value: ${{ steps.inputs.outputs.build-contexts }}
+runs:
+  using: composite
+  steps:
+    - id: choose
+      name: Choose the pinned base image or the source build
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.github-token }}
+        FORCE: ${{ inputs.force-source }}
+      run: |
+        set -eu
+        versions=$(grep -E '^(PROJ|GDAL)_(VERSION|SHA256)=' ci/versions.env)
+        eval "$versions"
+        base=$(sed -n 's/^ARG GEOBASE=//p' Dockerfile)
+        mode=source
+        if [ "$FORCE" != true ] && [ "$base" != geospatial-source ]; then
+          if [ -n "$TOKEN" ]; then
+            printf '%s' "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          fi
+          for attempt in 1 2 3; do
+            if docker buildx imagetools inspect "$base" > /dev/null; then mode=image; break; fi
+            echo "Attempt $attempt to read $base failed"
+            sleep 10
+          done
+          if [ "$mode" != image ]; then
+            echo "::warning::$base could not be read; building GDAL and PROJ from the cached source tarballs"
+          fi
+        fi
+        echo "Geospatial base: $mode (GEOBASE=$base)"
+        {
+          echo "mode=$mode"
+          echo "directory=$RUNNER_TEMP/geospatial-tarballs"
+          echo "key=geospatial-tarballs-$PROJ_SHA256-$GDAL_SHA256"
+          printf 'versions<<EOF\n%s\nEOF\n' "$versions"
+        } >> "$GITHUB_OUTPUT"
+    - id: restore
+      if: steps.choose.outputs.mode == 'source'
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ steps.choose.outputs.directory }}
+        key: ${{ steps.choose.outputs.key }}
+    - name: Download and check the source tarballs
+      if: steps.choose.outputs.mode == 'source' && steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        DIRECTORY: ${{ steps.choose.outputs.directory }}
+        VERSIONS: ${{ steps.choose.outputs.versions }}
+      run: |
+        set -eu
+        eval "$VERSIONS"
+        mkdir -p "$DIRECTORY"
+        fetch() {
+          local sha=$1 destination=$2 url
+          shift 2
+          for url in "$@"; do
+            if curl -fsSL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 900 -o "$destination.part" "$url" \
+              && echo "$sha  $destination.part" | sha256sum -c --quiet -; then
+              mv "$destination.part" "$destination"
+              echo "Fetched $url"
+              return 0
+            fi
+            echo "::warning::$url failed or does not have SHA-256 $sha"
+          done
+          rm -f "$destination.part"
+          return 1
+        }
+        fetch "$PROJ_SHA256" "$DIRECTORY/proj.tar.gz" \
+          "https://download.osgeo.org/proj/proj-$PROJ_VERSION.tar.gz" \
+          "https://github.com/OSGeo/PROJ/releases/download/$PROJ_VERSION/proj-$PROJ_VERSION.tar.gz"
+        fetch "$GDAL_SHA256" "$DIRECTORY/gdal.tar.gz" \
+          "https://download.osgeo.org/gdal/$GDAL_VERSION/gdal-$GDAL_VERSION.tar.gz" \
+          "https://github.com/OSGeo/gdal/releases/download/v$GDAL_VERSION/gdal-$GDAL_VERSION.tar.gz"
+    - if: steps.choose.outputs.mode == 'source' && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ steps.choose.outputs.directory }}
+        key: ${{ steps.choose.outputs.key }}
+    - id: inputs
+      name: Write the build inputs
+      shell: bash
+      env:
+        MODE: ${{ steps.choose.outputs.mode }}
+        DIRECTORY: ${{ steps.choose.outputs.directory }}
+        VERSIONS: ${{ steps.choose.outputs.versions }}
+      run: |
+        set -eu
+        if [ "$MODE" = source ]; then
+          eval "$VERSIONS"
+          # The Dockerfile checks them again; this catches a corrupt cache entry early.
+          printf '%s  %s\n' "$PROJ_SHA256" "$DIRECTORY/proj.tar.gz" "$GDAL_SHA256" "$DIRECTORY/gdal.tar.gz" | sha256sum -c -
+          echo 'build-args=GEOBASE=geospatial-source' >> "$GITHUB_OUTPUT"
+          echo "build-contexts=geospatial-tarballs=$DIRECTORY" >> "$GITHUB_OUTPUT"
+        else
+          echo 'build-args=' >> "$GITHUB_OUTPUT"
+          echo 'build-contexts=' >> "$GITHUB_OUTPUT"
+        fi

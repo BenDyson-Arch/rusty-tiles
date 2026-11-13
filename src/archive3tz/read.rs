@@ -17,6 +17,8 @@ use std::{
 
 /// Index rows per streamed chunk: a 65,520-byte buffer.
 const INDEX_CHUNK_ROWS: usize = 2730;
+/// Central entries scanned between stop checks (each costs up to three small reads).
+const STOP_ENTRIES: u64 = 1024;
 /// Central-directory bytes read at once.
 const DIRECTORY_CHUNK: u64 = 64 * 1024;
 
@@ -111,19 +113,23 @@ impl<R: Read + Seek> StoredArchive<R> {
             limits,
             CatalogConfig::selected(),
             Placement::disk(false),
+            None,
         )
     }
 
     /// Admits the archive; a catalog over `config.resident_bytes` spills to a scratch
-    /// directory at `placement`, created on first use.
+    /// directory at `placement`, created on first use. With `stop`, admission and every
+    /// later hash and spill on this archive end with [`SpillError::Stopped`] once that run
+    /// has stopped.
     pub(crate) fn new_with(
         mut reader: R,
         known_length: u64,
         limits: &ReadLimits,
         config: CatalogConfig,
         placement: Placement,
+        stop: Option<crate::runtime::AttemptProbe>,
     ) -> Result<Self, ReadError> {
-        let scanned = scan_directory(&mut reader, known_length, limits, &config, placement)?;
+        let scanned = scan_directory(&mut reader, known_length, limits, &config, placement, stop)?;
         let mut archive = Self {
             reader,
             catalog: scanned.catalog,
@@ -222,6 +228,9 @@ impl<R: Read + Seek> StoredArchive<R> {
         let mut crc = crc32fast::Hasher::new();
         let mut sha = Sha256::new();
         while remaining != 0 {
+            // One atomic load per 64 KiB: a multi-GB member stops within a block.
+            self.scratch.check_stop()?;
+            crate::test_hooks::pace("validate.hash-block");
             let count = remaining.min(buffer.len() as u64) as usize;
             read_exact(&mut self.reader, &mut buffer[..count])?;
             if let Some(head) = head.take() {
@@ -272,6 +281,7 @@ impl<R: Read + Seek> StoredArchive<R> {
             &mut self.reader,
             &self.last,
             length,
+            &self.scratch,
             |position, key, offset| {
                 if unordered.is_none() && previous.is_some_and(|previous| previous > key) {
                     unordered = Some(position);
@@ -315,6 +325,7 @@ impl<R: Read + Seek> StoredArchive<R> {
             &mut self.reader,
             &self.last,
             length,
+            &scratch,
             |position, md5, offset| {
                 Ok(rows.push(IndexRow {
                     md5,
@@ -395,6 +406,7 @@ fn index_pass(
     reader: &mut (impl Read + Seek),
     last: &Last,
     length: u64,
+    scratch: &Scratch,
     mut row: impl FnMut(u64, [u64; 2], u64) -> Result<(), ReadError>,
 ) -> Result<bool, ReadError> {
     let mut hasher = crc32fast::Hasher::new();
@@ -403,6 +415,7 @@ fn index_pass(
     let mut position = 0u64;
     reader.seek(SeekFrom::Start(last.data_offset))?;
     while remaining != 0 {
+        scratch.check_stop()?;
         let count = remaining.min(buffer.len() as u64) as usize;
         let chunk = &mut buffer[..count];
         read_exact(reader, chunk)?;
@@ -757,6 +770,7 @@ fn scan_directory(
     limits: &ReadLimits,
     config: &CatalogConfig,
     placement: Placement,
+    probe: Option<crate::runtime::AttemptProbe>,
 ) -> Result<Scanned, ReadError> {
     cap(
         LimitKey::SourceArchiveBytes,
@@ -896,6 +910,9 @@ fn scan_directory(
         placement,
         CatalogConfig::scratch_estimate(entries, bytes),
     ));
+    if let Some(probe) = probe {
+        scratch.watch(probe);
+    }
     let mut log = LogWriter::new(&scratch, memory, config)?;
     let mut rows = catalog::sorter::<Row>(&scratch, config.sort)?;
     let mut extents = catalog::sorter::<Extent>(&scratch, config.side_sort)?;
@@ -909,6 +926,10 @@ fn scan_directory(
     let mut total = 0u64;
     let mut name_bytes = 0u64;
     for ordinal in 0..entries {
+        if ordinal % STOP_ENTRIES == 0 {
+            scratch.check_stop()?;
+        }
+        crate::test_hooks::pace("validate.admission");
         if cursor.checked_add(46).is_none_or(|n| n > stop) {
             return Err(malformed("truncated ZIP central entry"));
         }
@@ -1149,6 +1170,7 @@ pub(crate) mod tests {
             limits,
             &CatalogConfig::selected(),
             Placement::disk(false),
+            None,
         )
     }
 
@@ -2442,6 +2464,7 @@ pub(crate) mod tests {
             &natural_limits(bytes.len()),
             config,
             Placement::In(parent.into()),
+            None,
         )
     }
 

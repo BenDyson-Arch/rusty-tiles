@@ -475,7 +475,8 @@ fn model_to_archive_with_operations(
         return Err(cleanup_failure(staging.fail(error), workspace));
     }
     if let Err(error) = operations.stage(ProducerStage::Cleanup) {
-        let path = workspace.0.keep();
+        // A retained workspace is the caller's to remove; it is no longer the run's.
+        let (path, _registered) = workspace.0.keep();
         let mut failure = staging.fail(error);
         failure.retained_paths.push(path);
         return Err(failure);

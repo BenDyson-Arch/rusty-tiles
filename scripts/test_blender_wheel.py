@@ -12,6 +12,23 @@ import venv
 from wheel_acceptance import clear_requested_report, copy_evidence, failure_reason, require_completion
 from download_blender import validate_distribution
 
+# The test in bindings/python/tests/test_api.py that imports decoded GLBs with Blender's glTF
+# importer. --require-gltf-import needs it reported as passed, so renaming or removing it
+# fails the run until this name follows.
+GLTF_IMPORT_TEST = "test_blender_imports_decoded_plain_glb"
+
+
+def require_gltf_import(report):
+    """Fail unless the acceptance report lists the glTF import test as run and passed."""
+    skipped = [skip for skip in report.get("skips", []) if f".{GLTF_IMPORT_TEST}:" in skip]
+    if skipped:
+        raise RuntimeError(f"Blender's glTF import of decoded tiles did not run: {skipped[0]}")
+    passed = report.get("passed")
+    if not isinstance(passed, list) or not any(
+            isinstance(test, str) and test.rpartition(".")[2] == GLTF_IMPORT_TEST for test in passed):
+        raise RuntimeError(f"Blender's glTF import of decoded tiles was not reported as passed "
+                           f"(no {GLTF_IMPORT_TEST} among the passed tests)")
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -20,6 +37,9 @@ def main():
     parser.add_argument("--report-json", type=Path, help="Write runtime and test evidence as JSON")
     parser.add_argument("--distribution-json", type=Path,
                         help="Require the pinned official bundle recorded by download_blender.py")
+    parser.add_argument("--require-gltf-import", action="store_true",
+                        help="Fail unless Blender's glTF import of decoded tiles is reported as "
+                             "run and passed (its importer needs numpy in Blender's Python)")
     args = parser.parse_args()
     requested_report = clear_requested_report(args.report_json, args.wheel)
     wheel = args.wheel.resolve(strict=True)
@@ -30,7 +50,7 @@ def main():
     distribution = None
     if args.distribution_json is not None:
         distribution = json.loads(args.distribution_json.read_text())
-        manifest, spec = validate_distribution(distribution, Path(blender))
+        release, spec = validate_distribution(distribution, Path(blender))
     root = Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory(prefix="rusty-tiles-blender-") as work:
         work = Path(work)
@@ -69,10 +89,16 @@ def main():
                     timeout=240,
                 )
             require_completion(evidence, wheel_sha256, require_blender=True)
+            if args.require_gltf_import:
+                require_gltf_import(json.loads(evidence.read_text()))
             if distribution is not None:
                 report = json.loads(evidence.read_text())
-                if report.get("blender_version") != [int(part) for part in manifest["version"].split(".")]:
+                if report.get("blender_version") != [int(part) for part in release["version"].split(".")]:
                     raise RuntimeError("The API suite ran a different Blender version from the pinned bundle")
+                # sys.version starts with "MAJOR.MINOR.MICRO"; the pin names MAJOR.MINOR.
+                python = str(report.get("python", "")).partition(" ")[0]
+                if python.split(".")[:2] != release["python"].split("."):
+                    raise RuntimeError("The API suite ran a different Python version from the pinned bundle's")
                 if report.get("machine", "").lower() not in spec["machines"]:
                     raise RuntimeError("The API suite ran a different architecture from the pinned bundle")
                 report["blender_distribution"] = distribution
