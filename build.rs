@@ -99,7 +99,9 @@ const BASISU_GUARDED_SOURCES: &[(&[&str], &str)] = &[
 /// - every vendored translation unit force-includes rt_basisu_silence.h, which
 ///   routes its stdio output to the capturing sinks in rt_basisu_sink.cpp;
 /// - C++ exceptions are enabled on every target (MSVC needs /EHsc), so the
-///   shim can catch them and the guarded sources' checks can unwind to it.
+///   shim can catch them and the guarded sources' checks can unwind to it;
+/// - MSVC C++ keeps std::mutex's runtime constructor, so the C++ runs against
+///   the older MSVCP140.dll a host process (Blender 4.5) may have loaded.
 fn compile_basisu() {
     let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let vendor = manifest.join("vendor/basis_universal");
@@ -130,7 +132,15 @@ fn compile_basisu() {
         if msvc {
             build.flag("/bigobj").flag("/fp:precise").flag("/utf-8");
             if cpp {
-                build.flag("/EHsc");
+                // The wheel loads into hosts that bundle their own, possibly older,
+                // MSVCP140.dll (Blender 4.5 on Windows). Since MSVC 17.10, std::mutex has a
+                // constexpr constructor whose object an older runtime's lock dereferences
+                // as uninitialized, an access violation inside MSVCP140.dll. This is
+                // Microsoft's documented opt-out; rt_basisu_silence.h refuses to compile
+                // without it.
+                build
+                    .flag("/EHsc")
+                    .define("_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR", None);
             }
             for header in force_includes {
                 build.flag(format!("/FI{}", header.display()));

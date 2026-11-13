@@ -60,7 +60,10 @@ The same configuration on every target and in every Cargo profile:
   `BASISD_SUPPORT_KTX2=1`, `BASISD_SUPPORT_KTX2_ZSTD=1`, `BASISU_DISABLE_ANDROID_ASTC_DECOMP=0`;
 - `-fno-strict-aliasing` (required by upstream), `-ffp-contract=off` (no FMA contraction),
   `-fvisibility=hidden`, `-fexceptions` on GCC/Clang; `/bigobj /fp:precise /utf-8 /EHsc` on MSVC
-  (the `cc` crate does not enable C++ exception handling on MSVC by itself);
+  (the `cc` crate does not enable C++ exception handling on MSVC by itself), and
+  `_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR` for MSVC C++, so `std::mutex` keeps its runtime
+  constructor and works against an older `MSVCP140.dll` already loaded by a host process
+  (Blender 4.5 on Windows); `rt_basisu_silence.h` refuses to compile MSVC C++ without it;
 - every vendored translation unit and the shim force-include
   `src/basisu_ktx2/native/rt_basisu_silence.h`, which redirects the C stdio output family to the
   capturing sinks in `src/basisu_ktx2/native/rt_basisu_sink.cpp`. Library text aimed at stdout

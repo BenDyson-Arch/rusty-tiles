@@ -135,7 +135,7 @@ jobs:
       - name: Install and test using official Blender's embedded Python
         run: |
           blender=$(python -c "import json; print(json.load(open('evidence/blender-distribution.json'))['executable'])")
-          python scripts/test_blender_wheel.py candidate/*.whl --blender "$blender" --distribution-json evidence/blender-distribution.json --report-json evidence/blender-acceptance.json
+          python scripts/test_blender_wheel.py candidate/*.whl --blender "$blender" --distribution-json evidence/blender-distribution.json --report-json evidence/blender-acceptance.json --require-gltf-import
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -160,12 +160,13 @@ jobs:
         with:
           name: wheel-x86_64-unknown-linux-gnu
           path: candidate
+      # Distribution Blender runs on the system Python, and its glTF importer needs numpy.
       - name: Install distribution Blender
         run: |
           sudo apt-get update
-          sudo apt-get install -y blender
+          sudo apt-get install -y blender python3-numpy
       - name: Install and test using Blender's embedded Python
-        run: python scripts/test_blender_wheel.py candidate/*.whl --report-json evidence/blender-linux-x86_64.json
+        run: python scripts/test_blender_wheel.py candidate/*.whl --report-json evidence/blender-linux-x86_64.json --require-gltf-import
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
