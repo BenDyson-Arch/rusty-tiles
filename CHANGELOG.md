@@ -137,6 +137,9 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
   count (Python `decode_tile`) is refused as invalid input. Before, such a stride could make the bundled meshopt decoder write past its
   buffers or divide by zero. The check now sits in front of every meshopt decode,
   not only in `validate`.
+- Mesh HLOD no longer fails with an internal error when a coarse tile of a normal-mapped
+  material is next to a material without a normal map: a coarse texel whose nearest source
+  triangle has no normal map gets a flat normal.
 - `raster --force` no longer replaces, and so deletes, a directory that holds its own
   source when the output names that directory through another path (a second bind
   mount, or a different case on a case-insensitive file system). The output is
