@@ -546,6 +546,8 @@ fn density_image(
     services
         .cache
         .density(&services.captured.scratch, (index, class_key), drop, || {
+            // Decoding, caching and this chain each take seconds on a 16k² image.
+            check()?;
             let memory = usize::try_from(services.memory).map_err(|_| resource())?;
             timing::time(Stage::DensityMips, || {
                 mips::build(
@@ -1079,15 +1081,27 @@ fn page_charge(
     let mut decode = 0u64;
     for &bi in &page.bindings {
         let info = image_info.get(bindings[bi].image).ok_or_else(invariant)?;
-        let texels = u64::from(info.width) * u64::from(info.height);
-        // Encoded bytes (<=4/texel), decoder RGB(A) output and RGBA8 copy;
-        // a density drop also builds the full-resolution class chain.
-        let per_texel = if drop > 0 { 32 } else { 12 };
-        decode = decode.max(texels.checked_mul(per_texel).ok_or_else(resource)?);
+        decode = decode.max(decode_transient(info, drop)?);
     }
     codec
         .checked_add(assembly)
         .and_then(|n| n.checked_add(decode))
+        .ok_or_else(resource)
+}
+
+/// One source image's decode transient in a page lease: the encoded bytes at their actual
+/// length, at least 4 per texel, plus decoder RGB(A) output and the RGBA8 copy (8 per
+/// texel); a density drop also builds the full-resolution class chain (20 more per texel).
+/// Images of at most 4 encoded bytes per texel are charged 12 (32 dropped) per texel.
+fn decode_transient(info: &source::ImageInfo, drop: u32) -> Result<u64, JobError> {
+    let texels = u64::from(info.width) * u64::from(info.height);
+    let per_texel = if drop > 0 { 28 } else { 8 };
+    let encoded = info
+        .encoded_bytes
+        .max(texels.checked_mul(4).ok_or_else(resource)?);
+    texels
+        .checked_mul(per_texel)
+        .and_then(|n| n.checked_add(encoded))
         .ok_or_else(resource)
 }
 
@@ -1484,6 +1498,35 @@ pub(super) fn prepare(
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// #338: a page lease charges each source image's encoded bytes at their actual length
+    /// once they exceed 4 per texel, and exactly the former 12 (32 with a density drop)
+    /// bytes per texel at or below it.
+    #[test]
+    fn decode_transient_charges_encoded_bytes_above_four_per_texel() {
+        let info = |encoded_bytes| source::ImageInfo {
+            mime_type: "image/png",
+            extension: "png",
+            width: 1000,
+            height: 100,
+            encoded_bytes,
+        };
+        let texels = 100_000u64;
+        for (encoded, drop, expected) in [
+            (1, 0, 12 * texels),
+            (4 * texels, 0, 12 * texels),
+            (4 * texels, 2, 32 * texels),
+            (4 * texels + 1, 0, 12 * texels + 1),
+            (4 * texels + 1, 1, 32 * texels + 1),
+            (1 << 30, 0, (1 << 30) + 8 * texels),
+            (1 << 30, 3, (1 << 30) + 28 * texels),
+        ] {
+            assert_eq!(
+                decode_transient(&info(encoded), drop).unwrap(),
+                expected,
+                "{encoded} encoded, drop {drop}"
+            );
+        }
+    }
     #[test]
     fn lossless_8192_mask_capacity_is_projected_and_refused_before_allocation() {
         use crate::gltf_source::source::{Document, ImageInfo};
@@ -1505,6 +1548,7 @@ mod tests {
             extension: "png",
             width: 8186,
             height: 8186,
+            encoded_bytes: 1,
         }];
         let classes = crate::mesh_large::batching::MaterialClasses::default();
         let resources = AtlasResources {

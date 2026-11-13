@@ -286,7 +286,7 @@ jobs:
         with:
           key: portable-${{ matrix.target }}
       - name: Test the portable release CLI
-        run: cargo test --locked --target "$RELEASE_TARGET"
+        run: cargo test --locked --no-fail-fast --target "$RELEASE_TARGET"
       - name: Report vendored KTX2 encoder digests and round trips
         run: cargo test --locked --target "$RELEASE_TARGET" --lib basisu_ktx2 -- --nocapture --test-threads=1
 

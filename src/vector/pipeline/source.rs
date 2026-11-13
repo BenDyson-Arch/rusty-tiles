@@ -7,11 +7,13 @@ pub(super) enum Reader {
     Native(Box<source_native::Reader>),
 }
 impl Reader {
+    /// `stop` interrupts the portable reader's SQLite work; native OGR calls cannot be.
     pub fn new(
         input: &Path,
         options: &VectorOptions,
         frame: Option<Frame>,
         scratch: &Path,
+        stop: Option<&crate::runtime::AttemptProbe>,
     ) -> Result<Self, Error> {
         #[cfg(feature = "native-geospatial")]
         if !input
@@ -25,7 +27,7 @@ impl Reader {
             }
             return Ok(Self::Native(Box::new(reader)));
         }
-        source_portable::Reader::new(input, options, frame, scratch)
+        source_portable::Reader::with_stop(input, options, frame, scratch, stop)
             .map(Box::new)
             .map(Self::Portable)
     }
@@ -112,7 +114,7 @@ mod tests {
             skip_invalid: true,
             ..VectorOptions::default()
         };
-        let mut reader = Reader::new(&input, &options, None, work.path()).unwrap();
+        let mut reader = Reader::new(&input, &options, None, work.path(), None).unwrap();
         let mut accepted = Vec::new();
         let mut rejected = Vec::new();
         reader

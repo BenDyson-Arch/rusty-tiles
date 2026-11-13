@@ -179,14 +179,18 @@ def view_of(document, binary, index):
 
 
 class WheelAPI(unittest.TestCase):
-    def test_decoded_tile_views_list_members_and_export_plain_glb_and_arrays(self):
+    def textured_tiles(self):
+        """A textured grid tiled into an archive, with its listed tiles and leaves."""
         source = self.root / "textured.glb"
         write_textured_grid(source)
         output = rusty_tiles.mesh_to_tileset(source, self.root / "textured.3tz", jobs=1).output
         tiles = rusty_tiles.list_tiles(output)
+        return source, output, tiles, [tile for tile in tiles if tile["role"] == "leaf"]
+
+    def test_decoded_tile_views_list_members_and_export_plain_glb_and_arrays(self):
+        source, output, tiles, leaves = self.textured_tiles()
         self.assertEqual(set(tiles[0]), {"uri", "depth", "role", "geometric_error", "transform"})
         self.assertEqual((tiles[0]["depth"], tiles[0]["role"]), (0, "coarse"))
-        leaves = [tile for tile in tiles if tile["role"] == "leaf"]
         self.assertGreaterEqual(len(leaves), 2)
         self.assertTrue(all(tile["depth"] > 0 for tile in leaves))
         with zipfile.ZipFile(output) as archive:
@@ -218,8 +222,6 @@ class WheelAPI(unittest.TestCase):
             primitive = document["meshes"][0]["primitives"][0]
             labels = {f["label"] for f in primitive["extensions"]["EXT_mesh_features"]["featureIds"]}
             self.assertEqual(labels, label_set)
-            if "bpy" in sys.modules:
-                self.check_blender_import(plain, label_set)
         with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
             rusty_tiles.decode_tile(output, "tileset.json")
         self.assertEqual(caught.exception.kind, "invalid_request")
@@ -309,8 +311,21 @@ class WheelAPI(unittest.TestCase):
         self.assertGreater(limit["observed"], limit["value"])
         self.assertEqual(caught.exception.kind, "resource_limit")
 
+    @unittest.skipUnless("bpy" in sys.modules, "runs inside Blender only")
+    def test_blender_imports_decoded_plain_glb(self):
+        """Blender's bundled glTF importer reads each plain GLB with its page, UVs and IDs."""
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            # Blender's own glTF importer imports numpy; a distribution Blender running on a
+            # system Python without it cannot import any glTF.
+            self.skipTest("this Blender's Python lacks numpy, which its glTF importer needs")
+        _, output, tiles, leaves = self.textured_tiles()
+        for tile, labels in ((tiles[0], {"source_primitive"}),
+                             (leaves[0], {"source_primitive", "source_triangle"})):
+            self.check_blender_import(rusty_tiles.decode_tile(output, tile["uri"], format="glb"), labels)
+
     def check_blender_import(self, plain, labels):
-        """Blender's bundled glTF importer reads the plain GLB with its page, UVs and IDs."""
         import bpy
         path = self.root / "blender-view.glb"
         path.write_bytes(plain)
@@ -1792,6 +1807,33 @@ class WheelAPI(unittest.TestCase):
         with self.assertRaises(KeyboardInterrupt):
             rusty_tiles.validate(archive, callback=interrupt)
 
+        # #342: the memory budget and workers are reported and change nothing else.
+        def verdict(report):
+            return {k: v for k, v in report.items() if k not in ("resources", "scratch")}
+
+        # A default run of a small archive that spilled nothing has no host-dependent members.
+        self.assertNotIn("resources", report)
+        self.assertNotIn("scratch", report)
+        for budget, jobs in ((1 << 30, 1), (4 << 30, None), (512 << 20, 2)):
+            other = rusty_tiles.validate(archive, memory_budget_bytes=budget, jobs=jobs)
+            self.assertEqual(verdict(other), verdict(report))
+            self.assertEqual(other["resources"]["memoryBudget"]["requestedBytes"], budget)
+            self.assertEqual(other["resources"]["memoryBudget"]["source"], "explicit")
+            self.assertEqual(other["resources"]["jobs"]["requested"],
+                             "auto" if jobs is None else str(jobs))
+        with self.assertRaises(rusty_tiles.ResourceLimitError):
+            rusty_tiles.validate(archive, memory_budget_bytes=(512 << 20) - 1)
+        for bad in (0, -1, 2**64):
+            with self.assertRaises(rusty_tiles.InvalidRequestError, msg=repr(bad)):
+                rusty_tiles.validate(missing, memory_budget_bytes=bad)
+        for bad in (True, 1.0, "1GiB"):
+            with self.assertRaises(TypeError, msg=repr(bad)):
+                rusty_tiles.validate(missing, memory_budget_bytes=bad)
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.validate(missing, jobs=0)
+        with self.assertRaises(TypeError):
+            rusty_tiles.validate(missing, jobs="auto")
+
     def test_validate_reads_implicit_roots_with_rust_parity(self):
         """I1 parity with tests/i1_implicit_read.rs: labels, counts and categories."""
         def point_glb():
@@ -1860,6 +1902,7 @@ if __name__ == "__main__":
         "failures": len(result.failures),
         "errors": len(result.errors),
         "skipped": len(result.skipped),
+        "skips": [f"{test.id()}: {reason}" for test, reason in result.skipped],
         "ok": result.wasSuccessful(),
     }
     if "bpy" in sys.modules:

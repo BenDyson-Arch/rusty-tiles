@@ -17,6 +17,8 @@ use std::{
 
 /// Index rows per streamed chunk: a 65,520-byte buffer.
 const INDEX_CHUNK_ROWS: usize = 2730;
+/// Central entries scanned between stop checks (each costs up to three small reads).
+const STOP_ENTRIES: u64 = 1024;
 /// Central-directory bytes read at once.
 const DIRECTORY_CHUNK: u64 = 64 * 1024;
 
@@ -111,19 +113,23 @@ impl<R: Read + Seek> StoredArchive<R> {
             limits,
             CatalogConfig::selected(),
             Placement::disk(false),
+            None,
         )
     }
 
     /// Admits the archive; a catalog over `config.resident_bytes` spills to a scratch
-    /// directory at `placement`, created on first use.
+    /// directory at `placement`, created on first use. With `stop`, admission and every
+    /// later hash and spill on this archive end with [`SpillError::Stopped`] once that run
+    /// has stopped.
     pub(crate) fn new_with(
         mut reader: R,
         known_length: u64,
         limits: &ReadLimits,
         config: CatalogConfig,
         placement: Placement,
+        stop: Option<crate::runtime::AttemptProbe>,
     ) -> Result<Self, ReadError> {
-        let scanned = scan_directory(&mut reader, known_length, limits, &config, placement)?;
+        let scanned = scan_directory(&mut reader, known_length, limits, &config, placement, stop)?;
         let mut archive = Self {
             reader,
             catalog: scanned.catalog,
@@ -202,21 +208,34 @@ impl<R: Read + Seek> StoredArchive<R> {
         Ok(bytes)
     }
 
-    /// Streams one admitted stored range through CRC-32 and SHA-256.
-    pub(crate) fn hash_range(
+    /// Streams one admitted stored range through CRC-32 and SHA-256, also copying its first
+    /// block (at most 64 KiB, the bytes the hash reads first) into `head` when given. The copy
+    /// costs no further read.
+    pub(crate) fn hash_range_with_head(
         &mut self,
         size: u64,
         offset: u64,
         expected_crc: u32,
+        mut head: Option<&mut Vec<u8>>,
     ) -> Result<[u8; 32], ReadError> {
+        // An empty range has no first block: its head is empty, never a previous member's.
+        if let Some(head) = head.as_deref_mut() {
+            head.clear();
+        }
         let mut remaining = size;
         self.reader.seek(SeekFrom::Start(offset))?;
         let mut buffer = [0; 64 * 1024];
         let mut crc = crc32fast::Hasher::new();
         let mut sha = Sha256::new();
         while remaining != 0 {
+            // One atomic load per 64 KiB: a multi-GB member stops within a block.
+            self.scratch.check_stop()?;
+            crate::test_hooks::pace("validate.hash-block");
             let count = remaining.min(buffer.len() as u64) as usize;
             read_exact(&mut self.reader, &mut buffer[..count])?;
+            if let Some(head) = head.take() {
+                head.extend_from_slice(&buffer[..count]);
+            }
             crc.update(&buffer[..count]);
             sha.update(&buffer[..count]);
             remaining -= count as u64;
@@ -262,6 +281,7 @@ impl<R: Read + Seek> StoredArchive<R> {
             &mut self.reader,
             &self.last,
             length,
+            &self.scratch,
             |position, key, offset| {
                 if unordered.is_none() && previous.is_some_and(|previous| previous > key) {
                     unordered = Some(position);
@@ -305,6 +325,7 @@ impl<R: Read + Seek> StoredArchive<R> {
             &mut self.reader,
             &self.last,
             length,
+            &scratch,
             |position, md5, offset| {
                 Ok(rows.push(IndexRow {
                     md5,
@@ -385,6 +406,7 @@ fn index_pass(
     reader: &mut (impl Read + Seek),
     last: &Last,
     length: u64,
+    scratch: &Scratch,
     mut row: impl FnMut(u64, [u64; 2], u64) -> Result<(), ReadError>,
 ) -> Result<bool, ReadError> {
     let mut hasher = crc32fast::Hasher::new();
@@ -393,6 +415,7 @@ fn index_pass(
     let mut position = 0u64;
     reader.seek(SeekFrom::Start(last.data_offset))?;
     while remaining != 0 {
+        scratch.check_stop()?;
         let count = remaining.min(buffer.len() as u64) as usize;
         let chunk = &mut buffer[..count];
         read_exact(reader, chunk)?;
@@ -549,6 +572,37 @@ fn zip64_sizes<const N: usize>(
         }
     }
     Ok((values, disk_number, record.is_some()))
+}
+
+/// One stored member's bytes by position, CRC-checked, from any thread (#342: the validator's
+/// replay workers). The same checks as [`StoredArchive::read_member`] after its lookup.
+pub(crate) fn read_stored_at(
+    file: &std::fs::File,
+    offset: u64,
+    size: u64,
+    crc: u32,
+) -> Result<Vec<u8>, ReadError> {
+    let length =
+        usize::try_from(size).map_err(|_| ReadError::limit("archive member exceeds host range"))?;
+    let mut bytes = bounded_bytes(length)?;
+    let mut at = 0;
+    while at < length {
+        #[cfg(unix)]
+        let read = std::os::unix::fs::FileExt::read_at(file, &mut bytes[at..], offset + at as u64);
+        #[cfg(windows)]
+        let read =
+            std::os::windows::fs::FileExt::seek_read(file, &mut bytes[at..], offset + at as u64);
+        match read {
+            Ok(0) => return Err(malformed("truncated stored archive record")),
+            Ok(count) => at += count,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(ReadError::Io(error)),
+        }
+    }
+    if crc32fast::hash(&bytes) != crc {
+        return Err(malformed("stored member CRC mismatch"));
+    }
+    Ok(bytes)
 }
 
 fn bounded_bytes(size: usize) -> Result<Vec<u8>, ReadError> {
@@ -716,6 +770,7 @@ fn scan_directory(
     limits: &ReadLimits,
     config: &CatalogConfig,
     placement: Placement,
+    probe: Option<crate::runtime::AttemptProbe>,
 ) -> Result<Scanned, ReadError> {
     cap(
         LimitKey::SourceArchiveBytes,
@@ -855,6 +910,9 @@ fn scan_directory(
         placement,
         CatalogConfig::scratch_estimate(entries, bytes),
     ));
+    if let Some(probe) = probe {
+        scratch.watch(probe);
+    }
     let mut log = LogWriter::new(&scratch, memory, config)?;
     let mut rows = catalog::sorter::<Row>(&scratch, config.sort)?;
     let mut extents = catalog::sorter::<Extent>(&scratch, config.side_sort)?;
@@ -868,6 +926,10 @@ fn scan_directory(
     let mut total = 0u64;
     let mut name_bytes = 0u64;
     for ordinal in 0..entries {
+        if ordinal % STOP_ENTRIES == 0 {
+            scratch.check_stop()?;
+        }
+        crate::test_hooks::pace("validate.admission");
         if cursor.checked_add(46).is_none_or(|n| n > stop) {
             return Err(malformed("truncated ZIP central entry"));
         }
@@ -1108,6 +1170,7 @@ pub(crate) mod tests {
             limits,
             &CatalogConfig::selected(),
             Placement::disk(false),
+            None,
         )
     }
 
@@ -1124,7 +1187,7 @@ pub(crate) mod tests {
                 .into_iter()
                 .nth(index)
                 .ok_or_else(|| ReadError::MissingMember(format!("ordinal {index}")))?;
-            self.hash_range(entry.size, entry.data_offset, entry.crc32)
+            self.hash_range_with_head(entry.size, entry.data_offset, entry.crc32, None)
         }
     }
 
@@ -1681,6 +1744,42 @@ pub(crate) mod tests {
             member_bytes: length,
             archive_stored_bytes: Some(length),
         }
+    }
+
+    /// #375 review N6: the head is each range's own first block; an empty member's head is
+    /// empty, not the previous member's.
+    #[test]
+    fn hash_head_is_reset_for_every_range() {
+        let large = vec![7u8; 70 * 1024];
+        let bytes = indexed(&[
+            Record::stored(b"tileset.json", b"{}"),
+            Record::stored(b"a.glb", b"glTF-head"),
+            Record::stored(b"b.glb", b""),
+            Record::stored(b"c.glb", &large),
+        ]);
+        let limits = natural_limits(bytes.len());
+        let mut archive =
+            StoredArchive::new(Cursor::new(&bytes), bytes.len() as u64, &limits).unwrap();
+        let mut head = Vec::new();
+        let mut heads = Vec::new();
+        for entry in archive
+            .entries()
+            .into_iter()
+            .filter(|e| e.name.ends_with(".glb"))
+        {
+            archive
+                .hash_range_with_head(entry.size, entry.data_offset, entry.crc32, Some(&mut head))
+                .unwrap();
+            heads.push((entry.name, head.len(), head.first().copied()));
+        }
+        assert_eq!(
+            heads,
+            [
+                ("a.glb".to_string(), 9, Some(b'g')),
+                ("b.glb".to_string(), 0, None),
+                ("c.glb".to_string(), 64 * 1024, Some(7)),
+            ]
+        );
     }
 
     #[test]
@@ -2365,6 +2464,7 @@ pub(crate) mod tests {
             &natural_limits(bytes.len()),
             config,
             Placement::In(parent.into()),
+            None,
         )
     }
 
