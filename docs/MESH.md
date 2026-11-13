@@ -669,6 +669,14 @@ about 0.5 KB per source triangle with every vertex attribute present, or about
 0.3 KB with positions and one texture coordinate set; capture stores only the
 attributes some selected primitive carries.
 
+The triangle and corner-depth streams capture keeps for the later stages are
+stored as LZ4 blocks of at most 64 KiB (a quarter of the stream buffer when that
+is smaller); a block that does not shrink is stored as is. The records read back
+are the same bytes, so the archive does not depend on it. Declared and preflight
+scratch bounds count these files at their uncompressed size; measured scratch
+(`scratch_stage_peak_bytes`, `run_scratch_peak_bytes`) is what is on disk. Their
+block indexes (9 bytes per block) are charged in capture's resident bound.
+
 The run also reserves output-side space for leaf staging, archive staging and a
 replaced destination: three copies of 119 bytes per triangle (a conservative
 estimate; measured archives are about 47) plus the encoded image bytes. Once

@@ -7,6 +7,7 @@
 //! independent of `R`, `F` and `jobs`. Every I/O failure is a typed [`SpillError`]; scratch files
 //! are removed on drop and on error.
 
+mod codec;
 mod scratch;
 mod sequence;
 mod sort;
@@ -16,8 +17,8 @@ mod volume;
 pub(crate) use scratch::{FileIo, Placement, Scratch, SpillIo};
 #[allow(unused_imports)]
 pub(crate) use sequence::{
-    ByteFile, ByteWriter, ClosedByteFile, RandomRecords, Sequence, SequenceReader, SequenceWriter,
-    SlotFile,
+    block_index_memory_bound, ByteFile, ByteWriter, ClosedByteFile, RandomRecords, Sequence,
+    SequenceReader, SequenceWriter, SlotFile,
 };
 #[allow(unused_imports)]
 pub(crate) use sort::{

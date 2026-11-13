@@ -122,6 +122,8 @@ pub(crate) struct FullMemoryBound {
     pub planning_allowance_bytes: u64,
     /// Descriptors of live spill chunk files (grows with spilled bytes).
     pub chunk_descriptor_bytes: u64,
+    /// Block indexes of the compressed retained sequences (full triangles, corner depths).
+    pub block_index_bytes: u64,
     pub bound_bytes: u64,
 }
 impl FullMemoryBound {
@@ -618,10 +620,17 @@ fn memory_bound(
         path as usize,
         spill_bytes,
     );
+    // The retained full-triangle and corner-depth sequences are block-compressed; their block
+    // indexes stay resident with the capture (both hold at most the spill's bytes).
+    let block_index_bytes =
+        crate::spill::block_index_memory_bound(spill_bytes, config.sort.buffer_bytes, 2);
     let bound_bytes = add(
         add(
-            add(geometry.bound_bytes, owned_metadata_bytes)?,
-            chunk_descriptor_bytes,
+            add(
+                add(geometry.bound_bytes, owned_metadata_bytes)?,
+                chunk_descriptor_bytes,
+            )?,
+            block_index_bytes,
         )?,
         add(DECODER_ALLOWANCE, PLANNING_ALLOWANCE)?,
     )?;
@@ -629,6 +638,7 @@ fn memory_bound(
         geometry,
         owned_metadata_bytes,
         chunk_descriptor_bytes,
+        block_index_bytes,
         decoder_allowance_bytes: DECODER_ALLOWANCE,
         planning_allowance_bytes: PLANNING_ALLOWANCE,
         bound_bytes,
@@ -892,7 +902,8 @@ pub(crate) fn capture_admitted(
         peaks.capture = end_stage(&scratch, stages.capture, "attribute capture")?;
         progress.begin(Step::Sequence, scan.triangles)?;
         begin_stage(&scratch, &need, stages.projection)?;
-        let mut full_writer = SequenceWriter::<FullTriangle>::with_layout(
+        // Retained for every later stage, block-compressed (lossless; see `spill::codec`).
+        let mut full_writer = SequenceWriter::<FullTriangle>::compressed(
             &scratch,
             "full-triangles",
             config.sort.buffer_bytes,
@@ -1397,8 +1408,12 @@ fn join_corner_depths(
     }
     drop(welds);
     let mut depths = depths.finish()?;
-    let mut writer =
-        SequenceWriter::<CornerDepth>::new(scratch, "corner-depths", config.sort.buffer_bytes)?;
+    let mut writer = SequenceWriter::<CornerDepth>::compressed(
+        scratch,
+        "corner-depths",
+        config.sort.buffer_bytes,
+        crate::spill::Layout::FULL,
+    )?;
     for rank in 0..triangles {
         if rank.is_multiple_of(1024) {
             progress.advance(triangles * 6 + rank)?;
