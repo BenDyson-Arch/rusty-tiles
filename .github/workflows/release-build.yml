@@ -115,11 +115,12 @@ jobs:
       - name: Check the archive against CI's SHA-256
         if: steps.source.outputs.build == 'false'
         run: '"$PYTHON" scripts/sha256s.py check --dir dist sums/*.sha256'
-      - name: Select stable Rust
+      # rust-toolchain.toml pins the toolchain and its components (ci/versions.env
+      # RUST_VERSION); with no argument, rustup 1.28 or later installs the one it names.
+      - name: Install the pinned Rust toolchain
         if: steps.source.outputs.build == 'true'
         run: |
-          rustup update stable --no-self-update
-          rustup default stable
+          rustup toolchain install --no-self-update
           rustup target add "$RELEASE_TARGET"
       - name: Cache Rust dependencies
         if: steps.source.outputs.build == 'true'

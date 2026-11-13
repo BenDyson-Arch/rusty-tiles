@@ -128,11 +128,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config
-      - name: Select stable Rust
-        run: |
-          rustup update stable --no-self-update
-          rustup default stable
-          rustup component add rustfmt
+      # rust-toolchain.toml pins the toolchain and its components (ci/versions.env
+      # RUST_VERSION); with no argument, rustup 1.28 or later installs the one it names.
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install --no-self-update
       # Only develop and main write Rust caches; pull requests restore their base branch's
       # cache and no longer evict it (the repository's cache space is shared).
       - name: Cache Rust dependencies
@@ -255,11 +254,8 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Check wheel acceptance failure handling
         run: python -m unittest discover -s tests -p test_wheel_runners.py -v
-      - name: Select stable Rust
-        run: |
-          rustup update stable --no-self-update
-          rustup default stable
-          rustup component add clippy
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install --no-self-update
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
@@ -359,10 +355,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: Select stable Rust
+      - name: Install the pinned Rust toolchain
         run: |
-          rustup update stable --no-self-update
-          rustup default stable
+          rustup toolchain install --no-self-update
           rustup target add "$RELEASE_TARGET"
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
@@ -446,10 +441,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: Select stable Rust
+      - name: Install the pinned Rust toolchain
         run: |
-          rustup update stable --no-self-update
-          rustup default stable
+          rustup toolchain install --no-self-update
           rustup target add "$RELEASE_TARGET"
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
@@ -505,6 +499,8 @@ jobs:
             proj>=9.2
             -c conda-forge
           init-shell: bash
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install --no-self-update
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
@@ -543,7 +539,6 @@ jobs:
         run: |
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          rustup component add clippy
           cargo clippy --locked --all-targets --features native-geospatial -- -D warnings
 
   crs-allowlist:
@@ -571,10 +566,8 @@ jobs:
             proj=${{ steps.pins.outputs.proj }}
             -c conda-forge
           init-shell: bash
-      - name: Select stable Rust
-        run: |
-          rustup update stable --no-self-update
-          rustup default stable
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install --no-self-update
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
@@ -620,6 +613,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libclang-dev libsqlite3-dev
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install --no-self-update
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
@@ -795,6 +790,8 @@ jobs:
             pyproj>=3.7,<4
             -c conda-forge
           init-shell: bash
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install --no-self-update
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22' # versions: NODE_VERSION

@@ -14,6 +14,7 @@ import check_ci_config
 VERSIONS = """\
 # comment
 MATURIN_VERSION=1.15.0
+RUST_VERSION=1.100.0
 TIMEOUT_SHORT=5
 TIMEOUT_LONG=90
 GDAL_VERSION=3.12.4
@@ -33,6 +34,10 @@ jobs:
     timeout-minutes: 5 # versions: TIMEOUT_SHORT
     steps:
       - run: python -m pip install 'maturin==1.15.0' # versions: MATURIN_VERSION
+      - run: rustup toolchain install --no-self-update
+      - uses: PyO3/maturin-action@v1
+        with:
+          rust-toolchain: '1.100.0' # versions: RUST_VERSION
   choose:
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.reuse && 5 || 90 }} # versions: TIMEOUT_SHORT TIMEOUT_LONG
@@ -43,13 +48,22 @@ jobs:
 """
 
 DOCKERFILE = """\
+ARG RUST_VERSION=1.100.0
 ARG GDAL_VERSION=3.12.4
 ADD --checksum=sha256:68844ae29557b7efae4292c3b4cb3a3b8a79d14b765b89c5a7b17cbae7fa715a https://example/gdal.tar.gz /gdal.tar.gz
+FROM rust:${RUST_VERSION}-trixie AS build
+"""
+
+TOOLCHAIN = """\
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
 """
 
 
 class CheckCiConfigTests(unittest.TestCase):
-    def tree(self, workflow=WORKFLOW, dockerfile=DOCKERFILE, versions=VERSIONS):
+    def tree(self, workflow=WORKFLOW, dockerfile=DOCKERFILE, versions=VERSIONS, toolchain=TOOLCHAIN):
         temp = tempfile.TemporaryDirectory(prefix="rusty-tiles-ci-config-")
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
@@ -58,6 +72,8 @@ class CheckCiConfigTests(unittest.TestCase):
         (root / ".github" / "workflows").mkdir(parents=True)
         (root / ".github" / "workflows" / "example.yml").write_text(workflow)
         (root / "Dockerfile").write_text(dockerfile)
+        if toolchain is not None:
+            (root / "rust-toolchain.toml").write_text(toolchain)
         return root
 
     def errors(self, **files):
@@ -137,6 +153,58 @@ class CheckCiConfigTests(unittest.TestCase):
             with self.subTest(value=value):
                 errors = self.errors(dockerfile=f"ARG GEOBASE={value}\n" + DOCKERFILE)
                 self.assertEqual(errors == [], valid, errors)
+
+    def test_rust_toolchain_is_rust_version_everywhere(self):
+        bumped = TOOLCHAIN.replace("1.100.0", "1.101.0")
+        self.assertEqual(self.errors(toolchain=bumped),
+                         ["rust-toolchain.toml: channel is '1.101.0', expected RUST_VERSION=1.100.0"])
+        self.assertEqual(self.errors(toolchain=TOOLCHAIN.replace('"1.100.0"', '"stable"')),
+                         ["rust-toolchain.toml: channel is 'stable', expected RUST_VERSION=1.100.0"])
+        self.assertIn("rust-toolchain.toml: missing", self.errors(toolchain=None)[0])
+        self.assertIn("ci/versions.env: RUST_VERSION is missing",
+                      self.errors(versions=VERSIONS.replace("RUST_VERSION=1.100.0\n", "")))
+        # The maturin action's input is a marked pin, checked against RUST_VERSION.
+        errors = self.errors(workflow=WORKFLOW.replace("'1.100.0' # versions", "'1.99.0' # versions"))
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("expected RUST_VERSION=1.100.0", errors[0])
+        errors = self.errors(workflow=WORKFLOW.replace(" # versions: RUST_VERSION", ""))
+        self.assertTrue(any("pinned version needs" in error for error in errors), errors)
+
+    def test_dockerfile_rust_image_is_rust_version(self):
+        cases = {
+            "FROM rust:${RUST_VERSION}-trixie AS build": True,
+            "FROM rust:$RUST_VERSION-trixie AS build": True,
+            "FROM rust:1.100.0-trixie AS build": True,
+            "FROM --platform=$BUILDPLATFORM rust:1.100.0 AS build": True,
+            "FROM rust:1.98-trixie AS build": False,
+            "FROM rust:1.100-trixie AS build": False,
+            "FROM rust:trixie AS build": False,
+            "FROM rust:${OTHER}-trixie AS build": False,
+        }
+        for line, valid in cases.items():
+            with self.subTest(line=line):
+                errors = self.errors(dockerfile=DOCKERFILE.replace("FROM rust:${RUST_VERSION}-trixie AS build", line))
+                self.assertEqual(errors == [], valid, errors)
+        errors = self.errors(dockerfile=DOCKERFILE.replace("ARG RUST_VERSION=1.100.0", "ARG RUST_VERSION=1.99.0"))
+        self.assertEqual(len(errors), 2, errors)
+        self.assertIn("ARG RUST_VERSION should default to 1.100.0", errors[0])
+        self.assertIn("found rust:1.99.0-trixie", errors[1])
+
+    def test_stable_rust_fails_outside_comments(self):
+        for line in ("      - run: rustup update stable --no-self-update",
+                     "      - run: rustup default stable",
+                     "          rust-toolchain: stable",
+                     "          toolchain: 'stable'",
+                     "      - uses: dtolnay/rust-toolchain@stable",
+                     "      - run: cargo +stable clippy"):
+            with self.subTest(line=line):
+                errors = self.errors(workflow=WORKFLOW + "  extra:\n    runs-on: ubuntu-24.04\n"
+                                     "    timeout-minutes: 5 # versions: TIMEOUT_SHORT\n    steps:\n" + line + "\n")
+                self.assertTrue(any("not stable" in error for error in errors), errors)
+        fine = WORKFLOW + "# Not rustup default stable: rust-toolchain.toml pins it.\n"
+        fine += "  wheel:\n    runs-on: ubuntu-24.04\n    timeout-minutes: 5 # versions: TIMEOUT_SHORT\n"
+        fine += "    steps:\n      - name: Test the same stable ABI wheel\n        run: true\n"
+        self.assertEqual(self.errors(workflow=fine), [])
 
     def test_unsupported_targets_and_runners_fail_outside_comments(self):
         row = "          - os: macos-15-intel\n            target: x86_64-apple-darwin\n"
