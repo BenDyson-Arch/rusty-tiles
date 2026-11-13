@@ -456,13 +456,24 @@ const STAGE_TRIES: u32 = 10;
 const MIN_STEP: usize = 4;
 const MERGE_ROUNDS: u32 = 4;
 const MERGE_PASSES: u32 = 32;
+/// A staged reduction still above `ABANDON_FACTOR` times the cap when its step
+/// `ABANDON_STEP` begins (counted from 0 across merge rounds) is abandoned and its attempt
+/// fails. This is an owner rule for 0.4.2, measured but not proved. In the measured
+/// replays, no reduction that crossed this point was ever repaired into an accepted
+/// proposal, and stopping there changed no tile.
+const ABANDON_STEP: u32 = 12;
+const ABANDON_FACTOR: usize = 2;
+
+fn abandons(steps: u32, faces: usize, cap: usize) -> bool {
+    steps == ABANDON_STEP && faces > ABANDON_FACTOR * cap
+}
 
 /// Reduce toward the cap in steps from the current mesh (the first a third of the
 /// excess). The unchanged guard, the interface items and component survival judge each
 /// step; a refused step keeps its own faces around the flagged vertices and is redone,
 /// then halves. At a plateau border carriers merge, then the steps resume. The error is
 /// the largest step's meshopt estimate against its previous step (merges add none): a
-/// lower bound, as S2 measures the published G.
+/// lower bound, as S2 measures the published G. `None`: abandoned (`abandons`).
 fn staged_reduce(
     merged: &Merged,
     source: &[[u32; 3]],
@@ -470,7 +481,7 @@ fn staged_reduce(
     locked: &[bool],
     cap: usize,
     policy: &folds::Policy,
-) -> (Vec<[u32; 3]>, f64) {
+) -> Option<(Vec<[u32; 3]>, f64)> {
     let guard = folds::Source::new(&merged.positions, source)
         .with_boundary(interface)
         .with_policy(policy.clone());
@@ -481,9 +492,14 @@ fn staged_reduce(
         .collect();
     let points = interface_points(interface);
     let (mut current, mut error) = (merged.triangles.clone(), 0f64);
+    let mut steps = 0;
     for _ in 0..MERGE_ROUNDS {
         let mut step = (current.len().saturating_sub(cap) / 3).max(1);
         for _ in 0..STAGES {
+            if abandons(steps, current.len(), cap) {
+                return None;
+            }
+            steps += 1;
             if current.len() <= cap {
                 break;
             }
@@ -544,7 +560,7 @@ fn staged_reduce(
             break;
         }
     }
-    (current, error)
+    Some((current, error))
 }
 
 /// N2/N3: faces the source holds only the other way round are turned; N2 also drops
@@ -1913,7 +1929,8 @@ fn assessed_attempt_inner(
 /// produce an eligible capped result; it is not a proof of cap infeasibility. With `Fix2`,
 /// when both modes fail after the touching-boundary comparison refused a proposal, reduce
 /// once more with the anchored paths of touching boundaries locked
-/// (`topology::touching_pins`).
+/// (`topology::touching_pins`). An abandoned staged reduction (`abandons`) fails the
+/// attempt without the separate-sheets mode.
 #[allow(clippy::too_many_arguments)]
 fn attempt(
     tile: TileKey,
@@ -1931,8 +1948,13 @@ fn attempt(
     refused_out: &mut bool,
 ) -> Result<Built, JobError> {
     let mut refused = false;
+    let mut abandoned = false;
     let mut remaining = REDUCTION_PASSES;
-    let reduce = |locked: &HashSet<Key>, sheets, remaining: &mut u32, refused: &mut bool| {
+    let reduce = |locked: &HashSet<Key>,
+                  sheets,
+                  remaining: &mut u32,
+                  refused: &mut bool,
+                  abandoned: &mut bool| {
         attempt_mode(
             tile,
             merged,
@@ -1947,16 +1969,27 @@ fn attempt(
             sheets,
             remaining,
             refused,
+            abandoned,
             resort,
             policy,
         )
     };
     // An overprotected ring is a failed strategy, not a cap lower bound. Both
     // strategies retain the same source guards and pre-contraction reference.
-    let result = match reduce(opening_pins, false, &mut remaining, &mut refused) {
-        Err(e) if e.kind() == JobErrorKind::Unsupported => {
-            reduce(opening_pins, true, &mut remaining, &mut refused)
-        }
+    let result = match reduce(
+        opening_pins,
+        false,
+        &mut remaining,
+        &mut refused,
+        &mut abandoned,
+    ) {
+        Err(e) if e.kind() == JobErrorKind::Unsupported && !abandoned => reduce(
+            opening_pins,
+            true,
+            &mut remaining,
+            &mut refused,
+            &mut abandoned,
+        ),
         result => result,
     };
     *refused_out |= refused;
@@ -1975,7 +2008,13 @@ fn attempt(
             if locked.len() == opening_pins.len() {
                 Err(e)
             } else {
-                reduce(&locked, false, &mut { REDUCTION_PASSES }, &mut false)
+                reduce(
+                    &locked,
+                    false,
+                    &mut { REDUCTION_PASSES },
+                    &mut false,
+                    &mut false,
+                )
             }
         }
         result => result,
@@ -1997,6 +2036,7 @@ fn attempt_mode(
     separate_sheets: bool,
     remaining: &mut u32,
     touching: &mut bool,
+    abandoned: &mut bool,
     resort: Resort,
     policy: &folds::Policy,
 ) -> Result<Built, JobError> {
@@ -2088,7 +2128,14 @@ fn attempt_mode(
                 policy,
                 resort == Resort::N3Recovery,
             ),
-            Some(lock) => staged_reduce(merged, contracted_faces, interface, lock, cap, policy),
+            Some(lock) => staged_reduce(merged, contracted_faces, interface, lock, cap, policy)
+                .ok_or_else(|| {
+                    *abandoned = true;
+                    JobError::new(
+                        JobErrorKind::Unsupported,
+                        "staged reduction abandoned above twice the cap",
+                    )
+                })?,
             None => reduce(&merged.triangles, &|v| locked[v as usize], cap)?,
         };
         settle(merged, contracted_faces, policy, resort, &mut output);
@@ -2353,6 +2400,68 @@ fn attempt_mode(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The 0.4.2 owner rule (`abandons`). A staged reduction still above twice the cap when
+    /// step 12 begins (the thirteenth, counted across merge rounds) is abandoned. One at or
+    /// below twice the cap, or at any other step, carries on.
+    #[test]
+    fn a_staged_reduction_above_twice_the_cap_at_step_twelve_is_abandoned() {
+        let cap = 100;
+        assert!(abandons(12, 2 * cap + 1, cap));
+        assert!(!abandons(12, 2 * cap, cap));
+        assert!(!abandons(11, 3 * cap, cap));
+        assert!(!abandons(13, 3 * cap, cap));
+        // A fully locked grid never reduces and merges no carrier. Every step is refused
+        // and halves, from a third of the excess down to `MIN_STEP`. 32,768 faces start at
+        // 10,889 and are still stepping at step 12, above twice the cap. 8,192 faces start
+        // at 2,697 and stop after 11 steps, so that reduction ends unchanged, not abandoned.
+        let grid = |n: u32| {
+            let positions: Vec<[f32; 3]> = (0..=n)
+                .flat_map(|j| (0..=n).map(move |i| [i as f32, j as f32, 0.]))
+                .collect();
+            let triangles: Vec<[u32; 3]> = (0..n)
+                .flat_map(|j| {
+                    (0..n).flat_map(move |i| {
+                        let v = j * (n + 1) + i;
+                        [[v, v + 1, v + n + 2], [v, v + n + 2, v + n + 1]]
+                    })
+                })
+                .collect();
+            Merged {
+                keys: positions.iter().map(|&p| key(p)).collect(),
+                ells: vec![0; positions.len()],
+                representative: vec![
+                    SourcePrimitive {
+                        node: 0,
+                        mesh: 0,
+                        primitive: 0,
+                        expanded_ordinal: 0,
+                        material: u32::MAX,
+                    };
+                    triangles.len()
+                ],
+                positions,
+                triangles,
+            }
+        };
+        let reduce = |merged: &Merged| {
+            staged_reduce(
+                merged,
+                &merged.triangles,
+                &[],
+                &vec![true; merged.positions.len()],
+                cap,
+                &folds::Policy::default(),
+            )
+        };
+        let large = grid(128);
+        assert_eq!(large.triangles.len(), 32_768);
+        assert!(reduce(&large).is_none());
+        let small = grid(64);
+        let (faces, _) = reduce(&small).expect("ends before step 12");
+        assert_eq!(faces, small.triangles);
+        assert!(faces.len() > 2 * cap);
+    }
 
     /// A1 → N3 hand-over: border chain a-m-b with m left on chord a-b (t 0.25) and an
     /// interior apex c. `snap_stuck` moves m onto a, drops the face it degenerates and
