@@ -80,6 +80,147 @@ pub(crate) struct Built {
     pub topology: topology::Receipt,
     pub change: topology::Change,
     pub controls: measurement::Controls,
+    /// S2's search statistics of this proposal's assessment (set by the caller's assess).
+    pub search: super::error::SearchStats,
+}
+
+/// Work a later build of the same cell would repeat exactly, and what was reused.
+///
+/// Each reuse rests on code facts, not on hashes: `build` is a function of its
+/// arguments (no global state; `Merged` vertex arrays never grow; every recovery round
+/// restarts from the reference faces), and the per-call state an `assessed_attempt` call
+/// changes is the attempted-topology receipt, the opening pins and S2's search statistics,
+/// all replayed below. Disabled while the audit sidecar records every attempt.
+struct Repeats {
+    enabled: bool,
+    /// Failed contractions by argument class, with the receipt each build returned.
+    failed: Vec<(ContractionClass, TopologyReceipt)>,
+    /// `None`'s calls in order, kept only while its contraction finished without the
+    /// constrained rebuild or recovery: the only steps that read `Fix2`'s `fallbacks`.
+    primary: Option<Vec<Call>>,
+    /// `Fix2`'s position in `primary` while it replays (its call sequence is `None`'s, then
+    /// the panels).
+    replay: Option<usize>,
+    /// The last call's result (round-zero reuse within a build).
+    last: Option<Call>,
+    reused: Reused,
+}
+
+/// What determines a build's contraction: `fix2` (fallbacks), the N3 policy, the relief
+/// seed, and the recovery caps after `recover_contraction`'s duplicate skip.
+#[derive(Clone, PartialEq)]
+struct ContractionClass {
+    fix2: bool,
+    clustered: bool,
+    seeded: bool,
+    rounds: Vec<usize>,
+}
+
+impl ContractionClass {
+    fn of(resort: Resort, caps: &[usize], seeded: bool) -> Self {
+        let mut rounds: Vec<usize> = Vec::with_capacity(caps.len());
+        for &c in caps {
+            if !rounds.contains(&c) {
+                rounds.push(c);
+            }
+        }
+        Self {
+            fix2: resort == Resort::Fix2,
+            clustered: resort.clustered(),
+            seeded: seeded && resort.clustered(),
+            rounds,
+        }
+    }
+}
+
+/// One failed `assessed_attempt` call: its receipt contribution, the opening pins after it,
+/// whether `attempt` set the touching-refusal flag, and its S2 search statistics.
+#[derive(Clone)]
+struct Call {
+    attempted: TopologyReceipt,
+    pins: HashSet<Key>,
+    refused: bool,
+    search: super::error::SearchStats,
+}
+
+impl Call {
+    fn apply(&self, attempted: &mut TopologyReceipt, pins: &mut HashSet<Key>, reused: &mut Reused) {
+        attempted.add(self.attempted);
+        pins.clone_from(&self.pins);
+        reused.search.add(self.search);
+    }
+}
+
+impl Repeats {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            failed: Vec::new(),
+            primary: None,
+            replay: None,
+            last: None,
+            reused: Reused::default(),
+        }
+    }
+    fn failed_contraction(&self, class: &ContractionClass) -> Option<TopologyReceipt> {
+        self.failed
+            .iter()
+            .find(|(c, _)| c == class)
+            .map(|(_, r)| *r)
+    }
+    /// A build's contraction succeeded; `direct`: without the constrained rebuild or
+    /// recovery. `None` starts its call log; `Fix2` replays it (its contraction then
+    /// equals `None`'s: everything before the rebuild ignores `fallbacks`).
+    fn contracted(&mut self, resort: Resort, direct: bool) {
+        self.last = None;
+        if !self.enabled {
+            return;
+        }
+        match resort {
+            Resort::None => self.primary = direct.then(Vec::new),
+            Resort::Fix2 => self.replay = (direct && self.primary.is_some()).then_some(0),
+            _ => self.replay = None,
+        }
+    }
+    /// `Fix2`'s next replayable call; replay ends at a call that set the refusal flag
+    /// (`attempt`'s `Fix2` branch could then differ) or at the end of `None`'s calls.
+    fn replay_next(&mut self, resort: Resort) -> Option<Call> {
+        if resort != Resort::Fix2 {
+            return None;
+        }
+        let at = self.replay?;
+        match self.primary.as_ref().and_then(|p| p.get(at)) {
+            Some(call) if !call.refused => {
+                self.replay = Some(at + 1);
+                Some(call.clone())
+            }
+            _ => {
+                self.replay = None;
+                None
+            }
+        }
+    }
+    fn log(&mut self, resort: Resort, call: &Call) {
+        if resort == Resort::None {
+            if let Some(p) = &mut self.primary {
+                p.push(call.clone());
+            }
+        }
+        self.last = Some(call.clone());
+    }
+}
+
+/// Reused work of one cell (`build_parent`), and the S2 search statistics of replayed
+/// calls, which the caller adds to the tile's accumulator.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Reused {
+    /// Builds that reused an earlier build's failed contraction.
+    pub contractions: u64,
+    /// `Fix2` calls replayed from `None`'s.
+    pub calls: u64,
+    /// Remesh round 0 calls reused from the same build's full-cap calls.
+    pub rounds: u64,
+    pub search: super::error::SearchStats,
 }
 
 pub(crate) struct Outcome {
@@ -91,6 +232,8 @@ pub(crate) struct Outcome {
     /// A border contraction the primary build started but could not finish (A1 border
     /// relief); the last resort's N3 continues from it (`Contracted`).
     pub relief: Option<Contracted>,
+    /// Exact repeats skipped (`Repeats`); set by `build_parent`.
+    pub reused: Reused,
 }
 
 /// A border contraction handed to the last resort's N3 (A1 border relief): the merged
@@ -830,14 +973,17 @@ pub(crate) fn build_parent(
     assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
     last_resorts: bool,
+    reuse: bool,
 ) -> Result<Outcome, JobError> {
-    let mut run = |r, seed| {
+    let mut repeats = Repeats::new(reuse);
+    let mut run = |r, seed, repeats: &mut Repeats| {
         build(
-            tile, children, caps, contract, mapping, assess, check, r, seed,
+            tile, children, caps, contract, mapping, assess, check, r, seed, repeats,
         )
     };
-    let mut first = run(Resort::None, None)?;
+    let mut first = run(Resort::None, None, &mut repeats)?;
     if first.built.is_some() || !last_resorts {
+        first.reused = repeats.reused;
         return Ok(first);
     }
     // A1 hand-over from the primary contraction, kept for N3 (`Contracted`). Its chord
@@ -852,13 +998,13 @@ pub(crate) fn build_parent(
         );
         relief::resume(&seed, &contract.interface, &policy)
     });
-    let mut last = run(Resort::Fix2, None)?;
+    let mut last = run(Resort::Fix2, None, &mut repeats)?;
     last.attempted_topology.add(first.attempted_topology);
     for resort in [Resort::Staged, Resort::N1, Resort::N2, Resort::N3] {
         if last.built.is_some() {
             break;
         }
-        let mut next = run(resort, relief.as_ref())?;
+        let mut next = run(resort, relief.as_ref(), &mut repeats)?;
         next.attempted_topology.add(last.attempted_topology);
         if let (Some(b), Some(relief)) = (&mut next.built, &relief) {
             if resort == Resort::N3 {
@@ -881,6 +1027,7 @@ pub(crate) fn build_parent(
             check,
             Resort::N3Recovery,
             relief.as_ref(),
+            &mut repeats,
         )?;
         next.attempted_topology.add(last.attempted_topology);
         if let (Some(b), Some(relief)) = (&mut next.built, &relief) {
@@ -891,6 +1038,7 @@ pub(crate) fn build_parent(
     if let Some(b) = &mut last.built {
         b.last_resort = true;
     }
+    last.reused = repeats.reused;
     Ok(last)
 }
 
@@ -926,6 +1074,7 @@ pub(crate) fn root_candidate(
         &HashSet::default(),
         Resort::N3,
         &policy,
+        &mut false,
     );
     match proposal {
         Ok(mut built) => {
@@ -990,12 +1139,30 @@ fn build(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
     resort: Resort,
     seed: Option<&Contracted>,
+    repeats: &mut Repeats,
 ) -> Result<Outcome, JobError> {
     let fix2 = resort == Resort::Fix2;
     check()?;
     if caps.is_empty() {
         return Err(state("a parent build needs at least one cap"));
     }
+    // An earlier build failed this exact contraction: it fails again with that receipt.
+    // (The primary build is first, so a reuse never stands in for its relief hand-over.)
+    let class = ContractionClass::of(resort, caps, seed.is_some());
+    if resort != Resort::None {
+        if let Some(receipt) = repeats.failed_contraction(&class) {
+            repeats.reused.contractions += 1;
+            return Ok(Outcome {
+                built: None,
+                contraction_failed: true,
+                attempted_topology: receipt,
+                construction_dropped: Vec::new(),
+                relief: None,
+                reused: Reused::default(),
+            });
+        }
+    }
+    let mut direct = seed.is_none() || !resort.clustered();
     let mut merged = merge(children);
     let reference = merged.clone();
     if merged.triangles.is_empty() {
@@ -1055,12 +1222,16 @@ fn build(
         )
         .with_policy(policy.clone());
         let Some(snapped) = snap_stuck(&reference, seed, interface, &guard) else {
+            if repeats.enabled {
+                repeats.failed.push((class, attempted));
+            }
             return Ok(Outcome {
                 built: None,
                 contraction_failed: true,
                 attempted_topology: attempted,
                 construction_dropped: Vec::new(),
                 relief: None,
+                reused: Reused::default(),
             });
         };
         merged = snapped;
@@ -1073,7 +1244,8 @@ fn build(
         } else {
             &mut discard
         };
-        if !topology::contract(
+        let mut rebuilt = false;
+        let contracted = topology::contract_noting(
             &mut merged,
             interface,
             &previous_interface,
@@ -1082,7 +1254,10 @@ fn build(
             fix2,
             n3,
             relieved.then_some(slot),
-        )? {
+            &mut rebuilt,
+        )?;
+        direct &= !rebuilt && contracted;
+        if !contracted {
             attempted.add(topology);
             topology = Default::default();
             if !recover_contraction(
@@ -1099,16 +1274,21 @@ fn build(
                 relieved,
             )? {
                 attempted.add(topology);
+                if repeats.enabled {
+                    repeats.failed.push((class, attempted));
+                }
                 return Ok(Outcome {
                     built: None,
                     contraction_failed: true,
                     attempted_topology: attempted,
                     construction_dropped: Vec::new(),
                     relief: residue,
+                    reused: Reused::default(),
                 });
             }
         }
     }
+    repeats.contracted(resort, direct);
     let contracted_faces = merged.triangles.clone();
     let contracted_representative = merged.representative.clone();
     let floor = contract.scale.max(children_error);
@@ -1126,12 +1306,17 @@ fn build(
         0.
     };
     let mut opening_pins = HashSet::default();
+    // Round-zero reuse: the full-cap calls, and the pins they started from.
+    let full_cap = *caps.last().unwrap();
+    let mut full: Option<(HashSet<Key>, Vec<Call>)> = None;
     for (i, &cap) in caps.iter().enumerate() {
         if caps[..i].contains(&cap) {
             continue;
         }
         for preserve_holes in [false, true] {
-            if let Some(mut b) = assessed_attempt(
+            let pins_before = (repeats.enabled && cap == full_cap && !preserve_holes)
+                .then(|| opening_pins.clone());
+            let found = assessed_attempt(
                 tile,
                 &merged,
                 interface,
@@ -1147,7 +1332,10 @@ fn build(
                 &mut attempted,
                 assess,
                 check,
-            )? {
+                repeats,
+                None,
+            )?;
+            if let Some(mut b) = found {
                 attempted.add(topology);
                 b.topology.add(topology);
                 return Ok(Outcome {
@@ -1156,7 +1344,16 @@ fn build(
                     attempted_topology: attempted,
                     construction_dropped: Vec::new(),
                     relief: None,
+                    reused: Reused::default(),
                 });
+            }
+            if cap == full_cap && repeats.enabled {
+                if let Some(pins) = pins_before {
+                    full = Some((pins, Vec::new()));
+                }
+                if let (Some((_, calls)), Some(call)) = (&mut full, &repeats.last) {
+                    calls.push(call.clone());
+                }
             }
         }
     }
@@ -1169,6 +1366,7 @@ fn build(
             attempted_topology: attempted,
             construction_dropped: Vec::new(),
             relief: None,
+            reused: Reused::default(),
         });
     }
     // D11: simplifier stagnation alone is not cap infeasibility. Deduplicate and remove
@@ -1177,12 +1375,23 @@ fn build(
     if let Some(receipt) = constrained::remesh(&mut merged, interface, *caps.last().unwrap()) {
         topology.add(receipt);
     }
+    // Round 0 repeats the full-cap calls exactly when cleanup and the constrained remesh
+    // left the contracted mesh as it was and the pins are those the calls started from.
+    let unchanged =
+        merged.triangles == contracted_faces && merged.representative == contracted_representative;
+    let mut round_zero = full
+        .filter(|(pins, calls)| unchanged && calls.len() == 2 && *pins == opening_pins)
+        .map(|(_, calls)| calls);
     for round in 0..=6 {
         check()?;
         if round != 0 && !topology::remesh(&mut merged, interface, round, &mut topology) {
             continue;
         }
-        for preserve_holes in [false, true] {
+        for (h, preserve_holes) in [false, true].into_iter().enumerate() {
+            let known = round_zero
+                .as_ref()
+                .filter(|_| round == 0)
+                .map(|calls| calls[h].clone());
             if let Some(mut b) = assessed_attempt(
                 tile,
                 &merged,
@@ -1199,6 +1408,8 @@ fn build(
                 &mut attempted,
                 assess,
                 check,
+                repeats,
+                known.as_ref(),
             )? {
                 // Final comparison already counts actual changes against the reference.
                 topology.dropped_components = 0;
@@ -1212,9 +1423,11 @@ fn build(
                     attempted_topology: attempted,
                     construction_dropped: Vec::new(),
                     relief: None,
+                    reused: Reused::default(),
                 });
             }
         }
+        round_zero = None;
     }
     // D11 coarse drops (owner decision 2026-10-28): only once every strategy above has
     // failed, and only for cap pressure: the contracted input exceeds the cap (validators
@@ -1262,6 +1475,8 @@ fn build(
                 &mut attempted,
                 assess,
                 check,
+                repeats,
+                None,
             )?;
             if built.is_some() {
                 break;
@@ -1323,6 +1538,8 @@ fn build(
                         attempted,
                         assess,
                         check,
+                        repeats,
+                        None,
                     )? {
                         return Ok(Some((b, round)));
                     }
@@ -1390,6 +1607,7 @@ fn build(
             attempted_topology: attempted,
             construction_dropped: Vec::new(),
             relief: None,
+            reused: Reused::default(),
         });
     }
     attempted.add(topology);
@@ -1399,6 +1617,7 @@ fn build(
         attempted_topology: attempted,
         construction_dropped,
         relief: residue,
+        reused: Reused::default(),
     })
 }
 
@@ -1526,6 +1745,7 @@ fn recover_contraction(
             folds,
             // A recovery copy's residue is not the cell's: only the primary one is kept.
             relieved.then_some(&mut None),
+            &mut false,
         )? {
             receipt.add(attempt);
             return Ok(true);
@@ -1535,8 +1755,8 @@ fn recover_contraction(
     Ok(false)
 }
 
-/// Keep the source face ring around a rejected new hole before considering omission.
-/// Pins grow monotonically and retries are bounded; no patch or new boundary is invented.
+/// `assessed_attempt_inner`, or the exact result of an equal earlier call (`Repeats`):
+/// `Fix2` replaying `None`, or `known` (round zero repeating the full-cap calls).
 #[allow(clippy::too_many_arguments)]
 fn assessed_attempt(
     tile: TileKey,
@@ -1554,6 +1774,83 @@ fn assessed_attempt(
     attempted: &mut TopologyReceipt,
     assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    repeats: &mut Repeats,
+    known: Option<&Call>,
+) -> Result<Option<Built>, JobError> {
+    if let Some(call) = repeats.replay_next(resort) {
+        check()?;
+        call.apply(attempted, opening_pins, &mut repeats.reused);
+        repeats.reused.calls += 1;
+        repeats.log(resort, &call);
+        return Ok(None);
+    }
+    if let Some(call) = known {
+        check()?;
+        call.apply(attempted, opening_pins, &mut repeats.reused);
+        repeats.reused.rounds += 1;
+        repeats.log(resort, call);
+        return Ok(None);
+    }
+    // The receipt is a commutative monoid (u64 sums, f64 max from `Default`), so a call's
+    // own contribution added once equals its rounds' additions.
+    let mut own = TopologyReceipt::default();
+    let mut refused = false;
+    let mut search = super::error::SearchStats::default();
+    let out = assessed_attempt_inner(
+        tile,
+        merged,
+        interface,
+        cap,
+        children_error,
+        reference,
+        contracted_faces,
+        floor,
+        preserve_holes,
+        opening_pins,
+        resort,
+        policy,
+        &mut own,
+        assess,
+        check,
+        &mut refused,
+        &mut search,
+    )?;
+    attempted.add(own);
+    if out.is_none() && repeats.enabled {
+        repeats.log(
+            resort,
+            &Call {
+                attempted: own,
+                pins: opening_pins.clone(),
+                refused,
+                search,
+            },
+        );
+    }
+    Ok(out)
+}
+
+/// Keep the source face ring around a rejected new hole before considering omission.
+/// Pins grow monotonically and retries are bounded; no patch or new boundary is invented.
+#[allow(clippy::too_many_arguments)]
+fn assessed_attempt_inner(
+    tile: TileKey,
+    merged: &Merged,
+    interface: &[InterfaceRow],
+    cap: usize,
+    children_error: f64,
+    reference: &Merged,
+    contracted_faces: &[[u32; 3]],
+    floor: f64,
+    preserve_holes: bool,
+    opening_pins: &mut HashSet<Key>,
+    resort: Resort,
+    policy: &folds::Policy,
+    attempted: &mut TopologyReceipt,
+    assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    refused: &mut bool,
+    search: &mut super::error::SearchStats,
 ) -> Result<Option<Built>, JobError> {
     for round in 0..=RETRIES {
         check()?;
@@ -1570,6 +1867,7 @@ fn assessed_attempt(
             opening_pins,
             resort,
             policy,
+            refused,
         );
         let mut b = match proposal {
             Ok(b) => b,
@@ -1580,6 +1878,7 @@ fn assessed_attempt(
         b.staged = resort.staged();
         b.last_resort_stage = resort.stage();
         let accepted = assess(&mut b)?;
+        search.add(b.search);
         if !accepted {
             b.change.receipt.rejected_hole_closures += b.change.receipt.closed_holes;
             b.change.receipt.rejected_hole_openings += b.change.receipt.opened_holes;
@@ -1631,6 +1930,7 @@ fn attempt(
     opening_pins: &HashSet<Key>,
     resort: Resort,
     policy: &folds::Policy,
+    refused_out: &mut bool,
 ) -> Result<Built, JobError> {
     let mut refused = false;
     let mut remaining = REDUCTION_PASSES;
@@ -1661,6 +1961,7 @@ fn attempt(
         }
         result => result,
     };
+    *refused_out |= refused;
     match result {
         Err(e) if e.kind() == JobErrorKind::Unsupported && resort == Resort::Fix2 && refused => {
             let border = interface_points(interface);
@@ -2043,6 +2344,7 @@ fn attempt_mode(
         interface_vertices: interface_vertices as u32,
         interface_segments: interface_segments as u32,
         reoriented: 0,
+        search: Default::default(),
         topology: change.receipt,
         change,
         controls: Default::default(),
@@ -2321,6 +2623,7 @@ mod tests {
             &mut |_| Ok(true),
             &|| Ok(()),
             true,
+            true,
         )
         .unwrap()
         .built
@@ -2406,6 +2709,7 @@ mod tests {
             &pins,
             Resort::None,
             &folds::Policy::default(),
+            &mut false,
         )
         .is_err());
         let built = attempt(
@@ -2421,6 +2725,7 @@ mod tests {
             &pins,
             Resort::None,
             &folds::Policy::default(),
+            &mut false,
         )
         .unwrap();
         assert_eq!(built.geometry.triangles.len(), 6);

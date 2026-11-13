@@ -601,6 +601,7 @@ fn complete_parent(n: usize, third_contact: bool) {
                 Ok(())
             },
             true,
+            true,
         );
         // Read and retain both metadata vectors after the complete builder.
         let metadata = Metadata::of(std::hint::black_box(&contract));
@@ -718,6 +719,7 @@ fn a_highest_indexed_parent_builds_the_seam_faces_it_owns() {
             &mut |_| Ok(true),
             &|| Ok(()),
             true,
+            true,
         )
         .unwrap();
         let stage = outcome.built.as_ref().map(|b| b.last_resort_stage);
@@ -777,11 +779,65 @@ fn seam_ownership_follows_the_point_holders_not_the_contract_rows() {
             &mut |_| Ok(true),
             &|| Ok(()),
             true,
+            true,
         )
         .unwrap();
         let stage = outcome.built.as_ref().map(|b| b.last_resort_stage);
         assert_eq!(stage.is_some(), builds, "greatest={greatest}: {stage:?}");
     }
+}
+
+/// Exact-repeat reuse (`Repeats`): the third-contact strip's border contraction is rejected
+/// and its recovery fails, so `Staged`, `N1` and `N2`, whose contraction arguments equal the
+/// primary build's, would repeat that failure before N3 builds. Reusing it skips their
+/// contraction (fewer source lookups) and returns the same outcome, receipts included.
+#[test]
+fn a_repeated_failed_contraction_is_reused_with_the_same_outcome() {
+    let fixture = Fixture::Direct {
+        third_contact: true,
+    };
+    let (parent, children) = children(512, fixture);
+    let [a, mid, b, c] = STRIP.map(key);
+    let contract = measured_contract(parent, &children, fixture);
+    let run = |reuse: bool| {
+        let lookups = Cell::new(0usize);
+        let outcome = build_parent(
+            parent,
+            &children,
+            &[super::super::TRIANGLE_CAP],
+            &contract,
+            &|k| {
+                lookups.set(lookups.get() + 1);
+                if k == mid {
+                    Ok(Some((a, b, 0.5, 2)))
+                } else {
+                    Ok(Some((k, k, 0., if [a, b, c].contains(&k) { 2 } else { 1 })))
+                }
+            },
+            &mut |_| Ok(true),
+            &|| Ok(()),
+            true,
+            reuse,
+        )
+        .unwrap();
+        (outcome, lookups.get())
+    };
+    let (reference, recomputed) = run(false);
+    let (reused, skipped) = run(true);
+    assert_eq!(reference.reused.contractions, 0);
+    assert!(reused.reused.contractions > 0, "{:?}", reused.reused);
+    assert!(skipped < recomputed, "{skipped} vs {recomputed} lookups");
+    let built = reused
+        .built
+        .as_ref()
+        .expect("the last resort builds the strip");
+    assert!(built.last_resort_stage > 0);
+    assert_eq!(reused.contraction_failed, reference.contraction_failed);
+    assert_eq!(
+        format!("{:?}", (&reused.built, &reused.attempted_topology)),
+        format!("{:?}", (&reference.built, &reference.attempted_topology))
+    );
+    assert_eq!(reused.construction_dropped, reference.construction_dropped);
 }
 
 #[test]
@@ -837,6 +893,7 @@ fn complete_parent_constrained_contraction_dense_rows_fit_charge() {
                 Ok(true)
             },
             &|| Ok(()),
+            true,
             true,
         );
         let metadata = Metadata::of(std::hint::black_box(&contract));

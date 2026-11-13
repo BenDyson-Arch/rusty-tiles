@@ -687,6 +687,8 @@ pub struct HlodDiagnostics {
     /// admission, whichever is larger.
     pub stage_scratch_peak_bytes: u64,
     pub stage_scratch_bound_bytes: u64,
+    /// Exact repeats the coarse ladder skipped (`RepeatReuse`).
+    pub repeat_reuse: RepeatReuse,
     /// Highest simultaneously leased bytes of the walk's ledger.
     pub lease_peak_bytes: u64,
     pub held_spill: store::spill::Stats,
@@ -1014,6 +1016,7 @@ pub(crate) fn produce(
         .zip(audit_lease.as_ref())
         .map(|(path, lease)| audit::Writer::new(path, audit_bound, lease))
         .transpose()?;
+    let repeats = RepeatCounter::default();
     let job = Job {
         input: &input,
         services: &services,
@@ -1021,6 +1024,7 @@ pub(crate) fn produce(
         borders: &borders,
         sampling: &sampling,
         check,
+        repeats: &repeats,
     };
     let result = walk(
         &job,
@@ -1030,6 +1034,7 @@ pub(crate) fn produce(
         audit.as_ref(),
         &ledger,
     );
+    diagnostics.repeat_reuse = repeats.receipt();
     diagnostics.error_cpu_seconds = index_cpu.map(|s| s + report.error_cpu_seconds);
     diagnostics.root_competition_cpu_seconds = report.root_competition_cpu_seconds;
     diagnostics.root_competition_timing = report.root_competition_timing;
@@ -1354,6 +1359,39 @@ struct Job<'j, 'a> {
     borders: &'j borders::Borders,
     sampling: &'j error::SamplingPlan,
     check: &'j (dyn Fn() -> Result<(), JobError> + Sync),
+    /// Exact repeats the walk skipped (`geometry::Reused`), for the diagnostics.
+    repeats: &'j RepeatCounter,
+}
+
+/// `RepeatReuse` summed over worker threads.
+#[derive(Default)]
+struct RepeatCounter([std::sync::atomic::AtomicU64; 3]);
+
+impl RepeatCounter {
+    fn add(&self, r: &geometry::Reused) {
+        use std::sync::atomic::Ordering::Relaxed;
+        self.0[0].fetch_add(r.contractions, Relaxed);
+        self.0[1].fetch_add(r.calls, Relaxed);
+        self.0[2].fetch_add(r.rounds, Relaxed);
+    }
+    fn receipt(&self) -> RepeatReuse {
+        use std::sync::atomic::Ordering::Relaxed;
+        RepeatReuse {
+            contractions: self.0[0].load(Relaxed),
+            replayed_calls: self.0[1].load(Relaxed),
+            round_zero_calls: self.0[2].load(Relaxed),
+        }
+    }
+}
+
+/// Exact repeats the coarse ladder skipped (`geometry::build_parent`): builds that reused an
+/// earlier build's failed contraction, `Fix2` proposal calls replayed from the primary
+/// build's, and remesh round 0 calls reused from the full-cap calls. Output is unchanged.
+#[derive(Clone, Copy, Debug, Default, Serialize)]
+pub struct RepeatReuse {
+    pub contractions: u64,
+    pub replayed_calls: u64,
+    pub round_zero_calls: u64,
 }
 
 struct Prepared {
@@ -1589,7 +1627,7 @@ fn build_tile(
         } else {
             settings.cap
         };
-        geometry::build_parent(
+        let outcome = geometry::build_parent(
             closed.key,
             &children,
             &[half, settings.cap],
@@ -1609,8 +1647,14 @@ fn build_tile(
                     }
                 }
                 // Keep the last accepted measurement: the coarse-drop bisection may
-                // try smaller prefixes after its fitting one.
-                let candidate = prepare(job, built, contract, &mut query, &mut nearest)?;
+                // try smaller prefixes after its fitting one. This proposal's own search
+                // statistics go with it, so a reused call can replay them (`Reused`);
+                // their accumulation is a sum and a max, so the split changes nothing.
+                let before = std::mem::take(&mut nearest.stats);
+                let candidate = prepare(job, built, contract, &mut query, &mut nearest);
+                built.search = std::mem::replace(&mut nearest.stats, before);
+                nearest.stats.add(built.search);
+                let candidate = candidate?;
                 let accepted = candidate.is_some();
                 if accepted {
                     prepared = candidate;
@@ -1630,7 +1674,13 @@ fn build_tile(
             },
             check,
             settings.mutation.last_resorts(),
-        )?
+            // Reused calls write no audit records: reuse only without the audit sidecar.
+            settings.mutation.reuse() && audit.is_none(),
+        )?;
+        // Replayed calls' S2 searches, as if they had run (read only after this point).
+        nearest.stats.add(outcome.reused.search);
+        job.repeats.add(&outcome.reused);
+        outcome
     } else {
         geometry::Outcome {
             built: None,
@@ -1638,6 +1688,7 @@ fn build_tile(
             attempted_topology: Default::default(),
             construction_dropped: Vec::new(),
             relief: None,
+            reused: Default::default(),
         }
     };
     #[cfg(test)]
