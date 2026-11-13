@@ -34,8 +34,19 @@ ROOT = Path(__file__).resolve().parents[1]
 MARKER = re.compile(r"#\s*versions:\s*([A-Z0-9_ ]+?)\s*$")
 # Literal pins that must say where their value comes from.
 PINNED = re.compile(r"(maturin-version:|node-version:|python-version:\s*'?[0-9]|maturin==|cargo-nextest@|tool:\s*cargo-nextest|rust-toolchain:)")
-# Rust from the moving stable channel instead of the pinned RUST_VERSION.
-STABLE_RUST = re.compile(r"\brustup\b.*\bstable\b|\btoolchain:\s*['\"]?stable\b|\+stable\b|rust-toolchain@stable\b")
+# Rust from a moving channel or another release instead of the pinned RUST_VERSION:
+# a channel name on a rustup line or in a toolchain input, `cargo +<toolchain>`, an
+# explicit `rustup install/default/override <toolchain>`, or a RUSTUP_TOOLCHAIN override.
+CHANNEL = r"(?:stable|beta|nightly)"
+STABLE_RUST = re.compile(
+    r"\brustup\b.*\b" + CHANNEL + r"\b"
+    r"|\btoolchain:\s*['\"]?" + CHANNEL + r"\b"
+    r"|\bcargo\s+\+\S"
+    r"|\+" + CHANNEL + r"\b"
+    r"|rust-toolchain@" + CHANNEL + r"\b"
+    r"|\brustup\s+(?:toolchain\s+)?install\s+[0-9A-Za-z]"
+    r"|\brustup\s+(?:default|override)\b"
+    r"|\bRUSTUP_TOOLCHAIN\b")
 KEY_LINE = re.compile(r"^([A-Z][A-Z0-9_]*)=(\S+)$")
 
 
@@ -120,7 +131,7 @@ def check_unsupported(path, lines, values):
 
 def check_stable_rust(path, lines):
     """Workflows and actions install the pinned toolchain, never the stable channel."""
-    return [f"{path}:{number}: Rust must come from rust-toolchain.toml (RUST_VERSION), not stable"
+    return [f"{path}:{number}: Rust must come from rust-toolchain.toml (RUST_VERSION), not stable or another toolchain"
             for number, line in enumerate(lines, 1)
             if not line.lstrip().startswith("#") and STABLE_RUST.search(line)]
 

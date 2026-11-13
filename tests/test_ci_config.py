@@ -196,7 +196,14 @@ class CheckCiConfigTests(unittest.TestCase):
                      "          rust-toolchain: stable",
                      "          toolchain: 'stable'",
                      "      - uses: dtolnay/rust-toolchain@stable",
-                     "      - run: cargo +stable clippy"):
+                     "      - run: cargo +stable clippy",
+                     "      - run: rustup toolchain install nightly",
+                     "      - run: rustup toolchain install 1.98.0",
+                     "      - run: rustup default 1.100.0",
+                     "      - run: rustup override set beta",
+                     "      - run: cargo +1.99.0 test",
+                     "          toolchain: nightly",
+                     "      RUSTUP_TOOLCHAIN: beta"):
             with self.subTest(line=line):
                 errors = self.errors(workflow=WORKFLOW + "  extra:\n    runs-on: ubuntu-24.04\n"
                                      "    timeout-minutes: 5 # versions: TIMEOUT_SHORT\n    steps:\n" + line + "\n")
@@ -204,6 +211,8 @@ class CheckCiConfigTests(unittest.TestCase):
         fine = WORKFLOW + "# Not rustup default stable: rust-toolchain.toml pins it.\n"
         fine += "  wheel:\n    runs-on: ubuntu-24.04\n    timeout-minutes: 5 # versions: TIMEOUT_SHORT\n"
         fine += "    steps:\n      - name: Test the same stable ABI wheel\n        run: true\n"
+        fine += "      - run: rustup toolchain install --no-self-update\n"
+        fine += "      - run: rustup target add \"$RELEASE_TARGET\"\n"
         self.assertEqual(self.errors(workflow=fine), [])
 
     def test_unsupported_targets_and_runners_fail_outside_comments(self):
