@@ -3,7 +3,10 @@
 use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 fn read(relative: &str) -> String {
-    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(relative)).unwrap()
+    // Windows checkouts may convert line endings to CRLF; the checks below match on `\n`.
+    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(relative))
+        .unwrap()
+        .replace("\r\n", "\n")
 }
 
 fn help(args: &[&str]) -> String {
