@@ -1887,9 +1887,21 @@ class WheelAPI(unittest.TestCase):
         self.assertEqual(str(caught.exception),
                          "implicit: unsupported external tileset content template in tileset.json")
 
+class RecordingResult(unittest.TextTestResult):
+    """Also records the tests that passed, so a runner can require a named one."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.passed = []
+
+    def addSuccess(self, test):
+        super().addSuccess(test)
+        self.passed.append(test.id())
+
+
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(WheelAPI)
-    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    result = unittest.TextTestRunner(verbosity=2, resultclass=RecordingResult).run(suite)
     evidence = {
         "python": sys.version,
         "platform": platform.platform(),
@@ -1903,6 +1915,7 @@ if __name__ == "__main__":
         "errors": len(result.errors),
         "skipped": len(result.skipped),
         "skips": [f"{test.id()}: {reason}" for test, reason in result.skipped],
+        "passed": result.passed,
         "ok": result.wasSuccessful(),
     }
     if "bpy" in sys.modules:
