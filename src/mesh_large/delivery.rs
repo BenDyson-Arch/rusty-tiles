@@ -314,6 +314,9 @@ impl WriteSink<'_> {
         sha256: [u8; 32],
         member: &str,
     ) -> Result<(), JobError> {
+        // A document stages up to 4096 payloads of up to 96 MiB each: check per payload.
+        (self.check)()?;
+        crate::test_hooks::pace("mesh.stage-payload");
         let source = self.leaves.member(uri);
         // The row's digest is checked here, so a payload that contradicts its row is the
         // leaf directory's fault (InvalidInput); the writer re-checks the staged member.
@@ -612,6 +615,7 @@ fn publish_with(
         out,
         work_parent,
         &StorageCharges::default(),
+        None,
     )
     .map(|(report, bytes, _)| (report, bytes))
 }
@@ -749,12 +753,14 @@ pub(crate) fn prepare_tiler(
 /// measured and must be within what its meter admitted (a larger figure is a write that
 /// bypassed the meter); that measure is returned. A charged archive is admitted by the
 /// archive writer before each part of it is written.
+/// `stop`, when given, stops the archive's spill (index sort and merges) with its run.
 pub(crate) fn write_prepared(
     prepared: PreparedDelivery,
     check: &mut dyn FnMut() -> Result<(), JobError>,
     out: &mut File,
     work_parent: &Path,
     charges: &StorageCharges,
+    stop: Option<&crate::runtime::AttemptProbe>,
 ) -> Result<(MeshTilesetReport, u64, Option<u64>), JobError> {
     let PreparedDelivery {
         limits,
@@ -868,6 +874,9 @@ pub(crate) fn write_prepared(
         None => None,
     };
     let scratch = crate::spill::Scratch::create(Some(work.path()), scratch_need)?;
+    if let Some(stop) = stop {
+        scratch.watch(stop.clone());
+    }
     let archive_bytes = archive::write(
         &staging,
         &names_path,

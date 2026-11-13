@@ -139,6 +139,9 @@ pub(crate) fn build(
     .ok_or_else(|| failure(exhausted("H1 scratch bound exceeds u64")))?;
     let scratch = Scratch::create(config.scratch_dir.as_deref(), need.need_bytes)
         .map_err(|error| failure(error.into()))?;
+    if let Some(stop) = &config.stop {
+        scratch.watch(stop.clone());
+    }
     let result = (|| {
         let need = config::scratch_need_parts(
             scan.triangles,

@@ -546,6 +546,8 @@ fn density_image(
     services
         .cache
         .density(&services.captured.scratch, (index, class_key), drop, || {
+            // Decoding, caching and this chain each take seconds on a 16k² image.
+            check()?;
             let memory = usize::try_from(services.memory).map_err(|_| resource())?;
             timing::time(Stage::DensityMips, || {
                 mips::build(

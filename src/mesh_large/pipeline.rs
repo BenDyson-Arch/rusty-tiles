@@ -583,6 +583,7 @@ pub fn mesh_to_tileset(
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs.into();
     config.source_crs = request.source_crs.clone();
+    config.stop = Some(attempt.probe());
     let budget = MemoryBudget::resolve(request.memory_budget).map_err(|e| attempt.fail(e))?;
     config.memory_budget = Some(budget);
     #[cfg(test)]
@@ -615,7 +616,7 @@ pub fn mesh_to_tileset(
         .prefix(".tiles-mesh-")
         .tempdir_in(work_parent)
     {
-        Ok(work) => work,
+        Ok(work) => crate::cleanup::RegisteredDir::new(work),
         Err(error) => {
             return Err(staging.fail(JobError::io("create mesh intermediate", work_parent, error)))
         }
@@ -813,6 +814,7 @@ pub fn mesh_to_tileset(
             staging.writer(),
             work.path(),
             &charges,
+            Some(&attempt.probe()),
         )
         .map_err(refused)?;
         let storage_diagnostics = &mut memory.memory_backed_storage;

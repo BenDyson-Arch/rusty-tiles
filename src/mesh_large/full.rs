@@ -856,6 +856,9 @@ pub(crate) fn capture_admitted(
     .map_err(super::failure)?;
     let scratch = Scratch::create(config.scratch_dir.as_deref(), scratch_admission)
         .map_err(|e| super::failure(e.into()))?;
+    if let Some(stop) = &config.stop {
+        scratch.watch(stop.clone());
+    }
     #[cfg(test)]
     if let Some(chunk) = config.test_chunk_bytes {
         scratch.set_chunk_bytes(chunk);

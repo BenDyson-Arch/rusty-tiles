@@ -171,6 +171,22 @@ pub(crate) trait SortObserver {
     fn checkpoint(&self, progress: SortProgress) -> Result<(), SpillError>;
 }
 
+/// Where a sort checks: the scratch's stop probe (the owning run's cancellation, whether or
+/// not the sort has an observer), then the observer.
+#[derive(Clone, Copy)]
+struct Checkpoints<'s> {
+    scratch: &'s Scratch,
+    observer: Option<&'s dyn SortObserver>,
+}
+
+impl Checkpoints<'_> {
+    fn at(&self, progress: SortProgress) -> Result<(), SpillError> {
+        self.scratch.check_stop()?;
+        self.observer
+            .map_or(Ok(()), |observer| observer.checkpoint(progress))
+    }
+}
+
 /// Largest run chunk file. Smaller chunks free disk sooner and raise the file count; with the
 /// default `F = 64` an intermediate merge holds at most `F` partly read chunks (512 MiB).
 pub(crate) const CHUNK_BYTES: usize = 8 << 20;
@@ -660,8 +676,15 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
     }
 
     fn checkpoint(&self, progress: SortProgress) -> Result<(), SpillError> {
-        self.observer
-            .map_or(Ok(()), |observer| observer.checkpoint(progress))
+        self.checkpoints().at(progress)
+    }
+
+    /// This sort's checkpoints, as a copy closures can hold while the sorter is borrowed.
+    fn checkpoints(&self) -> Checkpoints<'s> {
+        Checkpoints {
+            scratch: self.scratch,
+            observer: self.observer,
+        }
     }
 
     pub(crate) fn push(&mut self, record: T) -> Result<(), SpillError> {
@@ -785,20 +808,20 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
     }
 
     fn flush_run(&mut self) -> Result<(), SpillError> {
-        let observer = self.observer;
+        let observer = self.checkpoints();
         let chunk = sort_pieces(
             &mut self.buffer,
             self.config.jobs,
             self.scratch.piece_bytes(),
             self.scratch.path(),
-            &mut || observer.map_or(Ok(()), |o| o.checkpoint(SortProgress::Wrote)),
+            &mut || observer.at(SortProgress::Wrote),
         )?;
         let mut parts: Vec<_> = self
             .buffer
             .chunks(chunk)
             .map(|part| SliceCursor(part.iter()))
             .collect();
-        let mut tick = |_| observer.map_or(Ok(()), |o| o.checkpoint(SortProgress::Wrote));
+        let mut tick = |_| observer.at(SortProgress::Wrote);
         let run = if parts.len() == 1 {
             write_run(
                 &self.scratch.file_maker()?,
@@ -863,13 +886,13 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             let mut merger = Merger::new(readers)?;
-            let observer = self.observer;
+            let observer = self.checkpoints();
             let mut run = write_run(
                 &self.scratch.file_maker()?,
                 self.config.buffer_bytes,
                 self.layout,
                 &mut merger,
-                &mut |_| observer.map_or(Ok(()), |o| o.checkpoint(SortProgress::Wrote)),
+                &mut |_| observer.at(SortProgress::Wrote),
             )?;
             run.generation = generation.checked_add(1).ok_or(SpillError::Overflow)?;
             self.stats.spilled_bytes += run.file_bytes();
@@ -935,7 +958,7 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
         }
         let mut done = 0u64;
         self.checkpoint(SortProgress::MergeStart { total })?;
-        let observer = self.observer;
+        let observer = self.checkpoints();
         let mut pending = std::mem::take(&mut self.runs).into_iter();
         let mut merged = Vec::with_capacity(pending.len());
         for size in groups {
@@ -963,7 +986,7 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
                         &mut merger,
                         &mut |written| {
                             let done = done + written;
-                            observer.map_or(Ok(()), |o| o.checkpoint(SortProgress::Merged { done }))
+                            observer.at(SortProgress::Merged { done })
                         },
                     )?;
                     done += run.records;
@@ -997,13 +1020,13 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
         let remaining = self.stats.records;
         if self.runs.is_empty() {
             let mut buffer = std::mem::take(&mut self.buffer);
-            let observer = self.observer;
+            let observer = self.checkpoints();
             let chunk = sort_pieces(
                 &mut buffer,
                 self.config.jobs,
                 self.scratch.piece_bytes(),
                 self.scratch.path(),
-                &mut || observer.map_or(Ok(()), |o| o.checkpoint(SortProgress::Wrote)),
+                &mut || observer.at(SortProgress::Wrote),
             )?;
             let len = buffer.len();
             let data = Arc::new(buffer);

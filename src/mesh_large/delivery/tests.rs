@@ -1655,7 +1655,7 @@ fn memory_backed_work_is_admitted_before_it_is_written() {
         let mut file = File::create(&output).unwrap();
         let request = MeshTilesetRequest::new(&dir, &output);
         let prepared = prepare(&request, LIMITS, &mut || Ok(()), false).unwrap();
-        let result = write_prepared(prepared, &mut || Ok(()), &mut file, &dir, &charges);
+        let result = write_prepared(prepared, &mut || Ok(()), &mut file, &dir, &charges, None);
         assert!(
             !std::fs::read_dir(&dir).unwrap().any(|e| e
                 .unwrap()
@@ -1714,6 +1714,7 @@ fn memory_backed_work_is_admitted_before_it_is_written() {
         work: Some(meter),
         archive: None,
     };
-    let error = write_prepared(prepared, &mut || Ok(()), &mut file, &dir, &charges).unwrap_err();
+    let error =
+        write_prepared(prepared, &mut || Ok(()), &mut file, &dir, &charges, None).unwrap_err();
     assert!(error.to_string().contains("bypassed the meter"), "{error}");
 }

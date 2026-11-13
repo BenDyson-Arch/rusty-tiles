@@ -421,7 +421,11 @@ callback cannot redirect the output. If the callback failure is the job's first
 fatal cause, the original exception is raised. Nested and concurrent calls are
 independent. Pending Python signals are checked during preparation and events,
 not after installation; an asynchronous interruption or allocation failure
-after commit can still interrupt the caller.
+after commit can still interrupt the caller. A `KeyboardInterrupt` seen at one
+of these checks stops the job like a CLI stop: it removes its scratch and
+staging before the exception reaches the caller. Ctrl-C is noticed at the next
+progress event, so between events (for example during one KTX2 texture page
+encode) it waits for that event. The bindings have no backstop like the CLI's.
 
 ## Errors
 

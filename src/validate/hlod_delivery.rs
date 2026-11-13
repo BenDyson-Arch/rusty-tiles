@@ -90,6 +90,35 @@ const SOURCE_COLUMNS: [&str; 5] = [
 fn bad(label: &str, detail: &str) -> Error {
     invalid(format!("{label}: {detail}"))
 }
+/// Rows streamed between stop checks in loops that charge no work.
+const STOP_ROWS: usize = 1 << 16;
+/// Runs `batch` under a progress handler that only watches `probe`, so a bulk statement
+/// (an index build, a large COMMIT) ends soon after its run stops. It charges no work.
+fn stoppable_batch(
+    connection: &Connection,
+    probe: Option<&crate::runtime::AttemptProbe>,
+    batch: &str,
+) -> Result<(), Error> {
+    let Some(probe) = probe else {
+        return connection.execute_batch(batch).map_err(sql);
+    };
+    let watch = probe.clone();
+    connection
+        .progress_handler(
+            10_000,
+            Some(move || {
+                crate::test_hooks::pace("sqlite.delivery-batch");
+                watch.check().is_err()
+            }),
+        )
+        .map_err(sql)?;
+    let result = connection.execute_batch(batch);
+    connection
+        .progress_handler(0, None::<fn() -> bool>)
+        .map_err(sql)?;
+    probe.check().map_err(super::run_failure)?;
+    result.map_err(sql)
+}
 fn sql(error: rusqlite::Error) -> Error {
     Error::Scratch(ScratchRefusal::Io(std::io::Error::other(format!(
         "HLOD delivery database: {error}"
@@ -1859,13 +1888,14 @@ impl Store {
             self.materialize()?;
         }
         // Secondary indexes of rows inserted in traversal order are built once, by sort.
-        self.connection
-            .execute_batch(
-                "CREATE INDEX IF NOT EXISTS tile_parent ON tiles(parent);
-                 CREATE INDEX IF NOT EXISTS refs_tile ON refs(tile);
-                 CREATE INDEX IF NOT EXISTS refs_rank ON refs(rank);",
-            )
-            .map_err(sql)?;
+        stoppable_batch(
+            &self.connection,
+            probe.as_ref(),
+            "CREATE INDEX IF NOT EXISTS tile_parent ON tiles(parent);
+             CREATE INDEX IF NOT EXISTS refs_tile ON refs(tile);
+             CREATE INDEX IF NOT EXISTS refs_rank ON refs(rank);",
+        )?;
+        let commit_probe = probe.clone();
         let used = Arc::new(AtomicU64::new(0));
         let effort = Effort {
             certificate_fast: AtomicU64::new(0),
@@ -1905,7 +1935,7 @@ impl Store {
             "interfaceSegments: native delivery work exceeds payload element budget".into()
         })?;
         let census = result?;
-        self.connection.execute_batch("COMMIT;").map_err(sql)?;
+        stoppable_batch(&self.connection, commit_probe.as_ref(), "COMMIT;")?;
         self.census = census;
         Ok(count)
     }
@@ -2250,7 +2280,10 @@ impl Store {
             }
         }
         let mut previous: Option<Alias> = None;
-        for alias in sorter.finish().map_err(spill_failure)? {
+        for (at, alias) in sorter.finish().map_err(spill_failure)?.enumerate() {
+            if at % STOP_ROWS == 0 {
+                self._scratch.check_stop().map_err(spill_failure)?;
+            }
             let alias = alias.map_err(spill_failure)?;
             if let Some(p) = previous {
                 if (p.source, p.vertex) == (alias.source, alias.vertex) && p.exact != alias.exact {
@@ -2867,7 +2900,10 @@ impl Store {
         ends: Sequence<bulk::End>,
     ) -> Result<(), Error> {
         let mut sorted = self.sorter()?;
-        for e in ends.reader().map_err(spill_failure)? {
+        for (at, e) in ends.reader().map_err(spill_failure)?.enumerate() {
+            if at % STOP_ROWS == 0 {
+                self._scratch.check_stop().map_err(spill_failure)?;
+            }
             sorted
                 .push(e.map_err(spill_failure)?)
                 .map_err(spill_failure)?;

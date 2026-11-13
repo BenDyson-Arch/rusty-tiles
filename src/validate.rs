@@ -185,6 +185,9 @@ fn spill_failure(error: crate::spill::SpillError) -> Error {
         Ok(refusal) => return Error::Scratch(refusal),
         Err(error) => error,
     };
+    if let SpillError::Stopped(error) = error {
+        return run_failure(*error);
+    }
     let message = format!("validation scratch: {error}");
     match error {
         SpillError::Overflow => Error::limit(message),
@@ -3384,6 +3387,7 @@ fn inspect_run(
         &archive_limits,
         crate::archive3tz::CatalogConfig::selected_or(plan.catalog),
         placement,
+        attempt.map(crate::runtime::Attempt::probe),
     )
     .map_err(archive_admission_error)?;
     // VS-C-1: S is fixed by the admitted catalog before any budgeted work.
