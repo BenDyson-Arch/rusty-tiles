@@ -366,42 +366,17 @@ impl Attempt {
     }
 
     pub(crate) fn check(&self) -> Result<(), JobError> {
-        let state = self.control.state();
-        match state.phase {
-            Phase::Open => Ok(()),
-            Phase::Aborted => Err(state.primary.as_ref().unwrap().clone()),
-            Phase::Publishing | Phase::Finished => Err(state
-                .primary
-                .as_ref()
-                .cloned()
-                .unwrap_or_else(|| invalid_state("operation is no longer producing"))),
-        }
+        check_control(&self.control)
     }
 
     pub(crate) fn emit(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
-        {
-            let mut state = self.control.state();
-            if state.phase == Phase::Aborted {
-                return Err(state.primary.as_ref().unwrap().clone());
-            }
-            if state.phase != Phase::Open || state.events_closed {
-                let error = invalid_state("event admission is closed");
-                record_abort(&mut state, error.clone());
-                return Err(error);
-            }
-            state.active_events += 1;
-        }
-        // RAII also decrements the active count if a user observer unwinds.
-        let admission = EventAdmission {
-            control: &self.control,
-            active: true,
-        };
-        let observed = self
-            .control
-            .observer
-            .as_ref()
-            .map_or(Ok(()), |observer| observer.observe(event));
-        admission.complete(observed)
+        emit_control(&self.control, event)
+    }
+
+    /// A `'static` view for callbacks that cannot borrow the attempt (SQLite's progress
+    /// handler): it checks and emits like the attempt and never finishes it.
+    pub(crate) fn probe(&self) -> AttemptProbe {
+        AttemptProbe(self.control.clone())
     }
 
     pub(crate) fn close_events(&self) -> Result<(), JobError> {
@@ -468,6 +443,57 @@ impl Attempt {
         state.phase = Phase::Finished;
         state.events_closed = true;
     }
+}
+
+/// See [`Attempt::probe`].
+pub(crate) struct AttemptProbe(Arc<Control>);
+
+impl AttemptProbe {
+    pub(crate) fn check(&self) -> Result<(), JobError> {
+        check_control(&self.0)
+    }
+
+    pub(crate) fn emit(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
+        emit_control(&self.0, event)
+    }
+}
+
+fn check_control(control: &Control) -> Result<(), JobError> {
+    let state = control.state();
+    match state.phase {
+        Phase::Open => Ok(()),
+        Phase::Aborted => Err(state.primary.as_ref().unwrap().clone()),
+        Phase::Publishing | Phase::Finished => Err(state
+            .primary
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| invalid_state("operation is no longer producing"))),
+    }
+}
+
+fn emit_control(control: &Control, event: &RunEvent<'_>) -> Result<(), JobError> {
+    {
+        let mut state = control.state();
+        if state.phase == Phase::Aborted {
+            return Err(state.primary.as_ref().unwrap().clone());
+        }
+        if state.phase != Phase::Open || state.events_closed {
+            let error = invalid_state("event admission is closed");
+            record_abort(&mut state, error.clone());
+            return Err(error);
+        }
+        state.active_events += 1;
+    }
+    // RAII also decrements the active count if a user observer unwinds.
+    let admission = EventAdmission {
+        control,
+        active: true,
+    };
+    let observed = control
+        .observer
+        .as_ref()
+        .map_or(Ok(()), |observer| observer.observe(event));
+    admission.complete(observed)
 }
 
 impl Drop for Attempt {
