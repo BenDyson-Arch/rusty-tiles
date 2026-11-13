@@ -127,6 +127,10 @@ jobs:
         run: |
           cargo package --locked --no-verify
           python3 scripts/third_party_notices.py check --rust-licenses all --max-bytes 10000000 target/package/rusty-tiles-*.crate
+      - name: Generate validator test corpora
+        # Seconds: tracked generators write the fixtures the oracle-parity tests read, each
+        # checked against bench/architecture_audit/generated-corpora.sha256.
+        run: python3 scripts/test_corpora.py
       - name: Test default build
         shell: bash
         run: |
@@ -272,10 +276,15 @@ jobs:
         shell: bash
     env:
       RELEASE_TARGET: ${{ matrix.target }}
+      RUSTY_TILES_PYTHON: python
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          # Generated test corpora need Python 3.12+ (scripts/test_corpora.py).
+          python-version: '3.14'
       - name: Select stable Rust
         run: |
           rustup update stable --no-self-update
@@ -285,6 +294,10 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: portable-${{ matrix.target }}
+      - name: Generate validator test corpora
+        # Seconds: tracked generators write the fixtures the oracle-parity tests read, each
+        # checked against bench/architecture_audit/generated-corpora.sha256.
+        run: python scripts/test_corpora.py
       - name: Test the portable release CLI
         run: cargo test --locked --target "$RELEASE_TARGET"
       - name: Report vendored KTX2 encoder digests and round trips
@@ -381,6 +394,10 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: gdal-${{ matrix.gdal }}
+      - name: Generate validator test corpora
+        # Seconds: tracked generators write the fixtures the oracle-parity tests read, each
+        # checked against bench/architecture_audit/generated-corpora.sha256.
+        run: python3 scripts/test_corpora.py
       - name: Test native geospatial build
         env:
           LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'

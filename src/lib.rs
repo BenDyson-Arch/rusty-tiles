@@ -88,6 +88,9 @@ pub mod preview;
 pub mod validate;
 
 #[cfg(test)]
+mod test_corpora;
+
+#[cfg(test)]
 #[path = "../bench/architecture_audit/c1_payload_integrity/production_controls/compiled_private_controls_clippy.rs"]
 mod payload_integrity_acceptance;
 

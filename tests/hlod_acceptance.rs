@@ -12,6 +12,9 @@ use std::{
     process::Command,
 };
 
+#[path = "../src/test_corpora.rs"]
+mod test_corpora;
+
 /// Work-root directories outside the `base` family: the other digested families
 /// and run outputs (winding probes, omission producer-report inputs, D11 border
 /// controls, whose producer-baked sheet is not digested).
@@ -305,6 +308,7 @@ fn sampled_hlod_archives_and_named_mutants() {
     }
     // I1's independently authored A-1: co-adjusted missing tile/content bit,
     // metadata row and payload, rather than an obviously dangling URI.
+    test_corpora::ensure();
     let incomplete = repo.join("bench/architecture_audit/implicit_read/controls/fixtures/A-1.3tz");
     let error = inspect(ValidationRequest::new(&incomplete))
         .unwrap_err()

@@ -114,6 +114,8 @@ cargo test --locked
 LIBSQLITE3_SYS_USE_PKG_CONFIG=1 cargo test --locked --features native-geospatial
 ```
 
+The validator oracle-parity tests read fixture corpora under `bench/architecture_audit/` that are generated, not committed. The tests generate them on first use with `scripts/test_corpora.py`, which needs Python 3.12 or newer (`python3`, then `python`; `RUSTY_TILES_PYTHON` overrides). It writes the gitignored fixtures in place and checks every file against the tracked `bench/architecture_audit/generated-corpora.sha256`; a missing or different file fails the test. Run `python3 scripts/test_corpora.py` yourself before the Python oracle and mutant scripts that read the fixtures. After an intended generator change, run `python3 scripts/test_corpora.py update` and commit the manifest diff with the change ([details](bench/architecture_audit/README.md#generated-test-corpora)).
+
 The default suite runs real local LAS/LAZ conversions. The native suite adds CLI acceptance for doctor, preview, point cloud, raster, terrain and vector. Native CRS tests use independent references and synthetic local grids, with no Python or downloads. `cargo clippy --locked --all-targets --features native-geospatial -- -D warnings` is a CI gate in the native GDAL matrix.
 
 CI and release builds cache Cargo dependencies by job, Rust toolchain and lockfile, with separate platform and GDAL keys. The Python-free job exports all Docker build layers to the GitHub Actions `python-free-acceptance` cache, including the pinned PROJ/GDAL SDK and Rust build outputs. Its acceptance stage always runs the full installed suite through `no-cache-filters: acceptance`; only the packaged runtime image is loaded into Docker. Runtime builds read that export without overwriting it; the release workflow uses the same cache scope. The Dockerfile's Cargo cache mounts remain local to a builder and are not exported by the GitHub cache backend, so source changes can still require Rust dependency compilation on a fresh runner. A cold SDK build remains slow; measure later runs after the cache has been populated.
@@ -269,6 +271,7 @@ Core tests use invented fixtures only. Private data and credentials are never bu
 | `tests/fixtures/*.cjs` | Browser probes, described below |
 | `bench/benchmark_*.py` | Repeatable benchmark harnesses |
 | `bench/*_results.json`, `bench/public_runtime_audit.json` | Recorded evidence, listed below |
+| `bench/architecture_audit/generated-corpora.sha256` | SHA-256 of every generated validator fixture; `scripts/test_corpora.py` writes them |
 | `docs/schema/` | Bundled tileset schema used by `validate`. Do not edit. |
 
 Oracles are development tools. They are never embedded and conversion never falls back to Python. Acceptance tests run the native CLI with an empty executable `PATH`. laspy and pyproj act as independent readers for point clouds.

@@ -91,10 +91,15 @@ jobs:
     env:
       RELEASE_VERSION: ${{ needs.check.outputs.version }}
       RELEASE_TARGET: ${{ matrix.target }}
+      RUSTY_TILES_PYTHON: python
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          # Generated test corpora need Python 3.12+ (scripts/test_corpora.py).
+          python-version: '3.14'
       - name: Select stable Rust
         run: |
           rustup update stable --no-self-update
@@ -104,6 +109,10 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: portable-${{ matrix.target }}
+      - name: Generate validator test corpora
+        # Seconds: tracked generators write the fixtures the oracle-parity tests read, each
+        # checked against bench/architecture_audit/generated-corpora.sha256.
+        run: python scripts/test_corpora.py
       - name: Build and test the default CLI
         run: |
           # Peak-RSS slack in this test is sensitive to shared runner load; CI runs it

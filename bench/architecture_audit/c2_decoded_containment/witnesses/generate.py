@@ -2,7 +2,7 @@
 """Materialize the C2 slice-1 witnesses and controls as `.3tz` fixtures, run the
 oracle on each and write the expected-versus-actual report.
 
-    python3 -I witnesses/generate.py [--large]
+    python3 -I witnesses/generate.py [--large] [--fixtures-only]
 
 Inputs (pinned by sha256, copied under witnesses/inputs/):
   witnesses.json, slice1-witness-expectations.json, w13-normalized.json.
@@ -10,6 +10,8 @@ Outputs:
   witnesses/fixtures/*.3tz, witnesses/report.json.gz,
   controls/fixtures/*.3tz, controls/manifest.json,
   controls/large/*.3tz (only with --large; not committed, hashes pinned).
+With --fixtures-only the fixtures are written (and the oracle still runs) but the
+committed records (report.json.gz, controls/manifest.json) are left unchanged.
 
 Expected verdicts come from the expectation file and from exact membership of
 independently known points (literal witness values, or points computed by
@@ -1344,6 +1346,7 @@ def literal_results(case, oracle):
 
 
 _SHARED_FILES = {}
+FIXTURES_ONLY = False  # --fixtures-only: write fixtures, leave report.json.gz and controls/manifest.json alone
 
 
 def run_case(case, directory, report_rows, large_ok):
@@ -1404,7 +1407,10 @@ def run_case(case, directory, report_rows, large_ok):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--large", action="store_true", help="also build and run the 24 MB repeated-index control")
+    parser.add_argument("--fixtures-only", action="store_true", help="write fixtures, keep the committed records")
     args = parser.parse_args()
+    global FIXTURES_ONLY
+    FIXTURES_ONLY = args.fixtures_only
     inputs = load_inputs()
     cases = build_cases(inputs)
     wdir = os.path.join(HERE, "fixtures")
@@ -1443,8 +1449,9 @@ def main():
     }
     report = json.dumps({"summary": summary, "inputs": {k: v[1] for k, v in INPUT_PINS.items()},
                          "rows": rows}, indent=1, sort_keys=True).encode("utf-8")
-    with open(os.path.join(HERE, "report.json.gz"), "wb") as fh:
-        fh.write(gzip.compress(report, mtime=0))
+    if not FIXTURES_ONLY:
+        with open(os.path.join(HERE, "report.json.gz"), "wb") as fh:
+            fh.write(gzip.compress(report, mtime=0))
     print(json.dumps(summary, indent=1))
     return 0 if not summary["disagree"] and summary["controlPairsAgree"] == summary["controlPairs"] else 1
 
@@ -1547,8 +1554,9 @@ def build_controls(cases, reports, rows, cdir, ldir, large_ok):
     manifest = {"record": "C2 slice-1 data controls: base and mutated fixtures with expected verdicts. "
                           "Production and the oracle must both report both verdicts.",
                 "pairs": pairs}
-    with open(os.path.join(TOP, "controls", "manifest.json"), "w") as fh:
-        json.dump(manifest, fh, indent=1, sort_keys=True)
+    if not FIXTURES_ONLY:
+        with open(os.path.join(TOP, "controls", "manifest.json"), "w") as fh:
+            json.dump(manifest, fh, indent=1, sort_keys=True)
     return manifest
 
 
