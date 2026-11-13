@@ -174,8 +174,11 @@ impl<T: Record> SequenceWriter<T> {
         } = self;
         drop(writer);
         let blocks = match blocks.map(|b| *b) {
-            Some(BlockWriter { index, .. }) => {
+            Some(BlockWriter { mut index, .. }) => {
                 file.completed(*index.offsets.last().expect("offsets start at zero"));
+                // The index stays resident while the sequence lives: no growth slack.
+                index.offsets.shrink_to_fit();
+                index.stored.shrink_to_fit();
                 Some(Arc::new(index))
             }
             None => {
@@ -274,6 +277,7 @@ impl<T: Record> Sequence<T> {
             records: self.records,
             layout: self.layout,
             blocks: self.blocks.clone(),
+            cache: std::sync::Mutex::new((usize::MAX, Vec::new(), Vec::new())),
             _record: PhantomData,
         })
     }
@@ -424,7 +428,17 @@ pub(crate) struct RandomRecords<T: Record> {
     records: u64,
     layout: Layout,
     blocks: Option<Arc<BlockIndex>>,
+    /// The last block decoded (compressed sequences): its index, its records' bytes and the
+    /// buffer its compressed copy was read into. Neighbouring reads reuse it.
+    cache: std::sync::Mutex<(usize, Vec<u8>, Vec<u8>)>,
     _record: PhantomData<T>,
+}
+
+/// The most a positioned reader of a compressed sequence of `record_bytes` records holds
+/// besides the caller's buffers: one decoded block and its compressed copy, each at most the
+/// block target (64 KiB) or one record when that is larger.
+pub(crate) fn random_cache_bound(record_bytes: usize) -> u64 {
+    2 * record_bytes.max(64 << 10) as u64
 }
 
 impl<T: Record> RandomRecords<T> {
@@ -445,15 +459,22 @@ impl<T: Record> RandomRecords<T> {
         let size = T::size_in(self.layout);
         let bytes = count.checked_mul(size).ok_or(SpillError::Overflow)?;
         if let Some(index) = &self.blocks {
-            // Every block the range touches is decoded; its records are copied out.
+            // Every block the range touches is decoded, unless it is the last one decoded; its
+            // records are copied out.
             encoded.clear();
-            let (mut compressed, mut raw) = (Vec::new(), Vec::new());
+            let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+            let (cached, raw, compressed) = &mut *cache;
             let mut at = first;
             while at < end {
                 let block = (at / index.per_block) as usize;
-                index
-                    .read_block(&self.file, block, self.records, &mut compressed, &mut raw)
-                    .map_err(|e| SpillError::io("read spill sequence", &self.path, e))?;
+                if *cached != block {
+                    // A failed read leaves no block cached.
+                    *cached = usize::MAX;
+                    index
+                        .read_block(&self.file, block, self.records, compressed, raw)
+                        .map_err(|e| SpillError::io("read spill sequence", &self.path, e))?;
+                    *cached = block;
+                }
                 let start = block as u64 * index.per_block;
                 let lo = (at - start) as usize * size;
                 let hi = ((end.min(start + index.per_block) - start) as usize) * size;

@@ -886,8 +886,9 @@ impl SourceQuery<'_> {
         self.region.push(Region { node, children });
         Ok(at)
     }
-    // Charge actual vector capacities and conservative hash allocation bounds,
-    // plus 128 KiB for handles, allocator headers and an in-flight replacement block.
+    // Charge actual vector capacities and conservative hash allocation bounds, the
+    // full-record reader's block cache, plus 128 KiB for handles, allocator headers and an
+    // in-flight replacement block.
     // Refuse rather than letting a cache/backend change exceed the admitted workspace.
     fn check_charge(&self) -> Result<(), JobError> {
         use std::mem::size_of;
@@ -900,6 +901,8 @@ impl SourceQuery<'_> {
             + self.tri_buf.capacity() * size_of::<Triangle>()
             + self.full_buf.capacity() * size_of::<FullTriangle>()
             + self.block_bytes
+            // The full-record reader's decoded block and its compressed copy.
+            + crate::spill::random_cache_bound(FullTriangle::SIZE) as usize
             + (128 << 10);
         if bytes as u64 > QUERY_BYTES {
             return Err(resource(format!(

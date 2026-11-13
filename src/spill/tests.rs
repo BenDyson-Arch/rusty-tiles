@@ -314,6 +314,23 @@ impl SpillIo for FaultIo {
             tick: false,
         }))
     }
+    /// Positioned handles (compressed sequences' readers): an open failure, or an anonymous
+    /// copy of the file cut at `truncate_reads` bytes.
+    fn open_random(&self, path: &Path) -> io::Result<File> {
+        if self.faults.open_error {
+            return Err(io::Error::other("injected open failure"));
+        }
+        match self.faults.truncate_reads {
+            Some(at) => {
+                let mut bytes = std::fs::read(path)?;
+                bytes.truncate(at as usize);
+                let mut copy = tempfile::tempfile()?;
+                copy.write_all(&bytes)?;
+                Ok(copy)
+            }
+            None => File::open(path),
+        }
+    }
     fn open(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
         if self.faults.open_error {
             return Err(io::Error::other("injected open failure"));
@@ -1988,6 +2005,87 @@ fn damaged_compressed_sequences_are_typed_errors() {
         }
         drop((random, sequence));
         assert_eq!(scratch.live_bytes(), 0);
+    }
+}
+
+/// Read faults reach the compressed readers through `open_random`: an open failure and a
+/// truncated file are typed errors (I/O, or a corrupt run) on every access path. The positioned reader's block
+/// cache returns the same records whatever the order of reads, and a failed read leaves no
+/// block cached.
+#[test]
+fn compressed_sequence_read_faults_are_typed_and_cached_reads_match() {
+    let input = wide_input(1000, 9, true);
+    for faults in [
+        Faults {
+            open_error: true,
+            ..Default::default()
+        },
+        Faults {
+            truncate_reads: Some(700),
+            ..Default::default()
+        },
+    ] {
+        let open_error = faults.open_error;
+        let (_parent, scratch) = new_scratch(FaultIo::new(faults));
+        let sequence = compressed_sequence(&scratch, &input, 400);
+        let read: Result<Vec<Wide>, _> = sequence.reader().and_then(|r| r.collect());
+        assert!(
+            matches!(
+                read,
+                Err(SpillError::Io { .. } | SpillError::CorruptRun { .. })
+            ),
+            "{read:?}"
+        );
+        let ranged: Result<Vec<Wide>, _> = sequence.range(500, 900, 64).and_then(|r| r.collect());
+        assert!(
+            matches!(
+                ranged,
+                Err(SpillError::Io { .. } | SpillError::CorruptRun { .. })
+            ),
+            "{ranged:?}"
+        );
+        match sequence.random() {
+            Err(error) => assert!(open_error && matches!(error, SpillError::Io { .. })),
+            Ok(random) => {
+                let (mut encoded, mut out) = (Vec::new(), Vec::new());
+                // The start of the file is intact; the end is cut.
+                random.read(0, 3, &mut encoded, &mut out).unwrap();
+                assert_eq!(out, input[..3]);
+                let late = random.read(990, 10, &mut encoded, &mut out);
+                assert!(
+                    matches!(
+                        late,
+                        Err(SpillError::Io { .. } | SpillError::CorruptRun { .. })
+                    ),
+                    "{late:?}"
+                );
+                assert!(random.read(990, 1, &mut encoded, &mut out).is_err());
+                random.read(1, 2, &mut encoded, &mut out).unwrap();
+                assert_eq!(out, input[1..3]);
+            }
+        }
+        drop(sequence);
+        assert_eq!(scratch.live_bytes(), 0);
+    }
+    let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+    let sequence = compressed_sequence(&scratch, &input, 400);
+    let random = sequence.random().unwrap();
+    let (mut encoded, mut out) = (Vec::new(), Vec::new());
+    for (first, count) in [
+        (0, 1),
+        (950, 3),
+        (1, 5),
+        (2, 1),
+        (400, 300),
+        (699, 2),
+        (0, 1000),
+    ] {
+        random.read(first, count, &mut encoded, &mut out).unwrap();
+        assert_eq!(
+            out,
+            input[first as usize..first as usize + count],
+            "{first}+{count}"
+        );
     }
 }
 
