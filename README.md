@@ -33,7 +33,7 @@ python -m pip install rusty-tiles
 **From source** (stable Rust and a C++ compiler):
 
 ```sh
-cargo install --git https://github.com/BenDyson-Arch/rusty-tiles --tag v0.4.0 --locked
+cargo install --git https://github.com/BenDyson-Arch/rusty-tiles --tag v0.4.1 --locked
 ```
 
 The [installation guide](docs/INSTALL.md) covers every option, including the native-geospatial build below.
@@ -108,7 +108,7 @@ A separate build adds what needs GDAL, PROJ and GEOS: imagery (`raster`, to COG 
 
 ```sh
 docker run --rm --platform linux/amd64 --network none \
-  -v "$PWD:/data" -w /data ghcr.io/bendyson-arch/rusty-tiles:v0.4.0 \
+  -v "$PWD:/data" -w /data ghcr.io/bendyson-arch/rusty-tiles:v0.4.1 \
   raster -i orthophoto.tif -o imagery --max-zoom 14
 ```
 

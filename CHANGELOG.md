@@ -39,7 +39,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 - `conversion.json` and the CLI summary name the EPSG datum operation an allow-listed code
   uses and EPSG's stated accuracy; a null transformation such as GDA2020 to WGS 84 is
   reported with its accuracy (3 m), not as exact. `doctor` reports the allow-list's size
-  and versions, and `doctor --sourceCrs <definition>` resolves one CRS without converting.
+  and versions, and `doctor --source-crs <definition>` resolves one CRS without converting.
 - `validate --memory-budget BYTES` and `--jobs N|auto` (Python
   `validate(..., memory_budget_bytes=, jobs=)`, Rust `ValidationRequest::memory_budget` and
   `::jobs`), with `mesh`'s default policy: the lesser of 4 GiB and half the detected
@@ -142,8 +142,8 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 - `validate` creates SQLite's temporary files for the HLOD delivery store (sorter runs,
   temporary tables, statement journals) in its scratch directory instead of SQLite's own
   temporary directory (`/var/tmp` or `TMPDIR`), so `--scratch-dir` holds them.
-- A stop request now ends the long phases that capture progress did not
-  already cover within a few seconds. This covers SIGINT/SIGTERM,
+- A stop request now ends the long phases within a few seconds (capture's
+  own checkpoints are under Added). This covers SIGINT/SIGTERM,
   Ctrl+C/Ctrl+Break in a Windows console, and `KeyboardInterrupt` at a Python
   progress event. Before, such a run could keep working for minutes and a
   service manager would kill it, leaving its scratch on disk. The phases are:
