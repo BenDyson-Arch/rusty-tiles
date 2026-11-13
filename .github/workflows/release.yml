@@ -1,26 +1,39 @@
 name: Release
 
+# A vX.Y.Z tag publishes the release: the GitHub release with the four CLI archives and
+# SHA256SUMS, the wheels on PyPI and the GHCR image. The tag must match the committed version
+# and belong to main, and a non-PR ci.yml run must have passed the full matrix on the tagged
+# commit; the archives and wheels that run tested are what gets published (release-build.yml
+# rebuilds them only if no such run has them).
+#
+# A manual run is a dry run (#346): any ref, no tag needed, the same CI gate, build or reuse,
+# smoke tests and asset checks, and nothing published. Its version is the one a CI build of
+# that ref carries (scripts/dev_version.py build): the committed version on main, otherwise
+# the development version.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: false
 
 jobs:
   check:
     name: Check release tag
     runs-on: ubuntu-22.04
+    timeout-minutes: 15 # versions: TIMEOUT_GATE
     permissions:
       contents: read
       actions: read
     outputs:
-      version: ${{ steps.tag.outputs.version }}
-      prerelease: ${{ steps.tag.outputs.prerelease }}
+      version: ${{ steps.tag.outputs.version || steps.rehearsal.outputs.version }}
+      prerelease: ${{ steps.tag.outputs.prerelease || steps.rehearsal.outputs.prerelease }}
+      ci-run-id: ${{ steps.ci.outputs.artifact-run }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -28,6 +41,7 @@ jobs:
           persist-credentials: false
       - id: tag
         name: Match the tag to Cargo.toml and main
+        if: github.event_name == 'push'
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
@@ -40,29 +54,63 @@ jobs:
             *-*) echo 'prerelease=true' >> "$GITHUB_OUTPUT" ;;
             *) echo 'prerelease=false' >> "$GITHUB_OUTPUT" ;;
           esac
-      - name: Require the full CI matrix for the tagged commit
+      - id: rehearsal
+        name: Resolve the version of a dry run
+        if: github.event_name != 'push'
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -eu
+          python3 scripts/dev_version.py build "$REF" | tee build.txt
+          grep '^version=' build.txt >> "$GITHUB_OUTPUT"
+          echo 'prerelease=true' >> "$GITHUB_OUTPUT"
+          echo "::notice::Dry run of $(grep '^version=' build.txt | cut -d= -f2) at $GITHUB_SHA: nothing will be published."
+      - id: ci
+        name: Require the full CI matrix for the commit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_SHA: ${{ github.sha }}
+          RELEASE_VERSION: ${{ steps.tag.outputs.version || steps.rehearsal.outputs.version }}
         run: |
           set -eu
-          # Pull-request runs only cover the fast Linux tier, so they never count. A qualifying
-          # run is a successful push, nightly or manual run of ci.yml on this exact commit in
-          # which both "Full matrix" (every job, including the five-platform and wheel jobs) and
-          # "Rust" succeeded. A docs-only push skips the matrix and does not qualify.
-          runs=$(gh run list --workflow ci.yml --commit "$RELEASE_SHA" --status success --limit 100 \
-            --json databaseId,event --jq '.[] | select(.event != "pull_request") | .databaseId')
-          for run in $runs; do
-            passed=$(gh api --paginate "repos/${GH_REPO}/actions/runs/${run}/jobs" \
-              --jq '.jobs[] | select(.conclusion == "success") | .name')
-            if printf '%s\n' "$passed" | grep -Fxq 'Full matrix' && printf '%s\n' "$passed" | grep -Fxq 'Rust'; then
-              echo "Full CI matrix passed for $RELEASE_SHA in run $run"
-              exit 0
-            fi
-          done
-          echo "::error::no successful full-matrix CI run for $RELEASE_SHA; wait for the push run on main to finish (or dispatch ci.yml on this commit), then re-run this workflow"
-          exit 1
+          # Pull-request runs never count. A qualifying run is a successful push, nightly or
+          # manual run of ci.yml on this exact commit in which both "Full matrix" (every job,
+          # including the four-platform and wheel jobs) and "Rust" succeeded. A docs-only push
+          # skips the matrix and does not qualify (scripts/ci_run.py).
+          python3 scripts/ci_run.py select --repo "$GH_REPO" --commit "$RELEASE_SHA" --version "$RELEASE_VERSION" > ci-run.txt
+          cat ci-run.txt >> "$GITHUB_OUTPUT"
+          if ! grep -q '^run-id=[0-9]' ci-run.txt; then
+            echo "::error::no successful full-matrix CI run for $RELEASE_SHA; wait for the push run on main to finish (or dispatch ci.yml on this commit), then re-run this workflow"
+            exit 1
+          fi
+          if grep -qx 'artifact-run=' ci-run.txt; then
+            echo "::warning::The CI run's $RELEASE_VERSION archives and wheels are missing or expired; they will be built and tested again (up to 90 minutes)."
+          fi
+      # Before anything is built: a tag whose CHANGELOG.md section is missing or empty fails
+      # here. A dry run on another ref only warns when its (development) version has none.
+      - name: Write the release notes from CHANGELOG.md
+        env:
+          REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ steps.tag.outputs.version || steps.rehearsal.outputs.version }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          TAG_PUSH: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          set -eu
+          python3 -I -m unittest discover -s tests -p test_release_notes.py
+          tag=$RELEASE_TAG
+          flags=()
+          if [ "$TAG_PUSH" != true ]; then tag="v$RELEASE_VERSION"; flags=(--dry-run); fi
+          # The previous stable release before this commit, for the compare link.
+          previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude 'v*-*' HEAD^ 2>/dev/null || true)
+          python3 -I scripts/release_notes.py "$RELEASE_VERSION" --tag "$tag" --repo "$REPO" \
+            --previous "$previous" "${flags[@]}" --output release-notes.md
+          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
       - name: Test the checksum-verifying installer
         run: python3 -m unittest discover -s tests -p test_install.py -v
 
@@ -72,22 +120,26 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: read
     uses: ./.github/workflows/release-build.yml
     with:
       version: ${{ needs.check.outputs.version }}
-      image-tag: ${{ github.ref_name }}
-
-  wheels:
-    name: Python wheel acceptance
-    needs: check
-    uses: ./.github/workflows/wheel-acceptance.yml
+      # A dry run builds and tests the image without pushing it.
+      image-tag: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) && github.ref_name || '' }}
+      ci-run-id: ${{ needs.check.outputs.ci-run-id }}
 
   pypi:
     name: Publish Python wheels to PyPI
-    needs: [check, build, wheels]
-    # PyPI uploads cannot be replaced; release candidates stay on GitHub only.
-    if: needs.check.outputs.prerelease == 'false'
+    needs: [check, build]
+    # PyPI uploads cannot be replaced; release candidates stay on GitHub only. Only a pushed
+    # vX.Y.Z tag can get here: a dry run (workflow_dispatch, on any ref) is excluded by the
+    # event and the ref, not only by the check job's outputs. The pypi environment should
+    # also allow deployments from v* tags only (repository settings).
+    if: >-
+      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') &&
+      needs.check.outputs.prerelease == 'false'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15 # versions: TIMEOUT_PUBLISH
     environment:
       name: pypi
       url: https://pypi.org/project/rusty-tiles/
@@ -104,12 +156,13 @@ jobs:
 
   publish:
     name: Publish release
-    needs: [check, build, wheels, pypi]
-    # A prerelease skips PyPI; anything else needs PyPI to have succeeded.
+    needs: [check, build, pypi]
+    # A prerelease and a dry run skip PyPI; a release needs PyPI to have succeeded.
     if: >-
-      !cancelled() && needs.build.result == 'success' && needs.wheels.result == 'success' &&
+      !cancelled() && needs.build.result == 'success' &&
       (needs.pypi.result == 'success' || (needs.pypi.result == 'skipped' && needs.check.outputs.prerelease == 'true'))
     runs-on: ubuntu-24.04
+    timeout-minutes: 15 # versions: TIMEOUT_PUBLISH
     permissions:
       contents: write
       packages: write
@@ -119,7 +172,30 @@ jobs:
           pattern: binary-*
           merge-multiple: true
           path: dist
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-notes
+          path: notes
+      - name: Check the archives and write SHA256SUMS
+        env:
+          RELEASE_VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          set -eu
+          cd dist
+          printf '%s\n' * | tee ../assets.txt
+          test "$(grep -c "^rusty-tiles-$RELEASE_VERSION-.*\.\(tgz\|zip\)\$" ../assets.txt)" -eq 4
+          test "$(wc -l < ../assets.txt)" -eq 4
+          sha256sum -- *.tgz *.zip > SHA256SUMS
+          cat SHA256SUMS
+      - name: Keep the dry run's checksums
+        if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-dry-run
+          path: dist/SHA256SUMS
+          if-no-files-found: error
       - name: Attach checksums and publish
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -128,11 +204,13 @@ jobs:
         run: |
           set -eu
           cd dist
-          sha256sum *.tgz *.zip > SHA256SUMS
+          # The body is the tag's CHANGELOG.md section (scripts/release_notes.py), also on a
+          # re-run that finds the draft from an earlier attempt.
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+            gh release edit "$RELEASE_TAG" --notes-file ../notes/release-notes.md
           else
-            gh release create "$RELEASE_TAG" --verify-tag --draft --title "$RELEASE_TAG" --generate-notes
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "$RELEASE_TAG" --notes-file ../notes/release-notes.md
           fi
           gh release upload "$RELEASE_TAG" ./*.tgz ./*.zip SHA256SUMS --clobber
           if [ "$PRERELEASE" = true ]; then

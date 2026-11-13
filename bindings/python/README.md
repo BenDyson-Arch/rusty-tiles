@@ -9,7 +9,7 @@ Self-contained wheels: no GDAL, CLI, Rust compiler or other Python packages are 
 python -m pip install rusty-tiles
 ```
 
-Wheels need CPython 3.10 or newer and use the stable ABI, so one wheel covers later Python versions. They are built for Linux x86_64 and ARM64 (manylinux_2_28, glibc 2.28+), macOS 15+ on Intel and Apple Silicon, and Windows x64. They are tested inside official Blender 4.5.14 LTS (Python 3.11) on Linux x64, Windows x64 and both macOS architectures, and inside official Blender 5.2.4 LTS (Python 3.13) on Linux x64, Windows x64 and Apple Silicon macOS. Blender 5.x has no Intel macOS build, and neither series has an official Linux ARM64 build.
+Wheels need CPython 3.10 or newer and use the stable ABI, so one wheel covers later Python versions. They are built for Linux x86_64 and ARM64 (manylinux_2_28, glibc 2.28+), macOS 15+ on Apple Silicon, and Windows x64. They are tested inside official Blender 4.5.14 LTS (Python 3.11) and 5.2.4 LTS (Python 3.13) on Linux x64, Windows x64 and Apple Silicon macOS. Neither series has an official Linux ARM64 build. Intel Macs are not supported from 0.4.1: pip finds no wheel there (there is no source distribution), so keep 0.4.0 or build the wheel from source with `maturin build --release` (see [INSTALL](../../docs/INSTALL.md#intel-macs)).
 
 ## Example
 
@@ -476,7 +476,7 @@ fresh results matching the wheel and replace an earlier report.
 
 To repeat the official Blender check with host Python 3.12 or newer, pick a
 release series (`4.5` or `5.2`) and a platform for your host: `linux-x64`,
-`windows-x64` or `macos-arm64`, plus `macos-x64` for 4.5 only:
+`windows-x64` or `macos-arm64`:
 
 ```sh
 python scripts/download_blender.py --release 5.2 --platform linux-x64 --directory /tmp/official-blender --report-json target/blender-distribution.json
@@ -491,9 +491,9 @@ before extraction. It needs a new directory, prints the executable path and
 records it in its JSON. On macOS it copies the application from a read-only DMG
 mount and detaches it; it does not modify a system installation. The runner
 checks the extracted executable's hash, Blender and Python versions and
-architecture. Blender 4.5 LTS is supported until July 2027 and is the last
-official release series for Intel macOS; Blender 5.2 LTS is supported until
-July 2028. See
+architecture. Blender 4.5 LTS is supported until July 2027 and Blender 5.2 LTS
+until July 2028. Intel macOS bundles are not pinned: rusty-tiles has no Intel
+macOS wheel from 0.4.1. See
 [Blender's compatibility notes](https://developer.blender.org/docs/release_notes/compatibility/).
 CI acceptance and updating the Blender pin are described in
 [CONTRIBUTING.md](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/CONTRIBUTING.md#python-acceptance).

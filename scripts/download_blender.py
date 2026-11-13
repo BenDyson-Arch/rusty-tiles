@@ -2,6 +2,11 @@
 
 Requires host Python 3.12+ for tar extraction's data filter. Blender supplies
 the interpreter that actually installs and tests the candidate wheel.
+
+The archive comes from download.blender.org, or from the mirrors listed in
+blender_official.json when that fails; every copy must have the pinned SHA-256.
+With --cache-dir, a verified archive already in that directory is used without
+downloading, and a downloaded one is kept there (CI caches it by its SHA-256).
 """
 import argparse
 import hashlib
@@ -17,6 +22,7 @@ import zipfile
 
 
 MANIFEST = Path(__file__).with_name("blender_official.json")
+CANONICAL_ROOT = "https://download.blender.org/release/"
 
 
 def sha256_file(path):
@@ -39,6 +45,35 @@ def download_verified(url, destination, expected_sha256):
     except BaseException:
         destination.unlink(missing_ok=True)
         raise
+
+
+def archive_urls(manifest, release, spec):
+    """The official archive URL, then the same path on each listed mirror."""
+    url = release["base_url"] + spec["archive"]
+    urls = [url]
+    if url.startswith(CANONICAL_ROOT):
+        urls += [mirror + url[len(CANONICAL_ROOT):] for mirror in manifest.get("mirrors", [])]
+    return urls
+
+
+def fetch_archive(urls, destination, expected_sha256):
+    """Use a verified archive already at destination, else download the first good copy.
+
+    Returns where the bytes came from: "cache" or the URL.
+    """
+    if destination.is_file():
+        if sha256_file(destination) == expected_sha256:
+            return "cache"
+        destination.unlink()
+    failures = []
+    for url in urls:
+        try:
+            download_verified(url, destination, expected_sha256)
+            return url
+        except Exception as error:  # noqa: BLE001 - try the next mirror, report them all
+            failures.append(f"{url}: {error}")
+            print(f"warning: {url}: {error}", flush=True)
+    raise RuntimeError("No source had the pinned Blender archive:\n" + "\n".join(failures))
 
 
 def extract_bundle(archive, destination):
@@ -91,6 +126,8 @@ def main():
                         help="Official bundle platform of that release, e.g. linux-x64")
     parser.add_argument("--directory", type=Path, required=True, help="New temporary bundle directory")
     parser.add_argument("--report-json", type=Path, required=True)
+    parser.add_argument("--cache-dir", type=Path,
+                        help="Keep the verified archive here, and reuse a verified one found here")
     args = parser.parse_args()
     directory = args.directory.resolve()
     report = args.report_json.resolve()
@@ -106,9 +143,14 @@ def main():
     directory.mkdir(parents=True, exist_ok=False)
     completed = False
     try:
-        archive = directory / spec["archive"]
         url = release["base_url"] + spec["archive"]
-        download_verified(url, archive, spec["sha256"])
+        if args.cache_dir:
+            args.cache_dir.mkdir(parents=True, exist_ok=True)
+            archive = args.cache_dir.resolve() / spec["archive"]
+        else:
+            archive = directory / spec["archive"]
+        source = fetch_archive(archive_urls(manifest, release, spec), archive, spec["sha256"])
+        print(f"Blender archive from {source}", flush=True)
         extract_bundle(archive, directory)
         executable = directory / spec["executable"]
         if not executable.is_file():
@@ -120,13 +162,15 @@ def main():
             "version": release["version"],
             "archive_url": url,
             "archive_sha256": spec["sha256"],
+            "archive_source": source,
             "checksum_url": release["checksum_url"],
             "executable": str(executable),
             "executable_sha256": sha256_file(executable),
         }
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text(json.dumps(record, indent=2) + "\n")
-        archive.unlink()  # The extracted bundle and checksum evidence suffice.
+        if not args.cache_dir:
+            archive.unlink()  # The extracted bundle and checksum evidence suffice.
         completed = True
         print(executable)
     finally:

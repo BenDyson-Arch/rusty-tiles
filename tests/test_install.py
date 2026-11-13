@@ -31,6 +31,7 @@ class InstallTests(unittest.TestCase):
                         INSTALL_TEST_MUSL="0", INSTALL_TEST_LATEST="v0.3.0")
         self.tool("uname", 'case "$1" in -m) echo "$INSTALL_TEST_ARCH";; -s) echo "$INSTALL_TEST_PLATFORM";; esac')
         self.tool("getconf", '[ "$INSTALL_TEST_MUSL" = 0 ] && echo "glibc 2.35"')
+        self.tool("sysctl", '[ "${INSTALL_TEST_TRANSLATED:-}" = 1 ] && echo 1 || exit 1')
         self.tool("curl", textwrap.dedent('''\
             out=
             latest=0
@@ -132,15 +133,51 @@ class InstallTests(unittest.TestCase):
         self.assertIn("checksum mismatch", result.stderr)
         self.assertFalse(marker.exists())
 
-    def test_arm_linux_and_intel_macos_assets(self):
+    def test_arm_linux_and_apple_silicon_assets(self):
         for platform, arch, target in (("Linux", "aarch64", "aarch64-unknown-linux-gnu"),
-                                       ("Darwin", "x86_64", "x86_64-apple-darwin")):
+                                       ("Darwin", "arm64", "aarch64-apple-darwin")):
             with self.subTest(target=target):
                 self.env.update(INSTALL_TEST_PLATFORM=platform, INSTALL_TEST_ARCH=arch)
-                self.release(target=target)
-                result = self.run_installer("--version", "0.3.0")
+                self.release(version="0.4.1", target=target)
+                result = self.run_installer("--version", "0.4.1")
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn(target, (self.root / "requests").read_text())
+
+    def test_intel_macos_is_refused_from_0_4_1(self):
+        self.env.update(INSTALL_TEST_PLATFORM="Darwin", INSTALL_TEST_ARCH="x86_64")
+        for args in (("--version", "0.4.1"), ("--version", "v0.4.1-rc.1"), ("--version", "0.5.0"),
+                     ("--version", "1.0.0"), ("--version", "dev")):
+            with self.subTest(args=args):
+                (self.root / "requests").unlink(missing_ok=True)
+                result = self.run_installer(*args)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Intel macOS is not supported from 0.4.1", result.stderr)
+                self.assertIn("--version 0.4.0", result.stderr)
+                self.assertIn("build from source with cargo", result.stderr)
+                # Refused before any archive or checksum download.
+                self.assertFalse((self.root / "requests").exists())
+                self.assertFalse((self.destination / "rusty-tiles").exists())
+        # The latest release is resolved first: refused once it is 0.4.1 or later.
+        self.env.update(INSTALL_TEST_LATEST="v0.4.1")
+        result = self.run_installer()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Intel macOS is not supported from 0.4.1", result.stderr)
+
+    def test_intel_macos_can_still_install_0_4_0_and_older(self):
+        self.env.update(INSTALL_TEST_PLATFORM="Darwin", INSTALL_TEST_ARCH="x86_64")
+        for version in ("0.4.0", "0.3.0"):
+            with self.subTest(version=version):
+                self.release(version=version, target="x86_64-apple-darwin")
+                result = self.run_installer("--version", version)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f"rusty-tiles-{version}-x86_64-apple-darwin.tgz", (self.root / "requests").read_text())
+
+    def test_rosetta_shell_on_apple_silicon_installs_the_native_build(self):
+        self.env.update(INSTALL_TEST_PLATFORM="Darwin", INSTALL_TEST_ARCH="x86_64", INSTALL_TEST_TRANSLATED="1")
+        self.release(version="0.4.1", target="aarch64-apple-darwin")
+        result = self.run_installer("--version", "0.4.1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("aarch64-apple-darwin", (self.root / "requests").read_text())
 
     def test_shasum_fallback(self):
         self.release()

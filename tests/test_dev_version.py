@@ -154,6 +154,90 @@ class Checkout(unittest.TestCase):
         git("tag", "v0.4.0")
         self.assertEqual(resolve(), ["version=0.4.1-dev.202611121734", "python-version=0.4.1.dev202611121734"])
 
+        def build(ref):
+            output = io.StringIO()
+            with mock.patch.dict(os.environ, environment), contextlib.redirect_stdout(output):
+                dev_version.build(ref)
+            return output.getvalue().splitlines()
+
+        release = ["version=0.4.0", "python-version=0.4.0", "kind=release"]
+        for ref in ("refs/heads/main", "refs/tags/v0.4.0", "refs/pull/12/merge"):
+            with self.subTest(ref=ref):
+                self.assertEqual(build(ref), release)
+        dev = ["version=0.4.1-dev.202611121734", "python-version=0.4.1.dev202611121734", "kind=dev"]
+        for ref in ("refs/heads/develop", "refs/heads/ci/streamline", "refs/heads/mainline"):
+            with self.subTest(ref=ref):
+                self.assertEqual(build(ref), dev)
+
+    def test_release_candidate_dev_versions_sort_between_candidates(self):
+        committed = datetime(2026, 11, 12, 17, 34, tzinfo=timezone.utc)
+        cases = [
+            ((0, 4, 1), False, None, "0.4.1-dev.202611121734", "0.4.1.dev202611121734"),
+            ((0, 4, 1), True, None, "0.4.2-dev.202611121734", "0.4.2.dev202611121734"),
+            ((0, 4, 1), False, "rc.1", "0.4.1-rc.1.dev.202611121734", "0.4.1rc1.dev202611121734"),
+            ((0, 4, 1), True, "rc.1", "0.4.1-rc.2.dev.202611121734", "0.4.1rc2.dev202611121734"),
+            ((0, 4, 1), True, "beta.3", "0.4.1-beta.4.dev.202611121734", "0.4.1b4.dev202611121734"),
+        ]
+        for core, tagged, pre, cargo, python in cases:
+            with self.subTest(core=core, tagged=tagged, pre=pre):
+                self.assertEqual(dev_version.development_version(core, tagged, committed, pre), (cargo, python))
+                self.assertIsNotNone(dev_version.SEMVER.fullmatch(cargo))
+        for pre in ("rc", "preview.1", "rc.1.dev.2", "rc.01"):
+            with self.subTest(pre=pre), self.assertRaises(SystemExit):
+                dev_version.development_version((0, 4, 1), False, committed, pre)
+        # pip's order, when packaging is importable (pip vendors it).
+        try:
+            from pip._vendor.packaging.version import Version
+        except ImportError:
+            return
+        order = ["0.4.0", "0.4.1rc1.dev202611121734", "0.4.1rc1", "0.4.1rc2.dev202611121734", "0.4.1rc2", "0.4.1"]
+        self.assertEqual(sorted(order, key=Version), order)
+
+    def test_resolve_follows_a_tagged_release_candidate(self):
+        self.write(MANIFEST.replace('version = "0.4.0"', 'version = "0.4.1-rc.1"'),
+                   LOCK.replace('version = "0.4.0"', 'version = "0.4.1-rc.1"'))
+        environment = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+                           GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
+                           GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid",
+                           GIT_COMMITTER_DATE="2026-11-12T17:34:00Z", GIT_AUTHOR_DATE="2026-11-12T17:34:00Z")
+
+        def git(*arguments):
+            subprocess.run(["git", "-C", str(self.root), *arguments], check=True, env=environment,
+                           capture_output=True)
+
+        def resolve():
+            output = io.StringIO()
+            with mock.patch.dict(os.environ, environment), contextlib.redirect_stdout(output):
+                dev_version.resolve()
+            return output.getvalue().splitlines()
+
+        git("init", "-q")
+        git("add", "Cargo.toml", "Cargo.lock")
+        git("commit", "-q", "-m", "base")
+        self.assertEqual(resolve(), ["version=0.4.1-rc.1.dev.202611121734", "python-version=0.4.1rc1.dev202611121734"])
+        git("tag", "v0.4.1-rc.1")
+        self.assertEqual(resolve(), ["version=0.4.1-rc.2.dev.202611121734", "python-version=0.4.1rc2.dev202611121734"])
+        # Stamping the dev version keeps --locked builds consistent.
+        self.stamp("0.4.1-rc.2.dev.202611121734")
+
+    def test_python_spelling_matches_the_bindings(self):
+        # The same cases as `version_tests` in bindings/python/src/lib.rs.
+        cases = {
+            "0.4.0": "0.4.0",
+            "0.4.0-rc.1": "0.4.0rc1",
+            "0.4.0-alpha.2": "0.4.0a2",
+            "0.4.0-beta.3": "0.4.0b3",
+            "0.4.1-dev.202611121734": "0.4.1.dev202611121734",
+            "0.4.0-rc.1.dev.2": "0.4.0rc1.dev2",
+            "0.4.0-dev.0": "0.4.0.dev0",
+            "0.4.0-nightly.1": "0.4.0-nightly.1",
+            "0.4.0-rc": "0.4.0-rc",
+            "0.4.0-rc.x": "0.4.0-rc.x",
+        }
+        for cargo, python in cases.items():
+            with self.subTest(cargo=cargo):
+                self.assertEqual(dev_version.python_version(cargo), python)
+
 
 if __name__ == "__main__":
     unittest.main()

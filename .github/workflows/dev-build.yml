@@ -1,7 +1,7 @@
 name: Dev build
 
 # The rolling development build of develop: one GitHub pre-release on the moving tag `dev`
-# with the five CLI archives, the Python wheels and SHA256SUMS, replaced on each build, and
+# with the four CLI archives, the Python wheels and SHA256SUMS, replaced on each build, and
 # the GHCR image tag `dev`. Nothing goes to PyPI or crates.io, and the image's `latest` tag is
 # untouched. The version is a development version of the next release (see
 # scripts/dev_version.py), stamped into the checkout and never committed.
@@ -9,8 +9,10 @@ name: Dev build
 # The nightly full CI run on develop dispatches this workflow after its "Full matrix" verdict
 # passes; it can also be dispatched by hand. A commit is built only if a push, nightly or
 # manual ci.yml run passed "Full matrix" and "Rust" on it, and on develop only if develop
-# moved since the last dev build (unless `force` is set). On any other branch the workflow
-# builds and tests everything but publishes nothing, so a change to it can be tried first.
+# moved since the last dev build (unless `force` is set). The archives and wheels are the
+# ones that CI run built and tested with the development version (release-build.yml), or are
+# built here when no run has them. On any other branch the workflow builds or reuses and
+# tests everything but publishes nothing, so a change to it can be tried first.
 on:
   workflow_dispatch:
     inputs:
@@ -37,7 +39,7 @@ jobs:
   check:
     name: Check the commit and resolve its version
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15 # versions: TIMEOUT_GATE
     permissions:
       contents: read
       actions: read
@@ -46,11 +48,15 @@ jobs:
       publish: ${{ steps.gate.outputs.publish }}
       version: ${{ steps.version.outputs.version }}
       python-version: ${{ steps.version.outputs.python-version }}
+      ci-run-id: ${{ steps.gate.outputs.artifact-run }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           persist-credentials: false
+      - id: version
+        name: Resolve the development version
+        run: python3 scripts/dev_version.py resolve | tee -a "$GITHUB_OUTPUT"
       - id: gate
         name: Require a full CI pass, and on develop a change since the last dev build
         env:
@@ -58,6 +64,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           BUILD_REF: ${{ github.ref }}
           BUILD_SHA: ${{ github.sha }}
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
           FORCE: ${{ inputs.force }}
         run: |
           set -eu
@@ -71,24 +78,17 @@ jobs:
             exit 0
           fi
           # release.yml's gate, except that the run may still be in progress: the nightly run
-          # dispatches this workflow from a job that follows its "Full matrix" verdict.
-          runs=$(gh run list --workflow ci.yml --commit "$BUILD_SHA" --limit 100 \
-            --json databaseId,event --jq '.[] | select(.event != "pull_request") | .databaseId')
-          for run in $runs; do
-            passed=$(gh api --paginate "repos/${GH_REPO}/actions/runs/${run}/jobs" \
-              --jq '.jobs[] | select(.conclusion == "success") | .name')
-            if printf '%s\n' "$passed" | grep -Fxq 'Full matrix' && printf '%s\n' "$passed" | grep -Fxq 'Rust'; then
-              echo "Full CI matrix passed for $BUILD_SHA in run $run"
-              echo 'build=true' >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          done
-          echo "::warning::No full-matrix CI pass for $BUILD_SHA yet, so nothing was built. Dispatch ci.yml on this ref, wait for its Full matrix job, then dispatch this workflow."
-          echo 'build=false' >> "$GITHUB_OUTPUT"
-      - id: version
-        name: Resolve the development version
-        if: steps.gate.outputs.build == 'true'
-        run: python3 scripts/dev_version.py resolve | tee -a "$GITHUB_OUTPUT"
+          # dispatches this workflow from a job that follows its "Full matrix" verdict. CI runs
+          # on develop build the development version, so their archives and wheels are reused.
+          python3 scripts/ci_run.py select --in-progress --repo "$GH_REPO" --commit "$BUILD_SHA" \
+            --version "$BUILD_VERSION" > ci-run.txt
+          cat ci-run.txt >> "$GITHUB_OUTPUT"
+          if ! grep -q '^run-id=[0-9]' ci-run.txt; then
+            echo "::warning::No full-matrix CI pass for $BUILD_SHA yet, so nothing was built. Dispatch ci.yml on this ref, wait for its Full matrix job, then dispatch this workflow."
+            echo 'build=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'build=true' >> "$GITHUB_OUTPUT"
 
   build:
     name: Build
@@ -97,26 +97,21 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: read
     uses: ./.github/workflows/release-build.yml
     with:
       version: ${{ needs.check.outputs.version }}
       # Off develop the image is built and tested but not pushed.
       image-tag: ${{ needs.check.outputs.publish == 'true' && 'dev' || '' }}
-
-  wheels:
-    name: Python wheel acceptance
-    needs: check
-    if: needs.check.outputs.build == 'true'
-    uses: ./.github/workflows/wheel-acceptance.yml
-    with:
-      version: ${{ needs.check.outputs.version }}
+      # Empty when no CI run has this version's artifacts: the build then runs from source.
+      ci-run-id: ${{ needs.check.outputs.ci-run-id }}
 
   publish:
     name: Publish the dev pre-release
-    needs: [check, build, wheels]
+    needs: [check, build]
     if: needs.check.outputs.build == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 15 # versions: TIMEOUT_PUBLISH
     permissions:
       contents: write
     steps:
@@ -144,11 +139,11 @@ jobs:
           SERVER: ${{ github.server_url }}
         run: |
           set -eu
-          # Five CLI archives and five wheels of exactly this build, and nothing else.
+          # Four CLI archives and four wheels of exactly this build, and nothing else.
           (cd dist && ls -1) | tee assets.txt
-          test "$(grep -c "^rusty-tiles-$VERSION-.*\.\(tgz\|zip\)\$" assets.txt)" -eq 5
-          test "$(grep -c "^rusty_tiles-$PYTHON_VERSION-cp310-abi3-.*\.whl\$" assets.txt)" -eq 5
-          test "$(wc -l < assets.txt)" -eq 10
+          test "$(grep -c "^rusty-tiles-$VERSION-.*\.\(tgz\|zip\)\$" assets.txt)" -eq 4
+          test "$(grep -c "^rusty_tiles-$PYTHON_VERSION-cp310-abi3-.*\.whl\$" assets.txt)" -eq 4
+          test "$(wc -l < assets.txt)" -eq 8
           (cd dist && sha256sum -- *.tgz *.zip *.whl > SHA256SUMS)
           repo="$SERVER/$GH_REPO"
           # The latest stable release (GitHub never marks a pre-release as latest).
@@ -194,36 +189,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           BUILD_SHA: ${{ github.sha }}
-        run: |
-          set -eu
-          api="repos/$GH_REPO"
-          title='Development build'
-          # Staging drafts left by a failed earlier run.
-          for id in $(gh api --paginate "$api/releases" --jq ".[] | select(.draft and .name == \"$title\" and (.tag_name | startswith(\"dev-staging-\"))) | .id"); do
-            gh api -X DELETE "$api/releases/$id"
-          done
-          # Stage the new build as a draft with every asset, so the published dev release is
-          # replaced in one step. A draft creates no tag; publishing it as `dev` creates the tag
-          # at the build commit (a release-created tag, not a ref update). The tag moves only
-          # once a build is out: a run that fails earlier leaves the previous build, and the next
-          # run rebuilds.
-          draft=$(gh api -X POST "$api/releases" -f tag_name="dev-staging-$GITHUB_RUN_ID" \
-            -f target_commitish="$BUILD_SHA" -f name="$title" -F body=@notes.md \
-            -F draft=true -F prerelease=true --jq .id)
-          for asset in dist/*.tgz dist/*.zip dist/*.whl dist/SHA256SUMS; do
-            curl --fail --silent --show-error --retry 3 -X POST -o /dev/null \
-              -H "Authorization: Bearer $GH_TOKEN" -H 'Content-Type: application/octet-stream' \
-              --data-binary @"$asset" \
-              "https://uploads.github.com/$api/releases/$draft/assets?name=${asset#dist/}"
-          done
-          test "$(gh api "$api/releases/$draft" --jq '.assets | length')" -eq 11
-          # releases/tags/ returns only a published release, never the draft.
-          if previous=$(gh api "$api/releases/tags/dev" --jq .id 2>/dev/null); then
-            gh api -X DELETE "$api/releases/$previous"
-          fi
-          if gh api "$api/git/ref/tags/dev" >/dev/null 2>&1; then
-            gh api -X DELETE "$api/git/refs/tags/dev"
-          fi
-          gh api -X PATCH "$api/releases/$draft" -f tag_name=dev -f target_commitish="$BUILD_SHA" \
-            -F draft=false -F prerelease=true --jq .html_url
-          test "$(gh api "$api/git/ref/tags/dev" --jq .object.sha)" = "$BUILD_SHA"
+        # Moves the tag and swaps the assets of the published release in place, so downloads
+        # keep working, then proves the tag and asset set through the API (see the script).
+        run: scripts/dev_release.sh notes.md dist

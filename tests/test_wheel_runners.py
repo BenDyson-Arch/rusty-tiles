@@ -220,6 +220,39 @@ class OfficialBlenderIntegrity(unittest.TestCase):
                                            download_blender.sha256_file(source))
         self.assertEqual(destination.read_bytes(), source.read_bytes())
 
+    def test_archive_falls_back_to_mirrors_and_reuses_a_verified_cache(self):
+        good = self.root / "good.zip"
+        good.write_bytes(b"original archive")
+        bad = self.root / "bad.zip"
+        bad.write_bytes(b"tampered archive")
+        digest = download_blender.sha256_file(good)
+        missing = (self.root / "missing.zip").as_uri()
+        cached = self.root / "cache" / "blender.zip"
+        cached.parent.mkdir()
+        # A failing and a tampered source are skipped; the first good copy wins.
+        source = download_blender.fetch_archive([missing, bad.as_uri(), good.as_uri()], cached, digest)
+        self.assertEqual(source, good.as_uri())
+        self.assertEqual(cached.read_bytes(), good.read_bytes())
+        # A verified archive already in the cache is used without any download.
+        self.assertEqual(download_blender.fetch_archive([missing], cached, digest), "cache")
+        # A cached archive with the wrong digest is discarded, never used.
+        cached.write_bytes(b"stale")
+        self.assertEqual(download_blender.fetch_archive([good.as_uri()], cached, digest), good.as_uri())
+        cached.write_bytes(b"stale")
+        with self.assertRaisesRegex(RuntimeError, "No source had the pinned Blender archive"):
+            download_blender.fetch_archive([missing, bad.as_uri()], cached, digest)
+        self.assertFalse(cached.exists())
+
+    def test_mirror_urls_keep_the_official_path(self):
+        manifest = json.loads(download_blender.MANIFEST.read_text())
+        release = manifest["releases"]["4.5"]
+        spec = release["platforms"]["linux-x64"]
+        urls = download_blender.archive_urls(manifest, release, spec)
+        self.assertEqual(urls[0], release["base_url"] + spec["archive"])
+        self.assertGreaterEqual(len(urls), 2)
+        for mirror, url in zip(manifest["mirrors"], urls[1:]):
+            self.assertEqual(url, mirror + "Blender4.5/" + spec["archive"])
+
     def test_windows_archive_cannot_write_outside_bundle(self):
         archive = self.root / "blender.zip"
         with zipfile.ZipFile(archive, "w") as output:
@@ -265,11 +298,20 @@ class OfficialBlenderIntegrity(unittest.TestCase):
             "executable_sha256": download_blender.sha256_file(executable),
         }
         download_blender.validate_distribution(record, executable)
-        # 5.2 has no Intel macOS bundle, and 4.5 archive evidence cannot pass as 5.2.
-        for changes in ({"release": "5.2"}, {"release": None}, {"release": "5.2", "distribution_platform": "macos-x64"}):
+        # 4.5 archive evidence cannot pass as 5.2, and no release pins an Intel macOS bundle
+        # (Intel macOS is not supported from 0.4.1).
+        for changes in ({"release": "5.2"}, {"release": None}, {"distribution_platform": "macos-x64"},
+                        {"release": "5.2", "distribution_platform": "macos-x64"}):
             with self.subTest(changes=changes):
                 with self.assertRaisesRegex(RuntimeError, "does not match the pinned official bundle"):
                     download_blender.validate_distribution({**record, **changes}, executable)
+
+    def test_no_intel_macos_bundle_is_pinned(self):
+        manifest = json.loads(download_blender.MANIFEST.read_text())
+        for release in manifest["releases"].values():
+            for name, spec in release["platforms"].items():
+                with self.subTest(platform=name):
+                    self.assertFalse(spec["system"] == "Darwin" and "x86_64" in spec["machines"])
 
     def test_manifest_pins_are_internally_consistent(self):
         manifest = json.loads(download_blender.MANIFEST.read_text())

@@ -1,0 +1,3 @@
+### Removed
+
+- Intel macOS (`x86_64-apple-darwin`) is no longer supported: releases have no Intel macOS CLI archive or wheel, and CI no longer builds or tests it. 0.4.0 is the last release with them. On an Intel Mac, `pip install rusty-tiles` finds no wheel (there is no source distribution) and `scripts/install.sh` stops with a message for 0.4.1 and later; install 0.4.0 (`--version 0.4.0`, `pip install rusty-tiles==0.4.0`) or build from source with Cargo (`cargo install --locked --git https://github.com/BenDyson-Arch/rusty-tiles rusty-tiles`, or `maturin build --release` for the wheel). macOS builds are Apple Silicon only, and the installer gives an Apple Silicon Mac in a Rosetta terminal the native build.

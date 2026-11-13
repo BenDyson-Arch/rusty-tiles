@@ -1,0 +1,107 @@
+name: Geospatial base image
+
+# Builds the Dockerfile's geospatial-source stage (PROJ and GDAL from their checked source
+# tarballs, on debian:trixie-slim) once per version pair and pushes it as
+# ghcr.io/bendyson-arch/rusty-tiles-geobase:<gdal>-<proj> (ci/versions.env). The native image
+# then starts from that base, pinned by digest in the Dockerfile's GEOBASE, instead of
+# building GDAL from download.osgeo.org on every cache miss (#346).
+#
+# It runs when ci/versions.env, the Dockerfile or the GDAL build script reaches develop or
+# main, and by hand. An existing tag is left alone unless `force` is set (use it after
+# changing scripts/build-native-gdal.sh without a version change). The job summary gives
+# the GEOBASE line to commit.
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - ci/versions.env
+      - Dockerfile
+      - scripts/build-native-gdal.sh
+      - .github/workflows/geobase.yml
+      - .github/actions/geobase/action.yml
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild and re-push the tag even if it exists
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: geobase
+  cancel-in-progress: false
+
+jobs:
+  geobase:
+    name: GDAL/PROJ base image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120 # versions: TIMEOUT_GEOBASE
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - id: tag
+        name: Check whether this version pair is published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -eu
+          eval "$(grep -E '^(PROJ_VERSION|GDAL_VERSION|GEOBASE_REPOSITORY)=' ci/versions.env)"
+          image="$GEOBASE_REPOSITORY:$GDAL_VERSION-$PROJ_VERSION"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          if [ "$FORCE" != true ] && docker buildx imagetools inspect "$image" > /dev/null 2>&1; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "$image exists; dispatch with force to rebuild it."
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Set up Docker Buildx
+        if: steps.tag.outputs.build == 'true'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      # The tarballs from the Actions cache (or a checked download), never a stale image.
+      - id: sources
+        if: steps.tag.outputs.build == 'true'
+        uses: ./.github/actions/geobase
+        with:
+          force-source: 'true'
+      - id: push
+        name: Build and push the base image
+        if: steps.tag.outputs.build == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          target: geospatial-source
+          push: true
+          provenance: false
+          tags: ${{ steps.tag.outputs.image }}
+          build-contexts: ${{ steps.sources.outputs.build-contexts }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=PROJ and GDAL built for the rusty-tiles native image
+          cache-from: type=gha,scope=geobase
+          cache-to: type=gha,scope=geobase,mode=max
+      - name: Report the digest to pin
+        env:
+          IMAGE: ${{ steps.tag.outputs.image }}
+        run: |
+          set -eu
+          digest=$(docker buildx imagetools inspect "$IMAGE" --format '{{json .Manifest}}' | jq -r .digest)
+          line="ARG GEOBASE=$IMAGE@$digest"
+          echo "$line"
+          {
+            echo '### GDAL/PROJ base image'
+            echo
+            echo "Pin it in the Dockerfile (replacing the current \`ARG GEOBASE=\` line):"
+            echo
+            echo '```dockerfile'
+            echo "$line"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
