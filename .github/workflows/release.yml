@@ -66,82 +66,16 @@ jobs:
       - name: Test the checksum-verifying installer
         run: python3 -m unittest discover -s tests -p test_install.py -v
 
-  binaries:
-    name: Binary (${{ matrix.target }})
+  build:
+    name: Build
     needs: check
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-          - os: ubuntu-22.04-arm
-            target: aarch64-unknown-linux-gnu
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-          - os: macos-15
-            target: aarch64-apple-darwin
-          - os: windows-2022
-            target: x86_64-pc-windows-msvc
-    defaults:
-      run:
-        shell: bash
-    env:
-      RELEASE_VERSION: ${{ needs.check.outputs.version }}
-      RELEASE_TARGET: ${{ matrix.target }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - name: Select stable Rust
-        run: |
-          rustup update stable --no-self-update
-          rustup default stable
-          rustup target add "$RELEASE_TARGET"
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-        with:
-          key: portable-${{ matrix.target }}
-      - name: Build and test the default CLI
-        run: |
-          # Peak-RSS slack in this test is sensitive to shared runner load; CI runs it
-          # for the same source, so it does not gate publication here.
-          cargo test --locked --target "$RELEASE_TARGET" -- \
-            --skip spill::tests::spill_memory_is_flat_in_input_size
-          cargo build --locked --release --target "$RELEASE_TARGET"
-      - name: Package and smoke test
-        run: |
-          set -eu
-          suffix=
-          if [[ "$RELEASE_TARGET" == *windows* ]]; then suffix=.exe; fi
-          binary="target/$RELEASE_TARGET/release/rusty-tiles$suffix"
-          "$binary" --version
-          mkdir -p smoke dist stage
-          "$binary" doctor --command mesh
-          "$binary" mesh -i tests/fixtures/example.glb -o smoke/mesh.3tz --anchor 153.02 -27.47 0
-          "$binary" validate smoke/mesh.3tz
-          # A textured source exercises the in-process KTX2/Basis encoder of this binary.
-          "$binary" mesh -i tests/fixtures/f1b/basecolor-jpeg.glb -o smoke/mesh-ktx2.3tz --anchor 153.02 -27.47 0
-          "$binary" validate smoke/mesh-ktx2.3tz
-          cp "$binary" LICENSE stage/
-          cp licenses/THIRD_PARTY_LICENSES-cli.md stage/THIRD_PARTY_LICENSES.md
-          python=python3
-          if [[ "$RELEASE_TARGET" == *windows* ]]; then python=python; fi
-          "$python" scripts/third_party_notices.py stage stage
-          asset="rusty-tiles-$RELEASE_VERSION-$RELEASE_TARGET"
-          if [[ "$RELEASE_TARGET" == *windows* ]]; then
-            (cd stage && 7z a -tzip "../dist/$asset.zip" "rusty-tiles$suffix" LICENSE THIRD_PARTY_LICENSES.md third_party)
-          else
-            tar -czf "dist/$asset.tgz" -C stage "rusty-tiles$suffix" LICENSE THIRD_PARTY_LICENSES.md third_party
-          fi
-          "$python" scripts/third_party_notices.py check --rust-licenses cli dist/"$asset".*
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: binary-${{ matrix.target }}
-          path: dist/*
-          if-no-files-found: error
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/release-build.yml
+    with:
+      version: ${{ needs.check.outputs.version }}
+      image-tag: ${{ github.ref_name }}
 
   wheels:
     name: Python wheel acceptance
@@ -150,7 +84,7 @@ jobs:
 
   pypi:
     name: Publish Python wheels to PyPI
-    needs: [check, binaries, wheels, container]
+    needs: [check, build, wheels]
     # PyPI uploads cannot be replaced; release candidates stay on GitHub only.
     if: needs.check.outputs.prerelease == 'false'
     runs-on: ubuntu-24.04
@@ -168,57 +102,12 @@ jobs:
       - name: Publish with PyPI trusted publishing
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
 
-  container:
-    name: Native geospatial image (Linux amd64)
-    needs: [check, binaries]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
-      - name: Build the packaged runtime
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        with:
-          context: .
-          target: runtime
-          load: true
-          tags: rusty-tiles:release
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.version=${{ github.ref_name }}
-            org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha,scope=python-free-acceptance
-          cache-to: type=gha,scope=python-free-acceptance,mode=max
-      - name: Check and publish the Python-free runtime
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.ref_name }}
-          RELEASE_REPO: ${{ github.repository }}
-        run: |
-          set -eu
-          image="ghcr.io/${RELEASE_REPO,,}:$RELEASE_TAG"
-          docker tag rusty-tiles:release "$image"
-          docker run --rm --network none \
-            --tmpfs /tmp:rw,nosuid,nodev,size=256m \
-            --mount type=bind,src="$PWD/tests/fixtures",dst=/fixtures,readonly \
-            --mount type=bind,src="$PWD/scripts/test-packaged-runtime.sh",dst=/test-packaged-runtime.sh,readonly \
-            --entrypoint /bin/sh "$image" /test-packaged-runtime.sh /fixtures
-          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          docker push "$image"
-
   publish:
     name: Publish release
-    needs: [check, binaries, wheels, container, pypi]
+    needs: [check, build, wheels, pypi]
     # A prerelease skips PyPI; anything else needs PyPI to have succeeded.
     if: >-
-      !cancelled() && needs.binaries.result == 'success' && needs.wheels.result == 'success' &&
-      needs.container.result == 'success' &&
+      !cancelled() && needs.build.result == 'success' && needs.wheels.result == 'success' &&
       (needs.pypi.result == 'success' || (needs.pypi.result == 'skipped' && needs.check.outputs.prerelease == 'true'))
     runs-on: ubuntu-24.04
     permissions:

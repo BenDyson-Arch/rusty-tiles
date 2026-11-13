@@ -162,11 +162,15 @@ CPython 3.10 and newer. See [the Python API guide](bindings/python/README.md).
 The separate [Wheel acceptance workflow](.github/workflows/wheel-acceptance.yml)
 runs in the full CI tier (not on pull requests) and is a mandatory release-workflow gate.
 It tests all five wheels with CPython 3.10 and 3.14, then installs the matching
-candidate wheels inside checksum-pinned official Blender 4.5.14 LTS bundles on
-Linux x86_64, Windows x64, Intel macOS and Apple Silicon macOS. Its uploaded JSON
-records the archive and executable hashes, actual runtime and wheel identity,
-and completed API tests. The optional Linux distribution Blender job is
-distinct; Linux ARM64 has no official Blender 4.5 bundle. See the
+candidate wheels inside checksum-pinned official Blender bundles: 4.5.14 LTS on
+Linux x86_64, Windows x64, Intel macOS and Apple Silicon macOS, and 5.2.4 LTS on
+Linux x86_64, Windows x64 and Apple Silicon macOS (Blender 5.x has no Intel macOS
+build). Its uploaded JSON records the archive and executable hashes, actual
+Blender and Python runtime, wheel identity and completed API tests. The optional
+Linux distribution Blender job is distinct; no supported Blender series has an
+official Linux ARM64 bundle. To add or update a series, copy each archive's
+SHA-256 from that release's `blender-VERSION.sha256` on download.blender.org into
+`scripts/blender_official.json` and add its matrix rows to the workflow. See the
 [local reproduction and pin-update instructions](bindings/python/README.md).
 
 The Python suite drives the built CLI and checks its output with independent readers. It needs GDAL Python bindings that match your native GDAL, NumPy, laspy and pyproj.
@@ -385,6 +389,16 @@ The `mesh` recipe runs the tiler with the lossless profile, so its digests do no
 The standalone downloads are default builds. Linux builds use Ubuntu 22.04 (glibc 2.35+ and libstdc++); macOS builds use macOS 15. The installer checks the release checksum before running or installing a binary. `cargo-binstall` uses the same archive layout via the manifest metadata; publishing to crates.io is a separate maintainer action.
 
 A new version changes converter and cache identity. Consumers must invalidate derivative caches. Vector archives from another encoder identity, schema, library version, CRS or setting need a fresh baseline before reuse. The terrain manifest keeps `heightOverlay` version 1 with south-to-north rows. Echidna keeps its own Python raster and height helpers, separate from this runtime.
+
+### Development builds
+
+The rolling `dev` pre-release is a separate path ([dev-build.yml](.github/workflows/dev-build.yml)). The nightly full CI run on `develop` dispatches it once `Full matrix` passes. It builds only a commit with a full-tier pass (`Full matrix` and `Rust`, as the release gate requires), and only when `develop` has moved past the `dev` tag. It reuses the release build ([release-build.yml](.github/workflows/release-build.yml)) and wheel acceptance with a development version that `scripts/dev_version.py` stamps into the checkout and never commits, then replaces the `dev` pre-release and pushes the image tag `dev`. It never publishes to PyPI or crates.io and never moves `latest`. To rebuild by hand, after a full-tier pass on the commit:
+
+```sh
+gh workflow run dev-build.yml --ref develop -f force=true
+```
+
+On any other branch the workflow builds and tests everything but publishes nothing, so a change to it can be tried before it merges (dispatch `ci.yml` on that branch first). The `dev` tag moves with each build; a clone that fetched it needs `git fetch --tags --force` to follow it.
 
 ## Verification evidence
 

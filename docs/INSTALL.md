@@ -67,7 +67,7 @@ Install into the Python environment that will call it, including Blender's bundl
 - macOS 15+ on Intel and Apple Silicon
 - Windows x64
 
-Wheels are tested inside official Blender 4.5.14 LTS on Linux x64, Windows x64 and both macOS architectures. Linux ARM64 has no official Blender 4.5 bundle.
+Wheels are tested inside official Blender 4.5.14 LTS (Python 3.11) on Linux x64, Windows x64 and both macOS architectures, and inside official Blender 5.2.4 LTS (Python 3.13) on Linux x64, Windows x64 and Apple Silicon macOS. Blender 5.x has no Intel macOS build, and neither series has an official Linux ARM64 build.
 
 The wheel contains **only the standard conversion APIs**: meshes, local and grid-free LAS/LAZ, GeoJSON/GeoPackage vectors, tileset packaging and archive validation. It does not include the CLI, `doctor` or `preview`, and it cannot convert imagery, terrain or OGR-only inputs or use native CRS operations. Installing GDAL or its Python bindings does not change this. See the [Python API guide](../bindings/python/README.md).
 
@@ -80,6 +80,30 @@ python -m pip install target/wheels/rusty_tiles-*.whl
 ```
 
 Leave `LIBSQLITE3_SYS_USE_PKG_CONFIG` unset for wheel builds.
+
+## Development builds
+
+The rolling [`dev` pre-release](https://github.com/BenDyson-Arch/rusty-tiles/releases/tag/dev) is built from the `develop` branch after its nightly full CI run passes, when `develop` has changed since the previous development build. It carries the same CLI archives, Python wheels and `SHA256SUMS` as a release, and the native-geospatial container is tagged `ghcr.io/bendyson-arch/rusty-tiles:dev`. Each build replaces the previous one: older development builds are not kept. Nothing from it is published to PyPI or crates.io.
+
+> **Warning:** a development build is not a release. Output, options and APIs can change from one development build to the next, and its changes may not have changelog entries yet. Each build has a new version, which changes converter and cache identity, so derivative caches and baselines made with an earlier build must be rebuilt. Use a release for work you keep or compare.
+
+The version is a development version of the next release, for example `0.4.1.dev202611121734` (the number is the UTC commit time). `rusty-tiles --version` prints the same version in Cargo's spelling, `rusty-tiles 0.4.1-dev.202611121734`. It sorts after the previous release and before the next one.
+
+CLI on macOS and Linux (the installer on `develop` knows `--version dev`):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/BenDyson-Arch/rusty-tiles/develop/scripts/install.sh | sh -s -- --version dev
+```
+
+On Windows, download the `x86_64-pc-windows-msvc` ZIP from the `dev` pre-release.
+
+Wheel file names include the build's version, so take the URL for your platform from the release notes, which list a `pip install` line for each wheel, or from the `browser_download_url` values of `https://api.github.com/repos/BenDyson-Arch/rusty-tiles/releases/tags/dev`:
+
+```sh
+python -m pip install --force-reinstall https://github.com/BenDyson-Arch/rusty-tiles/releases/download/dev/rusty_tiles-0.4.1.dev202611121734-cp310-abi3-manylinux_2_28_x86_64.whl
+```
+
+Because a development version sorts above the previous release, `pip install --upgrade rusty-tiles` keeps it until the next release is out. To go back to a release, run `python -m pip install --force-reinstall rusty-tiles==VERSION`.
 
 ## Check the installed build
 

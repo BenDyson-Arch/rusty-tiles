@@ -70,21 +70,25 @@ def extract_bundle(archive, destination):
 def validate_distribution(record, executable):
     """Bind acceptance to the pinned bundle and the extracted executable."""
     manifest = json.loads(MANIFEST.read_text())
-    spec = manifest["platforms"].get(record.get("distribution_platform"))
-    if (spec is None or record.get("version") != manifest["version"]
-            or record.get("archive_url") != manifest["base_url"] + spec["archive"]
+    release = manifest["releases"].get(record.get("release"))
+    spec = None if release is None else release["platforms"].get(record.get("distribution_platform"))
+    if (spec is None or record.get("version") != release["version"]
+            or record.get("archive_url") != release["base_url"] + spec["archive"]
             or record.get("archive_sha256") != spec["sha256"]):
         raise RuntimeError("Blender distribution evidence does not match the pinned official bundle")
     if (Path(record["executable"]).resolve() != executable.resolve()
             or record.get("executable_sha256") != sha256_file(executable)):
         raise RuntimeError("Blender executable does not match the verified distribution evidence")
-    return manifest, spec
+    return release, spec
 
 
 def main():
     manifest = json.loads(MANIFEST.read_text())
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--platform", choices=manifest["platforms"], required=True)
+    parser.add_argument("--release", choices=manifest["releases"], required=True,
+                        help="Pinned Blender release series")
+    parser.add_argument("--platform", required=True,
+                        help="Official bundle platform of that release, e.g. linux-x64")
     parser.add_argument("--directory", type=Path, required=True, help="New temporary bundle directory")
     parser.add_argument("--report-json", type=Path, required=True)
     args = parser.parse_args()
@@ -92,14 +96,18 @@ def main():
     report = args.report_json.resolve()
     # Stale success cannot survive a failed download or an incorrect host.
     report.unlink(missing_ok=True)
-    spec = manifest["platforms"][args.platform]
+    release = manifest["releases"][args.release]
+    if args.platform not in release["platforms"]:
+        parser.error(f"Blender {args.release} has no pinned official bundle for {args.platform}; "
+                     f"choose from {', '.join(release['platforms'])}")
+    spec = release["platforms"][args.platform]
     if platform.system() != spec["system"] or platform.machine().lower() not in spec["machines"]:
         parser.error(f"{args.platform} does not match this host: {platform.system()} {platform.machine()}")
     directory.mkdir(parents=True, exist_ok=False)
     completed = False
     try:
         archive = directory / spec["archive"]
-        url = manifest["base_url"] + spec["archive"]
+        url = release["base_url"] + spec["archive"]
         download_verified(url, archive, spec["sha256"])
         extract_bundle(archive, directory)
         executable = directory / spec["executable"]
@@ -107,11 +115,12 @@ def main():
             raise RuntimeError(f"Verified Blender bundle lacks its executable: {executable}")
         record = {
             "distribution": "official-blender.org",
+            "release": args.release,
             "distribution_platform": args.platform,
-            "version": manifest["version"],
+            "version": release["version"],
             "archive_url": url,
             "archive_sha256": spec["sha256"],
-            "checksum_url": manifest["checksum_url"],
+            "checksum_url": release["checksum_url"],
             "executable": str(executable),
             "executable_sha256": sha256_file(executable),
         }
