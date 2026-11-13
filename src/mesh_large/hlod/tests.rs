@@ -1901,6 +1901,7 @@ fn parent_jobs_allocate_within_their_charge() {
                 &mut |_| Ok(true),
                 &|| Ok(()),
                 true,
+                true,
             )
         });
         eprintln!(
@@ -5315,6 +5316,7 @@ fn ordinary_drops_under_pressure_go_smallest_first() {
             &mut |_| Ok(true),
             &|| Ok(()),
             true,
+            true,
         )
         .unwrap()
         .built
@@ -5453,6 +5455,7 @@ fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
             &|_| Ok(None),
             &mut |_| Ok(true),
             &|| Ok(()),
+            true,
             true,
         )
         .unwrap();
@@ -5869,6 +5872,118 @@ fn a_noisy_folded_sheet_builds_every_coarse_tile() {
     assert!(omission_receipt("noisy folded sheet", &dir));
     assert_directed_census("noisy folded sheet", &census(&dir), Run::default().cap);
     published_and_valid("noisy folded sheet", &dir, work.path());
+}
+
+/// Stage without the audit sidecar (exact-repeat reuse is off while it records every
+/// attempt): every published byte, and the reuse the walk counted.
+fn stage_unaudited(
+    input: &Path,
+    out: &Path,
+    jobs: usize,
+    mutation: Mutation,
+) -> (BTreeMap<String, Vec<u8>>, super::RepeatReuse) {
+    let run = Run::default();
+    let scratch = out.with_extension("scratch");
+    fs::create_dir_all(&scratch).unwrap();
+    let request = LeafOutputRequest::new(input, out, run.profile)
+        .with_jobs(NonZeroUsize::new(jobs).unwrap())
+        .with_scratch_dir(&scratch)
+        .with_leaf_triangles(run.leaf_triangles)
+        .with_hlod_settings(Settings {
+            audit_dir: None,
+            cap: run.cap,
+            mutation,
+            nearest_steps: run.nearest_steps,
+            sampling: run.sampling,
+        });
+    let result = mesh_to_leaf_payloads(request, &RunControl::default()).unwrap();
+    assert_eq!(
+        fs::read_dir(&scratch).unwrap().count(),
+        0,
+        "scratch is cleaned up"
+    );
+    let resources: Value =
+        serde_json::from_slice(&fs::read(result.output.join("resources.json")).unwrap()).unwrap();
+    let reuse = &resources["hlod"]["diagnostics"]["repeat_reuse"];
+    let count = |field: &str| reuse[field].as_u64().unwrap();
+    (
+        published(&result.output),
+        super::RepeatReuse {
+            contractions: count("contractions"),
+            replayed_calls: count("replayed_calls"),
+            round_zero_calls: count("round_zero_calls"),
+        },
+    )
+}
+
+/// Exact-repeat reuse (`geometry::build_parent`): `Fix2` replaying the primary build's proposal
+/// calls, remesh round 0 repeating the full-cap calls, and a later build repeating an earlier
+/// failed contraction. Every published byte equals a run that recomputes all of them, at one
+/// and at four jobs. These fixtures reach the first two; none fails the primary contraction
+/// and `Fix2` both, which the third needs, so it has a geometry-level control
+/// (`a_repeated_failed_contraction_is_reused_with_the_same_outcome`).
+#[test]
+fn exact_repeat_reuse_publishes_identical_bytes() {
+    let work = tempfile::tempdir().unwrap();
+    let mut fixtures: Vec<(String, Vec<Mesh>)> = vec![
+        (
+            "folded 72x2".into(),
+            vec![folded_sheet(72, 2, 0.02, 0.0003, 0)],
+        ),
+        (
+            "folded 72x3".into(),
+            vec![folded_sheet(72, 3, 0.02, 0.0001, 4)],
+        ),
+        (
+            "folded 48x5".into(),
+            vec![folded_sheet(48, 5, 0.02, 0.001, 7)],
+        ),
+    ];
+    for layout in [26, 77, 2, 113] {
+        fixtures.push((format!("city block {layout}"), city_block(layout)));
+    }
+    let mut total = super::RepeatReuse::default();
+    for (i, (name, meshes)) in fixtures.iter().enumerate() {
+        let input = write_gltf(&work.path().join(format!("src{i}")), meshes);
+        let (reference, none) = stage_unaudited(
+            &input,
+            &work.path().join(format!("{i}-reference")),
+            1,
+            Mutation::NoRepeatReuse,
+        );
+        assert_eq!(
+            none.contractions + none.replayed_calls + none.round_zero_calls,
+            0
+        );
+        for jobs in [1, 4] {
+            let (bytes, reuse) = stage_unaudited(
+                &input,
+                &work.path().join(format!("{i}-{jobs}")),
+                jobs,
+                Mutation::None,
+            );
+            assert_eq!(
+                reference.keys().collect::<Vec<_>>(),
+                bytes.keys().collect::<Vec<_>>(),
+                "{name}"
+            );
+            for (member, b) in &bytes {
+                assert!(
+                    reference[member] == *b,
+                    "{name}, {jobs} jobs: {member} differs"
+                );
+            }
+            eprintln!("{name}, {jobs} jobs: {reuse:?}");
+            if jobs == 1 {
+                total.contractions += reuse.contractions;
+                total.replayed_calls += reuse.replayed_calls;
+                total.round_zero_calls += reuse.round_zero_calls;
+            }
+        }
+    }
+    eprintln!("total reuse: {total:?}");
+    assert!(total.replayed_calls > 0, "{total:?}");
+    assert!(total.round_zero_calls > 0, "{total:?}");
 }
 
 /// The A2 last-resort tiles of a staged run: `(first, depth, stage, fold faces)`.

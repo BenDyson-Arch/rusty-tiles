@@ -208,6 +208,33 @@ pub(super) fn contract(
     folds: Option<&super::folds::Policy>,
     relief: Option<&mut Option<super::Contracted>>,
 ) -> Result<bool, JobError> {
+    contract_noting(
+        m,
+        interface,
+        previous_interface,
+        mapping,
+        receipt,
+        fallbacks,
+        folds,
+        relief,
+        &mut false,
+    )
+}
+
+/// `contract`, also setting `rebuilt` when the constrained rebuild ran: the only step
+/// whose result depends on `fallbacks` (`constrained::contract`).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn contract_noting(
+    m: &mut Merged,
+    interface: &[InterfaceRow],
+    previous_interface: &[InterfaceRow],
+    mapping: &super::BorderMap<'_>,
+    receipt: &mut Receipt,
+    fallbacks: bool,
+    folds: Option<&super::folds::Policy>,
+    relief: Option<&mut Option<super::Contracted>>,
+    rebuilt: &mut bool,
+) -> Result<bool, JobError> {
     contract_from(
         m,
         interface,
@@ -218,6 +245,7 @@ pub(super) fn contract(
         fallbacks,
         folds,
         relief,
+        rebuilt,
     )
 }
 
@@ -296,6 +324,7 @@ pub(super) fn contract_from(
     fallbacks: bool,
     folds: Option<&super::folds::Policy>,
     relief: Option<&mut Option<super::Contracted>>,
+    rebuilt: &mut bool,
 ) -> Result<bool, JobError> {
     let _cpu = super::super::cpu_profile::start(
         super::super::cpu_profile::Stage::Contract,
@@ -448,6 +477,7 @@ pub(super) fn contract_from(
     }
     drop(output);
     drop(representatives);
+    *rebuilt = true;
     if let Some(r) = super::constrained::contract(
         m,
         interface,

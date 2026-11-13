@@ -25,7 +25,7 @@ mod source_crs;
 mod tree;
 /// The validator plans its stores with the same budget, job and headroom rules (#342).
 pub(crate) use config::{available_memory, plan_jobs, Jobs};
-pub use hlod::{DeclaredTile, HlodDiagnostics, HlodMemoryPlan};
+pub use hlod::{DeclaredTile, HlodDiagnostics, HlodMemoryPlan, RepeatReuse};
 pub use pipeline::{
     mesh_to_tileset, MemoryDiagnostics, StorageDiagnostics, TilerDiagnostics, TilerJobs,
     TilerProfile, TilerReport, TilerRequest, TilerResult,

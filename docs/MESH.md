@@ -270,6 +270,12 @@ rule. A declaration does not certify source-distance maxima.
 Conversion `diagnostics.hlod` reports `last_resort_tiles`,
 `last_resort_stages` (counts for stages 1, 2 and 3), `fold_faces` and
 `declared_tiles` (including stage-0 tiles, with stage and fold count).
+`diagnostics.hlod.repeat_reuse` counts the exact repeats the coarse ladder
+skipped: `contractions` (a build returned an earlier build's failed border
+contraction), `replayed_calls` (`Fix2` proposal calls replayed from the
+primary build's) and `round_zero_calls` (remesh round 0 repeating the full-cap
+calls). The published output is the same as recomputing them. The counts are 0
+while the `RT_HLOD_AUDIT_DIR` sidecar records every attempt.
 
 ### Geometric error: sampled, not certified
 
