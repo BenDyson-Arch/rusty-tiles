@@ -51,7 +51,7 @@ Each release also lists `SHA256SUMS` for its ZIP and `.tgz` archives. With `carg
 Install stable Rust, Cargo and a C++ compiler, then build a release tag (or `main`):
 
 ```sh
-git clone --branch v0.4.0 https://github.com/BenDyson-Arch/rusty-tiles.git
+git clone --branch v0.4.1 https://github.com/BenDyson-Arch/rusty-tiles.git
 cd rusty-tiles
 cargo install --path . --locked
 rusty-tiles doctor --command mesh --command point-cloud --command vector
@@ -131,14 +131,14 @@ The published image contains the native CLI with GDAL 3.12.4, PROJ 9.8.1, GEOS a
 
 ```sh
 docker run --rm --platform linux/amd64 --network none \
-  ghcr.io/bendyson-arch/rusty-tiles:v0.4.0 doctor --command raster --command terrain
+  ghcr.io/bendyson-arch/rusty-tiles:v0.4.1 doctor --command raster --command terrain
 
 docker run --rm --platform linux/amd64 --network none \
-  -v "$PWD:/data" -w /data ghcr.io/bendyson-arch/rusty-tiles:v0.4.0 \
+  -v "$PWD:/data" -w /data ghcr.io/bendyson-arch/rusty-tiles:v0.4.1 \
   raster -i orthophoto.tif -o imagery --max-zoom 14
 ```
 
-Tags are `v0.4.0` and `latest`; pin a version for repeatable deployments. The image contains no Python, datasets, Cesium runtime or extra datum grids, and PROJ networking is off. Mount required grids and set `PROJ_DATA` to a path list that includes them and `proj.db`. With a rootful Docker daemon, add `--user "$(id -u):$(id -g)"` so new outputs belong to you.
+Tags are `v0.4.1` and `latest`; pin a version for repeatable deployments. The image contains no Python, datasets, Cesium runtime or extra datum grids, and PROJ networking is off. Mount required grids and set `PROJ_DATA` to a path list that includes them and `proj.db`. With a rootful Docker daemon, add `--user "$(id -u):$(id -g)"` so new outputs belong to you.
 
 To build the image from a source checkout:
 
