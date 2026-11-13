@@ -42,7 +42,7 @@ pub struct ScratchStages {
     /// capture no longer writes a separate rank-ordered projection).
     pub projection: u64,
     pub images: u64,
-    /// The cell tree and node sort over the retained sequence, and the weld-depth pass.
+    /// The cell tree and node sort over the retained sequence.
     pub tree: u64,
     pub corner_depths: u64,
     pub leaf_plans: u64,
@@ -327,8 +327,8 @@ fn scratch_need(
     image_bytes: u64,
 ) -> Result<FullScratchNeed, JobError> {
     use super::{
+        corners::{Candidate, RankDepth},
         records::{CornerRef, NodeRecord, Span},
-        tree::{VertexDepth, WeldDepth},
     };
     let overflow = || exhausted("full capture scratch arithmetic overflow");
     let sorter = inside.sorter(1); // Run sizes do not depend on the worker count.
@@ -346,10 +346,9 @@ fn scratch_need(
     let node_sort = config::sort_spill::<NodeRecord>(nodes, sorter).ok_or_else(overflow)?;
     let node_bytes = mul(nodes, NodeRecord::SIZE as u64)?;
     let span_bytes = mul(nodes, Span::SIZE as u64)?;
-    let vertex_depths = config::sort_spill::<VertexDepth>(corners, sorter).ok_or_else(overflow)?;
-    let weld_bytes = mul(corners, WeldDepth::SIZE as u64)?;
-    let rank_corners = config::sort_spill::<RankCorner>(corners, sorter).ok_or_else(overflow)?;
-    let rank_depths = config::sort_spill::<RankDepth>(corners, sorter).ok_or_else(overflow)?;
+    // At most every corner is a join candidate, and at most every candidate is patched.
+    let candidates = config::sort_spill::<Candidate>(corners, sorter).ok_or_else(overflow)?;
+    let patches = config::sort_spill::<RankDepth>(corners, sorter).ok_or_else(overflow)?;
     let corner_depth_bytes = mul(n, CornerDepth::SIZE as u64)?;
     // Every leaf holds at least one triangle and is a tree node.
     let leaf_plan_bytes = mul(n.min(nodes), LeafPlan::SIZE as u64)?;
@@ -372,10 +371,6 @@ fn scratch_need(
     let projection_stage = full.flow(t).ok_or_else(overflow)?;
     let images = add(t, image_bytes)?;
     let retained = add(t, image_bytes)?;
-    let welding = max(&[
-        Some(vertex_depths.finish_peak),
-        vertex_depths.flow(weld_bytes),
-    ])?;
     let tree = add(
         retained,
         max(&[
@@ -383,17 +378,16 @@ fn scratch_need(
             node_sort
                 .flow(node_bytes)
                 .and_then(|v| v.checked_add(span_bytes)),
-            welding.checked_add(node_bytes + span_bytes),
         ])?,
     )?;
-    let base = add(add(retained, node_bytes)?, weld_bytes)?;
+    let base = add(retained, node_bytes)?;
     let corner_depths = add(
         base,
         max(&[
-            Some(rank_corners.finish_peak),
-            rank_corners.flow(rank_depths.push_peak),
-            Some(rank_depths.finish_peak),
-            rank_depths.flow(corner_depth_bytes),
+            Some(candidates.finish_peak),
+            candidates.flow(patches.push_peak),
+            Some(patches.finish_peak),
+            patches.flow(corner_depth_bytes),
         ])?,
     )?;
     let kept = base;
@@ -536,10 +530,10 @@ fn begin_stage(scratch: &Scratch, need: &FullScratchNeed, bound: u64) -> Result<
 }
 
 /// Every sort inside capture, by count and resident record size.
-fn capture_sort_loads(scan: SourceScan, config: &TreeConfig) -> [SortLoad; 7] {
+fn capture_sort_loads(scan: SourceScan, config: &TreeConfig) -> [SortLoad; 6] {
     use super::{
+        corners::{Candidate, RankDepth},
         records::{CornerRef, NodeRecord},
-        tree::VertexDepth,
     };
     let n = scan.triangles;
     let corners = n.saturating_mul(3);
@@ -553,8 +547,7 @@ fn capture_sort_loads(scan: SourceScan, config: &TreeConfig) -> [SortLoad; 7] {
         load(corners, size_of::<attributes::FullCorner>()),
         load(n, size_of::<FullTriangle>()),
         load(nodes, size_of::<NodeRecord>()),
-        load(corners, size_of::<VertexDepth>()),
-        load(corners, size_of::<RankCorner>()),
+        load(corners, size_of::<Candidate>()),
         load(corners, size_of::<RankDepth>()),
     ]
 }
@@ -1046,7 +1039,6 @@ pub(crate) fn capture_admitted(
             &triangles,
             capture_config,
             workers,
-            Some(add(stages.tree, need.file_rounding_bytes)?),
             Some(progress),
             check,
         )?;
@@ -1242,32 +1234,7 @@ impl tree::RankedTriangles for Sequence<FullTriangle> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct RankCorner {
-    position: [u32; 3],
-    rank: u64,
-    corner: u8,
-}
-impl Record for RankCorner {
-    const SIZE: usize = 21;
-    fn encode(&self, out: &mut [u8]) {
-        for a in 0..3 {
-            out[a * 4..a * 4 + 4].copy_from_slice(&self.position[a].to_le_bytes());
-        }
-        out[12..20].copy_from_slice(&self.rank.to_le_bytes());
-        out[20] = self.corner;
-    }
-    fn decode(bytes: &[u8]) -> Self {
-        Self {
-            position: std::array::from_fn(|a| {
-                u32::from_le_bytes(bytes[a * 4..a * 4 + 4].try_into().unwrap())
-            }),
-            rank: u64::from_le_bytes(bytes[12..20].try_into().unwrap()),
-            corner: bytes[20],
-        }
-    }
-}
-/// Exclusive bound of a triangle rank in the packed corner records ([`RankDepth`]): 40
+/// Exclusive bound of a triangle rank in the packed corner records (`corners`): 40
 /// bits, about 1.1 trillion triangles.
 pub(crate) const RANK_LIMIT: u64 = 1 << 40;
 /// The range of capture's packed corner records: at most `triangles` triangles (40-bit
@@ -1308,31 +1275,6 @@ impl RecordLimits {
 pub(crate) fn check_rank_limit(triangles: u64) -> Result<(), JobError> {
     RecordLimits::PACKED.check_triangles(triangles)
 }
-/// A corner's depth, sorted back to rank order. Encoded in 6 bytes: the 40-bit rank and
-/// `corner | depth << 2` (a depth is below the tree height, at most 32).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct RankDepth {
-    rank: u64,
-    corner: u8,
-    depth: u8,
-}
-impl Record for RankDepth {
-    const SIZE: usize = 6;
-    fn encode(&self, out: &mut [u8]) {
-        debug_assert!(self.rank < RANK_LIMIT && self.corner < 4 && self.depth < 64);
-        out[..5].copy_from_slice(&self.rank.to_le_bytes()[..5]);
-        out[5] = self.corner | self.depth << 2;
-    }
-    fn decode(bytes: &[u8]) -> Self {
-        let mut rank = [0u8; 8];
-        rank[..5].copy_from_slice(&bytes[..5]);
-        Self {
-            rank: u64::from_le_bytes(rank),
-            corner: bytes[5] & 3,
-            depth: bytes[5] >> 2,
-        }
-    }
-}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct CornerDepth {
     pub depths: [u8; 3],
@@ -1348,108 +1290,33 @@ impl Record for CornerDepth {
         }
     }
 }
-/// Each corner's welded depth, in rank order, for the tree built over `ranked`.
-fn join_corner_depths(
+/// Each corner's welded depth, in rank order, for the tree built over `triangles`.
+fn join_corner_depths<T: super::corners::Corners>(
     scratch: &Scratch,
     tree: &RetainedTree,
-    ranked: &dyn tree::RankedTriangles,
+    triangles: &Sequence<T>,
     config: &TreeConfig,
     jobs: usize,
     progress: &StepProgress<'_>,
 ) -> Result<Sequence<CornerDepth>, JobError> {
     // Defence: capture refused the count as soon as it knew it.
     let limits = RecordLimits::of(config);
-    let triangles = tree.stats.triangles;
-    limits.check_triangles(triangles)?;
+    limits.check_triangles(tree.stats.triangles)?;
     if tree.stats.height > config::HEIGHT_CAP {
         return Err(invariant("tree height exceeds the packed corner depth"));
     }
-    // Seven units per triangle: three corners sorted, three joined, one written.
-    progress.begin(Step::CornerDepths, mul(triangles, 7)?)?;
-    let mut corners =
-        ExternalSorter::<RankCorner>::new(scratch, config.sorter(jobs))?.observed(progress);
-    let mut rank = 0_u64;
-    for triangle in ranked.ranked()? {
-        if rank.is_multiple_of(1024) {
-            progress.advance(rank * 3)?;
-        }
-        let triangle = triangle?;
-        for (corner, position) in triangle.positions.iter().enumerate() {
-            corners.push(RankCorner {
-                position: position.map(f32::to_bits),
-                rank,
-                corner: corner as u8,
-            })?;
-        }
-        rank = add(rank, 1)?;
-    }
-    if rank != triangles {
+    if tree.stats.triangles != triangles.len() {
         return Err(invariant("corner rank inventory length mismatch"));
     }
-    let mut corners = corners.finish()?;
-    let mut welds = tree.weld_depths.reader()?;
-    let mut weld = welds.next().transpose()?;
-    let mut previous_position = None;
-    let mut depths =
-        ExternalSorter::<RankDepth>::new(scratch, config.sorter(jobs))?.observed(progress);
-    let mut corner_count = 0_u64;
-    for row in corners.by_ref() {
-        let row = row?;
-        if previous_position.is_some_and(|p| p != row.position) {
-            weld = welds.next().transpose()?;
-        }
-        let value =
-            weld.ok_or_else(|| invariant("corner position missing from complete weld table"))?;
-        if value.position != row.position || value.depth as u32 >= tree.stats.height {
-            return Err(invariant("corner/weld position/depth mismatch"));
-        }
-        previous_position = Some(row.position);
-        depths.push(RankDepth {
-            rank: row.rank,
-            corner: row.corner,
-            depth: value.depth,
-        })?;
-        corner_count = add(corner_count, 1)?;
-        if corner_count.is_multiple_of(3072) {
-            progress.advance(triangles * 3 + corner_count)?;
-        }
-    }
-    drop(corners);
-    if welds.next().transpose()?.is_some() || corner_count != mul(triangles, 3)? {
-        return Err(invariant("corner/weld coverage mismatch"));
-    }
-    drop(welds);
-    let mut depths = depths.finish()?;
-    let mut writer = SequenceWriter::<CornerDepth>::compressed(
+    super::corners::corner_depths(
         scratch,
-        "corner-depths",
-        config.sort.buffer_bytes,
-        crate::spill::Layout::FULL,
-    )?;
-    for rank in 0..triangles {
-        if rank.is_multiple_of(1024) {
-            progress.advance(triangles * 6 + rank)?;
-        }
-        let mut result = [0; 3];
-        for (corner, result_depth) in result.iter_mut().enumerate() {
-            let row = depths
-                .next()
-                .transpose()?
-                .ok_or_else(|| invariant("missing ranked corner depth"))?;
-            if (row.rank, row.corner) != (rank, corner as u8) {
-                return Err(invariant("ranked corner depth order mismatch"));
-            }
-            *result_depth = row.depth;
-        }
-        writer.push(&CornerDepth { depths: result })?;
-    }
-    if depths.next().transpose()?.is_some() {
-        return Err(invariant("extra ranked corner depth"));
-    }
-    drop(depths);
-    let written = writer.finish()?;
-    progress.end()?;
-    Ok(written)
+        &tree.nodes,
+        tree.stats.height,
+        triangles,
+        config,
+        jobs,
+        progress,
+    )
 }
 
 #[cfg(test)]
@@ -1667,13 +1534,7 @@ pub(super) mod tests {
             assert_eq!(row.corners[0].color, [1., 0.25, 0.5, 1.]);
             assert_eq!(row.material, 0);
         }
-        let weld: Vec<_> = output
-            .tree
-            .weld_depths
-            .reader()
-            .unwrap()
-            .map(Result::unwrap)
-            .collect();
+        let weld = welded_minimum(&output);
         for (triangle, depths) in output
             .triangles
             .reader()
@@ -1684,10 +1545,7 @@ pub(super) mod tests {
             let depths = depths.unwrap();
             for a in 0..3 {
                 let key = triangle.positions[a].map(f32::to_bits);
-                assert_eq!(
-                    depths.depths[a],
-                    weld.iter().find(|v| v.position == key).unwrap().depth
-                );
+                assert_eq!(depths.depths[a], weld[&key]);
             }
         }
         let material = output.materials[0].literal();
@@ -1811,6 +1669,32 @@ pub(super) mod tests {
         fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
         input
     }
+    /// Each position's least leaf depth over every corner, computed in memory from the
+    /// tree's leaves: the corner join's oracle.
+    pub(crate) fn welded_minimum(
+        output: &FullCaptured,
+    ) -> std::collections::BTreeMap<[u32; 3], u8> {
+        let triangles: Vec<_> = output
+            .triangles
+            .reader()
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        let mut least = std::collections::BTreeMap::new();
+        for node in output.tree.nodes.reader().unwrap() {
+            let node = node.unwrap();
+            if node.kind != super::super::records::NodeKind::Leaf {
+                continue;
+            }
+            for t in &triangles[node.first as usize..node.end as usize] {
+                for p in t.triangle.positions {
+                    let depth = least.entry(p.map(f32::to_bits)).or_insert(u8::MAX);
+                    *depth = (*depth).min(node.depth() as u8);
+                }
+            }
+        }
+        least
+    }
     /// Corner depths, tree rank order and weld depths are identical for every worker count
     /// and run size, from in-memory sorts down to one-record runs merged two at a time; every
     /// corner depth is its position's welded minimum.
@@ -1883,14 +1767,8 @@ pub(super) mod tests {
                     bytes
                 })
                 .collect();
-            let weld: Vec<_> = output
-                .tree
-                .weld_depths
-                .reader()
-                .unwrap()
-                .map(|w| w.map(|w| (w.position, w.depth)).unwrap())
-                .collect();
-            let lookup: std::collections::BTreeMap<_, _> = weld.iter().copied().collect();
+            let lookup = welded_minimum(&output);
+            let weld: Vec<_> = lookup.iter().map(|(&p, &d)| (p, d)).collect();
             for (triangle, depths) in output.triangles.reader().unwrap().zip(&depths) {
                 let triangle = triangle.unwrap().triangle;
                 for corner in 0..3 {
@@ -1926,25 +1804,10 @@ pub(super) mod tests {
         assert_eq!(fs::read_dir(parent).unwrap().count(), 0);
         assert_eq!(fs::read_dir(disk.path()).unwrap().count(), 0);
     }
-    /// The packed rank-order corner record keeps its limits: the largest rank, every corner
-    /// and depths up to the tree height cap; more triangles than the
-    /// 40-bit rank holds are refused before any record is packed.
+    /// More triangles than the packed corner records' 40-bit rank holds are refused before
+    /// any record is packed (the records' round trips: `corners::tests`).
     #[test]
-    fn rank_depth_round_trips_at_its_limits() {
-        for rank in [0, 1, u64::from(u32::MAX) + 7, RANK_LIMIT - 1] {
-            for corner in 0..3 {
-                for depth in [0, 1, 20, (config::HEIGHT_CAP - 1) as u8] {
-                    let row = RankDepth {
-                        rank,
-                        corner,
-                        depth,
-                    };
-                    let mut bytes = [0u8; RankDepth::SIZE];
-                    row.encode(&mut bytes);
-                    assert_eq!(RankDepth::decode(&bytes), row);
-                }
-            }
-        }
+    fn rank_limit_is_refused_past_its_end() {
         assert!(check_rank_limit(RANK_LIMIT).is_ok());
         assert_eq!(
             check_rank_limit(RANK_LIMIT + 1).unwrap_err().kind(),
@@ -2052,20 +1915,29 @@ pub(super) mod tests {
                 weld_depths,
                 stats,
             } = tree();
-            let retained = RetainedTree {
-                nodes,
-                weld_depths,
-                stats,
-            };
-            join_corner_depths(
+            let retained = RetainedTree { nodes, stats };
+            let depths = join_corner_depths(
                 &scratch,
                 &retained,
                 &triangles,
                 config,
                 1,
                 StepProgress::silent(),
-            )
-            .map(|_| ())
+            )?;
+            // The join agrees with H1's weld table over the same tree.
+            let weld: std::collections::BTreeMap<_, _> = weld_depths
+                .reader()
+                .unwrap()
+                .map(|w| w.map(|w| (w.position, w.depth)).unwrap())
+                .collect();
+            for (triangle, depths) in triangles.reader().unwrap().zip(depths.reader().unwrap()) {
+                let (triangle, depths) = (triangle.unwrap(), depths.unwrap());
+                for corner in 0..3 {
+                    let key = triangle.positions[corner].map(f32::to_bits);
+                    assert_eq!(depths.depths[corner], weld[&key]);
+                }
+            }
+            Ok::<(), JobError>(())
         };
         let mut limited = config.clone();
         for (limits, refusal) in [(3, Some("triangles exceed")), (4, None)] {
@@ -2078,6 +1950,123 @@ pub(super) mod tests {
                 }
                 (result, _) => panic!("{limits:?}: unexpected {result:?}"),
             }
+        }
+        assert_eq!(scratch.live_bytes(), 0);
+    }
+    /// The corner join over adversarial trees equals H1's weld table and an in-memory oracle
+    /// for every worker count: a point shared by corners in nearly every leaf, slivers whose
+    /// corners lie in far leaves' boxes, coincident triangles (one key: degenerate runs and
+    /// packed octants) and keys unrelated to positions, so leaf boxes overlap everywhere.
+    #[test]
+    fn corner_join_matches_the_weld_table_on_adversarial_trees() {
+        let scratch = Scratch::create(None, 0).unwrap();
+        let mut state = 0x2545_f491_4f6c_dd1du64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let mut rows: Vec<(u64, [[f32; 3]; 3])> = Vec::new();
+        let grid = |v: u64| (v % 9) as f32 * 0.25;
+        for i in 0..600u64 {
+            let key = next() >> 1; // 63-bit Morton keys.
+            let a = [grid(next()), grid(next()), grid(next())];
+            let b = [grid(next()), grid(next()), 0.];
+            let positions = match i % 5 {
+                // A fan: one corner at the shared point.
+                0 => [[0.5, 0.5, 0.5], a, b],
+                // A sliver from a corner of the grid to the opposite one.
+                1 => [[0., 0., 0.], [2., 2., 2.], a],
+                _ => [a, b, [grid(next()), 0., grid(next())]],
+            };
+            rows.push((key, positions));
+        }
+        // Coincident triangles under one key, and repeats of earlier triangles.
+        for i in 0..40 {
+            rows.push((7 << 40, rows[i % 3].1));
+            rows.push((next() >> 1, rows[i * 7].1));
+        }
+        for (jobs, leaf) in [(1, 3), (2, 3), (3, 16), (8, 1), (4, 200)] {
+            let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(leaf);
+            config.sort.buffer_bytes = 64;
+            let mut sorter = ExternalSorter::new(&scratch, config.sorter(1)).unwrap();
+            for (i, (key, positions)) in rows.iter().enumerate() {
+                sorter
+                    .push(TriangleRecord {
+                        key: *key,
+                        source: super::super::records::Provenance {
+                            triangle: i as u64,
+                            ..Default::default()
+                        },
+                        vertices: [0, 1, 2],
+                        positions: *positions,
+                        bytes: 56,
+                        degenerate: false,
+                    })
+                    .unwrap();
+            }
+            let tree::TreeOutput {
+                triangles,
+                nodes,
+                weld_depths,
+                stats,
+            } = tree::build(
+                &scratch,
+                sorter.finish().unwrap(),
+                &config,
+                1,
+                None,
+                &mut || Ok(()),
+            )
+            .unwrap();
+            // Forty coincident triangles exceed every leaf size but the largest.
+            assert!(
+                stats.leaves > 2 && (leaf > 40 || stats.degenerate_cells > 0),
+                "{stats:?}"
+            );
+            let weld: std::collections::BTreeMap<_, _> = weld_depths
+                .reader()
+                .unwrap()
+                .map(|w| w.map(|w| (w.position, w.depth)).unwrap())
+                .collect();
+            let mut oracle = std::collections::BTreeMap::new();
+            let ranked: Vec<_> = triangles.reader().unwrap().map(Result::unwrap).collect();
+            for node in nodes.reader().unwrap().map(Result::unwrap) {
+                if node.kind == super::super::records::NodeKind::Leaf {
+                    for t in &ranked[node.first as usize..node.end as usize] {
+                        for p in t.positions {
+                            let d = oracle.entry(p.map(f32::to_bits)).or_insert(u8::MAX);
+                            *d = (*d).min(node.depth() as u8);
+                        }
+                    }
+                }
+            }
+            assert_eq!(weld, oracle);
+            let retained = RetainedTree { nodes, stats };
+            let depths = join_corner_depths(
+                &scratch,
+                &retained,
+                &triangles,
+                &config,
+                jobs,
+                StepProgress::silent(),
+            )
+            .unwrap();
+            assert_eq!(depths.len(), triangles.len());
+            let mut patched = 0;
+            for (t, d) in ranked.iter().zip(depths.reader().unwrap()) {
+                let d = d.unwrap();
+                for corner in 0..3 {
+                    assert_eq!(
+                        d.depths[corner],
+                        oracle[&t.positions[corner].map(f32::to_bits)]
+                    );
+                }
+                patched += usize::from(d.depths.iter().any(|&x| x != d.depths[0]));
+            }
+            // Leaves of different depths share points, so some corners are patched.
+            assert!(patched > 0 || leaf == 200, "jobs {jobs}, leaf {leaf}");
         }
         assert_eq!(scratch.live_bytes(), 0);
     }

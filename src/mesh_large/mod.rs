@@ -8,6 +8,7 @@ mod batching;
 mod capture;
 mod capture_sort;
 mod config;
+mod corners;
 mod delivery;
 mod full;
 #[allow(dead_code)] // HLOD item cleanup deferred to its concurrent owner; see cleanup evidence.

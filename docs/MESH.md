@@ -640,7 +640,7 @@ large sources, especially when the output directory is memory-backed;
 memory-backed scratch counts against the [memory budget](#memory-budget).
 
 Capture's external sorts (corner references, positioned corners, triangles,
-the cell tree's nodes and weld depths, and the corner-depth join) are planned
+the cell tree's nodes, and the corner-depth join's candidates and patches) are planned
 once against the [memory budget](#memory-budget). The fixed sort configuration,
 an 80 MiB run buffer per live sort with fan-in 64, is the floor: capture's
 worker plan and `capture_minimum_bytes` are computed with it, so a budget that
@@ -668,6 +668,17 @@ until there are about 16 per worker, each cell's subtree is built on a worker,
 and the levels above them are closed in rank order. The nodes are those of one
 pass over the triangles, so the archive does not depend on the worker count.
 Workers stop at the run's stop request between units of 4,096 triangles.
+
+Each corner's depth (the least leaf depth over every corner at its exact
+position, which coarse levels use to keep shared vertices welded) is joined
+over the leaves without sorting every corner. A leaf's box holds all its
+corners; each leaf also records which of the 16 x 16 x 16 cells of its box hold
+one of its corners. A corner whose position lies in no other leaf's box, or
+only in cells another leaf leaves empty, is welded only inside its own leaf
+and keeps its leaf's depth. Only the remaining corners are sorted by position
+to find each position's least depth. Both passes over the leaves run on the capture workers, which stop
+at the run's stop request before each leaf. The depths are those of the full
+join, so the archive does not change.
 
 The coarse stage's incidence pass (`hlod_incidence`) plans its item and
 open-edge endpoint sorts the same way inside the coarse stage's admission,
@@ -1047,8 +1058,8 @@ logs its wall seconds and the run's elapsed seconds as a `log` event. Inside
 (corner references read and sorted), `capture_positions` (corners joined with
 their attributes), `capture_triangles` (triangles reassembled),
 `capture_sequence` (triangles written in rank order), `capture_images` (two
-units per image), `capture_tree` (triangles), `capture_corner_depths` (seven
-units per triangle) and `capture_leaf_plans` (leaves). Each step reports `0`
+units per image), `capture_tree` (triangles), `capture_corner_depths` (three
+units per triangle: leaf masks, candidates, depths written) and `capture_leaf_plans` (leaves). Each step reports `0`
 and its total; all but `capture_validate`, `capture_tree` and
 `capture_leaf_plans` also report counts between. An intermediate sort merge pass, which a budget
 too small for one pass needs, is reported as `capture_merge` (records
