@@ -8,6 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 static PATHS: Mutex<Vec<(u64, PathBuf)>> = Mutex::new(Vec::new());
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -67,9 +68,44 @@ pub(crate) fn register(path: &Path) -> Registered {
 /// never followed), files directly. For a CLI that is about to exit while a stopped job is
 /// still blocked; returns the paths it could not remove. Entries stay registered, so the
 /// owners' own cleanup, if it still runs, finds nothing left to do.
+///
+/// The registry is process-wide: this removes every path any job in the process has
+/// registered. That is right only for a process that runs one job, as the CLI does; a
+/// library caller running several jobs at once must not call it.
+///
+/// Worker threads may still be unwinding and writing, so a file created during removal
+/// (`ENOTEMPTY`) or a directory recreated after it would survive a single pass. Removal is
+/// repeated every [`SETTLE_INTERVAL`] until one round finds nothing left to remove, for at
+/// most [`SETTLE_WINDOW`].
 #[doc(hidden)]
 pub fn remove_registered_now() -> Vec<PathBuf> {
-    remove(snapshot())
+    remove_settled(&snapshot(), SETTLE_WINDOW, SETTLE_INTERVAL)
+}
+
+/// How long [`remove_registered_now`] keeps removing paths that reappear.
+const SETTLE_WINDOW: Duration = Duration::from_millis(1500);
+/// The pause between its rounds.
+const SETTLE_INTERVAL: Duration = Duration::from_millis(100);
+
+/// Remove `paths` in rounds until a round finds none of them present (the previous round's
+/// removal held for one interval) or `window` has passed; returns those still present.
+fn remove_settled(paths: &[PathBuf], window: Duration, interval: Duration) -> Vec<PathBuf> {
+    let deadline = Instant::now() + window;
+    loop {
+        let present: Vec<PathBuf> = paths
+            .iter()
+            .filter(|path| std::fs::symlink_metadata(path).is_ok())
+            .cloned()
+            .collect();
+        if present.is_empty() {
+            return present;
+        }
+        let left = remove(present);
+        if Instant::now() >= deadline {
+            return left;
+        }
+        std::thread::sleep(interval);
+    }
 }
 
 fn snapshot() -> Vec<PathBuf> {
@@ -131,5 +167,51 @@ mod tests {
         assert!(remove(vec![dir.clone(), file.clone(), missing]).is_empty());
         assert!(!dir.exists() && !file.exists());
         assert!(outside.path().join("precious").exists());
+    }
+
+    /// A worker still writing into a registered directory (recreating it, as
+    /// `create_dir_all` does) while the backstop removes it: rounds repeat until the writes
+    /// stop and one round finds nothing left.
+    #[test]
+    fn removal_repeats_while_a_worker_keeps_writing() {
+        use std::sync::atomic::AtomicBool;
+        use std::sync::Arc;
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("spill");
+        std::fs::create_dir_all(&dir).unwrap();
+        let writing = Arc::new(AtomicBool::new(true));
+        let worker = {
+            let (dir, writing) = (dir.clone(), writing.clone());
+            std::thread::spawn(move || {
+                let mut n = 0u64;
+                let mut writes = 0u64;
+                while writing.load(Ordering::Relaxed) {
+                    let _ = std::fs::create_dir_all(dir.join("nested"));
+                    if std::fs::write(dir.join("nested").join(format!("{n}.spill")), b"x").is_ok() {
+                        writes += 1;
+                    }
+                    n += 1;
+                }
+                writes
+            })
+        };
+        let stopper = {
+            let writing = writing.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(600));
+                writing.store(false, Ordering::Relaxed);
+            })
+        };
+        let left = remove_settled(
+            std::slice::from_ref(&dir),
+            Duration::from_secs(10),
+            // Far longer than any pause of a writer in a tight loop, so a round finds the
+            // directory gone only once the writer has stopped.
+            Duration::from_millis(200),
+        );
+        stopper.join().unwrap();
+        assert!(worker.join().unwrap() > 0, "the worker never wrote");
+        assert!(left.is_empty(), "{left:?}");
+        assert!(!dir.exists(), "the directory survived its removal");
     }
 }

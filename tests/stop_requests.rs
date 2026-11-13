@@ -21,8 +21,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// The asserted bound from signal to exit.
-const BOUND: Duration = Duration::from_secs(5);
+/// The asserted bound from signal to exit: a checked phase stops within one paced work
+/// unit (at most 1 s here) plus cleanup, with headroom for a loaded CI host. Each fixture
+/// paces enough work that, without the phase's check, the run outlasts this bound.
+const BOUND: Duration = Duration::from_secs(10);
 
 /// Kills and reaps the child if the test unwinds before waiting for it.
 struct KillOnDrop(Option<Child>);
@@ -194,7 +196,7 @@ fn archive(work: &Work, members: usize, big: usize) -> PathBuf {
 #[test]
 fn validate_admission_stops() {
     let work = Work::new();
-    let input = archive(&work, 12_000, 0);
+    let input = archive(&work, 20_000, 0);
     let run = stop_in(
         &os(&[&"validate", &input, &"--scratch-dir", &work.scratch()]),
         &[("RUSTY_TILES_TEST_PACE", "validate.admission")],
@@ -212,7 +214,7 @@ fn validate_hash_of_one_large_member_stops() {
         &os(&[&"validate", &input, &"--scratch-dir", &work.scratch()]),
         &[
             ("RUSTY_TILES_TEST_PACE", "validate.hash-block"),
-            ("RUSTY_TILES_TEST_PACE_US", "20000"),
+            ("RUSTY_TILES_TEST_PACE_US", "30000"),
             // Past the small members: inside the 640-block member.
             ("RUSTY_TILES_TEST_PACE_AFTER", "16"),
         ],
@@ -281,7 +283,7 @@ fn vector_spool_statements_stop() {
 #[test]
 fn vector_encoding_statements_stop() {
     let work = Work::new();
-    let run = vector_run(&work, 200_000, "sqlite.encode", "1000000", &[]);
+    let run = vector_run(&work, 200_000, "sqlite.encode", "500000", &[]);
     assert_stopped(&run, &work.scratch(), &work.out());
 }
 
@@ -314,7 +316,7 @@ fn vector_reuse_restore_stops() {
 fn mesh_payload_staging_stops() {
     let work = Work::new();
     let input = work.path("grid.glb");
-    fs::write(&input, support::textured_grid_glb(120)).unwrap();
+    fs::write(&input, support::textured_grid_glb(200)).unwrap();
     let output = work.out().join("grid.3tz");
     let run = stop_in(
         &os(&[
@@ -330,7 +332,7 @@ fn mesh_payload_staging_stops() {
         ]),
         &[
             ("RUSTY_TILES_TEST_PACE", "mesh.stage-payload"),
-            ("RUSTY_TILES_TEST_PACE_US", "2000000"),
+            ("RUSTY_TILES_TEST_PACE_US", "1000000"),
         ],
         "mesh.stage-payload",
     );

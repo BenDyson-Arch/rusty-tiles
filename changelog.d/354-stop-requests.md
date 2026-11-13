@@ -14,11 +14,12 @@
     encoding statements, and restoring a reused tileset.
 
   The run still removes its scratch, exits 130/143 and publishes nothing.
-- If a stopped CLI run has not finished 20 seconds after the signal, the CLI
-  removes the run's spill, work and staging paths itself and exits with the
-  same status. This covers, for example, one KTX2 page encode, which cannot
-  be interrupted and can take minutes at the highest settings of the lossy
-  ladder. A systemd stop no longer reaches the 90-second SIGKILL.
+- A few calls cannot see a stop, such as one KTX2 page encode, which can
+  take minutes at the highest settings of the lossy ladder. If a stopped CLI
+  run has not finished 20 seconds after the signal, the CLI removes the run's
+  spill, work and staging paths itself and exits with the same status. A
+  systemd stop then ends after about 20 seconds plus the time to remove the
+  run's temporary files, instead of reaching the 90-second SIGKILL.
 
 ### Added
 

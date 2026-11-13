@@ -689,6 +689,7 @@ impl<'a> Staging<'a> {
             Ok(()) => Ok(SealedArtifact {
                 path: self.file.into_temp_path(),
                 attempt: self.attempt,
+                _registered: self._registered,
             }),
             Err(error) => Err(self.fail_with(error, files)),
         }
@@ -699,6 +700,10 @@ impl<'a> Staging<'a> {
 pub(crate) struct SealedArtifact<'a> {
     path: TempPath,
     attempt: &'a Attempt,
+    /// The run is still open until publication permission: the candidate stays listed for
+    /// the CLI's stop backstop until it is installed (the listed name is then gone) or
+    /// removed. Dropped after `path`.
+    _registered: crate::cleanup::Registered,
 }
 
 pub(crate) struct Published {
