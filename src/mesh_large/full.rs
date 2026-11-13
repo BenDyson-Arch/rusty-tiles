@@ -1809,13 +1809,16 @@ pub(super) mod tests {
             config.sort.run_bytes = run_bytes;
             config.sort.fan_in = fan_in;
             config.sort.buffer_bytes = 61;
+            // An explicit budget on every run: where the platform reports no available memory
+            // (`available_memory()` is Linux-only), an unbudgeted capture keeps one worker and
+            // reports `unknown_memory`, so neither the worker counts nor the floor would be
+            // exercised there.
+            config.memory_budget = Some(
+                super::super::resources::MemoryBudget::resolve_with(Some(2 << 30), None).unwrap(),
+            );
             if plan {
                 // The budget plan grows these floors: one pass, with writers when jobs allow.
                 config.test_sort_plan = true;
-                config.memory_budget = Some(
-                    super::super::resources::MemoryBudget::resolve_with(Some(2 << 30), None)
-                        .unwrap(),
-                );
             }
             let output = capture(&input, &config, &mut || Ok(())).unwrap();
             let sort = output.report.sort;
