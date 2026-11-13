@@ -2404,6 +2404,38 @@ mod tests {
     /// The 0.4.2 owner rule (`abandons`). A staged reduction still above twice the cap when
     /// step 12 begins (the thirteenth, counted across merge rounds) is abandoned. One at or
     /// below twice the cap, or at any other step, carries on.
+    /// An `n` x `n` grid (`2 n^2` faces), no interface: with every vertex locked, a staged
+    /// reduction can never take a step.
+    fn grid(n: u32) -> Merged {
+        let positions: Vec<[f32; 3]> = (0..=n)
+            .flat_map(|j| (0..=n).map(move |i| [i as f32, j as f32, 0.]))
+            .collect();
+        let triangles: Vec<[u32; 3]> = (0..n)
+            .flat_map(|j| {
+                (0..n).flat_map(move |i| {
+                    let v = j * (n + 1) + i;
+                    [[v, v + 1, v + n + 2], [v, v + n + 2, v + n + 1]]
+                })
+            })
+            .collect();
+        Merged {
+            keys: positions.iter().map(|&p| key(p)).collect(),
+            ells: vec![0; positions.len()],
+            representative: vec![
+                SourcePrimitive {
+                    node: 0,
+                    mesh: 0,
+                    primitive: 0,
+                    expanded_ordinal: 0,
+                    material: u32::MAX,
+                };
+                triangles.len()
+            ],
+            positions,
+            triangles,
+        }
+    }
+
     #[test]
     fn a_staged_reduction_above_twice_the_cap_at_step_twelve_is_abandoned() {
         let cap = 100;
@@ -2415,35 +2447,6 @@ mod tests {
         // and halves, from a third of the excess down to `MIN_STEP`. 32,768 faces start at
         // 10,889 and are still stepping at step 12, above twice the cap. 8,192 faces start
         // at 2,697 and stop after 11 steps, so that reduction ends unchanged, not abandoned.
-        let grid = |n: u32| {
-            let positions: Vec<[f32; 3]> = (0..=n)
-                .flat_map(|j| (0..=n).map(move |i| [i as f32, j as f32, 0.]))
-                .collect();
-            let triangles: Vec<[u32; 3]> = (0..n)
-                .flat_map(|j| {
-                    (0..n).flat_map(move |i| {
-                        let v = j * (n + 1) + i;
-                        [[v, v + 1, v + n + 2], [v, v + n + 2, v + n + 1]]
-                    })
-                })
-                .collect();
-            Merged {
-                keys: positions.iter().map(|&p| key(p)).collect(),
-                ells: vec![0; positions.len()],
-                representative: vec![
-                    SourcePrimitive {
-                        node: 0,
-                        mesh: 0,
-                        primitive: 0,
-                        expanded_ordinal: 0,
-                        material: u32::MAX,
-                    };
-                    triangles.len()
-                ],
-                positions,
-                triangles,
-            }
-        };
         let reduce = |merged: &Merged| {
             staged_reduce(
                 merged,
@@ -2461,6 +2464,50 @@ mod tests {
         let (faces, _) = reduce(&small).expect("ends before step 12");
         assert_eq!(faces, small.triangles);
         assert!(faces.len() > 2 * cap);
+    }
+
+    /// An abandoned staged reduction fails its attempt without the separate-sheets retry,
+    /// as the measured replays did. The attempt returns the abandon itself; had the retry
+    /// run, its own failure would replace that error. Opening pins on every vertex lock the
+    /// whole grid. A reduction that ends before step 12 fails its own way and falls through
+    /// to the retry as before.
+    #[test]
+    fn an_abandoned_staged_attempt_skips_the_separate_sheets_retry() {
+        let cap = 100;
+        let fail = |merged: &Merged, resort| {
+            let pins: HashSet<Key> = merged.keys.iter().copied().collect();
+            let tile = TileKey {
+                first: 0,
+                end: merged.triangles.len() as u64,
+                depth: 0,
+                leaf_begin: 0,
+                leaf_end: 1,
+            };
+            let error = attempt(
+                tile,
+                merged,
+                &[],
+                cap,
+                0.,
+                merged,
+                &merged.triangles,
+                1.,
+                false,
+                &pins,
+                resort,
+                &folds::Policy::default(),
+                &mut false,
+            )
+            .expect_err("a locked grid cannot fit the cap");
+            assert_eq!(error.kind(), JobErrorKind::Unsupported);
+            error.message().to_string()
+        };
+        let abandoned = "staged reduction abandoned above twice the cap";
+        let large = grid(128);
+        assert_eq!(fail(&large, Resort::Staged), abandoned);
+        assert_eq!(fail(&large, Resort::N1), abandoned);
+        assert_ne!(fail(&large, Resort::None), abandoned);
+        assert_ne!(fail(&grid(64), Resort::Staged), abandoned);
     }
 
     /// A1 → N3 hand-over: border chain a-m-b with m left on chord a-b (t 0.25) and an
