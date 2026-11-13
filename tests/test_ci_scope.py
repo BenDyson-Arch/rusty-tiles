@@ -1,6 +1,7 @@
 """scripts/ci_scope.py: which pull requests run the full CI tier."""
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -106,6 +107,76 @@ class ScopeTests(unittest.TestCase):
 
     def test_patterns_compile(self):
         self.assertGreater(len(ci_scope.load_patterns()), 10)
+
+
+class WorkflowTierTests(unittest.TestCase):
+    """What ci.yml runs for each tier, read from the workflow text (stdlib only, no YAML)."""
+
+    @staticmethod
+    def job(workflow, name):
+        text = (ROOT / ".github" / "workflows" / workflow).read_text()
+        match = re.search(rf"^  {re.escape(name)}:\n(.*?)(?=^  \S|\Z)", text, re.M | re.S)
+        assert match, f"{workflow} has no job {name}"
+        return match.group(1)
+
+    def condition(self, workflow, name):
+        block = self.job(workflow, name)
+        match = re.search(r"^    if: (>-\n(?:      .*\n)+|.*\n)", block, re.M)
+        return " ".join(match.group(1).replace(">-", "").split()) if match else ""
+
+    def portable_rows(self, full):
+        """The portable matrix for a `full` output, as GitHub evaluates `a && 'X' || 'Y'`."""
+        block = self.job("ci.yml", "portable")
+        expression = " ".join(re.search(r"^        include: >-\n(.*?\}\})", block, re.M | re.S).group(1).split())
+        match = re.fullmatch(r"\$\{\{ fromJSON\(needs\.changes\.outputs\.full == 'false' && '(\[.*?\])'"
+                             r" \|\| '(\[.*?\])'\) \}\}", expression)
+        self.assertIsNotNone(match, expression)
+        fast, every = (json.loads(group) for group in match.groups())
+        return fast if full == "false" else every
+
+    def test_fast_tier_runs_the_windows_portable_job_only(self):
+        self.assertEqual(self.portable_rows("false"),
+                         [{"os": "windows-2022", "target": "x86_64-pc-windows-msvc", "slow": True}])
+
+    def test_full_tier_and_a_failed_classifier_run_every_portable_target(self):
+        for full in ("true", ""):
+            with self.subTest(full=full):
+                rows = self.portable_rows(full)
+                self.assertEqual({row["target"]: row["slow"] for row in rows}, {
+                    "x86_64-unknown-linux-gnu": False, "aarch64-unknown-linux-gnu": False,
+                    "aarch64-apple-darwin": False, "x86_64-pc-windows-msvc": True})
+                self.assertIn({"os": "windows-2022", "target": "x86_64-pc-windows-msvc", "slow": True}, rows)
+
+    def test_docs_only_changes_skip_the_portable_job_in_both_tiers(self):
+        # The portable job packages with the build version, so both run in either tier.
+        for name in ("portable", "version"):
+            with self.subTest(job=name):
+                condition = self.condition("ci.yml", name)
+                self.assertIn("needs.changes.outputs.docs_only != 'true'", condition)
+                self.assertNotIn("needs.changes.outputs.full", condition)
+        # The other full-tier matrices still skip the fast tier.
+        self.assertIn("needs.changes.outputs.full != 'false'", self.condition("ci.yml", "encoder-link"))
+
+    def test_only_develop_starts_the_dev_build(self):
+        condition = self.condition("ci.yml", "dev-build")
+        self.assertIn("github.ref == 'refs/heads/develop'", condition)
+        self.assertIn("inputs.nightly", condition)
+        self.assertIn("--ref develop", self.job("ci.yml", "dev-build"))
+
+    def test_nightly_branches_report_to_their_own_issue(self):
+        dispatch = self.job("nightly.yml", "dispatch")
+        branches = re.search(r"^        branch: \[(.*)\]$", dispatch, re.M).group(1).split(", ")
+        self.assertEqual(branches[0], "develop")
+        self.assertEqual(len(branches), len(set(branches)))
+        self.assertIn('--ref "$BRANCH" -f nightly=true', dispatch)
+        self.assertIn('title="Full CI matrix failing on $BRANCH"', dispatch)
+        tracking = self.job("ci.yml", "tracking-issue")
+        self.assertIn('title="Full CI matrix failing on $BRANCH"', tracking)
+        self.assertIn("BRANCH: ${{ github.ref_name }}", tracking)
+        # Pushes report on develop only; any nightly run reports to its branch.
+        condition = self.condition("ci.yml", "tracking-issue")
+        self.assertIn("(github.event_name == 'push' && github.ref == 'refs/heads/develop')", condition)
+        self.assertIn("(github.event_name == 'workflow_dispatch' && inputs.nightly)", condition)
 
 
 if __name__ == "__main__":

@@ -1,10 +1,11 @@
 name: CI
 
-# Two tiers (see "CI tiers" in CONTRIBUTING.md). Pull requests run the fast Linux tier:
-# Change scope, Rust, Python and native geospatial for the newest GDAL. Pushes to main and
-# develop, nightly runs (dispatched by nightly.yml) and manual runs also run every other job,
-# and so do pull requests into main, pull requests labelled full-ci and pull requests that
-# change build, platform or CI files (scripts/ci_scope.py, ci/full-tier-paths.txt).
+# Two tiers (see "CI tiers" in CONTRIBUTING.md). Pull requests run the fast tier: Change
+# scope, Rust, Python, native geospatial for the newest GDAL and the Windows portable CLI
+# (with the build version it packages). Pushes to main and develop, nightly runs (dispatched
+# by nightly.yml) and manual runs also run every other job, and so do pull requests into
+# main, pull requests labelled full-ci and pull requests that change build, platform or CI
+# files (scripts/ci_scope.py, ci/full-tier-paths.txt).
 on:
   push:
     branches: [main, develop]
@@ -14,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       nightly:
-        description: Report this run to the "Full CI matrix failing on develop" tracking issue
+        description: Report this run to its branch's "Full CI matrix failing on <branch>" tracking issue
         type: boolean
         default: false
 
@@ -279,10 +280,11 @@ jobs:
   # The version this run's archives and wheels carry (scripts/dev_version.py build): the
   # committed one on main and in pull requests, the development version on develop and other
   # branches. Its ci-build-<version> artifact lets release.yml and dev-build.yml reuse them.
+# The fast tier runs it too, for the Windows portable job.
   version:
     name: Build version
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.full != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5 # versions: TIMEOUT_SHORT
     outputs:
@@ -314,8 +316,9 @@ jobs:
   portable:
     name: Portable CLI (${{ matrix.target }})
     needs: [changes, version]
-    # Skipped jobs satisfy required checks; a failed classifier runs everything.
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.full != 'false' }}
+    # Skipped jobs satisfy required checks; a failed classifier runs everything. The fast tier
+    # runs the Windows target only (see the matrix).
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ${{ matrix.os }}
     # The nightly run tests the whole suite on every target and builds the release archive.
     timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.nightly) && 120 || 90 }} # versions: TIMEOUT_PORTABLE_NIGHTLY TIMEOUT_PORTABLE
@@ -329,19 +332,18 @@ jobs:
         # nightly run (nightly=true) runs the whole `cargo test` suite on all four targets,
         # so every platform still runs every test daily. Intel macOS is not a target from
         # 0.4.1.
-        include:
-          - os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            slow: false
-          - os: ubuntu-22.04-arm
-            target: aarch64-unknown-linux-gnu
-            slow: false
-          - os: macos-15
-            target: aarch64-apple-darwin
-            slow: false
-          - os: windows-2022
-            target: x86_64-pc-windows-msvc
-            slow: true
+        # The fast tier (full == 'false') runs Windows only, the platform the Linux jobs cover
+        # least, so Windows breakage shows on its pull request; the full tier runs all four.
+        # A matrix `include` cannot drop rows, so the tier picks one of two complete lists.
+        include: >-
+          ${{ fromJSON(needs.changes.outputs.full == 'false' && '[
+          {"os": "windows-2022", "target": "x86_64-pc-windows-msvc", "slow": true}
+          ]' || '[
+          {"os": "ubuntu-22.04", "target": "x86_64-unknown-linux-gnu", "slow": false},
+          {"os": "ubuntu-22.04-arm", "target": "aarch64-unknown-linux-gnu", "slow": false},
+          {"os": "macos-15", "target": "aarch64-apple-darwin", "slow": false},
+          {"os": "windows-2022", "target": "x86_64-pc-windows-msvc", "slow": true}
+          ]') }}
     defaults:
       run:
         shell: bash
@@ -891,7 +893,8 @@ jobs:
 
   # After a nightly full-tier pass on develop, start the rolling dev build (dev-build.yml).
   # It runs as its own workflow, so a publishing problem cannot fail the full tier, and it
-  # rebuilds only if develop moved since the last dev build.
+  # rebuilds only if develop moved since the last dev build. Nightly runs on other branches
+  # (nightly.yml also tests the next patch release's integration branch) never start it.
   dev-build:
     name: Start the dev build
     needs: [full-matrix, rust]
@@ -910,14 +913,16 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: gh workflow run dev-build.yml --ref develop
 
-  # Keeps one open issue while the full tier fails on develop (pushes and nightly runs) and
+  # Keeps one open issue per branch, "Full CI matrix failing on <branch>", while the full tier
+  # fails there (pushes to develop, and nightly runs on any branch nightly.yml dispatches) and
   # closes it on the next fully green run. Only this job can write issues.
   tracking-issue:
     name: Full CI tracking issue
     needs: [full-matrix, rust]
     if: >-
-      ${{ !cancelled() && github.ref == 'refs/heads/develop' &&
-      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.nightly)) }}
+      ${{ !cancelled() &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
+      (github.event_name == 'workflow_dispatch' && inputs.nightly)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5 # versions: TIMEOUT_SHORT
     permissions:
@@ -935,9 +940,10 @@ jobs:
           RUN_SHA: ${{ github.sha }}
           VERDICT: ${{ needs.full-matrix.result }}
           RUST: ${{ needs.rust.result }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           set -eu
-          title='Full CI matrix failing on develop'
+          title="Full CI matrix failing on $BRANCH"
           number=$(gh issue list --state open --limit 100 --json number,title \
             --jq "[.[] | select(.title == \"$title\")] | sort_by(.number) | .[0].number // empty")
           case "$VERDICT" in

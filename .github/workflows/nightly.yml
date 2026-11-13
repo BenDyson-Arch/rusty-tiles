@@ -1,10 +1,12 @@
 name: Nightly full CI
 
 # GitHub runs scheduled workflows from the default branch (main), but the full matrix must
-# test develop. This workflow only dispatches ci.yml on develop with nightly=true; that run
-# executes every full-tier job, Release acceptance included, reports to the "Full CI matrix
-# failing on develop" issue and, when it passes, starts the dev build. If the dispatch itself
-# fails (for example develop's ci.yml no longer parses), this job reports to the same issue.
+# test develop. This workflow only dispatches ci.yml with nightly=true on each branch in the
+# matrix below; that run executes every full-tier job, Release acceptance included, and
+# reports to the branch's "Full CI matrix failing on <branch>" issue. Only a passing run on
+# develop starts the dev build (ci.yml gates it on the ref). If a dispatch itself fails (for
+# example the branch's ci.yml no longer parses, or the branch is gone), this job reports to
+# the same issue.
 on:
   schedule:
     - cron: '0 17 * * *' # 03:00 Australia/Brisbane (UTC+10, no daylight saving)
@@ -15,19 +17,28 @@ permissions:
 
 jobs:
   dispatch:
-    name: Dispatch full CI on develop
+    name: Dispatch full CI on ${{ matrix.branch }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5 # versions: TIMEOUT_SHORT
     permissions:
       contents: read
       actions: write
       issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # develop, and the integration branch of the next patch release while it is open, so
+        # its integration failures surface within a day. Rename it for the next release
+        # (next/0.4.3), or remove it once it has merged.
+        branch: [develop, next/0.4.2]
+    env:
+      BRANCH: ${{ matrix.branch }}
     steps:
       - name: Start the full tier
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-        run: gh workflow run ci.yml --ref develop -f nightly=true
+        run: gh workflow run ci.yml --ref "$BRANCH" -f nightly=true
       - name: Report a failed dispatch to the tracking issue
         if: failure()
         env:
@@ -36,8 +47,8 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -eu
-          title='Full CI matrix failing on develop'
-          body=$(printf 'The nightly run could not start ci.yml on develop: %s\n' "$RUN_URL")
+          title="Full CI matrix failing on $BRANCH"
+          body=$(printf 'The nightly run could not start ci.yml on %s: %s\n' "$BRANCH" "$RUN_URL")
           number=$(gh issue list --state open --limit 100 --json number,title \
             --jq "[.[] | select(.title == \"$title\")] | sort_by(.number) | .[0].number // empty")
           if [ -n "$number" ]; then
