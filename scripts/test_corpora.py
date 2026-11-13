@@ -42,14 +42,21 @@ C1_CONTEXT = AUDIT + "/c1_payload_integrity/production_controls/context_controls
 # Every generator runs under this shim. It pins the one platform-dependent field the standard library writes into
 # a ZIP: ZipInfo sets create_system to 0 on Windows and 3 (Unix) elsewhere, and the committed fixtures say 3. The
 # script then runs as `python3 -I script args` would (its directory first on sys.path). `-X utf8` makes text reads
-# decode UTF-8 whatever the locale.
+# decode UTF-8 whatever the locale. Text files are written with `\n` line endings: on Windows a text-mode write
+# would otherwise translate them to `\r\n` and the bytes would not match the manifest.
 SHIM = """
-import os, runpy, sys, zipfile
+import builtins, io, os, runpy, sys, zipfile
 _init = zipfile.ZipInfo.__init__
 def _unix(self, *args, **kwargs):
     _init(self, *args, **kwargs)
     self.create_system = 3
 zipfile.ZipInfo.__init__ = _unix
+_open = io.open
+def _lf(file, mode="r", buffering=-1, encoding=None, errors=None, newline=None, *args, **kwargs):
+    if newline is None and "b" not in mode and any(c in mode for c in "wax+"):
+        newline = "\\n"
+    return _open(file, mode, buffering, encoding, errors, newline, *args, **kwargs)
+builtins.open = io.open = _lf
 script = os.path.abspath(sys.argv[1])
 sys.argv = sys.argv[1:]
 sys.path.insert(0, os.path.dirname(script))

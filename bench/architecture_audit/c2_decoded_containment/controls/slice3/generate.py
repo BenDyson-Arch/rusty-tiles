@@ -301,10 +301,13 @@ def repeated_uri_pair(built):
     import tempfile
     from c2o.implicit import ImplicitOracle
     data = built.blobs["repeated-uri.base"]
-    with tempfile.NamedTemporaryFile(suffix=".3tz") as fh:
-        fh.write(data)
-        fh.flush()
-        report = ImplicitOracle(fh.name, precheck_only=True).run()
+    # A closed file in a temporary directory: Windows cannot reopen an open
+    # NamedTemporaryFile by name.
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "repeated-uri.base.3tz")
+        with open(path, "wb") as fh:
+            fh.write(data)
+        report = ImplicitOracle(path, precheck_only=True).run()
     units = report["precheck"]["totals"]["units"]
     refs = report["references"]
     built.add("repeated-uri.at-cap", data, CONTAINED, "9.D repeated URI", "pair",
