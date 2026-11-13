@@ -580,7 +580,9 @@ impl Scratch {
     /// [`SpillError::Stopped`] once the watched run has stopped.
     pub(crate) fn check_stop(&self) -> Result<(), SpillError> {
         match self.stop.get() {
-            Some(probe) => probe.check().map_err(|error| SpillError::Stopped(Box::new(error))),
+            Some(probe) => probe
+                .check()
+                .map_err(|error| SpillError::Stopped(Box::new(error))),
             None => Ok(()),
         }
     }

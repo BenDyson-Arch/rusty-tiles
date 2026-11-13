@@ -186,7 +186,7 @@ fn spill_failure(error: crate::spill::SpillError) -> Error {
         Err(error) => error,
     };
     if let SpillError::Stopped(error) = error {
-        return run_failure(error);
+        return run_failure(*error);
     }
     let message = format!("validation scratch: {error}");
     match error {

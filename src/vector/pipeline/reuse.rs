@@ -896,6 +896,14 @@ mod fingerprint_tests {
         ("src/output_path.rs", "resolves the requested output path"),
         ("src/runtime.rs", "run control, events and staging"),
         (
+            "src/cleanup.rs",
+            "registers the private workspace for the CLI's stop backstop; no content bytes",
+        ),
+        (
+            "src/test_hooks.rs",
+            "debug-build pacing for stop tests; compiled out of release builds",
+        ),
+        (
             "src/storage_meter.rs",
             "D8 write admission under mesh-registered directories; plain calls elsewhere",
         ),

@@ -975,8 +975,6 @@ pub(crate) fn capture_admitted(
             .num_threads(workers.max(1))
             .build()
             .map_err(|_| exhausted("image admission worker pool"))?;
-        // Workers cannot borrow `check`; the run's probe is `Sync`.
-        let stop = || config.stop.as_ref().map_or(Ok(()), |stop| stop.check());
         for range in decode_batches(&charges, budget, workers)? {
             progress.advance(image_count.saturating_add(range.start as u64))?;
             let (start, end) = (range.start, range.end);
@@ -985,13 +983,12 @@ pub(crate) fn capture_admitted(
                 images[start..end]
                     .par_iter()
                     .map(|image| {
-                        stop()?;
-                        let encoded = image.reconstruct(&mut || stop())?;
+                        let encoded = image.reconstruct(&mut || Ok(()))?;
                         let (info, rgba) = source::decode_image_admitted(
                             &encoded,
                             image.identity.mime.as_deref(),
                             admission,
-                            &mut || stop(),
+                            &mut || Ok(()),
                         )?;
                         drop(rgba);
                         Ok(info)
