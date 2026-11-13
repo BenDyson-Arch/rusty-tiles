@@ -1389,8 +1389,15 @@ impl RepeatCounter {
 /// build's, and remesh round 0 calls reused from the full-cap calls. Output is unchanged.
 #[derive(Clone, Copy, Debug, Default, Serialize)]
 pub struct RepeatReuse {
+    /// Builds (`Staged`, `N1`, `N2`, or `N3Recovery` after `N3`) that returned an earlier
+    /// build's failed border contraction, with its receipt, instead of contracting again.
     pub contractions: u64,
+    /// `Fix2` proposal calls replayed from the primary build's failed calls (its contraction
+    /// was direct, so `Fix2`'s equals it), up to the first call that set the
+    /// touching-refusal flag.
     pub replayed_calls: u64,
+    /// Remesh round 0 calls that repeated the build's full-cap calls, because cleanup and the
+    /// constrained remesh left the contracted mesh and the opening pins unchanged.
     pub round_zero_calls: u64,
 }
 

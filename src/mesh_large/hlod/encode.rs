@@ -129,10 +129,13 @@ impl Mutation {
     /// Whether the coarse ladder reuses exact repeats (`geometry::build_parent`).
     pub(crate) fn reuse(self) -> bool {
         #[cfg(test)]
-        if self == Self::NoRepeatReuse {
-            return false;
+        {
+            self != Self::NoRepeatReuse
         }
-        true
+        #[cfg(not(test))]
+        {
+            true
+        }
     }
 
     pub(crate) fn last_resorts(self) -> bool {

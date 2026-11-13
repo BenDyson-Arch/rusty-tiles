@@ -133,12 +133,19 @@ impl ContractionClass {
     }
 }
 
-/// One failed `assessed_attempt` call: its receipt contribution, the opening pins after it,
+/// One failed `assessed_attempt` call: its receipt contribution, the opening pins it added,
 /// whether `attempt` set the touching-refusal flag, and its S2 search statistics.
-#[derive(Clone)]
+///
+/// A build's opening pins start empty and only grow: `assessed_attempt_inner` is their one
+/// writer, and it only inserts. A replayed call starts from the same pins as the call it
+/// repeats, so inserting the keys that call added restores the same set. The rest of the
+/// ladder reads pins only by membership and count, so the set's layout never reaches
+/// output. A log therefore holds each pin at most once: no more keys than the build's own
+/// pin set, instead of one copy of the set per call.
+#[derive(Clone, Default)]
 struct Call {
     attempted: TopologyReceipt,
-    pins: HashSet<Key>,
+    added: Vec<Key>,
     refused: bool,
     search: super::error::SearchStats,
 }
@@ -146,7 +153,7 @@ struct Call {
 impl Call {
     fn apply(&self, attempted: &mut TopologyReceipt, pins: &mut HashSet<Key>, reused: &mut Reused) {
         attempted.add(self.attempted);
-        pins.clone_from(&self.pins);
+        pins.extend(self.added.iter().copied());
         reused.search.add(self.search);
     }
 }
@@ -1306,16 +1313,17 @@ fn build(
         0.
     };
     let mut opening_pins = HashSet::default();
-    // Round-zero reuse: the full-cap calls, and the pins they started from.
+    // Round-zero reuse: the full-cap calls, and how many pins they started from (pins only
+    // grow within a build, so an equal count is an equal set).
     let full_cap = *caps.last().unwrap();
-    let mut full: Option<(HashSet<Key>, Vec<Call>)> = None;
+    let mut full: Option<(usize, Vec<Call>)> = None;
     for (i, &cap) in caps.iter().enumerate() {
         if caps[..i].contains(&cap) {
             continue;
         }
         for preserve_holes in [false, true] {
             let pins_before = (repeats.enabled && cap == full_cap && !preserve_holes)
-                .then(|| opening_pins.clone());
+                .then_some(opening_pins.len());
             let found = assessed_attempt(
                 tile,
                 &merged,
@@ -1380,7 +1388,7 @@ fn build(
     let unchanged =
         merged.triangles == contracted_faces && merged.representative == contracted_representative;
     let mut round_zero = full
-        .filter(|(pins, calls)| unchanged && calls.len() == 2 && *pins == opening_pins)
+        .filter(|(pins, calls)| unchanged && calls.len() == 2 && *pins == opening_pins.len())
         .map(|(_, calls)| calls);
     for round in 0..=6 {
         check()?;
@@ -1791,11 +1799,9 @@ fn assessed_attempt(
         repeats.log(resort, call);
         return Ok(None);
     }
-    // The receipt is a commutative monoid (u64 sums, f64 max from `Default`), so a call's
-    // own contribution added once equals its rounds' additions.
-    let mut own = TopologyReceipt::default();
-    let mut refused = false;
-    let mut search = super::error::SearchStats::default();
+    // The receipt (u64 sums, f64 max) and S2's statistics (u64 sums, u64 max) are commutative
+    // monoids from `Default`, so a call's own contribution added once equals its rounds'.
+    let mut call = Call::default();
     let out = assessed_attempt_inner(
         tile,
         merged,
@@ -1809,23 +1815,13 @@ fn assessed_attempt(
         opening_pins,
         resort,
         policy,
-        &mut own,
         assess,
         check,
-        &mut refused,
-        &mut search,
+        &mut call,
     )?;
-    attempted.add(own);
+    attempted.add(call.attempted);
     if out.is_none() && repeats.enabled {
-        repeats.log(
-            resort,
-            &Call {
-                attempted: own,
-                pins: opening_pins.clone(),
-                refused,
-                search,
-            },
-        );
+        repeats.log(resort, &call);
     }
     Ok(out)
 }
@@ -1846,11 +1842,9 @@ fn assessed_attempt_inner(
     opening_pins: &mut HashSet<Key>,
     resort: Resort,
     policy: &folds::Policy,
-    attempted: &mut TopologyReceipt,
     assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-    refused: &mut bool,
-    search: &mut super::error::SearchStats,
+    call: &mut Call,
 ) -> Result<Option<Built>, JobError> {
     for round in 0..=RETRIES {
         check()?;
@@ -1867,7 +1861,7 @@ fn assessed_attempt_inner(
             opening_pins,
             resort,
             policy,
-            refused,
+            &mut call.refused,
         );
         let mut b = match proposal {
             Ok(b) => b,
@@ -1878,12 +1872,12 @@ fn assessed_attempt_inner(
         b.staged = resort.staged();
         b.last_resort_stage = resort.stage();
         let accepted = assess(&mut b)?;
-        search.add(b.search);
+        call.search.add(b.search);
         if !accepted {
             b.change.receipt.rejected_hole_closures += b.change.receipt.closed_holes;
             b.change.receipt.rejected_hole_openings += b.change.receipt.opened_holes;
         }
-        attempted.add(b.change.receipt);
+        call.attempted.add(b.change.receipt);
         if accepted {
             return Ok(Some(b));
         }
@@ -1901,7 +1895,11 @@ fn assessed_attempt_inner(
         for t in &reference.triangles {
             let keys = t.map(|v| reference.keys[v as usize]);
             if keys.iter().any(|k| rim.contains(k)) {
-                opening_pins.extend(keys);
+                for k in keys {
+                    if opening_pins.insert(k) {
+                        call.added.push(k);
+                    }
+                }
             }
         }
         if opening_pins.len() == before {
@@ -2641,8 +2639,8 @@ mod tests {
         assert!(built.topology.contracted_vertices > 0);
     }
 
-    #[test]
-    fn thin_tetrahedron_collapse_retries_instead_of_publishing_fresh_twins() {
+    /// A thin tetrahedron over a flat triangle (6 faces, 3 interface points), one tile.
+    fn thin_tetrahedron() -> (Merged, Vec<InterfaceRow>, TileKey) {
         let positions = vec![
             [0., 0., 0.],
             [1., 0., 0.],
@@ -2662,9 +2660,116 @@ mod tests {
             keys: positions.iter().copied().map(key).collect(),
             ells: vec![0; positions.len()],
             positions,
-            representative: Vec::new(),
+            representative: vec![
+                SourcePrimitive {
+                    node: 0,
+                    mesh: 0,
+                    primitive: 0,
+                    expanded_ordinal: 0,
+                    material: u32::MAX,
+                };
+                triangles.len()
+            ],
             triangles,
         };
+        let interface = (0..3)
+            .map(|v| InterfaceRow::new(0, merged.keys[v], merged.keys[v], 0, 1))
+            .collect();
+        let tile = TileKey {
+            first: 0,
+            end: 6,
+            depth: 0,
+            leaf_begin: 0,
+            leaf_end: 1,
+        };
+        (merged, interface, tile)
+    }
+
+    /// Contraction reuse keys (`ContractionClass`). The primary build, `Staged`, `N1` and `N2`
+    /// contract alike; `Fix2` (fallbacks) and the clustered `N3` do not, nor does a relief
+    /// seed. `N3Recovery` repeats `N3` only when its recovery caps reduce to the same rounds.
+    /// A wrong key is the way a reuse can go wrong: it would hand a build another's failure.
+    #[test]
+    fn contraction_classes_equal_only_for_equal_contraction_arguments() {
+        let class = |resort, caps: &[usize], seeded| ContractionClass::of(resort, caps, seeded);
+        let caps = [6144, 8192];
+        let primary = class(Resort::None, &caps, false);
+        for resort in [Resort::Staged, Resort::N1, Resort::N2] {
+            assert!(class(resort, &caps, false) == primary);
+            // A relief seed only reaches the clustered contraction.
+            assert!(class(resort, &caps, true) == primary);
+        }
+        assert!(class(Resort::Fix2, &caps, false) != primary);
+        assert!(class(Resort::N3, &caps, false) != primary);
+        assert!(class(Resort::None, &[8192], false) != primary);
+        assert!(class(Resort::N3, &caps, true) != class(Resort::N3, &caps, false));
+        assert!(
+            class(Resort::N3Recovery, &[8192, 8192], false) == class(Resort::N3, &[8192], false)
+        );
+        assert!(
+            class(Resort::N3Recovery, &[6144, 8192], false) != class(Resort::N3, &[8192], false)
+        );
+    }
+
+    /// `Fix2` replays the primary build's failed calls only up to the first that set the
+    /// touching-refusal flag. From there `attempt`'s `Fix2` branch can differ, so that call
+    /// and every later one run live (`assess` sees their proposals) and add their own pins,
+    /// not the logged ones.
+    #[test]
+    fn fix2_replay_stops_at_the_first_refused_call_and_runs_live() {
+        let (merged, interface, tile) = thin_tetrahedron();
+        let logged = |x: f32| key([x, 7., 0.]);
+        let mut repeats = Repeats::new(true);
+        repeats.contracted(Resort::None, true);
+        for (refused, x) in [(false, 1.), (true, 2.), (false, 3.)] {
+            repeats.log(
+                Resort::None,
+                &Call {
+                    refused,
+                    added: vec![logged(x)],
+                    ..Call::default()
+                },
+            );
+        }
+        repeats.contracted(Resort::Fix2, true);
+        let mut pins = HashSet::default();
+        let mut attempted = TopologyReceipt::default();
+        for live in [false, true, true] {
+            let mut assessed = 0;
+            let out = assessed_attempt(
+                tile,
+                &merged,
+                &interface,
+                6,
+                0.,
+                &merged,
+                &merged.triangles,
+                1.,
+                false,
+                &mut pins,
+                Resort::Fix2,
+                &folds::Policy::default(),
+                &mut attempted,
+                &mut |_: &mut Built| {
+                    assessed += 1;
+                    Ok(false)
+                },
+                &|| Ok(()),
+                &mut repeats,
+                None,
+            )
+            .unwrap();
+            assert!(out.is_none());
+            assert_eq!(assessed > 0, live);
+        }
+        assert_eq!(repeats.reused.calls, 1);
+        assert!(pins.contains(&logged(1.)));
+        assert!(!pins.contains(&logged(2.)) && !pins.contains(&logged(3.)));
+    }
+
+    #[test]
+    fn thin_tetrahedron_collapse_retries_instead_of_publishing_fresh_twins() {
+        let (merged, interface, tile) = thin_tetrahedron();
         let source = folds::Source::new(&merged.positions, &merged.triangles);
         let (raw, _) = simplify(&merged, &merged.triangles, &|v| v < 3, 2);
         assert!(
@@ -2674,27 +2779,6 @@ mod tests {
                 .any(|v| *v),
             "{raw:?}"
         );
-        let interface = (0..3)
-            .map(|v| InterfaceRow::new(0, merged.keys[v], merged.keys[v], 0, 1))
-            .collect::<Vec<_>>();
-        let mut merged = merged;
-        merged.representative.resize(
-            merged.triangles.len(),
-            SourcePrimitive {
-                node: 0,
-                mesh: 0,
-                primitive: 0,
-                expanded_ordinal: 0,
-                material: u32::MAX,
-            },
-        );
-        let tile = TileKey {
-            first: 0,
-            end: 6,
-            depth: 0,
-            leaf_begin: 0,
-            leaf_end: 1,
-        };
         let pins = HashSet::default();
         assert!(attempt(
             tile,
