@@ -27,8 +27,33 @@ const assert=require('node:assert/strict');
         const C=Cesium,viewer=window.viewer,mesh=window.tiles;
         window.annotations.show=false;window.pointCloud.show=false;
         viewer.scene.globe.show=false;
-        // Software rendering (CI) can be slow: keep rendering until the tileset reports loaded.
-        for(let i=0;i<600 && !mesh.tilesLoaded;i++){viewer.scene.render();await new Promise(r=>setTimeout(r,50));}
+        // Software rendering (CI) can be slow: one run used up 600 renders without the mesh
+        // reporting loaded. Render until tilesLoaded, waking early on the allTilesLoaded event,
+        // for at least 120 s and 600 renders; if it never settles, the result carries the
+        // tileset's request and processing counts.
+        const tileFailures=[];
+        mesh.tileFailed.addEventListener(e=>tileFailures.push(`${e.url}: ${e.message}`));
+        const settle=async()=>{
+          const start=performance.now();
+          let wake=()=>{},renders=0;
+          const remove=mesh.allTilesLoaded.addEventListener(()=>wake());
+          try {
+            while(!mesh.tilesLoaded && (performance.now()-start<120000 || renders<600)){
+              viewer.scene.render();renders++;
+              await new Promise(r=>{wake=r;setTimeout(r,50);});
+            }
+          } finally {remove();}
+          return {ms:Math.round(performance.now()-start),renders};
+        };
+        const diagnostics=label=>{
+          const s=mesh.statistics || mesh._statistics || {};
+          return {label,tilesLoaded:mesh.tilesLoaded,pendingRequests:s.numberOfPendingRequests,
+            processing:s.numberOfTilesProcessing,attemptedRequests:s.numberOfAttemptedRequests,
+            selected:s.selected,visited:s.visited,contentReady:s.numberOfTilesWithContentReady,
+            loadedTotal:s.numberOfLoadedTilesTotal,tileFailures:tileFailures.slice()};
+        };
+        const waits={load:await settle()};
+        const afterLoad=diagnostics('after load');
         await new Promise(r=>setTimeout(r,500));
         let picked;
         for(let i=0;i<100 && !picked;i++) {
@@ -38,11 +63,13 @@ const assert=require('node:assert/strict');
           if(!picked)await new Promise(r=>setTimeout(r,50));
         }
         // Picking can render the frame that finishes the tile; settle tilesLoaded after it.
-        for(let i=0;i<600 && picked && !mesh.tilesLoaded;i++){viewer.scene.render();await new Promise(r=>setTimeout(r,50));}
+        if(picked)waits.pick=await settle();
         // Real imagery data and IIFE worker/runtime routes must decode too.
         const image=await window.orthophoto.imageryProvider.requestImage(546,380,10);
-        return {version:C.VERSION,meshLoaded:mesh.tilesLoaded,meshPicked:!!picked,
-          imagerySize:[image.width,image.height],failures:window.failures};
+        const meshLoaded=mesh.tilesLoaded;
+        return {version:C.VERSION,meshLoaded,meshPicked:!!picked,
+          imagerySize:[image.width,image.height],failures:window.failures,waits,
+          ...(meshLoaded && picked ? {} : {diagnostics:[afterLoad,diagnostics('at the end')]})};
       });
     };
     const first=await inspect();
@@ -50,7 +77,10 @@ const assert=require('node:assert/strict');
     await page.reload({waitUntil:'load'});const refreshed=await inspect();
     console.log(JSON.stringify({first,refreshed,browserErrors:errors,externalRequests:external},null,2));
     for(const result of [first,refreshed]){
-      assert.equal(result.version,'1.146.0');assert.equal(result.meshLoaded,true);assert.equal(result.meshPicked,true);
+      const state=JSON.stringify(result.diagnostics);
+      assert.equal(result.version,'1.146.0');
+      assert.equal(result.meshLoaded,true,`the mesh never reported tilesLoaded: ${state}`);
+      assert.equal(result.meshPicked,true,`the mesh could not be picked: ${state}`);
       assert.deepEqual(result.imagerySize,[256,256]);assert.deepEqual(result.failures,[]);
     }
     assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
