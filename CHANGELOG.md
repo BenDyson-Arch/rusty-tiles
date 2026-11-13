@@ -2,7 +2,7 @@
 
 All notable changes to rusty-tiles are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## 0.4.1 - 2026-11-13
+## 0.4.1 - 2026-11-14
 
 ### Added
 
