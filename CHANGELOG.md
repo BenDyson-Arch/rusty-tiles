@@ -134,9 +134,9 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 ### Fixed
 
 - Security: decoding a tile whose meshopt stream declares an invalid byte stride or
-  count (Python `decode_tile`) is refused as invalid input. Before, such a stride could make the bundled meshopt decoder write past its
-  buffers or divide by zero. The check now sits in front of every meshopt decode,
-  not only in `validate`.
+  count (Python `decode_tile`) is refused as invalid input. Before, such a stream
+  reached the bundled meshopt decoder, which checks these preconditions only in debug
+  builds. The check now sits in front of every meshopt decode, not only in `validate`.
 - Mesh HLOD no longer fails with an internal error when a coarse tile of a normal-mapped
   material is next to a material without a normal map: a coarse texel whose nearest source
   triangle has no normal map gets a flat normal.
