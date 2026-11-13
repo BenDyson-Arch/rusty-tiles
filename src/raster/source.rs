@@ -492,12 +492,21 @@ fn push_leaf(
     // mount, a case-insensitive spelling) passes it, and `--force` would then replace
     // and delete the source. Compare file identity too, as terrain and the raster
     // directory producer do. A symlinked output is replaced as a link, so it is skipped.
+    // Identity needs an open handle: an ancestor we may only search (mode 711) cannot be
+    // opened, and `--force` cannot list and delete through it either, so it is no alias.
     if fs::symlink_metadata(output).is_ok_and(|m| !m.file_type().is_symlink()) {
         for candidate in p.ancestors() {
-            if same_file::is_same_file(candidate, output)
-                .map_err(|e| JobError::io("compare raster source/output identity", output, e))?
-            {
-                return Err(invalid("raster output aliases a source dependency"));
+            match same_file::is_same_file(candidate, output) {
+                Ok(true) => return Err(invalid("raster output aliases a source dependency")),
+                Ok(false) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {}
+                Err(e) => {
+                    return Err(JobError::io(
+                        "compare raster source/output identity",
+                        output,
+                        e,
+                    ));
+                }
             }
         }
     }
