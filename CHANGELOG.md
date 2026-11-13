@@ -133,6 +133,14 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Fixed
 
+- Security: decoding a tile whose meshopt stream declares an invalid byte stride or
+  count (Python `decode_tile`) is refused as invalid input. Before, such a stride could make the bundled meshopt decoder write past its
+  buffers or divide by zero. The check now sits in front of every meshopt decode,
+  not only in `validate`.
+- `raster --force` no longer replaces, and so deletes, a directory that holds its own
+  source when the output names that directory through another path (a second bind
+  mount, or a different case on a case-insensitive file system). The output is
+  compared with each source by file identity, as `terrain` already does.
 - Mesh HLOD coarse tiles no longer shade surfaces with starburst gradients or
   inverted facets when the source carries normals. Coarse `NORMAL` is now
   crease-aware: a vertex splits its normal across edges sharper than 60°, and
