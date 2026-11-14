@@ -392,6 +392,7 @@ mod tests {
             interface_vertices: 0,
             interface_segments: 0,
             reoriented: 0,
+            search: Default::default(),
             topology: TopologyReceipt::default(),
             change: Default::default(),
             controls: Default::default(),

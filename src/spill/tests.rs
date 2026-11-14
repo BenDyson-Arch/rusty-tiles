@@ -314,6 +314,23 @@ impl SpillIo for FaultIo {
             tick: false,
         }))
     }
+    /// Positioned handles (compressed sequences' readers): an open failure, or an anonymous
+    /// copy of the file cut at `truncate_reads` bytes.
+    fn open_random(&self, path: &Path) -> io::Result<File> {
+        if self.faults.open_error {
+            return Err(io::Error::other("injected open failure"));
+        }
+        match self.faults.truncate_reads {
+            Some(at) => {
+                let mut bytes = std::fs::read(path)?;
+                bytes.truncate(at as usize);
+                let mut copy = tempfile::tempfile()?;
+                copy.write_all(&bytes)?;
+                Ok(copy)
+            }
+            None => File::open(path),
+        }
+    }
     fn open(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
         if self.faults.open_error {
             return Err(io::Error::other("injected open failure"));
@@ -1837,4 +1854,272 @@ fn an_open_run_does_not_change_a_sort() {
     expected.sort();
     let (sorted, _) = sort(&scratch, config::<Keyed>(64, 2, 1, 32), &input).unwrap();
     assert_eq!(pairs(&sorted), pairs(&expected));
+}
+
+fn wide_input(n: usize, seed: u64, compressible: bool) -> Vec<Wide> {
+    let mut rng = Rng(seed);
+    (0..n)
+        .map(|i| Wide {
+            morton: if compressible {
+                i as u64 / 7
+            } else {
+                rng.next()
+            },
+            a: if compressible { 3 } else { rng.next() as u32 },
+            b: i as u32,
+        })
+        .collect()
+}
+
+fn compressed_sequence(scratch: &Scratch, input: &[Wide], buffer: usize) -> Sequence<Wide> {
+    let mut writer =
+        SequenceWriter::<Wide>::compressed(scratch, "compressed", buffer, Layout::FULL).unwrap();
+    for record in input {
+        writer.push(record).unwrap();
+    }
+    assert_eq!(writer.len(), input.len() as u64);
+    writer.finish().unwrap()
+}
+
+/// The single spill file of `scratch` (its path, for direct damage).
+fn only_file(scratch: &Scratch) -> std::path::PathBuf {
+    let mut files: Vec<_> = std::fs::read_dir(scratch.path())
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    assert_eq!(files.len(), 1);
+    files.pop().unwrap()
+}
+
+#[test]
+fn compressed_sequences_read_back_every_access_path() {
+    // A 400-byte buffer gives six 16-byte records per block, so every access path crosses
+    // many block boundaries; 1000 records end on a short block (1000 = 166 x 6 + 4).
+    for (compressible, n) in [(true, 1000), (false, 1000), (true, 6), (true, 1), (true, 0)] {
+        let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+        let input = wide_input(n, 31, compressible);
+        let sequence = compressed_sequence(&scratch, &input, 400);
+        assert_eq!(sequence.len(), n as u64);
+        let all: Vec<Wide> = sequence
+            .reader()
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(all, input);
+        // Ranged readers start inside blocks, on boundaries and at the end.
+        for (first, end) in [(0, n), (n / 3, n), (5, (n / 2).max(5)), (6, 13), (n, n)] {
+            let (first, end) = (first.min(n), end.min(n).max(first.min(n)));
+            let got: Vec<Wide> = sequence
+                .range(first as u64, end as u64, 64)
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap();
+            assert_eq!(got, input[first..end], "range {first}..{end} of {n}");
+        }
+        // Positioned reads spanning blocks.
+        let random = sequence.random().unwrap();
+        let (mut encoded, mut out) = (Vec::new(), Vec::new());
+        for (first, count) in [
+            (0, n),
+            (1.min(n), n.saturating_sub(2)),
+            (n / 2, n / 4),
+            (n, 0),
+        ] {
+            random
+                .read(first as u64, count, &mut encoded, &mut out)
+                .unwrap();
+            assert_eq!(out, input[first..first + count]);
+        }
+        assert!(random.read(n as u64, 1, &mut encoded, &mut out).is_err());
+        // Live bytes are the bytes on disk; a block never grows past its records.
+        let raw = (n * Wide::SIZE) as u64;
+        assert_eq!(scratch.live_bytes(), sequence.stored_bytes());
+        assert!(sequence.stored_bytes() <= raw);
+        if compressible && n >= 1000 {
+            assert!(
+                sequence.stored_bytes() < raw / 2,
+                "{} of {raw}",
+                sequence.stored_bytes()
+            );
+        }
+        drop((random, sequence));
+        assert_eq!(scratch.live_bytes(), 0);
+        assert_eq!(entries(scratch.path()), 0);
+    }
+}
+
+#[test]
+fn compressed_sequences_match_plain_ones_for_every_buffer() {
+    let input = wide_input(5000, 9, true);
+    for buffer in [1, 17, 64, 1 << 10, 1 << 20] {
+        let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+        let mut plain = SequenceWriter::<Wide>::new(&scratch, "plain", buffer).unwrap();
+        for record in &input {
+            plain.push(record).unwrap();
+        }
+        let plain = plain.finish().unwrap();
+        let compressed = compressed_sequence(&scratch, &input, buffer);
+        let a: Vec<Wide> = plain.reader().unwrap().collect::<Result<_, _>>().unwrap();
+        let b: Vec<Wide> = compressed
+            .reader()
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(a, b, "buffer {buffer}");
+        assert_eq!(b, input);
+    }
+}
+
+#[test]
+fn damaged_compressed_sequences_are_typed_errors() {
+    for damage in ["truncate", "flip", "extend"] {
+        let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+        let input = wide_input(1000, 5, true);
+        let sequence = compressed_sequence(&scratch, &input, 400);
+        let path = only_file(&scratch);
+        let mut bytes = std::fs::read(&path).unwrap();
+        match damage {
+            "truncate" => bytes.truncate(bytes.len() / 2),
+            "flip" => {
+                let middle = bytes.len() / 2;
+                for b in &mut bytes[middle..middle + 8] {
+                    *b ^= 0x5a;
+                }
+            }
+            _ => bytes.extend_from_slice(&[1, 2, 3]),
+        }
+        std::fs::write(&path, &bytes).unwrap();
+        let read: Result<Vec<Wide>, _> = sequence.reader().unwrap().collect();
+        match damage {
+            // The block index is authoritative: trailing bytes are never read.
+            "extend" => assert_eq!(read.unwrap(), input),
+            // A flipped literal may still decode; it must then differ, never panic.
+            "flip" => assert!(read.map_or(true, |records| records != input)),
+            _ => assert!(read.is_err()),
+        }
+        let random = sequence.random().unwrap();
+        let (mut encoded, mut out) = (Vec::new(), Vec::new());
+        let whole = random.read(0, input.len(), &mut encoded, &mut out);
+        if damage == "truncate" {
+            assert!(whole.is_err());
+        }
+        drop((random, sequence));
+        assert_eq!(scratch.live_bytes(), 0);
+    }
+}
+
+/// Read faults reach the compressed readers through `open_random`: an open failure and a
+/// truncated file are typed errors (I/O, or a corrupt run) on every access path. The positioned reader's block
+/// cache returns the same records whatever the order of reads, and a failed read leaves no
+/// block cached.
+#[test]
+fn compressed_sequence_read_faults_are_typed_and_cached_reads_match() {
+    let input = wide_input(1000, 9, true);
+    for faults in [
+        Faults {
+            open_error: true,
+            ..Default::default()
+        },
+        Faults {
+            truncate_reads: Some(700),
+            ..Default::default()
+        },
+    ] {
+        let open_error = faults.open_error;
+        let (_parent, scratch) = new_scratch(FaultIo::new(faults));
+        let sequence = compressed_sequence(&scratch, &input, 400);
+        let read: Result<Vec<Wide>, _> = sequence.reader().and_then(|r| r.collect());
+        assert!(
+            matches!(
+                read,
+                Err(SpillError::Io { .. } | SpillError::CorruptRun { .. })
+            ),
+            "{read:?}"
+        );
+        let ranged: Result<Vec<Wide>, _> = sequence.range(500, 900, 64).and_then(|r| r.collect());
+        assert!(
+            matches!(
+                ranged,
+                Err(SpillError::Io { .. } | SpillError::CorruptRun { .. })
+            ),
+            "{ranged:?}"
+        );
+        match sequence.random() {
+            Err(error) => assert!(open_error && matches!(error, SpillError::Io { .. })),
+            Ok(random) => {
+                let (mut encoded, mut out) = (Vec::new(), Vec::new());
+                // The start of the file is intact; the end is cut.
+                random.read(0, 3, &mut encoded, &mut out).unwrap();
+                assert_eq!(out, input[..3]);
+                let late = random.read(990, 10, &mut encoded, &mut out);
+                assert!(
+                    matches!(
+                        late,
+                        Err(SpillError::Io { .. } | SpillError::CorruptRun { .. })
+                    ),
+                    "{late:?}"
+                );
+                assert!(random.read(990, 1, &mut encoded, &mut out).is_err());
+                random.read(1, 2, &mut encoded, &mut out).unwrap();
+                assert_eq!(out, input[1..3]);
+            }
+        }
+        drop(sequence);
+        assert_eq!(scratch.live_bytes(), 0);
+    }
+    let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+    let sequence = compressed_sequence(&scratch, &input, 400);
+    let random = sequence.random().unwrap();
+    let (mut encoded, mut out) = (Vec::new(), Vec::new());
+    for (first, count) in [
+        (0, 1),
+        (950, 3),
+        (1, 5),
+        (2, 1),
+        (400, 300),
+        (699, 2),
+        (0, 1000),
+    ] {
+        random.read(first, count, &mut encoded, &mut out).unwrap();
+        assert_eq!(
+            out,
+            input[first as usize..first as usize + count],
+            "{first}+{count}"
+        );
+    }
+}
+
+#[test]
+fn compressed_sequence_write_faults_are_typed_and_clean_up() {
+    for faults in [
+        Faults {
+            write_error_at: Some((0, io::ErrorKind::StorageFull)),
+            ..Default::default()
+        },
+        Faults {
+            create_error_at: Some(0),
+            ..Default::default()
+        },
+        Faults {
+            flush_error: true,
+            ..Default::default()
+        },
+    ] {
+        let (_parent, scratch) = new_scratch(FaultIo::new(faults));
+        let result = (|| -> Result<Sequence<Wide>, SpillError> {
+            let mut writer =
+                SequenceWriter::<Wide>::compressed(&scratch, "faulty", 64, Layout::FULL)?;
+            for record in &wide_input(2000, 1, true) {
+                writer.push(record)?;
+            }
+            writer.finish()
+        })();
+        assert!(
+            matches!(result, Err(SpillError::Io { .. })),
+            "{:?}",
+            result.as_ref().err()
+        );
+        assert_eq!(scratch.live_bytes(), 0);
+        assert_eq!(entries(scratch.path()), 0);
+    }
 }

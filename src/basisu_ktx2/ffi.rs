@@ -15,6 +15,8 @@ pub(super) const FORMAT_UASTC_LDR_4X4: u32 = 1;
 pub(super) const FLAG_SRGB: u32 = 1 << 0;
 pub(super) const FLAG_ZSTD: u32 = 1 << 1;
 pub(super) const FLAG_MIPMAPS: u32 = 1 << 2;
+/// UASTC only; the library's pack flag values, passed through by the shim.
+pub(super) const FLAG_UASTC_FASTEST_ETC1_HINTS: u32 = super::UASTC_FASTEST_ETC1_HINTS;
 
 #[repr(C)]
 pub(super) struct MipLevel {
@@ -53,11 +55,43 @@ extern "C" {
 
     pub(super) fn rt_basisu_free(data: *mut u8);
 
+    /// Test oracle for the pure-Rust encoder: [`rt_basisu_encode_mips`]'s parameters written
+    /// out, with `extra_pack_flags` OR'd into the UASTC pack flags.
+    /// Compiled only with feature `pure-rust-basis` (build.rs).
+    #[cfg(all(test, feature = "pure-rust-basis"))]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn rt_basisu_encode_mips_oracle(
+        levels: *const MipLevel,
+        level_count: usize,
+        format: u32,
+        quality: i32,
+        effort: i32,
+        flags: u32,
+        extra_pack_flags: u32,
+        out: *mut *mut u8,
+        out_len: *mut usize,
+    ) -> i32;
+
     /// `which == 0` throws through the replacement the encoder's checks call
     /// instead of `abort()`; otherwise calls the library's real
     /// `container_abort()`. Returns the status an entry point reports.
     #[cfg(test)]
     pub(super) fn rt_basisu_selftest_failure(which: i32) -> i32;
+
+    /// Encodes with the library's `basis_compress2()`, the reference the
+    /// shim's own parameter setup must reproduce byte for byte.
+    /// Compiled only with feature `pure-rust-basis` (build.rs).
+    #[cfg(all(test, feature = "pure-rust-basis"))]
+    pub(super) fn rt_basisu_selftest_compress2(
+        levels: *const MipLevel,
+        level_count: usize,
+        format: u32,
+        quality: i32,
+        effort: i32,
+        flags: u32,
+        out: *mut *mut u8,
+        out_len: *mut usize,
+    ) -> i32;
 
     /// Decodes one mip level to RGBA8. `out_len` must equal the level's
     /// `width * height * 4`; the decoder's level dimensions are returned.

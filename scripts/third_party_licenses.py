@@ -6,6 +6,8 @@ One file per artefact type is committed under licenses/ and bundled into that ar
   cli                the default CLI binary (release archives, cargo-binstall)
   native-geospatial  the binary of the container image (also lists its system libraries)
   python             the Python wheel (bindings/python, default features off)
+  pure-rust-basis    the crates the opt-in `pure-rust-basis` feature adds to the CLI binary
+                     (only those: the rest are in the cli file)
 
 The crate set of each file is the resolved dependency graph of that artefact
 (`cargo tree -e no-dev --target all`: normal and build dependencies for every target
@@ -37,7 +39,11 @@ ARTEFACTS = {
     "native-geospatial": (["-p", "rusty-tiles", "--features", "native-geospatial"],
                           "native-geospatial binary (container image)"),
     "python": (["-p", "rusty-tiles-python"], "Python wheel"),
+    "pure-rust-basis": (["-p", "rusty-tiles", "--features", "pure-rust-basis"],
+                        "CLI binary built with `--features pure-rust-basis`: added crates"),
 }
+# Artefacts listed as the crates they add to another artefact's file.
+DELTA_OF = {"pure-rust-basis": "cli"}
 
 # Licences that may ship. Order is the preference when an OR expression offers a choice.
 ALLOWED = [
@@ -51,6 +57,9 @@ EXPRESSION_OVERRIDES = {}
 # Licence files in a subdirectory of a crate (not found by the top-level scan) that cover code
 # the crate bundles. Each must exist, so a crate update that moves one is noticed.
 EXTRA_FILES = {"regex-syntax": ["src/unicode_tables/LICENSE-UNICODE"]}
+# Crates that publish no licence file but share their repository and version with a crate that
+# does: name -> (that crate, its licence files). Each file must exist.
+SIBLING_FILES = {"ktx-rs-macros": ("ktx-rs", ["LICENSE", "NOTICE.md"])}
 # Bundled code whose licence text is only inside a source header: (SPDX id, copyright line).
 EXTRA_SPDX = {"meshopt": [("MIT", "Copyright (c) 2016-2025 Arseny Kapoulkine (vendored meshoptimizer 0.25)")]}
 LICENCE_FILE = re.compile(r"^(LICEN[CS]E|COPYING|UNLICEN[CS]E|NOTICE|COPYRIGHT)([-_. ].*)?$", re.I)
@@ -363,6 +372,16 @@ def collect(selectors, packages):
             problems.append(f"{name} {version}: licence `{expression}` is not on the allow-list")
             continue
         texts = licence_files(package)
+        if not texts and name in SIBLING_FILES:
+            sibling_name, files = SIBLING_FILES[name]
+            sibling = packages.get((sibling_name, version))
+            if sibling is None or sibling.get("repository") != package.get("repository"):
+                sys.exit(f"error: {name} {version}: no {sibling_name} {version} from the same repository")
+            base = pathlib.Path(sibling["manifest_path"]).parent
+            for relative in files:
+                if not (base / relative).is_file():
+                    sys.exit(f"error: {sibling_name} {version}: expected licence file {relative} is missing")
+                texts.append(normalise((base / relative).read_bytes()))
         for identifier, line in EXTRA_SPDX.get(name, []):
             texts.append(line + "\n\n" + SPDX[identifier])
         used_fallback = not texts
@@ -459,7 +478,14 @@ def render(artefact, entries):
         "publishes no licence file, the SPDX standard text and a copyright line from its manifest are given.",
         "",
     ]
-    if artefact != "native-geospatial":
+    if artefact in DELTA_OF:
+        lines[2] = lines[2].replace(
+            "in the resolved dependency graph of this artefact (normal and build "
+            "dependencies, all target platforms)",
+            "this artefact adds to the resolved dependency graph (normal and build dependencies, "
+            f"all target platforms) of `THIRD_PARTY_LICENSES-{DELTA_OF[artefact]}.md`, whose crates "
+            "and texts also apply,")
+    if artefact not in ("native-geospatial", *DELTA_OF):
         lines += [
             "`libsqlite3-sys` compiles the SQLite amalgamation into this artefact; SQLite is in the "
             "public domain (https://www.sqlite.org/copyright.html).",
@@ -495,6 +521,10 @@ def build(only=None):
         if only and artefact not in only:
             continue
         entries, problems, fallback = collect(selectors, packages)
+        if artefact in DELTA_OF:
+            base = resolved_crates(ARTEFACTS[DELTA_OF[artefact]][0])
+            entries = [entry for entry in entries if (entry[0], entry[1]) not in base]
+            fallback = [item for item in fallback if tuple(item.split(" ")[:2]) not in base]
         for problem in problems:
             print(f"error: {artefact}: {problem}", file=sys.stderr)
             failed = True

@@ -91,6 +91,9 @@ pub(crate) enum Mutation {
     /// texture term.
     #[cfg(test)]
     UnderstateTextureError,
+    /// Recompute every exact repeat of the coarse ladder (the identity reference).
+    #[cfg(test)]
+    NoRepeatReuse,
 }
 
 impl Mutation {
@@ -121,6 +124,18 @@ impl Mutation {
             return false;
         }
         self.last_resorts()
+    }
+
+    /// Whether the coarse ladder reuses exact repeats (`geometry::build_parent`).
+    pub(crate) fn reuse(self) -> bool {
+        #[cfg(test)]
+        {
+            self != Self::NoRepeatReuse
+        }
+        #[cfg(not(test))]
+        {
+            true
+        }
     }
 
     pub(crate) fn last_resorts(self) -> bool {

@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <memory>
@@ -70,7 +71,17 @@ enum Format : std::uint32_t {
 constexpr std::uint32_t kFlagSrgb = 1u << 0;
 constexpr std::uint32_t kFlagZstd = 1u << 1;
 constexpr std::uint32_t kFlagMipmaps = 1u << 2;
-constexpr std::uint32_t kKnownFlags = kFlagSrgb | kFlagZstd | kFlagMipmaps;
+// UASTC only: the library's own pack flags, passed through unchanged
+// (UASTC_FASTEST_ETC1_HINTS in src/basisu_ktx2.rs). They change only the ETC1
+// hint bits stored in each block, used when a block is transcoded to ETC1;
+// the UASTC texels are unchanged.
+constexpr std::uint32_t kFlagUastcFastestEtc1Hints = 0x180;
+static_assert(kFlagUastcFastestEtc1Hints ==
+                  (basisu::cPackUASTCETC1FastestHints | basisu::cPackUASTCETC1DisableFlipAndIndividual),
+              "UASTC ETC1 hint flags must be the library's pack flag values");
+static_assert((kFlagUastcFastestEtc1Hints & (kFlagSrgb | kFlagZstd | kFlagMipmaps)) == 0,
+              "UASTC ETC1 hint flags must not overlap the shim's own flags");
+constexpr std::uint32_t kKnownFlags = kFlagSrgb | kFlagZstd | kFlagMipmaps | kFlagUastcFastestEtc1Hints;
 
 std::once_flag g_init_once;
 
@@ -86,6 +97,86 @@ void init_once() {
 // compiled with rt_basisu_silence.h, so stderr goes to the capturing sink.
 void note_exception(const char *what) {
     std::fprintf(stderr, "rusty-tiles shim: C++ exception: %s\n", what != nullptr ? what : "(no message)");
+}
+
+// basisu::basis_compress2() for the 2D LDR requests above, written out because
+// that API masks the UASTC pack flags to the effort level and then overrides
+// them from the effort, so it cannot express the ETC1 hint flags. Each
+// parameter is set as basis_compress_internal() (basisu_comp.cpp) sets it for
+// cFlagKTX2 [| cFlagSRGB] [| cFlagKTX2UASTCSuperCompression] with no RDO, no
+// threads, no statistics and no generated mips; with no extra pack flags the
+// output is byte-identical to basis_compress2() (tests::direct_compress_matches_compress2).
+// `extra_pack_flags` (UASTC only) are OR'd into the pack flags after the effort
+// sets the pack level. Returns malloc'ed bytes (released by basis_free_data) or
+// nullptr.
+void *compress(basist::basis_tex_format mode, const basisu::vector<basisu::image> &source_images,
+               std::uint32_t flags, std::int32_t quality, std::int32_t effort,
+               std::uint32_t extra_pack_flags, std::size_t *size) {
+    *size = 0;
+    const bool srgb = (flags & kFlagSrgb) != 0;
+    basisu::job_pool pool(1);
+    basisu::basis_compressor_params params;
+    params.set_format_mode(mode);
+    params.m_pJob_pool = &pool;
+    params.m_y_flip = false;
+    params.m_debug = false;
+    params.m_debug_images = false;
+    params.m_tex_type = basist::basis_texture_type::cBASISTexType2D;
+    // Level 0 is the image; any further levels are its caller-authored mips.
+    params.m_source_images.resize(1);
+    params.m_source_images[0] = source_images[0];
+    if (source_images.size() > 1) {
+        params.m_source_mipmap_images.resize(1);
+        params.m_source_mipmap_images[0].resize(source_images.size() - 1);
+        for (std::uint32_t i = 1; i < source_images.size(); ++i) {
+            params.m_source_mipmap_images[0][i - 1] = source_images[i];
+        }
+    }
+    params.m_multithreading = false;
+    params.m_use_opencl = false;
+    params.m_write_output_basis_or_ktx2_files = false;
+    params.m_perceptual = srgb;
+    params.m_ktx2_and_basis_srgb_transfer_function = srgb;
+    params.m_mip_srgb = srgb;
+    params.set_ldr_srgb_channel_weights(srgb);
+    params.m_mip_gen = false;
+    params.m_mip_wrapping = false;
+    if (mode == basist::basis_tex_format::cUASTC_LDR_4x4) {
+        // The pack level comes from the effort below.
+        params.m_pack_uastc_ldr_4x4_flags = 0;
+    } else {
+        // Replaced from the quality below.
+        params.m_quality_level = 1;
+    }
+    params.m_create_ktx2_file = true;
+    if ((flags & kFlagZstd) != 0 && params.m_uastc) {
+        params.m_ktx2_uastc_supercompression = basist::KTX2_SS_ZSTANDARD;
+    }
+    params.m_compute_stats = false;
+    params.m_print_stats = false;
+    params.m_status_output = false;
+    params.m_astc_hdr_6x6_options.m_rec2020_bt2100_color_gamut = false;
+    params.m_validate_output_data = false;
+    // Quality 100 disables UASTC RDO; the effort sets the UASTC pack level or
+    // the ETC1S compression level.
+    if (!params.set_format_mode_and_quality_effort(mode, quality, effort, false)) {
+        return nullptr;
+    }
+    if (mode == basist::basis_tex_format::cUASTC_LDR_4x4) {
+        params.m_pack_uastc_ldr_4x4_flags |= extra_pack_flags;
+    }
+    basisu::basis_compressor compressor;
+    if (!compressor.init(params) || compressor.process() != basisu::basis_compressor::cECSuccess) {
+        return nullptr;
+    }
+    const basisu::uint8_vec &file = compressor.get_output_ktx2_file();
+    void *data = std::malloc(file.size());
+    if (data == nullptr) {
+        throw std::bad_alloc();
+    }
+    std::memcpy(data, file.get_ptr(), file.size());
+    *size = file.size();
+    return data;
 }
 
 } // namespace
@@ -107,8 +198,8 @@ extern "C" {
 // Encodes one RGBA8 image (tightly packed rows) to KTX2. On success the
 // returned buffer must be released with rt_basisu_free().
 //
-// The call is single-threaded: cFlagThreaded is never set, so the encoder's
-// job pool has no worker threads. Status, statistics and debug output flags are
+// The call is single-threaded: the encoder's job pool has one thread and
+// multithreading is off. Status, statistics and debug output flags are
 // never set, and no statistics are computed.
 struct RtBasisuMipLevel {
     const std::uint8_t *rgba;
@@ -161,7 +252,7 @@ RT_BASISU_ENTRY std::int32_t rt_basisu_encode_mips(const RtBasisuMipLevel *level
     basist::basis_tex_format mode;
     switch (format) {
     case kEtc1s:
-        if (quality < 1 || quality > 100) {
+        if (quality < 1 || quality > 100 || (flags & kFlagUastcFastestEtc1Hints) != 0) {
             return kInvalidArgument;
         }
         mode = basist::basis_tex_format::cETC1S;
@@ -178,34 +269,25 @@ RT_BASISU_ENTRY std::int32_t rt_basisu_encode_mips(const RtBasisuMipLevel *level
     }
     try {
         init_once();
-        std::uint32_t basis_flags = basisu::cFlagKTX2;
-        if (flags & kFlagSrgb) {
-            basis_flags |= basisu::cFlagSRGB;
-        }
-        if (flags & kFlagZstd) {
-            basis_flags |= basisu::cFlagKTX2UASTCSuperCompression;
-        }
-        // Never set cFlagGenMips*: the vector overload copies extra images to
-        // m_source_mipmap_images and disables automatic generation. One image
-        // deliberately remains base-only. Caller pixels are copied before encode.
+        // Never set cFlagGenMips*: the encoder never generates a level. One
+        // image deliberately remains base-only. Caller pixels are copied
+        // before encode.
         basisu::vector<basisu::image> source_images;
         source_images.resize(static_cast<std::uint32_t>(level_count));
         for (std::size_t i = 0; i < level_count; ++i) {
             source_images[static_cast<std::uint32_t>(i)].init(
                 levels[i].rgba, levels[i].width, levels[i].height, 4);
         }
-        std::size_t size = 0;
-        void *data = basisu::basis_compress2(mode, source_images, basis_flags, quality,
-                                             effort, &size, nullptr);
+        void *data = compress(mode, source_images, flags, quality, effort,
+                              flags & kFlagUastcFastestEtc1Hints, out_len);
         if (data == nullptr) {
             return kEncodeFailed;
         }
-        if (size == 0) {
+        if (*out_len == 0) {
             basisu::basis_free_data(data);
             return kEncodeFailed;
         }
         *out = static_cast<std::uint8_t *>(data);
-        *out_len = size;
         return kOk;
     } catch (const InvariantFailure &) {
         return kInvariantFailed;
@@ -221,6 +303,60 @@ RT_BASISU_ENTRY std::int32_t rt_basisu_encode_mips(const RtBasisuMipLevel *level
         return kException;
     }
 }
+
+// Test oracle for the pure-Rust encoder (src/basisu_ktx2/pure/shadow_tests.rs), not used in
+// production: rt_basisu_encode_mips's compress() with any `extra_pack_flags` OR'd into the
+// UASTC pack flags, not only the ETC1 hint flags production uses. The caller validates the
+// request as for rt_basisu_encode_mips. Compiled only with feature pure-rust-basis (build.rs
+// defines RT_BASISU_ENCODE_ORACLE), like rt_basisu_selftest_compress2 below, so the default
+// build has neither entry.
+#if defined(RT_BASISU_ENCODE_ORACLE)
+RT_BASISU_ENTRY std::int32_t rt_basisu_encode_mips_oracle(const RtBasisuMipLevel *levels,
+                                                         std::size_t level_count, std::uint32_t format,
+                                                         std::int32_t quality, std::int32_t effort,
+                                                         std::uint32_t flags, std::uint32_t extra_pack_flags,
+                                                         std::uint8_t **out, std::size_t *out_len) {
+    rt_basisu_clear_diagnostics();
+    if (out == nullptr || out_len == nullptr || levels == nullptr || level_count == 0 ||
+        level_count > 15 || (flags & ~(kFlagSrgb | kFlagZstd)) != 0 || effort < 0 || effort > kMaxEffort ||
+        (format != kEtc1s && format != kUastcLdr4x4) || (format == kEtc1s && extra_pack_flags != 0)) {
+        return kInvalidArgument;
+    }
+    *out = nullptr;
+    *out_len = 0;
+    try {
+        init_once();
+        const basist::basis_tex_format mode =
+            format == kEtc1s ? basist::basis_tex_format::cETC1S : basist::basis_tex_format::cUASTC_LDR_4x4;
+        basisu::vector<basisu::image> source_images;
+        source_images.resize(static_cast<std::uint32_t>(level_count));
+        for (std::size_t i = 0; i < level_count; ++i) {
+            source_images[static_cast<std::uint32_t>(i)].init(
+                levels[i].rgba, levels[i].width, levels[i].height, 4);
+        }
+        void *data = compress(mode, source_images, flags, quality, effort, extra_pack_flags, out_len);
+        if (data == nullptr || *out_len == 0) {
+            basisu::basis_free_data(data);
+            *out_len = 0;
+            return kEncodeFailed;
+        }
+        *out = static_cast<std::uint8_t *>(data);
+        return kOk;
+    } catch (const InvariantFailure &) {
+        return kInvariantFailed;
+    } catch (const ContainerFailure &) {
+        return kContainerFailed;
+    } catch (const std::bad_alloc &) {
+        return kOutOfMemory;
+    } catch (const std::exception &error) {
+        note_exception(error.what());
+        return kException;
+    } catch (...) {
+        note_exception(nullptr);
+        return kException;
+    }
+}
+#endif // RT_BASISU_ENCODE_ORACLE
 
 // For the tests: `which == 0` throws through the encoder checks' abort()
 // replacement; anything else calls the library's real container_abort(). Both
@@ -242,6 +378,59 @@ RT_BASISU_ENTRY std::int32_t rt_basisu_selftest_failure(std::int32_t which) {
         return kException;
     }
 }
+
+// Test reference, not used in production: encodes with basisu::basis_compress2(),
+// the library's simple API the shim used before it set the parameters itself, so
+// the tests can show compress() reproduces it byte for byte. The tests pass only
+// requests rt_basisu_encode_mips() accepts, without the hint flags. Compiled only
+// with RT_BASISU_ENCODE_ORACLE, like rt_basisu_encode_mips_oracle above.
+#if defined(RT_BASISU_ENCODE_ORACLE)
+RT_BASISU_ENTRY std::int32_t rt_basisu_selftest_compress2(const RtBasisuMipLevel *levels, std::size_t level_count,
+                                                          std::uint32_t format, std::int32_t quality,
+                                                          std::int32_t effort, std::uint32_t flags,
+                                                          std::uint8_t **out, std::size_t *out_len) {
+    rt_basisu_clear_diagnostics();
+    if (out == nullptr || out_len == nullptr || levels == nullptr || level_count == 0 || level_count > 15 ||
+        (flags & ~(kFlagSrgb | kFlagZstd)) != 0 || format > kUastcLdr4x4) {
+        return kInvalidArgument;
+    }
+    *out = nullptr;
+    *out_len = 0;
+    try {
+        init_once();
+        std::uint32_t basis_flags = basisu::cFlagKTX2;
+        if (flags & kFlagSrgb) {
+            basis_flags |= basisu::cFlagSRGB;
+        }
+        if (flags & kFlagZstd) {
+            basis_flags |= basisu::cFlagKTX2UASTCSuperCompression;
+        }
+        basisu::vector<basisu::image> source_images;
+        source_images.resize(static_cast<std::uint32_t>(level_count));
+        for (std::size_t i = 0; i < level_count; ++i) {
+            if (levels[i].rgba == nullptr ||
+                levels[i].length != static_cast<std::uint64_t>(levels[i].width) * levels[i].height * 4) {
+                return kInvalidArgument;
+            }
+            source_images[static_cast<std::uint32_t>(i)].init(
+                levels[i].rgba, levels[i].width, levels[i].height, 4);
+        }
+        const basist::basis_tex_format mode = format == kEtc1s ? basist::basis_tex_format::cETC1S
+                                                               : basist::basis_tex_format::cUASTC_LDR_4x4;
+        std::size_t size = 0;
+        void *data = basisu::basis_compress2(mode, source_images, basis_flags, quality, effort, &size, nullptr);
+        if (data == nullptr || size == 0) {
+            basisu::basis_free_data(data);
+            return kEncodeFailed;
+        }
+        *out = static_cast<std::uint8_t *>(data);
+        *out_len = size;
+        return kOk;
+    } catch (...) {
+        return kException;
+    }
+}
+#endif // RT_BASISU_ENCODE_ORACLE
 
 // Base-only legacy ABI. Requests to generate mips are rejected by the common entry.
 RT_BASISU_ENTRY std::int32_t rt_basisu_encode(const std::uint8_t *rgba, std::uint32_t width, std::uint32_t height,

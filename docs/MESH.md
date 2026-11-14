@@ -270,6 +270,12 @@ rule. A declaration does not certify source-distance maxima.
 Conversion `diagnostics.hlod` reports `last_resort_tiles`,
 `last_resort_stages` (counts for stages 1, 2 and 3), `fold_faces` and
 `declared_tiles` (including stage-0 tiles, with stage and fold count).
+`diagnostics.hlod.repeat_reuse` counts the exact repeats the coarse ladder
+skipped: `contractions` (a build returned an earlier build's failed border
+contraction), `replayed_calls` (`Fix2` proposal calls replayed from the
+primary build's) and `round_zero_calls` (remesh round 0 repeating the full-cap
+calls). The published output is the same as recomputing them. The counts are 0
+while the `RT_HLOD_AUDIT_DIR` sidecar records every attempt.
 
 ### Geometric error: sampled, not certified
 
@@ -492,6 +498,14 @@ profile:
 - MASK pages keep their own codec and coverage policy;
 - ID pages are exact PNG in every profile.
 
+Every leaf UASTC page, of any class or ladder step, is encoded with Basis
+Universal's fastest ETC1 hints (`cPackUASTCETC1FastestHints |
+cPackUASTCETC1DisableFlipAndIndividual`). The hints are used only when a
+viewer transcodes UASTC to ETC1, which CesiumJS does on GPUs with none of
+ASTC, BC7 or S3TC; decodes to RGBA, ASTC, BC7 and BC1/3 are the same with
+either setting. Coarse UASTC pages, and MASK pages on leaves and coarse tiles
+alike (they use the coarse codec policy), keep the full hint search.
+
 ETC1S quality uses the wrapper's 1–100 scale; effort 0 maps to native ETC1S
 compression level 0. ETC1S at effort 0 costs about three times the encode CPU of
 UASTC level 0 for smaller pages; the
@@ -648,6 +662,13 @@ and reported as `diagnostics.capture.sort`: `run_bytes`, `fan_in`,
 each sort's output is the stable sort of its input order for every run size,
 fan-in and writer count, so the archive does not depend on the plan.
 
+Capture's cell tree is built as parallel subtrees: the largest octree cells of
+the sorted triangles are split (found by binary search on their Morton keys)
+until there are about 16 per worker, each cell's subtree is built on a worker,
+and the levels above them are closed in rank order. The nodes are those of one
+pass over the triangles, so the archive does not depend on the worker count.
+Workers stop at the run's stop request between units of 4,096 triangles.
+
 The coarse stage's incidence pass (`hlod_incidence`) plans its item and
 open-edge endpoint sorts the same way inside the coarse stage's admission,
 before the walk admits any parent job: runs grow toward one pass at the
@@ -668,6 +689,14 @@ space. A 10% margin and per-file rounding are added. At scale this comes to
 about 0.5 KB per source triangle with every vertex attribute present, or about
 0.3 KB with positions and one texture coordinate set; capture stores only the
 attributes some selected primitive carries.
+
+The triangle and corner-depth streams capture keeps for the later stages are
+stored as LZ4 blocks of at most 64 KiB (a quarter of the stream buffer when that
+is smaller); a block that does not shrink is stored as is. The records read back
+are the same bytes, so the archive does not depend on it. Declared and preflight
+scratch bounds count these files at their uncompressed size; measured scratch
+(`scratch_stage_peak_bytes`, `run_scratch_peak_bytes`) is what is on disk. Their
+block indexes (9 bytes per block) are charged in capture's resident bound.
 
 The run also reserves output-side space for leaf staging, archive staging and a
 replaced destination: three copies of 119 bytes per triangle (a conservative

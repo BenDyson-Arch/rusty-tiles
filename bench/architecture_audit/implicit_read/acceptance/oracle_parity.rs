@@ -203,6 +203,7 @@ fn production(file: &Path, limits: ValidationLimits, dump: Option<(&Path, &str)>
 
 #[test]
 fn production_matches_every_i1_oracle_witness_and_control() {
+    crate::test_corpora::ensure();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(ROOT);
     let read = |p: &str| -> Value {
         serde_json::from_slice(&std::fs::read(root.join(p)).unwrap()).unwrap()

@@ -1,0 +1,3 @@
+# Byte-exact checkout on every platform: generators read pinned inputs (sha256) from
+# here, and tests compare committed records byte for byte. No CRLF conversion.
+* -text

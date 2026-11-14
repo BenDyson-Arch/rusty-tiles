@@ -11,7 +11,11 @@ literals and end each such line with `# versions: KEY [KEY ...]`. This check fai
   so `${{ cond && 120 || 90 }} # versions: A B` binds A to 120 and B to 90;
 - a job that runs steps (not a reusable-workflow call) has no `timeout-minutes`, or a
   `timeout-minutes` line has no marker;
-- a pinned tool version (maturin, Node, Python, cargo-nextest) is written without a marker;
+- a pinned tool version (maturin, Node, Python, cargo-nextest, the maturin action's Rust
+  toolchain) is written without a marker;
+- the Rust toolchain is not RUST_VERSION everywhere: rust-toolchain.toml's channel, the
+  Dockerfile's `FROM rust:` tag, or a workflow or action line that installs `stable` Rust
+  (`rustup ... stable`, `toolchain: stable`, `cargo +stable`, `...rust-toolchain@stable`);
 - a workflow, a composite action or scripts/ci_run.py names a target in UNSUPPORTED_TARGETS
   or a runner label in UNSUPPORTED_RUNNERS outside a comment line (0.4.1 drops Intel macOS);
 - a Dockerfile `ARG` named like a key has a different default, an `ADD --checksum` is not a
@@ -24,11 +28,25 @@ import argparse
 from pathlib import Path
 import re
 import sys
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 MARKER = re.compile(r"#\s*versions:\s*([A-Z0-9_ ]+?)\s*$")
 # Literal pins that must say where their value comes from.
-PINNED = re.compile(r"(maturin-version:|node-version:|python-version:\s*'?[0-9]|maturin==|cargo-nextest@|tool:\s*cargo-nextest)")
+PINNED = re.compile(r"(maturin-version:|node-version:|python-version:\s*'?[0-9]|maturin==|cargo-nextest@|tool:\s*cargo-nextest|rust-toolchain:)")
+# Rust from a moving channel or another release instead of the pinned RUST_VERSION:
+# a channel name on a rustup line or in a toolchain input, `cargo +<toolchain>`, an
+# explicit `rustup install/default/override <toolchain>`, or a RUSTUP_TOOLCHAIN override.
+CHANNEL = r"(?:stable|beta|nightly)"
+STABLE_RUST = re.compile(
+    r"\brustup\b.*\b" + CHANNEL + r"\b"
+    r"|\btoolchain:\s*['\"]?" + CHANNEL + r"\b"
+    r"|\bcargo\s+\+\S"
+    r"|\+" + CHANNEL + r"\b"
+    r"|rust-toolchain@" + CHANNEL + r"\b"
+    r"|\brustup\s+(?:toolchain\s+)?install\s+[0-9A-Za-z]"
+    r"|\brustup\s+(?:default|override)\b"
+    r"|\bRUSTUP_TOOLCHAIN\b")
 KEY_LINE = re.compile(r"^([A-Z][A-Z0-9_]*)=(\S+)$")
 
 
@@ -111,6 +129,28 @@ def check_unsupported(path, lines, values):
     return errors
 
 
+def check_stable_rust(path, lines):
+    """Workflows and actions install the pinned toolchain, never the stable channel."""
+    return [f"{path}:{number}: Rust must come from rust-toolchain.toml (RUST_VERSION), not stable or another toolchain"
+            for number, line in enumerate(lines, 1)
+            if not line.lstrip().startswith("#") and STABLE_RUST.search(line)]
+
+
+def check_toolchain_file(path, name, values):
+    """rust-toolchain.toml names RUST_VERSION exactly."""
+    if "RUST_VERSION" not in values:
+        return ["ci/versions.env: RUST_VERSION is missing"]
+    if not path.exists():
+        return [f"{name}: missing; it must pin channel = \"{values['RUST_VERSION']}\""]
+    try:
+        channel = tomllib.loads(path.read_text()).get("toolchain", {}).get("channel")
+    except tomllib.TOMLDecodeError as error:
+        return [f"{name}: {error}"]
+    if channel != values["RUST_VERSION"]:
+        return [f"{name}: channel is {channel!r}, expected RUST_VERSION={values['RUST_VERSION']}"]
+    return []
+
+
 def check_jobs(path, lines):
     """Every job that runs steps has a time limit (a job calling a workflow cannot have one)."""
     errors, job, has_limit, calls, in_jobs = [], None, False, False, False
@@ -142,9 +182,17 @@ def check_jobs(path, lines):
 
 
 def check_dockerfile(path, name, values):
-    errors = []
+    errors, args = [], {}
     for number, line in enumerate(path.read_text().splitlines(), 1):
+        image = re.match(r"^FROM\s+(?:--platform=\S+\s+)?rust:(\S+)", line)
+        if image:
+            # The tag may start with an ARG (FROM rust:${RUST_VERSION}-trixie), read at its default.
+            tag = re.sub(r"\$\{?([A-Z0-9_]+)\}?", lambda arg: args.get(arg.group(1), arg.group(0)), image.group(1))
+            if tag.split("-")[0] != values.get("RUST_VERSION"):
+                errors.append(f"{name}:{number}: the rust image must be RUST_VERSION={values.get('RUST_VERSION')}, found rust:{tag}")
         match = re.match(r"^ARG ([A-Z0-9_]+)=(\S*)$", line)
+        if match:
+            args[match.group(1)] = match.group(2)
         if match and match.group(1) in values and match.group(2) != values[match.group(1)]:
             errors.append(f"{name}:{number}: ARG {match.group(1)} should default to {values[match.group(1)]}")
         if match and match.group(1) == "GEOBASE" and match.group(2) != "geospatial-source":
@@ -168,11 +216,13 @@ def check(root):
         relative = path.relative_to(root)
         errors += check_lines(relative, lines, values)
         errors += check_unsupported(relative, lines, values)
+        errors += check_stable_rust(relative, lines)
         if path.parent.name == "workflows":
             errors += check_jobs(relative, lines)
     reuse = root / "scripts" / "ci_run.py"
     if reuse.exists():
         errors += check_unsupported(reuse.relative_to(root), reuse.read_text().splitlines(), values)
+    errors += check_toolchain_file(root / "rust-toolchain.toml", "rust-toolchain.toml", values)
     dockerfile = root / "Dockerfile"
     if dockerfile.exists():
         errors += check_dockerfile(dockerfile, dockerfile.relative_to(root), values)
