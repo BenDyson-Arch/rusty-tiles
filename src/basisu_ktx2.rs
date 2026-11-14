@@ -432,11 +432,20 @@ fn encode_mips_unverified(
     crate::test_hooks::stall("ktx2.encode");
     #[cfg(feature = "pure-rust-basis")]
     {
-        rust_encode_mips(mips, mode, params, 0)
+        rust_encode_mips(mips, mode, params, uastc_extra_pack_flags(params))
     }
     #[cfg(not(feature = "pure-rust-basis"))]
     {
         native_encode_mips(mips, mode, params)
+    }
+}
+
+/// The UASTC pack flags `params` adds to the pack level the effort sets: the encode
+/// setting of [`Params::etc1_hints`], on both encoder paths.
+fn uastc_extra_pack_flags(params: Params) -> u32 {
+    match params.etc1_hints {
+        Etc1Hints::Full => 0,
+        Etc1Hints::Fastest => UASTC_FASTEST_ETC1_HINTS,
     }
 }
 
@@ -478,9 +487,8 @@ fn native_encode_mips(
     if params.transfer == Transfer::Srgb {
         flags |= ffi::FLAG_SRGB;
     }
-    if params.etc1_hints == Etc1Hints::Fastest {
-        flags |= ffi::FLAG_UASTC_FASTEST_ETC1_HINTS;
-    }
+    // The shim passes its hint flag bits to the encoder as these same pack flags.
+    flags |= uastc_extra_pack_flags(params);
     let native_mips: Vec<ffi::MipLevel> = mips
         .iter()
         .map(|mip| ffi::MipLevel {

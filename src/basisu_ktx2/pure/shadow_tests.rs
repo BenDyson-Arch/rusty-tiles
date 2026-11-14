@@ -11,17 +11,18 @@ use super::super::tests::{
     checker, fixture_mips, flat, low_noise, noise, normal_map, occlusion, orm, photo, Rng,
 };
 use super::super::{
-    ffi, native_decode_level_rgba, native_encode_mips, rust_decode_level_rgba, rust_encode_mips,
-    MipLevel, Mode, Params, Transfer,
+    encode_mips_unverified, ffi, native_decode_level_rgba, native_encode_mips,
+    rust_decode_level_rgba, rust_encode_mips, Etc1Hints, MipLevel, Mode, Params, Transfer,
+    UASTC_FASTEST_ETC1_HINTS,
 };
 use super::decode::zstd_decompress;
 use super::{decode_level, zstd_compress};
 
 const REPORT_ENV: &str = "RUSTY_TILES_BASIS_SHADOW_REPORT";
 
-/// `cPackUASTCETC1FastestHints | cPackUASTCETC1DisableFlipAndIndividual`: the UASTC ETC1 hint
-/// flags of the fast-hints work (perf/uastc-fast-hints).
-const FAST_HINTS: u32 = 0x180;
+/// `cPackUASTCETC1FastestHints | cPackUASTCETC1DisableFlipAndIndividual`, the leaf pages'
+/// UASTC ETC1 hint flags ([`Etc1Hints::Fastest`]).
+const FAST_HINTS: u32 = UASTC_FASTEST_ETC1_HINTS;
 /// `cPackUASTCETC1FasterHints`.
 const FASTER_HINTS: u32 = 0x40;
 
@@ -111,6 +112,7 @@ fn chain(input: &Input, full: bool) -> Vec<Vec<u8>> {
         effort: 0,
         transfer: Transfer::Linear,
         mipmaps: full,
+        etc1_hints: Etc1Hints::Full,
     };
     fixture_mips(&input.rgba, input.width, input.height, params)
 }
@@ -132,6 +134,7 @@ fn params(effort: u8, transfer: Transfer) -> Params {
         effort,
         transfer,
         mipmaps: false,
+        etc1_hints: Etc1Hints::Full,
     }
 }
 
@@ -373,6 +376,45 @@ fn uastc_hint_flag_encodes_are_identical() {
         }
     }
     report(&lines);
+}
+
+/// The production encode with [`Etc1Hints::Fastest`] (leaf UASTC pages) takes the pure-Rust
+/// path under this feature and must equal the production C++ entry with the same setting,
+/// and differ from the full-hint encode (the flags reach both encoders).
+#[test]
+fn production_fastest_hints_match_on_both_paths() {
+    let corpus = corpus();
+    for input in corpus
+        .iter()
+        .filter(|i| ["photo-alpha-128x128", "noise-61x37", "column-1x7"].contains(&i.name.as_str()))
+    {
+        for full in [false, true] {
+            let images = chain(input, full);
+            let mips = levels(&images, input);
+            for (zstd, effort, transfer) in [(true, 0, SRGB), (false, 2, LINEAR), (true, 5, SRGB)] {
+                let mode = Mode::Uastc { zstd };
+                let fastest = Params {
+                    etc1_hints: Etc1Hints::Fastest,
+                    ..params(effort, transfer)
+                };
+                let case = format!("{} full={full} {mode:?} effort {effort}", input.name);
+                let rust = encode_mips_unverified(&mips, mode, fastest).unwrap();
+                let cpp = native_encode_mips(&mips, mode, fastest).unwrap();
+                assert!(rust == cpp, "{case}: production paths differ");
+                assert!(
+                    rust == oracle_encode(&mips, mode, params(effort, transfer), FAST_HINTS),
+                    "{case}: production differs from the oracle with the hint flags"
+                );
+                let full_hints = encode_mips_unverified(&mips, mode, params(effort, transfer));
+                if input.width * input.height >= 64 {
+                    assert!(
+                        rust != full_hints.unwrap(),
+                        "{case}: hint flags had no effect"
+                    );
+                }
+            }
+        }
+    }
 }
 
 extern "C" {

@@ -1795,7 +1795,9 @@ fn measure_caller_mip_floors() {
 }
 
 /// Encodes `levels` through the production entry or through the library's
-/// `basis_compress2()` reference.
+/// `basis_compress2()` reference (a test entry built with feature
+/// `pure-rust-basis` only, so CI runs it in the pure-Rust Basis job).
+#[cfg(feature = "pure-rust-basis")]
 fn native_encode(
     levels: &[MipLevel<'_>],
     format: u32,
@@ -1848,6 +1850,7 @@ fn native_encode(
     bytes
 }
 
+#[cfg(feature = "pure-rust-basis")]
 #[test]
 fn direct_compress_matches_compress2() {
     // The shim sets the library's parameters itself so that it can pass UASTC

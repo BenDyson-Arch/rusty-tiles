@@ -28,7 +28,8 @@ switch backend, so the request checks, the mandatory post-encode verification, t
 - **Extra UASTC pack flags**: `rust_encode_mips` takes flags OR'd into the pack level
   after the effort sets it, such as the ETC1 hint flags 0x180
   (`cPackUASTCETC1FastestHints | cPackUASTCETC1DisableFlipAndIndividual`). Production
-  passes 0 until the hint-flag work wires a mode to it.
+  passes the flags of `Params::etc1_hints` (`UASTC_FASTEST_ETC1_HINTS` for leaf UASTC
+  pages, 0 otherwise), the same flags the C++ path passes.
 - **Decoding** (`src/basisu_ktx2/pure/decode.rs`): a front end that follows the acceptance
   of `ktx2_transcoder` (`init`, `start_transcoding`, `get_image_level_info`,
   `transcode_image_level` to RGBA32 with no flags), including its key/value parse, then
@@ -81,7 +82,8 @@ and full chains:
 - UASTC: 248 encodes (efforts 0, 1, 2, 5, 8; sRGB and linear; with and without
   Zstandard), identical;
 - UASTC with pack flags 0x180 (150) and 0x40 (30) against a C++ oracle entry point
-  (`rt_basisu_encode_mips_oracle`, checked equal to the production entry without flags);
+  (`rt_basisu_encode_mips_oracle`, the production entry's parameter setup with any extra
+  pack flags), and the production encode with `Etc1Hints::Fastest` equal on both paths;
 - zstd-pure-rs against the vendored zstd at levels 1 to 19 on 36 payloads, identical;
 - every level of every file decodes to identical texels with both transcoders;
 - 300 mutants per base file (20,000 in a longer run): never accepted by Rust and refused

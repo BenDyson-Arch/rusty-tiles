@@ -80,7 +80,8 @@ extern "C" {
 
     /// Encodes with the library's `basis_compress2()`, the reference the
     /// shim's own parameter setup must reproduce byte for byte.
-    #[cfg(test)]
+    /// Compiled only with feature `pure-rust-basis` (build.rs).
+    #[cfg(all(test, feature = "pure-rust-basis"))]
     pub(super) fn rt_basisu_selftest_compress2(
         levels: *const MipLevel,
         level_count: usize,
