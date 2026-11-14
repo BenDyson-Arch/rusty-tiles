@@ -27,10 +27,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # develop, and the integration branch of the next patch release while it is open, so
-        # its integration failures surface within a day. Rename it for the next release
-        # (next/0.4.3), or remove it once it has merged.
-        branch: [develop, next/0.4.2]
+        # develop, plus any open release integration branch (e.g. next/0.5.0) while it exists,
+        # so its integration failures surface within a day. Remove that entry once it merges.
+        branch: [develop]
     env:
       BRANCH: ${{ matrix.branch }}
     steps:
