@@ -21,4 +21,6 @@ use super::container::{
     SUPERCOMPRESSION_ZSTD,
 };
 pub(crate) use decode::decode_level;
-pub(crate) use encode::{encode, zstd_compress, Settings};
+#[cfg(test)]
+use encode::zstd_compress;
+pub(crate) use encode::{encode, Settings};

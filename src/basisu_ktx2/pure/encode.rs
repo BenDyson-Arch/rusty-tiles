@@ -115,9 +115,9 @@ fn image(mip: &MipLevel<'_>) -> Image {
     for (texel, rgba) in image
         .get_pixels_mut()
         .iter_mut()
-        .zip(mip.rgba.chunks_exact(4))
+        .zip(mip.rgba.as_chunks::<4>().0)
     {
-        texel.copy_from_slice(rgba);
+        *texel = *rgba;
     }
     image
 }
