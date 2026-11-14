@@ -781,9 +781,11 @@ impl<'a> CellBuilder<'a> {
     }
 }
 
-/// Deepest cell the parallel frontier splits to, and the smallest cell it splits.
+/// Deepest cell the parallel frontier splits to, and the smallest cell it splits. Unit tests
+/// split cells above 64 triangles, so every capture test with more than one job builds its
+/// tree from several subtrees.
 const FRONTIER_DEPTH: u8 = 18;
-const FRONTIER_SPLIT: u64 = 1 << 16;
+const FRONTIER_SPLIT: u64 = if cfg!(test) { 64 } else { 1 << 16 };
 
 /// The cell pass over `ranked` as parallel subtrees. A frontier of disjoint octree cells
 /// covering the rank space (the largest cells split until there are about 16 per worker,
@@ -805,7 +807,7 @@ fn parallel_cells(
 ) -> Result<NodeRecord, JobError> {
     use std::sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed},
-        Mutex,
+        Condvar, Mutex,
     };
     let count = ranked.count();
     if count == 0 {
@@ -857,42 +859,80 @@ fn parallel_cells(
         }
         frontier.splice(at..at + 1, children);
     }
-    type Job = Result<(NodeRecord, Vec<NodeRecord>, CellTotals), JobError>;
-    let results: Vec<Mutex<Option<Job>>> = frontier.iter().map(|_| Mutex::new(None)).collect();
+    // Workers build frontier cells in rank order; the calling thread takes each result as soon
+    // as its turn comes, pushes its nodes to the node sort and closes the levels above the
+    // frontier, so a subtree's nodes are held only until the cells before it are done.
+    // A worker's own failure (or the run's stop) is the run's error. A worker that only saw
+    // the shared stop flag reports `Halted`, which never masks that error.
+    enum Done {
+        Built(NodeRecord, Vec<NodeRecord>, CellTotals),
+        Failed(JobError),
+        Halted,
+    }
+    let results: Mutex<Vec<Option<Done>>> = Mutex::new(frontier.iter().map(|_| None).collect());
+    let ready = Condvar::new();
     let (next, stop) = (AtomicUsize::new(0), AtomicBool::new(false));
-    let stopped = std::thread::scope(|scope| {
-        let worker = || loop {
-            let task = next.fetch_add(1, Relaxed);
-            if task >= frontier.len() || stop.load(Relaxed) {
-                break;
+    let lock = || results.lock().unwrap_or_else(|e| e.into_inner());
+    let deliver = |task: usize, done: Done| {
+        lock()[task] = Some(done);
+        ready.notify_all();
+    };
+    // Sets the stop flag when a worker unwinds, so the others stop and the caller joins.
+    struct Unwind<'a>(&'a AtomicBool, &'a Condvar);
+    impl Drop for Unwind<'_> {
+        fn drop(&mut self) {
+            if std::thread::panicking() {
+                self.0.store(true, Relaxed);
+                self.1.notify_all();
             }
-            let (depth, _, first, end) = frontier[task];
-            let job = (|| -> Job {
-                let mut out = Vec::new();
-                let mut cells = CellBuilder::new(scratch, config, depth, first);
-                let mut halt = || -> Result<(), JobError> {
-                    crate::test_hooks::pace("mesh.tree-subtree");
-                    if stop.load(Relaxed) {
-                        return Err(JobError::new(JobErrorKind::Cancelled, "tree stopped"));
+        }
+    }
+    let mut top: Vec<OpenCell> = Vec::new();
+    let mut last_key: Option<u64> = None;
+    let mut root = None;
+    let failure = std::thread::scope(|scope| -> Result<Option<JobError>, JobError> {
+        let worker = || {
+            let _unwind = Unwind(&stop, &ready);
+            loop {
+                let task = next.fetch_add(1, Relaxed);
+                if task >= frontier.len() || stop.load(Relaxed) {
+                    break;
+                }
+                let (depth, _, first, end) = frontier[task];
+                let halted = std::cell::Cell::new(false);
+                let job = (|| -> Result<(NodeRecord, Vec<NodeRecord>, CellTotals), JobError> {
+                    let mut out = Vec::new();
+                    let mut cells = CellBuilder::new(scratch, config, depth, first);
+                    let mut halt = || -> Result<(), JobError> {
+                        crate::test_hooks::pace("mesh.tree-subtree");
+                        if stop.load(Relaxed) {
+                            halted.set(true);
+                            return Err(JobError::new(JobErrorKind::Cancelled, "tree stopped"));
+                        }
+                        scratch.check_stop().map_err(Into::into)
+                    };
+                    for triangle in ranked.range(first, end)? {
+                        cells.push(&triangle?, &mut out, &mut halt)?;
                     }
-                    scratch.check_stop().map_err(Into::into)
+                    let (top, built) = cells.finish(&mut out, &mut halt)?;
+                    if built.triangles != end {
+                        return Err(invalid("tree subtree read the wrong number of triangles"));
+                    }
+                    Ok((top, out, built))
+                })();
+                let done = match job {
+                    Ok((top, out, built)) => Done::Built(top, out, built),
+                    Err(_) if halted.get() => Done::Halted,
+                    Err(error) => {
+                        stop.store(true, Relaxed);
+                        Done::Failed(error)
+                    }
                 };
-                for triangle in ranked.range(first, end)? {
-                    cells.push(&triangle?, &mut out, &mut halt)?;
-                }
-                let (top, built) = cells.finish(&mut out, &mut halt)?;
-                if built.triangles != end {
-                    return Err(invalid("tree subtree read the wrong number of triangles"));
-                }
-                Ok((top, out, built))
-            })();
-            if job.is_err() {
-                stop.store(true, Relaxed);
+                deliver(task, done);
             }
-            *results[task].lock().unwrap_or_else(|e| e.into_inner()) = Some(job);
         };
         let mut threads = Vec::new();
-        let mut stopped = None;
+        let mut failure = None;
         for _ in 0..jobs.clamp(1, frontier.len()) {
             match std::thread::Builder::new()
                 .name("rusty-tiles-tree".into())
@@ -901,7 +941,7 @@ fn parallel_cells(
                 Ok(thread) => threads.push(thread),
                 Err(error) => {
                     stop.store(true, Relaxed);
-                    stopped = Some(JobError::new(
+                    failure = Some(JobError::new(
                         JobErrorKind::ResourceLimit,
                         format!("start tree worker: {error}"),
                     ));
@@ -909,54 +949,86 @@ fn parallel_cells(
                 }
             }
         }
-        while stopped.is_none() && !threads.iter().all(|t| t.is_finished()) {
-            if let Err(error) = check() {
-                stop.store(true, Relaxed);
-                stopped = Some(error);
-                break;
+        // Consume in frontier order. On the first failure (a worker's, or the caller's stop)
+        // stop every worker; then the first worker failure in frontier order wins, else the
+        // caller's.
+        let mut stopped: Option<JobError> = None;
+        let mut taken = 0;
+        let mut merge = || -> Result<(), JobError> {
+            while taken < frontier.len() && failure.is_none() && stopped.is_none() {
+                let mut guard = lock();
+                let Some(done) = guard[taken].take() else {
+                    if stop.load(Relaxed) && threads.iter().all(|t| t.is_finished()) {
+                        // Every worker left: a failure is recorded, or one panicked.
+                        return Ok(());
+                    }
+                    let (guard, _) = ready
+                        .wait_timeout(guard, std::time::Duration::from_millis(25))
+                        .unwrap_or_else(|e| e.into_inner());
+                    drop(guard);
+                    if let Err(error) = check() {
+                        stop.store(true, Relaxed);
+                        stopped = Some(error);
+                    }
+                    continue;
+                };
+                drop(guard);
+                let (closed, out, built) = match done {
+                    Done::Built(closed, out, built) => (closed, out, built),
+                    // Recorded below, in frontier order with the others.
+                    Done::Failed(error) => {
+                        lock()[taken] = Some(Done::Failed(error));
+                        return Ok(());
+                    }
+                    Done::Halted => return Ok(()),
+                };
+                let (depth, cell, first, _) = frontier[taken];
+                taken += 1;
+                stats.degenerate_cells += built.degenerate_cells;
+                for node in out {
+                    nodes.push(node)?;
+                }
+                if depth == 0 {
+                    root = Some(closed);
+                    continue;
+                }
+                let key = cell << (3 * u32::from(KEY_DEPTH - depth));
+                if let Some(last) = last_key {
+                    let common = common_cell_prefix(last, key);
+                    while top.len() > common as usize + 1 {
+                        let c = top.pop().unwrap().close(config, nodes)?;
+                        top.last_mut().unwrap().append(c)?;
+                    }
+                }
+                for d in top.len() as u8..depth {
+                    top.push(OpenCell::new(d, prefix(key, d), first));
+                }
+                top.last_mut().unwrap().append(closed)?;
+                last_key = Some(key);
             }
-            std::thread::sleep(std::time::Duration::from_millis(25));
+            Ok(())
+        };
+        let merged = merge();
+        if merged.is_err() || taken < frontier.len() {
+            stop.store(true, Relaxed);
         }
         for thread in threads {
             if let Err(panic) = thread.join() {
                 std::panic::resume_unwind(panic);
             }
         }
-        stopped
-    });
-    if let Some(error) = stopped {
+        merged?;
+        let worker_failure = lock().iter_mut().find_map(|done| match done.take() {
+            Some(Done::Failed(error)) => Some(error),
+            _ => None,
+        });
+        Ok(failure.or(worker_failure).or(stopped))
+    })?;
+    if let Some(error) = failure {
         return Err(error);
     }
-    // The levels above the frontier, closed in rank order as one pass closes them.
-    let mut top: Vec<OpenCell> = Vec::new();
-    let mut last_key: Option<u64> = None;
-    let mut root = None;
-    for (result, &(depth, cell, first, _)) in results.into_iter().zip(&frontier) {
-        let (closed, out, built) = result
-            .into_inner()
-            .unwrap_or_else(|e| e.into_inner())
-            .ok_or_else(|| invalid("tree subtree did not run"))??;
-        stats.degenerate_cells += built.degenerate_cells;
-        for node in out {
-            nodes.push(node)?;
-        }
-        if depth == 0 {
-            root = Some(closed);
-            continue;
-        }
-        let key = cell << (3 * u32::from(KEY_DEPTH - depth));
-        if let Some(last) = last_key {
-            let common = common_cell_prefix(last, key);
-            while top.len() > common as usize + 1 {
-                let c = top.pop().unwrap().close(config, nodes)?;
-                top.last_mut().unwrap().append(c)?;
-            }
-        }
-        for d in top.len() as u8..depth {
-            top.push(OpenCell::new(d, prefix(key, d), first));
-        }
-        top.last_mut().unwrap().append(closed)?;
-        last_key = Some(key);
+    if root.is_none() && top.is_empty() {
+        return Err(invalid("tree subtree did not run"));
     }
     stats.triangles = count;
     match root {
@@ -1106,6 +1178,74 @@ mod tests {
     /// The parallel cell pass writes the serial pass's node records, for any frontier and job
     /// count: clustered keys, coincident-key degenerate cells, packing across siblings, empty
     /// octants and keys spread over the whole range.
+    /// A subtree's own failure is the pass's error, never the cancellation of the subtrees
+    /// stopped because of it, whatever their place in rank order. Here the second cell fails
+    /// at once while the first is still reading (it waits until the failure is recorded), so
+    /// the first stops at its next check.
+    #[test]
+    fn a_subtree_failure_is_not_masked_by_the_stops_it_causes() {
+        use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
+        struct Failing {
+            rows: Vec<TriangleRecord>,
+            failed: AtomicBool,
+        }
+        impl RankedTriangles for Failing {
+            fn ranked(&self) -> Result<RankedReader<'_>, JobError> {
+                self.range(0, self.count())
+            }
+            fn range(&self, first: u64, end: u64) -> Result<RankedReader<'_>, JobError> {
+                if first > 0 {
+                    self.failed.store(true, SeqCst);
+                    return Err(JobError::new(
+                        JobErrorKind::ResourceLimit,
+                        "injected failure",
+                    ));
+                }
+                Ok(Box::new(
+                    self.rows[first as usize..end as usize].iter().map(|t| {
+                        if !self.failed.load(SeqCst) {
+                            while !self.failed.load(SeqCst) {
+                                std::thread::sleep(std::time::Duration::from_millis(1));
+                            }
+                            // Past the failing worker's stop request.
+                            std::thread::sleep(std::time::Duration::from_millis(20));
+                        }
+                        Ok(*t)
+                    }),
+                ))
+            }
+            fn key_at(&self, rank: u64) -> Result<u64, JobError> {
+                Ok(self.rows[rank as usize].key)
+            }
+            fn count(&self) -> u64 {
+                self.rows.len() as u64
+            }
+        }
+        // 5,000 triangles in octant 0 and one in octant 7: two frontier cells.
+        let mut rows: Vec<TriangleRecord> = (0..5000).map(|id| triangle(id << 20, id)).collect();
+        rows.push(triangle(7 << 60, 5000));
+        let ranked = Failing {
+            rows,
+            failed: AtomicBool::new(false),
+        };
+        let config = TreeConfig::new(Profile::Quality).with_leaf_triangles(40);
+        let scratch = Scratch::create(None, 0).unwrap();
+        let mut nodes = ExternalSorter::new(&scratch, config.sorter(2)).unwrap();
+        let error = parallel_cells(
+            &scratch,
+            &ranked,
+            &config,
+            2,
+            5000,
+            &mut nodes,
+            &mut TreeStats::default(),
+            &mut || Ok(()),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::ResourceLimit, "{error}");
+        assert!(error.to_string().contains("injected failure"), "{error}");
+    }
+
     #[test]
     fn parallel_cells_equal_the_serial_pass() {
         let mut state = 0x2545_f491_4f6c_dd1du64;
