@@ -30,6 +30,8 @@ The JSON report contains:
 | `payloads` | One row per payload URI, in byte order: `uri`, `accessorsChecked`, `primitivesChecked`, `vertices` |
 | `interfaceCensus` | HLOD archives only: border and omission counts (see [HLOD archives](#hlod-archives)) |
 | `scratch` | Present only when scratch files were written: `memoryBacked` and `peakBytes` |
+| `warnings` | Present only when some warning applies: a list of `{code, message}`. Warnings never fail validation; `ok` stays `true`. The CLI prints each as `warning: <code>: <message>` on stderr. The one code so far is [`coarseNormalInversion`](#coarse-normals) |
+| `resources` | Present only when the request set a memory budget or jobs: the resolved budget, workers, store sizes and scratch-disk bound (see [memory, workers and disk](#memory-workers-and-disk)). Without them, every member except `scratch` depends on the archive and the request alone; `scratch` (whether it is present and its `peakBytes`) also depends on the host's resolved budget and worker count |
 
 Payload rows are read on demand. The CLI streams them. Python returns a list by default, or a lazy read-only sequence with `validate(input, lazy_payloads=True)`.
 
@@ -91,7 +93,7 @@ Valid but unsupported content is reported as Unsupported, distinct from malforme
 
 **EXT_meshopt_compression** is decoded within the same limits.
 
-- Filters NONE and OCTAHEDRAL are supported; QUATERNION and EXPONENTIAL are Unsupported. A stream with an unsupported filter is Unsupported whatever its header, because filtered streams are refused before their bytes are read.
+- Filters NONE and OCTAHEDRAL are supported; an absent `filter` is NONE, and an explicit `"NONE"` is accepted too. rusty-tiles writes `filter` only for OCTAHEDRAL. QUATERNION and EXPONENTIAL are Unsupported. A stream with an unsupported filter is Unsupported whatever its header, because filtered streams are refused before their bytes are read.
 - OCTAHEDRAL needs ATTRIBUTES mode and a 4- or 8-byte stride. Every element must be a valid K-bit code: the third component encodes 1.0 as `(1 << (K - 1)) - 1`, and |x| and |y| do not exceed it. Anything else is invalid.
 - The extension defines filter output only to one unit, so declared bounds on a filtered BYTE or SHORT accessor may differ from decoded values by one unit. All other bounds are exact.
 - A compressed view may serve any role, including property-table values.
@@ -146,11 +148,35 @@ The 3TZ index is admitted at exactly 24 bytes per other member, as the central-d
 
 ### Scratch space
 
-The catalog holds one fixed-width row per member and a log of names. It stays in memory up to 96 MiB, which covers every archive of at most 524,288 entries and a 32 MiB directory. A larger catalog moves to scratch files, so resident memory grows by only one bit per member (21.3 MiB at the member ceiling). Per-payload facts move to scratch once they exceed 100 MiB.
+The catalog holds one fixed-width row per member and a log of names. It stays in memory up to one eighth of the planned memory, P/8 (see [memory, workers and disk](#memory-workers-and-disk)); at the 4 GiB default that is about 450 MiB, which covers every archive within the default entry and directory limits. A larger catalog moves to scratch files, so resident memory grows by only one bit per member (21.3 MiB at the member ceiling). Per-payload facts move to scratch once they exceed P/8.
 
 Scratch goes to the first disk-backed directory with room among `$TMPDIR`, the user cache directory (`rusty-tiles/scratch`) and the system temporary directory. Memory-backed scratch is used only when nothing else is available; the report's `scratch.memoryBacked` then says so. `--scratchDir DIR` (Python `scratch_dir`) puts scratch inside exactly `DIR`, which must exist; otherwise the request is refused as `usage` before the archive is opened. A memory-backed `DIR` is used and labelled.
 
 A failure of scratch storage is `io`, `resource_limit` or `invalid_state` with the prefix `validation scratch:`. It is never a verdict on the archive.
+
+### Memory, workers and disk
+
+| Surface | Memory budget | Workers |
+| --- | --- | --- |
+| CLI | `--memory-budget BYTES` (`--memoryBudget`) | `--jobs N` or `auto` |
+| Python | `validate(..., memory_budget_bytes=None)` | `jobs=None` |
+| Rust | `ValidationRequest::memory_budget(bytes)` | `ValidationRequest::jobs(n)` |
+
+The budget follows `mesh`'s rule and syntax ([memory budget](MESH.md#memory-budget)): the default is the lesser of 4 GiB and half the detected host or cgroup headroom, or 2 GiB when none is detected; an explicit budget is a ceiling that is never raised, and the stores are planned against the lesser of the budget and the detected headroom. Zero or malformed values are `usage` errors. An explicit budget below 512 MiB is `resource_limit`, before the archive is opened. Workers default to every core; an explicit count is a maximum. Each worker beyond the first is admitted against the budget at 64 MiB, and workers take at most half of the planned share: 1 GiB admits 6 workers, 4 GiB admits 30.
+
+The budget sizes the validator's scale stores. Per-item work (one document, one payload decode) stays bounded by the fixed [per-item limits](#limits), so 256 MiB of the budget is left outside the plan for it. Of the rest, P, the stores live at once during the HLOD delivery stage take at most about 0.9·P. No store keeps a fixed minimum: a store returns the same records whether it stays in memory or spills, so a small budget only spills more:
+
+- the delivery store's external sorts: runs of up to about P/6 (at least 2 MiB), merged 16 to 128 at a time with 256 KiB to 1 MiB buffers, so a sort of up to `singlePassBytes` needs one merge pass. Measured plans on a 16-core host: about 54 GB at 4 GiB with 16 workers (74 GB with one) and 6.0 GB at 1 GiB with its 6 workers (14 GB with one). The fixed 0.4.0 profile merged 32 runs of 24 MiB (0.8 GB) per pass;
+- the delivery store's SQLite page cache, P/8 (it was 8 MiB). SQLite's sorter keeps at most the same amount in memory. Its temporary store is in memory only when its bound fits P/16: every row it can hold is a charged delivery row, a tile or a reference, each at most 256 bytes as a sorter record (frame-carrying rows hold a 128-byte matrix), so the bound is `(totalPayloadElements ÷ 128 + hierarchyVisits + references) × 256` bytes. Otherwise, as for every archive under the default budget, it stays on disk, in the scratch directory (below);
+- the catalog page cache (P/32), the resident thresholds above and the stream log (P/32), and the payload-row sort (P/16).
+
+Workers replay HLOD payload geometry (the leaf, edge-face and coarse passes) a bounded window ahead of the pass that consumes them, and sort the delivery store's runs. The pass still consumes placements in order and makes every work charge, read admission and refusal at the point a single worker makes it, so work counts, refusals and reports are those of one worker. A worker's decoded views and surface are each capped at 8 MiB, and each job is charged its stored bytes plus 16 MiB against a window of 32 MiB per extra worker; a placement that needs more, a worker failure or a worker panic replays sequentially under the full per-item limit, with the same result (a panic then unwinds as usual). Jobs not yet started stop when their pass ends, fails or is cancelled. SQLite statements and the traversal run on one thread.
+
+Before traversal starts, free space on the scratch volume is checked. The HLOD delivery store's rows are geometry rows, so its terms follow the triangles the archive's GLB payloads declare (index or position count ÷ 3 of each triangle-list primitive, read from the JSON chunk while the member is hashed), not stored bytes: texture bytes add nothing. Measured peaks are 160 to 245 bytes per declared triangle (Walem 2048, a 4× Walem archive, two 1.3 M-triangle crops). The volume is refused as typed insufficient space (`io`, Python `TilesIOError`, with the needed and available bytes) only below the catalog's terms plus 16 bytes per declared triangle, a tenth of the smallest measured peak. Below the catalog's terms plus 256 bytes per triangle a `scratch_space` warning event is emitted (CLI `--progress json`, Python callback) and validation goes on. Like every preflight it is not a reservation, and neither figure is a proven bound.
+
+SQLite's own temporary files (its sorter runs, temporary tables and statement journals, about 0.4 GB for Walem 2048) are created in the scratch directory too, through a delegating SQLite VFS, so they land on the volume checked above and inside `--scratchDir`. They are deleted on close and are outside `scratch.peakBytes`. Where the VFS cannot be used (a scratch path that is not UTF-8 on Windows, or a failed registration) they stay in SQLite's own temporary directory and a `sqlite_temp_dir` warning event says so.
+
+The report's `resources` member states `memoryBudget` (`requestedBytes`, `resolvedBytes`, `source`: `explicit`, `default_ceiling`, `default_headroom` or `default_undetected`, `detectedHeadroomBytes`, `plannedBytes`), `jobs` (`requested`, `cores`, `jobs`, `limitedBy`), `stores` (`sortRunBytes`, `sortFanIn`, `sortBufferBytes`, `singlePassBytes`, `catalogCacheBytes`, `sqliteCacheBytes`, `sqliteTempStore`) and, once checked, `disk` (`estimatedPeakBytes`, `refusalBytes`, `availableBytes`). None of these change a verdict. Every report member except `resources` and `scratch` is identical for every budget and worker count.
 
 The report-less Rust facade `validate_3tz` never keeps its catalog in RAM. With only memory-backed candidates it is refused as `environment` (exit 4; Rust `Error::Scratch(ScratchRefusal::MemoryBackedOnly)`). Set `TMPDIR` to a disk-backed directory.
 
@@ -234,6 +260,13 @@ The report's `interfaceCensus` is derived from the archive alone, using decoded 
 | `contractedBorderArcs`, `contractedBorderVertices` | Shared borders delivered as one chord over two or more leaf edges, and the leaf border vertices those chords remove |
 | `droppedComponents`, `droppedByDepth` | Child components that coarse payloads no longer hold, by delivered cell depth |
 | `textureRefinableTiles`, `textureBoundTiles` | Tiles refinable to finer texels, and those whose `geometricError` is within 1% of the texture term |
+| `coarseNormals` | Coarse tiles that publish `NORMAL` and their faces (`tiles`, `faces`), tiles whose `NORMAL` is not compared (`skippedTiles`), and those with a face shaded against its winding (`invertedTiles`, `invertedFaces`, and the same `ByDepth`, by cell depth), against `boundDegrees` (90); see [coarse normals](#coarse-normals) |
+
+### Coarse normals
+
+For every coarse tile that publishes `NORMAL`, validation compares each face's corner normals with the face's own normal (wound by its corners, after the node transform). A corner normal more than 90° from its face means the face shades against its winding: under double-sided lighting it renders inverted. Such faces are counted in `interfaceCensus.coarseNormals` by cell depth and reported as the `coarseNormalInversion` warning. They never fail validation.
+
+The bound is 90° because that is where shading inverts, whatever smoothing a producer chose. `mesh` keeps every coarse corner normal within 60° of its face ([coarse normals](MESH.md#coarse-appearance)), so normal and position rounding stay far from the bound. Archives written before that change (issue #336) average every face at a vertex and usually carry the warning; rebuilding them removes it. Leaves are not compared: they keep the source's own normals. The comparison is charged to the existing work budget (6 units per face). It does not compare coarse orientation with the source surface, which remains not inspected. The comparison reads a `NORMAL` that is a VEC3 of floats or of normalized 8- or 16-bit integers, one per vertex, in a buffer view without an `EXT_meshopt_compression` filter. Any other coarse `NORMAL` that the earlier checks admit is not compared and never fails validation. Such tiles are counted as `skippedTiles`, and `notInspected` names the reason: `coarseNormalInversion.meshoptFilteredNormal` (for example `OCTAHEDRAL`), `.sparseNormal`, `.viewlessNormal` (zero storage without a buffer view) or `.unsupportedNormalAccessor`. `mesh` writes coarse normals the comparison reads.
 
 ### Border rules
 
@@ -369,7 +402,7 @@ The default ceilings are sized for default vector output at its 100,000-tile `--
 
 A refused charge against a cap or budget is `resource_limit`, with a message ending in `(limit KEY=VALUE, SOURCE)`, where `SOURCE` is `floor`, `scaled`, `explicit` or `cap`. The CLI error carries `"limit": {"limit", "value", "observed", "derivation"}`; Python has the same dict as `ResourceLimitError.limit`; Rust has `ValidationFailure::exceeded()`.
 
-Separately bounded ZIP envelope, tail and header reads are outside `totalBytesRead`. These limits are engineering bounds, not a promise about total process memory. Validation memory does not grow with tiles, references or payloads: the traversal keeps only its current path, per-payload facts spill to scratch above 100 MiB, and shared external-tileset summaries are capped at 64 MiB.
+Separately bounded ZIP envelope, tail and header reads are outside `totalBytesRead`. These limits are engineering bounds, not a promise about total process memory. Validation memory does not grow with tiles, references or payloads: the traversal keeps only its current path, per-payload facts spill to scratch above their [planned](#memory-workers-and-disk) threshold, and shared external-tileset summaries are capped at 64 MiB.
 
 ## Errors, cancellation and progress
 
@@ -387,7 +420,7 @@ Separately bounded ZIP envelope, tail and header reads are outside `totalBytesRe
 
 `InvalidState` reports an internal error, such as an exact-arithmetic capacity fault in decoded containment. It is never a verdict about the archive.
 
-Cancellation, through `inspect_with`'s control, a Python callback or Ctrl-C, is checked before each hashed member, traversal task, replayed external-tileset event, implicit tile and containment stream entry.
+Cancellation, through `inspect_with`'s control, a Python callback or Ctrl-C, is checked before each hashed member, traversal task, replayed external-tileset event, implicit tile and containment stream entry, and in the HLOD delivery stage at every charged row and every 10,000 SQLite operations. A Python callback (and so a Python Ctrl-C) runs at every event.
 
 Progress events use these phases; the CLI prints them with `--progress json`.
 
@@ -395,10 +428,12 @@ Progress events use these phases; the CLI prints them with `--progress json`.
 | --- | --- |
 | `validate.hash` | Hashing members |
 | `validate.traverse` | Walking the hierarchy |
+| `validate.delivery` | HLOD archives: the delivery stage's passes; `done` counts the passes started of `total` (20) |
+| `validate.delivery.leaves`, `.edges`, `.coarse` | HLOD archives: the leaf, edge-face and coarse geometry replays; `done` counts placements replayed of `total`, with an event every 1,024 |
 | `validate.stream` | Streaming decoded content for containment, only when it runs |
 | `validate.rows` | Ordering payload rows |
 
-The phase list is open and conditional. `done` never decreases within a phase, but an event may repeat: replaying a shared external tileset re-sends the current `validate.traverse` event every 1,024 replayed events as a heartbeat.
+The phase list is open and conditional. `done` never decreases within a phase, but an event may repeat: replaying a shared external tileset re-sends the current `validate.traverse` event every 1,024 replayed events as a heartbeat, and the delivery stage re-sends its current event every 65,536 charged rows and every 10,240,000 SQLite operations. The delivery phases alternate: each replay phase sits between two `validate.delivery` events.
 
 ## Design documents
 

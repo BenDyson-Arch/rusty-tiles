@@ -30,6 +30,8 @@ pub(crate) enum PreflightStage {
     Texture,
     /// HLOD coarse levels: interface incidence, source index and coarse payloads.
     Lod,
+    /// The validator's start-of-run bound (catalog, payload rows and HLOD delivery store).
+    Validation,
 }
 
 impl PreflightStage {
@@ -38,6 +40,7 @@ impl PreflightStage {
             Self::Geometry => "geometry",
             Self::Texture => "texture",
             Self::Lod => "lod",
+            Self::Validation => "validation",
         }
     }
 }

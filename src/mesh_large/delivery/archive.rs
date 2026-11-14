@@ -55,6 +55,7 @@ const SORT: SortConfig = SortConfig {
     fan_in: 64,
     buffer_bytes: 256 << 10,
     jobs: 1,
+    writers: 0,
 };
 
 /// Resident bytes of the archive writer: the index sorter, the central-directory spool,
@@ -322,6 +323,7 @@ mod tests {
             fan_in: 4,
             buffer_bytes: 4096,
             jobs: 1,
+            writers: 0,
         };
         let length = write_with(
             &staging,

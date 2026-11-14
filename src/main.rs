@@ -110,6 +110,16 @@ enum Command {
             value_parser = ["hlod"]
         )]
         expect_profile: Option<String>,
+        /// Memory budget the scratch stores are sized from: bytes, or with a KiB/MiB/GiB/TiB
+        /// suffix (2GiB). A ceiling, never raised; at least 512MiB. Default: the lesser of 4 GiB
+        /// and half the detected headroom. Verdicts and reports do not depend on it
+        #[arg(long = "memory-budget", visible_alias = "memoryBudget", value_name = "BYTES",
+              value_parser = parse_memory_budget)]
+        memory_budget: Option<u64>,
+        /// Maximum workers or auto (every core); capped by cores and the memory budget.
+        /// Verdicts and reports do not depend on it
+        #[arg(long, default_value = "auto")]
+        jobs: TilerJobs,
     },
     /// Check converter capabilities and local CRS resources
     Doctor(DoctorArgs),
@@ -300,6 +310,10 @@ struct DoctorArgs {
     /// Check only these converters; repeat to select several
     #[arg(long = "command", value_parser = doctor_commands())]
     commands: Vec<doctor::Command>,
+    /// Also resolve this source CRS (EPSG:<code>, WKT or PROJ) as the converters would,
+    /// and report its backend and any allow-listed datum operation with its accuracy
+    #[arg(long = "sourceCrs", visible_alias = "source-crs")]
+    source_crs: Option<String>,
     /// Cesium Build/Cesium directory to look for (informational preview check;
     /// the default is the README install location relative to the working directory)
     #[arg(
@@ -929,7 +943,7 @@ fn point_cloud_summary(result: &rusty_tiles::point_cloud::PointCloudResult) -> V
 }
 
 fn tiler_summary(result: &TilerResult) -> Value {
-    json!({
+    let mut summary = json!({
         "ok":true,
         "output":result.output.to_string_lossy(),
         "tilerReport":result.report,
@@ -937,7 +951,49 @@ fn tiler_summary(result: &TilerResult) -> Value {
         "counts":{"triangles":result.report.triangles,"tiles":result.report.tiles,"leaf_tiles":result.report.leaves},
         "conversionReport":{"archive":result.output.to_string_lossy(),"entry":"conversion.json"},
         "cleanupDiagnostics":cleanup_diagnostics_summary(&result.cleanup_diagnostics),
-    })
+    });
+    let report = json!(&result.report);
+    if let Some(operation) = report["source_crs"].get("datum_operation") {
+        summary["crsOperations"] = json!([operation]);
+    }
+    summary
+}
+
+/// Allow-listed EPSG datum operations a converter report names (point cloud at the top
+/// level, vector per layer), without duplicates.
+fn crs_operations(report: &Value) -> Vec<Value> {
+    let mut found: Vec<Value> = Vec::new();
+    let layers = report["layers"].as_array().into_iter().flatten();
+    for operation in std::iter::once(&report["crsOperation"])
+        .chain(layers.map(|layer| &layer["crsOperation"]))
+        .filter(|operation| operation.is_object())
+    {
+        if !found.contains(operation) {
+            found.push(operation.clone());
+        }
+    }
+    found
+}
+
+/// "EPSG:7856: GDA2020 to WGS 84 (2) (EPSG:8450), EPSG-stated accuracy 3 m"
+fn crs_operation_line(operation: &Value) -> String {
+    let accuracy = match (
+        operation["kind"].as_str(),
+        operation["accuracyMetres"].as_f64(),
+    ) {
+        (Some("conversion"), _) => "no datum change".to_owned(),
+        (_, Some(metres)) => format!("EPSG-stated accuracy {metres} m"),
+        _ => "EPSG states no accuracy".to_owned(),
+    };
+    let id = operation["operationId"]
+        .as_str()
+        .map(|id| format!(" ({id})"))
+        .unwrap_or_default();
+    format!(
+        "CRS operation: {}: {}{id}, {accuracy}",
+        operation["source"].as_str().unwrap_or("?"),
+        operation["operation"].as_str().unwrap_or("?")
+    )
 }
 
 fn model_summary(
@@ -1016,8 +1072,13 @@ fn output_summary(output: &Path, report: Option<&Value>, archive: bool) -> Value
             target.insert(key.clone(), value.clone());
         }
     }
-    json!({"ok":true,"output":output.to_string_lossy(),"counts":counts,"settings":settings,
-        "skippedFeatures":report["skippedFeatures"],"reuse":report["reuse"],"conversionReport":location})
+    let mut summary = json!({"ok":true,"output":output.to_string_lossy(),"counts":counts,"settings":settings,
+        "skippedFeatures":report["skippedFeatures"],"reuse":report["reuse"],"conversionReport":location});
+    let operations = crs_operations(report);
+    if !operations.is_empty() {
+        summary["crsOperations"] = Value::Array(operations);
+    }
+    summary
 }
 
 /// Quote a path for a copy-pasteable shell suggestion when needed.
@@ -1073,6 +1134,9 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
         format!(" ({})", parts.join(", "))
     };
     let mut lines = vec![format!("{command}: wrote {}{detail}", output.display())];
+    for operation in summary["crsOperations"].as_array().into_iter().flatten() {
+        lines.push(crs_operation_line(operation));
+    }
     let count = |key: &str| counts[key].as_u64().filter(|n| *n > 0);
     let mut warnings = Vec::new();
     if let Some(n) = count("skippedFeatures") {
@@ -1179,8 +1243,16 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             max_volume,
             scratch_dir,
             expect_profile,
+            memory_budget,
+            jobs,
         } => {
             let mut request = rusty_tiles::validate::ValidationRequest::new(&input);
+            if let Some(bytes) = memory_budget {
+                request = request.memory_budget(bytes);
+            }
+            if let TilerJobs::Maximum(n) = jobs {
+                request = request.jobs(n);
+            }
             if expect_profile.is_some() {
                 request = request.expect_profile(rusty_tiles::validate::ExpectedProfile::Hlod);
             }
@@ -1212,11 +1284,17 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
                 if !report.not_inspected.is_empty() {
                     outln!("Not inspected: {}", report.not_inspected.join(", "));
                 }
+                for warning in &report.warnings {
+                    errln!("warning: {}: {}", warning.code, warning.message);
+                }
             }
             Outcome::Validation(Box::new(report))
         }
         Command::Doctor(a) => {
-            let report = doctor::report(&a.commands, Some(&a.cesium));
+            let mut report = doctor::report(&a.commands, Some(&a.cesium));
+            if let Some(definition) = &a.source_crs {
+                report = report.with_source_crs(definition);
+            }
             // Each not-ready command carries the failure kind its own execution
             // check returns; present it with execution's category and status.
             // The first not-ready command in name order decides the process exit.

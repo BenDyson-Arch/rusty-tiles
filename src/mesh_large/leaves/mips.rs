@@ -55,7 +55,6 @@ pub(crate) struct Coverage {
 }
 #[derive(Debug)]
 pub(crate) struct Chain {
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     #[allow(dead_code)] // Retained measurement in the bounded encoding result.
     pub class: Class,
     pub levels: Vec<Level>,

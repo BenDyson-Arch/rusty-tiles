@@ -263,8 +263,10 @@ rusty-tiles validate output/example.3tz
 | `--maxVolume KEY=N` | `--max-volume` | profile defaults | Set an opt-in volume cap or replace an amplification budget. Repeatable, once per key. `KEY` is one of `sourceArchiveBytes`, `archiveEntries`, `centralDirectoryBytes`, `archiveStoredBytes`, `hierarchyVisits`, `references`, `totalBytesRead`, `totalPayloadElements`, `containmentWorkUnits`, `containmentBytesRead` or `containmentDecodedBytes`. `N` is a decimal integer and may be below the default (stricter). Per-item format limits are fixed. See [limits](VALIDATION.md#limits). |
 | `--scratchDir DIR` | `--scratch-dir` | `TMPDIR`, then the user cache directory, then the system temporary directory, disk-backed first | Put validation scratch files inside this existing directory |
 | `--expectProfile PROFILE` | `--expect-profile` | none | Require a delivery profile whatever the archive's labels say. `hlod` is the only value: every payload must carry source identity and every HLOD check runs. An archive that declares HLOD is held to it anyway. |
+| `--memory-budget BYTES` | `--memoryBudget` | lesser of 4 GiB and half the detected headroom (2 GiB if undetected) | Memory the scratch stores are sized from: sort runs and merge buffers, caches and the HLOD delivery store. Same syntax and default as `mesh`. A ceiling, never raised; below 512 MiB is refused as `resource_limit`. See [resources](VALIDATION.md#memory-workers-and-disk). |
+| `--jobs` | | `auto` | A positive maximum worker count, or `auto` (every core). Capped by cores and the memory budget. |
 
-The JSON report lists the `checks` that ran and what was `notInspected`, per-payload accessor, primitive and vertex counts, archive counts, and the `limits` used. Passing means the listed checks completed within the profile. It does not imply source fidelity, geometric-error accuracy, rendered extent, or metadata and material meaning. [Validation](VALIDATION.md) describes every check and limit.
+The JSON report lists the `checks` that ran and what was `notInspected`, per-payload accessor, primitive and vertex counts, archive counts, and the `limits` used. With `--memory-budget` or `--jobs`, its `resources` member states the resolved budget, the workers, the store sizes and the scratch-disk bound. Verdicts and every other member are the same for every budget and worker count. Passing means the listed checks completed within the profile. It does not imply source fidelity, geometric-error accuracy, rendered extent, or metadata and material meaning. [Validation](VALIDATION.md) describes every check and limit.
 
 Failures use `invalid_input` (exit 3), `unsupported` (exit 2), `resource_limit` (exit 3), `io` (exit 1) or `invalid_state` (exit 1, an internal error). Oversized inputs are refused as `resource_limit` before the work that limit covers. Parser usage errors exit 2. The Rust and Python APIs use the same inspection and limits.
 
@@ -315,6 +317,7 @@ rusty-tiles doctor --command vector --command terrain
 | --- | --- | --- |
 | `--command` | all | Check only these commands. Repeat to select several. Aliases are accepted. |
 | `--cesium DIR` | `target/preview-runtime/node_modules/cesium/Build/Cesium`, relative to the working directory | Where to look for a Cesium runtime. This check is informational only. |
+| `--sourceCrs` (`--source-crs`) | none | Also resolve this 2D horizontal EPSG, WKT or PROJ definition as the mesh, point-cloud and vector converters do, and report it as `sourceCrs`: `status`, `backend` (`portable` or `native`), the allow-listed EPSG datum `operation` with its stated accuracy, or the refusal `reason`. Informational: it never changes `status` or the exit code. |
 
 Each selected command has a `status`:
 
@@ -335,9 +338,15 @@ Requirements in the native-geospatial build:
 
 `doctor` reports linked GDAL, PROJ and GEOS versions when present, readiness for the selected commands, the PROJ search paths and the local grid count. `probes` names every check that ran. In a native-geospatial build the version, PROJ offline-policy and PROJ database checks always run. Configured PROJ directories (`PROJ_DATA`, `PROJ_LIB` and GDAL's search paths) are always listed, top level only and capped at 4096 entries per directory. GDAL driver, GEOS and Cesium checks run only for the commands that need them.
 
-Point-cloud readiness lists the pure-Rust CRS classes and native fallback readiness; grid-free placement needs no PROJ database. Standard-build vector readiness lists the GeoJSON and GeoPackage readers, Rust geometry support and grid-free CRS limits. Native vector readiness uses the converter's own GDAL and GEOS driver check.
+Point-cloud readiness lists the pure-Rust CRS classes, the [GDAL-verified EPSG allow-list](FORMATS.md#gdal-verified-epsg-allow-list) (`epsgAllowList`: code count, GDAL/PROJ/EPSG versions and whether this build uses it) and native fallback readiness; grid-free placement needs no PROJ database. Standard-build vector readiness lists the GeoJSON and GeoPackage readers, Rust geometry support and grid-free CRS limits. Native vector readiness uses the converter's own GDAL and GEOS driver check.
 
 `--command` limits the inventory in both human and JSON output; without it every command is listed. `doctor` starts no processes, keeps PROJ networking off, writes no files, installs nothing and fetches no grids. A listed grid does not prove a height operation is available; conversion checks the exact operation offline.
+
+## Stopping a run
+
+SIGINT (Ctrl-C) and SIGTERM stop a running command, as do Ctrl+C and Ctrl+Break in a Windows console. The converters and `validate` check for the stop in their long phases, including external sorts and merges, archive admission and hashing, SQLite work, payload staging and image processing, apart from the few calls named below. Such a run stops within a few seconds and removes its spill folders, private work folders and output staging. It publishes nothing and fails as `cancelled`, exiting 130 (SIGINT, Ctrl+C, Ctrl+Break) or 143 (SIGTERM). A stop that arrives once the output is being installed lets installation finish, and the command then reports its result.
+
+A few calls cannot see the stop while they run. These are a single KTX2 texture page encode, which can take minutes at the highest settings of the lossy escalation ladder, a single image decode, GDAL dataset flushes, native OGR feature counts and the final flush of a large output to disk. If a stopped run has not finished 20 seconds after the signal, the CLI removes the run's spill, work and staging paths itself and exits with the same status, without a JSON result. A second signal ends the process at once, without cleanup. So does a signal to a command with nothing to cancel, such as `preview` or `doctor`. A service manager's stop therefore ends after about 20 seconds plus the time to remove the run's temporary files, normally well inside systemd's default 90-second `TimeoutStopSec`. A killed process (SIGKILL, an out-of-memory kill) cannot clean up.
 
 ## Exit codes
 
@@ -351,6 +360,7 @@ Programs should test the exit code or `error.code`, not the message text.
 | 3 | `data` | Invalid input, invalid option value or failed validation |
 | 4 | `environment` | Missing native capability, PROJ database or strict CRS operation |
 | 5 | `output_conflict` | The output exists and `--force` was not given |
+| 130, 143 | `cancelled` | [Stopped](#stopping-a-run) by SIGINT (Ctrl-C, Ctrl+Break) or SIGTERM |
 
 `mesh`, `vector`, `point-cloud`, `raster`, `raster-tile-to-directory` and the packaging commands report error kinds instead:
 
@@ -418,13 +428,13 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 
 | Command | Phases |
 | --- | --- |
-| `mesh` | `capture`, `leaf_build`, `hlod_incidence`, `hlod_geometry`, `leaf_payloads`, `archive`, `ready_to_publish`; required events finish before installation. See the [mesh guide](MESH.md). |
+| `mesh` | `capture` (its steps `capture_scan`, `capture_validate`, `capture_corners`, `capture_positions`, `capture_triangles`, `capture_sequence`, `capture_images`, `capture_tree`, `capture_corner_depths`, `capture_leaf_plans` and, when a sort needs one, `capture_merge`, each with its total and repeated at least every 250 ms), `leaf_build`, `hlod_incidence` (its steps `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends` and, when a sort needs one, `hlod_incidence_merge`, reported the same way), `hlod_geometry`, `leaf_payloads`, `archive`, `ready_to_publish`; required events finish before installation. See the [mesh guide](MESH.md). |
 | `point-cloud` | `ingestion`, `tiling`, `point_archive`, `ready_to_publish`; these finish before installation |
 | `vector` | `ingestion`, `encoding` |
 | `raster` | `source_cog` and `aligned_warp` report progress out of 1,000,000. `tiling` reports completed tiles on the same scale and resets for each zoom. `raster_complete` reports the actual tile count before sealing and installation. |
 | `terrain` | `terrain`, counting tiles |
 | `convert` | `encoding`, `ready_to_publish`; these finish before installation |
-| `validate` | `validate.hash`, `validate.traverse`, `validate.stream`, `validate.rows`; see [validation](VALIDATION.md#errors-cancellation-and-progress) |
+| `validate` | `validate.hash`, `validate.traverse`, `validate.delivery` (HLOD archives, with `validate.delivery.leaves`, `.edges` and `.coarse`), `validate.stream`, `validate.rows`; see [validation](VALIDATION.md#errors-cancellation-and-progress) |
 
 Events report work units, not time remaining.
 

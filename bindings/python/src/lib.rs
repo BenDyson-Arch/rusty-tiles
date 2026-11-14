@@ -3,7 +3,7 @@ use pyo3::{
     create_exception,
     exceptions::{PyBaseException, PyException, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyBool, PyDict, PyInt, PyList},
+    types::{PyBool, PyByteArray, PyBytes, PyDict, PyInt, PyList, PyModule, PyTuple},
 };
 use serde_json::Value;
 use std::{
@@ -13,6 +13,7 @@ use std::{
 use tiles_core::{
     package::{package, PackageRequest},
     point_cloud::{PointCloudCoordinates, PointCloudCrs, PointCloudOptions, PointCloudRequest},
+    tile_view::{DecodedTile, TileLimit, TileSet},
     vector::{VectorLodOptions, VectorOptions},
     Error, JobError, JobErrorKind, JobFailure, MeshPlacement, MeshSourceCrs, ModelManifestRequest,
     ModelWrapRequest, Observer, OutputPolicy, RunControl, RunEvent, SourceAxes, TilerJobs,
@@ -986,10 +987,14 @@ impl ValidationPayloadsIter {
 /// in that existing directory. `expect_profile="hlod"` requires the 0.4 HLOD profile whatever
 /// the archive's labels say: every payload must carry source identity and every HLOD check
 /// runs (an archive declaring HLOD itself is held to it anyway); any other value raises
-/// `ValueError` before the archive is opened. `callback` receives progress events; raising from
-/// it (or Ctrl-C) stops the validation and the exception propagates.
+/// `ValueError` before the archive is opened. `memory_budget_bytes` (an int, default the
+/// lesser of 4 GiB and half the detected headroom) sizes the scratch stores, as for
+/// `mesh_to_tileset`; `jobs` (a positive int, default `None` for auto) caps parallel workers.
+/// Neither changes a verdict or any report member outside `resources` and `scratch`.
+/// `callback` receives progress events; raising from it (or Ctrl-C) stops the validation and
+/// the exception propagates.
 #[pyfunction]
-#[pyo3(signature = (input, *, lazy_payloads = false, max_volume = None, scratch_dir = None, expect_profile = None, callback = None))]
+#[pyo3(signature = (input, *, lazy_payloads = false, max_volume = None, scratch_dir = None, expect_profile = None, memory_budget_bytes = None, jobs = None, callback = None))]
 #[allow(clippy::too_many_arguments)]
 fn validate(
     py: Python<'_>,
@@ -998,6 +1003,8 @@ fn validate(
     max_volume: Option<Bound<'_, PyAny>>,
     scratch_dir: Option<PathBuf>,
     expect_profile: Option<String>,
+    memory_budget_bytes: Option<Bound<'_, PyAny>>,
+    jobs: Option<Bound<'_, PyAny>>,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<Py<PyAny>> {
     use tiles_core::validate::{ExpectedProfile, LimitKey, ValidationFailure, ValidationRequest};
@@ -1016,7 +1023,15 @@ fn validate(
     {
         return Err(PyTypeError::new_err("callback must be callable"));
     }
+    let memory_budget = tiler_memory_budget(py, memory_budget_bytes)?;
+    let jobs = tiler_jobs(py, jobs)?;
     let mut request = ValidationRequest::new(input);
+    if let Some(bytes) = memory_budget {
+        request = request.memory_budget(bytes);
+    }
+    if let TilerJobs::Maximum(n) = jobs {
+        request = request.jobs(n);
+    }
     if let Some(profile) = expected {
         request = request.expect_profile(profile);
     }
@@ -1091,9 +1106,361 @@ fn validate(
     Ok(report)
 }
 
+fn serialized_to_python(py: Python<'_>, value: serde_json::Result<Value>) -> PyResult<Py<PyAny>> {
+    json_to_python(py, &value.map_err(|e| TilesError::new_err(e.to_string()))?)
+}
+
+/// Resolve a source CRS exactly as the converters do, without converting anything.
+/// Returns a dict with `accepted`, `kind`, `definition`, `crsOperation`, `summary` and
+/// `refusal`; an unsupported definition is a result, not an exception.
+#[pyfunction]
+fn resolve_source_crs(py: Python<'_>, definition: String) -> PyResult<Py<PyAny>> {
+    if definition.trim().is_empty() {
+        return Err(InvalidRequestError::new_err(
+            "definition must be a non-empty CRS definition",
+        ));
+    }
+    // The first call decompresses the embedded EPSG table.
+    let resolution = py.detach(|| tiles_core::resolve_source_crs(&definition));
+    serialized_to_python(py, serde_json::to_value(resolution))
+}
+
+/// Every EPSG code this package resolves, as `EPSG:<code>` in numeric order.
+#[pyfunction]
+fn supported_epsg_codes(py: Python<'_>) -> Vec<String> {
+    py.detach(tiles_core::supported_epsg_codes)
+        .into_iter()
+        .map(|code| format!("EPSG:{code}"))
+        .collect()
+}
+
+/// The embedded EPSG table's EPSG, PROJ and GDAL versions and its code counts.
+#[pyfunction]
+fn crs_table_info(py: Python<'_>) -> PyResult<Py<PyAny>> {
+    let info = py.detach(tiles_core::crs_table_info);
+    serialized_to_python(py, serde_json::to_value(info))
+}
+
+/// The PEP 440 spelling of a Cargo version, as maturin writes it into the wheel metadata
+/// (`0.4.0-rc.1` is `0.4.0rc1`, `0.4.1-dev.202611121734` is `0.4.1.dev202611121734`), so
+/// `__version__` matches `importlib.metadata.version("rusty-tiles")`. Pre-release identifiers
+/// other than `alpha.N`, `beta.N`, `rc.N` and `dev.N` keep the Cargo spelling, which the
+/// installed-wheel suite then rejects.
+fn python_version(cargo: &str) -> String {
+    let Some((release, pre)) = cargo.split_once('-') else {
+        return cargo.to_owned();
+    };
+    let identifiers: Vec<&str> = pre.split('.').collect();
+    let mut python = release.to_owned();
+    for pair in identifiers.chunks(2) {
+        let [kind, number] = pair else {
+            return cargo.to_owned();
+        };
+        if number.is_empty() || !number.bytes().all(|byte| byte.is_ascii_digit()) {
+            return cargo.to_owned();
+        }
+        python.push_str(match *kind {
+            "alpha" => "a",
+            "beta" => "b",
+            "rc" => "rc",
+            "dev" => ".dev",
+            _ => return cargo.to_owned(),
+        });
+        python.push_str(number);
+    }
+    python
+}
+
+fn job_error_to_python(py: Python<'_>, error: JobError) -> PyErr {
+    // A tile-view limit refusal carries its fixed limit as the cause, like `validate`'s
+    // structured `limit`; other resource refusals set `limit` to None.
+    let limit = (error.kind() == JobErrorKind::ResourceLimit).then(|| {
+        std::error::Error::source(&error)
+            .and_then(|cause| cause.downcast_ref::<TileLimit>())
+            .copied()
+    });
+    let exception = job_failure_to_python(
+        py,
+        JobFailure {
+            error,
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        },
+    );
+    if let Some(limit) = limit {
+        let value = match limit {
+            Some(limit) => {
+                let dict = PyDict::new(py);
+                let _ = dict.set_item("limit", limit.limit);
+                let _ = dict.set_item("value", limit.value);
+                let _ = dict.set_item("observed", limit.observed);
+                let _ = dict.set_item("derivation", "fixed");
+                dict.into_any().unbind()
+            }
+            None => py.None(),
+        };
+        let _ = exception.value(py).setattr("limit", value);
+    }
+    exception
+}
+
+/// A column-major 4x4 matrix as four row lists.
+fn matrix_rows(m: &[f64; 16]) -> Vec<Vec<f64>> {
+    (0..4)
+        .map(|r| (0..4).map(|c| m[r + 4 * c]).collect())
+        .collect()
+}
+
+/// The content tiles of a `.3tz` archive or unpacked tileset directory, parent before
+/// children: one dict per content URI with `uri`, `depth` (hops from the root, which is 0), `role` (`"leaf"` without
+/// child tiles, else `"coarse"`), `geometric_error` and `transform` (the accumulated tile
+/// transform as four row lists, tile frame to the tileset's world). The GIL is released while
+/// the tileset is read.
+#[pyfunction]
+#[pyo3(signature = (archive))]
+fn list_tiles(py: Python<'_>, archive: PathBuf) -> PyResult<Py<PyAny>> {
+    let tiles = py
+        .detach(|| TileSet::open(&archive).map(|set| set.tiles().to_vec()))
+        .map_err(|error| job_error_to_python(py, error))?;
+    let list = PyList::empty(py);
+    for tile in tiles {
+        let entry = PyDict::new(py);
+        entry.set_item("uri", tile.uri)?;
+        entry.set_item("depth", tile.depth)?;
+        entry.set_item("role", tile.role.as_str())?;
+        entry.set_item("geometric_error", tile.geometric_error)?;
+        entry.set_item("transform", matrix_rows(&tile.transform))?;
+        list.append(entry)?;
+    }
+    Ok(list.into_any().unbind())
+}
+
+/// A writable NumPy array over a new `bytearray` of `length` bytes filled by `fill`
+/// (little-endian `dtype`), in `shape`. The bytearray is the only Python copy.
+fn ndarray<'py>(
+    numpy: &Bound<'py, PyModule>,
+    length: usize,
+    fill: impl FnOnce(&mut [u8]),
+    dtype: &str,
+    shape: &[usize],
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = numpy.py();
+    let buffer = PyByteArray::new_with(py, length, |bytes| {
+        fill(bytes);
+        Ok(())
+    })?;
+    numpy
+        .call_method1("frombuffer", (buffer, dtype))?
+        .call_method1("reshape", (PyTuple::new(py, shape)?,))
+}
+
+/// An array of `N`-component rows, each component `W` little-endian bytes.
+fn rows<'py, T: Copy, const N: usize, const W: usize>(
+    numpy: &Bound<'py, PyModule>,
+    values: &[[T; N]],
+    bytes: impl Fn(T) -> [u8; W],
+    dtype: &str,
+    shape: &[usize],
+) -> PyResult<Bound<'py, PyAny>> {
+    ndarray(
+        numpy,
+        values.len() * N * W,
+        |out| {
+            for (chunk, &value) in out
+                .as_chunks_mut::<W>()
+                .0
+                .iter_mut()
+                .zip(values.iter().flatten())
+            {
+                *chunk = bytes(value);
+            }
+        },
+        dtype,
+        shape,
+    )
+}
+
+fn raw<'py>(
+    numpy: &Bound<'py, PyModule>,
+    bytes: &[u8],
+    dtype: &str,
+    shape: &[usize],
+) -> PyResult<Bound<'py, PyAny>> {
+    ndarray(
+        numpy,
+        bytes.len(),
+        |out| out.copy_from_slice(bytes),
+        dtype,
+        shape,
+    )
+}
+
+fn matrix_array<'py>(numpy: &Bound<'py, PyModule>, m: &[f64; 16]) -> PyResult<Bound<'py, PyAny>> {
+    let matrix: Vec<[f64; 4]> = (0..4).map(|r| [0, 1, 2, 3].map(|c| m[r + 4 * c])).collect();
+    rows(numpy, &matrix, f64::to_le_bytes, "<f8", &[4, 4])
+}
+
+/// Consumes the decoded tile so each Rust array is released after its copy.
+fn arrays_to_python(
+    py: Python<'_>,
+    numpy: &Bound<'_, PyModule>,
+    tile: DecodedTile,
+) -> PyResult<Py<PyAny>> {
+    let out = PyDict::new(py);
+    out.set_item("uri", &tile.tile.uri)?;
+    out.set_item("depth", tile.tile.depth)?;
+    out.set_item("role", tile.tile.role.as_str())?;
+    out.set_item("geometric_error", tile.tile.geometric_error)?;
+    out.set_item("transform", matrix_array(numpy, &tile.tile.transform)?)?;
+    out.set_item("root_transform", matrix_array(numpy, &tile.root_transform)?)?;
+    let primitives = PyList::empty(py);
+    for p in tile.primitives {
+        let d = PyDict::new(py);
+        d.set_item("node", p.node)?;
+        d.set_item("mesh", p.mesh)?;
+        d.set_item("primitive", p.primitive)?;
+        d.set_item("material", p.material)?;
+        let n = p.positions.len();
+        d.set_item(
+            "positions",
+            rows(numpy, &p.positions, f64::to_le_bytes, "<f8", &[n, 3])?,
+        )?;
+        drop(p.positions);
+        let t = p.indices.len();
+        d.set_item(
+            "indices",
+            rows(numpy, &p.indices, u32::to_le_bytes, "<u4", &[t, 3])?,
+        )?;
+        let normals = match &p.normals {
+            None => py.None().into_bound(py),
+            Some(v) => rows(numpy, v, f32::to_le_bytes, "<f4", &[n, 3])?,
+        };
+        d.set_item("normals", normals)?;
+        let uvs = p
+            .uvs
+            .iter()
+            .map(|set| rows(numpy, set, f32::to_le_bytes, "<f4", &[n, 2]))
+            .collect::<PyResult<Vec<_>>>()?;
+        d.set_item("uvs", uvs)?;
+        let colors = match &p.colors {
+            None => py.None().into_bound(py),
+            Some(v) => rows(numpy, v, f32::to_le_bytes, "<f4", &[n, 4])?,
+        };
+        d.set_item("colors", colors)?;
+        let sets = PyList::empty(py);
+        for set in &p.feature_ids {
+            let s = PyDict::new(py);
+            s.set_item("label", &set.label)?;
+            s.set_item("feature_count", set.feature_count)?;
+            s.set_item("null_feature_id", set.null_feature_id)?;
+            s.set_item("property_table", set.property_table)?;
+            let values = set.values.as_chunks::<1>().0;
+            s.set_item(
+                "values",
+                rows(numpy, values, u32::to_le_bytes, "<u4", &[n])?,
+            )?;
+            sets.append(s)?;
+        }
+        d.set_item("feature_ids", sets)?;
+        primitives.append(d)?;
+    }
+    out.set_item("primitives", primitives)?;
+    let pages = PyList::empty(py);
+    for page in tile.pages {
+        let shape = [page.height as usize, page.width as usize, 4];
+        pages.append(raw(numpy, &page.rgba, "u1", &shape)?)?;
+    }
+    out.set_item("pages", pages)?;
+    let tables = PyList::empty(py);
+    for table in tile.property_tables {
+        let t = PyDict::new(py);
+        t.set_item("class", &table.class)?;
+        t.set_item("count", table.count)?;
+        let properties = PyDict::new(py);
+        let transforms = PyDict::new(py);
+        for column in &table.columns {
+            let dtype = match column.component_type.as_str() {
+                "UINT8" => "u1",
+                "INT8" => "i1",
+                "UINT16" => "<u2",
+                "INT16" => "<i2",
+                "UINT32" => "<u4",
+                "INT32" => "<i4",
+                "UINT64" => "<u8",
+                "INT64" => "<i8",
+                "FLOAT32" => "<f4",
+                _ => "<f8",
+            };
+            let count = table.count as usize;
+            properties.set_item(&column.name, raw(numpy, &column.bytes, dtype, &[count])?)?;
+            if column.normalized || column.offset.is_some() || column.scale.is_some() {
+                let transform = PyDict::new(py);
+                transform.set_item("normalized", column.normalized)?;
+                transform.set_item("offset", column.offset)?;
+                transform.set_item("scale", column.scale)?;
+                transforms.set_item(&column.name, transform)?;
+            }
+        }
+        t.set_item("properties", properties)?;
+        t.set_item("value_transforms", transforms)?;
+        let skipped = PyDict::new(py);
+        for (name, reason) in &table.skipped {
+            skipped.set_item(name, reason)?;
+        }
+        t.set_item("skipped", skipped)?;
+        tables.append(t)?;
+    }
+    out.set_item("property_tables", tables)?;
+    out.set_item("materials", json_to_python(py, &tile.materials)?)?;
+    out.set_item("textures", json_to_python(py, &tile.textures)?)?;
+    out.set_item("samplers", json_to_python(py, &tile.samplers)?)?;
+    Ok(out.into_any().unbind())
+}
+
+/// One content member of a `.3tz` archive or unpacked tileset directory, decoded for
+/// display and inspection. This is a view, not a reversible round trip: nothing is
+/// re-encoded and an edited result cannot be published back.
+///
+/// `member` is a content URI from `list_tiles`. `format="glb"` returns the bytes of a plain
+/// glTF 2.0 GLB: `EXT_meshopt_compression` views decoded, `KHR_texture_basisu` pages
+/// transcoded to PNG at level 0 (further mip levels are dropped), everything else kept,
+/// including samplers, materials, `KHR_mesh_quantization`, `EXT_mesh_features` and
+/// `EXT_structural_metadata`. `format="arrays"` needs NumPy and returns a dict of arrays per
+/// primitive in the tile frame (see the README). The GIL is released while decoding.
+#[pyfunction]
+#[pyo3(signature = (archive, member, *, format = "glb"))]
+fn decode_tile(
+    py: Python<'_>,
+    archive: PathBuf,
+    member: String,
+    format: &str,
+) -> PyResult<Py<PyAny>> {
+    match format {
+        "glb" => {
+            let bytes = py
+                .detach(|| TileSet::open(&archive)?.plain_glb(&member))
+                .map_err(|error| job_error_to_python(py, error))?;
+            Ok(PyBytes::new(py, &bytes).into_any().unbind())
+        }
+        "arrays" => {
+            let numpy = py.import("numpy").map_err(|error| {
+                EnvironmentError::new_err(format!("format=\"arrays\" needs NumPy: {error}"))
+            })?;
+            let tile = py
+                .detach(|| TileSet::open(&archive)?.arrays(&member))
+                .map_err(|error| job_error_to_python(py, error))?;
+            arrays_to_python(py, &numpy, tile)
+        }
+        other => Err(InvalidRequestError::new_err(format!(
+            "format must be \"glb\" or \"arrays\", not {other:?}"
+        ))),
+    }
+}
+
 #[pymodule]
 fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    module.add("__version__", python_version(env!("CARGO_PKG_VERSION")))?;
     module.add_class::<ValidationPayloads>()?;
     module.add_class::<VectorResult>()?;
     module.add_class::<PointCloudResult>()?;
@@ -1137,7 +1504,36 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(vector_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(convert_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(validate, module)?)?;
+    module.add_function(wrap_pyfunction!(resolve_source_crs, module)?)?;
+    module.add_function(wrap_pyfunction!(supported_epsg_codes, module)?)?;
+    module.add_function(wrap_pyfunction!(crs_table_info, module)?)?;
+    module.add_function(wrap_pyfunction!(list_tiles, module)?)?;
+    module.add_function(wrap_pyfunction!(decode_tile, module)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::python_version;
+
+    #[test]
+    fn cargo_versions_use_the_wheel_metadata_spelling() {
+        for (cargo, python) in [
+            ("0.4.0", "0.4.0"),
+            ("0.4.0-rc.1", "0.4.0rc1"),
+            ("0.4.0-alpha.2", "0.4.0a2"),
+            ("0.4.0-beta.3", "0.4.0b3"),
+            ("0.4.1-dev.202611121734", "0.4.1.dev202611121734"),
+            ("0.4.0-rc.1.dev.2", "0.4.0rc1.dev2"),
+            ("0.4.0-dev.0", "0.4.0.dev0"),
+            // Not a supported pre-release: kept, so the installed-wheel suite fails.
+            ("0.4.0-nightly.1", "0.4.0-nightly.1"),
+            ("0.4.0-rc", "0.4.0-rc"),
+            ("0.4.0-rc.x", "0.4.0-rc.x"),
+        ] {
+            assert_eq!(python_version(cargo), python, "{cargo}");
+        }
+    }
 }
 
 #[cfg(test)]

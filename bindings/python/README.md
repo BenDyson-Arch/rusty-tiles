@@ -3,11 +3,13 @@
 Convert meshes, GeoJSON/GeoPackage vectors and LAS/LAZ point clouds to 3D Tiles from Python, including Blender's bundled Python.
 Self-contained wheels: no GDAL, CLI, Rust compiler or other Python packages are needed at runtime.
 
+**Status:** pre-1.0 and under active development. Function signatures, report fields, error types and archive bytes can change in any release, including patch releases; each change is listed in the [release notes](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/CHANGELOG.md). Pin the version (for example `rusty-tiles==0.4.1`) in add-ons and scripts you ship. Output archives are standard 3D Tiles 1.1, so viewers are not affected.
+
 ```sh
 python -m pip install rusty-tiles
 ```
 
-Wheels need CPython 3.10 or newer and use the stable ABI, so one wheel covers later Python versions. They are built for Linux x86_64 and ARM64 (manylinux_2_28, glibc 2.28+), macOS 15+ on Intel and Apple Silicon, and Windows x64. They are tested inside official Blender 4.5.14 LTS on Linux x64, Windows x64 and both macOS architectures; Linux ARM64 has no official Blender 4.5 bundle.
+Wheels need CPython 3.10 or newer and use the stable ABI, so one wheel covers later Python versions. They are built for Linux x86_64 and ARM64 (manylinux_2_28, glibc 2.28+), macOS 15+ on Apple Silicon, and Windows x64. They are tested inside official Blender 4.5.14 LTS (Python 3.11) and 5.2.4 LTS (Python 3.13) on Linux x64, Windows x64 and Apple Silicon macOS. Neither series has an official Linux ARM64 build. Intel Macs are not supported from 0.4.1: pip finds no wheel there (there is no source distribution), so keep 0.4.0 or build the wheel from source with `maturin build --release` (see [INSTALL](../../docs/INSTALL.md#intel-macs)).
 
 ## Example
 
@@ -28,7 +30,7 @@ assert rusty_tiles.validate(result.output)["ok"]
 
 ## API
 
-All inputs and outputs are filesystem paths (`str` or `os.PathLike`). All keywords are keyword-only. Existing outputs are kept unless `force=True`. Without a callback, functions are silent.
+Converter inputs and outputs are filesystem paths (`str` or `os.PathLike`). All keywords are keyword-only. Existing outputs are kept unless `force=True`. Without a callback, functions are silent.
 
 | Function | Keyword arguments and result |
 | --- | --- |
@@ -38,7 +40,12 @@ All inputs and outputs are filesystem paths (`str` or `os.PathLike`). All keywor
 | `point_cloud_to_3tz(input, output, ...)` | required `source_crs`, `force=False`, `height_offset=None`, `max_points=8192` (also the maximum), `chunk_points=100000`, `metadata=False`, `metadata_attributes=False`, `callback=None`; returns `PointCloudResult` |
 | `vector_to_3tz(input, output, ...)` | GeoJSON or GeoPackage; see [Vectors](#vectors); returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; packs an existing tileset directory and returns `PackageResult` |
-| `validate(input, ...)` | `lazy_payloads=False`, `max_volume=None`, `scratch_dir=None`, `expect_profile=None`, `callback=None`; returns the validation report as a `dict` |
+| `validate(input, ...)` | `lazy_payloads=False`, `max_volume=None`, `scratch_dir=None`, `expect_profile=None`, `memory_budget_bytes=None`, `jobs=None`, `callback=None`; returns the validation report as a `dict` |
+| `resolve_source_crs(definition)` | Resolves one CRS definition as the converters do, without converting; returns a `dict`, see [Source CRS checks](#source-crs-checks) |
+| `supported_epsg_codes()` | Every EPSG code this package resolves, as `"EPSG:nnnn"` strings in numeric order |
+| `crs_table_info()` | The EPSG table's `epsg`, `proj` and `gdal` versions and its `codes`, `builtin` and `allowList` counts, as a `dict` |
+| `list_tiles(archive)` | Lists the content tiles of a `.3tz` archive or unpacked tileset directory; returns a `list` of `dict`s; see [Decoded tile views](#decoded-tile-views) |
+| `decode_tile(archive, member, ...)` | `format="glb"` (plain GLB `bytes`) or `"arrays"` (a `dict` of NumPy arrays); see [Decoded tile views](#decoded-tile-views) |
 | `raster_tile_to_directory(input, output, *, zoom, x, y, force=False, callback=None)` | Always raises `UnsupportedError` in this package; see [Not included](#not-included) |
 
 Every result has `output` (the resolved absolute path) and `cleanup_diagnostics`. `PackageResult` has a `receipt`; the others have a required `report` dictionary, and `TilerResult` also has `diagnostics`. `TilerResult`, `PointCloudResult`, `VectorResult` and `PackageResult` have `archive=True`. Results are frozen, but their dictionaries are not deeply immutable.
@@ -204,9 +211,14 @@ rusty_tiles.point_cloud_to_3tz(
 ```
 
 The package supports verified grid-free WGS84 geographic, UTM and Mercator
-transforms, plus supported WKT/PROJ local projections with explicit WGS84 or
-Helmert datum parameters. Grid-dependent, compound/geoid, dynamic or unknown
-datums raise `UnsupportedError` naming the native build. See the
+transforms, about 3,100 further EPSG codes from the
+[GDAL-verified allow-list](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/FORMATS.md#gdal-verified-epsg-allow-list)
+(such as GDA2020/GDA94 MGA, NZTM2000 and ETRS89 UTM), plus supported WKT/PROJ
+local projections with explicit WGS84 or Helmert datum parameters. A report for an
+allow-listed code names its EPSG datum operation and stated accuracy as
+`crsOperation`. Grid-dependent (such as British National Grid and NAD27),
+compound/geoid, dynamic or unknown datums and coordinate epochs raise
+`UnsupportedError` naming the native build. See the
 [CRS limits](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/FORMATS.md#point-clouds).
 Text `.xyz` files and in-memory buffers are not supported.
 
@@ -214,6 +226,36 @@ Text `.xyz` files and in-memory buffers are not supported.
 default only position and colour are kept). `metadata_attributes=True` adds
 point attributes named `vertex_classification`, `vertex_intensity` and
 `vertex_return_number`.
+
+### Source CRS checks
+
+`resolve_source_crs(definition)` is the package's form of `doctor --sourceCrs`: it runs
+the converters' own resolver on an EPSG code, WKT or PROJ string and reads no data, so
+a tool can show the datum operation before a long conversion.
+
+```python
+check = rusty_tiles.resolve_source_crs("EPSG:7856")
+# {"accepted": True, "kind": "allowlist", "definition": "+proj=utm +zone=56 ...",
+#  "crsOperation": {"source": "EPSG:7856", "kind": "null",
+#                   "operation": "GDA2020 to WGS 84 (2)", "operationId": "EPSG:8450",
+#                   "accuracyMetres": 3.0, "verification": "..."},
+#  "summary": "EPSG:7856: GDA2020 to WGS 84 (2) (EPSG:8450), EPSG-stated accuracy 3 m",
+#  "refusal": None}
+```
+
+`kind` is `"builtin"` (WGS 84 geographic, UTM and Mercator), `"allowlist"` (any other
+EPSG code), `"wkt"` or `"proj"`, or `None` for text of none of those forms.
+`definition` is the text the transform is built from. `crsOperation` has the same
+shape as the reports' `crsOperation` and is `None` except for allow-listed codes;
+`summary` is its one-line form, or `"EPSG:nnnn: WGS 84, no datum change"` for a
+built-in code. An unsupported definition is returned with `accepted=False` and the
+converters' `refusal` message instead of raising. A non-`str` argument raises
+`TypeError` and an empty one `InvalidRequestError`.
+
+`supported_epsg_codes()` lists exactly the codes `resolve_source_crs` accepts (about
+3,200); `crs_table_info()` gives the EPSG, PROJ and GDAL versions they were verified
+with. No CRS names or areas of use are included: take those from your own catalogue,
+such as pyproj.
 
 ### Vectors
 
@@ -264,11 +306,99 @@ list, or a lazy sequence when `lazy_payloads=True`.
   labels say: every payload must carry source identity and every HLOD check
   runs. An archive that declares HLOD is held to it anyway. Any other value
   raises `ValueError` before the archive is opened.
-- `callback` receives progress events; raising from it, or Ctrl-C, stops
-  validation.
+- `memory_budget_bytes` (an `int`) sizes the scratch stores, with the same
+  rule and default as `mesh_to_tileset`; below 512 MiB raises
+  `ResourceLimitError`. `jobs` (a positive `int`, or `None` for auto) caps the
+  workers. Neither changes a verdict or any report entry outside `resources`
+  and `scratch`; `resources`, present when either is given, states what was
+  resolved.
+- `callback` receives progress events with totals, including the HLOD
+  `validate.delivery` phases; raising from it, or Ctrl-C, stops validation.
 
 A limit refusal raises `ResourceLimitError` whose `limit` attribute is
 `{"limit", "value", "observed", "derivation"}`.
+
+### Decoded tile views
+
+`list_tiles` and `decode_tile` read one tile of a `.3tz` archive or an unpacked
+tileset directory for viewers that read neither `EXT_meshopt_compression` nor
+`KHR_texture_basisu`, such as Blender's bundled glTF importer. A decoded tile
+is a view for display and inspection, not a reversible round trip: nothing is
+re-encoded, and an edited view cannot be published back.
+
+```python
+tiles = rusty_tiles.list_tiles("site.3tz")
+leaf = max((t for t in tiles if t["role"] == "leaf"), key=lambda t: t["depth"])
+Path("leaf.glb").write_bytes(rusty_tiles.decode_tile("site.3tz", leaf["uri"]))
+arrays = rusty_tiles.decode_tile("site.3tz", leaf["uri"], format="arrays")
+```
+
+- `list_tiles(archive)` returns one dict per content URI, parent before
+  children, with external documents and implicit subtrees expanded: `uri`,
+  `depth` (hops from the root, which is 0; this can differ from the level in a
+  member's file name), `role` (`"leaf"` for a tile without children,
+  otherwise `"coarse"`), `geometric_error` and `transform`, the accumulated
+  tile transform as four row lists (tile frame to the tileset's world, ECEF
+  for placed output).
+- `decode_tile(archive, member, *, format="glb")` takes a `uri` from
+  `list_tiles`; any other member raises `InvalidRequestError`.
+- `format="glb"` returns the `bytes` of a plain glTF 2.0 GLB with one embedded
+  buffer. Meshopt views are decoded, and KTX2/Basis pages are transcoded to PNG
+  at level 0; their other mip levels are dropped. Everything else is kept:
+  accessors (so `KHR_mesh_quantization`, which Blender reads), samplers,
+  materials, `_FEATURE_ID_n` attributes with `EXT_mesh_features`, and
+  `EXT_structural_metadata` property tables.
+- `format="arrays"` needs NumPy (Blender bundles it); without it the call
+  raises `EnvironmentError`. It returns a dict with the tile's `uri`, `depth`,
+  `role` and `geometric_error`, `transform` and `root_transform` as (4, 4)
+  float64 arrays, `primitives`, `pages`, `property_tables`, and the document's
+  `materials`, `textures` and `samplers`. A texture's `source` indexes `pages`.
+- Each primitive has `node`, `mesh`, `primitive`, `material`, `positions`
+  ((N, 3) float64), `indices` ((T, 3) uint32), `normals` ((N, 3) float32 or
+  `None`), `uvs` (a list of (N, 2) float32 arrays, `TEXCOORD_0` first),
+  `colors` ((N, 4) float32 or `None`) and `feature_ids`. Each feature-ID set is
+  a dict with `label`, `feature_count`, `null_feature_id`, `property_table` and
+  per-vertex `values` ((N,) uint32). Leaves carry `source_primitive` and
+  `source_triangle`; coarse tiles carry `source_primitive` only. A face's ID
+  is the value at any of its corners. Triangles are counter-clockwise front
+  faces in the tile frame: under a mirroring node transform (negative
+  determinant) corners 1 and 2 are swapped relative to the GLB.
+- `pages` holds one (H, W, 4) uint8 RGBA array per glTF image, top row first.
+  Each property table is a dict with `class`, `count`, `properties` (name to a
+  1-D array of the stored values in the schema's component type),
+  `value_transforms` and `skipped`. Values are returned as stored: where a
+  property is `normalized` or has an `offset` or `scale`, `value_transforms`
+  holds them, and its value is `offset + scale * v` (normalize `v` first; an
+  omitted offset is 0 and scale 1). `noData` and `default` are not applied.
+  Properties that are not numeric scalars (strings, enums, booleans, arrays,
+  vectors, matrices) are not decoded; `skipped` maps each name to the reason.
+- Positions and normals are in the tile frame: node transforms are applied and
+  glTF Y-up is turned to Z-up, `(x, -z, y)`, which is the frame Blender's
+  importer shows. `transform @ [x, y, z, 1]` is the world position. Mesh tiler
+  output has a transform on the root only, so positions are already in its
+  local frame (see the
+  [mesh guide](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#decoded-tile-views)).
+
+Both functions release the GIL while reading and decoding. Malformed content
+raises `DataError`; other codecs, external resources, legacy tile formats and,
+in a directory, members that are symlinks or not regular files raise
+`UnsupportedError`. Each decode is bounded before it allocates or walks:
+
+- a member of at most 1 GiB, and JSON (a tile's JSON chunk or one tileset
+  document) of at most 64 MiB, counted at 16 times its size once parsed;
+- at most 1 GiB held at once by one decode: the parsed JSON, decoded views and
+  outputs stay held, decode scratch is released as it is freed, and the copy
+  into Python is counted as it happens (one primitive, page or table at a time
+  for arrays, the whole GLB for `format="glb"`), so a tile with two 8192 x 8192
+  pages decodes;
+- 65,536 node visits plus primitive instances;
+- pages of at most 16384 texels per edge and 8192 x 8192 texels in total, sized
+  from their headers.
+
+A refusal raises `ResourceLimitError` whose `limit` is
+`{"limit", "value", "observed", "derivation": "fixed"}`, with `limit` one of
+`memberBytes`, `jsonBytes`, `decodedBytes`, `sceneWork`, `pageEdge` or
+`pageTexels`.
 
 ## Callbacks and threads
 
@@ -291,7 +421,11 @@ callback cannot redirect the output. If the callback failure is the job's first
 fatal cause, the original exception is raised. Nested and concurrent calls are
 independent. Pending Python signals are checked during preparation and events,
 not after installation; an asynchronous interruption or allocation failure
-after commit can still interrupt the caller.
+after commit can still interrupt the caller. A `KeyboardInterrupt` seen at one
+of these checks stops the job like a CLI stop: it removes its scratch and
+staging before the exception reaches the caller. Ctrl-C is noticed at the next
+progress event, so between events (for example during one KTX2 texture page
+encode) it waits for that event. The bindings have no backstop like the CLI's.
 
 ## Errors
 
@@ -340,23 +474,26 @@ records the Blender and Python versions, platform, wheel SHA-256 and test
 counts; `test_python_wheel.py` also accepts `--report-json`. Both runners need
 fresh results matching the wheel and replace an earlier report.
 
-To repeat the official Blender check with host Python 3.12 or newer, pick
-`linux-x64`, `windows-x64`, `macos-x64` or `macos-arm64` for your host:
+To repeat the official Blender check with host Python 3.12 or newer, pick a
+release series (`4.5` or `5.2`) and a platform for your host: `linux-x64`,
+`windows-x64` or `macos-arm64`:
 
 ```sh
-python scripts/download_blender.py --platform linux-x64 --directory /tmp/official-blender --report-json target/blender-distribution.json
-python scripts/test_blender_wheel.py target/wheels/*.whl --blender /tmp/official-blender/blender-4.5.14-linux-x64/blender --distribution-json target/blender-distribution.json --report-json target/blender-acceptance.json
+python scripts/download_blender.py --release 5.2 --platform linux-x64 --directory /tmp/official-blender --report-json target/blender-distribution.json
+python scripts/test_blender_wheel.py target/wheels/*.whl --blender /tmp/official-blender/blender-5.2.4-linux-x64/blender --distribution-json target/blender-distribution.json --report-json target/blender-acceptance.json
 ```
 
 The downloader verifies each archive against the checksums pinned in
-`scripts/blender_official.json` (from
-[Blender's published checksums](https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256))
+`scripts/blender_official.json`, copied from Blender's published checksum
+files for [4.5.14](https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256)
+and [5.2.4](https://download.blender.org/release/Blender5.2/blender-5.2.4.sha256),
 before extraction. It needs a new directory, prints the executable path and
 records it in its JSON. On macOS it copies the application from a read-only DMG
 mount and detaches it; it does not modify a system installation. The runner
-checks the extracted executable's hash, Blender version and architecture.
-Blender 4.5 LTS is supported until July 2027 and is the last official release
-series for Intel macOS; see
+checks the extracted executable's hash, Blender and Python versions and
+architecture. Blender 4.5 LTS is supported until July 2027 and Blender 5.2 LTS
+until July 2028. Intel macOS bundles are not pinned: rusty-tiles has no Intel
+macOS wheel from 0.4.1. See
 [Blender's compatibility notes](https://developer.blender.org/docs/release_notes/compatibility/).
 CI acceptance and updating the Blender pin are described in
 [CONTRIBUTING.md](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/CONTRIBUTING.md#python-acceptance).

@@ -3,7 +3,10 @@
 use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 fn read(relative: &str) -> String {
-    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(relative)).unwrap()
+    // Windows checkouts may convert line endings to CRLF; the checks below match on `\n`.
+    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(relative))
+        .unwrap()
+        .replace("\r\n", "\n")
 }
 
 fn help(args: &[&str]) -> String {
@@ -357,4 +360,35 @@ fn policy_statements_match_the_implementation() {
     assert!(guide.contains("`asset.extras.rustyTiles.textureError`"));
     assert!(read("src/mesh_large/delivery.rs").contains("texture_rule"));
     assert!(read("src/validate.rs").contains("expect_texture"));
+}
+
+#[test]
+fn documented_capture_steps_are_the_reported_steps() {
+    // The step names `Step::name` returns, read from its definition.
+    let phases = read("src/mesh_large/phases.rs");
+    let start = phases.find("impl Step {").unwrap();
+    let end = start + phases[start..].find("\n}\n").unwrap();
+    let steps: BTreeSet<String> = phases[start..end]
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .map(String::from)
+        .collect();
+    assert_eq!(steps.len(), 15, "{steps:?}");
+    for (document, text) in [
+        ("docs/MESH.md", read("docs/MESH.md")),
+        ("docs/CLI.md", read("docs/CLI.md")),
+    ] {
+        // Every `capture_…` and `hlod_incidence_…` code span that is not a report field.
+        let documented: BTreeSet<String> = ["`capture_", "`hlod_incidence_"]
+            .iter()
+            .flat_map(|prefix| text.match_indices(prefix).map(|(at, _)| at))
+            .filter_map(|at| {
+                let name = &text[at + 1..];
+                Some(name[..name.find('`')?].to_owned())
+            })
+            .filter(|name| !name.ends_with("_bytes"))
+            .collect();
+        assert_eq!(documented, steps, "{document}");
+    }
 }

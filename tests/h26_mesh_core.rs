@@ -285,3 +285,222 @@ fn cancellation_wins_when_an_observer_cancels_then_returns_a_second_failure() {
     assert_eq!(fs::read(output).unwrap(), b"old output");
     assert_empty(&scratch);
 }
+
+/// A `side × side` grid of indexed quads (two triangles each) in one primitive.
+fn grid_fixture(root: &Path, side: u32) -> PathBuf {
+    let mut bytes = Vec::new();
+    for y in 0..=side {
+        for x in 0..=side {
+            for v in [x as f32, ((x * 7 + y * 3) % 5) as f32 * 0.1, y as f32] {
+                bytes.extend(v.to_le_bytes());
+            }
+        }
+    }
+    let positions = bytes.len();
+    let row = side + 1;
+    for y in 0..side {
+        for x in 0..side {
+            let a = y * row + x;
+            for i in [a, a + row, a + 1, a + 1, a + row, a + row + 1] {
+                bytes.extend(i.to_le_bytes());
+            }
+        }
+    }
+    fs::write(root.join("grid.bin"), &bytes).unwrap();
+    let vertices = row * row;
+    let input = root.join("grid.gltf");
+    fs::write(&input, serde_json::to_vec(&json!({
+        "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+        "nodes":[{"mesh":0}],"meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1}]}],
+        "buffers":[{"uri":"grid.bin","byteLength":bytes.len()}],
+        "bufferViews":[{"buffer":0,"byteLength":positions},
+            {"buffer":0,"byteOffset":positions,"byteLength":bytes.len()-positions}],
+        "accessors":[{"bufferView":0,"componentType":5126,"count":vertices,"type":"VEC3",
+                "min":[0,0,0],"max":[side as f32,0.4,side as f32]},
+            {"bufferView":1,"componentType":5125,"count":side*side*6,"type":"SCALAR"}]
+    })).unwrap()).unwrap();
+    input
+}
+
+#[derive(Debug, PartialEq)]
+struct Step {
+    phase: String,
+    first: u64,
+    last: u64,
+    total: u64,
+    events: usize,
+}
+
+/// Capture steps in order (consecutive events of one phase), with their first and last counts.
+fn capture_steps(events: &[(String, u64, Option<u64>)]) -> Vec<Step> {
+    steps_with(events, "capture_")
+}
+
+/// Steps whose phase starts with `prefix`, as [`capture_steps`].
+fn steps_with(events: &[(String, u64, Option<u64>)], prefix: &str) -> Vec<Step> {
+    let mut steps: Vec<Step> = Vec::new();
+    for (phase, done, total) in events {
+        if !phase.starts_with(prefix) {
+            continue;
+        }
+        let total = total.expect("capture steps declare totals");
+        assert!(*done <= total, "{phase} {done}/{total}");
+        match steps.last_mut() {
+            Some(step) if step.phase == *phase => {
+                assert!(*done >= step.last, "{phase} counts never go back");
+                step.last = *done;
+                step.events += 1;
+            }
+            _ => steps.push(Step {
+                phase: phase.clone(),
+                first: *done,
+                last: *done,
+                total,
+                events: 1,
+            }),
+        }
+    }
+    steps
+}
+
+#[test]
+fn capture_reports_every_step_with_its_total_and_honours_a_cancel_inside_capture() {
+    let work = tempfile::tempdir().unwrap();
+    // Above one 8,192-triangle leaf, so the coarse stage (and its incidence pass) runs.
+    let side = 96;
+    let triangles = u64::from(2 * side * side);
+    let input = grid_fixture(work.path(), side);
+    let scratch = work.path().join("scratch");
+    fs::create_dir(&scratch).unwrap();
+    let output = work.path().join("output.3tz");
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let sink = seen.clone();
+    let run = control(move |event| {
+        if let RunEvent::Progress { phase, done, total } = event {
+            sink.lock()
+                .unwrap()
+                .push((phase.to_string(), *done, *total));
+        }
+        Ok(())
+    });
+    let result = mesh_to_tileset(request(&input, &output, &scratch), &run).unwrap();
+    assert_eq!(result.report.triangles, triangles);
+    let events = seen.lock().unwrap();
+    let steps = capture_steps(&events);
+    let names: Vec<&str> = steps.iter().map(|s| s.phase.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "capture_scan",
+            "capture_validate",
+            "capture_corners",
+            "capture_positions",
+            "capture_triangles",
+            "capture_sequence",
+            "capture_images",
+            "capture_tree",
+            "capture_corner_depths",
+            "capture_leaf_plans",
+        ]
+    );
+    let total = |name: &str| steps.iter().find(|s| s.phase == name).unwrap().total;
+    assert_eq!(total("capture_scan"), triangles);
+    assert_eq!(total("capture_corners"), 3 * triangles);
+    assert_eq!(total("capture_positions"), 3 * triangles);
+    assert_eq!(total("capture_triangles"), triangles);
+    assert_eq!(total("capture_sequence"), triangles);
+    assert_eq!(total("capture_tree"), triangles);
+    assert_eq!(total("capture_corner_depths"), 7 * triangles);
+    assert_eq!(total("capture_images"), 0);
+    for step in &steps {
+        assert_eq!((step.first, step.last), (0, step.total), "{step:?}");
+    }
+    // The coarse stage's incidence pass reports its steps the same way, inside its phase.
+    let incidence = steps_with(&events, "hlod_incidence_");
+    let names: Vec<&str> = incidence.iter().map(|s| s.phase.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "hlod_incidence_items",
+            "hlod_incidence_reduce",
+            "hlod_incidence_ends"
+        ]
+    );
+    assert_eq!(incidence[0].total, triangles);
+    assert!(incidence[1].total >= triangles, "{incidence:?}");
+    for step in &incidence {
+        assert_eq!((step.first, step.last), (0, step.total), "{step:?}");
+    }
+    let at = |phase: &str, done| {
+        events
+            .iter()
+            .position(|e| e.0 == phase && e.1 == done)
+            .unwrap()
+    };
+    assert!(at("hlod_incidence", 0) < at("hlod_incidence_items", 0));
+    assert!(at("hlod_incidence", 1) > at("hlod_incidence_ends", incidence[2].total));
+    // The capture steps sit between the capture phase's own start and end events.
+    let position = |phase: &str, done| {
+        events
+            .iter()
+            .position(|e| e.0 == phase && e.1 == done)
+            .unwrap()
+    };
+    let first_step = position("capture_scan", 0);
+    assert!(position("capture", 0) < first_step);
+    assert!(position("capture", 1) > position("capture_leaf_plans", total("capture_leaf_plans")));
+    drop(events);
+
+    // A cancel issued from an observer during capture (as the Python callback does on an
+    // interrupt) lands at capture's next check: nothing after the current step runs.
+    let output = work.path().join("cancelled.3tz");
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let sink = seen.clone();
+    let handle = Arc::new(Mutex::new(None::<CancellationHandle>));
+    let observer_handle = handle.clone();
+    let run = control(move |event| {
+        if let RunEvent::Progress { phase, done, total } = event {
+            sink.lock()
+                .unwrap()
+                .push((phase.to_string(), *done, *total));
+            if *phase == "capture_positions" && *done == 0 {
+                assert!(observer_handle.lock().unwrap().as_ref().unwrap().cancel());
+            }
+        }
+        Ok(())
+    });
+    *handle.lock().unwrap() = Some(run.cancellation_handle());
+    let failure = mesh_to_tileset(request(&input, &output, &scratch), &run).unwrap_err();
+    assert_eq!(failure.error.kind(), JobErrorKind::Cancelled);
+    let events = seen.lock().unwrap();
+    let last = capture_steps(&events).pop().unwrap();
+    assert_eq!(last.phase, "capture_positions");
+    assert!(last.last < last.total, "{last:?}");
+    assert!(!events.iter().any(|e| e.0 == "leaf_build"));
+    assert!(!output.exists());
+    assert_empty(&scratch);
+}
+
+/// Plumbing control: this grid (three leaves, so the coarse stage and its incidence pass
+/// run) fits one floor run, so every budget plans the floor and only the worker count
+/// varies. Plan dependence is covered by the capture- and incidence-level sort tests and the
+/// recorded real-data matrix.
+#[test]
+fn archives_are_identical_across_workers_and_budgets() {
+    let work = tempfile::tempdir().unwrap();
+    let input = grid_fixture(work.path(), 96);
+    let scratch = work.path().join("scratch");
+    fs::create_dir(&scratch).unwrap();
+    let mut archives = Vec::new();
+    for (jobs, budget) in [(1, 2u64 << 30), (4, 2 << 30), (1, 6 << 30), (4, 6 << 30)] {
+        let output = work.path().join(format!("grid-{jobs}-{budget}.3tz"));
+        let request = TilerRequest::new(&input, &output)
+            .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(jobs).unwrap()))
+            .with_scratch_dir(&scratch)
+            .with_memory_budget(budget);
+        mesh_to_tileset(request, &RunControl::default()).unwrap();
+        archives.push(fs::read(&output).unwrap());
+        assert_empty(&scratch);
+    }
+    assert!(archives.windows(2).all(|pair| pair[0] == pair[1]));
+}

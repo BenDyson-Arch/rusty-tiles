@@ -6,7 +6,7 @@ use super::{
     hlod::{HlodDiagnostics, HlodMemoryPlan},
     input::StreamSource,
     leaves::producer,
-    phases::{Phase, PhaseSeconds, Phases},
+    phases::{Phase, PhaseSeconds, Phases, StepProgress},
     resources::MemoryBudget,
     source_crs::{MeshSourceCrs, MeshSourceCrsReport},
 };
@@ -91,6 +91,10 @@ pub struct TilerRequest {
     /// it were memory-backed.
     #[cfg(test)]
     test_work_charge: Option<u64>,
+    /// Test seam: let capture and the incidence pass grow their sorts under the budget
+    /// (production always does; fixtures otherwise keep `test_spill`'s configuration).
+    #[cfg(test)]
+    test_sort_plan: bool,
 }
 impl TilerRequest {
     pub fn new(input: impl Into<PathBuf>, output: impl Into<PathBuf>) -> Self {
@@ -112,6 +116,8 @@ impl TilerRequest {
             test_spill: None,
             #[cfg(test)]
             test_work_charge: None,
+            #[cfg(test)]
+            test_sort_plan: false,
         }
     }
     /// Declared memory budget in bytes, a ceiling for every stage of the run: never raised,
@@ -141,6 +147,11 @@ impl TilerRequest {
     #[cfg(test)]
     pub(crate) fn with_test_spill(mut self, sort: crate::spill::SortConfig, chunk: usize) -> Self {
         self.test_spill = Some((sort, chunk));
+        self
+    }
+    #[cfg(test)]
+    pub(crate) fn with_test_sort_plan(mut self, plan: bool) -> Self {
+        self.test_sort_plan = plan;
         self
     }
     pub fn with_profile(mut self, profile: TilerProfile) -> Self {
@@ -288,6 +299,8 @@ impl TilerReport {
 pub struct CaptureDiagnostics {
     pub jobs: u64,
     pub jobs_limited_by: &'static str,
+    /// The sorts inside capture as planned under the memory budget.
+    pub sort: super::capture_sort::SortPlan,
     pub available_memory_bytes: Option<u64>,
     pub memory_bound_bytes: u64,
     pub scratch_need_bytes: u64,
@@ -570,6 +583,7 @@ pub fn mesh_to_tileset(
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs.into();
     config.source_crs = request.source_crs.clone();
+    config.stop = Some(attempt.probe());
     let budget = MemoryBudget::resolve(request.memory_budget).map_err(|e| attempt.fail(e))?;
     config.memory_budget = Some(budget);
     #[cfg(test)]
@@ -580,6 +594,10 @@ pub fn mesh_to_tileset(
     if let Some((sort, chunk)) = request.test_spill {
         config.sort = sort;
         config.test_chunk_bytes = Some(chunk);
+    }
+    #[cfg(test)]
+    {
+        config.test_sort_plan = request.test_sort_plan;
     }
     config.scratch_dir = request
         .scratch_dir
@@ -598,7 +616,7 @@ pub fn mesh_to_tileset(
         .prefix(".tiles-mesh-")
         .tempdir_in(work_parent)
     {
-        Ok(work) => work,
+        Ok(work) => crate::cleanup::RegisteredDir::new(work),
         Err(error) => {
             return Err(staging.fail(JobError::io("create mesh intermediate", work_parent, error)))
         }
@@ -608,6 +626,8 @@ pub fn mesh_to_tileset(
     config.output_parents = Some((work_parent.to_owned(), parent.to_owned()));
     let emit = |event: &RunEvent<'_>| attempt.emit(event);
     let phases = Phases::new(&emit);
+    let capture_check = || attempt.check();
+    let capture_progress = StepProgress::new(&capture_check, Some(&emit));
     let capture_started = std::time::Instant::now();
     let captured = match attempt
         .emit(&RunEvent::Progress {
@@ -616,7 +636,7 @@ pub fn mesh_to_tileset(
             total: None,
         })
         .map_err(super::failure)
-        .and_then(|_| full::capture_admitted(source, &config, &mut || attempt.check()))
+        .and_then(|_| full::capture_admitted(source, &config, &capture_progress))
     {
         Ok(captured) => captured,
         Err(inner) => {
@@ -794,6 +814,7 @@ pub fn mesh_to_tileset(
             staging.writer(),
             work.path(),
             &charges,
+            Some(&attempt.probe()),
         )
         .map_err(refused)?;
         let storage_diagnostics = &mut memory.memory_backed_storage;
@@ -830,6 +851,7 @@ pub fn mesh_to_tileset(
             capture: CaptureDiagnostics {
                 jobs: c.jobs.jobs,
                 jobs_limited_by: c.jobs.limited_by,
+                sort: c.sort,
                 available_memory_bytes: c.jobs.available_memory_bytes,
                 memory_bound_bytes: c.memory.bound_bytes,
                 scratch_need_bytes: c.scratch.need_bytes,

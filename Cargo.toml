@@ -14,7 +14,7 @@ default-members = ["."]
 resolver = "2"
 
 [workspace.package]
-version = "0.4.0"
+version = "0.4.1"
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }{ archive-suffix }"
@@ -46,7 +46,7 @@ overflow-checks = true
 opt-level = 2
 
 [features]
-# `cli` is what the binary needs beyond the library (signal handling); the Python
+# `cli` is what the binary needs beyond the library (Unix signal handling); the Python
 # bindings depend on the library with default features off.
 default = ["cli"]
 cli = ["dep:signal-hook"]
@@ -94,13 +94,14 @@ bitvec = { version = "1.1", default-features = false, features = ["std"] }
 morton-encoding = "2.0"
 proj4rs = { version = "0.2.0", default-features = false }
 proj4wkt = "0.1.1"
+# Already in the dependency graph through png; decompresses the embedded EPSG allow-list.
+flate2 = "1"
 
 [build-dependencies]
 cc = { version = "1.2", features = ["parallel"] }
 pkg-config = { version = "0.3", optional = true }
 
 [dev-dependencies]
-flate2 = "1"
 basisu = "=0.1.0"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 zip = { version = "2", default-features = false }
@@ -108,3 +109,7 @@ zip = { version = "2", default-features = false }
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 signal-hook = { version = "0.3", optional = true, default-features = false, features = ["iterator"] }
+
+# Already in the graph through tempfile: the CLI's Ctrl+C/Ctrl+Break console handler.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Console"] }

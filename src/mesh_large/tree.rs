@@ -5,7 +5,9 @@ use super::{
     records::{prefix, Bounds, NodeKind, NodeRecord, Span, TriangleRecord, KEY_DEPTH},
 };
 use crate::{
-    spill::{ExternalSorter, Record, Scratch, Sequence, SequenceWriter, SortedStream},
+    spill::{
+        ExternalSorter, Record, Scratch, Sequence, SequenceWriter, SortObserver, SortedStream,
+    },
     JobError, JobErrorKind,
 };
 use serde::Serialize;
@@ -450,6 +452,7 @@ pub(crate) fn build(
         config,
         jobs,
         weld_stage_need_bytes,
+        None,
         check,
     )?;
     Ok(TreeOutput {
@@ -461,13 +464,14 @@ pub(crate) fn build(
 }
 
 /// The tree over `ranked`, which must be in strict Morton/provenance order (checked); no
-/// copy of the triangles is stored.
+/// copy of the triangles is stored. `observer` receives both sorts' checkpoints.
 pub(crate) fn build_ranked(
     scratch: &Scratch,
     ranked: &dyn RankedTriangles,
     config: &TreeConfig,
     jobs: usize,
     weld_stage_need_bytes: Option<u64>,
+    observer: Option<&dyn SortObserver>,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<RetainedTree, JobError> {
     let mut input = ranked.ranked()?;
@@ -479,6 +483,7 @@ pub(crate) fn build_ranked(
         config,
         jobs,
         weld_stage_need_bytes,
+        observer,
         check,
     )?;
     Ok(RetainedTree {
@@ -486,6 +491,16 @@ pub(crate) fn build_ranked(
         weld_depths,
         stats,
     })
+}
+
+fn observe<'s, T: Record>(
+    sorter: ExternalSorter<'s, T>,
+    observer: Option<&'s dyn SortObserver>,
+) -> ExternalSorter<'s, T> {
+    match observer {
+        Some(observer) => sorter.observed(observer),
+        None => sorter,
+    }
 }
 
 type Built = (
@@ -505,6 +520,7 @@ fn build_in(
     config: &TreeConfig,
     jobs: usize,
     weld_stage_need_bytes: Option<u64>,
+    observer: Option<&dyn SortObserver>,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Built, JobError> {
     check()?;
@@ -514,7 +530,7 @@ fn build_in(
             "tree budgets must be nonzero",
         ));
     }
-    let mut nodes = ExternalSorter::new(scratch, config.sorter(jobs))?;
+    let mut nodes = observe(ExternalSorter::new(scratch, config.sorter(jobs))?, observer);
     let mut stats = TreeStats::default();
     let mut group: Option<KeyGroup<'_>> = None;
     let mut cells: Vec<OpenCell> = Vec::with_capacity(KEY_DEPTH as usize);
@@ -657,6 +673,7 @@ fn build_in(
         &nodes,
         config,
         jobs,
+        observer,
         check,
     )?;
     stats.welded_vertices = weld_depths.len();
@@ -664,6 +681,7 @@ fn build_in(
     Ok((stored, nodes, weld_depths, stats))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn vertex_depths(
     scratch: &Scratch,
     triangles: &dyn RankedTriangles,
@@ -671,6 +689,7 @@ fn vertex_depths(
     nodes: &Sequence<NodeRecord>,
     config: &TreeConfig,
     jobs: usize,
+    observer: Option<&dyn SortObserver>,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Sequence<WeldDepth>, JobError> {
     let mut leaves = nodes.reader()?.filter_map(|n| match n {
@@ -682,7 +701,7 @@ fn vertex_depths(
         .next()
         .transpose()?
         .ok_or_else(|| invalid("tree has no leaves"))?;
-    let mut sorter = ExternalSorter::new(scratch, config.sorter(jobs))?;
+    let mut sorter = observe(ExternalSorter::new(scratch, config.sorter(jobs))?, observer);
     let mut read = 0_u64;
     for (rank, triangle) in triangles.ranked()?.enumerate() {
         let rank = rank as u64;
@@ -696,9 +715,9 @@ fn vertex_depths(
         if rank < leaf.first || rank >= leaf.end {
             return Err(invalid("leaf rank ranges are not contiguous"));
         }
-        for corner in 0..3 {
+        for (corner, position) in triangle.positions.iter().enumerate() {
             sorter.push(VertexDepth {
-                position: triangle.positions[corner].map(f32::to_bits),
+                position: position.map(f32::to_bits),
                 rank,
                 corner: corner as u8,
                 depth: leaf.depth() as u8,

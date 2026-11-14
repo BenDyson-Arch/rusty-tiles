@@ -824,7 +824,9 @@ mod tests {
                 params![integer(declared)?],
             )
             .map_err(sql)?;
-        s.finish(budget(), 0, &mut |rank| Ok(payloads[rank as usize].clone()))?;
+        s.finish(budget(), 0, None, &mut |rank| {
+            Ok(payloads[rank as usize].clone())
+        })?;
         Ok(s.census().unwrap().dropped_by_depth)
     }
     fn refused(result: Result<Vec<u64>, Error>, label: &str) {
@@ -860,6 +862,7 @@ mod tests {
             },
             base: 0,
             used: Arc::new(AtomicU64::new(0)),
+            ticks: Default::default(),
             certificate_fast: AtomicU64::new(0),
             certificate_slow: AtomicU64::new(0),
         };
@@ -898,6 +901,7 @@ mod tests {
             budget: budget(),
             base: 0,
             used: Arc::new(AtomicU64::new(0)),
+            ticks: Default::default(),
         };
         let a = [0., 0., 0.];
         let b = [2., 0., 0.];
@@ -922,6 +926,7 @@ mod tests {
             budget: tiny,
             base: 0,
             used: Arc::new(AtomicU64::new(0)),
+            ticks: Default::default(),
         };
         assert!(grid
             .covers([a, b, c].map(|p| p.map(f64::from)), &faces, &exhausted)

@@ -88,10 +88,12 @@ impl DirectoryTarget {
             .prefix(".tiles-dir-")
             .tempdir_in(self.output.parent().expect("prepared directory parent"))
             .map_err(|e| JobError::io("create private directory", &self.output, e))?;
+        let _registered = crate::cleanup::register(tree.path());
         Ok(DirectoryStaging {
             tree,
             target: self,
             attempt,
+            _registered,
         })
     }
 }
@@ -102,6 +104,8 @@ pub(crate) struct DirectoryStaging<'a> {
     // Native directory publication and its lifecycle controls; unavailable in the standard build.
     target: DirectoryTarget,
     attempt: &'a Attempt,
+    /// Listed for the CLI's stop backstop until the tree is installed or removed.
+    _registered: crate::cleanup::Registered,
 }
 impl<'a> DirectoryStaging<'a> {
     #[cfg(feature = "native-geospatial")]
@@ -146,6 +150,7 @@ impl<'a> DirectoryStaging<'a> {
             tree: self.tree,
             target: self.target,
             attempt: self.attempt,
+            _registered: self._registered,
         })
     }
 }
@@ -155,6 +160,9 @@ pub(crate) struct SealedDirectory<'a> {
     tree: TempDir,
     target: DirectoryTarget,
     attempt: &'a Attempt,
+    /// The run is still open until publication permission: the tree stays listed for the
+    /// CLI's stop backstop until it is installed (the listed name is then gone) or removed.
+    _registered: crate::cleanup::Registered,
 }
 impl SealedDirectory<'_> {
     #[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.

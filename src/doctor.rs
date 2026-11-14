@@ -224,9 +224,63 @@ pub struct Report {
     pub native_geospatial: NativeGeospatial,
     pub proj: ProjInventory,
     pub probes: BTreeSet<Probe>,
+    /// The `--sourceCrs` check, when one was requested.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_crs: Option<SourceCrsCheck>,
+}
+
+/// How this build resolves one source CRS definition, without reading any data.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceCrsCheck {
+    pub definition: String,
+    /// `ready` when this build resolves it, else `unsupported` (needs another build) or
+    /// `unavailable`/invalid as the converters would report.
+    pub status: Status,
+    /// `portable` (pure Rust) or `native` (strict PROJ).
+    pub backend: Option<&'static str>,
+    /// The allow-listed EPSG datum operation and its EPSG-stated accuracy, when used.
+    pub operation: Option<crate::crs::CrsOperation>,
+    pub reason: Option<String>,
+}
+
+impl SourceCrsCheck {
+    /// Resolve `definition` as the point-cloud, mesh and vector converters do.
+    pub fn new(definition: &str) -> Self {
+        let definition = definition.trim().to_owned();
+        match crate::crs::Transform::new(&definition, 0.) {
+            Ok(transform) => Self {
+                status: Status::Ready,
+                operation: transform.operation().cloned(),
+                backend: Some(match transform {
+                    crate::crs::Transform::Pure(_) => "portable",
+                    #[cfg(feature = "native-geospatial")]
+                    crate::crs::Transform::Native(_) => "native",
+                }),
+                reason: None,
+                definition,
+            },
+            Err(error) => Self {
+                status: match error {
+                    crate::Error::Environment(_) => Status::Unsupported,
+                    _ => Status::Unavailable,
+                },
+                backend: None,
+                operation: None,
+                reason: Some(error.to_string()),
+                definition,
+            },
+        }
+    }
 }
 
 impl Report {
+    /// Add a `--sourceCrs` resolution check; it never changes `status`.
+    pub fn with_source_crs(mut self, definition: &str) -> Self {
+        self.source_crs = Some(SourceCrsCheck::new(definition));
+        self
+    }
+
     /// The first selected command, in name order, that is not ready, with its
     /// capability. Its `refusal` is what that command's own execution returns.
     pub fn refusal(&self) -> Option<(&'static str, &Capability)> {
@@ -280,6 +334,7 @@ pub fn report(selected: &[Command], cesium: Option<&Path>) -> Report {
         native_geospatial: native,
         proj,
         probes,
+        source_crs: None,
     }
 }
 
@@ -406,11 +461,18 @@ impl Resolver<'_> {
 
     /// Shared pure-Rust horizontal placement with the native fallback status.
     fn placement(&self) -> Value {
+        let table = crate::crs::allowlist_summary();
+        let listed = if cfg!(feature = "native-geospatial") {
+            "other EPSG codes: strict native PROJ (the GDAL-verified allow-list serves the standard build)".to_owned()
+        } else {
+            format!("{} more EPSG codes from the GDAL-verified allow-list ({}), including GDA2020/GDA94 MGA, GDA94/GDA2020 geographic, NZTM2000 and ETRS89 UTM; each reports its EPSG datum operation and stated accuracy", table.codes, table.versions)
+        };
         let classes = [
-            "WGS84 geographic (EPSG:4326)",
-            "WGS84 UTM north/south (EPSG:32601–32660/32701–32760)",
-            "WGS84 Mercator (EPSG:3857/3395)",
-            "supported local projections with an explicit WGS84 datum or 3/7-parameter Helmert shift",
+            "WGS84 geographic (EPSG:4326)".to_owned(),
+            "WGS84 UTM north/south (EPSG:32601–32660/32701–32760)".to_owned(),
+            "WGS84 Mercator (EPSG:3857/3395)".to_owned(),
+            listed,
+            "supported local projections with an explicit WGS84 datum or 3/7-parameter Helmert shift".to_owned(),
         ];
         let tier = if cfg!(feature = "native-geospatial") {
             "pure Rust with strict native fallback"
@@ -418,8 +480,8 @@ impl Resolver<'_> {
             "pure Rust"
         };
         json!({"status":Status::Ready,"ready":true,"backend":"pure Rust (proj4rs)","tier":tier,
-            "crsClasses":classes,"nativeFallback":self.native,
-            "limitations":"Grids, geoid/compound heights, coordinate epochs, unverified datum operations, geographic +lon_0 offsets, non-decimal PROJ angles, quoted PROJ values, PROJ +init or spaced assignments, unsupported WKT syntax, incomplete/mismatched WKT method parameters, unverified method-specific parameter names/identities or colliding aliases, spherical transverse Mercator, oblique stereographic origins at or beyond 80 degrees latitude, ordinary stereographic origins from 80 degrees to below 90 degrees, distinct conic parallels less than one degree apart, conic parallels beyond 80 degrees, omitted LCC origins/second parallels, oblique/nonpolar stereographic points at or beyond 80 degrees source latitude, failed coordinate-domain probes, conflicting polar hemispheres or zero polar standard parallels and Lambert azimuthal equal area require --features native-geospatial. UTM requires an explicit zone; projection scales must be positive, latitudes within method-specific domains and projected PROJ units linear. Conflicting polar stereographic scales and conic parallels whose signed sum has magnitude below one degree and Albers points at or beyond 80 degrees source latitude are refused in all builds. Point clouds require a 2D horizontal CRS and explicit ellipsoidal metre height offset."})
+            "crsClasses":classes,"nativeFallback":self.native,"epsgAllowList":table,
+            "limitations":"EPSG codes outside the allow-list (grid-based operations such as British National Grid/OSTN15, NAD27 and original NAD83, coordinate epochs and dynamic datums), grids, geoid/compound heights, coordinate epochs, unverified datum operations, geographic +lon_0 offsets, non-decimal PROJ angles, quoted PROJ values, PROJ +init or spaced assignments, unsupported WKT syntax, incomplete/mismatched WKT method parameters, unverified method-specific parameter names/identities or colliding aliases, spherical transverse Mercator, oblique stereographic origins at or beyond 80 degrees latitude, ordinary stereographic origins from 80 degrees to below 90 degrees, distinct conic parallels less than one degree apart, conic parallels beyond 80 degrees, omitted LCC origins/second parallels, oblique/nonpolar stereographic points at or beyond 80 degrees source latitude, failed coordinate-domain probes, conflicting polar hemispheres or zero polar standard parallels and Lambert azimuthal equal area require --features native-geospatial. UTM requires an explicit zone; projection scales must be positive, latitudes within method-specific domains and projected PROJ units linear. Conflicting polar stereographic scales and conic parallels whose signed sum has magnitude below one degree and Albers points at or beyond 80 degrees source latitude are refused in all builds. Point clouds require a 2D horizontal CRS and explicit ellipsoidal metre height offset."})
     }
 
     #[cfg(feature = "native-geospatial")]
@@ -446,7 +508,11 @@ impl Resolver<'_> {
 
     #[cfg(not(feature = "native-geospatial"))]
     fn vector(&mut self) -> Readiness {
-        let crs = self.placement()["crsClasses"].clone();
+        let placement = self.placement();
+        let (crs, table) = (
+            placement["crsClasses"].clone(),
+            placement["epsgAllowList"].clone(),
+        );
         Readiness {
             capability: Capability::ready(),
             backend: "portable Rust/SQLite",
@@ -454,7 +520,7 @@ impl Resolver<'_> {
             details: details(json!({"inputs":["GeoJSON","GeoPackage"],
                 "reader":{"status":Status::Ready,"ready":true,"backend":"Rust GeoJSON and bundled SQLite/WKB"},
                 "geometry":{"status":Status::Ready,"ready":true,"backend":"Rust polygon validation, repair and triangulation"},
-                "geospatial":{"status":Status::Ready,"ready":true,"backend":"pure Rust (proj4rs)","crsClasses":crs,
+                "geospatial":{"status":Status::Ready,"ready":true,"backend":"pure Rust (proj4rs)","crsClasses":crs,"epsgAllowList":table,
                     "nativeFallback":self.native,
                     "limitations":"Only verified grid-free horizontal CRS operations are available. Grids, geoid/compound heights, coordinate epochs and unverified datum operations require --features native-geospatial. GeoPackage 3D horizontal-CRS inputs require an explicit ellipsoidal metre height offset; GeoJSON heights use its ellipsoidal convention."},
                 "limitations":"GeoJSON and GeoPackage only; use --features native-geospatial for Shapefile and other OGR drivers. Measured geometries, geometry collections, curves and unsupported field types are refused. Conversion validates each selected source and operation.",
@@ -679,6 +745,19 @@ impl fmt::Display for Report {
                     writeln!(f, "    {}", class.as_str().unwrap_or(""))?;
                 }
                 writeln!(f, "  native fallback: {}", native.status)?;
+                if let Some(table) = geospatial.and_then(|g| g.get("epsgAllowList")) {
+                    writeln!(
+                        f,
+                        "  EPSG allow-list: {} codes{} ({})",
+                        table["codes"],
+                        if table["active"] == true {
+                            ""
+                        } else {
+                            ", not used by this build"
+                        },
+                        table["versions"].as_str().unwrap_or("")
+                    )?;
+                }
             }
             if let Some(cesium) = readiness.details.get("cesium") {
                 let path = cesium["path"].as_str().unwrap_or("");
@@ -687,6 +766,18 @@ impl fmt::Display for Report {
                 } else {
                     writeln!(f, "  cesium: not found at {path} (informational; pass preview --cesium <Build/Cesium>)")?;
                 }
+            }
+        }
+        if let Some(check) = &self.source_crs {
+            writeln!(f, "source CRS {}: {}", check.definition, check.status)?;
+            if let Some(backend) = check.backend {
+                writeln!(f, "  backend: {backend}")?;
+            }
+            if let Some(operation) = &check.operation {
+                writeln!(f, "  operation: {}", operation.summary())?;
+            }
+            if let Some(reason) = &check.reason {
+                writeln!(f, "  reason: {reason}")?;
             }
         }
         for path in &self.proj.data_directories {
@@ -844,5 +935,41 @@ mod tests {
         assert_eq!(directories, [root.path().to_string_lossy()]);
         assert_eq!(complete.len(), 5);
         assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn source_crs_check_names_the_allow_listed_operation_or_the_refusal() {
+        let listed = SourceCrsCheck::new(" EPSG:7856 ");
+        assert_eq!(listed.definition, "EPSG:7856");
+        #[cfg(not(feature = "native-geospatial"))]
+        {
+            let refused = SourceCrsCheck::new("EPSG:27700");
+            assert_eq!(
+                (listed.status, listed.backend),
+                (Status::Ready, Some("portable"))
+            );
+            let operation = listed.operation.as_ref().unwrap();
+            assert_eq!(operation.operation, "GDA2020 to WGS 84 (2)");
+            assert_eq!(operation.accuracy_metres, Some(3.));
+            assert_eq!(refused.status, Status::Unsupported);
+            assert!(refused.reason.unwrap().contains("allow-list"));
+            let points = report(&[Command::PointCloud], None);
+            let table = serde_json::to_value(&points.commands["point-cloud"]).unwrap();
+            let table = &table["geospatial"]["epsgAllowList"];
+            assert_eq!(table["active"], true, "{table}");
+            assert!(table["codes"].as_u64().unwrap() > 3000, "{table}");
+        }
+        #[cfg(feature = "native-geospatial")]
+        assert!(listed.operation.is_none());
+        let report = report(&[Command::Convert], None).with_source_crs("EPSG:7856");
+        assert!(report.to_string().contains("source CRS EPSG:7856"));
+        let value = serde_json::to_value(&report).unwrap();
+        assert_eq!(value["sourceCrs"]["definition"], "EPSG:7856");
+        assert!(
+            serde_json::to_value(super::report(&[Command::Convert], None))
+                .unwrap()
+                .get("sourceCrs")
+                .is_none()
+        );
     }
 }

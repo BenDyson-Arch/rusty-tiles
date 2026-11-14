@@ -1,0 +1,194 @@
+name: Dev build
+
+# The rolling development build of develop: one GitHub pre-release on the moving tag `dev`
+# with the four CLI archives, the Python wheels and SHA256SUMS, replaced on each build, and
+# the GHCR image tag `dev`. Nothing goes to PyPI or crates.io, and the image's `latest` tag is
+# untouched. The version is a development version of the next release (see
+# scripts/dev_version.py), stamped into the checkout and never committed.
+#
+# The nightly full CI run on develop dispatches this workflow after its "Full matrix" verdict
+# passes; it can also be dispatched by hand. A commit is built only if a push, nightly or
+# manual ci.yml run passed "Full matrix" and "Rust" on it, and on develop only if develop
+# moved since the last dev build (unless `force` is set). The archives and wheels are the
+# ones that CI run built and tested with the development version (release-build.yml), or are
+# built here when no run has them. On any other branch the workflow builds or reuses and
+# tests everything but publishes nothing, so a change to it can be tried first.
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild even if develop has not changed since the last dev build
+        type: boolean
+        default: false
+  # GitHub dispatches a workflow only once its file is on the default branch or it has run
+  # once. A push that changes this file runs it, which registers it from develop (or a
+  # pull-request branch) before it reaches main. The new commit has no full CI pass yet, so
+  # such a run builds nothing. Tag pushes are excluded.
+  push:
+    branches: ['**']
+    paths: ['.github/workflows/dev-build.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check the commit and resolve its version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15 # versions: TIMEOUT_GATE
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      build: ${{ steps.gate.outputs.build }}
+      publish: ${{ steps.gate.outputs.publish }}
+      version: ${{ steps.version.outputs.version }}
+      python-version: ${{ steps.version.outputs.python-version }}
+      ci-run-id: ${{ steps.gate.outputs.artifact-run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: version
+        name: Resolve the development version
+        run: python3 scripts/dev_version.py resolve | tee -a "$GITHUB_OUTPUT"
+      - id: gate
+        name: Require a full CI pass, and on develop a change since the last dev build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BUILD_REF: ${{ github.ref }}
+          BUILD_SHA: ${{ github.sha }}
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -eu
+          publish=false
+          if [ "$BUILD_REF" = refs/heads/develop ]; then publish=true; fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          previous=$(git rev-parse -q --verify 'refs/tags/dev^{commit}' || true)
+          if [ "$publish" = true ] && [ "$FORCE" != true ] && [ "$previous" = "$BUILD_SHA" ]; then
+            echo "::notice::The dev build is already at $BUILD_SHA; dispatch with force to rebuild it."
+            echo 'build=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # release.yml's gate, except that the run may still be in progress: the nightly run
+          # dispatches this workflow from a job that follows its "Full matrix" verdict. CI runs
+          # on develop build the development version, so their archives and wheels are reused.
+          python3 scripts/ci_run.py select --in-progress --repo "$GH_REPO" --commit "$BUILD_SHA" \
+            --version "$BUILD_VERSION" > ci-run.txt
+          cat ci-run.txt >> "$GITHUB_OUTPUT"
+          if ! grep -q '^run-id=[0-9]' ci-run.txt; then
+            echo "::warning::No full-matrix CI pass for $BUILD_SHA yet, so nothing was built. Dispatch ci.yml on this ref, wait for its Full matrix job, then dispatch this workflow."
+            echo 'build=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'build=true' >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+    uses: ./.github/workflows/release-build.yml
+    with:
+      version: ${{ needs.check.outputs.version }}
+      # Off develop the image is built and tested but not pushed.
+      image-tag: ${{ needs.check.outputs.publish == 'true' && 'dev' || '' }}
+      # Empty when no CI run has this version's artifacts: the build then runs from source.
+      ci-run-id: ${{ needs.check.outputs.ci-run-id }}
+
+  publish:
+    name: Publish the dev pre-release
+    needs: [check, build]
+    if: needs.check.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15 # versions: TIMEOUT_PUBLISH
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: binary-*
+          merge-multiple: true
+          path: dist
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: wheel-*
+          merge-multiple: true
+          path: dist
+      - name: Check the assets and write SHA256SUMS and the release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BUILD_SHA: ${{ github.sha }}
+          VERSION: ${{ needs.check.outputs.version }}
+          PYTHON_VERSION: ${{ needs.check.outputs.python-version }}
+          SERVER: ${{ github.server_url }}
+        run: |
+          set -eu
+          # Four CLI archives and four wheels of exactly this build, and nothing else.
+          (cd dist && ls -1) | tee assets.txt
+          test "$(grep -c "^rusty-tiles-$VERSION-.*\.\(tgz\|zip\)\$" assets.txt)" -eq 4
+          test "$(grep -c "^rusty_tiles-$PYTHON_VERSION-cp310-abi3-.*\.whl\$" assets.txt)" -eq 4
+          test "$(wc -l < assets.txt)" -eq 8
+          (cd dist && sha256sum -- *.tgz *.zip *.whl > SHA256SUMS)
+          repo="$SERVER/$GH_REPO"
+          # The latest stable release (GitHub never marks a pre-release as latest).
+          last=$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name 2>/dev/null || true)
+          {
+            echo "Rolling development build of \`develop\` at $BUILD_SHA, committed $(git show -s --format=%cI HEAD), built $(date -u +%Y-%m-%dT%H:%M:%SZ). Each build replaces this release and its assets."
+            echo
+            echo "**This is not a release.** Output, options and APIs can change between development builds, and they are not published to PyPI or crates.io. Use [the latest release]($repo/releases/latest) for work you keep."
+            echo
+            echo "- CLI: \`rusty-tiles --version\` prints \`rusty-tiles $VERSION\`."
+            echo "- Python wheels: version \`$PYTHON_VERSION\`, which pip orders after the last release and before the next."
+            echo "- Container: \`ghcr.io/${GH_REPO,,}:dev\` (Linux amd64, native-geospatial)."
+            if [ -n "$last" ]; then echo "- Changes since $last: $repo/compare/$last...$BUILD_SHA"; fi
+            echo
+            echo '## Install'
+            echo
+            echo '```sh'
+            echo "curl -fsSL https://raw.githubusercontent.com/$GH_REPO/develop/scripts/install.sh | sh -s -- --version dev"
+            for wheel in dist/*.whl; do
+              echo "python -m pip install --force-reinstall $repo/releases/download/dev/${wheel#dist/}"
+            done
+            echo '```'
+            echo
+            echo "Pick the wheel for your platform. \`SHA256SUMS\` lists every asset."
+            if [ -n "$last" ]; then
+              echo
+              echo "## Changes since $last"
+              echo
+              git log --first-parent --format='- %s (%h)' "$last..$BUILD_SHA" | head -n 200
+            fi
+          } > notes.md
+          cat notes.md
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dev-release
+          path: |
+            notes.md
+            dist/SHA256SUMS
+          if-no-files-found: error
+      - name: Replace the dev pre-release
+        if: needs.check.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BUILD_SHA: ${{ github.sha }}
+        # Moves the tag and swaps the assets of the published release in place, so downloads
+        # keep working, then proves the tag and asset set through the API (see the script).
+        run: scripts/dev_release.sh notes.md dist

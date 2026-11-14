@@ -47,7 +47,10 @@ The source must have a default or sole scene, TRIANGLES primitives, local
 resources and core PBR materials. Supported:
 
 - authored normals and tangents, UV0/UV1 and `COLOR_0`;
-- all five core PBR texture slots, from PNG or JPEG images;
+- all five core PBR texture slots, from PNG or JPEG images with 8-bit
+  channels, at most 16,384 px per edge and 1 GiB encoded each. 1 GiB is only a
+  sanity ceiling: each image is charged against the
+  [memory budget](#memory-budget) at its actual encoded size;
 - normal maps, when the source has authored normals and tangents;
 - tangent-bearing geometry, when the accumulated transform is conformal
   (supported reflections included).
@@ -116,11 +119,18 @@ are not accepted. Horizontal feet never rescale source height or A. No geoid
 model is applied: orthometric Metashape heights need an explicit
 `--height-offset` to the ellipsoid.
 
-EPSG:4326, EPSG:3857, EPSG:3395, UTM (EPSG:326xx/327xx) and the grid-free PROJ
-methods [listed for point clouds](FORMATS.md#coordinate-reference-systems) work
-in the standard build. Other EPSG codes, coordinate epochs and Lambert
-azimuthal equal area need the native-geospatial build and its PROJ database;
-without it they are `unsupported` before any source is read. One operation
+EPSG:4326, EPSG:3857, EPSG:3395, UTM (EPSG:326xx/327xx), the codes of the
+[GDAL-verified EPSG allow-list](FORMATS.md#gdal-verified-epsg-allow-list) (for
+example GDA2020 MGA EPSG:7856, GDA94 MGA EPSG:28356, NZTM2000 EPSG:2193 and ETRS89
+UTM EPSG:25832) and the grid-free PROJ methods
+[listed for point clouds](FORMATS.md#coordinate-reference-systems) work in the
+standard build. An allow-listed code adds `datum_operation` to the report's
+`source_crs`: the EPSG datum transformation and its stated accuracy (GDA2020 to
+WGS 84 (2) is a null transformation with 3 m accuracy, not an exact one). Other
+EPSG codes, including grid-based ones such as British National Grid EPSG:27700,
+coordinate epochs and Lambert azimuthal equal area need the native-geospatial
+build and its PROJ database; without it they are `unsupported` before any source
+is read. One operation
 serves the whole capture: a source that would need native PROJ for only some
 vertices is refused.
 
@@ -358,6 +368,38 @@ published only when the source carries normals, so leaves and coarse tiles of
 one source shade the same way. Coarse pages need not reproduce leaf texels:
 they approximate the surface's appearance, with no appearance certificate.
 
+Coarse `NORMAL` comes from the coarse tile's own geometry, not from the source
+normals. It is crease-aware. Around each vertex, faces whose normals differ by
+less than 60° across a shared edge share one area-weighted normal. Sharper
+edges, and edges between faces wound opposite ways, keep a separate normal on
+each side. Where a run of smooth edges turns that shared normal more than 60°
+from one of its faces, that face's corner averages only the faces at the vertex
+within 60° of its own. Every corner normal is therefore within 60° of its
+face's normal, and no face is shaded against its own winding. Earlier coarse
+tiles averaged all faces at a vertex, which gave rough surfaces such as rock
+walls starburst gradients and, under double-sided lighting, inverted facets.
+Splitting adds coarse vertices, never triangles: on the measured meshes (0.8 M
+to 10 M triangles), coarse tiles of sources with normals gained 15–18% vertices
+and 13–15% bytes. Coarse tiles do not carry the source's fine shading detail
+(untextured classes get no normal map). Leaves are unaffected.
+
+60° is the single crease angle, with no option. Any angle below 90° keeps every
+face from shading against its own winding, for every input. 60° sits between
+the measured alternatives on a synthetic rock wall: 45° shaded closest to the
+source but cost 36% more coarse bytes (60°: 15%), and 80° cost only 4% but
+shaded further from the source, close to the earlier averaged normals at the
+coarsest levels. At 45–60°, rough coarse tiles look faceted where their own
+geometry is, instead of blurred. `validate` reports any coarse corner normal
+more than 90° from its face as the `coarseNormalInversion` warning
+([VALIDATION.md](VALIDATION.md#coarse-normals)); archives written before this
+change usually carry it.
+
+Simplification can still leave some coarse faces wound against the source
+surface they replace (issue #372): on one 10 M-triangle photogrammetry mesh, a
+nearest-source estimate put about 7% of the root tile's area and 3–5% at the
+next three depths against the source. Double-sided materials shade them on the
+viewer's side; single-sided materials cull them, as before.
+
 Coarse pages go through the same encoder and decoded-image gates as leaf pages,
 so a profile chooses one colour codec for both (see
 [Profiles](#profiles-and-resources)). A tile's pages together are bounded to
@@ -583,6 +625,41 @@ on the output filesystem beside the destination. Prefer disk-backed scratch for
 large sources, especially when the output directory is memory-backed;
 memory-backed scratch counts against the [memory budget](#memory-budget).
 
+Capture's external sorts (corner references, positioned corners, triangles,
+the cell tree's nodes and weld depths, and the corner-depth join) are planned
+once against the [memory budget](#memory-budget). The fixed sort configuration,
+an 80 MiB run buffer per live sort with fan-in 64, is the floor: capture's
+worker plan and `capture_minimum_bytes` are computed with it, so a budget that
+admits it is never refused for want of larger runs. Above the floor, runs grow
+to the smallest size at which every capture sort has at most `F` initial runs,
+so each sort writes its records once and merges them once, in the stream that
+feeds the next step. `F` is 64, 128 or 256, whichever admits the most background
+run writers. Writers sort and write full runs on their own threads while the
+next run fills, at most one fewer than capture's workers, so `--jobs 1` writes
+runs on the capturing thread. A budget too small for one pass even at `F = 256`
+gets the largest run buffer that fits, without writers. A plan never declares
+more scratch than the floor, so no scratch admission refuses a run the floor
+would admit. The plan is charged in
+capture's declared resident bound (`diagnostics.memory.capture_bound_bytes`)
+and reported as `diagnostics.capture.sort`: `run_bytes`, `fan_in`,
+`buffer_bytes`, `writers`, `max_runs`, `single_pass` and `limited_by`
+(`floor`, `single_pass`, `budget`, or `unknown_memory` and
+`memory_backed_scratch`, which keep the floor). It changes resources only:
+each sort's output is the stable sort of its input order for every run size,
+fan-in and writer count, so the archive does not depend on the plan.
+
+The coarse stage's incidence pass (`hlod_incidence`) plans its item and
+open-edge endpoint sorts the same way inside the coarse stage's admission,
+before the walk admits any parent job: runs grow toward one pass at the
+floor's fan-in, at which no staged scratch declaration exceeds the floor's, and
+run writers are added as the stage's memory admits. The row sort, whose stream the walk
+reads later, keeps the floor. The planned pass must fit the stage's memory
+after its fixed terms; its resident need is reported as
+`diagnostics.memory.hlod.incidence_bytes` and the plan as
+`diagnostics.memory.hlod.incidence_sort` (whose `max_runs` assumes the worst
+case of six items per triangle). The coarse stage's minimum is computed with the
+floor.
+
 Before starting, the run checks for enough free scratch for its largest
 declared stage working set: files kept from earlier stages, the HLOD incidence
 pass and source index, and each external sort's runs. Sort runs are 8 MiB chunk
@@ -674,12 +751,27 @@ One declared ceiling governs the whole run, with the same rule on every surface:
   ceiling that is never silently raised: every stage plans against the lesser
   of the budget and the detected headroom.
 - **What it covers.** Capture, the leaf stage and the coarse stage admit their
-  work against it before allocating: source and JSON metadata, sort buffers,
+  work against it before allocating: source and JSON metadata, sort buffers
+  (capture grows its sort runs and run writers into the budget it is given; see
+  [workers and scratch](#workers-and-scratch)),
   interface incidence, child tiles held for their parents and the active
   parents, decoded source images, chart/page/codec workspace, memory-backed
   capture scratch and the archive stage's resident buffers
   (`archive_minimum_bytes`). A source without images reserves no texture,
   chart, mip or codec workspace.
+- **Source images.** Each decode of a source image is charged at the image's
+  actual encoded length, which decoding holds whole, plus the decoder's working
+  memory (at most 8 bytes per texel) and the decoded RGBA8 copy. There is no
+  fixed encoded-size allowance. Before it writes any scratch, capture reads each
+  image's header (PNG `IHDR`, or the first JPEG frame header after skipping
+  earlier segments, holding at most 64 KiB at a time) and checks the largest
+  decode charge against what its own resident bound leaves for decoding. Each decode is checked again against the
+  decoder's own header, which must declare the same dimensions. An image the
+  budget cannot hold is a `resource_limit` refusal; over 1 GiB encoded or
+  16,384 px per edge is `unsupported` whatever the budget. For example, an
+  8192² PNG of 110 MB built under a 4 GiB budget with a peak resident set of
+  about 0.83 GiB; the reported `minimum_bytes` of that run was 3.6 GiB, mostly
+  the leaf stage's page workspace for the full-size image.
 - **Memory-backed storage.** Files on memory-backed (tmpfs) storage are charged
   too. Capture scratch there is charged at its declared need. After capture,
   each other location on tmpfs is charged one copy of the output-side
@@ -829,6 +921,30 @@ as the original Python exception. Python errors raised after installation, while
 building the result or from unrelated asynchronous sources, are outside the
 installation guarantee.
 
+### Decoded tile views
+
+Viewers that read neither `EXT_meshopt_compression` nor `KHR_texture_basisu`
+can show a tile through the Python view functions. Blender 5.2's bundled glTF
+importer is one: it has no KTX2 support, and it fails on the explicit
+`"filter": "NONE"` that meshopt views in archives from 0.4.0 and earlier carry
+(later archives omit it, #370).
+
+- `rusty_tiles.list_tiles(archive)` lists each content URI with its depth,
+  `leaf` or `coarse` role, geometric error and accumulated transform.
+- `rusty_tiles.decode_tile(archive, uri)` returns a plain glTF 2.0 GLB: meshopt
+  views decoded, KTX2 pages transcoded to PNG at level 0. Samplers, materials,
+  quantized accessors, feature IDs and property tables are kept.
+- `rusty_tiles.decode_tile(archive, uri, format="arrays")` returns NumPy arrays
+  per primitive, RGBA pages and property tables.
+
+`archive` is a `.3tz` or an unpacked tileset directory. Positions are in the
+Z-up tile frame. Only the root carries a transform, so every tile shares the
+local frame described in [How source positions are mapped](#how-source-positions-are-mapped)
+or [rigid placement](#source-and-placement), and `transform` maps it to ECEF.
+A decoded tile is a view for display and inspection, not a reversible round
+trip: an edited view cannot be re-encoded or published back. See the
+[Python reference](../bindings/python/README.md#decoded-tile-views).
+
 ## Reports and errors
 
 `--json` writes one stdout object with `ok`, resolved `output`, `tilerReport`,
@@ -896,7 +1012,27 @@ are present in every result.
 nullable totals: `conversion`, `capture`, then inside the leaf stage
 `leaf_build` (leaves), `hlod_incidence` and `hlod_geometry` (coarse stage),
 then `leaf_payloads`, `archive` and `ready_to_publish`. Each finished phase also
-logs its wall seconds and the run's elapsed seconds as a `log` event. Required
+logs its wall seconds and the run's elapsed seconds as a `log` event. Inside
+`capture`, each step is a phase whose total is known when it starts:
+`capture_scan` (triangles), `capture_validate` (one unit), `capture_corners`
+(corner references read and sorted), `capture_positions` (corners joined with
+their attributes), `capture_triangles` (triangles reassembled),
+`capture_sequence` (triangles written in rank order), `capture_images` (two
+units per image), `capture_tree` (triangles), `capture_corner_depths` (seven
+units per triangle) and `capture_leaf_plans` (leaves). Each step reports `0`
+and its total; all but `capture_validate`, `capture_tree` and
+`capture_leaf_plans` also report counts between. An intermediate sort merge pass, which a budget
+too small for one pass needs, is reported as `capture_merge` (records
+rewritten, counted on across passes so the count never goes back), after which
+the interrupted step resumes. While capture runs, the
+current step's latest count is repeated at least every 250 ms. These events are
+capture's cancellation checkpoints, also for a Python callback, so a cancel or
+callback exception lands within about a second, as in the leaf stage. The coarse
+stage's `hlod_incidence` phase reports its steps the same way:
+`hlod_incidence_items` (triangles read into their leaves' interface items),
+`hlod_incidence_reduce` (items merged into shared rows) and `hlod_incidence_ends`
+(two units per open-edge endpoint), with `hlod_incidence_merge` for an
+intermediate merge pass. Required
 events finish before publication; a successful result means the archive is
 installed. A cleanup problem after installation is still success, with cleanup
 diagnostics.

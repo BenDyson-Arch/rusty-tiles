@@ -93,6 +93,9 @@ pub struct PointCloudReport {
     pub tiles: usize,
     pub source_crs: String,
     pub resolved_crs: Option<String>,
+    /// The allow-listed EPSG datum operation and its EPSG-stated accuracy, when one is used.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub crs_operation: Option<crate::crs::CrsOperation>,
     pub source_scales: [f64; 3],
     pub source_offsets: [f64; 3],
     pub height_offset: Option<f64>,
@@ -294,7 +297,7 @@ fn prepare(
         expected,
     })
 }
-struct Workspace(tempfile::TempDir);
+struct Workspace(crate::cleanup::RegisteredDir);
 impl Workspace {
     fn create(output: &Path) -> Result<Self, JobError> {
         let parent = output.parent().expect("resolved output parent");
@@ -303,14 +306,14 @@ impl Workspace {
         tempfile::Builder::new()
             .prefix(".point-work-")
             .tempdir_in(parent)
-            .map(Self)
+            .map(|dir| Self(crate::cleanup::RegisteredDir::new(dir)))
             .map_err(|e| JobError::io("create point-cloud workspace", parent, e))
     }
     fn cleanup(self) -> Result<(), CleanupDiagnostic> {
         self.cleanup_with(&mut SystemIo)
     }
     fn cleanup_with(self, operations: &mut impl ProducerIo) -> Result<(), CleanupDiagnostic> {
-        let path = self.0.keep();
+        let (path, _registered) = self.0.keep();
         operations.cleanup(&path).map_err(|e| CleanupDiagnostic {
             error: JobError::io("remove point-cloud workspace", &path, e),
             path,
@@ -531,6 +534,10 @@ fn convert(
         expected,
     } = prepared;
     let options = &request.options;
+    let crs_operation = match &coordinates {
+        Coordinates::Ecef(transform) => transform.operation().cloned(),
+        Coordinates::Local => None,
+    };
     let (mut source_lo, mut source_hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
     let (origin, count) = {
         let mut points = las::PointDataBuilder::new().for_header(&header).build();
@@ -692,7 +699,7 @@ fn convert(
         ),
     };
     let report = PointCloudReport {
-        points: count, tiles: tree.tiles, source_crs, resolved_crs: resolved,
+        points: count, tiles: tree.tiles, source_crs, resolved_crs: resolved, crs_operation,
         source_scales: scales, source_offsets: offsets, height_offset,
         metadata: options.metadata,
         properties: if options.metadata { layout.dimensions.iter().map(|d| d.name.clone()).collect() } else { Vec::new() },

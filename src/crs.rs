@@ -6,14 +6,21 @@
 //! height selection, including any decision to leave coordinates local.
 //!
 //! Conservative, grid-free operations with strict native fallback when enabled.
-//! EPSG definitions are an
-//! explicit allowlist, not an old PROJ-string database with implicit datum shifts.
+//! EPSG definitions are an explicit allowlist, not an old PROJ-string database with
+//! implicit datum shifts: built-in WGS 84 cases plus, in the standard build, the
+//! GDAL-verified table in `allowlist` (issue #337).
 //! The WKT parser is used only for syntax: proj4wkt's formatter assumes a zero
 //! datum shift and drops vertical/unknown metadata, so it is deliberately unused.
 use crate::Error;
 use proj4rs::Proj;
 use proj4wkt::parser::{Attribute, Processor};
+use serde::Serialize;
 use std::collections::BTreeMap;
+
+mod allowlist;
+#[cfg_attr(feature = "native-geospatial", allow(unused_imports))]
+pub(crate) use allowlist::TABLE as ALLOWLIST_TABLE;
+pub use allowlist::{CrsOperation, OperationKind};
 
 pub(crate) enum Transform {
     Pure(Box<PureTransform>),
@@ -78,6 +85,26 @@ impl Transform {
         })))
     }
 
+    /// The allow-listed EPSG datum operation this transform uses, if any. Built-in WGS 84
+    /// codes, explicit PROJ/WKT definitions and native PROJ operations report none.
+    pub(crate) fn operation(&self) -> Option<&CrsOperation> {
+        match self {
+            Self::Pure(operation) => operation.operation.as_ref(),
+            #[cfg(feature = "native-geospatial")]
+            Self::Native(_) => None,
+        }
+    }
+
+    /// The definition text the portable transform was built from: the built-in PROJ
+    /// string, the allow-list row, or the caller's own WKT/PROJ. Native PROJ reports none.
+    fn resolved_definition(&self) -> Option<&str> {
+        match self {
+            Self::Pure(operation) => Some(&operation.resolved_definition),
+            #[cfg(feature = "native-geospatial")]
+            Self::Native(_) => None,
+        }
+    }
+
     /// Source-coordinate normalization for intrinsic polygon charts.
     /// Geographic coordinates become degrees; projected coordinates metres.
     pub(crate) fn polygon_units(&self) -> Option<(bool, f64)> {
@@ -115,7 +142,7 @@ impl Transform {
 }
 
 fn unsupported(reason: &str) -> Error {
-    Error::Environment(format!("pure-Rust point-cloud CRS transform unavailable: {reason}; use a build with --features native-geospatial (GDAL >= 3.12, PROJ >= 9.2) and the required local PROJ database/grids"))
+    Error::Environment(format!("pure-Rust CRS transform unavailable: {reason}; use a build with --features native-geospatial (GDAL >= 3.12, PROJ >= 9.2) and the required local PROJ database/grids"))
 }
 
 fn horizontal_required() -> Error {
@@ -128,6 +155,8 @@ pub(crate) struct PureTransform {
     angular_units: f64,
     height_offset: f64,
     source_geographic: Option<Proj>,
+    operation: Option<CrsOperation>,
+    resolved_definition: String,
     #[cfg(feature = "native-geospatial")]
     definition: String,
 }
@@ -143,19 +172,38 @@ impl PureTransform {
         if definition.contains('\0') {
             return Err(Error::Data("CRS definition contains a NUL byte".into()));
         }
-        let (definition, angular_units) = if definition.starts_with('+') {
-            (
+        let mut operation = None;
+        let mut resolved_definition = definition.to_owned();
+        let (definition, angular_units) = match source_kind(definition) {
+            Some(SourceCrsKind::Proj) => (
                 validate_proj(definition, false)?,
                 std::f64::consts::PI / 180.,
-            )
-        } else if definition.to_ascii_uppercase().starts_with("EPSG:") {
-            (epsg(definition)?, std::f64::consts::PI / 180.)
-        } else if definition.contains('[') {
-            wkt(definition)?
-        } else {
-            return Err(unsupported(
-                "expected an EPSG code, WKT or PROJ CRS definition",
-            ));
+            ),
+            Some(SourceCrsKind::Builtin | SourceCrsKind::Allowlist) => match epsg(definition)? {
+                Epsg::Builtin(definition) => {
+                    resolved_definition.clone_from(&definition);
+                    (definition, std::f64::consts::PI / 180.)
+                }
+                // A listed definition takes the same validation as user input.
+                Epsg::Listed(entry, table) => {
+                    operation = Some(CrsOperation::new(entry, table));
+                    resolved_definition.clone_from(&entry.definition);
+                    if entry.definition.starts_with('+') {
+                        (
+                            validate_proj(&entry.definition, false)?,
+                            std::f64::consts::PI / 180.,
+                        )
+                    } else {
+                        wkt(&entry.definition)?
+                    }
+                }
+            },
+            Some(SourceCrsKind::Wkt) => wkt(definition)?,
+            None => {
+                return Err(unsupported(
+                    "expected an EPSG code, WKT or PROJ CRS definition",
+                ))
+            }
         };
         let source = Proj::from_proj_string(&definition).map_err(|error| match error {
             // Some proj4rs projections need an ellipsoid, including extended
@@ -218,6 +266,8 @@ impl PureTransform {
             angular_units,
             height_offset,
             source_geographic,
+            operation,
+            resolved_definition,
             #[cfg(feature = "native-geospatial")]
             definition: original_definition,
         })
@@ -275,7 +325,193 @@ impl PureTransform {
     }
 }
 
-fn epsg(definition: &str) -> Result<String, Error> {
+/// The embedded EPSG allow-list as `doctor` states it.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AllowlistSummary {
+    /// Listed codes, beyond the built-in WGS 84 cases.
+    pub codes: usize,
+    pub builtin: usize,
+    pub versions: String,
+    /// Whether this build resolves listed codes from the table (the standard build).
+    pub active: bool,
+    pub criterion: &'static str,
+}
+
+pub(crate) fn allowlist_summary() -> AllowlistSummary {
+    let table = allowlist::table();
+    AllowlistSummary {
+        codes: table.entries.len(),
+        builtin: table.builtin,
+        versions: table.versions(),
+        active: cfg!(not(feature = "native-geospatial")),
+        criterion: "all 18 samples (3x3 area-of-use lattice at 0 and 1000 m) within 1 mm in ECEF of GDAL's only-best, no-ballpark, offline result",
+    }
+}
+
+/// How a source CRS definition resolves, by its form alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SourceCrsKind {
+    /// A WGS 84 geographic, UTM or Mercator EPSG code the resolver states itself.
+    Builtin,
+    /// Any other EPSG code, looked up in the GDAL-verified allow-list.
+    Allowlist,
+    /// A caller-supplied WKT definition.
+    Wkt,
+    /// A caller-supplied PROJ string.
+    Proj,
+}
+
+/// The resolver's single dispatch on a trimmed definition.
+fn source_kind(definition: &str) -> Option<SourceCrsKind> {
+    if definition.starts_with('+') {
+        Some(SourceCrsKind::Proj)
+    } else if definition
+        .get(..5)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("EPSG:"))
+    {
+        let code = definition[5..].trim().parse::<u32>().ok();
+        Some(if code.and_then(builtin_epsg).is_some() {
+            SourceCrsKind::Builtin
+        } else {
+            SourceCrsKind::Allowlist
+        })
+    } else if definition.contains('[') {
+        Some(SourceCrsKind::Wkt)
+    } else {
+        None
+    }
+}
+
+/// How the converters would resolve one source CRS definition, without reading data.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceCrsResolution {
+    /// Whether the converters of this build accept the definition.
+    pub accepted: bool,
+    /// The definition's form; `None` when it is not an EPSG code, WKT or PROJ string.
+    pub kind: Option<SourceCrsKind>,
+    /// The text the transform is built from (the built-in PROJ string, the allow-list
+    /// row, or the caller's own WKT/PROJ); `None` when refused or resolved by native PROJ.
+    pub definition: Option<String>,
+    /// The allow-listed EPSG datum operation, exactly as conversion reports state it.
+    pub crs_operation: Option<CrsOperation>,
+    /// One line naming the operation and its accuracy, or "no datum change" for a
+    /// built-in WGS 84 code; `None` for explicit WKT/PROJ and refusals.
+    pub summary: Option<String>,
+    /// The converters' refusal message when not accepted.
+    pub refusal: Option<String>,
+}
+
+/// Resolve a source CRS definition exactly as the mesh, point-cloud and vector converters
+/// (and `doctor --sourceCrs`) do. A refusal is a result, not an error.
+pub fn resolve_source_crs(definition: &str) -> SourceCrsResolution {
+    let definition = definition.trim();
+    let kind = source_kind(definition);
+    match Transform::new(definition, 0.) {
+        Ok(transform) => {
+            let crs_operation = transform.operation().cloned();
+            let summary = match (&crs_operation, kind) {
+                (Some(operation), _) => Some(operation.summary()),
+                (None, Some(SourceCrsKind::Builtin)) => definition[5..]
+                    .trim()
+                    .parse::<u32>()
+                    .ok()
+                    .map(|code| format!("EPSG:{code}: WGS 84, no datum change")),
+                _ => None,
+            };
+            SourceCrsResolution {
+                accepted: true,
+                kind,
+                definition: transform.resolved_definition().map(str::to_owned),
+                crs_operation,
+                summary,
+                refusal: None,
+            }
+        }
+        Err(error) => SourceCrsResolution {
+            accepted: false,
+            kind,
+            definition: None,
+            crs_operation: None,
+            summary: None,
+            refusal: Some(error.to_string()),
+        },
+    }
+}
+
+/// The WGS 84 EPSG codes `builtin_epsg` states, in numeric order.
+fn builtin_epsg_codes() -> impl Iterator<Item = u32> {
+    [3395, 3857, 4326]
+        .into_iter()
+        .chain(32601..=32660)
+        .chain(32701..=32760)
+}
+
+/// Every EPSG code the standard build resolves: the built-in WGS 84 codes plus the
+/// GDAL-verified allow-list, sorted numerically. Native builds resolve codes beyond the
+/// built-in ones with strict PROJ instead of the table.
+pub fn supported_epsg_codes() -> Vec<u32> {
+    let mut codes: Vec<u32> = builtin_epsg_codes()
+        .chain(allowlist::table().entries.iter().map(|entry| entry.code))
+        .collect();
+    codes.sort_unstable();
+    codes
+}
+
+/// The embedded EPSG table's provenance and size, as its header records them.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrsTableInfo {
+    /// EPSG dataset version, for example `v13.102`.
+    pub epsg: String,
+    /// PROJ version the table was generated and verified with.
+    pub proj: String,
+    /// GDAL version the table was generated and verified with.
+    pub gdal: String,
+    /// All codes `supported_epsg_codes` lists.
+    pub codes: usize,
+    /// Built-in WGS 84 codes.
+    pub builtin: usize,
+    /// Allow-list rows.
+    pub allow_list: usize,
+}
+
+/// Versions and counts of the embedded EPSG table.
+pub fn crs_table_info() -> CrsTableInfo {
+    let table = allowlist::table();
+    CrsTableInfo {
+        epsg: table.epsg.clone(),
+        proj: table.proj.clone(),
+        gdal: table.gdal.clone(),
+        codes: table.builtin + table.entries.len(),
+        builtin: table.builtin,
+        allow_list: table.entries.len(),
+    }
+}
+
+enum Epsg {
+    Builtin(String),
+    // The standard build only: native builds resolve other codes with strict PROJ.
+    #[cfg_attr(feature = "native-geospatial", allow(dead_code))]
+    Listed(&'static allowlist::Entry, &'static allowlist::Table),
+}
+
+/// WGS 84 geographic, UTM and Mercator: same-datum conversions, exact in any build.
+fn builtin_epsg(code: u32) -> Option<String> {
+    let projection = match code {
+        4326 => "+proj=longlat".to_owned(),
+        3857 => "+proj=webmerc".to_owned(),
+        3395 => "+proj=merc".to_owned(),
+        32601..=32660 => format!("+proj=utm +zone={}", code - 32600),
+        32701..=32760 => format!("+proj=utm +zone={} +south", code - 32700),
+        _ => return None,
+    };
+    Some(format!("{projection} +datum=WGS84 +units=m"))
+}
+
+fn epsg(definition: &str) -> Result<Epsg, Error> {
     if definition[5..].contains('@') {
         return Err(unsupported("EPSG coordinate epochs require native PROJ"));
     }
@@ -288,16 +524,28 @@ fn epsg(definition: &str) -> Result<String, Error> {
         .trim()
         .parse::<u32>()
         .map_err(|_| Error::Data("invalid source EPSG code".into()))?;
-    let projection = match code {
-        4326 => "+proj=longlat".to_owned(),
-        3857 => "+proj=webmerc".to_owned(),
-        3395 => "+proj=merc".to_owned(),
-        32601..=32660 => format!("+proj=utm +zone={}", code - 32600),
-        32701..=32760 => format!("+proj=utm +zone={} +south", code - 32700),
-        4978 | 4979 => return Err(horizontal_required()),
-        _ => return Err(unsupported("EPSG CRS is outside the verified WGS84 geographic, UTM and Mercator allowlist; its best datum operation may require grids")),
-    };
-    Ok(format!("{projection} +datum=WGS84 +units=m"))
+    if matches!(code, 4978 | 4979) {
+        return Err(horizontal_required());
+    }
+    if let Some(definition) = builtin_epsg(code) {
+        return Ok(Epsg::Builtin(definition));
+    }
+    // A native build keeps strict PROJ, the reference the table was verified against,
+    // for every other code: the table serves the standard build only.
+    let table = allowlist::table();
+    if let Some(entry) = table.get(code) {
+        #[cfg(not(feature = "native-geospatial"))]
+        return Ok(Epsg::Listed(entry, table));
+        #[cfg(feature = "native-geospatial")]
+        return Err(unsupported(&format!(
+            "EPSG:{} uses strict native PROJ in this build",
+            entry.code
+        )));
+    }
+    Err(unsupported(&format!(
+        "EPSG:{code} is not in the standard build's GDAL-verified EPSG allow-list ({}); its best datum operation may require grids, an epoch or an unverified method",
+        table.versions()
+    )))
 }
 
 // Only parameters whose semantics we implement may reach proj4rs: it otherwise
@@ -2920,6 +3168,117 @@ mod tests {
             geodetic_to_ecef(Cartographic::new(153., -27., 130.)),
             definition,
         );
+    }
+
+    #[test]
+    fn resolve_source_crs_reports_kind_definition_operation_and_refusal() {
+        let builtin = resolve_source_crs(" epsg:32756 ");
+        assert!(builtin.accepted, "{builtin:?}");
+        assert_eq!(builtin.kind, Some(SourceCrsKind::Builtin));
+        assert_eq!(
+            builtin.definition.as_deref(),
+            Some("+proj=utm +zone=56 +south +datum=WGS84 +units=m")
+        );
+        assert_eq!(builtin.crs_operation, None);
+        assert_eq!(
+            builtin.summary.as_deref(),
+            Some("EPSG:32756: WGS 84, no datum change")
+        );
+        assert_eq!(builtin.refusal, None);
+
+        let helmert = "+proj=longlat +ellps=intl +towgs84=-87,-98,-121,0,0,0,0 +no_defs";
+        let proj = resolve_source_crs(helmert);
+        assert!(proj.accepted, "{proj:?}");
+        assert_eq!(proj.kind, Some(SourceCrsKind::Proj));
+        assert_eq!(proj.definition.as_deref(), Some(helmert));
+        assert_eq!((proj.crs_operation, proj.summary), (None, None));
+        let wkt = resolve_source_crs(WGS_WKT);
+        assert_eq!(
+            (wkt.accepted, wkt.kind, wkt.definition.as_deref()),
+            (true, Some(SourceCrsKind::Wkt), Some(WGS_WKT))
+        );
+
+        // Refusals carry the converters' own message, never an error.
+        let unknown = resolve_source_crs("not a crs");
+        assert!(!unknown.accepted && unknown.kind.is_none());
+        let message = |definition| match Transform::new(definition, 0.) {
+            Err(error) => error.to_string(),
+            Ok(_) => panic!("{definition} resolved"),
+        };
+        assert_eq!(unknown.refusal, Some(message("not a crs")));
+        let compound = resolve_source_crs("EPSG:4326+5773");
+        assert_eq!(compound.kind, Some(SourceCrsKind::Allowlist));
+        assert_eq!(compound.refusal, Some(message("EPSG:4326+5773")));
+        assert_eq!((compound.definition, compound.summary), (None, None));
+
+        #[cfg(not(feature = "native-geospatial"))]
+        {
+            let listed = resolve_source_crs("EPSG:7856");
+            assert!(listed.accepted, "{listed:?}");
+            assert_eq!(listed.kind, Some(SourceCrsKind::Allowlist));
+            let entry = allowlist::table().get(7856).unwrap();
+            assert_eq!(
+                listed.definition.as_deref(),
+                Some(entry.definition.as_str())
+            );
+            let operation = listed.crs_operation.as_ref().unwrap();
+            assert_eq!(operation, &CrsOperation::new(entry, allowlist::table()));
+            assert_eq!(operation.accuracy_metres, Some(3.));
+            assert_eq!(listed.summary, Some(operation.summary()));
+            let value = serde_json::to_value(&listed).unwrap();
+            assert_eq!(value["kind"], "allowlist");
+            assert_eq!(value["crsOperation"]["operationId"], "EPSG:8450");
+            assert_eq!(value["crsOperation"]["accuracyMetres"], 3.);
+
+            let grid = resolve_source_crs("EPSG:27700");
+            assert!(!grid.accepted);
+            assert_eq!(grid.kind, Some(SourceCrsKind::Allowlist));
+            assert_eq!(grid.refusal, Some(message("EPSG:27700")));
+            assert!(grid.refusal.unwrap().contains("allow-list"));
+        }
+    }
+
+    #[test]
+    fn supported_epsg_codes_are_the_builtin_codes_plus_the_table() {
+        let table = allowlist::table();
+        let builtin: Vec<u32> = builtin_epsg_codes().collect();
+        assert_eq!(builtin.len(), table.builtin);
+        assert!(builtin.windows(2).all(|pair| pair[0] < pair[1]));
+        for code in &builtin {
+            assert!(builtin_epsg(*code).is_some(), "{code}");
+            assert!(table.get(*code).is_none(), "{code} is also a table row");
+        }
+        let codes = supported_epsg_codes();
+        assert!(codes.windows(2).all(|pair| pair[0] < pair[1]));
+        let info = crs_table_info();
+        assert_eq!(
+            (info.codes, info.builtin, info.allow_list),
+            (codes.len(), builtin.len(), table.entries.len())
+        );
+        assert_eq!(
+            (info.epsg.as_str(), info.proj.as_str(), info.gdal.as_str()),
+            (
+                table.epsg.as_str(),
+                table.proj.as_str(),
+                table.gdal.as_str()
+            )
+        );
+        // Every listed code is accepted by the standard build, with its row's operation.
+        #[cfg(not(feature = "native-geospatial"))]
+        for code in codes {
+            let resolved = resolve_source_crs(&format!("EPSG:{code}"));
+            assert!(resolved.accepted, "EPSG:{code}: {:?}", resolved.refusal);
+            let listed = table.get(code).is_some();
+            assert_eq!(resolved.crs_operation.is_some(), listed, "EPSG:{code}");
+            assert_eq!(
+                resolved.kind,
+                Some(if listed {
+                    SourceCrsKind::Allowlist
+                } else {
+                    SourceCrsKind::Builtin
+                })
+            );
+        }
     }
 }
 

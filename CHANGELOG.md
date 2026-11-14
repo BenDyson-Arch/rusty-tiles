@@ -2,6 +2,189 @@
 
 All notable changes to rusty-tiles are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.4.1 - 2026-11-14
+
+### Added
+
+- Python `list_tiles(archive)` lists the content tiles of a `.3tz` archive or
+  unpacked tileset directory with their depth, `leaf`/`coarse` role, geometric
+  error and accumulated transform.
+- Python `decode_tile(archive, member, *, format="glb")` returns one tile as a
+  plain glTF 2.0 GLB (meshopt decoded, KTX2/Basis pages transcoded to PNG at
+  level 0, feature IDs and property tables kept) or, with `format="arrays"`,
+  as NumPy arrays in the tile frame. It is a view for display and inspection,
+  such as in Blender's bundled glTF importer, not a reversible round trip.
+- `mesh` capture progress: `capture_scan`, `capture_validate`, `capture_corners`,
+  `capture_positions`, `capture_triangles`, `capture_sequence`, `capture_images`,
+  `capture_tree`, `capture_corner_depths`, `capture_leaf_plans` and
+  `capture_merge` phases with totals, repeated at least every 250 ms, and
+  `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends` and
+  `hlod_incidence_merge` inside `hlod_incidence`. They are cancellation
+  checkpoints, so a cancel or Python callback exception during capture or the
+  incidence pass lands within about a second.
+- `validate` reports coarse HLOD tiles whose corner `NORMAL` points more than
+  90° from its face (the face shades against its winding) as the
+  `coarseNormalInversion` warning, with counts by cell depth in
+  `interfaceCensus.coarseNormals`. Warnings appear in a new report `warnings`
+  list, never fail validation (`ok` stays `true`), and the CLI prints them on
+  stderr. Archives written before this release usually carry the warning.
+- The standard build (CLI and Python wheel) resolves about 3,100 more EPSG codes from a
+  GDAL-verified allow-list, including GDA2020/GDA94 MGA, GDA94/GDA2020 geographic, GDA94
+  Lambert/Albers, NZTM2000, ETRS89 UTM and TM35FIN, for mesh, point-cloud and vector
+  conversion. A code is listed only when its generated Helmert or null-shift definition
+  lands within 1 mm of GDAL/PROJ's best operation at all 18 sampled points of its area of
+  use (EPSG v13.102, PROJ 9.9.0, GDAL 3.13.3). Grid-based codes such as British National
+  Grid (OSTN15), NAD27 and the original NAD83, coordinate epochs and dynamic reference
+  frames (ITRF, WGS 84 (Gxxxx), WGS 72) stay refused; native builds keep using strict PROJ.
+- `conversion.json` and the CLI summary name the EPSG datum operation an allow-listed code
+  uses and EPSG's stated accuracy; a null transformation such as GDA2020 to WGS 84 is
+  reported with its accuracy (3 m), not as exact. `doctor` reports the allow-list's size
+  and versions, and `doctor --source-crs <definition>` resolves one CRS without converting.
+- `validate --memory-budget BYTES` and `--jobs N|auto` (Python
+  `validate(..., memory_budget_bytes=, jobs=)`, Rust `ValidationRequest::memory_budget` and
+  `::jobs`), with `mesh`'s default policy: the lesser of 4 GiB and half the detected
+  headroom. When either is given, the report's new `resources` member states the resolved
+  budget and its source, the workers, the store sizes derived from the budget and the
+  scratch-disk bound.
+  An explicit budget below 512 MiB is refused as `resource_limit` before the archive is
+  opened.
+- `validate` progress for the HLOD delivery stage: `validate.delivery` (passes done of
+  the total) and `validate.delivery.leaves`, `.edges` and `.coarse` (placements replayed
+  of the total). Every event, every charged delivery row and every 10,000 SQLite
+  operations is a cancellation checkpoint.
+- A start-of-run scratch-disk check for `validate`: before traversal, free space is
+  compared with the catalog's terms plus, for an HLOD archive, a per-triangle term from the
+  triangles its GLB payloads declare. Below 16 bytes per triangle the volume is refused as
+  typed insufficient space (`io`); below 256 a `scratch_space` warning event is emitted.
+- Ctrl+C and Ctrl+Break in a Windows console cancel the running command and
+  clean up as SIGINT does on Unix (exit 130). A second press ends the process
+  at once.
+- Python: `resolve_source_crs(definition)` resolves one source CRS exactly as the
+  converters do, without converting, and returns `accepted`, `kind`, `definition`,
+  `crsOperation` (the reports' shape), `summary` and `refusal`; an unsupported definition
+  is returned, not raised. `supported_epsg_codes()` lists every EPSG code the package
+  resolves, and `crs_table_info()` gives the EPSG table's EPSG, PROJ and GDAL versions and
+  counts. The Rust library exports the same as `resolve_source_crs`,
+  `supported_epsg_codes` and `crs_table_info`.
+- Python wheels are also tested inside official Blender 5.2.4 LTS (Python 3.13) on Linux x64, Windows x64 and Apple Silicon macOS, alongside Blender 4.5.14 LTS.
+- A rolling development build of `develop`, the GitHub pre-release `dev`, is rebuilt after a nightly full CI pass when `develop` has changed. It has the CLI archives, Python wheels and `SHA256SUMS`, plus the container tag `ghcr.io/bendyson-arch/rusty-tiles:dev`, and uses a development version such as `0.4.1.dev202611121734`. It is not published to PyPI or crates.io. `scripts/install.sh --version dev` installs its CLI; see "Development builds" in `docs/INSTALL.md`.
+
+### Changed
+
+- `mesh` capture sizes its external sorts from the memory budget: runs grow until
+  every capture sort merges once (fan-in 64, 128 or 256), and full runs are sorted
+  and written by background writers while the next fills. The plan is charged in
+  capture's declared memory bound and reported as `diagnostics.capture.sort`;
+  the fixed configuration stays the floor, so the minimum budget and refusals are
+  unchanged. Archives are byte-identical for every budget and `--jobs`.
+- The coarse stage's `hlod_incidence` pass plans its item and endpoint sorts the same
+  way within the coarse stage's admission (floor fan-in, so no new scratch refusals),
+  reported as `diagnostics.memory.hlod.incidence_sort`.
+- The CRS refusal message reads `pure-Rust CRS transform unavailable` for every converter,
+  instead of naming point clouds.
+- `mesh` no longer refuses source images over 32 MiB encoded. Each image is
+  charged against the memory budget at its actual encoded length plus its
+  decoder working memory, in capture, the leaf stage and the coarse stage.
+  Capture reads every image's header (PNG `IHDR` or the first JPEG frame
+  header) before it writes any scratch, and an image whose decode the budget
+  cannot hold is `resource_limit` there; each decode is checked again against
+  the decoder's own header, which must declare the same dimensions
+  (`invalid_input` otherwise). A 1 GiB encoded sanity ceiling (`unsupported`)
+  and the 16,384 px edge remain. Malformed or unsupported image headers are now
+  refused at that preflight, before capture. The error kinds are the
+  decoder's, except that an image both over a header limit (edge, 16-bit) and
+  corrupt later in its stream now reports the header refusal (`unsupported`)
+  instead of the corruption (`invalid_input`).
+- Breaking error type: a `mesh` source image over 32 MiB encoded (and at most
+  1 GiB) that the memory budget cannot hold is now `resource_limit` (exit 1;
+  Python `ResourceLimitError`), refused with "image capture: decoding a source
+  image needs N bytes ... but the memory budget leaves B for image decoding".
+  It was `unsupported` (exit 2; `UnsupportedError`) "encoded image exceeds
+  32 MiB admission ceiling" before, whatever the budget. One that fits is now
+  converted. Over 1 GiB stays `unsupported`, now "encoded image exceeds 1 GiB
+  admission ceiling".
+- Archives for sources admitted before are unchanged at the budgets the digest
+  tests use, with two planning caveats. An image of at most 32 MiB with more
+  than 4 encoded bytes per texel (an incompressible RGBA PNG, or one inflated
+  by ancillary chunks) now gets a higher, correct leaf-stage charge, which can
+  move a leaf's density step at a budget right at that threshold. The coarse
+  stage's decode charge now uses the largest actual encoded image instead of a
+  fixed 32 MiB, so for every source that declares images (textured, or with
+  images no material samples) the coarse stage's job count, image cache and
+  reported memory minima can change; coarse planning does not change archive
+  bytes, and image-free sources never had this term. The output digest tests
+  run at default budgets, not at these thresholds.
+- `validate` sizes its external sort runs, merge fan-in and buffers, catalog cache,
+  resident-store thresholds and the HLOD delivery store's SQLite page cache from the
+  memory budget (SQLite's temporary store stays on disk unless its row bound fits), and
+  replays HLOD payload geometry on `--jobs` workers in a bounded lookahead. Verdicts,
+  work counts, refusals and every report member except `resources` and `scratch` are
+  unchanged and identical for every budget and worker count.
+- The vector encoder fingerprint changes, so `--reuse-tileset` refuses every vector archive
+  made before this release, with or without `--meshopt` ("previous encoder, CRS or conversion
+  settings differ"). Run one fresh conversion without `--reuse-tileset`.
+- Release and development builds publish the CLI archives and Python wheels that the full CI run of the same commit built and tested, after smoke-testing each archive on its platform, instead of rebuilding them. They are rebuilt only when that run's artifacts have expired.
+- The native container's `Dockerfile` takes PROJ and GDAL from a `GEOBASE` stage or image: `geospatial-source` builds them from their checked source tarballs as before, or a pinned `ghcr.io/bendyson-arch/rusty-tiles-geobase:<gdal>-<proj>@sha256:...` image provides them. The image contents are unchanged.
+- While a release candidate is out, development builds are versioned between it and the next candidate (for example `0.4.1rc2.dev202611121734` after `0.4.1rc1`) instead of before every candidate, and replacing the `dev` pre-release no longer interrupts its downloads.
+
+### Removed
+
+- Intel macOS (`x86_64-apple-darwin`) is no longer supported: releases have no Intel macOS CLI archive or wheel, and CI no longer builds or tests it. 0.4.0 is the last release with them. On an Intel Mac, `pip install rusty-tiles` finds no wheel (there is no source distribution) and `scripts/install.sh` stops with a message for 0.4.1 and later; install 0.4.0 (`--version 0.4.0`, `pip install rusty-tiles==0.4.0`) or build from source with Cargo (`cargo install --locked --git https://github.com/BenDyson-Arch/rusty-tiles rusty-tiles`, or `maturin build --release` for the wheel). macOS builds are Apple Silicon only, and the installer gives an Apple Silicon Mac in a Rosetta terminal the native build.
+
+### Fixed
+
+- Security: decoding a tile whose meshopt stream declares an invalid byte stride or
+  count (Python `decode_tile`) is refused as invalid input. Before, such a stream
+  reached the bundled meshopt decoder, which checks these preconditions only in debug
+  builds. The check now sits in front of every meshopt decode, not only in `validate`.
+- Mesh HLOD no longer fails with an internal error when a coarse tile of a normal-mapped
+  material is next to a material without a normal map: a coarse texel whose nearest source
+  triangle has no normal map gets a flat normal.
+- `raster --force` no longer replaces, and so deletes, a directory that holds its own
+  source when the output names that directory through another path (a second bind
+  mount, or a different case on a case-insensitive file system). The output is
+  compared with each source by file identity, as `terrain` already does.
+- Mesh HLOD coarse tiles no longer shade surfaces with starburst gradients or
+  inverted facets when the source carries normals. Coarse `NORMAL` is now
+  crease-aware: a vertex splits its normal across edges sharper than 60°, and
+  every corner normal lies within 60° of its face, so no face is shaded against
+  its own winding. Leaves are unchanged; coarse tiles of sources with normals
+  have more vertices (13–15% more coarse bytes on the measured meshes).
+- `validate` creates SQLite's temporary files for the HLOD delivery store (sorter runs,
+  temporary tables, statement journals) in its scratch directory instead of SQLite's own
+  temporary directory (`/var/tmp` or `TMPDIR`), so `--scratch-dir` holds them.
+- A stop request now ends the long phases within a few seconds (capture's
+  own checkpoints are under Added). This covers SIGINT/SIGTERM,
+  Ctrl+C/Ctrl+Break in a Windows console, and `KeyboardInterrupt` at a Python
+  progress event. Before, such a run could keep working for minutes and a
+  service manager would kill it, leaving its scratch on disk. The phases are:
+  - `validate` archive admission (before its first progress event), hashing
+    of a large member, its catalog, row and delivery external sorts and
+    merges, and the HLOD index build and final commit;
+  - the mesh archive's index sort, staging of each leaf payload, density mip
+    chains and coarse texture halving;
+  - vector GeoJSON ingestion, its SQLite partition, fingerprint, grid and
+    encoding statements, and restoring a reused tileset.
+
+  The run still removes its scratch, exits 130/143 and publishes nothing.
+- A few calls cannot see a stop, such as one KTX2 page encode, which can
+  take minutes at the highest settings of the lossy ladder. If a stopped CLI
+  run has not finished 20 seconds after the signal, the CLI removes the run's
+  spill, work and staging paths itself and exits with the same status. A
+  systemd stop then ends after about 20 seconds plus the time to remove the
+  run's temporary files, instead of reaching the 90-second SIGKILL.
+- `mesh` and vector content no longer write `"filter": "NONE"` on `EXT_meshopt_compression`
+  buffer views. NONE is the extension's default, but Blender 5.2's glTF importer refuses the
+  explicit value, so untextured mesh tiles did not open in Blender. `OCTAHEDRAL` is still
+  written. Only the glTF JSON changes; compressed and fallback payload bytes are the same, but
+  `mesh` and vector content hashes and archive bytes change. `validate` accepts both forms.
+- `rusty_tiles.__version__` uses the wheel's PEP 440 spelling for pre-release versions (`0.4.0rc1`, not `0.4.0-rc.1`), so it matches `importlib.metadata.version("rusty-tiles")`.
+- Windows: the Python wheel no longer crashes Blender 4.5 (an access violation in
+  `MSVCP140.dll`) when it encodes or decodes KTX2 textures, for example in `decode_tile` or a
+  textured `mesh_to_tileset`. The bundled Basis Universal C++ was built with the newer runtime's
+  constexpr `std::mutex`, which Blender 4.5's older bundled C++ runtime cannot lock; it now keeps
+  the runtime-constructed mutex that every `MSVCP140.dll` supports.
+
 ## 0.4.0 - 2026-11-11
 
 ### Added

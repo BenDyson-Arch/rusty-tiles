@@ -18,6 +18,7 @@ mod limits;
 mod limits_controls;
 #[cfg(test)]
 mod memo_controls;
+mod resources;
 mod rows;
 #[cfg(test)]
 mod scale_driver;
@@ -31,10 +32,12 @@ pub use limits::{
     UnknownLimitKey, LIMIT_MODEL,
 };
 use limits::{LimitPlan, Sources};
+pub use resources::{BudgetReport, DiskBound, JobsReport, StorePlan, ValidationResources};
 pub use rows::{PayloadRows, PayloadRowsIter};
 pub use types::{
-    ExpectedProfile, InterfaceCensus, PayloadReport, ScratchRefusal, ScratchReport,
-    ValidationFailure, ValidationLimits, ValidationReport, ValidationRequest,
+    CoarseNormalCensus, ExpectedProfile, InterfaceCensus, PayloadReport, ScratchRefusal,
+    ScratchReport, ValidationFailure, ValidationLimits, ValidationReport, ValidationRequest,
+    ValidationWarning,
 };
 type Error = ValidationFailure;
 use facts::{FactStore, Stored};
@@ -182,6 +185,9 @@ fn spill_failure(error: crate::spill::SpillError) -> Error {
         Ok(refusal) => return Error::Scratch(refusal),
         Err(error) => error,
     };
+    if let SpillError::Stopped(error) = error {
+        return run_failure(*error);
+    }
     let message = format!("validation scratch: {error}");
     match error {
         SpillError::Overflow => Error::limit(message),
@@ -284,6 +290,15 @@ impl<'a> Progress<'a> {
         } else {
             attempt.check().map_err(|error| self.stopped(error))
         }
+    }
+    /// A warning event; without a control a no-op.
+    fn warn(&self, code: &str, message: &str) -> Result<(), Error> {
+        let Some(attempt) = self.attempt else {
+            return Ok(());
+        };
+        attempt
+            .emit(&crate::RunEvent::Warning { code, message })
+            .map_err(|error| self.stopped(error))
     }
     fn emit(&self) -> Result<(), Error> {
         let Some(attempt) = self.attempt else {
@@ -3336,6 +3351,9 @@ fn inspect_run(
     attempt: Option<&crate::runtime::Attempt>,
 ) -> Result<Inspection, Error> {
     let mut progress = Progress::new(attempt);
+    // #342: the memory budget and workers are resolved once, before anything is touched.
+    let (memory_budget, jobs) = request.requested_resources();
+    let mut plan = resources::Plan::resolve(memory_budget, jobs)?;
     // VS-C-7: an explicit scratch directory is checked before the input is opened.
     let placement = match request.scratch() {
         Some(dir) if dir.is_dir() => crate::spill::Placement::In(dir.to_owned()),
@@ -3367,13 +3385,32 @@ fn inspect_run(
         source.try_clone()?,
         before.len(),
         &archive_limits,
-        crate::archive3tz::CatalogConfig::selected(),
+        crate::archive3tz::CatalogConfig::selected_or(plan.catalog),
         placement,
+        attempt.map(crate::runtime::Attempt::probe),
     )
     .map_err(archive_admission_error)?;
     // VS-C-1: S is fixed by the admitted catalog before any budgeted work.
     let stored_bytes = archive.stored_bytes();
     let (limits, limit_derivation, sources) = budgets.resolve(stored_bytes);
+    let delivery_resources = hlod_delivery::Resources {
+        // The forced-spill parity profile keeps its own tiny side sorts.
+        sort: (*archive.config() == plan.catalog).then_some(plan.delivery_sort),
+        workers: plan.jobs,
+        window_bytes: plan.window_bytes,
+        cache_bytes: plan.sqlite_cache_bytes,
+        temp_in_memory: plan.temp_store_in_memory(
+            limits.total_payload_elements,
+            hlod_delivery::ROW_UNITS as u64,
+            limits.hierarchy_visits,
+            limits.references,
+        ),
+    };
+    plan.report.stores.sqlite_temp_store = if delivery_resources.temp_in_memory {
+        "memory"
+    } else {
+        "file"
+    };
     let reads = budget(&limits, &sources, LimitKey::TotalBytesRead);
     // Count the exact index bytes already consumed by the format owner. Later
     // index/member hashing and repeated content reads consume this same budget.
@@ -3383,6 +3420,10 @@ fn inspect_run(
     let mut vector_build = None;
     progress.phase("validate.hash", Some(archive.len()))?;
     let mut directory = archive.directory().map_err(archive_admission_error)?;
+    // #342: triangles the GLB members declare, read from the block the hash reads first; they
+    // size the HLOD delivery store's disk bound below.
+    let mut declared_triangles = 0u64;
+    let mut head = Vec::new();
     while let Some(member) = directory.next_entry().map_err(spill_failure)? {
         progress.step()?;
         let name = member.name;
@@ -3395,9 +3436,19 @@ fn inspect_run(
         bytes_read = reads.charge(bytes_read, member.size, || {
             "archive hash reads exceed work limit".into()
         })?;
+        let glb = name.ends_with(".glb");
         let digest = archive
-            .hash_range(member.size, member.data_offset, member.crc32)
+            .hash_range_with_head(
+                member.size,
+                member.data_offset,
+                member.crc32,
+                glb.then_some(&mut head),
+            )
             .map_err(archive_admission_error)?;
+        if glb {
+            declared_triangles =
+                declared_triangles.saturating_add(resources::declared_triangles(&head));
+        }
         let hash = format!("{:x}", sha2::digest::Output::<sha2::Sha256>::from(digest));
         let stem = Path::new(&name)
             .file_stem()
@@ -3483,7 +3534,7 @@ fn inspect_run(
         },
         reports: report,
         hlod_identity: false,
-        delivery: hlod_delivery::Store::new(scratch.clone(), &config)?,
+        delivery: hlod_delivery::Store::new(scratch.clone(), &config, delivery_resources)?,
         delivery_path: Vec::new(),
         delivery_next: 0,
         tiles: 0,
@@ -3541,6 +3592,45 @@ fn inspect_run(
         if hlod {
             check.delivery.expect_identity();
         }
+        // #342: the scratch-disk bound, before any traversal work: the catalog's estimate plus,
+        // for an HLOD archive, the delivery store's terms per declared triangle. Below the
+        // floor the volume is refused as typed insufficient space; below the estimate a
+        // warning is emitted and validation goes on (review P2-1).
+        if hlod || check.scratch.is_created() {
+            let per_triangle = |bytes: u64| {
+                if hlod {
+                    declared_triangles.saturating_mul(bytes)
+                } else {
+                    0
+                }
+            };
+            let needed = check.scratch.needed();
+            let (floor_rate, estimate_rate) = resources::hlod_bytes_per_triangle();
+            let floor = needed.saturating_add(per_triangle(floor_rate));
+            let estimate = needed
+                .saturating_add(per_triangle(estimate_rate))
+                .max(floor);
+            let available = check
+                .scratch
+                .preflight_peak(floor, crate::spill::PreflightStage::Validation)
+                .map_err(spill_failure)?;
+            let held = check.scratch.live_bytes();
+            if available.saturating_add(held) < estimate {
+                check.progress.warn(
+                    "scratch_space",
+                    &format!(
+                        "validation scratch at {} may run short: estimated peak {estimate} \
+                         bytes, {available} available",
+                        check.scratch.path().display()
+                    ),
+                )?;
+            }
+            plan.report.disk = Some(resources::DiskBound {
+                estimated_peak_bytes: estimate,
+                refusal_bytes: floor,
+                available_bytes: available,
+            });
+        }
         // D5 amendment A3: the texture term binds every content tile's G, under the
         // resolved HLOD expectation and the producer's recorded profile.
         let profile = (check.reports["operation"].as_str() == Some("mesh_tiler"))
@@ -3569,24 +3659,19 @@ fn inspect_run(
     let delivery_budget = check.resources.budget(LimitKey::TotalPayloadElements);
     let delivery_reads = check.resources.budget(LimitKey::TotalBytesRead);
     let delivery_member_cap = check.resources.limits.member_bytes;
-    let delivery_resources = &mut check.resources;
+    let probe = check.progress.attempt.map(crate::runtime::Attempt::probe);
     // Selected geometry replays use already C1-admitted payload ranks. Reads
     // retain their ordinary volume charge; the delivery owner charges decoding.
-    let delivery_work = check
-        .delivery
-        .finish(delivery_budget, check.elements, &mut |rank| {
-            let name = delivery_resources
-                .archive
-                .name(rank)
-                .map_err(archive_admission_error)?;
-            read_member(
-                delivery_resources.archive,
-                &name,
-                &mut delivery_resources.bytes_read,
-                delivery_reads,
-                delivery_member_cap,
-            )
-        })?;
+    let mut reads = DeliveryReads {
+        resources: &mut check.resources,
+        reads: delivery_reads,
+        cap: delivery_member_cap,
+        file: worker_file(&source, path).map(std::sync::Arc::new),
+    };
+    let delivery_work =
+        check
+            .delivery
+            .finish_with(delivery_budget, check.elements, probe, &mut reads)?;
     check.elements = check
         .elements
         .checked_add(delivery_work)
@@ -3671,14 +3756,30 @@ fn inspect_run(
     check.progress.phase("validate.rows", None)?;
     let payloads = check.rows.finish(names, scratch.clone())?;
     check.progress.step()?;
+    let census = check.delivery.census();
+    if let Some(c) = &census {
+        for (bit, suffix) in hlod_delivery::NORMAL_SKIPS {
+            if c.coarse_normals.skip_reasons & bit != 0 {
+                check
+                    .not_inspected
+                    .insert(format!("coarseNormalInversion.{suffix}"));
+            }
+        }
+    }
+    let warnings = census
+        .as_ref()
+        .and_then(|c| coarse_normal_warning(&c.coarse_normals))
+        .into_iter()
+        .collect();
     let report = ValidationReport {
         ok: true,
+        warnings,
         archive: path.into(),
         tiles: check.tiles as u64,
         content_references: check.contents as u64,
         entries,
         payloads,
-        interface_census: check.delivery.census().map(|c| InterfaceCensus {
+        interface_census: census.map(|c| InterfaceCensus {
             basis: "decoded leaf canonical f32 keys",
             shared_points: c.shared_points,
             shared_segments: c.shared_segments,
@@ -3696,6 +3797,7 @@ fn inspect_run(
             dropped_by_depth: c.dropped_by_depth,
             texture_refinable_tiles: c.texture_refinable_tiles,
             texture_bound_tiles: c.texture_bound_tiles,
+            coarse_normals: coarse_normal_census(&c.coarse_normals),
         }),
         scratch: scratch.is_created().then(|| ScratchReport {
             memory_backed: scratch.memory_backed(),
@@ -3737,6 +3839,10 @@ fn inspect_run(
         .collect(),
         not_inspected: check.not_inspected.into_iter().collect(),
         not_inspected_truncated: labels.truncated,
+        // Host-dependent: only a request that set a budget or jobs gets it back, so a default
+        // report is a function of the archive and the request, `scratch` apart (whether files
+        // spilled, and their peak, follow the resolved budget and workers; review P2-3, N5).
+        resources: (memory_budget.is_some() || jobs.is_some()).then_some(plan.report),
     };
     Ok(Inspection {
         report,
@@ -3759,6 +3865,71 @@ fn inspect_run(
         #[cfg(test)]
         implicit: check.implicit_facts,
     })
+}
+
+/// The delivery stage's payload reads (#342): the sequential [`read_member`] split into its
+/// in-order admission and its fetch, plus positional worker fetches for the replay lookahead.
+struct DeliveryReads<'r, 'a> {
+    resources: &'r mut ArchiveResources<'a>,
+    reads: Budget,
+    cap: u64,
+    /// The archive for worker reads; `None` keeps every replay sequential.
+    file: Option<std::sync::Arc<File>>,
+}
+impl hlod_delivery::Payloads for DeliveryReads<'_, '_> {
+    fn admit(&mut self, rank: u64) -> Result<(), Error> {
+        let archive = &mut *self.resources.archive;
+        let name = archive.name(rank).map_err(archive_admission_error)?;
+        let size = archive.member(&name).map_err(archive_admission_error)?.size;
+        if size > self.cap {
+            return Err(Error::limit(format!(
+                "member exceeds admitted byte limit: {name}"
+            )));
+        }
+        self.resources.bytes_read = self.reads.charge(self.resources.bytes_read, size, || {
+            "member reads exceed work limit".into()
+        })?;
+        Ok(())
+    }
+    fn fetch(&mut self, rank: u64) -> Result<Vec<u8>, Error> {
+        let archive = &mut *self.resources.archive;
+        let name = archive.name(rank).map_err(archive_admission_error)?;
+        archive
+            .read_member(&name, self.cap)
+            .map_err(archive_admission_error)
+    }
+    fn locate(&mut self, rank: u64) -> Option<(u64, hlod_delivery::Fetch)> {
+        let file = self.file.clone()?;
+        let archive = &mut *self.resources.archive;
+        let name = archive.name(rank).ok()?;
+        let member = archive.member(&name).ok()?;
+        if member.size > self.cap {
+            return None;
+        }
+        let (offset, size, crc) = (member.data_offset, member.size, member.crc32);
+        Some((
+            size,
+            Box::new(move || {
+                crate::archive3tz::read_stored_at(&file, offset, size, crc)
+                    .map_err(archive_admission_error)
+            }),
+        ))
+    }
+}
+/// A handle for positional worker reads of the archive: a clone of the inspected handle on
+/// Unix; elsewhere a second open, whose own file position the reader's seeks never move (its
+/// bytes are CRC-checked, and the source is compared again after inspection).
+fn worker_file(source: &File, path: &Path) -> Option<File> {
+    #[cfg(unix)]
+    {
+        let _ = path;
+        source.try_clone().ok()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = source;
+        File::open(path).ok()
+    }
 }
 
 /// Small I1 archive builders shared by the in-crate tests.
@@ -3891,6 +4062,43 @@ mod i1_fixtures {
         (work, output)
     }
 }
+/// Corner NORMALs more than this from their coarse face shade the face against its
+/// winding (the inversion bound; producers since #336 stay within 60°, so snorm8 and
+/// position rounding cannot reach it).
+const COARSE_NORMAL_BOUND_DEGREES: u32 = 90;
+fn coarse_normal_census(c: &hlod_delivery::CoarseNormals) -> CoarseNormalCensus {
+    CoarseNormalCensus {
+        bound_degrees: COARSE_NORMAL_BOUND_DEGREES,
+        tiles: c.tiles,
+        faces: c.faces,
+        skipped_tiles: c.skipped_tiles,
+        inverted_tiles: c.inverted_tiles_by_depth.iter().sum(),
+        inverted_faces: c.inverted_faces_by_depth.iter().sum(),
+        inverted_tiles_by_depth: c.inverted_tiles_by_depth.clone(),
+        inverted_faces_by_depth: c.inverted_faces_by_depth.clone(),
+    }
+}
+/// The `coarseNormalInversion` warning: never a failure (`ok` stays true).
+fn coarse_normal_warning(c: &hlod_delivery::CoarseNormals) -> Option<ValidationWarning> {
+    let census = coarse_normal_census(c);
+    (census.inverted_faces > 0).then(|| ValidationWarning {
+        code: "coarseNormalInversion",
+        message: format!(
+            "{} of {} coarse tiles with NORMAL ({} of {} faces) have a corner NORMAL more than \
+             {}° from its face, so those faces shade against their winding; by cell depth, \
+             tiles {:?}, faces {:?} (interfaceCensus.coarseNormals). Rebuild with a \
+             producer that includes #336.",
+            census.inverted_tiles,
+            census.tiles,
+            census.inverted_faces,
+            census.faces,
+            census.bound_degrees,
+            census.inverted_tiles_by_depth,
+            census.inverted_faces_by_depth,
+        ),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

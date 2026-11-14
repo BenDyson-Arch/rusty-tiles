@@ -48,9 +48,10 @@ use self::{
     store::{CoarseTile, HlodRow, SourcePrimitive, StoppingBound, TileGeometry, TileKey},
 };
 use super::{
+    capture_sort::{self, SortPlan},
     config::{self, TreeConfig},
     full::FullCaptured,
-    phases::{Phase, Phases},
+    phases::{Phase, Phases, Step, StepProgress},
     records::{NodeKind, NodeRecord},
     resources::{self, Ledger, MemoryBudget},
 };
@@ -189,8 +190,12 @@ pub struct HlodMemoryPlan {
     pub ceiling_bytes: u64,
     /// Captured metadata, decoded JSON, runtime reserve and stream buffers.
     pub fixed_bytes: u64,
-    /// The incidence pass's two live sorters (before the walk).
+    /// The incidence pass's two live sorters (before the walk), as planned.
     pub incidence_bytes: u64,
+    /// The incidence pass's item and endpoint sorts, planned under the budget (D8): the
+    /// floor's fan-in, runs grown toward one pass and run writers, within the ledger the
+    /// walk has not yet taken. The row sort, whose stream the walk reads, keeps the floor.
+    pub incidence_sort: SortPlan,
     /// The sequential walk's worst child window: 8 held tiles per open level.
     pub window_bytes: u64,
     /// One parent job: its workspace plus its output.
@@ -259,6 +264,26 @@ fn chart_workspace(edge: u32, cap: usize) -> u64 {
     )
 }
 
+/// One worker's source-image decode transient and the chain it holds while sampling,
+/// besides the shared cache, with the largest chain alone: 16 bytes per texel of the
+/// largest image (decoder output, RGBA and chain build copy), the largest encoded image
+/// at its actual length (a different image when that is larger), and the largest chain.
+fn source_decode_bytes(images: &[crate::gltf_source::source::ImageInfo]) -> (u64, u64) {
+    let largest = images
+        .iter()
+        .map(|i| (u64::from(i.width), u64::from(i.height)))
+        .max_by_key(|(w, h)| w * h)
+        .unwrap_or((0, 0));
+    let largest_chain = bake::chain_bytes(largest.0 as u32, largest.1 as u32);
+    let largest_encoded = images.iter().map(|i| i.encoded_bytes).max().unwrap_or(0);
+    let decode = bake::CHAIN_READER_BYTES
+        + (largest.0 * largest.1)
+            .saturating_mul(16)
+            .saturating_add(largest_encoded)
+            .saturating_add(largest_chain);
+    (decode, largest_chain)
+}
+
 fn appearance_plan(
     captured: &FullCaptured,
     profile: config::Profile,
@@ -293,20 +318,7 @@ fn appearance_plan(
         .unwrap_or(0)
         .max(1);
     let page = appearance::page_charge([edge, edge], slots, profile)?;
-    let largest = captured
-        .image_info
-        .iter()
-        .map(|i| (u64::from(i.width), u64::from(i.height)))
-        .max_by_key(|(w, h)| w * h)
-        .unwrap_or((0, 0));
-    let largest_chain = bake::chain_bytes(largest.0 as u32, largest.1 as u32);
-    // One image decode transient (encoded bytes, RGBA, chain build copy) and the chain a
-    // worker holds while sampling, besides the shared cache.
-    let decode = bake::CHAIN_READER_BYTES
-        + (largest.0 * largest.1)
-            .saturating_mul(16)
-            .saturating_add(32 << 20)
-            .saturating_add(largest_chain);
+    let (decode, largest_chain) = source_decode_bytes(&captured.image_info);
     // One group's page workspace at a time, plus the tile's delivered pages and the GLB
     // being assembled from them (each at most `tile_pages`).
     let tile_pages =
@@ -358,8 +370,12 @@ pub(crate) fn plan(
         .saturating_add(appearance.texture)
         .saturating_add(appearance.color);
     let sorter = config.sorter(1);
-    let incidence = interfaces::memory_need(sorter, leaf_cap, captured.tree.stats.leaves)
-        .max(borders::memory_need(sorter));
+    let leaves = captured.tree.stats.leaves;
+    let incidence_need = |sorters| {
+        interfaces::memory_need(sorters, leaf_cap, leaves).max(borders::memory_need(sorter))
+    };
+    // The floor: what the stage's minimum is computed with.
+    let incidence = incidence_need(interfaces::Sorters::uniform(sorter));
     let buffer = config.sort.buffer_bytes as u64;
     // Five sequence readers plus the interface stream's merge buffers.
     let streams = buffer
@@ -428,6 +444,45 @@ pub(crate) fn plan(
         }
         let ledger = ceiling - fixed;
         let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as u64;
+        // D8: the incidence pass runs before the walk takes any lease, so its item and
+        // endpoint sorts may grow into the whole ledger. Their fan-in stays the floor's, at
+        // which every staged scratch bound only shrinks as runs grow (`interfaces`), so no
+        // free-space admission refuses what the floor would admit.
+        let blocked = if captured.scratch.memory_backed() {
+            Some("memory_backed_scratch")
+        } else if config::available_memory().is_none() {
+            Some("unknown_memory")
+        } else {
+            None
+        };
+        #[cfg(test)]
+        let blocked = blocked.or((!config.test_sort_plan).then_some("floor"));
+        let workers = match config.jobs {
+            config::Jobs::Auto => cores,
+            config::Jobs::Fixed(n) => (n.get() as u64).min(cores),
+        };
+        let (_, incidence_sort) = capture_sort::plan(
+            config.sort,
+            &interfaces::sort_loads(captured.triangles.len()),
+            blocked,
+            usize::try_from(workers.saturating_sub(1)).unwrap_or(0),
+            &[config.sort.fan_in],
+            |shared| {
+                let items = crate::spill::SortConfig {
+                    run_bytes: (shared.run_bytes / 2).max(1),
+                    jobs: 1,
+                    ..shared
+                };
+                incidence_need(interfaces::Sorters {
+                    items,
+                    rows: sorter,
+                }) <= ledger
+            },
+        );
+        let incidence_bytes = incidence_need(interfaces::Sorters {
+            items: incidence_sort.sorter(1),
+            rows: sorter,
+        });
         let (jobs, limited_by) = worker_admission(
             (ledger - window).saturating_sub(appearance.cache_floor),
             job,
@@ -448,7 +503,8 @@ pub(crate) fn plan(
             budget_bytes: budget.resolved_bytes,
             ceiling_bytes: ceiling,
             fixed_bytes: fixed,
-            incidence_bytes: incidence,
+            incidence_bytes,
+            incidence_sort,
             window_bytes: window,
             job_bytes: job,
             minimum_bytes: minimum.saturating_add(tmpfs),
@@ -809,15 +865,22 @@ pub(crate) fn produce(
     let incidence_started = std::time::Instant::now();
     captured.scratch.begin_stage();
     let admit = |bound: u64| admit_scratch(captured, input.config, settings.cap, bound);
+    // The pass's steps and sort checkpoints are its cancellation checks.
+    let incidence_check = || check();
+    let incidence_progress = StepProgress::new(&incidence_check, input.phases.emitter())
+        .merging_as(Step::IncidenceMerge);
     let (rows, stats, source_open_ends) = interfaces::build(
         &captured.scratch,
-        input.config.sorter(1),
+        interfaces::Sorters {
+            items: input.plan.incidence_sort.sorter(1),
+            rows: input.config.sorter(1),
+        },
         &captured.tree.nodes,
         &captured.triangles,
         &captured.corner_depths,
         &captured.lattice,
         &admit,
-        check,
+        &incidence_progress,
     )?;
     // The pass checks its own bytes as it returns, before any downstream stage writes: its
     // phases are over, only its row stream remains (consumed by the walk).

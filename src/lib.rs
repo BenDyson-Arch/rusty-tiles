@@ -6,6 +6,8 @@
 mod archive3tz;
 mod basisu_ktx2;
 pub mod bbox;
+#[doc(hidden)]
+pub mod cleanup;
 mod content_integrity;
 mod crs;
 mod crs_jacobian;
@@ -35,10 +37,16 @@ mod storage_meter;
 pub mod terrain;
 #[cfg(test)]
 mod test_alloc;
+mod test_hooks;
+pub mod tile_view;
 mod tileset_node;
 mod vec3;
 pub mod vector;
 
+pub use crs::{
+    crs_table_info, resolve_source_crs, supported_epsg_codes, CrsOperation, CrsTableInfo,
+    OperationKind, SourceCrsKind, SourceCrsResolution,
+};
 pub use error::Error;
 pub use georef::{Cartographic, RotationDegrees, SourceAxes, SourceOffset};
 pub use mesh_archive::{

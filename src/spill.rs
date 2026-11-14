@@ -21,7 +21,8 @@ pub(crate) use sequence::{
 };
 #[allow(unused_imports)]
 pub(crate) use sort::{
-    chunk_records, ExternalSorter, SortConfig, SortStats, SortedStream, CHUNK_BYTES,
+    chunk_records, ExternalSorter, SortConfig, SortObserver, SortProgress, SortStats, SortedStream,
+    CHUNK_BYTES,
 };
 #[cfg(test)]
 pub(crate) use volume::Classification;
@@ -41,7 +42,7 @@ use std::{fmt, io, path::PathBuf};
 /// A record may also have narrower run-level encodings ([`Layout`]): fields that a whole run
 /// leaves at their default are omitted from every record of that run's sorts and sequences, and
 /// decode restores them. The containers carry their layout, so readers are unchanged.
-pub(crate) trait Record: Copy + Ord + Send {
+pub(crate) trait Record: Copy + Ord + Send + 'static {
     /// Encoded size in bytes under [`Layout::FULL`]; must be nonzero.
     const SIZE: usize;
     /// Writes exactly `SIZE` bytes into `out` (`out.len() == SIZE`).
@@ -133,6 +134,10 @@ pub(crate) enum SpillError {
     Overflow,
     #[error("spill sorter already failed")]
     Poisoned,
+    /// A sort observer stopped the sort (cancellation or an observer failure); the cause is
+    /// returned unchanged.
+    #[error(transparent)]
+    Stopped(Box<JobError>),
 }
 
 impl SpillError {
@@ -168,6 +173,7 @@ impl From<SpillError> for JobError {
             }
             SpillError::Overflow => JobError::new(JobErrorKind::ResourceLimit, error.to_string()),
             SpillError::Poisoned => JobError::new(JobErrorKind::InvalidState, error.to_string()),
+            SpillError::Stopped(cause) => *cause,
             SpillError::CorruptRun { ref path, .. } => {
                 let path = path.clone();
                 JobError::with_cause_at(JobErrorKind::Io, error.to_string(), &path, error)

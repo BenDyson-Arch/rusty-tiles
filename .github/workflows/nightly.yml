@@ -1,8 +1,10 @@
 name: Nightly full CI
 
 # GitHub runs scheduled workflows from the default branch (main), but the full matrix must
-# test develop. This workflow only dispatches ci.yml on develop; the run it starts reports to
-# the "Full CI matrix failing on develop" issue. It fires once this file has reached main.
+# test develop. This workflow only dispatches ci.yml on develop with nightly=true; that run
+# executes every full-tier job, Release acceptance included, reports to the "Full CI matrix
+# failing on develop" issue and, when it passes, starts the dev build. If the dispatch itself
+# fails (for example develop's ci.yml no longer parses), this job reports to the same issue.
 on:
   schedule:
     - cron: '0 17 * * *' # 03:00 Australia/Brisbane (UTC+10, no daylight saving)
@@ -15,13 +17,31 @@ jobs:
   dispatch:
     name: Dispatch full CI on develop
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 5 # versions: TIMEOUT_SHORT
     permissions:
       contents: read
       actions: write
+      issues: write
     steps:
       - name: Start the full tier
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: gh workflow run ci.yml --ref develop -f nightly=true
+      - name: Report a failed dispatch to the tracking issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -eu
+          title='Full CI matrix failing on develop'
+          body=$(printf 'The nightly run could not start ci.yml on develop: %s\n' "$RUN_URL")
+          number=$(gh issue list --state open --limit 100 --json number,title \
+            --jq "[.[] | select(.title == \"$title\")] | sort_by(.number) | .[0].number // empty")
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

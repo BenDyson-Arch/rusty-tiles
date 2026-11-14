@@ -1533,7 +1533,7 @@ fn stereographic_points_and_hemispheres_use_native_or_refuse_without_publishing(
             assert!(report["error"]["message"]
                 .as_str()
                 .unwrap()
-                .contains("pure-Rust point-cloud CRS transform unavailable"));
+                .contains("pure-Rust CRS transform unavailable"));
             assert!(!output.exists());
         }
     }
@@ -1562,7 +1562,7 @@ fn native_lcc_variant_b_conditioning_cannot_be_bypassed_with_alternate_syntax() 
         #[cfg(feature = "native-geospatial")]
         let (code, message) = (3, "conic standard parallels");
         #[cfg(not(feature = "native-geospatial"))]
-        let (code, message) = (2, "pure-Rust point-cloud CRS transform unavailable");
+        let (code, message) = (2, "pure-Rust CRS transform unavailable");
         assert_eq!(
             result.status.code(),
             Some(code),
@@ -1832,4 +1832,63 @@ fn default_surface_payload_parent_fill_and_one_octant_error_ladder() {
     }
     failures.dedup_by(|a, b| a.split(": ").last() == b.split(": ").last());
     assert!(failures.is_empty(), "{failures:#?}");
+}
+
+#[test]
+fn allow_listed_epsg_codes_report_their_datum_operation_and_grid_codes_stay_refused() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("mga56.las");
+    // GDA2020 / MGA zone 56 near Brisbane.
+    exact_point_fixture(&input, [502_000., 6_961_000., 12.]);
+    let output = work.path().join("mga56.3tz");
+    let result = call(
+        &input,
+        &output,
+        &["--sourceCrs", "EPSG:7856", "--heightOffset", "0"],
+    );
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    let summary: Value = serde_json::from_slice(&result.stdout).unwrap();
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+    let conversion = document(&mut zip, "conversion.json");
+    #[cfg(not(feature = "native-geospatial"))]
+    {
+        let operation = &conversion["crsOperation"];
+        assert_eq!(operation["source"], "EPSG:7856");
+        assert_eq!(operation["kind"], "null");
+        assert_eq!(operation["operation"], "GDA2020 to WGS 84 (2)");
+        // A null transformation keeps EPSG's stated accuracy; it is never exact.
+        assert_eq!(operation["accuracyMetres"], 3.0);
+        assert_eq!(summary["crsOperations"], serde_json::json!([operation]));
+    }
+    // The native build resolves the code with strict PROJ and names no table operation.
+    #[cfg(feature = "native-geospatial")]
+    assert!(conversion.get("crsOperation").is_none() && summary.get("crsOperations").is_none());
+
+    let refused = work.path().join("bng.3tz");
+    let result = call(
+        &input,
+        &refused,
+        &["--sourceCrs", "EPSG:27700", "--heightOffset", "0"],
+    );
+    #[cfg(not(feature = "native-geospatial"))]
+    {
+        assert_eq!(result.status.code(), Some(2));
+        let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+        assert_eq!(report["error"]["kind"], "unsupported");
+        let message = report["error"]["message"].as_str().unwrap();
+        assert!(
+            message.contains("pure-Rust CRS transform unavailable")
+                && message.contains(
+                    "EPSG:27700 is not in the standard build's GDAL-verified EPSG allow-list"
+                ),
+            "{message}"
+        );
+        assert!(!refused.exists());
+    }
+    #[cfg(feature = "native-geospatial")]
+    let _ = result;
 }

@@ -12,7 +12,9 @@ Most users need only the **standard package**. It converts meshes, LAS/LAZ point
 | Container `ghcr.io/bendyson-arch/rusty-tiles` | Native-geospatial | CLI plus GDAL, PROJ, GEOS and SQLite runtime libraries |
 | Cargo with `--features native-geospatial` | Native-geospatial | CLI or Rust library linked to system geospatial libraries |
 
-The [native-geospatial build](#native-geospatial-cli) is optional. Use it only for imagery, terrain, Shapefile and other OGR vector formats, or a CRS operation outside the standard package's verified grid-free tier. It is a build-time Cargo feature, not a runtime switch or a Python extra. Installing GDAL alongside a standard binary or wheel does not enable it. There is no native wheel or native ZIP/tarball.
+The [native-geospatial build](#native-geospatial-cli) is optional. Use it only for imagery, terrain, Shapefile and other OGR vector formats, or a CRS operation outside the standard package's verified grid-free tier.
+
+The standard package resolves WGS84 geographic, UTM and Mercator codes and about 3,100 further EPSG codes from a [GDAL-verified allow-list](FORMATS.md#gdal-verified-epsg-allow-list), including GDA2020/GDA94 MGA, GDA94/GDA2020 geographic, NZTM2000 and ETRS89 UTM. Codes whose best operation needs a grid, such as British National Grid (OSTN15), NAD27 and the original NAD83, and coordinate epochs need the native build. Check one with `rusty-tiles doctor --sourceCrs EPSG:<code>`. It is a build-time Cargo feature, not a runtime switch or a Python extra. Installing GDAL alongside a standard binary or wheel does not enable it. There is no native wheel or native ZIP/tarball.
 
 The [converter guide](CONVERTERS.md) lists input and placement limits for each build. Conversion runs offline in both builds. The CLI preview needs a separately installed Cesium runtime.
 
@@ -28,7 +30,11 @@ rusty-tiles --version
 
 The installer downloads the latest release into `~/.local/bin` and verifies its SHA-256 checksum. It needs no Rust or administrator privileges. Pass options after `sh -s --`: `--version 0.4.0` pins a release and `--prefix DIRECTORY` changes the install directory. Add the `export PATH` line to your shell's startup file to keep it in new terminals.
 
-Binaries cover x86_64 and ARM64. Linux needs glibc 2.35+ and libstdc++; on musl-based systems such as Alpine, build with Cargo or use the container. macOS needs version 15 or later.
+Linux binaries cover x86_64 and ARM64 and need glibc 2.35+ and libstdc++; on musl-based systems such as Alpine, build with Cargo or use the container. macOS binaries are for Apple Silicon only and need macOS 15 or later.
+
+#### Intel Macs
+
+0.4.0 is the last release with Intel macOS (`x86_64-apple-darwin`) binaries and wheels. From 0.4.1 the installer stops on an Intel Mac with a message, and `pip install rusty-tiles` finds no wheel (there is no source distribution). Either keep 0.4.0 (`sh -s -- --version 0.4.0` for the installer, `pip install rusty-tiles==0.4.0` for Python) or build from source with Cargo: `cargo install --locked --git https://github.com/BenDyson-Arch/rusty-tiles --tag vVERSION rusty-tiles` for the CLI, or `maturin build --release` in a clone for the Python wheel (see [Build](../CONTRIBUTING.md#build)). A terminal running under Rosetta on an Apple Silicon Mac gets the native Apple Silicon build.
 
 ### Windows
 
@@ -45,7 +51,7 @@ Each release also lists `SHA256SUMS` for its ZIP and `.tgz` archives. With `carg
 Install stable Rust, Cargo and a C++ compiler, then build a release tag (or `main`):
 
 ```sh
-git clone --branch v0.4.0 https://github.com/BenDyson-Arch/rusty-tiles.git
+git clone --branch v0.4.1 https://github.com/BenDyson-Arch/rusty-tiles.git
 cd rusty-tiles
 cargo install --path . --locked
 rusty-tiles doctor --command mesh --command point-cloud --command vector
@@ -62,10 +68,10 @@ python -m pip install rusty-tiles
 Install into the Python environment that will call it, including Blender's bundled Python. Wheels need CPython 3.10 or newer and use the stable ABI, so one wheel covers later Python versions. They are built for:
 
 - Linux x86_64 and ARM64 (manylinux_2_28, glibc 2.28+)
-- macOS 15+ on Intel and Apple Silicon
+- macOS 15+ on Apple Silicon (Intel Macs: [build from source or keep 0.4.0](#intel-macs))
 - Windows x64
 
-Wheels are tested inside official Blender 4.5.14 LTS on Linux x64, Windows x64 and both macOS architectures. Linux ARM64 has no official Blender 4.5 bundle.
+Wheels are tested inside official Blender 4.5.14 LTS (Python 3.11) and 5.2.4 LTS (Python 3.13) on Linux x64, Windows x64 and Apple Silicon macOS. Neither series has an official Linux ARM64 build.
 
 The wheel contains **only the standard conversion APIs**: meshes, local and grid-free LAS/LAZ, GeoJSON/GeoPackage vectors, tileset packaging and archive validation. It does not include the CLI, `doctor` or `preview`, and it cannot convert imagery, terrain or OGR-only inputs or use native CRS operations. Installing GDAL or its Python bindings does not change this. See the [Python API guide](../bindings/python/README.md).
 
@@ -78,6 +84,30 @@ python -m pip install target/wheels/rusty_tiles-*.whl
 ```
 
 Leave `LIBSQLITE3_SYS_USE_PKG_CONFIG` unset for wheel builds.
+
+## Development builds
+
+The rolling [`dev` pre-release](https://github.com/BenDyson-Arch/rusty-tiles/releases/tag/dev) is built from the `develop` branch after its nightly full CI run passes, when `develop` has changed since the previous development build. It carries the same CLI archives, Python wheels and `SHA256SUMS` as a release, and the native-geospatial container is tagged `ghcr.io/bendyson-arch/rusty-tiles:dev`. Each build replaces the previous one: older development builds are not kept. Nothing from it is published to PyPI or crates.io.
+
+> **Warning:** a development build is not a release. Output, options and APIs can change from one development build to the next, and its changes may not have changelog entries yet. Each build has a new version, which changes converter and cache identity, so derivative caches and baselines made with an earlier build must be rebuilt. Use a release for work you keep or compare.
+
+The version is a development version of the next release, for example `0.4.1.dev202611121734` (the number is the UTC commit time). `rusty-tiles --version` prints the same version in Cargo's spelling, `rusty-tiles 0.4.1-dev.202611121734`. It sorts after the previous release and before the next one. While a release candidate is out, dev builds are versioned between it and the next candidate, such as `0.4.1rc2.dev202611121734` after `0.4.1rc1`.
+
+CLI on macOS and Linux (the installer on `develop` knows `--version dev`):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/BenDyson-Arch/rusty-tiles/develop/scripts/install.sh | sh -s -- --version dev
+```
+
+On Windows, download the `x86_64-pc-windows-msvc` ZIP from the `dev` pre-release.
+
+Wheel file names include the build's version, so take the URL for your platform from the release notes, which list a `pip install` line for each wheel, or from the `browser_download_url` values of `https://api.github.com/repos/BenDyson-Arch/rusty-tiles/releases/tags/dev`:
+
+```sh
+python -m pip install --force-reinstall https://github.com/BenDyson-Arch/rusty-tiles/releases/download/dev/rusty_tiles-0.4.1.dev202611121734-cp310-abi3-manylinux_2_28_x86_64.whl
+```
+
+Because a development version sorts above the previous release, `pip install --upgrade rusty-tiles` keeps it until the next release is out. To go back to a release, run `python -m pip install --force-reinstall rusty-tiles==VERSION`.
 
 ## Check the installed build
 
@@ -101,14 +131,14 @@ The published image contains the native CLI with GDAL 3.12.4, PROJ 9.8.1, GEOS a
 
 ```sh
 docker run --rm --platform linux/amd64 --network none \
-  ghcr.io/bendyson-arch/rusty-tiles:v0.4.0 doctor --command raster --command terrain
+  ghcr.io/bendyson-arch/rusty-tiles:v0.4.1 doctor --command raster --command terrain
 
 docker run --rm --platform linux/amd64 --network none \
-  -v "$PWD:/data" -w /data ghcr.io/bendyson-arch/rusty-tiles:v0.4.0 \
+  -v "$PWD:/data" -w /data ghcr.io/bendyson-arch/rusty-tiles:v0.4.1 \
   raster -i orthophoto.tif -o imagery --max-zoom 14
 ```
 
-Tags are `v0.4.0` and `latest`; pin a version for repeatable deployments. The image contains no Python, datasets, Cesium runtime or extra datum grids, and PROJ networking is off. Mount required grids and set `PROJ_DATA` to a path list that includes them and `proj.db`. With a rootful Docker daemon, add `--user "$(id -u):$(id -g)"` so new outputs belong to you.
+Tags are `v0.4.1` and `latest`; pin a version for repeatable deployments. The image contains no Python, datasets, Cesium runtime or extra datum grids, and PROJ networking is off. Mount required grids and set `PROJ_DATA` to a path list that includes them and `proj.db`. With a rootful Docker daemon, add `--user "$(id -u):$(id -g)"` so new outputs belong to you.
 
 To build the image from a source checkout:
 

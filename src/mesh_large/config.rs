@@ -96,6 +96,8 @@ pub(crate) struct TreeConfig {
     pub output_parents: Option<(PathBuf, PathBuf)>,
     /// Declared source CRS applied at capture; `None` is local metres/Y-up.
     pub source_crs: Option<super::MeshSourceCrs>,
+    /// The run's stop probe: spill scratch created for this run stops with it.
+    pub(crate) stop: Option<crate::runtime::AttemptProbe>,
     /// D8's resolved run budget: every stage plans against it as a ceiling. Only the
     /// capture-only diagnostic build runs without one.
     pub memory_budget: Option<super::resources::MemoryBudget>,
@@ -105,6 +107,10 @@ pub(crate) struct TreeConfig {
     /// Test seam: lowered packed-record limits, to drive capture's refusals.
     #[cfg(test)]
     pub test_record_limits: Option<super::full::RecordLimits>,
+    /// Test seam: let capture grow its sorts under the budget (production always does;
+    /// fixtures otherwise keep their small sort configuration to exercise spilling).
+    #[cfg(test)]
+    pub test_sort_plan: bool,
 }
 
 impl TreeConfig {
@@ -142,11 +148,14 @@ impl TreeConfig {
             member_ceiling: MEMBER_CEILING_3TZ,
             output_parents: None,
             source_crs: None,
+            stop: None,
             memory_budget: None,
             #[cfg(test)]
             test_chunk_bytes: None,
             #[cfg(test)]
             test_record_limits: None,
+            #[cfg(test)]
+            test_sort_plan: false,
         }
     }
 
@@ -175,6 +184,7 @@ impl TreeConfig {
             fan_in: self.sort.fan_in,
             buffer_bytes: self.sort.buffer_bytes,
             jobs,
+            writers: self.sort.writers,
         }
     }
 }
@@ -267,7 +277,6 @@ impl MemoryBound {
         }
     }
 
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     pub(crate) fn base_bytes(&self) -> u64 {
         self.document_bytes
             .saturating_add(self.runtime_bytes)

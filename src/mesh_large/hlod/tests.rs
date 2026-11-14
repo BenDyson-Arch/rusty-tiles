@@ -355,6 +355,11 @@ fn decode(bytes: &[u8]) -> Decoded {
         let v = &doc["bufferViews"][i];
         match v["extensions"].get("EXT_meshopt_compression") {
             Some(e) => {
+                // #370: NONE is the default filter and is never written.
+                assert!(
+                    e.get("filter").is_none_or(|f| f == "OCTAHEDRAL"),
+                    "meshopt filter written: {e}"
+                );
                 let s = e["byteOffset"].as_u64().unwrap_or(0) as usize;
                 let mode = match e["mode"].as_str().unwrap() {
                     "ATTRIBUTES" => Mode::Attributes,
@@ -2072,12 +2077,10 @@ fn coarse_weld_keeps_uv_and_normal_seams() {
         [[0., 0.], [1., 0.], [0., 1.]],
         [[1., 0.], [1., 1.], [0.5, 1.]],
     ]);
+    // Faces [0, 1, 2] and [4, 3, 2]: vertex 4 carries a different normal.
     appearance.normals = Some(vec![
-        [0., 0., 1.],
-        [0., 0., 1.],
-        [0., 0., 1.],
-        [0., 0., 1.],
-        [0., 1., 0.],
+        [[0., 0., 1.], [0., 0., 1.], [0., 0., 1.]],
+        [[0., 1., 0.], [0., 0., 1.], [0., 0., 1.]],
     ]);
     let locked = [false; 5];
     let encoded_positions = || {
@@ -3381,6 +3384,7 @@ fn public(
                 fan_in: 4,
                 buffer_bytes: 1 << 12,
                 jobs: 1,
+                writers: 0,
             },
             1 << 14,
         );
@@ -6565,4 +6569,31 @@ fn descendant_recovery_is_complete_measured_and_job_and_spill_invariant() {
                 .unwrap()
     );
     published_and_valid("refused descendant recovery", &dirs[4], work.path());
+}
+
+/// #338: the coarse stage's decode charge follows the largest encoded image at its actual
+/// length, even when a different image has the most texels, with no fixed 32 MiB term.
+#[test]
+fn coarse_decode_charge_follows_the_largest_encoded_image() {
+    let info = |width, height, encoded_bytes| crate::gltf_source::source::ImageInfo {
+        mime_type: "image/png",
+        extension: "png",
+        width,
+        height,
+        encoded_bytes,
+    };
+    let (base, chain) = super::source_decode_bytes(&[info(512, 256, 1), info(64, 64, 1)]);
+    assert_eq!(chain, super::bake::chain_bytes(512, 256));
+    assert_eq!(
+        base,
+        super::bake::CHAIN_READER_BYTES + 512 * 256 * 16 + 1 + chain
+    );
+    for encoded in [100, 32 << 20, (32 << 20) + 1, 1 << 30] {
+        // The small image carries the largest encoded length; texels still come from the
+        // large one.
+        let (decode, same_chain) =
+            super::source_decode_bytes(&[info(512, 256, 7), info(64, 64, encoded)]);
+        assert_eq!(same_chain, chain);
+        assert_eq!(decode, base - 1 + encoded, "{encoded}");
+    }
 }

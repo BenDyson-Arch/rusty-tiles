@@ -690,13 +690,14 @@ mod tests {
             budget,
             base: 0,
             used: Arc::new(AtomicU64::new(0)),
+            ticks: Default::default(),
             certificate_fast: AtomicU64::new(0),
             certificate_slow: AtomicU64::new(0),
         };
         for (i, bytes) in payloads.iter().enumerate() {
             let tile = i as i64 + 1;
             let surface =
-                replay_surface(bytes, delivery_frame(IDENTITY), 1 << 24, &effort).unwrap();
+                replay_surface(bytes, delivery_frame(IDENTITY), 1 << 24, &effort, false).unwrap();
             for p in &surface.points {
                 points.insert((point_bytes(*p), tile));
             }
@@ -757,8 +758,10 @@ mod tests {
                 s.payload(leaf - 1, true, true).unwrap();
             }
             work.push(
-                s.finish(budget, 0, &mut |rank| Ok(payloads[rank as usize].clone()))
-                    .unwrap(),
+                s.finish(budget, 0, None, &mut |rank| {
+                    Ok(payloads[rank as usize].clone())
+                })
+                .unwrap(),
             );
             let mut census = s.census().unwrap();
             census.omission = Default::default();

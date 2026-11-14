@@ -11,7 +11,7 @@ use super::{
     store::{SourcePrimitive, TileGeometry},
 };
 use crate::{
-    glb::{self, MeshoptLayout, MeshoptStream},
+    glb::{self, MeshoptStream},
     mesh_large::{
         batching::material_key,
         leaves::geometry::{CoarsePositions, PositionStorage},
@@ -125,10 +125,13 @@ impl Mutation {
 
     pub(crate) fn last_resorts(self) -> bool {
         #[cfg(test)]
-        if matches!(self, Self::Develop | Self::DevelopNoRelief) {
-            return false;
+        {
+            !matches!(self, Self::Develop | Self::DevelopNoRelief)
         }
-        true
+        #[cfg(not(test))]
+        {
+            true
+        }
     }
     /// The coarse page edge cap (D5).
     pub(crate) fn max_page_edge(self) -> u32 {
@@ -533,11 +536,13 @@ pub(crate) fn encode(
         let mut streams = vec![("POSITION", position.0, position.1, position.2)];
         if let Some(smooth) = &appearance.normals {
             let mut bytes = Vec::with_capacity(count * 4);
-            for v in corners() {
-                for c in smooth[v as usize] {
-                    bytes.push(snorm8(c));
+            for &(t, _, _) in &faces {
+                for corner in smooth[t] {
+                    for c in corner {
+                        bytes.push(snorm8(c));
+                    }
+                    bytes.push(0);
                 }
-                bytes.push(0);
             }
             streams.push((
                 "NORMAL",
@@ -687,16 +692,8 @@ pub(crate) fn encode(
         glb::add_extension(&mut document, "KHR_texture_basisu", true)
             .map_err(|e| invalid(e.to_string()))?;
     }
-    let compressed = glb::meshopt_compress(
-        &mut document,
-        &binary,
-        MeshoptLayout {
-            align: 8,
-            explicit_filter: true,
-        },
-        |i, _| Ok(streams[i]),
-    )
-    .map_err(|e| invalid(e.to_string()))?;
+    let compressed = glb::meshopt_compress(&mut document, &binary, 8, |i, _| Ok(streams[i]))
+        .map_err(|e| invalid(e.to_string()))?;
     let bytes = glb::encode_glb(&document, &compressed).map_err(|e| invalid(e.to_string()))?;
     let quantized = matches!(positions.storage, PositionStorage::Quantized { .. });
     let mut result = Encoded {

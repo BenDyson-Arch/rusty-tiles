@@ -8,7 +8,9 @@ Usage: install.sh [--version VERSION] [--prefix DIRECTORY]
 
 Install rusty-tiles into DIRECTORY (default: $HOME/.local/bin).
 VERSION may include the leading v; the default is the latest stable release.
-Supports Linux (glibc) and macOS, on x86_64 and ARM64.
+VERSION dev installs the rolling development build of the develop branch.
+Supports Linux (glibc) on x86_64 and ARM64, and macOS on Apple Silicon.
+Intel macOS builds stop at 0.4.0: --version 0.4.0 (or older) still installs one.
 Windows: download the x86_64-pc-windows-msvc ZIP from GitHub Releases.
 EOF
 }
@@ -40,7 +42,18 @@ case "$(uname -s)" in
         command -v getconf >/dev/null 2>&1 && getconf GNU_LIBC_VERSION >/dev/null 2>&1 \
             || fail "Linux binaries need glibc; on musl/Alpine, build with Cargo or use the container"
         target=$arch-unknown-linux-gnu ;;
-    Darwin) target=$arch-apple-darwin ;;
+    Darwin)
+        # A Rosetta shell on Apple Silicon reports x86_64; the native build is the right one.
+        # macOS keeps sysctl in /usr/sbin, which a restricted PATH may lack.
+        if [ "$arch" = x86_64 ]; then
+            translated=
+            for sysctl in /usr/sbin/sysctl sysctl; do
+                if translated=$("$sysctl" -n sysctl.proc_translated 2>/dev/null); then break; fi
+                translated=
+            done
+            if [ "$translated" = 1 ]; then arch=aarch64; fi
+        fi
+        target=$arch-apple-darwin ;;
     *) fail "unsupported operating system: $(uname -s); Windows binaries are on GitHub Releases" ;;
 esac
 
@@ -67,18 +80,45 @@ case "$version" in
     ''|*[!0-9A-Za-z.+-]*) fail "invalid version: $version" ;;
 esac
 case "$version" in
-    [0-9]*.[0-9]*.[0-9]*) ;;
-    *) fail "expected a release version such as 0.3.0" ;;
+    dev|[0-9]*.[0-9]*.[0-9]*) ;;
+    *) fail "expected a release version such as 0.3.0, or dev" ;;
 esac
+# 0.4.0 is the last release with Intel macOS (x86_64-apple-darwin) archives.
+if [ "$target" = x86_64-apple-darwin ]; then
+    newer=yes
+    if [ "$version" != dev ]; then
+        # Plain POSIX awk (macOS ships the BSD one): MAJOR.MINOR.PATCH >= 0.4.1.
+        newer=$(printf '%s\n' "$version" | awk -F'[.+-]' '{ if ($1 + 0 > 0 || $2 + 0 > 4 || ($2 + 0 == 4 && $3 + 0 >= 1)) print "yes"; else print "no" }')
+    fi
+    if [ "$newer" = yes ]; then
+        fail "Intel macOS is not supported from 0.4.1 ($version has no x86_64-apple-darwin build); install 0.4.0 with --version 0.4.0, or build from source with cargo (see docs/INSTALL.md)"
+    fi
+fi
 
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT
 trap 'exit 1' HUP INT TERM
-asset=rusty-tiles-$version-$target.tgz
-base=$repo/releases/download/v$version
-download "$base/$asset" "$tmp_dir/$asset" \
-    || fail "no binary for v$version / $target; older releases are source-only (see README Build with Cargo)"
-download "$base/SHA256SUMS" "$tmp_dir/SHA256SUMS" || fail "could not download release checksums"
+if [ "$version" = dev ]; then
+    # Development archives are named after their build version, so find this target's
+    # archive in the build's checksums first. A rebuild replaces both.
+    base=$repo/releases/download/dev
+    download "$base/SHA256SUMS" "$tmp_dir/SHA256SUMS" || fail "could not download the development build checksums"
+    asset=$(awk -v suffix="-$target.tgz" '
+        substr($2, 1, 12) == "rusty-tiles-" && length($2) > 12 + length(suffix) &&
+        substr($2, length($2) - length(suffix) + 1) == suffix { count++; name = $2 }
+        END { if (count == 1) print name }' "$tmp_dir/SHA256SUMS")
+    case "$asset" in
+        ''|*[!0-9A-Za-z._+-]*) fail "the development build has no binary for $target" ;;
+    esac
+    download "$base/$asset" "$tmp_dir/$asset" \
+        || fail "could not download $asset; the development build may be updating, try again"
+else
+    asset=rusty-tiles-$version-$target.tgz
+    base=$repo/releases/download/v$version
+    download "$base/$asset" "$tmp_dir/$asset" \
+        || fail "no binary for v$version / $target; older releases are source-only (see README Build with Cargo)"
+    download "$base/SHA256SUMS" "$tmp_dir/SHA256SUMS" || fail "could not download release checksums"
+fi
 expected=$(awk -v asset="$asset" '$2 == asset { print $1 }' "$tmp_dir/SHA256SUMS")
 [ "${#expected}" -eq 64 ] || fail "missing or invalid checksum for $asset"
 case "$expected" in *[!0-9a-fA-F]*) fail "invalid SHA-256 checksum" ;; esac

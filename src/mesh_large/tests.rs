@@ -233,6 +233,7 @@ fn isolated_triangles_spill_within_the_declared_bound() {
         fan_in: 4,
         buffer_bytes: 4096,
         jobs: 1,
+        writers: 0,
     };
     let scratch = work.path().join("scratch");
     fs::create_dir(&scratch).unwrap();
@@ -264,6 +265,7 @@ fn chunked_sort_runs_publish_identical_archives() {
         fan_in: 4,
         buffer_bytes: 4096,
         jobs: 1,
+        writers: 0,
     };
     let mut archives = Vec::new();
     for (tag, spill) in [
@@ -351,7 +353,7 @@ fn leaf_normals_follow_the_profile_and_provenance_tables_decode() {
             Some(e) => {
                 let stream = &bin[at(e, "byteOffset")..at(e, "byteOffset") + at(e, "byteLength")];
                 check_header(stream, Mode::Attributes).unwrap();
-                let filter = Filter::parse(e["filter"].as_str().unwrap()).unwrap();
+                let filter = Filter::parse(e["filter"].as_str().unwrap_or("NONE")).unwrap();
                 let out = decode_filtered(
                     stream,
                     at(e, "count"),
@@ -893,4 +895,448 @@ fn tight_memory_backed_work_charge_is_refused_before_it_is_exceeded() {
         );
         assert!(!work.path().join("tight.3tz").exists());
     }
+}
+
+/// The budget plans of capture and of the coarse stage's incidence pass grow their sorts
+/// (single pass, run writers) from small floors, and publish the floor's archive byte for
+/// byte, each stage's measured scratch within its declaration.
+#[test]
+fn planned_capture_and_incidence_sorts_publish_the_floor_archive() {
+    use crate::{mesh_large::TilerJobs, spill::SortConfig, RunControl};
+    let work = tempfile::tempdir().unwrap();
+    // The plan needs disk-backed scratch and the system temporary directory may be tmpfs.
+    let disk = tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+    let input = super::full::tests::shuffled_grid(&work.path().join("src"), 30, 0x7e57_5eed);
+    // Production's floor fan-in with small runs: a larger fan-in would declare a larger file
+    // inventory than the floor's, which the plans never do, so they grow runs and writers.
+    let sort = SortConfig {
+        run_bytes: 8 << 10,
+        fan_in: 64,
+        buffer_bytes: 4096,
+        jobs: 1,
+        writers: 0,
+    };
+    let mut archives = Vec::new();
+    for plan in [false, true] {
+        let scratch = disk.path().join(format!("scratch-{plan}"));
+        fs::create_dir(&scratch).unwrap();
+        let output = work.path().join(format!("plan-{plan}.3tz"));
+        let request = super::TilerRequest::new(&input, &output)
+            .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(4).unwrap()))
+            .with_scratch_dir(&scratch)
+            .with_memory_budget(2 << 30)
+            .with_test_leaf_triangles(64)
+            .with_test_spill(sort, 4096)
+            .with_test_sort_plan(plan);
+        let result = super::mesh_to_tileset(request, &RunControl::default()).unwrap();
+        let diagnostics = &result.diagnostics;
+        let (capture, hlod) = (&diagnostics.capture, &diagnostics.hlod);
+        let incidence = diagnostics.memory.hlod.incidence_sort;
+        assert!(!capture.scratch_memory_backed, "planned scratch on disk");
+        assert!(hlod.tiles > 0, "the coarse stage ran");
+        if plan {
+            assert_eq!(
+                (capture.sort.limited_by, capture.sort.single_pass),
+                ("single_pass", true)
+            );
+            assert!(capture.sort.writers > 0, "{:?}", capture.sort);
+        } else {
+            assert_eq!(capture.sort.limited_by, "floor");
+        }
+        // Capture plans against the explicit budget everywhere; the incidence plan keeps the
+        // floor where the platform reports no available memory (`available_memory()` is
+        // Linux-only), whatever the budget.
+        if config::available_memory().is_none() {
+            assert_eq!(incidence.limited_by, "unknown_memory");
+        } else if plan {
+            assert_eq!(
+                (incidence.limited_by, incidence.single_pass),
+                ("single_pass", true)
+            );
+            assert!(incidence.writers > 0, "{incidence:?}");
+            assert_eq!(
+                incidence.fan_in, 64,
+                "the incidence plan keeps the floor's fan-in"
+            );
+            assert!(incidence.run_bytes > 4 << 10, "{incidence:?}");
+        } else {
+            assert_eq!(incidence.limited_by, "floor");
+        }
+        // Measured scratch within every declaration: capture's stages, the incidence pass's
+        // phases and the whole run.
+        let stages = [
+            (
+                capture.scratch_stage_peak_bytes.capture,
+                capture.scratch_stage_bytes.capture,
+            ),
+            (
+                capture.scratch_stage_peak_bytes.tree,
+                capture.scratch_stage_bytes.tree,
+            ),
+            (
+                capture.scratch_stage_peak_bytes.corner_depths,
+                capture.scratch_stage_bytes.corner_depths,
+            ),
+        ];
+        for (peak, bound) in stages {
+            assert!(peak <= bound, "plan {plan}: {peak} > {bound}");
+        }
+        assert!(hlod.incidence_scratch_peak_bytes <= hlod.incidence_scratch.declared());
+        assert!(capture.run_scratch_peak_bytes <= capture.run_scratch_bound_bytes);
+        archives.push(fs::read(&output).unwrap());
+        assert_eq!(fs::read_dir(&scratch).unwrap().count(), 0);
+    }
+    assert!(
+        archives[0] == archives[1],
+        "the planned run publishes the floor's archive"
+    );
+}
+
+/// Rewrites the PNG at `path` to exactly `length` bytes by inserting one private ancillary
+/// chunk of zeros after the image data. The chunk data is a sparse hole, so a gigabyte-scale
+/// source costs no disk until something reads it; decoders skip the chunk, so the pixels
+/// are unchanged.
+fn pad_png(path: &Path, length: u64) {
+    use std::io::{Seek, SeekFrom};
+    let png = fs::read(path).unwrap();
+    let body = &png[..png.len() - 12];
+    assert_eq!(&png[png.len() - 8..png.len() - 4], b"IEND");
+    let data = length - body.len() as u64 - 24;
+    let mut crc = crc32fast::Hasher::new();
+    crc.update(b"ruTi");
+    let zeros = vec![0u8; 1 << 20];
+    let mut left = data;
+    while left > 0 {
+        let n = left.min(zeros.len() as u64) as usize;
+        crc.update(&zeros[..n]);
+        left -= n as u64;
+    }
+    let mut file = fs::File::create(path).unwrap();
+    file.write_all(body).unwrap();
+    file.write_all(&u32::try_from(data).unwrap().to_be_bytes())
+        .unwrap();
+    file.write_all(b"ruTi").unwrap();
+    file.seek(SeekFrom::Current(data as i64)).unwrap();
+    file.write_all(&crc.finalize().to_be_bytes()).unwrap();
+    file.write_all(&png[png.len() - 12..]).unwrap();
+    drop(file);
+    assert_eq!(fs::metadata(path).unwrap().len(), length);
+}
+
+/// #338: an encoded image is charged at its actual length instead of being refused at a
+/// fixed 32 MiB. One byte over the old ceiling builds, and every archive member is
+/// byte-identical to the same sheet with its unpadded image: admission and accounting do not
+/// change output. The one exception is the report's source fact `external_bytes`, which
+/// counts the padding.
+#[test]
+fn encoded_image_past_the_old_32_mib_ceiling_is_admitted_and_builds_identically() {
+    use std::io::Read;
+    let work = tempfile::tempdir().unwrap();
+    let run = |dir: &str, pad: Option<u64>| {
+        let input = textured_sheet(&work.path().join(dir), 4);
+        if let Some(length) = pad {
+            pad_png(&input.with_file_name("a.png"), length);
+        }
+        let output = work.path().join(format!("{dir}.3tz"));
+        let result = super::mesh_to_tileset(
+            super::TilerRequest::new(&input, &output)
+                .with_jobs(super::TilerJobs::Maximum(NonZeroUsize::new(2).unwrap()))
+                .with_memory_budget(2 << 30),
+            &crate::RunControl::default(),
+        )
+        .unwrap();
+        let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
+        let members = (0..zip.len())
+            .map(|i| {
+                let mut member = zip.by_index(i).unwrap();
+                let mut bytes = Vec::new();
+                member.read_to_end(&mut bytes).unwrap();
+                (member.name().to_owned(), bytes)
+            })
+            .collect::<Vec<_>>();
+        (
+            members,
+            result.diagnostics.memory.hlod.texture_workspace_bytes,
+        )
+    };
+    let (padded, padded_texture) = run("padded", Some((32 << 20) + 1));
+    let (plain, plain_texture) = run("plain", None);
+    // The coarse stage charges the largest encoded image at its actual length.
+    let largest_plain = ["a.png", "b.png"]
+        .map(|n| {
+            fs::metadata(work.path().join("plain").join(n))
+                .unwrap()
+                .len()
+        })
+        .into_iter()
+        .max()
+        .unwrap();
+    assert!(largest_plain < 1 << 20);
+    assert_eq!(
+        padded_texture - plain_texture,
+        (32 << 20) + 1 - largest_plain
+    );
+    assert_eq!(padded.len(), plain.len());
+    assert!(padded.iter().any(|(name, _)| name.ends_with(".glb")));
+    for ((name, a), (other, b)) in padded.iter().zip(&plain) {
+        assert_eq!(name, other);
+        if name != "conversion.json" {
+            assert!(a == b, "{name} differs");
+            continue;
+        }
+        let [mut a, mut b] =
+            [a, b].map(|v| serde_json::from_slice::<serde_json::Value>(v).unwrap());
+        let padding = a["external_bytes"].as_u64().unwrap() - b["external_bytes"].as_u64().unwrap();
+        assert_eq!(
+            padding,
+            (32 << 20) + 1 - fs::metadata(work.path().join("plain/a.png")).unwrap().len()
+        );
+        a["external_bytes"] = 0.into();
+        b["external_bytes"] = 0.into();
+        assert_eq!(a, b);
+    }
+}
+
+/// Rewrites the PNG IHDR at `path` to declare `width` x `height` (CRC kept valid). The pixel
+/// data no longer matches, so only header admission can read the result.
+fn declare_png_size(path: &Path, width: u32, height: u32) {
+    let mut png = fs::read(path).unwrap();
+    assert_eq!(&png[12..16], b"IHDR");
+    png[16..20].copy_from_slice(&width.to_be_bytes());
+    png[20..24].copy_from_slice(&height.to_be_bytes());
+    let crc = crc32fast::hash(&png[12..29]).to_be_bytes();
+    png[29..33].copy_from_slice(&crc);
+    fs::write(path, png).unwrap();
+}
+
+/// A temporary directory on disk-backed storage, so capture scratch is not charged to the
+/// memory budget (which would refuse large sources earlier, at capture's resident bound).
+fn disk_backed_workdir() -> tempfile::TempDir {
+    let parent = [
+        std::env::temp_dir(),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+    ]
+    .into_iter()
+    .find(|dir| crate::spill::inspect_volume(dir).is_ok_and(|volume| !volume.memory_backed))
+    .expect("a disk-backed temporary or manifest directory");
+    tempfile::Builder::new()
+        .prefix(".image-admission-")
+        .tempdir_in(parent)
+        .unwrap()
+}
+
+/// A large encoded image the budget cannot hold is a typed resource refusal naming the
+/// image stage, raised before any scratch or output exists; over the 1 GiB sanity ceiling
+/// it stays `unsupported`. Both sources are sparse, so neither run reads gigabytes. The
+/// work directory must be disk-backed: memory-backed scratch would charge the 1 GiB
+/// snapshot to the budget and refuse earlier, at capture's resident bound.
+#[test]
+fn large_encoded_images_are_refused_by_budget_or_sanity_ceiling() {
+    let work = disk_backed_workdir();
+    let request = |dir: &str, budget: u64| {
+        let input = textured_sheet(&work.path().join(dir), 4);
+        let scratch = work.path().join(format!("{dir}-scratch"));
+        fs::create_dir(&scratch).unwrap();
+        let output = work.path().join(format!("{dir}.3tz"));
+        let request = super::TilerRequest::new(&input, &output)
+            .with_scratch_dir(&scratch)
+            .with_jobs(super::TilerJobs::Maximum(NonZeroUsize::new(1).unwrap()))
+            .with_memory_budget(budget);
+        (input, scratch, output, request)
+    };
+    // Capture's own resident bound for this sheet, from an admitted run of its plain image.
+    let (_, _, _, plain) = request("plain", 2 << 30);
+    let bound = super::mesh_to_tileset(plain, &crate::RunControl::default())
+        .unwrap()
+        .diagnostics
+        .memory
+        .capture_bound_bytes;
+    // Capture's bound fits with 512 MiB to spare, so image decoding has those 512 MiB plus
+    // the 192 MiB decoder allowance: less than the 1 GiB image, and less than the decode
+    // of a 16384² image even though its 110 MB encoding would fit. Only capture's header
+    // preflight names "image capture:"; the later decode batches refuse differently.
+    for (dir, length, budget, kind, needle) in [
+        (
+            // Review of #378: 110 MB fits the budget but its 16384² decode does not; the
+            // header alone refuses it before the snapshot is written.
+            "texels",
+            110_000_000,
+            bound + (512 << 20),
+            JobErrorKind::ResourceLimit,
+            "image capture: decoding a source image needs 3331225472 bytes (110000000 \
+             encoded plus 12 per texel of 16384x16384)",
+        ),
+        (
+            "budget",
+            1u64 << 30,
+            bound + (512 << 20),
+            JobErrorKind::ResourceLimit,
+            "image capture: decoding a source image needs 1074528256 bytes (1073741824 encoded",
+        ),
+        (
+            "ceiling",
+            (1 << 30) + 1,
+            64 << 30,
+            JobErrorKind::Unsupported,
+            "encoded image exceeds 1 GiB admission ceiling",
+        ),
+    ] {
+        let (input, scratch, output, request) = request(dir, budget);
+        if dir == "texels" {
+            declare_png_size(&input.with_file_name("a.png"), 16384, 16384);
+        }
+        pad_png(&input.with_file_name("a.png"), length);
+        let failure = match super::mesh_to_tileset(request, &crate::RunControl::default()) {
+            Ok(_) => panic!("{dir}: a {length}-byte image must be refused"),
+            Err(failure) => failure,
+        };
+        assert_eq!(failure.error.kind(), kind, "{dir}: {}", failure.error);
+        let message = failure.error.to_string();
+        assert!(message.contains(needle), "{dir}: {message}");
+        assert!(!output.exists(), "{dir}");
+        assert_eq!(fs::read_dir(&scratch).unwrap().count(), 0, "{dir}");
+    }
+}
+
+/// #338: capture's pre-scratch refusal sits exactly at the budget. A 256 MiB image (above
+/// the 192 MiB decoder allowance) is refused under a budget that leaves its whole decode
+/// charge less one byte, naming both figures; one byte more budget admits it, and the
+/// run's later decode batches admit the same charge, so the two checks agree.
+#[test]
+fn capture_admits_the_largest_decode_charge_exactly_at_the_budget() {
+    let work = disk_backed_workdir();
+    let input = textured_sheet(&work.path().join("src"), 4);
+    let plain = textured_sheet(&work.path().join("plain"), 4);
+    pad_png(&input.with_file_name("a.png"), 256 << 20);
+    let run = |name: &str, source: &Path, budget: u64| {
+        let scratch = work.path().join(format!("{name}-scratch"));
+        fs::create_dir(&scratch).unwrap();
+        let output = work.path().join(format!("{name}.3tz"));
+        let result = super::mesh_to_tileset(
+            super::TilerRequest::new(source, &output)
+                .with_scratch_dir(&scratch)
+                .with_jobs(super::TilerJobs::Maximum(NonZeroUsize::new(1).unwrap()))
+                .with_memory_budget(budget),
+            &crate::RunControl::default(),
+        );
+        (result, output, scratch)
+    };
+    let figure = |message: &str, before: &str, after: &str| -> u64 {
+        let start = message.find(before).unwrap() + before.len();
+        let end = start + message[start..].find(after).unwrap();
+        message[start..end].parse().unwrap()
+    };
+    let bound = run("plain", &plain, 2 << 30)
+        .0
+        .unwrap()
+        .diagnostics
+        .memory
+        .capture_bound_bytes;
+    // Capture's bound fits with 1 MiB to spare: decoding gets about 193 MiB.
+    let (result, _, _) = run("probe", &input, bound + (1 << 20));
+    let message = result.unwrap_err().error.to_string();
+    let charge = figure(&message, "needs ", " bytes");
+    let leaves = figure(&message, "leaves ", " for");
+    assert_eq!(charge, (256 << 20) + 12 * 256 * 256, "{message}");
+    assert!(leaves < charge, "{message}");
+    let exact = bound + (1 << 20) + (charge - leaves);
+    // Run names keep one length: the bound charges the scratch and output path lengths.
+    let (result, output, scratch) = run("below", &input, exact - 1);
+    let failure = result.unwrap_err();
+    assert_eq!(failure.error.kind(), JobErrorKind::ResourceLimit);
+    let message = failure.error.to_string();
+    assert!(message.starts_with("image capture:"), "{message}");
+    assert_eq!(figure(&message, "leaves ", " for"), charge - 1, "{message}");
+    assert!(!output.exists());
+    assert_eq!(fs::read_dir(&scratch).unwrap().count(), 0);
+    // At exactly the charge, capture runs on. A later stage may still refuse this
+    // budget, but not image admission or its decode batches.
+    if let Err(failure) = run("exact", &input, exact).0 {
+        let message = failure.error.to_string();
+        assert!(
+            !message.starts_with("image capture:")
+                && !message.contains("decoding an admitted image does not fit"),
+            "{message}"
+        );
+    }
+}
+
+/// #338 evidence lane: an 8192² RGB noise PNG of about 100 MB (three times the old ceiling)
+/// admits under a 4 GiB budget and builds. The noise is drawn from 16 levels per channel and
+/// left unfiltered, so deflate cannot shrink it much below 4 bits per sample. Generated
+/// here, never committed.
+/// Run with `cargo test --release --lib -- --ignored eight_k_noise_png`.
+#[test]
+#[ignore = "slow: generates and tiles a ~100 MB 8192² PNG"]
+fn eight_k_noise_png_admits_under_a_few_gib_budget_and_builds() {
+    let work = tempfile::tempdir().unwrap();
+    let input = textured_sheet(&work.path().join("src"), 4);
+    let mut state = 0x9E37_79B9_7F4A_7C15_u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    let mut raw = vec![0u8; 8192 * 8192 * 3];
+    for chunk in raw.chunks_mut(16) {
+        let bits = next();
+        for (i, byte) in chunk.iter_mut().enumerate() {
+            *byte = ((bits >> (4 * i)) & 15) as u8 * 17;
+        }
+    }
+    {
+        use image::{codecs::png, ImageEncoder};
+        let file = BufWriter::new(fs::File::create(input.with_file_name("a.png")).unwrap());
+        png::PngEncoder::new_with_quality(
+            file,
+            png::CompressionType::Level(1),
+            png::FilterType::NoFilter,
+        )
+        .write_image(&raw, 8192, 8192, image::ExtendedColorType::Rgb8)
+        .unwrap();
+    }
+    let encoded = fs::metadata(input.with_file_name("a.png")).unwrap().len();
+    assert!(encoded > 2 * (32 << 20), "{encoded} bytes");
+    let output = work.path().join("noise.3tz");
+    let result = super::mesh_to_tileset(
+        super::TilerRequest::new(&input, &output)
+            .with_jobs(super::TilerJobs::Maximum(NonZeroUsize::new(2).unwrap()))
+            .with_memory_budget(4 << 30),
+        &crate::RunControl::default(),
+    )
+    .unwrap();
+    assert!(output.exists());
+    eprintln!(
+        "encoded {encoded} bytes; minimum budget {} bytes",
+        result.diagnostics.memory.minimum_bytes
+    );
+}
+
+/// #338 evidence lane: an image exactly at the 1 GiB sanity ceiling (a sparse 256² PNG
+/// padded with an ancillary chunk) is admitted and builds under a budget that holds it.
+/// Capture writes the whole gigabyte to scratch and each stage rebuilds it to decode.
+/// Run with `cargo test --release --lib -- --ignored one_gib_encoded_image`.
+#[test]
+#[ignore = "slow: captures and decodes a 1 GiB encoded image"]
+fn one_gib_encoded_image_at_the_ceiling_builds() {
+    let work = disk_backed_workdir();
+    let input = textured_sheet(&work.path().join("src"), 4);
+    pad_png(&input.with_file_name("a.png"), 1 << 30);
+    let scratch = work.path().join("scratch");
+    fs::create_dir(&scratch).unwrap();
+    let output = work.path().join("gib.3tz");
+    let result = super::mesh_to_tileset(
+        super::TilerRequest::new(&input, &output)
+            .with_scratch_dir(&scratch)
+            .with_jobs(super::TilerJobs::Maximum(NonZeroUsize::new(1).unwrap()))
+            .with_memory_budget(6 << 30),
+        &crate::RunControl::default(),
+    )
+    .unwrap();
+    assert!(output.exists());
+    eprintln!(
+        "minimum budget {} bytes",
+        result.diagnostics.memory.minimum_bytes
+    );
 }
