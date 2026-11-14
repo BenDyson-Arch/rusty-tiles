@@ -53,6 +53,22 @@ extern "C" {
 
     pub(super) fn rt_basisu_free(data: *mut u8);
 
+    /// Test oracle for the pure-Rust encoder: [`rt_basisu_encode_mips`]'s parameters written
+    /// out, with `extra_pack_flags` OR'd into the UASTC pack flags.
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn rt_basisu_encode_mips_oracle(
+        levels: *const MipLevel,
+        level_count: usize,
+        format: u32,
+        quality: i32,
+        effort: i32,
+        flags: u32,
+        extra_pack_flags: u32,
+        out: *mut *mut u8,
+        out_len: *mut usize,
+    ) -> i32;
+
     /// `which == 0` throws through the replacement the encoder's checks call
     /// instead of `abort()`; otherwise calls the library's real
     /// `container_abort()`. Returns the status an entry point reports.

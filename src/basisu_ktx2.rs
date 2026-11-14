@@ -29,11 +29,15 @@
 //!   ([`ErrorFloor`]) and, where the input has enough within-block detail,
 //!   reproduce it ([`DetailFloor`]).
 //!   Any failure is `InvalidState`.
+//! - With feature `pure-rust-basis`, every encode and decode runs in pure Rust instead
+//!   (`pure`), with byte-identical output; the C++ stays compiled as the shadow tests' oracle.
 // Keep the bounded calibration/diagnostic entry points alongside the production API.
 #![allow(dead_code)]
 
 mod container;
 mod ffi;
+#[cfg(feature = "pure-rust-basis")]
+mod pure;
 #[cfg(test)]
 mod tests;
 
@@ -395,6 +399,45 @@ fn encode_mips_unverified(
     mode: Mode,
     params: Params,
 ) -> Result<Vec<u8>, JobError> {
+    // One page encode cannot be interrupted (minutes at the ladder's highest efforts); the
+    // CLI's stop backstop covers it. Tests stand in for a long encode here.
+    crate::test_hooks::stall("ktx2.encode");
+    #[cfg(feature = "pure-rust-basis")]
+    {
+        rust_encode_mips(mips, mode, params, 0)
+    }
+    #[cfg(not(feature = "pure-rust-basis"))]
+    {
+        native_encode_mips(mips, mode, params)
+    }
+}
+
+/// The pure-Rust encoder, with `extra_pack_flags` OR'd into the UASTC pack flags (0 for the
+/// settings `basis_compress2` derives).
+#[cfg(feature = "pure-rust-basis")]
+fn rust_encode_mips(
+    mips: &[MipLevel<'_>],
+    mode: Mode,
+    params: Params,
+    extra_pack_flags: u32,
+) -> Result<Vec<u8>, JobError> {
+    let settings = pure::Settings::resolve(mode, params.effort, params.transfer, extra_pack_flags);
+    std::panic::catch_unwind(|| pure::encode(mips, settings))
+        .unwrap_or_else(|_| Err("the encoder panicked".into()))
+        .map_err(|message| {
+            JobError::new(
+                JobErrorKind::InvalidState,
+                format!("Basis Universal (pure Rust): {message}"),
+            )
+        })
+}
+
+/// The vendored C++ encoder through the shim.
+fn native_encode_mips(
+    mips: &[MipLevel<'_>],
+    mode: Mode,
+    params: Params,
+) -> Result<Vec<u8>, JobError> {
     let (format, quality, mut flags) = match mode {
         Mode::Etc1s { quality } => (ffi::FORMAT_ETC1S, i32::from(quality), 0),
         // Quality 100 is the encoder's "no RDO" setting.
@@ -418,9 +461,6 @@ fn encode_mips_unverified(
         .collect();
     let mut data = std::ptr::null_mut();
     let mut length = 0usize;
-    // One page encode cannot be interrupted (minutes at the ladder's highest efforts); the
-    // CLI's stop backstop covers it. Tests stand in for a long encode here.
-    crate::test_hooks::stall("ktx2.encode");
     // SAFETY: every mip holds width * height * 4 bytes (checked by the caller);
     // the out-pointers are valid for writes.
     let status = unsafe {
@@ -481,8 +521,43 @@ fn expected_levels(width: u32, height: u32, mipmaps: bool) -> u32 {
     }
 }
 
-/// Decodes one level with the vendored transcoder.
+/// Decodes one level to RGBA8, with the pure-Rust transcoder under feature
+/// `pure-rust-basis` and the vendored transcoder otherwise.
 pub(crate) fn decode_level_rgba(
+    ktx2: &[u8],
+    level: u32,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>, JobError> {
+    #[cfg(feature = "pure-rust-basis")]
+    {
+        rust_decode_level_rgba(ktx2, level, width, height)
+    }
+    #[cfg(not(feature = "pure-rust-basis"))]
+    {
+        native_decode_level_rgba(ktx2, level, width, height)
+    }
+}
+
+#[cfg(feature = "pure-rust-basis")]
+fn rust_decode_level_rgba(
+    ktx2: &[u8],
+    level: u32,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>, JobError> {
+    let (decoded_width, decoded_height, rgba) = pure::decode_level(ktx2, level)
+        .map_err(|message| invalid_state(format!("level {level} did not decode: {message}")))?;
+    if (decoded_width, decoded_height) != (width, height) {
+        return Err(invalid_state(format!(
+            "level {level} decoded as {decoded_width}x{decoded_height}, expected {width}x{height}"
+        )));
+    }
+    Ok(rgba)
+}
+
+/// Decodes one level with the vendored transcoder.
+fn native_decode_level_rgba(
     ktx2: &[u8],
     level: u32,
     width: u32,
