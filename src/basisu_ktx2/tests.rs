@@ -227,11 +227,13 @@ const COLOUR: Params = Params {
     effort: 0,
     transfer: Transfer::Srgb,
     mipmaps: true,
+    etc1_hints: Etc1Hints::Full,
 };
 const DATA: Params = Params {
     effort: 0,
     transfer: Transfer::Linear,
     mipmaps: true,
+    etc1_hints: Etc1Hints::Full,
 };
 
 /// The profile-like configurations from the design table, plus plain UASTC.
@@ -600,6 +602,7 @@ fn measure_floors() {
                     effort,
                     transfer,
                     mipmaps: true,
+                    etc1_hints: Etc1Hints::Full,
                 };
                 let encoded =
                     encode_fixture_unverified(image, *width, *height, mode, params).unwrap();
@@ -792,6 +795,15 @@ fn hostile_child() {
         ),
         ("unknown format", 2, 2, 7, 40, 0, 0),
         ("unknown flag", 2, 2, fmt_etc1s, 40, 0, 1 << 9),
+        (
+            "ETC1S with UASTC ETC1 hint flags",
+            2,
+            2,
+            fmt_etc1s,
+            40,
+            0,
+            ffi::FLAG_UASTC_FASTEST_ETC1_HINTS,
+        ),
         ("ETC1S quality 0", 2, 2, fmt_etc1s, 0, 0, 0),
         ("ETC1S quality 101", 2, 2, fmt_etc1s, 101, 0, 0),
         ("UASTC with RDO quality", 2, 2, fmt_uastc, 50, 0, 0),
@@ -1780,4 +1792,196 @@ fn measure_caller_mip_floors() {
             }
         }
     }
+}
+
+/// Encodes `levels` through the production entry or through the library's
+/// `basis_compress2()` reference (a test entry built with feature
+/// `pure-rust-basis` only, so CI runs it in the pure-Rust Basis job).
+#[cfg(feature = "pure-rust-basis")]
+fn native_encode(
+    levels: &[MipLevel<'_>],
+    format: u32,
+    quality: i32,
+    effort: i32,
+    flags: u32,
+    reference: bool,
+) -> Vec<u8> {
+    let native: Vec<ffi::MipLevel> = levels
+        .iter()
+        .map(|level| ffi::MipLevel {
+            rgba: level.rgba.as_ptr(),
+            length: level.rgba.len(),
+            width: level.width,
+            height: level.height,
+        })
+        .collect();
+    let (mut data, mut length) = (std::ptr::null_mut(), 0usize);
+    // SAFETY: every descriptor borrows a live level of the stated size; the
+    // out-pointers are valid for writes.
+    let status = unsafe {
+        if reference {
+            ffi::rt_basisu_selftest_compress2(
+                native.as_ptr(),
+                native.len(),
+                format,
+                quality,
+                effort,
+                flags,
+                &mut data,
+                &mut length,
+            )
+        } else {
+            ffi::rt_basisu_encode_mips(
+                native.as_ptr(),
+                native.len(),
+                format,
+                quality,
+                effort,
+                flags,
+                &mut data,
+                &mut length,
+            )
+        }
+    };
+    assert_eq!(status, ffi::STATUS_OK, "{}", ffi::diagnostics());
+    // SAFETY: on success the shim returns `length` bytes it owns.
+    let bytes = unsafe { std::slice::from_raw_parts(data, length) }.to_vec();
+    unsafe { ffi::rt_basisu_free(data) };
+    bytes
+}
+
+#[cfg(feature = "pure-rust-basis")]
+#[test]
+fn direct_compress_matches_compress2() {
+    // The shim sets the library's parameters itself so that it can pass UASTC
+    // pack flags, which basis_compress2() cannot express. Without them every
+    // encode must stay byte-identical to basis_compress2(): every production
+    // ETC1S setting (fast q50, balanced/occlusion q90) plus q40, and every
+    // UASTC pack level (efforts 0..=9). Each setting meets each sRGB/Zstd flag
+    // combination once across the four images, which keeps the test cheap.
+    let images = [
+        ("photo", 96, 64, photo(96, 64, 5, true)),
+        ("noise", 32, 32, noise(32, 32, 6, true)),
+        ("flat", 8, 8, flat(8, 8, 7)),
+        ("odd", 13, 7, photo(13, 7, 8, false)),
+    ];
+    let flag_sets = [
+        0,
+        ffi::FLAG_SRGB,
+        ffi::FLAG_ZSTD,
+        ffi::FLAG_SRGB | ffi::FLAG_ZSTD,
+    ];
+    let mut settings = vec![
+        (ffi::FORMAT_ETC1S, 40, 0),
+        (ffi::FORMAT_ETC1S, 40, 5),
+        (ffi::FORMAT_ETC1S, 40, 10),
+        (ffi::FORMAT_ETC1S, 50, 0),
+        (ffi::FORMAT_ETC1S, 50, 3),
+        (ffi::FORMAT_ETC1S, 90, 0),
+        (ffi::FORMAT_ETC1S, 90, 2),
+        (ffi::FORMAT_ETC1S, 90, 6),
+    ];
+    settings.extend((0..=9).map(|effort| (ffi::FORMAT_UASTC_LDR_4X4, 100, effort)));
+    let mut compared = 0;
+    for (image, (name, width, height, rgba)) in images.iter().enumerate() {
+        for chain in [false, true] {
+            let images = fixture_mips(
+                rgba,
+                *width,
+                *height,
+                Params {
+                    mipmaps: chain,
+                    ..COLOUR
+                },
+            );
+            let levels = fixture_levels(&images, *width, *height);
+            for (i, &(format, quality, effort)) in settings.iter().enumerate() {
+                let flags = flag_sets[(i + image) % flag_sets.len()];
+                let ours = native_encode(&levels, format, quality, effort, flags, false);
+                let reference = native_encode(&levels, format, quality, effort, flags, true);
+                assert!(
+                    ours == reference,
+                    "{name} chain={chain} format {format} q{quality} e{effort} flags {flags}"
+                );
+                compared += 1;
+            }
+        }
+    }
+    assert_eq!(compared, 4 * 2 * 18);
+}
+
+#[test]
+fn fastest_etc1_hints_change_only_the_etc1_transcode() {
+    assert_eq!(UASTC_FASTEST_ETC1_HINTS, 0x80 | 0x100);
+    let (width, height) = (128, 96);
+    for (name, rgba) in [
+        ("photo", photo(width, height, 11, true)),
+        ("noise", noise(width, height, 12, false)),
+    ] {
+        let images = fixture_mips(&rgba, width, height, COLOUR);
+        let levels = fixture_levels(&images, width, height);
+        for effort in [0, 2, 5] {
+            for zstd in [true, false] {
+                let encode = |etc1_hints| {
+                    encode_ktx2_mips(
+                        &levels,
+                        Mode::Uastc { zstd },
+                        Params {
+                            effort,
+                            mipmaps: false,
+                            etc1_hints,
+                            ..COLOUR
+                        },
+                    )
+                    .unwrap()
+                };
+                let (full, fastest) = (encode(Etc1Hints::Full), encode(Etc1Hints::Fastest));
+                let what = format!("{name} e{effort} zstd={zstd}");
+                assert!(
+                    full != fastest,
+                    "{what}: the hint flags did not reach the encoder"
+                );
+                let full = basisu::Transcoder::new(&full).unwrap();
+                let fastest = basisu::Transcoder::new(&fastest).unwrap();
+                assert_eq!(full.level_count(), fastest.level_count());
+                let mut etc1_changed = 0;
+                for level in 0..full.level_count() {
+                    let transcode = |transcoder: &basisu::Transcoder, target| {
+                        transcoder
+                            .transcode(level, target, basisu::DecodeFlags::NONE)
+                            .unwrap()
+                    };
+                    for target in [
+                        basisu::TargetFormat::Rgba32,
+                        basisu::TargetFormat::Astc4x4Rgba,
+                        basisu::TargetFormat::Bc7Rgba,
+                        basisu::TargetFormat::Bc3Rgba,
+                        basisu::TargetFormat::Bc1Rgb,
+                    ] {
+                        assert!(
+                            transcode(&full, target) == transcode(&fastest, target),
+                            "{what}: level {level} {target:?} differs"
+                        );
+                    }
+                    let etc1 = basisu::TargetFormat::Etc1Rgb;
+                    etc1_changed +=
+                        usize::from(transcode(&full, etc1) != transcode(&fastest, etc1));
+                }
+                assert!(etc1_changed > 0, "{what}: ETC1 transcode unchanged");
+            }
+        }
+    }
+    let rgba = photo(16, 16, 13, false);
+    let error = encode_fixture(
+        &rgba,
+        16,
+        16,
+        Mode::Etc1s { quality: 90 },
+        Params {
+            etc1_hints: Etc1Hints::Fastest,
+            ..COLOUR
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), JobErrorKind::InvalidRequest, "{error}");
 }
