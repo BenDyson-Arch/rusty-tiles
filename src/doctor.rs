@@ -163,7 +163,13 @@ impl Capability {
         )
     }
     /// The first capability that is not ready, else ready.
-    #[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
+    #[cfg_attr(
+        not(any(test, feature = "native-geospatial")),
+        expect(
+            dead_code,
+            reason = "used only by native-geospatial builds and unit tests"
+        )
+    )]
     fn all<'a>(parts: impl IntoIterator<Item = &'a Capability>) -> Self {
         parts
             .into_iter()

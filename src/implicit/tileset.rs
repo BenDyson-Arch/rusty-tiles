@@ -29,7 +29,6 @@ use std::{
 };
 
 mod stream;
-#[cfg_attr(not(test), allow(unused_imports))]
 pub(crate) use stream::{
     Availability, ChunkOutput, DocumentLink, ForestTile, ForestWriter, ImplicitNames, RootName,
 };
@@ -1417,7 +1416,10 @@ impl ImplicitRoot<'_> {
     /// row grows by an outward-rounded bound on the drift of its own and its descendants'
     /// content relative to it, so a vertex the producer's hierarchy contains exactly stays
     /// inside every volume C2 tests. Exact sums give a zero bound and unchanged rows.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn write(
         &self,
         nodes: &[Node],

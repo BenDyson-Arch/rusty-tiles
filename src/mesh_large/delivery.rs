@@ -45,7 +45,7 @@ const OCTREE: SubdivisionScheme = SubdivisionScheme::Octree;
 #[derive(Clone, Debug)]
 pub struct MeshTilesetRequest {
     leaves: PathBuf,
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg_attr(not(test), expect(dead_code, reason = "used only by unit tests"))]
     // Retained for bounded unit-test fixtures; production uses the streamed facade.
     output: PathBuf,
     placement: MeshPlacement,
@@ -64,7 +64,13 @@ impl MeshTilesetRequest {
             member_ceiling: MEMBER_CEILING_3TZ,
         }
     }
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+        )
+    )]
     pub fn with_placement(mut self, placement: MeshPlacement) -> Self {
         self.placement = placement;
         self
@@ -102,13 +108,25 @@ pub struct MeshTilesetReport {
     pub placement: MeshPlacementReport,
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 #[derive(Debug)]
 pub struct MeshTilesetResult {
-    #[allow(dead_code)] // Test-only delivery result preserves publication cleanup diagnostics.
+    #[expect(
+        dead_code,
+        reason = "Test-only delivery result preserves publication cleanup diagnostics"
+    )]
     pub output: PathBuf,
     pub report: MeshTilesetReport,
-    #[allow(dead_code)] // Test-only delivery result preserves publication cleanup diagnostics.
+    #[expect(
+        dead_code,
+        reason = "Test-only delivery result preserves publication cleanup diagnostics"
+    )]
     pub cleanup_diagnostics: Vec<CleanupDiagnostic>,
 }
 
@@ -579,7 +597,13 @@ fn ceiling(members: u64, ceiling: u64, what: &str) -> Result<(), JobError> {
     Ok(())
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 pub(crate) fn publish(
     request: &MeshTilesetRequest,
     attempt_check: &mut dyn FnMut() -> Result<(), JobError>,
@@ -600,7 +624,13 @@ pub(crate) fn publish_with_limits(
     publish_with(request, limits, &mut || Ok(()), out, work_parent)
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 fn publish_with(
     request: &MeshTilesetRequest,
     limits: Limits,
@@ -681,7 +711,13 @@ impl PreparedDelivery {
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 fn prepare(
     request: &MeshTilesetRequest,
     limits: Limits,
@@ -932,7 +968,13 @@ pub(crate) fn resident_bound(max_glb_json: u64) -> u64 {
         + (64 << 20)
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// Publish an H8 leaf directory as a Tiles 1.1 `.3tz` (hidden CLI `mesh-leaves-to-3tz`).
 pub fn mesh_leaves_to_3tz(
     request: MeshTilesetRequest,

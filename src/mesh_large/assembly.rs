@@ -622,7 +622,10 @@ impl Decoder<'_> {
 /// Decodes `p`'s used vertices into a store: in memory when `memory` allows, else spilled.
 /// Returns the first failure (in time) of a parallel task as the inner error: the caller
 /// reruns serially for the first failing vertex in order.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn decode_primitive(
     source: &StreamSource,
     p: &ScenePrimitive<'_>,
@@ -864,7 +867,10 @@ impl Record for TriangleCorners {
 /// The routed placement of `p`'s corners: every corner sorted by vertex, joined in order with
 /// the decoded vertices, sorted back to (triangle, corner) and written per triangle. Two
 /// external sorts of the primitive's corners, like the corner join the assembly replaced.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn place_corners(
     source: &StreamSource,
     p: &ScenePrimitive<'_>,
@@ -1025,7 +1031,10 @@ fn sort_key(bytes: &[u8]) -> SortKey {
 }
 
 /// One triangle, built exactly as the corner-sort capture built it.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn triangle(
     p: &ScenePrimitive<'_>,
     ordinal: u64,
@@ -1104,7 +1113,10 @@ impl Record for StagedRun {
 /// The rank-ordered full-triangle sequence of `source` (see the module notes). `scan` is the
 /// preflight scan; with a source CRS its box is replaced by the mapped one, as the corner join
 /// did. Validation has run.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(crate) fn assemble(
     source: &StreamSource,
     frame: &mut SourceFrame,

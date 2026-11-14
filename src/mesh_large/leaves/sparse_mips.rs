@@ -27,7 +27,10 @@ pub(in crate::mesh_large) struct Chain {
     pub levels: Vec<Level>,
     /// Owned chain plus reusable gutter scratch bound; borrowed inputs and
     /// native encoder workspace/output must be charged by the caller.
-    #[allow(dead_code)] // Retained measurement in the bounded encoding result.
+    #[expect(
+        dead_code,
+        reason = "Retained measurement in the bounded encoding result"
+    )]
     pub charged_bytes: u64,
 }
 #[derive(Clone, Copy)]
@@ -448,7 +451,13 @@ fn dominant_normal(
     Ok(best.0)
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 pub(in crate::mesh_large) fn build(
     width: u32,
     height: u32,
@@ -484,7 +493,10 @@ pub(crate) const LEAF_ISLAND_ISOLATED_LEVELS: u32 = 3;
 /// islands may blend (bleed accepted, as standard; the HLOD parent replaces the leaf
 /// before deep levels dominate). Dimensions may be any multiple of four (whole KTX2
 /// blocks).
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(in crate::mesh_large) fn build_islands(
     width: u32,
     height: u32,
@@ -531,7 +543,10 @@ pub(in crate::mesh_large) fn build_base(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn build_levels(
     width: u32,
     height: u32,

@@ -1,4 +1,9 @@
 //! Streaming OGR features; explicit axes, heights, filters and exact typed fields.
+#![expect(
+    clippy::undocumented_unsafe_blocks,
+    unsafe_op_in_unsafe_fn,
+    reason = "GDAL FFI written before SAFETY comments were required; new modules document each block"
+)]
 use super::super::source_fields;
 use super::*;
 use crate::geospatial::{

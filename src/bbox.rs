@@ -33,7 +33,6 @@ impl Obb {
         }
     }
 
-    #[allow(clippy::needless_range_loop)]
     pub fn corners(&self) -> [[f64; 3]; 8] {
         let mut out = [[0.0; 3]; 8];
         for (n, c) in out.iter_mut().enumerate() {
@@ -72,7 +71,10 @@ fn norm(a: [f64; 3]) -> f64 {
 
 /// Eigenvectors of a symmetric 3×3 (cyclic Jacobi), rows sorted by
 /// descending eigenvalue, made right-handed.
-#[allow(clippy::needless_range_loop)]
+#[expect(
+    clippy::needless_range_loop,
+    reason = "the index addresses several arrays in step"
+)]
 pub(crate) fn jacobi_eigenvectors(mut a: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
     let mut v = AXIS_ALIGNED;
     for _ in 0..32 {

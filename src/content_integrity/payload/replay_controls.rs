@@ -124,7 +124,10 @@ fn limits() -> PayloadLimits {
     }
 }
 
-#[allow(clippy::too_many_arguments)] // Explicit independent case inputs; test helper only.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Explicit independent case inputs; test helper only"
+)]
 fn execute(
     kind: PayloadKind,
     bytes: &[u8],

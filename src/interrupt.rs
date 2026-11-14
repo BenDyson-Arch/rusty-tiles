@@ -26,7 +26,13 @@ static INSTALL: Once = Once::new();
 const BACKSTOP: Duration = Duration::from_secs(20);
 
 /// What the watcher does after one signal.
-#[cfg_attr(not(any(all(unix, feature = "cli"), windows)), allow(dead_code))]
+#[cfg_attr(
+    not(any(all(unix, feature = "cli"), windows)),
+    expect(
+        dead_code,
+        reason = "signal handling is built for the Unix CLI and for Windows"
+    )
+)]
 enum Action {
     /// The run is unwinding (or publishing); keep running.
     Continue,
@@ -62,7 +68,13 @@ fn install_once() {
     console::install();
 }
 
-#[cfg_attr(not(any(all(unix, feature = "cli"), windows)), allow(dead_code))]
+#[cfg_attr(
+    not(any(all(unix, feature = "cli"), windows)),
+    expect(
+        dead_code,
+        reason = "signal handling is built for the Unix CLI and for Windows"
+    )
+)]
 fn on_signal(signal: i32) -> Action {
     if SIGNAL
         .compare_exchange(0, signal, Ordering::SeqCst, Ordering::SeqCst)
@@ -130,7 +142,13 @@ mod console {
 /// After [`BACKSTOP`], remove the run's registered temporary paths and exit with the
 /// signal's status, in case the run is blocked in a call that cannot see the stop. A run
 /// that was cancelled never publishes, so nothing else needs to be undone.
-#[cfg_attr(not(any(all(unix, feature = "cli"), windows)), allow(dead_code))]
+#[cfg_attr(
+    not(any(all(unix, feature = "cli"), windows)),
+    expect(
+        dead_code,
+        reason = "signal handling is built for the Unix CLI and for Windows"
+    )
+)]
 fn arm_backstop(signal: i32) {
     let mut wait = BACKSTOP;
     if cfg!(debug_assertions) {

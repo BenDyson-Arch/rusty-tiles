@@ -32,6 +32,7 @@ pub(crate) struct Counting;
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         route_meshopt();
+        // SAFETY: the caller's `GlobalAlloc` contract is forwarded to `System` unchanged.
         let p = unsafe { System.alloc(layout) };
         if !p.is_null() {
             note(layout.size() as isize);
@@ -39,6 +40,7 @@ unsafe impl GlobalAlloc for Counting {
         p
     }
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        // SAFETY: the caller's `GlobalAlloc` contract is forwarded to `System` unchanged.
         let p = unsafe { System.alloc_zeroed(layout) };
         if !p.is_null() {
             note(layout.size() as isize);
@@ -46,12 +48,14 @@ unsafe impl GlobalAlloc for Counting {
         p
     }
     unsafe fn dealloc(&self, p: *mut u8, layout: Layout) {
+        // SAFETY: the caller's `GlobalAlloc` contract is forwarded to `System` unchanged.
         unsafe { System.dealloc(p, layout) };
         note(-(layout.size() as isize));
     }
     unsafe fn realloc(&self, p: *mut u8, layout: Layout, size: usize) -> *mut u8 {
         // Counted as the new block before the old one is freed: a move's transient peak.
         note(size as isize);
+        // SAFETY: the caller's `GlobalAlloc` contract is forwarded to `System` unchanged.
         let q = unsafe { System.realloc(p, layout, size) };
         if q.is_null() {
             note(-(size as isize));

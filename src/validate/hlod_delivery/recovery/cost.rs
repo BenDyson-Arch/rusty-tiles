@@ -9,10 +9,8 @@ thread_local! {
 fn cpu() -> f64 {
     let mut t = std::mem::MaybeUninit::<libc::timespec>::uninit();
     // SAFETY: successful clock_gettime initializes the supplied timespec.
-    assert_eq!(
-        unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, t.as_mut_ptr()) },
-        0
-    );
+    let status = unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, t.as_mut_ptr()) };
+    assert_eq!(status, 0);
     // SAFETY: the successful call above initialized t.
     let t = unsafe { t.assume_init() };
     t.tv_sec as f64 + t.tv_nsec as f64 * 1e-9

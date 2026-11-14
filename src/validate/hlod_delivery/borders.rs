@@ -308,7 +308,10 @@ impl Store {
     /// vertex's image for the pairwise depth rules (loaded by `border_pairs`) and returns
     /// the contracted arcs by chord (for the equal-direction multiplicity check) and the
     /// tile's shared points (for the seam-owner check).
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     pub(super) fn border(
         &self,
         tile: i64,
@@ -516,7 +519,10 @@ impl Store {
     }
 
     /// One arc between retained vertices: its chord, directions and displacement.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn arc(
         &self,
         tile: i64,
@@ -692,7 +698,10 @@ impl Store {
     /// of `arc`: same direction along the arc, third corner on the same side of the
     /// coarse edge (exact acute wedge). An unrelated face of that edge (another
     /// book page on another side) supplies no correspondence.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn corresponds(
         &self,
         (tile, last): (i64, Option<i64>),

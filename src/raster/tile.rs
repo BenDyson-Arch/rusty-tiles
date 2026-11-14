@@ -2,6 +2,10 @@
 //! zoom z global pixel X with k = 2^(zmax-z) samples finest global pixel
 //! kX + k/2 on each axis: an east/south tie selects the greater fine index.
 //! Samples outside the finest raster are zero RGBA. Tiles are sequential.
+#![expect(
+    clippy::undocumented_unsafe_blocks,
+    reason = "GDAL FFI written before SAFETY comments were required; new modules document each block"
+)]
 use super::{
     grid::GridPlan,
     native::{self, Dataset},

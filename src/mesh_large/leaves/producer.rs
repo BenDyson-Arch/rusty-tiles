@@ -51,7 +51,13 @@ impl From<LeafProfile> for Profile {
         }
     }
 }
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 #[derive(Clone, Debug)]
 pub struct LeafOutputRequest {
     input: PathBuf,
@@ -65,7 +71,13 @@ pub struct LeafOutputRequest {
     leaf_triangles: Option<u64>,
 }
 impl LeafOutputRequest {
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+        )
+    )]
     pub fn new(
         input: impl Into<PathBuf>,
         output: impl Into<PathBuf>,
@@ -84,7 +96,13 @@ impl LeafOutputRequest {
         }
     }
     /// Declared memory budget (D8).
-    #[cfg_attr(not(test), allow(dead_code))] // Test fixture access; not used by the public pipeline.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Test fixture access; not used by the public pipeline"
+        )
+    )]
     pub(crate) fn with_memory_budget(mut self, bytes: u64) -> Self {
         self.memory_budget = Some(bytes);
         self
@@ -95,12 +113,24 @@ impl LeafOutputRequest {
         self.hlod = settings;
         self
     }
-    #[cfg_attr(not(test), allow(dead_code))] // Test fixture access; not used by the public pipeline.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Test fixture access; not used by the public pipeline"
+        )
+    )]
     pub fn with_jobs(mut self, jobs: NonZeroUsize) -> Self {
         self.jobs = Jobs::Fixed(jobs);
         self
     }
-    #[cfg_attr(not(test), allow(dead_code))] // Test fixture access; not used by the public pipeline.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Test fixture access; not used by the public pipeline"
+        )
+    )]
     pub fn with_scratch_dir(mut self, path: impl Into<PathBuf>) -> Self {
         self.scratch_dir = Some(path.into());
         self
@@ -233,12 +263,21 @@ pub struct EscalationMiss {
     pub mip: Option<u64>,
     pub gate: String,
 }
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 #[derive(Debug)]
 pub struct LeafOutputResult {
     pub output: PathBuf,
     pub report: LeafOutputReport,
-    #[allow(dead_code)] // Test-only leaf publication result preserves cleanup diagnostics.
+    #[expect(
+        dead_code,
+        reason = "Test-only leaf publication result preserves cleanup diagnostics"
+    )]
     pub cleanup_diagnostics: Vec<CleanupDiagnostic>,
 }
 fn invariant(message: &str) -> JobError {
@@ -247,7 +286,13 @@ fn invariant(message: &str) -> JobError {
 fn resource(message: &str) -> JobError {
     JobError::new(JobErrorKind::ResourceLimit, message)
 }
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 fn close_failed_capture(captured: full::FullCaptured, failure: &mut JobFailure) {
     let path = captured.scratch.path().to_owned();
     if let Err(error) = captured.close() {
@@ -714,7 +759,10 @@ fn leaf_encode(
 /// of one leaf also run in parallel), and written strictly in leaf order, so
 /// every member, manifest row and the first reported failure are independent
 /// of the worker count.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(crate) fn produce(
     path: &Path,
     captured: &full::FullCaptured,
@@ -1131,7 +1179,13 @@ fn write_leaf(
     Ok(())
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 pub fn mesh_to_leaf_payloads(
     request: LeafOutputRequest,
     control: &RunControl,
@@ -1896,7 +1950,10 @@ mod tests {
         (input, texture(0).into_raw())
     }
     /// The leaf GLB's JSON and its (width, height, wrapS, wrapT, mime) per texture.
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn leaf_pages(output: &Path) -> (serde_json::Value, Vec<(u32, u32, u64, u64, String)>) {
         let leaf = fs::read(output.join("leaves/000000000000.glb")).unwrap();
         let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;

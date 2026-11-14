@@ -38,7 +38,13 @@ use crate::{JobError, JobErrorKind};
 use serde_json::{json, Value};
 
 pub(crate) const NEAREST: u64 = 9728;
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 const CLAMP_TO_EDGE: u64 = 33071;
 
 fn error(kind: JobErrorKind, message: impl Into<String>) -> JobError {
@@ -47,11 +53,23 @@ fn error(kind: JobErrorKind, message: impl Into<String>) -> JobError {
 fn invalid(message: impl Into<String>) -> JobError {
     error(JobErrorKind::InvalidRequest, message)
 }
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 fn broken(message: impl Into<String>) -> JobError {
     error(JobErrorKind::InvalidState, message)
 }
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 fn resource() -> JobError {
     error(
         JobErrorKind::ResourceLimit,
@@ -59,21 +77,39 @@ fn resource() -> JobError {
     )
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// One feature-ID set (or categorical property) of `bytes` little-endian bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct IdSet {
     pub bytes: u8,
 }
 impl IdSet {
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+        )
+    )]
     /// The set's `nullFeatureId`: all channel bits set.
     pub(crate) fn null(self) -> u32 {
         (((1u64) << (8 * u32::from(self.bytes))) - 1) as u32
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// Where one set lives: page index and its contiguous channels, low byte first.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SetLayout {
@@ -81,7 +117,13 @@ pub(crate) struct SetLayout {
     pub channels: Vec<u8>,
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// First-fit channel packing in request order; returns layouts and page count.
 pub(crate) fn layout(sets: &[IdSet]) -> Result<(Vec<SetLayout>, usize), JobError> {
     if sets.is_empty() {
@@ -112,7 +154,13 @@ pub(crate) fn layout(sets: &[IdSet]) -> Result<(Vec<SetLayout>, usize), JobError
     Ok((out, used.len()))
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// The sampler every ID texture uses.
 pub(crate) fn sampler() -> Value {
     json!({"magFilter":NEAREST,"minFilter":NEAREST,"wrapS":CLAMP_TO_EDGE,"wrapT":CLAMP_TO_EDGE})
@@ -133,7 +181,13 @@ pub(crate) fn check_sampler(sampler: &Value) -> Result<(), JobError> {
     Ok(())
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// Reads `bytes` little-endian channels of one RGBA8 texel.
 fn read(pixel: &[u8], channels: &[u8]) -> u32 {
     channels
@@ -142,7 +196,13 @@ fn read(pixel: &[u8], channels: &[u8]) -> u32 {
         .fold(0u32, |v, &c| (v << 8) | u32::from(pixel[usize::from(c)]))
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// Request: `ids` holds `sets.len()` IDs per texel, texel-major, row-major.
 /// Pages are power-of-two, at least 4 texels per edge (as every H8 page).
 /// IDs of zero-support texels are ignored (written as no-feature).
@@ -155,7 +215,13 @@ pub(crate) struct Request<'a> {
     pub memory_limit: u64,
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 #[derive(Debug)]
 pub(crate) struct IdPage {
     /// Exact PNG per authored level, level 0 first.
@@ -163,7 +229,13 @@ pub(crate) struct IdPage {
     /// Level dimensions, level 0 first.
     pub sizes: Vec<[u32; 2]>,
 }
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 #[derive(Debug)]
 pub(crate) struct IdTexture {
     pub sets: Vec<IdSet>,
@@ -171,11 +243,20 @@ pub(crate) struct IdTexture {
     pub pages: Vec<IdPage>,
     /// Distinct non-null IDs per set per level (`featureCount`).
     pub feature_counts: Vec<Vec<u32>>,
-    #[allow(dead_code)] // Decoded ID texture receipt retained alongside the test fixture output.
+    #[expect(
+        dead_code,
+        reason = "Decoded ID texture receipt retained alongside the test fixture output"
+    )]
     pub receipts: Vec<Value>,
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// One attached set: glTF texture index plus its read rule.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct TextureRef {
@@ -185,7 +266,13 @@ pub(crate) struct TextureRef {
     pub feature_count: u32,
 }
 impl TextureRef {
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+        )
+    )]
     /// `EXT_mesh_features.featureIds[]` entry of a feature ID texture; `None`
     /// when the level holds no feature (the spec requires `featureCount >= 1`).
     pub(crate) fn feature_id(&self, tex_coord: usize, label: &str) -> Option<Value> {
@@ -195,14 +282,26 @@ impl TextureRef {
         })
     }
     /// `EXT_structural_metadata` property texture property (categorical).
-    #[cfg_attr(not(test), allow(dead_code))] // Test fixture access; not used by the public pipeline.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Test fixture access; not used by the public pipeline"
+        )
+    )]
     pub(crate) fn property(&self, tex_coord: usize) -> Value {
         json!({"index":self.texture,"texCoord":tex_coord,"channels":self.channels})
     }
 }
 
 impl IdTexture {
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+        )
+    )]
     /// Attaches `level` of every page to `atlas` with the NEAREST sampler and
     /// returns one reference per set, in request order. Leaves take level 0;
     /// coarse proxies may take a coarser exact level.
@@ -253,7 +352,13 @@ impl IdTexture {
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// Independent check of one decoded level against the level-0 request page:
 /// zero-support source regions must read no-feature; any other texel must
 /// equal a supported level-0 texel inside its own source region.
@@ -298,7 +403,13 @@ pub(crate) fn check_level(
     Ok(())
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// Emulates `sampler` on `level` (no mips: both filters read this level) at
 /// three-quarter texel offsets, where LINEAR blends 3:1 with a neighbour.
 /// Every sample must be one of its own 2x2 tap texels, unchanged.
@@ -350,7 +461,13 @@ pub(crate) fn check_sampled(level: &mips::Level, sampler: &Value) -> Result<(), 
     Ok(())
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 fn distinct(level: &sparse_mips::Level, channels: &[u8], null: u32) -> Result<u32, JobError> {
     let mut values = Vec::new();
     values
@@ -367,7 +484,13 @@ fn distinct(level: &sparse_mips::Level, channels: &[u8], null: u32) -> Result<u3
     u32::try_from(values.len()).map_err(|_| resource())
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// Bakes, mips, encodes and independently checks every page of one request.
 pub(crate) fn bake(request: &Request<'_>) -> Result<IdTexture, JobError> {
     let (layouts, page_count) = layout(request.sets)?;

@@ -986,7 +986,10 @@ fn oriented(t: &[u32; 3]) -> [u32; 3] {
 /// Only when that fails, and with `last_resorts` (production: always), the whole build
 /// runs again with fix 2's last resorts, then with staged reduction (`Resort`), so no tile
 /// an earlier build publishes changes.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(crate) fn build_parent(
     tile: TileKey,
     children: &[TileGeometry],
@@ -1151,7 +1154,10 @@ impl Resort {
 }
 
 /// One build with the given last resorts.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn build(
     tile: TileKey,
     children: &[TileGeometry],
@@ -1710,7 +1716,10 @@ fn coarse_candidates(m: &Merged, interface: &[InterfaceRow], floor: f64) -> Vec<
 /// Failed contraction is not an omission decision. Preserve the old border samples
 /// while reducing separate sheets at both caps, then try constructive and six bounded
 /// interior remeshes. Every final contraction is checked against the original faces.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn recover_contraction(
     merged: &mut Merged,
     reference: &Merged,
@@ -1781,7 +1790,10 @@ fn recover_contraction(
 
 /// `assessed_attempt_inner`, or the exact result of an equal earlier call (`Repeats`):
 /// `Fix2` replaying `None`, or `known` (round zero repeating the full-cap calls).
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn assessed_attempt(
     tile: TileKey,
     merged: &Merged,
@@ -1844,7 +1856,10 @@ fn assessed_attempt(
 
 /// Keep the source face ring around a rejected new hole before considering omission.
 /// Pins grow monotonically and retries are bounded; no patch or new boundary is invented.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn assessed_attempt_inner(
     tile: TileKey,
     merged: &Merged,
@@ -1931,7 +1946,10 @@ fn assessed_attempt_inner(
 /// once more with the anchored paths of touching boundaries locked
 /// (`topology::touching_pins`). An abandoned staged reduction (`abandons`) fails the
 /// attempt without the separate-sheets mode.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn attempt(
     tile: TileKey,
     merged: &Merged,
@@ -2021,7 +2039,10 @@ fn attempt(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn attempt_mode(
     tile: TileKey,
     merged: &Merged,

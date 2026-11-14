@@ -1,4 +1,8 @@
 //! GDAL admission and copying; no native handles leave this module.
+#![expect(
+    clippy::undocumented_unsafe_blocks,
+    reason = "GDAL FFI written before SAFETY comments were required; new modules document each block"
+)]
 use super::{error, JobError, JobErrorKind};
 use crate::{
     geospatial::{native::Dataset, QuietErrors},

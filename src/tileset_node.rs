@@ -189,7 +189,7 @@ impl GeometricError {
 pub(crate) enum Refine {
     Replace,
     // Point clouds refine by ADD; they write through the JSON shim until they migrate.
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg_attr(not(test), expect(dead_code, reason = "used only by unit tests"))]
     Add,
 }
 
@@ -1161,7 +1161,6 @@ impl<X: Serialize> TileTree<X> {
     /// A tile whose children occupy explicit implicit slots (sparse or packed octants), in
     /// the given order. A slot above [`MAX_CHILD_SLOT`] or a slot shared by two children is
     /// refused; the forest also refuses a slot outside its scheme (4 to 7 in a quadtree).
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn with_slots(
         record: TileRecord<X>,
         children: Vec<(u8, TileTree<X>)>,

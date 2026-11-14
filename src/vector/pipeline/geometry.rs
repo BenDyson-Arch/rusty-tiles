@@ -676,7 +676,6 @@ fn retain_intrinsic(
 /// as the tile encoder will (`polygon_for` in that frame, including its loop
 /// coverage check); a candidate it refuses keeps its source polygon, so a
 /// parent never fails at encoding time on a polygon simplification made.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn simplify(
     feature: &Feature,
     tolerance: f64,

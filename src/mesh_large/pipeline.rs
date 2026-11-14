@@ -667,7 +667,10 @@ pub fn mesh_to_tileset(
         phases.finished(Phase::Capture, capture_started.elapsed().as_secs_f64())?;
         // D8: memory-backed storage written from here on is charged before any later stage
         // plans, so every stage (leaf, HLOD, archive) sees the budget it leaves.
-        #[allow(unused_mut)]
+        #[cfg_attr(
+            not(test),
+            expect(unused_mut, reason = "test builds replace the work charge below")
+        )]
         let (mut charges, [work_volume, archive_volume]) =
             storage_charges(work.path(), parent, &captured.report.scratch)?;
         let (work_storage, archive_storage) = (work_volume.class(), archive_volume.class());

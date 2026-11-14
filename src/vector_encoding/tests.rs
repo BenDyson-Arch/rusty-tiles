@@ -588,6 +588,8 @@ fn existing_at_version(version: i32) -> Vec<u8> {
     let j = u32::from_le_bytes(out.bytes[12..16].try_into().unwrap()) as usize;
     let mut parsed: Value = serde_json::from_slice(&out.bytes[20..20 + j]).unwrap();
     let mut stream = vec![0u8; 1024];
+    // SAFETY: `stream` is writable for its full length and `bin` holds the 2 vertices of
+    // 8 bytes the call reads.
     let n = unsafe {
         meshopt::ffi::meshopt_encodeVertexBufferLevel(
             stream.as_mut_ptr(),

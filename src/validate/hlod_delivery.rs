@@ -2689,7 +2689,10 @@ impl Store {
         drop(ahead_query);
         self.load_edge_faces(faces)
     }
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn require_ancestors(
         &self,
         mut tile: i64,
@@ -2723,7 +2726,6 @@ impl Store {
         }
         Ok(())
     }
-    #[allow(clippy::too_many_arguments)]
     fn shared_point(
         &self,
         key: &[u8],
@@ -2792,7 +2794,10 @@ impl Store {
         }
         Ok(())
     }
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn segment_group(
         &self,
         key: &[u8],

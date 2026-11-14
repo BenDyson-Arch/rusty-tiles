@@ -418,7 +418,10 @@ impl Sampler {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn emit(
     rows: &[u8],
     center: [f64; 3],

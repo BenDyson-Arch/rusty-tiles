@@ -59,7 +59,6 @@ extern "C" {
     /// out, with `extra_pack_flags` OR'd into the UASTC pack flags.
     /// Compiled only with feature `pure-rust-basis` (build.rs).
     #[cfg(all(test, feature = "pure-rust-basis"))]
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn rt_basisu_encode_mips_oracle(
         levels: *const MipLevel,
         level_count: usize,

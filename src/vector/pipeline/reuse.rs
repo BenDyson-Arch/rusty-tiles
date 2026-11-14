@@ -121,7 +121,13 @@ const FINGERPRINT_SOURCES: &[(&str, &str)] = fingerprint_sources![
     "Cargo.lock",
 ];
 /// Native-geospatial build only, hashed after [`FINGERPRINT_SOURCES`].
-#[cfg_attr(not(any(test, feature = "native-geospatial")), allow(dead_code))]
+#[cfg_attr(
+    not(any(test, feature = "native-geospatial")),
+    expect(
+        dead_code,
+        reason = "used only by tests and the native-geospatial build"
+    )
+)]
 const NATIVE_FINGERPRINT_SOURCES: &[(&str, &str)] = fingerprint_sources![
     "src/vector/pipeline/source_native.rs",
     "src/vector/pipeline/geometry/native.rs",
@@ -129,7 +135,13 @@ const NATIVE_FINGERPRINT_SOURCES: &[(&str, &str)] = fingerprint_sources![
     "src/geospatial/native.rs",
 ];
 /// Portable build only, hashed after [`FINGERPRINT_SOURCES`].
-#[cfg_attr(any(not(test), feature = "native-geospatial"), allow(dead_code))]
+#[cfg_attr(
+    all(feature = "native-geospatial", not(test)),
+    expect(
+        dead_code,
+        reason = "native builds hash the native list; the fingerprint tests read both"
+    )
+)]
 const PORTABLE_FINGERPRINT_SOURCES: &[(&str, &str)] =
     fingerprint_sources!["src/vector/pipeline/geometry/portable.rs"];
 const FRAMING_SOURCE: &str = "src/vector_encoding/framing.rs";

@@ -213,7 +213,10 @@ fn open(bytes: &[u8]) -> Result<Reader<'_>, JobError> {
 
 /// A primitive's POSITION in client order (`u*s + t` in f32, u16 or f32 storage): the
 /// stored words and the decoded positions.
-#[allow(clippy::type_complexity)]
+#[expect(
+    clippy::type_complexity,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn positions(
     reader: &Reader<'_>,
     attributes: &Value,

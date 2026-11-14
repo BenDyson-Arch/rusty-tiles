@@ -90,6 +90,14 @@ that infer hardware concurrency, use a two-CPU process affinity where supported
 or another actual worker cap. Keep these local execution limits distinct from
 the product's supported configuration and resource acceptance claims.
 
+## Lint rules
+
+Encode a correction as a check, not as more text here: a ban in `clippy.toml` with
+a reason that says what to do instead, a lint in `Cargo.toml` `[lints]`, or a lint in
+the `scripts/lint_debt.py` ratchet ([CONTRIBUTING.md](CONTRIBUTING.md#lint-rules)).
+Do not add `#[expect]` exemptions or ratchet baseline growth to make a check pass;
+fix the code, or ask.
+
 ## Changelog
 
 PRs add a `changelog.d/` fragment (format in `changelog.d/README.md`) and must not edit `CHANGELOG.md` directly; fragments are assembled at release.

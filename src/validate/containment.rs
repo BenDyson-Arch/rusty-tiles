@@ -1,7 +1,6 @@
 //! Exact decoded-content containment: the normative static span bound, quaternion admission,
 //! the node composite and the per-vertex frame walk (C2 contract v3.2, "Exact evaluation").
-// Removed when F wires the operation into `validate.rs`.
-#![allow(dead_code)]
+#![expect(dead_code, reason = "not yet wired into validate.rs")]
 mod dyadic;
 use dyadic::{Dyadics, D};
 use std::cmp::Ordering;
