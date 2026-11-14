@@ -173,6 +173,11 @@ fn compile_basisu() {
 
     let mut cxx = cc::Build::new();
     configure(&mut cxx, true, &[&silence]);
+    // The pure-Rust path's shadow tests compare it with an oracle entry point in the shim
+    // (rt_basisu_encode_mips_oracle); other builds do not compile it.
+    if std::env::var_os("CARGO_FEATURE_PURE_RUST_BASIS").is_some() {
+        cxx.define("RT_BASISU_ENCODE_ORACLE", None);
+    }
     cxx.files(BASISU_CXX_SOURCES.iter().map(|source| vendor.join(source)))
         .file(native.join("rt_basisu_shim.cpp"))
         .objects(guarded_objects)

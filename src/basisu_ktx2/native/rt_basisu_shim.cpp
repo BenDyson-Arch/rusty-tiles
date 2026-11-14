@@ -229,6 +229,9 @@ RT_BASISU_ENTRY std::int32_t rt_basisu_encode_mips(const RtBasisuMipLevel *level
 // sets the pack level (basis_compress2 cannot express pack flags such as the ETC1 hint
 // flags). With `extra_pack_flags == 0` the output must equal rt_basisu_encode_mips's, which
 // the shadow tests check. The caller validates the request as for rt_basisu_encode_mips.
+// Compiled only with feature pure-rust-basis (build.rs defines RT_BASISU_ENCODE_ORACLE), so the
+// default build is unchanged.
+#if defined(RT_BASISU_ENCODE_ORACLE)
 RT_BASISU_ENTRY std::int32_t rt_basisu_encode_mips_oracle(const RtBasisuMipLevel *levels,
                                                          std::size_t level_count, std::uint32_t format,
                                                          std::int32_t quality, std::int32_t effort,
@@ -318,6 +321,7 @@ RT_BASISU_ENTRY std::int32_t rt_basisu_encode_mips_oracle(const RtBasisuMipLevel
         return kException;
     }
 }
+#endif // RT_BASISU_ENCODE_ORACLE
 
 // For the tests: `which == 0` throws through the encoder checks' abort()
 // replacement; anything else calls the library's real container_abort(). Both
