@@ -126,6 +126,26 @@ pub(crate) enum Transfer {
     Linear,
 }
 
+/// Basis Universal's UASTC LDR 4x4 pack flags `cPackUASTCETC1FastestHints |
+/// cPackUASTCETC1DisableFlipAndIndividual` (`basisu_uastc_enc.h`, 0x80 | 0x100),
+/// the encode setting of [`Etc1Hints::Fastest`]. The shim passes them to the
+/// encoder unchanged and checks this value against the library's at compile
+/// time; a replacement encoder uses the same flags.
+pub(crate) const UASTC_FASTEST_ETC1_HINTS: u32 = 0x180;
+
+/// How much the UASTC encoder searches for the ETC1 hints it stores in each
+/// block. A hint is used only when a block is transcoded to ETC1 (a GPU with
+/// none of ASTC, BC7 or BC1/3); the UASTC texels, and therefore every decode
+/// to RGBA, ASTC, BC7 or BC1/3, are the same with either setting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Etc1Hints {
+    /// The encoder's own search for its pack level.
+    Full,
+    /// [`UASTC_FASTEST_ETC1_HINTS`]: one bias and a single flip/differential
+    /// layout per block. UASTC only.
+    Fastest,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Params {
     /// Encoder effort, 0..=10.
@@ -133,6 +153,8 @@ pub(crate) struct Params {
     pub transfer: Transfer,
     /// Legacy flag: base-only calls must set false; supplied chains use the mip API.
     pub mipmaps: bool,
+    /// UASTC ETC1 hint search; ETC1S requires [`Etc1Hints::Full`].
+    pub etc1_hints: Etc1Hints,
 }
 
 /// One caller-authored tightly packed RGBA8 level. All levels are borrowed
@@ -354,6 +376,12 @@ fn check_request(
                 format!("ETC1S quality must be 1..=100, got {quality}"),
             ));
         }
+        if params.etc1_hints != Etc1Hints::Full {
+            return Err(JobError::new(
+                JobErrorKind::InvalidRequest,
+                "ETC1 hint settings apply to UASTC only",
+            ));
+        }
     }
     if params.effort > MAX_EFFORT {
         return Err(JobError::new(
@@ -449,6 +477,9 @@ fn native_encode_mips(
     };
     if params.transfer == Transfer::Srgb {
         flags |= ffi::FLAG_SRGB;
+    }
+    if params.etc1_hints == Etc1Hints::Fastest {
+        flags |= ffi::FLAG_UASTC_FASTEST_ETC1_HINTS;
     }
     let native_mips: Vec<ffi::MipLevel> = mips
         .iter()
