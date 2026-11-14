@@ -339,6 +339,35 @@ fn mesh_payload_staging_stops() {
     assert_stopped(&run, &work.scratch(), &work.out());
 }
 
+/// Capture's cell tree builds its subtrees on worker threads; each checks the run's stop
+/// between units of 4,096 triangles, and the calling thread keeps checking while they run.
+#[test]
+fn mesh_tree_subtrees_stop() {
+    let work = Work::new();
+    let input = work.path("grid.glb");
+    fs::write(&input, support::textured_grid_glb(200)).unwrap();
+    let output = work.out().join("grid.3tz");
+    let run = stop_in(
+        &os(&[
+            &"mesh",
+            &"-i",
+            &input,
+            &"-o",
+            &output,
+            &"--jobs",
+            &"2",
+            &"--scratch-dir",
+            &work.scratch(),
+        ]),
+        &[
+            ("RUSTY_TILES_TEST_PACE", "mesh.tree-subtree"),
+            ("RUSTY_TILES_TEST_PACE_US", "1000000"),
+        ],
+        "mesh.tree-subtree",
+    );
+    assert_stopped(&run, &work.scratch(), &work.out());
+}
+
 /// A KTX2 page encode cannot be interrupted (minutes at the ladder's highest efforts). The
 /// CLI's backstop removes the run's temporary paths and exits with the signal's status once
 /// the stop has not finished in time; here the encode never returns.

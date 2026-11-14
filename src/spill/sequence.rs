@@ -224,6 +224,11 @@ impl<T: Record> Sequence<T> {
         self.layout
     }
 
+    /// The stream buffer its writer used (the default for its readers).
+    pub(crate) fn buffer_bytes(&self) -> usize {
+        self.buffer_bytes
+    }
+
     /// Encoded bytes per record.
     fn size(&self) -> usize {
         T::size_in(self.layout)
