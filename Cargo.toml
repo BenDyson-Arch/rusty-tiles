@@ -53,6 +53,9 @@ cli = ["dep:signal-hook"]
 native-geospatial = ["dep:gdal-sys", "dep:pkg-config"]
 # Test-only: `RUSTY_TILES_FORCED_SPILL=1` puts the validator catalog on scratch (parity runs).
 validate-forced-spill = []
+# Encodes and decodes KTX2/Basis Universal pages in pure Rust (ktx-rs, zstd-pure-rs, ruzstd)
+# instead of the vendored C++. Output is byte-identical; see docs/architecture/basis-pure-rust.md.
+pure-rust-basis = ["dep:ktx-rs", "dep:zstd-pure-rs", "dep:ruzstd"]
 
 [dependencies]
 base64 = "0.22"
@@ -96,6 +99,11 @@ proj4rs = { version = "0.2.0", default-features = false }
 proj4wkt = "0.1.1"
 # Already in the dependency graph through png; decompresses the embedded EPSG allow-list.
 flate2 = "1"
+# Feature pure-rust-basis. Exact pins: byte identity with the vendored Basis Universal v2.50
+# and zstd 1.5.7 is checked against these versions (docs/architecture/basis-pure-rust.md).
+ktx-rs = { version = "=4.4.3", default-features = false, optional = true }
+zstd-pure-rs = { version = "=0.2.0", optional = true }
+ruzstd = { version = "=0.9.1", optional = true }
 
 [build-dependencies]
 cc = { version = "1.2", features = ["parallel"] }

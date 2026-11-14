@@ -6,10 +6,10 @@ use sha2::{Digest, Sha256};
 mod effort_sweep;
 
 /// splitmix64, so fixtures are identical on every target.
-struct Rng(u64);
+pub(super) struct Rng(pub(super) u64);
 
 impl Rng {
-    fn next(&mut self) -> u64 {
+    pub(super) fn next(&mut self) -> u64 {
         self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
         let mut z = self.0;
         z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
@@ -20,7 +20,7 @@ impl Rng {
 
 /// Smooth photo-like content: gradients, low-frequency waves, a few hard
 /// edges and mild texel noise. Integer arithmetic only.
-fn photo(width: u32, height: u32, seed: u64, alpha: bool) -> Vec<u8> {
+pub(super) fn photo(width: u32, height: u32, seed: u64, alpha: bool) -> Vec<u8> {
     let mut rng = Rng(seed);
     let mut out = Vec::with_capacity(width as usize * height as usize * 4);
     for y in 0..height {
@@ -44,7 +44,7 @@ fn photo(width: u32, height: u32, seed: u64, alpha: bool) -> Vec<u8> {
 }
 
 /// Uniform random bytes, the worst case for any block codec.
-fn noise(width: u32, height: u32, seed: u64, alpha: bool) -> Vec<u8> {
+pub(super) fn noise(width: u32, height: u32, seed: u64, alpha: bool) -> Vec<u8> {
     let mut rng = Rng(seed);
     (0..width as usize * height as usize)
         .flat_map(|_| {
@@ -55,7 +55,7 @@ fn noise(width: u32, height: u32, seed: u64, alpha: bool) -> Vec<u8> {
 }
 
 /// Mid-grey plus uniform noise of +-`amplitude`, per channel; opaque.
-fn low_noise(width: u32, height: u32, seed: u64, amplitude: u8) -> Vec<u8> {
+pub(super) fn low_noise(width: u32, height: u32, seed: u64, amplitude: u8) -> Vec<u8> {
     let mut rng = Rng(seed);
     let span = 2 * u64::from(amplitude) + 1;
     (0..width as usize * height as usize)
@@ -78,14 +78,14 @@ fn chroma_noise(width: u32, height: u32, seed: u64) -> Vec<u8> {
         .collect()
 }
 
-fn flat(width: u32, height: u32, seed: u64) -> Vec<u8> {
+pub(super) fn flat(width: u32, height: u32, seed: u64) -> Vec<u8> {
     let v = Rng(seed).next().to_le_bytes();
     (0..width as usize * height as usize)
         .flat_map(|_| [v[0], v[1], v[2], 255])
         .collect()
 }
 
-fn checker(width: u32, height: u32) -> Vec<u8> {
+pub(super) fn checker(width: u32, height: u32) -> Vec<u8> {
     (0..height)
         .flat_map(|y| (0..width).map(move |x| if (x + y) % 2 == 0 { 0u8 } else { 255 }))
         .flat_map(|v| [v, v, v, 255])
@@ -122,7 +122,7 @@ fn hex(bytes: &[u8]) -> String {
 
 // Codec fixtures supply their own byte-domain box pyramid. This helper is
 // deliberately not a color/normal/alpha semantic mip implementation; H8 owns it.
-fn fixture_mips(rgba: &[u8], width: u32, height: u32, params: Params) -> Vec<Vec<u8>> {
+pub(super) fn fixture_mips(rgba: &[u8], width: u32, height: u32, params: Params) -> Vec<Vec<u8>> {
     let mut levels = vec![rgba.to_vec()];
     let (mut w, mut h) = (width, height);
     if params.mipmaps && w > 0 && h > 0 && rgba.len() as u64 == u64::from(w) * u64::from(h) * 4 {
@@ -1026,7 +1026,7 @@ fn tri(t: u32, period: u32) -> u32 {
     up * 510 / period
 }
 
-fn occlusion(size: u32) -> Vec<u8> {
+pub(super) fn occlusion(size: u32) -> Vec<u8> {
     let mut rng = Rng(42);
     (0..size)
         .flat_map(|y| (0..size).map(move |x| (x, y)))
@@ -1041,7 +1041,7 @@ fn occlusion(size: u32) -> Vec<u8> {
         .collect()
 }
 
-fn orm(size: u32) -> Vec<u8> {
+pub(super) fn orm(size: u32) -> Vec<u8> {
     let mut rng = Rng(43);
     let ao = occlusion(size);
     (0..size)
@@ -1057,7 +1057,7 @@ fn orm(size: u32) -> Vec<u8> {
 
 /// A tangent-space normal map of a smooth height field with a few ridges:
 /// (encoded RGBA, unit normals).
-fn normal_map(size: u32) -> (Vec<u8>, Vec<[f64; 3]>) {
+pub(super) fn normal_map(size: u32) -> (Vec<u8>, Vec<[f64; 3]>) {
     let height = |x: i64, y: i64| -> i64 {
         let (x, y) = (
             x.rem_euclid(size as i64) as u32,

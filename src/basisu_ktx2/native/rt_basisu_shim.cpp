@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <memory>
@@ -221,6 +222,106 @@ RT_BASISU_ENTRY std::int32_t rt_basisu_encode_mips(const RtBasisuMipLevel *level
         return kException;
     }
 }
+
+// Test oracle for the pure-Rust encoder (src/basisu_ktx2/pure/shadow_tests.rs), not used in
+// production: the parameters basis_compress2 builds for rt_basisu_encode_mips, written out
+// here so that `extra_pack_flags` can be OR'd into the UASTC pack flags after the effort
+// sets the pack level (basis_compress2 cannot express pack flags such as the ETC1 hint
+// flags). With `extra_pack_flags == 0` the output must equal rt_basisu_encode_mips's, which
+// the shadow tests check. The caller validates the request as for rt_basisu_encode_mips.
+// Compiled only with feature pure-rust-basis (build.rs defines RT_BASISU_ENCODE_ORACLE), so the
+// default build is unchanged.
+#if defined(RT_BASISU_ENCODE_ORACLE)
+RT_BASISU_ENTRY std::int32_t rt_basisu_encode_mips_oracle(const RtBasisuMipLevel *levels,
+                                                         std::size_t level_count, std::uint32_t format,
+                                                         std::int32_t quality, std::int32_t effort,
+                                                         std::uint32_t flags, std::uint32_t extra_pack_flags,
+                                                         std::uint8_t **out, std::size_t *out_len) {
+    rt_basisu_clear_diagnostics();
+    if (out == nullptr || out_len == nullptr || levels == nullptr || level_count == 0 ||
+        level_count > 15 || (flags & ~(kFlagSrgb | kFlagZstd)) != 0 || effort < 0 || effort > kMaxEffort ||
+        (format != kEtc1s && format != kUastcLdr4x4) || (format == kEtc1s && extra_pack_flags != 0)) {
+        return kInvalidArgument;
+    }
+    *out = nullptr;
+    *out_len = 0;
+    try {
+        init_once();
+        const basist::basis_tex_format mode =
+            format == kEtc1s ? basist::basis_tex_format::cETC1S : basist::basis_tex_format::cUASTC_LDR_4x4;
+        const bool srgb = (flags & kFlagSrgb) != 0;
+        basisu::job_pool jp(1);
+        basisu::basis_compressor_params params;
+        params.set_format_mode(mode);
+        params.m_pJob_pool = &jp;
+        params.m_y_flip = false;
+        params.m_debug = false;
+        params.m_debug_images = false;
+        params.m_tex_type = basist::basis_texture_type::cBASISTexType2D;
+        params.m_source_images.resize(1);
+        params.m_source_images[0].init(levels[0].rgba, levels[0].width, levels[0].height, 4);
+        if (level_count > 1) {
+            params.m_source_mipmap_images.resize(1);
+            params.m_source_mipmap_images[0].resize(static_cast<std::uint32_t>(level_count - 1));
+            for (std::size_t i = 1; i < level_count; ++i) {
+                params.m_source_mipmap_images[0][static_cast<std::uint32_t>(i - 1)].init(
+                    levels[i].rgba, levels[i].width, levels[i].height, 4);
+            }
+        }
+        params.m_multithreading = false;
+        params.m_use_opencl = false;
+        params.m_write_output_basis_or_ktx2_files = false;
+        params.m_perceptual = srgb;
+        params.m_ktx2_and_basis_srgb_transfer_function = srgb;
+        params.m_mip_srgb = srgb;
+        params.set_ldr_srgb_channel_weights(srgb);
+        params.m_mip_gen = false;
+        params.m_mip_wrapping = false;
+        if (format == kUastcLdr4x4) {
+            params.m_pack_uastc_ldr_4x4_flags = 0;
+        } else {
+            params.m_quality_level = 1;
+        }
+        params.m_create_ktx2_file = true;
+        if ((flags & kFlagZstd) != 0 && format == kUastcLdr4x4) {
+            params.m_ktx2_uastc_supercompression = basist::KTX2_SS_ZSTANDARD;
+        }
+        params.m_compute_stats = false;
+        params.m_print_stats = false;
+        params.m_status_output = false;
+        params.m_astc_hdr_6x6_options.m_rec2020_bt2100_color_gamut = false;
+        params.m_validate_output_data = false;
+        params.set_format_mode_and_quality_effort(mode, quality, effort, false);
+        params.m_pack_uastc_ldr_4x4_flags |= extra_pack_flags;
+        basisu::basis_compressor compressor;
+        if (!compressor.init(params) || compressor.process() != basisu::basis_compressor::cECSuccess) {
+            return kEncodeFailed;
+        }
+        const basisu::uint8_vec &ktx2 = compressor.get_output_ktx2_file();
+        void *data = std::malloc(ktx2.size());
+        if (data == nullptr || ktx2.size() == 0) {
+            std::free(data);
+            return kEncodeFailed;
+        }
+        std::memcpy(data, ktx2.data(), ktx2.size());
+        *out = static_cast<std::uint8_t *>(data);
+        *out_len = ktx2.size();
+        return kOk;
+    } catch (const InvariantFailure &) {
+        return kInvariantFailed;
+    } catch (const ContainerFailure &) {
+        return kContainerFailed;
+    } catch (const std::bad_alloc &) {
+        return kOutOfMemory;
+    } catch (const std::exception &error) {
+        note_exception(error.what());
+        return kException;
+    } catch (...) {
+        note_exception(nullptr);
+        return kException;
+    }
+}
+#endif // RT_BASISU_ENCODE_ORACLE
 
 // For the tests: `which == 0` throws through the encoder checks' abort()
 // replacement; anything else calls the library's real container_abort(). Both
