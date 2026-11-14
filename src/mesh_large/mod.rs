@@ -23,6 +23,7 @@ mod pipeline;
 mod records;
 mod resources;
 mod source_crs;
+mod tasks;
 mod tree;
 /// The validator plans its stores with the same budget, job and headroom rules (#342).
 pub(crate) use config::{available_memory, plan_jobs, Jobs};

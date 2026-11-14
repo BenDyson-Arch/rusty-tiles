@@ -177,11 +177,171 @@ fn scan_task(
 /// that capture replaces with its mapped box. `progress` is the cancellation check, given the
 /// triangles scanned so far; it runs on the calling thread.
 ///
-/// Up to `workers` threads scan consecutive triangle ranges with their own bounded readers.
-/// Their boxes are combined in input order, and a failure reports the first failing range in
-/// input order (its first failing triangle), so counts, boxes and verdicts are those of one
-/// sequential pass for any worker count.
+/// Per expanded primitive, up to `workers` threads read the index buffer into a bitmap of the
+/// vertices its triangles use (checking every index), then read the used positions in vertex
+/// order (checking every one). The boxes are the same as those of the triangle-order pass,
+/// since they cover the same set of positions, but positions are read once each in file
+/// order instead of once per corner in index order. On any failure the triangle-order pass
+/// ([`scan_in_triangle_order`]) runs instead and reports exactly its verdict: the first
+/// failing triangle in input order.
 pub(crate) fn scan_with_source_bounds(
+    source: &StreamSource,
+    buffer_bytes: usize,
+    workers: usize,
+    progress: &mut dyn FnMut(u64) -> Result<()>,
+) -> Result<(SourceScan, [[f64; 3]; 2])> {
+    let mut reported = 0;
+    let found = scan_in_vertex_order(source, buffer_bytes, workers, &mut |done| {
+        reported = done;
+        progress(done)
+    })?;
+    match found {
+        Some(found) => Ok(found),
+        // The verdict pass; counts it reports never go back.
+        None => scan_in_triangle_order(source, buffer_bytes, workers, &mut |done| {
+            progress(done.max(reported))
+        }),
+    }
+}
+
+/// Bytes of the used-vertex bitmap of the scan: one bit per vertex of the largest POSITION
+/// accessor of an expanded primitive (one primitive's bitmap is live at a time).
+pub(crate) fn scan_bitmap_bytes(source: &StreamSource) -> u64 {
+    source
+        .document
+        .scene_primitives()
+        .map(|p| p.position.count.div_ceil(64) as u64 * 8)
+        .max()
+        .unwrap_or(0)
+}
+
+/// Vertices one bitmap or position task covers.
+const SCAN_TASK_VERTICES: usize = 1 << 16;
+
+/// The vertex-order scan of [`scan_with_source_bounds`]; `None` when any check failed.
+fn scan_in_vertex_order(
+    source: &StreamSource,
+    buffer_bytes: usize,
+    workers: usize,
+    progress: &mut dyn FnMut(u64) -> Result<()>,
+) -> Result<Option<(SourceScan, [[f64; 3]; 2])>> {
+    use super::tasks::{run, Ran};
+    use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+    let primitives: Vec<_> = source.document.scene_primitives().collect();
+    let mut triangles = 0u64;
+    let mut geometry_bytes = 0u64;
+    for p in &primitives {
+        let count = u64::try_from(p.triangles).map_err(|_| overflow())?;
+        triangles = triangles.checked_add(count).ok_or_else(overflow)?;
+        geometry_bytes = geometry_bytes
+            .checked_add(
+                count
+                    .checked_mul(u64::from(triangle_bytes(p)))
+                    .ok_or_else(overflow)?,
+            )
+            .ok_or_else(overflow)?;
+    }
+    progress(0)?;
+    let mut source_bounds = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
+    let mut bounds = Bounds::EMPTY;
+    let mut scanned = 0u64;
+    for p in &primitives {
+        // Used vertices, from every index (checked).
+        let used: Vec<AtomicU64> = (0..p.position.count.div_ceil(64))
+            .map(|_| AtomicU64::new(0))
+            .collect();
+        let done = AtomicU64::new(0);
+        let chunks = p.triangles.div_ceil(SCAN_TASK_TRIANGLES);
+        let marked = run(
+            chunks,
+            workers,
+            &mut || progress(scanned + done.load(Relaxed)),
+            |chunk, stop| {
+                let mut indices = p.indices.map(|v| source.reader(&v, buffer_bytes));
+                let start = chunk * SCAN_TASK_TRIANGLES;
+                let end = (start + SCAN_TASK_TRIANGLES).min(p.triangles);
+                let (mut word, mut bits) = (usize::MAX, 0u64);
+                for triangle in start..end {
+                    if triangle.is_multiple_of(1024) && stop.load(Relaxed) {
+                        return Err(JobError::new(JobErrorKind::Cancelled, "scan stopped"));
+                    }
+                    for vertex in vertices(p, &mut indices, triangle)? {
+                        let w = (vertex / 64) as usize;
+                        if w != word {
+                            if bits != 0 {
+                                used[word].fetch_or(bits, Relaxed);
+                            }
+                            (word, bits) = (w, 0);
+                        }
+                        bits |= 1 << (vertex % 64);
+                    }
+                }
+                if bits != 0 {
+                    used[word].fetch_or(bits, Relaxed);
+                }
+                done.fetch_add((end - start) as u64, Relaxed);
+                Ok(())
+            },
+        )?;
+        if matches!(marked, Ran::Failed) {
+            return Ok(None);
+        }
+        scanned += p.triangles as u64;
+        // Used positions, in vertex order (checked).
+        let read = run(
+            p.position.count.div_ceil(SCAN_TASK_VERTICES),
+            workers,
+            &mut || progress(scanned),
+            |chunk, stop| {
+                let mut out = TaskScan {
+                    source_bounds: [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]],
+                    bounds: Bounds::EMPTY,
+                };
+                let mut positions = source.reader(&p.position, buffer_bytes);
+                let start = chunk * SCAN_TASK_VERTICES;
+                let end = (start + SCAN_TASK_VERTICES).min(p.position.count);
+                for vertex in start..end {
+                    if vertex.is_multiple_of(4096) && stop.load(Relaxed) {
+                        return Err(JobError::new(JobErrorKind::Cancelled, "scan stopped"));
+                    }
+                    if used[vertex / 64].load(Relaxed) & (1 << (vertex % 64)) == 0 {
+                        continue;
+                    }
+                    let world = source_position(p, &mut positions, vertex as u64)?;
+                    include_source(&mut out.source_bounds, world);
+                    out.bounds.include(canonical(world.map(|x| x as f32)));
+                }
+                Ok(out)
+            },
+        )?;
+        match read {
+            Ran::Failed => return Ok(None),
+            Ran::All(tasks) => {
+                for task in tasks {
+                    include_source(&mut source_bounds, task.source_bounds[0]);
+                    include_source(&mut source_bounds, task.source_bounds[1]);
+                    bounds.union(&task.bounds);
+                }
+            }
+        }
+    }
+    progress(triangles)?;
+    source.verify_unchanged()?;
+    Ok(Some((
+        SourceScan {
+            triangles,
+            bounds,
+            geometry_bytes,
+        },
+        source_bounds,
+    )))
+}
+
+/// The scan in triangle order: up to `workers` threads scan consecutive triangle ranges with
+/// their own bounded readers. Their boxes are combined in input order, and a failure reports
+/// the first failing range in input order (its first failing triangle), so counts, boxes and
+/// verdicts are those of one sequential pass for any worker count.
+pub(crate) fn scan_in_triangle_order(
     source: &StreamSource,
     buffer_bytes: usize,
     workers: usize,
@@ -612,6 +772,21 @@ mod tests {
         let (sequential, seen) = scan(1);
         let (sequential, bounds) = sequential.unwrap();
         assert_eq!((sequential.triangles, seen), (180_000, 180_000));
+        // The vertex-order scan finds the triangle-order pass's counts and boxes exactly.
+        let (ordered, ordered_bounds) =
+            scan_in_triangle_order(&source, 1 << 12, 1, &mut |_| Ok(())).unwrap();
+        assert_eq!(
+            (ordered.triangles, ordered.geometry_bytes, ordered.bounds),
+            (
+                sequential.triangles,
+                sequential.geometry_bytes,
+                sequential.bounds
+            )
+        );
+        assert_eq!(
+            ordered_bounds.map(|c| c.map(f64::to_bits)),
+            bounds.map(|c| c.map(f64::to_bits))
+        );
         for workers in [2, 3, 8] {
             let (parallel, seen) = scan(workers);
             let (parallel, parallel_bounds) = parallel.unwrap();
@@ -662,6 +837,9 @@ mod tests {
             (error.kind(), error.to_string())
         };
         let sequential = message(1);
+        // Exactly the triangle-order pass's verdict.
+        let ordered = scan_in_triangle_order(&source, 1 << 12, 1, &mut |_| Ok(())).unwrap_err();
+        assert_eq!(sequential, (ordered.kind(), ordered.to_string()));
         assert_eq!(sequential.0, JobErrorKind::InvalidInput);
         assert!(sequential.1.contains("nonfinite"), "{}", sequential.1);
         for workers in [2, 3, 8] {

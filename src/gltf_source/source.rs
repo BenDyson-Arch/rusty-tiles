@@ -387,6 +387,13 @@ impl Extrema {
         self.max[c] = self.max[c].max(x);
         Ok(())
     }
+    /// Adds what `other` observed (extrema of another range of the same accessor).
+    pub(crate) fn merge(&mut self, other: &Self) {
+        for c in 0..4 {
+            self.min[c] = self.min[c].min(other.min[c]);
+            self.max[c] = self.max[c].max(other.max[c]);
+        }
+    }
     pub(crate) fn verify(&self, view: &AccessorView<'_>) -> Result<()> {
         if view
             .min

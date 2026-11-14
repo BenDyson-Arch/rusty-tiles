@@ -126,6 +126,8 @@ pub(crate) struct FullMemoryBound {
     pub block_index_bytes: u64,
     /// The corner-depth join's chunk tasks beside its sorts (`corners::wave_bytes`).
     pub corner_join_bytes: u64,
+    /// The scan's used-vertex bitmap (one primitive's at a time).
+    pub scan_bitmap_bytes: u64,
     pub bound_bytes: u64,
 }
 impl FullMemoryBound {
@@ -560,6 +562,7 @@ fn memory_bound(
     image_count: u64,
     jobs: usize,
     spill_bytes: u64,
+    scan_bitmap_bytes: u64,
 ) -> Result<FullMemoryBound, JobError> {
     let mut geometry = MemoryBound::new(config, json_bytes, jobs);
     let sorter = config.sorter(jobs);
@@ -627,7 +630,7 @@ fn memory_bound(
                 add(geometry.bound_bytes, owned_metadata_bytes)?,
                 chunk_descriptor_bytes,
             )?,
-            add(block_index_bytes, corner_join_bytes)?,
+            add(add(block_index_bytes, corner_join_bytes)?, scan_bitmap_bytes)?,
         )?,
         add(DECODER_ALLOWANCE, PLANNING_ALLOWANCE)?,
     )?;
@@ -637,6 +640,7 @@ fn memory_bound(
         chunk_descriptor_bytes,
         block_index_bytes,
         corner_join_bytes,
+        scan_bitmap_bytes,
         decoder_allowance_bytes: DECODER_ALLOWANCE,
         planning_allowance_bytes: PLANNING_ALLOWANCE,
         bound_bytes,
@@ -703,6 +707,8 @@ pub(crate) fn capture_admitted(
         scan_memory.per_job_bytes,
     )
     .jobs;
+    // The scan's used-vertex bitmap is charged in capture's resident bound below.
+    let scan_bitmap = capture::scan_bitmap_bytes(&source);
     let (mut scan, source_bounds) = capture::scan_with_source_bounds(
         &source,
         config.sort.buffer_bytes,
@@ -747,6 +753,7 @@ pub(crate) fn capture_admitted(
         image_count,
         1,
         need.logical_need_bytes,
+        scan_bitmap,
     )
     .map_err(super::failure)?;
     let jobs = config::plan_jobs(
@@ -769,6 +776,7 @@ pub(crate) fn capture_admitted(
         image_count,
         workers,
         need.logical_need_bytes,
+        scan_bitmap,
     )
     .map_err(super::failure)?;
     // The floor's resident bound: what capture holds once its sorts have ended (the image
@@ -817,6 +825,7 @@ pub(crate) fn capture_admitted(
             image_count,
             workers,
             grown.logical_need_bytes,
+            scan_bitmap,
         )
         .ok()?;
         let fits = jobs
@@ -2390,8 +2399,8 @@ pub(super) mod tests {
             .kind(),
             JobErrorKind::ResourceLimit
         );
-        let memory = memory_bound(&cfg, 1000, 2, 1, 0).unwrap();
-        let large = memory_bound(&cfg, 1000, 2, 1, 150 << 30).unwrap();
+        let memory = memory_bound(&cfg, 1000, 2, 1, 0, 0).unwrap();
+        let large = memory_bound(&cfg, 1000, 2, 1, 150 << 30, 0).unwrap();
         // 150 GiB of live spill is about 19k chunk descriptors.
         assert!(large.chunk_descriptor_bytes > memory.chunk_descriptor_bytes + 19_000 * 64);
         assert_eq!(memory.decoder_allowance_bytes, 192 << 20);
