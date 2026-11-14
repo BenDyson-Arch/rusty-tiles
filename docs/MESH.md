@@ -503,7 +503,8 @@ Universal's fastest ETC1 hints (`cPackUASTCETC1FastestHints |
 cPackUASTCETC1DisableFlipAndIndividual`). The hints are used only when a
 viewer transcodes UASTC to ETC1, which CesiumJS does on GPUs with none of
 ASTC, BC7 or S3TC; decodes to RGBA, ASTC, BC7 and BC1/3 are the same with
-either setting. Coarse UASTC pages keep the full hint search.
+either setting. Coarse UASTC pages, and MASK pages on leaves and coarse tiles
+alike (they use the coarse codec policy), keep the full hint search.
 
 ETC1S quality uses the wrapper's 1–100 scale; effort 0 maps to native ETC1S
 compression level 0. ETC1S at effort 0 costs about three times the encode CPU of

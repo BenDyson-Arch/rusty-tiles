@@ -1852,15 +1852,35 @@ fn native_encode(
 fn direct_compress_matches_compress2() {
     // The shim sets the library's parameters itself so that it can pass UASTC
     // pack flags, which basis_compress2() cannot express. Without them every
-    // encode must stay byte-identical to basis_compress2().
+    // encode must stay byte-identical to basis_compress2(): every production
+    // ETC1S setting (fast q50, balanced/occlusion q90) plus q40, and every
+    // UASTC pack level (efforts 0..=9). Each setting meets each sRGB/Zstd flag
+    // combination once across the four images, which keeps the test cheap.
     let images = [
         ("photo", 96, 64, photo(96, 64, 5, true)),
         ("noise", 32, 32, noise(32, 32, 6, true)),
         ("flat", 8, 8, flat(8, 8, 7)),
         ("odd", 13, 7, photo(13, 7, 8, false)),
     ];
+    let flag_sets = [
+        0,
+        ffi::FLAG_SRGB,
+        ffi::FLAG_ZSTD,
+        ffi::FLAG_SRGB | ffi::FLAG_ZSTD,
+    ];
+    let mut settings = vec![
+        (ffi::FORMAT_ETC1S, 40, 0),
+        (ffi::FORMAT_ETC1S, 40, 5),
+        (ffi::FORMAT_ETC1S, 40, 10),
+        (ffi::FORMAT_ETC1S, 50, 0),
+        (ffi::FORMAT_ETC1S, 50, 3),
+        (ffi::FORMAT_ETC1S, 90, 0),
+        (ffi::FORMAT_ETC1S, 90, 2),
+        (ffi::FORMAT_ETC1S, 90, 6),
+    ];
+    settings.extend((0..=9).map(|effort| (ffi::FORMAT_UASTC_LDR_4X4, 100, effort)));
     let mut compared = 0;
-    for (name, width, height, rgba) in &images {
+    for (image, (name, width, height, rgba)) in images.iter().enumerate() {
         for chain in [false, true] {
             let images = fixture_mips(
                 rgba,
@@ -1872,33 +1892,19 @@ fn direct_compress_matches_compress2() {
                 },
             );
             let levels = fixture_levels(&images, *width, *height);
-            for (format, quality, efforts) in [
-                (ffi::FORMAT_ETC1S, 40, [0, 5, 10]),
-                (ffi::FORMAT_ETC1S, 90, [0, 2, 6]),
-                (ffi::FORMAT_UASTC_LDR_4X4, 100, [0, 2, 5]),
-                (ffi::FORMAT_UASTC_LDR_4X4, 100, [6, 8, 10]),
-            ] {
-                for effort in efforts {
-                    for flags in [
-                        0,
-                        ffi::FLAG_SRGB,
-                        ffi::FLAG_ZSTD,
-                        ffi::FLAG_SRGB | ffi::FLAG_ZSTD,
-                    ] {
-                        let ours = native_encode(&levels, format, quality, effort, flags, false);
-                        let reference =
-                            native_encode(&levels, format, quality, effort, flags, true);
-                        assert!(
-                            ours == reference,
-                            "{name} chain={chain} format {format} q{quality} e{effort} flags {flags}"
-                        );
-                        compared += 1;
-                    }
-                }
+            for (i, &(format, quality, effort)) in settings.iter().enumerate() {
+                let flags = flag_sets[(i + image) % flag_sets.len()];
+                let ours = native_encode(&levels, format, quality, effort, flags, false);
+                let reference = native_encode(&levels, format, quality, effort, flags, true);
+                assert!(
+                    ours == reference,
+                    "{name} chain={chain} format {format} q{quality} e{effort} flags {flags}"
+                );
+                compared += 1;
             }
         }
     }
-    assert_eq!(compared, 4 * 2 * 4 * 3 * 4);
+    assert_eq!(compared, 4 * 2 * 18);
 }
 
 #[test]

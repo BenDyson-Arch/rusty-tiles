@@ -599,7 +599,8 @@ pub(in crate::mesh_large) fn scalar_occlusion(slot: TextureSlot, profile: Profil
 /// The hints only matter when a viewer transcodes UASTC to ETC1, which CesiumJS
 /// does only on a GPU with none of ASTC, BC7 and BC1/3; every other decode, and
 /// so every decoded-image gate here, is unchanged, at about half the leaf UASTC
-/// encode CPU. Coarse pages keep [`codec::Etc1Hints::Full`].
+/// encode CPU. Coarse pages, and MASK pages on either tier (which `escalate`
+/// encodes with the coarse policy), keep [`codec::Etc1Hints::Full`].
 pub(in crate::mesh_large) const LEAF_UASTC_ETC1_HINTS: codec::Etc1Hints = codec::Etc1Hints::Fastest;
 
 fn leaf_settings((mode, params): (codec::Mode, codec::Params)) -> (codec::Mode, codec::Params) {
@@ -673,7 +674,8 @@ fn coarse_codec_settings(slot: TextureSlot, profile: Profile) -> (codec::Mode, c
         },
     )
 }
-/// Encoder mode and parameters of one lossy ladder step.
+/// Encoder mode and parameters of one lossy leaf ladder step.
+#[cfg(test)]
 pub(super) fn step_settings(
     slot: TextureSlot,
     profile: Profile,
@@ -1090,7 +1092,7 @@ fn escalate(
         }
         let rrr = scalar && step == Step::Profile;
         let earlier = (&misses[..], &witnesses[..]);
-        if let Some(miss) = probe(chain, &prepared, (slot, profile, step), earlier)? {
+        if let Some(miss) = probe(chain, &prepared, (tier, slot, profile, step), earlier)? {
             misses.push(miss);
             continue;
         }
@@ -1407,13 +1409,14 @@ fn block_row(rgba: &[u8], width: usize, blocks: &[u32]) -> Vec<u8> {
 fn probe(
     chain: &sparse_mips::Chain,
     prepared: &Prepared,
-    (slot, profile, step): (TextureSlot, Profile, Step),
+    (tier, slot, profile, step): (Tier, TextureSlot, Profile, Step),
     (misses, witnesses): (&[GateMiss], &[(usize, Vec<u32>)]),
 ) -> Result<Option<GateMiss>, JobError> {
     if step == Step::Profile {
         return Ok(None);
     }
-    let (mode, params) = step_settings(slot, profile, step)?;
+    // The page's own tier, so the probe encodes exactly as the step would.
+    let (mode, params) = step_settings_for(tier, slot, profile, step)?;
     for (index, blocks) in witnesses {
         let level = &chain.levels[*index];
         let w = level.width as usize;
@@ -3140,7 +3143,7 @@ mod tests {
                 let skip = probe(
                     &chain,
                     &prepared,
-                    (slot, profile, step),
+                    (Tier::Leaf, slot, profile, step),
                     (&misses[..], &witnesses[..]),
                 )
                 .unwrap();
