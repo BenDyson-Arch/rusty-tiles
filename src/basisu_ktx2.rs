@@ -546,14 +546,8 @@ fn rust_decode_level_rgba(
     width: u32,
     height: u32,
 ) -> Result<Vec<u8>, JobError> {
-    let (decoded_width, decoded_height, rgba) = pure::decode_level(ktx2, level)
-        .map_err(|message| invalid_state(format!("level {level} did not decode: {message}")))?;
-    if (decoded_width, decoded_height) != (width, height) {
-        return Err(invalid_state(format!(
-            "level {level} decoded as {decoded_width}x{decoded_height}, expected {width}x{height}"
-        )));
-    }
-    Ok(rgba)
+    pure::decode_level(ktx2, level, width, height)
+        .map_err(|message| invalid_state(format!("level {level} did not decode: {message}")))
 }
 
 /// Decodes one level with the vendored transcoder.

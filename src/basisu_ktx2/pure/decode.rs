@@ -4,7 +4,9 @@
 //!
 //! The block decoders are ktx-rs's ports of `basisu_lowlevel_etc1s_transcoder` and
 //! `basisu_lowlevel_uastc_ldr_4x4_transcoder`; Zstandard levels are decompressed by `ruzstd`.
-//! Every read is bounds-checked and every allocation is bounded by the level being decoded.
+//! Every read is bounds-checked. Allocations are bounded by the level being decoded: its
+//! texels and, for Zstandard, its block bytes plus a window no larger than those
+//! (`zstd_decompress`).
 //! Where this front end is stricter than the vendored transcoder it says so; it never accepts
 //! a file the vendored transcoder rejects, and when both accept, the decoded texels are equal
 //! (`shadow_tests`).
@@ -59,15 +61,28 @@ const ZSTD_MAGIC: u32 = 0xFD2F_B528;
 /// `ZSTD_decompress` into `out`, with the checks zstd 1.5.7 makes that ruzstd leaves to its
 /// caller: a frame's reserved descriptor bit must be clear, its decoded size must equal its
 /// Frame_Content_Size when present, and its content checksum must match when present.
-/// Frames are decoded in sequence and skippable frames skipped, as zstd does; the output
-/// never grows past `out` (ruzstd's default window limit, 2^27 bytes, is zstd's
-/// ZSTD_WINDOWLOG_LIMIT_DEFAULT). Returns the number of bytes written.
-fn zstd_decompress(mut input: &[u8], out: &mut [u8]) -> Result<usize, String> {
+/// Frames are decoded in sequence and skippable frames skipped, as zstd does. Returns the
+/// number of bytes written.
+///
+/// Memory stays bounded by `out`: ruzstd's decode buffer holds up to a frame's window
+/// before it releases decoded bytes, so the window is limited to `out`'s length rounded up
+/// to a power of two (at least 1 KiB, zstd's smallest window), and each step stops once
+/// it has decoded more than `out` has room for (by at most one 128 KiB block). Stricter than zstd's one-shot decoder, which
+/// writes straight into `out` and accepts any window up to 2^31: a frame whose window
+/// exceeds that bound is refused. zstd sizes a frame's window to its content when it knows
+/// the content size, as it does for every level the encoder writes.
+pub(super) fn zstd_decompress(mut input: &[u8], out: &mut [u8]) -> Result<usize, String> {
     use ruzstd::decoding::errors::{FrameDecoderError, ReadFrameHeaderError};
     use ruzstd::decoding::{BlockDecodingStrategy, FrameDecoder};
     use std::io::Read;
-    let error = |e: FrameDecoderError| format!("Zstandard level did not decompress: {e}");
+    let error = |e: FrameDecoderError| match e {
+        FrameDecoderError::WindowSizeTooBig { requested, max } => format!(
+            "Zstandard frame window of {requested} bytes exceeds the level's bound of {max}"
+        ),
+        e => format!("Zstandard level did not decompress: {e}"),
+    };
     let mut decoder = FrameDecoder::new();
+    decoder.set_max_window_size((out.len() as u64).max(1 << 10).next_power_of_two());
     let mut written = 0usize;
     while !input.is_empty() {
         let descriptor = match input {
@@ -94,8 +109,10 @@ fn zstd_decompress(mut input: &[u8], out: &mut [u8]) -> Result<usize, String> {
         }
         let frame_start = written;
         loop {
+            // One more byte than `out` has room for is enough to detect an overrun.
+            let room = (out.len() - written + 1).min(1 << 20);
             decoder
-                .decode_blocks(&mut input, BlockDecodingStrategy::UptoBytes(1 << 20))
+                .decode_blocks(&mut input, BlockDecodingStrategy::UptoBytes(room))
                 .map_err(error)?;
             written += decoder
                 .read(&mut out[written..])
@@ -405,14 +422,21 @@ impl<'a> Ktx2<'a> {
         Ok(out)
     }
 
-    /// `ktx2_transcoder::transcode_image_level(level, 0, 0, RGBA32, flags 0)`.
-    fn decode_level(&self, level_index: u32) -> Result<(u32, u32, Vec<u8>), String> {
+    /// `ktx2_transcoder::transcode_image_level(level, 0, 0, RGBA32, flags 0)`, for a level
+    /// the caller expects to be `expected` texels; checked before anything is allocated.
+    fn decode_level(&self, level_index: u32, expected: (u32, u32)) -> Result<Vec<u8>, String> {
         let level = *self
             .levels
             .get(level_index as usize)
             .ok_or_else(|| format!("level {level_index} does not exist"))?;
         let width = (self.width >> level_index).max(1);
         let height = (self.height >> level_index).max(1);
+        if (width, height) != expected {
+            return Err(format!(
+                "level {level_index} is {width}x{height}, expected {}x{}",
+                expected.0, expected.1
+            ));
+        }
         let (blocks_x, blocks_y) = (width.div_ceil(4), height.div_ceil(4));
         let pixels = width * height;
         let mut out = vec![0u8; pixels as usize * 4];
@@ -483,16 +507,21 @@ impl<'a> Ktx2<'a> {
             )
         };
         match status {
-            TranscodeStatus::Ok => Ok((width, height, out)),
+            TranscodeStatus::Ok => Ok(out),
             other => Err(format!("level {level_index} did not transcode ({other:?})")),
         }
     }
 }
 
-/// Decodes one level to RGBA8: `(width, height, rgba)`, the level's dimensions as the
-/// transcoder reports them. A decoder panic (the block decoders are ports of C++ that
-/// assumes well-formed input in places) is returned as an error, never propagated.
-pub(crate) fn decode_level(ktx2: &[u8], level: u32) -> Result<(u32, u32, Vec<u8>), String> {
-    std::panic::catch_unwind(|| Ktx2::parse(ktx2)?.decode_level(level))
+/// Decodes one level, which must be `width` x `height` texels, to RGBA8. A decoder panic
+/// (the block decoders are ports of C++ that assumes well-formed input in places) is
+/// returned as an error, never propagated.
+pub(crate) fn decode_level(
+    ktx2: &[u8],
+    level: u32,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>, String> {
+    std::panic::catch_unwind(|| Ktx2::parse(ktx2)?.decode_level(level, (width, height)))
         .unwrap_or_else(|_| Err("the transcoder panicked on this file".into()))
 }

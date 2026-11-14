@@ -35,8 +35,12 @@ switch backend, so the request checks, the mandatory post-encode verification, t
   ktx-rs's `LowlevelEtc1sTranscoder` and `LowlevelUastcLdr4x4Transcoder`. Zstandard levels
   are decompressed by ruzstd, wrapped with the checks zstd makes and ruzstd leaves to its
   caller: the reserved frame-header bit, Frame_Content_Size and the content checksum.
-  Every read is bounds-checked; the only allocations are the level's texels and, for
-  Zstandard, its block bytes.
+  Every read is bounds-checked, and the level's dimensions are checked against the
+  caller's before anything is allocated. Allocations are bounded by the level: its texels
+  and, for Zstandard, its block bytes plus ruzstd's window. A frame's window is limited to
+  the level's block bytes rounded up to a power of two (at least 1 KiB), because ruzstd
+  buffers up to a whole window before it releases decoded bytes; without that limit a
+  few-KiB frame declaring a 2^27-byte window could build 128 MiB for a 16-byte level.
 - **Panics**: encode and decode run under `catch_unwind`; a panic becomes `InvalidState`
   (encode) or a refused file (decode), never a process exit. None has been observed.
 
@@ -52,7 +56,8 @@ refuses these files, which the vendored transcoder decodes:
 | ETC1S with a `KTXanimData` key | ETC1S video (P-frames) is unsupported |
 | ETC1S global data shorter than its 20-byte header | the vendored reader copies the header before checking the length |
 | a Zstandard level whose recorded uncompressed size is not its block bytes | bounds the allocation by the level (the vendored transcoder allocates any size below 2 GiB) |
-| a corrupt Zstandard frame that zstd 1.5.7 decodes without noticing, or a window over 2^27 bytes | ruzstd's literal-stream checks are stricter; its window limit is zstd's streaming default |
+| a Zstandard frame whose declared window exceeds the level's block bytes rounded up to a power of two (at least 1 KiB) | bounds ruzstd's buffer by the level (zstd's one-shot decoder writes straight into the level and accepts windows up to 2^31). zstd sizes the window to the content when it knows the content size, as for every level the encoder writes |
+| a corrupt Zstandard frame without a checksum whose literal stream ruzstd finds inconsistent (`DecodedLiteralCountMismatch`, `BitstreamReadMismatch`) but zstd 1.5.7 decodes | ruzstd's literal-stream checks are stricter |
 
 ## Dependencies (exact pins)
 
@@ -60,7 +65,7 @@ refuses these files, which the vendored transcoder decodes:
 |---|---|---|---|
 | ktx-rs =4.4.3, `default-features = false` | Apache-2.0 AND BSD-3-Clause AND MIT AND Zlib | encoder, block decoders | Port of KTX-Software and Basis Universal. `unsafe_code = "deny"`; its `basisu` module has no `unsafe`. Published 2026-10-30, one maintainer. Pulls ktx-rs-macros, miniz_oxide 0.9, ruzstd, zstd-pure-rs. |
 | zstd-pure-rs =0.2.0 | BSD-3-Clause OR GPL-2.0-only (BSD chosen) | level compression | Port of zstd 1.5.7; byte-identical to it at levels 1 to 19 here. About 500 `unsafe` lines; only its compressor is called, on the encoder's own block bytes, never on untrusted input. Owner's choice over mzstd (5.7 MB smaller binary). |
-| ruzstd =0.9.1 | MIT | level decompression | Already in the graph through ktx-rs. Safe decoding API with a 2^27-byte window limit. Used instead of zstd-pure-rs's decoder, whose hot paths use raw pointers and unchecked indexing, because decoded views and validation read untrusted archives. |
+| ruzstd =0.9.1 | MIT | level decompression | Already in the graph through ktx-rs. Safe decoding API, but not `unsafe`-free: `decoding/ringbuffer.rs` (37 uses) and `decoding/decode_buffer.rs` (2) hold `unsafe` on the decoding hot path (the window ring buffer's copies). Called with a window limit per level (above). Used instead of zstd-pure-rs's decoder, whose hot paths use raw pointers and unchecked indexing, because decoded views and validation read untrusted archives. |
 
 Licence texts: `licenses/THIRD_PARTY_LICENSES-pure-rust-basis.md` (the crates the feature
 adds to the CLI's graph; `scripts/third_party_licenses.py`).

@@ -14,6 +14,7 @@ use super::super::{
     ffi, native_decode_level_rgba, native_encode_mips, rust_decode_level_rgba, rust_encode_mips,
     MipLevel, Mode, Params, Transfer,
 };
+use super::decode::zstd_decompress;
 use super::{decode_level, zstd_compress};
 
 const REPORT_ENV: &str = "RUSTY_TILES_BASIS_SHADOW_REPORT";
@@ -192,9 +193,8 @@ fn assert_decodes_match(ktx2: &[u8], input: &Input, level_count: usize, case: &s
         );
         let native = native_decode_level_rgba(ktx2, level, w, h)
             .unwrap_or_else(|e| panic!("{case}: C++ decode of level {level}: {}", e.message()));
-        let (rw, rh, rust) = decode_level(ktx2, level)
+        let rust = decode_level(ktx2, level, w, h)
             .unwrap_or_else(|e| panic!("{case}: Rust decode of level {level}: {e}"));
-        assert_eq!((rw, rh), (w, h), "{case}: level {level} dimensions");
         assert!(native == rust, "{case}: level {level} decodes differently");
     }
 }
@@ -448,7 +448,8 @@ fn zstd_payloads() -> Vec<(String, Vec<u8>)> {
 }
 
 /// zstd-pure-rs equals the vendored zstd 1.5.7 at every level 1..=19 (the encoder uses 6),
-/// and ruzstd decodes every frame back to its input.
+/// and the decoder's wrapper (window bound, content size and checksum checks) decodes every
+/// frame back to its input.
 #[test]
 fn zstd_levels_are_identical_to_c_zstd() {
     let mut lines = String::new();
@@ -464,8 +465,7 @@ fn zstd_levels_are_identical_to_c_zstd() {
                 rust.len()
             );
             let mut decoded = vec![0u8; data.len()];
-            let written = ruzstd::decoding::FrameDecoder::new()
-                .decode_all(&rust, &mut decoded)
+            let written = zstd_decompress(&rust, &mut decoded)
                 .unwrap_or_else(|e| panic!("{name}: level {level} frame did not decode: {e}"));
             assert!(
                 written == data.len() && decoded == data,
@@ -494,27 +494,107 @@ fn zstd_level_sizes_bound_the_allocation() {
     let mut bomb = ktx2.clone();
     // Level 0's uncompressedByteLength: just under the vendored transcoder's 2 GiB limit.
     bomb[80 + 16..80 + 24].copy_from_slice(&(2048u64 * 1024 * 1024 - 1).to_le_bytes());
-    let (result, peak) = crate::test_alloc::peak(|| decode_level(&bomb, 0));
+    let (result, peak) = crate::test_alloc::peak(|| decode_level(&bomb, 0, 192, 128));
     let error = result.unwrap_err();
     assert!(error.contains("records"), "{error}");
     assert!(peak < 1 << 20, "peak {peak} bytes");
-    let (result, peak) = crate::test_alloc::peak(|| decode_level(&ktx2, 0));
+    let (result, peak) = crate::test_alloc::peak(|| decode_level(&ktx2, 0, 192, 128));
     result.unwrap();
     let image = 192 * 128 * 4;
     assert!(peak < 4 * image + (1 << 20), "decode peak {peak} bytes");
 }
 
+/// A zstd frame: no content size, no checksum, window descriptor `window` (exponent in the
+/// top five bits, so windowLog = 10 + `window >> 3`), then `blocks` of (type, size, body).
+fn zstd_frame(window: u8, blocks: &[(u32, u32, &[u8])]) -> Vec<u8> {
+    let mut frame = vec![0x28, 0xB5, 0x2F, 0xFD, 0x00, window];
+    for (i, &(kind, size, body)) in blocks.iter().enumerate() {
+        let last = u32::from(i + 1 == blocks.len());
+        frame.extend_from_slice(&((size << 3) | (kind << 1) | last).to_le_bytes()[..3]);
+        frame.extend_from_slice(body);
+    }
+    frame
+}
+
+/// A 4x4 UASTC Zstandard page whose level 0 is replaced by `frame` (appended to the file).
+fn page_with_level_frame(frame: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let input = input("one-block", 4, 4, photo(4, 4, 11, false));
+    let images = chain(&input, false);
+    let mips = levels(&images, &input);
+    let raw = rust_encode_mips(&mips, Mode::Uastc { zstd: false }, params(0, SRGB), 0).unwrap();
+    let level = &super::super::container::parse(&raw).unwrap().levels[0];
+    let block = raw[level.offset as usize..][..16].to_vec();
+    let mut page = rust_encode_mips(&mips, Mode::Uastc { zstd: true }, params(0, SRGB), 0).unwrap();
+    let offset = page.len() as u64;
+    page.extend_from_slice(frame);
+    page[80..88].copy_from_slice(&offset.to_le_bytes());
+    page[88..96].copy_from_slice(&(frame.len() as u64).to_le_bytes());
+    assert_eq!(u64::from_le_bytes(page[96..104].try_into().unwrap()), 16);
+    (page, block)
+}
+
+/// A few KiB of RLE blocks that expand to 128 MiB under a 2^27 window, in a level of 16
+/// bytes: refused before the window is allocated, and RLE blocks inside an allowed window
+/// are refused once they overrun the level, also with bounded memory. The vendored
+/// one-shot decoder refuses both too (its output is the 16-byte level).
+#[test]
+fn zstd_window_bombs_are_refused_with_bounded_memory() {
+    const RLE: u32 = 1;
+    let byte: &[u8] = &[0x55];
+    let big = zstd_frame(17 << 3, &vec![(RLE, 128 << 10, byte); 1024]);
+    let small = zstd_frame(0, &vec![(RLE, 1 << 10, byte); 4096]);
+    assert!(big.len() < 5000 && small.len() < 20_000);
+    for (name, frame, refusal) in [
+        ("windowLog 27", &big, "exceeds the level's bound"),
+        ("windowLog 10", &small, "did not decompress"),
+    ] {
+        let (page, _) = page_with_level_frame(frame);
+        let (result, peak) = crate::test_alloc::peak(|| decode_level(&page, 0, 4, 4));
+        assert!(peak < 1 << 20, "{name}: peak {peak} bytes");
+        let error = result.unwrap_err();
+        assert!(error.contains(refusal), "{name}: {error}");
+        assert!(
+            native_decode_level_rgba(&page, 0, 4, 4).is_err(),
+            "{name}: C++ decodes it"
+        );
+    }
+}
+
+/// The documented strictness: a frame whose declared window exceeds its level's bound is
+/// refused even when its content is valid, which the vendored decoder accepts. Frames zstd
+/// writes with a known content size never declare such a window.
+#[test]
+fn zstd_windows_beyond_the_level_are_refused_where_zstd_accepts_them() {
+    const RAW: u32 = 0;
+    let probe = zstd_frame(17 << 3, &[(RAW, 16, &[0; 16])]);
+    let (_, block) = page_with_level_frame(&probe);
+    for (window, accepted) in [(17u8 << 3, false), (0, true)] {
+        let (page, _) = page_with_level_frame(&zstd_frame(window, &[(RAW, 16, &block)]));
+        let native = native_decode_level_rgba(&page, 0, 4, 4).unwrap();
+        match decode_level(&page, 0, 4, 4) {
+            Ok(rust) => assert!(accepted && rust == native, "window byte {window}"),
+            Err(error) => assert!(
+                !accepted && error.contains("exceeds the level's bound"),
+                "window byte {window}: {error}"
+            ),
+        }
+    }
+}
+
 /// The front end's refusals where the vendored transcoder would decode: each is documented
 /// in `decode.rs` and docs/architecture/basis-pure-rust.md.
-const STRICTER: [&str; 7] = [
+const STRICTER: [&str; 9] = [
     "vkFormat",
     "faces and",
     "does not suit the format",
     "ETC1S video",
     "shorter than its header",
     "Zstandard level records",
-    // ruzstd detects some corrupt frames (without a checksum) that zstd 1.5.7 decodes.
-    "Zstandard level did not decompress",
+    "exceeds the level's bound",
+    // ruzstd's literal-stream checks catch corruption (in frames without a checksum) that
+    // zstd 1.5.7 decodes.
+    "DecodedLiteralCountMismatch",
+    "BitstreamReadMismatch",
 ];
 
 /// Deterministic mutations of valid files: both transcoders decode every level of each
