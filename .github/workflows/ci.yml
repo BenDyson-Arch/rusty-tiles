@@ -478,6 +478,38 @@ jobs:
           path: ${{ runner.temp }}/encoder-link/*.json
           if-no-files-found: error
 
+  pure-rust-basis:
+    name: Pure-Rust Basis (shadow tests)
+    needs: changes
+    # Skipped jobs satisfy required checks; a failed classifier runs everything.
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30 # versions: TIMEOUT_PURE_RUST_BASIS
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install --no-self-update
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: pure-rust-basis
+          save-if: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
+      - name: Check lint with the feature
+        run: cargo clippy --locked --all-targets --features pure-rust-basis -- -D warnings
+      # The shadow tests (basisu_ktx2::pure) encode and decode a generated corpus with both the
+      # vendored C++ and the Rust path and require identical bytes; the other modules are every
+      # library test that encodes or decodes KTX2, run on the Rust path.
+      - name: Test the Rust path against the C++
+        run: |
+          cargo test --locked --features pure-rust-basis --lib -- \
+            basisu_ktx2:: tile_view:: mesh_large::leaves:: mesh_large::hlod::appearance
+
   native-geospatial:
     name: Native geospatial (GDAL ${{ matrix.gdal }})
     needs: changes
@@ -883,6 +915,7 @@ jobs:
       - python-wheel
       - portable
       - encoder-link
+      - pure-rust-basis
       - native-geospatial
       - crs-allowlist
       - python
@@ -905,7 +938,7 @@ jobs:
           fi
           # Docs-only changes skip the matrix by design; anything else must have run it.
           if [ "$DOCS_ONLY" != true ]; then
-            printf '%s\n' "$NEEDS" | jq -e '.rust.result == "success" and .version.result == "success" and .python.result == "success" and .portable.result == "success" and .["native-geospatial"].result == "success" and .["crs-allowlist"].result == "success" and .["wheel-acceptance"].result == "success"' >/dev/null \
+            printf '%s\n' "$NEEDS" | jq -e '.rust.result == "success" and .version.result == "success" and .python.result == "success" and .portable.result == "success" and .["native-geospatial"].result == "success" and .["pure-rust-basis"].result == "success" and .["crs-allowlist"].result == "success" and .["wheel-acceptance"].result == "success"' >/dev/null \
               || { echo "::error::a required full-tier job was skipped"; exit 1; }
           fi
 
