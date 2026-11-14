@@ -243,12 +243,29 @@ fn isolated_triangles_spill_within_the_declared_bound() {
         .with_test_spill(sort, 4096);
     let result = super::mesh_to_tileset(request, &RunControl::default()).unwrap();
     let (capture, hlod) = (&result.diagnostics.capture, &result.diagnostics.hlod);
+    // Measured: the run's peak came in the incidence pass, past every capture stage's
+    // measured peak. (Measured peaks are bytes on disk, with the retained sequences
+    // block-compressed, so they are compared with each other, not with raw declarations.)
+    let stages = capture.scratch_stage_peak_bytes;
+    let capture_peak = [
+        stages.capture,
+        stages.projection,
+        stages.images,
+        stages.tree,
+        stages.corner_depths,
+        stages.leaf_plans,
+    ]
+    .into_iter()
+    .max()
+    .unwrap();
     assert!(
-        capture.run_scratch_peak_bytes > capture.scratch_logical_need_bytes,
+        capture.run_scratch_peak_bytes > capture_peak,
         "the incidence pass outgrew every capture stage: {} vs {}",
         capture.run_scratch_peak_bytes,
-        capture.scratch_logical_need_bytes
+        capture_peak
     );
+    // Declared: the HLOD stage's bound exceeds capture's need, and the run stays within it.
+    assert!(hlod.stage_scratch_bound_bytes > capture.scratch_logical_need_bytes);
     assert!(capture.run_scratch_peak_bytes <= hlod.stage_scratch_bound_bytes);
 }
 

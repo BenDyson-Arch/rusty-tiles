@@ -22,7 +22,17 @@ pub(crate) struct SequenceWriter<T: Record> {
     records: u64,
     layout: Layout,
     encoded: Vec<u8>,
+    /// Block compression state, for a writer from [`SequenceWriter::compressed`] (boxed: plain
+    /// writers stay as small as before, and they are embedded in other spill types).
+    blocks: Option<Box<BlockWriter>>,
     _record: PhantomData<T>,
+}
+
+/// Records gathered into fixed-count blocks, each written compressed or stored.
+struct BlockWriter {
+    raw: Vec<u8>,
+    scratch: Vec<u8>,
+    index: BlockIndex,
 }
 
 impl<T: Record> SequenceWriter<T> {
@@ -58,11 +68,75 @@ impl<T: Record> SequenceWriter<T> {
             records: 0,
             layout,
             encoded: vec![0; size],
+            blocks: None,
             _record: PhantomData,
         })
     }
 
+    /// A writer whose sequence is stored as compressed blocks of a fixed record count (see
+    /// [`block_records`]). Readers see the same records; the file holds at most their bytes
+    /// (a block that does not shrink is stored as is), and its live bytes are what is on disk.
+    pub(crate) fn compressed(
+        scratch: &Scratch,
+        stem: &str,
+        buffer_bytes: usize,
+        layout: Layout,
+    ) -> Result<Self, SpillError> {
+        let mut writer = Self::with_layout(scratch, stem, buffer_bytes, layout)?;
+        let size = writer.encoded.len();
+        let per_block = block_records(size, buffer_bytes);
+        writer.blocks = Some(Box::new(BlockWriter {
+            raw: Vec::with_capacity(per_block as usize * size),
+            scratch: Vec::new(),
+            index: BlockIndex {
+                per_block,
+                record_bytes: size,
+                offsets: vec![0],
+                stored: Vec::new(),
+            },
+        }));
+        Ok(writer)
+    }
+
+    /// Writes the gathered records as one block (compressed, or stored when that is smaller).
+    fn emit_block(&mut self) -> Result<(), SpillError> {
+        let Some(blocks) = self.blocks.as_mut() else {
+            return Ok(());
+        };
+        if blocks.raw.is_empty() {
+            return Ok(());
+        }
+        let encoded = super::codec::encode(&blocks.raw, &mut blocks.scratch);
+        let at = *blocks.index.offsets.last().expect("offsets start at zero");
+        let end = at
+            .checked_add(encoded.bytes.len() as u64)
+            .ok_or(SpillError::Overflow)?;
+        // Accounted before the write, as plain sequences are: a failed write may have
+        // emitted a prefix.
+        self.file.completed(end);
+        self.writer
+            .write_all(&encoded.bytes)
+            .map_err(|e| SpillError::io("write spill sequence", self.file.path(), e))?;
+        blocks.index.offsets.push(end);
+        blocks.index.stored.push(encoded.stored);
+        blocks.raw.clear();
+        Ok(())
+    }
+
     pub(crate) fn push(&mut self, record: &T) -> Result<(), SpillError> {
+        if self.blocks.is_some() {
+            let records = self.records.checked_add(1).ok_or(SpillError::Overflow)?;
+            record.encode_in(self.layout, &mut self.encoded);
+            let blocks = self.blocks.as_mut().expect("block writer");
+            blocks.raw.extend_from_slice(&self.encoded);
+            let full =
+                blocks.raw.len() as u64 == blocks.index.per_block * self.encoded.len() as u64;
+            self.records = records;
+            if full {
+                self.emit_block()?;
+            }
+            return Ok(());
+        }
         let records = self.records.checked_add(1).ok_or(SpillError::Overflow)?;
         let bytes = records
             .checked_mul(self.encoded.len() as u64)
@@ -83,6 +157,7 @@ impl<T: Record> SequenceWriter<T> {
     }
 
     pub(crate) fn finish(mut self) -> Result<Sequence<T>, SpillError> {
+        self.emit_block()?;
         self.writer
             .flush()
             .map_err(|e| SpillError::io("write spill sequence", self.file.path(), e))?;
@@ -94,19 +169,33 @@ impl<T: Record> SequenceWriter<T> {
             records,
             layout,
             encoded,
+            blocks,
             ..
         } = self;
         drop(writer);
-        let bytes = records
-            .checked_mul(encoded.len() as u64)
-            .ok_or(SpillError::Overflow)?;
-        file.completed(bytes);
+        let blocks = match blocks.map(|b| *b) {
+            Some(BlockWriter { mut index, .. }) => {
+                file.completed(*index.offsets.last().expect("offsets start at zero"));
+                // The index stays resident while the sequence lives: no growth slack.
+                index.offsets.shrink_to_fit();
+                index.stored.shrink_to_fit();
+                Some(Arc::new(index))
+            }
+            None => {
+                let bytes = records
+                    .checked_mul(encoded.len() as u64)
+                    .ok_or(SpillError::Overflow)?;
+                file.completed(bytes);
+                None
+            }
+        };
         Ok(Sequence {
             file,
             io,
             buffer_bytes,
             records,
             layout,
+            blocks,
             _record: PhantomData,
         })
     }
@@ -120,6 +209,8 @@ pub(crate) struct Sequence<T: Record> {
     records: u64,
     /// Run-level encoding of every record (its width was checked by the writer).
     layout: Layout,
+    /// Present when the file holds compressed blocks ([`SequenceWriter::compressed`]).
+    blocks: Option<Arc<BlockIndex>>,
     _record: PhantomData<T>,
 }
 
@@ -140,12 +231,9 @@ impl<T: Record> Sequence<T> {
 
     /// A new reader from the first record. Readers are independent.
     pub(crate) fn reader(&self) -> Result<SequenceReader<'_, T>, SpillError> {
-        let inner = self
-            .io
-            .open(self.file.path())
-            .map_err(|e| SpillError::io("open spill sequence", self.file.path(), e))?;
+        let (inner, buffer) = self.open_bytes(0, self.buffer_bytes)?;
         Ok(SequenceReader {
-            reader: Some(BufReader::with_capacity(self.buffer_bytes, inner)),
+            reader: Some(BufReader::with_capacity(buffer, inner)),
             sequence: self,
             remaining: self.records,
             encoded: vec![0; self.size()],
@@ -165,15 +253,9 @@ impl<T: Record> Sequence<T> {
                 "sequence range outside its records",
             ));
         }
-        let offset = first
-            .checked_mul(self.size() as u64)
-            .ok_or(SpillError::Overflow)?;
-        let inner = self
-            .io
-            .open_at(self.file.path(), offset)
-            .map_err(|e| SpillError::io("open spill sequence", self.file.path(), e))?;
+        let (inner, buffer) = self.open_bytes(first, buffer_bytes)?;
         Ok(SequenceReader {
-            reader: Some(BufReader::with_capacity(buffer_bytes, inner)),
+            reader: Some(BufReader::with_capacity(buffer, inner)),
             sequence: self,
             remaining: end - first,
             encoded: vec![0; self.size()],
@@ -194,8 +276,148 @@ impl<T: Record> Sequence<T> {
             path: self.file.path().to_owned(),
             records: self.records,
             layout: self.layout,
+            blocks: self.blocks.clone(),
+            cache: std::sync::Mutex::new((usize::MAX, Vec::new(), Vec::new())),
             _record: PhantomData,
         })
+    }
+
+    /// The encoded byte stream from record `first` on, and the read buffer to put over it: the
+    /// file itself, or its decoded blocks (which buffer a block already, so a small buffer).
+    fn open_bytes(
+        &self,
+        first: u64,
+        buffer_bytes: usize,
+    ) -> Result<(Box<dyn Read + Send>, usize), SpillError> {
+        let path = self.file.path();
+        let Some(index) = &self.blocks else {
+            let offset = first
+                .checked_mul(self.size() as u64)
+                .ok_or(SpillError::Overflow)?;
+            let inner = self
+                .io
+                .open_at(path, offset)
+                .map_err(|e| SpillError::io("open spill sequence", path, e))?;
+            return Ok((inner, buffer_bytes));
+        };
+        let file = self
+            .io
+            .open_random(path)
+            .map_err(|e| SpillError::io("open spill sequence", path, e))?;
+        let block = first / index.per_block;
+        let mut reader = BlockReader {
+            file,
+            index: index.clone(),
+            records: self.records,
+            next: block as usize,
+            compressed: Vec::new(),
+            raw: Vec::new(),
+            pos: 0,
+        };
+        let skip = (first - block * index.per_block) * self.size() as u64;
+        let skipped = io::copy(&mut (&mut reader).take(skip), &mut io::sink())
+            .map_err(|e| SpillError::io("open spill sequence", path, e))?;
+        if skipped != skip {
+            return Err(SpillError::CorruptRun {
+                path: path.to_owned(),
+                detail: format!("compressed blocks end before record {first}"),
+            });
+        }
+        Ok((Box::new(reader), self.size().max(1) * 16))
+    }
+
+    /// Bytes this sequence holds on disk (its compressed blocks, or all its records).
+    #[cfg(test)]
+    pub(crate) fn stored_bytes(&self) -> u64 {
+        self.file.bytes()
+    }
+}
+
+/// Records per compressed block for `record_bytes`-byte records under a stream buffer of
+/// `buffer_bytes`: blocks of about a quarter of the buffer, at most 64 KiB, so a reader's block
+/// and its compressed copy stay within the buffer charged for a plain reader.
+pub(crate) fn block_records(record_bytes: usize, buffer_bytes: usize) -> u64 {
+    let target = (buffer_bytes / 4).clamp(1, 64 << 10);
+    (target / record_bytes.max(1)).max(1) as u64
+}
+
+/// Upper bound on the resident block index of compressed sequences holding up to `bytes`
+/// record bytes in all, under `buffer_bytes`: a block holds at least half its target (or one
+/// record), and the index keeps nine bytes per block, plus one partial block per sequence for
+/// `sequences` sequences.
+pub(crate) fn block_index_memory_bound(bytes: u64, buffer_bytes: usize, sequences: u64) -> u64 {
+    let half = ((buffer_bytes / 4).clamp(1, 64 << 10) / 2).max(1) as u64;
+    bytes
+        .div_ceil(half)
+        .saturating_add(sequences.saturating_mul(2))
+        .saturating_mul(9)
+}
+
+/// Where each block of a compressed sequence lies: block `i` holds records
+/// `[i * per_block, (i + 1) * per_block)` (the last may be short) at bytes
+/// `offsets[i]..offsets[i + 1]`, compressed unless `stored[i]`.
+struct BlockIndex {
+    per_block: u64,
+    record_bytes: usize,
+    offsets: Vec<u64>,
+    stored: Vec<bool>,
+}
+
+impl BlockIndex {
+    fn blocks(&self) -> usize {
+        self.stored.len()
+    }
+
+    /// Decodes block `block` of `file` into `raw` (of its records' bytes).
+    fn read_block(
+        &self,
+        file: &File,
+        block: usize,
+        records: u64,
+        compressed: &mut Vec<u8>,
+        raw: &mut Vec<u8>,
+    ) -> io::Result<()> {
+        let (start, end) = (self.offsets[block], self.offsets[block + 1]);
+        let first = block as u64 * self.per_block;
+        let count = (records - first).min(self.per_block) as usize;
+        raw.resize(count * self.record_bytes, 0);
+        compressed.resize((end - start) as usize, 0);
+        read_exact_at(file, compressed, start)?;
+        super::codec::decode(compressed, self.stored[block], raw)
+    }
+}
+
+/// The decoded bytes of a compressed sequence's blocks, in order, from one block on.
+struct BlockReader {
+    file: File,
+    index: Arc<BlockIndex>,
+    records: u64,
+    next: usize,
+    compressed: Vec<u8>,
+    raw: Vec<u8>,
+    pos: usize,
+}
+
+impl Read for BlockReader {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        if self.pos == self.raw.len() {
+            if self.next >= self.index.blocks() {
+                return Ok(0);
+            }
+            self.index.read_block(
+                &self.file,
+                self.next,
+                self.records,
+                &mut self.compressed,
+                &mut self.raw,
+            )?;
+            self.next += 1;
+            self.pos = 0;
+        }
+        let n = out.len().min(self.raw.len() - self.pos);
+        out[..n].copy_from_slice(&self.raw[self.pos..self.pos + n]);
+        self.pos += n;
+        Ok(n)
     }
 }
 
@@ -205,7 +427,18 @@ pub(crate) struct RandomRecords<T: Record> {
     path: std::path::PathBuf,
     records: u64,
     layout: Layout,
+    blocks: Option<Arc<BlockIndex>>,
+    /// The last block decoded (compressed sequences): its index, its records' bytes and the
+    /// buffer its compressed copy was read into. Neighbouring reads reuse it.
+    cache: std::sync::Mutex<(usize, Vec<u8>, Vec<u8>)>,
     _record: PhantomData<T>,
+}
+
+/// The most a positioned reader of a compressed sequence of `record_bytes` records holds
+/// besides the caller's buffers: one decoded block and its compressed copy, each at most the
+/// block target (64 KiB) or one record when that is larger.
+pub(crate) fn random_cache_bound(record_bytes: usize) -> u64 {
+    2 * record_bytes.max(64 << 10) as u64
 }
 
 impl<T: Record> RandomRecords<T> {
@@ -225,6 +458,37 @@ impl<T: Record> RandomRecords<T> {
             ))?;
         let size = T::size_in(self.layout);
         let bytes = count.checked_mul(size).ok_or(SpillError::Overflow)?;
+        if let Some(index) = &self.blocks {
+            // Every block the range touches is decoded, unless it is the last one decoded; its
+            // records are copied out.
+            encoded.clear();
+            let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+            let (cached, raw, compressed) = &mut *cache;
+            let mut at = first;
+            while at < end {
+                let block = (at / index.per_block) as usize;
+                if *cached != block {
+                    // A failed read leaves no block cached.
+                    *cached = usize::MAX;
+                    index
+                        .read_block(&self.file, block, self.records, compressed, raw)
+                        .map_err(|e| SpillError::io("read spill sequence", &self.path, e))?;
+                    *cached = block;
+                }
+                let start = block as u64 * index.per_block;
+                let lo = (at - start) as usize * size;
+                let hi = ((end.min(start + index.per_block) - start) as usize) * size;
+                encoded.extend_from_slice(&raw[lo..hi]);
+                at = start + index.per_block;
+            }
+            out.clear();
+            out.extend(
+                encoded
+                    .chunks_exact(size)
+                    .map(|b| T::decode_in(self.layout, b)),
+            );
+            return Ok(());
+        }
         encoded.resize(bytes, 0);
         let offset = first.checked_mul(size as u64).ok_or(SpillError::Overflow)?;
         read_exact_at(&self.file, encoded, offset).map_err(|e| {
