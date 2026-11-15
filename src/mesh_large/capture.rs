@@ -196,11 +196,15 @@ pub(crate) fn scan_with_source_bounds(
         progress(done)
     })?;
     match found {
-        Some(found) => Ok(found),
-        // The verdict pass; counts it reports never go back.
-        None => scan_in_triangle_order(source, buffer_bytes, workers, &mut |done| {
-            progress(done.max(reported))
-        }),
+        Ok(found) => Ok(found),
+        // The verdict pass (its counts never go back). Should it pass where the vertex-order
+        // pass failed (a transient read error), the vertex-order failure stands.
+        Err(failure) => {
+            scan_in_triangle_order(source, buffer_bytes, workers, &mut |done| {
+                progress(done.max(reported))
+            })?;
+            Err(failure)
+        }
     }
 }
 
@@ -218,13 +222,17 @@ pub(crate) fn scan_bitmap_bytes(source: &StreamSource) -> u64 {
 /// Vertices one bitmap or position task covers.
 const SCAN_TASK_VERTICES: usize = 1 << 16;
 
-/// The vertex-order scan of [`scan_with_source_bounds`]; `None` when any check failed.
+/// A scan and the f64 bounds of the used post-node corners.
+type Scanned = (SourceScan, [[f64; 3]; 2]);
+
+/// The vertex-order scan of [`scan_with_source_bounds`]; the first failure (in time) when
+/// any check failed.
 fn scan_in_vertex_order(
     source: &StreamSource,
     buffer_bytes: usize,
     workers: usize,
     progress: &mut dyn FnMut(u64) -> Result<()>,
-) -> Result<Option<(SourceScan, [[f64; 3]; 2])>> {
+) -> Result<std::result::Result<Scanned, JobError>> {
     use super::tasks::{run, Ran};
     use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
     let primitives: Vec<_> = source.document.scene_primitives().collect();
@@ -283,8 +291,8 @@ fn scan_in_vertex_order(
                 Ok(())
             },
         )?;
-        if matches!(marked, Ran::Failed) {
-            return Ok(None);
+        if let Ran::Failed(failure) = marked {
+            return Ok(Err(failure));
         }
         scanned += p.triangles as u64;
         // Used positions, in vertex order (checked).
@@ -297,25 +305,32 @@ fn scan_in_vertex_order(
                     source_bounds: [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]],
                     bounds: Bounds::EMPTY,
                 };
-                let mut positions = source.reader(&p.position, buffer_bytes);
+                // A small window, as the triangle-order scan used: sparse used vertices then
+                // read a little around each, not up to a full buffer.
+                let mut positions =
+                    source.reader(&p.position, buffer_bytes.min(SCAN_POSITION_WINDOW));
                 let start = chunk * SCAN_TASK_VERTICES;
                 let end = (start + SCAN_TASK_VERTICES).min(p.position.count);
-                for vertex in start..end {
-                    if vertex.is_multiple_of(4096) && stop.load(Relaxed) {
+                // Chunks start on a bitmap word; empty words are skipped 64 vertices at once.
+                let first = start / 64;
+                for (k, word) in used[first..end.div_ceil(64)].iter().enumerate() {
+                    if k % 64 == 0 && stop.load(Relaxed) {
                         return Err(JobError::new(JobErrorKind::Cancelled, "scan stopped"));
                     }
-                    if used[vertex / 64].load(Relaxed) & (1 << (vertex % 64)) == 0 {
-                        continue;
+                    let mut bits = word.load(Relaxed);
+                    while bits != 0 {
+                        let vertex = (first + k) * 64 + bits.trailing_zeros() as usize;
+                        bits &= bits - 1;
+                        let world = source_position(p, &mut positions, vertex as u64)?;
+                        include_source(&mut out.source_bounds, world);
+                        out.bounds.include(canonical(world.map(|x| x as f32)));
                     }
-                    let world = source_position(p, &mut positions, vertex as u64)?;
-                    include_source(&mut out.source_bounds, world);
-                    out.bounds.include(canonical(world.map(|x| x as f32)));
                 }
                 Ok(out)
             },
         )?;
         match read {
-            Ran::Failed => return Ok(None),
+            Ran::Failed(failure) => return Ok(Err(failure)),
             Ran::All(tasks) => {
                 for task in tasks {
                     include_source(&mut source_bounds, task.source_bounds[0]);
@@ -327,7 +342,7 @@ fn scan_in_vertex_order(
     }
     progress(triangles)?;
     source.verify_unchanged()?;
-    Ok(Some((
+    Ok(Ok((
         SourceScan {
             triangles,
             bounds,
@@ -752,6 +767,102 @@ mod tests {
         let input = dir.join("grid.gltf");
         fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
         input
+    }
+
+    /// Both scans of `input` on 1 and 3 workers give the same counts, geometry bytes and
+    /// boxes (bit for bit). Returns the scan.
+    fn assert_scans_agree(input: &std::path::Path) -> SourceScan {
+        let source = StreamSource::open(input, &mut || Ok(())).unwrap();
+        let (ordered, ordered_bounds) =
+            scan_in_triangle_order(&source, 1 << 12, 1, &mut |_| Ok(())).unwrap();
+        for workers in [1, 3] {
+            let (scan, bounds) =
+                scan_with_source_bounds(&source, 1 << 12, workers, &mut |_| Ok(())).unwrap();
+            assert_eq!(
+                (scan.triangles, scan.geometry_bytes, scan.bounds),
+                (ordered.triangles, ordered.geometry_bytes, ordered.bounds)
+            );
+            assert_eq!(
+                bounds.map(|c| c.map(f64::to_bits)),
+                ordered_bounds.map(|c| c.map(f64::to_bits))
+            );
+        }
+        ordered
+    }
+
+    /// A vertex no index uses never reaches the scan: an outlier stays out of the boxes, and
+    /// a nonfinite one is not read (payload validation rejects it separately).
+    #[test]
+    fn unused_vertices_never_reach_the_scan() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = indexed_grid(dir.path(), 20, [1e6, 1e6, 1e6], &[]);
+        let scan = assert_scans_agree(&input);
+        assert!(
+            scan.bounds.max.iter().all(|&v| v <= 20.),
+            "{:?}",
+            scan.bounds
+        );
+        let input = indexed_grid(dir.path(), 20, [f32::NAN, 0., 0.], &[]);
+        assert_scans_agree(&input);
+    }
+
+    /// A scene of primitives sharing one POSITION accessor (vertex counts around a bitmap word,
+    /// different index subsets), a mirrored instance, a non-indexed primitive, and many tiny
+    /// primitives. Both scans agree, and one-task primitives start no threads.
+    #[test]
+    fn multi_primitive_scenes_scan_as_the_triangle_order_pass() {
+        for count in [63u32, 64, 65, 130] {
+            let dir = tempfile::tempdir().unwrap();
+            let mut bytes = Vec::new();
+            for v in 0..count {
+                for c in [v as f32, (v % 7) as f32, (v / 8) as f32] {
+                    bytes.extend(c.to_le_bytes());
+                }
+            }
+            let positions = bytes.len();
+            // Mesh 0: every vertex; mesh 1: the last few only.
+            let all: Vec<u32> = (0..count - 2).flat_map(|v| [v, v + 1, v + 2]).collect();
+            let last: Vec<u32> = vec![count - 3, count - 2, count - 1];
+            let start_all = bytes.len();
+            bytes.extend(all.iter().flat_map(|i| i.to_le_bytes()));
+            let start_last = bytes.len();
+            bytes.extend(last.iter().flat_map(|i| i.to_le_bytes()));
+            fs::write(dir.path().join("scene.bin"), &bytes).unwrap();
+            let tiny = 2000;
+            let mut nodes = vec![
+                json!({"mesh":0}),
+                json!({"mesh":0,"scale":[-1,1,1],"translation":[500,0,0]}),
+                json!({"mesh":1}),
+                json!({"mesh":2}),
+            ];
+            nodes.extend((0..tiny).map(|i| json!({"mesh":1,"translation":[0,i,0]})));
+            let doc = json!({
+                "asset":{"version":"2.0"},"scene":0,
+                "scenes":[{"nodes":(0..nodes.len()).collect::<Vec<_>>()}],
+                "nodes":nodes,
+                "meshes":[
+                    {"primitives":[{"attributes":{"POSITION":0},"indices":1}]},
+                    {"primitives":[{"attributes":{"POSITION":0},"indices":2}]},
+                    {"primitives":[{"attributes":{"POSITION":3}}]}],
+                "buffers":[{"uri":"scene.bin","byteLength":bytes.len()}],
+                "bufferViews":[{"buffer":0,"byteLength":positions,"byteStride":12},
+                    {"buffer":0,"byteOffset":start_all,"byteLength":all.len() * 4},
+                    {"buffer":0,"byteOffset":start_last,"byteLength":12}],
+                "accessors":[{"bufferView":0,"componentType":5126,"count":count,"type":"VEC3",
+                        "min":[0,0,0],"max":[count as f32,6,count as f32 / 8.]},
+                    {"bufferView":1,"componentType":5125,"count":all.len(),"type":"SCALAR"},
+                    {"bufferView":2,"componentType":5125,"count":3,"type":"SCALAR"},
+                    {"bufferView":0,"componentType":5126,"count":count - count % 3,"type":"VEC3",
+                        "min":[0,0,0],"max":[count as f32,6,count as f32 / 8.]}]
+            });
+            let input = dir.path().join("scene.gltf");
+            fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+            super::super::tasks::SPAWNED.with(|n| n.set(0));
+            let scan = assert_scans_agree(&input);
+            assert!(scan.triangles > tiny, "{}", scan.triangles);
+            // Every primitive here is one task per pass: run inline, no threads.
+            assert_eq!(super::super::tasks::SPAWNED.with(|n| n.get()), 0);
+        }
     }
 
     #[test]

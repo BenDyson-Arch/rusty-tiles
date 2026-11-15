@@ -126,8 +126,9 @@ pub(crate) struct FullMemoryBound {
     pub block_index_bytes: u64,
     /// The corner-depth join's chunk tasks beside its sorts (`corners::wave_bytes`).
     pub corner_join_bytes: u64,
-    /// The scan's used-vertex bitmap (one primitive's at a time).
-    pub scan_bitmap_bytes: u64,
+    /// The larger of the scan's used-vertex bitmap (one primitive's at a time) and the
+    /// parallel validation's task lists; they never coexist.
+    pub preflight_bytes: u64,
     pub bound_bytes: u64,
 }
 impl FullMemoryBound {
@@ -562,7 +563,7 @@ fn memory_bound(
     image_count: u64,
     jobs: usize,
     spill_bytes: u64,
-    scan_bitmap_bytes: u64,
+    preflight_bytes: u64,
 ) -> Result<FullMemoryBound, JobError> {
     let mut geometry = MemoryBound::new(config, json_bytes, jobs);
     let sorter = config.sorter(jobs);
@@ -630,7 +631,7 @@ fn memory_bound(
                 add(geometry.bound_bytes, owned_metadata_bytes)?,
                 chunk_descriptor_bytes,
             )?,
-            add(add(block_index_bytes, corner_join_bytes)?, scan_bitmap_bytes)?,
+            add(add(block_index_bytes, corner_join_bytes)?, preflight_bytes)?,
         )?,
         add(DECODER_ALLOWANCE, PLANNING_ALLOWANCE)?,
     )?;
@@ -640,7 +641,7 @@ fn memory_bound(
         chunk_descriptor_bytes,
         block_index_bytes,
         corner_join_bytes,
-        scan_bitmap_bytes,
+        preflight_bytes,
         decoder_allowance_bytes: DECODER_ALLOWANCE,
         planning_allowance_bytes: PLANNING_ALLOWANCE,
         bound_bytes,
@@ -697,18 +698,20 @@ pub(crate) fn capture_admitted(
     // The scan holds two bounded readers per worker, within the per-job term; its workers
     // are planned like capture's own before capture's larger base is known.
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    // The scan's used-vertex bitmap is charged in its own plan and, with validation's task
+    // lists (whichever is larger), in capture's resident bound below.
+    let scan_bitmap = capture::scan_bitmap_bytes(&source);
+    let preflight_bytes = scan_bitmap.max(source.validation_task_bytes());
     let scan_memory = MemoryBound::new(config, source.json_bytes, 1);
     let scan_workers = config::plan_jobs(
         config.jobs,
         cores,
         config.available_memory(),
         0,
-        scan_memory.base_bytes(),
+        scan_memory.base_bytes().saturating_add(scan_bitmap),
         scan_memory.per_job_bytes,
     )
     .jobs;
-    // The scan's used-vertex bitmap is charged in capture's resident bound below.
-    let scan_bitmap = capture::scan_bitmap_bytes(&source);
     let (mut scan, source_bounds) = capture::scan_with_source_bounds(
         &source,
         config.sort.buffer_bytes,
@@ -753,7 +756,7 @@ pub(crate) fn capture_admitted(
         image_count,
         1,
         need.logical_need_bytes,
-        scan_bitmap,
+        preflight_bytes,
     )
     .map_err(super::failure)?;
     let jobs = config::plan_jobs(
@@ -776,7 +779,7 @@ pub(crate) fn capture_admitted(
         image_count,
         workers,
         need.logical_need_bytes,
-        scan_bitmap,
+        preflight_bytes,
     )
     .map_err(super::failure)?;
     // The floor's resident bound: what capture holds once its sorts have ended (the image
@@ -825,7 +828,7 @@ pub(crate) fn capture_admitted(
             image_count,
             workers,
             grown.logical_need_bytes,
-            scan_bitmap,
+            preflight_bytes,
         )
         .ok()?;
         let fits = jobs
