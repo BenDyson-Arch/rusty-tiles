@@ -679,7 +679,8 @@ fn decode_primitive(
 pub(crate) enum Fault {
     /// Writing a staged run fails.
     Staging,
-    /// Sorting an ordinary bucket after the first fails.
+    /// Sorting bucket 1 fails, while the worker holding bucket 0 leaves at the stop without
+    /// sorting it: the writer, waiting on bucket 0, must report bucket 1's error.
     Bucket,
 }
 #[cfg(test)]
@@ -1454,7 +1455,7 @@ pub(crate) fn assemble(
     // Sorts an ordinary bucket in memory: its records' bytes in the strict order.
     let sort_bucket = |b: usize, runs: Vec<StagedRun>| -> Result<Vec<u8>> {
         #[cfg(test)]
-        if b > 0 {
+        if b == 1 {
             injected(scratch, Fault::Bucket)?;
         }
         let mut raw = Vec::new();
@@ -1520,6 +1521,15 @@ pub(crate) fn assemble(
             let _unwind = Unwind(&stop, &ready);
             loop {
                 let b = next.fetch_add(1, Relaxed);
+                // Test seam: with Fault::Bucket, the worker holding bucket 0 waits for the
+                // stop (bucket 1 fails) and leaves without filling the writer's slot.
+                #[cfg(test)]
+                if b == 0 && injected(scratch, Fault::Bucket).is_err() {
+                    let started = std::time::Instant::now();
+                    while !stop.load(Relaxed) && started.elapsed().as_secs() < 30 {
+                        std::thread::sleep(std::time::Duration::from_millis(1));
+                    }
+                }
                 if b >= buckets || stop.load(Relaxed) {
                     break;
                 }

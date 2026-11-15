@@ -562,6 +562,36 @@ fn end_stage(scratch: &Scratch, bound: u64, name: &'static str) -> Result<u64, J
     }
     Ok(peak)
 }
+/// The assembly's vertex allowance: `free` (what the budget leaves beside the bound without
+/// one), at most `vertex_bytes`. With a known `available`, the bound with the allowance
+/// (`bound_at`) plus `memory_backed` scratch must fit it; the allowance shrinks once by any
+/// excess (the bound grows by at most the allowance, so one shrink suffices when anything
+/// fits), and a run that does not fit even then is refused.
+fn fit_vertex_allowance(
+    free: u64,
+    vertex_bytes: u64,
+    available: Option<u64>,
+    memory_backed: u64,
+    bound_at: &mut dyn FnMut(u64) -> Result<u64, JobFailure>,
+) -> Result<u64, JobFailure> {
+    let allowance = free.min(vertex_bytes);
+    let Some(available) = available else {
+        return Ok(allowance);
+    };
+    let need = |bound: u64| add(bound, memory_backed).map_err(super::failure);
+    let excess = need(bound_at(allowance)?)?.saturating_sub(available);
+    if excess == 0 {
+        return Ok(allowance);
+    }
+    let allowance = allowance.saturating_sub(excess);
+    if need(bound_at(allowance)?)? > available {
+        return Err(super::failure(exhausted(
+            "full capture resident bound with the assembly does not fit available memory",
+        )));
+    }
+    Ok(allowance)
+}
+
 /// Starts a stage: rechecks free space for its own working set plus file rounding.
 fn begin_stage(scratch: &Scratch, need: &FullScratchNeed, bound: u64) -> Result<(), JobError> {
     config::preflight_remaining(scratch, add(bound, need.file_rounding_bytes)?)?;
@@ -953,28 +983,20 @@ pub(crate) fn capture_admitted(
         .map_err(super::failure)?;
         Ok((plan, memory))
     };
-    let mut allowance = free.min(shape.vertex_bytes);
-    let (mut assembly_plan, mut memory) = with_allowance(allowance)?;
     // A test's own plan may be deliberately extreme (huge caches); only derived plans are
     // held to the budget.
     #[cfg(test)]
     let checked = config.test_assembly.is_none();
     #[cfg(not(test))]
     let checked = true;
-    if let Some(available) = jobs.available_memory_bytes.filter(|_| checked) {
-        let excess = add(memory.bound_bytes, memory_backed)
-            .map_err(super::failure)?
-            .saturating_sub(available);
-        if excess > 0 {
-            allowance = allowance.saturating_sub(excess);
-            (assembly_plan, memory) = with_allowance(allowance)?;
-        }
-        if add(memory.bound_bytes, memory_backed).map_err(super::failure)? > available {
-            return Err(super::failure(exhausted(
-                "full capture resident bound with the assembly does not fit available memory",
-            )));
-        }
-    }
+    let allowance = fit_vertex_allowance(
+        free,
+        shape.vertex_bytes,
+        jobs.available_memory_bytes.filter(|_| checked),
+        memory_backed,
+        &mut |bytes| with_allowance(bytes).map(|(_, memory)| memory.bound_bytes),
+    )?;
+    let (assembly_plan, memory) = with_allowance(allowance)?;
     // One source frame per worker for the assembly's decode tasks, each resolved like the
     // first (resolution is deterministic), so decode tasks never wait for one another.
     let mut frames = vec![std::sync::Mutex::new(frame)];
@@ -2838,6 +2860,43 @@ pub(super) mod tests {
             texture_output_reserve(n, 0, 0, Profile::Lossless).unwrap(),
             3 * n * config::OUTPUT_BYTES_PER_TRIANGLE
         );
+    }
+    /// The vertex allowance fits the budget: taken whole when it fits, shrunk by the excess
+    /// when `free` overestimates (a bound that grows with the allowance at slope one, under
+    /// a step maximum), and refused when even no allowance fits.
+    #[test]
+    fn vertex_allowance_fits_the_budget_or_is_refused() {
+        // Bound: 1,000 fixed plus the larger of (decode: 200 + allowance) and (sort: 500).
+        let bound = |allowance: u64| 1_000 + (200 + allowance).max(500);
+        let mut calls = 0;
+        let mut at = |allowance: u64| {
+            calls += 1;
+            Ok(bound(allowance))
+        };
+        // Not binding: every vertex fits.
+        assert_eq!(
+            fit_vertex_allowance(5_000, 100, Some(10_000), 0, &mut at).unwrap(),
+            100
+        );
+        // Binding and exact: the bound reaches the budget.
+        assert_eq!(
+            fit_vertex_allowance(800, 5_000, Some(2_000), 0, &mut at).unwrap(),
+            800
+        );
+        assert_eq!(bound(800), 2_000);
+        // An overestimate (as from a stale bound): shrunk by the excess, then it fits.
+        let fitted = fit_vertex_allowance(1_000, 5_000, Some(2_000), 50, &mut at).unwrap();
+        assert_eq!(fitted, 750);
+        assert!(bound(fitted) + 50 <= 2_000);
+        // Memory-backed scratch alone leaves no room: refused.
+        let refused = fit_vertex_allowance(1_000, 5_000, Some(2_000), 600, &mut at);
+        assert!(refused.is_err());
+        // Unknown memory: the allowance is taken as given.
+        assert_eq!(
+            fit_vertex_allowance(1_000, 300, None, 0, &mut at).unwrap(),
+            300
+        );
+        assert!(calls > 0);
     }
     #[test]
     fn checked_full_scratch_and_decoder_memory_charges() {
