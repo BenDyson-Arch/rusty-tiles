@@ -2089,6 +2089,28 @@ fn compressed_sequence_read_faults_are_typed_and_cached_reads_match() {
     }
 }
 
+/// A positioned reader keeping several blocks replaces the least recently used one, and
+/// reads the same records as with one block.
+#[test]
+fn positioned_block_cache_replaces_the_least_recently_used_block() {
+    let input = wide_input(1000, 11, true);
+    let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+    let sequence = compressed_sequence(&scratch, &input, 400);
+    let per_block = super::sequence::block_records(Wide::SIZE, 400);
+    assert!(per_block < 50, "{per_block} records per block");
+    let random = sequence.random_cached(3).unwrap();
+    let (mut encoded, mut out) = (Vec::new(), Vec::new());
+    let mut read = |block: u64| {
+        let first = block * per_block;
+        random.read(first, 1, &mut encoded, &mut out).unwrap();
+        assert_eq!(out[0], input[first as usize]);
+        random.decoded_blocks()
+    };
+    assert_eq!([read(0), read(1), read(2), read(0)], [1, 2, 3, 3]);
+    // Block 1 is the least recently used: block 3 replaces it; 0 and 2 stay.
+    assert_eq!([read(3), read(0), read(2), read(1)], [4, 4, 4, 5]);
+}
+
 #[test]
 fn compressed_sequence_write_faults_are_typed_and_clean_up() {
     for faults in [

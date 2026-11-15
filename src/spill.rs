@@ -8,6 +8,8 @@
 //! are removed on drop and on error.
 
 mod codec;
+/// The block codec of compressed spill files, for callers that stage their own blocks.
+pub(crate) use codec::{decode as decode_block, encode as encode_block};
 mod scratch;
 mod sequence;
 mod sort;
@@ -17,8 +19,8 @@ mod volume;
 pub(crate) use scratch::{FileIo, Placement, Scratch, SpillIo};
 #[allow(unused_imports)]
 pub(crate) use sequence::{
-    block_index_memory_bound, random_cache_bound, ByteFile, ByteWriter, ClosedByteFile,
-    RandomRecords, Sequence, SequenceReader, SequenceWriter, SlotFile,
+    block_index_memory_bound, block_records, random_cache_bound, ByteFile, ByteWriter,
+    ClosedByteFile, RandomRecords, Sequence, SequenceReader, SequenceWriter, SlotFile,
 };
 #[allow(unused_imports)]
 pub(crate) use sort::{

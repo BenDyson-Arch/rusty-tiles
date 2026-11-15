@@ -301,6 +301,8 @@ pub struct CaptureDiagnostics {
     pub jobs_limited_by: &'static str,
     /// The sorts inside capture as planned under the memory budget.
     pub sort: super::capture_sort::SortPlan,
+    /// The direct assembly: its plan, vertex stores (resident, spilled, routed) and buckets.
+    pub assembly: super::assembly::AssemblyReport,
     pub available_memory_bytes: Option<u64>,
     pub memory_bound_bytes: u64,
     pub scratch_need_bytes: u64,
@@ -344,6 +346,9 @@ pub struct MemoryDiagnostics {
     pub minimum_bytes: u64,
     pub capture_minimum_bytes: u64,
     pub capture_bound_bytes: u64,
+    /// The direct assembly's working set within `capture_bound_bytes` (it runs before
+    /// capture's sorts; the bound charges the larger).
+    pub capture_assembly_bytes: u64,
     pub leaf_minimum_bytes: u64,
     pub leaf_bound_bytes: u64,
     pub hlod: HlodMemoryPlan,
@@ -752,6 +757,7 @@ pub fn mesh_to_tileset(
             archive_minimum_bytes: archive_minimum,
             capture_minimum_bytes: capture_minimum,
             capture_bound_bytes: c.memory.bound_bytes,
+            capture_assembly_bytes: c.memory.assembly_bytes,
             leaf_minimum_bytes: plan.minimum_bytes(),
             leaf_bound_bytes: plan.bound_bytes(),
             hlod: hlod.clone(),
@@ -852,6 +858,7 @@ pub fn mesh_to_tileset(
                 jobs: c.jobs.jobs,
                 jobs_limited_by: c.jobs.limited_by,
                 sort: c.sort,
+                assembly: c.assembly.clone(),
                 available_memory_bytes: c.jobs.available_memory_bytes,
                 memory_bound_bytes: c.memory.bound_bytes,
                 scratch_need_bytes: c.scratch.need_bytes,

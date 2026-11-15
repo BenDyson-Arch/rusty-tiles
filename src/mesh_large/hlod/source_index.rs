@@ -902,7 +902,7 @@ impl SourceQuery<'_> {
             + self.full_buf.capacity() * size_of::<FullTriangle>()
             + self.block_bytes
             // The full-record reader's decoded block and its compressed copy.
-            + crate::spill::random_cache_bound(FullTriangle::SIZE) as usize
+            + crate::spill::random_cache_bound(FullTriangle::SIZE, 1) as usize
             + (128 << 10);
         if bytes as u64 > QUERY_BYTES {
             return Err(resource(format!(

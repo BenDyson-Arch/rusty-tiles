@@ -3,6 +3,7 @@
 //! leaves, `hlod` builds the 0.4 octree HLOD coarse tiles inside the H8 producer while the
 //! capture is live, and H16 (`delivery`) publishes their hierarchy as a `.3tz`.
 
+mod assembly;
 mod attributes;
 mod batching;
 mod capture;
