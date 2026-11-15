@@ -806,6 +806,39 @@ mod tests {
         assert_scans_agree(&input);
     }
 
+    /// A primitive using only the first and last vertex words of a 70,000-vertex accessor (two
+    /// position tasks, nearly every bitmap word empty) scans as the triangle-order pass.
+    #[test]
+    fn sparse_primitives_scan_across_position_chunks() {
+        let dir = tempfile::tempdir().unwrap();
+        let count = 70_000u32;
+        let mut bytes = Vec::new();
+        for v in 0..count {
+            for c in [v as f32 * 0.01, (v % 11) as f32, -(v as f32) * 0.02] {
+                bytes.extend(c.to_le_bytes());
+            }
+        }
+        let positions = bytes.len();
+        let indices = [0u32, 1, 2, 2, 1, 63, count - 3, count - 2, count - 1];
+        bytes.extend(indices.iter().flat_map(|i| i.to_le_bytes()));
+        fs::write(dir.path().join("sparse.bin"), &bytes).unwrap();
+        let doc = json!({
+            "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+            "nodes":[{"mesh":0}],"meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1}]}],
+            "buffers":[{"uri":"sparse.bin","byteLength":bytes.len()}],
+            "bufferViews":[{"buffer":0,"byteLength":positions},
+                {"buffer":0,"byteOffset":positions,"byteLength":indices.len() * 4}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":count,"type":"VEC3",
+                    "min":[0,0,-1400],"max":[700,10,0]},
+                {"bufferView":1,"componentType":5125,"count":indices.len(),"type":"SCALAR"}]
+        });
+        let input = dir.path().join("sparse.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let scan = assert_scans_agree(&input);
+        assert_eq!(scan.triangles, 3);
+        assert_eq!(scan.bounds.max[0], (count - 1) as f32 * 0.01);
+    }
+
     /// A scene of primitives sharing one POSITION accessor (vertex counts around a bitmap word,
     /// different index subsets), a mirrored instance, a non-indexed primitive, and many tiny
     /// primitives. Both scans agree, and one-task primitives start no threads.

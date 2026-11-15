@@ -436,8 +436,9 @@ impl StreamSource {
         Ok(())
     }
     /// At most the bytes of [`Self::validate_payload_parallel`]'s task list and results: one
-    /// task per range of every accessor's elements (extrema, and at most a role and an index
-    /// check each) and of every authored primitive's tangent corners.
+    /// task per range of every accessor's elements (extrema), and of every authored
+    /// primitive's attributes, indices and tangent corners (counted per primitive, so an
+    /// accessor shared or reused with different position counts is counted each time).
     pub(crate) fn validation_task_bytes(&self) -> u64 {
         let ranges = |count: usize| count.div_ceil(VALIDATE_TASK_ELEMENTS - 2) as u64;
         let views: u64 = self
@@ -445,18 +446,18 @@ impl StreamSource {
             .accessor_views()
             .map(|v| ranges(v.count))
             .sum();
-        let tangents: u64 = self
+        let primitives: u64 = self
             .document
             .payload_primitives()
-            .map(|p| ranges(p.count))
+            .map(|p| {
+                let attributes: u64 = p.attributes().map(|(_, v)| ranges(v.count)).sum();
+                attributes + p.indices.map_or(0, |v| ranges(v.count)) + ranges(p.count)
+            })
             .sum();
         let each = (std::mem::size_of::<ValidationTask<'_>>()
             + std::mem::size_of::<std::sync::Mutex<Option<Option<source::Extrema>>>>())
             as u64;
-        views
-            .saturating_mul(3)
-            .saturating_add(tangents)
-            .saturating_mul(each)
+        views.saturating_add(primitives).saturating_mul(each)
     }
 
     /// [`Self::validate_payload`] on up to `workers` threads: every accessor's elements and

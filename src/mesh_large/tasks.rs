@@ -59,21 +59,27 @@ pub(crate) fn run<T: Send>(
     let first_error: Mutex<Option<JobError>> = Mutex::new(None);
     // Workers wake the calling thread when they finish a task or leave.
     let (gate, done) = (Mutex::new(()), Condvar::new());
+    // Wakes the calling thread. The gate is taken first, so a wake-up never falls between
+    // the caller's check of `running` (made under the gate) and its wait.
+    let wake = || {
+        drop(gate.lock().unwrap_or_else(|e| e.into_inner()));
+        done.notify_all();
+    };
     // Sets the stop flag when a worker unwinds, so the others stop and the caller joins;
     // counts the worker out either way.
-    struct Leave<'a>(&'a AtomicBool, &'a AtomicUsize, &'a Condvar);
+    struct Leave<'a>(&'a AtomicBool, &'a AtomicUsize, &'a (dyn Fn() + Sync));
     impl Drop for Leave<'_> {
         fn drop(&mut self) {
             if std::thread::panicking() {
                 self.0.store(true, Relaxed);
             }
             self.1.fetch_sub(1, Relaxed);
-            self.2.notify_all();
+            (self.2)();
         }
     }
     let stopped = std::thread::scope(|scope| {
         let worker = || {
-            let _leave = Leave(&stop, &running, &done);
+            let _leave = Leave(&stop, &running, &wake);
             loop {
                 let i = next.fetch_add(1, Relaxed);
                 if i >= count || stop.load(Relaxed) {
@@ -96,7 +102,7 @@ pub(crate) fn run<T: Send>(
                         stop.store(true, Relaxed);
                     }
                 }
-                done.notify_all();
+                wake();
             }
         };
         let mut threads = Vec::new();
