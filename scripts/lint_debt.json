@@ -71,9 +71,18 @@
   "src/point_cloud/source.rs": 2,
   "src/point_cloud/tiles.rs": 5,
   "src/point_sampling.rs": 2,
+  "src/raster.rs": 3,
+  "src/raster/display.rs": 9,
   "src/raster/grid.rs": 5,
+  "src/raster/native.rs": 13,
+  "src/raster/source.rs": 1,
+  "src/raster/tile.rs": 9,
+  "src/raster_directory.rs": 4,
   "src/spill/sequence.rs": 7,
   "src/stage_timing.rs": 2,
+  "src/terrain.rs": 7,
+  "src/terrain/glb.rs": 5,
+  "src/terrain/raster.rs": 7,
   "src/tile_view.rs": 10,
   "src/validate.rs": 3,
   "src/validate/containment.rs": 1,
@@ -91,6 +100,7 @@
   "src/validate/stream_log.rs": 2,
   "src/vector/pipeline/encoding.rs": 22,
   "src/vector/pipeline/geometry.rs": 7,
+  "src/vector/pipeline/source_native.rs": 3,
   "src/vector/pipeline/store.rs": 8,
   "src/vector/portable.rs": 1,
   "src/vector_encoding/framing.rs": 3
@@ -103,7 +113,11 @@
   "src/mesh_large/hlod/borders/curve.rs": 2,
   "src/point_cloud/source.rs": 1,
   "src/point_cloud/tiles.rs": 1,
+  "src/raster/display.rs": 19,
   "src/raster/grid.rs": 1,
+  "src/raster/native.rs": 12,
+  "src/raster/tile.rs": 5,
+  "src/terrain/raster.rs": 5,
   "src/tile_view.rs": 1,
   "src/validate/containment.rs": 3,
   "src/validate/containment/dyadic.rs": 2,
@@ -112,6 +126,7 @@
   "src/validate/hlod_delivery/bulk.rs": 1,
   "src/validate/hlod_delivery/recovery.rs": 5,
   "src/vector/pipeline/aggregation.rs": 1,
+  "src/vector/pipeline/source_native.rs": 3,
   "src/vector/pipeline/store.rs": 4
  },
  "clippy::cast_sign_loss": {
@@ -139,10 +154,16 @@
   "src/mesh_large/source_crs.rs": 2,
   "src/point_cloud/tiles.rs": 2,
   "src/point_sampling.rs": 2,
+  "src/raster/display.rs": 4,
   "src/raster/grid.rs": 5,
+  "src/raster/native.rs": 22,
+  "src/raster_directory/native.rs": 2,
   "src/runtime/directory_platform.rs": 1,
   "src/spill/volume.rs": 1,
   "src/stage_timing.rs": 2,
+  "src/terrain.rs": 2,
+  "src/terrain/glb.rs": 1,
+  "src/terrain/raster.rs": 6,
   "src/tile_view.rs": 1,
   "src/validate/containment/dyadic.rs": 1,
   "src/validate/hlod_delivery.rs": 4,
@@ -151,6 +172,7 @@
   "src/validate/hlod_delivery/recovery.rs": 1,
   "src/validate/identity.rs": 1,
   "src/vector/pipeline/encoding.rs": 4,
+  "src/vector/pipeline/source_native.rs": 4,
   "src/vector/pipeline/store.rs": 7
  },
  "clippy::disallowed_methods(rayon::ThreadPoolBuilder::new)": {
@@ -161,12 +183,13 @@
   "src/vector/pipeline/store.rs": 1
  },
  "clippy::disallowed_methods(std::env::var)": {
-  "build.rs": 1,
+  "build.rs": 4,
   "src/interrupt.rs": 1,
-  "src/test_hooks.rs": 4
+  "src/test_hooks.rs": 4,
+  "src/vector/pipeline/geometry/native.rs": 1
  },
  "clippy::disallowed_methods(std::env::var_os)": {
-  "build.rs": 2,
+  "build.rs": 3,
   "src/doctor.rs": 1,
   "src/mesh_large/hlod/cpu_profile.rs": 1,
   "src/mesh_large/hlod/mod.rs": 1,
@@ -177,7 +200,8 @@
  "clippy::disallowed_methods(std::fs::remove_dir)": {
   "src/implicit/tileset.rs": 1,
   "src/point_cloud.rs": 1,
-  "src/runtime/directory.rs": 1
+  "src/runtime/directory.rs": 1,
+  "src/terrain.rs": 1
  },
  "clippy::disallowed_methods(std::fs::remove_dir_all)": {
   "src/cleanup.rs": 1,
@@ -191,6 +215,7 @@
   "src/cleanup.rs": 1,
   "src/implicit/tileset.rs": 2,
   "src/point_cloud/tiles.rs": 3,
+  "src/raster/native.rs": 2,
   "src/runtime.rs": 1,
   "src/spill/scratch.rs": 1,
   "src/vector/pipeline/reuse.rs": 1
@@ -203,12 +228,15 @@
   "src/mesh_large/hlod/mod.rs": 1,
   "src/mesh_large/leaves/producer.rs": 1,
   "src/mesh_large/mod.rs": 1,
+  "src/raster.rs": 1,
   "src/validate/resources.rs": 1,
   "src/vector.rs": 1
  },
  "clippy::expect_used": {
+  "build.rs": 2,
   "src/archive3tz/catalog.rs": 1,
   "src/crs/allowlist.rs": 2,
+  "src/doctor.rs": 1,
   "src/fixtures.rs": 1,
   "src/gltf_source/binding.rs": 3,
   "src/gltf_source/source/material.rs": 1,
@@ -236,12 +264,17 @@
   "src/package.rs": 1,
   "src/point_cloud.rs": 1,
   "src/preview.rs": 1,
+  "src/raster.rs": 1,
   "src/raster/grid.rs": 2,
+  "src/raster/native.rs": 4,
+  "src/raster/source.rs": 1,
+  "src/raster/tile.rs": 2,
   "src/runtime/directory.rs": 2,
   "src/spill/scratch.rs": 1,
   "src/spill/sequence.rs": 3,
   "src/spill/sort.rs": 3,
   "src/stage_timing.rs": 2,
+  "src/terrain.rs": 5,
   "src/tileset_node.rs": 1,
   "src/validate/hlod_delivery.rs": 3,
   "src/validate/hlod_delivery/borders.rs": 1,
@@ -252,6 +285,7 @@
   "src/vector.rs": 1,
   "src/vector/pipeline/encoding.rs": 1,
   "src/vector/pipeline/outline.rs": 1,
+  "src/vector/pipeline/source_native.rs": 1,
   "src/vector/pipeline/store.rs": 3
  },
  "clippy::iter_over_hash_type": {
@@ -310,7 +344,11 @@
   "src/point_cloud.rs": 2,
   "src/point_cloud/source.rs": 29,
   "src/preview.rs": 1,
+  "src/raster/native.rs": 7,
+  "src/raster_directory.rs": 3,
+  "src/raster_directory/native.rs": 1,
   "src/runtime.rs": 5,
+  "src/terrain.rs": 7,
   "src/tile_view.rs": 5,
   "src/validate.rs": 3,
   "src/validate/facts.rs": 6,
@@ -326,6 +364,7 @@
   "src/vector/pipeline/geometry.rs": 7,
   "src/vector/pipeline/geometry/portable.rs": 2,
   "src/vector/pipeline/reuse.rs": 5,
+  "src/vector/pipeline/source_native.rs": 4,
   "src/vector/pipeline/store.rs": 9,
   "src/vector/portable.rs": 15,
   "src/vector_encoding/plan.rs": 6,

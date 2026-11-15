@@ -47,16 +47,24 @@ class LintDebtTests(unittest.TestCase):
         self.baseline = self.root / "lint_debt.json"
         self.json = self.root / "clippy.json"
 
-    def run_check(self, lines, update=False):
-        self.json.write_text("\n".join(lines) + "\n")
-        argv = ["--root", str(self.root), "--baseline", str(self.baseline),
-                "--clippy-json", str(self.json)]
+    def run_check(self, *passes, update=False, allow_growth=False):
+        argv = ["--root", str(self.root), "--baseline", str(self.baseline)]
+        for n, lines in enumerate(passes or ([],)):
+            path = self.root / f"clippy-{n}.json"
+            path.write_text("\n".join(lines) + "\n")
+            argv += ["--clippy-json", str(path)]
         if update:
             argv.append("--update")
+        if allow_growth:
+            argv.append("--allow-growth")
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = lint_debt.main(argv)
         return code, out.getvalue() + err.getvalue()
+
+    def record(self, *passes):
+        """Write a baseline holding exactly these findings plus the tree's exemptions."""
+        self.assertEqual(self.run_check(*passes, update=True, allow_growth=True)[0], 0)
 
     def test_exemptions_count_each_lint_of_every_attribute_form(self):
         found = lint_debt.counts(lint_debt.exemptions(self.root))
@@ -83,15 +91,24 @@ class LintDebtTests(unittest.TestCase):
             "clippy::unwrap_used": {"src/a.rs": 1},
         })
 
+    def test_both_passes_are_counted_and_a_shared_finding_once(self):
+        portable = [message("clippy::unwrap_used", "src/a.rs", 3)]
+        native = [message("clippy::unwrap_used", "src/a.rs", 3),
+                  message("clippy::unwrap_used", "src/b.rs", 1)]
+        self.record(portable, native)
+        baseline = json.loads(self.baseline.read_text())
+        self.assertEqual(baseline["clippy::unwrap_used"], {"src/a.rs": 1, "src/b.rs": 1})
+        self.assertEqual(self.run_check(portable, native)[0], 0)
+
     def test_unchanged_counts_pass(self):
         lines = [message("clippy::unwrap_used", "src/a.rs", 3)]
-        self.assertEqual(self.run_check(lines, update=True)[0], 0)
+        self.record(lines)
         code, output = self.run_check(lines)
         self.assertEqual(code, 0, output)
-        self.assertIn("unchanged", output)
+        self.assertIn("within the baseline", output)
 
-    def test_growth_fails_and_prints_the_findings(self):
-        self.assertEqual(self.run_check([message("clippy::unwrap_used", "src/a.rs", 3)], update=True)[0], 0)
+    def test_growth_fails_and_prints_the_new_findings(self):
+        self.record([message("clippy::unwrap_used", "src/a.rs", 3)])
         code, output = self.run_check([
             message("clippy::unwrap_used", "src/a.rs", 3),
             message("clippy::unwrap_used", "src/a.rs", 9, "new unwrap"),
@@ -99,37 +116,68 @@ class LintDebtTests(unittest.TestCase):
                     "use of a disallowed method `std::fs::remove_file`"),
         ])
         self.assertEqual(code, 1)
-        self.assertIn("src/a.rs: clippy::unwrap_used grew from 1 to 2", output)
+        self.assertIn("clippy::unwrap_used grew from 1 to 2", output)
+        self.assertIn("src/a.rs: 1 -> 2", output)
         self.assertIn("new unwrap", output)
         self.assertIn("clippy::disallowed_methods(std::fs::remove_file) grew from 0 to 1", output)
 
     def test_a_new_exemption_is_growth(self):
-        self.assertEqual(self.run_check([], update=True)[0], 0)
+        self.record()
         with open(self.root / "src/b.rs", "a") as f:
             f.write("#[expect(clippy::too_many_arguments, reason = \"wide\")]\nfn c() {}\n")
-        code, output = self.run_check([])
+        code, output = self.run_check()
         self.assertEqual(code, 1)
-        self.assertIn("src/b.rs: expect(clippy::too_many_arguments) grew from 0 to 1", output)
+        self.assertIn("expect(clippy::too_many_arguments) grew from 1 to 2", output)
+        self.assertIn("src/b.rs: 0 -> 1", output)
 
-    def test_a_fall_fails_until_the_baseline_is_updated(self):
-        lines = [message("clippy::unwrap_used", "src/a.rs", 3)]
-        self.assertEqual(self.run_check(lines, update=True)[0], 0)
-        code, output = self.run_check([])
-        self.assertEqual(code, 1)
-        self.assertIn("src/a.rs: clippy::unwrap_used 1 -> 0", output)
-        self.assertEqual(self.run_check([], update=True)[0], 0)
-        self.assertEqual(self.run_check([])[0], 0)
+    def test_moved_code_warns_without_failing(self):
+        self.record([message("clippy::unwrap_used", "src/a.rs", 3)])
+        code, output = self.run_check([message("clippy::unwrap_used", "src/b.rs", 7)])
+        self.assertEqual(code, 0, output)
+        self.assertIn("warning", output)
+        self.assertIn("src/b.rs: clippy::unwrap_used 0 -> 1", output)
+
+    def test_a_fall_passes_and_update_keeps_it(self):
+        self.record([message("clippy::unwrap_used", "src/a.rs", 3)])
+        code, output = self.run_check()
+        self.assertEqual(code, 0, output)
+        self.assertIn("clippy::unwrap_used 1 -> 0", output)
+        self.assertEqual(self.run_check(update=True)[0], 0)
+        self.assertNotIn("clippy::unwrap_used", json.loads(self.baseline.read_text()))
+        code, output = self.run_check([message("clippy::unwrap_used", "src/a.rs", 3)])
+        self.assertEqual(code, 1, output)
+
+    def test_update_never_records_growth_without_allow_growth(self):
+        self.record([message("clippy::unwrap_used", "src/a.rs", 3)])
+        grown = [message("clippy::unwrap_used", "src/a.rs", 3),
+                 message("clippy::unwrap_used", "src/b.rs", 1),
+                 message("clippy::expect_used", "src/b.rs", 2)]
+        code, output = self.run_check(grown, update=True)
+        self.assertEqual(code, 0)
+        self.assertIn("not recorded: clippy::expect_used", output)
+        self.assertIn("not recorded: clippy::unwrap_used", output)
+        baseline = json.loads(self.baseline.read_text())
+        self.assertEqual(baseline["clippy::unwrap_used"], {"src/a.rs": 1})
+        self.assertNotIn("clippy::expect_used", baseline)
+        self.assertEqual(self.run_check(grown)[0], 1)
+        self.assertEqual(self.run_check(grown, update=True, allow_growth=True)[0], 0)
+        self.assertEqual(self.run_check(grown)[0], 0)
+
+    def test_allow_growth_needs_update(self):
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            lint_debt.main(["--root", str(self.root), "--allow-growth"])
 
     def test_clippy_errors_stop_the_check(self):
         code, output = self.run_check([message(None, "src/a.rs", 1, "mismatched types", level="error")])
         self.assertEqual(code, 1)
         self.assertIn("mismatched types", output)
 
-    def test_baseline_matches_the_tree_exemptions(self):
+    def test_tree_exemptions_are_within_the_committed_baseline(self):
         # Exemptions need no build, so the committed baseline is checked against the source here.
         baseline = json.loads((ROOT / "scripts/lint_debt.json").read_text())
-        recorded = {key: files for key, files in baseline.items() if key.startswith("expect(")}
-        self.assertEqual(recorded, lint_debt.counts(lint_debt.exemptions(ROOT)))
+        recorded = lint_debt.totals({k: v for k, v in baseline.items() if k.startswith("expect(")})
+        for key, total in lint_debt.totals(lint_debt.counts(lint_debt.exemptions(ROOT))).items():
+            self.assertLessEqual(total, recorded.get(key, 0), key)
 
 
 if __name__ == "__main__":
