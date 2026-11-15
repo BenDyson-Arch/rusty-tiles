@@ -63,6 +63,13 @@ const CHUNK_TRIANGLES: usize = 1 << 14;
 const CHUNK_VERTICES: usize = 1 << 16;
 /// Staging files of ordinary buckets (consecutive bucket ranges); a heavy bucket has its own.
 const STAGING_GROUPS: usize = 16;
+/// Heavy buckets with a staging file of their own: those over 1/OWN_FILES of the records.
+const OWN_FILES: usize = 64;
+/// The most staging files open at once: the groups, the own files, and the group split by
+/// each own file.
+pub(crate) const STAGING_FILES: usize = STAGING_GROUPS + 2 * OWN_FILES;
+/// Write buffer of a staging file.
+const STAGING_BUFFER: usize = 64 << 10;
 /// Smallest and largest gathering buffer per bucket.
 const GATHER_MIN: u64 = 4 << 10;
 const GATHER_MAX: u64 = 1 << 20;
@@ -146,14 +153,21 @@ impl AssemblyPlan {
             .checked_add(reader)?;
         // Histogram counts and the cell-to-bucket table.
         let tables = CELLS as u64 * 12;
+        // Gathering buffers grow by doubling (up to twice their flush size), and one task can
+        // add a whole chunk's records to one buffer before it flushes.
         let gathering = self
             .gather_bytes
-            .max(Self::buckets_bound(n, record, self.bucket_bytes)?.checked_mul(GATHER_MIN)?);
+            .max(Self::buckets_bound(n, record, self.bucket_bytes)?.checked_mul(GATHER_MIN)?)
+            .checked_mul(2)?
+            .checked_add(w.checked_mul(CHUNK_TRIANGLES as u64 * record)?)?;
+        // Every staging file open at once with its write buffer, and the run list's writer.
+        let staging = (STAGING_FILES * STAGING_BUFFER.min(buffer_bytes)) as u64;
         let distributing = [
             self.vertex_allowance_bytes,
             w.checked_mul(task)?,
             tables,
             gathering,
+            staging,
             buffer_bytes as u64,
         ]
         .iter()
@@ -200,9 +214,8 @@ pub(crate) fn vertex_record_bytes(layout: Layout) -> u64 {
 }
 
 impl ScratchShape {
-    /// For `source` under `layout`, with `n` triangles of `record` bytes each. Heavy buckets
-    /// each hold at least one smallest in-memory bucket of records.
-    pub(crate) fn of(source: &StreamSource, layout: Layout, n: u64) -> Option<Self> {
+    /// For `source` under `layout`.
+    pub(crate) fn of(source: &StreamSource, layout: Layout) -> Option<Self> {
         let size = DecodedVertex::size_in(layout) as u64;
         let mut vertex_bytes = 0u64;
         let mut primitives = 0u64;
@@ -211,13 +224,13 @@ impl ScratchShape {
                 vertex_bytes.checked_add((p.position.count as u64).checked_mul(size)?)?;
             primitives += 1;
         }
-        let records = n.checked_mul(FullTriangle::size_in(layout) as u64)?;
-        let heavy = records / BUCKET_FLOOR + 1;
         Some(Self {
             vertex_bytes,
+            // Spilled vertex stores, staging files, the run list and one external sort's
+            // runs (counted elsewhere).
             files: primitives
-                .checked_add(STAGING_GROUPS as u64)?
-                .checked_add(heavy)?,
+                .checked_add(STAGING_FILES as u64)?
+                .checked_add(1)?,
         })
     }
 }
@@ -409,7 +422,7 @@ fn used_vertices(
     workers: usize,
     (per_block, cache_blocks): (u64, usize),
     poll: &mut dyn FnMut() -> Result<()>,
-) -> Result<Option<(Vec<AtomicU64>, u64)>> {
+) -> Result<std::result::Result<(Vec<AtomicU64>, u64), JobError>> {
     let used: Vec<AtomicU64> = (0..p.position.count.div_ceil(64))
         .map(|_| AtomicU64::new(0))
         .collect();
@@ -450,7 +463,10 @@ fn used_vertices(
             Ok(())
         },
     )?;
-    Ok(matches!(marked, Ran::All(_)).then(|| (used, local.into_inner())))
+    Ok(match marked {
+        Ran::All(_) => Ok((used, local.into_inner())),
+        Ran::Failed(failure) => Err(failure),
+    })
 }
 
 /// Vertices decoded exactly as the corner join decoded them.
@@ -557,7 +573,8 @@ impl Decoder<'_> {
 }
 
 /// Decodes `p`'s used vertices into a store: in memory when `memory` allows, else spilled.
-/// Returns `None` when a vertex failed (the caller reruns serially for the first failure).
+/// Returns the first failure (in time) of a parallel task as the inner error: the caller
+/// reruns serially for the first failing vertex in order.
 #[allow(clippy::too_many_arguments)]
 fn decode_primitive(
     source: &StreamSource,
@@ -570,19 +587,19 @@ fn decode_primitive(
     in_memory: bool,
     (cache_blocks, sorter, progress): (usize, SortConfig, &StepProgress<'_>),
     poll: &mut dyn FnMut() -> Result<()>,
-) -> Result<Option<(Store, Boxes)>> {
+) -> Result<std::result::Result<(Store, Boxes), JobError>> {
     let size = DecodedVertex::size_in(layout);
     let per_block = crate::spill::block_records(size, buffer_bytes);
-    let Some((used, local)) = used_vertices(
+    let (used, local) = match used_vertices(
         source,
         p,
         buffer_bytes,
         workers,
         (per_block, cache_blocks),
         poll,
-    )?
-    else {
-        return Ok(None);
+    )? {
+        Ok(found) => found,
+        Err(failure) => return Ok(Err(failure)),
     };
     let count = p.position.count;
     let chunks = count.div_ceil(CHUNK_VERTICES);
@@ -610,11 +627,12 @@ fn decode_primitive(
             decode_chunk(chunk, &mut slot, stop)
         })?;
         drop(slots);
-        let Ran::All(found) = ran else {
-            return Ok(None);
+        let found = match ran {
+            Ran::All(found) => found,
+            Ran::Failed(failure) => return Ok(Err(failure)),
         };
         found.iter().for_each(|b| boxes.union(b));
-        return Ok(Some((Store::Memory(bytes), boxes)));
+        return Ok(Ok((Store::Memory(bytes), boxes)));
     }
     // Spilled: waves of two chunks per worker, written in order.
     let mut writer = SequenceWriter::<DecodedVertex>::compressed(
@@ -633,8 +651,9 @@ fn decode_primitive(
             let found = decode_chunk(chunk, &mut out, stop)?;
             Ok((out, found))
         })?;
-        let Ran::All(found) = ran else {
-            return Ok(None);
+        let found = match ran {
+            Ran::All(found) => found,
+            Ran::Failed(failure) => return Ok(Err(failure)),
         };
         for (bytes, found) in found {
             boxes.union(&found);
@@ -646,11 +665,45 @@ fn decode_primitive(
     let spilled = writer.finish()?;
     // Too little locality for the block caches: place every corner by sorting instead.
     let chunks = p.triangles.div_ceil(CHUNK_TRIANGLES) as u64;
-    if local * 32 < chunks * LOCAL_CHUNKS_PER_32 {
+    if needs_route(local, chunks) {
         let placed = place_corners(source, p, &spilled, scratch, layout, sorter, progress, poll)?;
-        return Ok(Some((Store::Placed(placed), boxes)));
+        return Ok(Ok((Store::Placed(placed), boxes)));
     }
-    Ok(Some((Store::Spilled(spilled), boxes)))
+    Ok(Ok((Store::Spilled(spilled), boxes)))
+}
+
+/// Test seam: faults injected into the assembly of captures whose scratch lies under a
+/// registered directory.
+#[cfg(test)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Fault {
+    /// Writing a staged run fails.
+    Staging,
+    /// Sorting an ordinary bucket after the first fails.
+    Bucket,
+}
+#[cfg(test)]
+pub(crate) static FAULTS: Mutex<Vec<(std::path::PathBuf, Fault)>> = Mutex::new(Vec::new());
+#[cfg(test)]
+fn injected(scratch: &Scratch, fault: Fault) -> Result<()> {
+    let faults = FAULTS.lock().unwrap_or_else(|e| e.into_inner());
+    if faults
+        .iter()
+        .any(|(dir, f)| *f == fault && scratch.path().starts_with(dir))
+    {
+        return Err(JobError::new(
+            JobErrorKind::ResourceLimit,
+            format!("injected {fault:?} failure"),
+        ));
+    }
+    Ok(())
+}
+
+/// Whether a spilled primitive's corners are placed by sorting: fewer than
+/// [`LOCAL_CHUNKS_PER_32`] in 32 of its `chunks` triangle chunks touch at most a cache's worth
+/// of vertex blocks (`local` of them do).
+fn needs_route(local: u64, chunks: u64) -> bool {
+    local.saturating_mul(32) < chunks.saturating_mul(LOCAL_CHUNKS_PER_32)
 }
 
 /// A corner of a routed primitive, sorted by vertex to meet the decoded vertices in order.
@@ -852,23 +905,29 @@ fn place_corners(
 }
 
 /// The first failing vertex of `p` in vertex order, as the corner join reported it.
+/// The first failing vertex of `p` in vertex order, as the corner join reported it, or
+/// `None` when every vertex decodes alone. Checks `poll` as it goes.
 fn first_vertex_failure(
     source: &StreamSource,
     p: &ScenePrimitive<'_>,
     frames: &Frames,
     layout: Layout,
     buffer_bytes: usize,
-) -> JobError {
+    poll: &mut dyn FnMut() -> Result<()>,
+) -> Result<Option<JobError>> {
     let used: Vec<AtomicU64> = (0..p.position.count.div_ceil(64))
         .map(|_| AtomicU64::new(0))
         .collect();
     let mut indices = p.indices.map(|v| source.reader(&v, buffer_bytes));
     for triangle in 0..p.triangles {
+        if triangle.is_multiple_of(4096) {
+            poll()?;
+        }
         match vertices(p, &mut indices, triangle) {
             Ok(vs) => vs.iter().for_each(|&v| {
                 used[(v / 64) as usize].fetch_or(1 << (v % 64), Relaxed);
             }),
-            Err(error) => return error,
+            Err(error) => return Ok(Some(error)),
         }
     }
     let size = DecodedVertex::size_in(layout);
@@ -882,11 +941,14 @@ fn first_vertex_failure(
     let stop = AtomicBool::new(false);
     let mut out = vec![0u8; size];
     for vertex in 0..p.position.count {
+        if vertex.is_multiple_of(4096) {
+            poll()?;
+        }
         if let Err(error) = decoder.decode(&used, vertex..vertex + 1, layout, &mut out, &stop) {
-            return error;
+            return Ok(Some(error));
         }
     }
-    invariant("a vertex decode failed in parallel but not alone")
+    Ok(None)
 }
 
 /// The prefix cell of a Morton key.
@@ -1050,14 +1112,18 @@ pub(crate) fn assemble(
                 progress.advance(done)
             },
         )?;
-        let Some((store, found)) = decoded else {
-            return Err(first_vertex_failure(
-                source,
-                p,
-                frames,
-                layout,
-                buffer_bytes,
-            ));
+        let (store, found) = match decoded {
+            Ok(decoded) => decoded,
+            // The first failing vertex in order, as before; otherwise (a read or scratch
+            // error) the task's own failure.
+            Err(failure) => {
+                let first =
+                    first_vertex_failure(source, p, frames, layout, buffer_bytes, &mut || {
+                        stop_check()?;
+                        progress.check()
+                    })?;
+                return Err(first.unwrap_or(failure));
+            }
         };
         if in_memory {
             allowance -= bytes;
@@ -1134,8 +1200,9 @@ pub(crate) fn assemble(
             Ok(bounds)
         },
     )?;
-    let Ran::All(found) = ran else {
-        return Err(invariant("assembly histogram task failed"));
+    let found = match ran {
+        Ran::All(found) => found,
+        Ran::Failed(failure) => return Err(failure),
     };
     let mut bounds = Bounds::EMPTY;
     found.iter().for_each(|b| bounds.union(b));
@@ -1192,14 +1259,17 @@ pub(crate) fn assemble(
     report.buckets = buckets as u64;
     report.heavy_buckets = (0..buckets).filter(|&b| heavy(b)).count() as u64;
     report.largest_bucket_records = (0..buckets).map(records_of).max().unwrap_or(0);
-    // Staging files: STAGING_GROUPS of consecutive ordinary buckets, one per heavy bucket.
+    // Staging files: STAGING_GROUPS of consecutive buckets, and one of its own for each
+    // heavy bucket holding more than 1/OWN_FILES of the records (at most OWN_FILES of them),
+    // removed as soon as its external sort holds its records.
+    let own_file = |b: usize| heavy(b) && records_of(b) > n / OWN_FILES as u64;
     let mut group_of = vec![0usize; buckets];
     let mut groups = 0usize;
-    let ordinary = (0..buckets).filter(|&b| !heavy(b)).count().max(1);
+    let ordinary = (0..buckets).filter(|&b| !own_file(b)).count().max(1);
     let mut seen = 0usize;
     let mut last_group = usize::MAX;
     for (b, group) in group_of.iter_mut().enumerate() {
-        if heavy(b) {
+        if own_file(b) {
             *group = groups;
             groups += 1;
             last_group = usize::MAX;
@@ -1215,7 +1285,12 @@ pub(crate) fn assemble(
     }
     let stagings: Vec<Mutex<Option<ByteWriter>>> = (0..groups)
         .map(|_| {
-            ByteWriter::new(scratch, "assembly-staging", buffer_bytes).map(|w| Mutex::new(Some(w)))
+            ByteWriter::new(
+                scratch,
+                "assembly-staging",
+                buffer_bytes.min(STAGING_BUFFER),
+            )
+            .map(|w| Mutex::new(Some(w)))
         })
         .collect::<std::result::Result<_, _>>()?;
     // 4. Distribute.
@@ -1228,6 +1303,8 @@ pub(crate) fn assemble(
         buffer_bytes,
     )?);
     let staged = |b: usize, raw: &[u8], scratch_buffer: &mut Vec<u8>| -> Result<()> {
+        #[cfg(test)]
+        injected(scratch, Fault::Staging)?;
         let encoded = crate::spill::encode_block(raw, scratch_buffer);
         let group = group_of[b];
         let mut writer = stagings[group].lock().unwrap_or_else(|e| e.into_inner());
@@ -1302,8 +1379,8 @@ pub(crate) fn assemble(
             Ok(())
         },
     )?;
-    if matches!(ran, Ran::Failed(_)) {
-        return Err(invariant("assembly distribution task failed"));
+    if let Ran::Failed(failure) = ran {
+        return Err(failure);
     }
     let mut compressed = Vec::new();
     for (b, buffer) in gathering.into_iter().enumerate() {
@@ -1376,6 +1453,10 @@ pub(crate) fn assemble(
     };
     // Sorts an ordinary bucket in memory: its records' bytes in the strict order.
     let sort_bucket = |b: usize, runs: Vec<StagedRun>| -> Result<Vec<u8>> {
+        #[cfg(test)]
+        if b > 0 {
+            injected(scratch, Fault::Bucket)?;
+        }
         let mut raw = Vec::new();
         let records = read_runs(&mut runs.into_iter().map(Ok), &mut |run| {
             raw.extend_from_slice(run);
@@ -1407,6 +1488,7 @@ pub(crate) fn assemble(
     let consumed = std::sync::atomic::AtomicUsize::new(0);
     let dispatched = std::sync::atomic::AtomicUsize::new(0);
     let stop = AtomicBool::new(false);
+    let failed = std::sync::atomic::AtomicUsize::new(usize::MAX);
     // Workers and the writer wait on one gate (a condition variable needs one mutex).
     let gate = Mutex::new(());
     let ready = std::sync::Condvar::new();
@@ -1421,40 +1503,56 @@ pub(crate) fn assemble(
         }
         last
     };
-    let mut previous: Option<SortKey> = None;
+    let mut previous: Option<TriangleRecord> = None;
     let mut written = 0u64;
     let outcome = std::thread::scope(|scope| -> Result<()> {
-        let worker = || loop {
-            let b = next.fetch_add(1, Relaxed);
-            if b >= buckets || stop.load(Relaxed) {
-                break;
+        // Sets the stop flag when a worker unwinds, so the writer stops waiting and joins.
+        struct Unwind<'a>(&'a AtomicBool, &'a std::sync::Condvar);
+        impl Drop for Unwind<'_> {
+            fn drop(&mut self) {
+                if std::thread::panicking() {
+                    self.0.store(true, Relaxed);
+                    self.1.notify_all();
+                }
             }
-            // Stay within the window ahead of the writer, and wait for the bucket's runs.
-            while (b >= consumed.load(Relaxed) + window || b >= dispatched.load(Relaxed))
-                && !stop.load(Relaxed)
-            {
-                wait(5);
+        }
+        let worker = || {
+            let _unwind = Unwind(&stop, &ready);
+            loop {
+                let b = next.fetch_add(1, Relaxed);
+                if b >= buckets || stop.load(Relaxed) {
+                    break;
+                }
+                // Stay within the window ahead of the writer, and wait for the bucket's runs.
+                while (b >= consumed.load(Relaxed) + window || b >= dispatched.load(Relaxed))
+                    && !stop.load(Relaxed)
+                {
+                    wait(5);
+                }
+                if stop.load(Relaxed) {
+                    break;
+                }
+                // Heavy buckets are sorted externally by the writer itself.
+                let result = if heavy(b) {
+                    Ok(Vec::new())
+                } else {
+                    let runs = lists[b].lock().unwrap_or_else(|e| e.into_inner()).take();
+                    stop_check().and_then(|()| {
+                        sort_bucket(
+                            b,
+                            runs.ok_or_else(|| invariant("bucket runs not handed out"))?,
+                        )
+                    })
+                };
+                let failed_here = result.is_err();
+                *slots[b].lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
+                if failed_here {
+                    // The lowest failed bucket's error is the pass's error (stored before the stop).
+                    failed.fetch_min(b, Relaxed);
+                    stop.store(true, Relaxed);
+                }
+                ready.notify_all();
             }
-            if stop.load(Relaxed) {
-                break;
-            }
-            // Heavy buckets are sorted externally by the writer itself.
-            let result = if heavy(b) {
-                Ok(Vec::new())
-            } else {
-                let runs = lists[b].lock().unwrap_or_else(|e| e.into_inner()).take();
-                stop_check().and_then(|()| {
-                    sort_bucket(
-                        b,
-                        runs.ok_or_else(|| invariant("bucket runs not handed out"))?,
-                    )
-                })
-            };
-            if result.is_err() {
-                stop.store(true, Relaxed);
-            }
-            *slots[b].lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
-            ready.notify_all();
         };
         let mut threads = Vec::new();
         for _ in 0..workers.clamp(1, buckets.max(1)) {
@@ -1495,13 +1593,17 @@ pub(crate) fn assemble(
             Ok(())
         };
         let mut write = |bytes: &[u8]| -> Result<()> {
-            let key = sort_key(bytes);
-            if previous.is_some_and(|p| p >= key) {
+            // The merge's check: each triangle record strictly after the previous one.
+            let row = TriangleRecord::decode(&bytes[..TriangleRecord::SIZE]);
+            if previous
+                .as_ref()
+                .is_some_and(|p: &TriangleRecord| p.cmp(&row) != std::cmp::Ordering::Less)
+            {
                 return Err(invariant(
                     "full source provenance projection is not unique strict order",
                 ));
             }
-            previous = Some(key);
+            previous = Some(row);
             writer.push_encoded(bytes)?;
             written += 1;
             if written.is_multiple_of(1024) {
@@ -1536,7 +1638,9 @@ pub(crate) fn assemble(
                     if records != records_of(b) {
                         return Err(invariant("staged runs do not hold their bucket"));
                     }
-                    *files[group_of[b]].lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    if own_file(b) {
+                        *files[group_of[b]].lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    }
                     dispatched.store(b + 1, Relaxed);
                     let mut encoded = vec![0u8; record];
                     for row in sort.finish()? {
@@ -1551,7 +1655,20 @@ pub(crate) fn assemble(
                         break done;
                     }
                     if stop.load(Relaxed) && threads.iter().all(|t| t.is_finished()) {
-                        result = Err(invariant("assembly bucket did not run"));
+                        // Every worker left: this bucket's own result if it came in meanwhile,
+                        // else the failed bucket's error, else (a panic) the joins below.
+                        let own = slots[b].lock().unwrap_or_else(|e| e.into_inner()).take();
+                        if let Some(done) = own {
+                            break done;
+                        }
+                        let f = failed.load(Relaxed);
+                        let theirs = (f < buckets)
+                            .then(|| slots[f].lock().unwrap_or_else(|e| e.into_inner()).take())
+                            .flatten();
+                        result = match theirs {
+                            Some(Err(error)) => Err(error),
+                            _ => Err(invariant("assembly bucket did not run")),
+                        };
                         break 'buckets;
                     }
                     wait(25);
@@ -1587,4 +1704,29 @@ pub(crate) fn assemble(
     }
     progress.end()?;
     Ok((writer.finish()?, report))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A spilled primitive keeps its block caches with at least 31 in 32 local chunks and is
+    /// routed below that, exactly at the boundary.
+    #[test]
+    fn the_route_starts_below_31_in_32_local_chunks() {
+        for (local, chunks, routed) in [
+            (31, 32, false),
+            (30, 32, true),
+            (32, 32, false),
+            (0, 1, true),
+            (1, 1, false),
+            (62, 64, false),
+            (61, 64, true),
+            (969, 1000, false),
+            (968, 1000, true),
+            (0, 0, false),
+        ] {
+            assert_eq!(needs_route(local, chunks), routed, "{local} of {chunks}");
+        }
+    }
 }

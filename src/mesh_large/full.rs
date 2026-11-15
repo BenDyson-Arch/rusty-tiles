@@ -395,9 +395,15 @@ fn scratch_need(
     let run_list = assembly::run_list_bytes(n, layout).ok_or_else(overflow)?;
     let capture = max(&[
         Some(add(stores, routing)?),
-        Some(add(stores, t)?),
+        Some(add(add(stores, t)?, run_list)?),
         Some(add(t, mul(run_list, 3)?)?),
-        add(add(t, t.div_ceil(8))?, full.finish_peak.saturating_sub(t)).ok(),
+        // A heavy bucket sharing a staging group keeps its staged copy while it is sorted:
+        // at most 1/64 of the records (`assembly`'s own-file rule), two run generations.
+        add(
+            add(add(t, t.div_ceil(8))?, full.finish_peak.saturating_sub(t))?,
+            t.div_ceil(32),
+        )
+        .ok(),
     ])?;
     // The retained sequence, written by the assembly.
     let projection_stage = t;
@@ -774,7 +780,7 @@ pub(crate) fn capture_admitted(
         .clone()
         .unwrap_or_else(Scratch::default_parent);
     let volume = crate::spill::inspect_volume(&parent).map_err(|e| super::failure(e.into()))?;
-    let shape = assembly::ScratchShape::of(&source, layout, scan.triangles)
+    let shape = assembly::ScratchShape::of(&source, layout)
         .ok_or_else(|| super::failure(exhausted("assembly scratch arithmetic overflow")))?;
     let need = scratch_need(
         scan,
@@ -788,14 +794,16 @@ pub(crate) fn capture_admitted(
     )
     .map_err(super::failure)?;
     // The assembly's fixed working sets for `workers`, from the sort allowance of `memory`.
-    let assembly_for = |workers: usize, memory: &FullMemoryBound| {
+    // The assembly's working sets for `workers` under `sorts` (its sort configuration and
+    // allowance), with no vertex allowance yet.
+    let assembly_for = |workers: usize, sorts: &TreeConfig, memory: &FullMemoryBound| {
         let plan = AssemblyPlan::fixed(workers, memory.geometry.sort_bytes);
         plan.memory_bytes(
             workers,
             scan.triangles,
             layout,
             config.sort.buffer_bytes,
-            config.sorter(workers),
+            sorts.sorter(workers),
         )
         .map(|bytes| (plan, bytes))
         .ok_or_else(|| super::failure(exhausted("assembly memory arithmetic overflow")))
@@ -812,8 +820,13 @@ pub(crate) fn capture_admitted(
         )
     };
     let one = bound_with(config, 1, need.logical_need_bytes, 0).map_err(super::failure)?;
-    let one = bound_with(config, 1, need.logical_need_bytes, assembly_for(1, &one)?.1)
-        .map_err(super::failure)?;
+    let one = bound_with(
+        config,
+        1,
+        need.logical_need_bytes,
+        assembly_for(1, config, &one)?.1,
+    )
+    .map_err(super::failure)?;
     let jobs = config::plan_jobs(
         config.jobs,
         cores,
@@ -830,7 +843,7 @@ pub(crate) fn capture_admitted(
         .map_err(|_| super::failure(exhausted("full worker count overflow")))?;
     let floor_memory =
         bound_with(config, workers, need.logical_need_bytes, 0).map_err(super::failure)?;
-    let (assembly_plan, assembly_bytes) = assembly_for(workers, &floor_memory)?;
+    let (floor_plan, assembly_bytes) = assembly_for(workers, config, &floor_memory)?;
     let floor_memory = bound_with(config, workers, need.logical_need_bytes, assembly_bytes)
         .map_err(super::failure)?;
     // The floor's resident bound: what capture holds once its sorts have ended (the image
@@ -874,12 +887,14 @@ pub(crate) fn capture_admitted(
         // scratch admission (up front, at a stage's entry or at the texture recheck) refuses
         // a run the floor would admit.
         let disk = grown.within(&need);
-        let memory =
-            bound_with(&capture, workers, grown.logical_need_bytes, assembly_bytes).ok()?;
+        // The assembly under the grown sorts: their allowance and an external sort's size.
+        let memory = bound_with(&capture, workers, grown.logical_need_bytes, 0).ok()?;
+        let (plan, assembly) = assembly_for(workers, &capture, &memory).ok()?;
+        let memory = bound_with(&capture, workers, grown.logical_need_bytes, assembly).ok()?;
         let fits = jobs
             .available_memory_bytes
             .is_some_and(|available| memory.bound_bytes <= available);
-        (disk && fits).then_some((capture, grown, memory))
+        (disk && fits).then_some((capture, grown, memory, plan))
     };
     let loads = capture_sort_loads(scan, config);
     // The producing thread plus its writers stay within the planned workers.
@@ -892,21 +907,22 @@ pub(crate) fn capture_admitted(
         &capture_sort::FAN_INS,
         |c| candidate(c).is_some(),
     );
-    let (capture_config, need, memory) = if sort == config.sort {
-        (config.clone(), need, floor_memory)
+    let (capture_config, need, memory, assembly_plan) = if sort == config.sort {
+        (config.clone(), need, floor_memory, floor_plan)
     } else {
         candidate(sort)
             .ok_or_else(|| super::failure(invariant("capture sort plan does not fit")))?
     };
     let capture_config = &capture_config;
-    // The vertex allowance: what the budget leaves beside the declared bound (the assembly
-    // may also use the sort allowance, unused while it runs), at most every vertex.
+    // The vertex allowance: what the budget leaves beside the declared bound, which already
+    // holds the assembly without it (the assembly may also use the sort allowance, unused
+    // while it runs), at most every vertex. The assembly's steps grow by at most the
+    // allowance, so the bound still fits; it is checked again, and the allowance shrunk by
+    // any excess.
+    let memory_backed = jobs.memory_backed_scratch_bytes;
     let free = match jobs.available_memory_bytes {
         Some(available) => available
-            .saturating_sub(
-                add(memory.bound_bytes, jobs.memory_backed_scratch_bytes)
-                    .map_err(super::failure)?,
-            )
+            .saturating_sub(add(memory.bound_bytes, memory_backed).map_err(super::failure)?)
             .saturating_add(
                 memory
                     .geometry
@@ -915,34 +931,58 @@ pub(crate) fn capture_admitted(
             ),
         None => assembly::DEFAULT_VERTEX_ALLOWANCE,
     };
-    let assembly_plan = assembly_plan.with_vertex_allowance(free.min(shape.vertex_bytes));
-    #[cfg(test)]
-    let assembly_plan = config.test_assembly.unwrap_or(assembly_plan);
-    let assembly_bytes = assembly_plan
-        .memory_bytes(
+    let with_allowance = |bytes: u64| -> Result<(AssemblyPlan, FullMemoryBound), JobFailure> {
+        let plan = assembly_plan.with_vertex_allowance(bytes);
+        #[cfg(test)]
+        let plan = config.test_assembly.unwrap_or(plan);
+        let assembly_bytes = plan
+            .memory_bytes(
+                workers,
+                scan.triangles,
+                layout,
+                config.sort.buffer_bytes,
+                capture_config.sorter(workers),
+            )
+            .ok_or_else(|| super::failure(exhausted("assembly memory arithmetic overflow")))?;
+        let memory = bound_with(
+            capture_config,
             workers,
-            scan.triangles,
-            layout,
-            config.sort.buffer_bytes,
-            capture_config.sorter(workers),
+            need.logical_need_bytes,
+            assembly_bytes,
         )
-        .ok_or_else(|| super::failure(exhausted("assembly memory arithmetic overflow")))?;
-    let memory = bound_with(
-        capture_config,
-        workers,
-        need.logical_need_bytes,
-        assembly_bytes,
-    )
-    .map_err(super::failure)?;
-    // One source frame per worker for the assembly's decode tasks, each resolved like the
-    // first (resolution is deterministic).
-    let mut frames = vec![std::sync::Mutex::new(frame)];
-    if let Some(spec) = &config.source_crs {
-        for _ in 1..workers {
-            frames.push(std::sync::Mutex::new(
-                SourceFrame::resolve(spec, source_bounds).map_err(super::failure)?,
-            ));
+        .map_err(super::failure)?;
+        Ok((plan, memory))
+    };
+    let mut allowance = free.min(shape.vertex_bytes);
+    let (mut assembly_plan, mut memory) = with_allowance(allowance)?;
+    // A test's own plan may be deliberately extreme (huge caches); only derived plans are
+    // held to the budget.
+    #[cfg(test)]
+    let checked = config.test_assembly.is_none();
+    #[cfg(not(test))]
+    let checked = true;
+    if let Some(available) = jobs.available_memory_bytes.filter(|_| checked) {
+        let excess = add(memory.bound_bytes, memory_backed)
+            .map_err(super::failure)?
+            .saturating_sub(available);
+        if excess > 0 {
+            allowance = allowance.saturating_sub(excess);
+            (assembly_plan, memory) = with_allowance(allowance)?;
         }
+        if add(memory.bound_bytes, memory_backed).map_err(super::failure)? > available {
+            return Err(super::failure(exhausted(
+                "full capture resident bound with the assembly does not fit available memory",
+            )));
+        }
+    }
+    // One source frame per worker for the assembly's decode tasks, each resolved like the
+    // first (resolution is deterministic), so decode tasks never wait for one another.
+    let mut frames = vec![std::sync::Mutex::new(frame)];
+    for _ in 1..workers {
+        frames.push(std::sync::Mutex::new(match &config.source_crs {
+            None => SourceFrame::Local,
+            Some(spec) => SourceFrame::resolve(spec, source_bounds).map_err(super::failure)?,
+        }));
     }
     let frames = assembly::Frames(frames);
     // Image admission decodes beside capture's resident bound, within the declared decoder
@@ -2271,16 +2311,17 @@ pub(super) mod tests {
         }
         assert_eq!(scratch.live_bytes(), 0);
     }
-    /// Indexed grids of `side` quads per primitive (POSITION only), one mesh and node each;
-    /// a `shuffled` primitive stores its vertices in a seeded random order, its indices
-    /// remapped, so its corners have no index locality.
-    fn indexed_grids(parent: &Path, primitives: &[(usize, bool)]) -> PathBuf {
+    /// Indexed grids of `side` quads per primitive, one mesh and node each: POSITION, and with
+    /// `attributes` also NORMAL, TEXCOORD_0 and COLOR_0 per vertex. A `shuffled` primitive
+    /// stores its vertices in a seeded random order, its indices remapped, so its corners have
+    /// no index locality.
+    fn indexed_grids(parent: &Path, primitives: &[(usize, bool, bool)]) -> PathBuf {
         fs::create_dir_all(parent).unwrap();
         let mut bytes = Vec::new();
         let (mut views, mut accessors, mut meshes, mut nodes) =
             (Vec::new(), Vec::new(), Vec::new(), Vec::new());
         let mut state = 0x9e37_79b9_7f4a_7c15u64;
-        for (index, &(side, shuffled)) in primitives.iter().enumerate() {
+        for (index, &(side, shuffled, attributes)) in primitives.iter().enumerate() {
             let row = side + 1;
             let count = row * row;
             let mut order: Vec<usize> = (0..count).collect();
@@ -2330,9 +2371,38 @@ pub(super) mod tests {
                 serde_json::json!({"bufferView":views.len() - 1,"componentType":5125,
                 "count":indices.len(),"type":"SCALAR"}),
             );
+            let mut roles = serde_json::json!({"POSITION":accessors.len() - 2});
+            let index_accessor = accessors.len() - 1;
+            if attributes {
+                let mut normals = vec![[0f32; 3]; count];
+                let mut uvs = vec![[0f32; 2]; count];
+                let mut colors = vec![[0f32; 4]; count];
+                for v in 0..count {
+                    let (x, y) = ((v % row) as f32, (v / row) as f32);
+                    let n = [(v % 3) as f32 - 1., 1., (v % 2) as f32];
+                    let length = n.iter().map(|c| c * c).sum::<f32>().sqrt();
+                    normals[order[v]] = n.map(|c| c / length);
+                    uvs[order[v]] = [x / side as f32, y / side as f32];
+                    colors[order[v]] = [(v % 5) as f32 / 4., 0.5, y / side as f32, 1.];
+                }
+                let mut add = |data: Vec<u8>, kind: &str| {
+                    let start = bytes.len();
+                    let length = data.len();
+                    bytes.extend(data);
+                    views.push(
+                        serde_json::json!({"buffer":0,"byteOffset":start,"byteLength":length}),
+                    );
+                    accessors.push(serde_json::json!({"bufferView":views.len() - 1,
+                        "componentType":5126,"count":count,"type":kind}));
+                    accessors.len() - 1
+                };
+                let flat = |v: &[f32]| v.iter().flat_map(|c| c.to_le_bytes()).collect::<Vec<u8>>();
+                roles["NORMAL"] = add(flat(normals.as_flattened()), "VEC3").into();
+                roles["TEXCOORD_0"] = add(flat(uvs.as_flattened()), "VEC2").into();
+                roles["COLOR_0"] = add(flat(colors.as_flattened()), "VEC4").into();
+            }
             meshes.push(
-                serde_json::json!({"primitives":[{"attributes":{"POSITION":accessors.len() - 2},
-                "indices":accessors.len() - 1}]}),
+                serde_json::json!({"primitives":[{"attributes":roles,"indices":index_accessor}]}),
             );
             nodes.push(serde_json::json!({"mesh":index}));
         }
@@ -2399,7 +2469,7 @@ pub(super) mod tests {
     #[test]
     fn routed_corners_capture_identical_sequences() {
         let dir = tempfile::tempdir().unwrap();
-        let input = indexed_grids(&dir.path().join("source"), &[(40, true)]);
+        let input = indexed_grids(&dir.path().join("source"), &[(40, true, false)]);
         let (rows, depths, report) = capture_planned(&input, &dir.path().join("memory"), 1, None);
         assert_eq!(
             (report.spilled_primitives, report.routed_primitives),
@@ -2442,7 +2512,10 @@ pub(super) mod tests {
     #[test]
     fn mixed_routes_capture_identical_sequences() {
         let dir = tempfile::tempdir().unwrap();
-        let input = indexed_grids(&dir.path().join("source"), &[(40, true), (3, false)]);
+        let input = indexed_grids(
+            &dir.path().join("source"),
+            &[(40, true, false), (3, false, false)],
+        );
         let (rows, depths, _) = capture_planned(&input, &dir.path().join("memory"), 2, None);
         // One vertex per block (64-byte buffers): the ordered 16-vertex grid touches at most
         // 16 blocks per chunk, the shuffled one far more.
@@ -2457,13 +2530,74 @@ pub(super) mod tests {
         assert_eq!(other_depths, depths);
     }
 
+    /// Routed corners carry every attribute of the layout (NORMAL, TEXCOORD_0, COLOR_0): the
+    /// records equal the in-memory and block-cache captures', with a routed and a cached
+    /// primitive in one capture.
+    #[test]
+    fn routed_corners_with_attributes_capture_identical_sequences() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = indexed_grids(
+            &dir.path().join("source"),
+            &[(40, true, true), (3, false, true)],
+        );
+        let (rows, depths, _) = capture_planned(&input, &dir.path().join("memory"), 2, None);
+        for (cache_blocks, routed) in [(32, 1), (1 << 20, 0)] {
+            let parent = dir.path().join(format!("spilled-{cache_blocks}"));
+            let (other, other_depths, report) =
+                capture_planned(&input, &parent, 2, Some(spilled(cache_blocks)));
+            assert_eq!(report.routed_primitives, routed, "{report:?}");
+            assert!(other == rows, "{cache_blocks} cache blocks");
+            assert_eq!(other_depths, depths);
+        }
+    }
+
+    /// A failure inside the assembly's workers is the capture's error, not a stand-in: a
+    /// staged write that fails while distributing, and a bucket sort that fails while other
+    /// buckets are sorted. The scratch is removed.
+    #[test]
+    fn assembly_failures_surface_as_themselves() {
+        use super::super::assembly::{Fault, FAULTS};
+        for fault in [Fault::Staging, Fault::Bucket] {
+            let dir = tempfile::tempdir().unwrap();
+            let input = indexed_grids(&dir.path().join("source"), &[(40, false, false)]);
+            let parent = dir.path().join("scratch");
+            fs::create_dir_all(&parent).unwrap();
+            FAULTS.lock().unwrap().push((parent.clone(), fault));
+            let mut config = config(&parent);
+            config.sort.buffer_bytes = 64;
+            config.jobs = Jobs::Fixed(NonZeroUsize::new(3).unwrap());
+            config.test_assembly = Some(super::super::assembly::AssemblyPlan {
+                bucket_bytes: 16 << 10,
+                ..spilled(1 << 20)
+            });
+            let result = capture(&input, &config, &mut || Ok(()));
+            FAULTS.lock().unwrap().retain(|(dir, _)| *dir != parent);
+            let error = match result {
+                Ok(_) => panic!("{fault:?}: the injected failure was lost"),
+                Err(failed) => failed.error,
+            };
+            assert_eq!(
+                error.kind(),
+                JobErrorKind::ResourceLimit,
+                "{fault:?}: {error}"
+            );
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("injected {fault:?} failure")),
+                "{error}"
+            );
+            assert_eq!(fs::read_dir(&parent).unwrap().count(), 0);
+        }
+    }
+
     /// A stop request while a primitive's corners are routed ends the capture as cancelled
     /// and removes its scratch.
     #[test]
     fn a_stop_during_routed_sorts_is_honoured() {
         use super::super::assembly::ROUTING;
         let dir = tempfile::tempdir().unwrap();
-        let input = indexed_grids(&dir.path().join("source"), &[(60, true)]);
+        let input = indexed_grids(&dir.path().join("source"), &[(60, true, false)]);
         let parent = dir.path().join("scratch");
         fs::create_dir_all(&parent).unwrap();
         let mut config = config(&parent);
