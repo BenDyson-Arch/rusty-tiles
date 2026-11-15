@@ -1965,7 +1965,7 @@ pub(super) mod tests {
         rows: &[(u64, [[f32; 3]; 3])],
         leaf: u64,
         jobs: usize,
-    ) -> tree::TreeStats {
+    ) -> (tree::TreeStats, Vec<usize>) {
         let scratch = Scratch::create(None, 0).unwrap();
         let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(leaf);
         config.sort.buffer_bytes = 64;
@@ -2004,6 +2004,7 @@ pub(super) mod tests {
             .unwrap()
             .map(|w| w.map(|w| (w.position, w.depth)).unwrap())
             .collect();
+        let (levels, _) = super::super::corners::grid_levels(&nodes);
         let retained = RetainedTree {
             nodes,
             stats: stats.clone(),
@@ -2026,7 +2027,7 @@ pub(super) mod tests {
                 );
             }
         }
-        stats
+        (stats, levels)
     }
 
     /// A position written as -0.0 is a different (f32-bit) position from +0.0 for the join,
@@ -2041,7 +2042,7 @@ pub(super) mod tests {
             rows.push((i << 50, [[x, zero, 0.], [x + 1., 0., zero], [x, 1., 0.]]));
         }
         for jobs in [1, 3] {
-            let stats = assert_join_matches_weld(&rows, 4, jobs);
+            let (stats, _) = assert_join_matches_weld(&rows, 4, jobs);
             assert!(stats.leaves > 10);
         }
     }
@@ -2065,8 +2066,13 @@ pub(super) mod tests {
             ));
         }
         for (leaf, jobs) in [(3, 1), (3, 4), (8, 2)] {
-            let stats = assert_join_matches_weld(&rows, leaf, jobs);
+            let (stats, levels) = assert_join_matches_weld(&rows, leaf, jobs);
             assert!(stats.leaves > 50, "{stats:?}");
+            // The huge leaf's box is listed on a coarser grid level.
+            assert!(
+                levels.len() > 1 && levels[1..].iter().sum::<usize>() > 0,
+                "{levels:?}"
+            );
         }
     }
 

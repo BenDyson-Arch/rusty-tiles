@@ -30,16 +30,45 @@ const MASK_WORDS: usize = SIDE * SIDE * SIDE / 64;
 const CHUNK_TRIANGLES: u64 = 1 << 14;
 
 /// The most the join's chunk tasks hold at once beside its sorts, for `jobs` workers and
-/// leaves of at most `leaf_triangles`: one wave of one chunk per worker, each holding its
-/// candidates (every corner of the chunk at worst), one leaf's triangles and their corners.
+/// leaves of at most `leaf_triangles`: one wave of one chunk per worker, each holding one
+/// leaf's triangles and their corners and either its candidates (every corner of the chunk
+/// at worst) or, in the mask pass, a mask per leaf (a leaf per triangle at worst).
 pub(crate) fn wave_bytes(jobs: usize, leaf_triangles: u64) -> Option<u64> {
     let chunk = CHUNK_TRIANGLES.checked_add(leaf_triangles)?;
     let candidates = chunk.checked_mul(3 * std::mem::size_of::<Candidate>() as u64)?;
+    let masks = chunk.checked_mul(std::mem::size_of::<[u64; MASK_WORDS]>() as u64)?;
     let leaf = leaf_triangles.checked_mul(
         std::mem::size_of::<FullTriangle>() as u64
             + 3 * std::mem::size_of::<([u32; 3], u64, u8)>() as u64,
     )?;
-    (jobs.max(1) as u64).checked_mul(candidates.checked_add(leaf)?)
+    (jobs.max(1) as u64).checked_mul(candidates.max(masks).checked_add(leaf)?)
+}
+
+/// Test seam: how many leaves of the tree `nodes` each grid level lists, and how many are
+/// tested for every position.
+#[cfg(test)]
+pub(crate) fn grid_levels(nodes: &Sequence<NodeRecord>) -> (Vec<usize>, usize) {
+    let leaves: Vec<Leaf> = nodes
+        .reader()
+        .unwrap()
+        .map(Result::unwrap)
+        .filter(|n| n.kind == NodeKind::Leaf)
+        .map(|n| Leaf {
+            first: n.first,
+            end: n.end,
+            depth: n.depth() as u8,
+            bounds: n.bounds,
+        })
+        .collect();
+    let grid = Grid::new(&leaves);
+    let mut listed = vec![0; grid.levels.len()];
+    for (i, level) in grid.levels.iter().enumerate() {
+        let mut ids = level.ids.clone();
+        ids.sort_unstable();
+        ids.dedup();
+        listed[i] = ids.len();
+    }
+    (listed, grid.huge.len())
 }
 /// A leaf box spanning more grid cells than this is tested for every position instead.
 const LARGE_SPAN: usize = 64;
