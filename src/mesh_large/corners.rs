@@ -25,9 +25,22 @@ use rayon::prelude::*;
 /// Occupancy mask resolution per axis of a leaf's box.
 const SIDE: usize = 16;
 const MASK_WORDS: usize = SIDE * SIDE * SIDE / 64;
-/// Leaves are read in chunks of at most about this many triangles, one chunk per task (and
-/// at least eight chunks per worker when the triangles allow).
-const CHUNK_TRIANGLES: u64 = 1 << 16;
+/// Leaves are read in chunks of at most about this many triangles (plus one leaf), one chunk
+/// per task, at least eight chunks per worker when the triangles allow.
+const CHUNK_TRIANGLES: u64 = 1 << 14;
+
+/// The most the join's chunk tasks hold at once beside its sorts, for `jobs` workers and
+/// leaves of at most `leaf_triangles`: one wave of one chunk per worker, each holding its
+/// candidates (every corner of the chunk at worst), one leaf's triangles and their corners.
+pub(crate) fn wave_bytes(jobs: usize, leaf_triangles: u64) -> Option<u64> {
+    let chunk = CHUNK_TRIANGLES.checked_add(leaf_triangles)?;
+    let candidates = chunk.checked_mul(3 * std::mem::size_of::<Candidate>() as u64)?;
+    let leaf = leaf_triangles.checked_mul(
+        std::mem::size_of::<FullTriangle>() as u64
+            + 3 * std::mem::size_of::<([u32; 3], u64, u8)>() as u64,
+    )?;
+    (jobs.max(1) as u64).checked_mul(candidates.checked_add(leaf)?)
+}
 /// A leaf box spanning more grid cells than this is tested for every position instead.
 const LARGE_SPAN: usize = 64;
 
@@ -78,16 +91,25 @@ fn mask_bit(bounds: &Bounds, p: [f32; 3]) -> Option<usize> {
     Some(cell[0] + SIDE * (cell[1] + SIDE * cell[2]))
 }
 
-/// A uniform grid over the leaves' boxes, listing for each cell the leaves whose box meets
-/// it; a box spanning more than [`LARGE_SPAN`] cells is listed once, in `large`.
+/// Uniform grids over the leaves' boxes, each eight times coarser than the one below: a box
+/// is listed in each cell of the finest level where it spans at most [`LARGE_SPAN`] cells, and
+/// a box too large for every level is listed once, in `huge`, and tested for every position.
 struct Grid {
+    levels: Vec<Level>,
+    huge: Vec<u32>,
+}
+
+/// One grid level: for each cell, the leaves whose box meets it.
+struct Level {
     origin: [f64; 3],
     side: f64,
     dims: [usize; 3],
     offsets: Vec<usize>,
     ids: Vec<u32>,
-    large: Vec<u32>,
 }
+
+/// Grid levels above the finest.
+const COARSER_LEVELS: usize = 2;
 
 impl Grid {
     fn new(leaves: &[Leaf]) -> Self {
@@ -117,28 +139,63 @@ impl Grid {
             }
             side = smaller;
         }
-        let dims = dims_at(side);
-        let mut grid = Self {
+        let mut members: Vec<u32> = (0..leaves.len() as u32).collect();
+        let mut levels = Vec::new();
+        for _ in 0..=COARSER_LEVELS {
+            if members.is_empty() {
+                break;
+            }
+            let (level, larger) = Level::new(leaves, &members, origin, side, dims_at(side));
+            levels.push(level);
+            members = larger;
+            side *= 8.;
+        }
+        Self {
+            levels,
+            huge: members,
+        }
+    }
+
+    /// The leaves whose box may hold `p`.
+    fn near(&self, p: [f32; 3]) -> impl Iterator<Item = u32> + '_ {
+        self.levels
+            .iter()
+            .flat_map(move |level| level.near(p))
+            .chain(self.huge.iter().copied())
+    }
+}
+
+impl Level {
+    /// The level over `members` of `leaves`, and the members whose box spans more than
+    /// [`LARGE_SPAN`] of its cells (left for coarser levels).
+    fn new(
+        leaves: &[Leaf],
+        members: &[u32],
+        origin: [f64; 3],
+        side: f64,
+        dims: [usize; 3],
+    ) -> (Self, Vec<u32>) {
+        let cells = dims.iter().product::<usize>();
+        let mut level = Self {
             origin,
             side,
             dims,
-            offsets: vec![0; cells(dims) + 1],
+            offsets: vec![0; cells + 1],
             ids: Vec::new(),
-            large: Vec::new(),
         };
-        let mut spans = Vec::with_capacity(leaves.len());
-        for (i, leaf) in leaves.iter().enumerate() {
-            let (lo, hi) = (grid.cell(leaf.bounds.min), grid.cell(leaf.bounds.max));
+        let mut placed = Vec::with_capacity(members.len());
+        let mut larger = Vec::new();
+        for &i in members {
+            let bounds = &leaves[i as usize].bounds;
+            let (lo, hi) = (level.cell(bounds.min), level.cell(bounds.max));
             let span: usize = (0..3).map(|a| hi[a] - lo[a] + 1).product();
             if span > LARGE_SPAN {
-                grid.large.push(i as u32);
-                spans.push(None);
+                larger.push(i);
             } else {
-                spans.push(Some((lo, hi)));
+                placed.push((i, lo, hi));
             }
         }
-        let each = |span: ([usize; 3], [usize; 3]), f: &mut dyn FnMut(usize)| {
-            let (lo, hi) = span;
+        let each = |lo: [usize; 3], hi: [usize; 3], f: &mut dyn FnMut(usize)| {
             for z in lo[2]..=hi[2] {
                 for y in lo[1]..=hi[1] {
                     for x in lo[0]..=hi[0] {
@@ -147,27 +204,25 @@ impl Grid {
                 }
             }
         };
-        for span in spans.iter().flatten() {
-            each(*span, &mut |c| grid.offsets[c + 1] += 1);
+        for &(_, lo, hi) in &placed {
+            each(lo, hi, &mut |c| level.offsets[c + 1] += 1);
         }
-        for c in 0..cells(dims) {
-            grid.offsets[c + 1] += grid.offsets[c];
+        for c in 0..cells {
+            level.offsets[c + 1] += level.offsets[c];
         }
-        let mut fill = grid.offsets.clone();
-        grid.ids = vec![0; grid.offsets[cells(dims)]];
-        for (i, span) in spans.iter().enumerate() {
-            if let Some(span) = span {
-                each(*span, &mut |c| {
-                    grid.ids[fill[c]] = i as u32;
-                    fill[c] += 1;
-                });
-            }
+        let mut fill = level.offsets.clone();
+        level.ids = vec![0; level.offsets[cells]];
+        for &(i, lo, hi) in &placed {
+            each(lo, hi, &mut |c| {
+                level.ids[fill[c]] = i;
+                fill[c] += 1;
+            });
         }
-        grid
+        (level, larger)
     }
 
-    /// The grid cell of `p`, clamped to the grid. Monotone in each coordinate, so a point of
-    /// a box lies in a cell of the box's span.
+    /// The cell of `p`, clamped to the level. Monotone in each coordinate, so a point of a box
+    /// lies in a cell of the box's span.
     fn cell(&self, p: [f32; 3]) -> [usize; 3] {
         std::array::from_fn(|a| {
             let x = ((f64::from(p[a]) - self.origin[a]) / self.side).floor();
@@ -175,13 +230,11 @@ impl Grid {
         })
     }
 
-    /// The leaves whose box may hold `p`.
     fn near(&self, p: [f32; 3]) -> impl Iterator<Item = u32> + '_ {
         let [x, y, z] = self.cell(p);
         let c = x + self.dims[0] * (y + self.dims[1] * z);
         self.ids[self.offsets[c]..self.offsets[c + 1]]
             .iter()
-            .chain(&self.large)
             .copied()
     }
 }
@@ -349,7 +402,8 @@ pub(super) fn corner_depths<T: Corners>(
         .map_err(|e| JobError::new(JobErrorKind::ResourceLimit, format!("corner pool: {e}")))?;
     let size = (count / (jobs.max(1) as u64 * 8)).clamp(1, CHUNK_TRIANGLES);
     let chunks = chunks(&leaves, size);
-    let wave = jobs.max(1) * 2;
+    // One chunk per worker per wave ([`wave_bytes`]).
+    let wave = jobs.max(1);
     let buffer = config.sort.buffer_bytes;
     // Reads a chunk's leaves, one leaf's triangles at a time, checking the run's stop.
     let read =
@@ -596,7 +650,19 @@ mod tests {
             ..leaves[0]
         });
         let grid = Grid::new(&leaves);
-        assert!(grid.offsets.len() <= leaves.len() * 8 + 2);
+        // The finest level has about four cells per leaf; coarser ones fewer.
+        assert!(grid.levels[0].offsets.len() <= leaves.len() * 8 + 2);
+        assert!(grid
+            .levels
+            .iter()
+            .skip(1)
+            .all(|l| l.offsets.len() <= grid.levels[0].offsets.len()));
+        // The eight 0.9-wide boxes are too wide for the finest level but not for every level.
+        assert!(
+            grid.levels.len() > 1 && grid.huge.len() < 8,
+            "{}",
+            grid.huge.len()
+        );
         for _ in 0..20_000 {
             let p = [next() * 1.2 - 0.1, next() * 1.2 - 0.1, next() * 1.2 - 0.1];
             let holders: Vec<u32> = (0..leaves.len() as u32)

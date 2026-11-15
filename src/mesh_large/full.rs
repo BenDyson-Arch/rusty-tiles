@@ -124,6 +124,8 @@ pub(crate) struct FullMemoryBound {
     pub chunk_descriptor_bytes: u64,
     /// Block indexes of the compressed retained sequences (full triangles, corner depths).
     pub block_index_bytes: u64,
+    /// The corner-depth join's chunk tasks beside its sorts (`corners::wave_bytes`).
+    pub corner_join_bytes: u64,
     pub bound_bytes: u64,
 }
 impl FullMemoryBound {
@@ -617,13 +619,15 @@ fn memory_bound(
     // indexes stay resident with the capture (both hold at most the spill's bytes).
     let block_index_bytes =
         crate::spill::block_index_memory_bound(spill_bytes, config.sort.buffer_bytes, 2);
+    let corner_join_bytes = super::corners::wave_bytes(jobs, config.leaf_triangles())
+        .ok_or_else(|| exhausted("corner join memory arithmetic overflow"))?;
     let bound_bytes = add(
         add(
             add(
                 add(geometry.bound_bytes, owned_metadata_bytes)?,
                 chunk_descriptor_bytes,
             )?,
-            block_index_bytes,
+            add(block_index_bytes, corner_join_bytes)?,
         )?,
         add(DECODER_ALLOWANCE, PLANNING_ALLOWANCE)?,
     )?;
@@ -632,6 +636,7 @@ fn memory_bound(
         owned_metadata_bytes,
         chunk_descriptor_bytes,
         block_index_bytes,
+        corner_join_bytes,
         decoder_allowance_bytes: DECODER_ALLOWANCE,
         planning_allowance_bytes: PLANNING_ALLOWANCE,
         bound_bytes,
@@ -1953,6 +1958,118 @@ pub(super) mod tests {
         }
         assert_eq!(scratch.live_bytes(), 0);
     }
+    /// Joins the corner depths of `rows` (Morton key, positions) under leaves of `leaf`
+    /// triangles on `jobs` workers and checks them against H1's weld table over the same tree.
+    /// Returns the tree's statistics.
+    fn assert_join_matches_weld(
+        rows: &[(u64, [[f32; 3]; 3])],
+        leaf: u64,
+        jobs: usize,
+    ) -> tree::TreeStats {
+        let scratch = Scratch::create(None, 0).unwrap();
+        let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(leaf);
+        config.sort.buffer_bytes = 64;
+        let mut sorter = ExternalSorter::new(&scratch, config.sorter(1)).unwrap();
+        for (i, (key, positions)) in rows.iter().enumerate() {
+            sorter
+                .push(TriangleRecord {
+                    key: *key,
+                    source: super::super::records::Provenance {
+                        triangle: i as u64,
+                        ..Default::default()
+                    },
+                    vertices: [0, 1, 2],
+                    positions: *positions,
+                    bytes: 56,
+                    degenerate: false,
+                })
+                .unwrap();
+        }
+        let tree::TreeOutput {
+            triangles,
+            nodes,
+            weld_depths,
+            stats,
+        } = tree::build(
+            &scratch,
+            sorter.finish().unwrap(),
+            &config,
+            1,
+            None,
+            &mut || Ok(()),
+        )
+        .unwrap();
+        let weld: std::collections::BTreeMap<_, _> = weld_depths
+            .reader()
+            .unwrap()
+            .map(|w| w.map(|w| (w.position, w.depth)).unwrap())
+            .collect();
+        let retained = RetainedTree {
+            nodes,
+            stats: stats.clone(),
+        };
+        let depths = join_corner_depths(
+            &scratch,
+            &retained,
+            &triangles,
+            &config,
+            jobs,
+            StepProgress::silent(),
+        )
+        .unwrap();
+        for (t, d) in triangles.reader().unwrap().zip(depths.reader().unwrap()) {
+            let (t, d) = (t.unwrap(), d.unwrap());
+            for corner in 0..3 {
+                assert_eq!(
+                    d.depths[corner],
+                    weld[&t.positions[corner].map(f32::to_bits)]
+                );
+            }
+        }
+        stats
+    }
+
+    /// A position written as -0.0 is a different (f32-bit) position from +0.0 for the join,
+    /// as for the weld table. Capture canonicalises zeros before both, so this pins the
+    /// join's own key.
+    #[test]
+    fn corner_join_keys_positions_by_their_bits() {
+        let mut rows = Vec::new();
+        for i in 0..200u64 {
+            let x = (i % 10) as f32;
+            let zero = if i % 2 == 0 { 0. } else { -0. };
+            rows.push((i << 50, [[x, zero, 0.], [x + 1., 0., zero], [x, 1., 0.]]));
+        }
+        for jobs in [1, 3] {
+            let stats = assert_join_matches_weld(&rows, 4, jobs);
+            assert!(stats.leaves > 10);
+        }
+    }
+
+    /// One leaf of huge triangles (its box spans the whole scene, so the finest grid level
+    /// cannot list it) among many small leaves sharing its corners.
+    #[test]
+    fn corner_join_with_one_huge_leaf_among_small_ones() {
+        let mut rows = Vec::new();
+        // Small triangles on a 30 x 30 grid, keys spread over the low key range.
+        for i in 0..900u64 {
+            let (x, y) = ((i % 30) as f32, (i / 30) as f32);
+            rows.push((i << 40, [[x, y, 0.], [x + 1., y, 0.], [x, y + 1., 0.]]));
+        }
+        // Huge triangles corner to corner, under keys of their own, sharing grid corners.
+        for i in 0..6u64 {
+            let o = i as f32;
+            rows.push((
+                (7 << 60) + i,
+                [[o, 0., 0.], [30., 30. - o, 0.], [0., 30., o]],
+            ));
+        }
+        for (leaf, jobs) in [(3, 1), (3, 4), (8, 2)] {
+            let stats = assert_join_matches_weld(&rows, leaf, jobs);
+            assert!(stats.leaves > 50, "{stats:?}");
+        }
+    }
+
     /// The corner join over adversarial trees equals H1's weld table and an in-memory oracle
     /// for every worker count: a point shared by corners in nearly every leaf, slivers whose
     /// corners lie in far leaves' boxes, coincident triangles (one key: degenerate runs and
