@@ -368,6 +368,35 @@ fn mesh_tree_subtrees_stop() {
     assert_stopped(&run, &work.scratch(), &work.out());
 }
 
+/// Capture's corner-depth pass reads its leaves on worker threads; each checks the run's
+/// stop before every leaf, and the calling thread checks between waves of chunks.
+#[test]
+fn mesh_corner_candidates_stop() {
+    let work = Work::new();
+    let input = work.path("grid.glb");
+    fs::write(&input, support::textured_grid_glb(200)).unwrap();
+    let output = work.out().join("grid.3tz");
+    let run = stop_in(
+        &os(&[
+            &"mesh",
+            &"-i",
+            &input,
+            &"-o",
+            &output,
+            &"--jobs",
+            &"2",
+            &"--scratch-dir",
+            &work.scratch(),
+        ]),
+        &[
+            ("RUSTY_TILES_TEST_PACE", "mesh.corner-candidates"),
+            ("RUSTY_TILES_TEST_PACE_US", "1000000"),
+        ],
+        "mesh.corner-candidates",
+    );
+    assert_stopped(&run, &work.scratch(), &work.out());
+}
+
 /// A KTX2 page encode cannot be interrupted (minutes at the ladder's highest efforts). The
 /// CLI's backstop removes the run's temporary paths and exits with the signal's status once
 /// the stop has not finished in time; here the encode never returns.

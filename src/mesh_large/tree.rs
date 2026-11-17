@@ -97,17 +97,17 @@ pub(crate) struct TreeOutput {
 
 /// The tree a full capture retains for leaves and coarse levels. It stores no triangles: it is
 /// built over the rank-ordered full-triangle sequence ([`build_ranked`]), which embeds every
-/// [`TriangleRecord`] field and which every later stage reads.
+/// [`TriangleRecord`] field and which every later stage reads. It has no weld table: capture
+/// joins corner depths over the leaves directly (`corners`).
 pub(crate) struct RetainedTree {
     /// Preorder, sorted by (first rank, depth).
     pub nodes: Sequence<NodeRecord>,
-    pub weld_depths: Sequence<WeldDepth>,
     pub stats: TreeStats,
 }
 
-/// Rank-ordered triangles that can be read from the first rank any number of times: the cell
-/// pass reads them once and the weld pass again. H1 builds over the copy it stores; full
-/// capture builds over its retained full-triangle sequence and stores no projection.
+/// Rank-ordered triangles that can be read from the first rank any number of times: H1's weld
+/// pass rereads the copy it stores; full capture builds over its retained full-triangle
+/// sequence and stores no projection.
 pub(crate) trait RankedTriangles: Sync {
     fn ranked(&self) -> Result<RankedReader<'_>, JobError>;
     /// Ranks `[first, end)` only.
@@ -469,19 +469,45 @@ pub(crate) fn build(
 ) -> Result<TreeOutput, JobError> {
     let stored = SequenceWriter::new(scratch, "triangles", config.sort.buffer_bytes)?;
     let mut input = triangles.map(|row| row.map_err(Into::into));
-    let (triangles, nodes, weld_depths, stats) = build_in(
+    let (triangles, nodes, root_bytes, mut stats) = build_in(
         scratch,
         &mut input,
         Some(stored),
         None,
         config,
         jobs,
-        weld_stage_need_bytes,
         None,
         check,
     )?;
+    let triangles = triangles.ok_or_else(|| invalid("H1 tree stored no triangles"))?;
+    // Stage-entry recheck of the weld pass: the caller's declared working set, else H1's
+    // own whole need.
+    let stage_need = match weld_stage_need_bytes {
+        Some(need) => need,
+        None => super::config::scratch_need(
+            stats.triangles,
+            root_bytes,
+            config,
+            scratch.allocation_unit_bytes(),
+        )
+        .ok_or_else(|| {
+            JobError::new(JobErrorKind::ResourceLimit, "H1 scratch bound exceeds u64")
+        })?,
+    };
+    super::config::preflight_remaining(scratch, stage_need)?;
+    let weld_depths = vertex_depths(
+        scratch,
+        &triangles,
+        stats.triangles,
+        &nodes,
+        config,
+        jobs,
+        check,
+    )?;
+    stats.welded_vertices = weld_depths.len();
+    check()?;
     Ok(TreeOutput {
-        triangles: triangles.ok_or_else(|| invalid("H1 tree stored no triangles"))?,
+        triangles,
         nodes,
         weld_depths,
         stats,
@@ -489,34 +515,28 @@ pub(crate) fn build(
 }
 
 /// The tree over `ranked`, which must be in strict Morton/provenance order (checked); no
-/// copy of the triangles is stored. `observer` receives both sorts' checkpoints. With more
-/// than one job, the cell pass runs as parallel subtrees ([`parallel_cells`]).
+/// copy of the triangles is stored. `observer` receives the node sort's checkpoints. With
+/// more than one job, the cell pass runs as parallel subtrees ([`parallel_cells`]).
 pub(crate) fn build_ranked(
     scratch: &Scratch,
     ranked: &dyn RankedTriangles,
     config: &TreeConfig,
     jobs: usize,
-    weld_stage_need_bytes: Option<u64>,
     observer: Option<&dyn SortObserver>,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<RetainedTree, JobError> {
     let mut input = ranked.ranked()?;
-    let (_, nodes, weld_depths, stats) = build_in(
+    let (_, nodes, _, stats) = build_in(
         scratch,
         &mut input,
         None,
         Some(ranked),
         config,
         jobs,
-        weld_stage_need_bytes,
         observer,
         check,
     )?;
-    Ok(RetainedTree {
-        nodes,
-        weld_depths,
-        stats,
-    })
+    Ok(RetainedTree { nodes, stats })
 }
 
 fn observe<'s, T: Record>(
@@ -529,14 +549,16 @@ fn observe<'s, T: Record>(
     }
 }
 
+/// The stored triangles (when asked for), the ordered nodes, the root's payload bytes and the
+/// statistics.
 type Built = (
     Option<Sequence<TriangleRecord>>,
     Sequence<NodeRecord>,
-    Sequence<WeldDepth>,
+    u64,
     TreeStats,
 );
-/// Cells over `triangles`, written to `stored` when given; the weld pass then rereads
-/// `stored`, or `ranked` (the same triangles) when nothing is stored.
+/// Cells over `triangles`, written to `stored` when given. Over `ranked` (the same
+/// triangles, re-readable) with more than one job, the cell pass runs as parallel subtrees.
 #[allow(clippy::too_many_arguments)]
 fn build_in(
     scratch: &Scratch,
@@ -545,7 +567,6 @@ fn build_in(
     ranked: Option<&dyn RankedTriangles>,
     config: &TreeConfig,
     jobs: usize,
-    weld_stage_need_bytes: Option<u64>,
     observer: Option<&dyn SortObserver>,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Built, JobError> {
@@ -630,40 +651,7 @@ fn build_in(
     }
     let nodes = ordered_nodes.finish()?;
     check()?;
-    // Stage-entry recheck of the weld pass. A caller sharing the Scratch (H8 full capture)
-    // passes that stage's declared working set, which includes its retained files;
-    // standalone H1 rechecks its own whole need.
-    let stage_need = match weld_stage_need_bytes {
-        Some(need) => need,
-        None => super::config::scratch_need(
-            stats.triangles,
-            root.bytes,
-            config,
-            scratch.allocation_unit_bytes(),
-        )
-        .ok_or_else(|| {
-            JobError::new(JobErrorKind::ResourceLimit, "H1 scratch bound exceeds u64")
-        })?,
-    };
-    super::config::preflight_remaining(scratch, stage_need)?;
-    let ranked: &dyn RankedTriangles = match (&stored, ranked) {
-        (Some(stored), _) => stored,
-        (None, Some(ranked)) => ranked,
-        (None, None) => return Err(invalid("tree weld pass has no ranked triangles")),
-    };
-    let weld_depths = vertex_depths(
-        scratch,
-        ranked,
-        stats.triangles,
-        &nodes,
-        config,
-        jobs,
-        observer,
-        check,
-    )?;
-    stats.welded_vertices = weld_depths.len();
-    check()?;
-    Ok((stored, nodes, weld_depths, stats))
+    Ok((stored, nodes, root.bytes, stats))
 }
 
 /// What a cell pass built besides its nodes.
@@ -1045,7 +1033,7 @@ fn parallel_cells(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// H1's weld table: each distinct position's least leaf depth over every corner.
 fn vertex_depths(
     scratch: &Scratch,
     triangles: &dyn RankedTriangles,
@@ -1053,7 +1041,6 @@ fn vertex_depths(
     nodes: &Sequence<NodeRecord>,
     config: &TreeConfig,
     jobs: usize,
-    observer: Option<&dyn SortObserver>,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Sequence<WeldDepth>, JobError> {
     let mut leaves = nodes.reader()?.filter_map(|n| match n {
@@ -1065,7 +1052,7 @@ fn vertex_depths(
         .next()
         .transpose()?
         .ok_or_else(|| invalid("tree has no leaves"))?;
-    let mut sorter = observe(ExternalSorter::new(scratch, config.sorter(jobs))?, observer);
+    let mut sorter = ExternalSorter::new(scratch, config.sorter(jobs))?;
     let mut read = 0_u64;
     for (rank, triangle) in triangles.ranked()?.enumerate() {
         let rank = rank as u64;

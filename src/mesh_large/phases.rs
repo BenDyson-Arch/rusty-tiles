@@ -187,7 +187,8 @@ pub(crate) enum Step {
     Images,
     /// The cell tree over the retained triangles.
     Tree,
-    /// The weld-depth join over every corner.
+    /// Corner depths: leaf occupancy masks, the candidate join and the rank-ordered write
+    /// (one unit per triangle each).
     CornerDepths,
     /// Leaf planning over the tree's leaves.
     LeafPlans,
