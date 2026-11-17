@@ -666,9 +666,9 @@ Capture assembles its rank-ordered triangles directly, without sorting
 corners or merging triangles:
 
 - **Decode.** Each expanded primitive's used vertices are decoded once (world
-  position, source frame, the run's attributes): on the capture workers, or,
-  with a source CRS, on the calling thread, which holds the resolved
-  transform. They stay in memory while the
+  position, source frame, the run's attributes) on the capture workers, each
+  task with a copy of the resolved frame. Only a native (GDAL/PROJ) source CRS
+  transform decodes on the calling thread, which holds it. They stay in memory while the
   vertex allowance lasts: what the memory budget leaves beside capture's
   declared bound, reported as `diagnostics.capture.assembly.plan`
   (`vertex_allowance_bytes`). Otherwise

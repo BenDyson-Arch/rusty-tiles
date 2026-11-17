@@ -477,35 +477,67 @@ struct Decoder<'a> {
     buffer_bytes: usize,
 }
 
-/// Runs `task` over `chunks` with a source frame. The local frame carries no state, so the
-/// chunks run on up to `workers` threads, each task with its own. A source CRS frame may hold
-/// a native transform (GDAL/PROJ) that must stay on the thread that made it, so its chunks
-/// run in order on the calling thread with that frame, `poll` between them. Either way every
-/// vertex is mapped by the same deterministic arithmetic.
+/// Runs `task(chunk, frame, check)` over `chunks` with a source frame; a task calls `check`
+/// as it goes and stops on its error. A local or portable frame is copied for each task
+/// ([`SourceFrame::portable`]), so the chunks run on up to `workers` threads and `check`
+/// reads their stop flag. A native frame holds GDAL/PROJ handles that must stay on the
+/// thread that made them, so its chunks run in order on the calling thread with that frame,
+/// and `check` is `poll` itself: a `poll` error is returned as such, not as a task failure.
+/// Either way every vertex is mapped by the same deterministic arithmetic.
 fn decode_chunks<T: Send>(
     frame: &mut SourceFrame,
     chunks: std::ops::Range<usize>,
     workers: usize,
     poll: &mut dyn FnMut() -> Result<()>,
-    task: impl Fn(usize, &mut SourceFrame, &AtomicBool) -> Result<T> + Sync,
+    task: impl Fn(usize, &mut SourceFrame, &mut dyn FnMut() -> Result<()>) -> Result<T> + Sync,
 ) -> Result<Ran<T>> {
     let first = chunks.start;
-    if matches!(frame, SourceFrame::Local) {
+    if let Some(portable) = frame.portable() {
         return run(chunks.len(), workers, poll, |i, stop| {
-            task(first + i, &mut SourceFrame::Local, stop)
+            task(first + i, &mut portable.frame(), &mut || {
+                if stop.load(Relaxed) {
+                    return Err(stopped());
+                }
+                Ok(())
+            })
         });
     }
-    let stop = AtomicBool::new(false);
+    decode_inline(frame, chunks, poll, task)
+}
+
+/// [`decode_chunks`] for a native frame: the chunks in order on the calling thread, paced as
+/// [`run`] paces its tasks, with `poll` as each task's `check`.
+fn decode_inline<T>(
+    frame: &mut SourceFrame,
+    chunks: std::ops::Range<usize>,
+    poll: &mut dyn FnMut() -> Result<()>,
+    task: impl Fn(usize, &mut SourceFrame, &mut dyn FnMut() -> Result<()>) -> Result<T>,
+) -> Result<Ran<T>> {
     let mut found = Vec::with_capacity(chunks.len());
     for chunk in chunks {
         poll()?;
-        match task(chunk, frame, &stop) {
+        crate::test_hooks::pace("mesh.capture-task");
+        let mut polled = None;
+        let result = task(chunk, frame, &mut || {
+            poll().map_err(|error| {
+                polled = Some(error);
+                stopped()
+            })
+        });
+        if let Some(error) = polled {
+            return Err(error);
+        }
+        match result {
             Ok(value) => found.push(value),
             Err(error) => return Ok(Ran::Failed(error)),
         }
     }
     poll()?;
     Ok(Ran::All(found))
+}
+
+fn stopped() -> JobError {
+    JobError::new(JobErrorKind::Cancelled, "assembly stopped")
 }
 
 /// The boxes of a decoded range: mapped f32 and f64 source.
@@ -530,14 +562,14 @@ impl Boxes {
 
 impl Decoder<'_> {
     /// Decodes the used vertices of `range` into `out` (records under `layout`, unused ones
-    /// zero), checking `stop` every 4,096 vertices.
+    /// zero), running `check` every 4,096 vertices and stopping on its error.
     fn decode(
         &mut self,
         used: &[AtomicU64],
         range: std::ops::Range<usize>,
         layout: Layout,
         out: &mut [u8],
-        stop: &AtomicBool,
+        check: &mut dyn FnMut() -> Result<()>,
     ) -> Result<Boxes> {
         let p = self.p;
         let source = self.source;
@@ -553,8 +585,8 @@ impl Decoder<'_> {
         let mut boxes = Boxes::EMPTY;
         let start = range.start;
         for vertex in range {
-            if vertex.is_multiple_of(4096) && stop.load(Relaxed) {
-                return Err(JobError::new(JobErrorKind::Cancelled, "assembly stopped"));
+            if vertex.is_multiple_of(4096) {
+                check()?;
             }
             if used[vertex / 64].load(Relaxed) & (1 << (vertex % 64)) == 0 {
                 continue;
@@ -622,7 +654,7 @@ fn decode_primitive(
     let decode_chunk = |chunk: usize,
                         frame: &mut SourceFrame,
                         out: &mut [u8],
-                        stop: &AtomicBool|
+                        check: &mut dyn FnMut() -> Result<()>|
      -> Result<Boxes> {
         let start = chunk * CHUNK_VERTICES;
         let end = (start + CHUNK_VERTICES).min(count);
@@ -632,7 +664,7 @@ fn decode_primitive(
             frame,
             buffer_bytes,
         };
-        decoder.decode(&used, start..end, layout, out, stop)
+        decoder.decode(&used, start..end, layout, out, check)
     };
     if in_memory {
         let mut bytes = vec![0u8; count.checked_mul(size).ok_or_else(overflow)?];
@@ -640,9 +672,9 @@ fn decode_primitive(
             .chunks_mut(CHUNK_VERTICES * size)
             .map(Mutex::new)
             .collect();
-        let ran = decode_chunks(frame, 0..chunks, workers, poll, |chunk, frame, stop| {
+        let ran = decode_chunks(frame, 0..chunks, workers, poll, |chunk, frame, check| {
             let mut slot = slots[chunk].lock().unwrap_or_else(|e| e.into_inner());
-            decode_chunk(chunk, frame, &mut slot, stop)
+            decode_chunk(chunk, frame, &mut slot, check)
         })?;
         drop(slots);
         let found = match ran {
@@ -662,10 +694,10 @@ fn decode_primitive(
     let wave = 2 * workers.max(1);
     for first in (0..chunks).step_by(wave) {
         let last = (first + wave).min(chunks);
-        let ran = decode_chunks(frame, first..last, workers, poll, |chunk, frame, stop| {
+        let ran = decode_chunks(frame, first..last, workers, poll, |chunk, frame, check| {
             let len = (CHUNK_VERTICES.min(count - chunk * CHUNK_VERTICES)) * size;
             let mut out = vec![0u8; len];
-            let found = decode_chunk(chunk, frame, &mut out, stop)?;
+            let found = decode_chunk(chunk, frame, &mut out, check)?;
             Ok((out, found))
         })?;
         let found = match ran {
@@ -955,13 +987,14 @@ fn first_vertex_failure(
         frame,
         buffer_bytes,
     };
-    let stop = AtomicBool::new(false);
     let mut out = vec![0u8; size];
     for vertex in 0..p.position.count {
         if vertex.is_multiple_of(4096) {
             poll()?;
         }
-        if let Err(error) = decoder.decode(&used, vertex..vertex + 1, layout, &mut out, &stop) {
+        if let Err(error) =
+            decoder.decode(&used, vertex..vertex + 1, layout, &mut out, &mut || Ok(()))
+        {
             return Ok(Some(error));
         }
     }
@@ -1753,6 +1786,117 @@ mod tests {
             (0, 0, false),
         ] {
             assert_eq!(needs_route(local, chunks), routed, "{local} of {chunks}");
+        }
+    }
+
+    type Mapped = ([u32; 3], Option<[u64; 9]>, std::thread::ThreadId);
+
+    /// A world position per chunk, mapped with its Jacobian; bits, and the thread that ran it.
+    fn map_chunk(chunk: usize, frame: &mut SourceFrame) -> Result<Mapped> {
+        let world = [chunk as f64 * 0.7 - 5., 3. - chunk as f64 * 0.3, 1.5];
+        let (position, jacobian) = frame.vertex(world, true)?;
+        Ok((
+            position.map(f32::to_bits),
+            jacobian.map(|j| {
+                let flat: Vec<u64> = j.0.iter().flatten().map(|v| v.to_bits()).collect();
+                flat.try_into().unwrap()
+            }),
+            std::thread::current().id(),
+        ))
+    }
+
+    fn resolved(definition: &str, offset: [f64; 2]) -> SourceFrame {
+        let spec = super::super::source_crs::MeshSourceCrs::from_parameters(
+            Some(definition),
+            Some(crate::georef::SourceAxes::Xyz),
+            Some(&offset),
+            None,
+            None,
+        )
+        .unwrap()
+        .unwrap();
+        SourceFrame::resolve(&spec, [[-10., -10., 0.], [10., 10., 5.]]).unwrap()
+    }
+
+    /// Local and portable CRS frames decode on the workers, each task with a copy that maps
+    /// every position and Jacobian to the same bits as the frame itself. A native frame
+    /// decodes on the calling thread.
+    #[test]
+    fn portable_frames_decode_on_the_workers_with_identical_mapping() {
+        let caller = std::thread::current().id();
+        let mut frames = vec![
+            (SourceFrame::Local, true),
+            (resolved("EPSG:32756", [502_000., 6_961_000.]), true),
+        ];
+        // The allow-listed GDA2020 code is portable in the standard build, native PROJ in
+        // the native one.
+        frames.push((
+            resolved("EPSG:7856", [502_000., 6_961_000.]),
+            cfg!(not(feature = "native-geospatial")),
+        ));
+        for (mut frame, portable) in frames {
+            assert_eq!(frame.portable().is_some(), portable);
+            let want: Vec<_> = (0..24)
+                .map(|chunk| map_chunk(chunk, &mut frame).unwrap())
+                .collect();
+            super::super::tasks::SPAWNED.with(|n| n.set(0));
+            let Ran::All(got) = decode_chunks(
+                &mut frame,
+                0..24,
+                4,
+                &mut || Ok(()),
+                |chunk, frame, check| {
+                    check()?;
+                    map_chunk(chunk, frame)
+                },
+            )
+            .unwrap() else {
+                panic!("no chunk fails");
+            };
+            let spawned = super::super::tasks::SPAWNED.with(|n| n.get());
+            assert_eq!(spawned > 0, portable, "{spawned} workers");
+            for (want, got) in want.iter().zip(&got) {
+                assert_eq!((want.0, want.1), (got.0, got.1));
+            }
+            assert_eq!(got.iter().all(|m| m.2 == caller), !portable);
+        }
+    }
+
+    /// On the calling thread a task's `check` is `poll`: a `poll` error ends the decode as that
+    /// error, at the check that saw it, while a task's own error is a task failure.
+    #[test]
+    fn inline_decode_returns_poll_errors_and_task_failures_apart() {
+        let task = |chunk: usize, _: &mut SourceFrame, check: &mut dyn FnMut() -> Result<()>| {
+            for _ in 0..10 {
+                check()?;
+            }
+            if chunk == 3 {
+                return Err(JobError::new(JobErrorKind::InvalidInput, "bad vertex"));
+            }
+            Ok(chunk)
+        };
+        // Chunk 0 takes a poll and 10 checks; chunk 1 a poll (the 12th) and fails at its 3rd.
+        let mut polls = 0;
+        let error = decode_inline(
+            &mut SourceFrame::Local,
+            0..5,
+            &mut || {
+                polls += 1;
+                if polls == 15 {
+                    return Err(JobError::new(JobErrorKind::Cancelled, "run stopped"));
+                }
+                Ok(())
+            },
+            task,
+        )
+        .err()
+        .expect("the poll error");
+        assert_eq!(error.kind(), JobErrorKind::Cancelled);
+        assert!(error.to_string().contains("run stopped"), "{error}");
+        assert_eq!(polls, 15);
+        match decode_inline(&mut SourceFrame::Local, 0..5, &mut || Ok(()), task).unwrap() {
+            Ran::Failed(error) => assert_eq!(error.kind(), JobErrorKind::InvalidInput),
+            Ran::All(_) => panic!("chunk 3 fails"),
         }
     }
 }

@@ -7,7 +7,7 @@
 //! exceeds the tolerance uses per-vertex Jacobians. Every later stage sees local metres
 //! only; the root transform carries ENU to ECEF.
 use crate::{
-    crs::Transform,
+    crs::{PureTransform, Transform},
     crs_jacobian,
     georef::{ecef_to_cartographic, EnuFrame, SourceAxes, SourceOffset},
     gltf_source::source::within_local_domain,
@@ -15,7 +15,7 @@ use crate::{
     JobError, JobErrorKind, MeshPlacement,
 };
 use serde::Serialize;
-use std::{io::Read, mem::Discriminant, path::Path};
+use std::{io::Read, mem::Discriminant, path::Path, sync::Arc};
 
 type Result<T> = std::result::Result<T, JobError>;
 type Columns = [[f64; 3]; 3];
@@ -308,7 +308,7 @@ pub(crate) struct CrsFrame {
     frame: EnuFrame,
     placement: ResolvedPlacement,
     report: MeshSourceCrsReport,
-    lattice: Lattice,
+    lattice: Arc<Lattice>,
 }
 
 /// Capture's coordinate frame: identity rounding, or a resolved source CRS.
@@ -392,9 +392,9 @@ impl SourceFrame {
             frame: EnuFrame::new(origin),
             placement,
             report,
-            lattice: Lattice::default(),
+            lattice: Arc::default(),
         });
-        frame.lattice = frame.build_lattice(min, max)?;
+        frame.lattice = Arc::new(frame.build_lattice(min, max)?);
         frame.report.jacobian_lattice_cells = frame.lattice.cells.map(|n| n as u64);
         frame.report.jacobian_exact_cells =
             frame.lattice.exact.iter().filter(|e| **e).count() as u64;
@@ -417,6 +417,31 @@ impl SourceFrame {
         }
     }
 
+    /// A copy of this frame that worker threads can share, or `None` for a native source
+    /// CRS: its GDAL/PROJ handles stay on the thread that made them. A copy holds a clone
+    /// of the resolved portable transform and shares the resolved lattice, so it maps every
+    /// vertex as this frame does.
+    pub(crate) fn portable(&self) -> Option<PortableFrame> {
+        match self {
+            Self::Local => Some(PortableFrame::Local),
+            Self::Crs(frame) => match &frame.operation {
+                Transform::Pure(operation) => Some(PortableFrame::Crs(Box::new(PortableCrs {
+                    operation: (**operation).clone(),
+                    axes: frame.axes,
+                    offset: frame.offset,
+                    horizontal_step: frame.horizontal_step,
+                    degrees_per_unit: frame.degrees_per_unit,
+                    frame: frame.frame,
+                    placement: frame.placement.clone(),
+                    report: frame.report.clone(),
+                    lattice: Arc::clone(&frame.lattice),
+                }))),
+                #[cfg(feature = "native-geospatial")]
+                Transform::Native(_) => None,
+            },
+        }
+    }
+
     /// A position, rounded once to f32, and, when requested in CRS mode, its Jacobian.
     pub(crate) fn vertex(
         &mut self,
@@ -426,6 +451,51 @@ impl SourceFrame {
         match self {
             Self::Local => Ok((world.map(|x| x as f32), None)),
             Self::Crs(frame) => frame.vertex(world, jacobian),
+        }
+    }
+}
+
+/// A [`SourceFrame`] without native handles, so it can be shared by worker threads; each
+/// task makes its own [`SourceFrame`] from it with [`PortableFrame::frame`].
+pub(crate) enum PortableFrame {
+    Local,
+    Crs(Box<PortableCrs>),
+}
+
+pub(crate) struct PortableCrs {
+    operation: PureTransform,
+    axes: SourceAxes,
+    offset: SourceOffset,
+    horizontal_step: f64,
+    degrees_per_unit: Option<f64>,
+    frame: EnuFrame,
+    placement: ResolvedPlacement,
+    report: MeshSourceCrsReport,
+    lattice: Arc<Lattice>,
+}
+
+impl PortableFrame {
+    /// A frame for one task. A portable transform carries no state between batches (a
+    /// promotion to native PROJ fails the capture either way), so a fresh one per task maps
+    /// exactly as one long-lived frame would.
+    pub(crate) fn frame(&self) -> SourceFrame {
+        match self {
+            Self::Local => SourceFrame::Local,
+            Self::Crs(crs) => {
+                let operation = Transform::Pure(Box::new(crs.operation.clone()));
+                SourceFrame::Crs(Box::new(CrsFrame {
+                    kind: std::mem::discriminant(&operation),
+                    operation,
+                    axes: crs.axes,
+                    offset: crs.offset,
+                    horizontal_step: crs.horizontal_step,
+                    degrees_per_unit: crs.degrees_per_unit,
+                    frame: crs.frame,
+                    placement: crs.placement.clone(),
+                    report: crs.report.clone(),
+                    lattice: Arc::clone(&crs.lattice),
+                }))
+            }
         }
     }
 }
