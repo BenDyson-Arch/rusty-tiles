@@ -120,6 +120,7 @@ fn measure_tex3_efforts() {
         effort,
         transfer: Transfer::Srgb,
         mipmaps: false,
+        etc1_hints: Etc1Hints::Full,
     };
     let mut paths: Vec<_> = fs::read_dir(root)
         .unwrap()

@@ -48,6 +48,8 @@ def main():
                 or name.startswith(('src/', 'bindings/python/src/')) and name.endswith('.rs')]
     controls = 'bench/architecture_audit/c1_payload_integrity/production_controls/'
     selected += [name for name in files if name.startswith(controls)]
+    # The context fixtures are generated, not tracked; this manifest pins each one's SHA-256.
+    selected.append('bench/architecture_audit/generated-corpora.sha256')
     evidence = {
         'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip(),
         'sourceTree': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], cwd=root, text=True).strip(),

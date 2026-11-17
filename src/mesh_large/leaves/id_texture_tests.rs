@@ -443,6 +443,7 @@ fn basis_ktx2_is_refused_and_would_change_ids() {
         effort: 0,
         transfer: codec::Transfer::Linear,
         mipmaps: false,
+        etc1_hints: crate::basisu_ktx2::Etc1Hints::Full,
     };
     // 128 bits per 4x4 block cannot carry 32 random bits per texel; if the
     // codec's own verification does not already refuse it, IDs change.

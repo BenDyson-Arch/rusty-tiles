@@ -29,11 +29,15 @@
 //!   ([`ErrorFloor`]) and, where the input has enough within-block detail,
 //!   reproduce it ([`DetailFloor`]).
 //!   Any failure is `InvalidState`.
+//! - With feature `pure-rust-basis`, every encode and decode runs in pure Rust instead
+//!   (`pure`), with byte-identical output; the C++ stays compiled as the shadow tests' oracle.
 // Keep the bounded calibration/diagnostic entry points alongside the production API.
 #![allow(dead_code)]
 
 mod container;
 mod ffi;
+#[cfg(feature = "pure-rust-basis")]
+mod pure;
 #[cfg(test)]
 mod tests;
 
@@ -122,6 +126,26 @@ pub(crate) enum Transfer {
     Linear,
 }
 
+/// Basis Universal's UASTC LDR 4x4 pack flags `cPackUASTCETC1FastestHints |
+/// cPackUASTCETC1DisableFlipAndIndividual` (`basisu_uastc_enc.h`, 0x80 | 0x100),
+/// the encode setting of [`Etc1Hints::Fastest`]. The shim passes them to the
+/// encoder unchanged and checks this value against the library's at compile
+/// time; a replacement encoder uses the same flags.
+pub(crate) const UASTC_FASTEST_ETC1_HINTS: u32 = 0x180;
+
+/// How much the UASTC encoder searches for the ETC1 hints it stores in each
+/// block. A hint is used only when a block is transcoded to ETC1 (a GPU with
+/// none of ASTC, BC7 or BC1/3); the UASTC texels, and therefore every decode
+/// to RGBA, ASTC, BC7 or BC1/3, are the same with either setting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Etc1Hints {
+    /// The encoder's own search for its pack level.
+    Full,
+    /// [`UASTC_FASTEST_ETC1_HINTS`]: one bias and a single flip/differential
+    /// layout per block. UASTC only.
+    Fastest,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Params {
     /// Encoder effort, 0..=10.
@@ -129,6 +153,8 @@ pub(crate) struct Params {
     pub transfer: Transfer,
     /// Legacy flag: base-only calls must set false; supplied chains use the mip API.
     pub mipmaps: bool,
+    /// UASTC ETC1 hint search; ETC1S requires [`Etc1Hints::Full`].
+    pub etc1_hints: Etc1Hints,
 }
 
 /// One caller-authored tightly packed RGBA8 level. All levels are borrowed
@@ -350,6 +376,12 @@ fn check_request(
                 format!("ETC1S quality must be 1..=100, got {quality}"),
             ));
         }
+        if params.etc1_hints != Etc1Hints::Full {
+            return Err(JobError::new(
+                JobErrorKind::InvalidRequest,
+                "ETC1 hint settings apply to UASTC only",
+            ));
+        }
     }
     if params.effort > MAX_EFFORT {
         return Err(JobError::new(
@@ -395,6 +427,54 @@ fn encode_mips_unverified(
     mode: Mode,
     params: Params,
 ) -> Result<Vec<u8>, JobError> {
+    // One page encode cannot be interrupted (minutes at the ladder's highest efforts); the
+    // CLI's stop backstop covers it. Tests stand in for a long encode here.
+    crate::test_hooks::stall("ktx2.encode");
+    #[cfg(feature = "pure-rust-basis")]
+    {
+        rust_encode_mips(mips, mode, params, uastc_extra_pack_flags(params))
+    }
+    #[cfg(not(feature = "pure-rust-basis"))]
+    {
+        native_encode_mips(mips, mode, params)
+    }
+}
+
+/// The UASTC pack flags `params` adds to the pack level the effort sets: the encode
+/// setting of [`Params::etc1_hints`], on both encoder paths.
+fn uastc_extra_pack_flags(params: Params) -> u32 {
+    match params.etc1_hints {
+        Etc1Hints::Full => 0,
+        Etc1Hints::Fastest => UASTC_FASTEST_ETC1_HINTS,
+    }
+}
+
+/// The pure-Rust encoder, with `extra_pack_flags` OR'd into the UASTC pack flags (0 for the
+/// settings `basis_compress2` derives).
+#[cfg(feature = "pure-rust-basis")]
+fn rust_encode_mips(
+    mips: &[MipLevel<'_>],
+    mode: Mode,
+    params: Params,
+    extra_pack_flags: u32,
+) -> Result<Vec<u8>, JobError> {
+    let settings = pure::Settings::resolve(mode, params.effort, params.transfer, extra_pack_flags);
+    std::panic::catch_unwind(|| pure::encode(mips, settings))
+        .unwrap_or_else(|_| Err("the encoder panicked".into()))
+        .map_err(|message| {
+            JobError::new(
+                JobErrorKind::InvalidState,
+                format!("Basis Universal (pure Rust): {message}"),
+            )
+        })
+}
+
+/// The vendored C++ encoder through the shim.
+fn native_encode_mips(
+    mips: &[MipLevel<'_>],
+    mode: Mode,
+    params: Params,
+) -> Result<Vec<u8>, JobError> {
     let (format, quality, mut flags) = match mode {
         Mode::Etc1s { quality } => (ffi::FORMAT_ETC1S, i32::from(quality), 0),
         // Quality 100 is the encoder's "no RDO" setting.
@@ -407,6 +487,8 @@ fn encode_mips_unverified(
     if params.transfer == Transfer::Srgb {
         flags |= ffi::FLAG_SRGB;
     }
+    // The shim passes its hint flag bits to the encoder as these same pack flags.
+    flags |= uastc_extra_pack_flags(params);
     let native_mips: Vec<ffi::MipLevel> = mips
         .iter()
         .map(|mip| ffi::MipLevel {
@@ -418,9 +500,6 @@ fn encode_mips_unverified(
         .collect();
     let mut data = std::ptr::null_mut();
     let mut length = 0usize;
-    // One page encode cannot be interrupted (minutes at the ladder's highest efforts); the
-    // CLI's stop backstop covers it. Tests stand in for a long encode here.
-    crate::test_hooks::stall("ktx2.encode");
     // SAFETY: every mip holds width * height * 4 bytes (checked by the caller);
     // the out-pointers are valid for writes.
     let status = unsafe {
@@ -481,8 +560,37 @@ fn expected_levels(width: u32, height: u32, mipmaps: bool) -> u32 {
     }
 }
 
-/// Decodes one level with the vendored transcoder.
+/// Decodes one level to RGBA8, with the pure-Rust transcoder under feature
+/// `pure-rust-basis` and the vendored transcoder otherwise.
 pub(crate) fn decode_level_rgba(
+    ktx2: &[u8],
+    level: u32,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>, JobError> {
+    #[cfg(feature = "pure-rust-basis")]
+    {
+        rust_decode_level_rgba(ktx2, level, width, height)
+    }
+    #[cfg(not(feature = "pure-rust-basis"))]
+    {
+        native_decode_level_rgba(ktx2, level, width, height)
+    }
+}
+
+#[cfg(feature = "pure-rust-basis")]
+fn rust_decode_level_rgba(
+    ktx2: &[u8],
+    level: u32,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>, JobError> {
+    pure::decode_level(ktx2, level, width, height)
+        .map_err(|message| invalid_state(format!("level {level} did not decode: {message}")))
+}
+
+/// Decodes one level with the vendored transcoder.
+fn native_decode_level_rgba(
     ktx2: &[u8],
     level: u32,
     width: u32,

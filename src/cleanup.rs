@@ -176,6 +176,10 @@ mod tests {
     fn removal_repeats_while_a_worker_keeps_writing() {
         use std::sync::atomic::AtomicBool;
         use std::sync::Arc;
+        // Far longer than any pause of a writer in a tight loop, so a round finds the
+        // directory gone only once the writer has stopped, unless the writer itself was
+        // descheduled for about that long.
+        let interval = Duration::from_millis(200);
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("spill");
         std::fs::create_dir_all(&dir).unwrap();
@@ -185,14 +189,19 @@ mod tests {
             std::thread::spawn(move || {
                 let mut n = 0u64;
                 let mut writes = 0u64;
+                // The longest gap between two iterations: how long the writer was paused.
+                let (mut last, mut longest_pause) = (Instant::now(), Duration::ZERO);
                 while writing.load(Ordering::Relaxed) {
                     let _ = std::fs::create_dir_all(dir.join("nested"));
                     if std::fs::write(dir.join("nested").join(format!("{n}.spill")), b"x").is_ok() {
                         writes += 1;
                     }
                     n += 1;
+                    let now = Instant::now();
+                    longest_pause = longest_pause.max(now - last);
+                    last = now;
                 }
-                writes
+                (writes, longest_pause)
             })
         };
         let stopper = {
@@ -205,13 +214,21 @@ mod tests {
         let left = remove_settled(
             std::slice::from_ref(&dir),
             Duration::from_secs(10),
-            // Far longer than any pause of a writer in a tight loop, so a round finds the
-            // directory gone only once the writer has stopped.
-            Duration::from_millis(200),
+            interval,
         );
+        // Judge the outcome only once the writer has stopped: nothing can recreate the
+        // directory after these joins.
         stopper.join().unwrap();
-        assert!(worker.join().unwrap() > 0, "the worker never wrote");
+        let (writes, longest_pause) = worker.join().unwrap();
+        assert!(writes > 0, "the worker never wrote");
         assert!(left.is_empty(), "{left:?}");
-        assert!(!dir.exists(), "the directory survived its removal");
+        // Removal settles once a round finds the directory gone. While the writer runs that
+        // happens only if it paused for about an interval (a loaded CI runner can deschedule
+        // it), and it may then recreate the directory after removal returned. Without such a
+        // pause the directory must be gone, or removal stopped repeating while it was written.
+        assert!(
+            !dir.exists() || longest_pause >= interval / 2,
+            "the directory survived its removal, and the worker never paused (longest pause {longest_pause:?})"
+        );
     }
 }

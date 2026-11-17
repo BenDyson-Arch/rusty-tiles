@@ -86,6 +86,19 @@ pub(crate) fn decode_filtered(
             "meshopt OCTAHEDRAL filter needs ATTRIBUTES mode and byteStride 4 or 8",
         ));
     }
+    // The C decoders only assert these (and the asserts are compiled out with NDEBUG):
+    // a vertex stride above 256 overflows a stack buffer, other index strides or a
+    // triangle count that is not a multiple of 3 write past `decoded`, and stride 0
+    // divides by zero. Every caller reaches the decoder through here, so refuse them
+    // here whatever the caller already checked.
+    let shape = match mode {
+        Mode::Attributes => stride > 0 && stride <= 256 && stride.is_multiple_of(4),
+        Mode::Triangles => (stride == 2 || stride == 4) && count.is_multiple_of(3),
+        Mode::Indices => stride == 2 || stride == 4,
+    };
+    if !shape {
+        return Err(invalid("invalid meshopt stride/count"));
+    }
     let length = count
         .checked_mul(stride)
         .ok_or_else(|| limit("meshopt decoded size overflow"))?;
@@ -215,4 +228,34 @@ pub(crate) fn copy_words(words: &[u32], length: usize) -> Result<Vec<u8>, Format
         out.extend_from_slice(&word.to_ne_bytes()[..take]);
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decoder_preconditions_are_refused_before_the_c_decoder() {
+        // The stream is never read: each shape is refused first.
+        let stream = [0u8; 64];
+        for (count, stride, mode) in [
+            (1, 0, Mode::Attributes),
+            (1, 260, Mode::Attributes),
+            (1, 4096, Mode::Attributes),
+            (1, 6, Mode::Attributes),
+            (3, 1, Mode::Triangles),
+            (3, 3, Mode::Triangles),
+            (3, 8, Mode::Triangles),
+            (1, 4, Mode::Triangles),
+            (4, 2, Mode::Triangles),
+            (1, 1, Mode::Indices),
+            (1, 3, Mode::Indices),
+            (1, 0, Mode::Indices),
+        ] {
+            match decode_filtered(&stream, count, stride, mode, Filter::None) {
+                Err(FormatError::InvalidInput(m)) => assert_eq!(m, "invalid meshopt stride/count"),
+                other => panic!("count {count} stride {stride}: {other:?}"),
+            }
+        }
+    }
 }

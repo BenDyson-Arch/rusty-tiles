@@ -120,6 +120,7 @@ fn agrees(expected: &Value, oracle: &Value, got: &Value) -> bool {
 
 #[test]
 fn production_matches_every_oracle_witness_and_control() {
+    crate::test_corpora::ensure();
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let read = |p: &str| -> Value {
         let bytes = std::fs::read(root.join(ROOT).join(p)).unwrap();
@@ -199,6 +200,7 @@ fn production_matches_every_oracle_witness_and_control() {
 /// present, C1 must admit them and the precheck total and facts must equal O-WB's.
 #[test]
 fn production_matches_every_c2wb_class_fixture() {
+    crate::test_corpora::ensure();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(ROOT);
     let manifest: Value =
         serde_json::from_slice(&std::fs::read(root.join("wb/manifest.json")).unwrap()).unwrap();
@@ -418,6 +420,7 @@ fn read_root(p: &str) -> Value {
 /// and are otherwise listed as skipped. `C2S3_PARITY_OUT` receives the summary.
 #[test]
 fn production_matches_every_slice3_oracle_control() {
+    crate::test_corpora::ensure();
     let dir = format!("{ROOT}/controls/slice3");
     let manifest = read_root(&format!("{dir}/manifest.json"));
     let results = read_root(&format!("{dir}/results.json"));
@@ -488,6 +491,7 @@ fn production_matches_every_slice3_oracle_control() {
 /// gitignored `--large` I1 controls may be absent. `C2S3_SWEEP_OUT` receives the summary.
 #[test]
 fn production_matches_the_slice3_sweep_of_every_i1_control() {
+    crate::test_corpora::ensure();
     let i1 = "bench/architecture_audit/implicit_read/controls";
     let manifest = read_root(&format!("{i1}/manifest.json"));
     let sweep = read_root(&format!("{ROOT}/controls/slice3/results.json"));
@@ -638,6 +642,7 @@ fn production_matches_the_slice3_sweep_of_every_i1_control() {
 /// repeated-URI pair always runs. `C2S3_FOREST_OUT` receives the summary.
 #[test]
 fn production_matches_the_slice3_forest_witnesses_and_limit_pairs() {
+    crate::test_corpora::ensure();
     let corpus = read_root(&format!("{ROOT}/corpus/slice3-manifest.json"));
     let forest = std::env::var_os("C2S3_FOREST_DIR").map(std::path::PathBuf::from);
     let top = Path::new(env!("CARGO_MANIFEST_DIR")).join(ROOT);
@@ -758,6 +763,7 @@ fn slice3_precheck_only_arm() {
 /// escaping vertex.
 #[test]
 fn production_matches_every_h11_fast_path_control() {
+    crate::test_corpora::ensure();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(ROOT);
     let report: Value =
         serde_json::from_slice(&std::fs::read(root.join("h11/report.json")).unwrap()).unwrap();

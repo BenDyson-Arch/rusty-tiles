@@ -8,6 +8,7 @@ mod batching;
 mod capture;
 mod capture_sort;
 mod config;
+mod corners;
 mod delivery;
 mod full;
 #[allow(dead_code)] // HLOD item cleanup deferred to its concurrent owner; see cleanup evidence.
@@ -22,6 +23,7 @@ mod pipeline;
 mod records;
 mod resources;
 mod source_crs;
+mod tasks;
 mod tree;
 /// The validator plans its stores with the same budget, job and headroom rules (#342).
 pub(crate) use config::{available_memory, plan_jobs, Jobs};

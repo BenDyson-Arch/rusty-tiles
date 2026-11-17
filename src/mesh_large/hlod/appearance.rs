@@ -985,8 +985,15 @@ fn bake_pages(
                 };
                 match b {
                     Some((image, _, _)) => requests.push((image, i as u32)),
+                    // The nearest source triangle can belong to a material that does not
+                    // bind this slot (the donor search is not limited to the class). A
+                    // normal map then gets the flat tangent-space normal; `write` needs a
+                    // frame for that slot and must not be reached without one.
+                    None if matches!(slot, TextureSlot::Normal) => {
+                        let t = chunk[i].0 as usize * 4;
+                        rgba[t..t + 4].copy_from_slice(&[128, 128, 255, 255]);
+                    }
                     None => {
-                        // A class member always binds the slot; defensively neutral.
                         write(rgba, chunk[i].0, slot, [1., 1., 1., 1.], hit, None);
                     }
                 }

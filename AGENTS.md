@@ -54,6 +54,13 @@ families, even when CI does not run them; later slices extend them. Bulk
 evidence (raw runs, review transcripts, candidate and precode corpora,
 preparation output) goes to `~/.cache/rusty-tiles-evidence/` and is referenced
 from a tracked README by SHA-256 and the last commit that held it.
+Test inputs that a tracked generator reproduces byte for byte (stdlib Python,
+the same bytes on Linux, macOS and Windows) are not committed either: commit the
+generator and add its outputs to `bench/architecture_audit/generated-corpora.sha256`
+and a job in `scripts/test_corpora.py`, which tests and CI run before reading them;
+a missing or different file fails. Keep a file committed only when it cannot be
+regenerated exactly, and list it with its reason in
+`bench/architecture_audit/README.md`.
 `scripts/check_tree_budget.py` runs in CI and fails when any tracked file
 exceeds 1 MB or the tree, `bench/` or `vendor/` exceeds its total budget; raise a
 budget only with a stated reason. On 2026-10-14, after

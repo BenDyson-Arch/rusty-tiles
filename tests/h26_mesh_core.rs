@@ -410,7 +410,7 @@ fn capture_reports_every_step_with_its_total_and_honours_a_cancel_inside_capture
     assert_eq!(total("capture_triangles"), triangles);
     assert_eq!(total("capture_sequence"), triangles);
     assert_eq!(total("capture_tree"), triangles);
-    assert_eq!(total("capture_corner_depths"), 7 * triangles);
+    assert_eq!(total("capture_corner_depths"), 3 * triangles);
     assert_eq!(total("capture_images"), 0);
     for step in &steps {
         assert_eq!((step.first, step.last), (0, step.total), "{step:?}");

@@ -488,6 +488,28 @@ fn push_leaf(
     if p == output || p.starts_with(output) || output.starts_with(&p) {
         return Err(invalid("raster output aliases a source dependency"));
     }
+    // The comparison above is textual: an alias of the output directory (a second bind
+    // mount, a case-insensitive spelling) passes it, and `--force` would then replace
+    // and delete the source. Compare file identity too, as terrain and the raster
+    // directory producer do. A symlinked output is replaced as a link, so it is skipped.
+    // Identity needs an open handle: an ancestor we may only search (mode 711) cannot be
+    // opened, and `--force` cannot list and delete through it either, so it is no alias.
+    if fs::symlink_metadata(output).is_ok_and(|m| !m.file_type().is_symlink()) {
+        for candidate in p.ancestors() {
+            match same_file::is_same_file(candidate, output) {
+                Ok(true) => return Err(invalid("raster output aliases a source dependency")),
+                Ok(false) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {}
+                Err(e) => {
+                    return Err(JobError::io(
+                        "compare raster source/output identity",
+                        output,
+                        e,
+                    ));
+                }
+            }
+        }
+    }
     if leaves.iter().any(|l| l.stamp.identity == s.identity) {
         return Err(invalid("raster dependency aliases another source leaf"));
     }
@@ -761,6 +783,25 @@ pub(super) fn admit(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn an_output_alias_of_a_source_directory_is_refused_by_identity() {
+        let root = tempfile::tempdir().unwrap();
+        let source_dir = root.path().join("source");
+        let other = root.path().join("other");
+        fs::create_dir(&source_dir).unwrap();
+        fs::create_dir(&other).unwrap();
+        let input = source_dir.join("ortho.tif");
+        fs::write(&input, b"literal").unwrap();
+        // Textually unrelated to the canonical leaf, but the same directory.
+        let alias = other.join("..").join("source");
+        let mut leaves = Vec::new();
+        let error = push_leaf(&mut leaves, input.clone(), LeafKind::Main, &alias).unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::InvalidInput);
+        assert!(leaves.is_empty());
+        // A distinct output directory is still accepted.
+        push_leaf(&mut leaves, input, LeafKind::Main, &other.join("tiles")).unwrap();
+        assert_eq!(leaves.len(), 1);
+    }
     #[test]
     fn finite_mixed_case_spellings_and_authority_identity() {
         let mut seen = Vec::new();

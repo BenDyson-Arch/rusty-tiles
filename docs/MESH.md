@@ -498,6 +498,14 @@ profile:
 - MASK pages keep their own codec and coverage policy;
 - ID pages are exact PNG in every profile.
 
+Every leaf UASTC page, of any class or ladder step, is encoded with Basis
+Universal's fastest ETC1 hints (`cPackUASTCETC1FastestHints |
+cPackUASTCETC1DisableFlipAndIndividual`). The hints are used only when a
+viewer transcodes UASTC to ETC1, which CesiumJS does on GPUs with none of
+ASTC, BC7 or S3TC; decodes to RGBA, ASTC, BC7 and BC1/3 are the same with
+either setting. Coarse UASTC pages, and MASK pages on leaves and coarse tiles
+alike (they use the coarse codec policy), keep the full hint search.
+
 ETC1S quality uses the wrapper's 1–100 scale; effort 0 maps to native ETC1S
 compression level 0. ETC1S at effort 0 costs about three times the encode CPU of
 UASTC level 0 for smaller pages; the
@@ -632,7 +640,7 @@ large sources, especially when the output directory is memory-backed;
 memory-backed scratch counts against the [memory budget](#memory-budget).
 
 Capture's external sorts (corner references, positioned corners, triangles,
-the cell tree's nodes and weld depths, and the corner-depth join) are planned
+the cell tree's nodes, and the corner-depth join's candidates and patches) are planned
 once against the [memory budget](#memory-budget). The fixed sort configuration,
 an 80 MiB run buffer per live sort with fan-in 64, is the floor: capture's
 worker plan and `capture_minimum_bytes` are computed with it, so a budget that
@@ -654,6 +662,31 @@ and reported as `diagnostics.capture.sort`: `run_bytes`, `fan_in`,
 each sort's output is the stable sort of its input order for every run size,
 fan-in and writer count, so the archive does not depend on the plan.
 
+Capture's preflight scan and payload validation run on the capture workers. The
+scan reads each primitive's index buffer into a bitmap of the vertices its
+triangles use, then reads the used positions once each in file order, instead
+of once per corner in index order. Validation checks every accessor and
+primitive in ranges. When any check fails, the sequential pass runs instead,
+so an invalid source reports the same first error as before.
+
+Capture's cell tree is built as parallel subtrees: the largest octree cells of
+the sorted triangles are split (found by binary search on their Morton keys)
+until there are about 16 per worker, each cell's subtree is built on a worker,
+and the levels above them are closed in rank order. The nodes are those of one
+pass over the triangles, so the archive does not depend on the worker count.
+Workers stop at the run's stop request between units of 4,096 triangles.
+
+Each corner's depth (the least leaf depth over every corner at its exact
+position, which coarse levels use to keep shared vertices welded) is joined
+over the leaves without sorting every corner. A leaf's box holds all its
+corners; each leaf also records which of the 16 x 16 x 16 cells of its box hold
+one of its corners. A corner whose position lies in no other leaf's box, or
+only in cells another leaf leaves empty, is welded only inside its own leaf
+and keeps its leaf's depth. Only the remaining corners are sorted by position
+to find each position's least depth. Both passes over the leaves run on the capture workers, which stop
+at the run's stop request before each leaf. The depths are those of the full
+join, so the archive does not change.
+
 The coarse stage's incidence pass (`hlod_incidence`) plans its item and
 open-edge endpoint sorts the same way inside the coarse stage's admission,
 before the walk admits any parent job: runs grow toward one pass at the
@@ -674,6 +707,14 @@ space. A 10% margin and per-file rounding are added. At scale this comes to
 about 0.5 KB per source triangle with every vertex attribute present, or about
 0.3 KB with positions and one texture coordinate set; capture stores only the
 attributes some selected primitive carries.
+
+The triangle and corner-depth streams capture keeps for the later stages are
+stored as LZ4 blocks of at most 64 KiB (a quarter of the stream buffer when that
+is smaller); a block that does not shrink is stored as is. The records read back
+are the same bytes, so the archive does not depend on it. Declared and preflight
+scratch bounds count these files at their uncompressed size; measured scratch
+(`scratch_stage_peak_bytes`, `run_scratch_peak_bytes`) is what is on disk. Their
+block indexes (9 bytes per block) are charged in capture's resident bound.
 
 The run also reserves output-side space for leaf staging, archive staging and a
 replaced destination: three copies of 119 bytes per triangle (a conservative
@@ -1024,8 +1065,8 @@ logs its wall seconds and the run's elapsed seconds as a `log` event. Inside
 (corner references read and sorted), `capture_positions` (corners joined with
 their attributes), `capture_triangles` (triangles reassembled),
 `capture_sequence` (triangles written in rank order), `capture_images` (two
-units per image), `capture_tree` (triangles), `capture_corner_depths` (seven
-units per triangle) and `capture_leaf_plans` (leaves). Each step reports `0`
+units per image), `capture_tree` (triangles), `capture_corner_depths` (three
+units per triangle: leaf masks, candidates, depths written) and `capture_leaf_plans` (leaves). Each step reports `0`
 and its total; all but `capture_validate`, `capture_tree` and
 `capture_leaf_plans` also report counts between. An intermediate sort merge pass, which a budget
 too small for one pass needs, is reported as `capture_merge` (records

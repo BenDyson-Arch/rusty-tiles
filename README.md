@@ -12,7 +12,7 @@ rusty-tiles converts textured GLB/glTF meshes, LAS/LAZ point clouds and GeoJSON/
 
 ## Install
 
-**macOS / Linux** (Intel/AMD or ARM64; macOS 15+, or Linux with glibc 2.35+):
+**macOS / Linux** (Apple Silicon Macs with macOS 15+; Linux on x86_64 or ARM64 with glibc 2.35+; Intel Macs: see [INSTALL](docs/INSTALL.md#intel-macs)):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/BenDyson-Arch/rusty-tiles/main/scripts/install.sh | sh
@@ -33,7 +33,7 @@ python -m pip install rusty-tiles
 **From source** (stable Rust and a C++ compiler):
 
 ```sh
-cargo install --git https://github.com/BenDyson-Arch/rusty-tiles --tag v0.4.0 --locked
+cargo install --git https://github.com/BenDyson-Arch/rusty-tiles --tag v0.4.1 --locked
 ```
 
 The [installation guide](docs/INSTALL.md) covers every option, including the native-geospatial build below.
@@ -108,7 +108,7 @@ A separate build adds what needs GDAL, PROJ and GEOS: imagery (`raster`, to COG 
 
 ```sh
 docker run --rm --platform linux/amd64 --network none \
-  -v "$PWD:/data" -w /data ghcr.io/bendyson-arch/rusty-tiles:v0.4.0 \
+  -v "$PWD:/data" -w /data ghcr.io/bendyson-arch/rusty-tiles:v0.4.1 \
   raster -i orthophoto.tif -o imagery --max-zoom 14
 ```
 

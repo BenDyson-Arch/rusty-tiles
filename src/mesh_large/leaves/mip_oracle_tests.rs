@@ -451,6 +451,7 @@ fn historical_abandoned_policy_reports_retained_floor_violations() {
                     Transfer::Linear
                 },
                 mipmaps: false,
+                etc1_hints: crate::basisu_ktx2::Etc1Hints::Full,
             };
             let levels: Vec<_> = chain
                 .levels
@@ -662,6 +663,7 @@ fn probe_decode_effort(
             effort,
             transfer,
             mipmaps: false,
+            etc1_hints: crate::basisu_ktx2::Etc1Hints::Full,
         },
     )
     .unwrap();

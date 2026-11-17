@@ -349,7 +349,10 @@ pub(crate) fn capture_full_in<'s>(
     progress: &'s StepProgress<'_>,
 ) -> Result<SortedStream<'s, FullTriangle>> {
     progress.begin(Step::Validate, 1)?;
-    source.validate_payload(sort.buffer_bytes, &mut || progress.check())?;
+    // On capture's workers, at most two bounded readers each (within the per-job term).
+    source.validate_payload_parallel(sort.buffer_bytes, sort.jobs.max(1), &mut || {
+        progress.check()
+    })?;
     progress.end()?;
     let corners_total = scan.triangles.checked_mul(3).ok_or_else(overflow)?;
     // Only a primitive's own attributes are ever nonzero, so a layout holding them all drops

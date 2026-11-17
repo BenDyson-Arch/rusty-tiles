@@ -695,6 +695,7 @@ fn basis_pages() -> Vec<(&'static str, Vec<u8>)> {
         effort: 0,
         transfer: Transfer::Srgb,
         mipmaps: false,
+        etc1_hints: crate::basisu_ktx2::Etc1Hints::Full,
     };
     [
         ("etc1s", Mode::Etc1s { quality: 50 }),
