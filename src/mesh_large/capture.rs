@@ -177,11 +177,186 @@ fn scan_task(
 /// that capture replaces with its mapped box. `progress` is the cancellation check, given the
 /// triangles scanned so far; it runs on the calling thread.
 ///
-/// Up to `workers` threads scan consecutive triangle ranges with their own bounded readers.
-/// Their boxes are combined in input order, and a failure reports the first failing range in
-/// input order (its first failing triangle), so counts, boxes and verdicts are those of one
-/// sequential pass for any worker count.
+/// Per expanded primitive, up to `workers` threads read the index buffer into a bitmap of the
+/// vertices its triangles use (checking every index), then read the used positions in vertex
+/// order (checking every one). The boxes are the same as those of the triangle-order pass,
+/// since they cover the same set of positions, but positions are read once each in file
+/// order instead of once per corner in index order. On any failure the triangle-order pass
+/// ([`scan_in_triangle_order`]) runs instead and reports exactly its verdict: the first
+/// failing triangle in input order.
 pub(crate) fn scan_with_source_bounds(
+    source: &StreamSource,
+    buffer_bytes: usize,
+    workers: usize,
+    progress: &mut dyn FnMut(u64) -> Result<()>,
+) -> Result<(SourceScan, [[f64; 3]; 2])> {
+    let mut reported = 0;
+    let found = scan_in_vertex_order(source, buffer_bytes, workers, &mut |done| {
+        reported = done;
+        progress(done)
+    })?;
+    match found {
+        Ok(found) => Ok(found),
+        // The verdict pass (its counts never go back). Should it pass where the vertex-order
+        // pass failed (a transient read error), the vertex-order failure stands.
+        Err(failure) => {
+            scan_in_triangle_order(source, buffer_bytes, workers, &mut |done| {
+                progress(done.max(reported))
+            })?;
+            Err(failure)
+        }
+    }
+}
+
+/// Bytes of the used-vertex bitmap of the scan: one bit per vertex of the largest POSITION
+/// accessor of an expanded primitive (one primitive's bitmap is live at a time).
+pub(crate) fn scan_bitmap_bytes(source: &StreamSource) -> u64 {
+    source
+        .document
+        .scene_primitives()
+        .map(|p| p.position.count.div_ceil(64) as u64 * 8)
+        .max()
+        .unwrap_or(0)
+}
+
+/// Vertices one bitmap or position task covers.
+const SCAN_TASK_VERTICES: usize = 1 << 16;
+
+/// A scan and the f64 bounds of the used post-node corners.
+type Scanned = (SourceScan, [[f64; 3]; 2]);
+
+/// The vertex-order scan of [`scan_with_source_bounds`]; the first failure (in time) when
+/// any check failed.
+fn scan_in_vertex_order(
+    source: &StreamSource,
+    buffer_bytes: usize,
+    workers: usize,
+    progress: &mut dyn FnMut(u64) -> Result<()>,
+) -> Result<std::result::Result<Scanned, JobError>> {
+    use super::tasks::{run, Ran};
+    use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+    let primitives: Vec<_> = source.document.scene_primitives().collect();
+    let mut triangles = 0u64;
+    let mut geometry_bytes = 0u64;
+    for p in &primitives {
+        let count = u64::try_from(p.triangles).map_err(|_| overflow())?;
+        triangles = triangles.checked_add(count).ok_or_else(overflow)?;
+        geometry_bytes = geometry_bytes
+            .checked_add(
+                count
+                    .checked_mul(u64::from(triangle_bytes(p)))
+                    .ok_or_else(overflow)?,
+            )
+            .ok_or_else(overflow)?;
+    }
+    progress(0)?;
+    let mut source_bounds = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
+    let mut bounds = Bounds::EMPTY;
+    let mut scanned = 0u64;
+    for p in &primitives {
+        // Used vertices, from every index (checked).
+        let used: Vec<AtomicU64> = (0..p.position.count.div_ceil(64))
+            .map(|_| AtomicU64::new(0))
+            .collect();
+        let done = AtomicU64::new(0);
+        let chunks = p.triangles.div_ceil(SCAN_TASK_TRIANGLES);
+        let marked = run(
+            chunks,
+            workers,
+            &mut || progress(scanned + done.load(Relaxed)),
+            |chunk, stop| {
+                let mut indices = p.indices.map(|v| source.reader(&v, buffer_bytes));
+                let start = chunk * SCAN_TASK_TRIANGLES;
+                let end = (start + SCAN_TASK_TRIANGLES).min(p.triangles);
+                let (mut word, mut bits) = (usize::MAX, 0u64);
+                for triangle in start..end {
+                    if triangle.is_multiple_of(1024) && stop.load(Relaxed) {
+                        return Err(JobError::new(JobErrorKind::Cancelled, "scan stopped"));
+                    }
+                    for vertex in vertices(p, &mut indices, triangle)? {
+                        let w = (vertex / 64) as usize;
+                        if w != word {
+                            if bits != 0 {
+                                used[word].fetch_or(bits, Relaxed);
+                            }
+                            (word, bits) = (w, 0);
+                        }
+                        bits |= 1 << (vertex % 64);
+                    }
+                }
+                if bits != 0 {
+                    used[word].fetch_or(bits, Relaxed);
+                }
+                done.fetch_add((end - start) as u64, Relaxed);
+                Ok(())
+            },
+        )?;
+        if let Ran::Failed(failure) = marked {
+            return Ok(Err(failure));
+        }
+        scanned += p.triangles as u64;
+        // Used positions, in vertex order (checked).
+        let read = run(
+            p.position.count.div_ceil(SCAN_TASK_VERTICES),
+            workers,
+            &mut || progress(scanned),
+            |chunk, stop| {
+                let mut out = TaskScan {
+                    source_bounds: [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]],
+                    bounds: Bounds::EMPTY,
+                };
+                // A small window, as the triangle-order scan used: sparse used vertices then
+                // read a little around each, not up to a full buffer.
+                let mut positions =
+                    source.reader(&p.position, buffer_bytes.min(SCAN_POSITION_WINDOW));
+                let start = chunk * SCAN_TASK_VERTICES;
+                let end = (start + SCAN_TASK_VERTICES).min(p.position.count);
+                // Chunks start on a bitmap word; empty words are skipped 64 vertices at once.
+                let first = start / 64;
+                for (k, word) in used[first..end.div_ceil(64)].iter().enumerate() {
+                    if k % 64 == 0 && stop.load(Relaxed) {
+                        return Err(JobError::new(JobErrorKind::Cancelled, "scan stopped"));
+                    }
+                    let mut bits = word.load(Relaxed);
+                    while bits != 0 {
+                        let vertex = (first + k) * 64 + bits.trailing_zeros() as usize;
+                        bits &= bits - 1;
+                        let world = source_position(p, &mut positions, vertex as u64)?;
+                        include_source(&mut out.source_bounds, world);
+                        out.bounds.include(canonical(world.map(|x| x as f32)));
+                    }
+                }
+                Ok(out)
+            },
+        )?;
+        match read {
+            Ran::Failed(failure) => return Ok(Err(failure)),
+            Ran::All(tasks) => {
+                for task in tasks {
+                    include_source(&mut source_bounds, task.source_bounds[0]);
+                    include_source(&mut source_bounds, task.source_bounds[1]);
+                    bounds.union(&task.bounds);
+                }
+            }
+        }
+    }
+    progress(triangles)?;
+    source.verify_unchanged()?;
+    Ok(Ok((
+        SourceScan {
+            triangles,
+            bounds,
+            geometry_bytes,
+        },
+        source_bounds,
+    )))
+}
+
+/// The scan in triangle order: up to `workers` threads scan consecutive triangle ranges with
+/// their own bounded readers. Their boxes are combined in input order, and a failure reports
+/// the first failing range in input order (its first failing triangle), so counts, boxes and
+/// verdicts are those of one sequential pass for any worker count.
+pub(crate) fn scan_in_triangle_order(
     source: &StreamSource,
     buffer_bytes: usize,
     workers: usize,
@@ -594,6 +769,135 @@ mod tests {
         input
     }
 
+    /// Both scans of `input` on 1 and 3 workers give the same counts, geometry bytes and
+    /// boxes (bit for bit). Returns the scan.
+    fn assert_scans_agree(input: &std::path::Path) -> SourceScan {
+        let source = StreamSource::open(input, &mut || Ok(())).unwrap();
+        let (ordered, ordered_bounds) =
+            scan_in_triangle_order(&source, 1 << 12, 1, &mut |_| Ok(())).unwrap();
+        for workers in [1, 3] {
+            let (scan, bounds) =
+                scan_with_source_bounds(&source, 1 << 12, workers, &mut |_| Ok(())).unwrap();
+            assert_eq!(
+                (scan.triangles, scan.geometry_bytes, scan.bounds),
+                (ordered.triangles, ordered.geometry_bytes, ordered.bounds)
+            );
+            assert_eq!(
+                bounds.map(|c| c.map(f64::to_bits)),
+                ordered_bounds.map(|c| c.map(f64::to_bits))
+            );
+        }
+        ordered
+    }
+
+    /// A vertex no index uses never reaches the scan: an outlier stays out of the boxes, and
+    /// a nonfinite one is not read (payload validation rejects it separately).
+    #[test]
+    fn unused_vertices_never_reach_the_scan() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = indexed_grid(dir.path(), 20, [1e6, 1e6, 1e6], &[]);
+        let scan = assert_scans_agree(&input);
+        assert!(
+            scan.bounds.max.iter().all(|&v| v <= 20.),
+            "{:?}",
+            scan.bounds
+        );
+        let input = indexed_grid(dir.path(), 20, [f32::NAN, 0., 0.], &[]);
+        assert_scans_agree(&input);
+    }
+
+    /// A primitive using only the first and last vertex words of a 70,000-vertex accessor (two
+    /// position tasks, nearly every bitmap word empty) scans as the triangle-order pass.
+    #[test]
+    fn sparse_primitives_scan_across_position_chunks() {
+        let dir = tempfile::tempdir().unwrap();
+        let count = 70_000u32;
+        let mut bytes = Vec::new();
+        for v in 0..count {
+            for c in [v as f32 * 0.01, (v % 11) as f32, -(v as f32) * 0.02] {
+                bytes.extend(c.to_le_bytes());
+            }
+        }
+        let positions = bytes.len();
+        let indices = [0u32, 1, 2, 2, 1, 63, count - 3, count - 2, count - 1];
+        bytes.extend(indices.iter().flat_map(|i| i.to_le_bytes()));
+        fs::write(dir.path().join("sparse.bin"), &bytes).unwrap();
+        let doc = json!({
+            "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+            "nodes":[{"mesh":0}],"meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1}]}],
+            "buffers":[{"uri":"sparse.bin","byteLength":bytes.len()}],
+            "bufferViews":[{"buffer":0,"byteLength":positions},
+                {"buffer":0,"byteOffset":positions,"byteLength":indices.len() * 4}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":count,"type":"VEC3",
+                    "min":[0,0,-1400],"max":[700,10,0]},
+                {"bufferView":1,"componentType":5125,"count":indices.len(),"type":"SCALAR"}]
+        });
+        let input = dir.path().join("sparse.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let scan = assert_scans_agree(&input);
+        assert_eq!(scan.triangles, 3);
+        assert_eq!(scan.bounds.max[0], (count - 1) as f32 * 0.01);
+    }
+
+    /// A scene of primitives sharing one POSITION accessor (vertex counts around a bitmap word,
+    /// different index subsets), a mirrored instance, a non-indexed primitive, and many tiny
+    /// primitives. Both scans agree, and one-task primitives start no threads.
+    #[test]
+    fn multi_primitive_scenes_scan_as_the_triangle_order_pass() {
+        for count in [63u32, 64, 65, 130] {
+            let dir = tempfile::tempdir().unwrap();
+            let mut bytes = Vec::new();
+            for v in 0..count {
+                for c in [v as f32, (v % 7) as f32, (v / 8) as f32] {
+                    bytes.extend(c.to_le_bytes());
+                }
+            }
+            let positions = bytes.len();
+            // Mesh 0: every vertex; mesh 1: the last few only.
+            let all: Vec<u32> = (0..count - 2).flat_map(|v| [v, v + 1, v + 2]).collect();
+            let last: Vec<u32> = vec![count - 3, count - 2, count - 1];
+            let start_all = bytes.len();
+            bytes.extend(all.iter().flat_map(|i| i.to_le_bytes()));
+            let start_last = bytes.len();
+            bytes.extend(last.iter().flat_map(|i| i.to_le_bytes()));
+            fs::write(dir.path().join("scene.bin"), &bytes).unwrap();
+            let tiny = 2000;
+            let mut nodes = vec![
+                json!({"mesh":0}),
+                json!({"mesh":0,"scale":[-1,1,1],"translation":[500,0,0]}),
+                json!({"mesh":1}),
+                json!({"mesh":2}),
+            ];
+            nodes.extend((0..tiny).map(|i| json!({"mesh":1,"translation":[0,i,0]})));
+            let doc = json!({
+                "asset":{"version":"2.0"},"scene":0,
+                "scenes":[{"nodes":(0..nodes.len()).collect::<Vec<_>>()}],
+                "nodes":nodes,
+                "meshes":[
+                    {"primitives":[{"attributes":{"POSITION":0},"indices":1}]},
+                    {"primitives":[{"attributes":{"POSITION":0},"indices":2}]},
+                    {"primitives":[{"attributes":{"POSITION":3}}]}],
+                "buffers":[{"uri":"scene.bin","byteLength":bytes.len()}],
+                "bufferViews":[{"buffer":0,"byteLength":positions,"byteStride":12},
+                    {"buffer":0,"byteOffset":start_all,"byteLength":all.len() * 4},
+                    {"buffer":0,"byteOffset":start_last,"byteLength":12}],
+                "accessors":[{"bufferView":0,"componentType":5126,"count":count,"type":"VEC3",
+                        "min":[0,0,0],"max":[count as f32,6,count as f32 / 8.]},
+                    {"bufferView":1,"componentType":5125,"count":all.len(),"type":"SCALAR"},
+                    {"bufferView":2,"componentType":5125,"count":3,"type":"SCALAR"},
+                    {"bufferView":0,"componentType":5126,"count":count - count % 3,"type":"VEC3",
+                        "min":[0,0,0],"max":[count as f32,6,count as f32 / 8.]}]
+            });
+            let input = dir.path().join("scene.gltf");
+            fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+            super::super::tasks::SPAWNED.with(|n| n.set(0));
+            let scan = assert_scans_agree(&input);
+            assert!(scan.triangles > tiny, "{}", scan.triangles);
+            // Every primitive here is one task per pass: run inline, no threads.
+            assert_eq!(super::super::tasks::SPAWNED.with(|n| n.get()), 0);
+        }
+    }
+
     #[test]
     fn parallel_scan_matches_one_sequential_pass_and_reports_the_first_failure_in_order() {
         // 2 × 300² = 180,000 triangles: three scan tasks.
@@ -612,6 +916,21 @@ mod tests {
         let (sequential, seen) = scan(1);
         let (sequential, bounds) = sequential.unwrap();
         assert_eq!((sequential.triangles, seen), (180_000, 180_000));
+        // The vertex-order scan finds the triangle-order pass's counts and boxes exactly.
+        let (ordered, ordered_bounds) =
+            scan_in_triangle_order(&source, 1 << 12, 1, &mut |_| Ok(())).unwrap();
+        assert_eq!(
+            (ordered.triangles, ordered.geometry_bytes, ordered.bounds),
+            (
+                sequential.triangles,
+                sequential.geometry_bytes,
+                sequential.bounds
+            )
+        );
+        assert_eq!(
+            ordered_bounds.map(|c| c.map(f64::to_bits)),
+            bounds.map(|c| c.map(f64::to_bits))
+        );
         for workers in [2, 3, 8] {
             let (parallel, seen) = scan(workers);
             let (parallel, parallel_bounds) = parallel.unwrap();
@@ -662,6 +981,9 @@ mod tests {
             (error.kind(), error.to_string())
         };
         let sequential = message(1);
+        // Exactly the triangle-order pass's verdict.
+        let ordered = scan_in_triangle_order(&source, 1 << 12, 1, &mut |_| Ok(())).unwrap_err();
+        assert_eq!(sequential, (ordered.kind(), ordered.to_string()));
         assert_eq!(sequential.0, JobErrorKind::InvalidInput);
         assert!(sequential.1.contains("nonfinite"), "{}", sequential.1);
         for workers in [2, 3, 8] {

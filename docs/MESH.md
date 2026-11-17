@@ -662,6 +662,13 @@ and reported as `diagnostics.capture.sort`: `run_bytes`, `fan_in`,
 each sort's output is the stable sort of its input order for every run size,
 fan-in and writer count, so the archive does not depend on the plan.
 
+Capture's preflight scan and payload validation run on the capture workers. The
+scan reads each primitive's index buffer into a bitmap of the vertices its
+triangles use, then reads the used positions once each in file order, instead
+of once per corner in index order. Validation checks every accessor and
+primitive in ranges. When any check fails, the sequential pass runs instead,
+so an invalid source reports the same first error as before.
+
 Capture's cell tree is built as parallel subtrees: the largest octree cells of
 the sorted triangles are split (found by binary search on their Morton keys)
 until there are about 16 per worker, each cell's subtree is built on a worker,
