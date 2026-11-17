@@ -797,7 +797,7 @@ pub(crate) fn capture_admitted(
     progress.end().map_err(super::failure)?;
     // One frame, resolved once from the used post-node source bounds, serves capture; with a
     // source CRS, capture replaces the scan's placeholder box with the mapped one.
-    let frame = match &config.source_crs {
+    let mut frame = match &config.source_crs {
         None => SourceFrame::Local,
         Some(spec) => SourceFrame::resolve(spec, source_bounds).map_err(super::failure)?,
     };
@@ -997,16 +997,6 @@ pub(crate) fn capture_admitted(
         &mut |bytes| with_allowance(bytes).map(|(_, memory)| memory.bound_bytes),
     )?;
     let (assembly_plan, memory) = with_allowance(allowance)?;
-    // One source frame per worker for the assembly's decode tasks, each resolved like the
-    // first (resolution is deterministic), so decode tasks never wait for one another.
-    let mut frames = vec![std::sync::Mutex::new(frame)];
-    for _ in 1..workers {
-        frames.push(std::sync::Mutex::new(match &config.source_crs {
-            None => SourceFrame::Local,
-            Some(spec) => SourceFrame::resolve(spec, source_bounds).map_err(super::failure)?,
-        }));
-    }
-    let frames = assembly::Frames(frames);
     // Image admission decodes beside capture's resident bound, within the declared decoder
     // allowance plus whatever available memory that bound leaves free. Every decode charge
     // is known from the preflight headers, so the largest must fit before any scratch
@@ -1059,7 +1049,7 @@ pub(crate) fn capture_admitted(
         progress.end()?;
         let (triangles, assembly_report) = assembly::assemble(
             &source,
-            &frames,
+            &mut frame,
             &scratch,
             layout,
             &mut scan,

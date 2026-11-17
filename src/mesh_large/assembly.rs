@@ -477,20 +477,35 @@ struct Decoder<'a> {
     buffer_bytes: usize,
 }
 
-/// Source frames for concurrent decode tasks: one per worker, all resolved from the same
-/// request and bounds (resolution is deterministic, so they map every vertex alike).
-pub(crate) struct Frames(pub Vec<Mutex<SourceFrame>>);
-
-impl Frames {
-    /// A frame no other task holds (there are as many as workers), else the first.
-    fn take(&self) -> std::sync::MutexGuard<'_, SourceFrame> {
-        for frame in &self.0 {
-            if let Ok(guard) = frame.try_lock() {
-                return guard;
-            }
-        }
-        self.0[0].lock().unwrap_or_else(|e| e.into_inner())
+/// Runs `task` over `chunks` with a source frame. The local frame carries no state, so the
+/// chunks run on up to `workers` threads, each task with its own. A source CRS frame may hold
+/// a native transform (GDAL/PROJ) that must stay on the thread that made it, so its chunks
+/// run in order on the calling thread with that frame, `poll` between them. Either way every
+/// vertex is mapped by the same deterministic arithmetic.
+fn decode_chunks<T: Send>(
+    frame: &mut SourceFrame,
+    chunks: std::ops::Range<usize>,
+    workers: usize,
+    poll: &mut dyn FnMut() -> Result<()>,
+    task: impl Fn(usize, &mut SourceFrame, &AtomicBool) -> Result<T> + Sync,
+) -> Result<Ran<T>> {
+    let first = chunks.start;
+    if matches!(frame, SourceFrame::Local) {
+        return run(chunks.len(), workers, poll, |i, stop| {
+            task(first + i, &mut SourceFrame::Local, stop)
+        });
     }
+    let stop = AtomicBool::new(false);
+    let mut found = Vec::with_capacity(chunks.len());
+    for chunk in chunks {
+        poll()?;
+        match task(chunk, frame, &stop) {
+            Ok(value) => found.push(value),
+            Err(error) => return Ok(Ran::Failed(error)),
+        }
+    }
+    poll()?;
+    Ok(Ran::All(found))
 }
 
 /// The boxes of a decoded range: mapped f32 and f64 source.
@@ -579,7 +594,7 @@ impl Decoder<'_> {
 fn decode_primitive(
     source: &StreamSource,
     p: &ScenePrimitive<'_>,
-    frames: &Frames,
+    frame: &mut SourceFrame,
     scratch: &Scratch,
     layout: Layout,
     buffer_bytes: usize,
@@ -604,14 +619,17 @@ fn decode_primitive(
     let count = p.position.count;
     let chunks = count.div_ceil(CHUNK_VERTICES);
     let mut boxes = Boxes::EMPTY;
-    let decode_chunk = |chunk: usize, out: &mut [u8], stop: &AtomicBool| -> Result<Boxes> {
+    let decode_chunk = |chunk: usize,
+                        frame: &mut SourceFrame,
+                        out: &mut [u8],
+                        stop: &AtomicBool|
+     -> Result<Boxes> {
         let start = chunk * CHUNK_VERTICES;
         let end = (start + CHUNK_VERTICES).min(count);
-        let mut frame = frames.take();
         let mut decoder = Decoder {
             source,
             p,
-            frame: &mut frame,
+            frame,
             buffer_bytes,
         };
         decoder.decode(&used, start..end, layout, out, stop)
@@ -622,9 +640,9 @@ fn decode_primitive(
             .chunks_mut(CHUNK_VERTICES * size)
             .map(Mutex::new)
             .collect();
-        let ran = run(chunks, workers, poll, |chunk, stop| {
+        let ran = decode_chunks(frame, 0..chunks, workers, poll, |chunk, frame, stop| {
             let mut slot = slots[chunk].lock().unwrap_or_else(|e| e.into_inner());
-            decode_chunk(chunk, &mut slot, stop)
+            decode_chunk(chunk, frame, &mut slot, stop)
         })?;
         drop(slots);
         let found = match ran {
@@ -644,11 +662,10 @@ fn decode_primitive(
     let wave = 2 * workers.max(1);
     for first in (0..chunks).step_by(wave) {
         let last = (first + wave).min(chunks);
-        let ran = run(last - first, workers, poll, |i, stop| {
-            let chunk = first + i;
+        let ran = decode_chunks(frame, first..last, workers, poll, |chunk, frame, stop| {
             let len = (CHUNK_VERTICES.min(count - chunk * CHUNK_VERTICES)) * size;
             let mut out = vec![0u8; len];
-            let found = decode_chunk(chunk, &mut out, stop)?;
+            let found = decode_chunk(chunk, frame, &mut out, stop)?;
             Ok((out, found))
         })?;
         let found = match ran {
@@ -911,7 +928,7 @@ fn place_corners(
 fn first_vertex_failure(
     source: &StreamSource,
     p: &ScenePrimitive<'_>,
-    frames: &Frames,
+    frame: &mut SourceFrame,
     layout: Layout,
     buffer_bytes: usize,
     poll: &mut dyn FnMut() -> Result<()>,
@@ -932,11 +949,10 @@ fn first_vertex_failure(
         }
     }
     let size = DecodedVertex::size_in(layout);
-    let mut frame = frames.take();
     let mut decoder = Decoder {
         source,
         p,
-        frame: &mut frame,
+        frame,
         buffer_bytes,
     };
     let stop = AtomicBool::new(false);
@@ -1058,7 +1074,7 @@ impl Record for StagedRun {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn assemble(
     source: &StreamSource,
-    frames: &Frames,
+    frame: &mut SourceFrame,
     scratch: &Scratch,
     layout: Layout,
     scan: &mut SourceScan,
@@ -1101,7 +1117,7 @@ pub(crate) fn assemble(
         let decoded = decode_primitive(
             source,
             p,
-            frames,
+            frame,
             scratch,
             layout,
             buffer_bytes,
@@ -1119,7 +1135,7 @@ pub(crate) fn assemble(
             // error) the task's own failure.
             Err(failure) => {
                 let first =
-                    first_vertex_failure(source, p, frames, layout, buffer_bytes, &mut || {
+                    first_vertex_failure(source, p, frame, layout, buffer_bytes, &mut || {
                         stop_check()?;
                         progress.check()
                     })?;
@@ -1141,7 +1157,7 @@ pub(crate) fn assemble(
         progress.advance(done)?;
     }
     progress.end()?;
-    let expected = frames.take().source_bounds();
+    let expected = frame.source_bounds();
     if let Some(expected) = expected {
         if boxes.source != expected {
             return Err(invalid(

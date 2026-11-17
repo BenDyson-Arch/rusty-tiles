@@ -303,10 +303,10 @@ pub(crate) fn capture_full_with(
 ) -> Result<Vec<FullTriangle>> {
     let mut scan = *scan;
     source.validate_payload(sort.buffer_bytes, &mut || Ok(()))?;
-    let frames = super::assembly::Frames(vec![std::sync::Mutex::new(SourceFrame::Local)]);
+    let mut frame = SourceFrame::Local;
     let (rows, _) = super::assembly::assemble(
         source,
-        &frames,
+        &mut frame,
         scratch,
         layout,
         &mut scan,
