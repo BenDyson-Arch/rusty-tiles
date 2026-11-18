@@ -1071,14 +1071,11 @@ fn encoded_image_past_the_old_32_mib_ceiling_is_admitted_and_builds_identically(
                 (member.name().to_owned(), bytes)
             })
             .collect::<Vec<_>>();
-        (
-            members,
-            result.diagnostics.memory.hlod.texture_workspace_bytes,
-        )
+        (members, result.diagnostics.memory.hlod.decode_bytes)
     };
-    let (padded, padded_texture) = run("padded", Some((32 << 20) + 1));
-    let (plain, plain_texture) = run("plain", None);
-    // The coarse stage charges the largest encoded image at its actual length.
+    let (padded, padded_decode) = run("padded", Some((32 << 20) + 1));
+    let (plain, plain_decode) = run("plain", None);
+    // The coarse stage's decode slot charges the largest encoded image at its actual length.
     let largest_plain = ["a.png", "b.png"]
         .map(|n| {
             fs::metadata(work.path().join("plain").join(n))
@@ -1089,10 +1086,7 @@ fn encoded_image_past_the_old_32_mib_ceiling_is_admitted_and_builds_identically(
         .max()
         .unwrap();
     assert!(largest_plain < 1 << 20);
-    assert_eq!(
-        padded_texture - plain_texture,
-        (32 << 20) + 1 - largest_plain
-    );
+    assert_eq!(padded_decode - plain_decode, (32 << 20) + 1 - largest_plain);
     assert_eq!(padded.len(), plain.len());
     assert!(padded.iter().any(|(name, _)| name.ends_with(".glb")));
     for ((name, a), (other, b)) in padded.iter().zip(&plain) {
