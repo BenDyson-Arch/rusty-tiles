@@ -281,17 +281,32 @@ rusty-tiles mesh-inspect -i site.glb --source-crs EPSG:3857 --source-offset-file
   --geojson site-check.geojson
 ```
 
-Checks a `mesh` source before a bake and writes no archive. It reports open edges and loops by length class, edges on primitive boundaries and how many coincide with another primitive's edge, repeated positions and the edges welding them would close, connected components, and an estimated coarse omission per cell over the cells the bake would build. See [check a source before baking](MESH.md#check-a-source-before-baking).
+Checks a `mesh` source before a bake and writes no archive. It reports exact counts of:
 
-It takes `mesh`'s `-i`, `--profile`, `--jobs`, `--scratchDir`, `--memory-budget`, placement and source CRS options, with the same meaning: give the options you will bake with, so the cells line up. It also takes:
+- open edges and loops by length class;
+- edges on primitive boundaries, and how many coincide with another primitive's edge;
+- repeated positions, and the edges welding them would close;
+- connected components.
+
+It also gives an estimated coarse-omission risk per cell over the cells the bake would build. See [check a source before baking](MESH.md#check-a-source-before-baking).
+
+It takes `mesh`'s `-i`, `--profile`, `--jobs`, `--scratchDir`, `--memory-budget`, placement and source CRS options, with the same meaning. Give the options you will bake with, so the cells line up. It also takes:
 
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
-| `--geojson PATH` | | none | Also write a `.geojson` of open loops and seams at least `--minFeatureLength` long and of the cells at risk. WGS84 with `--anchor` or a source CRS, else local east/north metres. Installed only after the run succeeds. |
+| `--geojson PATH` | | none | Also write a `.geojson` of open loops and seams at least `--minFeatureLength` long (ordered polylines) and of the cells at risk. Coordinates are WGS84, so the source needs `--anchor` or a source CRS; otherwise the request is refused unless `--geojsonLocal` is given. Installed only after the run succeeds. |
+| `--geojsonLocal` | `--geojson-local` | off | Write the GeoJSON in local east/north metres (east = glTF +X, north = glTF −Z) instead. This is not RFC 7946; a top-level `rustyTilesFrame` member says so. |
 | `--minFeatureLength METRES` | `--min-feature-length` | `5` | Shortest open loop or seam written to the GeoJSON. |
 | `-f`, `--force` | | off | Replace an existing GeoJSON. |
 
-Without `--json` it prints six summary lines on stderr, and a seventh naming the GeoJSON. `--json` returns `inspectReport` (the same for every `--jobs`, budget and scratch location), `diagnostics` (workers, the memory plan and stage seconds) and `cleanupDiagnostics`. The omission forecast is labelled an estimate (`"estimate": true`): only `certain` cells, whose border contract alone exceeds the triangle cap, are certain.
+Without `--json` it prints six summary lines on stderr, and a seventh naming the GeoJSON. `--json` returns:
+
+- `inspectReport`: the same for every `--jobs`, budget, scratch location and GeoJSON path;
+- `geojson`: the installed path, or null;
+- `diagnostics`: workers, the memory plan and stage seconds;
+- `cleanupDiagnostics`.
+
+The omission risk is an estimate (`"estimate": true`). On four measured bakes its omitted-cell precision was 0.13–1.00 and its recall 0.33–1.00. It found only 3 of 18 actual omission sources. `certain` cells, whose border contract alone exceeds the triangle cap, follow the bake's own rule; that has been checked against a bake only on a synthetic case.
 
 ### preview
 

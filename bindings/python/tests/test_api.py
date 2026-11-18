@@ -384,11 +384,18 @@ class WheelAPI(unittest.TestCase):
         write_local_mesh(source)
         geojson = self.root / "inspect.geojson"
         events = []
+        # An unplaced source has no WGS84 position: local metres must be asked for.
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.inspect_mesh(source, geojson=geojson)
+        self.assertFalse(geojson.exists())
         result = rusty_tiles.inspect_mesh(
-            source, geojson=geojson, min_feature_length=1.0, jobs=1, callback=events.append,
+            source, geojson=geojson, geojson_local=True, min_feature_length=1.0, jobs=1,
+            callback=events.append,
         )
-        self.assertEqual(set(result), {"report", "diagnostics", "cleanup_diagnostics", "summary"})
-        report = result["report"]
+        self.assertIsInstance(result, rusty_tiles.InspectResult)
+        self.assertTrue(result.geojson.samefile(geojson))
+        self.assertEqual(result.cleanup_diagnostics, [])
+        report = result.report
         self.assertEqual(report["operation"], "mesh_inspect")
         source_report = report["source"]
         # Three separate unindexed triangles: nothing is shared.
@@ -401,23 +408,38 @@ class WheelAPI(unittest.TestCase):
         self.assertEqual(report["forecast"]["root"], "built")
         self.assertTrue(report["forecast"]["estimate"])
         self.assertEqual(report["geojson"]["open_loops"], 3)
+        self.assertEqual(report["geojson"]["coordinates"], "local_east_north_metres")
+        self.assertNotIn("path", report["geojson"])
         document = json.loads(geojson.read_text(encoding="utf-8"))
         self.assertEqual(document["type"], "FeatureCollection")
+        self.assertIs(document["rustyTilesFrame"]["wgs84"], False)
         self.assertEqual(len(document["features"]), 3)
-        self.assertTrue(result["summary"][0].startswith("source: 3 triangles"))
+        for feature in document["features"]:
+            (ring,) = feature["geometry"]["coordinates"]
+            self.assertEqual(len(ring), 4)
+            self.assertEqual(ring[0], ring[-1])
+        self.assertTrue(result.summary[0].startswith("source: 3 triangles"))
+        self.assertTrue(any(line.startswith("omission risk (an estimate") for line in result.summary))
         phases = {event.get("phase") for event in events}
         self.assertTrue({"capture", "inspect_vertices", "inspect_edges", "inspect_loops"} <= phases, phases)
-        # Deterministic: another worker count gives the same report (but for the path).
-        again = rusty_tiles.inspect_mesh(source, jobs=None)["report"]
+        with self.assertRaises(AttributeError):
+            result.geojson = self.root / "redirected.geojson"
+        # Deterministic: another worker count, without a GeoJSON, gives the same report.
+        again = rusty_tiles.inspect_mesh(source, jobs=None)
+        self.assertIsNone(again.geojson)
         report.pop("geojson")
-        self.assertEqual(again, report)
+        self.assertEqual(again.report, report)
         with self.assertRaises(rusty_tiles.OutputExistsError):
-            rusty_tiles.inspect_mesh(source, geojson=geojson)
-        rusty_tiles.inspect_mesh(source, geojson=geojson, force=True)
+            rusty_tiles.inspect_mesh(source, geojson=geojson, geojson_local=True)
+        rusty_tiles.inspect_mesh(source, geojson=geojson, geojson_local=True, force=True)
         with self.assertRaises(rusty_tiles.InvalidRequestError):
-            rusty_tiles.inspect_mesh(source, geojson=self.root / "inspect.json")
+            rusty_tiles.inspect_mesh(source, geojson=self.root / "inspect.json", geojson_local=True)
         with self.assertRaises(rusty_tiles.InvalidRequestError):
             rusty_tiles.inspect_mesh(source, min_feature_length=-1.0)
+        placed = rusty_tiles.inspect_mesh(
+            source, geojson=self.root / "placed.geojson", anchor=(153.02, -27.47, 25.0),
+        )
+        self.assertEqual(placed.report["geojson"]["coordinates"], "wgs84")
         if CLI:
             completed = subprocess.run(
                 [CLI, "--json", "mesh-inspect", "-i", str(source), "--jobs", "1"],

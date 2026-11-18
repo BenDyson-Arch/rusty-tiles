@@ -61,7 +61,7 @@ pub(crate) struct LeafFacts {
     /// such an edge crosses the border of every ancestor cell deeper than `k`.
     pub open: [u32; DEPTHS],
     /// Their lengths, by the same `k`.
-    pub length: [f32; DEPTHS],
+    pub length: [f64; DEPTHS],
 }
 impl Default for LeafFacts {
     fn default() -> Self {
@@ -125,8 +125,10 @@ pub(crate) struct CellForecast {
     /// Linked contract items, reported also past the limit.
     pub contract_items: u64,
     pub terminal_locks: u64,
-    /// The exact contract points of its children: every border point the merged input holds.
-    pub child_points: u64,
+    /// The distinct contract points of the tiles its build merges (its children's, or a
+    /// recovered root's frontier tiles'): every border point the merged input holds. `None`
+    /// for a cell omitted beside an unbounded frontier, which the bake never builds.
+    pub child_points: Option<u64>,
     /// Source open edges in the cell whose loop crosses its border, and their length.
     pub crossing_open_edges: u64,
     pub crossing_open_length: f64,
@@ -137,13 +139,17 @@ pub(crate) struct CellForecast {
     pub outcome: Outcome,
 }
 
-/// What a finished cell or leaf hands its parent.
+/// What a finished cell or leaf hands its parent: the tiles its parent would merge.
 #[derive(Clone)]
 struct Handed {
     coarse: bool,
-    /// Contract points of the child (its own node's), sorted and distinct; empty past the
-    /// contract limit, when `points` counts its linked items instead.
+    /// The contract points of the tiles it hands up, sorted and distinct: its own contract's
+    /// when it publishes, or the union of its frontier tiles' when it is omitted with a
+    /// bounded frontier (what a recovered root merges). Points of a contract past the limit
+    /// are not listed; `unlisted` counts their linked items instead.
     keys: Vec<interfaces::Key>,
+    unlisted: u64,
+    /// Its own contract's points (or linked items past the limit), as reported.
     points: u64,
     omitted: bool,
     /// Its frontier: capped tiles it hands up (1 when built), `None` when unavailable.
@@ -159,6 +165,8 @@ struct Frame {
     leaf_begin: u32,
     started: usize,
     children: Vec<Handed>,
+    /// Its children's points were dropped (`drop_unbounded`).
+    unbounded: bool,
     area: f64,
     open: [u64; DEPTHS],
     length: [f64; DEPTHS],
@@ -198,12 +206,15 @@ pub(crate) fn memory_need(captured: &FullCaptured, config: &TreeConfig, cap: usi
             .internal
             .saturating_mul(std::mem::size_of::<CellForecast>() as u64),
     )
+    // An open frame holds at most `2 × INPUTS` tiles' points: keys are dropped once its
+    // children's frontier passes `INPUTS` tiles beside an omission (`drop_unbounded`).
     .saturating_add(u64::from(captured.tree.stats.height).saturating_mul(
         std::mem::size_of::<Frame>() as u64
-            + 8 * (std::mem::size_of::<Handed>() as u64 + child_key_bytes(cap)),
+            + 8 * std::mem::size_of::<Handed>() as u64
+            + 2 * recovery::INPUTS as u64 * child_key_bytes(cap),
     ))
     // One parent's union of its children's points.
-    .saturating_add(8 * child_key_bytes(cap))
+    .saturating_add(2 * recovery::INPUTS as u64 * child_key_bytes(cap))
 }
 
 /// The most a child's contract points occupy: a contract within the limit has at most
@@ -246,7 +257,14 @@ pub(crate) fn forecast(
         return Err(state("leaf facts differ from the tree's leaves"));
     }
     captured.scratch.begin_stage();
-    let admit = |bound: u64| admit_charged_scratch(captured, charged, bound);
+    let admit = |bound: u64| {
+        admit_charged_scratch(
+            captured,
+            charged,
+            bound,
+            crate::spill::PreflightStage::Inspection,
+        )
+    };
     let sorter = config.sorter(1);
     let (rows, stats, source_open_ends) = interfaces::build(
         &captured.scratch,
@@ -339,22 +357,46 @@ fn point_keys(contract: &borders::Contract) -> Vec<interfaces::Key> {
     keys
 }
 
-/// The border points a parent's merged input holds: the distinct union of its children's
-/// contract points (a point on a face between two children is in both). A child past the
-/// contract limit adds its linked item count.
-fn union_points(children: &[Handed]) -> u64 {
+/// The border points a parent's merged input holds: the distinct union of the contract
+/// points of the tiles its children hand up (a point on a face between two tiles is in
+/// both), and the linked items of contracts past the limit.
+fn union_points(children: &[Handed]) -> (Vec<interfaces::Key>, u64) {
     let mut keys: Vec<interfaces::Key> = children
         .iter()
         .flat_map(|c| c.keys.iter().copied())
         .collect();
     keys.sort_unstable();
     keys.dedup();
-    let unlisted: u64 = children
+    (keys, children.iter().map(|c| c.unlisted).sum())
+}
+
+/// The capped tiles `children` hand up, when every child hands a complete frontier within
+/// the cap: the walk's `recovery::bounded` condition, at most `INPUTS` tiles.
+fn frontier(children: &[Handed]) -> Option<u32> {
+    children
         .iter()
-        .filter(|c| c.keys.is_empty())
-        .map(|c| c.points)
-        .sum();
-    keys.len() as u64 + unlisted
+        .try_fold((0u32, true), |(n, capped), c| {
+            c.tiles.map(|t| (n.saturating_add(t), capped && c.capped))
+        })
+        .filter(|&(n, capped)| capped && n > 0 && n as usize <= recovery::INPUTS)
+        .map(|(n, _)| n)
+}
+
+/// A frame whose children cannot form a bounded frontier and include an omission has no
+/// use for their points (it is omitted without a build, and hands up no frontier): drop them.
+fn drop_unbounded(frame: &mut Frame) {
+    let omitted = frame.children.iter().any(|c| c.omitted);
+    let tiles = frame
+        .children
+        .iter()
+        .try_fold(0u32, |n, c| c.tiles.map(|t| n.saturating_add(t)));
+    if omitted && tiles.is_none_or(|n| n as usize > recovery::INPUTS) {
+        frame.unbounded = true;
+        for c in &mut frame.children {
+            c.keys = Vec::new();
+            c.unlisted = 0;
+        }
+    }
 }
 
 /// Replays `walk`'s frames and `close` over the frozen tree.
@@ -420,7 +462,7 @@ fn walk(
                 contract_segments: None,
                 contract_items: borders.contract_items(key)?,
                 terminal_locks: 0,
-                child_points: only.points,
+                child_points: Some(only.points),
                 crossing_open_edges: crossing.0,
                 crossing_open_length: crossing.1,
                 open_estimate: 0.,
@@ -451,11 +493,21 @@ fn walk(
                 }
                 None => (None, None, u64::MAX, 0),
             };
-            let child_points = union_points(&frame.children);
-            let children = frame.children.len().max(1) as f64;
+            // The tiles the build merges: its children's, or for a recovered root the
+            // bounded frontier its omitted children hand up.
+            let (union, unlisted) = union_points(&frame.children);
+            let child_points = union.len() as u64 + unlisted;
+            let merged: u32 = frame
+                .children
+                .iter()
+                .map(|c| c.tiles.unwrap_or(1))
+                .fold(0u32, u32::saturating_add)
+                .max(1);
             let triangles = node.triangles();
-            // The children's capped tiles: their mean edge length over the cell's surface.
-            let tiles = (triangles as f64).min(children * cap as f64).max(1.);
+            // Their mean edge length over the cell's surface, each tile at most at the cap.
+            let tiles = (triangles as f64)
+                .min(f64::from(merged) * cap as f64)
+                .max(1.);
             let edge = (4. * frame.area / (3f64.sqrt() * tiles)).sqrt();
             let open_estimate = if edge > 0. && edge.is_finite() {
                 (crossing.0 as f64).min(crossing.1 / edge)
@@ -473,14 +525,7 @@ fn walk(
                 Risk::Low
             };
             let has_omission = frame.children.iter().any(|c| c.omitted);
-            let frontier = frame
-                .children
-                .iter()
-                .try_fold((0u32, true), |(n, capped), c| {
-                    c.tiles.map(|t| (n.saturating_add(t), capped && c.capped))
-                })
-                .filter(|&(n, capped)| capped && n > 0 && n as usize <= recovery::INPUTS)
-                .map(|(n, _)| n);
+            let frontier = frontier(&frame.children);
             let root = !parent_depth_open || borders.publication_depth(key)? == 0;
             let recovery_allowed = settings.mutation.recovery();
             let outcome = if has_omission && !(root && recovery_allowed && frontier.is_some()) {
@@ -504,12 +549,13 @@ fn walk(
                 leaf_end: key.leaf_end,
                 bounds: node.bounds,
                 triangles,
-                children: frame.children.len() as u32,
+                children: u32::try_from(frame.children.len())
+                    .map_err(|_| state("a cell with too many children"))?,
                 contract_points: points,
                 contract_segments: segments,
                 contract_items: items,
                 terminal_locks: locks,
-                child_points,
+                child_points: (!frame.unbounded).then_some(child_points),
                 crossing_open_edges: crossing.0,
                 crossing_open_length: crossing.1,
                 open_estimate,
@@ -518,9 +564,18 @@ fn walk(
                 outcome,
             });
             let omitted = outcome.omitted();
+            let (keys, unlisted) = match (omitted, frontier, &contract) {
+                // Built: its own tile's contract.
+                (false, _, Some(c)) => (point_keys(c), 0),
+                (false, _, None) => (Vec::new(), items),
+                // Omitted with a bounded frontier: the frontier tiles' points.
+                (true, Some(_), _) => (union, unlisted),
+                (true, None, _) => (Vec::new(), 0),
+            };
             Handed {
                 coarse: true,
-                keys: contract.as_ref().map(point_keys).unwrap_or_default(),
+                keys,
+                unlisted,
                 points: points.unwrap_or(items),
                 omitted,
                 tiles: if omitted { frontier } else { Some(1) },
@@ -530,6 +585,7 @@ fn walk(
         };
         if let Some(parent) = stack.last_mut() {
             parent.children.push(handed);
+            drop_unbounded(parent);
             parent.area += frame.area;
             for k in 0..DEPTHS {
                 parent.open[k] += frame.open[k];
@@ -553,6 +609,7 @@ fn walk(
                 leaf_begin: leaf,
                 started: 0,
                 children: Vec::with_capacity(8),
+                unbounded: false,
                 area: 0.,
                 open: [0; DEPTHS],
                 length: [0.; DEPTHS],
@@ -569,13 +626,16 @@ fn walk(
             leaf_begin: leaf,
             leaf_end: leaf + 1,
         };
-        let (keys, points) = match borders.contract(key, 6 * cap)? {
+        let (keys, unlisted, points) = match borders.contract(key, 6 * cap)? {
             Some(c) => {
                 let keys = point_keys(&c);
                 let n = keys.len() as u64;
-                (keys, n)
+                (keys, 0, n)
             }
-            None => (Vec::new(), borders.contract_items(key)?),
+            None => {
+                let items = borders.contract_items(key)?;
+                (Vec::new(), items, items)
+            }
         };
         let parent = stack
             .last_mut()
@@ -583,16 +643,18 @@ fn walk(
         parent.children.push(Handed {
             coarse: false,
             keys,
+            unlisted,
             points,
             omitted: false,
             tiles: Some(1),
             capped: node.triangles() <= cap as u64,
             cell: None,
         });
+        drop_unbounded(parent);
         parent.area += facts.area;
         for k in 0..DEPTHS {
             parent.open[k] += u64::from(facts.open[k]);
-            parent.length[k] += f64::from(facts.length[k]);
+            parent.length[k] += facts.length[k];
         }
         leaf = leaf
             .checked_add(1)
@@ -656,7 +718,10 @@ pub(crate) fn cell_intervals(
             stack.pop();
         }
         if node.kind == NodeKind::Internal {
-            let parent = stack.last().map_or(u32::MAX, |&(i, _)| i as u32);
+            let parent = match stack.last() {
+                Some(&(i, _)) => u32::try_from(i).map_err(|_| state("cell index overflow"))?,
+                None => u32::MAX,
+            };
             let depth = u8::try_from(node.depth()).map_err(|_| state("cell depth overflow"))?;
             out.push((leaf, leaf, depth, parent));
             stack.push((out.len() - 1, node.end));
@@ -695,5 +760,81 @@ mod tests {
         assert_eq!(common_depth(&cells, 2, 2), 2);
         assert_eq!(common_depth(&cells, 2, 3), 1);
         assert_eq!(common_depth(&cells, 3, 3), 1);
+    }
+
+    fn handed(keys: &[u32], omitted: bool, tiles: Option<u32>) -> Handed {
+        Handed {
+            coarse: true,
+            keys: keys.iter().map(|&k| [k, 0, 0]).collect(),
+            unlisted: 0,
+            points: keys.len() as u64,
+            omitted,
+            tiles,
+            capped: true,
+            cell: None,
+        }
+    }
+
+    /// A recovered root merges the frontier its omitted child hands up: the union of those
+    /// tiles' points and their tile count, not the omitted child's own contract.
+    #[test]
+    fn a_recovered_root_merges_the_frontier_tiles() {
+        // A built child (points 1, 2) and an omitted child handing up three tiles whose
+        // points are 2..=6 (its own contract would be different and is not used).
+        let children = [
+            handed(&[1, 2], false, Some(1)),
+            handed(&[2, 3, 4, 5, 6], true, Some(3)),
+        ];
+        assert_eq!(frontier(&children), Some(4));
+        let (keys, unlisted) = union_points(&children);
+        assert_eq!((keys.len(), unlisted), (6, 0));
+        // Past eight tiles there is no bounded frontier.
+        let wide = [handed(&[1], false, Some(1)), handed(&[2], true, Some(8))];
+        assert_eq!(frontier(&wide), None);
+        // An omitted child without a frontier makes it unavailable.
+        assert_eq!(frontier(&[handed(&[1], true, None)]), None);
+    }
+
+    /// Points are dropped once a frame's frontier cannot be bounded beside an omission (the
+    /// cell is omitted without a build and hands up nothing), and only then.
+    #[test]
+    fn unbounded_frames_drop_their_points() {
+        let frame = |children: Vec<Handed>| Frame {
+            node: NodeRecord {
+                cell_depth: 0,
+                cell: 0,
+                path_len: 0,
+                path: 0,
+                last_octant: 0,
+                kind: NodeKind::Internal,
+                children: 0,
+                first: 0,
+                end: 1,
+                bytes: 0,
+                bounds: Bounds::EMPTY,
+            },
+            leaf_begin: 0,
+            started: children.len(),
+            children,
+            unbounded: false,
+            area: 0.,
+            open: [0; DEPTHS],
+            length: [0.; DEPTHS],
+        };
+        let mut kept = frame(vec![
+            handed(&[1], false, Some(1)),
+            handed(&[2, 3], true, Some(7)),
+        ]);
+        drop_unbounded(&mut kept);
+        assert!(!kept.unbounded && kept.children.iter().all(|c| !c.keys.is_empty()));
+        let mut dropped = frame(vec![
+            handed(&[1], false, Some(1)),
+            handed(&[2], true, Some(8)),
+        ]);
+        drop_unbounded(&mut dropped);
+        assert!(dropped.unbounded && dropped.children.iter().all(|c| c.keys.is_empty()));
+        let mut built = frame((0..8).map(|k| handed(&[k], false, Some(1))).collect());
+        drop_unbounded(&mut built);
+        assert!(!built.unbounded);
     }
 }

@@ -221,10 +221,18 @@ struct MeshInspectArgs {
     #[arg(short = 'i', long)]
     input: PathBuf,
     /// Also write a GeoJSON (.geojson) of open loops and seams at least --minFeatureLength
-    /// long and of the cells at risk; WGS84 with --anchor or --source-crs, else local
-    /// east/north metres
+    /// long and of the cells at risk, in WGS84; needs --anchor or --source-crs unless
+    /// --geojsonLocal is given
     #[arg(long, value_name = "PATH")]
     geojson: Option<PathBuf>,
+    /// Write the GeoJSON in local east/north metres (east = glTF +X, north = glTF -Z), not
+    /// RFC 7946 WGS84; the file says so in a top-level `rustyTilesFrame` member
+    #[arg(
+        long = "geojsonLocal",
+        visible_alias = "geojson-local",
+        requires = "geojson"
+    )]
+    geojson_local: bool,
     /// Shortest open loop or seam written to the GeoJSON, in metres
     #[arg(
         long = "minFeatureLength",
@@ -1002,6 +1010,7 @@ fn inspect_summary(result: &rusty_tiles::InspectResult) -> Value {
     json!({
         "ok":true,
         "inspectReport":result.report,
+        "geojson":result.geojson.as_ref().map(|p| p.to_string_lossy()),
         "diagnostics":result.diagnostics,
         "cleanupDiagnostics":cleanup_diagnostics_summary(&result.cleanup_diagnostics),
     })
@@ -1308,6 +1317,7 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
                 .with_profile(a.profile)
                 .with_jobs(a.jobs)
                 .with_min_feature_length(a.min_feature_length)
+                .with_geojson_local(a.geojson_local)
                 .with_output_policy(if a.force {
                     OutputPolicy::Replace
                 } else {

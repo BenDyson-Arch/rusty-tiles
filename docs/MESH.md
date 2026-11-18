@@ -52,13 +52,15 @@ will bake with and its cells are the bake's cells. It writes no archive. The
 source is read once; later passes read the captured scratch files. Every sort
 is admitted on the scratch and every resident array against the memory budget
 before it is written, so a source the budget cannot hold is refused as
-`resource_limit`, as `mesh` refuses it. Capture is usually the larger part of
-its time: a few percent to a quarter of a bake's CPU time on the sources
-measured, plus about as much again for the passes below.
+`resource_limit`, as `mesh` refuses it. On the sources measured it took 7–30 %
+of a bake's wall time on the same cores: capture, plus about as much again for
+the passes below.
 
 The report (`--json`'s `inspectReport`, Python's `report`) is the same for
-every `--jobs`, budget and scratch location. Without `--json`, six lines on
-stderr summarise it (a seventh names the GeoJSON). It holds:
+every `--jobs`, budget, scratch location and GeoJSON path; the path is reported
+beside it (`geojson` in `--json`, `InspectResult.geojson` in Python). Without
+`--json`, six lines on stderr summarise it (a seventh names the GeoJSON). It
+holds:
 
 - **Source topology** (`source`), on exact positions: two corners are one
   position only when their captured coordinates are bit-equal, with no
@@ -81,54 +83,78 @@ stderr summarise it (a seventh names the GeoJSON). It holds:
   every one exactly.
 - **The cell tree** (`tree`): leaves, coarse cells, height, leaf size and the
   triangle cap.
-- **An omission forecast** (`forecast`), labelled `"estimate": true`.
+- **An omission risk estimate** (`forecast`), labelled `"estimate": true`.
+
+The topology counts are exact. The forecast is not.
 
 ### The omission forecast is an estimate
 
 The forecast replays the bake's structural rules over its real contracts and
-estimates only whether each cell's own build fails:
+estimates whether each cell's own build fails:
 
-- A cell whose border contract alone cannot fit the triangle cap is omitted
-  without a build (`risk: "certain"`). This part is exact: those cells are the
-  bake's `contract_lower_bound` omissions.
-- A cell is otherwise scored by
-  `load = (children's contract points + open-boundary estimate) / cap`. The
-  children's contract points are the distinct border points their merged input
-  holds, read from the same contracts the bake builds with. The open-boundary
-  estimate counts the source's open edges on loops that cross the cell's
-  border (the boundaries the last resort must keep), at the resolution of the
-  children's capped tiles. On measured bakes the omission sources were
-  contraction stalls (the parent could not remove the border points its children
-  keep inside it) or stalled proposals, never a refused assessment. Risk is
-  `high` from a load of 1 (predicted omitted), `elevated` from 0.5, otherwise
-  `low`.
-- Omission propagates as in the bake: every ancestor of an omitted cell is
-  omitted, except that the root is rebuilt when its children's frontier is
-  complete and holds at most eight capped tiles (`root: "recovered"`).
-  Pass-through cells share their child's outcome.
+- **Certain omissions.** A cell whose border contract alone cannot fit the
+  triangle cap is omitted without a build (`risk: "certain"`), and the bake
+  reports it as `contract_lower_bound`. The rule is the bake's own. It has been
+  checked against a bake only on a synthetic sheet with a tiny cap, where the
+  certain cells matched cell for cell. None of the real sources measured had a
+  certain cell.
+- **The estimate.** Every other cell is scored by
+  `load = (merged contract points + open-boundary estimate) / cap`.
+  - The merged contract points are the distinct border points of the tiles the
+    build merges: its children's or, for a root rebuilt from a frontier, the
+    frontier tiles'. They come from the same contracts the bake builds with.
+  - The open-boundary estimate counts the source's open edges on loops that
+    cross the cell's border (the boundaries the last resort must keep), at the
+    resolution of the merged capped tiles.
+  - On measured bakes the omission sources were contraction stalls (the parent
+    could not remove the border points its children keep inside it) or stalled
+    proposals.
+  - Risk is `high` from a load of 1 (counted as a predicted omission),
+    `elevated` from 0.5, otherwise `low`. The thresholds were fixed before
+    measuring, not fitted.
+- **Propagation.** Omission propagates as in the bake: every ancestor of an
+  omitted cell is omitted, except that the root is rebuilt when its children's
+  frontier is complete and holds at most eight capped tiles
+  (`root: "recovered"`). Pass-through cells share their child's outcome.
 
-`forecast.by_depth` gives the cells, risks, predicted omitted cells (counted as
-`omitted_by_depth` counts them) and predicted sources at each depth;
-`top_cells` lists the highest loads and every certain source. The estimate
-misses omissions caused by folds or stalls on surfaces with few open
-boundaries, and it predicts some that the last-resort stages avoid. Treat a
-high load as a reason to look, not as a verdict.
+**Measured quality.** Four bakes with known omissions were compared cell by
+cell: two crops of private photogrammetry models and two synthetic surfaces.
+
+- Precision for omitted cells was 0.13–1.00 and recall 0.33–1.00. The lower
+  precision went with high recall, and the reverse.
+- The estimate rarely finds the cell that actually fails: 3 of the 18 bakes'
+  omission sources. Its recall comes mostly from propagation: any predicted
+  failure marks the same shallow ancestors the bake omits.
+- It predicts failures that the coarse drops and last-resort stages avoid,
+  such as cities whose open boundaries belong to border-free buildings. It
+  misses fold and stall failures on surfaces with few open boundaries.
+
+Treat `high` risk as a reason to look at a region, not as a verdict.
+`forecast.by_depth` gives the cells, risks and predicted omissions at each
+depth, and `top_cells` lists the highest loads and every certain cell.
 
 ### GeoJSON
 
 `--geojson PATH` (a `.geojson` path; `--force` replaces an existing one)
 writes one FeatureCollection:
 
-- `open_loop` and `seam` features: MultiLineString segments of each open loop
-  and seam chain at least `--minFeatureLength` metres long (default 5), longest
-  first, up to 250,000 segments in all (`omitted_line_features` counts the rest);
+- `open_loop` and `seam` features: each open loop and seam chain at least
+  `--minFeatureLength` metres long (default 5), as a MultiLineString of
+  ordered polylines. A loop is a closed ring; a branching chain is split at its
+  branch points. Features are written longest first, up to 250,000 segments
+  in all, and `omitted_line_features` counts the rest.
 - `cell` features: the footprint of every cell at `elevated` risk or above, or
   predicted omitted, with its forecast as properties.
 
-Coordinates are WGS84 longitude and latitude in degrees when the source is
-placed (`--anchor` or a source CRS), else local east/north metres
-(`geojson.coordinates` says which). The file is installed only after the run
-succeeds.
+Coordinates are WGS84 longitude and latitude in degrees (RFC 7946), so the
+source must be placed with `--anchor` or a source CRS. Otherwise the request is
+refused before the source is read, unless `--geojson-local` asks for local
+metres. A local file holds east and north metres of the tileset's local frame:
+east is glTF +X and north is glTF −Z, the tiler's own Y-up convention. A
+top-level `rustyTilesFrame` member says the coordinates are not WGS84. There is
+no source-CRS output: capture maps the source one way (to WGS84 through the
+CRS operation), and an inverse is not part of it. Reproject the WGS84 file in a
+GIS instead. The file is installed only after the run succeeds.
 
 ```python
 check = rusty_tiles.inspect_mesh(
@@ -136,16 +162,21 @@ check = rusty_tiles.inspect_mesh(
     source_crs="EPSG:3857", source_offset_file=Path("site_offset.txt"),
     callback=None,
 )
-print(check["report"]["forecast"]["root"], *check["summary"], sep="\n")
+print(*check.summary, sep="\n")
 ```
 
-`inspect_mesh(input, *, geojson=None, min_feature_length=5.0, ...)` takes
-`mesh_to_tileset`'s keywords, without `output`, and returns a dict with
-`report`, `diagnostics`, `cleanup_diagnostics` and `summary`. Progress reaches
-`callback` as for `mesh_to_tileset`; the phases are `capture` and its steps,
-`inspect_vertices`, `inspect_edges`, `inspect_loops` (and `inspect_merge` when
-a sort merges), then the incidence steps `hlod_incidence_items`,
-`hlod_incidence_reduce`, `hlod_incidence_ends`, and `ready_to_publish`.
+`inspect_mesh(input, *, geojson=None, geojson_local=False,
+min_feature_length=5.0, ...)` takes `mesh_to_tileset`'s keywords, without
+`output`. It returns a frozen `InspectResult` with `report`, `diagnostics`,
+`geojson` (the installed path, or `None`), `summary` and `cleanup_diagnostics`.
+Progress reaches `callback` as for `mesh_to_tileset`. The phases are:
+
+- `capture` and its steps;
+- `inspect_vertices`, `inspect_edges` and `inspect_loops` (and `inspect_merge`
+  when a sort merges);
+- the incidence steps `hlod_incidence_items`, `hlod_incidence_reduce` and
+  `hlod_incidence_ends`;
+- `ready_to_publish`.
 
 ## Source and placement
 

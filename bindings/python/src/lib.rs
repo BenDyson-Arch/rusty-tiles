@@ -307,6 +307,38 @@ impl TilerResult {
     }
 }
 
+/// One mesh inspection: its deterministic `report`, the run's `diagnostics`, the installed
+/// `geojson` path (`None` when none was requested), the CLI's human `summary` lines and
+/// `cleanup_diagnostics`.
+#[pyclass(frozen, module = "rusty_tiles")]
+struct InspectResult {
+    #[pyo3(get)]
+    geojson: Option<PathBuf>,
+    #[pyo3(get)]
+    summary: Vec<String>,
+    report: Value,
+    diagnostics: Value,
+    cleanup_diagnostics: Vec<CleanupDiagnostic>,
+}
+
+#[pymethods]
+impl InspectResult {
+    #[getter]
+    fn report(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_python(py, &self.report)
+    }
+
+    #[getter]
+    fn diagnostics(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_python(py, &self.diagnostics)
+    }
+
+    #[getter]
+    fn cleanup_diagnostics(&self) -> Vec<CleanupDiagnostic> {
+        self.cleanup_diagnostics.clone()
+    }
+}
+
 fn tiler_request_error(py: Python<'_>, error: JobError) -> PyErr {
     job_failure_to_python(
         py,
@@ -457,12 +489,13 @@ fn mesh_to_tileset(
 /// connected components) and an estimated coarse omission per cell over the same cells
 /// `mesh_to_tileset` would build (pass the same profile, placement and source CRS options).
 /// `geojson` writes a `.geojson` of open loops and seams at least `min_feature_length`
-/// metres long and of the cells at risk (WGS84 when placed); `force` replaces an existing
-/// one. Returns a dict with `report` (deterministic: independent of `jobs`, the budget and
-/// the scratch location), `diagnostics`, `cleanup_diagnostics` and `summary` (the CLI's
-/// human lines). `callback` receives progress events, as for `mesh_to_tileset`.
+/// metres long and of the cells at risk, in WGS84, which needs `anchor` or `source_crs`;
+/// `geojson_local=True` writes local east/north metres instead (not RFC 7946). `force`
+/// replaces an existing one. Returns an `InspectResult`; its `report` is independent of
+/// `jobs`, the budget, the scratch location and the GeoJSON path. The omission forecast in
+/// it is an estimate. `callback` receives progress events, as for `mesh_to_tileset`.
 #[pyfunction]
-#[pyo3(signature = (input, *, geojson=None, min_feature_length=tiles_core::DEFAULT_MIN_FEATURE_LENGTH, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None))]
+#[pyo3(signature = (input, *, geojson=None, geojson_local=false, min_feature_length=tiles_core::DEFAULT_MIN_FEATURE_LENGTH, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None))]
 #[expect(
     clippy::too_many_arguments,
     reason = "one keyword per CLI option, as mesh_to_tileset"
@@ -471,6 +504,7 @@ fn inspect_mesh(
     py: Python<'_>,
     input: PathBuf,
     geojson: Option<PathBuf>,
+    geojson_local: bool,
     min_feature_length: f64,
     profile: &str,
     jobs: Option<Bound<'_, PyAny>>,
@@ -486,7 +520,7 @@ fn inspect_mesh(
     height_offset: Option<f64>,
     force: bool,
     callback: Option<Py<PyAny>>,
-) -> PyResult<Py<PyAny>> {
+) -> PyResult<InspectResult> {
     let profile = profile
         .parse::<TilerProfile>()
         .map_err(|error| tiler_request_error(py, error))?;
@@ -517,6 +551,7 @@ fn inspect_mesh(
         .with_profile(profile)
         .with_jobs(jobs)
         .with_min_feature_length(min_feature_length)
+        .with_geojson_local(geojson_local)
         .with_placement(rigid_placement(anchor, orientation_xyzw, scene_offset)?)
         .with_output_policy(if force {
             OutputPolicy::Replace
@@ -536,21 +571,13 @@ fn inspect_mesh(
         request = request.with_memory_budget(bytes);
     }
     let result = run_job(py, callback, |run| tiles_core::inspect_mesh(request, run))?;
-    let summary = result.summary_lines();
-    let cleanup: Vec<Value> = result
-        .cleanup_diagnostics
-        .iter()
-        .map(|d| serde_json::json!({"path": d.path.to_string_lossy(), "message": d.error.to_string()}))
-        .collect();
-    json_to_python(
-        py,
-        &serde_json::json!({
-            "report": result.report,
-            "diagnostics": result.diagnostics,
-            "cleanup_diagnostics": cleanup,
-            "summary": summary,
-        }),
-    )
+    Ok(InspectResult {
+        summary: result.summary_lines(),
+        geojson: result.geojson,
+        report: serde_json::json!(result.report),
+        diagnostics: serde_json::json!(result.diagnostics),
+        cleanup_diagnostics: cleanup_diagnostics(result.cleanup_diagnostics),
+    })
 }
 
 /// Published D1 raster directory; the standard wheel reports Unsupported.
@@ -1568,6 +1595,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PackageResult>()?;
     module.add_class::<PackageReceipt>()?;
     module.add_class::<TilerResult>()?;
+    module.add_class::<InspectResult>()?;
     module.add_class::<ModelWrapResult>()?;
     module.add_class::<ModelManifestResult>()?;
     module.add_class::<RasterDirectoryResult>()?;

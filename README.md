@@ -63,6 +63,7 @@ Open <http://127.0.0.1:9227/> and use **3D mesh extent** to frame the model. The
 | Your data | Command | Output |
 | --- | --- | --- |
 | Textured GLB or glTF meshes | `mesh` | Streamed 3D Tiles with exact leaves and simplified, textured coarse levels |
+| A mesh source, before baking it | `mesh-inspect` | A report of open edges, seams, repeated positions and components, an estimated coarse-omission risk per cell, and an optional GeoJSON; no archive |
 | LAS or LAZ point clouds | `point-cloud` | 3D Tiles with sampled parents and full-detail leaves |
 | GeoJSON or GeoPackage layers | `vector` | glTF vector tiles (experimental) |
 | An existing model or tileset | `glb-to-3tz`, `createTilesetJson`, `convert` | `.3tz` or `tileset.json`, without new levels of detail |
@@ -92,7 +93,7 @@ result = rusty_tiles.mesh_to_tileset("example.glb", "example.3tz", anchor=(153.0
 assert rusty_tiles.validate(result.output)["ok"]
 ```
 
-The wheel contains the same converters as the standard CLI (`mesh_to_tileset`, `point_cloud_to_3tz`, `vector_to_3tz`, `glb_to_3tz`, `convert_to_3tz` and `validate`) with no GDAL or other Python packages. See the [Python guide](bindings/python/README.md).
+The wheel contains the same converters as the standard CLI (`mesh_to_tileset`, `inspect_mesh`, `point_cloud_to_3tz`, `vector_to_3tz`, `glb_to_3tz`, `convert_to_3tz` and `validate`) with no GDAL or other Python packages. See the [Python guide](bindings/python/README.md).
 
 In Rust, each converter takes a request, a `RunControl` for progress and cancellation, and returns a typed result:
 

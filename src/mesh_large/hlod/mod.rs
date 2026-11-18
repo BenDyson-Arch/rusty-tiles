@@ -1374,7 +1374,7 @@ fn admit_scratch(
     } else {
         0
     };
-    admit_charged_scratch(captured, charged, bound)
+    admit_charged_scratch(captured, charged, bound, crate::spill::PreflightStage::Lod)
 }
 
 /// [`admit_scratch`] against an explicit memory charge for memory-backed scratch (the
@@ -1383,6 +1383,7 @@ fn admit_charged_scratch(
     captured: &FullCaptured,
     charged: u64,
     bound: u64,
+    stage: crate::spill::PreflightStage,
 ) -> Result<(), JobError> {
     let need = &captured.report.scratch;
     let scratch = &captured.scratch;
@@ -1401,7 +1402,7 @@ fn admit_charged_scratch(
         scratch.path(),
         total.saturating_sub(scratch.live_bytes()),
         crate::spill::SpaceRole::Scratch,
-        crate::spill::PreflightStage::Lod,
+        stage,
     )?;
     Ok(())
 }

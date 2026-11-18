@@ -65,6 +65,7 @@ fn resource(message: impl Into<String>) -> JobError {
 pub struct InspectRequest {
     input: PathBuf,
     geojson: Option<PathBuf>,
+    geojson_local: bool,
     min_feature_length: f64,
     profile: TilerProfile,
     jobs: TilerJobs,
@@ -86,6 +87,7 @@ impl InspectRequest {
         Self {
             input: input.into(),
             geojson: None,
+            geojson_local: false,
             min_feature_length: DEFAULT_MIN_FEATURE_LENGTH,
             profile: TilerProfile::Balanced,
             jobs: TilerJobs::Auto,
@@ -105,6 +107,12 @@ impl InspectRequest {
     /// Also write a GeoJSON (`.geojson`) of open loops, seams and cells at risk.
     pub fn with_geojson(mut self, path: impl Into<PathBuf>) -> Self {
         self.geojson = Some(path.into());
+        self
+    }
+    /// Write the GeoJSON in local east/north metres instead of WGS84 (RFC 7946). Without
+    /// it, a GeoJSON needs a placed source (an anchor or a source CRS).
+    pub fn with_geojson_local(mut self, local: bool) -> Self {
+        self.geojson_local = local;
         self
     }
     /// Shortest open loop or seam written to the GeoJSON, in metres (default 5).
@@ -226,8 +234,8 @@ pub struct CellForecastRow(pub(crate) CellForecast);
 /// What the GeoJSON holds.
 #[derive(Clone, Debug, Serialize)]
 pub struct GeoJsonSummary {
-    pub path: PathBuf,
-    /// `wgs84` (longitude, latitude in degrees) or `local_east_north_metres`.
+    /// `wgs84` (longitude, latitude in degrees) or `local_east_north_metres` (requested with
+    /// `--geojson-local`; not RFC 7946).
     pub coordinates: &'static str,
     pub min_feature_length_m: f64,
     pub open_loops: u64,
@@ -238,7 +246,8 @@ pub struct GeoJsonSummary {
 }
 
 /// The inspection report. Deterministic for a given source and request: independent of
-/// `--jobs`, the memory budget and the scratch location.
+/// `--jobs`, the memory budget, the scratch location and the GeoJSON path (which is not in
+/// it; see [`InspectResult::geojson`]).
 #[derive(Clone, Debug, Serialize)]
 pub struct InspectReport {
     pub schema_version: u32,
@@ -287,13 +296,15 @@ pub struct InspectMemory {
 pub struct InspectResult {
     pub report: InspectReport,
     pub diagnostics: InspectDiagnostics,
+    /// The installed GeoJSON, when one was requested.
+    pub geojson: Option<PathBuf>,
     pub cleanup_diagnostics: Vec<CleanupDiagnostic>,
 }
 
 impl InspectResult {
     /// A short human summary of the report.
     pub fn summary_lines(&self) -> Vec<String> {
-        summary_lines(&self.report)
+        summary_lines(&self.report, self.geojson.as_deref())
     }
 }
 
@@ -309,7 +320,7 @@ fn thousands(n: u64) -> String {
     out
 }
 
-fn summary_lines(r: &InspectReport) -> Vec<String> {
+fn summary_lines(r: &InspectReport, geojson: Option<&Path>) -> Vec<String> {
     let s = &r.source;
     let classes = |loops: &topology::Loops| {
         loops
@@ -321,11 +332,13 @@ fn summary_lines(r: &InspectReport) -> Vec<String> {
     };
     let b = &s.primitive_boundaries;
     let f = &r.forecast;
-    let omitted: Vec<String> = f
-        .by_depth
-        .iter()
-        .map(|d| d.predicted_omitted.to_string())
-        .collect();
+    let high: u64 = f.by_depth.iter().map(|d| d.risk_high).sum();
+    let elevated: u64 = f.by_depth.iter().map(|d| d.risk_elevated).sum();
+    let root = match f.root {
+        "built" => "low risk",
+        "recovered" => "rebuilt from its frontier",
+        _ => "at risk",
+    };
     let mut lines = vec![
         format!(
             "source: {} triangles, {} positions, {} components, {} primitive instances",
@@ -365,19 +378,18 @@ fn summary_lines(r: &InspectReport) -> Vec<String> {
             r.tree.height
         ),
         format!(
-            "forecast (estimate): root {}; {} omitted cells from {} sources ({} certain); by \
-             depth [{}]",
-            f.root,
-            thousands(f.predicted_omitted),
-            thousands(f.predicted_sources),
-            thousands(f.certain_sources),
-            omitted.join(", ")
+            "omission risk (an estimate, not a bake): {} high and {} elevated of {} coarse \
+             cells, root {root}; certain omissions (contract past the cap): {}",
+            thousands(high),
+            thousands(elevated),
+            thousands(r.tree.coarse_cells),
+            thousands(f.certain_sources)
         ),
     ];
-    if let Some(g) = &r.geojson {
+    if let (Some(g), Some(path)) = (&r.geojson, geojson) {
         lines.push(format!(
             "geojson: {} ({} open loops, {} seams, {} cells; {})",
-            g.path.display(),
+            path.display(),
             g.open_loops,
             g.seams,
             g.cells,
@@ -387,21 +399,24 @@ fn summary_lines(r: &InspectReport) -> Vec<String> {
     lines
 }
 
-/// glTF local metres to GeoJSON coordinates: WGS84 degrees through the root transform, or
-/// local east/north metres.
-struct Frame(Option<[f64; 16]>);
+/// glTF local metres to GeoJSON coordinates: WGS84 degrees through the root transform, or,
+/// when requested, local east/north metres. Captured positions are the tileset's local
+/// glTF frame, Y up; the tileset's own Y-up to Z-up convention (`mesh_archive::placement`)
+/// makes +X east, +Y up and -Z north, so east is `x` and north is `-z`.
+enum Frame {
+    Wgs84([f64; 16]),
+    Local,
+}
 impl Frame {
     fn coordinates(&self) -> &'static str {
-        if self.0.is_some() {
-            "wgs84"
-        } else {
-            "local_east_north_metres"
+        match self {
+            Self::Wgs84(_) => "wgs84",
+            Self::Local => "local_east_north_metres",
         }
     }
     fn point(&self, [x, y, z]: [f64; 3]) -> [f64; 2] {
-        // glTF Y up to tile Z up: +X east, +Y up, -Z north.
         let tile = [x, -z, y];
-        let Some(m) = &self.0 else {
+        let Self::Wgs84(m) = self else {
             return [tile[0], tile[1]];
         };
         let ecef: [f64; 3] = std::array::from_fn(|r| {
@@ -412,7 +427,7 @@ impl Frame {
     fn write_point(&self, out: &mut String, p: [f64; 3]) {
         use std::fmt::Write as _;
         let [a, b] = self.point(p);
-        if self.0.is_some() {
+        if matches!(self, Self::Wgs84(_)) {
             let _ = write!(out, "[{a:.9},{b:.9}]");
         } else {
             let _ = write!(out, "[{a:.4},{b:.4}]");
@@ -428,16 +443,23 @@ struct GeoWriter<'f> {
     buf: String,
 }
 impl<'f> GeoWriter<'f> {
-    fn new(file: &'f mut std::fs::File, path: &'f Path) -> Result<Self, JobError> {
+    fn new(file: &'f mut std::fs::File, path: &'f Path, frame: &Frame) -> Self {
         let mut w = Self {
             out: BufWriter::new(file),
             path,
             features: 0,
             buf: String::new(),
         };
-        w.buf
-            .push_str("{\"type\":\"FeatureCollection\",\"features\":[");
-        Ok(w)
+        w.buf.push_str("{\"type\":\"FeatureCollection\",");
+        if matches!(frame, Frame::Local) {
+            // RFC 7946 coordinates are WGS84; this file says plainly that its are not.
+            w.buf.push_str(
+                "\"rustyTilesFrame\":{\"wgs84\":false,\"coordinates\":\"local\",\
+                 \"units\":\"metre\",\"x\":\"east (glTF +X)\",\"y\":\"north (glTF -Z)\"},",
+            );
+        }
+        w.buf.push_str("\"features\":[");
+        w
     }
     fn error(&self, e: std::io::Error) -> JobError {
         JobError::io("write GeoJSON", self.path, e)
@@ -539,6 +561,15 @@ fn check_request(request: &InspectRequest) -> Result<Option<PathBuf>, JobError> 
     let Some(path) = &request.geojson else {
         return Ok(None);
     };
+    if !request.geojson_local
+        && request.placement == MeshPlacement::Local
+        && request.source_crs.is_none()
+    {
+        return Err(invalid(
+            "an unplaced source has no WGS84 coordinates for --geojson: give --anchor or \
+             --source-crs, or --geojson-local for local east/north metres (not RFC 7946)",
+        ));
+    }
     if !path
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("geojson"))
@@ -650,26 +681,29 @@ pub fn inspect_mesh(
     let capture_seconds = started.elapsed().as_secs_f64();
     let capture_path = captured.scratch.path().to_owned();
     // A source CRS derives the root placement from the captured origin.
-    let frame = Frame(captured.placement.as_ref().map(|p| p.transform()).or(rigid));
+    let placed = captured.placement.as_ref().map(|p| p.transform()).or(rigid);
+    let frame = match placed {
+        Some(m) if !request.geojson_local => Frame::Wgs84(m),
+        _ => Frame::Local,
+    };
     let result = (|| {
         attempt.emit(&RunEvent::Progress {
             phase: "capture",
             done: 1,
             total: Some(1),
         })?;
-        run(
-            &request,
-            &config,
-            &settings,
-            &captured,
+        run(Run {
+            request: &request,
+            config: &config,
+            settings: &settings,
+            captured: &captured,
             budget,
-            &frame,
-            staging.as_mut().map(|s| s.writer()),
-            geojson.as_deref(),
-            &check,
-            &emit,
+            frame: &frame,
+            geojson: staging.as_mut().map(|s| s.writer()).zip(geojson.as_deref()),
+            check: &check,
+            emit: &emit,
             capture_seconds,
-        )
+        })
     })();
     let cleanup = captured.close();
     let (report, diagnostics) = match (result, cleanup) {
@@ -702,40 +736,107 @@ pub fn inspect_mesh(
     {
         return Err(fail(staging, error));
     }
-    let cleanup_diagnostics = match (staging, geojson) {
+    let (geojson, cleanup_diagnostics) = match (staging, geojson) {
         (Some(staging), Some(path)) => {
-            staging
-                .seal()?
-                .publish(&path, request.policy)?
-                .cleanup_diagnostics
+            let published = staging.seal()?.publish(&path, request.policy)?;
+            (Some(published.output), published.cleanup_diagnostics)
         }
         // Dropping the attempt finishes it: nothing to publish.
-        _ => Vec::new(),
+        _ => (None, Vec::new()),
     };
     Ok(InspectResult {
         report,
         diagnostics,
+        geojson,
         cleanup_diagnostics,
     })
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the captured stores, the admissions and the run hooks are separate owners"
-)]
-fn run(
-    request: &InspectRequest,
-    config: &TreeConfig,
-    settings: &hlod::Settings,
-    captured: &full::FullCaptured,
+/// What the passes after capture read: the request, the captured stores, the GeoJSON
+/// candidate and the run's hooks.
+struct Run<'a> {
+    request: &'a InspectRequest,
+    config: &'a TreeConfig,
+    settings: &'a hlod::Settings,
+    captured: &'a full::FullCaptured,
     budget: MemoryBudget,
-    frame: &Frame,
-    geojson: Option<&mut std::fs::File>,
-    geojson_path: Option<&Path>,
-    check: &(dyn Fn() -> Result<(), JobError> + Sync),
-    emit: &(dyn Fn(&RunEvent<'_>) -> Result<(), JobError> + Sync),
+    frame: &'a Frame,
+    /// The staged GeoJSON and its final path.
+    geojson: Option<(&'a mut std::fs::File, &'a Path)>,
+    check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
+    emit: &'a (dyn Fn(&RunEvent<'_>) -> Result<(), JobError> + Sync),
     capture_seconds: f64,
-) -> Result<(InspectReport, InspectDiagnostics), JobError> {
+}
+
+/// A line feature's segments joined into ordered polylines: each starts at a point that is
+/// not on exactly two of its segments (an end or a branch), in point order, and follows one
+/// unused segment at a time until it reaches another such point; what is left is closed
+/// rings, each starting and ending at its smallest point. Deterministic.
+fn polylines(segments: &[([u32; 3], [u32; 3])]) -> Vec<Vec<[u32; 3]>> {
+    use std::collections::BTreeMap;
+    let mut at: BTreeMap<[u32; 3], Vec<usize>> = BTreeMap::new();
+    for (i, (a, b)) in segments.iter().enumerate() {
+        at.entry(*a).or_default().push(i);
+        at.entry(*b).or_default().push(i);
+    }
+    let mut used = vec![false; segments.len()];
+    let mut lines = Vec::new();
+    let walk = |start: [u32; 3], used: &mut Vec<bool>, lines: &mut Vec<Vec<[u32; 3]>>| {
+        while let Some(&first) = at[&start].iter().find(|&&i| !used[i]) {
+            let mut line = vec![start];
+            let (mut point, mut segment) = (start, first);
+            loop {
+                used[segment] = true;
+                let (a, b) = segments[segment];
+                point = if a == point { b } else { a };
+                line.push(point);
+                let here = &at[&point];
+                if here.len() != 2 {
+                    break;
+                }
+                match here.iter().find(|&&i| !used[i]) {
+                    Some(&next) => segment = next,
+                    None => break,
+                }
+            }
+            lines.push(line);
+        }
+    };
+    let ends: Vec<[u32; 3]> = at
+        .iter()
+        .filter(|(_, s)| s.len() != 2)
+        .map(|(p, _)| *p)
+        .collect();
+    for p in ends {
+        walk(p, &mut used, &mut lines);
+    }
+    let points: Vec<[u32; 3]> = at.keys().copied().collect();
+    for p in points {
+        walk(p, &mut used, &mut lines);
+    }
+    lines
+}
+
+/// Resident bytes of [`polylines`] for `segments` segments: the segments, the point index
+/// (an ordered map's nodes at about twice their entries) and the output.
+fn polyline_bytes(segments: u64) -> u64 {
+    segments.saturating_mul(24 + 2 * (12 + 24 + 16) * 2 + 1 + 2 * 12)
+}
+
+fn run(run: Run<'_>) -> Result<(InspectReport, InspectDiagnostics), JobError> {
+    let Run {
+        request,
+        config,
+        settings,
+        captured,
+        budget,
+        frame,
+        geojson,
+        check,
+        emit,
+        capture_seconds,
+    } = run;
+    let geojson_path = geojson.as_ref().map(|(_, p)| *p);
     let sorter = config.sorter(1);
     let cap = settings.cap;
     let stats = &captured.tree.stats;
@@ -796,7 +897,7 @@ fn run(
             captured.scratch.path(),
             bound.saturating_sub(captured.scratch.live_bytes()),
             crate::spill::SpaceRole::Scratch,
-            crate::spill::PreflightStage::Lod,
+            crate::spill::PreflightStage::Inspection,
         )
         .map(|_| ())
         .map_err(JobError::from)
@@ -806,30 +907,28 @@ fn run(
         min_length: request.min_feature_length,
         max_segments: MAX_GEOJSON_SEGMENTS,
     });
-    let topology = topology::run(
-        &captured.scratch,
+    let admit = topology::Admit {
+        memory: &memory,
+        scratch: &admit_scratch,
+    };
+    let topology = topology::run(topology::Input {
+        scratch: &captured.scratch,
         sorter,
-        &captured.triangles,
-        &captured.tree.nodes,
-        stats.leaves,
-        &cells,
-        geo_request,
-        &topology::Admit {
-            memory: &memory,
-            scratch: &admit_scratch,
-        },
-        &progress,
-    )?;
+        triangles: &captured.triangles,
+        nodes: &captured.tree.nodes,
+        leaves: stats.leaves,
+        cells: &cells,
+        geo: geo_request,
+        admit: &admit,
+        progress: &progress,
+    })?;
     let topology::Topology {
         report: source,
         leaves,
         geo,
     } = topology;
     drop(cells);
-    let mut writer = match (geojson, geojson_path) {
-        (Some(file), Some(path)) => Some(GeoWriter::new(file, path)?),
-        _ => None,
-    };
+    let mut writer = geojson.map(|(file, path)| GeoWriter::new(file, path, frame));
     let state = |e: serde_json::Error| JobError::new(JobErrorKind::InvalidState, e.to_string());
     let mut line_counts = (0u64, 0u64, 0u64);
     if let (Some(w), Some(geo)) = (writer.as_mut(), geo) {
@@ -839,40 +938,58 @@ fn run(
             omitted,
         } = geo;
         line_counts.2 = omitted;
+        // One feature's segments at a time (at most the segment budget), joined into
+        // ordered polylines.
+        stage.admit("geojson_polylines", polyline_bytes(MAX_GEOJSON_SEGMENTS))?;
+        let mut write_feature = |feature: u32,
+                                 segments: &[([u32; 3], [u32; 3])],
+                                 w: &mut GeoWriter<'_>|
+         -> Result<(), JobError> {
+            let index = usize::try_from(feature).map_err(|_| resource("feature index"))?;
+            let f = features.get(index).ok_or_else(|| {
+                JobError::new(JobErrorKind::InvalidState, "a segment without its feature")
+            })?;
+            if f.kind == "seam" {
+                line_counts.1 += 1;
+            } else {
+                line_counts.0 += 1;
+            }
+            w.begin(&serde_json::to_value(f).map_err(state)?, "MultiLineString");
+            w.buf.push('[');
+            let p = |k: [u32; 3]| k.map(|v| f64::from(f32::from_bits(v)));
+            for (i, line) in polylines(segments).iter().enumerate() {
+                if i > 0 {
+                    w.buf.push(',');
+                }
+                w.buf.push('[');
+                for (j, point) in line.iter().enumerate() {
+                    if j > 0 {
+                        w.buf.push(',');
+                    }
+                    frame.write_point(&mut w.buf, p(*point));
+                }
+                w.buf.push(']');
+                w.spill()?;
+            }
+            w.buf.push_str("]}}");
+            w.spill()
+        };
         let mut current: Option<u32> = None;
+        let mut held: Vec<([u32; 3], [u32; 3])> = Vec::new();
         for (i, s) in segments.enumerate() {
             if i % 65_536 == 0 {
                 check()?;
             }
             let s = s?;
-            if current != Some(s.feature) {
-                if current.is_some() {
-                    w.buf.push_str("]}}");
-                }
-                let f = features.get(s.feature as usize).ok_or_else(|| {
-                    JobError::new(JobErrorKind::InvalidState, "a segment without its feature")
-                })?;
-                if f.kind == "seam" {
-                    line_counts.1 += 1;
-                } else {
-                    line_counts.0 += 1;
-                }
-                w.begin(&serde_json::to_value(f).map_err(state)?, "MultiLineString");
-                w.buf.push('[');
-                current = Some(s.feature);
-            } else {
-                w.buf.push(',');
+            if let Some(feature) = current.filter(|&f| f != s.feature) {
+                write_feature(feature, &held, w)?;
+                held.clear();
             }
-            let p = |k: [u32; 3]| k.map(|v| f64::from(f32::from_bits(v)));
-            w.buf.push('[');
-            frame.write_point(&mut w.buf, p(s.pa));
-            w.buf.push(',');
-            frame.write_point(&mut w.buf, p(s.pb));
-            w.buf.push(']');
-            w.spill()?;
+            current = Some(s.feature);
+            held.push((s.pa, s.pb));
         }
-        if current.is_some() {
-            w.buf.push_str("]}}");
+        if let Some(feature) = current {
+            write_feature(feature, &held, w)?;
         }
     }
     let topology_seconds = topology_started.elapsed().as_secs_f64();
@@ -969,8 +1086,7 @@ fn run(
             triangle_cap: cap as u64,
         },
         forecast: summarize(&forecast.cells, stats.height),
-        geojson: geojson_path.map(|path| GeoJsonSummary {
-            path: path.to_owned(),
+        geojson: geojson_path.map(|_| GeoJsonSummary {
             coordinates: frame.coordinates(),
             min_feature_length_m: request.min_feature_length,
             open_loops: line_counts.0,

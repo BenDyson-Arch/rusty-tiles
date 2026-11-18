@@ -375,14 +375,14 @@ struct Groups(Vec<u32>);
 impl Groups {
     fn new(n: u32) -> Result<Self, JobError> {
         let mut v = Vec::new();
-        v.try_reserve_exact(n as usize)
+        v.try_reserve_exact(usize::try_from(n).map_err(|_| resource("position count overflows"))?)
             .map_err(|_| resource("position union-find allocation failed"))?;
         v.extend(0..n);
         Ok(Self(v))
     }
     fn reset(&mut self) {
-        for (i, p) in self.0.iter_mut().enumerate() {
-            *p = i as u32;
+        for (i, p) in (0u32..).zip(self.0.iter_mut()) {
+            *p = i;
         }
     }
     fn find(&mut self, mut x: u32) -> u32 {
@@ -526,22 +526,33 @@ fn tally(table: &BTreeMap<u32, Chain>, loops: &mut Loops) {
     loops.length_m = loops.by_size_class.iter().map(|s| s.length_m).sum();
 }
 
-/// Run the pass. `cells` are the internal cells' intervals (`forecast::cell_intervals`).
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the captured stores, the admissions and the run hooks are separate owners"
-)]
-pub(crate) fn run<'s>(
-    scratch: &'s Scratch,
-    sorter: SortConfig,
-    triangles: &Sequence<FullTriangle>,
-    nodes: &Sequence<NodeRecord>,
-    leaves: u64,
-    cells: &[(u32, u32, u8, u32)],
-    geo: Option<GeoRequest>,
-    admit: &Admit<'_>,
-    progress: &'s StepProgress<'_>,
-) -> Result<Topology<'s>, JobError> {
+/// What the pass reads: the captured stores and the run's hooks.
+pub(crate) struct Input<'s, 'a, 'p> {
+    pub scratch: &'s Scratch,
+    pub sorter: SortConfig,
+    pub triangles: &'a Sequence<FullTriangle>,
+    pub nodes: &'a Sequence<NodeRecord>,
+    pub leaves: u64,
+    /// The internal cells' intervals (`forecast::cell_intervals`).
+    pub cells: &'a [(u32, u32, u8, u32)],
+    pub geo: Option<GeoRequest>,
+    pub admit: &'a Admit<'a>,
+    pub progress: &'s StepProgress<'p>,
+}
+
+/// Run the pass.
+pub(crate) fn run<'s>(input: Input<'s, '_, '_>) -> Result<Topology<'s>, JobError> {
+    let Input {
+        scratch,
+        sorter,
+        triangles,
+        nodes,
+        leaves,
+        cells,
+        geo,
+        admit,
+        progress,
+    } = input;
     let n = triangles.len();
     let corners = n
         .checked_mul(3)
@@ -562,7 +573,10 @@ pub(crate) fn run<'s>(
     facts
         .try_reserve_exact(usize::try_from(leaves).map_err(|_| overflow())?)
         .map_err(|_| resource("leaf facts allocation failed"))?;
-    facts.resize(leaves as usize, LeafFacts::default());
+    facts.resize(
+        usize::try_from(leaves).map_err(|_| overflow())?,
+        LeafFacts::default(),
+    );
 
     // 1. Corners by exact position: position ids, source vertices and repeated positions.
     let corner_spill = spill::<Corner>(corners, sorter).ok_or_else(overflow)?;
@@ -883,7 +897,7 @@ pub(crate) fn run<'s>(
             .get_mut(e.leaf as usize)
             .ok_or_else(|| state("an open edge outside the leaves"))?;
         f.open[k] = f.open[k].saturating_add(1);
-        f.length[k] += length(e.pa, e.pb) as f32;
+        f.length[k] += length(e.pa, e.pb);
     }
     progress.advance(1)?;
     // Selected open loops by root (each root is its component's smallest position id,
@@ -932,7 +946,9 @@ pub(crate) fn run<'s>(
                     continue;
                 }
                 budget -= c.edges;
-                chosen[usize::from(seam)].insert(root, features.len() as u32);
+                let feature = u32::try_from(features.len())
+                    .map_err(|_| resource("too many GeoJSON features"))?;
+                chosen[usize::from(seam)].insert(root, feature);
                 features.push(LineFeature {
                     kind: if seam { "seam" } else { "open_loop" },
                     edges: c.edges,

@@ -223,10 +223,11 @@ fn report_and_geojson_do_not_depend_on_jobs() {
         let result = inspect(
             request(&input, hlod::Settings::production(), jobs)
                 .with_geojson(&path)
+                .with_geojson_local(true)
                 .with_min_feature_length(1.),
         );
-        let mut report = serde_json::to_value(&result.report).unwrap();
-        report["geojson"]["path"] = Value::Null;
+        assert_eq!(result.geojson.as_deref(), Some(path.as_path()));
+        let report = serde_json::to_value(&result.report).unwrap();
         (report, fs::read(path).unwrap(), result)
     };
     let (one, one_geo, result) = run(1, "one.geojson");
@@ -242,6 +243,9 @@ fn report_and_geojson_do_not_depend_on_jobs() {
     assert_eq!(g.coordinates, "local_east_north_metres");
     let doc: Value = serde_json::from_slice(&one_geo).unwrap();
     assert_eq!(doc["type"], "FeatureCollection");
+    // Local metres, said plainly: RFC 7946 coordinates would be WGS84.
+    assert_eq!(doc["rustyTilesFrame"]["wgs84"], false);
+    assert_eq!(doc["rustyTilesFrame"]["y"], "north (glTF -Z)");
     let features = doc["features"].as_array().unwrap();
     let kind = |k: &str| {
         features
@@ -260,6 +264,24 @@ fn report_and_geojson_do_not_depend_on_jobs() {
     for f in features {
         assert_eq!(f["type"], "Feature");
         let geometry = &f["geometry"];
+        let lines = geometry["coordinates"].as_array().unwrap();
+        // Every loop is one closed ring; the seam column is one open polyline.
+        match f["properties"]["kind"].as_str().unwrap() {
+            "open_loop" => {
+                assert_eq!(lines.len(), 1, "{f}");
+                let ring = lines[0].as_array().unwrap();
+                assert_eq!(ring.first(), ring.last());
+                assert_eq!(
+                    ring.len() as u64,
+                    f["properties"]["edges"].as_u64().unwrap() + 1
+                );
+            }
+            "seam" => {
+                assert_eq!(lines.len(), 1, "{f}");
+                assert_eq!(lines[0].as_array().unwrap().len(), 61);
+            }
+            _ => {}
+        }
         match geometry["type"].as_str().unwrap() {
             "MultiLineString" => assert!(!geometry["coordinates"].as_array().unwrap().is_empty()),
             "Polygon" => assert_eq!(geometry["coordinates"][0].as_array().unwrap().len(), 5),
@@ -323,7 +345,11 @@ fn certain_sources_are_the_bakes_contract_lower_bound_omissions() {
         "the fixture must exercise the lower bound"
     );
     let geojson = work.path().join("forecast.geojson");
-    let result = inspect(request(&input, settings(), 2).with_geojson(&geojson));
+    let result = inspect(
+        request(&input, settings(), 2)
+            .with_geojson(&geojson)
+            .with_geojson_local(true),
+    );
     let forecast = &result.report.forecast;
     let certain: BTreeSet<(u64, u32)> = forecast
         .top_cells
@@ -394,16 +420,30 @@ fn requests_are_checked_before_any_work() {
         fail(InspectRequest::new(work.path().join("missing.glb"))).kind(),
         JobErrorKind::Io
     );
+    // An unplaced source has no WGS84 coordinates: refused unless local metres are asked for.
+    let unplaced = fail(InspectRequest::new(&input).with_geojson(work.path().join("u.geojson")));
+    assert_eq!(unplaced.kind(), JobErrorKind::InvalidRequest);
+    assert!(
+        unplaced.to_string().contains("--geojson-local"),
+        "{unplaced}"
+    );
+    assert!(!work.path().join("u.geojson").exists());
     let existing = work.path().join("old.geojson");
     fs::write(&existing, b"keep").unwrap();
     assert_eq!(
-        fail(InspectRequest::new(&input).with_geojson(&existing)).kind(),
+        fail(
+            InspectRequest::new(&input)
+                .with_geojson(&existing)
+                .with_geojson_local(true)
+        )
+        .kind(),
         JobErrorKind::Conflict
     );
     assert_eq!(fs::read(&existing).unwrap(), b"keep");
     let replaced = inspect(
         InspectRequest::new(&input)
             .with_geojson(&existing)
+            .with_geojson_local(true)
             .with_output_policy(OutputPolicy::Replace),
     );
     assert!(replaced.report.geojson.is_some());
@@ -440,6 +480,7 @@ fn cancellation_inside_the_topology_pass_leaves_nothing() {
     let failure = inspect_mesh(
         request(&input, hlod::Settings::production(), 1)
             .with_geojson(&geojson)
+            .with_geojson_local(true)
             .with_scratch_dir(&scratch),
         &control,
     )
@@ -474,7 +515,7 @@ fn placed_geojson_is_wgs84_and_the_origin_maps_to_the_anchor() {
         lat_deg: -12.3362,
         height_m: 100.,
     };
-    let frame = super::Frame(Some(crate::georef::root_transform(anchor, None)));
+    let frame = super::Frame::Wgs84(crate::georef::root_transform(anchor, None));
     let [lon, lat] = frame.point([0., 0., 0.]);
     assert!((lon - anchor.lon_deg).abs() < 1e-9 && (lat - anchor.lat_deg).abs() < 1e-9);
     // 100 m north (glTF -Z) is about 0.0009 degrees of latitude.
@@ -497,10 +538,42 @@ fn placed_geojson_is_wgs84_and_the_origin_maps_to_the_anchor() {
     );
     assert_eq!(result.report.geojson.as_ref().unwrap().coordinates, "wgs84");
     let doc: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert!(
+        doc.get("rustyTilesFrame").is_none(),
+        "RFC 7946 output needs no frame member"
+    );
     let first = &doc["features"][0]["geometry"]["coordinates"][0][0];
     let (x, y) = (first[0].as_f64().unwrap(), first[1].as_f64().unwrap());
     assert!(
         (x - 133.0584).abs() < 0.01 && (y + 12.3362).abs() < 0.01,
         "{first}"
+    );
+}
+
+/// Segments join into ordered polylines: an open chain from its end, a branch split at the
+/// branch point, and a ring closed on its smallest point, whatever the segment order.
+#[test]
+fn polylines_follow_ends_branches_and_rings() {
+    let p = |x: u32, y: u32| [x, y, 0];
+    // A chain 0-1-2, a branch 1-3, and a ring 10-11-12-10.
+    let mut segments = vec![
+        (p(1, 0), p(2, 0)),
+        (p(10, 0), p(11, 0)),
+        (p(0, 0), p(1, 0)),
+        (p(12, 0), p(10, 0)),
+        (p(1, 0), p(3, 0)),
+        (p(11, 0), p(12, 0)),
+    ];
+    let lines = super::polylines(&segments);
+    segments.reverse();
+    assert_eq!(super::polylines(&segments).len(), lines.len());
+    assert_eq!(
+        lines,
+        vec![
+            vec![p(0, 0), p(1, 0)],
+            vec![p(1, 0), p(2, 0)],
+            vec![p(1, 0), p(3, 0)],
+            vec![p(10, 0), p(11, 0), p(12, 0), p(10, 0)],
+        ]
     );
 }
