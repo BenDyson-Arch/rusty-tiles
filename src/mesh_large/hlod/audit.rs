@@ -387,6 +387,8 @@ mod tests {
             retries: 0,
             last_resort: false,
             staged: false,
+            rejection: None,
+            primary: false,
             last_resort_stage: 0,
             relief_stuck: 0,
             interface_vertices: 0,

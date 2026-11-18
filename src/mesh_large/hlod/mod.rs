@@ -117,6 +117,33 @@ const ROW_WINDOW: usize = 1024;
 /// Encoded GLB, compression scratch and decoded check copy of one coarse tile.
 const JOB_ENCODE_BYTES: u64 = 16 << 20;
 
+/// A tile only a retry of `geometry::build_parent` published: fix 2, staged reduction or a
+/// last-resort stage. Stages 1-3 are also declared in their payloads (`DeclaredTile`);
+/// fix 2 and staged tiles (stage 0) have only this record.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastResortRecord {
+    /// The cell's first node and published depth (as `DeclaredTile`).
+    pub first: u64,
+    pub depth: u32,
+    /// The last-resort stage that built it (1-3), 0 for fix 2 and staged reduction.
+    pub stage: u8,
+    /// The build that published it: `fix2`, `staged`, `n1`, `n2`, `n3`, `n3Recovery`, or
+    /// `rootCandidate` (the root competition's full-cap N3 candidate).
+    pub resort: &'static str,
+    /// Why the primary build's tile is not published: `contractionStalled` (its border
+    /// contraction could not reach the contract), `proposalsRefused` (assessment refused
+    /// every proposal), `noProposal` (no proposal fit the cap or the guards) or
+    /// `rootCompetition` (it was built, and the root candidate measured a lower G). When
+    /// the root candidate replaces a root a retry built, the primary build's reason stays.
+    pub reason: &'static str,
+    /// The primary build's proposals that assessment refused, by check: decoded positions
+    /// (fold or interface guard), unlicensed topology change, S2 controls.
+    pub refused_decode: u32,
+    pub refused_topology: u32,
+    pub refused_controls: u32,
+}
+
 /// A tile declaring `asset.extras.rustyTiles.lastResort` (D1/D11 amendment A2).
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct DeclaredTile {
@@ -551,6 +578,9 @@ pub(crate) struct HlodReport {
     pub fold_faces: u64,
     #[serde(skip)]
     pub declared_tiles: Vec<DeclaredTile>,
+    /// Every tile only a retry published, in walk order (`LastResortRecord`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub last_resort_records: Vec<LastResortRecord>,
     /// Content-less cells (omitted coarse tiles), by cell depth, and of them the sources:
     /// cells whose exact interface (or topology plain simplification cannot reduce) needs
     /// more triangles than the cap. Includes propagation and pass-through cells. A declared
@@ -662,6 +692,8 @@ pub struct HlodDiagnostics {
     pub fold_faces: u64,
     /// Every tile declaring `lastResort` (stage 0: it keeps admitted folds from below).
     pub declared_tiles: Vec<DeclaredTile>,
+    /// Every tile only a retry published, declared or not (`last_resort_tiles` of them).
+    pub last_resort_records: Vec<LastResortRecord>,
     pub jobs: u64,
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
     pub cpu_seconds: Option<f64>,
@@ -1080,6 +1112,7 @@ pub(crate) fn produce(
     diagnostics.last_resort_stages = report.last_resort_stages;
     diagnostics.fold_faces = report.fold_faces;
     diagnostics.declared_tiles = report.declared_tiles.clone();
+    diagnostics.last_resort_records = report.last_resort_records.clone();
     diagnostics.omitted_proxies = report.omitted_proxies;
     diagnostics.omission_sources = report.omission_sources;
     diagnostics.omitted_by_depth = report.omitted_by_depth.clone();
@@ -1463,6 +1496,7 @@ fn prepare(
             &built.geometry.interface,
             &policy,
         ) {
+            built.rejection = Some(geometry::Rejection::Decode);
             return Ok(None);
         }
     }
@@ -1499,6 +1533,7 @@ fn prepare(
         check,
     )?
     else {
+        built.rejection = Some(geometry::Rejection::Topology);
         return Ok(None);
     };
     built.controls = controls;
@@ -1571,6 +1606,7 @@ fn prepare(
         .max(built.controls.opening_proxy_max);
     // N3 licenses any border-free closure or opening; S2's G covers it (A2).
     if built.last_resort_stage < 3 && !built.controls.eligible(contract.scale) {
+        built.rejection = Some(geometry::Rejection::Controls);
         return Ok(None);
     }
     built.change.receipt.hole_patch_to_source = built
@@ -1621,6 +1657,9 @@ fn build_tile(
         .transpose()?;
     let mut prepared = None;
     let mut topology_attempts = 0;
+    // The primary build's proposals refused, by reason: decode, topology, controls
+    // (`Rejection`). Its calls are never reused, so these counts do not depend on reuse.
+    let mut refused = [0u32; 3];
     let mut published_topology_attempt = None;
     let mut query = job.source.query(captured, closed.key)?;
     let mut nearest = error::Nearest::with_steps(settings.nearest_steps);
@@ -1657,12 +1696,29 @@ fn build_tile(
                 // try smaller prefixes after its fitting one. This proposal's own search
                 // statistics go with it, so a reused call can replay them (`Reused`);
                 // their accumulation is a sum and a max, so the split changes nothing.
+                #[cfg(test)]
+                if let Mutation::RefuseBuilds(k) = settings.mutation {
+                    let rank = match (built.primary, built.staged, built.last_resort_stage) {
+                        (true, ..) => 0,
+                        (false, false, 0) => 1,
+                        (false, true, 0) => 2,
+                        (_, _, stage) => 2 + stage,
+                    };
+                    if rank < k {
+                        built.rejection = Some(geometry::Rejection::Controls);
+                        refused[2] += u32::from(built.primary);
+                        return Ok(false);
+                    }
+                }
                 let before = std::mem::take(&mut nearest.stats);
                 let candidate = prepare(job, built, contract, &mut query, &mut nearest);
                 built.search = std::mem::replace(&mut nearest.stats, before);
                 nearest.stats.add(built.search);
                 let candidate = candidate?;
                 let accepted = candidate.is_some();
+                if let Some(reason) = built.rejection.filter(|_| built.primary && !accepted) {
+                    refused[reason as usize] += 1;
+                }
                 if accepted {
                     prepared = candidate;
                 }
@@ -1696,6 +1752,7 @@ fn build_tile(
             construction_dropped: Vec::new(),
             relief: None,
             reused: Default::default(),
+            retry: None,
         }
     };
     #[cfg(test)]
@@ -1954,6 +2011,10 @@ fn build_tile(
         retries: built.retries,
         last_resort: built.last_resort,
         last_resort_stage: built.last_resort_stage,
+        retry: outcome
+            .retry
+            .filter(|_| built.last_resort)
+            .map(|r| (r, refused)),
         fold_faces: if last_resort.is_some() { fold_faces } else { 0 },
         declared_folds: last_resort.is_some(),
         carries_folds,
@@ -2029,6 +2090,26 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     report.protected_faces += u64::from(row.protected_faces);
     report.retries += u64::from(row.retries);
     report.last_resort_tiles += u64::from(row.last_resort);
+    if let Some((retry, refused)) = row.retry {
+        report.last_resort_records.push(LastResortRecord {
+            first: row.first,
+            depth: row.depth,
+            stage: row.last_resort_stage,
+            resort: retry.resort,
+            reason: if retry.root_competition {
+                "rootCompetition"
+            } else if retry.primary_contraction_failed {
+                "contractionStalled"
+            } else if refused == [0; 3] {
+                "noProposal"
+            } else {
+                "proposalsRefused"
+            },
+            refused_decode: refused[0],
+            refused_topology: refused[1],
+            refused_controls: refused[2],
+        });
+    }
     if row.last_resort_stage > 0 {
         report.last_resort_stages[row.last_resort_stage as usize - 1] += 1;
     }

@@ -94,6 +94,11 @@ pub(crate) enum Mutation {
     /// Recompute every exact repeat of the coarse ladder (the identity reference).
     #[cfg(test)]
     NoRepeatReuse,
+    /// Refuse (as S2 controls) every proposal of the first `k` builds of the coarse
+    /// ladder: primary, fix 2, staged, N1, N2, N3. Reuse is off, since a replayed refusal
+    /// would stand for an assessment that is no longer the same.
+    #[cfg(test)]
+    RefuseBuilds(u8),
 }
 
 impl Mutation {
@@ -130,7 +135,7 @@ impl Mutation {
     pub(crate) fn reuse(self) -> bool {
         #[cfg(test)]
         {
-            self != Self::NoRepeatReuse
+            !matches!(self, Self::NoRepeatReuse | Self::RefuseBuilds(_))
         }
         #[cfg(not(test))]
         {

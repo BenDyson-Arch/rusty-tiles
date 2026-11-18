@@ -71,6 +71,10 @@ pub(crate) struct Built {
     pub staged: bool,
     /// The last-resort stage (1-3) that proposed it, 0 otherwise (`Resort::N1`..`N3`).
     pub last_resort_stage: u8,
+    /// Why the caller's assessment refused this proposal (set by the caller, if it did).
+    pub rejection: Option<Rejection>,
+    /// Proposed by the primary build (`Resort::None`), whose calls are never reused.
+    pub primary: bool,
     /// Border vertices N3 snapped from an A1 hand-over (`Contracted::stuck`).
     pub relief_stuck: u32,
     pub interface_vertices: u32,
@@ -230,8 +234,33 @@ pub(crate) struct Reused {
     pub search: super::error::SearchStats,
 }
 
+/// Why the caller's assessment refused a proposal (`Built::rejection`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Rejection {
+    /// Its decoded positions break the fold or interface guard.
+    Decode,
+    /// It changed topology (dropped, closed or opened surface) beyond its licence.
+    Topology,
+    /// S2's controls make it ineligible at the border scale.
+    Controls,
+}
+
+/// How a retry published a tile (`build_parent`, or the root competition's candidate):
+/// the build that published it, whether the primary build's contraction failed
+/// (otherwise every primary proposal was refused or none was made), and whether the
+/// root candidate replaced a primary build.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Retry {
+    pub resort: &'static str,
+    pub primary_contraction_failed: bool,
+    pub root_competition: bool,
+}
+
 pub(crate) struct Outcome {
     pub built: Option<Built>,
+    /// Set by `build_parent` once the primary build failed (and by the root competition
+    /// when its candidate wins).
+    pub retry: Option<Retry>,
     pub contraction_failed: bool,
     /// All measured proposals, including rejected candidates and the accepted publication.
     pub attempted_topology: TopologyReceipt,
@@ -1009,6 +1038,7 @@ pub(crate) fn build_parent(
         first.reused = repeats.reused;
         return Ok(first);
     }
+    let primary_contraction_failed = first.contraction_failed;
     // A1 hand-over from the primary contraction, kept for N3 (`Contracted`). Its chord
     // collapse resumes under N3's policy (a seam face or edge in its owner), so N3 snaps
     // only what that still leaves.
@@ -1023,10 +1053,12 @@ pub(crate) fn build_parent(
     });
     let mut last = run(Resort::Fix2, None, &mut repeats)?;
     last.attempted_topology.add(first.attempted_topology);
+    let mut published = Resort::Fix2;
     for resort in [Resort::Staged, Resort::N1, Resort::N2, Resort::N3] {
         if last.built.is_some() {
             break;
         }
+        published = resort;
         let mut next = run(resort, relief.as_ref(), &mut repeats)?;
         next.attempted_topology.add(last.attempted_topology);
         if let (Some(b), Some(relief)) = (&mut next.built, &relief) {
@@ -1057,10 +1089,16 @@ pub(crate) fn build_parent(
             b.relief_stuck = relief.stuck.len() as u32;
         }
         last = next;
+        published = Resort::N3Recovery;
     }
     if let Some(b) = &mut last.built {
         b.last_resort = true;
     }
+    last.retry = Some(Retry {
+        resort: published.name(),
+        primary_contraction_failed,
+        root_competition: false,
+    });
     last.reused = repeats.reused;
     Ok(last)
 }
@@ -1132,6 +1170,18 @@ enum Resort {
 }
 
 impl Resort {
+    /// The build's name in the stage report.
+    fn name(self) -> &'static str {
+        match self {
+            Self::None => "primary",
+            Self::Fix2 => "fix2",
+            Self::Staged => "staged",
+            Self::N1 => "n1",
+            Self::N2 => "n2",
+            Self::N3 => "n3",
+            Self::N3Recovery => "n3Recovery",
+        }
+    }
     /// The last-resort stage, 0 before it.
     fn stage(self) -> u8 {
         match self {
@@ -1182,6 +1232,7 @@ fn build(
                 construction_dropped: Vec::new(),
                 relief: None,
                 reused: Reused::default(),
+                retry: None,
             });
         }
     }
@@ -1255,6 +1306,7 @@ fn build(
                 construction_dropped: Vec::new(),
                 relief: None,
                 reused: Reused::default(),
+                retry: None,
             });
         };
         merged = snapped;
@@ -1307,6 +1359,7 @@ fn build(
                     construction_dropped: Vec::new(),
                     relief: residue,
                     reused: Reused::default(),
+                    retry: None,
                 });
             }
         }
@@ -1369,6 +1422,7 @@ fn build(
                     construction_dropped: Vec::new(),
                     relief: None,
                     reused: Reused::default(),
+                    retry: None,
                 });
             }
             if cap == full_cap && repeats.enabled {
@@ -1391,6 +1445,7 @@ fn build(
             construction_dropped: Vec::new(),
             relief: None,
             reused: Reused::default(),
+            retry: None,
         });
     }
     // D11: simplifier stagnation alone is not cap infeasibility. Deduplicate and remove
@@ -1448,6 +1503,7 @@ fn build(
                     construction_dropped: Vec::new(),
                     relief: None,
                     reused: Reused::default(),
+                    retry: None,
                 });
             }
         }
@@ -1632,6 +1688,7 @@ fn build(
             construction_dropped: Vec::new(),
             relief: None,
             reused: Reused::default(),
+            retry: None,
         });
     }
     attempted.add(topology);
@@ -1642,6 +1699,7 @@ fn build(
         construction_dropped,
         relief: residue,
         reused: Reused::default(),
+        retry: None,
     })
 }
 
@@ -1887,6 +1945,7 @@ fn assessed_attempt_inner(
         b.retries += round;
         b.staged = resort.staged();
         b.last_resort_stage = resort.stage();
+        b.primary = resort == Resort::None;
         let accepted = assess(&mut b)?;
         call.search.add(b.search);
         if !accepted {
@@ -2384,6 +2443,8 @@ fn attempt_mode(
         retries,
         last_resort: false,
         staged: false,
+        rejection: None,
+        primary: false,
         last_resort_stage: 0,
         relief_stuck: 0,
         interface_vertices: interface_vertices as u32,

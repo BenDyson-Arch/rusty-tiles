@@ -528,6 +528,8 @@ struct Census {
     /// A2 last-resort tiles, and those whose declared fold faces differ from their recount.
     last_resort_tiles: usize,
     fold_declaration_mismatches: usize,
+    /// Tiles a retry published, each with its record (`last_resort_records`).
+    retried_tiles: usize,
     leaves: usize,
     coarse: usize,
     max_depth: u32,
@@ -800,10 +802,12 @@ fn census(dir: &Path) -> Census {
         assert!(stage <= 3);
         fold_declaration_mismatches += usize::from(r["foldFaces"].as_u64().unwrap_or(0) != recount);
     }
+    let retried_tiles = last_resort_records(dir).len();
     let leaves: Vec<&Tile> = tiles.iter().filter(|t| t.leaf).collect();
     let mut c = Census {
         last_resort_tiles,
         fold_declaration_mismatches,
+        retried_tiles,
         leaves: leaves.len(),
         coarse: tiles.len() - leaves.len(),
         packed_leaves: rows(&dir.join("leaves.jsonl"))
@@ -4901,6 +4905,7 @@ fn d11_holey_sheet_builds_every_cell_with_the_last_resort() {
         assert!(omission_receipt(&name, &dir), "{name}");
         let c = census(&dir);
         assert!(c.last_resort_tiles > 0, "{name}: {c:?}");
+        assert!(c.retried_tiles > 0, "{name}: {c:?}");
         assert_directed_census(&name, &c, run.cap);
         published_and_valid(&name, &dir, work.path());
     }
@@ -5986,6 +5991,68 @@ fn exact_repeat_reuse_publishes_identical_bytes() {
     assert!(total.round_zero_calls > 0, "{total:?}");
 }
 
+/// Every tile a retry published, from the stage manifest, checked against the payload
+/// declarations and the stage's count: `(first, depth, stage, resort)`. A record's stage
+/// follows from its build, and a primary build that refused no proposal was refused for
+/// its contraction or had no proposal.
+fn last_resort_records(dir: &Path) -> Vec<(u64, u64, u64, String)> {
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let resources: Value =
+        serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+    let diagnostics = &resources["hlod"]["diagnostics"];
+    let records = manifest["hlod"]["lastResortRecords"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(
+        diagnostics["last_resort_records"].as_array().unwrap(),
+        &records
+    );
+    assert_eq!(
+        records.len() as u64,
+        diagnostics["last_resort_tiles"].as_u64().unwrap()
+    );
+    let out: Vec<_> = records
+        .iter()
+        .map(|r| {
+            let (stage, resort) = (r["stage"].as_u64().unwrap(), r["resort"].as_str().unwrap());
+            let expected = match resort {
+                "fix2" | "staged" => 0,
+                "n1" => 1,
+                "n2" => 2,
+                "n3" | "n3Recovery" | "rootCandidate" => 3,
+                other => panic!("unknown resort {other}"),
+            };
+            assert_eq!(stage, expected, "{r}");
+            let refused: u64 = ["refusedDecode", "refusedTopology", "refusedControls"]
+                .iter()
+                .map(|k| r[k].as_u64().unwrap())
+                .sum();
+            match r["reason"].as_str().unwrap() {
+                "contractionStalled" | "noProposal" => assert_eq!(refused, 0, "{r}"),
+                // The primary build published; it may have refused proposals before.
+                "rootCompetition" => assert_eq!(resort, "rootCandidate", "{r}"),
+                "proposalsRefused" => assert!(refused > 0, "{r}"),
+                other => panic!("unknown reason {other}"),
+            }
+            (
+                r["first"].as_u64().unwrap(),
+                r["depth"].as_u64().unwrap(),
+                stage,
+                resort.to_string(),
+            )
+        })
+        .collect();
+    for (first, depth, stage, _) in last_resort_tiles(dir).into_iter().filter(|t| t.2 > 0) {
+        assert!(
+            out.iter().any(|r| (r.0, r.1, r.2) == (first, depth, stage)),
+            "declared last resort f{first}-d{depth} stage {stage} has no record"
+        );
+    }
+    out
+}
+
 /// The A2 last-resort tiles of a staged run: `(first, depth, stage, fold faces)`.
 fn last_resort_tiles(dir: &Path) -> Vec<(u64, u64, u64, u64)> {
     rows(&dir.join("proxies.jsonl"))
@@ -6595,8 +6662,68 @@ fn root_competition_fills_a_forced_own_build_omission_and_is_job_invariant() {
     assert_eq!(root["rootCompetition"]["accepted"], true);
     assert!(root["rootCompetition"]["baselineG"].is_null());
     assert!(root["geometricError"].as_f64().unwrap() >= root["childrenError"].as_f64().unwrap());
+    // The candidate is recorded as the build that published the root.
+    let depth = root["depth"].as_u64().unwrap();
+    assert!(
+        last_resort_records(&dirs[0])
+            .iter()
+            .any(|r| (r.1, r.2, r.3.as_str()) == (depth, 3, "rootCandidate")),
+        "{:?}",
+        last_resort_records(&dirs[0])
+    );
     assert_eq!(published(&dirs[0]), published(&dirs[1]));
     published_and_valid("recovered root", &dirs[0], work.path());
+}
+
+/// Each build of the ladder publishes with its own record. Refusing every proposal of the
+/// first k builds (as S2's controls would) makes the next build publish: fix 2, staged
+/// reduction, N1, N2, N3. Its record names that build and stage, gives the primary
+/// build's refusal as the reason, and counts the refused primary proposals by check.
+#[test]
+fn every_ladder_build_publishes_with_its_record() {
+    let work = tempfile::tempdir().unwrap();
+    let source = grid((16, 16), (0., 100.), (0., 100.), &bump, [0.4, 0.5, 0.3, 1.]);
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    for (k, resorts, want) in [
+        (1u8, &["fix2"][..], 0u64),
+        (2, &["staged"][..], 0),
+        (3, &["n1"][..], 1),
+        (4, &["n2"][..], 2),
+        (5, &["n3", "n3Recovery"][..], 3),
+    ] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("refuse-{k}")),
+            &Run {
+                leaf_triangles: 64,
+                cap: 100,
+                mutation: Mutation::RefuseBuilds(k),
+                budget: Some(4 << 30),
+                ..s2_run()
+            },
+        )
+        .unwrap();
+        let census = census(&dir);
+        assert!(census.retried_tiles > 0, "k={k}: {census:?}");
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let records = manifest["hlod"]["lastResortRecords"].as_array().unwrap();
+        let forced: Vec<_> = records
+            .iter()
+            .filter(|r| resorts.contains(&r["resort"].as_str().unwrap()))
+            .collect();
+        assert!(!forced.is_empty(), "k={k}: {records:?}");
+        for r in &forced {
+            assert_eq!(r["stage"], want, "k={k}: {r}");
+            assert_eq!(r["reason"], "proposalsRefused", "k={k}: {r}");
+            assert!(r["refusedControls"].as_u64().unwrap() > 0, "k={k}: {r}");
+            assert_eq!(r["refusedDecode"], 0, "k={k}: {r}");
+            assert_eq!(r["refusedTopology"], 0, "k={k}: {r}");
+        }
+        if k == 5 {
+            published_and_valid("refused ladder", &dir, work.path());
+        }
+    }
 }
 
 /// Inject one depth-1 construction failure; recovery must use its complete leaves,
