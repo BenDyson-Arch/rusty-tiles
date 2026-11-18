@@ -226,7 +226,9 @@ fn report_and_geojson_do_not_depend_on_jobs() {
                 .with_geojson_local(true)
                 .with_min_feature_length(1.),
         );
-        assert_eq!(result.geojson.as_deref(), Some(path.as_path()));
+        // The result names the resolved output path (on Windows a verbatim `\\?\` path).
+        let resolved = crate::output_path::resolve(&path).unwrap();
+        assert_eq!(result.geojson.as_deref(), Some(resolved.as_path()));
         let report = serde_json::to_value(&result.report).unwrap();
         (report, fs::read(path).unwrap(), result)
     };
