@@ -491,7 +491,7 @@ pub(crate) struct Ranks {
 
 impl Ranks {
     pub(crate) fn new(words: Vec<u64>) -> Self {
-        let mut before = Vec::with_capacity(words.len());
+        let mut before = Vec::with_capacity(words.len() + 1);
         let mut ones = 0usize;
         for w in &words {
             before.push(ones);

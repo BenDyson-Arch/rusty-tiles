@@ -3645,6 +3645,7 @@ fn inspect_run(
         let profile = (check.reports["operation"].as_str() == Some("mesh_tiler"))
             .then(|| check.reports["profile"].as_str())
             .flatten();
+        check.delivery.expect_surface_error(&manifest, hlod)?;
         check
             .delivery
             .expect_texture(hlod_delivery::texture::Declaration::read(
@@ -3805,6 +3806,7 @@ fn inspect_run(
             dropped_components: c.dropped_by_depth.iter().sum(),
             dropped_by_depth: c.dropped_by_depth,
             texture_refinable_tiles: c.texture_refinable_tiles,
+            surface_error_extent_tiles: c.surface_error_extent_tiles,
             texture_bound_tiles: c.texture_bound_tiles,
             coarse_normals: coarse_normal_census(&c.coarse_normals),
         }),

@@ -215,9 +215,12 @@ struct ProxyWire {
     #[serde(default)]
     encoded_depth: Option<u32>,
     geometric_error: f64,
+    construction_error: f64,
+    input_triangles: u64,
     primitives: u32,
     #[serde(default)]
     error_policy: Option<String>,
+    certificate: Option<crate::mesh_large::hlod::certify::Certificate>,
     #[serde(default)]
     measurement: Option<crate::mesh_large::hlod::error::Summary>,
     #[serde(default)]
@@ -238,7 +241,12 @@ impl ProxyRow {
             _ => return Err(bad("missing or invalid encodedDepth")),
         };
         let summary = match (w.error_policy.as_deref(), w.measurement) {
-            (Some(crate::mesh_large::hlod::error::POLICY), Some(summary)) => {
+            (Some(crate::mesh_large::hlod::certify::POLICY), Some(summary)) => {
+                let range = w.end.saturating_sub(w.first);
+                w.certificate
+                    .ok_or_else(|| bad("missing decoded-surface certificate"))?
+                    .check(range, w.input_triangles, w.geometric_error)
+                    .map_err(|e| bad(&e.to_string()))?;
                 let key = crate::mesh_large::hlod::store::TileKey {
                     first: w.first,
                     end: w.end,
@@ -252,12 +260,19 @@ impl ProxyRow {
                 let children = w
                     .children_error
                     .ok_or_else(|| bad("S2 row has no childrenError"))?;
+                if w.geometric_error < w.construction_error {
+                    return Err(bad("published G below the construction floor"));
+                }
                 summary
-                    .validate(w.geometric_error, children, w.end.saturating_sub(w.first))
+                    .validate(w.construction_error, children, range)
                     .map_err(|e| bad(&e.to_string()))?;
                 summary
             }
-            _ => return Err(bad("missing or unsupported sampled-error policy/summary")),
+            _ => {
+                return Err(bad(
+                    "missing or unsupported certified-error policy or S2 construction summary",
+                ))
+            }
         };
         let expected = format!("proxies/f{}-d{}.glb", w.first, w.depth);
         if w.uri != expected {
@@ -567,9 +582,6 @@ pub(crate) struct LeafDirectory {
     omitted_by_depth: Vec<u64>,
     /// Largest GLB JSON chunk read for bounds.
     max_glb_json: u64,
-    /// An opt-in source weld's largest displacement (rounded up), added to every published
-    /// geometric error; 0 without a weld.
-    pub weld_error: f64,
 }
 
 impl LeafDirectory {
@@ -611,6 +623,12 @@ impl LeafDirectory {
             ));
         }
         let (omitted_proxies, omitted_by_depth) = if proxies {
+            if manifest["hlod"]["errorPolicy"].as_str() != Some(super::super::hlod::certify::POLICY)
+            {
+                return Err(input(
+                    "HLOD manifest lacks the certified surface error policy",
+                ));
+            }
             let total = manifest["hlod"]["omittedProxies"]
                 .as_u64()
                 .ok_or_else(|| input("manifest.json hlod has no omittedProxies"))?;
@@ -648,7 +666,6 @@ impl LeafDirectory {
             omitted_proxies,
             omitted_by_depth,
             max_glb_json: MAX_GLB_JSON,
-            weld_error: 0.,
         })
     }
 

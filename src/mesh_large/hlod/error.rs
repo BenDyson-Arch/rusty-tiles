@@ -1,6 +1,5 @@
-//! D2 sampled source error, policy v2. This is deliberately not certification.
-//! G=max(child G, 1.05 M). The 5% sampling margin exceeds the prototype's
-//! ~1% independent maximum exceedance; it is not a covering-radius bound.
+//! S2 construction error, policy v2. The value max(child construction G, 1.05 M)
+//! guides simplification and supplies a floor to the decoded-surface certifier.
 //! Source controls cover bounded patch boundaries, one vertex per patch component
 //! and sliver vertices/midpoints. Indexed proxy vertices/edges are checked once.
 use super::{
@@ -24,7 +23,7 @@ const BINS: usize = 16384;
 /// Per-query work budget of every S2 nearest search (node visits plus triangle tests; see
 /// `source_index::Budget`). Exact search is Θ(R) per query against R source triangles whose
 /// boxes all contain it; budgeted, a query costs O(B + depth + block). On exhaustion the
-/// best distance found is used: an overestimate, so M and G stay conservative. Exhaustions
+/// best distance found is used. It upper-bounds the distance at that query point. Exhaustions
 /// are counted in the report. A scale-gate tuning constant, chosen by measurement
 /// (2026-10-25): tex3/crop3 searches take at most 501 steps (none exhausted at 1024); the
 /// adversarial chords input costs 28.0/17.6/9.6 S2 CPU-s at B = 4096/1024/512 with G
@@ -458,7 +457,7 @@ impl CpuReport {
         self.proxy_to_source += c.proxy_to_source;
     }
 }
-fn elapsed(start: Option<f64>) -> f64 {
+pub(super) fn elapsed(start: Option<f64>) -> f64 {
     thread_cpu().zip(start).map_or(0., |(b, a)| b - a)
 }
 
@@ -722,10 +721,7 @@ fn publish(
         return Err(state("nonfinite or negative measured G"));
     }
     Ok((
-        TileError {
-            geometric_error,
-            policy: POLICY,
-        },
+        TileError { geometric_error },
         Summary {
             version: 2,
             seed,
@@ -1223,5 +1219,52 @@ mod tests {
         let d = s.summary();
         assert!(d.p95 >= 0.949 && d.p95 <= 0.949 * 2f64.powf(1. / 32.));
         assert!(d.p99 >= 0.989 && d.p99 <= 0.989 * 2f64.powf(1. / 32.));
+    }
+    // All source vertices and all edge midpoints belong to the delivered
+    // strips. The widest missing point lies strictly inside an original edge.
+    type TestFace = [[f32; 3]; 3];
+
+    fn edge_gap_surfaces() -> (Vec<TestFace>, Vec<TestFace>) {
+        fn strip(left: f32, right: f32) -> [[[f32; 3]; 3]; 2] {
+            let h = 1. / 16384.;
+            let (a, b, c, d) = (
+                [left, 0., 0.],
+                [right, 0., 0.],
+                [right, h, 0.],
+                [left, h, 0.],
+            );
+            [[a, b, c], [a, c, d]]
+        }
+        // The common face makes the strip a small share of the source area.
+        let shared = [[-100., 50., 0.], [100., 50., 0.], [-100., 150., 0.]];
+        let mut source = vec![shared];
+        source.extend(strip(0., 1.));
+        let mut proxy = vec![shared];
+        proxy.extend(strip(0., 0.25));
+        proxy.extend(strip(0.375, 1.));
+        (source, proxy)
+    }
+
+    #[test]
+    fn published_g_covers_an_original_edge_between_all_vertex_and_midpoint_controls() {
+        let (source, proxy) = edge_gap_surfaces();
+        let (sampled, _) = pair_count(&source, &proxy, 592, Schedule::PRODUCTION.per_depth);
+        // At (5/16,0,0), the nearest target points are (1/4,0,0) and
+        // (3/8,0,0). Every other target face lies outside that open x strip.
+        const DISTANCE: f64 = 1. / 16.;
+
+        assert!(sampled.geometric_error < DISTANCE);
+        for (a, b) in [(&source, &proxy), (&proxy, &source)] {
+            let certificate = super::super::certify::direct_control(a, b, sampled.geometric_error);
+            let published = certificate.bound().max(sampled.geometric_error);
+            assert!(
+                published >= DISTANCE,
+                "published G {published} < edge witness {DISTANCE}"
+            );
+            assert!(
+                published < DISTANCE + 0.001,
+                "loose edge certificate {published}"
+            );
+        }
     }
 }

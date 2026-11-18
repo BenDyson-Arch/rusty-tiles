@@ -65,7 +65,7 @@ impl PhaseSeconds {
     }
 }
 
-type Emit<'a> = dyn Fn(&RunEvent<'_>) -> Result<(), JobError> + Sync + 'a;
+pub(super) type Emit<'a> = dyn Fn(&RunEvent<'_>) -> Result<(), JobError> + Sync + 'a;
 
 /// The run's phase reporter. Calls may come from worker threads; events are emitted
 /// under one lock, so a phase's `done` counts arrive in order.

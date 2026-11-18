@@ -23,6 +23,7 @@ mod appearance_tests;
 mod audit;
 pub(crate) mod bake;
 mod borders;
+pub(crate) mod certify;
 mod charts;
 mod cpu_profile;
 pub(crate) mod decode;
@@ -166,13 +167,14 @@ pub struct DeclaredTile {
 
 /// One parent job's admission for `merged` input triangles: its workspace, encode allowance,
 /// S2's source query, measurement and nearest-search workspace, and a cap-sized output.
-fn job_charge(merged: u64, settings: &Settings) -> u64 {
+fn job_charge(merged: u64, settings: &Settings, certificate_bytes: u64) -> u64 {
     merged
         .saturating_mul(JOB_BYTES_PER_TRIANGLE)
         .saturating_add(borders::contract_workspace_bytes(
             (settings.cap as u64).saturating_mul(6),
         ))
         .saturating_add(JOB_ENCODE_BYTES)
+        .saturating_add(certificate_bytes)
         .saturating_add(source_index::QUERY_BYTES)
         .saturating_add(error::WORK_BYTES)
         .saturating_add(error::search_bytes(settings.nearest_steps))
@@ -240,6 +242,8 @@ pub struct HlodMemoryPlan {
     pub window_bytes: u64,
     /// One parent job: its workspace plus its output.
     pub job_bytes: u64,
+    /// Transient certified-surface workspace inside one admitted parent job.
+    pub certificate_workspace_bytes: u64,
     /// The least ceiling admitting the stage; refused below it.
     pub minimum_bytes: u64,
     /// The walk's lease ledger (`ceiling - fixed`).
@@ -412,7 +416,10 @@ pub(crate) fn plan(
     // S3's donor search (its resolve state and a local surface) and appearance workspace
     // ride on S1/S2's job.
     let appearance = appearance_plan(captured, config.profile, cap)?;
-    let job = job_charge(leaf_cap.max(cap as u64).saturating_mul(8), settings)
+    let max_children = leaf_cap.max(cap as u64).saturating_mul(8);
+    let certificate_workspace_bytes =
+        certify::workspace(max_children, cap, captured.triangles.len());
+    let job = job_charge(max_children, settings, certificate_workspace_bytes)
         .saturating_add(held.saturating_mul(8))
         .saturating_add(bake::RESOLVE_BYTES)
         .saturating_add(bake::LOCAL_BYTES)
@@ -559,6 +566,7 @@ pub(crate) fn plan(
             incidence_sort,
             window_bytes: window,
             job_bytes: job,
+            certificate_workspace_bytes,
             minimum_bytes: minimum.saturating_add(tmpfs),
             ledger_bytes: ledger,
             texture_workspace_bytes: appearance.texture,
@@ -638,6 +646,8 @@ pub(crate) struct HlodReport {
     pub error_cpu: error::CpuReport,
     #[serde(skip)]
     pub error_cpu_by_depth: Vec<f64>,
+    #[serde(skip)]
+    pub certification_cpu_by_depth: Vec<f64>,
     #[serde(skip)]
     pub root_competition_cpu_seconds: f64,
     #[serde(skip)]
@@ -729,6 +739,9 @@ pub struct HlodDiagnostics {
     pub error_cpu: error::CpuReport,
     /// Summed worker S2 CPU seconds by encoded depth (index construction excluded).
     pub error_cpu_by_depth: Vec<f64>,
+    /// Worker CPU seconds preparing the reference and certifying both decoded directions.
+    /// Indexed by encoded depth, absent without a thread CPU clock.
+    pub certification_cpu_by_depth: Option<Vec<f64>>,
     pub root_competition_cpu_seconds: f64,
     pub root_competition_timing: root_competition::Timing,
     pub error_measurement: error::ErrorReport,
@@ -889,7 +902,7 @@ pub(crate) fn produce(
     let mut report = HlodReport {
         schema_version: 1,
         method: "octree-hlod",
-        error_policy: error::POLICY,
+        error_policy: certify::POLICY,
         appearance: APPEARANCE_POLICY,
         triangle_cap: settings.cap as u64,
         omitted_by_depth: vec![0; captured.tree.stats.height as usize],
@@ -1100,6 +1113,7 @@ pub(crate) fn produce(
         sampling: &sampling,
         check,
         repeats: &repeats,
+        certification: certify::Progress::new(check, input.phases.emitter()),
     };
     let result = walk(
         &job,
@@ -1115,8 +1129,11 @@ pub(crate) fn produce(
     diagnostics.root_competition_timing = report.root_competition_timing;
     diagnostics.error_cpu = report.error_cpu;
     diagnostics.error_cpu_by_depth = report.error_cpu_by_depth.clone();
+    diagnostics.certification_cpu_by_depth =
+        error::thread_cpu().map(|_| report.certification_cpu_by_depth.clone());
     diagnostics.error_cpu.index = index_cpu.unwrap_or(0.);
     let (lease_peak, timings, held_spill, walk_utilisation) = result?;
+    job.certification.finish()?;
     diagnostics.held_spill = held_spill;
     diagnostics.walk_utilisation = walk_utilisation;
     diagnostics.appearance_seconds = timings;
@@ -1195,7 +1212,7 @@ struct LeafErrors {
 }
 
 impl LeafErrors {
-    fn next(&mut self, first: u64) -> Result<(f64, texture_error::Sums), JobError> {
+    fn next(&mut self, first: u64) -> Result<(f64, f64, texture_error::Sums), JobError> {
         let line = self
             .lines
             .next()
@@ -1213,7 +1230,15 @@ impl LeafErrors {
             .ok()
             .filter(|t| t.area.is_finite() && t.texels.is_finite())
             .ok_or_else(|| state("leaf row without texture sums"))?;
-        Ok((error, texture))
+        let construction = row
+            .get("constructionGeometryError")
+            .map_or(Ok(error), |value| {
+                value
+                    .as_f64()
+                    .filter(|e| e.is_finite() && *e >= 0.)
+                    .ok_or_else(|| state("invalid leaf constructionGeometryError"))
+            })?;
+        Ok((construction, error, texture))
     }
 }
 
@@ -1229,7 +1254,7 @@ fn read_leaf(
     leaf: u32,
     captured: &FullCaptured,
     streams: &mut LeafStreams<'_>,
-    (error, texture): (f64, texture_error::Sums),
+    (construction, error, texture): (f64, f64, texture_error::Sums),
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<TileGeometry, JobError> {
     let LeafStreams {
@@ -1254,8 +1279,10 @@ fn read_leaf(
         representative: Vec::new(),
         primitives: Vec::new(),
         interface: Vec::new(),
-        geometric_error: error,
+        geometric_error: construction,
         published_error: error,
+        surface_error: error,
+        decoded_override: Vec::new(),
         texture,
         lease: None,
     };
@@ -1275,8 +1302,8 @@ fn read_leaf(
                 .transpose()?
                 .ok_or_else(|| state("truncated leaf corner depths"))?
                 .depths;
-            // Welded by canonical decoded position. Corners that coincide carry no surface;
-            // such triangles are kept only for a parent whose descendants have no surface.
+            // Share vertices at equal decoded positions. Retain repeated-corner triples
+            // so a child reference includes every decoded segment and point.
             let mut corners = [[0f32; 3]; 3];
             for k in 0..3 {
                 corners[k] = captured
@@ -1467,6 +1494,7 @@ struct Job<'j, 'a> {
     check: &'j (dyn Fn() -> Result<(), JobError> + Sync),
     /// Exact repeats the walk skipped (`geometry::Reused`), for the diagnostics.
     repeats: &'j RepeatCounter,
+    certification: certify::Progress<'j>,
 }
 
 /// `RepeatReuse` summed over worker threads.
@@ -1950,6 +1978,9 @@ fn build_tile(
         .iter()
         .map(|c| (c.published_error, c.texture))
         .collect();
+    let reference_start = error::thread_cpu();
+    let comparison = certify::Comparison::new(closed.key, captured, &query, &children, job.check)?;
+    let reference_cpu = error::elapsed(reference_start);
     drop(children);
     built.change = Default::default();
     built.controls = Default::default();
@@ -2019,12 +2050,16 @@ fn build_tile(
         settings.mutation,
     )?;
     drop(appearance.groups);
-    if settings.mutation != Mutation::MoveVertexUnchecked {
-        // Every decoded corner carries exactly the measured (and charted) position bits.
-        encode::check(tile, &built.locked, &encoded)?;
-    } else {
+    let delivered = encode::check(tile, &built.locked, &encoded);
+    #[cfg(test)]
+    let delivered = if settings.mutation == Mutation::MoveVertexUnchecked {
+        // Exercise the independent archive validator with a corrupted payload.
         decode::decode(&encoded.glb)?;
-    }
+        Ok(encoded.decoded.clone())
+    } else {
+        delivered
+    };
+    let delivered = delivered?;
     if !error.geometric_error.is_finite() || error.geometric_error < built.children_error {
         return Err(state("coarse error is nonfinite or below its children's"));
     }
@@ -2033,9 +2068,17 @@ fn build_tile(
     #[cfg(test)]
     let px_per_texel =
         px_per_texel.filter(|_| settings.mutation != Mutation::UnderstateTextureError);
+    let cover_start = error::thread_cpu();
+    let certificate = comparison.certify(
+        &delivered,
+        &tile.triangles,
+        error.geometric_error,
+        &|done| job.certification.tick(done),
+    )?;
+    let certification_cpu_seconds = reference_cpu + error::elapsed(cover_start);
     let texture = texture_error::publish(
         texture_error::Rule::new(px_per_texel),
-        error.geometric_error,
+        error.geometric_error.max(certificate.bound()),
         decode::texture_sums(&encoded.glb)?,
         child_texture,
     );
@@ -2064,12 +2107,15 @@ fn build_tile(
         leaf_begin: tile.key.leaf_begin,
         leaf_end: tile.key.leaf_end,
         geometric_error: texture.error,
+        construction_error: error.geometric_error,
         texture,
-        error_policy: error.policy,
+        certificate,
+        error_policy: certify::POLICY,
         measurement,
         root_competition,
         recovery,
         nearest_search: nearest.stats,
+        certification_cpu_seconds,
         error_cpu_seconds,
         error_cpu,
         children_error: built.children_error,
@@ -2126,6 +2172,10 @@ fn build_tile(
     let mut geometry = built.geometry;
     geometry.geometric_error = error.geometric_error;
     geometry.published_error = texture.error;
+    geometry.surface_error = certificate.bound();
+    if delivered != geometry.positions {
+        geometry.decoded_override = delivered;
+    }
     geometry.texture = texture.sums;
     shrink(&mut geometry);
     Ok((
@@ -2216,11 +2266,7 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     if by_depth.len() <= encoded {
         by_depth.resize_with(encoded + 1, Default::default);
     }
-    by_depth[encoded].add(
-        row.measurement,
-        row.texture.geometric_error,
-        row.nearest_search,
-    );
+    by_depth[encoded].add(row.measurement, row.construction_error, row.nearest_search);
     let t = &mut report.texture_error;
     t.refinable += u64::from(row.texture.refinable);
     t.raised_by_texture += u64::from(row.texture.by_texture());
@@ -2236,6 +2282,11 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
         cpu.resize(encoded + 1, 0.);
     }
     cpu[encoded] += row.error_cpu_seconds;
+    let cert_cpu = &mut report.certification_cpu_by_depth;
+    if cert_cpu.len() <= encoded {
+        cert_cpu.resize(encoded + 1, 0.);
+    }
+    cert_cpu[encoded] += row.certification_cpu_seconds;
     if row.depth == 0 {
         report.error_measurement.root = Some(row.measurement);
     }

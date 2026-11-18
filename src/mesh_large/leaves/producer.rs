@@ -608,6 +608,7 @@ struct LeafEncoded {
     bytes: u64,
     bounds: super::super::records::Bounds,
     geometry_error: f64,
+    construction_error: f64,
     appearance: Vec<serde_json::Value>,
     escalations: Vec<atlas::PageEscalation>,
     density_drop: u32,
@@ -700,39 +701,46 @@ fn leaf_encode(
 ) -> Result<LeafEncoded, JobError> {
     let node = &input.node;
     let captured = services.captured;
-    let ((glb, appearance), density_drop, density_reasons) = encode_with_density_budget(
-        config.profile,
-        u32::from(input.plan.density_drop),
-        |density_drop| {
-            (services.check)().map_err(atlas::PrepareError::from)?;
-            write_prepared(
-                atlas::prepare(
-                    (input.records.clone(), input.corner_depths.clone()),
-                    services,
-                    config.profile,
-                    node.depth() as u8,
-                    density_drop,
-                ),
-                |atlas| {
-                    let mut leaf = timing::time(Stage::GlbWrite, || {
-                        writer::encode(
-                            atlas,
-                            &captured.lattice,
-                            node.depth() as u8,
-                            config.tile_bytes(),
-                        )
-                    })?;
-                    // Only the accepted density attempt reaches here.
-                    leaf.shared_triangles = timing::time(Stage::GlbWrite, || {
-                        crate::mesh_large::batching::leaf_shared_triangles(atlas, &mut || {
-                            (services.check)()
-                        })
-                    })?;
-                    Ok(leaf)
-                },
-            )
-        },
-    )?;
+    let (((glb, geometry_error), appearance), density_drop, density_reasons) =
+        encode_with_density_budget(
+            config.profile,
+            u32::from(input.plan.density_drop),
+            |density_drop| {
+                (services.check)().map_err(atlas::PrepareError::from)?;
+                write_prepared(
+                    atlas::prepare(
+                        (input.records.clone(), input.corner_depths.clone()),
+                        services,
+                        config.profile,
+                        node.depth() as u8,
+                        density_drop,
+                    ),
+                    |atlas| {
+                        let mut leaf = timing::time(Stage::GlbWrite, || {
+                            writer::encode(
+                                atlas,
+                                &captured.lattice,
+                                node.depth() as u8,
+                                config.tile_bytes(),
+                            )
+                        })?;
+                        // Only the accepted density attempt reaches here.
+                        leaf.shared_triangles = timing::time(Stage::GlbWrite, || {
+                            crate::mesh_large::batching::leaf_shared_triangles(atlas, &mut || {
+                                (services.check)()
+                            })
+                        })?;
+                        let error = match &captured.original_positions {
+                            Some(original) => {
+                                leaf.original_error(atlas, original, services.check)?
+                            }
+                            None => leaf.geometry_error,
+                        };
+                        Ok((leaf, error))
+                    },
+                )
+            },
+        )?;
     // Members are named by frozen leaf order, so workers write them in
     // parallel; the manifest row is still appended strictly in order.
     let name = format!("{index:012}.glb");
@@ -744,7 +752,8 @@ fn leaf_encode(
         sha256: hex(Sha256::digest(&glb.glb)),
         bytes: glb.glb.len() as u64,
         bounds: glb.bounds,
-        geometry_error: glb.geometry_error,
+        geometry_error,
+        construction_error: glb.geometry_error,
         appearance: appearance.receipts,
         escalations: appearance.escalations,
         density_drop,
@@ -1087,6 +1096,7 @@ fn write_leaf(
         bytes,
         bounds,
         geometry_error,
+        construction_error,
         appearance,
         escalations,
         density_drop,
@@ -1099,7 +1109,10 @@ fn write_leaf(
         return Err(invariant("leaf member order differs from manifest order"));
     }
     timing::count(Counter::Leaves, 1);
-    let receipt = json!({"schemaVersion":1,"uri":format!("leaves/{name}"),"sha256":sha256,"bytes":bytes,"first":node.first,"end":node.end,"cellDepth":node.cell_depth,"cell":node.cell,"pathLength":node.path_len,"path":node.path,"lastOctant":node.last_octant,"depth":node.depth(),"packed":node.is_packed(),"bounds":{"min":bounds.min.map(f64::from),"max":bounds.max.map(f64::from)},"geometryError":geometry_error,"texture":texture,"densityDrop":density_drop,"densityReasons":density_reasons,"primitives":primitives,"texelOwnership":if shared_triangles == 0 {"unique"} else {"shared"},"sharedTriangles":shared_triangles,"plannedFootprint":{"densityDrop":plan.density_drop,"memoryDrops":plan.memory_drops,"pages":plan.pages,"baseTexels":plan.base_texels,"chainTexels":plan.chain_texels,"geometryBytes":plan.geometry_bytes,"planningOwnedBytes":plan.owned_bytes},"appearance":appearance});
+    let mut receipt = json!({"schemaVersion":1,"uri":format!("leaves/{name}"),"sha256":sha256,"bytes":bytes,"first":node.first,"end":node.end,"cellDepth":node.cell_depth,"cell":node.cell,"pathLength":node.path_len,"path":node.path,"lastOctant":node.last_octant,"depth":node.depth(),"packed":node.is_packed(),"bounds":{"min":bounds.min.map(f64::from),"max":bounds.max.map(f64::from)},"geometryError":geometry_error,"texture":texture,"densityDrop":density_drop,"densityReasons":density_reasons,"primitives":primitives,"texelOwnership":if shared_triangles == 0 {"unique"} else {"shared"},"sharedTriangles":shared_triangles,"plannedFootprint":{"densityDrop":plan.density_drop,"memoryDrops":plan.memory_drops,"pages":plan.pages,"baseTexels":plan.base_texels,"chainTexels":plan.chain_texels,"geometryBytes":plan.geometry_bytes,"planningOwnedBytes":plan.owned_bytes},"appearance":appearance});
+    if construction_error != geometry_error {
+        receipt["constructionGeometryError"] = json!(construction_error);
+    }
     serde_json::to_writer(&mut *manifest, &receipt)
         .map_err(|e| invariant(&format!("leaf manifest serialization: {e}")))?;
     manifest

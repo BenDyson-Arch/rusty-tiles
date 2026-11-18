@@ -10,9 +10,9 @@ grid-free tier needs the [native-geospatial build](INSTALL.md#native-geospatial-
 The pipeline captures the source, writes exact full-detail leaf tiles, builds
 every coarse parent tile from its children as a classic octree level of detail
 ([coarse levels](#coarse-levels-hlod)), and publishes the hierarchy. A coarse
-tile's geometric error is a **sampled, measured** distance to the source
-surface, not a certificate. It is raised where the tile's texture is much
-coarser than its children's ([texture-aware G](#texture-aware-published-g)).
+tile's [geometric error](#certified-geometric-error) bounds the continuous
+distance in both directions between its captured source and its decoded surface.
+Coarse textures can raise the published value ([texture-aware G](#texture-aware-published-g)).
 
 ## Convert a local scene
 
@@ -492,52 +492,24 @@ repeats land on one position, and the edges between them close. `mesh-inspect`
 with the same options shows how many: its `source.open` and `hlod_view` counts
 are of the welded source.
 
-**Honest geometric error.** Coarse geometric error is sampled against the
-captured, welded source ([below](#geometric-error-sampled-not-certified)), and a
-leaf's against its own captured positions. Neither keeps a degenerate face. To
-keep a published error from understating the error against the original
-source, delivery adds a term `e` to every published geometric error, leaves'
-and coarse tiles' alike. `e` is the larger of the largest displacement `d` and
-the collapse bound below, rounded up to the next f64 so the sum never rounds
-below it.
+**Honest geometric error.** The reference is the selected, original source in
+local metres, before the weld. The weld retains the original XYZ bits of
+each moved vertex, including vertices on slivers that collapse to a segment
+or point. A leaf pairs the original corners with its delivered corners. A
+coarse tile covers every original face assigned to its welded tree interval,
+either directly or through the certified child frontier. The weld displacement
+and the position lattice are included in these measurements. See
+[certified geometric error](#certified-geometric-error).
 
-- Every welded vertex moves by at most `d`. A point of a source triangle at
-  barycentric coordinates λ is `Σ λᵢ vᵢ`, and the welded triangle's point at λ
-  is `Σ λᵢ v′ᵢ`. They are at most `Σ λᵢ |v′ᵢ − vᵢ| ≤ d` apart.
-- **Surviving triangles.** A welded triangle that is still a face is kept by
-  the bake. Its points and its source triangle's points are within `d` of each
-  other, both ways.
-- **Collapsed triangles.** A welded triangle with fewer than three distinct
-  corners is a segment or a point, which the bake does not keep. Its source
-  points map onto that collapsed set, within `d`. When the segment is an edge
-  of a surviving face, as for a sliver whose neighbours share its long edge,
-  or the point is a corner of one, the collapsed set lies on the surviving
-  surface and the bound is `d`. Otherwise, if one of its corners `s` is a
-  corner of a surviving face, every point of the collapsed set lies within
-  `r = max_j |v′_j − s|` of `s`. Every source point of the triangle is
-  therefore within `d + r` of a surviving face. The best such corner bounds the
-  triangle, and the largest such bound is the **collapse bound**. Every
-  welded run checks this after the assembly (step `capture_weld_check`).
-- **Isolated collapses.** A collapsed triangle with no corner on a surviving
-  face has nothing to bound it. `mesh` refuses such a weld
-  (`invalid_request`, before anything is published). `mesh-inspect` reports
-  the count as `isolated_collapses`.
-- So the surviving welded faces `S′` and the original source `S` are within
-  `e` of each other in both directions: every point of `S′` is within `d` of
-  `S`, and every point of `S` within `e` of `S′`. By the triangle inequality,
-  a tile within `G` of `S′` in either direction is within `G + e` of `S` in
-  the same direction. The charge covers both directions, tile to source and
-  source to tile.
-- Adding the same `e` everywhere keeps errors monotone down the tree. Empty
-  and omitted cells keep at least their children's (charged) error. A weld
-  that moves nothing adds nothing.
-- The bake's position lattice can also flatten a face that capture keeps, as
-  it can without a weld. Leaf and coarse error already cover that, and the weld
-  does not change it.
-
-`G` itself is still sampled, not certified. Once the measured error bound of
-#413 lands, `G` will be measured against the original, unwelded source, and the
-explicit term will no longer be needed.
+**Collapse diagnostics.** Let `d` be the largest vertex displacement. A
+collapsed segment on a surviving edge, or a collapsed point on a surviving
+corner, places the whole original triangle within `d` of that face by
+barycentric interpolation. Otherwise the weld audit tests each collapsed
+corner `s` shared with a surviving face. The source triangle is within
+`d + max_j |v′_j − s|` of that face. The report records the best such bound
+per collapse and the greatest over the job. A collapsed triangle sharing no
+corner with a surviving face is counted in `isolated_collapses`, and
+`mesh` continues to refuse that topology change before publication.
 
 **Report.** `tilerReport.weld` (also in `conversion.json`, and so in the
 [run report](#run-report)) and `inspectReport.weld` state:
@@ -555,8 +527,7 @@ explicit term will no longer be needed.
 - `coincident_triangles`: faces sharing all three corner positions with
   another face (either orientation), counted in groups that hold a face with a
   moved corner;
-- `geometric_error_term_m`: what delivery added to every published error (0
-  when nothing moved).
+- `geometric_error_term_m` is zero with original-source certification.
 
 The CLI's summary for `mesh` and `mesh-inspect` repeats these on one line. A
 warning line follows when the weld collapsed, isolated or duplicated faces.
@@ -580,9 +551,12 @@ it is deterministic for every `--jobs`.
   vertices is `resource_limit`.
 - Scratch: the column sort (up to four 28-byte records per vertex, two run
   generations), the vertices' positions, the class sort and the move lists, at
-  most about 240 bytes per used vertex, declared in capture's scratch stage.
-  The sorted move list (16 bytes per moved vertex) stays until the assembly has
-  decoded every vertex.
+  most 256 bytes per considered vertex for this weld term before file rounding.
+  Capture also reserves up to 12 bytes per considered vertex for original XYZs.
+  The sorted move list uses 16 bytes per moved vertex through the capture audit.
+  A separate 12-byte XYZ record per moved vertex stays
+  through certification. Its shared lookup uses 16 bytes per 64 expanded
+  vertices and 8 bytes per primitive offset, plus fixed overhead.
 - The sweep is linear in its records. A record at exactly the position and
   scope of one already in the window joins it without entering it, so exact
   repeats cost one comparison each, and ε = 0 never fills the window. A source
@@ -711,30 +685,38 @@ primary build's) and `round_zero_calls` (remesh round 0 repeating the full-cap
 calls). The published output is the same as recomputing them. The counts are 0
 while the `RT_HLOD_AUDIT_DIR` sidecar records every attempt.
 
-### Geometric error: sampled, not certified
+### Certified geometric error
 
-A coarse tile's `geometricError` is `G = max(max child G, 1.05 × M)`. `M` is the
-larger of two directed distances, measured on the **decoded positions a viewer
-sees** against the captured source surface in the tile's source range: coarse
-to source and source to coarse. Sampling is deterministic and area-stratified,
-with extra controls at patch boundaries, one vertex per connected component and
-sliver triangles. Each tile takes at least 2,048 samples per direction, and each
-occupied depth at least 200,000. Scheduling is seeded by tile, so `--jobs` never
-changes the result. `G` is monotone down the tree and is the value in
-`tileset.json` and the implicit-subtree metadata.
+A coarse tile's `geometricError` bounds the **two-sided, continuous Hausdorff
+distance in local metres** between the original, pre-weld source triangles assigned to
+that tile and its decoded GLB triangles. Both directions include edges, face
+interiors, disconnected components, segments and points. The version in
+`asset.extras.rustyTiles.surfaceErrorPolicy` is
+`hlod-certified-decoded-surface-v1`.
 
-This is **not** certification. A sampled maximum is neither a Hausdorff bound
-nor a guarantee against unsampled outliers, and no universal bound is claimed.
-With [`--weld-epsilon`](#weld-the-source), `G` is measured against the welded
-source, and the published error adds the weld's largest displacement.
-The 5% margin exceeds the roughly 1% maximum exceedance seen in test audits; it
-is not a covering radius.
+For up to 131,072 original faces in a tile, the bake checks the final decoded
+surface directly against the original range. Above that count it checks the
+complete decoded child frontier against the final tile and adds the largest
+child surface certificate. The cutoff bounds the size of the original-source
+search index per worker. Child accumulation can make a coarse level refine
+earlier. The certificate includes border chord movement, relief, simplification
+and position encoding. Same-depth seam identity and the mixed-depth seam-gap
+rule are checked separately.
 
-Incomplete required sampling is a `resource_limit` refusal, never a zero error,
-and a non-finite measurement fails the run. `diagnostics.hlod.error_measurement`
-reports the policy version, sample counts and per-direction mean/p95/p99/max.
-`validate` checks that errors are finite, non-negative, ordered and consistent
-between explicit and implicit metadata; it does not recompute source distances.
+S2 still guides simplification, root selection and texture spacing. Its sampled
+term, the texture term and the largest published child error remain floors on
+the certified value. Certification runs after final encoding. It can raise G
+without changing the geometry, UVs, textures or selected simplification.
+Failure or cancellation during certification stops publication. The
+`hlod_certify` progress count measures completed domain triangles across both
+directions and all workers. The diagnostic `certification_cpu_by_depth`
+gives their summed CPU seconds by encoded depth where a thread clock is available.
+
+The archive validator checks certified-policy declarations and a necessary
+geometric consequence against decoded descendant leaves. With the original
+source geometry, the independent S5 oracle can also verify the continuous
+distance in both directions. See the [validation guide](VALIDATION.md) and
+the [surface error contract](architecture/hlod-s2-error.md).
 
 ### Texture-aware published G
 

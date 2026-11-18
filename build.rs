@@ -1,6 +1,18 @@
 use std::path::PathBuf;
 
 fn main() {
+    println!("cargo:rerun-if-changed=src/mesh_large/hlod/certify.cpp");
+    let mut cert = cc::Build::new();
+    cert.cpp(true).std("c++17").opt_level(3).debug(false);
+    if cert.get_compiler().is_like_msvc() {
+        cert.flag("/fp:strict").flag("/EHsc");
+    } else {
+        cert.flag("-ffp-contract=off")
+            .flag("-fexceptions")
+            .flag("-fno-fast-math");
+    }
+    cert.file("src/mesh_large/hlod/certify.cpp")
+        .compile("rt_surface_cert");
     compile_basisu();
     #[cfg(feature = "native-geospatial")]
     {

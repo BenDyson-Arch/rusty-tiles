@@ -278,6 +278,26 @@ Not inspected: contraction against source arcs, producer certificates, logical d
 
 ### Coarse drops
 
+An HLOD archive can declare `asset.extras.rustyTiles.surfaceErrorPolicy` as
+`hlod-certified-decoded-surface-v1`. The native validator checks its version.
+In the common capture frame it compares all six coordinate extrema of each
+rendered coarse support with the union of its decoded descendant leaf
+supports. Each difference must fit the coarse G plus the largest represented
+leaf G, with outward arithmetic. Degenerate faces contribute their endpoints.
+`surfaceErrorExtents` reports a violating tile. The census field
+`surfaceErrorExtentTiles` counts the coarse tiles checked. Archives with
+relative tile transforms get zero comparisons in this local frame check.
+
+The archive lacks the captured source. `geometricErrorAccuracy` therefore
+stays uninspected by native validation. Given an independent source manifest,
+the S5 oracle's `--certify-source-error` verifies both continuous directed
+distances using exact rational point-to-triangle predicates and a complete
+subdivision cover, or returns a violating point or a work-limit refusal. Supply
+the original pre-weld GLB or an independent analytic source manifest. A manifest
+derived from delivered leaves can check their extrema but cannot establish the
+original-source certificate. The oracle also enforces its own canonical-seam
+contract, which can reject welded coordinates.
+
 A coarse payload that drops whole components of its children declares how many in glTF `asset.extras.rustyTiles.droppedComponents`. Validation recounts the drops from decoded keys and fails `coarseDrops` (`invalid_input`) when:
 
 - the count differs from the declaration; or

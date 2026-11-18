@@ -1,10 +1,112 @@
-# HLOD S2 sampled source error
+# Certified publication and S2 construction error
 
-Implementation contract for `hlod/{error,source_index}.rs`, following D2/D4/S2 and
-the D1 exact-seams and omission amendments in `hlod-040-decision.md`. Policy v2 keeps
-the 5% sampled-distance inflation and has no additive area-spacing allowance.
+## Publication contract
 
-## Measurement
+Let S be the union of the **closed** source triangles in the retained H1 rank
+interval [first, end), using their original pre-weld positions and including
+any disconnected or degenerate faces. Let P be the union
+of the closed triangles drawn by the encoded GLB, after decoding indices,
+positions and local node transforms. The coordinate frame is captured local
+binary32 metres. Survey accuracy, upstream placement and shading are separate
+quantities. The producer bounds both suprema of Euclidean point-to-surface
+distance. The published G is the maximum of this certificate, the S2
+construction floor, the applicable texture floor and the greatest published
+child G. An omitted cell keeps its existing refinement-only metadata.
+
+The source count selects one comparison. At most 131,072 original faces use
+S directly. Larger counts use the complete union C of the delivered child
+frontier. The worker verifies contiguous nonempty source and leaf intervals
+through the parent's end. In either case the target is the final GLB surface.
+Readback checks a bijection of faces and bit-identical positions at all three
+corners. A held coarse tile keeps the read-back coordinates when they differ
+from its construction positions. A held leaf uses the canonical coordinates
+checked by its frozen lattice encoder, including aligned primitive rebasing.
+
+For each directed comparison, cover each domain triangle by closed panels.
+Each accepted panel chooses one actual target triangle and a target point for
+each of its three corners. The three points have integer barycentric weights
+summing to 2²². Interpolating them with a panel point's barycentric coordinates
+keeps the witness in that target triangle. The norm of the residual is at most
+the largest of the three corner residuals. This argument includes segments and
+points. Four midpoint subtriangles cover a split panel. A bounded nearest
+search (768 BVH node visits per query), depth limit seven and a per-direction
+split allowance of `max(65536, 256 × max(domain faces, target faces))` guide
+the price. At a work limit the current panel receives its complete corner
+price. Run this comparison in each direction.
+
+For an original-source comparison, take the larger directional upper bound.
+For a child comparison let L bound both directions between P and C, and E be
+the greatest child's geometric certificate. Each point in the union of the
+original child ranges has a point within E in the matching decoded child.
+The converse holds for every point in C. Applying the triangle inequality
+in each direction yields H(S,P) ≤ E + L. Round the sum upward. At a leaf,
+pair corresponding corners and use the outward maximum encoding displacement
+with the same barycentric argument. Direct comparisons reset accumulated
+slack. The private stage row records both local directions, the reference type
+and size, and E. Its consumer checks the certificate arithmetic and source
+count before delivering G as binary64 in explicit or implicit metadata.
+
+### Opt-in source welding
+
+A direct reference uses the original mapped binary32 corners of every assigned
+rank before the source weld, including triangles collapsed or dropped during
+simplification. The weld's sorted move pass writes 12 bytes per genuinely
+moved expanded vertex. A rank bitmap and prefix counts index that file, and
+primitive offsets distinguish primitive instances. The retained RAM charge
+covers 16 bytes per 64 expanded vertices plus one sentinel pair, eight bytes
+per primitive offset including its sentinel, and 4 KiB for the file. The
+capture scratch reservation conservatively assumes every considered vertex
+moves. A run with no moved vertices uses the ordinary source index directly.
+
+S2 construction and appearance use the welded input. Each prepared leaf
+primitive pairs original corners by their authored IDs with the final decoded
+coordinates verified by the leaf writer. The maximum outward corner residual
+covers its closed faces in both directions. The walk uses the separate
+construction error for geometry decisions and the original-source certificate
+for publication and induction. Delivery uses these values directly. The weld
+audit still reports the largest move, collapsed and coincident faces and their
+reach. Its job-wide additive charge is zero.
+
+### Numerical enclosure
+
+The pricing operations use finite IEEE binary32 coordinates, IEEE binary64
+round-to-nearest, and disabled contraction. The kernel checks the arithmetic
+mode and format. Write M for the largest absolute input coordinate and
+u = 2⁻⁵³. Seven rounded midpoint levels cost at most 8uM per coordinate.
+The three dyadic weights are exact. The target interpolation costs at most
+6uM per coordinate, the subtraction 3uM, and norm evaluation adds less than
+12uM. The total norm error is below 50uM. All nonzero pricing coordinates
+are on a grid at least as coarse as 2⁻¹⁷¹, and squared norms of nonzero
+residuals are within binary64's normal range. The terminal directional price
+adds 512uM and rounds up. The BVH and approximate projection only select a
+target face and propose weights. Clamping and integer snapping establish
+simplex membership before pricing. A nonfinite bound, invalid ownership,
+allocation failure or cancellation stops publication.
+
+### Admission and progress
+
+One admitted worker reserves 512 bytes per possible reference or target face
+plus 8 MiB. The target count uses the proxy cap. When the complete input fits
+the direct cutoff, its face count bounds every reference. For larger inputs
+the reference count is the greater of 131,072 and the maximum bounded child
+frontier. The cutoff limits the original-source contribution to 64 MiB per
+worker and gives the same choice across worker counts and memory budgets. The two directional BVHs run sequentially.
+`certificate_workspace_bytes` identifies that term in the HLOD memory plan.
+Held tiles account for up to 12 extra bytes per vertex (36 per triangle)
+when readback differs from construction. Such overrides and their scalar
+error use the existing held-tile spill lease, including a 9-byte header
+extension. The certifier creates no separate scratch sequence. Progress
+reports completed domain faces across workers and a 250 ms heartbeat where
+the worker polls. Source iteration, BVH construction and panel descent check
+the same cancellation and observer errors. Where a per-thread CPU clock is
+available, `certification_cpu_by_depth` sums preparation and both cover passes
+by encoded depth, separately from S2 construction and texture baking.
+
+Border relief and chord changes precede measurement of the delivered geometry.
+The geometric certificate therefore prices their surface displacement. The
+seam contract still checks common interface identity and mixed-depth gaps.
+
+## S2 construction measurement
 
 - Measure captured source triangles in `[TileKey.first, TileKey.end)`, in the local
   metre frame of the final decoded proxy. Child G and leaf encoding errors are floors,
@@ -23,10 +125,10 @@ the 5% sampled-distance inflation and has no additive area-spacing allowance.
 - Each directed area/control distribution records count, mean, p95, p99 and max.
   Quantiles are upper log2-bin endpoints (32/octave). q, the maximum p99, is
   diagnostic only; D10 calibration is off.
-- With M the maximum of both directions, controls included, publish
-  `G = max(children G, 1.05*M)`. The 5% margin is motivated by the prototype's ~1%
-  independent exceedance. It is **not** a covering radius, confidence interval or
-  Hausdorff certificate: narrow unsampled extrema may still exceed G.
+- With M the maximum sampled distance in either direction, controls included,
+  construction uses `max(children construction G, 1.05 × M)`. Narrow
+  unsampled extrema can exceed this floor. Final publication applies the
+  continuous certificate above.
 - S1 collapses single-coarse-child chains: only the encoded tile is measured, and
   `encodedDepth` keys its seed, schedule and depth summaries while `depth` keys
   publication.
@@ -40,7 +142,9 @@ the 5% sampled-distance inflation and has no additive area-spacing allowance.
   requires the published ranges to cover the whole schedule (200,000 samples).
 - Incomplete or nonfinite sampling is a typed refusal, never zero error. Delivery
   validates the policy, per-row share, depth totals, encoded-tile seed, distributions,
-  margin, q and parent ordering. H17 rows stay readable until S6.
+  margin, q and parent ordering. A coarse staging directory must carry the new
+  surface-policy declaration and certificates before delivery. An existing
+  delivered archive retains the checks supported by its own declarations.
 
 ## Bounded nearest search
 
@@ -54,8 +158,7 @@ seed the next query. A query therefore costs O(B + depth + block) whatever the
 source. Queries per tile are bounded by its controls (at most three per source
 triangle in range, and per proxy vertex/edge) plus its samples, so the walk's nearest
 work is O((n·h + P·C)·B) for n source triangles, height h, P tiles and cap C. On exhaustion the best distance
-found is used. It is never below the exact distance, so M and G only grow
-(conservative); a representative may then be a near, not the nearest, primitive.
+found is used. It is never below the exact distance, so a sampled distance can grow; a representative may then be a near, not the nearest, primitive.
 Each row records `nearestSearch` (searches, exhausted, seeded, max steps), summed in
 `hlod.errorMeasurement.nearest`. The exact searches remain as test oracles only.
 

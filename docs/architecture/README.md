@@ -96,7 +96,7 @@ wherever the concrete scope has not adopted them.
 - [0.4 mesh direction: classic octree HLOD](hlod-040-decision.md) governs coarse
   tiles; H17 is removed, and the [mesh guide](../MESH.md#coarse-levels-hlod) describes the
   public surface, including its [memory budget](../MESH.md#memory-budget)
-- [HLOD S2 sampled-error measurement](hlod-s2-error.md)
+- [HLOD certified publication and S2 construction error](hlod-s2-error.md)
 
 - [I1 implicit read contract](i1-implicit-read-contract.md)
 - [P implicit layout contract: the bounded implicit forest](p-impl-layout-contract.md)

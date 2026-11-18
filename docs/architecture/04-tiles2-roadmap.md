@@ -12,9 +12,10 @@ and supported viewers.** Version strings must describe the encoding actually
 implemented. Draft experiments are optional design checks, never 0.4.0 blockers.
 
 The [2026-10-24 HLOD decision](hlod-040-decision.md) supersedes the H17/H27
-coarse-mesh requirements. Leaves retain exact provenance; coarse error is
-sampled, not certified, and all independently refined outer interfaces must
-agree on decoded bytes. The detailed codec, calibration and acceptance budgets
+coarse-mesh requirements. Leaves retain exact provenance. The [surface error
+amendment](hlod-s2-error.md) bounds the continuous distance between captured
+source and decoded coarse geometry. All independently refined outer interfaces
+must agree on decoded bytes. The detailed codec, calibration and acceptance budgets
 are proposals for review; this amendment is not an implementation pass.
 
 **Non-mesh amendment proposed for owner approval in this review:** adopt

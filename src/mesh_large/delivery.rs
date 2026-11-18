@@ -51,7 +51,6 @@ pub struct MeshTilesetRequest {
     placement: MeshPlacement,
     policy: OutputPolicy,
     member_ceiling: u64,
-    weld_error: f64,
 }
 
 impl MeshTilesetRequest {
@@ -63,15 +62,7 @@ impl MeshTilesetRequest {
             placement: MeshPlacement::Local,
             policy: OutputPolicy::CreateNew,
             member_ceiling: MEMBER_CEILING_3TZ,
-            weld_error: 0.,
         }
-    }
-    /// A welded source's largest displacement (rounded up), added to every published
-    /// geometric error (leaves and coarse tiles): each tile's error against the original,
-    /// unwelded source is at most its error against the welded one plus this.
-    pub(crate) fn with_weld_error(mut self, error: f64) -> Self {
-        self.weld_error = error;
-        self
     }
     #[cfg_attr(
         not(test),
@@ -564,9 +555,8 @@ fn plan_pass(
 ) -> Result<Planned, JobError> {
     let mut sink = PlanSink::default();
     let proxies = leaves.proxies.then(|| leaves.proxy_rows()).transpose()?;
-    let mut builder = Builder::with_proxies(&mut sink, limits, proxies)
-        .with_recovery(leaves.recovery.clone())?
-        .with_weld_error(leaves.weld_error);
+    let mut builder =
+        Builder::with_proxies(&mut sink, limits, proxies).with_recovery(leaves.recovery.clone())?;
     let mut triangles = 0u64;
     for (index, item) in leaves.leaves()?.enumerate() {
         if index % 256 == 0 {
@@ -754,11 +744,7 @@ fn prepare_resolved(
     max_glb_json: u64,
 ) -> Result<PreparedDelivery, JobError> {
     let root = root_placement(&placement)?;
-    let mut leaves = LeafDirectory::open(&request.leaves)?.with_max_glb_json(max_glb_json);
-    if !request.weld_error.is_finite() || request.weld_error < 0. {
-        return Err(state("weld error term is not finite and non-negative"));
-    }
-    leaves.weld_error = request.weld_error;
+    let leaves = LeafDirectory::open(&request.leaves)?.with_max_glb_json(max_glb_json);
     // Early: every leaf is a member, as are tileset.json and the index.
     ceiling(
         leaves
@@ -842,6 +828,7 @@ pub(crate) fn write_prepared(
     if leaves.proxies {
         document = document
             .declaring_hlod(
+                super::hlod::certify::POLICY,
                 leaves
                     .texture_rule
                     .map(|r| serde_json::to_value(r).expect("texture rule serializes")),
@@ -863,9 +850,8 @@ pub(crate) fn write_prepared(
         check,
     };
     let proxies = leaves.proxies.then(|| leaves.proxy_rows()).transpose()?;
-    let mut builder = Builder::with_proxies(&mut sink, limits, proxies)
-        .with_recovery(leaves.recovery.clone())?
-        .with_weld_error(leaves.weld_error);
+    let mut builder =
+        Builder::with_proxies(&mut sink, limits, proxies).with_recovery(leaves.recovery.clone())?;
     for (index, item) in leaves.leaves()?.enumerate() {
         if index % 256 == 0 {
             (builder.sink().check)()?;

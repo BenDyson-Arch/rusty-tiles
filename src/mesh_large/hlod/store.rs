@@ -1,5 +1,5 @@
 //! The S1 → S2/S3 handoff: tile identity, final decoded geometry, representative source
-//! primitives and the published error, with no certificates. Also the resident form in
+//! primitives and the construction, certified and published errors. Also the resident form in
 //! which a finished tile waits for its parent; it is leased against the run's memory
 //! budget and dropped (lease released) as soon as the parent is built.
 pub(crate) mod spill;
@@ -72,6 +72,12 @@ pub(crate) struct TileGeometry {
     /// Published G (D5 amendment A3): at least the geometric error, the texture term and
     /// every child's published G. Leaves publish their geometric error.
     pub published_error: f64,
+    /// Two-sided bound to the original captured range. Leaves use their outward
+    /// corresponding-corner displacement.
+    pub surface_error: f64,
+    /// Empty when the GLB decodes to the construction positions (always true
+    /// for leaves). Coarse overrides come from the encoder's GLB readback.
+    pub decoded_override: Vec<[f32; 3]>,
     /// Texture-term sums of the published payload.
     pub texture: super::texture_error::Sums,
     /// Admission of this resident record against the stage ledger.
@@ -80,11 +86,11 @@ pub(crate) struct TileGeometry {
 
 /// Proven resident bound per triangle of a held tile (capacities equal lengths after
 /// `shrink_to_fit`): at most three vertices per triangle (`u8` depth and `[f32; 3]`
-/// position each), the triangle (`[u32; 3]`), its representative (`u32`), at most one
+/// canonical position and an optional second decoded position each), the triangle (`[u32; 3]`), its representative (`u32`), at most one
 /// `SourcePrimitive` row per triangle, and at most one merged interface row per distinct
 /// point and segment it holds (three each per triangle). Rows are merged per item, and a
 /// required item is a point or segment of the tile's own triangles.
-pub(crate) const HELD_BYTES_PER_TRIANGLE: u64 = 3 * (1 + 12)
+pub(crate) const HELD_BYTES_PER_TRIANGLE: u64 = 3 * (1 + 12 + 12)
     + 12
     + 4
     + std::mem::size_of::<SourcePrimitive>() as u64
@@ -93,6 +99,13 @@ pub(crate) const HELD_BYTES_PER_TRIANGLE: u64 = 3 * (1 + 12)
 const HELD_FIXED_BYTES: u64 = std::mem::size_of::<TileGeometry>() as u64;
 
 impl TileGeometry {
+    pub(super) fn delivered_positions(&self) -> &[[f32; 3]] {
+        if self.decoded_override.is_empty() {
+            &self.positions
+        } else {
+            &self.decoded_override
+        }
+    }
     /// The proven bound on a held tile of `triangles` triangles.
     pub(crate) fn charge(triangles: u64) -> u64 {
         triangles
@@ -108,6 +121,7 @@ impl TileGeometry {
         HELD_FIXED_BYTES
             + heap(&self.ells)
             + heap(&self.positions)
+            + heap(&self.decoded_override)
             + heap(&self.triangles)
             + heap(&self.representative)
             + heap(&self.primitives)
@@ -173,12 +187,11 @@ pub(crate) struct CoarseTile<'a> {
     pub stopping: StoppingBound,
 }
 
-/// The published error of one coarse tile and the policy that produced it.
+/// Working S2 error used for geometry and appearance construction.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TileError {
     pub geometric_error: f64,
-    pub policy: &'static str,
 }
 
 /// The persisted handoff row of one coarse tile (`proxies.jsonl`, postorder). Delivery
@@ -201,7 +214,10 @@ pub(crate) struct HlodRow {
     pub leaf_end: u32,
     /// The published G (D5 amendment A3): `texture.error`.
     pub geometric_error: f64,
+    /// S2 plus construction floors, before the final-surface and texture policies.
+    pub construction_error: f64,
     pub texture: super::texture_error::Published,
+    pub certificate: super::certify::Certificate,
     pub error_policy: &'static str,
     pub measurement: super::error::Summary,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -212,6 +228,8 @@ pub(crate) struct HlodRow {
     pub nearest_search: super::error::SearchStats,
     #[serde(skip)]
     pub error_cpu_seconds: f64,
+    #[serde(skip)]
+    pub certification_cpu_seconds: f64,
     #[serde(skip)]
     pub error_cpu: super::error::CpuReport,
     pub children_error: f64,
