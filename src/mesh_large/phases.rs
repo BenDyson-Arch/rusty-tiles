@@ -5,12 +5,14 @@
 //! (`phase`, `done`, `total`, unchanged schema), and each finished phase as a `log` event
 //! naming its wall seconds and the run's elapsed seconds. The same seconds go to the run
 //! diagnostics. Diagnostics only: nothing here reaches the archive.
+use super::run_report::{RunReport, StageEntry};
 use crate::{
     runtime::RunEvent,
     spill::{SortObserver, SortProgress, SpillError},
     JobError,
 };
 use serde::Serialize;
+use serde_json::Value;
 use std::{
     cell::Cell,
     sync::Mutex,
@@ -69,6 +71,8 @@ type Emit<'a> = dyn Fn(&RunEvent<'_>) -> Result<(), JobError> + Sync + 'a;
 /// under one lock, so a phase's `done` counts arrive in order.
 pub(crate) struct Phases<'a> {
     emit: Option<&'a Emit<'a>>,
+    /// The run report each finished phase is written to (`--report-path`).
+    report: Option<&'a RunReport>,
     started: Instant,
     seconds: Mutex<PhaseSeconds>,
     cpu: Mutex<(Option<f64>, PhaseSeconds)>,
@@ -88,9 +92,15 @@ impl<'a> Phases<'a> {
     pub(crate) fn silent() -> Phases<'static> {
         Phases::with(None)
     }
+    /// Also writes each finished phase to `report`.
+    pub(crate) fn reporting(mut self, report: &'a RunReport) -> Self {
+        self.report = Some(report);
+        self
+    }
     fn with(emit: Option<&'a Emit<'a>>) -> Self {
         Self {
             emit,
+            report: None,
             started: Instant::now(),
             seconds: Mutex::new(PhaseSeconds::default()),
             cpu: Mutex::new((
@@ -131,16 +141,44 @@ impl<'a> Phases<'a> {
             total,
         })
     }
-    /// A finished phase: add its wall seconds and log them.
+    /// A finished phase without report facts: add its wall seconds and log them.
+    #[cfg(test)]
     pub(crate) fn finished(&self, phase: Phase, seconds: f64) -> Result<(), JobError> {
+        self.finished_with(phase, seconds, Value::Null)
+    }
+    /// A finished phase with the facts the run report records for it (scratch peaks,
+    /// counts, worker use): add its wall seconds, log them and write the report.
+    pub(crate) fn finished_with(
+        &self,
+        phase: Phase,
+        seconds: f64,
+        facts: Value,
+    ) -> Result<(), JobError> {
         // Process CPU includes all workers and the admission work between phases.
         let now = super::resources::process_cpu_seconds();
-        {
+        let cpu_seconds = {
             let mut cpu = self.cpu.lock().unwrap_or_else(|e| e.into_inner());
-            if let (Some(start), Some(end)) = (cpu.0, now) {
-                *cpu.1.slot(phase) += (end - start).max(0.);
+            let spent = cpu.0.zip(now).map(|(start, end)| (end - start).max(0.));
+            if let Some(spent) = spent {
+                *cpu.1.slot(phase) += spent;
             }
             cpu.0 = now;
+            spent
+        };
+        if let Some(report) = self.report {
+            let warning = report.stage(StageEntry {
+                stage: phase.name(),
+                wall_seconds: seconds,
+                cpu_seconds,
+                run_elapsed_seconds: self.elapsed(),
+                facts,
+            });
+            if let Some(message) = warning {
+                self.send(&RunEvent::Warning {
+                    code: "run_report",
+                    message: &message,
+                })?;
+            }
         }
 
         let total = {

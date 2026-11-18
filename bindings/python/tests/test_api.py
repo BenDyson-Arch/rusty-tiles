@@ -573,6 +573,29 @@ class WheelAPI(unittest.TestCase):
         self.assertNotIsInstance(caught.exception, rusty_tiles.InvalidRequestError)
         self.assertFalse(output.exists())
 
+    def test_tiler_report_path_writes_the_run_report_and_keeps_the_archive(self):
+        source = self.root / "grid.glb"
+        write_grid_mesh(source)
+        plain = self.root / "plain.3tz"
+        reported = self.root / "reported.3tz"
+        report_path = self.root / "run.json"
+        rusty_tiles.mesh_to_tileset(source, plain, jobs=1)
+        result = rusty_tiles.mesh_to_tileset(source, reported, jobs=1, report_path=report_path)
+        self.assertEqual(plain.read_bytes(), reported.read_bytes())
+        report = json.loads(report_path.read_text())
+        self.assertEqual((report["schema"], report["schema_version"], report["status"]),
+                         ("rusty_tiles_mesh_run_report", 1, "succeeded"))
+        self.assertEqual([stage["stage"] for stage in report["stages"]],
+                         ["capture", "leaf_build", "hlod_incidence", "hlod_geometry", "archive"])
+        self.assertEqual(report["tilerReport"]["tiles"], result.report["tiles"])
+        geometry = report["stages"][3]["facts"]
+        self.assertEqual(geometry["omitted_by_depth"], result.diagnostics["hlod"]["omitted_by_depth"])
+        self.assertTrue(geometry["walk_utilisation"]["by_depth"])
+        # A report path that names the output is refused before the source is read.
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.mesh_to_tileset(source, self.root / "x.3tz", jobs=1,
+                                        report_path=self.root / "x.3tz")
+
     def test_tiler_hlod_installed_run_reports_budget_and_keeps_callback_semantics(self):
         source = self.root / "grid.glb"
         write_grid_mesh(source)
@@ -678,7 +701,8 @@ class WheelAPI(unittest.TestCase):
         installed = set(inspect.signature(rusty_tiles.mesh_to_tileset).parameters)
         documented = {"input", "output", "profile", "jobs", "scratch_dir", "memory_budget_bytes",
                       "anchor", "orientation_xyzw", "scene_offset", "source_crs", "source_axes",
-                      "source_offset", "source_offset_file", "height_offset", "force", "callback"}
+                      "source_offset", "source_offset_file", "height_offset", "force", "callback",
+                      "report_path"}
         self.assertEqual(installed, documented)
         shown = io.StringIO()
         with contextlib.redirect_stdout(shown):
