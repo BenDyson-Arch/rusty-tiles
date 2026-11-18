@@ -24,6 +24,7 @@ mod pipeline;
 mod records;
 mod resources;
 mod source_crs;
+mod subset;
 mod tasks;
 mod tree;
 /// The validator plans its stores with the same budget, job and headroom rules (#342).
@@ -35,6 +36,7 @@ pub use pipeline::{
 };
 pub use resources::{parse_memory_budget, BudgetSource, MemoryBudget};
 pub use source_crs::{MeshSourceCrs, MeshSourceCrsReport};
+pub use subset::{MeshSubset, MeshSubsetReport};
 
 use crate::{spill::Scratch, JobError, JobErrorKind, JobFailure};
 use config::{JobsPlan, MemoryBound, ScratchNeed, TreeConfig, MEMBERS_BESIDES_TILES};
@@ -111,10 +113,10 @@ pub(crate) fn build(
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<CapturedTree, JobFailure> {
     config.validate().map_err(failure)?;
-    if config.source_crs.is_some() {
+    if config.source_crs.is_some() || config.subset.is_some() {
         return Err(failure(JobError::new(
             JobErrorKind::InvalidRequest,
-            "the H1 diagnostic build captures local sources only",
+            "the H1 diagnostic build captures whole local sources only",
         )));
     }
     check().map_err(failure)?;

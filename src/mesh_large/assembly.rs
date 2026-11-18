@@ -24,6 +24,7 @@ use super::{
     phases::{Step, StepProgress},
     records::{Bounds, Cube, Provenance, TriangleRecord, KEY_DEPTH},
     source_crs::SourceFrame,
+    subset::{Ranks, Selection},
     tasks::{run, Ran},
 };
 use crate::{
@@ -214,14 +215,25 @@ pub(crate) fn vertex_record_bytes(layout: Layout) -> u64 {
 }
 
 impl ScratchShape {
-    /// For `source` under `layout`.
-    pub(crate) fn of(source: &StreamSource, layout: Layout) -> Option<Self> {
+    /// For `source` under `layout`; in a subset bake, only the vertices its kept triangles
+    /// use are stored, and a primitive without one has no store.
+    pub(crate) fn of(
+        source: &StreamSource,
+        layout: Layout,
+        subset: Option<&Selection>,
+    ) -> Option<Self> {
         let size = DecodedVertex::size_in(layout) as u64;
         let mut vertex_bytes = 0u64;
         let mut primitives = 0u64;
-        for p in source.document.scene_primitives() {
-            vertex_bytes =
-                vertex_bytes.checked_add((p.position.count as u64).checked_mul(size)?)?;
+        for (i, p) in source.document.scene_primitives().enumerate() {
+            let stored = match subset {
+                None => p.position.count as u64,
+                Some(subset) => subset.primitives.get(i)?.vertices,
+            };
+            if stored == 0 && subset.is_some() {
+                continue;
+            }
+            vertex_bytes = vertex_bytes.checked_add(stored.checked_mul(size)?)?;
             primitives += 1;
         }
         Some(Self {
@@ -260,6 +272,13 @@ pub struct AssemblyReport {
     /// Compressed runs written to staging, and their bytes.
     pub staging_runs: u64,
     pub staging_bytes: u64,
+    /// In a subset bake, expanded primitives with no captured triangle (nothing decoded).
+    #[serde(skip_serializing_if = "is_zero")]
+    pub excluded_primitives: u64,
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }
 
 /// One decoded vertex: its canonical position and its attributes under the run layout.
@@ -343,8 +362,47 @@ enum Store {
     Placed(Sequence<TriangleCorners>),
 }
 
+/// A subset bake's view of one primitive: its kept triangles and the vertices they use. Its
+/// stores hold only those vertices, by rank, and a routed primitive's placed corners only
+/// those triangles, by rank. Without one, every vertex and triangle has its own slot.
+#[derive(Clone, Copy)]
+struct Slots<'a> {
+    triangles: &'a Ranks,
+    vertices: &'a Ranks,
+}
+
+/// The store slot of vertex `v`.
+fn vertex_slot(slots: Option<Slots<'_>>, v: u64) -> Result<u64> {
+    match slots {
+        None => Ok(v),
+        Some(slots) => Ok(slots
+            .vertices
+            .rank(usize::try_from(v).map_err(|_| overflow())?) as u64),
+    }
+}
+
+/// The placed-corner slot of triangle `t`.
+fn triangle_slot(slots: Option<Slots<'_>>, t: usize) -> usize {
+    slots.map_or(t, |slots| slots.triangles.rank(t))
+}
+
+/// Whether triangle `t` is captured.
+fn kept(slots: Option<Slots<'_>>, t: usize) -> bool {
+    slots.is_none_or(|slots| slots.triangles.contains(t))
+}
+
+/// Whether `range` holds no captured triangle.
+fn none_kept(slots: Option<Slots<'_>>, range: &std::ops::Range<usize>) -> bool {
+    slots.is_some_and(|slots| slots.triangles.rank(range.end) == slots.triangles.rank(range.start))
+}
+
 /// Per-task access to a [`Store`] for one range of triangles.
-enum StoreReader<'a> {
+struct StoreReader<'a> {
+    access: Access<'a>,
+    slots: Option<Slots<'a>>,
+}
+
+enum Access<'a> {
     Memory(&'a [u8]),
     Spilled(RandomRecords<DecodedVertex>, Vec<u8>, Vec<DecodedVertex>),
     Placed(crate::spill::SequenceReader<'a, TriangleCorners>, usize),
@@ -352,23 +410,26 @@ enum StoreReader<'a> {
 
 impl StoreReader<'_> {
     /// The corners of triangle `t`, whose vertices are `verts`. A placed store is read in
-    /// triangle order, so `t` must follow the previous triangle.
+    /// triangle order, so `t` must follow the previous (captured) triangle.
     fn corners(&mut self, layout: Layout, t: usize, verts: [u64; 3]) -> Result<[DecodedVertex; 3]> {
         let size = DecodedVertex::size_in(layout);
-        match self {
-            Self::Memory(bytes) => Ok(verts.map(|v| {
-                let at = v as usize * size;
+        let slots = self.slots;
+        match &mut self.access {
+            Access::Memory(bytes) => Ok(verts.map(|v| {
+                let v = v as usize;
+                let at = slots.map_or(v, |slots| slots.vertices.rank(v)) * size;
                 DecodedVertex::decode_in(layout, &bytes[at..at + size])
             })),
-            Self::Spilled(random, encoded, out) => {
+            Access::Spilled(random, encoded, out) => {
                 let mut corners = [DecodedVertex::default(); 3];
                 for (c, v) in verts.iter().enumerate() {
-                    random.read(*v, 1, encoded, out)?;
+                    random.read(vertex_slot(slots, *v)?, 1, encoded, out)?;
                     corners[c] = out[0];
                 }
                 Ok(corners)
             }
-            Self::Placed(reader, next) => {
+            Access::Placed(reader, next) => {
+                let t = triangle_slot(slots, t);
                 if t != *next {
                     return Err(invariant("placed corners read out of triangle order"));
                 }
@@ -382,45 +443,55 @@ impl StoreReader<'_> {
         }
     }
     fn decoded_blocks(&self) -> u64 {
-        match self {
-            Self::Spilled(random, ..) => random.decoded_blocks(),
+        match &self.access {
+            Access::Spilled(random, ..) => random.decoded_blocks(),
             _ => 0,
         }
     }
 }
 
 impl Store {
-    /// A reader of triangles `range` (of the primitive's triangles).
-    fn reader(
-        &self,
+    /// A reader of triangles `range` (of the primitive's triangles) under `slots`.
+    fn reader<'a>(
+        &'a self,
+        slots: Option<Slots<'a>>,
         cache_blocks: usize,
         range: std::ops::Range<usize>,
         buffer_bytes: usize,
-    ) -> Result<StoreReader<'_>> {
-        Ok(match self {
-            Self::Memory(bytes) => StoreReader::Memory(bytes),
-            Self::Spilled(sequence) => StoreReader::Spilled(
+    ) -> Result<StoreReader<'a>> {
+        let access = match self {
+            Self::Memory(bytes) => Access::Memory(bytes),
+            Self::Spilled(sequence) => Access::Spilled(
                 sequence.random_cached(cache_blocks)?,
                 Vec::new(),
                 Vec::new(),
             ),
-            Self::Placed(sequence) => StoreReader::Placed(
-                sequence.range(range.start as u64, range.end as u64, buffer_bytes)?,
-                range.start,
-            ),
-        })
+            Self::Placed(sequence) => {
+                let (start, end) = (
+                    triangle_slot(slots, range.start),
+                    triangle_slot(slots, range.end),
+                );
+                Access::Placed(
+                    sequence.range(start as u64, end as u64, buffer_bytes)?,
+                    start,
+                )
+            }
+        };
+        Ok(StoreReader { access, slots })
     }
 }
 
-/// The used vertices of `p` as a bitmap, and how many of its triangle chunks touch at most
-/// `cache_blocks` distinct blocks of `per_block` vertices (indices were checked by payload
-/// validation; reading them again checks nothing new).
+/// The used vertices of `p` (of its `kept` triangles in a subset bake) as a bitmap, and how
+/// many of its triangle chunks touch at most `cache_blocks` distinct blocks of `per_block`
+/// vertices (indices were checked by payload validation; reading them again checks nothing
+/// new). A subset bake's locality is counted over store slots instead ([`slot_locality`]).
 fn used_vertices(
     source: &StreamSource,
     p: &ScenePrimitive<'_>,
     buffer_bytes: usize,
     workers: usize,
     (per_block, cache_blocks): (u64, usize),
+    kept: Option<&Ranks>,
     poll: &mut dyn FnMut() -> Result<()>,
 ) -> Result<std::result::Result<(Vec<AtomicU64>, u64), JobError>> {
     let used: Vec<AtomicU64> = (0..p.position.count.div_ceil(64))
@@ -439,6 +510,9 @@ fn used_vertices(
             for triangle in start..(start + CHUNK_TRIANGLES).min(p.triangles) {
                 if triangle.is_multiple_of(1024) && stop.load(Relaxed) {
                     return Err(JobError::new(JobErrorKind::Cancelled, "assembly stopped"));
+                }
+                if kept.is_some_and(|kept| !kept.contains(triangle)) {
+                    continue;
                 }
                 for vertex in vertices(p, &mut indices, triangle)? {
                     blocks.push(vertex / per_block);
@@ -469,6 +543,54 @@ fn used_vertices(
     })
 }
 
+/// In a subset bake: how many of `p`'s triangle chunks holding a captured triangle touch at
+/// most `cache_blocks` distinct blocks of `per_block` store slots, and how many chunks hold
+/// one.
+fn slot_locality(
+    source: &StreamSource,
+    p: &ScenePrimitive<'_>,
+    buffer_bytes: usize,
+    workers: usize,
+    (per_block, cache_blocks): (u64, usize),
+    slots: Slots<'_>,
+    poll: &mut dyn FnMut() -> Result<()>,
+) -> Result<std::result::Result<(u64, u64), JobError>> {
+    let counted = run(
+        p.triangles.div_ceil(CHUNK_TRIANGLES),
+        workers,
+        poll,
+        |chunk, stop| {
+            let start = chunk * CHUNK_TRIANGLES;
+            let range = start..(start + CHUNK_TRIANGLES).min(p.triangles);
+            if none_kept(Some(slots), &range) {
+                return Ok((0, 0));
+            }
+            let mut indices = p.indices.map(|v| source.reader(&v, buffer_bytes));
+            let mut blocks = Vec::with_capacity(3 * CHUNK_TRIANGLES);
+            for triangle in range {
+                if triangle.is_multiple_of(1024) && stop.load(Relaxed) {
+                    return Err(JobError::new(JobErrorKind::Cancelled, "assembly stopped"));
+                }
+                if !slots.triangles.contains(triangle) {
+                    continue;
+                }
+                for vertex in vertices(p, &mut indices, triangle)? {
+                    blocks.push(vertex_slot(Some(slots), vertex)? / per_block);
+                }
+            }
+            blocks.sort_unstable();
+            blocks.dedup();
+            Ok((u64::from(blocks.len() <= cache_blocks), 1))
+        },
+    )?;
+    Ok(match counted {
+        Ran::All(counts) => Ok(counts
+            .iter()
+            .fold((0, 0), |(l, a), (local, active)| (l + local, a + active))),
+        Ran::Failed(failure) => Err(failure),
+    })
+}
+
 /// Vertices decoded exactly as the corner join decoded them.
 struct Decoder<'a> {
     source: &'a StreamSource,
@@ -484,7 +606,7 @@ struct Decoder<'a> {
 /// thread that made them, so its chunks run in order on the calling thread with that frame,
 /// and `check` is `poll` itself: a `poll` error is returned as such, not as a task failure.
 /// Either way every vertex is mapped by the same deterministic arithmetic.
-fn decode_chunks<T: Send>(
+pub(super) fn decode_chunks<T: Send>(
     frame: &mut SourceFrame,
     chunks: std::ops::Range<usize>,
     workers: usize,
@@ -562,13 +684,16 @@ impl Boxes {
 
 impl Decoder<'_> {
     /// Decodes the used vertices of `range` into `out` (records under `layout`, unused ones
-    /// zero), running `check` every 4,096 vertices and stopping on its error.
+    /// zero), running `check` every 4,096 vertices and stopping on its error. With `ranks`
+    /// (a subset bake), `out` holds the used vertices only, at their ranks from the range's
+    /// first.
     fn decode(
         &mut self,
         used: &[AtomicU64],
         range: std::ops::Range<usize>,
         layout: Layout,
         out: &mut [u8],
+        ranks: Option<&Ranks>,
         check: &mut dyn FnMut() -> Result<()>,
     ) -> Result<Boxes> {
         let p = self.p;
@@ -583,7 +708,8 @@ impl Decoder<'_> {
         let mut colors = p.color.map(|v| source.reader(&v, self.buffer_bytes));
         let want_jacobian = normals.is_some() || tangents.is_some();
         let mut boxes = Boxes::EMPTY;
-        let start = range.start;
+        let slot = |v: usize| ranks.map_or(v, |ranks| ranks.rank(v));
+        let start = slot(range.start);
         for vertex in range {
             if vertex.is_multiple_of(4096) {
                 check()?;
@@ -608,7 +734,7 @@ impl Decoder<'_> {
                 &mut uvs,
                 &mut colors,
             )?;
-            let at = (vertex - start) * size;
+            let at = (slot(vertex) - start) * size;
             DecodedVertex {
                 position,
                 attributes,
@@ -618,6 +744,9 @@ impl Decoder<'_> {
         Ok(boxes)
     }
 }
+
+/// A decoded primitive: its store, its boxes and, in a subset bake, its kept-vertex ranks.
+type Decoded = (Store, Boxes, Option<Ranks>);
 
 /// Decodes `p`'s used vertices into a store: in memory when `memory` allows, else spilled.
 /// Returns the first failure (in time) of a parallel task as the inner error: the caller
@@ -633,8 +762,9 @@ fn decode_primitive(
     workers: usize,
     in_memory: bool,
     (cache_blocks, sorter, progress): (usize, SortConfig, &StepProgress<'_>),
+    kept: Option<&Ranks>,
     poll: &mut dyn FnMut() -> Result<()>,
-) -> Result<std::result::Result<(Store, Boxes), JobError>> {
+) -> Result<std::result::Result<Decoded, JobError>> {
     let size = DecodedVertex::size_in(layout);
     let per_block = crate::spill::block_records(size, buffer_bytes);
     let (used, local) = match used_vertices(
@@ -643,13 +773,22 @@ fn decode_primitive(
         buffer_bytes,
         workers,
         (per_block, cache_blocks),
+        kept,
         poll,
     )? {
         Ok(found) => found,
         Err(failure) => return Ok(Err(failure)),
     };
+    // A subset bake stores the used vertices only, by rank.
+    let ranks = kept.map(|_| Ranks::new(used.iter().map(|w| w.load(Relaxed)).collect()));
+    let slot = |v: usize| ranks.as_ref().map_or(v, |ranks| ranks.rank(v));
     let count = p.position.count;
     let chunks = count.div_ceil(CHUNK_VERTICES);
+    // Store slots of chunk `chunk`'s vertices.
+    let span = |chunk: usize| {
+        let start = chunk * CHUNK_VERTICES;
+        slot((start + CHUNK_VERTICES).min(count)) - slot(start)
+    };
     let mut boxes = Boxes::EMPTY;
     let decode_chunk = |chunk: usize,
                         frame: &mut SourceFrame,
@@ -664,14 +803,17 @@ fn decode_primitive(
             frame,
             buffer_bytes,
         };
-        decoder.decode(&used, start..end, layout, out, check)
+        decoder.decode(&used, start..end, layout, out, ranks.as_ref(), check)
     };
     if in_memory {
-        let mut bytes = vec![0u8; count.checked_mul(size).ok_or_else(overflow)?];
-        let slots: Vec<Mutex<&mut [u8]>> = bytes
-            .chunks_mut(CHUNK_VERTICES * size)
-            .map(Mutex::new)
-            .collect();
+        let mut bytes = vec![0u8; slot(count).checked_mul(size).ok_or_else(overflow)?];
+        let mut rest = &mut bytes[..];
+        let mut slots: Vec<Mutex<&mut [u8]>> = Vec::with_capacity(chunks);
+        for chunk in 0..chunks {
+            let (head, tail) = std::mem::take(&mut rest).split_at_mut(span(chunk) * size);
+            slots.push(Mutex::new(head));
+            rest = tail;
+        }
         let ran = decode_chunks(frame, 0..chunks, workers, poll, |chunk, frame, check| {
             let mut slot = slots[chunk].lock().unwrap_or_else(|e| e.into_inner());
             decode_chunk(chunk, frame, &mut slot, check)
@@ -682,7 +824,7 @@ fn decode_primitive(
             Ran::Failed(failure) => return Ok(Err(failure)),
         };
         found.iter().for_each(|b| boxes.union(b));
-        return Ok(Ok((Store::Memory(bytes), boxes)));
+        return Ok(Ok((Store::Memory(bytes), boxes, ranks)));
     }
     // Spilled: waves of two chunks per worker, written in order.
     let mut writer = SequenceWriter::<DecodedVertex>::compressed(
@@ -695,7 +837,7 @@ fn decode_primitive(
     for first in (0..chunks).step_by(wave) {
         let last = (first + wave).min(chunks);
         let ran = decode_chunks(frame, first..last, workers, poll, |chunk, frame, check| {
-            let len = (CHUNK_VERTICES.min(count - chunk * CHUNK_VERTICES)) * size;
+            let len = span(chunk) * size;
             let mut out = vec![0u8; len];
             let found = decode_chunk(chunk, frame, &mut out, check)?;
             Ok((out, found))
@@ -712,13 +854,33 @@ fn decode_primitive(
         }
     }
     let spilled = writer.finish()?;
+    let slots = kept.zip(ranks.as_ref()).map(|(triangles, vertices)| Slots {
+        triangles,
+        vertices,
+    });
+    let (local, chunks) = match slots {
+        None => (local, p.triangles.div_ceil(CHUNK_TRIANGLES) as u64),
+        Some(slots) => match slot_locality(
+            source,
+            p,
+            buffer_bytes,
+            workers,
+            (per_block, cache_blocks),
+            slots,
+            poll,
+        )? {
+            Ok(counted) => counted,
+            Err(failure) => return Ok(Err(failure)),
+        },
+    };
     // Too little locality for the block caches: place every corner by sorting instead.
-    let chunks = p.triangles.div_ceil(CHUNK_TRIANGLES) as u64;
     if needs_route(local, chunks) {
-        let placed = place_corners(source, p, &spilled, scratch, layout, sorter, progress, poll)?;
-        return Ok(Ok((Store::Placed(placed), boxes)));
+        let placed = place_corners(
+            source, p, &spilled, scratch, layout, sorter, progress, slots, poll,
+        )?;
+        return Ok(Ok((Store::Placed(placed), boxes, ranks)));
     }
-    Ok(Ok((Store::Spilled(spilled), boxes)))
+    Ok(Ok((Store::Spilled(spilled), boxes, ranks)))
 }
 
 /// Test seam: faults injected into the assembly of captures whose scratch lies under a
@@ -873,6 +1035,7 @@ fn place_corners(
     layout: Layout,
     sorter: SortConfig,
     progress: &StepProgress<'_>,
+    slots: Option<Slots<'_>>,
     poll: &mut dyn FnMut() -> Result<()>,
 ) -> Result<Sequence<TriangleCorners>> {
     #[cfg(test)]
@@ -884,10 +1047,14 @@ fn place_corners(
             crate::test_hooks::pace("mesh.assembly-route");
             poll()?;
         }
+        if !kept(slots, triangle) {
+            continue;
+        }
+        let slot = triangle_slot(slots, triangle);
         for (corner, vertex) in vertices(p, &mut indices, triangle)?.into_iter().enumerate() {
             by_vertex.push(CornerVertex {
-                vertex,
-                triangle: triangle as u64,
+                vertex: vertex_slot(slots, vertex)?,
+                triangle: slot as u64,
                 corner: corner as u8,
             })?;
         }
@@ -946,7 +1113,7 @@ fn place_corners(
             (row.triangle, row.corner + 1)
         };
     }
-    if expected != (p.triangles as u64, 0) {
+    if expected != (triangle_slot(slots, p.triangles) as u64, 0) {
         return Err(invariant(
             "routed corners do not cover every triangle corner",
         ));
@@ -963,6 +1130,7 @@ fn first_vertex_failure(
     frame: &mut SourceFrame,
     layout: Layout,
     buffer_bytes: usize,
+    kept: Option<&Ranks>,
     poll: &mut dyn FnMut() -> Result<()>,
 ) -> Result<Option<JobError>> {
     let used: Vec<AtomicU64> = (0..p.position.count.div_ceil(64))
@@ -972,6 +1140,9 @@ fn first_vertex_failure(
     for triangle in 0..p.triangles {
         if triangle.is_multiple_of(4096) {
             poll()?;
+        }
+        if kept.is_some_and(|kept| !kept.contains(triangle)) {
+            continue;
         }
         match vertices(p, &mut indices, triangle) {
             Ok(vs) => vs.iter().for_each(|&v| {
@@ -992,9 +1163,14 @@ fn first_vertex_failure(
         if vertex.is_multiple_of(4096) {
             poll()?;
         }
-        if let Err(error) =
-            decoder.decode(&used, vertex..vertex + 1, layout, &mut out, &mut || Ok(()))
-        {
+        if let Err(error) = decoder.decode(
+            &used,
+            vertex..vertex + 1,
+            layout,
+            &mut out,
+            None,
+            &mut || Ok(()),
+        ) {
             return Ok(Some(error));
         }
     }
@@ -1104,6 +1280,10 @@ impl Record for StagedRun {
 /// The rank-ordered full-triangle sequence of `source` (see the module notes). `scan` is the
 /// preflight scan; with a source CRS its box is replaced by the mapped one, as the corner join
 /// did. Validation has run.
+///
+/// With a `subset` (a subset bake), only its kept triangles are captured and only the
+/// vertices they use are decoded and stored; `scan` already counts the kept triangles and
+/// holds the whole source's box, which keys them as a full bake would.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn assemble(
     source: &StreamSource,
@@ -1115,6 +1295,7 @@ pub(crate) fn assemble(
     workers: usize,
     sorter: SortConfig,
     progress: &StepProgress<'_>,
+    subset: Option<&Selection>,
 ) -> Result<(Sequence<FullTriangle>, AssemblyReport)> {
     let buffer_bytes = sorter.buffer_bytes;
     let mut report = AssemblyReport {
@@ -1140,10 +1321,23 @@ pub(crate) fn assemble(
     let size = DecodedVertex::size_in(layout) as u64;
     let mut allowance = plan.vertex_allowance_bytes;
     let mut stores = Vec::with_capacity(primitives.len());
+    // A subset bake's kept-vertex ranks, per primitive.
+    let mut vertex_ranks = Vec::with_capacity(subset.map_or(0, |_| primitives.len()));
     let mut boxes = Boxes::EMPTY;
     let mut done = 0u64;
-    for p in &primitives {
-        let bytes = (p.position.count as u64)
+    for (i, p) in primitives.iter().enumerate() {
+        let kept = subset.map(|s| &s.primitives[i]);
+        if kept.is_some_and(|kept| kept.vertices == 0) {
+            // No captured triangle: nothing to decode or store.
+            stores.push(Store::Memory(Vec::new()));
+            vertex_ranks.push(Ranks::new(Vec::new()));
+            report.excluded_primitives += 1;
+            done += p.position.count as u64;
+            progress.advance(done)?;
+            continue;
+        }
+        let bytes = kept
+            .map_or(p.position.count as u64, |kept| kept.vertices)
             .checked_mul(size)
             .ok_or_else(overflow)?;
         let in_memory = bytes <= allowance;
@@ -1157,24 +1351,33 @@ pub(crate) fn assemble(
             workers,
             in_memory,
             (plan.cache_blocks, sorter, progress),
+            kept.map(|kept| &kept.triangles),
             &mut || {
                 stop_check()?;
                 progress.advance(done)
             },
         )?;
-        let (store, found) = match decoded {
+        let (store, found, ranks) = match decoded {
             Ok(decoded) => decoded,
             // The first failing vertex in order, as before; otherwise (a read or scratch
             // error) the task's own failure.
             Err(failure) => {
-                let first =
-                    first_vertex_failure(source, p, frame, layout, buffer_bytes, &mut || {
+                let first = first_vertex_failure(
+                    source,
+                    p,
+                    frame,
+                    layout,
+                    buffer_bytes,
+                    kept.map(|kept| &kept.triangles),
+                    &mut || {
                         stop_check()?;
                         progress.check()
-                    })?;
+                    },
+                )?;
                 return Err(first.unwrap_or(failure));
             }
         };
+        vertex_ranks.extend(ranks);
         if in_memory {
             allowance -= bytes;
             report.resident_primitives += 1;
@@ -1190,14 +1393,34 @@ pub(crate) fn assemble(
         progress.advance(done)?;
     }
     progress.end()?;
+    if vertex_ranks.len() != subset.map_or(0, |_| primitives.len()) {
+        return Err(invariant(
+            "subset vertex ranks disagree with the primitives",
+        ));
+    }
+    // A subset's view of primitive `i`.
+    let slots_of = |i: usize| {
+        subset
+            .zip(vertex_ranks.get(i))
+            .map(|(subset, vertices)| Slots {
+                triangles: &subset.primitives[i].triangles,
+                vertices,
+            })
+    };
     let expected = frame.source_bounds();
-    if let Some(expected) = expected {
-        if boxes.source != expected {
-            return Err(invalid(
-                "mesh source geometry changed between preflight and capture",
-            ));
+    match subset {
+        // The kept vertices are the selection's, and the cube stays the whole source's.
+        Some(subset) => subset.check_decoded(boxes.source, boxes.mapped)?,
+        None => {
+            if let Some(expected) = expected {
+                if boxes.source != expected {
+                    return Err(invalid(
+                        "mesh source geometry changed between preflight and capture",
+                    ));
+                }
+                scan.bounds = boxes.mapped;
+            }
         }
-        scan.bounds = boxes.mapped;
     }
     let cube = Cube::around(&scan.bounds);
     // Tasks over every (primitive, chunk), in input order.
@@ -1228,11 +1451,19 @@ pub(crate) fn assemble(
             }
             let (i, _) = tasks[k];
             let p = &primitives[i];
-            let mut store = stores[i].reader(plan.cache_blocks, range(&tasks[k]), buffer_bytes)?;
+            let slots = slots_of(i);
+            if none_kept(slots, &range(&tasks[k])) {
+                return Ok(Bounds::EMPTY);
+            }
+            let mut store =
+                stores[i].reader(slots, plan.cache_blocks, range(&tasks[k]), buffer_bytes)?;
             let mut indices = p.indices.map(|v| source.reader(&v, buffer_bytes));
             let mut bounds = Bounds::EMPTY;
             let mut cells = Vec::with_capacity(CHUNK_TRIANGLES);
             for t in range(&tasks[k]) {
+                if !kept(slots, t) {
+                    continue;
+                }
                 let verts = vertices(p, &mut indices, t)?;
                 let mut positions = [[0f32; 3]; 3];
                 for (c, v) in store.corners(layout, t, verts)?.iter().enumerate() {
@@ -1258,8 +1489,8 @@ pub(crate) fn assemble(
     found.iter().for_each(|b| bounds.union(b));
     let mut count = 0u64;
     let mut geometry_bytes = 0u64;
-    for p in &primitives {
-        let triangles = p.triangles as u64;
+    for (i, p) in primitives.iter().enumerate() {
+        let triangles = subset.map_or(p.triangles, |s| s.primitives[i].triangles.ones()) as u64;
         count = count.checked_add(triangles).ok_or_else(overflow)?;
         geometry_bytes = geometry_bytes
             .checked_add(
@@ -1271,7 +1502,8 @@ pub(crate) fn assemble(
     }
     progress.end()?;
     source.verify_unchanged()?;
-    if count != scan.triangles || geometry_bytes != scan.geometry_bytes || bounds != scan.bounds {
+    let expected = subset.map_or(scan.bounds, |subset| subset.bounds);
+    if count != scan.triangles || geometry_bytes != scan.geometry_bytes || bounds != expected {
         return Err(invalid(
             "mesh source geometry changed between preflight and capture",
         ));
@@ -1391,10 +1623,18 @@ pub(crate) fn assemble(
             let p = &primitives[i];
             let ordinal = i as u64;
             let bytes = triangle_bytes(p);
-            let mut store = stores[i].reader(plan.cache_blocks, range(&tasks[k]), buffer_bytes)?;
+            let slots = slots_of(i);
+            if none_kept(slots, &range(&tasks[k])) {
+                return Ok(());
+            }
+            let mut store =
+                stores[i].reader(slots, plan.cache_blocks, range(&tasks[k]), buffer_bytes)?;
             let mut indices = p.indices.map(|v| source.reader(&v, buffer_bytes));
             let mut rows: Vec<(u32, FullTriangle)> = Vec::with_capacity(CHUNK_TRIANGLES);
             for t in range(&tasks[k]) {
+                if !kept(slots, t) {
+                    continue;
+                }
                 let row = triangle(
                     p,
                     ordinal,

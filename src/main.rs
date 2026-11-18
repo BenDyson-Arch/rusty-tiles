@@ -46,7 +46,7 @@ use rusty_tiles::error::Error;
 use rusty_tiles::georef::SourceAxes;
 use rusty_tiles::package::{package, PackageRequest, PackageResult};
 use rusty_tiles::{
-    doctor, terrain, vector, JobError, JobErrorKind, MeshPlacement, MeshSourceCrs,
+    doctor, terrain, vector, JobError, JobErrorKind, MeshPlacement, MeshSourceCrs, MeshSubset,
     ModelManifestRequest, ModelManifestResult, ModelWrapRequest, ModelWrapResult, Observer,
     OutputPolicy, RasterDirectoryRequest, RasterDirectoryResult, RasterLimits, RasterRequest,
     RasterResult, RunEvent, TilerJobs, TilerProfile, TilerRequest, TilerResult,
@@ -208,6 +208,42 @@ struct TilerArgs {
     placement: RigidPlacementArgs,
     #[command(flatten)]
     source: SourceCrsArgs,
+    #[command(flatten)]
+    subset: SubsetArgs,
+}
+
+/// `--bbox` / `--polygon`: bake part of the source.
+#[derive(Args)]
+struct SubsetArgs {
+    /// Bake only triangles whose centroid lies in MINX MINY MAXX MAXY (min edges inside, max
+    /// edges outside): post-node glTF X and -Z in source metres, or WGS84 longitude and
+    /// latitude in degrees with --source-crs. Placement and tiling stay the whole source's
+    #[arg(
+        long,
+        num_args = 4,
+        value_names = ["MINX", "MINY", "MAXX", "MAXY"],
+        allow_hyphen_values = true,
+        conflicts_with = "polygon"
+    )]
+    bbox: Vec<f64>,
+    /// Like --bbox, with a GeoJSON Polygon or MultiPolygon (holes allowed; even-odd rule) in
+    /// the same coordinates
+    #[arg(long, value_name = "GEOJSON")]
+    polygon: Option<PathBuf>,
+}
+impl SubsetArgs {
+    fn resolve(self) -> Result<Option<MeshSubset>, Error> {
+        Ok(MeshSubset::from_parameters(
+            (!self.bbox.is_empty()).then_some(&self.bbox[..]),
+            self.polygon.as_deref(),
+        )
+        .map_err(|error| rusty_tiles::JobFailure {
+            error,
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        })?)
+    }
 }
 
 #[derive(Args)]
@@ -959,6 +995,30 @@ fn tiler_summary(result: &TilerResult) -> Value {
     summary
 }
 
+/// "subset: kept 1,234 of 5,678 source triangles in the bbox; extent x 1 to 2, y 3 to 4
+/// (local x/-z)"
+fn subset_line(subset: &Value) -> Option<String> {
+    let kept = subset["kept_triangles"].as_u64()?;
+    let source = subset["source_triangles"].as_u64()?;
+    let extent: Vec<f64> = subset["extent"]
+        .as_array()?
+        .iter()
+        .filter_map(Value::as_f64)
+        .collect();
+    let [x0, y0, x1, y1] = extent[..] else {
+        return None;
+    };
+    let axes = if subset["coordinates"] == "wgs84" {
+        "WGS84 longitude/latitude, degrees"
+    } else {
+        "post-node glTF x/-z, source metres"
+    };
+    Some(format!(
+        "subset: kept {kept} of {source} source triangles in the {}; extent x {x0} to {x1}, y {y0} to {y1} ({axes})",
+        subset["region"].as_str().unwrap_or("region"),
+    ))
+}
+
 /// Allow-listed EPSG datum operations a converter report names (point cloud at the top
 /// level, vector per layer), without duplicates.
 fn crs_operations(report: &Value) -> Vec<Value> {
@@ -1137,6 +1197,9 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
     for operation in summary["crsOperations"].as_array().into_iter().flatten() {
         lines.push(crs_operation_line(operation));
     }
+    if let Some(line) = subset_line(&summary["tilerReport"]["subset"]) {
+        lines.push(line);
+    }
     let count = |key: &str| counts[key].as_u64().filter(|n| *n > 0);
     let mut warnings = Vec::new();
     if let Some(n) = count("skippedFeatures") {
@@ -1224,6 +1287,9 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
                 .with_placement(a.placement.resolve()?);
             if let Some(source_crs) = a.source.resolve()? {
                 request = request.with_source_crs(source_crs);
+            }
+            if let Some(subset) = a.subset.resolve()? {
+                request = request.with_subset(subset);
             }
             if let Some(path) = a.scratch_dir {
                 request = request.with_scratch_dir(path);

@@ -15,6 +15,7 @@ use super::{
     },
     phases::{Step, StepProgress},
     source_crs::{MeshSourceCrsReport, SourceFrame},
+    subset::{self, MeshSubsetReport},
     tree::{self, RetainedTree},
 };
 use crate::{
@@ -133,7 +134,14 @@ pub(crate) struct FullMemoryBound {
     /// The direct assembly's working set (`assembly::AssemblyPlan::memory_bytes`). Capture's
     /// sorts run after it, so the bound charges the larger of it and their allowance.
     pub assembly_bytes: u64,
+    /// A subset bake's selection: kept-triangle and kept-vertex ranks and the polygon index
+    /// (`subset::MeshSubset::memory_bytes`); absent without a subset.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub subset_bytes: u64,
     pub bound_bytes: u64,
+}
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }
 impl FullMemoryBound {
     fn base_bytes(&self) -> u64 {
@@ -165,6 +173,9 @@ pub(crate) struct FullCaptureReport {
     /// The resolved source CRS; absent for local sources.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_crs: Option<MeshSourceCrsReport>,
+    /// A subset bake's region, kept count and extent; absent for a whole-source bake.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subset: Option<MeshSubsetReport>,
 }
 
 pub(crate) struct FullCaptured {
@@ -628,7 +639,7 @@ fn memory_bound(
     image_count: u64,
     jobs: usize,
     spill_bytes: u64,
-    preflight_bytes: u64,
+    (preflight_bytes, subset_bytes): (u64, u64),
     assembly_bytes: u64,
 ) -> Result<FullMemoryBound, JobError> {
     let mut geometry = MemoryBound::new(config, json_bytes, jobs);
@@ -701,7 +712,10 @@ fn memory_bound(
         )?,
         add(
             add(DECODER_ALLOWANCE, PLANNING_ALLOWANCE)?,
-            assembly_bytes.saturating_sub(geometry.sort_bytes),
+            add(
+                assembly_bytes.saturating_sub(geometry.sort_bytes),
+                subset_bytes,
+            )?,
         )?,
     )?;
     Ok(FullMemoryBound {
@@ -712,6 +726,7 @@ fn memory_bound(
         corner_join_bytes,
         preflight_bytes,
         assembly_bytes,
+        subset_bytes,
         decoder_allowance_bytes: DECODER_ALLOWANCE,
         planning_allowance_bytes: PLANNING_ALLOWANCE,
         bound_bytes,
@@ -802,6 +817,41 @@ pub(crate) fn capture_admitted(
         Some(spec) => SourceFrame::resolve(spec, source_bounds).map_err(super::failure)?,
     };
     let source_crs = frame.placement();
+    // A subset bake selects its triangles here, before any scratch exists. Everything below
+    // plans for the kept triangles and the vertices they use; the frame above, the root cube
+    // (the whole source's box) and the position lattice's radius stay the whole source's, so
+    // the subset is placed and tiled as a full bake would be.
+    let subset_bytes = config
+        .subset
+        .as_ref()
+        .map_or(0, |subset| subset.memory_bytes(&source));
+    let selection = match &config.subset {
+        None => None,
+        Some(subset) => {
+            if config.available_memory().is_some_and(|available| {
+                scan_memory.base_bytes().saturating_add(subset_bytes) > available
+            }) {
+                return Err(super::failure(exhausted(
+                    "mesh subset selection does not fit available memory",
+                )));
+            }
+            let selection = subset::select(
+                &source,
+                &mut frame,
+                subset,
+                config.sort.buffer_bytes,
+                usize::try_from(scan_workers).unwrap_or(1),
+                progress,
+            )
+            .map_err(super::failure)?;
+            scan.triangles = selection.triangles;
+            scan.geometry_bytes = selection.geometry_bytes;
+            if let Some(full) = selection.full_bounds {
+                scan.bounds = full;
+            }
+            Some(selection)
+        }
+    };
     let preflight = image_preflight(&source, check).map_err(super::failure)?;
     let (image_count, image_bytes) = (preflight.count, preflight.scratch_bytes);
     let layout = attributes::attribute_layout(&source);
@@ -810,7 +860,7 @@ pub(crate) fn capture_admitted(
         .clone()
         .unwrap_or_else(Scratch::default_parent);
     let volume = crate::spill::inspect_volume(&parent).map_err(|e| super::failure(e.into()))?;
-    let shape = assembly::ScratchShape::of(&source, layout)
+    let shape = assembly::ScratchShape::of(&source, layout, selection.as_ref())
         .ok_or_else(|| super::failure(exhausted("assembly scratch arithmetic overflow")))?;
     let need = scratch_need(
         scan,
@@ -845,7 +895,7 @@ pub(crate) fn capture_admitted(
             image_count,
             workers,
             spill,
-            preflight_bytes,
+            (preflight_bytes, subset_bytes),
             assembly,
         )
     };
@@ -1032,6 +1082,7 @@ pub(crate) fn capture_admitted(
         source.external_bytes,
         source.json_bytes,
     );
+    let subset_report = selection.as_ref().map(|selection| selection.report.clone());
     let result = (|| {
         if scratch.allocation_unit_bytes() != volume.allocation_unit_bytes
             || scratch.memory_backed() != volume.memory_backed
@@ -1057,7 +1108,10 @@ pub(crate) fn capture_admitted(
             workers,
             capture_config.sorter(workers),
             progress,
+            selection.as_ref(),
         )?;
+        // The kept-triangle ranks end with the assembly.
+        drop(selection);
         peaks.capture = end_stage(&scratch, stages.capture, "assembly")?;
         begin_stage(&scratch, &need, stages.projection)?;
         peaks.projection = end_stage(&scratch, stages.projection, "projection")?;
@@ -1287,6 +1341,7 @@ pub(crate) fn capture_admitted(
             image_capture,
             lattice_version: 1,
             source_crs: source_crs.as_ref().map(|(_, report)| report.clone()),
+            subset: subset_report.clone(),
         };
         Ok((
             tree,
@@ -1630,7 +1685,7 @@ pub(super) mod tests {
         );
         captured.close().unwrap();
     }
-    fn config(parent: &Path) -> TreeConfig {
+    pub(crate) fn config(parent: &Path) -> TreeConfig {
         let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(2);
         config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
         config.scratch_dir = Some(parent.to_owned());
@@ -2327,7 +2382,7 @@ pub(super) mod tests {
     /// `attributes` also NORMAL, TEXCOORD_0 and COLOR_0 per vertex. A `shuffled` primitive
     /// stores its vertices in a seeded random order, its indices remapped, so its corners have
     /// no index locality.
-    fn indexed_grids(parent: &Path, primitives: &[(usize, bool, bool)]) -> PathBuf {
+    pub(crate) fn indexed_grids(parent: &Path, primitives: &[(usize, bool, bool)]) -> PathBuf {
         fs::create_dir_all(parent).unwrap();
         let mut bytes = Vec::new();
         let (mut views, mut accessors, mut meshes, mut nodes) =
@@ -2465,7 +2520,7 @@ pub(super) mod tests {
     }
 
     /// Spilled plans whose vertex caches hold one block, or every block.
-    fn spilled(cache_blocks: usize) -> super::super::assembly::AssemblyPlan {
+    pub(crate) fn spilled(cache_blocks: usize) -> super::super::assembly::AssemblyPlan {
         super::super::assembly::AssemblyPlan {
             vertex_allowance_bytes: 0,
             cache_blocks,
@@ -2984,8 +3039,8 @@ pub(super) mod tests {
             .kind(),
             JobErrorKind::ResourceLimit
         );
-        let memory = memory_bound(&cfg, 1000, 2, 1, 0, 0, 0).unwrap();
-        let large = memory_bound(&cfg, 1000, 2, 1, 150 << 30, 0, 0).unwrap();
+        let memory = memory_bound(&cfg, 1000, 2, 1, 0, (0, 0), 0).unwrap();
+        let large = memory_bound(&cfg, 1000, 2, 1, 150 << 30, (0, 0), 0).unwrap();
         // 150 GiB of live spill is about 19k chunk descriptors.
         assert!(large.chunk_descriptor_bytes > memory.chunk_descriptor_bytes + 19_000 * 64);
         assert_eq!(memory.decoder_allowance_bytes, 192 << 20);

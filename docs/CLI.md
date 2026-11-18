@@ -79,6 +79,8 @@ Tiles one static glTF/GLB scene into a 3D Tiles 1.1 implicit `.3tz`. The scene i
 | `--sourceOffset E N [A]` | `--source-offset` | `0 0 0` | Shift added in double precision: E and N in CRS units, A in metres. |
 | `--sourceOffsetFile` | `--source-offset-file` | none | Offset file you write, with exactly the lines `E: <n>`, `N: <n>` and `A: <n>` (Metashape does not export one). Cannot be combined with `--sourceOffset`. |
 | `--heightOffset` | `--height-offset` | `0` with a source CRS | Metres added to source height plus A to give ellipsoidal height. |
+| `--bbox MINX MINY MAXX MAXY` | | none | Bake only the triangles whose centroid lies in the box (west and south edges inside, east and north edges outside): post-node glTF X and −Z in source metres, or WGS84 longitude and latitude in degrees with a source CRS. Placement, the CRS frame and the tile grid stay the whole source's. See [part of the source](MESH.md#bake-part-of-the-source). |
+| `--polygon FILE` | | none | As `--bbox`, with a GeoJSON Polygon or MultiPolygon (holes allowed, even-odd rule) in the same coordinates. Cannot be combined with `--bbox`. |
 
 The shared `-i`, `-o` and `--force` options apply. Output is `.3tz` only.
 
@@ -428,7 +430,7 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 
 | Command | Phases |
 | --- | --- |
-| `mesh` | `capture` (its steps `capture_scan`, `capture_validate`, `capture_corners`, `capture_positions`, `capture_triangles`, `capture_sequence`, `capture_images`, `capture_tree`, `capture_corner_depths`, `capture_leaf_plans` and, when a sort needs one, `capture_merge`, each with its total and repeated at least every 250 ms), `leaf_build`, `hlod_incidence` (its steps `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends` and, when a sort needs one, `hlod_incidence_merge`, reported the same way), `hlod_geometry`, `leaf_payloads`, `archive`, `ready_to_publish`; required events finish before installation. See the [mesh guide](MESH.md). |
+| `mesh` | `capture` (its steps `capture_scan`, with `--bbox` or `--polygon` `capture_select`, `capture_validate`, `capture_corners`, `capture_positions`, `capture_triangles`, `capture_sequence`, `capture_images`, `capture_tree`, `capture_corner_depths`, `capture_leaf_plans` and, when a sort needs one, `capture_merge`, each with its total and repeated at least every 250 ms), `leaf_build`, `hlod_incidence` (its steps `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends` and, when a sort needs one, `hlod_incidence_merge`, reported the same way), `hlod_geometry`, `leaf_payloads`, `archive`, `ready_to_publish`; required events finish before installation. See the [mesh guide](MESH.md). |
 | `point-cloud` | `ingestion`, `tiling`, `point_archive`, `ready_to_publish`; these finish before installation |
 | `vector` | `ingestion`, `encoding` |
 | `raster` | `source_cog` and `aligned_warp` report progress out of 1,000,000. `tiling` reports completed tiles on the same scale and resets for each zoom. `raster_complete` reports the actual tile count before sealing and installation. |

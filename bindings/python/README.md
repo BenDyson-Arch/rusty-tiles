@@ -34,7 +34,7 @@ Converter inputs and outputs are filesystem paths (`str` or `os.PathLike`). All 
 
 | Function | Keyword arguments and result |
 | --- | --- |
-| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `memory_budget_bytes=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
+| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `memory_budget_bytes=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `bbox=None`, `polygon=None`, `force=False`, `callback=None`; returns `TilerResult` |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
 | `model_to_manifest(input, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; writes a sibling `tileset.json` and returns `ModelManifestResult` |
 | `point_cloud_to_3tz(input, output, ...)` | required `source_crs`, `force=False`, `height_offset=None`, `max_points=8192` (also the maximum), `chunk_points=100000`, `metadata=False`, `metadata_attributes=False`, `callback=None`; returns `PointCloudResult` |
@@ -61,7 +61,7 @@ This package contains the standard (portable) build only. It has no imagery or t
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
 scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None,
 scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
-height_offset=None, force=False, callback=None)` converts a source mesh to a
+height_offset=None, bbox=None, polygon=None, force=False, callback=None)` converts a source mesh to a
 `.3tz` archive in one run. The output has exact full-detail leaves under
 coarse parent tiles (hierarchical level of detail, HLOD). A coarse tile's
 geometric error is a sampled distance to the source, not a guaranteed bound.
@@ -80,6 +80,18 @@ double precision or a `source_offset_file` holding `E:`/`N:`/`A:` lines, and `he
 metres (default 0), with the CLI's rules. `source_crs=None` or `"local"` keeps
 local input. There is no CRS inference, geoid adjustment, texture-format
 selector or coarse-tile tuning.
+
+`bbox=(minx, miny, maxx, maxy)` or `polygon=path` (a GeoJSON Polygon or
+MultiPolygon file, holes allowed, even-odd rule) bakes only the triangles whose
+centroid lies inside, as the CLI's `--bbox` and `--polygon` do. The region is
+in post-node glTF x and −z (source metres) for a local source, and in WGS84
+longitude and latitude (degrees) with a source CRS. West and south edges are
+inside, east and north edges outside. Placement, the CRS frame and the tile grid
+stay the whole source's, so a subset lines up with a later full bake.
+`result.report["subset"]` holds the kept count and extent; the callback receives
+the `capture_select` step. A region that keeps nothing raises
+`InvalidRequestError`. See
+[part of the source](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#bake-part-of-the-source).
 
 Profiles are `fast`, `balanced` (default), `quality` and `lossless`; their
 settings are provisional and may change in later releases. Base-colour and

@@ -436,6 +436,61 @@ class WheelAPI(unittest.TestCase):
         local = rusty_tiles.mesh_to_tileset(source, self.root / "local.3tz", source_crs="local")
         self.assertNotIn("source_crs", local.report)
 
+    def test_tiler_subset_bakes_part_of_the_source_as_the_cli_does(self):
+        # Post-node centroids at x = 10.33, 13.33 and 16.33, glTF z = 3: region y = -z = -3.
+        source = self.root / "subset.glb"
+        write_local_mesh(source)
+        events = []
+        result = rusty_tiles.mesh_to_tileset(
+            source, self.root / "subset-bbox.3tz", jobs=1, bbox=(10, -4, 14, -2),
+            callback=events.append,
+        )
+        subset = result.report["subset"]
+        self.assertEqual((subset["region"], subset["coordinates"]), ("bbox", "local"))
+        self.assertEqual(subset["axes"], ["x", "-z"])
+        self.assertEqual((subset["source_triangles"], subset["kept_triangles"]), (3, 2))
+        self.assertEqual(result.report["triangles"], 2)
+        self.assertEqual(subset["extent"], [10.0, -3.0, 14.0, -3.0])
+        self.assertGreater(result.diagnostics["memory"]["capture_subset_bytes"], 0)
+        steps = {event.get("phase") for event in events}
+        self.assertIn("capture_select", steps)
+        polygon = self.root / "subset.geojson"
+        polygon.write_text(json.dumps({"type": "Feature", "properties": {}, "geometry": {
+            "type": "Polygon", "coordinates": [[[12, -4], [20, -4], [20, -2], [12, -2], [12, -4]]]}}))
+        result = rusty_tiles.mesh_to_tileset(source, self.root / "subset-polygon.3tz", jobs=1,
+                                             polygon=polygon)
+        self.assertEqual(result.report["subset"]["kept_triangles"], 2)
+        self.assertEqual((result.report["subset"]["polygons"], result.report["subset"]["rings"]), (1, 1))
+        # A region keeping nothing, a bad region and an unsupported GeoJSON type are request
+        # errors that publish nothing.
+        line = self.root / "line.geojson"
+        line.write_text(json.dumps({"type": "LineString", "coordinates": [[0, 0], [1, 1]]}))
+        for name, keywords, message in [
+            ("empty", {"bbox": (100, 100, 101, 101)}, "keeps no source triangle"),
+            ("inverted", {"bbox": (14, -4, 10, -2)}, "minx < maxx"),
+            ("both", {"bbox": (10, -4, 14, -2), "polygon": polygon}, "only one"),
+            ("line", {"polygon": line}, "LineString is not supported"),
+        ]:
+            output = self.root / f"subset-{name}.3tz"
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(rusty_tiles.InvalidRequestError, message):
+                    rusty_tiles.mesh_to_tileset(source, output, jobs=1, **keywords)
+                self.assertFalse(output.exists())
+        # Tuple conversion, as for anchor: a wrong length or a non-tuple.
+        with self.assertRaises(ValueError):
+            rusty_tiles.mesh_to_tileset(source, self.root / "x.3tz", bbox=(1, 2, 3))
+        with self.assertRaises(TypeError):
+            rusty_tiles.mesh_to_tileset(source, self.root / "x.3tz", bbox="abcd")
+        if CLI:
+            # The CLI gives the same report and archive.
+            cli_output = self.root / "subset-cli.3tz"
+            envelope = json.loads(subprocess.run(
+                [CLI, "--json", "mesh", "-i", str(source), "-o", str(cli_output), "--jobs", "1",
+                 "--bbox", "10", "-4", "14", "-2"],
+                capture_output=True, check=True, timeout=300).stdout)
+            self.assertEqual(envelope["tilerReport"]["subset"], subset)
+            self.assertEqual(cli_output.read_bytes(), (self.root / "subset-bbox.3tz").read_bytes())
+
     def test_tiler_python_request_errors_precede_source_io_and_callbacks(self):
         source = self.root / "missing.glb"
         output = self.root / "invalid.3tz"
@@ -678,7 +733,8 @@ class WheelAPI(unittest.TestCase):
         installed = set(inspect.signature(rusty_tiles.mesh_to_tileset).parameters)
         documented = {"input", "output", "profile", "jobs", "scratch_dir", "memory_budget_bytes",
                       "anchor", "orientation_xyzw", "scene_offset", "source_crs", "source_axes",
-                      "source_offset", "source_offset_file", "height_offset", "force", "callback"}
+                      "source_offset", "source_offset_file", "height_offset", "bbox", "polygon",
+                      "force", "callback"}
         self.assertEqual(installed, documented)
         shown = io.StringIO()
         with contextlib.redirect_stdout(shown):

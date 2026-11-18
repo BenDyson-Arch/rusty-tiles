@@ -15,9 +15,9 @@ use tiles_core::{
     point_cloud::{PointCloudCoordinates, PointCloudCrs, PointCloudOptions, PointCloudRequest},
     tile_view::{DecodedTile, TileLimit, TileSet},
     vector::{VectorLodOptions, VectorOptions},
-    Error, JobError, JobErrorKind, JobFailure, MeshPlacement, MeshSourceCrs, ModelManifestRequest,
-    ModelWrapRequest, Observer, OutputPolicy, RunControl, RunEvent, SourceAxes, TilerJobs,
-    TilerProfile, TilerRequest,
+    Error, JobError, JobErrorKind, JobFailure, MeshPlacement, MeshSourceCrs, MeshSubset,
+    ModelManifestRequest, ModelWrapRequest, Observer, OutputPolicy, RunControl, RunEvent,
+    SourceAxes, TilerJobs, TilerProfile, TilerRequest,
 };
 
 create_exception!(rusty_tiles, TilesError, PyException);
@@ -372,9 +372,12 @@ fn tiler_memory_budget(py: Python<'_>, budget: Option<Bound<'_, PyAny>>) -> PyRe
 /// Stream an admitted static mesh into one Tiles 1.1 .3tz: local metre/Y-up, or a declared
 /// source CRS mapped at capture. Profiles are provisional; jobs is a resource-capped
 /// maximum, and None means auto. memory_budget_bytes is a declared ceiling in bytes, never
-/// raised; None resolves the lesser of 4 GiB and half the detected headroom.
+/// raised; None resolves the lesser of 4 GiB and half the detected headroom. bbox
+/// (minx, miny, maxx, maxy) or polygon (a GeoJSON Polygon/MultiPolygon file) bakes only the
+/// triangles whose centroid lies inside: post-node glTF x and -z for a local source, WGS84
+/// longitude and latitude with a source CRS; placement and tiling stay the whole source's.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None))]
+#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, bbox=None, polygon=None, force=false, callback=None))]
 #[allow(clippy::too_many_arguments)]
 fn mesh_to_tileset(
     py: Python<'_>,
@@ -392,6 +395,8 @@ fn mesh_to_tileset(
     source_offset: Option<Vec<f64>>,
     source_offset_file: Option<PathBuf>,
     height_offset: Option<f64>,
+    bbox: Option<(f64, f64, f64, f64)>,
+    polygon: Option<PathBuf>,
     force: bool,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<TilerResult> {
@@ -422,6 +427,9 @@ fn mesh_to_tileset(
         height_offset,
     )
     .map_err(|error| tiler_request_error(py, error))?;
+    let bbox = bbox.map(|(minx, miny, maxx, maxy)| [minx, miny, maxx, maxy]);
+    let subset = MeshSubset::from_parameters(bbox.as_ref().map(|b| &b[..]), polygon.as_deref())
+        .map_err(|error| tiler_request_error(py, error))?;
     let mut request = TilerRequest::new(input, output)
         .with_profile(profile)
         .with_jobs(jobs)
@@ -433,6 +441,9 @@ fn mesh_to_tileset(
         });
     if let Some(source_crs) = source_crs {
         request = request.with_source_crs(source_crs);
+    }
+    if let Some(subset) = subset {
+        request = request.with_subset(subset);
     }
     if let Some(path) = scratch_dir {
         request = request.with_scratch_dir(path);

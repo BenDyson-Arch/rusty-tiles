@@ -167,6 +167,115 @@ centre check estimates the quadratic interpolation term, not higher-order
 terms. Measured errors in the tests are below 1e-7 rad, including a 150 km site
 at 60°. The report states the lattice and its per-vertex cells.
 
+## Bake part of the source
+
+To try settings on a small area of a large source, bake only part of it:
+
+```sh
+rusty-tiles mesh -i local.glb -o part.3tz --bbox 100 -50 400 250
+rusty-tiles mesh -i site.glb -o part.3tz \
+  --source-crs EPSG:3857 --source-offset-file site_offset.txt --polygon area.geojson
+```
+
+`--bbox MINX MINY MAXX MAXY` keeps the triangles whose centroid lies in the box,
+and `--polygon FILE` those whose centroid lies in a GeoJSON polygon. Pass at
+most one of them. Python takes `bbox=(minx, miny, maxx, maxy)` or
+`polygon=path`.
+
+**Coordinates.** Heights are ignored; the region is a 2D area.
+
+- A local source: `x` is glTF X and `y` is glTF −Z (north in a Y-up scene, and
+  the Y axis Blender shows), in source metres, after node transforms and before
+  `--scene-offset` or any other placement.
+- With a [source CRS](#source-crs): `x` is WGS84 longitude and `y` is latitude,
+  in degrees. Longitudes must lie in [−180, 180] and latitudes in [−90, 90]
+  (`invalid_request`), so a region cannot cross the antimeridian.
+
+**Which triangles are kept.** A triangle is kept when its centroid lies inside.
+Triangles are never split, so kept triangles can reach past the region's edge
+by up to one triangle. The centroid is `(a + b + c) / 3` of the three post-node
+source positions, in double precision. With a source CRS, that point plus the
+source offset is mapped through the run's CRS operation and converted to WGS84
+longitude and latitude. The test therefore sees the source-space centroid, not
+the mean of the mapped corners.
+
+**Boundary.** Inclusion is half-open, so abutting regions partition the source:
+
+- A bbox keeps `minx ≤ x < maxx` and `miny ≤ y < maxy`. A centroid exactly on
+  the west or south edge is kept; one on the east or north edge is not.
+- A polygon uses the **even-odd rule** over each polygon's rings, holes
+  included: a point is inside when a ray towards +x crosses the rings an odd
+  number of times. An edge counts when one endpoint has `y ≤ p.y` and the
+  other `y > p.y`, and its crossing, computed from its lower endpoint, lies at
+  `x > p.x`. Ring winding is ignored.
+- So a bbox is the same region as its rectangle polygon, a hole drops a
+  centroid on its own west or south edge and keeps one on its east or north
+  edge, and two polygons sharing an edge (same vertex coordinates) keep a
+  centroid on that edge exactly once.
+- A MultiPolygon, or a FeatureCollection, is the union of its polygons:
+  overlapping members do not cancel each other.
+
+**GeoJSON.** The file (at most 64 MiB) holds a Polygon or MultiPolygon
+geometry, a Feature with one, or a FeatureCollection of such Features. Rings
+must be closed (first position equal to the last) with at least four positions.
+A position is two or three finite numbers; a third is ignored. Malformed JSON,
+other types (Point, LineString, GeometryCollection, nested Features...), a
+Feature without geometry and a `crs` member are `invalid_request`.
+
+**Placement and tiling stay the whole source's.** A subset is placed exactly as
+a full bake of the same source would be. With a source CRS, the local frame's
+origin, its Jacobian lattice and the root transform come from the whole
+source's bounds. The octree's root cube, which keys triangles into cells, and
+the position lattice's zero origin and radius are also the whole source's. A
+subset bake therefore lines up with a later full bake with the same profile and
+options. Triangles are matched by their leaf provenance rows, and positions are
+compared in the shared tile frame under the identical root transform:
+
+- Capture maps every kept vertex to the same f32 position as the full bake.
+  `quality` and `lossless` store leaf positions as f32, so there a kept
+  triangle's decoded leaf positions are bit-identical to the full bake's.
+- `fast` and `balanced` quantize leaf positions to a power-of-two step per tree
+  depth. The step follows the largest tile at that depth, which a subset can
+  make smaller. Each decoded position is within half its own step of the shared
+  f32 position, so the two bakes agree to within the coarser of their steps
+  (at most 0.49 mm on a 10-million-triangle site).
+
+Near the cut, cells hold fewer triangles than in the full bake, so leaves there
+may split less deeply, and coarse tiles are built from the kept triangles only.
+Tile names (which count triangle ranks), tight bounding volumes and the tree
+above the subset therefore differ from the full bake's.
+
+**Report.** `tilerReport.subset`, also in `conversion.json`, states:
+
+- `region` (`bbox` or `polygon`), `coordinates` (`local` or `wgs84`) and
+  `axes` (`["x", "-z"]` or `["longitude", "latitude"]`);
+- `bounds`, the bbox or the polygons' bounding box, with `polygons` and `rings`
+  for a polygon;
+- `rule` (`centroid`), `source_triangles` and `kept_triangles`;
+- `extent`: the kept triangles' corners as `[minx, miny, maxx, maxy]` in the
+  region's coordinates, and `local_bounds`: their box in the tile frame (local
+  metres, Y up).
+
+`triangles` counts the kept triangles, and the CLI's summary line repeats the
+kept count and the extent. Without a subset the report has no `subset` field
+and the archive is unchanged.
+
+**Resources.** The selection is capture's step `capture_select`. It runs right
+after the scan, before any scratch exists. Each triangle's centroid is tested on
+the capture workers, then the vertices of kept triangles are marked; with a
+source CRS every used vertex is also mapped once, for the whole source's box.
+Every vertex therefore still meets the CRS-domain checks a full bake applies.
+The selection holds one bit per source triangle and per vertex, with ranks, and
+the polygon's edge index. It is charged in capture's resident bound
+(`diagnostics.memory.capture_subset_bytes`). Capture then decodes and stores only
+the vertices kept triangles use, and every later stage plans, admits memory and
+scratch, and reserves output for the kept triangles only. Excluded triangles
+cost no scratch.
+
+**Empty selection.** A region that keeps no triangle is `invalid_request`
+before any scratch or output exists. The message names the span of the source's
+centroids in the region's coordinates.
+
 ## Coarse levels (HLOD)
 
 Leaves are the exact tiles. Each occupied cell above them publishes one coarse
@@ -980,12 +1089,16 @@ print(result.report["triangles"], result.diagnostics["leaf_delivery"]["jobs"])
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
 scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None,
 scene_offset=None, source_crs=None, source_axes=None, source_offset=None,
-source_offset_file=None, height_offset=None, force=False, callback=None)`
-accepts `str` or `os.PathLike` paths. The keywords follow the CLI's rules:
+source_offset_file=None, height_offset=None, bbox=None, polygon=None,
+force=False, callback=None)` accepts `str` or `os.PathLike` paths. The keywords
+follow the CLI's rules:
 
 - `source_crs=None` or `"local"` keeps local input. `source_axes` is `"y-up"`
   (the default with a CRS) or `"xyz"`, `source_offset` a two- or three-number
   sequence, `source_offset_file` a path, and `height_offset` defaults to 0.
+- `bbox=(minx, miny, maxx, maxy)` or `polygon=path` bakes
+  [part of the source](#bake-part-of-the-source); the callback receives the
+  `capture_select` step like any other.
 - `jobs=None` means auto; a positive integer is a maximum. Booleans and
   non-integer worker counts are rejected.
 - `memory_budget_bytes` is the [memory budget](#memory-budget): a positive
@@ -1068,6 +1181,8 @@ The report includes:
   axes, source offset, height offset, `portable` or `native` operation, the
   chosen origin, `jacobian_lattice_cells` and `jacobian_exact_cells`) and
   reports its ENU frame as a `wgs84` placement at that origin;
+- `subset` for a [subset bake](#bake-part-of-the-source): the region, the kept
+  and source triangle counts and the kept extent;
 - `root_transform`: null for local output, whose root has no transform, or the
   exact column-major matrix for placed output.
 
@@ -1099,7 +1214,9 @@ nullable totals: `conversion`, `capture`, then inside the leaf stage
 then `leaf_payloads`, `archive` and `ready_to_publish`. Each finished phase also
 logs its wall seconds and the run's elapsed seconds as a `log` event. Inside
 `capture`, each step is a phase whose total is known when it starts:
-`capture_scan` (triangles), `capture_validate` (one unit), `capture_corners`
+`capture_scan` (triangles), for a [subset](#bake-part-of-the-source)
+`capture_select` (triangles tested, then every POSITION element of each
+expanded primitive marked or mapped), `capture_validate` (one unit), `capture_corners`
 (vertices decoded, counting every POSITION element of each expanded
 primitive), `capture_positions` (triangles keyed for the bucket histogram),
 `capture_triangles` (triangles built and staged in their buckets),
