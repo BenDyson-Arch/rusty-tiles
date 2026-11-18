@@ -204,6 +204,15 @@ struct TilerArgs {
     #[arg(long = "memory-budget", visible_alias = "memoryBudget", value_name = "BYTES",
           value_parser = parse_memory_budget)]
     memory_budget: Option<u64>,
+    /// Write a JSON run report here, rewritten atomically as each stage finishes (timing,
+    /// CPU, scratch peaks, HLOD omissions, last resorts and worker use), so a stopped run
+    /// leaves a valid partial report. Never part of the archive; see docs/MESH.md
+    #[arg(
+        long = "report-path",
+        visible_alias = "reportPath",
+        value_name = "FILE"
+    )]
+    report_path: Option<PathBuf>,
     #[command(flatten)]
     placement: RigidPlacementArgs,
     #[command(flatten)]
@@ -942,6 +951,23 @@ fn point_cloud_summary(result: &rusty_tiles::point_cloud::PointCloudResult) -> V
     summary
 }
 
+/// RUSTY_TILES_STAGE_TIMING=<file>: the run's summed per-thread stage timing
+/// (`rusty_tiles_stage_timing_v1`, with the leaf stage's share under
+/// `run.leafStageTiming`). Diagnostics only: as before it moved here from the library, a
+/// write failure is ignored (stderr may carry NDJSON events) and never fails the run.
+fn write_stage_timing(diagnostics: &rusty_tiles::TilerDiagnostics) {
+    let (Some(path), Some(mut document)) = (
+        std::env::var_os("RUSTY_TILES_STAGE_TIMING"),
+        diagnostics.stage_timing.clone(),
+    ) else {
+        return;
+    };
+    document["run"]["leafStageTiming"] = json!(diagnostics.leaf_delivery.timing);
+    if let Ok(bytes) = serde_json::to_vec_pretty(&document) {
+        let _ = std::fs::write(path, bytes);
+    }
+}
+
 fn tiler_summary(result: &TilerResult) -> Value {
     let mut summary = json!({
         "ok":true,
@@ -1231,12 +1257,14 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             if let Some(bytes) = a.memory_budget {
                 request = request.with_memory_budget(bytes);
             }
+            if let Some(path) = a.report_path {
+                request = request.with_report_path(path);
+            }
             let observer: Option<Arc<dyn Observer>> =
                 pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
-            Outcome::Tiler(Box::new(rusty_tiles::mesh_to_tileset(
-                request,
-                &interrupt::run_control(observer),
-            )?))
+            let result = rusty_tiles::mesh_to_tileset(request, &interrupt::run_control(observer))?;
+            write_stage_timing(&result.diagnostics);
+            Outcome::Tiler(Box::new(result))
         }
         Command::Validate {
             input,

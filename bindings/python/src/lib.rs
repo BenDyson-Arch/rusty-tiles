@@ -372,9 +372,11 @@ fn tiler_memory_budget(py: Python<'_>, budget: Option<Bound<'_, PyAny>>) -> PyRe
 /// Stream an admitted static mesh into one Tiles 1.1 .3tz: local metre/Y-up, or a declared
 /// source CRS mapped at capture. Profiles are provisional; jobs is a resource-capped
 /// maximum, and None means auto. memory_budget_bytes is a declared ceiling in bytes, never
-/// raised; None resolves the lesser of 4 GiB and half the detected headroom.
+/// raised; None resolves the lesser of 4 GiB and half the detected headroom. report_path
+/// writes the run report (the CLI's --report-path): JSON rewritten atomically as each stage
+/// finishes, so a stopped run leaves a valid partial report.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None))]
+#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, report_path=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None))]
 #[allow(clippy::too_many_arguments)]
 fn mesh_to_tileset(
     py: Python<'_>,
@@ -384,6 +386,7 @@ fn mesh_to_tileset(
     jobs: Option<Bound<'_, PyAny>>,
     scratch_dir: Option<PathBuf>,
     memory_budget_bytes: Option<Bound<'_, PyAny>>,
+    report_path: Option<PathBuf>,
     anchor: Option<(f64, f64, f64)>,
     orientation_xyzw: Option<(f64, f64, f64, f64)>,
     scene_offset: Option<(f64, f64, f64)>,
@@ -439,6 +442,9 @@ fn mesh_to_tileset(
     }
     if let Some(bytes) = memory_budget {
         request = request.with_memory_budget(bytes);
+    }
+    if let Some(path) = report_path {
+        request = request.with_report_path(path);
     }
     let result = run_job(py, callback, |run| {
         tiles_core::mesh_to_tileset(request, run)

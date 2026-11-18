@@ -26,6 +26,7 @@ mod phases;
 mod pipeline;
 mod records;
 mod resources;
+mod run_report;
 mod source_crs;
 mod tasks;
 mod tree;

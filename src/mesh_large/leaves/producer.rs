@@ -949,19 +949,34 @@ pub(crate) fn produce(
         .and_then(|_| manifest.get_ref().sync_all())
         .map_err(|e| JobError::io("finish leaf manifest", &manifest_path, e))?;
     phases.progress(Phase::LeafBuild, total_leaves, Some(total_leaves))?;
-    phases.finished(Phase::LeafBuild, leaf_started.elapsed().as_secs_f64())?;
+    let leaf_seconds = leaf_started.elapsed().as_secs_f64();
     let Coarse { plan, settings } = coarse;
-    // Opt-in stage timing: the leaf stage's share, before HLOD adds its own.
+    // Stage timing: the leaf stage's share, before HLOD adds its own.
     let leaf_timing = timing::since(&timing_mark);
     // HLOD needs no decoded image or leaf worker: record the cache and page-gate
     // observations, then release the decoded images and the pool before its own
     // admission takes effect (the gate and services own no memory).
     let stats = cache.stats();
     let image_scratch_peak = captured.scratch.stage_peak_bytes();
+    let gate_peak = gate.peak();
+    phases.finished_with(
+        Phase::LeafBuild,
+        leaf_seconds,
+        json!({
+            "leaves": report.leaves,
+            "triangles": report.triangles,
+            "glb_bytes": report.glb_bytes,
+            "jobs": stage.jobs,
+            "image_scratch_peak_bytes": image_scratch_peak,
+            "image_scratch_bound_bytes": image_scratch_base.saturating_add(image_scratch_bound),
+            "page_gate_peak_bytes": gate_peak,
+            "cache_peak_resident_bytes": stats.peak_resident_bytes,
+            "timing": leaf_timing,
+        }),
+    )?;
     if image_scratch_peak > image_scratch_base.saturating_add(image_scratch_bound) {
         return Err(resource("leaf image scratch exceeded admission"));
     }
-    let gate_peak = gate.peak();
     drop(cache);
     drop(pool);
     let (hlod, hlod_diagnostics) = timing::time(Stage::Lod, || {
@@ -990,7 +1005,6 @@ pub(crate) fn produce(
         &path.join("resources.json"),
         &serde_json::to_vec_pretty(&resources).map_err(|e| invariant(&e.to_string()))?,
     )?;
-    timing::finish(json!({"lod":"hlod","leafStageTiming":leaf_timing}));
     Ok(LeafStageOutput {
         report,
         diagnostics: LeafStageDiagnostics {
