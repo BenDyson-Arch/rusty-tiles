@@ -1250,6 +1250,26 @@ decoded sources. Archives are byte-identical with and without the store.
 `plan_seconds`, `build_seconds` and `misses` (pages the store could not serve,
 which then decode their sources); it is `null` when the stage ran without it.
 
+The same pass cuts the coarse stage's sparse source chains. A coarse texel
+samples the nearest point of a source triangle, whose texture coordinates lie
+inside that triangle's UV hull. For every source triangle and every texture its
+material binds, the plan marks the 64×64 tiles of the coarse chain (the source
+and each halving down to 1×1) that a bilinear sample anywhere in the hull can
+read at any level, under the binding's wrap modes and with a rounding margin.
+The pass builds each image's chain once from its decode and writes the marked
+tiles to a second scratch log in the same block format, which lives until the
+coarse stage ends. The coarse stage then samples those tiles with its usual
+arithmetic, through one small tile cache per job, and decodes no source image:
+its plan reserves the chains' index (`diagnostics.memory.hlod.sparse_index_bytes`)
+instead of a decode slot and an image cache, so its minimum budget falls and
+more coarse jobs fit. A sample outside the marked tiles is an internal error,
+not a fallback. The sparse chains are optional with the store: they are not cut
+when the coarse stage's plan with them is refused (it then plans as before).
+`leaf_delivery.crop_store` adds `coarse_chains`, `coarse_tiles` (stored),
+`coarse_chain_tiles` (all tiles of those chains), `coarse_raw_bytes`,
+`coarse_written_bytes` and `coarse_index_bytes`; `diagnostics.hlod` reports
+`sparse_tile_decodes`.
+
 A free-space check is not a reservation against other writers. Working files
 are removed on success and failure. A cleanup failure reports the paths
 involved and does not replace the original error.

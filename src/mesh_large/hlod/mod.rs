@@ -35,6 +35,7 @@ pub(crate) mod recovery;
 mod root_competition;
 pub(crate) mod scratch;
 pub(crate) mod source_index;
+pub(crate) mod sparse;
 pub(crate) mod store;
 #[cfg(test)]
 mod tests;
@@ -254,6 +255,10 @@ pub struct HlodMemoryPlan {
     /// the chain built from it. Chain loads take turns in it, so it is reserved once for the
     /// stage instead of in every job (zero without images).
     pub decode_bytes: u64,
+    /// Index of the sparse source chains the leaf stage cut for the coarse stage
+    /// ([`sparse`]); with them the stage decodes no source image and holds no image cache
+    /// or decode slot (zero without them).
+    pub sparse_index_bytes: u64,
     /// Encoder workspace ceiling of one coarse page.
     pub page_bytes: u64,
     /// Encoded page bytes one coarse tile may publish (admitted twice: pages and GLB).
@@ -333,6 +338,7 @@ fn appearance_plan(
     captured: &FullCaptured,
     profile: config::Profile,
     cap: usize,
+    sparse: bool,
 ) -> Result<AppearancePlan, JobError> {
     let layout = captured.triangles.layout().0;
     let colors = layout & super::attributes::COLOR != 0;
@@ -377,7 +383,23 @@ fn appearance_plan(
         .saturating_add(page)
         // The chain reader a worker holds while sampling; the decode itself is the stage's
         // one slot, not every job's.
-        .saturating_add(bake::CHAIN_READER_BYTES);
+        .saturating_add(if sparse {
+            sparse::READER_BYTES
+        } else {
+            bake::CHAIN_READER_BYTES
+        });
+    // Sampling the leaf stage's sparse chains decodes and caches no source image.
+    if sparse {
+        return Ok(AppearancePlan {
+            texture,
+            decode: 0,
+            color,
+            page,
+            tile_pages,
+            cache_floor: 0,
+            cache_total: 0,
+        });
+    }
     let cache_total = super::image_tiles::bound(captured, false);
     Ok(AppearancePlan {
         texture,
@@ -391,11 +413,14 @@ fn appearance_plan(
 }
 
 /// Plan the stage for `captured` under `budget`; refuses when one job cannot fit.
+/// `sparse_index` is the index of the leaf stage's sparse chains, when the coarse stage
+/// samples them instead of decoding its sources.
 pub(crate) fn plan(
     captured: &FullCaptured,
     config: &TreeConfig,
     budget: &MemoryBudget,
     settings: &Settings,
+    sparse_index: Option<u64>,
 ) -> Result<HlodMemoryPlan, JobError> {
     let cap = settings.cap;
     let leaf_cap = config.leaf_triangles();
@@ -411,7 +436,7 @@ pub(crate) fn plan(
         .saturating_add(read.saturating_sub(held));
     // S3's donor search (its resolve state and a local surface) and appearance workspace
     // ride on S1/S2's job.
-    let appearance = appearance_plan(captured, config.profile, cap)?;
+    let appearance = appearance_plan(captured, config.profile, cap, sparse_index.is_some())?;
     let job = job_charge(leaf_cap.max(cap as u64).saturating_mul(8), settings)
         .saturating_add(held.saturating_mul(8))
         .saturating_add(bake::RESOLVE_BYTES)
@@ -439,6 +464,7 @@ pub(crate) fn plan(
         .saturating_add(captured.images.len() as u64 * super::image_tiles::IMAGE_METADATA_BYTES)
         .saturating_add(source_index::BUILD_BYTES)
         .saturating_add(borders::WALK_CACHE_BYTES)
+        .saturating_add(sparse_index.unwrap_or(0))
         // Publication resolves one contract while admitted worker jobs remain live.
         .saturating_add(borders::contract_workspace_bytes(
             (settings.cap as u64).saturating_mul(6),
@@ -565,6 +591,7 @@ pub(crate) fn plan(
             color_workspace_bytes: appearance.color,
             image_cache_bytes: image_cache,
             decode_bytes: appearance.decode,
+            sparse_index_bytes: sparse_index.unwrap_or(0),
             page_bytes: appearance.page,
             tile_page_bytes: appearance.tile_pages,
             jobs,
@@ -754,6 +781,8 @@ pub struct HlodDiagnostics {
     /// Summed worker seconds of coarse charts, source queries, sampling and page encoding.
     pub appearance_seconds: appearance::Timing,
     pub image_cache: bake::CacheStats,
+    /// Sparse chain tiles the coarse jobs decoded (zero when they sampled decoded sources).
+    pub sparse_tile_decodes: u64,
     /// The manifest's per-depth appearance summary, repeated for the run report.
     pub appearance_by_depth: Vec<DepthAppearance>,
     /// D5 amendment A3 counts, repeated for the run report.
@@ -770,6 +799,8 @@ pub(crate) struct HlodInput<'a> {
     pub plan: &'a HlodMemoryPlan,
     pub settings: &'a Settings,
     pub phases: &'a Phases<'a>,
+    /// The leaf stage's sparse source chains, exactly when the plan was made with them.
+    pub sparse: Option<&'a sparse::Chains>,
 }
 
 /// One closed frame (a parent whose subtree has been read), in postorder.
@@ -1044,20 +1075,32 @@ pub(crate) fn produce(
     let index_cpu = resources::process_cpu_seconds()
         .zip(index_start)
         .map(|(b, a)| b - a);
-    // S3: the shared decoded source-chain cache and what every appearance job reads.
-    let cache = bake::ImageCache::new(
-        input.plan.image_cache_bytes,
-        super::image_tiles::bound(captured, false),
-    );
-    let image_spill = match cache.spill_bound() {
+    // S3: what every appearance job samples: the leaf stage's sparse chains, or the shared
+    // decoded source-chain cache.
+    if input.sparse.is_some() != (input.plan.sparse_index_bytes > 0) {
+        return Err(state("coarse plan and sparse chains disagree"));
+    }
+    let cache = match input.sparse {
+        Some(_) => None,
+        None => Some(bake::ImageCache::new(
+            input.plan.image_cache_bytes,
+            super::image_tiles::bound(captured, false),
+        )),
+    };
+    let image_spill = match cache.as_ref().map_or(0, bake::ImageCache::spill_bound) {
         0 => 0,
         b => b.saturating_add(super::image_tiles::file_rounding(captured)),
     };
     let image_lease = ledger.admit("image_tiles", image_spill)?;
+    let sources = match (input.sparse, &cache) {
+        (Some(chains), _) => appearance::Sources::Sparse(chains),
+        (None, Some(cache)) => appearance::Sources::Chains(cache),
+        (None, None) => return Err(state("coarse stage without sources")),
+    };
     let layout = captured.triangles.layout().0;
     let services = appearance::Services {
         captured,
-        cache: &cache,
+        sources,
         profile: input.config.profile,
         max_edge: settings.mutation.max_page_edge(),
         page_memory: input.plan.page_bytes,
@@ -1120,7 +1163,11 @@ pub(crate) fn produce(
     diagnostics.held_spill = held_spill;
     diagnostics.walk_utilisation = walk_utilisation;
     diagnostics.appearance_seconds = timings;
-    diagnostics.image_cache = cache.stats();
+    diagnostics.image_cache = cache
+        .as_ref()
+        .map(bake::ImageCache::stats)
+        .unwrap_or_default();
+    diagnostics.sparse_tile_decodes = input.sparse.map_or(0, sparse::Chains::decodes);
     image_lease.charge(diagnostics.image_cache.scratch_bytes)?;
     diagnostics.audit = audit.as_ref().map(audit::Writer::finish).transpose()?;
     report.audit = diagnostics.audit.as_ref().map(audit::Summary::from);
