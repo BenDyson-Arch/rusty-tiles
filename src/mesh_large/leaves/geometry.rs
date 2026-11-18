@@ -114,6 +114,22 @@ fn power_step(required: f64) -> Result<f32, JobError> {
 }
 
 impl LatticePlan {
+    /// A float-profile plan (canonical positions are the source's own) for unit fixtures
+    /// that build coarse tiles without a captured lattice.
+    #[cfg(test)]
+    pub(crate) fn float_for_tests() -> Self {
+        Self {
+            version: 1,
+            profile: Profile::Lossless,
+            common_origin: [0.; 3],
+            steps: Vec::new(),
+            depth_extents: Vec::new(),
+            source_bounds: Bounds {
+                min: [-1.; 3],
+                max: [1.; 3],
+            },
+        }
+    }
     pub(crate) fn profile(&self) -> Profile {
         self.profile
     }

@@ -1841,6 +1841,7 @@ fn build_tile(
             &[half, settings.cap],
             contract,
             &|k| job.borders.mapping(closed.key.depth, k),
+            &captured.lattice,
             &mut |built| {
                 if settings.mutation == Mutation::DropSegment {
                     let tile = &mut built.geometry;
@@ -1860,11 +1861,17 @@ fn build_tile(
                 // their accumulation is a sum and a max, so the split changes nothing.
                 #[cfg(test)]
                 if let Mutation::RefuseBuilds(k) = settings.mutation {
-                    let rank = match (built.primary, built.staged, built.last_resort_stage) {
+                    let rank = match (
+                        built.primary,
+                        built.p1,
+                        built.staged,
+                        built.last_resort_stage,
+                    ) {
                         (true, ..) => 0,
-                        (false, false, 0) => 1,
-                        (false, true, 0) => 2,
-                        (_, _, stage) => 2 + stage,
+                        (_, true, ..) => 1,
+                        (_, _, false, 0) => 2,
+                        (_, _, true, 0) => 3,
+                        (.., stage) => 3 + stage,
                     };
                     if rank < k {
                         built.rejection = Some(geometry::Rejection::Controls);

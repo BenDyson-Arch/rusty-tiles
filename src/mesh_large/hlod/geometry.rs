@@ -3,6 +3,7 @@
 //! topology cleanup and remeshing; only the reported capped frontier remains afterwards.
 #[cfg(test)]
 mod cluster_controls;
+mod collapse;
 #[cfg(test)]
 mod combined_controls;
 mod constrained;
@@ -11,6 +12,7 @@ mod contraction_memory;
 pub(crate) mod folds;
 pub(crate) mod locations;
 pub(crate) mod measurement;
+mod p1;
 mod relief;
 mod sheets;
 mod topology;
@@ -21,7 +23,7 @@ use super::{
     interfaces::{key, InterfaceRow, Key},
     store::{SourcePrimitive, StoppingBound, TileGeometry, TileKey},
 };
-use crate::{JobError, JobErrorKind};
+use crate::{mesh_large::leaves::geometry::LatticePlan, JobError, JobErrorKind};
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 type BorderMap<'a> = dyn Fn(Key) -> Result<Option<(Key, Key, f64, u8)>, JobError> + 'a;
@@ -75,6 +77,8 @@ pub(crate) struct Built {
     pub rejection: Option<Rejection>,
     /// Proposed by the primary build (`Resort::None`), whose calls are never reused.
     pub primary: bool,
+    /// Proposed by P1's contraction (`p1`).
+    pub p1: bool,
     /// Border vertices N3 snapped from an A1 hand-over (`Contracted::stuck`).
     pub relief_stuck: u32,
     pub interface_vertices: u32,
@@ -1012,9 +1016,9 @@ fn oriented(t: &[u32; 3]) -> [u32; 3] {
 /// Reconstruct the common contracted boundary before ordinary reduction. Only capped
 /// immediate children enter this job. After a stalled reduction, explicitly remesh the
 /// interior; omission is the reported last resort and propagates upwards in the walk.
-/// Only when that fails, and with `last_resorts` (production: always), the whole build
-/// runs again with fix 2's last resorts, then with staged reduction (`Resort`), so no tile
-/// an earlier build publishes changes.
+/// Only when that fails, and with `last_resorts` (production: always), P1's contraction is
+/// tried (`p1`), then the whole build runs again with fix 2's last resorts, then with
+/// staged reduction (`Resort`), so no tile an earlier build publishes changes.
 #[expect(
     clippy::too_many_arguments,
     reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
@@ -1025,23 +1029,43 @@ pub(crate) fn build_parent(
     caps: &[usize],
     contract: &Contract,
     mapping: &BorderMap<'_>,
+    lattice: &LatticePlan,
     assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
     last_resorts: bool,
     reuse: bool,
 ) -> Result<Outcome, JobError> {
     let mut repeats = Repeats::new(reuse);
-    let mut run = |r, seed, repeats: &mut Repeats| {
+    let run = |r,
+               seed,
+               assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
+               repeats: &mut Repeats| {
         build(
             tile, children, caps, contract, mapping, assess, check, r, seed, repeats,
         )
     };
-    let mut first = run(Resort::None, None, &mut repeats)?;
+    let mut first = run(Resort::None, None, assess, &mut repeats)?;
     if first.built.is_some() || !last_resorts {
         first.reused = repeats.reused;
         return Ok(first);
     }
     let primary_contraction_failed = first.contraction_failed;
+    // P1: one guard-by-construction contraction before the retry ladder. It is outside
+    // `build`, so the ladder's exact-repeat reuse is unchanged.
+    if let Some((stage, mut b)) = p1::attempt(tile, children, caps, contract, mapping, lattice)? {
+        b.last_resort_stage = stage;
+        b.staged = stage > 0;
+        if assess(&mut b)? {
+            first.built = Some(b);
+            first.reused = repeats.reused;
+            first.retry = Some(Retry {
+                resort: "p1",
+                primary_contraction_failed,
+                root_competition: false,
+            });
+            return Ok(first);
+        }
+    }
     // A1 hand-over from the primary contraction, kept for N3 (`Contracted`). Its chord
     // collapse resumes under N3's policy (a seam face or edge in its owner), so N3 snaps
     // only what that still leaves.
@@ -1054,7 +1078,7 @@ pub(crate) fn build_parent(
         );
         relief::resume(&seed, &contract.interface, &policy)
     });
-    let mut last = run(Resort::Fix2, None, &mut repeats)?;
+    let mut last = run(Resort::Fix2, None, assess, &mut repeats)?;
     last.attempted_topology.add(first.attempted_topology);
     let mut published = Resort::Fix2;
     for resort in [Resort::Staged, Resort::N1, Resort::N2, Resort::N3] {
@@ -1062,11 +1086,11 @@ pub(crate) fn build_parent(
             break;
         }
         published = resort;
-        let mut next = run(resort, relief.as_ref(), &mut repeats)?;
+        let mut next = run(resort, relief.as_ref(), assess, &mut repeats)?;
         next.attempted_topology.add(last.attempted_topology);
         if let (Some(b), Some(relief)) = (&mut next.built, &relief) {
             if resort == Resort::N3 {
-                b.relief_stuck = relief.stuck.len() as u32;
+                b.relief_stuck = u32::try_from(relief.stuck.len()).unwrap_or(u32::MAX);
             }
         }
         last = next;
@@ -1089,7 +1113,7 @@ pub(crate) fn build_parent(
         )?;
         next.attempted_topology.add(last.attempted_topology);
         if let (Some(b), Some(relief)) = (&mut next.built, &relief) {
-            b.relief_stuck = relief.stuck.len() as u32;
+            b.relief_stuck = u32::try_from(relief.stuck.len()).unwrap_or(u32::MAX);
         }
         last = next;
         published = Resort::N3Recovery;
@@ -2468,6 +2492,7 @@ fn attempt_mode(
         staged: false,
         rejection: None,
         primary: false,
+        p1: false,
         last_resort_stage: 0,
         relief_stuck: 0,
         interface_vertices: interface_vertices as u32,
@@ -2860,6 +2885,7 @@ mod tests {
                 calls.set(calls.get() + 1);
                 Ok((p == middle).then_some((a, b, 0.5, 1)))
             },
+            &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
             &mut |_| Ok(true),
             &|| Ok(()),
             true,

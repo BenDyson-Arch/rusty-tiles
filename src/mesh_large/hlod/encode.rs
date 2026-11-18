@@ -95,7 +95,7 @@ pub(crate) enum Mutation {
     #[cfg(test)]
     NoRepeatReuse,
     /// Refuse (as S2 controls) every proposal of the first `k` builds of the coarse
-    /// ladder: primary, fix 2, staged, N1, N2, N3. Reuse is off, since a replayed refusal
+    /// ladder: primary, P1, fix 2, staged, N1, N2, N3. Reuse is off, since a replayed refusal
     /// would stand for an assessment that is no longer the same.
     #[cfg(test)]
     RefuseBuilds(u8),

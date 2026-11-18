@@ -1904,6 +1904,7 @@ fn parent_jobs_allocate_within_their_charge() {
                     relief_floor: 0.,
                 },
                 &|_| Ok(None),
+                &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
                 &mut |_| Ok(true),
                 &|| Ok(()),
                 true,
@@ -5386,6 +5387,7 @@ fn ordinary_drops_under_pressure_go_smallest_first() {
             &[cap, cap],
             &contract,
             &|_| Ok(None),
+            &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
             &mut |_| Ok(true),
             &|| Ok(()),
             true,
@@ -5528,6 +5530,7 @@ fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
             &[cap, cap],
             &contract,
             &|_| Ok(None),
+            &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
             &mut |_| Ok(true),
             &|| Ok(()),
             true,
@@ -6087,14 +6090,16 @@ fn last_resort_records(dir: &Path) -> Vec<(u64, u64, u64, String)> {
         .iter()
         .map(|r| {
             let (stage, resort) = (r["stage"].as_u64().unwrap(), r["resort"].as_str().unwrap());
-            let expected = match resort {
-                "fix2" | "staged" => 0,
-                "n1" => 1,
-                "n2" => 2,
-                "n3" | "n3Recovery" | "rootCandidate" => 3,
+            let expected: &[u64] = match resort {
+                "fix2" | "staged" => &[0],
+                // P1: its default pass (0) or with N1's seam-owner licence (1).
+                "p1" => &[0, 1],
+                "n1" => &[1],
+                "n2" => &[2],
+                "n3" | "n3Recovery" | "rootCandidate" => &[3],
                 other => panic!("unknown resort {other}"),
             };
-            assert_eq!(stage, expected, "{r}");
+            assert!(expected.contains(&stage), "{r}");
             let refused: u64 = ["refusedDecode", "refusedTopology", "refusedControls"]
                 .iter()
                 .map(|k| r[k].as_u64().unwrap())
@@ -6750,8 +6755,8 @@ fn root_competition_fills_a_forced_own_build_omission_and_is_job_invariant() {
 }
 
 /// Each build of the ladder publishes with its own record. Refusing every proposal of the
-/// first k builds (as S2's controls would) makes the next build publish: fix 2, staged
-/// reduction, N1, N2, N3. Its record names that build and stage, gives the primary
+/// first k builds (as S2's controls would) makes the next build publish: P1, fix 2,
+/// staged reduction, N1, N2, N3. Its record names that build and stage, gives the primary
 /// build's refusal as the reason, and counts the refused primary proposals by check.
 #[test]
 fn every_ladder_build_publishes_with_its_record() {
@@ -6759,11 +6764,12 @@ fn every_ladder_build_publishes_with_its_record() {
     let source = grid((16, 16), (0., 100.), (0., 100.), &bump, [0.4, 0.5, 0.3, 1.]);
     let input = write_gltf(&work.path().join("src"), &[source]);
     for (k, resorts, want) in [
-        (1u8, &["fix2"][..], 0u64),
-        (2, &["staged"][..], 0),
-        (3, &["n1"][..], 1),
-        (4, &["n2"][..], 2),
-        (5, &["n3", "n3Recovery"][..], 3),
+        (1u8, &["p1"][..], &[0u64, 1][..]),
+        (2, &["fix2"][..], &[0][..]),
+        (3, &["staged"][..], &[0][..]),
+        (4, &["n1"][..], &[1][..]),
+        (5, &["n2"][..], &[2][..]),
+        (6, &["n3", "n3Recovery"][..], &[3][..]),
     ] {
         let dir = stage(
             &input,
@@ -6788,13 +6794,13 @@ fn every_ladder_build_publishes_with_its_record() {
             .collect();
         assert!(!forced.is_empty(), "k={k}: {records:?}");
         for r in &forced {
-            assert_eq!(r["stage"], want, "k={k}: {r}");
+            assert!(want.contains(&r["stage"].as_u64().unwrap()), "k={k}: {r}");
             assert_eq!(r["reason"], "proposalsRefused", "k={k}: {r}");
             assert!(r["refusedControls"].as_u64().unwrap() > 0, "k={k}: {r}");
             assert_eq!(r["refusedDecode"], 0, "k={k}: {r}");
             assert_eq!(r["refusedTopology"], 0, "k={k}: {r}");
         }
-        if k == 5 {
+        if k == 6 {
             published_and_valid("refused ladder", &dir, work.path());
         }
     }

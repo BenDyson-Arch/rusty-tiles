@@ -594,6 +594,7 @@ fn complete_parent(n: usize, third_contact: bool) {
                     Ok(Some((k, k, 0., if [a, b, c].contains(&k) { 2 } else { 1 })))
                 }
             },
+            &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
             &mut |_| {
                 assessed.set(assessed.get() + 1);
                 Ok(true)
@@ -718,6 +719,7 @@ fn a_highest_indexed_parent_builds_the_seam_faces_it_owns() {
                     Ok(Some((k, k, 0., if [a, b, c].contains(&k) { 2 } else { 1 })))
                 }
             },
+            &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
             &mut |_| Ok(true),
             &|| Ok(()),
             true,
@@ -778,6 +780,7 @@ fn seam_ownership_follows_the_point_holders_not_the_contract_rows() {
                     Ok(Some((k, k, 0., if [a, b, c].contains(&k) { 2 } else { 1 })))
                 }
             },
+            &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
             &mut |_| Ok(true),
             &|| Ok(()),
             true,
@@ -816,6 +819,7 @@ fn a_repeated_failed_contraction_is_reused_with_the_same_outcome() {
                     Ok(Some((k, k, 0., if [a, b, c].contains(&k) { 2 } else { 1 })))
                 }
             },
+            &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
             &mut |_| Ok(true),
             &|| Ok(()),
             true,
@@ -890,6 +894,7 @@ fn complete_parent_constrained_contraction_dense_rows_fit_charge() {
                     Ok(Some((k, k, 0., if [a, b].contains(&k) { 2 } else { 1 })))
                 }
             },
+            &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
             &mut |_| {
                 assessed.set(assessed.get() + 1);
                 Ok(true)

@@ -654,6 +654,23 @@ output is only a first proposal that develop's checks (interface retention, the 
 topology changes, S2) still judge. Tiles the earlier builds publish are unchanged. The audit
 records only this build's accepted proposal. Walem: 48 omitted cells to 14.
 
+P1 (2026-11-18): when develop's first strategies publish nothing, before fix 2, one build
+contracts the merged children onto the parent contract and simplifies them in one
+priority-queue pass of half-edge collapses, each checked locally so that it never makes what
+the fold guard, topology check and interface check refuse: the link condition, no face turned
+over or degenerate, no directed edge or face beyond the source's multiplicity, no new edge on
+two shared points that is neither a source edge nor a required segment, no new face on three
+shared points, and no required segment without a face. A border vertex the contract removes
+collapses only along its own arc. When such a vertex is fanned only by shared points, so that
+any removal makes a face on three of them (the #344 rock deadlock), it is replaced by one
+interior Steiner vertex snapped to its canonical leaf lattice, strictly inside the fan and
+never on the contract, with a sliver face closing the chord. The proposal goes through the
+same assessment as every other (decode validity, the contraction fold guard, topology
+change within the floor, S2), so P1 only adds a way to build a cell: tiles the first
+strategies publish are unchanged, and their ancestors change only through their inputs. A
+second pass adds N1's seam-owner licence and publishes as declared stage 1. The stage report
+names it `p1`.
+
 **Owner amendment, 2026-10-30 — constructive last resort (A2).** Replaces omission for
 every cell whose contract fits the cap (`minimum_triangles` within it). When develop's
 strategies, fix 2 and the staged reduction all publish nothing, the cell is rebuilt in three
