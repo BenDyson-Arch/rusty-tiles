@@ -227,6 +227,9 @@ pub(crate) struct HlodRow {
     pub retries: u32,
     #[serde(skip)]
     pub last_resort: bool,
+    /// How a retry published it, and its refused proposals by check (`LastResortRecord`).
+    #[serde(skip)]
+    pub retry: Option<(super::geometry::Retry, [u32; 3])>,
     /// The last-resort stage that built it (1-3) and its declared fold faces.
     #[serde(skip_serializing_if = "is_zero")]
     pub last_resort_stage: u8,

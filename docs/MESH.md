@@ -270,6 +270,12 @@ rule. A declaration does not certify source-distance maxima.
 Conversion `diagnostics.hlod` reports `last_resort_tiles`,
 `last_resort_stages` (counts for stages 1, 2 and 3), `fold_faces` and
 `declared_tiles` (including stage-0 tiles, with stage and fold count).
+`last_resort_records` lists every tile a retry published, with its stage, the
+publishing build and why the primary build did not publish it (also in the
+stage manifest as `hlod.lastResortRecords`; [VALIDATION.md](VALIDATION.md)
+lists the fields). When the root competition's candidate replaces a root a
+retry built, the record names `rootCandidate` and keeps the primary build's
+reason. It is a run record; validators do not read it.
 `diagnostics.hlod.repeat_reuse` counts the exact repeats the coarse ladder
 skipped: `contractions` (a build returned an earlier build's failed border
 contraction), `replayed_calls` (`Fix2` proposal calls replayed from the
