@@ -701,7 +701,8 @@ class WheelAPI(unittest.TestCase):
         installed = set(inspect.signature(rusty_tiles.mesh_to_tileset).parameters)
         documented = {"input", "output", "profile", "jobs", "scratch_dir", "memory_budget_bytes",
                       "anchor", "orientation_xyzw", "scene_offset", "source_crs", "source_axes",
-                      "source_offset", "source_offset_file", "height_offset", "force", "callback"}
+                      "source_offset", "source_offset_file", "height_offset", "force", "callback",
+                      "report_path"}
         self.assertEqual(installed, documented)
         shown = io.StringIO()
         with contextlib.redirect_stdout(shown):
