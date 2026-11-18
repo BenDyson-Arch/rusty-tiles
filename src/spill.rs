@@ -7,7 +7,7 @@
 //! independent of `R`, `F` and `jobs`. Every I/O failure is a typed [`SpillError`]; scratch files
 //! are removed on drop and on error.
 
-mod codec;
+pub(crate) mod codec;
 /// The block codec of compressed spill files, for callers that stage their own blocks.
 pub(crate) use codec::{decode as decode_block, encode as encode_block};
 mod scratch;

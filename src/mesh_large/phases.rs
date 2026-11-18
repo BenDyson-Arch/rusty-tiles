@@ -265,6 +265,10 @@ pub(crate) enum Step {
     InspectLoops,
     /// `mesh-inspect`: an intermediate merge pass of one of its sorts.
     InspectMerge,
+    /// Leaf delivery: every leaf's source crops planned (one unit per leaf).
+    LeafCrops,
+    /// Leaf delivery: source images decoded and their crops stored (one unit per image).
+    LeafCropStore,
 }
 impl Step {
     pub(crate) fn name(self) -> &'static str {
@@ -291,6 +295,8 @@ impl Step {
             Self::InspectEdges => "inspect_edges",
             Self::InspectLoops => "inspect_loops",
             Self::InspectMerge => "inspect_merge",
+            Self::LeafCrops => "leaf_crop_plan",
+            Self::LeafCropStore => "leaf_crop_store",
         }
     }
 }

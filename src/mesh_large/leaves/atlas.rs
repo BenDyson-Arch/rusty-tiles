@@ -857,6 +857,59 @@ pub(super) fn project_bounded(
         owned_bytes: owned,
     })
 }
+/// The crops `layout` reads from the crop store: every island of every CLAMP page's
+/// bindings, except MASK base colour, whose coverage samples read the decoded source.
+fn store_crops(
+    layout: &Layout,
+    page: &PagePlan,
+    drop: u32,
+) -> Result<Option<Vec<super::crop_store::CropRequest>>, JobError> {
+    if page.wrap != [CLAMP; 2] {
+        return Ok(None);
+    }
+    let mut keys = Vec::new();
+    for &bi in &page.bindings {
+        let b = &layout.bindings[bi];
+        if b.slot == TextureSlot::BaseColor && layout.masked[b.primitive] {
+            return Ok(None);
+        }
+        for island in &b.block.islands {
+            keys.push(super::crop_store::CropRequest::new(
+                b.image,
+                class(b.slot),
+                drop,
+                b.sampler,
+                &island.crop,
+            )?);
+        }
+    }
+    Ok(Some(keys))
+}
+/// Every crop a leaf's delivery at density `drop` can read from the crop store, from the
+/// same layout final preparation builds (the corner depths do not enter crops).
+pub(super) fn crop_requests(
+    triangles: &[FullTriangle],
+    resources: AtlasResources<'_>,
+    profile: Profile,
+    drop: u32,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<Vec<super::crop_store::CropRequest>, JobError> {
+    let layout = layout(
+        (triangles.to_vec(), vec![[0; 3]; triangles.len()]),
+        resources,
+        profile,
+        drop,
+        None,
+        check,
+    )?;
+    let mut keys = Vec::new();
+    for page in &layout.pages {
+        if let Some(page_keys) = store_crops(&layout, page, drop)? {
+            keys.extend(page_keys);
+        }
+    }
+    Ok(keys)
+}
 fn layout(
     geometry: (Vec<FullTriangle>, Vec<[u8; 3]>),
     resources: AtlasResources<'_>,
@@ -1054,6 +1107,8 @@ pub(super) struct Services<'a> {
     pub gate: &'a MemoryGate,
     /// Declared per-page workspace limit for internal allocation checks.
     pub memory: u64,
+    /// Every leaf's crops, cut image by image before delivery ([`super::crop_store`]).
+    pub crops: Option<&'a super::crop_store::CropStore>,
     pub check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
 }
 
@@ -1068,6 +1123,18 @@ fn page_charge(
     profile: Profile,
     drop: u32,
 ) -> Result<u64, JobError> {
+    page_charge_reading(page, bindings, image_info, profile, drop, true)
+}
+/// [`page_charge`], without the decode transient when the page reads its crops from the
+/// crop store (`decodes` false) and so never decodes a source image.
+fn page_charge_reading(
+    page: &PagePlan,
+    bindings: &[Binding],
+    image_info: &[source::ImageInfo],
+    profile: Profile,
+    drop: u32,
+    decodes: bool,
+) -> Result<u64, JobError> {
     let pixels = u64::from(page.width)
         .checked_mul(u64::from(page.height))
         .ok_or_else(resource)?;
@@ -1079,7 +1146,7 @@ fn page_charge(
         .checked_mul(if mipmapped { 42 } else { 32 })
         .ok_or_else(resource)?;
     let mut decode = 0u64;
-    for &bi in &page.bindings {
+    for &bi in page.bindings.iter().filter(|_| decodes) {
         let info = image_info.get(bindings[bi].image).ok_or_else(invariant)?;
         decode = decode.max(decode_transient(info, drop)?);
     }
@@ -1214,12 +1281,18 @@ fn encode_page(
         check: services.check,
         tier: delivery::Tier::Leaf,
     };
-    let _permit = services.gate.acquire(page_charge(
+    // A page the crop store covers reads no source image, so it leases no decode.
+    let stored = match services.crops {
+        Some(crops) => store_crops(layout, page, drop)?.filter(|keys| crops.covers(keys)),
+        None => None,
+    };
+    let _permit = services.gate.acquire(page_charge_reading(
         page,
         &layout.bindings,
         &captured.image_info,
         profile,
         drop,
+        stored.is_none(),
     )?)?;
     let bindings = &layout.bindings;
     let primitives = &layout.primitives;
@@ -1252,8 +1325,11 @@ fn encode_page(
         for &bi in &page.bindings {
             check()?;
             let b = &bindings[bi];
-            let source = density_image(services, b.image, b.slot, drop, check)?;
-            let size = source.size;
+            let source = match (&stored, services.crops) {
+                (Some(_), Some(_)) => None,
+                _ => Some(density_image(services, b.image, b.slot, drop, check)?),
+            };
+            let size = source.as_ref().map_or(b.source_size, |s| s.size);
             if size != b.source_size {
                 return Err(invariant());
             }
@@ -1266,7 +1342,21 @@ fn encode_page(
                         b.offset[0] + island.offset[0],
                         b.offset[1] + island.offset[1],
                     ];
-                    let copied = crops::copy_crop_tiled(&source.rgba, crop, b.sampler, memory)?;
+                    let copied = match (&source, services.crops) {
+                        (Some(source), _) => {
+                            crops::copy_crop_tiled(&source.rgba, crop, b.sampler, memory)?
+                        }
+                        (None, Some(store)) => store
+                            .crop(&super::crop_store::CropRequest::new(
+                                b.image,
+                                class(b.slot),
+                                drop,
+                                b.sampler,
+                                crop,
+                            )?)?
+                            .ok_or_else(invariant)?,
+                        (None, None) => return Err(invariant()),
+                    };
                     // The island's spans of crop texels: its mask cells (other islands may
                     // interlock into the rest of its rectangle), or the whole crop.
                     let spans: Vec<(u32, u32, u32)> = match &island.mask {
@@ -1313,10 +1403,10 @@ fn encode_page(
                 let (factor, cutoff) = captured.materials[id as usize]
                     .mask()
                     .ok_or_else(invariant)?;
-                let original = if drop == 0 {
-                    source
-                } else {
-                    source_image(services, b.image, check)?
+                // MASK pages never read the crop store, so their decoded source is here.
+                let original = match (drop, source) {
+                    (0, Some(source)) => source,
+                    _ => source_image(services, b.image, check)?,
                 };
                 surface.extend(samples(
                     &primitives[b.primitive],
