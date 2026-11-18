@@ -23,7 +23,11 @@ use super::super::{
 use super::{interface_points, Merged};
 use crate::JobError;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
-use std::{cmp::Ordering, collections::BinaryHeap};
+use std::{
+    cell::{Cell, RefCell},
+    cmp::Ordering,
+    collections::BinaryHeap,
+};
 
 /// Weight of the perpendicular boundary planes, times edge length squared.
 const BOUNDARY_WEIGHT: f64 = 10.;
@@ -69,6 +73,9 @@ pub(crate) struct Problem<'a> {
     pub steiner: bool,
     /// Snaps a Steiner position (replacing the given vertex) onto its canonical lattice.
     pub snap: Option<&'a dyn Fn([f32; 3], u32) -> [f32; 3]>,
+    /// The pass gives up (no result) once it has spent this many work units: faces and
+    /// neighbours visited by its adjacency scans and checks. Deterministic, unlike time.
+    pub work_limit: u64,
 }
 
 #[derive(Default, Debug, Clone, Copy, serde::Serialize)]
@@ -84,6 +91,9 @@ pub(crate) struct Stats {
     /// Refusals by reason: 1 vanish, 2 link, 3 pinch, 4 zero area, 5 flip, 6 reversed,
     /// 7 shared face, 8 coincident, 9 shared edge, 10 book, 11 segment, 12 not an edge.
     pub why: [u64; 13],
+    /// Work units spent (`State::work`), and whether `Problem::work_limit` stopped the pass.
+    pub work: u64,
+    pub exhausted: bool,
 }
 
 #[derive(PartialEq)]
@@ -184,6 +194,11 @@ struct State<'a> {
     alive_faces: usize,
     removes_left: usize,
     stats: Stats,
+    /// Per vertex: the scan epoch that last saw it (`neighbours` deduplicates in O(1)).
+    mark: RefCell<Vec<u32>>,
+    epoch: Cell<u32>,
+    /// Work units so far: faces and neighbours visited by adjacency scans and checks.
+    work: Cell<u64>,
 }
 
 /// Orientation bit of a face relative to its sorted triple (0: even permutation).
@@ -227,15 +242,36 @@ impl<'a> State<'a> {
             .filter(move |&f| self.alive[f as usize] && self.faces[f as usize].contains(&v))
     }
 
+    /// The live neighbours of `v` in first-seen order. A high-valence vertex (a fan apex)
+    /// is scanned in linear time: deduplication marks each neighbour with the scan's epoch.
     fn neighbours(&self, v: u32, out: &mut Vec<u32>) {
         out.clear();
+        let epoch = self.epoch.get().wrapping_add(1);
+        self.epoch.set(epoch);
+        let mut mark = self.mark.borrow_mut();
+        if epoch == 0 {
+            mark.iter_mut().for_each(|m| *m = 0);
+            self.epoch.set(1);
+        }
+        let epoch = self.epoch.get();
+        if mark.len() < self.pos.len() {
+            mark.resize(self.pos.len(), 0);
+        }
+        let mut scanned = 0u64;
         for f in self.live_faces(v) {
+            scanned += 1;
             for &w in &self.faces[f as usize] {
-                if w != v && !out.contains(&w) {
+                if w != v && mark[w as usize] != epoch {
+                    mark[w as usize] = epoch;
                     out.push(w);
                 }
             }
         }
+        self.work.set(self.work.get().saturating_add(scanned));
+    }
+
+    fn exhausted(&self) -> bool {
+        self.work.get() > self.p.work_limit
     }
 
     fn undirected(&self, a: u32, b: u32) -> u32 {
@@ -327,6 +363,8 @@ impl<'a> State<'a> {
             return 12;
         }
         let star_v = self.live_faces(v).count();
+        let visited = u64::try_from(star_u.len() + star_v).unwrap_or(u64::MAX);
+        self.work.set(self.work.get().saturating_add(visited));
         if moved.is_empty() && star_v == shared.len() {
             return 1; // the component would vanish
         }
@@ -773,6 +811,9 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
             .filter(|c| matches!(c, Class::Remove(_)))
             .count(),
         stats: Stats::default(),
+        mark: RefCell::new(vec![0; n]),
+        epoch: Cell::new(0),
+        work: Cell::new(0),
     };
     for (i, &t) in p.triangles.iter().enumerate() {
         for j in 0..3 {
@@ -816,6 +857,9 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
     }
     let mut nb = Vec::new();
     for _outer in 0..4 {
+        if st.exhausted() {
+            break;
+        }
         let before = (
             st.stats.collapses,
             st.stats.steiner,
@@ -829,7 +873,7 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
             }
         }
         while let Some(e) = heap.pop() {
-            if st.alive_faces <= p.target && st.removes_left == 0 {
+            if (st.alive_faces <= p.target && st.removes_left == 0) || st.exhausted() {
                 break;
             }
             let u = e.u;
@@ -862,7 +906,7 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
         // Rescue: a border vertex left on its arc. Simplify the free vertices around it
         // (cheapest valid collapse first), then retry it; a bounded number of rounds.
         let mut rounds = 0;
-        while st.removes_left > 0 && rounds < 64 {
+        while st.removes_left > 0 && rounds < 64 && !st.exhausted() {
             rounds += 1;
             let left: Vec<u32> = (0..id(n))
                 .filter(|&v| {
@@ -959,7 +1003,9 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
         .filter(|(_, a)| **a)
         .map(|(t, _)| *t)
         .collect();
-    let ok = st.removes_left == 0 && out.len() <= p.target.max(p.limit);
+    st.stats.work = st.work.get();
+    st.stats.exhausted = st.exhausted();
+    let ok = !st.stats.exhausted && st.removes_left == 0 && out.len() <= p.target.max(p.limit);
     (ok.then_some(out), st.stats, st.added)
 }
 
@@ -1077,6 +1123,7 @@ pub(crate) fn problem<'a>(
             keys: &m.keys,
             steiner: false,
             snap: None,
+            work_limit: u64::MAX,
             min_cos,
             owns_segment: None,
             owns_face: None,
@@ -1140,6 +1187,7 @@ mod tests {
             keys,
             steiner,
             snap: None,
+            work_limit: u64::MAX,
         }
     }
 
@@ -1220,6 +1268,98 @@ mod tests {
         assert!(
             faces.iter().all(|f| up(&positions, &[], *f) > 0.),
             "{faces:?}"
+        );
+    }
+
+    /// A planar grid of `n`×`n` cells, its outer ring locked, no interface.
+    fn grid(n: u32) -> (Vec<[f32; 3]>, Vec<[u32; 3]>, Vec<Class>) {
+        let w = n + 1;
+        let mut positions = Vec::new();
+        let mut class = Vec::new();
+        for j in 0..w {
+            for i in 0..w {
+                positions.push([i as f32, j as f32, 0.]);
+                let edge = i == 0 || j == 0 || i == n || j == n;
+                class.push(if edge { Class::Locked } else { Class::Free });
+            }
+        }
+        let mut triangles = Vec::new();
+        for j in 0..n {
+            for i in 0..n {
+                let v = j * w + i;
+                triangles.push([v, v + 1, v + w + 1]);
+                triangles.push([v, v + w + 1, v + w]);
+            }
+        }
+        (positions, triangles, class)
+    }
+
+    /// A raised, non-convex fan: one interior apex joined to every vertex of a star-shaped
+    /// rim. Collapsing the apex onto any rim vertex turns faces over, and every rim
+    /// collapse along the boundary changes the apex's neighbours: without a work bound the
+    /// apex is re-checked against all k candidates after each of k collapses.
+    fn fan(k: u32) -> (Vec<[f32; 3]>, Vec<[u32; 3]>, Vec<Class>) {
+        let mut positions = vec![[0., 0., 1.]];
+        for i in 0..k {
+            let a = std::f32::consts::TAU * i as f32 / k as f32;
+            let r = if i % 2 == 0 { 1. } else { 0.5 };
+            positions.push([r * a.cos(), r * a.sin(), 0.]);
+        }
+        let triangles = (0..k).map(|i| [0, 1 + i, 1 + (i + 1) % k]).collect();
+        (positions, triangles, vec![Class::Free; k as usize + 1])
+    }
+
+    fn free(
+        positions: &[[f32; 3]],
+        triangles: &[[u32; 3]],
+        class: Vec<Class>,
+        keys: &[Key],
+        target: usize,
+        work_limit: u64,
+    ) -> Stats {
+        let n = positions.len();
+        let p = Problem {
+            positions,
+            triangles,
+            class,
+            interface: vec![false; n],
+            segments: HashSet::default(),
+            target,
+            limit: target,
+            min_cos: 0.,
+            owns_segment: None,
+            owns_face: None,
+            keys,
+            steiner: false,
+            snap: None,
+            work_limit,
+        };
+        simplify(&p).1
+    }
+
+    #[test]
+    fn work_is_linear_on_a_grid_and_bounded_on_a_fan() {
+        let (positions, triangles, class) = grid(128);
+        let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        let faces = triangles.len();
+        let stats = free(&positions, &triangles, class, &keys, faces / 8, u64::MAX);
+        eprintln!(
+            "GRID faces={faces} work={} per face {:.1}",
+            stats.work,
+            stats.work as f64 / faces as f64
+        );
+        let (positions, triangles, class) = fan(4000);
+        let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        let faces = triangles.len();
+        let t = std::time::Instant::now();
+        let stats = free(&positions, &triangles, class, &keys, 16, u64::MAX);
+        eprintln!(
+            "FAN faces={faces} work={} per face {:.1} collapses={} checks={} {:?}",
+            stats.work,
+            stats.work as f64 / faces as f64,
+            stats.collapses,
+            stats.checks,
+            t.elapsed()
         );
     }
 }

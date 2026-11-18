@@ -11,7 +11,7 @@
 //! as last-resort stage 1).
 use super::super::{
     borders::Contract,
-    interfaces::{InterfaceRow, Key},
+    interfaces::Key,
     store::{StoppingBound, TileGeometry, TileKey},
 };
 use super::{
@@ -20,6 +20,18 @@ use super::{
 use crate::{mesh_large::leaves::geometry::LatticePlan, JobError};
 use rustc_hash::FxHashSet as HashSet;
 use std::borrow::Cow;
+
+/// Work units (`collapse::Problem::work_limit`) one P1 pass may spend per merged face before
+/// it gives up and the ladder continues: far above what ordinary meshes need (a planar grid
+/// spends about @@GRID@@ per face), so only a pathological star stops it (a high-valence apex
+/// re-checked against all its neighbours after every change around it).
+const WORK_PER_FACE: u64 = 1 << 12;
+
+fn work_limit(faces: usize) -> u64 {
+    u64::try_from(faces)
+        .unwrap_or(u64::MAX)
+        .saturating_mul(WORK_PER_FACE)
+}
 
 /// Upper estimate of what P1 holds at once for `vertices` merged vertices, `faces` faces and
 /// `rows` child interface rows: per vertex its merged copy, class, mapping, f64 position,
@@ -86,6 +98,7 @@ pub(super) fn attempt(
         collapse::problem(&m, children, interface, mapping, target, 0.)?;
     prob.limit = cap;
     prob.steiner = true;
+    prob.work_limit = work_limit(m.triangles.len());
     let snap = |p: [f32; 3], r: u32| {
         m.ells
             .get(r as usize)
