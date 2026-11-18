@@ -494,3 +494,37 @@ fn backstop_ends_a_run_blocked_in_a_texture_encode() {
     );
     assert!(names(&work.out()).is_empty(), "{:?}", names(&work.out()));
 }
+
+/// A subset bake's selection tests triangle centroids on worker threads; each task checks
+/// the run's stop every 1,024 triangles, and the calling thread keeps checking.
+#[test]
+fn mesh_subset_selection_stops() {
+    let work = Work::new();
+    let input = work.path("grid.glb");
+    fs::write(&input, support::textured_grid_glb(200)).unwrap();
+    let output = work.out().join("grid.3tz");
+    let run = stop_in(
+        &os(&[
+            &"mesh",
+            &"-i",
+            &input,
+            &"-o",
+            &output,
+            &"--jobs",
+            &"2",
+            &"--bbox",
+            &"0",
+            &"-1",
+            &"10",
+            &"1",
+            &"--scratch-dir",
+            &work.scratch(),
+        ]),
+        &[
+            ("RUSTY_TILES_TEST_PACE", "mesh.select"),
+            ("RUSTY_TILES_TEST_PACE_US", "1000000"),
+        ],
+        "mesh.select",
+    );
+    assert_stopped(&run, &work.scratch(), &work.out());
+}

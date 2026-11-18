@@ -215,6 +215,9 @@ impl<'a> Phases<'a> {
 pub(crate) enum Step {
     /// Preflight scan of the selected triangles.
     Scan,
+    /// A subset bake's selection: every triangle's centroid tested, then every POSITION
+    /// element of each expanded primitive marked or mapped.
+    Select,
     /// Accessor payload validation before any spill (one unit).
     Validate,
     /// Assembly: the vertices of every expanded primitive decoded (one unit per POSITION
@@ -261,6 +264,7 @@ impl Step {
     pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Scan => "capture_scan",
+            Self::Select => "capture_select",
             Self::Validate => "capture_validate",
             Self::Corners => "capture_corners",
             Self::Positions => "capture_positions",

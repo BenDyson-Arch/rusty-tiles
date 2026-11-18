@@ -10,6 +10,7 @@ use super::{
     resources::MemoryBudget,
     run_report::RunReport,
     source_crs::{MeshSourceCrs, MeshSourceCrsReport},
+    subset::{MeshSubset, MeshSubsetReport},
 };
 use crate::{
     mesh_archive::ResolvedPlacement, runtime::Staging, CleanupDiagnostic, JobError, JobErrorKind,
@@ -78,6 +79,7 @@ pub struct TilerRequest {
     scratch_dir: Option<PathBuf>,
     placement: MeshPlacement,
     source_crs: Option<MeshSourceCrs>,
+    subset: Option<MeshSubset>,
     policy: OutputPolicy,
     memory_budget: Option<u64>,
     report_path: Option<PathBuf>,
@@ -109,6 +111,7 @@ impl TilerRequest {
             scratch_dir: None,
             placement: MeshPlacement::Local,
             source_crs: None,
+            subset: None,
             policy: OutputPolicy::CreateNew,
             memory_budget: None,
             report_path: None,
@@ -195,6 +198,13 @@ impl TilerRequest {
         self.source_crs = Some(source_crs);
         self
     }
+    /// Bake only the source triangles whose centroid lies in `subset`'s region: post-node
+    /// glTF x and -z for a local source, WGS84 longitude and latitude with a source CRS.
+    /// Placement, the source CRS frame and the tile grid stay those of the whole source.
+    pub fn with_subset(mut self, subset: MeshSubset) -> Self {
+        self.subset = Some(subset);
+        self
+    }
     pub fn with_output_policy(mut self, policy: OutputPolicy) -> Self {
         self.policy = policy;
         self
@@ -255,6 +265,9 @@ pub struct TilerReport {
     /// The resolved source CRS; omitted for local sources.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_crs: Option<MeshSourceCrsReport>,
+    /// A subset bake's region, kept count and extent; omitted for a whole-source bake.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subset: Option<MeshSubsetReport>,
 }
 impl TilerReport {
     fn new(
@@ -311,6 +324,7 @@ impl TilerReport {
             root_transform: facts.root_transform,
             texel_ownership: leaf.texel_ownership.clone(),
             source_crs: capture.source_crs.clone(),
+            subset: capture.subset.clone(),
         }
     }
 }
@@ -377,6 +391,10 @@ pub struct MemoryDiagnostics {
     /// The direct assembly's working set within `capture_bound_bytes` (it runs before
     /// capture's sorts; the bound charges the larger).
     pub capture_assembly_bytes: u64,
+    /// A subset bake's selection within `capture_bound_bytes`: kept-triangle and
+    /// kept-vertex ranks and the polygon index. Absent without a subset.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub capture_subset_bytes: u64,
     pub leaf_minimum_bytes: u64,
     pub leaf_bound_bytes: u64,
     pub hlod: HlodMemoryPlan,
@@ -543,6 +561,9 @@ pub struct TilerResult {
 fn invalid(message: &str) -> JobError {
     JobError::new(JobErrorKind::InvalidRequest, message)
 }
+fn is_zero(n: &u64) -> bool {
+    *n == 0
+}
 
 /// Budget request rules, checked before any filesystem access.
 fn check_memory_budget(request: &TilerRequest) -> Result<(), JobError> {
@@ -568,6 +589,9 @@ fn preflight(request: &TilerRequest) -> Result<(PathBuf, ResolvedPlacement), Job
             ));
         }
         source_crs.check()?;
+        if let Some(subset) = &request.subset {
+            subset.check_geographic()?;
+        }
     }
     match std::fs::symlink_metadata(&request.output) {
         Ok(m) if !m.is_file() => return Err(invalid("mesh output must be a regular file path")),
@@ -668,6 +692,7 @@ fn run(
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs.into();
     config.source_crs = request.source_crs.clone();
+    config.subset = request.subset.clone();
     config.stop = Some(attempt.probe());
     let budget = MemoryBudget::resolve(request.memory_budget).map_err(|e| attempt.fail(e))?;
     config.memory_budget = Some(budget);
@@ -857,6 +882,7 @@ fn run(
             capture_minimum_bytes: capture_minimum,
             capture_bound_bytes: c.memory.bound_bytes,
             capture_assembly_bytes: c.memory.assembly_bytes,
+            capture_subset_bytes: c.memory.subset_bytes,
             leaf_minimum_bytes: plan.minimum_bytes(),
             leaf_bound_bytes: plan.bound_bytes(),
             hlod: hlod.clone(),
