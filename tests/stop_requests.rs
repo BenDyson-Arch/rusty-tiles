@@ -368,6 +368,35 @@ fn mesh_capture_tasks_stop() {
     assert_stopped(&run, &work.scratch(), &work.out());
 }
 
+/// Capture's direct assembly runs on worker threads; the calling thread checks the run's
+/// stop while they decode, key and stage triangles, and each bucket sort checks it first.
+#[test]
+fn mesh_assembly_stops() {
+    let work = Work::new();
+    let input = work.path("grid.glb");
+    fs::write(&input, support::textured_grid_glb(200)).unwrap();
+    let output = work.out().join("grid.3tz");
+    let run = stop_in(
+        &os(&[
+            &"mesh",
+            &"-i",
+            &input,
+            &"-o",
+            &output,
+            &"--jobs",
+            &"2",
+            &"--scratch-dir",
+            &work.scratch(),
+        ]),
+        &[
+            ("RUSTY_TILES_TEST_PACE", "mesh.assembly"),
+            ("RUSTY_TILES_TEST_PACE_US", "1000000"),
+        ],
+        "mesh.assembly",
+    );
+    assert_stopped(&run, &work.scratch(), &work.out());
+}
+
 /// Capture's cell tree builds its subtrees on worker threads; each checks the run's stop
 /// between units of 4,096 triangles, and the calling thread keeps checking while they run.
 #[test]

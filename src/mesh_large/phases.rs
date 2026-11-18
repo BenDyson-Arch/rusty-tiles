@@ -173,13 +173,14 @@ pub(crate) enum Step {
     Scan,
     /// Accessor payload validation before any spill (one unit).
     Validate,
-    /// Corner references read from the index accessors and sorted into runs.
+    /// Assembly: the vertices of every expanded primitive decoded (one unit per POSITION
+    /// element; the step keeps its name).
     Corners,
-    /// Merged corner references joined with their vertex attributes and sorted into runs.
+    /// Assembly: triangles keyed for the bucket histogram.
     Positions,
-    /// Merged positioned corners reassembled into triangles and sorted into runs.
+    /// Assembly: triangles built and staged in their buckets.
     Triangles,
-    /// Merged triangles written as the retained rank-ordered sequence.
+    /// Assembly: buckets sorted and written as the retained rank-ordered sequence.
     Sequence,
     /// An intermediate merge pass of one of the sorts (records rewritten).
     Merge,

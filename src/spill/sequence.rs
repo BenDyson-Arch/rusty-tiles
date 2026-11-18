@@ -124,9 +124,24 @@ impl<T: Record> SequenceWriter<T> {
     }
 
     pub(crate) fn push(&mut self, record: &T) -> Result<(), SpillError> {
+        record.encode_in(self.layout, &mut self.encoded);
+        self.push_encoded_record()
+    }
+
+    /// Appends one record already encoded under the writer's layout (`bytes` is exactly one
+    /// record's size).
+    pub(crate) fn push_encoded(&mut self, bytes: &[u8]) -> Result<(), SpillError> {
+        if bytes.len() != self.encoded.len() {
+            return Err(SpillError::InvalidConfig("encoded record size differs"));
+        }
+        self.encoded.copy_from_slice(bytes);
+        self.push_encoded_record()
+    }
+
+    /// Writes the record in `self.encoded`.
+    fn push_encoded_record(&mut self) -> Result<(), SpillError> {
         if self.blocks.is_some() {
             let records = self.records.checked_add(1).ok_or(SpillError::Overflow)?;
-            record.encode_in(self.layout, &mut self.encoded);
             let blocks = self.blocks.as_mut().expect("block writer");
             blocks.raw.extend_from_slice(&self.encoded);
             let full =
@@ -141,7 +156,6 @@ impl<T: Record> SequenceWriter<T> {
         let bytes = records
             .checked_mul(self.encoded.len() as u64)
             .ok_or(SpillError::Overflow)?;
-        record.encode_in(self.layout, &mut self.encoded);
         // Include the attempted record before writing: a failed write may have emitted a
         // strict prefix. Counting its full size remains conservative on that failure path.
         self.file.completed(bytes);
@@ -272,6 +286,12 @@ impl<T: Record> Sequence<T> {
 impl<T: Record> Sequence<T> {
     /// Positioned access to the completed records, independent of any sequential reader.
     pub(crate) fn random(&self) -> Result<RandomRecords<T>, SpillError> {
+        self.random_cached(1)
+    }
+
+    /// [`Self::random`] keeping up to `blocks` decoded blocks of a compressed sequence, the
+    /// least recently used replaced first (see [`random_cache_bound`]).
+    pub(crate) fn random_cached(&self, blocks: usize) -> Result<RandomRecords<T>, SpillError> {
         let file = self
             .io
             .open_random(self.file.path())
@@ -282,7 +302,10 @@ impl<T: Record> Sequence<T> {
             records: self.records,
             layout: self.layout,
             blocks: self.blocks.clone(),
-            cache: std::sync::Mutex::new((usize::MAX, Vec::new(), Vec::new())),
+            cache: std::sync::Mutex::new(BlockCache {
+                capacity: blocks.max(1),
+                ..BlockCache::default()
+            }),
             _record: PhantomData,
         })
     }
@@ -433,20 +456,71 @@ pub(crate) struct RandomRecords<T: Record> {
     records: u64,
     layout: Layout,
     blocks: Option<Arc<BlockIndex>>,
-    /// The last block decoded (compressed sequences): its index, its records' bytes and the
-    /// buffer its compressed copy was read into. Neighbouring reads reuse it.
-    cache: std::sync::Mutex<(usize, Vec<u8>, Vec<u8>)>,
+    /// The blocks last decoded (compressed sequences); neighbouring reads reuse them.
+    cache: std::sync::Mutex<BlockCache>,
     _record: PhantomData<T>,
 }
 
-/// The most a positioned reader of a compressed sequence of `record_bytes` records holds
-/// besides the caller's buffers: one decoded block and its compressed copy, each at most the
-/// block target (64 KiB) or one record when that is larger.
-pub(crate) fn random_cache_bound(record_bytes: usize) -> u64 {
-    2 * record_bytes.max(64 << 10) as u64
+/// Decoded blocks of a compressed sequence (index, records' bytes, last use), the buffer the
+/// compressed copy of a block is read into, and how many blocks were decoded.
+#[derive(Default)]
+struct BlockCache {
+    capacity: usize,
+    blocks: Vec<(usize, Vec<u8>, u64)>,
+    compressed: Vec<u8>,
+    tick: u64,
+    decoded: u64,
+}
+
+impl BlockCache {
+    /// The cached bytes of `block`, decoding it into the least recently used slot when absent.
+    /// A failed read leaves that slot empty.
+    fn get(
+        &mut self,
+        index: &BlockIndex,
+        file: &File,
+        block: usize,
+        records: u64,
+    ) -> io::Result<&[u8]> {
+        self.tick += 1;
+        let tick = self.tick;
+        let slot = match self.blocks.iter().position(|b| b.0 == block) {
+            Some(slot) => slot,
+            None => {
+                let slot = if self.blocks.len() < self.capacity {
+                    self.blocks.push((usize::MAX, Vec::new(), 0));
+                    self.blocks.len() - 1
+                } else {
+                    (0..self.blocks.len())
+                        .min_by_key(|&i| self.blocks[i].2)
+                        .expect("a cache holds at least one block")
+                };
+                let entry = &mut self.blocks[slot];
+                entry.0 = usize::MAX;
+                index.read_block(file, block, records, &mut self.compressed, &mut entry.1)?;
+                entry.0 = block;
+                self.decoded += 1;
+                slot
+            }
+        };
+        self.blocks[slot].2 = tick;
+        Ok(&self.blocks[slot].1)
+    }
+}
+
+/// The most a positioned reader of a compressed sequence of `record_bytes` records, keeping
+/// `blocks` decoded blocks, holds besides the caller's buffers: those blocks and one
+/// compressed copy, each at most the block target (64 KiB) or one record when that is larger.
+pub(crate) fn random_cache_bound(record_bytes: usize, blocks: usize) -> u64 {
+    (blocks.max(1) as u64 + 1) * record_bytes.max(64 << 10) as u64
 }
 
 impl<T: Record> RandomRecords<T> {
+    /// Blocks decoded so far (compressed sequences): a measure of read locality.
+    pub(crate) fn decoded_blocks(&self) -> u64 {
+        self.cache.lock().unwrap_or_else(|e| e.into_inner()).decoded
+    }
+
     /// Replaces `out` with records `first..first + count`; the range must lie in the sequence.
     pub(crate) fn read(
         &self,
@@ -468,18 +542,12 @@ impl<T: Record> RandomRecords<T> {
             // records are copied out.
             encoded.clear();
             let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
-            let (cached, raw, compressed) = &mut *cache;
             let mut at = first;
             while at < end {
                 let block = (at / index.per_block) as usize;
-                if *cached != block {
-                    // A failed read leaves no block cached.
-                    *cached = usize::MAX;
-                    index
-                        .read_block(&self.file, block, self.records, compressed, raw)
-                        .map_err(|e| SpillError::io("read spill sequence", &self.path, e))?;
-                    *cached = block;
-                }
+                let raw = cache
+                    .get(index, &self.file, block, self.records)
+                    .map_err(|e| SpillError::io("read spill sequence", &self.path, e))?;
                 let start = block as u64 * index.per_block;
                 let lo = (at - start) as usize * size;
                 let hi = ((end.min(start + index.per_block) - start) as usize) * size;

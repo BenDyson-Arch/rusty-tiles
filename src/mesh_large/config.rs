@@ -111,6 +111,9 @@ pub(crate) struct TreeConfig {
     /// fixtures otherwise keep their small sort configuration to exercise spilling).
     #[cfg(test)]
     pub test_sort_plan: bool,
+    /// Test seam: the assembly's plan, replacing the one capture derives from the budget.
+    #[cfg(test)]
+    pub test_assembly: Option<super::assembly::AssemblyPlan>,
 }
 
 impl TreeConfig {
@@ -156,6 +159,8 @@ impl TreeConfig {
             test_record_limits: None,
             #[cfg(test)]
             test_sort_plan: false,
+            #[cfg(test)]
+            test_assembly: None,
         }
     }
 

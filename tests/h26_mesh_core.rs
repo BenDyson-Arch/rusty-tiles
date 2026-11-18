@@ -405,8 +405,9 @@ fn capture_reports_every_step_with_its_total_and_honours_a_cancel_inside_capture
     );
     let total = |name: &str| steps.iter().find(|s| s.phase == name).unwrap().total;
     assert_eq!(total("capture_scan"), triangles);
-    assert_eq!(total("capture_corners"), 3 * triangles);
-    assert_eq!(total("capture_positions"), 3 * triangles);
+    // Every POSITION element of the grid's one primitive is decoded.
+    assert_eq!(total("capture_corners"), u64::from((side + 1) * (side + 1)));
+    assert_eq!(total("capture_positions"), triangles);
     assert_eq!(total("capture_triangles"), triangles);
     assert_eq!(total("capture_sequence"), triangles);
     assert_eq!(total("capture_tree"), triangles);

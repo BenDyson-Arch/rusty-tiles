@@ -149,6 +149,7 @@ fn horizontal_required() -> Error {
     Error::Data("use a 2D horizontal CRS and explicit ellipsoidal height offset; compound/geocentric CRS is unsupported".into())
 }
 
+#[derive(Clone)]
 pub(crate) struct PureTransform {
     source: Proj,
     target: Proj,

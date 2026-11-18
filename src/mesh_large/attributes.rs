@@ -1,26 +1,22 @@
-//! Bounded full vertex-attribute capture. Images must be captured separately before the
-//! caller releases source ownership. At most six accessor windows are live in the join;
-//! callers must additionally charge the typed sorter runs and merge buffers.
+//! Full vertex attributes: the per-corner record, the attribute layout of a run and the
+//! decoding of one vertex's attributes, which the direct assembly (`assembly`) builds
+//! triangles from.
+#[cfg(test)]
+use super::{capture::SourceScan, phases::StepProgress, source_crs::SourceFrame};
 use super::{
-    capture::{canonical, source_position, triangle_bytes, vertices, SourceScan},
     input::{ElementReader, StreamSource},
-    phases::{Step, StepProgress},
-    records::{Bounds, CornerPosition, CornerRef, Cube, Provenance, TriangleRecord},
-    source_crs::{Jacobian, SourceFrame},
+    records::TriangleRecord,
+    source_crs::Jacobian,
 };
+#[cfg(test)]
+use crate::spill::{Scratch, SortConfig};
 use crate::{
     gltf_source::source::ScenePrimitive,
-    spill::{ExternalSorter, Layout, Record, Scratch, SortConfig, SortedStream},
+    spill::{Layout, Record},
     JobError, JobErrorKind,
 };
 use std::cmp::Ordering;
 type Result<T> = std::result::Result<T, JobError>;
-fn invalid(message: impl Into<String>) -> JobError {
-    JobError::new(JobErrorKind::InvalidInput, message)
-}
-fn invariant(message: &'static str) -> JobError {
-    JobError::new(JobErrorKind::InvalidState, message)
-}
 fn overflow() -> JobError {
     JobError::new(
         JobErrorKind::ResourceLimit,
@@ -55,7 +51,7 @@ pub(crate) fn corner_attribute_bytes(layout: Layout) -> usize {
         .map(|(_, bytes)| bytes)
         .sum()
 }
-fn flags(p: &ScenePrimitive<'_>) -> u8 {
+pub(super) fn flags(p: &ScenePrimitive<'_>) -> u8 {
     (u8::from(p.normal.is_some()) * NORMAL)
         | (u8::from(p.tangent.is_some()) * TANGENT)
         | (u8::from(p.texcoords[0].is_some()) * UV0)
@@ -85,7 +81,7 @@ impl CornerAttributes {
     }
     /// Writes the fields `layout` keeps (`out.len() == corner_attribute_bytes(layout)`); the
     /// omitted fields must be zero, which capture guarantees by flag.
-    fn encode(&self, layout: Layout, out: &mut [u8]) {
+    pub(super) fn encode(&self, layout: Layout, out: &mut [u8]) {
         // Decode restores omitted fields as +0.0: any other bits would not round-trip.
         debug_assert!(
             self.fields(Layout(!layout.0)).all(|v| v.to_bits() == 0),
@@ -100,7 +96,7 @@ impl CornerAttributes {
             dst.copy_from_slice(&v.to_le_bytes());
         }
     }
-    fn decode(layout: Layout, bytes: &[u8]) -> Self {
+    pub(super) fn decode(layout: Layout, bytes: &[u8]) -> Self {
         let mut values = bytes
             .as_chunks::<4>()
             .0
@@ -198,49 +194,6 @@ impl Record for FullTriangle {
         }
     }
 }
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct FullCorner {
-    pub corner: CornerPosition,
-    pub attributes: CornerAttributes,
-}
-impl PartialEq for FullCorner {
-    fn eq(&self, other: &Self) -> bool {
-        self.corner == other.corner
-    }
-}
-impl Eq for FullCorner {}
-impl PartialOrd for FullCorner {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl Ord for FullCorner {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.corner.cmp(&other.corner)
-    }
-}
-impl Record for FullCorner {
-    const SIZE: usize = 97;
-    fn encode(&self, out: &mut [u8]) {
-        self.encode_in(Layout::FULL, out);
-    }
-    fn decode(bytes: &[u8]) -> Self {
-        Self::decode_in(Layout::FULL, bytes)
-    }
-    fn size_in(layout: Layout) -> usize {
-        37 + corner_attribute_bytes(layout)
-    }
-    fn encode_in(&self, layout: Layout, out: &mut [u8]) {
-        self.corner.encode(&mut out[..37]);
-        self.attributes.encode(layout, &mut out[37..]);
-    }
-    fn decode_in(layout: Layout, bytes: &[u8]) -> Self {
-        Self {
-            corner: CornerPosition::decode(&bytes[..37]),
-            attributes: CornerAttributes::decode(layout, &bytes[37..]),
-        }
-    }
-}
 fn normalize(mapped: [f64; 3], role: &str) -> Result<[f32; 3]> {
     let norm = mapped.into_iter().map(|x| x * x).sum::<f64>().sqrt();
     if !norm.is_finite() || norm == 0. {
@@ -251,7 +204,7 @@ fn normalize(mapped: [f64; 3], role: &str) -> Result<[f32; 3]> {
     }
     Ok(mapped.map(|v| (v / norm) as f32))
 }
-fn read_attributes(
+pub(super) fn read_attributes(
     p: &ScenePrimitive<'_>,
     vertex: u64,
     jacobian: Option<&Jacobian>,
@@ -313,255 +266,62 @@ fn read_attributes(
     }
     Ok(out)
 }
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
-/// Captures all selected geometry and vertex attributes, retaining every triangle and
-/// degenerate. The returned stream reads only scratch; image bytes are not captured here.
-pub(crate) fn capture_full<'s>(
+/// Captures all selected geometry and vertex attributes with the direct assembly in the
+/// local frame, retaining every triangle and degenerate: the unit tests' facade. Returns the
+/// rank-ordered records.
+#[cfg(test)]
+pub(crate) fn capture_full(
     source: &StreamSource,
-    scratch: &'s Scratch,
+    scratch: &Scratch,
     sort: SortConfig,
     scan: &SourceScan,
-    progress: &'s StepProgress<'_>,
-) -> Result<SortedStream<'s, FullTriangle>> {
-    let mut scan = *scan;
-    capture_full_in(
+    progress: &StepProgress<'_>,
+) -> Result<std::vec::IntoIter<Result<FullTriangle>>> {
+    let plan = super::assembly::AssemblyPlan::fixed(1, 0).with_vertex_allowance(u64::MAX);
+    let rows = capture_full_with(
         source,
-        &mut SourceFrame::Local,
         scratch,
         sort,
         attribute_layout(source),
-        &mut scan,
+        scan,
+        plan,
         progress,
-    )
+    )?;
+    Ok(rows.into_iter().map(Ok).collect::<Vec<_>>().into_iter())
 }
-/// [`capture_full`] in a resolved frame. A source CRS frame checks the used post-node source
-/// bounds against the scan's and replaces `scan.bounds` with the mapped box before the cube
-/// keys are assigned; the scan never maps positions. Both sorts spill under `layout`, which
-/// must hold every selected primitive's attributes ([`attribute_layout`]). `progress`
-/// receives the corner, position and triangle steps and every sort checkpoint.
-pub(crate) fn capture_full_in<'s>(
+
+/// [`capture_full`] under `layout` and `plan`.
+#[cfg(test)]
+pub(crate) fn capture_full_with(
     source: &StreamSource,
-    frame: &mut SourceFrame,
-    scratch: &'s Scratch,
+    scratch: &Scratch,
     sort: SortConfig,
     layout: Layout,
-    scan: &mut SourceScan,
-    progress: &'s StepProgress<'_>,
-) -> Result<SortedStream<'s, FullTriangle>> {
-    progress.begin(Step::Validate, 1)?;
-    // On capture's workers, at most two bounded readers each (within the per-job term).
-    source.validate_payload_parallel(sort.buffer_bytes, sort.jobs.max(1), &mut || {
-        progress.check()
-    })?;
-    progress.end()?;
-    let corners_total = scan.triangles.checked_mul(3).ok_or_else(overflow)?;
-    // Only a primitive's own attributes are ever nonzero, so a layout holding them all drops
-    // nothing but zeros. Checked once per primitive, never per record.
-    if source
-        .document
-        .scene_primitives()
-        .any(|p| flags(&p) & !layout.0 != 0)
-    {
-        return Err(invariant(
-            "attribute layout omits a selected primitive's attribute",
-        ));
-    }
-    progress.begin(Step::Corners, corners_total)?;
-    let mut corners = ExternalSorter::<CornerRef>::new(scratch, sort)?.observed(progress);
-    let mut read = 0u64;
-    for (ordinal, p) in source.document.scene_primitives().enumerate() {
-        progress.check()?;
-        let ordinal = u64::try_from(ordinal).map_err(|_| overflow())?;
-        let mut indices = p.indices.map(|v| source.reader(&v, sort.buffer_bytes));
-        for triangle in 0..p.triangles {
-            if triangle.is_multiple_of(1024) {
-                progress.advance(read)?;
-            }
-            read += 3;
-            for (corner, vertex) in vertices(&p, &mut indices, triangle)?
-                .into_iter()
-                .enumerate()
-            {
-                corners.push(CornerRef {
-                    primitive: ordinal,
-                    vertex,
-                    triangle: u64::try_from(triangle).map_err(|_| overflow())?,
-                    corner: corner as u8,
-                })?;
-            }
-        }
-    }
-    // Finishing waits for run writers and may merge: still inside the step.
-    let mut corners = corners.finish()?;
-    progress.end()?;
-    progress.begin(Step::Positions, corners_total)?;
-    let mut next = corners.next().transpose()?;
-    let mut positioned =
-        ExternalSorter::<FullCorner>::with_layout(scratch, sort, layout)?.observed(progress);
-    let mut joined = 0u64;
-    let mut mapped_bounds = Bounds::EMPTY;
-    let mut source_bounds = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
-    for (ordinal, p) in source.document.scene_primitives().enumerate() {
-        let ordinal = u64::try_from(ordinal).map_err(|_| overflow())?;
-        let mut positions = source.reader(&p.position, sort.buffer_bytes);
-        let mut normals = p.normal.map(|v| source.reader(&v, sort.buffer_bytes));
-        let mut tangents = p.tangent.map(|v| source.reader(&v, sort.buffer_bytes));
-        let mut uvs = p
-            .texcoords
-            .map(|v| v.map(|v| source.reader(&v, sort.buffer_bytes)));
-        let mut colors = p.color.map(|v| source.reader(&v, sort.buffer_bytes));
-        let mut cached = None;
-        let mut records = 0u64;
-        while let Some(corner) = next.filter(|c| c.primitive == ordinal) {
-            if records.is_multiple_of(3072) {
-                progress.advance(joined + records)?;
-            }
-            let (position, attributes) =
-                if let Some((_, value)) = cached.filter(|(v, _)| *v == corner.vertex) {
-                    value
-                } else {
-                    let world = source_position(&p, &mut positions, corner.vertex)?;
-                    let (position, jacobian) =
-                        frame.vertex(world, normals.is_some() || tangents.is_some())?;
-                    let position = canonical(position);
-                    mapped_bounds.include(position);
-                    for axis in 0..3 {
-                        source_bounds[0][axis] = source_bounds[0][axis].min(world[axis]);
-                        source_bounds[1][axis] = source_bounds[1][axis].max(world[axis]);
-                    }
-                    let attributes = read_attributes(
-                        &p,
-                        corner.vertex,
-                        jacobian.as_ref(),
-                        &mut normals,
-                        &mut tangents,
-                        &mut uvs,
-                        &mut colors,
-                    )?;
-                    cached = Some((corner.vertex, (position, attributes)));
-                    (position, attributes)
-                };
-            positioned.push(FullCorner {
-                corner: CornerPosition {
-                    primitive: corner.primitive,
-                    triangle: corner.triangle,
-                    corner: corner.corner,
-                    vertex: corner.vertex,
-                    position,
-                },
-                attributes,
-            })?;
-            records = records.checked_add(1).ok_or_else(overflow)?;
-            next = corners.next().transpose()?;
-        }
-        if records
-            != u64::try_from(p.triangles)
-                .map_err(|_| overflow())?
-                .checked_mul(3)
-                .ok_or_else(overflow)?
-        {
-            return Err(invariant(
-                "corner reference stream disagrees with admitted primitive",
-            ));
-        }
-        joined += records;
-    }
-    if next.is_some() {
-        return Err(invariant("unmatched corner reference after POSITION join"));
-    }
-    drop(corners);
-    if let Some(expected) = frame.source_bounds() {
-        if source_bounds != expected {
-            return Err(invalid(
-                "mesh source geometry changed between preflight and capture",
-            ));
-        }
-        scan.bounds = mapped_bounds;
-    }
-    let mut positioned = positioned.finish()?;
-    progress.end()?;
-    progress.begin(Step::Triangles, scan.triangles)?;
-    let mut triangles =
-        ExternalSorter::<FullTriangle>::with_layout(scratch, sort, layout)?.observed(progress);
-    let cube = Cube::around(&scan.bounds);
-    let mut count = 0u64;
-    let mut bounds = Bounds::EMPTY;
-    let mut geometry_bytes = 0u64;
-    for (ordinal, p) in source.document.scene_primitives().enumerate() {
-        let ordinal = u64::try_from(ordinal).map_err(|_| overflow())?;
-        let bytes = triangle_bytes(&p);
-        for triangle in 0..p.triangles {
-            if triangle.is_multiple_of(1024) {
-                progress.advance(count)?;
-            }
-            let mut positions = [[0.; 3]; 3];
-            let mut vertices = [0; 3];
-            let mut attributes = [CornerAttributes::default(); 3];
-            for corner in 0..3 {
-                let value = positioned
-                    .next()
-                    .transpose()?
-                    .ok_or_else(|| invariant("missing positioned corner"))?;
-                if (
-                    value.corner.primitive,
-                    value.corner.triangle,
-                    value.corner.corner,
-                ) != (ordinal, triangle as u64, corner as u8)
-                {
-                    return Err(invariant(
-                        "positioned corner stream order disagrees with provenance",
-                    ));
-                }
-                positions[corner] = value.corner.position;
-                vertices[corner] = value.corner.vertex;
-                bounds.include(value.corner.position);
-                attributes[corner] = value.attributes;
-            }
-            let degenerate = positions[0] == positions[1]
-                || positions[0] == positions[2]
-                || positions[1] == positions[2];
-            triangles.push(FullTriangle {
-                triangle: TriangleRecord {
-                    key: cube.key(&positions),
-                    source: Provenance {
-                        node: p.node,
-                        mesh: p.mesh,
-                        primitive: p.primitive,
-                        triangle: triangle as u64,
-                    },
-                    vertices,
-                    positions,
-                    bytes,
-                    degenerate,
-                },
-                expanded_ordinal: ordinal,
-                material: p.material.unwrap_or(u32::MAX),
-                flags: flags(&p),
-                corners: attributes,
-            })?;
-            count = count.checked_add(1).ok_or_else(overflow)?;
-            geometry_bytes = geometry_bytes
-                .checked_add(u64::from(bytes))
-                .ok_or_else(overflow)?;
-        }
-    }
-    if positioned.next().transpose()?.is_some() {
-        return Err(invariant("extra positioned corner"));
-    }
-    drop(positioned);
-    source.verify_unchanged()?;
-    if count != scan.triangles || geometry_bytes != scan.geometry_bytes || bounds != scan.bounds {
-        return Err(invalid(
-            "mesh source geometry changed between preflight and capture",
-        ));
-    }
-    let triangles = triangles.finish()?;
-    progress.end()?;
-    Ok(triangles)
+    scan: &SourceScan,
+    plan: super::assembly::AssemblyPlan,
+    progress: &StepProgress<'_>,
+) -> Result<Vec<FullTriangle>> {
+    let mut scan = *scan;
+    source.validate_payload(sort.buffer_bytes, &mut || Ok(()))?;
+    let mut frame = SourceFrame::Local;
+    let (rows, _) = super::assembly::assemble(
+        source,
+        &mut frame,
+        scratch,
+        layout,
+        &mut scan,
+        plan,
+        sort.jobs.max(1),
+        sort,
+        progress,
+    )?;
+    let rows = rows.reader()?.collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(rows)
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::records::Provenance;
     use super::*;
     use serde_json::json;
     use std::fs;
@@ -603,19 +363,6 @@ mod tests {
         let bytes = wire(&triangle);
         assert_eq!(bytes.len(), 286);
         assert_eq!(wire(&FullTriangle::decode(&bytes)), bytes);
-        let corner = FullCorner {
-            corner: CornerPosition {
-                primitive: large,
-                triangle: large + 1,
-                corner: 2,
-                vertex: large + 2,
-                position: [1., 2., 3.],
-            },
-            attributes,
-        };
-        let bytes = wire(&corner);
-        assert_eq!(bytes.len(), 97);
-        assert_eq!(wire(&FullCorner::decode(&bytes)), bytes);
         let mut later = triangle;
         later.expanded_ordinal += 1;
         assert!(triangle < later);
@@ -673,17 +420,15 @@ mod tests {
 
     /// Every attribute layout round-trips every record whose attributes it holds, byte for
     /// byte against the full encoding, at exactly the documented width; the full layout is
-    /// the unchanged 286/97-byte wire.
+    /// the unchanged 286-byte wire.
     #[test]
     fn attribute_layouts_round_trip_at_their_widths() {
         assert_eq!(corner_attribute_bytes(Layout::FULL), 60);
         assert_eq!(FullTriangle::size_in(Layout::FULL), FullTriangle::SIZE);
-        assert_eq!(FullCorner::size_in(Layout::FULL), FullCorner::SIZE);
         // The evidence inputs: crop3 (NORMAL, COLOR_0), tex3 (TEXCOORD_0), positions only.
         assert_eq!(FullTriangle::size_in(Layout(NORMAL | COLOR)), 190);
         assert_eq!(FullTriangle::size_in(Layout(UV0)), 130);
         assert_eq!(FullTriangle::size_in(Layout(0)), 106);
-        assert_eq!(FullCorner::size_in(Layout(UV0)), 45);
         for flags in 0..=ALL {
             let row = layout_row(flags);
             let full = wire(&row);
@@ -694,19 +439,6 @@ mod tests {
                 let mut bytes = vec![0; size];
                 row.encode_in(layout, &mut bytes);
                 assert_eq!(wire(&FullTriangle::decode_in(layout, &bytes)), full);
-                let corner = FullCorner {
-                    corner: CornerPosition {
-                        primitive: 1,
-                        triangle: 2,
-                        corner: 1,
-                        vertex: 3,
-                        position: [1., 2., 3.],
-                    },
-                    attributes: row.corners[1],
-                };
-                let mut bytes = vec![0; FullCorner::size_in(layout)];
-                corner.encode_in(layout, &mut bytes);
-                assert_eq!(wire(&FullCorner::decode_in(layout, &bytes)), wire(&corner));
             }
         }
     }
@@ -874,8 +606,8 @@ mod tests {
     }
 
     /// Captures the scene at `input` under the full layout and under the run's attribute
-    /// layout (which must equal `expected`) through spilled sorts; the records must be
-    /// byte-equal and the compact run must spill fewer bytes. A layout missing a selected
+    /// layout (which must equal `expected`), with the decoded vertices in memory and spilled,
+    /// and small buckets; the records must be byte-equal. A layout missing a selected
     /// primitive's attribute is refused before any record is written.
     fn assert_compact_captures_full(
         dir: &tempfile::TempDir,
@@ -895,27 +627,26 @@ mod tests {
         };
         let layout = attribute_layout(&source);
         assert_eq!(layout, expected);
-        let run = |layout: Layout| {
-            let mut scan = scan;
-            let sorted = capture_full_in(
+        let run = |layout: Layout, vertices: u64| {
+            let plan =
+                super::super::assembly::AssemblyPlan::fixed(1, 0).with_vertex_allowance(vertices);
+            let rows = capture_full_with(
                 &source,
-                &mut SourceFrame::Local,
                 &scratch,
                 sort,
                 layout,
-                &mut scan,
+                &scan,
+                plan,
                 StepProgress::silent(),
             )?;
-            let spilled = sorted.stats().spilled_bytes;
-            let rows = sorted.map(|row| row.map(|row| wire(&row)));
-            Ok::<_, JobError>((rows.collect::<std::result::Result<Vec<_>, _>>()?, spilled))
+            Ok::<_, JobError>(rows.iter().map(wire).collect::<Vec<_>>())
         };
-        let (full, full_spilled) = run(Layout::FULL).unwrap();
-        let (compact, compact_spilled) = run(layout).unwrap();
+        let full = run(Layout::FULL, u64::MAX).unwrap();
+        let compact = run(layout, u64::MAX).unwrap();
         assert_eq!(compact, full);
-        assert!(compact_spilled > 0);
-        assert!(compact_spilled < full_spilled);
-        let error = run(Layout(NORMAL & expected.0)).unwrap_err();
+        assert_eq!(run(layout, 0).unwrap(), full, "spilled vertex stores");
+        let _ = run_bytes;
+        let error = run(Layout(NORMAL & expected.0), u64::MAX).unwrap_err();
         assert_eq!(error.kind(), JobErrorKind::InvalidState);
         assert_eq!(scratch.live_bytes(), 0);
         compact

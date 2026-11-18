@@ -639,7 +639,7 @@ on the output filesystem beside the destination. Prefer disk-backed scratch for
 large sources, especially when the output directory is memory-backed;
 memory-backed scratch counts against the [memory budget](#memory-budget).
 
-Capture's external sorts (corner references, positioned corners, triangles,
+Capture's external sorts (the assembly's oversize buckets and routed corners,
 the cell tree's nodes, and the corner-depth join's candidates and patches) are planned
 once against the [memory budget](#memory-budget). The fixed sort configuration,
 an 80 MiB run buffer per live sort with fan-in 64, is the floor: capture's
@@ -661,6 +661,38 @@ and reported as `diagnostics.capture.sort`: `run_bytes`, `fan_in`,
 `memory_backed_scratch`, which keep the floor). It changes resources only:
 each sort's output is the stable sort of its input order for every run size,
 fan-in and writer count, so the archive does not depend on the plan.
+
+Capture assembles its rank-ordered triangles directly, without sorting
+corners or merging triangles:
+
+- **Decode.** Each expanded primitive's used vertices are decoded once (world
+  position, source frame, the run's attributes) on the capture workers, each
+  task with a copy of the resolved frame. Only a native (GDAL/PROJ) source CRS
+  transform decodes on the calling thread, which holds it. They stay in memory while the
+  vertex allowance lasts: what the memory budget leaves beside capture's
+  declared bound, reported as `diagnostics.capture.assembly.plan`
+  (`vertex_allowance_bytes`). Otherwise
+  they are written to scratch, block-compressed, and read back through small
+  per-worker block caches.
+- **Locality route.** A spilled primitive whose triangle chunks mostly touch
+  more vertex blocks than a cache holds (fewer than 31 in 32 fit) has its
+  corners sorted by vertex instead. They are joined with the decoded vertices
+  in order and sorted back to triangle order, two external sorts as before but
+  for that primitive only. `routed_primitives` counts them.
+- **Buckets.** Triangle keys are counted per depth-7 Morton prefix. Contiguous
+  prefix ranges form buckets sized for the sort window, and triangles are
+  built in parallel and staged per bucket as compressed runs. A prefix cell
+  holding more than one bucket's worth is sorted externally.
+- **Sort.** Buckets are sorted in key order, a window of them on the workers,
+  and written in order as the retained sequence.
+
+The records and their order are those of the corner sorts and triangle merge
+the assembly replaces. Its working sets (vertex allowance, caches, tables,
+gathering buffers, sort window and one external sort) are charged in
+capture's resident bound and reported as
+`diagnostics.memory.capture_assembly_bytes`. Its
+scratch is declared at raw size: every primitive spilled and routed, every
+record staged.
 
 Capture's preflight scan and payload validation run on the capture workers. The
 scan reads each primitive's index buffer into a bitmap of the vertices its
@@ -1062,14 +1094,16 @@ then `leaf_payloads`, `archive` and `ready_to_publish`. Each finished phase also
 logs its wall seconds and the run's elapsed seconds as a `log` event. Inside
 `capture`, each step is a phase whose total is known when it starts:
 `capture_scan` (triangles), `capture_validate` (one unit), `capture_corners`
-(corner references read and sorted), `capture_positions` (corners joined with
-their attributes), `capture_triangles` (triangles reassembled),
-`capture_sequence` (triangles written in rank order), `capture_images` (two
+(vertices decoded, counting every POSITION element of each expanded
+primitive), `capture_positions` (triangles keyed for the bucket histogram),
+`capture_triangles` (triangles built and staged in their buckets),
+`capture_sequence` (triangles sorted and written in rank order), `capture_images` (two
 units per image), `capture_tree` (triangles), `capture_corner_depths` (three
 units per triangle: leaf masks, candidates, depths written) and `capture_leaf_plans` (leaves). Each step reports `0`
 and its total; all but `capture_validate`, `capture_tree` and
 `capture_leaf_plans` also report counts between. An intermediate sort merge pass, which a budget
-too small for one pass needs, is reported as `capture_merge` (records
+too small for one pass needs (or a bucket over the in-memory sort size), is
+reported as `capture_merge` (records
 rewritten, counted on across passes so the count never goes back), after which
 the interrupted step resumes. While capture runs, the
 current step's latest count is repeated at least every 250 ms. These events are
