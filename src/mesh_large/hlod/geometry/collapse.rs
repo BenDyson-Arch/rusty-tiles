@@ -37,6 +37,9 @@ const BOUNDARY_WEIGHT: f64 = 10.;
 
 /// Steiner vertices with the removal vertex each replaced.
 pub(crate) type Added = Vec<([f32; 3], u32)>;
+/// Snaps a Steiner position (replacing the given vertex) to its canonical lattice point,
+/// or refuses it.
+pub(crate) type Snap<'a> = dyn Fn([f32; 3], u32) -> Option<[f32; 3]> + 'a;
 /// Per merged vertex: its contract mapping (`Mapping`).
 pub(crate) type Mapped = Vec<Option<(Key, Key, f64, u8)>>;
 
@@ -76,7 +79,7 @@ pub(crate) struct Problem<'a> {
     pub steiner: bool,
     /// Snaps a Steiner position (replacing the given vertex) onto its canonical lattice;
     /// `None` refuses the position (no canonical point at the inherited depth).
-    pub snap: Option<&'a dyn Fn([f32; 3], u32) -> Option<[f32; 3]>>,
+    pub snap: Option<&'a Snap<'a>>,
     /// Directed counts of edges between two shared points that the contraction fold guard
     /// licenses (`folds::Source::boundary_edges`, by vertex id); absent pairs have none.
     /// Without it (unit controls) the input counts by id, a required segment at least once.
@@ -1449,7 +1452,7 @@ mod tests {
         ring: &[u32],
         r: u32,
         cap: usize,
-        snap: Option<&dyn Fn([f32; 3], u32) -> Option<[f32; 3]>>,
+        snap: Option<&Snap<'_>>,
     ) -> (Option<Vec<[u32; 3]>>, Stats, Added) {
         let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
         let (x, y) = (ring[0], ring[ring.len() - 1]);

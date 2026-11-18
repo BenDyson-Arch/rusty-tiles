@@ -605,9 +605,9 @@ no selector.
   vertex), which is never on the contract. A Steiner rescue is admitted only
   when the vertex's faces form one simple fan between its two arc neighbours on
   its own contract chord, the new point is a canonical lattice point no other
-  vertex or source border point holds, every changed face keeps a certified
-  orientation, and no changed face meets another face outside their common
-  vertices (exact predicates). The Steiner vertex keeps its canonical decode,
+  vertex or source border point holds, every changed face keeps a strictly
+  positive orientation (an unresolved sign refuses it), and no changed face
+  meets another face outside their common vertices (exact predicates). The Steiner vertex keeps its canonical decode,
   and its faces are checked again on the delivered positions. Its proposal is
   assessed like any other; a second pass adds the stage-1 seam-owner licence and
   is declared as stage 1. Tiles the ordinary build publishes are unchanged.
