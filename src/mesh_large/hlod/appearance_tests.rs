@@ -813,6 +813,43 @@ fn charting_keeps_geometry_and_ids_and_image_free_input_bypasses_appearance() {
     assert_eq!(plan["image_cache_bytes"], 0, "{plan}");
 }
 
+/// A textured run plans the decode slot once: `decode_bytes` is the largest image's decode
+/// working set, the stage minimum counts it once beside one job, and the walk's leases stay
+/// below the ledger less the slot (chain loads hold the slot, not a lease).
+#[test]
+fn source_decode_is_reserved_once_for_the_stage() {
+    let work = tempfile::tempdir().unwrap();
+    let f = Fixture {
+        edge: 256,
+        images: vec![ramp, bumpy],
+        material: json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicRoughnessTexture":{"index":1},"metallicFactor":0.0}}),
+        ..base_fixture()
+    };
+    let dir = stage(
+        &write_fixture(&work.path().join("in"), &f),
+        &work.path().join("out"),
+    );
+    let resources: Value =
+        serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+    let plan = &resources["hlod"]["plan"];
+    let n = |k: &str| plan[k].as_u64().unwrap_or_else(|| panic!("{k}: {plan}"));
+    let decode = n("decode_bytes");
+    // 16 B per texel, the encoded PNG (at most what it decodes to) and the chain.
+    let floor = 256 * 256 * 16 + super::bake::chain_bytes(256, 256);
+    assert!(decode > floor && decode <= floor + 256 * 256 * 4, "{plan}");
+    assert!(n("texture_workspace_bytes") < n("job_bytes"), "{plan}");
+    let minimum = n("fixed_bytes")
+        + n("incidence_bytes")
+            .max(n("window_bytes") + n("job_bytes") + super::bake::chain_bytes(256, 256) + decode);
+    assert!(n("minimum_bytes") >= minimum, "{plan}");
+    let d = &resources["hlod"]["diagnostics"];
+    assert!(
+        d["lease_peak_bytes"].as_u64().unwrap() <= n("ledger_bytes") - decode,
+        "{d}"
+    );
+    assert!(d["image_cache"]["misses"].as_u64().unwrap() > 0, "{d}");
+}
+
 #[test]
 fn vertex_colours_follow_the_source_without_images() {
     let work = tempfile::tempdir().unwrap();

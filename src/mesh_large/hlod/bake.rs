@@ -389,6 +389,10 @@ pub(crate) struct ImageCache {
     budget: u64,
     store: crate::mesh_large::image_tiles::Store,
     state: Mutex<CacheState>,
+    /// The stage's one decode slot ([`super::HlodMemoryPlan::decode_bytes`]): a chain load
+    /// holds it from the source decode until its chain is stored, so at most one decode
+    /// transient is live however many jobs run.
+    decode_slot: Mutex<()>,
 }
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -412,6 +416,7 @@ impl ImageCache {
             budget,
             store: crate::mesh_large::image_tiles::Store::new(budget, bound),
             state: Mutex::new(CacheState::default()),
+            decode_slot: Mutex::new(()),
         }
     }
     /// Bytes the chain store may spill to scratch (zero when every chain fits).
@@ -461,6 +466,7 @@ impl ImageCache {
         cell.get_or_init(|| {
             let started = super::error::thread_cpu();
             let result = (|| {
+                let _slot = lock(&self.decode_slot);
                 let chain = load()?;
                 let levels = self.store.put(scratch, chain.levels)?;
                 Ok(Arc::new(Chain {
