@@ -190,6 +190,8 @@ pub(crate) struct FullCaptured {
     pub tree: RetainedTree,
     pub triangles: Sequence<FullTriangle>,
     pub corner_depths: Sequence<CornerDepth>,
+    /// Each leaf's occupancy mask and least welded depth, for the incidence pass.
+    pub leaf_index: super::corners::LeafIndex,
     pub leaf_plans: Sequence<LeafPlan>,
     pub images: Vec<ImageSnapshot>,
     pub image_info: Vec<ImageInfo>,
@@ -1317,7 +1319,7 @@ pub(crate) fn capture_admitted(
             ));
         }
         begin_stage(&scratch, &need, stages.corner_depths)?;
-        let corner_depths = join_corner_depths(
+        let (corner_depths, leaf_index) = join_corner_depths(
             &scratch,
             &tree,
             &triangles,
@@ -1426,7 +1428,7 @@ pub(crate) fn capture_admitted(
         Ok((
             tree,
             triangles,
-            corner_depths,
+            (corner_depths, leaf_index),
             leaf_plans,
             images,
             image_info,
@@ -1442,7 +1444,7 @@ pub(crate) fn capture_admitted(
         Ok((
             tree,
             triangles,
-            corner_depths,
+            (corner_depths, leaf_index),
             leaf_plans,
             images,
             image_info,
@@ -1456,6 +1458,7 @@ pub(crate) fn capture_admitted(
             tree,
             triangles,
             corner_depths,
+            leaf_index,
             leaf_plans,
             images,
             image_info,
@@ -1565,7 +1568,8 @@ impl Record for CornerDepth {
         }
     }
 }
-/// Each corner's welded depth, in rank order, for the tree built over `triangles`.
+/// Each corner's welded depth, in rank order, for the tree built over `triangles`, and each
+/// leaf's occupancy mask and least welded depth.
 fn join_corner_depths<T: super::corners::Corners>(
     scratch: &Scratch,
     tree: &RetainedTree,
@@ -1573,7 +1577,7 @@ fn join_corner_depths<T: super::corners::Corners>(
     config: &TreeConfig,
     jobs: usize,
     progress: &StepProgress<'_>,
-) -> Result<Sequence<CornerDepth>, JobError> {
+) -> Result<(Sequence<CornerDepth>, super::corners::LeafIndex), JobError> {
     // Defence: capture refused the count as soon as it knew it.
     let limits = RecordLimits::of(config);
     limits.check_triangles(tree.stats.triangles)?;
@@ -2192,7 +2196,7 @@ pub(super) mod tests {
                 stats,
             } = tree();
             let retained = RetainedTree { nodes, stats };
-            let depths = join_corner_depths(
+            let (depths, _) = join_corner_depths(
                 &scratch,
                 &retained,
                 &triangles,
@@ -2280,7 +2284,7 @@ pub(super) mod tests {
             nodes,
             stats: stats.clone(),
         };
-        let depths = join_corner_depths(
+        let (depths, _) = join_corner_depths(
             &scratch,
             &retained,
             &triangles,
@@ -2438,7 +2442,7 @@ pub(super) mod tests {
             }
             assert_eq!(weld, oracle);
             let retained = RetainedTree { nodes, stats };
-            let depths = join_corner_depths(
+            let (depths, _) = join_corner_depths(
                 &scratch,
                 &retained,
                 &triangles,

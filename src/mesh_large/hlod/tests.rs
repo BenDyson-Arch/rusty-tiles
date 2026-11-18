@@ -6837,3 +6837,93 @@ fn coarse_decode_charge_follows_the_largest_encoded_image() {
         assert_eq!(decode, base - 1 + encoded, "{encoded}");
     }
 }
+
+/// A snap-boundary adversary. A coarse sheet meets a patch sixteen times denser along a
+/// seam, so leaves of different depths share corners and those snap at the shallower leaf's
+/// step. Every coordinate is a multiple of 2^-7, so corners sit on half lattice steps (ties)
+/// and on leaf box faces. A copy far from the origin adds f32 rounding of canonical values.
+fn snap_sheet() -> Vec<Mesh> {
+    let ridge = |x: f32, z: f32| (x * 8.).round() / 128. + (z * 4.).floor() / 64.;
+    let colour = [0.5, 0.5, 0.5, 1.];
+    vec![
+        grid((16, 16), (0., 64.), (0., 64.), &ridge, colour),
+        grid((256, 256), (64., 80.), (0., 16.), &ridge, colour),
+        grid((32, 32), (4096., 4160.), (0., 64.), &ridge, colour),
+    ]
+}
+
+/// The incidence pass sorts only the items another leaf may hold. Its rows, open-edge
+/// endpoints and counts equal sorting every item, for 1, 2, 3 and 8 item workers, on every
+/// mesh fixture (seams, T-junctions, books, collinear and coincident sheets, packed leaves
+/// and synthetic depths, mixed densities) and the snap-boundary sheet, in snapped and float
+/// profiles. On the larger fixtures the filter sorts fewer items than every one.
+#[test]
+fn incidence_filter_matches_sorting_every_item() {
+    use crate::mesh_large::{
+        config::{Jobs, TreeConfig},
+        full,
+        hlod::interfaces::{self, SORTED_ITEMS, SORT_EVERY_ITEM},
+        phases::StepProgress,
+    };
+    let fixtures: [(&str, Vec<Mesh>, u64); 15] = [
+        ("sheet", sheet(), 64),
+        ("t_junction", t_junction(), 16),
+        ("book", book(), 16),
+        ("collinear", collinear(), 16),
+        ("back_to_back", back_to_back(), 16),
+        ("thin_islands", thin_islands(), 64),
+        ("cluster", cluster(), 64),
+        ("packed", packed(), 16),
+        ("jagged_sheet", jagged_sheet(), 64),
+        ("back_to_back_mismatched", back_to_back_mismatched(), 16),
+        ("triple_stack", triple_stack(), 16),
+        ("fin", fin(), 16),
+        ("closed_box", closed_box(), 16),
+        ("noisy_sheet", noisy_sheet(), 64),
+        ("snap_sheet", snap_sheet(), 64),
+    ];
+    let work = tempfile::tempdir().unwrap();
+    for (name, meshes, leaf_triangles) in fixtures {
+        let input = write_gltf(&work.path().join(name), &meshes);
+        for profile in [Profile::Balanced, Profile::Quality] {
+            let mut config = TreeConfig::new(profile).with_leaf_triangles(leaf_triangles);
+            config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+            let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+            let pass = |workers: usize, every: bool| {
+                SORT_EVERY_ITEM.with(|e| e.set(every));
+                let (rows, stats, ends) = interfaces::build(
+                    &captured.scratch,
+                    interfaces::Sorters::uniform(config.sorter(1)),
+                    &captured.tree.nodes,
+                    &captured.triangles,
+                    &captured.corner_depths,
+                    &captured.lattice,
+                    &captured.leaf_index,
+                    workers,
+                    &|_| Ok(()),
+                    StepProgress::silent(),
+                )
+                .unwrap();
+                SORT_EVERY_ITEM.with(|e| e.set(false));
+                let rows: Vec<_> = rows.map(Result::unwrap).collect();
+                let ends: Vec<_> = ends.reader().unwrap().map(Result::unwrap).collect();
+                let sorted = SORTED_ITEMS.with(std::cell::Cell::get);
+                ((rows, serde_json::to_value(stats).unwrap(), ends), sorted)
+            };
+            let (every, all) = pass(1, true);
+            assert_eq!(all, every.1["items"].as_u64().unwrap(), "{name}");
+            let mut fewest = u64::MAX;
+            for workers in [1, 2, 3, 8] {
+                let (filtered, sorted) = pass(workers, false);
+                assert!(filtered == every, "{name} {profile:?} at {workers} workers");
+                fewest = fewest.min(sorted);
+            }
+            if matches!(
+                name,
+                "sheet" | "snap_sheet" | "noisy_sheet" | "jagged_sheet"
+            ) {
+                assert!(fewest < all, "{name} {profile:?}: {fewest} of {all} sorted");
+            }
+        }
+    }
+}

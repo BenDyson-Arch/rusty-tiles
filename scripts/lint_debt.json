@@ -448,7 +448,7 @@
   "src/mesh_large/full.rs": 2,
   "src/mesh_large/leaves/crops.rs": 2,
   "src/mesh_large/leaves/delivery.rs": 3,
-  "src/mesh_large/leaves/geometry.rs": 2,
+  "src/mesh_large/leaves/geometry.rs": 1,
   "src/mesh_large/leaves/id_texture.rs": 21,
   "src/mesh_large/leaves/mips.rs": 8,
   "src/mesh_large/leaves/producer.rs": 9,

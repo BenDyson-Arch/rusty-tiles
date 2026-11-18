@@ -236,6 +236,9 @@ pub struct HlodMemoryPlan {
     /// floor's fan-in, runs grown toward one pass and run writers, within the ledger the
     /// walk has not yet taken. The row sort, whose stream the walk reads, keeps the floor.
     pub incidence_sort: SortPlan,
+    /// Workers generating the incidence pass's items: as many as the capture workers that
+    /// the ledger holds beside the floor's sorters, at least one.
+    pub incidence_jobs: usize,
     /// The sequential walk's worst child window: 8 held tiles per open level.
     pub window_bytes: u64,
     /// One parent job: its workspace plus its output.
@@ -420,11 +423,12 @@ pub(crate) fn plan(
         .saturating_add(appearance.color);
     let sorter = config.sorter(1);
     let leaves = captured.tree.stats.leaves;
-    let incidence_need = |sorters| {
-        interfaces::memory_need(sorters, leaf_cap, leaves).max(borders::memory_need(sorter))
+    let incidence_need = |sorters, workers| {
+        interfaces::memory_need(sorters, leaf_cap, leaves, workers)
+            .max(borders::memory_need(sorter))
     };
-    // The floor: what the stage's minimum is computed with.
-    let incidence = incidence_need(interfaces::Sorters::uniform(sorter));
+    // The floor: what the stage's minimum is computed with (one item worker).
+    let incidence = incidence_need(interfaces::Sorters::uniform(sorter), 1);
     let buffer = config.sort.buffer_bytes as u64;
     // Five sequence readers plus the interface stream's merge buffers.
     let streams = buffer
@@ -435,6 +439,8 @@ pub(crate) fn plan(
         .memory
         .owned_metadata_bytes
         .saturating_add(captured.report.memory.geometry.document_bytes)
+        // The leaves' occupancy masks, held from capture for the incidence pass.
+        .saturating_add(captured.leaf_index.bytes())
         .saturating_add(STAGE_RESERVE)
         .saturating_add(captured.images.len() as u64 * super::image_tiles::IMAGE_METADATA_BYTES)
         .saturating_add(source_index::BUILD_BYTES)
@@ -511,6 +517,11 @@ pub(crate) fn plan(
             config::Jobs::Auto => cores,
             config::Jobs::Fixed(n) => (n.get() as u64).min(cores),
         };
+        // Item workers: as many as the ledger holds at the floor's sorters, at least one.
+        let incidence_jobs = (1..=workers.max(1))
+            .rev()
+            .find(|&w| incidence_need(interfaces::Sorters::uniform(sorter), w) <= ledger)
+            .unwrap_or(1);
         let (_, incidence_sort) = capture_sort::plan(
             config.sort,
             &interfaces::sort_loads(captured.triangles.len()),
@@ -523,16 +534,22 @@ pub(crate) fn plan(
                     jobs: 1,
                     ..shared
                 };
-                incidence_need(interfaces::Sorters {
-                    items,
-                    rows: sorter,
-                }) <= ledger
+                incidence_need(
+                    interfaces::Sorters {
+                        items,
+                        rows: sorter,
+                    },
+                    incidence_jobs,
+                ) <= ledger
             },
         );
-        let incidence_bytes = incidence_need(interfaces::Sorters {
-            items: incidence_sort.sorter(1),
-            rows: sorter,
-        });
+        let incidence_bytes = incidence_need(
+            interfaces::Sorters {
+                items: incidence_sort.sorter(1),
+                rows: sorter,
+            },
+            incidence_jobs,
+        );
         // The decode slot is carved out of the ledger once; jobs share what remains.
         let shared = (ledger - window).saturating_sub(appearance.decode);
         let (jobs, limited_by) = worker_admission(
@@ -557,6 +574,7 @@ pub(crate) fn plan(
             fixed_bytes: fixed,
             incidence_bytes,
             incidence_sort,
+            incidence_jobs: usize::try_from(incidence_jobs).unwrap_or(1),
             window_bytes: window,
             job_bytes: job,
             minimum_bytes: minimum.saturating_add(tmpfs),
@@ -946,6 +964,8 @@ pub(crate) fn produce(
         &captured.triangles,
         &captured.corner_depths,
         &captured.lattice,
+        &captured.leaf_index,
+        input.plan.incidence_jobs,
         &admit,
         &incidence_progress,
     )?;

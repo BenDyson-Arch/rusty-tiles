@@ -100,13 +100,7 @@ impl LatticePlan {
     pub(crate) fn profile(&self) -> Profile {
         self.profile
     }
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
-        )
-    )]
+    /// The lattice step of each depth (the incidence pass grows leaf boxes by them).
     pub(crate) fn steps(&self) -> &[f32] {
         &self.steps
     }
@@ -317,6 +311,12 @@ pub(crate) struct CoarsePositions {
 impl LatticePlan {
     fn float_profile(&self) -> bool {
         matches!(self.profile, Profile::Quality | Profile::Lossless)
+    }
+
+    /// Whether canonical values are rounded to the lattice ([`Self::steps`]); in float
+    /// profiles they are the source values.
+    pub(crate) fn snapped(&self) -> bool {
+        !self.float_profile()
     }
 
     /// The leaf-compatible canonical decode of a source position whose welded vertex has

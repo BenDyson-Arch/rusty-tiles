@@ -192,6 +192,7 @@ pub(crate) fn memory_need(captured: &FullCaptured, config: &TreeConfig, cap: usi
         interfaces::Sorters::uniform(sorter),
         config.leaf_triangles(),
         leaves,
+        1,
     )
     .max(borders::memory_need(sorter))
     .saturating_add(borders::WALK_CACHE_BYTES)
@@ -273,6 +274,9 @@ pub(crate) fn forecast(
         &captured.triangles,
         &captured.corner_depths,
         &captured.lattice,
+        &captured.leaf_index,
+        // One item worker, as `memory_need` charges.
+        1,
         &admit,
         progress,
     )?;
