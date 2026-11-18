@@ -11,6 +11,7 @@ use super::{
     run_report::RunReport,
     source_crs::{MeshSourceCrs, MeshSourceCrsReport},
     subset::{MeshSubset, MeshSubsetReport},
+    weld::{MeshWeld, MeshWeldReport},
 };
 use crate::{
     mesh_archive::ResolvedPlacement, runtime::Staging, CleanupDiagnostic, JobError, JobErrorKind,
@@ -80,6 +81,7 @@ pub struct TilerRequest {
     placement: MeshPlacement,
     source_crs: Option<MeshSourceCrs>,
     subset: Option<MeshSubset>,
+    weld: Option<MeshWeld>,
     policy: OutputPolicy,
     memory_budget: Option<u64>,
     report_path: Option<PathBuf>,
@@ -112,6 +114,7 @@ impl TilerRequest {
             placement: MeshPlacement::Local,
             source_crs: None,
             subset: None,
+            weld: None,
             policy: OutputPolicy::CreateNew,
             memory_budget: None,
             report_path: None,
@@ -205,6 +208,12 @@ impl TilerRequest {
         self.subset = Some(subset);
         self
     }
+    /// Weld source vertex positions before capture (opt-in, reported): see [`MeshWeld`]. The
+    /// largest displacement is added to every published geometric error.
+    pub fn with_weld(mut self, weld: MeshWeld) -> Self {
+        self.weld = Some(weld);
+        self
+    }
     pub fn with_output_policy(mut self, policy: OutputPolicy) -> Self {
         self.policy = policy;
         self
@@ -268,6 +277,10 @@ pub struct TilerReport {
     /// A subset bake's region, kept count and extent; omitted for a whole-source bake.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subset: Option<MeshSubsetReport>,
+    /// An opt-in weld's tolerance, merged count and largest displacement; omitted without
+    /// one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weld: Option<MeshWeldReport>,
 }
 impl TilerReport {
     fn new(
@@ -325,6 +338,7 @@ impl TilerReport {
             texel_ownership: leaf.texel_ownership.clone(),
             source_crs: capture.source_crs.clone(),
             subset: capture.subset.clone(),
+            weld: capture.weld.clone(),
         }
     }
 }
@@ -395,6 +409,10 @@ pub struct MemoryDiagnostics {
     /// kept-vertex ranks and the polygon index. Absent without a subset.
     #[serde(skip_serializing_if = "is_zero")]
     pub capture_subset_bytes: u64,
+    /// An opt-in weld's union-find, bitmaps, sort, window and move readers within
+    /// `capture_bound_bytes`. Absent without a weld.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub capture_weld_bytes: u64,
     pub leaf_minimum_bytes: u64,
     pub leaf_bound_bytes: u64,
     pub hlod: HlodMemoryPlan,
@@ -693,6 +711,7 @@ fn run(
     config.jobs = request.jobs.into();
     config.source_crs = request.source_crs.clone();
     config.subset = request.subset.clone();
+    config.weld = request.weld;
     config.stop = Some(attempt.probe());
     let budget = MemoryBudget::resolve(request.memory_budget).map_err(|e| attempt.fail(e))?;
     config.memory_budget = Some(budget);
@@ -767,6 +786,24 @@ fn run(
     };
     let capture_path = captured.scratch.path().to_owned();
     let result = (|| {
+        // A collapsed triangle with no corner on a surviving face has no bounded error
+        // against the original source, so no honest geometric error can be published.
+        if let Some(weld) = captured
+            .report
+            .weld
+            .as_ref()
+            .filter(|weld| weld.isolated_collapses > 0)
+        {
+            return Err(JobError::new(
+                JobErrorKind::InvalidRequest,
+                format!(
+                    "the weld collapses {} triangles onto no surviving face, so their error \
+                     cannot be bounded; use a smaller --weld-epsilon (mesh-inspect reports \
+                     them as isolated_collapses)",
+                    weld.isolated_collapses
+                ),
+            ));
+        }
         attempt.emit(&RunEvent::Progress {
             phase: "capture",
             done: source_triangles,
@@ -883,6 +920,7 @@ fn run(
             capture_bound_bytes: c.memory.bound_bytes,
             capture_assembly_bytes: c.memory.assembly_bytes,
             capture_subset_bytes: c.memory.subset_bytes,
+            capture_weld_bytes: c.memory.weld_bytes,
             leaf_minimum_bytes: plan.minimum_bytes(),
             leaf_bound_bytes: plan.bound_bytes(),
             hlod: hlod.clone(),
@@ -922,7 +960,14 @@ fn run(
         })?;
         // HLOD built the coarse tiles inside the producer, while the capture was live;
         // delivery publishes them with the leaves.
-        let delivery_request = MeshTilesetRequest::new(work.path(), &output);
+        // A weld charges its largest displacement into every published geometric error.
+        let delivery_request = MeshTilesetRequest::new(work.path(), &output).with_weld_error(
+            captured
+                .report
+                .weld
+                .as_ref()
+                .map_or(0., |weld| weld.geometric_error_term_m),
+        );
         // A source CRS derives the root placement from the captured origin.
         let placement = captured.placement.clone().unwrap_or(placement);
         let archive_started = std::time::Instant::now();

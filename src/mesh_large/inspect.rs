@@ -72,6 +72,7 @@ pub struct InspectRequest {
     scratch_dir: Option<PathBuf>,
     placement: MeshPlacement,
     source_crs: Option<MeshSourceCrs>,
+    weld: Option<super::MeshWeld>,
     policy: OutputPolicy,
     memory_budget: Option<u64>,
     #[cfg(test)]
@@ -94,6 +95,7 @@ impl InspectRequest {
             scratch_dir: None,
             placement: MeshPlacement::Local,
             source_crs: None,
+            weld: None,
             policy: OutputPolicy::CreateNew,
             memory_budget: None,
             #[cfg(test)]
@@ -138,6 +140,12 @@ impl InspectRequest {
     }
     pub fn with_source_crs(mut self, source_crs: MeshSourceCrs) -> Self {
         self.source_crs = Some(source_crs);
+        self
+    }
+    /// Inspect the source as `mesh` would capture it with this weld: the report's topology,
+    /// bake view and forecast are of the welded source, and `weld` gives what it merged.
+    pub fn with_weld(mut self, weld: super::MeshWeld) -> Self {
+        self.weld = Some(weld);
         self
     }
     /// Whether an existing GeoJSON may be replaced.
@@ -260,6 +268,9 @@ pub struct InspectReport {
     pub forecast: OmissionForecast,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geojson: Option<GeoJsonSummary>,
+    /// An opt-in weld's statement, as `mesh` reports it; absent without one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weld: Option<super::MeshWeldReport>,
 }
 
 /// Run facts (not part of the deterministic report).
@@ -386,6 +397,9 @@ fn summary_lines(r: &InspectReport, geojson: Option<&Path>) -> Vec<String> {
             thousands(f.certain_sources)
         ),
     ];
+    if let Some(weld) = &r.weld {
+        lines.splice(0..0, weld.summary_lines());
+    }
     if let (Some(g), Some(path)) = (&r.geojson, geojson) {
         lines.push(format!(
             "geojson: {} ({} open loops, {} seams, {} cells; {})",
@@ -616,6 +630,7 @@ pub fn inspect_mesh(
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = Jobs::from(request.jobs);
     config.source_crs = request.source_crs.clone();
+    config.weld = request.weld;
     config.stop = Some(attempt.probe());
     let budget = MemoryBudget::resolve(request.memory_budget).map_err(|e| attempt.fail(e))?;
     config.memory_budget = Some(budget);
@@ -1094,6 +1109,7 @@ fn run(run: Run<'_>) -> Result<(InspectReport, InspectDiagnostics), JobError> {
             omitted_line_features: line_counts.2,
             cells: cell_features,
         }),
+        weld: c.weld.clone(),
     };
     let diagnostics = InspectDiagnostics {
         requested_jobs: c.jobs.requested.clone(),

@@ -567,6 +567,9 @@ pub(crate) struct LeafDirectory {
     omitted_by_depth: Vec<u64>,
     /// Largest GLB JSON chunk read for bounds.
     max_glb_json: u64,
+    /// An opt-in source weld's largest displacement (rounded up), added to every published
+    /// geometric error; 0 without a weld.
+    pub weld_error: f64,
 }
 
 impl LeafDirectory {
@@ -645,6 +648,7 @@ impl LeafDirectory {
             omitted_proxies,
             omitted_by_depth,
             max_glb_json: MAX_GLB_JSON,
+            weld_error: 0.,
         })
     }
 

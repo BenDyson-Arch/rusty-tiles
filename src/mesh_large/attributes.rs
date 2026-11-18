@@ -314,7 +314,7 @@ pub(crate) fn capture_full_with(
         sort.jobs.max(1),
         sort,
         progress,
-        None,
+        (None, None),
     )?;
     let rows = rows.reader()?.collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(rows)

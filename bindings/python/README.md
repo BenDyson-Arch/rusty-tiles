@@ -63,7 +63,8 @@ This package contains the standard (portable) build only. It has no imagery or t
 scratch_dir=None, memory_budget_bytes=None, report_path=None, anchor=None,
 orientation_xyzw=None,
 scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
-height_offset=None, bbox=None, polygon=None, force=False, callback=None)` converts a source mesh to a
+height_offset=None, bbox=None, polygon=None, weld_epsilon=None, join_primitives=None,
+force=False, callback=None)` converts a source mesh to a
 `.3tz` archive in one run. The output has exact full-detail leaves under
 coarse parent tiles (hierarchical level of detail, HLOD). A coarse tile's
 geometric error is a sampled distance to the source, not a guaranteed bound.
@@ -94,6 +95,17 @@ stay the whole source's, so a subset lines up with a later full bake.
 the `capture_select` step. A region that keeps nothing raises
 `InvalidRequestError`. See
 [part of the source](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#bake-part-of-the-source).
+
+`weld_epsilon` (metres, at least 0) welds the source's vertex positions before
+capture, as the CLI's `--weld-epsilon` does: vertices of one primitive within
+the tolerance merge onto their class's lowest-index position, and each keeps
+its own normal, UVs and colour. `join_primitives="same-material"` also welds
+across primitives with the same material (alone, it welds exact repeats).
+`result.report["weld"]` gives the merged count and the largest displacement,
+which is added to every published geometric error; the callback receives the
+`capture_weld` step. `inspect_mesh` takes the same two keywords to preview the
+effect on open edges. See
+[weld the source](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#weld-the-source).
 
 Profiles are `fast`, `balanced` (default), `quality` and `lossless`; their
 settings are provisional and may change in later releases. Base-colour and

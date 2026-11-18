@@ -32,6 +32,7 @@ mod source_crs;
 mod subset;
 mod tasks;
 mod tree;
+mod weld;
 /// The validator plans its stores with the same budget, job and headroom rules (#342).
 pub(crate) use config::{available_memory, plan_jobs, Jobs};
 pub use hlod::{DeclaredTile, HlodDiagnostics, HlodMemoryPlan, RepeatReuse};
@@ -46,6 +47,7 @@ pub use pipeline::{
 pub use resources::{parse_memory_budget, BudgetSource, MemoryBudget};
 pub use source_crs::{MeshSourceCrs, MeshSourceCrsReport};
 pub use subset::{MeshSubset, MeshSubsetReport};
+pub use weld::{MeshWeld, MeshWeldReport};
 
 use crate::{spill::Scratch, JobError, JobErrorKind, JobFailure};
 use config::{JobsPlan, MemoryBound, ScratchNeed, TreeConfig, MEMBERS_BESIDES_TILES};
@@ -152,10 +154,10 @@ pub(crate) fn build(
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<CapturedTree, JobFailure> {
     config.validate().map_err(failure)?;
-    if config.source_crs.is_some() || config.subset.is_some() {
+    if config.source_crs.is_some() || config.subset.is_some() || config.weld.is_some() {
         return Err(failure(JobError::new(
             JobErrorKind::InvalidRequest,
-            "the H1 diagnostic build captures whole local sources only",
+            "the H1 diagnostic build captures whole, unwelded local sources only",
         )));
     }
     check().map_err(failure)?;

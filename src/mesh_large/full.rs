@@ -17,6 +17,7 @@ use super::{
     source_crs::{MeshSourceCrsReport, SourceFrame},
     subset::{self, MeshSubsetReport},
     tree::{self, RetainedTree},
+    weld::{self, MeshWeldReport},
 };
 use crate::{
     gltf_source::source::{self, ImageInfo, Material},
@@ -138,6 +139,10 @@ pub(crate) struct FullMemoryBound {
     /// (`subset::MeshSubset::memory_bytes`); absent without a subset.
     #[serde(skip_serializing_if = "is_zero")]
     pub subset_bytes: u64,
+    /// An opt-in weld's union-find, bitmaps, sort, window and move readers
+    /// (`weld::MeshWeld::memory_bytes`); absent without a weld.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub weld_bytes: u64,
     pub bound_bytes: u64,
 }
 fn is_zero(n: &u64) -> bool {
@@ -176,6 +181,9 @@ pub(crate) struct FullCaptureReport {
     /// A subset bake's region, kept count and extent; absent for a whole-source bake.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subset: Option<MeshSubsetReport>,
+    /// An opt-in weld's statement; absent without one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weld: Option<MeshWeldReport>,
 }
 
 pub(crate) struct FullCaptured {
@@ -407,7 +415,7 @@ fn scratch_need(
     ])?;
     // Between distributing and sorting: the staged runs, their listing and its sort.
     let run_list = assembly::run_list_bytes(n, layout).ok_or_else(overflow)?;
-    let capture = max(&[
+    let capture_terms = max(&[
         Some(add(stores, routing)?),
         Some(add(add(stores, t)?, run_list)?),
         Some(add(t, mul(run_list, 3)?)?),
@@ -419,6 +427,14 @@ fn scratch_need(
         )
         .ok(),
     ])?;
+    // An opt-in weld runs before the assembly; its move list stays through it.
+    // Its audit of the captured faces sorts them beside the retained sequence.
+    let capture = add(capture_terms, assembly.weld_moves_bytes)?
+        .max(assembly.weld_bytes)
+        .max(add(
+            add(full.bytes, assembly.weld_moves_bytes)?,
+            assembly.weld_audit_bytes,
+        )?);
     // The retained sequence, written by the assembly.
     let projection_stage = t;
     let images = add(t, image_bytes)?;
@@ -642,7 +658,7 @@ fn memory_bound(
     image_count: u64,
     jobs: usize,
     spill_bytes: u64,
-    (preflight_bytes, subset_bytes): (u64, u64),
+    (preflight_bytes, subset_bytes, weld_bytes): (u64, u64, u64),
     assembly_bytes: u64,
 ) -> Result<FullMemoryBound, JobError> {
     let mut geometry = MemoryBound::new(config, json_bytes, jobs);
@@ -717,7 +733,7 @@ fn memory_bound(
             add(DECODER_ALLOWANCE, PLANNING_ALLOWANCE)?,
             add(
                 assembly_bytes.saturating_sub(geometry.sort_bytes),
-                subset_bytes,
+                add(subset_bytes, weld_bytes)?,
             )?,
         )?,
     )?;
@@ -730,6 +746,7 @@ fn memory_bound(
         preflight_bytes,
         assembly_bytes,
         subset_bytes,
+        weld_bytes,
         decoder_allowance_bytes: DECODER_ALLOWANCE,
         planning_allowance_bytes: PLANNING_ALLOWANCE,
         bound_bytes,
@@ -869,8 +886,34 @@ pub(crate) fn capture_admitted(
         .clone()
         .unwrap_or_else(Scratch::default_parent);
     let volume = crate::spill::inspect_volume(&parent).map_err(|e| super::failure(e.into()))?;
-    let shape = assembly::ScratchShape::of(&source, layout, selection.as_ref())
+    let mut shape = assembly::ScratchShape::of(&source, layout, selection.as_ref())
         .ok_or_else(|| super::failure(exhausted("assembly scratch arithmetic overflow")))?;
+    // An opt-in weld runs over every vertex the captured triangles use; its union-find spans
+    // every expanded POSITION element.
+    let expanded_vertices: u64 = source
+        .document
+        .scene_primitives()
+        .map(|p| p.position.count as u64)
+        .sum();
+    if config.weld.is_some() {
+        let used = selection.as_ref().map_or(expanded_vertices, |selection| {
+            selection.primitives.iter().map(|p| p.vertices).sum()
+        });
+        let weld_scratch = weld::scratch_bytes(used)
+            .zip(weld::moves_bytes(used))
+            .ok_or_else(|| super::failure(exhausted("weld scratch arithmetic overflow")))?;
+        (shape.weld_bytes, shape.weld_moves_bytes) = weld_scratch;
+        shape.weld_audit_bytes = weld::audit_scratch_bytes(scan.triangles)
+            .ok_or_else(|| super::failure(exhausted("weld scratch arithmetic overflow")))?;
+        // The column sort's runs are counted with every sort's; the positions and the
+        // move lists are files of their own.
+        shape.files += 3;
+    }
+    let weld_bytes = |workers: usize| match &config.weld {
+        None => 0,
+        Some(_) => weld::MeshWeld::memory_bytes(expanded_vertices, workers, config.sorter(workers))
+            .unwrap_or(u64::MAX),
+    };
     let need = scratch_need(
         scan,
         layout,
@@ -904,7 +947,7 @@ pub(crate) fn capture_admitted(
             image_count,
             workers,
             spill,
-            (preflight_bytes, subset_bytes),
+            (preflight_bytes, subset_bytes, weld_bytes(workers)),
             assembly,
         )
     };
@@ -1107,6 +1150,19 @@ pub(crate) fn capture_admitted(
         // On capture's workers, at most two bounded readers each (within the per-job term).
         source.validate_payload_parallel(config.sort.buffer_bytes, workers, check)?;
         progress.end()?;
+        // An opt-in weld, on capture's workers before the assembly splits the work: one
+        // order-independent result for every worker count.
+        let welded = match &config.weld {
+            None => None,
+            Some(spec) => Some(weld::weld(
+                &source,
+                &mut frame,
+                (spec, selection.as_ref()),
+                &scratch,
+                (config.sorter(workers), workers),
+                progress,
+            )?),
+        };
         let (triangles, assembly_report) = assembly::assemble(
             &source,
             &mut frame,
@@ -1117,10 +1173,24 @@ pub(crate) fn capture_admitted(
             workers,
             capture_config.sorter(workers),
             progress,
-            selection.as_ref(),
+            (selection.as_ref(), welded.as_ref()),
         )?;
-        // The kept-triangle ranks end with the assembly.
+        // The kept-triangle ranks end with the assembly; the weld's moves with its audit of
+        // the captured faces.
         drop(selection);
+        let weld_report = match welded {
+            None => None,
+            Some(mut welded) => {
+                weld::audit(
+                    &mut welded,
+                    &triangles,
+                    &scratch,
+                    config.sorter(workers),
+                    progress,
+                )?;
+                Some(welded.report)
+            }
+        };
         peaks.capture = end_stage(&scratch, stages.capture, "assembly")?;
         begin_stage(&scratch, &need, stages.projection)?;
         peaks.projection = end_stage(&scratch, stages.projection, "projection")?;
@@ -1351,6 +1421,7 @@ pub(crate) fn capture_admitted(
             lattice_version: 1,
             source_crs: source_crs.as_ref().map(|(_, report)| report.clone()),
             subset: subset_report.clone(),
+            weld: weld_report,
         };
         Ok((
             tree,
@@ -2999,6 +3070,7 @@ pub(super) mod tests {
             assembly::ScratchShape {
                 vertex_bytes: 1000,
                 files: 3,
+                ..Default::default()
             },
         )
         .unwrap();
@@ -3054,8 +3126,8 @@ pub(super) mod tests {
             .kind(),
             JobErrorKind::ResourceLimit
         );
-        let memory = memory_bound(&cfg, 1000, 2, 1, 0, (0, 0), 0).unwrap();
-        let large = memory_bound(&cfg, 1000, 2, 1, 150 << 30, (0, 0), 0).unwrap();
+        let memory = memory_bound(&cfg, 1000, 2, 1, 0, (0, 0, 0), 0).unwrap();
+        let large = memory_bound(&cfg, 1000, 2, 1, 150 << 30, (0, 0, 0), 0).unwrap();
         // 150 GiB of live spill is about 19k chunk descriptors.
         assert!(large.chunk_descriptor_bytes > memory.chunk_descriptor_bytes + 19_000 * 64);
         assert_eq!(memory.decoder_allowance_bytes, 192 << 20);
