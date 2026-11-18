@@ -437,7 +437,7 @@ pub(crate) fn plan(
         .saturating_add(captured.report.memory.geometry.document_bytes)
         .saturating_add(STAGE_RESERVE)
         .saturating_add(captured.images.len() as u64 * super::image_tiles::IMAGE_METADATA_BYTES)
-        .saturating_add(source_index::BUILD_BYTES)
+        .saturating_add(source_index::build_bytes(captured.triangles.len()))
         .saturating_add(borders::WALK_CACHE_BYTES)
         // Publication resolves one contract while admitted worker jobs remain live.
         .saturating_add(borders::contract_workspace_bytes(
@@ -740,6 +740,8 @@ pub struct HlodDiagnostics {
     /// The largest admission of each walk scratch component (`scratch::ScratchLedger`: S2's
     /// source index, S3 pages and charts, ...).
     pub scratch_components: std::collections::BTreeMap<&'static str, u64>,
+    /// Peak combined file lengths of the append-only source index, after compression.
+    pub source_index_stored_bytes: u64,
     /// The stage's scratch peak from the incidence pass's start to the walk's end, and its
     /// bound: the incidence pass's own, or the walk's base plus its largest simultaneous
     /// admission, whichever is larger.
@@ -1127,6 +1129,7 @@ pub(crate) fn produce(
     drop(audit);
     drop(audit_lease);
     ledger.check()?;
+    diagnostics.source_index_stored_bytes = source.stored_bytes();
     drop(source);
     drop(index_lease);
     drop(borders);

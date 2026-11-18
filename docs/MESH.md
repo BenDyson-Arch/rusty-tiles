@@ -1184,6 +1184,13 @@ scratch bounds count these files at their uncompressed size; measured scratch
 (`scratch_stage_peak_bytes`, `run_scratch_peak_bytes`) is what is on disk. Their
 block indexes (9 bytes per block) are charged in capture's resident bound.
 
+The HLOD source index stores the captured f32 positions losslessly in blocks
+of 256 triangles. With `n` source triangles and `k = ceil(n/256)` nonempty
+blocks, it reserves `77n + 72(2k − 1)` bytes, about 77.6 bytes per triangle
+at scale. The bake reports the two files' combined peak length in
+`diagnostics.hlod.source_index_stored_bytes` and their raw upper bound in
+`diagnostics.hlod.scratch_components["s2-source-index"]`.
+
 The run also reserves output-side space for leaf staging, archive staging and a
 replaced destination: three copies of 119 bytes per triangle (a conservative
 estimate; measured archives are about 47) plus the encoded image bytes. Once

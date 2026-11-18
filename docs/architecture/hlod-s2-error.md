@@ -83,10 +83,19 @@ bit against the prepared position and every representative row, and measurement
 consumes the positions read back. A control that only changes the expected position
 must fail before publication.
 
-`SourceIndex` holds compact source triangles (original f32 positions, rank,
-provenance, expanded ordinal, material, control mask, cached area) and fine BVHs in
-two disk sequences; a tile's area sums whole subtrees and scans at most two clipped
-blocks. `SourceIndex::query(captured, TileKey)` keeps at most 8,191 trimmed upper
+`SourceIndex` stores 256-triangle blocks in deterministic fine-BVH order. Each
+77-byte row preserves the original nine f32 bit patterns, rank, full provenance,
+expanded ordinal, material and control mask. LZ4 compresses each block losslessly
+and uses the raw bytes when they are smaller or equal. The index contributes zero
+coordinate error. A second sequence holds the upper rank tree, including each
+block's area summed in the original order. Tile area uses whole subtrees and at
+most two clipped blocks, where the reader evaluates the original f64 triangle
+area expression from the stored positions.
+
+On a cache miss the reader splits the ordered rows at the same median counts,
+recreates fine-node IDs in preorder and unions leaf boxes and rank intervals
+bottom-up. This takes linear time in the block size and preserves search order
+at budget exhaustion. `SourceIndex::query(captured, TileKey)` keeps at most 8,191 trimmed upper
 nodes resident, plus a bounded FIFO node cache and fine-block cache (FxHash, never
 iterated for results). All candidates clip to the descendant source range; ties use
 provenance, expanded ordinal, then rank. S3 consumes `nearest_budget`, `surface`,
@@ -96,16 +105,19 @@ decoded `CoarseTile`, its representatives and G; chart spacing is
 
 ## Resources
 
-- **Scratch:** the index is the walk scratch component `s2-source-index`, admitted
-  through `ScratchLedger::admit` for `160 * source_triangles + 1 MiB` before its first
-  write. Every block and node write is charged to the lease first; a write past the
-  admission is refused. Memory-backed scratch charges it to memory in the plan. S2
-  writes no other scratch. Files are capture-owned and removed on success, refusal
-  and cancellation.
-- **Memory:** each parent job is charged 16 MiB query caches, 4 MiB measurement
-  workspace and the search frontiers (`SEARCH_BYTES`, at most `2B+1` entries each);
-  2 MiB fixed construction. Query caches check actual capacities and refuse past
-  their allowance.
+- **Scratch.** For `n > 0` source triangles and `k = ceil(n/256)` blocks, the
+  `s2-source-index` admission is `77n + 72(2k − 1)` bytes. This covers raw rows
+  and every upper node with zero compression savings. An empty index needs zero
+  storage. Each write is charged against the lease in advance. Memory-backed
+  scratch charges the same bound to memory. Capture owns the files and removes
+  them on success, refusal and cancellation. The combined file lengths reach
+  their peak at completion, reported as `diagnostics.hlod.source_index_stored_bytes`.
+- **Memory.** The shared charge is `2 MiB + 27(k + 1)` bytes for construction,
+  the offset and storage flag per block, and overlapping vector allocations
+  during directory growth. Each parent job is charged 16 MiB for query caches,
+  including both compressed random readers, 4 MiB for measurement workspace,
+  and the search frontiers (`SEARCH_BYTES`, at most `2B+1` entries each).
+  Query caches check actual capacities and refuse past their allowance.
   S1b's internal budget tuning retains 384 fine blocks when the upper hierarchy
   is completely resident; the paged path retains 64 blocks. These fixed budgets
   do not change B, sampling, nearest-search order or source-scale bounds.
