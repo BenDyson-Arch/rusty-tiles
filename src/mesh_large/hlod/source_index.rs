@@ -952,7 +952,6 @@ impl SourceQuery<'_> {
     // Charge actual vector capacities and conservative hash allocation bounds, the
     // compressed readers' block caches, plus 128 KiB for handles, allocator headers and an
     // in-flight replacement block.
-    // Refuse rather than letting a cache/backend change exceed the admitted workspace.
     fn check_charge(&self) -> Result<(), JobError> {
         use std::mem::size_of;
         let bytes = self.node_cache.capacity() * 2 * (size_of::<(u64, Node)>() + 1)
@@ -963,11 +962,12 @@ impl SourceQuery<'_> {
             + self.node_buf.capacity() * size_of::<Node>()
             + self.tri_buf.capacity() * size_of::<Triangle>()
             + self.full_buf.capacity() * size_of::<FullTriangle>()
-            + self.block_bytes
-            + crate::spill::random_cache_bound(Triangle::SIZE, 1) as usize
-            + crate::spill::random_cache_bound(FullTriangle::SIZE, 1) as usize
+            + self.block_bytes;
+        let bytes = bytes as u64
+            + crate::spill::random_cache_bound(Triangle::SIZE, 1)
+            + crate::spill::random_cache_bound(FullTriangle::SIZE, 1)
             + (128 << 10);
-        if bytes as u64 > QUERY_BYTES {
+        if bytes > QUERY_BYTES {
             return Err(resource(format!(
                 "source query cache needs {bytes} bytes, admitted {QUERY_BYTES}"
             )));
