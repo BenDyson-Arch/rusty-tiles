@@ -528,6 +528,8 @@ struct Census {
     /// A2 last-resort tiles, and those whose declared fold faces differ from their recount.
     last_resort_tiles: usize,
     fold_declaration_mismatches: usize,
+    /// Tiles a retry published, each with its record (`last_resort_records`).
+    retried_tiles: usize,
     leaves: usize,
     coarse: usize,
     max_depth: u32,
@@ -800,10 +802,12 @@ fn census(dir: &Path) -> Census {
         assert!(stage <= 3);
         fold_declaration_mismatches += usize::from(r["foldFaces"].as_u64().unwrap_or(0) != recount);
     }
+    let retried_tiles = last_resort_records(dir).len();
     let leaves: Vec<&Tile> = tiles.iter().filter(|t| t.leaf).collect();
     let mut c = Census {
         last_resort_tiles,
         fold_declaration_mismatches,
+        retried_tiles,
         leaves: leaves.len(),
         coarse: tiles.len() - leaves.len(),
         packed_leaves: rows(&dir.join("leaves.jsonl"))
@@ -4901,6 +4905,7 @@ fn d11_holey_sheet_builds_every_cell_with_the_last_resort() {
         assert!(omission_receipt(&name, &dir), "{name}");
         let c = census(&dir);
         assert!(c.last_resort_tiles > 0, "{name}: {c:?}");
+        assert!(c.retried_tiles > 0, "{name}: {c:?}");
         assert_directed_census(&name, &c, run.cap);
         published_and_valid(&name, &dir, work.path());
     }
@@ -5984,6 +5989,68 @@ fn exact_repeat_reuse_publishes_identical_bytes() {
     eprintln!("total reuse: {total:?}");
     assert!(total.replayed_calls > 0, "{total:?}");
     assert!(total.round_zero_calls > 0, "{total:?}");
+}
+
+/// Every tile a retry published, from the stage manifest, checked against the payload
+/// declarations and the stage's count: `(first, depth, stage, resort)`. A record's stage
+/// follows from its build, and a primary build that refused no proposal was refused for
+/// its contraction or had no proposal.
+fn last_resort_records(dir: &Path) -> Vec<(u64, u64, u64, String)> {
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let resources: Value =
+        serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+    let diagnostics = &resources["hlod"]["diagnostics"];
+    let records = manifest["hlod"]["lastResortRecords"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(
+        diagnostics["last_resort_records"].as_array().unwrap(),
+        &records
+    );
+    assert_eq!(
+        records.len() as u64,
+        diagnostics["last_resort_tiles"].as_u64().unwrap()
+    );
+    let out: Vec<_> = records
+        .iter()
+        .map(|r| {
+            let (stage, resort) = (r["stage"].as_u64().unwrap(), r["resort"].as_str().unwrap());
+            let expected = match resort {
+                "fix2" | "staged" => 0,
+                "n1" => 1,
+                "n2" => 2,
+                "n3" | "n3Recovery" | "rootCandidate" => 3,
+                other => panic!("unknown resort {other}"),
+            };
+            assert_eq!(stage, expected, "{r}");
+            let refused: u64 = ["refusedDecode", "refusedTopology", "refusedControls"]
+                .iter()
+                .map(|k| r[k].as_u64().unwrap())
+                .sum();
+            match r["reason"].as_str().unwrap() {
+                "contractionStalled" | "noProposal" => assert_eq!(refused, 0, "{r}"),
+                // The primary build published; it may have refused proposals before.
+                "rootCompetition" => assert_eq!(resort, "rootCandidate", "{r}"),
+                "proposalsRefused" => assert!(refused > 0, "{r}"),
+                other => panic!("unknown reason {other}"),
+            }
+            (
+                r["first"].as_u64().unwrap(),
+                r["depth"].as_u64().unwrap(),
+                stage,
+                resort.to_string(),
+            )
+        })
+        .collect();
+    for (first, depth, stage, _) in last_resort_tiles(dir).into_iter().filter(|t| t.2 > 0) {
+        assert!(
+            out.iter().any(|r| (r.0, r.1, r.2) == (first, depth, stage)),
+            "declared last resort f{first}-d{depth} stage {stage} has no record"
+        );
+    }
+    out
 }
 
 /// The A2 last-resort tiles of a staged run: `(first, depth, stage, fold faces)`.

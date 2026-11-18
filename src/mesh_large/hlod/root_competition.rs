@@ -119,6 +119,18 @@ pub(super) fn select(
             }
             if receipt.accepted {
                 *prepared = Some(measured);
+                // The candidate is a last resort (`root_candidate`): record what it replaced.
+                outcome.retry = Some(match outcome.retry {
+                    Some(r) => geometry::Retry {
+                        resort: "rootCandidate",
+                        ..r
+                    },
+                    None => geometry::Retry {
+                        resort: "rootCandidate",
+                        primary_contraction_failed: false,
+                        root_competition: true,
+                    },
+                });
                 outcome.built = Some(built);
                 *published_attempt = index;
             }
