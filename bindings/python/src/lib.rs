@@ -452,6 +452,107 @@ fn mesh_to_tileset(
     })
 }
 
+/// Check a `mesh` source before a bake, writing no archive: its exact-position topology
+/// (open edges and loops by size class, primitive boundaries and seams, repeated positions,
+/// connected components) and an estimated coarse omission per cell over the same cells
+/// `mesh_to_tileset` would build (pass the same profile, placement and source CRS options).
+/// `geojson` writes a `.geojson` of open loops and seams at least `min_feature_length`
+/// metres long and of the cells at risk (WGS84 when placed); `force` replaces an existing
+/// one. Returns a dict with `report` (deterministic: independent of `jobs`, the budget and
+/// the scratch location), `diagnostics`, `cleanup_diagnostics` and `summary` (the CLI's
+/// human lines). `callback` receives progress events, as for `mesh_to_tileset`.
+#[pyfunction]
+#[pyo3(signature = (input, *, geojson=None, min_feature_length=tiles_core::DEFAULT_MIN_FEATURE_LENGTH, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None))]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one keyword per CLI option, as mesh_to_tileset"
+)]
+fn inspect_mesh(
+    py: Python<'_>,
+    input: PathBuf,
+    geojson: Option<PathBuf>,
+    min_feature_length: f64,
+    profile: &str,
+    jobs: Option<Bound<'_, PyAny>>,
+    scratch_dir: Option<PathBuf>,
+    memory_budget_bytes: Option<Bound<'_, PyAny>>,
+    anchor: Option<(f64, f64, f64)>,
+    orientation_xyzw: Option<(f64, f64, f64, f64)>,
+    scene_offset: Option<(f64, f64, f64)>,
+    source_crs: Option<&str>,
+    source_axes: Option<&str>,
+    source_offset: Option<Vec<f64>>,
+    source_offset_file: Option<PathBuf>,
+    height_offset: Option<f64>,
+    force: bool,
+    callback: Option<Py<PyAny>>,
+) -> PyResult<Py<PyAny>> {
+    let profile = profile
+        .parse::<TilerProfile>()
+        .map_err(|error| tiler_request_error(py, error))?;
+    let jobs = tiler_jobs(py, jobs)?;
+    let memory_budget = tiler_memory_budget(py, memory_budget_bytes)?;
+    let source_axes = source_axes
+        .map(|axes| match axes {
+            "xyz" => Ok(SourceAxes::Xyz),
+            "y-up" => Ok(SourceAxes::YUp),
+            _ => Err(tiler_request_error(
+                py,
+                JobError::new(
+                    JobErrorKind::InvalidRequest,
+                    "source_axes must be xyz or y-up",
+                ),
+            )),
+        })
+        .transpose()?;
+    let source_crs = MeshSourceCrs::from_parameters(
+        source_crs,
+        source_axes,
+        source_offset.as_deref(),
+        source_offset_file.as_deref(),
+        height_offset,
+    )
+    .map_err(|error| tiler_request_error(py, error))?;
+    let mut request = tiles_core::InspectRequest::new(input)
+        .with_profile(profile)
+        .with_jobs(jobs)
+        .with_min_feature_length(min_feature_length)
+        .with_placement(rigid_placement(anchor, orientation_xyzw, scene_offset)?)
+        .with_output_policy(if force {
+            OutputPolicy::Replace
+        } else {
+            OutputPolicy::CreateNew
+        });
+    if let Some(path) = geojson {
+        request = request.with_geojson(path);
+    }
+    if let Some(source_crs) = source_crs {
+        request = request.with_source_crs(source_crs);
+    }
+    if let Some(path) = scratch_dir {
+        request = request.with_scratch_dir(path);
+    }
+    if let Some(bytes) = memory_budget {
+        request = request.with_memory_budget(bytes);
+    }
+    let result = run_job(py, callback, |run| tiles_core::inspect_mesh(request, run))?;
+    let summary = result.summary_lines();
+    let cleanup: Vec<Value> = result
+        .cleanup_diagnostics
+        .iter()
+        .map(|d| serde_json::json!({"path": d.path.to_string_lossy(), "message": d.error.to_string()}))
+        .collect();
+    json_to_python(
+        py,
+        &serde_json::json!({
+            "report": result.report,
+            "diagnostics": result.diagnostics,
+            "cleanup_diagnostics": cleanup,
+            "summary": summary,
+        }),
+    )
+}
+
 /// Published D1 raster directory; the standard wheel reports Unsupported.
 #[pyclass(frozen, module = "rusty_tiles")]
 struct RasterDirectoryResult {
@@ -1497,6 +1598,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.py().get_type::<UnsupportedError>(),
     )?;
     module.add_function(wrap_pyfunction!(mesh_to_tileset, module)?)?;
+    module.add_function(wrap_pyfunction!(inspect_mesh, module)?)?;
     module.add_function(wrap_pyfunction!(raster_tile_to_directory, module)?)?;
     module.add_function(wrap_pyfunction!(glb_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(model_to_manifest, module)?)?;

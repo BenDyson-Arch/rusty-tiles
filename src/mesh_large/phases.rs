@@ -208,6 +208,16 @@ pub(crate) enum Step {
     IncidenceEnds,
     /// HLOD incidence: an intermediate merge pass of one of its sorts.
     IncidenceMerge,
+    /// `mesh-inspect`: every triangle corner sorted by exact position (repeated positions,
+    /// position ids).
+    InspectVertices,
+    /// `mesh-inspect`: triangle edges keyed by position ids and sorted (open edges,
+    /// primitive boundaries, components).
+    InspectEdges,
+    /// `mesh-inspect`: open-edge loops and seams joined and measured.
+    InspectLoops,
+    /// `mesh-inspect`: an intermediate merge pass of one of its sorts.
+    InspectMerge,
 }
 impl Step {
     pub(crate) fn name(self) -> &'static str {
@@ -227,6 +237,10 @@ impl Step {
             Self::IncidenceReduce => "hlod_incidence_reduce",
             Self::IncidenceEnds => "hlod_incidence_ends",
             Self::IncidenceMerge => "hlod_incidence_merge",
+            Self::InspectVertices => "inspect_vertices",
+            Self::InspectEdges => "inspect_edges",
+            Self::InspectLoops => "inspect_loops",
+            Self::InspectMerge => "inspect_merge",
         }
     }
 }

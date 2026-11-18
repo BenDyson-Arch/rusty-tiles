@@ -379,6 +379,52 @@ class WheelAPI(unittest.TestCase):
         with self.assertRaises(AttributeError):
             result.output = self.root / "redirected.3tz"
 
+    def test_inspect_mesh_reports_topology_and_writes_geojson_like_the_cli(self):
+        source = self.root / "inspect.glb"
+        write_local_mesh(source)
+        geojson = self.root / "inspect.geojson"
+        events = []
+        result = rusty_tiles.inspect_mesh(
+            source, geojson=geojson, min_feature_length=1.0, jobs=1, callback=events.append,
+        )
+        self.assertEqual(set(result), {"report", "diagnostics", "cleanup_diagnostics", "summary"})
+        report = result["report"]
+        self.assertEqual(report["operation"], "mesh_inspect")
+        source_report = report["source"]
+        # Three separate unindexed triangles: nothing is shared.
+        self.assertEqual(source_report["triangles"], 3)
+        self.assertEqual(source_report["components"], 3)
+        self.assertEqual(source_report["positions"], 9)
+        self.assertEqual(source_report["open"]["edges"], 9)
+        self.assertEqual(source_report["open"]["loops"], 3)
+        self.assertEqual(source_report["repeated_positions"]["positions"], 0)
+        self.assertEqual(report["forecast"]["root"], "built")
+        self.assertTrue(report["forecast"]["estimate"])
+        self.assertEqual(report["geojson"]["open_loops"], 3)
+        document = json.loads(geojson.read_text(encoding="utf-8"))
+        self.assertEqual(document["type"], "FeatureCollection")
+        self.assertEqual(len(document["features"]), 3)
+        self.assertTrue(result["summary"][0].startswith("source: 3 triangles"))
+        phases = {event.get("phase") for event in events}
+        self.assertTrue({"capture", "inspect_vertices", "inspect_edges", "inspect_loops"} <= phases, phases)
+        # Deterministic: another worker count gives the same report (but for the path).
+        again = rusty_tiles.inspect_mesh(source, jobs=None)["report"]
+        report.pop("geojson")
+        self.assertEqual(again, report)
+        with self.assertRaises(rusty_tiles.OutputExistsError):
+            rusty_tiles.inspect_mesh(source, geojson=geojson)
+        rusty_tiles.inspect_mesh(source, geojson=geojson, force=True)
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.inspect_mesh(source, geojson=self.root / "inspect.json")
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.inspect_mesh(source, min_feature_length=-1.0)
+        if CLI:
+            completed = subprocess.run(
+                [CLI, "--json", "mesh-inspect", "-i", str(source), "--jobs", "1"],
+                check=True, capture_output=True, text=True,
+            )
+            self.assertEqual(json.loads(completed.stdout)["inspectReport"], report)
+
     def test_tiler_provisional_profiles_and_worker_scratch_choices_preserve_bytes(self):
         source = self.root / "profiles.glb"
         write_local_mesh(source)

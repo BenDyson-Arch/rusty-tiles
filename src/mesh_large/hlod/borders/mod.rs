@@ -1062,6 +1062,13 @@ impl Borders {
         Ok(floor)
     }
 
+    /// The number of linked contract items of `key`'s own node, read without materializing
+    /// them: what `contract` compares against its limit (`mesh-inspect` reports it for a
+    /// contract past the limit).
+    pub(super) fn contract_items(&self, key: TileKey) -> Result<u64, JobError> {
+        Ok(self.source.nodes.get(self.source.node(key)?)?[7])
+    }
+
     /// The contract of `key`'s own node.
     fn own_contract(&self, key: TileKey, limit: usize) -> Result<Option<Contract>, JobError> {
         let n = self.source.nodes.get(self.source.node(key)?)?;

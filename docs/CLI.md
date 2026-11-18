@@ -6,7 +6,7 @@ Every value here comes from `rusty-tiles <command> --help` for version 0.4.0. Ru
 
 ## Build availability
 
-Release downloads and the default Cargo build are the standard CLI. It runs `mesh`, `point-cloud`, `vector` (GeoJSON and GeoPackage), the packaging commands, `validate`, `preview` and `doctor` without system geospatial libraries, and covers CRS operations in the verified grid-free tier.
+Release downloads and the default Cargo build are the standard CLI. It runs `mesh`, `mesh-inspect`, `point-cloud`, `vector` (GeoJSON and GeoPackage), the packaging commands, `validate`, `preview` and `doctor` without system geospatial libraries, and covers CRS operations in the verified grid-free tier.
 
 These need the [native-geospatial build](INSTALL.md#native-geospatial-cli) (GDAL, PROJ and GEOS):
 
@@ -274,6 +274,25 @@ Failures use `invalid_input` (exit 3), `unsupported` (exit 2), `resource_limit` 
 
 The bundled JSON schemas come from the Cesium 3D Tiles specification at commit `4d781014b52294759834018a931223b98ac1ce47`, with relative references rewritten to local `$defs`. Attribution and the CC BY 4.0 notice are in [`docs/schema/LICENSE.adoc`](schema/LICENSE.adoc). Schema loading makes no network or file lookups.
 
+### mesh-inspect
+
+```sh
+rusty-tiles mesh-inspect -i site.glb --source-crs EPSG:3857 --source-offset-file site_offset.txt \
+  --geojson site-check.geojson
+```
+
+Checks a `mesh` source before a bake and writes no archive. It reports open edges and loops by length class, edges on primitive boundaries and how many coincide with another primitive's edge, repeated positions and the edges welding them would close, connected components, and an estimated coarse omission per cell over the cells the bake would build. See [check a source before baking](MESH.md#check-a-source-before-baking).
+
+It takes `mesh`'s `-i`, `--profile`, `--jobs`, `--scratchDir`, `--memory-budget`, placement and source CRS options, with the same meaning: give the options you will bake with, so the cells line up. It also takes:
+
+| Option | Alias | Default | Meaning |
+| --- | --- | --- | --- |
+| `--geojson PATH` | | none | Also write a `.geojson` of open loops and seams at least `--minFeatureLength` long and of the cells at risk. WGS84 with `--anchor` or a source CRS, else local east/north metres. Installed only after the run succeeds. |
+| `--minFeatureLength METRES` | `--min-feature-length` | `5` | Shortest open loop or seam written to the GeoJSON. |
+| `-f`, `--force` | | off | Replace an existing GeoJSON. |
+
+Without `--json` it prints six summary lines on stderr, and a seventh naming the GeoJSON. `--json` returns `inspectReport` (the same for every `--jobs`, budget and scratch location), `diagnostics` (workers, the memory plan and stage seconds) and `cleanupDiagnostics`. The omission forecast is labelled an estimate (`"estimate": true`): only `certain` cells, whose border contract alone exceeds the triangle cap, are certain.
+
 ### preview
 
 ```sh
@@ -429,6 +448,7 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 | Command | Phases |
 | --- | --- |
 | `mesh` | `capture` (its steps `capture_scan`, `capture_validate`, `capture_corners`, `capture_positions`, `capture_triangles`, `capture_sequence`, `capture_images`, `capture_tree`, `capture_corner_depths`, `capture_leaf_plans` and, when a sort needs one, `capture_merge`, each with its total and repeated at least every 250 ms), `leaf_build`, `hlod_incidence` (its steps `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends` and, when a sort needs one, `hlod_incidence_merge`, reported the same way), `hlod_geometry`, `leaf_payloads`, `archive`, `ready_to_publish`; required events finish before installation. See the [mesh guide](MESH.md). |
+| `mesh-inspect` | `capture` and its steps (as for `mesh`), `inspect_vertices`, `inspect_edges`, `inspect_loops` (and `inspect_merge` when a sort needs one), `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends`, `ready_to_publish` |
 | `point-cloud` | `ingestion`, `tiling`, `point_archive`, `ready_to_publish`; these finish before installation |
 | `vector` | `ingestion`, `encoding` |
 | `raster` | `source_cog` and `aligned_warp` report progress out of 1,000,000. `tiling` reports completed tiles on the same scale and resets for each zoom. `raster_complete` reports the actual tile count before sealing and installation. |
