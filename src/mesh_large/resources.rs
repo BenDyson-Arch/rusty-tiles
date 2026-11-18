@@ -166,7 +166,13 @@ impl Ledger {
         self.lock().peak
     }
 
-    #[cfg_attr(not(test), allow(dead_code))] // Test fixture access; not used by the public pipeline.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Test fixture access; not used by the public pipeline"
+        )
+    )]
     pub(crate) fn used(&self) -> u64 {
         self.lock().used
     }

@@ -31,8 +31,10 @@
 //!   Any failure is `InvalidState`.
 //! - With feature `pure-rust-basis`, every encode and decode runs in pure Rust instead
 //!   (`pure`), with byte-identical output; the C++ stays compiled as the shadow tests' oracle.
-// Keep the bounded calibration/diagnostic entry points alongside the production API.
-#![allow(dead_code)]
+#![expect(
+    dead_code,
+    reason = "bounded calibration and diagnostic entry points stay beside the production API"
+)]
 
 mod container;
 mod ffi;
@@ -533,6 +535,8 @@ fn native_encode_mips(
     // SAFETY: on success the shim returns `length` initialized bytes owned
     // by the encoder's allocator, released immediately after the copy.
     let encoded = unsafe { std::slice::from_raw_parts(data, length) }.to_vec();
+    // SAFETY: `data` came from the shim's allocator, is freed once, and the copy above no
+    // longer borrows it.
     unsafe { ffi::rt_basisu_free(data) };
     Ok(encoded)
 }

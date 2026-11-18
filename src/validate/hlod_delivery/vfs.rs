@@ -47,6 +47,8 @@ struct Registered {
 // SAFETY: `base` points to the process-wide default VFS, which SQLite never frees; the
 // allocation behind the pointer is owned by this value and its mutable state is synchronized.
 unsafe impl Send for ScratchVfs {}
+// SAFETY: as for `Send`: shared access reads the immutable `base` and `dir` and goes
+// through `opened` (atomic) and `names` (mutex) for mutable state.
 unsafe impl Sync for ScratchVfs {}
 
 /// VFS names and temporary-file names: process-wide, so two VFSs over the same directory

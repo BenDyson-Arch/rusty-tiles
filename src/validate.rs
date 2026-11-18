@@ -1327,7 +1327,10 @@ struct Check<'a> {
     /// The reference traversal of VS-B-4 (controls only): references whose precheck step
     /// passed, with their level chains, streamed after traversal as the old phase 2 did.
     #[cfg(test)]
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     deferred: Option<Vec<(Vec<LevelFacts>, u64, u64, usize)>>,
     c2: Containment,
     /// EM: one summary per completed, implicit-free external-tileset document.
@@ -2413,7 +2416,10 @@ impl Check<'_> {
 
     /// Reads, checks and charges one tileset document (VS-B-7): its root, its error, the
     /// metadata schema of an implicit root, and its live-document charge.
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn prepare_tileset(
         &mut self,
         name: &str,
@@ -3027,7 +3033,10 @@ impl Check<'_> {
 /// their own successful first admission (H23): byte identity is checked before any consumer
 /// event, and the accessor-value and KTX2-container passes are not repeated. Without it the
 /// payload is inspected in full again (the reference traversal of the controls).
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn stream_member(
     resources: &mut ArchiveResources<'_>,
     stream: &mut Stream,

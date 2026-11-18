@@ -385,6 +385,7 @@ fn stopped_single_cpu_keepalive_burst_completes_without_releasing_any_client() {
     impl Drop for Resume {
         fn drop(&mut self) {
             // Even setup failure must resume before unwinding to assertions.
+            // SAFETY: kill takes plain integers and touches no memory of this process.
             unsafe { libc::kill(self.0, libc::SIGCONT) };
         }
     }
@@ -393,23 +394,29 @@ fn stopped_single_cpu_keepalive_burst_completes_without_releasing_any_client() {
     let server = serve(&cesium, &[("mesh", layer(&layers, "mesh"))], root.path());
     let address: std::net::SocketAddr = server.address.parse().unwrap();
     let pid = server.child.id() as libc::pid_t;
+    // SAFETY: cpu_set_t is a plain bit array; all zeroes is the empty set.
     let mut allowed: libc::cpu_set_t = unsafe { std::mem::zeroed() };
-    assert_eq!(
-        unsafe { libc::sched_getaffinity(0, std::mem::size_of_val(&allowed), &mut allowed) },
-        0
-    );
+    // SAFETY: `allowed` is writable for the size passed.
+    let read = unsafe { libc::sched_getaffinity(0, std::mem::size_of_val(&allowed), &mut allowed) };
+    assert_eq!(read, 0);
+    // SAFETY: CPU_ISSET reads one bit of `allowed` below CPU_SETSIZE.
     let cpu = (0..libc::CPU_SETSIZE as usize)
         .find(|cpu| unsafe { libc::CPU_ISSET(*cpu, &allowed) })
         .unwrap();
+    // SAFETY: as for `allowed` above.
     let mut selected: libc::cpu_set_t = unsafe { std::mem::zeroed() };
+    // SAFETY: `cpu` is below CPU_SETSIZE and `selected` is writable.
     unsafe { libc::CPU_SET(cpu, &mut selected) };
     // Establish the old transport's initially idle connection readers. This is
     // a scheduling control, not a retry or an acceptance deadline extension.
     std::thread::sleep(Duration::from_millis(50));
-    assert_eq!(unsafe { libc::kill(pid, libc::SIGSTOP) }, 0);
+    // SAFETY: kill takes plain integers and touches no memory of this process.
+    let stopped = unsafe { libc::kill(pid, libc::SIGSTOP) };
+    assert_eq!(stopped, 0);
     let resume = Resume(pid);
     let setup = (|| -> std::io::Result<Vec<BufReader<TcpStream>>> {
         let mut status = 0;
+        // SAFETY: `status` is writable for the call.
         if unsafe { libc::waitpid(pid, &mut status, libc::WUNTRACED) } != pid {
             return Err(std::io::Error::last_os_error());
         }
@@ -423,6 +430,7 @@ fn stopped_single_cpu_keepalive_burst_completes_without_releasing_any_client() {
                 .to_string_lossy()
                 .parse::<libc::pid_t>()
                 .map_err(std::io::Error::other)?;
+            // SAFETY: `selected` is readable for the size passed.
             if unsafe { libc::sched_setaffinity(tid, std::mem::size_of_val(&selected), &selected) }
                 != 0
             {
@@ -736,10 +744,9 @@ fn termination_signals_end_the_server_and_release_its_port() {
         let mut idle = TcpStream::connect(&address).unwrap();
         send_persistent(&mut idle, &address, "/config.json", "GET");
         assert_eq!(get(&address, "/config.json").status, 200);
-        assert_eq!(
-            unsafe { libc::kill(server.child.id() as libc::pid_t, signal) },
-            0
-        );
+        // SAFETY: kill takes plain integers and touches no memory of this process.
+        let sent = unsafe { libc::kill(server.child.id() as libc::pid_t, signal) };
+        assert_eq!(sent, 0);
         let status = server.child.wait().unwrap();
         assert_eq!(status.signal(), Some(signal));
         assert!(

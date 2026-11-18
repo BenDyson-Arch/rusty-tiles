@@ -752,8 +752,17 @@ pub(in crate::mesh_large) fn workspace_charge(
     Ok(charge)
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
-#[allow(clippy::too_many_arguments)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(in crate::mesh_large) fn encode(
     dimensions: [u32; 2],
     rgba: &[u8],
@@ -795,7 +804,10 @@ enum Levels<'a> {
 /// [`encode`] for a packed island page: a complete chain whose islands (`labels`, one
 /// per texel, 0 outside every allocation) stay isolated through level `isolated`
 /// ([`sparse_mips::build_islands`]); dimensions may be any multiple of four.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(in crate::mesh_large) fn encode_islands(
     dimensions: [u32; 2],
     rgba: &[u8],
@@ -824,7 +836,10 @@ pub(in crate::mesh_large) fn encode_islands(
 /// [`encode`] for a page whose sampler has no mipmap minification filter: level 0 alone,
 /// since such a sampler never reads a reduced level (S3 review P3-2). Lossless pages are
 /// the same exact PNG as [`encode_islands`] delivers.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(in crate::mesh_large) fn encode_base(
     dimensions: [u32; 2],
     rgba: &[u8],
@@ -848,7 +863,10 @@ pub(in crate::mesh_large) fn encode_base(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn encode_levels(
     dimensions: [u32; 2],
     rgba: &[u8],
@@ -1029,7 +1047,10 @@ fn mask_gate(
     }))
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn escalate(
     chain: &sparse_mips::Chain,
     slot: TextureSlot,
@@ -1254,7 +1275,10 @@ fn prepare_levels(
 
 /// One KTX2 step: encode the prepared chain, then gate every decoded level.
 /// `Ok(Err(miss))` is a gate miss the ladder may climb past.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn lossy_step(
     chain: &sparse_mips::Chain,
     prepared: &Prepared,
@@ -1476,7 +1500,10 @@ fn probe(
 /// The last step: exact PNG of the prepared level 0 (MASK-adjusted and
 /// guarded like every KTX2 step), decoded independently and checked by the
 /// same level-0 gates. A PNG that changes its input is a hard failure.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn png_step(
     chain: &sparse_mips::Chain,
     prepared: &Prepared,
@@ -1550,7 +1577,13 @@ fn png_step(
     }))
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// One exact PNG per authored ID level. Level 0 is the delivered texture
 /// (sampled NEAREST, no runtime mips); coarser levels are ID-safe pages for
 /// coarse proxies. Every level is decoded independently and must equal the
@@ -1561,7 +1594,13 @@ pub(in crate::mesh_large) struct IdDelivery {
     pub levels: Vec<Vec<u8>>,
     pub receipts: Vec<Value>,
 }
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 pub(in crate::mesh_large) fn encode_id_chain(
     chain: &sparse_mips::Chain,
     memory_limit: u64,

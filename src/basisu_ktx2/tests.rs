@@ -526,10 +526,14 @@ fn silence_child() {
     // A vendored library write aimed at stderr must reach the capturing
     // sink: basisu::container_abort() writes its message with fputs(stderr)
     // (and no longer ends the process; see rt_basisu_container.h).
+    // SAFETY: the self-test entry points take no pointers and only touch the shim's state.
     let before = unsafe { ffi::rt_basisu_sink_calls() };
+    // SAFETY: as for `rt_basisu_sink_calls` above.
     let status = unsafe { ffi::rt_basisu_selftest_failure(2) };
     assert_eq!(status, ffi::STATUS_CONTAINER_FAILED);
-    assert!(unsafe { ffi::rt_basisu_sink_calls() } > before);
+    // SAFETY: as for `rt_basisu_sink_calls` above.
+    let after = unsafe { ffi::rt_basisu_sink_calls() };
+    assert!(after > before);
     let diagnostics = ffi::diagnostics();
     assert!(
         diagnostics.contains("self-test container failure 2"),
@@ -673,6 +677,7 @@ fn raw_encode(
         )
     };
     if !data.is_null() {
+        // SAFETY: a non-null `data` came from the shim and is freed once.
         unsafe { ffi::rt_basisu_free(data) };
     }
     status
@@ -874,7 +879,9 @@ fn hostile_child() {
             "self-test container failure 1",
         ),
     ] {
-        assert_eq!(unsafe { ffi::rt_basisu_selftest_failure(which) }, status);
+        // SAFETY: the self-test entry point takes no pointers and only touches the shim's state.
+        let actual = unsafe { ffi::rt_basisu_selftest_failure(which) };
+        assert_eq!(actual, status);
         let diagnostics = ffi::diagnostics();
         assert!(diagnostics.contains(message), "captured: {diagnostics:?}");
     }
@@ -1846,6 +1853,7 @@ fn native_encode(
     assert_eq!(status, ffi::STATUS_OK, "{}", ffi::diagnostics());
     // SAFETY: on success the shim returns `length` bytes it owns.
     let bytes = unsafe { std::slice::from_raw_parts(data, length) }.to_vec();
+    // SAFETY: `data` came from the shim and is freed once, after the copy above.
     unsafe { ffi::rt_basisu_free(data) };
     bytes
 }

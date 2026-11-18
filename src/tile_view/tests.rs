@@ -842,7 +842,9 @@ fn directory_members_are_regular_files_below_the_root() {
     .unwrap();
     std::os::unix::fs::symlink(dir.join("a.glb"), dir.join("b.glb")).unwrap();
     let fifo = std::ffi::CString::new(dir.join("c.glb").to_str().unwrap()).unwrap();
-    assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+    // SAFETY: `fifo` is a NUL-terminated path that outlives the call.
+    let made = unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) };
+    assert_eq!(made, 0);
     fs::create_dir(dir.join("real")).unwrap();
     fs::copy(dir.join("a.glb"), dir.join("real/d.glb")).unwrap();
     std::os::unix::fs::symlink(dir.join("real"), dir.join("linked")).unwrap();

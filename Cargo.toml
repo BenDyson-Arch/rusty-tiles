@@ -57,6 +57,23 @@ validate-forced-spill = []
 # instead of the vendored C++. Output is byte-identical; see docs/architecture/basis-pure-rust.md.
 pure-rust-basis = ["dep:ktx-rs", "dep:zstd-pure-rs", "dep:ruzstd"]
 
+# Hard rules for every target. Debt that cannot be denied yet is held in place by
+# scripts/lint_debt.py instead (see clippy.toml and scripts/lint_debt.json).
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+# An exemption is `#[expect(lint, reason = "...")]`: it states why, and fails once the code
+# no longer needs it.
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+undocumented_unsafe_blocks = "deny"
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+# The ratchet enables this lint with the bans in clippy.toml; plain clippy runs leave it off.
+disallowed_methods = "allow"
+
 [dependencies]
 base64 = "0.22"
 clap = { version = "4.5", features = ["derive"] }

@@ -547,7 +547,10 @@ pub(crate) fn build(
 
 /// One textured group: fresh charts, the chunked source bake, MASK coverage samples and
 /// the labelled delivery of every slot page.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn textured(
     services: &Services<'_>,
     searcher: &mut bake::Searcher<'_, '_>,

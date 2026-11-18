@@ -640,7 +640,10 @@ fn metadata(
 
 // Keep geometry, schema and report inputs explicit alongside the once-validated
 // codec policy and the borrowed original Attempt. They have distinct owners.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn emit(
     items: &[&Feature],
     center: Point,
@@ -680,7 +683,10 @@ struct Source {
     inexact: bool,
 }
 /// See [`Quantize`] for how quantized positions are placed.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn emit_source(
     items: &[&Feature],
     center: Point,

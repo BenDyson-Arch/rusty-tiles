@@ -3,17 +3,35 @@
 use super::{JobError, JobErrorKind};
 use std::{io, path::Path};
 
-#[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
+#[cfg_attr(
+    not(any(test, feature = "native-geospatial")),
+    expect(
+        dead_code,
+        reason = "Native directory publication and its lifecycle controls; unavailable in the standard build"
+    )
+)]
 fn unsupported(message: &str) -> JobError {
     JobError::new(JobErrorKind::Unsupported, message)
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
+#[cfg_attr(
+    not(any(test, feature = "native-geospatial")),
+    expect(
+        dead_code,
+        reason = "Native directory publication and its lifecycle controls; unavailable in the standard build"
+    )
+)]
 pub(super) fn preflight(parent: &Path) -> Result<(), JobError> {
     implementation::preflight(parent)
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
+#[cfg_attr(
+    not(any(test, feature = "native-geospatial")),
+    expect(
+        dead_code,
+        reason = "Native directory publication and its lifecycle controls; unavailable in the standard build"
+    )
+)]
 pub(super) fn install(source: &Path, destination: &Path) -> io::Result<()> {
     implementation::install(source, destination)
 }
@@ -83,7 +101,13 @@ fn rename_information(name: &[u16]) -> io::Result<(Vec<usize>, u32)> {
     Ok((storage, u32::try_from(size).map_err(|_| too_long())?))
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
+#[cfg_attr(
+    not(any(test, feature = "native-geospatial")),
+    expect(
+        dead_code,
+        reason = "Native directory publication and its lifecycle controls; unavailable in the standard build"
+    )
+)]
 #[cfg(unix)]
 fn c_path(path: &Path) -> io::Result<std::ffi::CString> {
     use std::os::unix::ffi::OsStrExt;
@@ -94,7 +118,13 @@ fn c_path(path: &Path) -> io::Result<std::ffi::CString> {
 #[cfg(target_os = "linux")]
 mod implementation {
     use super::*;
-    #[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
+    #[cfg_attr(
+        not(any(test, feature = "native-geospatial")),
+        expect(
+            dead_code,
+            reason = "Native directory publication and its lifecycle controls; unavailable in the standard build"
+        )
+    )]
     pub(super) fn preflight(parent: &Path) -> Result<(), JobError> {
         let path =
             c_path(parent).map_err(|e| JobError::io("inspect directory volume", parent, e))?;
@@ -159,7 +189,13 @@ mod implementation {
         }
         Ok(())
     }
-    #[cfg_attr(not(test), allow(dead_code))] // Native directory publication and its lifecycle controls; unavailable in the standard build.
+    #[cfg_attr(
+        not(any(test, feature = "native-geospatial")),
+        expect(
+            dead_code,
+            reason = "Native directory publication and its lifecycle controls; unavailable in the standard build"
+        )
+    )]
     pub(super) fn install(source: &Path, destination: &Path) -> io::Result<()> {
         let source = c_path(source)?;
         let destination = c_path(destination)?;

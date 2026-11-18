@@ -592,6 +592,28 @@ jobs:
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           cargo clippy --locked --all-targets --features native-geospatial -- -D warnings
+      # Each ratcheted lint's total in library and binary code (both feature passes) may fall,
+      # never grow. A pull request is checked against its base branch's scripts/lint_debt.json,
+      # so editing that file cannot raise the ceiling. Findings do not depend on the GDAL version.
+      - name: Check lint debt does not grow
+        if: ${{ matrix.gdal == '3.13' }}
+        shell: bash -el {0}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          python3 -I -m unittest discover -s tests -p test_lint_debt.py
+          baseline=scripts/lint_debt.json
+          if [ -n "$BASE_REF" ]; then
+            git fetch --no-tags --depth=1 origin "refs/heads/$BASE_REF"
+            if git show FETCH_HEAD:scripts/lint_debt.json > "$RUNNER_TEMP/lint-debt-base.json"; then
+              baseline="$RUNNER_TEMP/lint-debt-base.json"
+            else
+              echo "::notice::$BASE_REF has no scripts/lint_debt.json yet; using this branch's"
+            fi
+          fi
+          python3 -I scripts/lint_debt.py --baseline "$baseline"
 
   crs-allowlist:
     name: CRS allow-list regeneration

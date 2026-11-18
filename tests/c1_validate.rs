@@ -101,7 +101,9 @@ fn fifo_input_is_rejected_without_waiting_for_a_writer() {
     let path = temporary.path().join("input.3tz");
     let c_path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
     // No writer is ever opened: a blocking File::open would wait forever.
-    assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+    // SAFETY: `c_path` is a NUL-terminated path that outlives the call.
+    let made = unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) };
+    assert_eq!(made, 0);
     let mut child = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
         .arg("validate")
         .arg(&path)

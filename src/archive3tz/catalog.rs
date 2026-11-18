@@ -82,7 +82,13 @@ impl CatalogConfig {
 
     /// Every store on scratch, runs of a few records, two fences and one cached page: the
     /// parity profile that exercises every spilled path on small archives.
-    #[cfg_attr(not(any(test, feature = "validate-forced-spill")), allow(dead_code))]
+    #[cfg_attr(
+        not(any(test, feature = "validate-forced-spill")),
+        expect(
+            dead_code,
+            reason = "used only by tests and the validate-forced-spill feature"
+        )
+    )]
     pub(crate) const FORCED_SPILL: Self = Self {
         sort: SortConfig {
             run_bytes: 4 * size_of::<Row>(),

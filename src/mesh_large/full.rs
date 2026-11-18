@@ -325,7 +325,10 @@ fn admit_decode(budget: Option<u64>, preflight: &ImagePreflight) -> Result<(), J
         _ => Ok(()),
     }
 }
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 /// Declared scratch of every capture stage. `inside` configures the sorts inside capture
 /// (its [`capture_sort`](super::capture_sort) plan); `config` is the request, whose floor
 /// configuration the HLOD stage's sorts use.
@@ -718,7 +721,13 @@ fn memory_bound(
     })
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 pub(crate) fn capture(
     input: &Path,
     config: &TreeConfig,
@@ -1404,7 +1413,13 @@ impl RecordLimits {
         Ok(())
     }
 }
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// A typed refusal, never a truncation, for a run with more triangles than [`RANK_LIMIT`].
 pub(crate) fn check_rank_limit(triangles: u64) -> Result<(), JobError> {
     RecordLimits::PACKED.check_triangles(triangles)

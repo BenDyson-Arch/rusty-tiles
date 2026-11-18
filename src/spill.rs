@@ -15,21 +15,20 @@ mod sequence;
 mod sort;
 mod volume;
 
-#[allow(unused_imports)]
-pub(crate) use scratch::{FileIo, Placement, Scratch, SpillIo};
-#[allow(unused_imports)]
+#[cfg(test)]
+pub(crate) use scratch::FileIo;
+pub(crate) use scratch::{Placement, Scratch, SpillIo};
 pub(crate) use sequence::{
     block_index_memory_bound, block_records, random_cache_bound, ByteFile, ByteWriter,
     ClosedByteFile, RandomRecords, Sequence, SequenceReader, SequenceWriter, SlotFile,
 };
-#[allow(unused_imports)]
+#[expect(unused_imports, reason = "not every build reads each re-export")]
 pub(crate) use sort::{
     chunk_records, ExternalSorter, SortConfig, SortObserver, SortProgress, SortStats, SortedStream,
     CHUNK_BYTES,
 };
 #[cfg(test)]
 pub(crate) use volume::Classification;
-#[allow(unused_imports)]
 pub(crate) use volume::{
     inspect_volume, preflight, same_filesystem, PreflightStage, SpaceRole, Volume, STORAGE_DISK_ENV,
 };

@@ -34,7 +34,10 @@ pub(crate) fn horizontal_step(operation: &Transform) -> Option<(f64, Option<f64>
 /// with the same probes, domain-edge one-sided rule and frame as batched [`derivatives`].
 /// `base` is the vertex's validated ECEF position. A resolver promotion is the
 /// caller's to detect; this function never mutates the vertex.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(crate) fn vertex_jacobian(
     operation: &mut Transform,
     position: [f64; 3],
