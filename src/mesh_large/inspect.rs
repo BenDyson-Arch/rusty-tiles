@@ -398,7 +398,7 @@ fn summary_lines(r: &InspectReport, geojson: Option<&Path>) -> Vec<String> {
         ),
     ];
     if let Some(weld) = &r.weld {
-        lines.insert(0, weld.summary_line());
+        lines.splice(0..0, weld.summary_lines());
     }
     if let (Some(g), Some(path)) = (&r.geojson, geojson) {
         lines.push(format!(

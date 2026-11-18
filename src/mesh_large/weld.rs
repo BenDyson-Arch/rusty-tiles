@@ -32,8 +32,11 @@
 //! reaches (at most four records). One external sort by (column, x) and one sweep with a
 //! window of the records within ε in x then meet every pair: of two vertices within ε, the
 //! one with the lower cell on an axis lists it, and the other's own cell on that axis is it.
-//! A hash collision only adds comparisons. The window is capped ([`WINDOW_RECORDS`]); a
-//! source denser than that within ε is refused as `resource_limit`.
+//! A hash collision only adds comparisons. An exact repeat of a window record joins it
+//! without entering the window, so repeats cost one comparison each. The window
+//! ([`WINDOW_RECORDS`]) and the comparisons per record on average ([`MAX_COMPARISONS`])
+//! are capped, so the sweep is linear; a source denser than that within ε is refused as
+//! `resource_limit`.
 //!
 //! **Resources.** One `u32` per expanded source vertex (the union-find), a bitmap of paired
 //! vertices, one external sort at a time and the window, all declared in capture's resident
@@ -44,10 +47,14 @@
 //!
 //! **Honest error.** Every welded vertex moves by at most the largest displacement `d`, and
 //! a point of a welded triangle at barycentric coordinates λ lies within `d` of the source
-//! triangle's point at λ (and the reverse), so the Hausdorff distance between the welded and
-//! the original source is at most `d`. A tile within `G` of the welded source is therefore
-//! within `G + d` of the original, in both directions (triangle inequality). Delivery adds
-//! `d` (rounded up) to every published geometric error, leaves' and coarse tiles' alike.
+//! triangle's point at λ (and the reverse). The bake keeps no degenerate face, so a
+//! triangle the weld collapses keeps none of its area: [`audit`] bounds each one by a
+//! corner on a surviving face (refusing none-bounded, isolated collapses in `mesh`).
+//! Every point of the surviving welded faces is then within `d` of the original source,
+//! and every source point within `e = max(d, collapse bound)` of them, so a tile within
+//! `G` of the welded faces is within `G + e` of the original, in both directions (triangle
+//! inequality). Delivery adds `e` (rounded up) to every published geometric error, leaves'
+//! and coarse tiles' alike.
 use super::{
     assembly::decode_chunks,
     capture::{canonical, source_position, vertices},
@@ -89,8 +96,14 @@ fn stopped() -> JobError {
 const WELD_VERTICES: usize = 1 << 14;
 /// Triangles one marking task covers.
 const WELD_TRIANGLES: usize = 1 << 16;
-/// Records the sweep's window may hold: vertices of one column within ε of each other in x.
-pub(crate) const WINDOW_RECORDS: usize = 1 << 20;
+/// Records the sweep's window may hold: distinct positions of one column within ε of each
+/// other in x.
+pub(crate) const WINDOW_RECORDS: usize = 1 << 16;
+/// Comparisons per record the sweep allows on average, beyond [`COMPARISON_SLACK`].
+pub(crate) const MAX_COMPARISONS: u64 = 1024;
+const COMPARISON_SLACK: u64 = 1 << 26;
+/// The sweep checks for a stop at least this often, in comparisons.
+const CHECK_COMPARISONS: u64 = 1 << 16;
 /// Records per vertex at most: its own cell and the lower neighbour in y and in z.
 const COPIES: u64 = 4;
 /// The smallest cell side, so cell indices of any local coordinate fit an `i64`.
@@ -179,6 +192,7 @@ impl MeshWeld {
             sorter.memory_bound::<Point>(),
             sorter.memory_bound::<Class>(),
             sorter.memory_bound::<Located>(),
+            sorter.memory_bound::<Face>(),
         ]
         .into_iter()
         .max()?;
@@ -192,7 +206,7 @@ impl MeshWeld {
             .checked_mul(4)?
             .checked_add(bitmap.checked_mul(2)?)?
             .checked_add(sort)?
-            .checked_add(window)?
+            .checked_add(window.max(audit_memory_bytes()))?
             .checked_add(wave)?
             .checked_add(readers)
     }
@@ -220,12 +234,12 @@ pub(crate) fn moves_bytes(vertices: u64) -> Option<u64> {
 }
 
 /// The published weld statement (`tilerReport.weld`, `inspectReport.weld`).
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, serde::Deserialize)]
 pub struct MeshWeldReport {
     /// The tolerance ε, in metres.
     pub epsilon_m: f64,
     /// `none` (each primitive instance welds its own vertices) or `same-material`.
-    pub join_primitives: &'static str,
+    pub join_primitives: String,
     /// Source vertices the captured triangles use: those the weld considered.
     pub vertices: u64,
     /// Vertices merged into another (a class's members other than its representative).
@@ -239,28 +253,56 @@ pub struct MeshWeldReport {
     /// The true largest displacement of a merged vertex, in metres (may exceed ε along a
     /// chain).
     pub max_displacement_m: f64,
-    /// What delivery adds to every published geometric error: the largest displacement
-    /// rounded up, 0 when nothing moved.
+    /// Captured triangles with fewer than three distinct corner positions after the weld,
+    /// and of those the ones the weld collapsed (degenerate with a moved corner).
+    pub degenerate_triangles: u64,
+    pub collapsed_triangles: u64,
+    /// Collapsed triangles no corner of which lies on a surviving (non-degenerate) face:
+    /// their source area has no bounded error, so `mesh` refuses the weld.
+    pub isolated_collapses: u64,
+    /// The largest bound on a collapsed triangle's source points' distance to a surviving
+    /// face (see the module notes); 0 without collapses.
+    pub collapse_bound_m: f64,
+    /// Non-degenerate triangles in a group of coincident ones (the same three corner
+    /// positions, either orientation) that holds a triangle with a moved corner.
+    pub coincident_triangles: u64,
+    /// What delivery adds to every published geometric error: the larger of the largest
+    /// displacement and the collapse bound, rounded up; 0 when nothing moved.
     pub geometric_error_term_m: f64,
 }
 
 impl MeshWeldReport {
-    /// One line for a human summary.
-    pub fn summary_line(&self) -> String {
+    /// Lines for a human summary (the CLI's `mesh` and `mesh-inspect`): the statement and,
+    /// when the weld collapsed, isolated or duplicated faces, a warning.
+    pub fn summary_lines(&self) -> Vec<String> {
         let scope = if self.join_primitives == "same-material" {
             "within each material"
         } else {
             "within each primitive"
         };
-        format!(
-            "weld: merged {} of {} source vertices within {} m {scope} ({} moved, {} classes);              largest displacement {} m, added to every published geometric error",
+        let mut lines = vec![format!(
+            "weld: merged {} of {} source vertices within {} m {scope} ({} moved, {} classes); \
+             largest displacement {} m; {} m added to every published geometric error",
             self.merged_vertices,
             self.vertices,
             self.epsilon_m,
             self.moved_vertices,
             self.classes,
             self.max_displacement_m,
-        )
+            self.geometric_error_term_m,
+        )];
+        if self.collapsed_triangles + self.coincident_triangles + self.isolated_collapses > 0 {
+            lines.push(format!(
+                "warning: the weld collapsed {} triangles ({} isolated from every surviving \
+                 face; {} degenerate after it) and left {} triangles coincident with another; \
+                 a smaller --weld-epsilon may avoid them",
+                self.collapsed_triangles,
+                self.isolated_collapses,
+                self.degenerate_triangles,
+                self.coincident_triangles,
+            ));
+        }
+        lines
     }
 }
 
@@ -566,17 +608,28 @@ fn used_vertices(
 /// Pairs every record of `sorted` (in [`Point`] order) with the window of earlier records
 /// of its column within ε in x: each pair [`within`] ε and in one scope joins its two
 /// vertices in `classes` and marks both in `paired`. `home` receives each vertex's own
-/// record, once.
+/// record, once; `check` is called with the comparisons made so far at least every
+/// [`CHECK_COMPARISONS`] comparisons and every 4,096 records.
+///
+/// A record at exactly the position and scope of one in the window joins it and is not
+/// added: every later record pairs with both or neither, so the window holds distinct
+/// positions and exact repeats cost one comparison each (ε = 0 never fills it). The work
+/// is at most the window per record; more than [`MAX_COMPARISONS`] per record on average
+/// (a source dense within ε) is refused as `resource_limit`, so the sweep is linear in
+/// its records.
 fn sweep(
     sorted: impl Iterator<Item = Result<Point>>,
     epsilon: f64,
     classes: &mut Classes,
     paired: &[AtomicU64],
     home: &mut dyn FnMut(Located) -> Result<()>,
+    check: &mut dyn FnMut(u64) -> Result<()>,
 ) -> Result<()> {
     let mut window: VecDeque<Point> = VecDeque::new();
+    let (mut records, mut compared, mut checked) = (0u64, 0u64, 0u64);
     for point in sorted {
         let point = point?;
+        records += 1;
         let id = point.id & !HOME;
         if point.id & HOME != 0 {
             home(Located {
@@ -594,23 +647,43 @@ fn sweep(
         {
             window.pop_front();
         }
+        let mut repeat = false;
         for w in &window {
+            if w.group != point.group {
+                continue;
+            }
+            repeat |= w.position == point.position;
             let other = w.id & !HOME;
-            if other != id && w.group == point.group && within(w.position, point.position, epsilon)
-            {
+            if other != id && within(w.position, point.position, epsilon) {
                 classes.union(other, id);
                 set(paired, other as usize);
                 set(paired, id as usize);
             }
         }
+        compared += window.len() as u64;
+        if compared - checked >= CHECK_COMPARISONS || records.is_multiple_of(4096) {
+            check(compared)?;
+            checked = compared;
+        }
+        if compared > MAX_COMPARISONS.saturating_mul(records) + COMPARISON_SLACK {
+            return Err(resource(format!(
+                "the source is too dense within the weld epsilon (more than \
+                 {MAX_COMPARISONS} vertex comparisons per vertex); use a smaller \
+                 --weld-epsilon"
+            )));
+        }
+        if repeat {
+            continue;
+        }
         if window.len() == WINDOW_RECORDS {
             return Err(resource(format!(
-                "more than {WINDOW_RECORDS} source vertices lie within the weld epsilon of each \
-                 other along one column; use a smaller --weld-epsilon"
+                "more than {WINDOW_RECORDS} distinct source positions lie within the weld \
+                 epsilon of each other along one column; use a smaller --weld-epsilon"
             )));
         }
         window.push_back(point);
     }
+    check(compared)?;
     Ok(())
 }
 
@@ -623,6 +696,8 @@ pub(crate) struct Welded {
     /// vertices, then the end of its moves.
     starts: Vec<Vec<u64>>,
     chunk: usize,
+    /// One bit per expanded source vertex: set when it moved.
+    moved: Vec<u64>,
     pub report: MeshWeldReport,
 }
 
@@ -784,7 +859,7 @@ pub(crate) fn weld(
     )?;
     let paired: Vec<AtomicU64> = (0..total.div_ceil(64)).map(|_| AtomicU64::new(0)).collect();
     let mut located = SequenceWriter::<Located>::new(scratch, "weld-positions", buffer_bytes)?;
-    let mut swept = 0u64;
+    let swept = std::cell::Cell::new(0u64);
     sweep(
         sort.finish()?.map(|p| p.map_err(JobError::from)),
         weld.epsilon,
@@ -792,12 +867,10 @@ pub(crate) fn weld(
         &paired,
         &mut |home| {
             located.push(&home)?;
-            swept += 1;
-            if swept.is_multiple_of(4096) {
-                progress.advance(done + swept)?;
-            }
+            swept.set(swept.get() + 1);
             Ok(())
         },
+        &mut |_| progress.advance(done + swept.get()),
     )?;
     let located = located.finish()?;
     if located.len() != considered {
@@ -828,13 +901,19 @@ pub(crate) fn weld(
             "same-material"
         } else {
             "none"
-        },
+        }
+        .to_owned(),
         vertices: considered,
         merged_vertices: 0,
         moved_vertices: 0,
         classes: 0,
         largest_class: 0,
         max_displacement_m: 0.,
+        degenerate_triangles: 0,
+        collapsed_triangles: 0,
+        isolated_collapses: 0,
+        collapse_bound_m: 0.,
+        coincident_triangles: 0,
         geometric_error_term_m: 0.,
     };
     let mut unsorted =
@@ -873,12 +952,8 @@ pub(crate) fn weld(
         }
     }
     let unsorted = unsorted.finish()?;
-    // The square root rounds to nearest; the published term never understates it.
-    report.geometric_error_term_m = if report.max_displacement_m > 0. {
-        report.max_displacement_m.next_up()
-    } else {
-        0.
-    };
+    // Set by the audit, once the captured faces are known.
+    report.geometric_error_term_m = 0.;
     let mut by_vertex = ExternalSorter::<Located>::new(scratch, sorter)?.observed(progress);
     for (k, m) in unsorted.reader()?.enumerate() {
         if k.is_multiple_of(4096) {
@@ -902,6 +977,13 @@ pub(crate) fn weld(
     });
     let mut pending = boundaries.next();
     let mut written = 0u64;
+    let words = usize::try_from(total.div_ceil(64))
+        .map_err(|_| resource("weld moved-vertex bitmap size overflow"))?;
+    let mut moved = Vec::new();
+    moved
+        .try_reserve_exact(words)
+        .map_err(|_| resource("weld moved-vertex bitmap allocation failed"))?;
+    moved.resize(words, 0u64);
     for (k, m) in by_vertex.finish()?.enumerate() {
         let m = m?;
         if k.is_multiple_of(4096) {
@@ -912,6 +994,7 @@ pub(crate) fn weld(
             pending = boundaries.next();
         }
         moves.push(&m)?;
+        moved[(m.id / 64) as usize] |= 1 << (m.id % 64);
         written += 1;
     }
     while let Some((_, i)) = pending {
@@ -928,8 +1011,237 @@ pub(crate) fn weld(
         offsets,
         starts,
         chunk,
+        moved,
         report,
     })
+}
+
+/// A non-degenerate captured triangle's corner positions, sorted (either orientation), and
+/// whether one of its corners moved.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Face {
+    corners: [[u32; 3]; 3],
+    moved: bool,
+}
+impl Record for Face {
+    const SIZE: usize = 37;
+    fn encode(&self, out: &mut [u8]) {
+        for (c, corner) in self.corners.iter().enumerate() {
+            for (a, v) in corner.iter().enumerate() {
+                put_u32(out, 12 * c + 4 * a, *v);
+            }
+        }
+        out[36] = u8::from(self.moved);
+    }
+    fn decode(bytes: &[u8]) -> Self {
+        Self {
+            corners: std::array::from_fn(|c| {
+                std::array::from_fn(|a| get_u32(bytes, 12 * c + 4 * a))
+            }),
+            moved: bytes[36] != 0,
+        }
+    }
+}
+
+/// Collapsed triangles the audit holds at most; a weld collapsing more is refused.
+pub(crate) const MAX_COLLAPSED: usize = 1 << 20;
+
+/// The audit's resident bytes beside one external sort: the collapsed triangles and their
+/// distinct corners with a mark each.
+pub(crate) fn audit_memory_bytes() -> u64 {
+    // Per collapsed triangle: its corners, up to three distinct corners and a segment,
+    // each with a mark.
+    (MAX_COLLAPSED as u64) * (36 + 3 * 13 + 25)
+}
+
+/// The audit's scratch for `triangles` captured triangles: one external sort of a record
+/// per non-degenerate triangle (two run generations).
+pub(crate) fn audit_scratch_bytes(triangles: u64) -> Option<u64> {
+    triangles.checked_mul(2 * Face::SIZE as u64)
+}
+
+/// A collapsed triangle's segment (its two distinct corners, ordered), or `None` when it
+/// collapsed to a point.
+fn segment(c: &[[u32; 3]; 3]) -> Option<[[u32; 3]; 2]> {
+    let (mut low, mut high) = (c[0], c[0]);
+    for v in &c[1..] {
+        low = low.min(*v);
+        high = high.max(*v);
+    }
+    (low != high).then_some([low, high])
+}
+
+fn distance(a: [u32; 3], b: [u32; 3]) -> f64 {
+    let (a, b) = (value(a), value(b));
+    (0..3)
+        .map(|k| (a[k] - b[k]) * (a[k] - b[k]))
+        .sum::<f64>()
+        .sqrt()
+}
+
+/// What the weld did to the captured faces, read from `triangles` (the assembly's
+/// sequence) into the report, reporting [`Step::WeldCheck`] (two units per triangle):
+///
+/// - **Collapsed triangles** are degenerate after the weld with a moved corner. The weld
+///   maps a source triangle's point at barycentric λ to its welded point at λ, at most `d`
+///   (the largest displacement) away; for a collapsed triangle that point lies on its
+///   collapsed segment or point, which HLOD does not keep as a face. When that segment is
+///   an edge of a surviving face (or that point a corner of one), the point lies on the
+///   surviving surface and the bound is `d`. Otherwise, if a corner `s` of the
+///   collapsed triangle is a corner of a surviving (non-degenerate) captured face, every
+///   point of the collapsed set is within `max_j |v′_j − s|` of `s`, so every source point
+///   of the triangle is within `d + max_j |v′_j − s|` of a surviving face. The best such
+///   corner bounds the triangle; the largest bound is charged into the published error.
+///   A collapsed triangle with no such corner is **isolated**: nothing bounds it, and
+///   `mesh` refuses the weld.
+/// - **Coincident triangles** are non-degenerate faces sharing their three corner
+///   positions with another, in groups holding a face with a moved corner.
+pub(crate) fn audit(
+    welded: &mut Welded,
+    triangles: &Sequence<super::attributes::FullTriangle>,
+    scratch: &Scratch,
+    sorter: SortConfig,
+    progress: &StepProgress<'_>,
+) -> Result<()> {
+    let n = triangles.len();
+    progress.begin(Step::WeldCheck, n.saturating_mul(2))?;
+    let moved = |expanded: u64, vertex: u64| -> Result<bool> {
+        let base = usize::try_from(expanded)
+            .ok()
+            .and_then(|i| welded.offsets.get(i))
+            .ok_or_else(|| invariant("captured triangle outside the welded primitives"))?;
+        let id = base + vertex;
+        let word = usize::try_from(id / 64).map_err(|_| invariant("weld vertex index"))?;
+        Ok(welded
+            .moved
+            .get(word)
+            .is_some_and(|w| w >> (id % 64) & 1 == 1))
+    };
+    let mut faces = ExternalSorter::<Face>::new(scratch, sorter)?.observed(progress);
+    let mut collapsed: Vec<[[u32; 3]; 3]> = Vec::new();
+    let (mut degenerate, mut seen) = (0u64, 0u64);
+    for t in triangles.reader()? {
+        let t = t?;
+        seen += 1;
+        if seen.is_multiple_of(4096) {
+            progress.advance(seen)?;
+        }
+        let mut any = false;
+        for v in t.triangle.vertices {
+            any |= moved(t.expanded_ordinal, v)?;
+        }
+        let corners = t.triangle.positions.map(bits);
+        if t.triangle.degenerate {
+            degenerate += 1;
+            if any {
+                if collapsed.len() == MAX_COLLAPSED {
+                    return Err(resource(format!(
+                        "the weld collapses more than {MAX_COLLAPSED} triangles; use a smaller \
+                         --weld-epsilon"
+                    )));
+                }
+                collapsed.push(corners);
+            }
+        } else {
+            let mut sorted = corners;
+            sorted.sort_unstable();
+            faces.push(Face {
+                corners: sorted,
+                moved: any,
+            })?;
+        }
+    }
+    // Which collapsed corners, and which collapsed segments, lie on a surviving face.
+    let mut distinct: Vec<[u32; 3]> = collapsed.iter().flatten().copied().collect();
+    distinct.sort_unstable();
+    distinct.dedup();
+    let mut segments: Vec<[[u32; 3]; 2]> = collapsed.iter().filter_map(segment).collect();
+    segments.sort_unstable();
+    segments.dedup();
+    let mut alive = vec![false; distinct.len()];
+    let mut alive_segments = vec![false; segments.len()];
+    if !distinct.is_empty() {
+        for (k, t) in triangles.reader()?.enumerate() {
+            let t = t?;
+            if k.is_multiple_of(4096) {
+                progress.advance(n + k as u64)?;
+            }
+            if t.triangle.degenerate {
+                continue;
+            }
+            let corners = t.triangle.positions.map(bits);
+            for p in corners {
+                if let Ok(i) = distinct.binary_search(&p) {
+                    alive[i] = true;
+                }
+            }
+            for (a, b) in [(0, 1), (1, 2), (2, 0)] {
+                let edge = if corners[a] < corners[b] {
+                    [corners[a], corners[b]]
+                } else {
+                    [corners[b], corners[a]]
+                };
+                if let Ok(i) = segments.binary_search(&edge) {
+                    alive_segments[i] = true;
+                }
+            }
+        }
+    }
+    let d = welded.report.max_displacement_m;
+    let (mut isolated, mut bound) = (0u64, 0f64);
+    for c in &collapsed {
+        // On a surviving face itself (a collapsed point that is a surviving corner, or a
+        // segment that is a surviving edge): within d. Otherwise through a surviving corner.
+        let on_face = match segment(c) {
+            Some(edge) => segments
+                .binary_search(&edge)
+                .is_ok_and(|i| alive_segments[i]),
+            None => distinct.binary_search(&c[0]).is_ok_and(|i| alive[i]),
+        };
+        let best = if on_face {
+            0.
+        } else {
+            c.iter()
+                .filter(|s| distinct.binary_search(s).is_ok_and(|i| alive[i]))
+                .map(|s| c.iter().map(|v| distance(*v, *s)).fold(0., f64::max))
+                .fold(f64::INFINITY, f64::min)
+        };
+        if best.is_finite() {
+            bound = bound.max(d + best);
+        } else {
+            isolated += 1;
+        }
+    }
+    // Coincident groups holding a moved face.
+    let mut coincident = 0u64;
+    let (mut group, mut size, mut any) = (None::<[[u32; 3]; 3]>, 0u64, false);
+    for (k, f) in faces.finish()?.enumerate() {
+        let f = f?;
+        if k.is_multiple_of(4096) {
+            progress.check()?;
+        }
+        if group != Some(f.corners) {
+            if size > 1 && any {
+                coincident += size;
+            }
+            (group, size, any) = (Some(f.corners), 0, false);
+        }
+        size += 1;
+        any |= f.moved;
+    }
+    if size > 1 && any {
+        coincident += size;
+    }
+    let report = &mut welded.report;
+    report.degenerate_triangles = degenerate;
+    report.collapsed_triangles = collapsed.len() as u64;
+    report.isolated_collapses = isolated;
+    report.collapse_bound_m = bound;
+    report.coincident_triangles = coincident;
+    // The square roots round to nearest; the published term never understates them.
+    let term = report.max_displacement_m.max(bound);
+    report.geometric_error_term_m = if term > 0. { term.next_up() } else { 0. };
+    progress.end()
 }
 
 #[cfg(test)]

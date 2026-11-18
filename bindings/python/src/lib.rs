@@ -417,7 +417,10 @@ fn tiler_memory_budget(py: Python<'_>, budget: Option<Bound<'_, PyAny>>) -> PyRe
 /// largest displacement, which is added to every published geometric error.
 #[pyfunction]
 #[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, report_path=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, bbox=None, polygon=None, weld_epsilon=None, join_primitives=None, force=false, callback=None))]
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one keyword per CLI option, as inspect_mesh"
+)]
 fn mesh_to_tileset(
     py: Python<'_>,
     input: PathBuf,

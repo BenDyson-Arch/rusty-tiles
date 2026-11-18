@@ -201,6 +201,9 @@ pub(crate) struct ScratchShape {
     pub weld_bytes: u64,
     /// Its sorted move list, held through the assembly (`weld::moves_bytes`).
     pub weld_moves_bytes: u64,
+    /// Its audit's sort of the captured faces (`weld::audit_scratch_bytes`), beside the
+    /// retained sequence and the move list.
+    pub weld_audit_bytes: u64,
 }
 
 /// The most bytes the list of staged runs takes for `n` records under `layout`: every run
@@ -250,6 +253,7 @@ impl ScratchShape {
                 .checked_add(1)?,
             weld_bytes: 0,
             weld_moves_bytes: 0,
+            weld_audit_bytes: 0,
         })
     }
 }

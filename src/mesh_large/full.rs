@@ -428,7 +428,13 @@ fn scratch_need(
         .ok(),
     ])?;
     // An opt-in weld runs before the assembly; its move list stays through it.
-    let capture = add(capture_terms, assembly.weld_moves_bytes)?.max(assembly.weld_bytes);
+    // Its audit of the captured faces sorts them beside the retained sequence.
+    let capture = add(capture_terms, assembly.weld_moves_bytes)?
+        .max(assembly.weld_bytes)
+        .max(add(
+            add(full.bytes, assembly.weld_moves_bytes)?,
+            assembly.weld_audit_bytes,
+        )?);
     // The retained sequence, written by the assembly.
     let projection_stage = t;
     let images = add(t, image_bytes)?;
@@ -897,6 +903,8 @@ pub(crate) fn capture_admitted(
             .zip(weld::moves_bytes(used))
             .ok_or_else(|| super::failure(exhausted("weld scratch arithmetic overflow")))?;
         (shape.weld_bytes, shape.weld_moves_bytes) = weld_scratch;
+        shape.weld_audit_bytes = weld::audit_scratch_bytes(scan.triangles)
+            .ok_or_else(|| super::failure(exhausted("weld scratch arithmetic overflow")))?;
         // The column sort's runs are counted with every sort's; the positions and the
         // move lists are files of their own.
         shape.files += 3;
@@ -1155,7 +1163,6 @@ pub(crate) fn capture_admitted(
                 progress,
             )?),
         };
-        let weld_report = welded.as_ref().map(|welded| welded.report.clone());
         let (triangles, assembly_report) = assembly::assemble(
             &source,
             &mut frame,
@@ -1168,9 +1175,22 @@ pub(crate) fn capture_admitted(
             progress,
             (selection.as_ref(), welded.as_ref()),
         )?;
-        // The kept-triangle ranks and the weld's moves end with the assembly.
+        // The kept-triangle ranks end with the assembly; the weld's moves with its audit of
+        // the captured faces.
         drop(selection);
-        drop(welded);
+        let weld_report = match welded {
+            None => None,
+            Some(mut welded) => {
+                weld::audit(
+                    &mut welded,
+                    &triangles,
+                    &scratch,
+                    config.sorter(workers),
+                    progress,
+                )?;
+                Some(welded.report)
+            }
+        };
         peaks.capture = end_stage(&scratch, stages.capture, "assembly")?;
         begin_stage(&scratch, &need, stages.projection)?;
         peaks.projection = end_stage(&scratch, stages.projection, "projection")?;

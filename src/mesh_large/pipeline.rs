@@ -786,6 +786,24 @@ fn run(
     };
     let capture_path = captured.scratch.path().to_owned();
     let result = (|| {
+        // A collapsed triangle with no corner on a surviving face has no bounded error
+        // against the original source, so no honest geometric error can be published.
+        if let Some(weld) = captured
+            .report
+            .weld
+            .as_ref()
+            .filter(|weld| weld.isolated_collapses > 0)
+        {
+            return Err(JobError::new(
+                JobErrorKind::InvalidRequest,
+                format!(
+                    "the weld collapses {} triangles onto no surviving face, so their error \
+                     cannot be bounded; use a smaller --weld-epsilon (mesh-inspect reports \
+                     them as isolated_collapses)",
+                    weld.isolated_collapses
+                ),
+            ));
+        }
         attempt.emit(&RunEvent::Progress {
             phase: "capture",
             done: source_triangles,

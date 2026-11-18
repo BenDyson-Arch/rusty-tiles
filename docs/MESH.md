@@ -477,8 +477,8 @@ Vertices no captured triangle uses take no part.
   including the ends of a real edge shorter than ε. On a dense photogrammetry
   mesh even 1 mm collapses some of its own short edges; each one leaves
   degenerate triangles. Pick ε below the mesh's shortest real edges and above
-  the gaps you want closed, and check `mesh-inspect`'s
-  `source.degenerate_triangles` and open edges with the same options first.
+  the gaps you want closed. Check `mesh-inspect` with the same options first:
+  its `weld.collapsed_triangles`, `source.degenerate_triangles` and open edges.
 - **Placement and tiling stay the source's.** A welded vertex sits on another
   used vertex's position, so the welded source lies inside the unwelded source's
   box. The frame, the root cube that keys triangles into cells and the position
@@ -494,40 +494,73 @@ are of the welded source.
 
 **Honest geometric error.** Coarse geometric error is sampled against the
 captured, welded source ([below](#geometric-error-sampled-not-certified)), and a
-leaf's against its own captured positions. To keep a published error from
-understating the error against the original source, delivery adds the largest
-displacement `d` to every published geometric error, leaves' and coarse tiles'
-alike (rounded up to the next f64, so the sum never rounds below it):
+leaf's against its own captured positions. Neither keeps a degenerate face. To
+keep a published error from understating the error against the original
+source, delivery adds a term `e` to every published geometric error, leaves'
+and coarse tiles' alike. `e` is the larger of the largest displacement `d` and
+the collapse bound below, rounded up to the next f64 so the sum never rounds
+below it.
 
-- Every welded vertex moves by at most `d`. A point of a welded triangle at
-  barycentric coordinates λ is `Σ λᵢ v′ᵢ`, and the source triangle's point at λ
-  is `Σ λᵢ vᵢ`; they are at most `Σ λᵢ |v′ᵢ − vᵢ| ≤ d` apart. So every point of
-  the welded source is within `d` of the original, and every original point
-  within `d` of the welded source: their Hausdorff distance is at most `d`.
-- By the triangle inequality, a tile within `G` of the welded source (in either
-  direction) is within `G + d` of the original source, in the same direction.
-  The charge covers both directions, tile to source and source to tile.
-- Adding the same `d` everywhere keeps errors monotone down the tree. Empty and
-  omitted cells keep at least their children's (charged) error. A weld that
-  moves nothing adds nothing.
+- Every welded vertex moves by at most `d`. A point of a source triangle at
+  barycentric coordinates λ is `Σ λᵢ vᵢ`, and the welded triangle's point at λ
+  is `Σ λᵢ v′ᵢ`. They are at most `Σ λᵢ |v′ᵢ − vᵢ| ≤ d` apart.
+- **Surviving triangles.** A welded triangle that is still a face is kept by
+  the bake. Its points and its source triangle's points are within `d` of each
+  other, both ways.
+- **Collapsed triangles.** A welded triangle with fewer than three distinct
+  corners is a segment or a point, which the bake does not keep. Its source
+  points map onto that collapsed set, within `d`. When the segment is an edge
+  of a surviving face, as for a sliver whose neighbours share its long edge,
+  or the point is a corner of one, the collapsed set lies on the surviving
+  surface and the bound is `d`. Otherwise, if one of its corners `s` is a
+  corner of a surviving face, every point of the collapsed set lies within
+  `r = max_j |v′_j − s|` of `s`. Every source point of the triangle is
+  therefore within `d + r` of a surviving face. The best such corner bounds the
+  triangle, and the largest such bound is the **collapse bound**. Every
+  welded run checks this after the assembly (step `capture_weld_check`).
+- **Isolated collapses.** A collapsed triangle with no corner on a surviving
+  face has nothing to bound it. `mesh` refuses such a weld
+  (`invalid_request`, before anything is published). `mesh-inspect` reports
+  the count as `isolated_collapses`.
+- So the surviving welded faces `S′` and the original source `S` are within
+  `e` of each other in both directions: every point of `S′` is within `d` of
+  `S`, and every point of `S` within `e` of `S′`. By the triangle inequality,
+  a tile within `G` of `S′` in either direction is within `G + e` of `S` in
+  the same direction. The charge covers both directions, tile to source and
+  source to tile.
+- Adding the same `e` everywhere keeps errors monotone down the tree. Empty
+  and omitted cells keep at least their children's (charged) error. A weld
+  that moves nothing adds nothing.
+- The bake's position lattice can also flatten a face that capture keeps, as
+  it can without a weld. Leaf and coarse error already cover that, and the weld
+  does not change it.
 
 `G` itself is still sampled, not certified. Once the measured error bound of
 #413 lands, `G` will be measured against the original, unwelded source, and the
 explicit term will no longer be needed.
 
-**Report.** `tilerReport.weld` (also in `conversion.json`) and
-`inspectReport.weld` state:
+**Report.** `tilerReport.weld` (also in `conversion.json`, and so in the
+[run report](#run-report)) and `inspectReport.weld` state:
 
 - `epsilon_m` and `join_primitives` (`none` or `same-material`);
 - `vertices`: the source vertices the weld considered;
 - `merged_vertices`: vertices merged into another (every class member but its
   representative), and `moved_vertices`: those whose position changed;
 - `classes` (of two or more vertices) and `largest_class`;
-- `max_displacement_m`, the true largest move, and `geometric_error_term_m`,
-  what delivery added to every published error (0 when nothing moved).
+- `max_displacement_m`: the true largest move;
+- `degenerate_triangles`: captured triangles with fewer than three distinct
+  corners after the weld, and of those `collapsed_triangles`, the ones the
+  weld made (a moved corner);
+- `isolated_collapses` and `collapse_bound_m`, as above;
+- `coincident_triangles`: faces sharing all three corner positions with
+  another face (either orientation), counted in groups that hold a face with a
+  moved corner;
+- `geometric_error_term_m`: what delivery added to every published error (0
+  when nothing moved).
 
-The CLI's summary repeats them on one line. Without the options the report has
-no `weld` field.
+The CLI's summary for `mesh` and `mesh-inspect` repeats these on one line. A
+warning line follows when the weld collapsed, isolated or duplicated faces.
+Without the options the report has no `weld` field.
 
 **Resources.** The weld is capture's step `capture_weld`, after
 `capture_validate` and before the assembly splits the work. On the capture
@@ -540,7 +573,8 @@ are then sorted under their representatives, and the moves by vertex. All of
 it is deterministic for every `--jobs`.
 
 - Memory: one 4-byte union-find entry per expanded source vertex, two bitmaps,
-  one external sort at a time, the sweep's window (at most 2²⁰ records) and
+  one external sort at a time, the sweep's window (at most 2¹⁶ records) or the
+  audit's collapsed triangles, and
   each decoding task's move reader, charged in capture's resident bound
   (`diagnostics.memory.capture_weld_bytes`). A source of 2³¹ or more expanded
   vertices is `resource_limit`.
@@ -549,8 +583,17 @@ it is deterministic for every `--jobs`.
   most about 240 bytes per used vertex, declared in capture's scratch stage.
   The sorted move list (16 bytes per moved vertex) stays until the assembly has
   decoded every vertex.
-- A source with more than 2²⁰ vertices within ε of each other along one column
-  is `resource_limit`: use a smaller ε.
+- The sweep is linear in its records. A record at exactly the position and
+  scope of one already in the window joins it without entering it, so exact
+  repeats cost one comparison each, and ε = 0 never fills the window. A source
+  is refused as `resource_limit` if more than 2¹⁶ distinct positions lie
+  within ε of each other along one column, or if the sweep averages more than
+  1,024 comparisons per record. Use a smaller ε. The stop check runs at least
+  every 2¹⁶ comparisons.
+- The audit (`capture_weld_check`) reads the captured triangles once, or twice
+  when some collapsed, and sorts one 37-byte record per surviving face for the
+  coincident count. It holds at most 2²⁰ collapsed triangles; a weld that
+  collapses more is `resource_limit`.
 
 ## Coarse levels (HLOD)
 
@@ -1525,7 +1568,9 @@ logs its wall seconds and the run's elapsed seconds as a `log` event. Inside
 `capture_select` (triangles tested, then every POSITION element of each
 expanded primitive marked or mapped), `capture_validate` (one unit), for a
 [weld](#weld-the-source) `capture_weld` (every POSITION element of each expanded
-primitive decoded and listed, then every used vertex swept), `capture_corners`
+primitive decoded and listed, then every used vertex swept) and, after
+`capture_sequence`, `capture_weld_check` (two units per captured triangle),
+`capture_corners`
 (vertices decoded, counting every POSITION element of each expanded
 primitive), `capture_positions` (triangles keyed for the bucket histogram),
 `capture_triangles` (triangles built and staged in their buckets),

@@ -113,6 +113,7 @@ fn the_sweep_finds_the_brute_force_classes() {
                 homes.push(home.id);
                 Ok(())
             },
+            &mut |_| Ok(()),
         )
         .unwrap();
         homes.sort_unstable();
@@ -165,6 +166,240 @@ fn union_find_roots_are_the_lowest_index_in_any_order() {
         let roots: Vec<u32> = (0..10).map(|v| classes.find(v)).collect();
         assert_eq!(roots, [0, 1, 2, 3, 4, 2, 2, 3, 3, 2]);
     }
+}
+
+/// The records of `vertices` (scope 0) under `epsilon`, sorted.
+fn sorted_points(epsilon: f64, vertices: &[[f32; 3]]) -> Vec<Point> {
+    let weld = MeshWeld::new(epsilon).unwrap();
+    let mut records = Vec::new();
+    for (id, p) in vertices.iter().enumerate() {
+        points(&weld, 0, id as u32, canonical(*p), &mut records).unwrap();
+    }
+    records.sort();
+    records
+}
+
+/// Exact repeats join the window's copy without entering it: 200,000 copies of one
+/// position at ε = 0 (far past the window) form one class at one comparison each. A source
+/// dense within ε is refused once its comparisons pass the per-record allowance, and the
+/// stop check runs by work done, not only by records.
+#[test]
+fn the_sweep_is_linear_in_exact_repeats_and_refuses_dense_sources() {
+    let n = 200_000usize;
+    let records = sorted_points(0., &vec![[1.5, -2., 3.25]; n]);
+    let mut classes = Classes::new(n).unwrap();
+    let paired: Vec<AtomicU64> = (0..n.div_ceil(64)).map(|_| AtomicU64::new(0)).collect();
+    let mut last = 0;
+    sweep(
+        records.into_iter().map(Ok),
+        0.,
+        &mut classes,
+        &paired,
+        &mut |_| Ok(()),
+        &mut |compared| {
+            last = compared;
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(last, n as u64 - 1, "one comparison per repeat");
+    assert!((0..n as u32).all(|v| classes.find(v) == 0));
+    // Distinct points 1 µm apart in a 1 cm cube under ε = 1 m: every pair is compared.
+    let mut state = 0x1234_5678_9abc_def1u64;
+    let dense: Vec<[f32; 3]> = (0..20_000)
+        .map(|_| std::array::from_fn(|_| (unit(&mut state) * 0.01) as f32))
+        .collect();
+    let records = sorted_points(1., &dense);
+    let mut classes = Classes::new(dense.len()).unwrap();
+    let paired: Vec<AtomicU64> = (0..dense.len().div_ceil(64))
+        .map(|_| AtomicU64::new(0))
+        .collect();
+    let mut checks = Vec::new();
+    let error = sweep(
+        records.into_iter().map(Ok),
+        1.,
+        &mut classes,
+        &paired,
+        &mut |_| Ok(()),
+        &mut |compared| {
+            checks.push(compared);
+            Ok(())
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), JobErrorKind::ResourceLimit);
+    assert!(
+        error.to_string().contains("smaller --weld-epsilon"),
+        "{error}"
+    );
+    // Checked at least every CHECK_COMPARISONS comparisons (plus one record's window).
+    assert!(checks
+        .windows(2)
+        .all(|w| w[1] - w[0] <= CHECK_COMPARISONS + WINDOW_RECORDS as u64));
+    assert!(checks.len() as u64 > checks.last().unwrap() / (2 * CHECK_COMPARISONS));
+    // A stop during the window scans ends the sweep.
+    let records = sorted_points(1., &dense);
+    let mut classes = Classes::new(dense.len()).unwrap();
+    let error = sweep(
+        records.into_iter().map(Ok),
+        1.,
+        &mut classes,
+        &paired,
+        &mut |_| Ok(()),
+        &mut |compared| {
+            if compared > 0 {
+                Err(stopped())
+            } else {
+                Ok(())
+            }
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), JobErrorKind::Cancelled);
+}
+
+/// An unindexed glTF of `triangles` in one primitive (Y up).
+fn triangles_gltf(parent: &Path, triangles: &[[[f32; 3]; 3]]) -> PathBuf {
+    fs::create_dir_all(parent).unwrap();
+    let mut bin = Vec::new();
+    let (mut low, mut high) = ([f32::MAX; 3], [f32::MIN; 3]);
+    for p in triangles.iter().flatten() {
+        for a in 0..3 {
+            low[a] = low[a].min(p[a]);
+            high[a] = high[a].max(p[a]);
+        }
+        bin.extend(p.iter().flat_map(|v| v.to_le_bytes()));
+    }
+    fs::write(parent.join("t.bin"), &bin).unwrap();
+    let doc = json!({
+        "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+        "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],
+        "buffers":[{"uri":"t.bin","byteLength":bin.len()}],
+        "bufferViews":[{"buffer":0,"byteLength":bin.len()}],
+        "accessors":[{"bufferView":0,"componentType":5126,"count":3 * triangles.len(),
+            "type":"VEC3","min":low,"max":high}]
+    });
+    let input = parent.join("t.gltf");
+    fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+    input
+}
+
+/// A face, a sliver whose short edge collapses onto that face's corner, and a near copy of
+/// the face that becomes coincident with it.
+const SLIVERS: [[[f32; 3]; 3]; 3] = [
+    [[0., 0., 0.], [1., 0., 0.], [0., 0., -1.]],
+    [[1., 0., 0.], [1.001, 0., 0.], [0.5, 0., -1e-4]],
+    [[0., 0., 0.], [1.0005, 0., 0.], [0., 0., -1.]],
+];
+
+/// A collapsed sliver with a corner on a surviving face is bounded by the largest
+/// displacement plus its collapsed set's reach from that corner, and the bound is charged;
+/// a coincident face is counted. The sliver's 1.001 m corner is the source's largest x, so
+/// the welded faces' box is strictly inside the source's: the assembly checks containment,
+/// not equality, in a welded run.
+#[test]
+fn collapsed_slivers_are_bounded_counted_and_charged() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = triangles_gltf(&dir.path().join("src"), &SLIVERS);
+    let weld = MeshWeld::new(0.002).unwrap();
+    let (rows, report) = capture(&input, &dir.path().join("weld"), 1, Some(weld), None);
+    let report = report.unwrap();
+    let d = f64::from(1.001f32) - 1.;
+    assert_eq!(report.max_displacement_m, d);
+    assert_eq!(
+        (
+            report.merged_vertices,
+            report.moved_vertices,
+            report.classes
+        ),
+        (5, 2, 3)
+    );
+    assert_eq!(
+        (
+            report.degenerate_triangles,
+            report.collapsed_triangles,
+            report.isolated_collapses,
+            report.coincident_triangles
+        ),
+        (1, 1, 0, 2)
+    );
+    let reach = (0.25f64 + f64::from(1e-4f32).powi(2)).sqrt();
+    assert!(
+        (report.collapse_bound_m - (d + reach)).abs() < 1e-6,
+        "{report:?}"
+    );
+    assert_eq!(
+        report.geometric_error_term_m,
+        report.collapse_bound_m.next_up()
+    );
+    let max_x = rows
+        .iter()
+        .flat_map(|t| t.triangle.positions)
+        .map(|p| p[0])
+        .fold(f32::MIN, f32::max);
+    assert_eq!(max_x, 1.);
+    let lines = report.summary_lines();
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert!(
+        lines[1].starts_with("warning: the weld collapsed 1 triangles"),
+        "{lines:?}"
+    );
+    assert!(!lines[0].contains("  "), "{lines:?}");
+    // A face along the sliver's collapsed segment holds it: the bound is the displacement.
+    let mut held = SLIVERS.to_vec();
+    held.push([[1., 0., 0.], [0.5, 0., -1e-4], [1., 0., -1.]]);
+    let held = triangles_gltf(&dir.path().join("held"), &held);
+    let (_, on_edge) = capture(&held, &dir.path().join("held-weld"), 1, Some(weld), None);
+    let on_edge = on_edge.unwrap();
+    assert_eq!(
+        (on_edge.collapsed_triangles, on_edge.isolated_collapses),
+        (1, 0)
+    );
+    assert_eq!(on_edge.collapse_bound_m, d);
+    assert_eq!(on_edge.geometric_error_term_m, d.next_up());
+    // The published errors carry the collapse bound.
+    let (archive, result) = bake(&input, dir.path(), "slivers", 1, Some(weld));
+    assert_eq!(result.report.weld.as_ref(), Some(&report));
+    let set = TileSet::open(&archive).unwrap();
+    assert!(set
+        .tiles()
+        .iter()
+        .all(|t| t.geometric_error >= report.geometric_error_term_m));
+}
+
+/// A sliver whose every corner collapses away from all surviving faces cannot be bounded:
+/// `mesh` refuses the weld before publishing, and `mesh-inspect` reports it.
+#[test]
+fn isolated_collapses_refuse_the_bake_and_are_reported_by_inspect() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut triangles = SLIVERS.to_vec();
+    triangles.push([[5., 0., 0.], [5.001, 0., 0.], [5., 0., -1.]]);
+    let input = triangles_gltf(&dir.path().join("src"), &triangles);
+    let weld = MeshWeld::new(0.002).unwrap();
+    let (_, report) = capture(&input, &dir.path().join("weld"), 1, Some(weld), None);
+    assert_eq!(report.unwrap().isolated_collapses, 1);
+    let scratch = dir.path().join("scratch");
+    fs::create_dir_all(&scratch).unwrap();
+    let output = dir.path().join("isolated.3tz");
+    let failure = crate::mesh_to_tileset(
+        TilerRequest::new(&input, &output)
+            .with_scratch_dir(&scratch)
+            .with_weld(weld),
+        &RunControl::default(),
+    )
+    .unwrap_err();
+    assert_eq!(failure.error.kind(), JobErrorKind::InvalidRequest);
+    assert!(failure.error.to_string().contains("isolated_collapses"));
+    assert!(!output.exists());
+    assert_eq!(fs::read_dir(&scratch).unwrap().count(), 0);
+    let inspected = crate::inspect_mesh(
+        crate::InspectRequest::new(&input)
+            .with_scratch_dir(&scratch)
+            .with_weld(weld),
+        &RunControl::default(),
+    )
+    .unwrap();
+    assert_eq!(inspected.report.weld.unwrap().isolated_collapses, 1);
 }
 
 /// Four 8 × 8 blocks of 1 m cells side by side in x (block `b` spans x 8b to 8b + 8), heights

@@ -1179,40 +1179,12 @@ fn subset_line(subset: &Value) -> Option<String> {
     ))
 }
 
-/// The weld statement's line (`MeshWeldReport::summary_line`).
-fn weld_line(weld: &Value) -> Option<String> {
-    serde_json::from_value::<WeldLine>(weld.clone())
-        .ok()
-        .map(|w| w.line())
-}
-#[derive(serde::Deserialize)]
-struct WeldLine {
-    epsilon_m: f64,
-    join_primitives: String,
-    vertices: u64,
-    merged_vertices: u64,
-    moved_vertices: u64,
-    classes: u64,
-    max_displacement_m: f64,
-}
-impl WeldLine {
-    fn line(&self) -> String {
-        let scope = if self.join_primitives == "same-material" {
-            "within each material"
-        } else {
-            "within each primitive"
-        };
-        format!(
-            "weld: merged {} of {} source vertices within {} m {scope} ({} moved, {} classes); \
-             largest displacement {} m, added to every published geometric error",
-            self.merged_vertices,
-            self.vertices,
-            self.epsilon_m,
-            self.moved_vertices,
-            self.classes,
-            self.max_displacement_m,
-        )
-    }
+/// The weld statement's lines (`MeshWeldReport::summary_lines`), shared with
+/// `mesh-inspect`.
+fn weld_lines(weld: &Value) -> Vec<String> {
+    serde_json::from_value::<rusty_tiles::MeshWeldReport>(weld.clone())
+        .map(|weld| weld.summary_lines())
+        .unwrap_or_default()
 }
 
 /// Allow-listed EPSG datum operations a converter report names (point cloud at the top
@@ -1396,9 +1368,7 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
     if let Some(line) = subset_line(&summary["tilerReport"]["subset"]) {
         lines.push(line);
     }
-    if let Some(line) = weld_line(&summary["tilerReport"]["weld"]) {
-        lines.push(line);
-    }
+    lines.extend(weld_lines(&summary["tilerReport"]["weld"]));
     let count = |key: &str| counts[key].as_u64().filter(|n| *n > 0);
     let mut warnings = Vec::new();
     if let Some(n) = count("skippedFeatures") {

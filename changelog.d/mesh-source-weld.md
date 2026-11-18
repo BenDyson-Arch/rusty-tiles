@@ -10,9 +10,12 @@
   At 0 only exact repeats merge, which the bake already treats as one position.
   Only positions move: normals, UVs, colours and provenance (`source_primitive`)
   stay each vertex's own, so UV seams are kept. `tilerReport.weld` states the
-  merged count and the true largest displacement (a chain can exceed ε), and
-  delivery adds that displacement to every published geometric error, leaves'
-  and coarse tiles'. The exact-seam rule between output tiles is unchanged. The
-  weld is progress step `capture_weld`, charged in capture's memory bound
+  merged count, the true largest displacement (a chain can exceed ε) and the
+  faces the weld collapsed or made coincident (CLI warning when non-zero).
+  Delivery adds the larger of that displacement and a bound on each collapsed
+  triangle's distance to a surviving face to every published geometric error,
+  leaves' and coarse tiles'; a weld that collapses a triangle onto no surviving
+  face is refused. The exact-seam rule between output tiles is unchanged. The
+  weld is progress steps `capture_weld` and `capture_weld_check`, charged in capture's memory bound
   (`capture_weld_bytes`) and declared scratch. Without the options, output is
   unchanged.
