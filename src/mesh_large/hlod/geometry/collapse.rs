@@ -21,6 +21,7 @@ use super::super::{
     store::TileGeometry,
 };
 use super::{interface_points, Merged};
+use crate::JobError;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::{cmp::Ordering, collections::BinaryHeap};
 
@@ -975,7 +976,7 @@ pub(crate) fn problem<'a>(
     mapping: &Mapping<'_>,
     target: usize,
     min_cos: f64,
-) -> (Problem<'a>, Mapped, Vec<InterfaceRow>) {
+) -> Result<(Problem<'a>, Mapped, Vec<InterfaceRow>), JobError> {
     let ids = key_index(&m.keys);
     let points = interface_points(interface);
     let mut previous: Vec<InterfaceRow> = children
@@ -995,7 +996,7 @@ pub(crate) fn problem<'a>(
             continue;
         }
         if child_border.contains(k) {
-            let mm = mapping(*k);
+            let mm = mapping(*k)?;
             mapped[v] = mm;
             if let Some((a, b, _, _)) = mm {
                 if let (Some(&a), Some(&b)) = (ids.get(&a), ids.get(&b)) {
@@ -1064,7 +1065,7 @@ pub(crate) fn problem<'a>(
         .filter_map(|r| Some((*ids.get(&r.a)?, *ids.get(&r.b)?)))
         .map(|(a, b)| (a.min(b), a.max(b)))
         .collect();
-    (
+    Ok((
         Problem {
             positions: &m.positions,
             triangles: &m.triangles,
@@ -1082,10 +1083,11 @@ pub(crate) fn problem<'a>(
         },
         mapped,
         previous,
-    )
+    ))
 }
 
-pub(crate) type Mapping<'a> = dyn Fn(Key) -> Option<(Key, Key, f64, u8)> + 'a;
+/// A child border key's image at the parent depth (`borders::Borders::mapping`).
+pub(crate) type Mapping<'a> = dyn Fn(Key) -> Result<Option<(Key, Key, f64, u8)>, JobError> + 'a;
 
 /// `m` with Steiner vertices appended (keys from their f32 positions, ells of the vertex
 /// each replaced); `mapped` grows with `None`.

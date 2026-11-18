@@ -526,12 +526,14 @@ fn measured_contract(parent: TileKey, children: &[TileGeometry], fixture: Fixtur
     contract
 }
 
-fn assert_peaks(n: usize, combined_peak: usize, metadata: Metadata) {
+/// `allowance`: what the build may use beyond the per-triangle charge (P1: the encode
+/// allowance, idle until the published tile is encoded).
+fn assert_peaks(n: usize, combined_peak: usize, metadata: Metadata, allowance: u64) {
     let metadata_bytes = metadata.bytes();
     let geometry_peak = combined_peak
         .checked_sub(metadata_bytes)
         .expect("retained metadata must be present in the combined peak");
-    let geometry_charge = n as u64 * super::super::JOB_BYTES_PER_TRIANGLE;
+    let geometry_charge = n as u64 * super::super::JOB_BYTES_PER_TRIANGLE + allowance;
     let contract_charge = contract_workspace_bytes((6 * super::super::TRIANGLE_CAP) as u64);
     eprintln!(
         "CONTRACT WORKSPACE: combined_peak={combined_peak} bytes, \
@@ -560,7 +562,7 @@ fn assert_peaks(n: usize, combined_peak: usize, metadata: Metadata) {
     );
 }
 
-fn complete_parent(n: usize, third_contact: bool) {
+fn complete_parent(n: usize, third_contact: bool, p1: bool) {
     // Held inputs are separately leased, as in parent_jobs_allocate_within_their_charge.
     // Nothing built here is moved into or freed within the counting closure.
     let (parent, children) = children(n, Fixture::Direct { third_contact });
@@ -605,6 +607,7 @@ fn complete_parent(n: usize, third_contact: bool) {
             },
             true,
             true,
+            p1,
         );
         // Read and retain both metadata vectors after the complete builder.
         let metadata = Metadata::of(std::hint::black_box(&contract));
@@ -627,7 +630,19 @@ fn complete_parent(n: usize, third_contact: bool) {
     assert!(calls.get() >= expected_contacts);
     assert!(mapped_mid.get() > 0, "a no-op mapping is not this control");
     assert!(outcome.attempted_topology.contracted_vertices > 0);
-    if third_contact {
+    if p1 {
+        // P1 rescues the strip with a Steiner vertex instead of the all-contact face, at
+        // stage 0, within the same charge.
+        assert_eq!(outcome.retry.map(|r| r.resort), Some("p1"));
+        let built = outcome.built.expect("P1 builds the strip");
+        assert_eq!(built.last_resort_stage, 0);
+        let keys: Vec<_> = built.geometry.positions.iter().copied().map(key).collect();
+        assert!(!keys.contains(&mid));
+        assert!(!built.geometry.triangles.iter().any(|t| {
+            let face = t.map(|v| keys[v as usize]);
+            face == [a, b, c] || face == [b, c, a] || face == [c, a, b]
+        }));
+    } else if third_contact {
         // The only possible upper strip face is a-b-c, a fresh all-contact face.
         // No recovery proposal can self-license it against the original source; the
         // A2 last resort admits it here, in its seam owner, after every strategy failed.
@@ -685,7 +700,16 @@ fn complete_parent(n: usize, third_contact: bool) {
         let lost = missing(&geometry.triangles, &keys, &segments, &points);
         assert!(lost.0.is_empty() && lost.1.is_empty());
     }
-    assert_peaks(n, peak, metadata);
+    assert_peaks(
+        n,
+        peak,
+        metadata,
+        if p1 {
+            super::super::JOB_ENCODE_BYTES
+        } else {
+            0
+        },
+    );
 }
 
 /// D1/D11 amendment A2 (N1, seam owner). The third-contact strip's only completion is the
@@ -724,12 +748,67 @@ fn a_highest_indexed_parent_builds_the_seam_faces_it_owns() {
             &|| Ok(()),
             true,
             true,
+            false,
         )
         .unwrap();
         let stage = outcome.built.as_ref().map(|b| b.last_resort_stage);
         let name = format!("greatest={greatest} shifted={shifted}");
         assert_eq!(stage.is_some(), builds, "{name}: {stage:?}");
         assert!(stage.is_none_or(|s| s == 3), "{name}: {stage:?}");
+    }
+}
+
+/// The same strip under P1 (`geometry::p1`): the removal of the border vertex fanned only
+/// by contacts is rescued by an interior Steiner vertex, so every parent builds at stage 0,
+/// owner or not, and none publishes the all-contact face a-b-c.
+#[test]
+fn p1_builds_the_seam_bound_strip_without_a_new_contact_face() {
+    for (greatest, shifted) in [(true, true), (true, false), (false, true), (false, false)] {
+        let fixture = Fixture::Owned { greatest, shifted };
+        let (parent, children) = children(64, fixture);
+        let [a, mid, b, c] = std::array::from_fn(|i| key(fixture.positions()[i]));
+        let contract = measured_contract(parent, &children, fixture);
+        let outcome = build_parent(
+            parent,
+            &children,
+            &[super::super::TRIANGLE_CAP],
+            &contract,
+            &|k| {
+                if k == mid {
+                    Ok(Some((a, b, 0.5, 2)))
+                } else {
+                    Ok(Some((k, k, 0., if [a, b, c].contains(&k) { 2 } else { 1 })))
+                }
+            },
+            &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
+            &mut |_| Ok(true),
+            &|| Ok(()),
+            true,
+            true,
+            true,
+        )
+        .unwrap();
+        let name = format!("greatest={greatest} shifted={shifted}");
+        let built = outcome
+            .built
+            .unwrap_or_else(|| panic!("{name}: P1 builds it"));
+        assert_eq!(built.last_resort_stage, 0, "{name}");
+        assert_eq!(outcome.retry.map(|r| r.resort), Some("p1"), "{name}");
+        let g = &built.geometry;
+        let mut contact = [a, b, c];
+        contact.sort_unstable();
+        assert!(
+            g.triangles.iter().all(|t| {
+                let mut k = t.map(|v| key(g.positions[v as usize]));
+                k.sort_unstable();
+                k != contact
+            }),
+            "{name}: no all-contact face"
+        );
+        assert!(
+            !g.positions.iter().any(|&p| key(p) == mid),
+            "{name}: m removed"
+        );
     }
 }
 
@@ -785,6 +864,7 @@ fn seam_ownership_follows_the_point_holders_not_the_contract_rows() {
             &|| Ok(()),
             true,
             true,
+            false,
         )
         .unwrap();
         let stage = outcome.built.as_ref().map(|b| b.last_resort_stage);
@@ -824,6 +904,7 @@ fn a_repeated_failed_contraction_is_reused_with_the_same_outcome() {
             &|| Ok(()),
             true,
             reuse,
+            false,
         )
         .unwrap();
         (outcome, lookups.get())
@@ -848,12 +929,19 @@ fn a_repeated_failed_contraction_is_reused_with_the_same_outcome() {
 
 #[test]
 fn complete_parent_actual_contraction_dense_rows_fit_charge() {
-    complete_parent(FACES, false);
+    complete_parent(FACES, false, false);
 }
 
 #[test]
 fn complete_parent_rejected_contraction_and_recovery_dense_rows_fit_charge() {
-    complete_parent(FACES, true);
+    complete_parent(FACES, true, false);
+}
+
+/// The rejected-contraction strip under P1: its Steiner rescue and contraction fit the same
+/// per-triangle job charge.
+#[test]
+fn complete_parent_p1_steiner_dense_rows_fit_charge() {
+    complete_parent(FACES, true, true);
 }
 
 #[test]
@@ -902,6 +990,7 @@ fn complete_parent_constrained_contraction_dense_rows_fit_charge() {
             &|| Ok(()),
             true,
             true,
+            false,
         );
         let metadata = Metadata::of(std::hint::black_box(&contract));
         (result, metadata)
@@ -998,5 +1087,5 @@ fn complete_parent_constrained_contraction_dense_rows_fit_charge() {
     assert!(lost.0.is_empty() && lost.1.is_empty());
     // Verify the actual successful CDT/frozen-ring result before the resource
     // assertion, so an overcharge cannot hide an unrelated branch failure.
-    assert_peaks(n, peak, metadata);
+    assert_peaks(n, peak, metadata, 0);
 }

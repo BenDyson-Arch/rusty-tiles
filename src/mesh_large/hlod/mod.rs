@@ -1908,6 +1908,7 @@ fn build_tile(
             settings.mutation.last_resorts(),
             // Reused calls write no audit records: reuse only without the audit sidecar.
             settings.mutation.reuse() && audit.is_none(),
+            settings.mutation.p1(),
         )?;
         // Replayed calls' S2 searches, as if they had run (read only after this point).
         nearest.stats.add(outcome.reused.search);

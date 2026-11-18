@@ -1909,6 +1909,7 @@ fn parent_jobs_allocate_within_their_charge() {
                 &|| Ok(()),
                 true,
                 true,
+                true,
             )
         });
         eprintln!(
@@ -5392,6 +5393,7 @@ fn ordinary_drops_under_pressure_go_smallest_first() {
             &|| Ok(()),
             true,
             true,
+            true,
         )
         .unwrap()
         .built
@@ -5533,6 +5535,7 @@ fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
             &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
             &mut |_| Ok(true),
             &|| Ok(()),
+            true,
             true,
             true,
         )
@@ -6188,7 +6191,8 @@ fn last_resort_case(
 
 /// D1/D11 amendment A2, stage N1. On three noisy sheets folded onto one another, a
 /// depth-1 cell fits only once it may create new faces and edges on the shared points
-/// of the seam segments it owns; no fold is admitted. Develop omits it. On D11's ladder
+/// of the seam segments it owns, or (P1) once a Steiner vertex replaces the border vertex
+/// whose removal needs them; no fold is admitted. Develop omits it. On D11's ladder
 /// alone (relief off) the cells still omitted are border-bound: their contracts leave the
 /// cap no room. With border relief (A1) those borders relax, and the root builds too.
 #[test]
@@ -6197,12 +6201,24 @@ fn n1_builds_a_seam_bound_cell_on_the_segments_it_owns() {
     let name = "N1 folded sheets";
     let sheet = folded_sheet(96, 3, 0., 0.0001, 23);
     let (develop, dir) = last_resort_case(name, sheet.clone(), &work.path().join("d11"), false);
-    let n1: Vec<_> = last_resort_tiles(&dir)
+    // Develop omits them; P1 (its default or seam-owner pass) or N1 builds them now.
+    let seam_bound: Vec<_> = last_resort_records(&dir)
         .into_iter()
-        .filter(|t| t.2 == 1)
+        .filter(|r| !develop.contains(&(r.0, r.1)))
         .collect();
-    assert!(!n1.is_empty(), "{name}: {:?}", last_resort_tiles(&dir));
-    assert!(n1.iter().all(|t| !develop.contains(&(t.0, t.1))), "{name}");
+    assert!(
+        !seam_bound.is_empty(),
+        "{name}: {:?}",
+        last_resort_records(&dir)
+    );
+    // Some of them are seam-bound cells P1 or N1 builds without a fold (stage at most 1);
+    // the others are ancestors that only inherited the omission.
+    assert!(
+        seam_bound
+            .iter()
+            .any(|r| r.3 == "n1" || (r.3 == "p1" && r.2 <= 1)),
+        "{name}: {seam_bound:?}"
+    );
     let (_, relieved) = last_resort_case(name, sheet, &work.path().join("relief"), true);
     assert!(
         rows(&relieved.join("proxies.jsonl"))
@@ -6623,7 +6639,9 @@ fn root_competition_city_sweep() {
 
 /// The bounded natural search found no own-root recovery: N3 is already part of
 /// incumbent construction. These are the closest actual refusals, not injected
-/// failures: a challenger that fails prepare, and a propagated descendant omission.
+/// failures: a challenger that fails prepare, and a propagated descendant omission. P1 is
+/// off: it builds both cells before the ladder (`every_ladder_build_publishes_with_its_record`
+/// covers the candidate's record).
 #[test]
 fn root_competition_preserves_natural_guard_and_descendant_refusals() {
     for (name, source) in [
@@ -6632,7 +6650,8 @@ fn root_competition_preserves_natural_guard_and_descendant_refusals() {
     ] {
         let work = tempfile::tempdir().unwrap();
         let input = write_gltf(&work.path().join("src"), &source);
-        let dirs = [Mutation::NoRootCompetition, Mutation::None].map(|mutation| {
+        // Without P1, which now builds these cells before the ladder reaches N3.
+        let dirs = [Mutation::NoP1NoRootCompetition, Mutation::NoP1].map(|mutation| {
             stage(
                 &input,
                 &work.path().join(format!("{mutation:?}")),

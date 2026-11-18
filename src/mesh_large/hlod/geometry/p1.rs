@@ -18,7 +18,38 @@ use super::{
     collapse, folds, interface_points, merge, missing, topology, BorderMap, Built, Merged,
 };
 use crate::{mesh_large::leaves::geometry::LatticePlan, JobError};
-use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+use rustc_hash::FxHashSet as HashSet;
+use std::borrow::Cow;
+
+/// Upper estimate of what P1 holds at once for `vertices` merged vertices, `faces` faces and
+/// `rows` child interface rows: per vertex its merged copy, class, mapping, f64 position,
+/// quadric, face list, stamps and heap entries; per face the merged face and representative,
+/// the four edge and face hash tables at a load of 7/16, and the face lists' entries; per
+/// row the merged child interface and its copy in the contraction guard. The primary build's
+/// remaining hand-over is included. Calibrated with margin against the complete-parent
+/// controls (`contraction_memory`), whose vertex-dense strips are the worst case measured.
+fn workspace_bytes(vertices: usize, faces: usize, rows: usize) -> u64 {
+    const PER_VERTEX: u64 = 600;
+    const PER_FACE: u64 = 600;
+    const PER_ROW: u64 = 100;
+    let n = |x: usize| u64::try_from(x).unwrap_or(u64::MAX);
+    n(vertices)
+        .saturating_mul(PER_VERTEX)
+        .saturating_add(n(faces).saturating_mul(PER_FACE))
+        .saturating_add(n(rows).saturating_mul(PER_ROW))
+}
+
+/// P1 runs within its job's charge: the per-triangle geometry workspace plus the encode
+/// allowance, which nothing uses until the published tile is encoded, after P1 has
+/// released its state. Beyond it (vertex-dense inputs at full size) the ladder runs as
+/// before without P1.
+fn fits(vertices: usize, faces: usize, rows: usize) -> bool {
+    let faces64 = u64::try_from(faces).unwrap_or(u64::MAX);
+    workspace_bytes(vertices, faces, rows)
+        <= faces64
+            .saturating_mul(super::super::JOB_BYTES_PER_TRIANGLE)
+            .saturating_add(super::super::JOB_ENCODE_BYTES)
+}
 
 /// The P1 proposal for `tile`, with the last-resort stage that licensed it (0 or 1), or
 /// none. `caps` are the build's caps (target first, hard cap last).
@@ -33,6 +64,17 @@ pub(super) fn attempt(
     let (Some(&target), Some(&cap)) = (caps.first(), caps.last()) else {
         return Ok(None);
     };
+    // A contract that alone needs more than the cap cannot be kept (production never
+    // builds one; `build_tile` filters it out).
+    if contract.minimum_triangles() > cap {
+        return Ok(None);
+    }
+    let rows: usize = children.iter().map(|c| c.interface.len()).sum();
+    let vertices: usize = children.iter().map(|c| c.positions.len()).sum();
+    let faces: usize = children.iter().map(|c| c.triangles.len()).sum();
+    if !fits(vertices, faces, rows) {
+        return Ok(None);
+    }
     let m = merge(children);
     let interface = &contract.interface;
     let children_error = children
@@ -40,21 +82,8 @@ pub(super) fn attempt(
         .map(|c| c.geometric_error)
         .fold(0., f64::max);
     let floor = contract.scale.max(children_error);
-    let mut previous: Vec<InterfaceRow> = children
-        .iter()
-        .flat_map(|c| c.interface.iter().copied())
-        .collect();
-    super::super::interfaces::merge_rows(&mut previous);
-    let child_border = interface_points(&previous);
-    let mut mapped_keys: HashMap<Key, Option<(Key, Key, f64, u8)>> = HashMap::default();
-    for k in &m.keys {
-        if child_border.contains(k) {
-            mapped_keys.insert(*k, mapping(*k)?);
-        }
-    }
-    let lookup = |k: Key| mapped_keys.get(&k).copied().flatten();
     let (mut prob, mapped0, previous) =
-        collapse::problem(&m, children, interface, &lookup, target, 0.);
+        collapse::problem(&m, children, interface, mapping, target, 0.)?;
     prob.limit = cap;
     prob.steiner = true;
     let snap = |p: [f32; 3], r: u32| {
@@ -173,9 +202,14 @@ pub(super) fn attempt(
         if faces.len() > cap || faces.is_empty() {
             continue;
         }
-        let mut with_added = m.clone();
-        let mut mapped = mapped0.clone();
-        collapse::extend_added(&mut with_added, &mut mapped, &added);
+        // Only a Steiner rescue adds vertices; otherwise the merged mesh is used as is.
+        let (with_added, mapped) = if added.is_empty() {
+            (Cow::Borrowed(&m), Cow::Borrowed(&mapped0))
+        } else {
+            let (mut m, mut mapped) = (m.clone(), mapped0.clone());
+            collapse::extend_added(&mut m, &mut mapped, &added);
+            (Cow::Owned(m), Cow::Owned(mapped))
+        };
         let stage_policy = if stage == 1 {
             policy.clone()
         } else {

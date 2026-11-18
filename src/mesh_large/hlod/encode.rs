@@ -55,6 +55,12 @@ pub(crate) enum Mutation {
     /// Keep production construction but disable only root competition (control).
     #[cfg(test)]
     NoRootCompetition,
+    /// Skip P1 (`geometry::p1`): the ladder of builds alone, as before it.
+    #[cfg(test)]
+    NoP1,
+    /// `NoP1` and `NoRootCompetition` together.
+    #[cfg(test)]
+    NoP1NoRootCompetition,
     /// Weld corners on POSITION and feature ID only (the weld's own check must refuse).
     #[cfg(test)]
     WeldPositionsOnly,
@@ -125,7 +131,16 @@ impl Mutation {
     }
     pub(crate) fn root_competition(self) -> bool {
         #[cfg(test)]
-        if self == Self::NoRootCompetition {
+        if matches!(self, Self::NoRootCompetition | Self::NoP1NoRootCompetition) {
+            return false;
+        }
+        self.last_resorts()
+    }
+
+    /// Whether P1 runs after a failed first build (`geometry::p1`).
+    pub(crate) fn p1(self) -> bool {
+        #[cfg(test)]
+        if matches!(self, Self::NoP1 | Self::NoP1NoRootCompetition) {
             return false;
         }
         self.last_resorts()

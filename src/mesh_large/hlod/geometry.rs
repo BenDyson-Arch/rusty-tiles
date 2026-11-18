@@ -1034,6 +1034,7 @@ pub(crate) fn build_parent(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
     last_resorts: bool,
     reuse: bool,
+    p1: bool,
 ) -> Result<Outcome, JobError> {
     let mut repeats = Repeats::new(reuse);
     let run = |r,
@@ -1052,7 +1053,12 @@ pub(crate) fn build_parent(
     let primary_contraction_failed = first.contraction_failed;
     // P1: one guard-by-construction contraction before the retry ladder. It is outside
     // `build`, so the ladder's exact-repeat reuse is unchanged.
-    if let Some((stage, mut b)) = p1::attempt(tile, children, caps, contract, mapping, lattice)? {
+    let proposal = if p1 {
+        p1::attempt(tile, children, caps, contract, mapping, lattice)?
+    } else {
+        None
+    };
+    if let Some((stage, mut b)) = proposal {
         b.last_resort_stage = stage;
         b.staged = stage > 0;
         if assess(&mut b)? {
@@ -2888,6 +2894,7 @@ mod tests {
             &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
             &mut |_| Ok(true),
             &|| Ok(()),
+            true,
             true,
             true,
         )
