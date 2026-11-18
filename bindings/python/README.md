@@ -34,7 +34,7 @@ Converter inputs and outputs are filesystem paths (`str` or `os.PathLike`). All 
 
 | Function | Keyword arguments and result |
 | --- | --- |
-| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `memory_budget_bytes=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `bbox=None`, `polygon=None`, `force=False`, `callback=None`; returns `TilerResult` |
+| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `memory_budget_bytes=None`, `report_path=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `bbox=None`, `polygon=None`, `force=False`, `callback=None`; returns `TilerResult` |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
 | `model_to_manifest(input, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; writes a sibling `tileset.json` and returns `ModelManifestResult` |
 | `point_cloud_to_3tz(input, output, ...)` | required `source_crs`, `force=False`, `height_offset=None`, `max_points=8192` (also the maximum), `chunk_points=100000`, `metadata=False`, `metadata_attributes=False`, `callback=None`; returns `PointCloudResult` |
@@ -59,7 +59,8 @@ This package contains the standard (portable) build only. It has no imagery or t
 ### Streamed local mesh tiler
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
-scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None,
+scratch_dir=None, memory_budget_bytes=None, report_path=None, anchor=None,
+orientation_xyzw=None,
 scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
 height_offset=None, bbox=None, polygon=None, force=False, callback=None)` converts a source mesh to a
 `.3tz` archive in one run. The output has exact full-detail leaves under
@@ -114,6 +115,10 @@ PNG pages most of all. They are described by these `result.report` keys:
 - `escalation_diagnostics` (the first 32 pages: leaf, first, depth, page, slot, sources, step, misses) and `escalation_diagnostics_omitted`
 
 The callback is polled for cancellation before every re-encode step.
+
+`report_path` writes the mesh guide's [run report](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#run-report)
+there, as the CLI's `--report-path` does: JSON rewritten atomically after each
+stage, so an interrupted run leaves a valid partial report.
 
 `memory_budget_bytes` is the run's declared memory ceiling: a positive `int`.
 A `bool`, float or string raises `TypeError`; zero, a negative value or a value

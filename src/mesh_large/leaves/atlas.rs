@@ -1197,7 +1197,6 @@ fn page_error(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
 fn encode_page(
     services: &Services<'_>,
     layout: &Layout,

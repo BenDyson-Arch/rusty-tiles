@@ -92,7 +92,9 @@ fn stop_in(args: &[OsString], env: &[(&str, &str)], site: &str) -> Stopped {
     }
     let pid = guard.0.as_ref().unwrap().id() as libc::pid_t;
     let sent = Instant::now();
-    assert_eq!(unsafe { libc::kill(pid, libc::SIGTERM) }, 0);
+    // SAFETY: kill takes plain integers and touches no memory of this process.
+    let signalled = unsafe { libc::kill(pid, libc::SIGTERM) };
+    assert_eq!(signalled, 0);
     // A run that ignores the stop is killed after a minute (KillOnDrop) and fails here.
     let status = loop {
         if let Some(status) = guard.0.as_mut().unwrap().try_wait().unwrap() {

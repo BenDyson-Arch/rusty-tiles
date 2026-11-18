@@ -846,7 +846,9 @@ mod tests {
         let fifo = directory.path().join("pipe.bin");
         let native = CString::new(fifo.as_os_str().as_bytes()).unwrap();
         // The FIFO has no writer. An accidental blocking open would hang.
-        assert_eq!(unsafe { libc::mkfifo(native.as_ptr(), 0o600) }, 0);
+        // SAFETY: `native` is a NUL-terminated path that outlives the call.
+        let made = unsafe { libc::mkfifo(native.as_ptr(), 0o600) };
+        assert_eq!(made, 0);
         fs::write(&input, document(&["pipe.bin"])).unwrap();
         let error = load(&input, &output, || Ok(())).err().unwrap();
         assert_eq!(error.kind(), JobErrorKind::InvalidInput);

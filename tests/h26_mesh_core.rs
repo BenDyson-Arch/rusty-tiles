@@ -439,7 +439,34 @@ fn capture_reports_every_step_with_its_total_and_honours_a_cancel_inside_capture
             .unwrap()
     };
     assert!(at("hlod_incidence", 0) < at("hlod_incidence_items", 0));
-    assert!(at("hlod_incidence", 1) > at("hlod_incidence_ends", incidence[2].total));
+    assert!(at("hlod_incidence", triangles) > at("hlod_incidence_ends", incidence[2].total));
+    // Every stage's own events carry a total (#353): capture and the incidence pass count
+    // the triangles they read, the leaves and the archive their tiles (leaves and coarse
+    // tiles with content).
+    for (phase, expected) in [
+        ("capture", Some(triangles)),
+        ("leaf_build", Some(result.report.leaves)),
+        ("hlod_incidence", Some(triangles)),
+        ("hlod_geometry", None),
+        (
+            "archive",
+            Some(result.report.leaves + result.diagnostics.hlod.tiles),
+        ),
+    ] {
+        let totals: Vec<Option<u64>> = events
+            .iter()
+            .filter(|e| e.0 == phase)
+            .map(|e| e.2)
+            .collect();
+        assert!(!totals.is_empty(), "{phase}");
+        assert!(totals.iter().all(Option::is_some), "{phase}: {totals:?}");
+        if let Some(expected) = expected {
+            assert!(
+                totals.iter().all(|t| *t == Some(expected)),
+                "{phase}: {totals:?}"
+            );
+        }
+    }
     // The capture steps sit between the capture phase's own start and end events.
     let position = |phase: &str, done| {
         events
@@ -449,7 +476,10 @@ fn capture_reports_every_step_with_its_total_and_honours_a_cancel_inside_capture
     };
     let first_step = position("capture_scan", 0);
     assert!(position("capture", 0) < first_step);
-    assert!(position("capture", 1) > position("capture_leaf_plans", total("capture_leaf_plans")));
+    assert!(
+        position("capture", triangles)
+            > position("capture_leaf_plans", total("capture_leaf_plans"))
+    );
     drop(events);
 
     // A cancel issued from an observer during capture (as the Python callback does on an
@@ -504,4 +534,219 @@ fn archives_are_identical_across_workers_and_budgets() {
         assert_empty(&scratch);
     }
     assert!(archives.windows(2).all(|pair| pair[0] == pair[1]));
+}
+
+fn read_report(path: &Path) -> serde_json::Value {
+    serde_json::from_slice(&fs::read(path).unwrap()).unwrap()
+}
+
+fn stage_names(report: &serde_json::Value) -> Vec<String> {
+    report["stages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["stage"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+/// No temporary report file is left beside the report.
+fn assert_no_report_temporaries(dir: &Path) {
+    for entry in fs::read_dir(dir).unwrap() {
+        let name = entry.unwrap().file_name();
+        assert!(
+            !name.to_string_lossy().starts_with(".rusty-tiles-report-"),
+            "{name:?}"
+        );
+    }
+}
+
+/// The run report (#353): one complete document after every stage, its stage facts and the
+/// coarse walk's worker use (#343), the final status, and an unchanged archive.
+#[test]
+fn the_run_report_is_rewritten_per_stage_and_leaves_the_archive_unchanged() {
+    let work = tempfile::tempdir().unwrap();
+    let input = grid_fixture(work.path(), 96);
+    let scratch = work.path().join("scratch");
+    fs::create_dir(&scratch).unwrap();
+    let plain = work.path().join("plain.3tz");
+    let plain_result =
+        mesh_to_tileset(request(&input, &plain, &scratch), &RunControl::default()).unwrap();
+    // Stage timing is reported only when asked for.
+    assert!(json!(plain_result.diagnostics)
+        .get("stage_timing")
+        .is_none());
+    let output = work.path().join("reported.3tz");
+    let report_path = work.path().join("run.json");
+    // Whenever the run reports progress, the report on disk is one complete document.
+    let seen = Arc::new(Mutex::new(Vec::<(String, usize)>::new()));
+    let (sink, watched) = (seen.clone(), report_path.clone());
+    let run = control(move |event| {
+        if matches!(event, RunEvent::Progress { .. }) && watched.exists() {
+            let report = read_report(&watched);
+            let stages = report["stages"].as_array().unwrap().len();
+            let status = report["status"].as_str().unwrap().to_owned();
+            sink.lock().unwrap().push((status, stages));
+        }
+        Ok(())
+    });
+    let result = mesh_to_tileset(
+        request(&input, &output, &scratch)
+            .with_report_path(&report_path)
+            .with_stage_timing(true),
+        &run,
+    )
+    .unwrap();
+    assert_eq!(fs::read(&output).unwrap(), fs::read(&plain).unwrap());
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.first().unwrap(), &("running".to_owned(), 0));
+    assert!(seen.windows(2).all(|w| w[0].1 <= w[1].1), "{seen:?}");
+    assert!(seen
+        .iter()
+        .any(|(status, stages)| status == "running" && *stages == 3));
+    let report = read_report(&report_path);
+    assert_eq!(report["schema"], "rusty_tiles_mesh_run_report");
+    assert_eq!(report["schema_version"], 1);
+    assert_eq!(report["status"], "succeeded");
+    assert_eq!(
+        stage_names(&report),
+        [
+            "capture",
+            "leaf_build",
+            "hlod_incidence",
+            "hlod_geometry",
+            "archive"
+        ]
+    );
+    for stage in report["stages"].as_array().unwrap() {
+        assert!(stage["wall_seconds"].as_f64().unwrap() >= 0., "{stage}");
+        assert!(
+            stage["run_elapsed_seconds"].as_f64().unwrap() >= 0.,
+            "{stage}"
+        );
+        assert!(stage["facts"].is_object(), "{stage}");
+    }
+    let facts = |i: usize| &report["stages"][i]["facts"];
+    assert_eq!(facts(0)["triangles"], result.report.triangles);
+    assert!(facts(0)["scratch_logical_peak_bytes"].as_u64().unwrap() > 0);
+    assert_eq!(facts(1)["leaves"], result.report.leaves);
+    assert!(facts(2)["scratch_peak_bytes"].is_u64());
+    let geometry = facts(3);
+    assert_eq!(geometry["tiles"], result.diagnostics.hlod.tiles);
+    assert_eq!(
+        geometry["omitted_by_depth"],
+        json!(result.diagnostics.hlod.omitted_by_depth)
+    );
+    assert_eq!(
+        geometry["last_resort_tiles"],
+        result.diagnostics.hlod.last_resort_tiles
+    );
+    assert_eq!(
+        geometry["last_resort_records"].as_array().unwrap().len() as u64,
+        result.diagnostics.hlod.last_resort_tiles
+    );
+    assert!(geometry["scratch_peak_bytes"].is_u64());
+    // Worker use: busy time by depth adds up, and the depths' idle time with the serial
+    // idle time is the walk's whole idle time.
+    let walk = &geometry["walk_utilisation"];
+    assert_eq!(walk["workers"], 1);
+    let depths = walk["by_depth"].as_array().unwrap();
+    assert!(!depths.is_empty());
+    let sum = |key: &str| depths.iter().map(|d| d[key].as_f64().unwrap()).sum::<f64>();
+    let near = |a: f64, b: f64| (a - b).abs() <= 1e-6 * (1. + a.abs().max(b.abs()));
+    assert!(near(
+        sum("busy_worker_seconds"),
+        walk["busy_worker_seconds"].as_f64().unwrap()
+    ));
+    assert!(near(
+        sum("idle_worker_seconds") + walk["serial_idle_worker_seconds"].as_f64().unwrap(),
+        walk["idle_worker_seconds"].as_f64().unwrap()
+    ));
+    for depth in depths {
+        let share = depth["slowest_cell_share"].as_f64().unwrap();
+        assert!(share > 0. && share <= 1., "{depth}");
+        assert!(depth["cells"].as_u64().unwrap() > 0);
+    }
+    assert_eq!(
+        facts(4)["archive_bytes"],
+        fs::metadata(&output).unwrap().len()
+    );
+    // The final document carries the run's report and diagnostics, as `--json` does.
+    assert_eq!(report["tilerReport"]["tiles"], result.report.tiles);
+    assert_eq!(report["tilerReport"]["triangles"], result.report.triangles);
+    assert_eq!(
+        report["diagnostics"]["archive_bytes"],
+        result.diagnostics.archive_bytes
+    );
+    assert_eq!(
+        report["diagnostics"]["hlod"]["walk_utilisation"]["by_depth"]
+            .as_array()
+            .unwrap()
+            .len(),
+        depths.len()
+    );
+    assert!(report["diagnostics"]["stage_timing"]["stages"].is_object());
+    assert_no_report_temporaries(work.path());
+    assert_empty(&scratch);
+}
+
+/// A cancelled run leaves a valid report naming the stages that finished; a report path
+/// that aliases the run's files or cannot be written refuses the run before capture.
+#[test]
+fn a_cancelled_run_leaves_a_valid_partial_report_and_bad_report_paths_are_refused() {
+    let work = tempfile::tempdir().unwrap();
+    let input = grid_fixture(work.path(), 96);
+    let scratch = work.path().join("scratch");
+    fs::create_dir(&scratch).unwrap();
+    let output = work.path().join("cancelled.3tz");
+    let report_path = work.path().join("run.json");
+    let handle = Arc::new(Mutex::new(None::<CancellationHandle>));
+    let observer_handle = handle.clone();
+    let run = control(move |event| {
+        if let RunEvent::Progress { phase, .. } = event {
+            if *phase == "hlod_geometry" {
+                observer_handle.lock().unwrap().as_ref().unwrap().cancel();
+            }
+        }
+        Ok(())
+    });
+    *handle.lock().unwrap() = Some(run.cancellation_handle());
+    let failure = mesh_to_tileset(
+        request(&input, &output, &scratch).with_report_path(&report_path),
+        &run,
+    )
+    .unwrap_err();
+    assert_eq!(failure.error.kind(), JobErrorKind::Cancelled);
+    assert!(!output.exists());
+    let report = read_report(&report_path);
+    assert_eq!(report["status"], "failed");
+    assert_eq!(report["error"]["kind"], "cancelled");
+    assert_eq!(
+        stage_names(&report),
+        ["capture", "leaf_build", "hlod_incidence"]
+    );
+    assert!(report.get("diagnostics").is_none());
+    assert_no_report_temporaries(work.path());
+    assert_empty(&scratch);
+
+    let refused = |report: PathBuf| {
+        let output = work.path().join("refused.3tz");
+        let failure = mesh_to_tileset(
+            request(&input, &output, &scratch).with_report_path(report),
+            &RunControl::default(),
+        )
+        .unwrap_err();
+        assert!(!output.exists());
+        assert_empty(&scratch);
+        failure.error.kind()
+    };
+    assert_eq!(
+        refused(work.path().join("refused.3tz")),
+        JobErrorKind::InvalidRequest
+    );
+    assert_eq!(refused(input.clone()), JobErrorKind::InvalidRequest);
+    assert_eq!(refused(scratch.clone()), JobErrorKind::InvalidRequest);
+    assert_eq!(
+        refused(work.path().join("missing").join("run.json")),
+        JobErrorKind::Io
+    );
 }

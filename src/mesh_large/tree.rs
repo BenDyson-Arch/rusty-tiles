@@ -86,7 +86,13 @@ pub(crate) struct TreeStats {
     pub degenerate_cells: u64,
     pub per_depth: Vec<DepthBounds>,
 }
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 pub(crate) struct TreeOutput {
     pub triangles: Sequence<TriangleRecord>,
     /// Preorder, sorted by (first rank, depth).
@@ -457,7 +463,13 @@ fn common_cell_prefix(a: u64, b: u64) -> u8 {
         .unwrap_or(0)
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// H1's tree over a sorted stream; the rank-ordered triangles are stored and kept.
 pub(crate) fn build(
     scratch: &Scratch,
@@ -559,7 +571,10 @@ type Built = (
 );
 /// Cells over `triangles`, written to `stored` when given. Over `ranked` (the same
 /// triangles, re-readable) with more than one job, the cell pass runs as parallel subtrees.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn build_in(
     scratch: &Scratch,
     triangles: &mut dyn Iterator<Item = Result<TriangleRecord, JobError>>,
@@ -782,7 +797,10 @@ const FRONTIER_SPLIT: u64 = if cfg!(test) { 64 } else { 1 << 16 };
 /// rank order and close exactly as one pass would. Every node record is the one the serial
 /// pass writes, so the sorted node stream is identical. `check` runs on the calling thread
 /// while the subtrees build; the workers stop at the scratch's stop probe or a failure.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn parallel_cells(
     scratch: &Scratch,
     ranked: &dyn RankedTriangles,

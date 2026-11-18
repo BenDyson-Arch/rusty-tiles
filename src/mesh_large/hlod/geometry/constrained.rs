@@ -124,7 +124,10 @@ pub(super) fn contract(
         })
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn triangulate(
     m: &mut Merged,
     interface: &[InterfaceRow],

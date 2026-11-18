@@ -71,6 +71,7 @@ Tiles one static glTF/GLB scene into a 3D Tiles 1.1 implicit `.3tz`. The scene i
 | `--jobs` | | `auto` | A positive maximum worker count, or `auto`. Each stage caps workers by cores and memory; `auto` uses one worker when memory is unknown. |
 | `--scratchDir` | `--scratch-dir` | platform scratch directory | Parent directory for working data. Archive staging stays beside the output. |
 | `--memory-budget BYTES` | `--memoryBudget` | lesser of 4 GiB and half the detected headroom (2 GiB if undetected) | Memory ceiling for every stage, never raised. A positive byte count with an optional `B`, `KiB`, `MiB`, `GiB` or `TiB` suffix, such as `2GiB`. A run that cannot fit is refused as `resource_limit` before it allocates. The archive does not depend on the budget. Invalid values are usage errors (exit 2). See [memory budget](MESH.md#memory-budget). |
+| `--report-path FILE` | `--reportPath` | none | Write a JSON [run report](MESH.md#run-report) here, rewritten atomically after each stage (timing, CPU, scratch peaks, HLOD omissions, last resorts and worker use), so a stopped run leaves a valid partial report. Never part of the archive. |
 | `--anchor LON LAT HEIGHT` | | none | Place a local scene on the globe: WGS84 longitude and latitude in degrees, ellipsoidal height in metres. Without it, output stays local. |
 | `--orientationXyzw X Y Z W` | `--orientation-xyzw` | identity with `--anchor` | Rotation in the anchor's east-north-up frame, as a near-unit quaternion with W last. Requires `--anchor`. |
 | `--sceneOffset X Y Z` | `--scene-offset` | zero with `--anchor` | Translation in source Y-up metres, applied after node transforms and before the orientation. Requires `--anchor`. |
@@ -89,7 +90,7 @@ With a [source CRS](MESH.md#source-crs), positions, normals and tangents are map
 `--json` returns:
 
 - `tilerReport`: the conversion report, in snake_case, identical to the archive's `conversion.json`;
-- `diagnostics`: requested and actual workers, the resolved `memory` budget and stage plan, the coarse stage's `hlod` facts and `phase_seconds` (not stored in the archive);
+- `diagnostics`: requested and actual workers, the resolved `memory` budget and stage plan, the coarse stage's `hlod` facts and `phase_seconds`, plus `stage_timing` when `RUSTY_TILES_STAGE_TIMING` is set (not stored in the archive);
 - `cleanupDiagnostics`;
 - the resolved `output`.
 
@@ -424,13 +425,13 @@ A failure has this shape and the matching exit code:
 | `progress` | `phase`, `done`, `total` | Work units in a phase. `total` is null when unknown. |
 | `warning` | `message`, or the structured feature report | A feature was skipped or degraded |
 | `log` | `message` | Informational lines, such as mesh timings |
-| `failed` | `phase`, `code` | The conversion failed with this error code |
+| `failed` | `phase`, `code` | The conversion failed with this error code. Problems found beside the failure (cleanup, a run report that could not record it) come first as `warning` events with `code` `secondary_diagnostic`; without `--progress json` they are printed as `warning:` lines. |
 
 Every converter emits a `conversion` phase at 0 and at 1. Completion comes only after the output is published. Other phases depend on the command.
 
 | Command | Phases |
 | --- | --- |
-| `mesh` | `capture` (its steps `capture_scan`, with `--bbox` or `--polygon` `capture_select`, `capture_validate`, `capture_corners`, `capture_positions`, `capture_triangles`, `capture_sequence`, `capture_images`, `capture_tree`, `capture_corner_depths`, `capture_leaf_plans` and, when a sort needs one, `capture_merge`, each with its total and repeated at least every 250 ms), `leaf_build`, `hlod_incidence` (its steps `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends` and, when a sort needs one, `hlod_incidence_merge`, reported the same way), `hlod_geometry`, `leaf_payloads`, `archive`, `ready_to_publish`; required events finish before installation. See the [mesh guide](MESH.md). |
+| `mesh` | Every phase has a total. `capture` (the source's triangles; its steps `capture_scan`, with `--bbox` or `--polygon` `capture_select`, `capture_validate`, `capture_corners`, `capture_positions`, `capture_triangles`, `capture_sequence`, `capture_images`, `capture_tree`, `capture_corner_depths`, `capture_leaf_plans` and, when a sort needs one, `capture_merge`, each with its total and repeated at least every 250 ms), `leaf_build`, `hlod_incidence` (retained triangles; its steps `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends` and, when a sort needs one, `hlod_incidence_merge`, reported the same way), `hlod_geometry` (coarse cells), `leaf_payloads`, `archive` (leaf and coarse tiles), `ready_to_publish`; required events finish before installation. See the [mesh guide](MESH.md). |
 | `point-cloud` | `ingestion`, `tiling`, `point_archive`, `ready_to_publish`; these finish before installation |
 | `vector` | `ingestion`, `encoding` |
 | `raster` | `source_cog` and `aligned_warp` report progress out of 1,000,000. `tiling` reports completed tiles on the same scale and resets for each zoom. `raster_complete` reports the actual tile count before sealing and installation. |
@@ -446,6 +447,7 @@ Events report work units, not time remaining.
 | --- | --- | --- |
 | `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` | vector | Print raw GDAL and GEOS warnings |
 | `RUSTY_TILES_STORAGE_DISK=1` | mesh | Treat storage whose kind cannot be detected, such as a container's overlay root, as disk-backed, so it is not charged to the memory budget. Never overrides detected tmpfs. See [memory budget](MESH.md#memory-budget). |
+| `RUSTY_TILES_STAGE_TIMING=<file>` | mesh | Write the run's summed per-thread stage timing (the `--json` result's `diagnostics.stage_timing`, with the leaf stage's share under `run.leafStageTiming`) to this file after a successful run. Diagnostics only. |
 | `PROJ_DATA` | geospatial commands | Directories holding `proj.db` and local grids |
 | `TMPDIR` | validate | First candidate for validation scratch files |
 

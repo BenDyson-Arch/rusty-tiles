@@ -12,7 +12,10 @@ mod config;
 mod corners;
 mod delivery;
 mod full;
-#[allow(dead_code)] // HLOD item cleanup deferred to its concurrent owner; see cleanup evidence.
+#[expect(
+    dead_code,
+    reason = "HLOD item cleanup deferred to its concurrent owner; see cleanup evidence"
+)]
 mod hlod;
 mod image_tiles;
 mod images;
@@ -23,6 +26,7 @@ mod phases;
 mod pipeline;
 mod records;
 mod resources;
+mod run_report;
 mod source_crs;
 mod subset;
 mod tasks;
@@ -46,7 +50,13 @@ use serde::Serialize;
 use std::path::Path;
 use tree::TreeOutput;
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct CaptureReport {
     pub source_bytes: u64,
@@ -64,7 +74,13 @@ pub(crate) struct CaptureReport {
     pub scratch_memory_backed: bool,
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 pub(crate) struct CapturedTree {
     // Spill handles drop before the directory, including on a diagnostic consumer failure.
     pub tree: TreeOutput,
@@ -73,7 +89,13 @@ pub(crate) struct CapturedTree {
 }
 
 impl CapturedTree {
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+        )
+    )]
     pub(crate) fn close(self) -> Result<(), JobError> {
         let Self { tree, scratch, .. } = self;
         drop(tree);
@@ -90,7 +112,13 @@ fn failure(error: JobError) -> JobFailure {
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 fn exhausted(message: &'static str) -> JobError {
     JobError::new(JobErrorKind::ResourceLimit, message)
 }
@@ -106,7 +134,13 @@ fn member_gate(tiles: u64, ceiling: u64) -> Result<(), JobError> {
     Ok(())
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 pub(crate) fn build(
     input: &Path,
     config: &TreeConfig,

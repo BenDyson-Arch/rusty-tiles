@@ -15,7 +15,13 @@ type Result<T> = std::result::Result<T, JobError>;
 fn invalid(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidInput, message)
 }
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 fn invariant(message: &'static str) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message)
 }
@@ -91,7 +97,13 @@ pub(super) fn canonical(mut position: [f32; 3]) -> [f32; 3] {
     }
     position
 }
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 pub(super) fn bake(
     p: &ScenePrimitive<'_>,
     positions: &mut ElementReader<'_>,
@@ -102,7 +114,13 @@ pub(super) fn bake(
     ))
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// Read-only preflight scan gives the tight box of used baked corners. It observes payload
 /// bytes, so invalid referenced positions/indices may fail here before scratch creation.
 pub(crate) fn scan(
@@ -133,6 +151,16 @@ fn include_source(bounds: &mut [[f64; 3]; 2], world: [f64; 3]) {
     for axis in 0..3 {
         bounds[0][axis] = bounds[0][axis].min(world[axis]);
         bounds[1][axis] = bounds[1][axis].max(world[axis]);
+    }
+}
+
+/// Adds one task's box `[min, max]` to `bounds`. A task that read no used position (a
+/// position chunk no index of its primitive touches) keeps the empty box `[+inf, -inf]` and
+/// adds nothing: included as two corners, it would widen `bounds` to `[-inf, +inf]`.
+fn union_source(bounds: &mut [[f64; 3]; 2], task: &[[f64; 3]; 2]) {
+    if (0..3).all(|axis| task[0][axis] <= task[1][axis]) {
+        include_source(bounds, task[0]);
+        include_source(bounds, task[1]);
     }
 }
 
@@ -333,8 +361,7 @@ fn scan_in_vertex_order(
             Ran::Failed(failure) => return Ok(Err(failure)),
             Ran::All(tasks) => {
                 for task in tasks {
-                    include_source(&mut source_bounds, task.source_bounds[0]);
-                    include_source(&mut source_bounds, task.source_bounds[1]);
+                    union_source(&mut source_bounds, &task.source_bounds);
                     bounds.union(&task.bounds);
                 }
             }
@@ -458,8 +485,7 @@ pub(crate) fn scan_in_triangle_order(
             .into_inner()
             .unwrap_or_else(|e| e.into_inner())
             .ok_or_else(|| JobError::new(JobErrorKind::InvalidState, "scan task did not run"))??;
-        include_source(&mut source_bounds, task.source_bounds[0]);
-        include_source(&mut source_bounds, task.source_bounds[1]);
+        union_source(&mut source_bounds, &task.source_bounds);
         bounds.union(&task.bounds);
     }
     progress(triangles)?;
@@ -474,7 +500,13 @@ pub(crate) fn scan_in_triangle_order(
     ))
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// Reads all source geometry before returning a sorted stream that refers only to scratch.
 /// All authored triangles remain represented, including repeated welded corners.
 pub(crate) fn capture<'s>(
@@ -837,6 +869,53 @@ mod tests {
         let scan = assert_scans_agree(&input);
         assert_eq!(scan.triangles, 3);
         assert_eq!(scan.bounds.max[0], (count - 1) as f32 * 0.01);
+    }
+
+    /// A position chunk no index of the primitive touches (here the middle one of three, or
+    /// the last of two) adds nothing to the f64 source box: it stays the finite box of the
+    /// used vertices, bit for bit that of the triangle-order pass.
+    #[test]
+    fn empty_position_chunks_keep_the_source_box_finite() {
+        let chunk = SCAN_TASK_VERTICES as u32;
+        for (count, indices) in [
+            (
+                2 * chunk + 100,
+                vec![0u32, 1, 2, 2 * chunk, 2 * chunk + 1, 2 * chunk + 99],
+            ),
+            (chunk + 100, vec![0, 1, 2, 3, 4, 5]),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let mut bytes = Vec::new();
+            for v in 0..count {
+                for c in [v as f32 * 0.001, (v % 5) as f32, -(v as f32) * 0.002] {
+                    bytes.extend(c.to_le_bytes());
+                }
+            }
+            let positions = bytes.len();
+            bytes.extend(indices.iter().flat_map(|i| i.to_le_bytes()));
+            fs::write(dir.path().join("gap.bin"), &bytes).unwrap();
+            let doc = json!({
+                "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+                "nodes":[{"mesh":0}],"meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1}]}],
+                "buffers":[{"uri":"gap.bin","byteLength":bytes.len()}],
+                "bufferViews":[{"buffer":0,"byteLength":positions},
+                    {"buffer":0,"byteOffset":positions,"byteLength":indices.len() * 4}],
+                "accessors":[{"bufferView":0,"componentType":5126,"count":count,"type":"VEC3",
+                        "min":[0,0,-300],"max":[150,4,0]},
+                    {"bufferView":1,"componentType":5125,"count":indices.len(),"type":"SCALAR"}]
+            });
+            let input = dir.path().join("gap.gltf");
+            fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+            assert_scans_agree(&input);
+            let source = StreamSource::open(&input, &mut || Ok(())).unwrap();
+            for workers in [1, 3] {
+                let (_, [min, max]) =
+                    scan_with_source_bounds(&source, 1 << 12, workers, &mut |_| Ok(())).unwrap();
+                let last = *indices.iter().max().unwrap() as f32;
+                assert_eq!(min, [0., 0., f64::from(-last * 0.002)]);
+                assert_eq!(max[0], f64::from(last * 0.001));
+            }
+        }
     }
 
     /// A scene of primitives sharing one POSITION accessor (vertex counts around a bitmap word,

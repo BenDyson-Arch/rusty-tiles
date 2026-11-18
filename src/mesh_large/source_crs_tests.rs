@@ -154,6 +154,12 @@ impl Fixture {
 /// A tilted 4x4-cell Y-up surface (40 m) with authored normals and tangents, under a
 /// translated node. Every value is exactly representable in f32.
 fn fixture(parent: &Path) -> Fixture {
+    fixture_with_unused(parent, 0)
+}
+
+/// [`fixture`] with `unused` copies of vertex 0 after the used vertices in every attribute
+/// accessor; no index references them, and `Fixture` lists the used vertices only.
+fn fixture_with_unused(parent: &Path, unused: usize) -> Fixture {
     fs::create_dir_all(parent).unwrap();
     let mut positions = Vec::new();
     let mut normals = Vec::new();
@@ -185,10 +191,17 @@ fn fixture(parent: &Path) -> Fixture {
     }
     let mut bytes = Vec::new();
     let mut views = Vec::new();
+    let padded = |values: &[f64], width: usize| {
+        let mut values = values.to_vec();
+        for _ in 0..unused {
+            values.extend_from_within(..width);
+        }
+        values
+    };
     for values in [
-        positions.iter().flatten().copied().collect::<Vec<_>>(),
-        normals.iter().flatten().copied().collect(),
-        tangents.iter().flatten().copied().collect(),
+        padded(positions.as_flattened(), 3),
+        padded(normals.as_flattened(), 3),
+        padded(tangents.as_flattened(), 4),
     ] {
         let start = bytes.len();
         for value in values {
@@ -209,7 +222,7 @@ fn fixture(parent: &Path) -> Fixture {
             .map(|p| p[i])
             .fold(f64::NEG_INFINITY, f64::max)
     });
-    let count = positions.len();
+    let count = positions.len() + unused;
     let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
         "nodes":[{"mesh":0,"translation":NODE}],
         "meshes":[{"primitives":[{"attributes":{"POSITION":0,"NORMAL":1,"TANGENT":2},"indices":3}]}],
@@ -507,6 +520,30 @@ fn assert_tangent_frames(fixture: &Fixture, corners: &[Corner]) {
     }
     eprintln!("tangent orthogonality: worst |t.n| {worst:e}");
     assert!(worst < 1e-6, "tangent orthogonality {worst}");
+}
+
+/// Unused vertices filling a whole 65,536-vertex scan chunk after the used ones leave the
+/// frame and every captured corner as they are without them. (That empty chunk once widened
+/// the source box to infinity, so the origin was NaN: "coordinates must be finite XYZ".)
+#[test]
+fn unused_position_chunks_leave_the_source_frame_unchanged() {
+    let work = tempfile::tempdir().unwrap();
+    let scratch = work.path().join("scratch");
+    fs::create_dir(&scratch).unwrap();
+    let plain = fixture(&work.path().join("plain"));
+    let padded = fixture_with_unused(&work.path().join("padded"), 1 << 16);
+    let want = capture(&plain.input, &scratch, OFFSET);
+    let got = capture(&padded.input, &scratch, OFFSET);
+    assert_eq!(got.root, want.root);
+    assert_eq!(
+        got.report.origin_degrees_metres,
+        want.report.origin_degrees_metres
+    );
+    assert_eq!(
+        got.report.jacobian_lattice_cells,
+        want.report.jacobian_lattice_cells
+    );
+    assert_eq!(got.corners, want.corners);
 }
 
 #[test]

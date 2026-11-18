@@ -328,6 +328,9 @@ pub(crate) fn encode<E>(
                     NATIVE_REACHED.with(|c| c.set(c.get() + 1));
                     size
                 };
+                // SAFETY: the destination is a live `bound`-byte slice of `bin` and
+                // `destination_size <= bound`; the source slice holds the planned view's
+                // `count * stride` bytes (the plan admits only `source.len % stride == 0`).
                 let encoded = unsafe {
                     meshopt::ffi::meshopt_encodeVertexBuffer(
                         bin[cursor..cursor + bound].as_mut_ptr(),

@@ -120,6 +120,9 @@ pub(crate) fn decode_filtered(
         .try_reserve_exact(words)
         .map_err(|_| limit("allocation failed"))?;
     decoded.resize(words, 0);
+    // SAFETY: `decoded` holds `words * 4 >= count * stride` initialized bytes, and the shape
+    // check above admits only the strides and counts the C decoders handle without writing
+    // past `count * stride` bytes. `compressed` is a live slice of its stated length.
     let code = unsafe {
         match mode {
             Mode::Attributes => meshopt::ffi::meshopt_decodeVertexBuffer(

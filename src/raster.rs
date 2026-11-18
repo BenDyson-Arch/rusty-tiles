@@ -120,7 +120,10 @@ pub(crate) struct RasterCapabilities {
 mod display;
 // Pure planning checks also run in portable builds; production planning
 // requires the native capability, while zoom validation remains shared.
-#[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "native-geospatial"),
+    expect(dead_code, reason = "used only with the native-geospatial feature")
+)]
 mod grid;
 #[cfg(feature = "native-geospatial")]
 mod native;

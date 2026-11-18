@@ -462,7 +462,10 @@ fn leaf_items(
 /// `admit` preflights free space for a phase's whole declared bound (live bytes included)
 /// before the phase writes (`ScratchPhases`). `progress` is the pass's cancellation check and
 /// receives its steps (`hlod_incidence_items`, `_reduce`, `_ends`) and every sort checkpoint.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(crate) fn build<'s>(
     scratch: &'s Scratch,
     sorters: Sorters,

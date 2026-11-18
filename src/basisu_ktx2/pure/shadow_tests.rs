@@ -183,6 +183,7 @@ fn oracle_encode(mips: &[MipLevel<'_>], mode: Mode, params: Params, extra: u32) 
     );
     // SAFETY: on success the shim returns `length` bytes released by rt_basisu_free.
     let bytes = unsafe { std::slice::from_raw_parts(data, length) }.to_vec();
+    // SAFETY: `data` came from the shim and is freed once, after the copy above.
     unsafe { ffi::rt_basisu_free(data) };
     bytes
 }

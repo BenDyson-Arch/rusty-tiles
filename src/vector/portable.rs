@@ -83,7 +83,7 @@ pub(super) struct Reader {
 }
 
 impl Reader {
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg_attr(not(test), expect(dead_code, reason = "used only by unit tests"))]
     pub fn new(
         input: &Path,
         options: &VectorOptions,

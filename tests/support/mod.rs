@@ -3,7 +3,10 @@
 //!
 //! Every input is generated deterministically from code, so the same recipe
 //! list can also be exported for `scripts/compare_outputs.sh`.
-#![allow(dead_code)]
+#![expect(
+    dead_code,
+    reason = "each test crate uses a different part of this module"
+)]
 
 use sha2::{Digest, Sha256};
 use std::{
@@ -579,11 +582,12 @@ pub fn write_rgb_geotiff(path: &Path, n: usize) {
     };
     let filename = CString::new(path.as_os_str().as_encoded_bytes()).unwrap();
     let size = n as i32;
-    // SAFETY: the dataset and SRS handles are released by their matching
-    // calls, buffers match the written window and all strings are terminated.
     // Registration is not thread-safe; tests in one binary run in parallel.
     static REGISTER: std::sync::Once = std::sync::Once::new();
+    // SAFETY: the Once runs registration exactly once, before any GDAL use below.
     REGISTER.call_once(|| unsafe { gdal_sys::GDALAllRegister() });
+    // SAFETY: the dataset and SRS handles are released by their matching
+    // calls, buffers match the written window and all strings are terminated.
     unsafe {
         let driver = gdal_sys::GDALGetDriverByName(c"GTiff".as_ptr());
         assert!(!driver.is_null());

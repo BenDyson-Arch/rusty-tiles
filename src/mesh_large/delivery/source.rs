@@ -417,7 +417,13 @@ fn numbers<const N: usize>(value: Option<&Value>, default: f64) -> Option<[f64; 
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// The decoded positions' box of an H8 leaf GLB in the tile frame, from its JSON chunk only.
 ///
 /// H8 writes one scene-root node per primitive with at most `translation` and `scale`, and

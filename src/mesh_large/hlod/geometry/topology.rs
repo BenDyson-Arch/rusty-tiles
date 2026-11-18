@@ -197,7 +197,10 @@ fn retain(m: &mut Merged, keep: &[bool]) {
 /// Consume the shared chord without folding incident faces. A sign-preserving collapse
 /// is cheap; otherwise rebuild the affected manifold patch against the exact boundary.
 /// Failure leaves the source mesh intact for the caller's reported frontier policy.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(super) fn contract(
     m: &mut Merged,
     interface: &[InterfaceRow],
@@ -223,7 +226,10 @@ pub(super) fn contract(
 
 /// `contract`, also setting `rebuilt` when the constrained rebuild ran: the only step
 /// whose result depends on `fallbacks` (`constrained::contract`).
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(super) fn contract_noting(
     m: &mut Merged,
     interface: &[InterfaceRow],
@@ -313,7 +319,10 @@ fn choose_targets(
 /// exact interface items and an unchanged topology still decide. `relief`: the contract has
 /// relieved chords (A1), and the slot receives this contraction's residue when it does not
 /// complete.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(super) fn contract_from(
     m: &mut Merged,
     interface: &[InterfaceRow],
@@ -1420,7 +1429,10 @@ fn boundary_adjacency(n: usize, edges: &HashMap<(u32, u32), u32>) -> (Vec<usize>
 /// Common boundary paths are compared after suppressing unshared degree-two vertices.
 /// Cycle rank of their intersection distinguishes closure from simultaneous opening;
 /// subtracting only whole-component ranks would silently cancel those two operations.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn changed_cycles(
     old: &HashMap<(u32, u32), u32>,
     new: &HashMap<(u32, u32), u32>,

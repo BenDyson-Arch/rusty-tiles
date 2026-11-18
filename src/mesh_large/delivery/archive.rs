@@ -97,7 +97,10 @@ pub(crate) fn write(
 /// Local entry bytes before a member's data: the fixed header and the name.
 const LOCAL_HEADER: u64 = 30;
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn write_with(
     staging: &Path,
     names: &Path,

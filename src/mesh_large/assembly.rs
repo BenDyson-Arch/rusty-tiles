@@ -751,7 +751,10 @@ type Decoded = (Store, Boxes, Option<Ranks>);
 /// Decodes `p`'s used vertices into a store: in memory when `memory` allows, else spilled.
 /// Returns the first failure (in time) of a parallel task as the inner error: the caller
 /// reruns serially for the first failing vertex in order.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn decode_primitive(
     source: &StreamSource,
     p: &ScenePrimitive<'_>,
@@ -1026,7 +1029,10 @@ impl Record for TriangleCorners {
 /// The routed placement of `p`'s corners: every corner sorted by vertex, joined in order with
 /// the decoded vertices, sorted back to (triangle, corner) and written per triangle. Two
 /// external sorts of the primitive's corners, like the corner join the assembly replaced.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn place_corners(
     source: &StreamSource,
     p: &ScenePrimitive<'_>,
@@ -1201,7 +1207,10 @@ fn sort_key(bytes: &[u8]) -> SortKey {
 }
 
 /// One triangle, built exactly as the corner-sort capture built it.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn triangle(
     p: &ScenePrimitive<'_>,
     ordinal: u64,
@@ -1284,7 +1293,10 @@ impl Record for StagedRun {
 /// With a `subset` (a subset bake), only its kept triangles are captured and only the
 /// vertices they use are decoded and stored; `scan` already counts the kept triangles and
 /// holds the whole source's box, which keys them as a full bake would.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(crate) fn assemble(
     source: &StreamSource,
     frame: &mut SourceFrame,

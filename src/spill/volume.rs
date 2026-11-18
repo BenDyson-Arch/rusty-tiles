@@ -302,7 +302,6 @@ fn c_path(path: &Path) -> io::Result<std::ffi::CString> {
 mod implementation {
     use super::*;
     // Field widths differ across targets; the casts are no-ops on 64-bit Linux.
-    #[allow(clippy::unnecessary_cast)]
     pub(super) fn inspect(path: &Path) -> io::Result<Volume> {
         let path = c_path(path)?;
         // SAFETY: statvfs is a plain C output record, zero initialization is valid.
@@ -441,7 +440,6 @@ mod implementation {
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    #[allow(clippy::unnecessary_cast)]
     fn fs_type(path: &std::ffi::CStr) -> io::Result<FsType> {
         const TMPFS_MAGIC: u64 = 0x0102_1994;
         const RAMFS_MAGIC: u64 = 0x8584_58f6;
@@ -470,8 +468,10 @@ mod implementation {
 #[cfg(target_vendor = "apple")]
 mod implementation {
     use super::*;
-    // statvfs block counts are 32-bit on Apple targets; statfs has 64-bit counts.
-    #[allow(clippy::unnecessary_cast)]
+    #[expect(
+        clippy::unnecessary_cast,
+        reason = "statvfs block counts are 32-bit on Apple targets; statfs counts are already 64-bit"
+    )]
     pub(super) fn inspect(path: &Path) -> io::Result<Volume> {
         let path = c_path(path)?;
         // SAFETY: statfs is a plain C output record, zero initialization is valid.

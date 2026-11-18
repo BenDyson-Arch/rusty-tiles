@@ -321,7 +321,6 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
 /// with more faces whose plane it faces within [`MERGE_COS`] and whose projection it does
 /// not overlap; drop charts left empty and renumber. Fewer, larger charts spend fewer
 /// page texels on gutters.
-#[allow(clippy::too_many_arguments)]
 fn merge_small(
     charts: &mut Vec<Chart>,
     chart_of: &mut [u32],

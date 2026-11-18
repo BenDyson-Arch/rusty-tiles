@@ -1,4 +1,8 @@
 //! One selected opacity and bounded typed windows, independent of tile phase.
+#![expect(
+    clippy::undocumented_unsafe_blocks,
+    reason = "GDAL FFI written before SAFETY comments were required; new modules document each block"
+)]
 use super::{
     native::{self, Dataset},
     source::{self, SampleType, ScalarFact, SourceFacts},

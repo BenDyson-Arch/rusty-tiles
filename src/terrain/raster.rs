@@ -1,4 +1,8 @@
 //! Finite standalone DEM decoding. All native ownership ends before returning.
+#![expect(
+    clippy::undocumented_unsafe_blocks,
+    reason = "GDAL FFI written before SAFETY comments were required; new modules document each block"
+)]
 use crate::{
     geospatial::{
         native::{self, Dataset},
