@@ -1607,12 +1607,18 @@ fn prepare(
     // Keep S1's open-border vertices at their leaf-canonical decode. Prepare the final
     // positions once: representatives and measurement both consume this publication.
     let border = encode::open_border(&built.geometry.triangles, built.geometry.positions.len());
-    let fixed: Vec<bool> = built
+    let mut fixed: Vec<bool> = built
         .locked
         .iter()
         .zip(&border)
         .map(|(l, b)| *l || *b)
         .collect();
+    // P1's Steiner vertices keep the canonical point P1 checked.
+    for &g in &built.generated {
+        if let Some(f) = fixed.get_mut(g as usize) {
+            *f = true;
+        }
+    }
     let mut positions = captured.lattice.encode_coarse(
         &built.geometry.positions,
         &built.geometry.ells,
@@ -1628,26 +1634,29 @@ fn prepare(
         built.geometry.key.leaf_end,
         &contract.holders,
     );
-    if !geometry::folds::decode_valid_with(
-        &built.geometry.positions,
-        &positions.decoded,
-        &built.geometry.triangles,
-        &built.geometry.interface,
-        &policy,
-    ) {
+    // A decode is valid when the fold guard accepts it and P1's Steiner faces stay
+    // embedded on the delivered positions.
+    let valid = |decoded: &[[f32; 3]]| {
+        geometry::folds::decode_valid_with(
+            &built.geometry.positions,
+            decoded,
+            &built.geometry.triangles,
+            &built.geometry.interface,
+            &policy,
+        ) && geometry::embedding::generated_embedded(
+            decoded,
+            &built.geometry.triangles,
+            &built.generated,
+        )
+    };
+    if !valid(&positions.decoded) {
         positions = captured.lattice.encode_coarse(
             &built.geometry.positions,
             &built.geometry.ells,
             &vec![true; fixed.len()],
             built.geometry.key.depth,
         )?;
-        if !geometry::folds::decode_valid_with(
-            &built.geometry.positions,
-            &positions.decoded,
-            &built.geometry.triangles,
-            &built.geometry.interface,
-            &policy,
-        ) {
+        if !valid(&positions.decoded) {
             built.rejection = Some(geometry::Rejection::Decode);
             return Ok(None);
         }

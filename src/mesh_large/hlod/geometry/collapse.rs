@@ -20,7 +20,10 @@ use super::super::{
     interfaces::{InterfaceRow, Key},
     store::TileGeometry,
 };
-use super::{interface_points, Merged};
+use super::{
+    embedding::{self, Point},
+    interface_points, Merged,
+};
 use crate::JobError;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::{
@@ -71,8 +74,16 @@ pub(crate) struct Problem<'a> {
     pub keys: &'a [Key],
     /// Rescue a removal vertex fanned only by shared points with a Steiner vertex.
     pub steiner: bool,
-    /// Snaps a Steiner position (replacing the given vertex) onto its canonical lattice.
-    pub snap: Option<&'a dyn Fn([f32; 3], u32) -> [f32; 3]>,
+    /// Snaps a Steiner position (replacing the given vertex) onto its canonical lattice;
+    /// `None` refuses the position (no canonical point at the inherited depth).
+    pub snap: Option<&'a dyn Fn([f32; 3], u32) -> Option<[f32; 3]>>,
+    /// Directed counts of edges between two shared points that the contraction fold guard
+    /// licenses (`folds::Source::boundary_edges`, by vertex id); absent pairs have none.
+    /// Without it (unit controls) the input counts by id, a required segment at least once.
+    pub shared: Option<HashMap<(u32, u32), u32>>,
+    /// Whether a canonical key is a protected border key elsewhere in the source, which
+    /// a Steiner vertex may not take.
+    pub protected: Option<&'a dyn Fn([f32; 3]) -> bool>,
     /// The pass gives up (no result) once it has spent this many work units: faces and
     /// neighbours visited by its adjacency scans and checks. Deterministic, unlike time.
     pub work_limit: u64,
@@ -94,6 +105,10 @@ pub(crate) struct Stats {
     /// Work units spent (`State::work`), and whether `Problem::work_limit` stopped the pass.
     pub work: u64,
     pub exhausted: bool,
+    /// Steiner rescues refused, by the furthest test any position reached: 0 link not one
+    /// simple path, 1 an arc end off the vertex's contraction, 2 chord edge exists or has no
+    /// licence, 3 no canonical private position, 4 orientation, 5 contact with another face.
+    pub steiner_why: [u64; 6],
 }
 
 #[derive(PartialEq)]
@@ -168,6 +183,11 @@ fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 
+/// A position's weld key with signed zero normalized.
+fn private_key(p: [f32; 3]) -> Key {
+    p.map(|x| if x == 0. { 0f32 } else { x }.to_bits())
+}
+
 fn sorted(f: [u32; 3]) -> [u32; 3] {
     let mut s = f;
     s.sort_unstable();
@@ -199,6 +219,8 @@ struct State<'a> {
     epoch: Cell<u32>,
     /// Work units so far: faces and neighbours visited by adjacency scans and checks.
     work: Cell<u64>,
+    /// Keys a Steiner vertex may not take (`State::taken`).
+    taken: Option<HashSet<Key>>,
 }
 
 /// Orientation bit of a face relative to its sorted triple (0: even permutation).
@@ -288,6 +310,27 @@ impl<'a> State<'a> {
 
     fn src_edge(&self, a: u32, b: u32) -> bool {
         self.src_dir.contains_key(&(a, b)) || self.src_dir.contains_key(&(b, a))
+    }
+
+    /// The guard's licence for directed edge `a -> b` between two shared points: its
+    /// count in the contracted source (`Problem::shared`), or none when the source has the
+    /// edge in neither direction and this cell owns the new segment (N1, stage 1).
+    fn shared_licence(&self, a: u32, b: u32) -> Option<u32> {
+        let count = |a: u32, b: u32| match &self.p.shared {
+            Some(shared) => shared.get(&(a, b)).copied().unwrap_or(0),
+            None => self
+                .src_dir
+                .get(&(a, b))
+                .copied()
+                .unwrap_or(0)
+                .max(u32::from(self.p.segments.contains(&(a.min(b), a.max(b))))),
+        };
+        let (ab, ba) = (count(a, b), count(b, a));
+        if ab == 0 && ba == 0 && self.p.owns_segment.is_some_and(|own| own(a, b)) {
+            None
+        } else {
+            Some(ab)
+        }
     }
 
     fn allowed_target(&self, u: u32, v: u32, u_boundary: bool) -> bool {
@@ -436,9 +479,8 @@ impl<'a> State<'a> {
                 if w != v
                     && iface[v as usize]
                     && iface[w as usize]
-                    && !self.src_edge(v, w)
-                    && !self.p.segments.contains(&(v.min(w), v.max(w)))
-                    && !self.p.owns_segment.is_some_and(|own| own(v, w))
+                    && self.shared_licence(v, w) == Some(0)
+                    && self.shared_licence(w, v) == Some(0)
                 {
                     return 9;
                 }
@@ -451,15 +493,14 @@ impl<'a> State<'a> {
             if d > 0 {
                 let now = i64::from(self.dir.get(&(a, b)).copied().unwrap_or(0)) + i64::from(d);
                 let src = self.src_dir.get(&(a, b)).copied().unwrap_or(0);
-                // Between two shared points (not a required chord) the directed count
-                // may not exceed the source's (the guard's boundary rule).
-                let shared = iface[a as usize]
-                    && iface[b as usize]
-                    && !self.p.segments.contains(&(a.min(b), a.max(b)))
-                    && !(src == 0
-                        && !self.src_dir.contains_key(&(b, a))
-                        && self.p.owns_segment.is_some_and(|own| own(a, b)));
-                let lic = i64::from(if shared { src } else { src.max(1) });
+                // Between two shared points the directed count may not exceed the
+                // guard's contracted source count (its boundary rule).
+                let shared = if iface[a as usize] && iface[b as usize] {
+                    self.shared_licence(a, b)
+                } else {
+                    None
+                };
+                let lic = i64::from(shared.unwrap_or(src.max(1)));
                 if now > lic {
                     return 10; // book
                 }
@@ -518,10 +559,12 @@ impl<'a> State<'a> {
         let g1 = [r, q, p];
         let g2 = [q, x, p];
         let iface = &self.iface;
+        // The flip makes p–q in both directions: between two shared points each needs the
+        // guard's licence.
         if iface[p as usize]
             && iface[q as usize]
-            && !self.src_edge(p, q)
-            && !self.p.owns_segment.is_some_and(|own| own(p, q))
+            && (self.shared_licence(p, q).is_some_and(|n| n < 1)
+                || self.shared_licence(q, p).is_some_and(|n| n < 1))
         {
             return false;
         }
@@ -577,39 +620,116 @@ impl<'a> State<'a> {
         true
     }
 
+    /// The ends `(x, y)` of `r`'s link when it is exactly one simple oriented path from `y`
+    /// to `x` over at least two faces: each face about `r`, rotated to `(r, p, q)`, gives
+    /// the link edge `p -> q`; every vertex starts and ends at most one edge, one vertex
+    /// starts none, and the walk from it consumes every face. So `x -> r` and `r -> y` are
+    /// the only edges at `r` with one face, and no cycle (a pinch) is left over.
+    fn simple_link(&self, r: u32, star: &[u32]) -> Option<(u32, u32)> {
+        if star.len() < 2 {
+            return None;
+        }
+        let mut edges: Vec<(u32, u32)> = Vec::with_capacity(star.len());
+        for &f in star {
+            let t = self.faces[f as usize];
+            let k = t.iter().position(|&w| w == r)?;
+            let (p, q) = (t[(k + 1) % 3], t[(k + 2) % 3]);
+            if p == r || q == r || p == q {
+                return None;
+            }
+            edges.push((p, q));
+        }
+        edges.sort_unstable();
+        let mut ends: Vec<u32> = edges.iter().map(|e| e.1).collect();
+        ends.sort_unstable();
+        if edges.windows(2).any(|w| w[0].0 == w[1].0) || ends.windows(2).any(|w| w[0] == w[1]) {
+            return None;
+        }
+        let mut starts = edges
+            .iter()
+            .map(|e| e.0)
+            .filter(|p| ends.binary_search(p).is_err());
+        let y = starts.next()?;
+        if starts.next().is_some() {
+            return None;
+        }
+        let (mut at, mut steps) = (y, 0usize);
+        while let Ok(i) = edges.binary_search_by(|e| e.0.cmp(&at)) {
+            at = edges[i].1;
+            steps += 1;
+            if steps > edges.len() {
+                return None;
+            }
+        }
+        (steps == edges.len()).then_some((at, y))
+    }
+
+    /// The canonical keys of every input vertex and every Steiner vertex so far (built on
+    /// the first rescue): a Steiner vertex takes none of them.
+    fn taken(&mut self) -> &mut HashSet<Key> {
+        let (positions, added) = (self.p.positions, &self.added);
+        let work = &self.work;
+        self.taken.get_or_insert_with(|| {
+            work.set(
+                work.get()
+                    .saturating_add(u64::try_from(positions.len()).unwrap_or(u64::MAX)),
+            );
+            positions
+                .iter()
+                .chain(added.iter().map(|a| &a.0))
+                .map(|&p| private_key(p))
+                .collect()
+        })
+    }
+
     /// Rescue of a removal vertex `r` stuck between shared points: replace it by a new
-    /// interior (Steiner) vertex `s` just inside the arc and close the boundary with the
-    /// sliver face (s, x, y) on its arc neighbours, so no face spans three shared points.
+    /// interior (Steiner) vertex `s` and close its arc with the bridge face `(s, x, y)`, so
+    /// no face spans three shared points. Admitted only when (`Stats::steiner_why`):
+    /// - `r`'s link is one simple path from `y` to `x` (`simple_link`), `x` and `y` lie on
+    ///   `r`'s own contraction (its chord's endpoints or removals of the same chord), there
+    ///   is no `x`–`y` edge yet and the edge has a licence;
+    /// - `s` is a canonical lattice point (the snap succeeds and is idempotent) whose key no
+    ///   input vertex, Steiner vertex or protected border key elsewhere holds;
+    /// - every moved face keeps a certified positive orientation against its old normal,
+    ///   and the bridge against the sum of the old normals (`embedding::positive`);
+    /// - each changed face meets every other live face only in their common vertices
+    ///   (`embedding::permitted`, exact).
+    ///
+    /// Positions are tried in a fixed order (from the chord midpoint toward the fan's
+    /// interior, then from `r`); one that fails a test is skipped for the next. The mesh
+    /// changes only once a position passes every test.
     fn steiner(&mut self, r: u32) -> bool {
-        if !matches!(self.class[r as usize], Class::Remove(_)) || self.dead[r as usize] {
+        let Class::Remove(chord) = self.class[r as usize] else {
+            return false;
+        };
+        if self.dead[r as usize] {
             return false;
         }
         let star: Vec<u32> = self.live_faces(r).collect();
-        let mut nb = Vec::new();
-        self.neighbours(r, &mut nb);
-        let arc: Vec<u32> = nb
-            .iter()
-            .copied()
-            .filter(|&w| self.is_boundary_edge(r, w))
-            .collect();
-        if arc.len() != 2 {
-            return false;
-        }
-        // x -> r and r -> y are the existing boundary directions
-        let (x, y) = if self.dir.contains_key(&(arc[0], r)) && self.dir.contains_key(&(r, arc[1])) {
-            (arc[0], arc[1])
-        } else if self.dir.contains_key(&(arc[1], r)) && self.dir.contains_key(&(r, arc[0])) {
-            (arc[1], arc[0])
-        } else {
+        let Some((x, y)) = self.simple_link(r, &star) else {
+            self.stats.steiner_why[0] += 1;
             return false;
         };
-        if self.undirected(x, y) > 0 {
+        let on_chord = |v: u32| {
+            v == chord[0] || v == chord[1] || self.class[v as usize] == Class::Remove(chord)
+        };
+        if !on_chord(x) || !on_chord(y) {
+            self.stats.steiner_why[1] += 1;
             return false;
         }
+        let lic = if self.iface[x as usize] && self.iface[y as usize] {
+            self.shared_licence(x, y)
+        } else {
+            None
+        }
+        .unwrap_or(self.src_dir.get(&(x, y)).copied().unwrap_or(0).max(1));
+        if self.undirected(x, y) > 0 || self.dir.get(&(x, y)).copied().unwrap_or(0) + 1 > lic {
+            self.stats.steiner_why[2] += 1;
+            return false;
+        }
+        let mut nb = Vec::new();
+        self.neighbours(r, &mut nb);
         let interior: Vec<u32> = nb.iter().copied().filter(|&w| w != x && w != y).collect();
-        if interior.is_empty() {
-            return false;
-        }
         let pr = self.pos[r as usize];
         let mut c = [0f64; 3];
         for &w in &interior {
@@ -617,81 +737,158 @@ impl<'a> State<'a> {
                 c[i] += self.pos[w as usize][i] / interior.len() as f64;
             }
         }
-        // f32 (lattice) position strictly inside the chord: from the chord midpoint toward
-        // the fan's interior (any arc bend), else from r; the first candidate whose closing
-        // face and moved faces keep the fan's orientation, distinct from every live neighbour.
-        let mut fan = [0f64; 3];
-        for &f in &star {
-            let m = self.normal(self.faces[f as usize]);
+        // Old faces rotated to (r, a, b) with their normals; the bridge's reference is
+        // their sum, accumulated with one rounding per further face.
+        let old: Vec<(u32, [u32; 2], (Point, Point))> = star
+            .iter()
+            .map(|&f| {
+                let t = self.faces[f as usize];
+                let k = t.iter().position(|&w| w == r).unwrap_or(0);
+                let n = embedding::normal(t.map(|v| self.pos[v as usize]));
+                (f, [t[(k + 1) % 3], t[(k + 2) % 3]], n)
+            })
+            .collect();
+        let (mut fan, mut fan_abs) = ([0f64; 3], [0f64; 3]);
+        for (_, _, (n, a)) in &old {
             for i in 0..3 {
-                fan[i] += m[i];
+                fan[i] += n[i];
+                fan_abs[i] += a[i];
             }
         }
+        let fan_depth = 4 + u32::try_from(old.len()).unwrap_or(u32::MAX);
         let (px, py) = (self.pos[x as usize], self.pos[y as usize]);
         let mid = [
             (px[0] + py[0]) / 2.,
             (px[1] + py[1]) / 2.,
             (px[2] + py[2]) / 2.,
         ];
-        let sid = id(self.pos.len());
-        let new_face = [sid, x, y];
-        let mut chosen = None;
-        let chord = dot(sub(px, py), sub(px, py)).sqrt();
-        'search: for base in [mid, pr] {
+        let chord_length = dot(sub(px, py), sub(px, py)).sqrt();
+        // Distinct canonical proposals in order: absolute offsets on the chord's scale
+        // first, then fractions of the reach, from the midpoint and then from r.
+        let mut proposals: Vec<[f32; 3]> = Vec::with_capacity(16);
+        for base in [mid, pr] {
             let toward = sub(c, base);
             let reach = dot(toward, toward).sqrt();
             if reach <= 0. {
                 continue;
             }
-            // absolute offsets on the chord's scale first, then fractions of the reach
             let steps = [0.05, 0.1, 0.2, 0.4]
-                .map(|k| (k * chord / reach).min(0.45))
+                .map(|k| (k * chord_length / reach).min(0.45))
                 .into_iter()
                 .chain([0.1, 0.2, 0.3, 0.45]);
             for frac in steps {
-                let mut ps = [0f32; 3];
-                for i in 0..3 {
-                    ps[i] = (base[i] + frac * toward[i]) as f32;
+                let raw: [f32; 3] = std::array::from_fn(|i| (base[i] + frac * toward[i]) as f32);
+                let ps = match self.p.snap {
+                    Some(snap) => match snap(raw, r) {
+                        Some(ps) if snap(ps, r).map(private_key) == Some(private_key(ps)) => ps,
+                        // no canonical point, or not a fixed point of its own lattice
+                        _ => continue,
+                    },
+                    None => raw,
+                };
+                if ps.iter().all(|v| v.is_finite())
+                    && !proposals.iter().any(|&p| private_key(p) == private_key(ps))
+                {
+                    proposals.push(ps);
                 }
-                if let Some(snap) = self.p.snap {
-                    ps = snap(ps, r);
-                }
-                let q = ps.map(f64::from);
-                if q == pr || nb.iter().any(|&w| self.pos[w as usize] == q) {
-                    continue;
-                }
-                let [a, b, cc] = new_face.map(|v| if v == sid { q } else { self.pos[v as usize] });
-                let n = cross(sub(b, a), sub(cc, a));
-                if dot(n, n) <= 0. || dot(n, fan) <= 0. {
-                    continue;
-                }
-                for &f in &star {
-                    let t = self.faces[f as usize];
-                    let g = t.map(|w| if w == r { q } else { self.pos[w as usize] });
-                    let (n0, n1) = (self.normal(t), cross(sub(g[1], g[0]), sub(g[2], g[0])));
-                    if dot(n1, n1) <= 0. || dot(n0, n1) <= 0. {
-                        continue 'search;
+            }
+        }
+        let sid = id(self.pos.len());
+        let bridge = [sid, x, y];
+        let mut nearby: Option<Vec<u32>> = None;
+        let mut stage = 3;
+        let mut chosen = None;
+        for ps in proposals.iter().copied() {
+            self.work.set(
+                self.work
+                    .get()
+                    .saturating_add(u64::try_from(star.len()).unwrap_or(u64::MAX)),
+            );
+            if self.exhausted() {
+                return false;
+            }
+            if self.taken().contains(&private_key(ps)) || self.p.protected.is_some_and(|f| f(ps)) {
+                continue;
+            }
+            let q = ps.map(f64::from);
+            if !embedding::positive(fan, fan_abs, fan_depth, px, py, q)
+                || !old.iter().all(|&(_, [a, b], (n, n_abs))| {
+                    embedding::positive(n, n_abs, 4, self.pos[a as usize], self.pos[b as usize], q)
+                })
+            {
+                stage = stage.max(4);
+                continue;
+            }
+            stage = 5;
+            let at = |v: u32| if v == sid { q } else { self.pos[v as usize] };
+            let changed: Vec<[u32; 3]> = old
+                .iter()
+                .map(|&(_, [a, b], _)| [sid, a, b])
+                .chain([bridge])
+                .collect();
+            let boxes: Vec<[Point; 2]> = changed
+                .iter()
+                .map(|t| embedding::bounds(t.map(at)))
+                .collect();
+            let near = nearby.get_or_insert_with(|| {
+                // Live faces outside the star within the bounds of the star and every
+                // proposal: no changed face of any proposal reaches beyond them.
+                let mut all = embedding::bounds([pr, px, py]);
+                let mut include = |p: Point| {
+                    for k in 0..3 {
+                        all[0][k] = all[0][k].min(p[k]);
+                        all[1][k] = all[1][k].max(p[k]);
                     }
+                };
+                for (_, [a, b], _) in &old {
+                    include(self.pos[*a as usize]);
+                    include(self.pos[*b as usize]);
                 }
+                for p in &proposals {
+                    include(p.map(f64::from));
+                }
+                self.work.set(
+                    self.work
+                        .get()
+                        .saturating_add(u64::try_from(self.faces.len()).unwrap_or(u64::MAX)),
+                );
+                (0..id(self.faces.len()))
+                    .filter(|&f| {
+                        self.alive[f as usize]
+                            && !star.contains(&f)
+                            && embedding::overlap(
+                                all,
+                                embedding::bounds(
+                                    self.faces[f as usize].map(|v| self.pos[v as usize]),
+                                ),
+                            )
+                    })
+                    .collect()
+            });
+            let apart = changed.iter().enumerate().all(|(i, &t)| {
+                changed[i + 1..]
+                    .iter()
+                    .zip(&boxes[i + 1..])
+                    .all(|(&u, &b)| {
+                        !embedding::overlap(boxes[i], b) || embedding::permitted(t, u, at)
+                    })
+                    && near.iter().all(|&f| {
+                        let u = self.faces[f as usize];
+                        !embedding::overlap(boxes[i], embedding::bounds(u.map(at)))
+                            || embedding::permitted(t, u, at)
+                    })
+            });
+            if apart {
                 chosen = Some((ps, q));
-                break 'search;
+                break;
             }
         }
         let Some((ps32, psd)) = chosen else {
+            self.stats.steiner_why[stage] += 1;
             return false;
         };
-        let lic = self.src_dir.get(&(x, y)).copied().unwrap_or(0).max(1);
-        if self.dir.get(&(x, y)).copied().unwrap_or(0) + 1 > lic {
-            return false;
-        }
-        if self.iface[x as usize]
-            && self.iface[y as usize]
-            && !self.src_edge(x, y)
-            && !self.p.segments.contains(&(x.min(y), x.max(y)))
-        {
-            return false;
-        }
         // apply: new vertex
+        self.taken().insert(private_key(ps32));
         self.pos.push(psd);
         self.added.push((ps32, r));
         self.class.push(Class::Free);
@@ -718,17 +915,17 @@ impl<'a> State<'a> {
             self.vf[sid as usize].push(f);
         }
         let fid = id(self.faces.len());
-        self.faces.push(new_face);
+        self.faces.push(bridge);
         self.alive.push(true);
         self.alive_faces += 1;
         for j in 0..3 {
             *self
                 .dir
-                .entry((new_face[j], new_face[(j + 1) % 3]))
+                .entry((bridge[j], bridge[(j + 1) % 3]))
                 .or_default() += 1;
         }
-        *self.face_set.entry(sorted(new_face)).or_default() += 1;
-        for v in new_face {
+        *self.face_set.entry(sorted(bridge)).or_default() += 1;
+        for v in bridge {
             self.vf[v as usize].push(fid);
         }
         self.dead[r as usize] = true;
@@ -814,6 +1011,7 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
         mark: RefCell::new(vec![0; n]),
         epoch: Cell::new(0),
         work: Cell::new(0),
+        taken: None,
     };
     for (i, &t) in p.triangles.iter().enumerate() {
         for j in 0..3 {
@@ -1123,6 +1321,8 @@ pub(crate) fn problem<'a>(
             keys: &m.keys,
             steiner: false,
             snap: None,
+            protected: None,
+            shared: None,
             work_limit: u64::MAX,
             min_cos,
             owns_segment: None,
@@ -1187,6 +1387,8 @@ mod tests {
             keys,
             steiner,
             snap: None,
+            protected: None,
+            shared: None,
             work_limit: u64::MAX,
         }
     }
@@ -1236,6 +1438,163 @@ mod tests {
         // The required chord a–b still has a face.
         assert!(faces.iter().any(|f| (0..3)
             .any(|j| (f[j], f[(j + 1) % 3]) == (0, 2) || (f[j], f[(j + 1) % 3]) == (2, 0))));
+    }
+
+    /// The removal `r` of chord `ring[0]`–`ring[last]` with shared `ring` vertices and free
+    /// others, at a face cap `cap`, snapped to the unit grid (the review's synthetic
+    /// controls, `steiner/probe/fixtures.py`).
+    fn rescue(
+        positions: &[[f32; 3]],
+        triangles: &[[u32; 3]],
+        ring: &[u32],
+        r: u32,
+        cap: usize,
+        snap: Option<&dyn Fn([f32; 3], u32) -> Option<[f32; 3]>>,
+    ) -> (Option<Vec<[u32; 3]>>, Stats, Added) {
+        let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        let (x, y) = (ring[0], ring[ring.len() - 1]);
+        let class = (0..id(positions.len()))
+            .map(|v| {
+                if v == r {
+                    Class::Remove([x, y])
+                } else if ring.contains(&v) {
+                    Class::Locked
+                } else {
+                    Class::Free
+                }
+            })
+            .collect();
+        let p = Problem {
+            positions,
+            triangles,
+            class,
+            interface: (0..id(positions.len()))
+                .map(|v| ring.contains(&v))
+                .collect(),
+            segments: [(x.min(y), x.max(y))].into_iter().collect(),
+            target: cap,
+            limit: cap,
+            min_cos: 0.,
+            owns_segment: None,
+            owns_face: None,
+            keys: &keys,
+            steiner: true,
+            snap,
+            protected: None,
+            shared: None,
+            work_limit: u64::MAX,
+        };
+        simplify_added(&p)
+    }
+
+    fn unit(p: [f32; 3], _: u32) -> Option<[f32; 3]> {
+        Some(p.map(f32::round))
+    }
+
+    /// x, r, y and the fan's far apex w (`crossing` without its spectator is `clear`).
+    fn crossing_fan() -> Vec<[f32; 3]> {
+        vec![[0., 0., 0.], [32., 16., 0.], [64., 0., 0.], [32., 64., 0.]]
+    }
+
+    #[test]
+    fn steiner_closes_a_clear_fan_on_the_lattice() {
+        let positions = crossing_fan();
+        let (out, stats, added) = rescue(
+            &positions,
+            &[[0, 1, 3], [3, 1, 2]],
+            &[0, 3, 2],
+            1,
+            3,
+            Some(&unit),
+        );
+        assert!(out.is_some(), "{stats:?}");
+        assert_eq!(added, vec![([32., 3., 0.], 1)]);
+    }
+
+    /// The review's three-face counterexample: the bridge (s, x, y) of every position on
+    /// the fan's axis would pierce a spectator triangle that the old fan never touched. The
+    /// rescue is refused (contact), so the removal stays and P1 builds nothing.
+    #[test]
+    fn steiner_never_pierces_a_disjoint_triangle() {
+        let mut positions = crossing_fan();
+        positions.extend([[32., 1., -1.], [32., 1., 1.], [32., 2., 0.]]);
+        let faces = [[0, 1, 3], [3, 1, 2], [4, 5, 6]];
+        let (out, stats, added) = rescue(&positions, &faces, &[0, 3, 2], 1, 4, Some(&unit));
+        assert!(out.is_none() && added.is_empty(), "{stats:?} {added:?}");
+        assert_eq!(stats.removed_left, 1);
+        assert!(stats.steiner_why[5] > 0, "{stats:?}");
+    }
+
+    /// A position whose key an unrelated vertex holds, then positions touching that
+    /// triangle's corner: refused.
+    #[test]
+    fn steiner_takes_no_key_another_vertex_holds() {
+        let mut positions = crossing_fan();
+        positions.extend([[32., 3., 0.], [32., 3., 1.], [33., 3., 1.]]);
+        let faces = [[0, 1, 3], [3, 1, 2], [4, 5, 6]];
+        let (out, stats, added) = rescue(&positions, &faces, &[0, 3, 2], 1, 4, Some(&unit));
+        assert!(out.is_none() && added.is_empty(), "{stats:?} {added:?}");
+    }
+
+    /// r's link is a path and a disjoint cycle (a pinch): capping it would leave s with two
+    /// link cycles. Refused before any position is tried.
+    #[test]
+    fn steiner_needs_one_simple_link_path() {
+        let mut positions = crossing_fan();
+        positions.extend([[-200., -100., 10.], [0., 300., 10.], [200., -100., 10.]]);
+        let faces = [[0, 1, 3], [3, 1, 2], [4, 1, 5], [5, 1, 6], [6, 1, 4]];
+        let (out, stats, added) = rescue(&positions, &faces, &[0, 3, 2], 1, 6, Some(&unit));
+        assert!(out.is_none() && added.is_empty(), "{stats:?}");
+        assert!(stats.steiner_why[0] > 0, "{stats:?}");
+    }
+
+    /// A moved face fails at the first distinct midpoint positions; the next position on
+    /// the same ray, (48, 1, 0), closes a valid five-face disk (the review's `skip`).
+    #[test]
+    fn steiner_tries_the_next_position_after_a_failed_face() {
+        let positions = vec![
+            [0., 0., 0.],
+            [0., 7., 0.],
+            [9., 6., 0.],
+            [93., 5., 0.],
+            [100., 0., 0.],
+            [23., -47., 0.],
+        ];
+        let faces: Vec<[u32; 3]> = (0..4).map(|i| [i, 5, i + 1]).collect();
+        let (out, stats, added) = rescue(&positions, &faces, &[0, 1, 2, 3, 4], 5, 5, Some(&unit));
+        let faces = out.unwrap_or_else(|| panic!("{stats:?}"));
+        assert_eq!(added, vec![([48., 1., 0.], 5)]);
+        assert_eq!(faces.len(), 5);
+        for f in &faces {
+            assert!(up(&positions, &added, *f) > 0., "{faces:?}");
+        }
+    }
+
+    /// No canonical point (a refused snap) is no position: the raw proposal is never used.
+    #[test]
+    fn steiner_refuses_a_failed_snap() {
+        let (positions, triangles) = fan_of_shared_points();
+        let none = |_: [f32; 3], _: u32| None;
+        let (out, stats, added) = rescue(&positions, &triangles, &[0, 3, 2], 1, 4, Some(&none));
+        assert!(out.is_none() && added.is_empty(), "{stats:?}");
+        assert!(stats.steiner_why[3] > 0, "{stats:?}");
+        // A snap that is not idempotent is refused too.
+        let drift = |p: [f32; 3], _: u32| Some([p[0], p[1] + 0.25, p[2]]);
+        let (out, _, added) = rescue(&positions, &triangles, &[0, 3, 2], 1, 4, Some(&drift));
+        assert!(out.is_none() && added.is_empty());
+    }
+
+    /// An arc end that is neither an endpoint of r's chord nor a removal of the same chord
+    /// would make a border edge the contract does not have: refused.
+    #[test]
+    fn steiner_shortcuts_only_along_its_own_chord() {
+        let (positions, triangles) = fan_of_shared_points();
+        let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        let mut p = problem(&positions, &triangles, &keys, true);
+        p.class[1] = Class::Remove([0, 3]);
+        let (out, stats, added) = simplify_added(&p);
+        assert!(out.is_none() && added.is_empty(), "{stats:?}");
+        assert!(stats.steiner_why[1] > 0, "{stats:?}");
     }
 
     #[test]
@@ -1332,34 +1691,43 @@ mod tests {
             keys,
             steiner: false,
             snap: None,
+            protected: None,
+            shared: None,
             work_limit,
         };
-        simplify(&p).1
+        let (out, stats) = simplify(&p);
+        assert!(
+            !stats.exhausted || out.is_none(),
+            "an exhausted pass has no result"
+        );
+        stats
     }
 
+    /// The work count grows linearly on an ordinary mesh, and the limit stops a pass on a
+    /// high-valence fan (whose apex is re-scanned after every collapse around it) with no
+    /// result, so the ladder continues instead.
     #[test]
     fn work_is_linear_on_a_grid_and_bounded_on_a_fan() {
         let (positions, triangles, class) = grid(128);
         let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
-        let faces = triangles.len();
-        let stats = free(&positions, &triangles, class, &keys, faces / 8, u64::MAX);
-        eprintln!(
-            "GRID faces={faces} work={} per face {:.1}",
-            stats.work,
-            stats.work as f64 / faces as f64
+        let faces = triangles.len() as u64;
+        let stats = free(
+            &positions,
+            &triangles,
+            class,
+            &keys,
+            triangles.len() / 8,
+            u64::MAX,
         );
+        assert!(!stats.exhausted);
+        assert!(stats.work < 64 * faces, "{} for {faces} faces", stats.work);
         let (positions, triangles, class) = fan(4000);
         let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
-        let faces = triangles.len();
-        let t = std::time::Instant::now();
-        let stats = free(&positions, &triangles, class, &keys, 16, u64::MAX);
-        eprintln!(
-            "FAN faces={faces} work={} per face {:.1} collapses={} checks={} {:?}",
-            stats.work,
-            stats.work as f64 / faces as f64,
-            stats.collapses,
-            stats.checks,
-            t.elapsed()
-        );
+        let faces = triangles.len() as u64;
+        let unbounded = free(&positions, &triangles, class.clone(), &keys, 16, u64::MAX);
+        assert!(unbounded.work > 1000 * faces, "{unbounded:?}");
+        let bounded = free(&positions, &triangles, class, &keys, 16, 64 * faces);
+        assert!(bounded.exhausted, "{bounded:?}");
+        assert!(bounded.work <= 64 * faces + 4 * 4001, "{bounded:?}");
     }
 }

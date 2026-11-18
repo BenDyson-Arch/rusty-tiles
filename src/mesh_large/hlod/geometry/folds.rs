@@ -149,6 +149,20 @@ impl Source {
         self
     }
 
+    /// The directed source count of every edge between two boundary (shared) keys, as
+    /// `(from, to, count)` in key order: the most the shared-point rule admits in each
+    /// direction (P1 consumes these exact licences).
+    pub(crate) fn boundary_edges(&self) -> Vec<(Key, Key, u32)> {
+        let mut out: Vec<(Key, Key, u32)> = self
+            .edges
+            .iter()
+            .filter(|((a, b), _)| self.boundary.contains(a) && self.boundary.contains(b))
+            .flat_map(|(&(a, b), &[ab, ba])| [(a, b, ab), (b, a, ba)])
+            .collect();
+        out.sort_unstable();
+        out
+    }
+
     pub(crate) fn with_policy(mut self, policy: Policy) -> Self {
         self.policy = policy;
         self

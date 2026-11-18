@@ -9,6 +9,7 @@ mod combined_controls;
 mod constrained;
 #[cfg(test)]
 mod contraction_memory;
+pub(crate) mod embedding;
 pub(crate) mod folds;
 pub(crate) mod locations;
 pub(crate) mod measurement;
@@ -59,6 +60,10 @@ pub(crate) struct Built {
     pub geometry: TileGeometry,
     /// Per vertex: on the parent's outer interface (locked).
     pub locked: Vec<bool>,
+    /// P1's Steiner vertices (indices into `geometry.positions`): kept at their canonical
+    /// decode, and their faces checked on the delivered positions
+    /// (`embedding::generated_embedded`).
+    pub generated: Vec<u32>,
     pub stopping: StoppingBound,
     pub simplifier_error: f64,
     pub children_error: f64,
@@ -2488,6 +2493,7 @@ fn attempt_mode(
     geometry.primitives.shrink_to_fit();
     Ok(Built {
         locked: out_locked,
+        generated: Vec::new(),
         stopping,
         simplifier_error,
         children_error,

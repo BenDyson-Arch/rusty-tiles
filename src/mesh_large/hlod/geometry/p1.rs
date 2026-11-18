@@ -11,7 +11,7 @@
 //! as last-resort stage 1).
 use super::super::{
     borders::Contract,
-    interfaces::Key,
+    interfaces::{key, Key},
     store::{StoppingBound, TileGeometry, TileKey},
 };
 use super::{
@@ -19,12 +19,13 @@ use super::{
 };
 use crate::{mesh_large::leaves::geometry::LatticePlan, JobError};
 use rustc_hash::FxHashSet as HashSet;
-use std::borrow::Cow;
+use std::{borrow::Cow, cell::RefCell};
 
 /// Work units (`collapse::Problem::work_limit`) one P1 pass may spend per merged face before
-/// it gives up and the ladder continues: far above what ordinary meshes need (a planar grid
-/// spends about @@GRID@@ per face), so only a pathological star stops it (a high-valence apex
-/// re-checked against all its neighbours after every change around it).
+/// it gives up and the ladder continues. Ordinary meshes need far less: a planar grid
+/// spends under 64 per face, and the busiest cells of the #344 rock, a 10M-triangle city
+/// and a 10M-triangle photogrammetry site at most 187. A pathological star exceeds it: a
+/// high-valence apex rescanned after every change around it costs O(k²) or worse.
 const WORK_PER_FACE: u64 = 1 << 12;
 
 fn work_limit(faces: usize) -> u64 {
@@ -98,14 +99,35 @@ pub(super) fn attempt(
         collapse::problem(&m, children, interface, mapping, target, 0.)?;
     prob.limit = cap;
     prob.steiner = true;
+    // The guard's own directed licences between shared points: P1 and the contraction
+    // fold guard below count one source (literal edges and the contract's chord paths).
+    let shared = {
+        let ids = collapse::key_index(&m.keys);
+        folds::Source::for_contraction(&m.positions, &m.triangles, interface, &previous, &mapped0)
+            .boundary_edges()
+            .into_iter()
+            .filter_map(|(a, b, n)| Some(((*ids.get(&a)?, *ids.get(&b)?), n)))
+            .collect()
+    };
+    prob.shared = Some(shared);
     prob.work_limit = work_limit(m.triangles.len());
+    // A Steiner position is the canonical lattice point at the inherited depth of the
+    // vertex it replaces, or none (an invalid depth or an out-of-range code refuses it).
     let snap = |p: [f32; 3], r: u32| {
-        m.ells
-            .get(r as usize)
-            .and_then(|&ell| lattice.canonical(p, ell).ok())
-            .unwrap_or(p)
+        let ell = *m.ells.get(r as usize)?;
+        lattice.canonical(p, ell).ok()
     };
     prob.snap = Some(&snap);
+    // A key on a border anywhere in the source is protected; a lookup failure is the job's.
+    let failure: RefCell<Option<JobError>> = RefCell::new(None);
+    let protected = |p: [f32; 3]| match mapping(key(p)) {
+        Ok(found) => found.is_some(),
+        Err(e) => {
+            failure.borrow_mut().get_or_insert(e);
+            true
+        }
+    };
+    prob.protected = Some(&protected);
     let policy = folds::Policy::last_resort(1, tile.leaf_begin, tile.leaf_end, &contract.holders);
     let owns_segment = |a: u32, b: u32| match (m.keys.get(a as usize), m.keys.get(b as usize)) {
         (Some(&a), Some(&b)) => policy.owns_segment(a, b),
@@ -124,6 +146,8 @@ pub(super) fn attempt(
         .map(|r| (r.a, r.b))
         .collect();
     let points = interface_points(interface);
+    // Merged vertices; Steiner vertices follow them.
+    let inputs = m.positions.len();
     // `faces` over `m` (the merged children with any Steiner vertices) as a proposal, if it
     // keeps every contract segment and point, passes the contraction fold guard under
     // `policy` and changes topology only within `floor`.
@@ -165,12 +189,16 @@ pub(super) fn attempt(
             lease: None,
         };
         let mut locked = Vec::new();
+        let mut generated = Vec::new();
         for t in faces {
             let mut out = [0u32; 3];
             for (o, &v) in out.iter_mut().zip(t) {
                 let slot = remap.get_mut(v as usize)?;
                 if *slot == u32::MAX {
                     *slot = u32::try_from(geometry.positions.len()).ok()?;
+                    if v as usize >= inputs {
+                        generated.push(*slot);
+                    }
                     geometry.ells.push(*m.ells.get(v as usize)?);
                     geometry.positions.push(*m.positions.get(v as usize)?);
                     locked.push(points.contains(m.keys.get(v as usize)?));
@@ -181,6 +209,7 @@ pub(super) fn attempt(
         }
         Some(Built {
             locked,
+            generated,
             stopping: StoppingBound::TriangleBudget,
             simplifier_error: 0.,
             children_error,
@@ -209,7 +238,15 @@ pub(super) fn attempt(
             prob.owns_segment = Some(&owns_segment);
             prob.owns_face = Some(&owns_face);
         }
-        let (Some(faces), _, added) = collapse::simplify_added(&prob) else {
+        let (out, stats, added) = collapse::simplify_added(&prob);
+        if let Some(e) = failure.borrow_mut().take() {
+            return Err(e);
+        }
+        if stats.exhausted {
+            // Its work bound is spent: the second pass would meet the same mesh.
+            return Ok(None);
+        }
+        let Some(faces) = out else {
             continue;
         };
         if faces.len() > cap || faces.is_empty() {

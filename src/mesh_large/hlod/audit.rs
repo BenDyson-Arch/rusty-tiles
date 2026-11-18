@@ -381,6 +381,7 @@ mod tests {
                 lease: None,
             },
             locked: vec![false; 3],
+            generated: Vec::new(),
             stopping: StoppingBound::Input,
             simplifier_error: 0.,
             children_error: 0.,

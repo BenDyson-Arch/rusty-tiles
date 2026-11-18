@@ -567,6 +567,10 @@ fn complete_parent(n: usize, third_contact: bool, p1: bool) {
     // Nothing built here is moved into or freed within the counting closure.
     let (parent, children) = children(n, Fixture::Direct { third_contact });
     let [a, mid, b, c] = STRIP.map(key);
+    let known: HashSet<Key> = children
+        .iter()
+        .flat_map(|c| c.positions.iter().map(|&p| key(p)))
+        .collect();
     let calls = Cell::new(0usize);
     let mapped_mid = Cell::new(0usize);
     let assessed = Cell::new(0usize);
@@ -593,7 +597,12 @@ fn complete_parent(n: usize, third_contact: bool, p1: bool) {
                 } else {
                     // The geometry owner must not query an unshared interior key.
                     assert!(k != c || third_contact);
-                    Ok(Some((k, k, 0., if [a, b, c].contains(&k) { 2 } else { 1 })))
+                    if known.contains(&k) {
+                        Ok(Some((k, k, 0., if [a, b, c].contains(&k) { 2 } else { 1 })))
+                    } else {
+                        // Not a source vertex (P1's Steiner key lookups): no border map.
+                        Ok(None)
+                    }
                 }
             },
             &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
@@ -767,6 +776,10 @@ fn p1_builds_the_seam_bound_strip_without_a_new_contact_face() {
         let fixture = Fixture::Owned { greatest, shifted };
         let (parent, children) = children(64, fixture);
         let [a, mid, b, c] = std::array::from_fn(|i| key(fixture.positions()[i]));
+        let known: HashSet<Key> = children
+            .iter()
+            .flat_map(|c| c.positions.iter().map(|&p| key(p)))
+            .collect();
         let contract = measured_contract(parent, &children, fixture);
         let outcome = build_parent(
             parent,
@@ -777,7 +790,12 @@ fn p1_builds_the_seam_bound_strip_without_a_new_contact_face() {
                 if k == mid {
                     Ok(Some((a, b, 0.5, 2)))
                 } else {
-                    Ok(Some((k, k, 0., if [a, b, c].contains(&k) { 2 } else { 1 })))
+                    if known.contains(&k) {
+                        Ok(Some((k, k, 0., if [a, b, c].contains(&k) { 2 } else { 1 })))
+                    } else {
+                        // Not a source vertex (P1's Steiner key lookups): no border map.
+                        Ok(None)
+                    }
                 }
             },
             &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),

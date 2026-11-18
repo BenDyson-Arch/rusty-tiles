@@ -104,6 +104,8 @@ rusqlite = { version = "0.40", features = ["bundled", "hooks"] }
 geozero = { version = "0.15.1", default-features = false, features = ["with-geojson", "with-wkb"] }
 geo = { version = "0.33.1", default-features = false, features = ["spade"] }
 spade = "2.15"
+# Exact orientation predicates (P1 Steiner faces); already in the graph through geo and spade.
+robust = "1.2"
 rstar = { version = "0.12.2", default-features = false }
 hyper = { version = "1", default-features = false, features = ["server", "http1"] }
 hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
