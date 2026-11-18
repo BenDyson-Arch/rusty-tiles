@@ -28,6 +28,7 @@ mod cpu_profile;
 pub(crate) mod decode;
 mod encode;
 pub(crate) mod error;
+pub(crate) mod forecast;
 mod geometry;
 pub(crate) mod interfaces;
 pub(crate) mod recovery;
@@ -202,6 +203,17 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             audit_dir: std::env::var_os("RT_HLOD_AUDIT_DIR").map(|p| std::sync::Arc::new(p.into())),
+            ..Self::production()
+        }
+    }
+}
+
+impl Settings {
+    /// Production settings without the audit sidecar (no environment read): `mesh-inspect`
+    /// builds no tile, so it has nothing to audit.
+    pub(crate) fn production() -> Self {
+        Self {
+            audit_dir: None,
             cap: TRIANGLE_CAP,
             mutation: Mutation::None,
             nearest_steps: error::NEAREST_STEPS,
@@ -1392,16 +1404,29 @@ fn admit_scratch(
     cap: usize,
     bound: u64,
 ) -> Result<(), JobError> {
+    let charged = if captured.scratch.memory_backed() {
+        memory_backed_need(captured, config, cap, false)?
+    } else {
+        0
+    };
+    admit_charged_scratch(captured, charged, bound, crate::spill::PreflightStage::Lod)
+}
+
+/// [`admit_scratch`] against an explicit memory charge for memory-backed scratch (the
+/// bake's is the HLOD stage's need; `mesh-inspect` charges its own).
+fn admit_charged_scratch(
+    captured: &FullCaptured,
+    charged: u64,
+    bound: u64,
+    stage: crate::spill::PreflightStage,
+) -> Result<(), JobError> {
     let need = &captured.report.scratch;
     let scratch = &captured.scratch;
-    if scratch.memory_backed() {
-        let charged = memory_backed_need(captured, config, cap, false)?;
-        if bound > charged {
-            return Err(resource(format!(
-                "HLOD incidence needs {bound} bytes of memory-backed scratch, past the \
-                 {charged} charged to memory"
-            )));
-        }
+    if scratch.memory_backed() && bound > charged {
+        return Err(resource(format!(
+            "HLOD incidence needs {bound} bytes of memory-backed scratch, past the \
+             {charged} charged to memory"
+        )));
     }
     let files = bound.div_ceil((crate::spill::CHUNK_BYTES / 2) as u64);
     let total = config::file_rounding(scratch.allocation_unit_bytes(), files)
@@ -1412,7 +1437,7 @@ fn admit_scratch(
         scratch.path(),
         total.saturating_sub(scratch.live_bytes()),
         crate::spill::SpaceRole::Scratch,
-        crate::spill::PreflightStage::Lod,
+        stage,
     )?;
     Ok(())
 }

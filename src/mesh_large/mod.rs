@@ -20,6 +20,7 @@ mod hlod;
 mod image_tiles;
 mod images;
 mod input;
+mod inspect;
 mod leaves;
 mod mask_pack;
 mod phases;
@@ -33,6 +34,10 @@ mod tree;
 /// The validator plans its stores with the same budget, job and headroom rules (#342).
 pub(crate) use config::{available_memory, plan_jobs, Jobs};
 pub use hlod::{DeclaredTile, HlodDiagnostics, HlodMemoryPlan, RepeatReuse};
+pub use inspect::{
+    inspect_mesh, InspectDiagnostics, InspectReport, InspectRequest, InspectResult,
+    DEFAULT_MIN_FEATURE_LENGTH,
+};
 pub use pipeline::{
     mesh_to_tileset, MemoryDiagnostics, StorageDiagnostics, TilerDiagnostics, TilerJobs,
     TilerProfile, TilerReport, TilerRequest, TilerResult,

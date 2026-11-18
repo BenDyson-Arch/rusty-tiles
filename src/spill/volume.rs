@@ -32,6 +32,8 @@ pub(crate) enum PreflightStage {
     Lod,
     /// The validator's start-of-run bound (catalog, payload rows and HLOD delivery store).
     Validation,
+    /// `mesh-inspect`'s passes after capture (topology sorts, incidence, border contracts).
+    Inspection,
 }
 
 impl PreflightStage {
@@ -41,6 +43,7 @@ impl PreflightStage {
             Self::Texture => "texture",
             Self::Lod => "lod",
             Self::Validation => "validation",
+            Self::Inspection => "inspection",
         }
     }
 }
