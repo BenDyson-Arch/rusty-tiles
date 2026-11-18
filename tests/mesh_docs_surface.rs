@@ -103,6 +103,8 @@ const OTHER: [&str; 6] = [
 
 fn mesh_flags() -> BTreeSet<String> {
     let mut known = flags(&help(&["mesh"]));
+    // The guide documents `mesh-inspect` too, which takes `mesh`'s source options.
+    known.extend(flags(&help(&["mesh-inspect"])));
     known.extend(OTHER.map(String::from));
     known
 }
@@ -374,13 +376,14 @@ fn documented_capture_steps_are_the_reported_steps() {
         .step_by(2)
         .map(String::from)
         .collect();
-    assert_eq!(steps.len(), 16, "{steps:?}");
+    assert_eq!(steps.len(), 20, "{steps:?}");
     for (document, text) in [
         ("docs/MESH.md", read("docs/MESH.md")),
         ("docs/CLI.md", read("docs/CLI.md")),
     ] {
-        // Every `capture_…` and `hlod_incidence_…` code span that is not a report field.
-        let documented: BTreeSet<String> = ["`capture_", "`hlod_incidence_"]
+        // Every `capture_…`, `hlod_incidence_…` and `inspect_…` code span that is not a
+        // report field.
+        let documented: BTreeSet<String> = ["`capture_", "`hlod_incidence_", "`inspect_"]
             .iter()
             .flat_map(|prefix| text.match_indices(prefix).map(|(at, _)| at))
             .filter_map(|at| {
@@ -388,6 +391,8 @@ fn documented_capture_steps_are_the_reported_steps() {
                 Some(name[..name.find('`')?].to_owned())
             })
             .filter(|name| !name.ends_with("_bytes"))
+            // The Python function, not a step.
+            .filter(|name| !name.starts_with("inspect_mesh"))
             .collect();
         assert_eq!(documented, steps, "{document}");
     }

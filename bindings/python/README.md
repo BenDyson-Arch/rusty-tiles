@@ -35,6 +35,7 @@ Converter inputs and outputs are filesystem paths (`str` or `os.PathLike`). All 
 | Function | Keyword arguments and result |
 | --- | --- |
 | `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `memory_budget_bytes=None`, `report_path=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `bbox=None`, `polygon=None`, `force=False`, `callback=None`; returns `TilerResult` |
+| `inspect_mesh(input, ...)` | `mesh_to_tileset`'s keywords without `output`, `report_path`, `bbox` and `polygon`, plus `geojson=None`, `geojson_local=False`, `min_feature_length=5.0`; writes no archive and returns `InspectResult`; see [Mesh inspection](#mesh-inspection) |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
 | `model_to_manifest(input, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; writes a sibling `tileset.json` and returns `ModelManifestResult` |
 | `point_cloud_to_3tz(input, output, ...)` | required `source_crs`, `force=False`, `height_offset=None`, `max_points=8192` (also the maximum), `chunk_points=100000`, `metadata=False`, `metadata_attributes=False`, `callback=None`; returns `PointCloudResult` |
@@ -48,7 +49,7 @@ Converter inputs and outputs are filesystem paths (`str` or `os.PathLike`). All 
 | `decode_tile(archive, member, ...)` | `format="glb"` (plain GLB `bytes`) or `"arrays"` (a `dict` of NumPy arrays); see [Decoded tile views](#decoded-tile-views) |
 | `raster_tile_to_directory(input, output, *, zoom, x, y, force=False, callback=None)` | Always raises `UnsupportedError` in this package; see [Not included](#not-included) |
 
-Every result has `output` (the resolved absolute path) and `cleanup_diagnostics`. `PackageResult` has a `receipt`; the others have a required `report` dictionary, and `TilerResult` also has `diagnostics`. `TilerResult`, `PointCloudResult`, `VectorResult` and `PackageResult` have `archive=True`. Results are frozen, but their dictionaries are not deeply immutable.
+Every converter result has `output` (the resolved absolute path) and `cleanup_diagnostics`; `InspectResult` writes no archive and has `geojson` instead. `PackageResult` has a `receipt`; the others have a required `report` dictionary, and `TilerResult` also has `diagnostics`. `TilerResult`, `PointCloudResult`, `VectorResult` and `PackageResult` have `archive=True`. Results are frozen, but their dictionaries are not deeply immutable.
 
 ### Not included
 
@@ -149,6 +150,42 @@ Coarse tiles that need last-resort reduction declare it in
 `asset.extras.rustyTiles.lastResort`; `result.diagnostics["hlod"]` reports
 `last_resort_tiles`, `last_resort_stages`, `fold_faces` and `declared_tiles`.
 See [last-resort declarations](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#last-resort-declarations).
+
+### Mesh inspection
+
+`inspect_mesh(input, *, geojson=None, geojson_local=False, min_feature_length=5.0,
+profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None,
+anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None,
+source_axes=None, source_offset=None, source_offset_file=None,
+height_offset=None, force=False, callback=None)` checks a mesh source before a
+bake, as `rusty-tiles mesh-inspect` does. Pass the keywords you will bake with:
+it captures the source as `mesh_to_tileset` does, so its cells are the bake's.
+
+```python
+check = rusty_tiles.inspect_mesh(
+    "site.glb", geojson="site-check.geojson",
+    source_crs="EPSG:3857", source_offset_file="site_offset.txt",
+)
+print(*check.summary, sep="\n")
+print(check.report["source"]["open"]["loops"], check.geojson)
+```
+
+The frozen `InspectResult` has:
+
+- `report`: the same `dict` as the CLI's `inspectReport`. It does not depend on
+  `jobs`, the memory budget, the scratch location or the GeoJSON path.
+- `diagnostics`: workers, the memory plan and stage seconds.
+- `geojson`: the installed GeoJSON's `pathlib.Path`, or `None`.
+- `summary`: the CLI's human summary lines.
+- `cleanup_diagnostics`.
+
+`report["forecast"]` is an estimate of coarse omission, not a bake, and its
+measured quality is modest; read
+[the omission forecast](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#the-omission-forecast-is-an-estimate)
+before acting on it. A GeoJSON is WGS84 and needs `anchor` or `source_crs`;
+`geojson_local=True` writes local east/north metres instead, which is not
+RFC 7946 and says so in a `rustyTilesFrame` member. Callbacks and errors work as
+for `mesh_to_tileset`.
 
 ### Rigid placement
 

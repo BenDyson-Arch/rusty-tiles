@@ -54,10 +54,11 @@ pub use mesh_archive::{
     ModelManifestResult, ModelReport, ModelWrapRequest, ModelWrapResult,
 };
 pub use mesh_large::{
-    mesh_to_tileset, parse_memory_budget, BudgetSource, DeclaredTile, HlodDiagnostics,
-    HlodMemoryPlan, MemoryBudget, MemoryDiagnostics, MeshSourceCrs, MeshSourceCrsReport,
-    MeshSubset, MeshSubsetReport, RepeatReuse, StorageDiagnostics, TilerDiagnostics, TilerJobs,
-    TilerProfile, TilerReport, TilerRequest, TilerResult,
+    inspect_mesh, mesh_to_tileset, parse_memory_budget, BudgetSource, DeclaredTile,
+    HlodDiagnostics, HlodMemoryPlan, InspectDiagnostics, InspectReport, InspectRequest,
+    InspectResult, MemoryBudget, MemoryDiagnostics, MeshSourceCrs, MeshSourceCrsReport, MeshSubset,
+    MeshSubsetReport, RepeatReuse, StorageDiagnostics, TilerDiagnostics, TilerJobs, TilerProfile,
+    TilerReport, TilerRequest, TilerResult, DEFAULT_MIN_FEATURE_LENGTH,
 };
 pub use pack::{validate_3tz, TZ_INDEX_NAME};
 pub use raster_directory::{

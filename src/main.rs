@@ -80,6 +80,10 @@ struct Cli {
 enum Command {
     /// Stream a static glTF/GLB mesh (local metres Y-up, or a declared --source-crs) into a Tiles 1.1 implicit .3tz
     Mesh(TilerArgs),
+    /// Check a mesh source before a bake: open edges and loops, primitive seams, repeated
+    /// positions, components and an estimated coarse omission per cell (no archive written)
+    #[command(name = "mesh-inspect")]
+    MeshInspect(MeshInspectArgs),
     /// Inspect a self-contained 3TZ archive against the bounded C1 payload profile
     Validate {
         /// .3tz archive to check (raster/terrain directories are not validated yet)
@@ -154,6 +158,7 @@ impl Command {
     fn name(&self) -> &'static str {
         match self {
             Self::Mesh(_) => "mesh",
+            Self::MeshInspect(_) => "mesh-inspect",
             Self::Validate { .. } => "validate",
             Self::Doctor(_) => "doctor",
             Self::Preview(_) => "preview",
@@ -253,6 +258,54 @@ impl SubsetArgs {
             recovery: None,
         })?)
     }
+}
+
+#[derive(Args)]
+struct MeshInspectArgs {
+    /// Source glTF/GLB, read as `mesh` reads it
+    #[arg(short = 'i', long)]
+    input: PathBuf,
+    /// Also write a GeoJSON (.geojson) of open loops and seams at least --minFeatureLength
+    /// long and of the cells at risk, in WGS84; needs --anchor or --source-crs unless
+    /// --geojsonLocal is given
+    #[arg(long, value_name = "PATH")]
+    geojson: Option<PathBuf>,
+    /// Write the GeoJSON in local east/north metres (east = glTF +X, north = glTF -Z), not
+    /// RFC 7946 WGS84; the file says so in a top-level `rustyTilesFrame` member
+    #[arg(
+        long = "geojsonLocal",
+        visible_alias = "geojson-local",
+        requires = "geojson"
+    )]
+    geojson_local: bool,
+    /// Shortest open loop or seam written to the GeoJSON, in metres
+    #[arg(
+        long = "minFeatureLength",
+        visible_alias = "min-feature-length",
+        value_name = "METRES",
+        default_value_t = rusty_tiles::DEFAULT_MIN_FEATURE_LENGTH
+    )]
+    min_feature_length: f64,
+    /// Replace an existing GeoJSON
+    #[arg(short = 'f', long)]
+    force: bool,
+    /// The bake's profile: give the same as `mesh` so cells line up
+    #[arg(long, default_value = "balanced")]
+    profile: TilerProfile,
+    /// Maximum capture workers or auto; the report does not depend on it
+    #[arg(long, default_value = "auto")]
+    jobs: TilerJobs,
+    /// Owned working-data parent
+    #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
+    scratch_dir: Option<PathBuf>,
+    /// Declared memory budget, as for `mesh`: a ceiling for every stage, never raised
+    #[arg(long = "memory-budget", visible_alias = "memoryBudget", value_name = "BYTES",
+          value_parser = parse_memory_budget)]
+    memory_budget: Option<u64>,
+    #[command(flatten)]
+    placement: RigidPlacementArgs,
+    #[command(flatten)]
+    source: SourceCrsArgs,
 }
 
 #[derive(Args)]
@@ -677,6 +730,7 @@ enum Outcome {
     /// Installed package with a typed receipt separate from source reports.
     Pack(PackageResult),
     Tiler(Box<TilerResult>),
+    Inspect(Box<rusty_tiles::InspectResult>),
     ModelArchive(Box<ModelWrapResult>),
     ModelManifest(Box<ModelManifestResult>),
     RasterDirectory(RasterDirectoryResult),
@@ -764,6 +818,16 @@ fn run_cli() -> ExitCode {
                                 errln!("error: writing the validation report: {error}");
                                 return ExitCode::from(1);
                             }
+                        }
+                    }
+                    None
+                }
+                Outcome::Inspect(result) => {
+                    if json {
+                        outln!("{}", inspect_summary(&result));
+                    } else if !events {
+                        for line in result.summary_lines() {
+                            errln!("{line}");
                         }
                     }
                     None
@@ -999,6 +1063,16 @@ fn point_cloud_summary(result: &rusty_tiles::point_cloud::PointCloudResult) -> V
     let mut summary = output_summary(&result.output, Some(&report), true);
     summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
     summary
+}
+
+fn inspect_summary(result: &rusty_tiles::InspectResult) -> Value {
+    json!({
+        "ok":true,
+        "inspectReport":result.report,
+        "geojson":result.geojson.as_ref().map(|p| p.to_string_lossy()),
+        "diagnostics":result.diagnostics,
+        "cleanupDiagnostics":cleanup_diagnostics_summary(&result.cleanup_diagnostics),
+    })
 }
 
 /// RUSTY_TILES_STAGE_TIMING=<file>: the run's summed per-thread stage timing
@@ -1348,6 +1422,37 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             let result = rusty_tiles::mesh_to_tileset(request, &interrupt::run_control(observer))?;
             write_stage_timing(stage_timing, &result.diagnostics);
             Outcome::Tiler(Box::new(result))
+        }
+        Command::MeshInspect(a) => {
+            let mut request = rusty_tiles::InspectRequest::new(a.input)
+                .with_profile(a.profile)
+                .with_jobs(a.jobs)
+                .with_min_feature_length(a.min_feature_length)
+                .with_geojson_local(a.geojson_local)
+                .with_output_policy(if a.force {
+                    OutputPolicy::Replace
+                } else {
+                    OutputPolicy::CreateNew
+                })
+                .with_placement(a.placement.resolve()?);
+            if let Some(path) = a.geojson {
+                request = request.with_geojson(path);
+            }
+            if let Some(source_crs) = a.source.resolve()? {
+                request = request.with_source_crs(source_crs);
+            }
+            if let Some(path) = a.scratch_dir {
+                request = request.with_scratch_dir(path);
+            }
+            if let Some(bytes) = a.memory_budget {
+                request = request.with_memory_budget(bytes);
+            }
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            Outcome::Inspect(Box::new(rusty_tiles::inspect_mesh(
+                request,
+                &interrupt::run_control(observer),
+            )?))
         }
         Command::Validate {
             input,
