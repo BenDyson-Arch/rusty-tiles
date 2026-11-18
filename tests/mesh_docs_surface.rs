@@ -376,7 +376,7 @@ fn documented_capture_steps_are_the_reported_steps() {
         .step_by(2)
         .map(String::from)
         .collect();
-    assert_eq!(steps.len(), 20, "{steps:?}");
+    assert_eq!(steps.len(), 21, "{steps:?}");
     for (document, text) in [
         ("docs/MESH.md", read("docs/MESH.md")),
         ("docs/CLI.md", read("docs/CLI.md")),

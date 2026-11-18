@@ -473,6 +473,12 @@ Vertices no captured triangle uses take no part.
   `source_primitive`, `source_triangle` and the authored vertex indices. A
   triangle whose corners land on fewer than three positions becomes degenerate,
   as capture already defines it.
+- **Short edges collapse.** The weld pairs any two vertices of a scope within ε,
+  including the ends of a real edge shorter than ε. On a dense photogrammetry
+  mesh even 1 mm collapses some of its own short edges; each one leaves
+  degenerate triangles. Pick ε below the mesh's shortest real edges and above
+  the gaps you want closed, and check `mesh-inspect`'s
+  `source.degenerate_triangles` and open edges with the same options first.
 - **Placement and tiling stay the source's.** A welded vertex sits on another
   used vertex's position, so the welded source lies inside the unwelded source's
   box. The frame, the root cube that keys triangles into cells and the position
@@ -505,9 +511,9 @@ alike (rounded up to the next f64, so the sum never rounds below it):
   omitted cells keep at least their children's (charged) error. A weld that
   moves nothing adds nothing.
 
-`G` itself is still sampled, not certified. Once certified geometric error
-lands (#413), it will be measured against the original, unwelded source, and
-the explicit term will no longer be needed.
+`G` itself is still sampled, not certified. Once the measured error bound of
+#413 lands, `G` will be measured against the original, unwelded source, and the
+explicit term will no longer be needed.
 
 **Report.** `tilerReport.weld` (also in `conversion.json`) and
 `inspectReport.weld` state:

@@ -528,3 +528,34 @@ fn mesh_subset_selection_stops() {
     );
     assert_stopped(&run, &work.scratch(), &work.out());
 }
+
+/// A weld decodes and lists source vertices on worker threads; each task checks the run's
+/// stop every 4,096 vertices, and the calling thread keeps checking.
+#[test]
+fn mesh_weld_stops() {
+    let work = Work::new();
+    let input = work.path("grid.glb");
+    fs::write(&input, support::textured_grid_glb(200)).unwrap();
+    let output = work.out().join("grid.3tz");
+    let run = stop_in(
+        &os(&[
+            &"mesh",
+            &"-i",
+            &input,
+            &"-o",
+            &output,
+            &"--jobs",
+            &"2",
+            &"--weld-epsilon",
+            &"0.001",
+            &"--scratch-dir",
+            &work.scratch(),
+        ]),
+        &[
+            ("RUSTY_TILES_TEST_PACE", "mesh.weld"),
+            ("RUSTY_TILES_TEST_PACE_US", "1000000"),
+        ],
+        "mesh.weld",
+    );
+    assert_stopped(&run, &work.scratch(), &work.out());
+}
