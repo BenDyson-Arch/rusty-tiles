@@ -820,12 +820,72 @@ class WheelAPI(unittest.TestCase):
                                  capture_output=True, check=True, timeout=300)
         self.assertTrue(json.loads(checked.stdout)["ok"])
 
+    def test_tiler_weld_merges_near_repeats_and_charges_published_error(self):
+        # Two triangles meeting along an edge whose second copy sits 1 mm away.
+        source = self.root / "weld.glb"
+        points = [(0, 0, 0), (1, 0, 0), (0, 0, -1), (1.001, 0, 0), (1, 0, -1), (0.001, 0, -1)]
+        payload = b"".join(struct.pack("<3f", *point) for point in points)
+        document = {
+            "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}],
+            "nodes": [{"mesh": 0}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+            "buffers": [{"byteLength": len(payload)}],
+            "bufferViews": [{"buffer": 0, "byteLength": len(payload)}],
+            "accessors": [{"bufferView": 0, "componentType": 5126, "count": 6, "type": "VEC3",
+                           "min": [0, 0, -1], "max": [1.001, 0, 0]}],
+        }
+        encoded = json.dumps(document, separators=(",", ":")).encode()
+        encoded += b" " * (-len(encoded) % 4)
+        source.write_bytes(struct.pack("<III", 0x46546C67, 2, 28 + len(encoded) + len(payload))
+                           + struct.pack("<II", len(encoded), 0x4E4F534A) + encoded
+                           + struct.pack("<II", len(payload), 0x004E4942) + payload)
+        plain = rusty_tiles.mesh_to_tileset(source, self.root / "weld-plain.3tz", jobs=1)
+        self.assertNotIn("weld", plain.report)
+        events = []
+        result = rusty_tiles.mesh_to_tileset(source, self.root / "weld.3tz", jobs=1,
+                                             weld_epsilon=0.01, callback=events.append)
+        weld = result.report["weld"]
+        self.assertEqual((weld["epsilon_m"], weld["join_primitives"]), (0.01, "none"))
+        self.assertEqual((weld["vertices"], weld["merged_vertices"], weld["moved_vertices"]),
+                         (6, 2, 2))
+        self.assertEqual((weld["classes"], weld["largest_class"]), (2, 2))
+        self.assertTrue(0.0009 < weld["max_displacement_m"] < 0.0011, weld)
+        self.assertGreater(weld["geometric_error_term_m"], weld["max_displacement_m"])
+        self.assertGreater(result.diagnostics["memory"]["capture_weld_bytes"], 0)
+        self.assertIn("capture_weld", {event.get("phase") for event in events})
+        # Exact repeats only at 0: nothing within a millimetre is merged.
+        exact = rusty_tiles.mesh_to_tileset(source, self.root / "weld-exact.3tz", jobs=1,
+                                            join_primitives="same-material")
+        self.assertEqual(exact.report["weld"]["merged_vertices"], 0)
+        self.assertEqual(exact.report["weld"]["join_primitives"], "same-material")
+        inspected = rusty_tiles.inspect_mesh(source, weld_epsilon=0.01)
+        self.assertEqual(inspected.report["weld"], weld)
+        self.assertNotIn("weld", rusty_tiles.inspect_mesh(source).report)
+        for name, keywords, message in [
+            ("negative", {"weld_epsilon": -1.0}, "finite"),
+            ("nan", {"weld_epsilon": float("nan")}, "finite"),
+            ("mode", {"join_primitives": "all"}, "same-material"),
+        ]:
+            output = self.root / f"weld-{name}.3tz"
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(rusty_tiles.InvalidRequestError, message):
+                    rusty_tiles.mesh_to_tileset(source, output, jobs=1, **keywords)
+                self.assertFalse(output.exists())
+        if CLI:
+            cli_output = self.root / "weld-cli.3tz"
+            envelope = json.loads(subprocess.run(
+                [CLI, "--json", "mesh", "-i", str(source), "-o", str(cli_output), "--jobs", "1",
+                 "--weld-epsilon", "0.01"],
+                capture_output=True, check=True, timeout=300).stdout)
+            self.assertEqual(envelope["tilerReport"]["weld"], weld)
+            self.assertEqual(cli_output.read_bytes(), (self.root / "weld.3tz").read_bytes())
+
     def test_tiler_documented_signatures_name_only_installed_parameters(self):
         installed = set(inspect.signature(rusty_tiles.mesh_to_tileset).parameters)
         documented = {"input", "output", "profile", "jobs", "scratch_dir", "memory_budget_bytes",
                       "anchor", "orientation_xyzw", "scene_offset", "source_crs", "source_axes",
                       "source_offset", "source_offset_file", "height_offset", "bbox", "polygon",
-                      "force", "callback",
+                      "weld_epsilon", "join_primitives", "force", "callback",
                       "report_path"}
         self.assertEqual(installed, documented)
         shown = io.StringIO()

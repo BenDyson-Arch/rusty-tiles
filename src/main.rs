@@ -47,9 +47,9 @@ use rusty_tiles::georef::SourceAxes;
 use rusty_tiles::package::{package, PackageRequest, PackageResult};
 use rusty_tiles::{
     doctor, terrain, vector, JobError, JobErrorKind, MeshPlacement, MeshSourceCrs, MeshSubset,
-    ModelManifestRequest, ModelManifestResult, ModelWrapRequest, ModelWrapResult, Observer,
-    OutputPolicy, RasterDirectoryRequest, RasterDirectoryResult, RasterLimits, RasterRequest,
-    RasterResult, RunEvent, TilerJobs, TilerProfile, TilerRequest, TilerResult,
+    MeshWeld, ModelManifestRequest, ModelManifestResult, ModelWrapRequest, ModelWrapResult,
+    Observer, OutputPolicy, RasterDirectoryRequest, RasterDirectoryResult, RasterLimits,
+    RasterRequest, RasterResult, RunEvent, TilerJobs, TilerProfile, TilerRequest, TilerResult,
 };
 
 // Option spelling: multi-word options keep their camelCase name as the primary
@@ -224,6 +224,48 @@ struct TilerArgs {
     source: SourceCrsArgs,
     #[command(flatten)]
     subset: SubsetArgs,
+    #[command(flatten)]
+    weld: WeldArgs,
+}
+
+/// `--weld-epsilon` / `--join-primitives`: an opt-in weld of source vertex positions.
+#[derive(Args)]
+struct WeldArgs {
+    /// Weld source vertices within METRES of each other (0: exact repeats only) before
+    /// capture, each primitive's own; a merged vertex takes its class's lowest-index
+    /// position, its normal, UVs and colour stay its own. The merged count and largest
+    /// displacement are reported, and that displacement is added to every published
+    /// geometric error
+    #[arg(
+        long = "weld-epsilon",
+        visible_alias = "weldEpsilon",
+        value_name = "METRES"
+    )]
+    weld_epsilon: Option<f64>,
+    /// `same-material`: also weld across primitives with the same material, so their
+    /// coincident boundaries become interior edges; source_primitive stays per triangle.
+    /// Without --weld-epsilon it welds exact repeats only
+    #[arg(
+        long = "join-primitives",
+        visible_alias = "joinPrimitives",
+        value_name = "MODE",
+        value_parser = ["same-material"]
+    )]
+    join_primitives: Option<String>,
+}
+impl WeldArgs {
+    fn resolve(self) -> Result<Option<MeshWeld>, Error> {
+        Ok(
+            MeshWeld::from_parameters(self.weld_epsilon, self.join_primitives.as_deref()).map_err(
+                |error| rusty_tiles::JobFailure {
+                    error,
+                    secondary: Vec::new(),
+                    retained_paths: Vec::new(),
+                    recovery: None,
+                },
+            )?,
+        )
+    }
 }
 
 /// `--bbox` / `--polygon`: bake part of the source.
@@ -298,6 +340,9 @@ struct MeshInspectArgs {
     /// Owned working-data parent
     #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
     scratch_dir: Option<PathBuf>,
+    /// Inspect the source welded as `mesh` would weld it (see `mesh --help`)
+    #[command(flatten)]
+    weld: WeldArgs,
     /// Declared memory budget, as for `mesh`: a ceiling for every stage, never raised
     #[arg(long = "memory-budget", visible_alias = "memoryBudget", value_name = "BYTES",
           value_parser = parse_memory_budget)]
@@ -1134,6 +1179,42 @@ fn subset_line(subset: &Value) -> Option<String> {
     ))
 }
 
+/// The weld statement's line (`MeshWeldReport::summary_line`).
+fn weld_line(weld: &Value) -> Option<String> {
+    serde_json::from_value::<WeldLine>(weld.clone())
+        .ok()
+        .map(|w| w.line())
+}
+#[derive(serde::Deserialize)]
+struct WeldLine {
+    epsilon_m: f64,
+    join_primitives: String,
+    vertices: u64,
+    merged_vertices: u64,
+    moved_vertices: u64,
+    classes: u64,
+    max_displacement_m: f64,
+}
+impl WeldLine {
+    fn line(&self) -> String {
+        let scope = if self.join_primitives == "same-material" {
+            "within each material"
+        } else {
+            "within each primitive"
+        };
+        format!(
+            "weld: merged {} of {} source vertices within {} m {scope} ({} moved, {} classes); \
+             largest displacement {} m, added to every published geometric error",
+            self.merged_vertices,
+            self.vertices,
+            self.epsilon_m,
+            self.moved_vertices,
+            self.classes,
+            self.max_displacement_m,
+        )
+    }
+}
+
 /// Allow-listed EPSG datum operations a converter report names (point cloud at the top
 /// level, vector per layer), without duplicates.
 fn crs_operations(report: &Value) -> Vec<Value> {
@@ -1315,6 +1396,9 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
     if let Some(line) = subset_line(&summary["tilerReport"]["subset"]) {
         lines.push(line);
     }
+    if let Some(line) = weld_line(&summary["tilerReport"]["weld"]) {
+        lines.push(line);
+    }
     let count = |key: &str| counts[key].as_u64().filter(|n| *n > 0);
     let mut warnings = Vec::new();
     if let Some(n) = count("skippedFeatures") {
@@ -1406,6 +1490,9 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             if let Some(subset) = a.subset.resolve()? {
                 request = request.with_subset(subset);
             }
+            if let Some(weld) = a.weld.resolve()? {
+                request = request.with_weld(weld);
+            }
             if let Some(path) = a.scratch_dir {
                 request = request.with_scratch_dir(path);
             }
@@ -1437,6 +1524,9 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
                 .with_placement(a.placement.resolve()?);
             if let Some(path) = a.geojson {
                 request = request.with_geojson(path);
+            }
+            if let Some(weld) = a.weld.resolve()? {
+                request = request.with_weld(weld);
             }
             if let Some(source_crs) = a.source.resolve()? {
                 request = request.with_source_crs(source_crs);

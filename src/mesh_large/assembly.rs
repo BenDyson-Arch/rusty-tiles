@@ -26,6 +26,7 @@ use super::{
     source_crs::SourceFrame,
     subset::{Ranks, Selection},
     tasks::{run, Ran},
+    weld::Welded,
 };
 use crate::{
     gltf_source::source::ScenePrimitive,
@@ -61,7 +62,7 @@ const CELLS: usize = 1 << (3 * PREFIX_DEPTH as usize);
 /// Triangles one histogram or distribution task covers.
 const CHUNK_TRIANGLES: usize = 1 << 14;
 /// Vertices one decode task covers.
-const CHUNK_VERTICES: usize = 1 << 16;
+pub(super) const CHUNK_VERTICES: usize = 1 << 16;
 /// Staging files of ordinary buckets (consecutive bucket ranges); a heavy bucket has its own.
 const STAGING_GROUPS: usize = 16;
 /// Heavy buckets with a staging file of their own: those over 1/OWN_FILES of the records.
@@ -196,6 +197,10 @@ impl AssemblyPlan {
 pub(crate) struct ScratchShape {
     pub vertex_bytes: u64,
     pub files: u64,
+    /// An opt-in weld's peak scratch, before the assembly (`weld::scratch_bytes`).
+    pub weld_bytes: u64,
+    /// Its sorted move list, held through the assembly (`weld::moves_bytes`).
+    pub weld_moves_bytes: u64,
 }
 
 /// The most bytes the list of staged runs takes for `n` records under `layout`: every run
@@ -243,6 +248,8 @@ impl ScratchShape {
             files: primitives
                 .checked_add(STAGING_FILES as u64)?
                 .checked_add(1)?,
+            weld_bytes: 0,
+            weld_moves_bytes: 0,
         })
     }
 }
@@ -597,6 +604,8 @@ struct Decoder<'a> {
     p: &'a ScenePrimitive<'a>,
     frame: &'a mut SourceFrame,
     buffer_bytes: usize,
+    /// A welded source's moves and this primitive instance's index.
+    weld: Option<(&'a Welded, usize)>,
 }
 
 /// Runs `task(chunk, frame, check)` over `chunks` with a source frame; a task calls `check`
@@ -710,6 +719,10 @@ impl Decoder<'_> {
         let mut boxes = Boxes::EMPTY;
         let slot = |v: usize| ranks.map_or(v, |ranks| ranks.rank(v));
         let start = slot(range.start);
+        let mut moves = self
+            .weld
+            .map(|(welded, i)| welded.moves(i, range.clone()))
+            .transpose()?;
         for vertex in range {
             if vertex.is_multiple_of(4096) {
                 check()?;
@@ -720,11 +733,17 @@ impl Decoder<'_> {
             let world = source_position(p, &mut positions, vertex as u64)?;
             let (position, jacobian) = self.frame.vertex(world, want_jacobian)?;
             let position = canonical(position);
+            // The boxes are the source's own; a welded vertex takes its representative's
+            // position, which is another used vertex's and so inside them.
             boxes.mapped.include(position);
             for axis in 0..3 {
                 boxes.source[0][axis] = boxes.source[0][axis].min(world[axis]);
                 boxes.source[1][axis] = boxes.source[1][axis].max(world[axis]);
             }
+            let position = match &mut moves {
+                Some(moves) => moves.position(vertex, position)?,
+                None => position,
+            };
             let attributes = read_attributes(
                 p,
                 vertex as u64,
@@ -765,7 +784,7 @@ fn decode_primitive(
     workers: usize,
     in_memory: bool,
     (cache_blocks, sorter, progress): (usize, SortConfig, &StepProgress<'_>),
-    kept: Option<&Ranks>,
+    (kept, weld): (Option<&Ranks>, Option<(&Welded, usize)>),
     poll: &mut dyn FnMut() -> Result<()>,
 ) -> Result<std::result::Result<Decoded, JobError>> {
     let size = DecodedVertex::size_in(layout);
@@ -805,6 +824,7 @@ fn decode_primitive(
             p,
             frame,
             buffer_bytes,
+            weld,
         };
         decoder.decode(&used, start..end, layout, out, ranks.as_ref(), check)
     };
@@ -1158,11 +1178,13 @@ fn first_vertex_failure(
         }
     }
     let size = DecodedVertex::size_in(layout);
+    // Only decoding can fail here; the weld moves no failing vertex.
     let mut decoder = Decoder {
         source,
         p,
         frame,
         buffer_bytes,
+        weld: None,
     };
     let mut out = vec![0u8; size];
     for vertex in 0..p.position.count {
@@ -1181,6 +1203,11 @@ fn first_vertex_failure(
         }
     }
     Ok(None)
+}
+
+/// Whether box `a` lies inside box `b`.
+fn inside(a: &Bounds, b: &Bounds) -> bool {
+    (0..3).all(|k| a.min[k] >= b.min[k] && a.max[k] <= b.max[k])
 }
 
 /// The prefix cell of a Morton key.
@@ -1307,7 +1334,7 @@ pub(crate) fn assemble(
     workers: usize,
     sorter: SortConfig,
     progress: &StepProgress<'_>,
-    subset: Option<&Selection>,
+    (subset, weld): (Option<&Selection>, Option<&Welded>),
 ) -> Result<(Sequence<FullTriangle>, AssemblyReport)> {
     let buffer_bytes = sorter.buffer_bytes;
     let mut report = AssemblyReport {
@@ -1363,7 +1390,7 @@ pub(crate) fn assemble(
             workers,
             in_memory,
             (plan.cache_blocks, sorter, progress),
-            kept.map(|kept| &kept.triangles),
+            (kept.map(|kept| &kept.triangles), weld.map(|weld| (weld, i))),
             &mut || {
                 stop_check()?;
                 progress.advance(done)
@@ -1515,7 +1542,13 @@ pub(crate) fn assemble(
     progress.end()?;
     source.verify_unchanged()?;
     let expected = subset.map_or(scan.bounds, |subset| subset.bounds);
-    if count != scan.triangles || geometry_bytes != scan.geometry_bytes || bounds != expected {
+    // A welded vertex sits on another used vertex's position, so a welded source's box is
+    // inside the source's own (which keeps placing and tiling it).
+    let bounded = match weld {
+        None => bounds == expected,
+        Some(_) => bounds == Bounds::EMPTY || inside(&bounds, &expected),
+    };
+    if count != scan.triangles || geometry_bytes != scan.geometry_bytes || !bounded {
         return Err(invalid(
             "mesh source geometry changed between preflight and capture",
         ));

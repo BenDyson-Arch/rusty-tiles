@@ -98,6 +98,8 @@ pub(crate) struct TreeConfig {
     pub source_crs: Option<super::MeshSourceCrs>,
     /// Bake only the triangles whose centroid lies in this region; `None` bakes them all.
     pub subset: Option<super::MeshSubset>,
+    /// Weld source vertex positions before the assembly; `None` captures them as authored.
+    pub weld: Option<super::MeshWeld>,
     /// The run's stop probe: spill scratch created for this run stops with it.
     pub(crate) stop: Option<crate::runtime::AttemptProbe>,
     /// D8's resolved run budget: every stage plans against it as a ceiling. Only the
@@ -154,6 +156,7 @@ impl TreeConfig {
             output_parents: None,
             source_crs: None,
             subset: None,
+            weld: None,
             stop: None,
             memory_budget: None,
             #[cfg(test)]

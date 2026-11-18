@@ -45,7 +45,8 @@ rusty-tiles --json mesh-inspect -i local.glb > check.json
 ```
 
 It takes `mesh`'s source options (`--profile`, `--jobs`, `--scratch-dir`,
-`--memory-budget`, the placement and the [source CRS](#source-crs) options)
+`--memory-budget`, the placement, the [source CRS](#source-crs) and the
+[weld](#weld-the-source) options)
 and captures the source exactly as `mesh` does: the same capture, cell tree,
 lattice, incidence pass and shared-border contracts. Give it the options you
 will bake with and its cells are the bake's cells. It writes no archive. The
@@ -59,7 +60,8 @@ the passes below.
 The report (`--json`'s `inspectReport`, Python's `report`) is the same for
 every `--jobs`, budget, scratch location and GeoJSON path; the path is reported
 beside it (`geojson` in `--json`, `InspectResult.geojson` in Python). Without
-`--json`, six lines on stderr summarise it (a seventh names the GeoJSON). It
+`--json`, six lines on stderr summarise it (a weld adds one before them, and
+a last one names the GeoJSON). It
 holds:
 
 - **Source topology** (`source`), on exact positions: two corners are one
@@ -72,8 +74,8 @@ holds:
     only with another face of the same primitive (unwelded vertices), and those
     open after welding.
   - `repeated_positions`: positions held by more than one source vertex, the
-    extra vertices, and the edges welding them closes. Opt-in welding of such
-    sources is a separate change (#349).
+    extra vertices, and the edges welding them closes. The bake already joins
+    exact repeats; `--weld-epsilon` [welds near repeats](#weld-the-source).
   - `seams`: those closed edges joined into chains, with their length classes.
   - `components` (connected after welding positions), `nonmanifold_edges`,
     `degenerate_triangles`, `surface_area_m2` and the counts of triangles,
@@ -421,6 +423,129 @@ cost no scratch.
 before any scratch or output exists. The message names the span of the source's
 centroids in the region's coordinates.
 
+## Weld the source
+
+Photogrammetry sources often arrive split into tiles or clusters whose shared
+boundaries are not welded: the same surface point is stored once per tile, a
+little apart. The bake keeps every open edge exactly, so such seams stay open
+and coarse levels fragment. Two opt-in options weld the source before capture:
+
+```sh
+rusty-tiles mesh-inspect -i site.glb --weld-epsilon 0.002     # preview the effect
+rusty-tiles mesh -i site.glb -o site.3tz --weld-epsilon 0.002
+rusty-tiles mesh -i site.glb -o site.3tz --weld-epsilon 0.002 --join-primitives same-material
+```
+
+Python takes `weld_epsilon=0.002` and `join_primitives="same-material"` in
+both `mesh_to_tileset` and `inspect_mesh`.
+
+This is a declared change to the source before tiling. The [exact-seam
+rule](#hierarchy-and-cracks) for the seams between output tiles is unchanged:
+the bake still locks only exactly shared edges and never matches T-junctions
+with a tolerance. Without either option the archive is byte-identical to a bake
+without them.
+
+**What is welded.** A source vertex is one primitive instance's POSITION
+element that a captured triangle uses (in a [subset bake](#bake-part-of-the-source),
+a kept triangle). Its position is the one capture decodes: after node
+transforms and any [source CRS](#source-crs) mapping, in local metres, as f32.
+Vertices no captured triangle uses take no part.
+
+- `--weld-epsilon METRES` (finite, at least 0) pairs two vertices when each
+  coordinate differs by at most ε and their distance is at most ε. At 0 it
+  pairs exact repeats only (bit-equal positions).
+- The default scope is one primitive instance: only its own vertices pair.
+  `--join-primitives same-material` widens it to every primitive instance with
+  the same glTF material index (primitives without a material form one scope),
+  so coincident boundaries between such primitives become interior edges. Given
+  alone, it welds at ε = 0.
+- **Classes.** The weld classes are the connected components of the pairs
+  (union-find), so they do not depend on the order pairs are found in, on
+  `--jobs` or on the budget. Every vertex of a class takes the position of the
+  class's representative: its lowest global vertex index (primitive instances in
+  scene order, then POSITION index). A chain of pairs can move a vertex by more
+  than ε from its representative; the report gives the true largest
+  displacement.
+- **Positions only.** Normals, tangents, UVs and colours stay each vertex's
+  own. A UV or normal seam stays a seam in attribute space while its geometry
+  closes, so no texture coordinate is averaged or taken from another vertex and
+  no texture is corrupted. Each triangle keeps its provenance:
+  `source_primitive`, `source_triangle` and the authored vertex indices. A
+  triangle whose corners land on fewer than three positions becomes degenerate,
+  as capture already defines it.
+- **Placement and tiling stay the source's.** A welded vertex sits on another
+  used vertex's position, so the welded source lies inside the unwelded source's
+  box. The frame, the root cube that keys triangles into cells and the position
+  lattice are the unwelded source's.
+
+**What changes in the bake.** The bake already treats bit-equal positions as
+one point: coarse tiles weld their children's vertices by decoded position, and
+the incidence pass by leaf-canonical position. A weld at ε = 0 therefore moves
+no vertex and changes no tile; it reports the exact repeats. With ε > 0, near
+repeats land on one position, and the edges between them close. `mesh-inspect`
+with the same options shows how many: its `source.open` and `hlod_view` counts
+are of the welded source.
+
+**Honest geometric error.** Coarse geometric error is sampled against the
+captured, welded source ([below](#geometric-error-sampled-not-certified)), and a
+leaf's against its own captured positions. To keep a published error from
+understating the error against the original source, delivery adds the largest
+displacement `d` to every published geometric error, leaves' and coarse tiles'
+alike (rounded up to the next f64, so the sum never rounds below it):
+
+- Every welded vertex moves by at most `d`. A point of a welded triangle at
+  barycentric coordinates λ is `Σ λᵢ v′ᵢ`, and the source triangle's point at λ
+  is `Σ λᵢ vᵢ`; they are at most `Σ λᵢ |v′ᵢ − vᵢ| ≤ d` apart. So every point of
+  the welded source is within `d` of the original, and every original point
+  within `d` of the welded source: their Hausdorff distance is at most `d`.
+- By the triangle inequality, a tile within `G` of the welded source (in either
+  direction) is within `G + d` of the original source, in the same direction.
+  The charge covers both directions, tile to source and source to tile.
+- Adding the same `d` everywhere keeps errors monotone down the tree. Empty and
+  omitted cells keep at least their children's (charged) error. A weld that
+  moves nothing adds nothing.
+
+`G` itself is still sampled, not certified. Once certified geometric error
+lands (#413), it will be measured against the original, unwelded source, and
+the explicit term will no longer be needed.
+
+**Report.** `tilerReport.weld` (also in `conversion.json`) and
+`inspectReport.weld` state:
+
+- `epsilon_m` and `join_primitives` (`none` or `same-material`);
+- `vertices`: the source vertices the weld considered;
+- `merged_vertices`: vertices merged into another (every class member but its
+  representative), and `moved_vertices`: those whose position changed;
+- `classes` (of two or more vertices) and `largest_class`;
+- `max_displacement_m`, the true largest move, and `geometric_error_term_m`,
+  what delivery added to every published error (0 when nothing moved).
+
+The CLI's summary repeats them on one line. Without the options the report has
+no `weld` field.
+
+**Resources.** The weld is capture's step `capture_weld`, after
+`capture_validate` and before the assembly splits the work. On the capture
+workers, every used vertex is decoded and listed in its column: its scope and
+its cell of side `max(4ε, 2⁻²⁰ m)` in y and z (at ε = 0, its exact y and z),
+and also the lower neighbour cell on each of those axes that its ε-range
+reaches (at most four records). One external sort by column and x, and one
+sweep with a window of the records within ε in x, meet every pair. The classes
+are then sorted under their representatives, and the moves by vertex. All of
+it is deterministic for every `--jobs`.
+
+- Memory: one 4-byte union-find entry per expanded source vertex, two bitmaps,
+  one external sort at a time, the sweep's window (at most 2²⁰ records) and
+  each decoding task's move reader, charged in capture's resident bound
+  (`diagnostics.memory.capture_weld_bytes`). A source of 2³¹ or more expanded
+  vertices is `resource_limit`.
+- Scratch: the column sort (up to four 28-byte records per vertex, two run
+  generations), the vertices' positions, the class sort and the move lists, at
+  most about 240 bytes per used vertex, declared in capture's scratch stage.
+  The sorted move list (16 bytes per moved vertex) stays until the assembly has
+  decoded every vertex.
+- A source with more than 2²⁰ vertices within ε of each other along one column
+  is `resource_limit`: use a smaller ε.
+
 ## Coarse levels (HLOD)
 
 Leaves are the exact tiles. Each occupied cell above them publishes one coarse
@@ -551,6 +676,8 @@ changes the result. `G` is monotone down the tree and is the value in
 
 This is **not** certification. A sampled maximum is neither a Hausdorff bound
 nor a guarantee against unsampled outliers, and no universal bound is claimed.
+With [`--weld-epsilon`](#weld-the-source), `G` is measured against the welded
+source, and the published error adds the weld's largest displacement.
 The 5% margin exceeds the roughly 1% maximum exceedance seen in test audits; it
 is not a covering radius.
 
@@ -1237,7 +1364,7 @@ scratch_dir=None, memory_budget_bytes=None, report_path=None, anchor=None,
 orientation_xyzw=None,
 scene_offset=None, source_crs=None, source_axes=None, source_offset=None,
 source_offset_file=None, height_offset=None, bbox=None, polygon=None,
-force=False, callback=None)` accepts `str` or `os.PathLike` paths. The keywords
+weld_epsilon=None, join_primitives=None, force=False, callback=None)` accepts `str` or `os.PathLike` paths. The keywords
 follow the CLI's rules:
 
 - `source_crs=None` or `"local"` keeps local input. `source_axes` is `"y-up"`
@@ -1246,6 +1373,10 @@ follow the CLI's rules:
 - `bbox=(minx, miny, maxx, maxy)` or `polygon=path` bakes
   [part of the source](#bake-part-of-the-source); the callback receives the
   `capture_select` step like any other.
+- `weld_epsilon` (metres) and `join_primitives="same-material"`
+  [weld the source](#weld-the-source) as `--weld-epsilon` and
+  `--join-primitives` do; `report["weld"]` states the result and the callback
+  receives the `capture_weld` step. `inspect_mesh` takes them too.
 - `jobs=None` means auto; a positive integer is a maximum. Booleans and
   non-integer worker counts are rejected.
 - `memory_budget_bytes` is the [memory budget](#memory-budget): a positive
@@ -1386,7 +1517,9 @@ logs its wall seconds and the run's elapsed seconds as a `log` event. Inside
 `capture`, each step is a phase whose total is known when it starts:
 `capture_scan` (triangles), for a [subset](#bake-part-of-the-source)
 `capture_select` (triangles tested, then every POSITION element of each
-expanded primitive marked or mapped), `capture_validate` (one unit), `capture_corners`
+expanded primitive marked or mapped), `capture_validate` (one unit), for a
+[weld](#weld-the-source) `capture_weld` (every POSITION element of each expanded
+primitive decoded and listed, then every used vertex swept), `capture_corners`
 (vertices decoded, counting every POSITION element of each expanded
 primitive), `capture_positions` (triangles keyed for the bucket histogram),
 `capture_triangles` (triangles built and staged in their buckets),

@@ -218,6 +218,9 @@ pub(crate) enum Step {
     /// A subset bake's selection: every triangle's centroid tested, then every POSITION
     /// element of each expanded primitive marked or mapped.
     Select,
+    /// An opt-in weld: every expanded primitive's POSITION elements decoded and listed
+    /// (one unit per element), then every used vertex swept (one unit each).
+    Weld,
     /// Accessor payload validation before any spill (one unit).
     Validate,
     /// Assembly: the vertices of every expanded primitive decoded (one unit per POSITION
@@ -265,6 +268,7 @@ impl Step {
         match self {
             Self::Scan => "capture_scan",
             Self::Select => "capture_select",
+            Self::Weld => "capture_weld",
             Self::Validate => "capture_validate",
             Self::Corners => "capture_corners",
             Self::Positions => "capture_positions",
