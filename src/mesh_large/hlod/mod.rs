@@ -39,6 +39,7 @@ pub(crate) mod store;
 #[cfg(test)]
 mod tests;
 pub(crate) mod texture_error;
+pub(crate) mod utilisation;
 #[cfg(test)]
 pub(crate) use tests::test_settings;
 
@@ -744,6 +745,9 @@ pub struct HlodDiagnostics {
     pub appearance_by_depth: Vec<DepthAppearance>,
     /// D5 amendment A3 counts, repeated for the run report.
     pub(crate) texture_error: TextureReport,
+    /// The coarse walk's worker use by cell depth: busy and idle worker seconds and the
+    /// slowest cell's share of each depth's wall time (#343).
+    pub walk_utilisation: utilisation::WalkUtilisation,
 }
 
 pub(crate) struct HlodInput<'a> {
@@ -906,8 +910,12 @@ pub(crate) fn produce(
         diagnostics.wall_seconds = started.elapsed().as_secs_f64();
         return Ok((report, diagnostics));
     }
-    // The incidence pass is capture's declared `hlod_incidence` scratch stage.
-    input.phases.progress(Phase::HlodIncidence, 0, Some(1))?;
+    // The incidence pass is capture's declared `hlod_incidence` scratch stage. Its total
+    // is the retained triangles (records) it reads, as its first step's.
+    let incidence_total = captured.triangles.len();
+    input
+        .phases
+        .progress(Phase::HlodIncidence, 0, Some(incidence_total))?;
     let incidence_started = std::time::Instant::now();
     captured.scratch.begin_stage();
     let admit = |bound: u64| admit_scratch(captured, input.config, settings.cap, bound);
@@ -943,10 +951,20 @@ pub(crate) fn produce(
     diagnostics.incidence_cpu_seconds = resources::process_cpu_seconds()
         .zip(cpu_started)
         .map(|(b, a)| b - a);
-    input.phases.progress(Phase::HlodIncidence, 1, Some(1))?;
-    input.phases.finished(
+    input
+        .phases
+        .progress(Phase::HlodIncidence, incidence_total, Some(incidence_total))?;
+    input.phases.finished_with(
         Phase::HlodIncidence,
         incidence_started.elapsed().as_secs_f64(),
+        serde_json::json!({
+            "triangles": incidence_total,
+            "items": report.incidence.items,
+            "rows": report.incidence.rows,
+            "scratch_peak_bytes": diagnostics.incidence_scratch_peak_bytes,
+            "scratch_bound_bytes": bound,
+            "scratch": diagnostics.incidence_scratch,
+        }),
     )?;
     let walk_started = std::time::Instant::now();
     // The walk's scratch: the incidence row stream (at most its walk phase) beside every
@@ -1085,8 +1103,9 @@ pub(crate) fn produce(
     diagnostics.error_cpu = report.error_cpu;
     diagnostics.error_cpu_by_depth = report.error_cpu_by_depth.clone();
     diagnostics.error_cpu.index = index_cpu.unwrap_or(0.);
-    let (lease_peak, timings, held_spill) = result?;
+    let (lease_peak, timings, held_spill, walk_utilisation) = result?;
     diagnostics.held_spill = held_spill;
+    diagnostics.walk_utilisation = walk_utilisation;
     diagnostics.appearance_seconds = timings;
     diagnostics.image_cache = cache.stats();
     image_lease.charge(diagnostics.image_cache.scratch_bytes)?;
@@ -1115,9 +1134,7 @@ pub(crate) fn produce(
             diagnostics.scratch_components
         )));
     }
-    input
-        .phases
-        .finished(Phase::HlodGeometry, walk_started.elapsed().as_secs_f64())?;
+    let geometry_seconds = walk_started.elapsed().as_secs_f64();
     diagnostics.error_measurement = report.error_measurement.clone();
     diagnostics.tiles = report.tiles;
     diagnostics.last_resort_tiles = report.last_resort_tiles;
@@ -1136,6 +1153,24 @@ pub(crate) fn produce(
         .zip(cpu_started)
         .map(|(b, a)| b - a);
     diagnostics.wall_seconds = started.elapsed().as_secs_f64();
+    input.phases.finished_with(
+        Phase::HlodGeometry,
+        geometry_seconds,
+        serde_json::json!({
+            "tiles": diagnostics.tiles,
+            "jobs": diagnostics.jobs,
+            "omitted_proxies": diagnostics.omitted_proxies,
+            "omitted_by_depth": diagnostics.omitted_by_depth,
+            "last_resort_tiles": diagnostics.last_resort_tiles,
+            "last_resort_stages": diagnostics.last_resort_stages,
+            "last_resort_records": diagnostics.last_resort_records,
+            "fold_faces": diagnostics.fold_faces,
+            "scratch_peak_bytes": diagnostics.stage_scratch_peak_bytes,
+            "scratch_bound_bytes": diagnostics.stage_scratch_bound_bytes,
+            "lease_peak_bytes": diagnostics.lease_peak_bytes,
+            "walk_utilisation": diagnostics.walk_utilisation,
+        }),
+    )?;
     cpu_profile::dump();
     Ok((report, diagnostics))
 }
@@ -2251,7 +2286,15 @@ fn walk(
     report: &mut HlodReport,
     audit: Option<&audit::Writer<'_>>,
     scratch_ledger: &scratch::ScratchLedger<'_>,
-) -> Result<(u64, appearance::Timing, store::spill::Stats), JobError> {
+) -> Result<
+    (
+        u64,
+        appearance::Timing,
+        store::spill::Stats,
+        utilisation::WalkUtilisation,
+    ),
+    JobError,
+> {
     let (input, check) = (job.input, job.check);
     let captured = input.captured;
     let plan = input.plan;
@@ -2300,8 +2343,12 @@ fn walk(
     let total = captured.tree.stats.internal;
     input.phases.progress(Phase::HlodGeometry, 0, Some(total))?;
     let mut passed = 0u64;
+    // Each built cell's interval on its worker, for the walk's worker use (#343).
+    let mut spans: Vec<utilisation::CellSpan> = Vec::new();
+    let pool_started = std::time::Instant::now();
     let outcome = pool.in_place_scope(|scope| -> Result<(), JobError> {
-        let (sender, receiver) = mpsc::channel::<(u64, u64, HeldDone)>();
+        type Message = (u64, u64, HeldDone, Option<utilisation::CellSpan>);
+        let (sender, receiver) = mpsc::channel::<Message>();
         let mut stack: Vec<Frame> = Vec::new();
         // Finished children: one built tile, a complete frontier, or unavailable input.
         let mut ready: HashMap<u64, Vec<store::spill::Held>> = HashMap::new();
@@ -2382,6 +2429,7 @@ fn walk(
                         closed.id,
                         closed.seq,
                         Ok((retained, omitted, appearance::Timing::default())),
+                        None,
                     ));
                     continue;
                 }
@@ -2430,6 +2478,7 @@ fn walk(
                 *inflight += 1;
                 scope.spawn(move |_| {
                     let (id, seq) = (closed.id, closed.seq);
+                    let (depth, start) = (closed.key.depth, std::time::Instant::now());
                     let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         let mut built = build_tile(job, &closed, children, audit)?;
                         // Reloaded inputs remain charged if failure returns the frontier.
@@ -2457,7 +2506,12 @@ fn walk(
                             timing,
                         )
                     });
-                    let _ = sender.send((id, seq, done));
+                    let span = utilisation::CellSpan {
+                        depth,
+                        start,
+                        end: std::time::Instant::now(),
+                    };
+                    let _ = sender.send((id, seq, done, Some(span)));
                 });
             }
             Ok(())
@@ -2472,10 +2526,11 @@ fn walk(
                     "HLOD stage cannot admit its next tile within the memory budget",
                 ));
             }
-            let (id, seq, done) = receiver
+            let (id, seq, done, span) = receiver
                 .recv()
                 .map_err(|_| state("HLOD worker ended without a result"))?;
             *inflight -= 1;
+            spans.extend(span);
             let (geometry, row, timing) = done?;
             match &row {
                 Finished::Row(r) => {
@@ -2824,7 +2879,10 @@ fn walk(
         }
         run
     });
+    let pool_ended = std::time::Instant::now();
     outcome?;
+    let workers = u32::try_from(jobs).unwrap_or(u32::MAX);
+    let utilisation = utilisation::measure(workers, pool_started, pool_ended, &spans);
     report.pass_through = passed;
     report.max_job_input_triangles = job_peak.get();
     if passed > 0 {
@@ -2840,5 +2898,10 @@ fn walk(
         .flush()
         .and_then(|_| writer.get_ref().sync_all())
         .map_err(|e| JobError::io("finish coarse rows", rows_path, e))?;
-    Ok((ledger.peak(), timings, spill.into_inner().stats()))
+    Ok((
+        ledger.peak(),
+        timings,
+        spill.into_inner().stats(),
+        utilisation,
+    ))
 }

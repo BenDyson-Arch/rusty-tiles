@@ -1110,6 +1110,7 @@ import rusty_tiles
 result = rusty_tiles.mesh_to_tileset(
     Path("local.glb"), Path("placed.3tz"),
     profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None,
+    report_path=None,
     anchor=(153.02, -27.47, 25.0),
     orientation_xyzw=(0.0, 0.0, 0.0, 1.0),
     scene_offset=(10.0, 2.0, -5.0),
@@ -1123,7 +1124,8 @@ print(result.report["triangles"], result.diagnostics["leaf_delivery"]["jobs"])
 ```
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
-scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None,
+scratch_dir=None, memory_budget_bytes=None, report_path=None, anchor=None,
+orientation_xyzw=None,
 scene_offset=None, source_crs=None, source_axes=None, source_offset=None,
 source_offset_file=None, height_offset=None, force=False, callback=None)`
 accepts `str` or `os.PathLike` paths. The keywords follow the CLI's rules:
@@ -1136,6 +1138,7 @@ accepts `str` or `os.PathLike` paths. The keywords follow the CLI's rules:
 - `memory_budget_bytes` is the [memory budget](#memory-budget): a positive
   `int` (not a `bool`), checked before any file is read; `None` takes the
   default.
+- `report_path` writes the [run report](#run-report), as `--report-path` does.
 - Unknown keywords raise `TypeError`.
 
 Python calls the same core operation without launching the CLI or an encoder,
@@ -1219,11 +1222,12 @@ The report includes:
 Runtime diagnostics stay **outside the archive**, so worker and scratch choices
 do not change its bytes. They include `requested_jobs`, `capture`,
 `leaf_delivery`, `archive_bytes`, `peak_held_records`, `phase_seconds`, the
-`memory` budget and stage plan ([memory budget](#memory-budget)), and the coarse
+`memory` budget and stage plan ([memory budget](#memory-budget)), the coarse
 stage's `hlod` facts (tiles, workers, CPU seconds, lease peak,
-`error_measurement` and the per-depth appearance summary: page texels, covered
-texels, cap hits and the requested and achieved spacing). `memory` and `hlod`
-are present in every result.
+`error_measurement`, the per-depth appearance summary: page texels, covered
+texels, cap hits and the requested and achieved spacing, and
+`walk_utilisation`, below) and, when asked for, `stage_timing`. `memory` and
+`hlod` are present in every result.
 
 - `phase_seconds` holds the wall seconds of `capture`, `leaf_build`,
   `hlod_incidence`, `hlod_geometry` and `archive`. `phase_cpu_seconds` holds
@@ -1234,14 +1238,35 @@ are present in every result.
   to them. It holds summed per-thread seconds, CPU seconds and calls per step
   (`source_reconstruct`, `source_decode`, `density_mips`, `basis_encode`,
   `codec_verify`, `glb_write`, `member_write`, ...) and texel counters.
+- `stage_timing` is the same document over the whole run (schema
+  `rusty_tiles_stage_timing_v1`), the coarse stage's `lod` step included. It is
+  present only when asked for: the CLI asks when
+  `RUSTY_TILES_STAGE_TIMING=<file>` is set, and after a successful run writes it
+  to that file, with the leaf stage's share under `run.leafStageTiming`
+  (Rust: `TilerRequest::with_stage_timing`).
+- `hlod.walk_utilisation` measures how the coarse walk used its workers, by
+  cell depth: `workers`, `wall_seconds` (the walk's worker pool), and summed
+  `busy_worker_seconds` (cells building) and `idle_worker_seconds`
+  (`workers × wall_seconds` minus busy). `by_depth` has one entry per depth
+  that built a cell, root first: `cells`, `busy_worker_seconds`,
+  `wall_seconds` (first of its cells starting to the last finishing),
+  `slowest_cell_seconds` and `slowest_cell_share` (the slowest cell's share of
+  that wall time), and `idle_worker_seconds`. A parent starts as soon as its
+  children are built, so depths overlap; idle time is charged to the coarsest
+  depth building at that moment (the work the idle workers wait behind), and
+  idle time with no cell building, the walk's own serial work, is
+  `serial_idle_worker_seconds`. The depths' idle times and the serial idle
+  time add up to `idle_worker_seconds`.
 - Stage objects describe worker admission and owned memory and scratch. Their
   accounting is declared, not a measured RSS guarantee. Absolute scratch paths
   and resource observations are diagnostics, not profile constants.
 
 `--progress json` writes NDJSON work events to stderr with named phases and
-nullable totals: `conversion`, `capture`, then inside the leaf stage
-`leaf_build` (leaves), `hlod_incidence` and `hlod_geometry` (coarse stage),
-then `leaf_payloads`, `archive` and `ready_to_publish`. Each finished phase also
+their totals: `conversion`, `capture` (the source's triangles), then inside the
+leaf stage `leaf_build` (leaves), `hlod_incidence` (retained triangles) and
+`hlod_geometry` (coarse cells) for the coarse stage, then `leaf_payloads`,
+`archive` (leaf and coarse tiles) and `ready_to_publish`. Every mesh phase
+reports a total; a stage that only knows its end reports `0`, then its total. Each finished phase also
 logs its wall seconds and the run's elapsed seconds as a `log` event. Inside
 `capture`, each step is a phase whose total is known when it starts:
 `capture_scan` (triangles), `capture_validate` (one unit), `capture_corners`
@@ -1268,6 +1293,74 @@ intermediate merge pass. Required
 events finish before publication; a successful result means the archive is
 installed. A cleanup problem after installation is still success, with cleanup
 diagnostics.
+
+### Run report
+
+`--report-path FILE` (Python `report_path=`) writes a JSON summary of the run
+to `FILE` while it runs. Long runs can be followed without waiting for the
+`--json` result, and a stopped run still leaves a valid report of the stages
+that finished. The report is never part of the archive, and the archive is
+byte-identical with or without it. No report is written unless asked for.
+
+The file is first written once the request is accepted, before the source is
+read; a path that cannot be written (a missing directory, say) refuses the run
+as `io`, and one naming the source, the output or a directory as
+`invalid_request`. It is then rewritten after every stage. Each write replaces
+the whole file atomically: a synced temporary file beside it
+(`.rusty-tiles-report-*.tmp`) is renamed over it, and on Unix the directory is
+synced. A reader sees a complete document at any moment. A process killed
+outright, or a power loss, in the middle of a write can leave that temporary
+file behind; it is safe to delete. A replaced report keeps its permission bits;
+a new one gets the usual mode for new files (on Unix, 0666 less the umask).
+
+While another program holds the report open without allowing it to be
+replaced (common on Windows: editors, file previews, virus scanners), the
+rename is retried for about 0.4 s. If it is still refused, the report is
+**stale**: it still holds the previous document. Every such write, the first
+one included, is reported as a `warning` event (`code` `run_report`) saying the
+report is stale, and the run goes on; the next stage tries again. A report
+that cannot be written at all (an unwritable directory) still refuses the run
+before the source is read. If the final `failed` document cannot be written,
+the run's error carries that as a secondary diagnostic, which the CLI also
+prints on stderr, so a failed run is not left looking `running` unnoticed.
+
+Version 1 of the document holds:
+
+| Field | Meaning |
+| --- | --- |
+| `schema` | `rusty_tiles_mesh_run_report` |
+| `schema_version` | `1`. Fields may be added within a version; a field that changes meaning or is removed changes it. |
+| `status` | `running`, then `succeeded` or `failed` |
+| `input`, `output` | The source as given and the resolved output path |
+| `elapsed_seconds` | Run seconds when this document was written |
+| `stages` | One entry per finished stage, in order: `stage` (`capture`, `leaf_build`, `hlod_incidence`, `hlod_geometry`, `archive`; the coarse stages are absent when the tree has no coarse cells), `wall_seconds`, `cpu_seconds` (process CPU since the previous stage, all workers; null where unavailable), `run_elapsed_seconds` and `facts` |
+| `error` | With `failed`: `kind` (the error codes below, `cancelled` for an interrupt) and `message` |
+| `tilerReport`, `diagnostics` | With `succeeded`: the `--json` result's `tilerReport` and `diagnostics`, under the same keys |
+
+Each stage's `facts`:
+
+- `capture`: `triangles`, `jobs`, `scratch_need_bytes`,
+  `scratch_logical_need_bytes`, `scratch_logical_peak_bytes`,
+  `scratch_stage_peak_bytes` (by capture stage) and `scratch_memory_backed`;
+- `leaf_build`: `leaves`, `triangles`, `glb_bytes`, `jobs`,
+  `image_scratch_peak_bytes` and `image_scratch_bound_bytes`,
+  `page_gate_peak_bytes`, `cache_peak_resident_bytes` and `timing` (as
+  `leaf_delivery.timing`);
+- `hlod_incidence`: `triangles`, `items`, `rows`, `scratch_peak_bytes`,
+  `scratch_bound_bytes` and `scratch` (its declared phases);
+- `hlod_geometry`: `tiles`, `jobs`, `omitted_proxies`, `omitted_by_depth`,
+  `last_resort_tiles`, `last_resort_stages` (N1-N3), `last_resort_records`
+  (as in the diagnostics: every tile a retry published), `fold_faces`,
+  `scratch_peak_bytes` and `scratch_bound_bytes` (the coarse stage's),
+  `lease_peak_bytes` and `walk_utilisation` (as in the diagnostics);
+- `archive`: `tiles`, `archive_bytes`, `peak_held_records`,
+  `run_scratch_peak_bytes` and `run_scratch_bound_bytes`.
+
+`succeeded` is written as the archive is handed to installation; if
+installation then fails, the report is rewritten as `failed`. A run stopped
+with SIGINT or SIGTERM is cancelled and ends as `failed` with `kind`
+`cancelled`; a process killed outright keeps its last stage's document, with
+`status` `running` (and possibly a leftover temporary file, above).
 
 | Core failure | CLI exit / JSON code | Python exception |
 | --- | --- | --- |
