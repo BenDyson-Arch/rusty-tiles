@@ -587,7 +587,7 @@ class WheelAPI(unittest.TestCase):
                          ("rusty_tiles_mesh_run_report", 1, "succeeded"))
         self.assertEqual([stage["stage"] for stage in report["stages"]],
                          ["capture", "leaf_build", "hlod_incidence", "hlod_geometry", "archive"])
-        self.assertEqual(report["tiler_report"]["tiles"], result.report["tiles"])
+        self.assertEqual(report["tilerReport"]["tiles"], result.report["tiles"])
         geometry = report["stages"][3]["facts"]
         self.assertEqual(geometry["omitted_by_depth"], result.diagnostics["hlod"]["omitted_by_depth"])
         self.assertTrue(geometry["walk_utilisation"]["by_depth"])

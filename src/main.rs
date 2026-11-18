@@ -786,6 +786,20 @@ fn run_cli() -> ExitCode {
             } else {
                 errln!("{error}");
             }
+            // Problems found beside the failure (cleanup, a run report that could not
+            // record it) reach stderr too, not only the --json result.
+            if let Error::Job(failure) = &error {
+                for cause in &failure.secondary {
+                    if events {
+                        errln!(
+                            "{}",
+                            json!({"event":"warning","code":"secondary_diagnostic","message":cause.to_string()})
+                        );
+                    } else {
+                        errln!("warning: {cause}");
+                    }
+                }
+            }
             if events {
                 errln!(
                     "{}",
@@ -953,13 +967,14 @@ fn point_cloud_summary(result: &rusty_tiles::point_cloud::PointCloudResult) -> V
 
 /// RUSTY_TILES_STAGE_TIMING=<file>: the run's summed per-thread stage timing
 /// (`rusty_tiles_stage_timing_v1`, with the leaf stage's share under
-/// `run.leafStageTiming`). Diagnostics only: as before it moved here from the library, a
-/// write failure is ignored (stderr may carry NDJSON events) and never fails the run.
-fn write_stage_timing(diagnostics: &rusty_tiles::TilerDiagnostics) {
-    let (Some(path), Some(mut document)) = (
-        std::env::var_os("RUSTY_TILES_STAGE_TIMING"),
-        diagnostics.stage_timing.clone(),
-    ) else {
+/// `run.leafStageTiming`), written after a successful run. Diagnostics only: as when the
+/// library wrote it, a write failure is ignored (stderr may carry NDJSON events) and never
+/// fails the run.
+fn write_stage_timing(
+    path: Option<std::ffi::OsString>,
+    diagnostics: &rusty_tiles::TilerDiagnostics,
+) {
+    let (Some(path), Some(mut document)) = (path, diagnostics.stage_timing.clone()) else {
         return;
     };
     document["run"]["leafStageTiming"] = json!(diagnostics.leaf_delivery.timing);
@@ -1260,10 +1275,12 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             if let Some(path) = a.report_path {
                 request = request.with_report_path(path);
             }
+            let stage_timing = std::env::var_os("RUSTY_TILES_STAGE_TIMING");
+            request = request.with_stage_timing(stage_timing.is_some());
             let observer: Option<Arc<dyn Observer>> =
                 pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
             let result = rusty_tiles::mesh_to_tileset(request, &interrupt::run_control(observer))?;
-            write_stage_timing(&result.diagnostics);
+            write_stage_timing(stage_timing, &result.diagnostics);
             Outcome::Tiler(Box::new(result))
         }
         Command::Validate {

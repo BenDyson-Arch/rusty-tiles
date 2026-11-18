@@ -88,7 +88,7 @@ With a [source CRS](MESH.md#source-crs), positions, normals and tangents are map
 `--json` returns:
 
 - `tilerReport`: the conversion report, in snake_case, identical to the archive's `conversion.json`;
-- `diagnostics`: requested and actual workers, the resolved `memory` budget and stage plan, the coarse stage's `hlod` facts, `phase_seconds` and `stage_timing` (not stored in the archive);
+- `diagnostics`: requested and actual workers, the resolved `memory` budget and stage plan, the coarse stage's `hlod` facts and `phase_seconds`, plus `stage_timing` when `RUSTY_TILES_STAGE_TIMING` is set (not stored in the archive);
 - `cleanupDiagnostics`;
 - the resolved `output`.
 
@@ -423,7 +423,7 @@ A failure has this shape and the matching exit code:
 | `progress` | `phase`, `done`, `total` | Work units in a phase. `total` is null when unknown. |
 | `warning` | `message`, or the structured feature report | A feature was skipped or degraded |
 | `log` | `message` | Informational lines, such as mesh timings |
-| `failed` | `phase`, `code` | The conversion failed with this error code |
+| `failed` | `phase`, `code` | The conversion failed with this error code. Problems found beside the failure (cleanup, a run report that could not record it) come first as `warning` events with `code` `secondary_diagnostic`; without `--progress json` they are printed as `warning:` lines. |
 
 Every converter emits a `conversion` phase at 0 and at 1. Completion comes only after the output is published. Other phases depend on the command.
 

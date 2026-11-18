@@ -1081,8 +1081,8 @@ do not change its bytes. They include `requested_jobs`, `capture`,
 stage's `hlod` facts (tiles, workers, CPU seconds, lease peak,
 `error_measurement`, the per-depth appearance summary: page texels, covered
 texels, cap hits and the requested and achieved spacing, and
-`walk_utilisation`, below) and `stage_timing`. `memory` and `hlod` are present
-in every result.
+`walk_utilisation`, below) and, when asked for, `stage_timing`. `memory` and
+`hlod` are present in every result.
 
 - `phase_seconds` holds the wall seconds of `capture`, `leaf_build`,
   `hlod_incidence`, `hlod_geometry` and `archive`. `phase_cpu_seconds` holds
@@ -1094,9 +1094,11 @@ in every result.
   (`source_reconstruct`, `source_decode`, `density_mips`, `basis_encode`,
   `codec_verify`, `glb_write`, `member_write`, ...) and texel counters.
 - `stage_timing` is the same document over the whole run (schema
-  `rusty_tiles_stage_timing_v1`), the coarse stage's `lod` step included. With
-  `RUSTY_TILES_STAGE_TIMING=<file>` the CLI also writes it to that file, with
-  the leaf stage's share under `run.leafStageTiming`.
+  `rusty_tiles_stage_timing_v1`), the coarse stage's `lod` step included. It is
+  present only when asked for: the CLI asks when
+  `RUSTY_TILES_STAGE_TIMING=<file>` is set, and after a successful run writes it
+  to that file, with the leaf stage's share under `run.leafStageTiming`
+  (Rust: `TilerRequest::with_stage_timing`).
 - `hlod.walk_utilisation` measures how the coarse walk used its workers, by
   cell depth: `workers`, `wall_seconds` (the walk's worker pool), and summed
   `busy_worker_seconds` (cells building) and `idle_worker_seconds`
@@ -1159,9 +1161,23 @@ The file is first written once the request is accepted, before the source is
 read; a path that cannot be written (a missing directory, say) refuses the run
 as `io`, and one naming the source, the output or a directory as
 `invalid_request`. It is then rewritten after every stage. Each write replaces
-the whole file atomically (a synced temporary file beside it, renamed over it),
-so a reader sees a complete document at any moment. A later write that fails is
-reported once as a `warning` event (`code` `run_report`) and the run goes on.
+the whole file atomically: a synced temporary file beside it
+(`.rusty-tiles-report-*.tmp`) is renamed over it, and on Unix the directory is
+synced. A reader sees a complete document at any moment. A process killed
+outright, or a power loss, in the middle of a write can leave that temporary
+file behind; it is safe to delete. A replaced report keeps its permission bits;
+a new one gets the usual mode for new files (on Unix, 0666 less the umask).
+
+While another program holds the report open without allowing it to be
+replaced (common on Windows: editors, file previews, virus scanners), the
+rename is retried for about 0.4 s. If it is still refused, the report is
+**stale**: it still holds the previous document. Every such write, the first
+one included, is reported as a `warning` event (`code` `run_report`) saying the
+report is stale, and the run goes on; the next stage tries again. A report
+that cannot be written at all (an unwritable directory) still refuses the run
+before the source is read. If the final `failed` document cannot be written,
+the run's error carries that as a secondary diagnostic, which the CLI also
+prints on stderr, so a failed run is not left looking `running` unnoticed.
 
 Version 1 of the document holds:
 
@@ -1174,7 +1190,7 @@ Version 1 of the document holds:
 | `elapsed_seconds` | Run seconds when this document was written |
 | `stages` | One entry per finished stage, in order: `stage` (`capture`, `leaf_build`, `hlod_incidence`, `hlod_geometry`, `archive`; the coarse stages are absent when the tree has no coarse cells), `wall_seconds`, `cpu_seconds` (process CPU since the previous stage, all workers; null where unavailable), `run_elapsed_seconds` and `facts` |
 | `error` | With `failed`: `kind` (the error codes below, `cancelled` for an interrupt) and `message` |
-| `tiler_report`, `diagnostics` | With `succeeded`: the `--json` result's `tilerReport` and `diagnostics` |
+| `tilerReport`, `diagnostics` | With `succeeded`: the `--json` result's `tilerReport` and `diagnostics`, under the same keys |
 
 Each stage's `facts`:
 
@@ -1199,7 +1215,7 @@ Each stage's `facts`:
 installation then fails, the report is rewritten as `failed`. A run stopped
 with SIGINT or SIGTERM is cancelled and ends as `failed` with `kind`
 `cancelled`; a process killed outright keeps its last stage's document, with
-`status` `running`.
+`status` `running` (and possibly a leftover temporary file, above).
 
 | Core failure | CLI exit / JSON code | Python exception |
 | --- | --- | --- |

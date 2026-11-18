@@ -198,10 +198,29 @@ fn report_path_writes_the_run_report_and_leaves_the_archive_unchanged() {
         .map(|s| s["stage"].as_str().unwrap())
         .collect();
     assert_eq!(stages, ["capture", "leaf_build", "archive"]);
+    // The final document uses the --json result's keys.
+    assert_eq!(report["tilerReport"], envelope["tilerReport"]);
+    assert!(report["diagnostics"].is_object());
+    // Stage timing is reported, and written, only when RUSTY_TILES_STAGE_TIMING asks.
+    assert!(envelope["diagnostics"].get("stage_timing").is_none());
+    let timing = work.path().join("timing.json");
+    let timed = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
+        .env("RUSTY_TILES_STAGE_TIMING", &timing)
+        .args(["--json", "mesh", "--jobs", "1", "-i"])
+        .arg(&input)
+        .arg("-o")
+        .arg(work.path().join("timed.3tz"))
+        .output()
+        .unwrap();
+    assert!(timed.status.success());
+    let timed: Value = serde_json::from_slice(&timed.stdout).unwrap();
+    let written: Value = serde_json::from_slice(&fs::read(&timing).unwrap()).unwrap();
+    assert_eq!(written["schema"], "rusty_tiles_stage_timing_v1");
     assert_eq!(
-        report["tiler_report"]["tiles"],
-        envelope["tilerReport"]["tiles"]
+        written["stages"],
+        timed["diagnostics"]["stage_timing"]["stages"]
     );
+    assert!(written["run"].get("leafStageTiming").is_some());
     assert_eq!(
         report["diagnostics"]["archive_bytes"],
         envelope["diagnostics"]["archive_bytes"]

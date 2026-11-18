@@ -81,6 +81,7 @@ pub struct TilerRequest {
     policy: OutputPolicy,
     memory_budget: Option<u64>,
     report_path: Option<PathBuf>,
+    stage_timing: bool,
     #[cfg(test)]
     hlod: super::hlod::Settings,
     /// Test seam: smaller leaves, so small inputs get coarse levels.
@@ -111,6 +112,7 @@ impl TilerRequest {
             policy: OutputPolicy::CreateNew,
             memory_budget: None,
             report_path: None,
+            stage_timing: false,
             #[cfg(test)]
             hlod: super::hlod::Settings::default(),
             #[cfg(test)]
@@ -175,6 +177,12 @@ impl TilerRequest {
     /// (a report that cannot be written refuses the run), and never enters the archive.
     pub fn with_report_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.report_path = Some(path.into());
+        self
+    }
+    /// Report the whole run's stage timing as `TilerDiagnostics::stage_timing` (the CLI
+    /// asks for it when `RUSTY_TILES_STAGE_TIMING` names a file). Diagnostics only.
+    pub fn with_stage_timing(mut self, stage_timing: bool) -> Self {
+        self.stage_timing = stage_timing;
         self
     }
     pub fn with_placement(mut self, placement: MeshPlacement) -> Self {
@@ -331,7 +339,10 @@ pub struct CaptureDiagnostics {
     pub run_scratch_peak_bytes: u64,
     pub run_scratch_bound_bytes: u64,
 }
+/// Run diagnostics. Fields are added as runs report more, so it is `non_exhaustive`: read
+/// it, do not build it.
 #[derive(Clone, Debug, Serialize)]
+#[non_exhaustive]
 pub struct TilerDiagnostics {
     pub requested_jobs: String,
     pub capture: CaptureDiagnostics,
@@ -347,7 +358,10 @@ pub struct TilerDiagnostics {
     /// HLOD stage run facts.
     pub hlod: HlodDiagnostics,
     /// The whole run's summed per-thread stage timing (`schema`
-    /// `rusty_tiles_stage_timing_v1`; the leaf stage's share is `leaf_delivery.timing`).
+    /// `rusty_tiles_stage_timing_v1`; the leaf stage's share is `leaf_delivery.timing`),
+    /// when the request asked for it ([`TilerRequest::with_stage_timing`]); omitted
+    /// otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub stage_timing: Option<serde_json::Value>,
 }
 
@@ -613,11 +627,15 @@ pub fn mesh_to_tileset(
     control: &RunControl,
 ) -> Result<TilerResult, JobFailure> {
     let run_report = RunReport::new(request.report_path.clone());
-    let result = run(request, control, &run_report);
+    let mut result = run(request, control, &run_report);
     // A started report records the failure (cancellation included) with the stages that
-    // finished; installation failing after `succeeded` was written is recorded too.
-    if let Err(failure) = &result {
-        run_report.failed(failure);
+    // finished; installation failing after `succeeded` was written is recorded too. If
+    // that write fails, the failure says so beside its own cause: the report on disk
+    // would otherwise go on saying `running`.
+    if let Err(failure) = &mut result {
+        if let Some(error) = run_report.failed(failure) {
+            failure.secondary.push(error);
+        }
     }
     result
 }
@@ -634,9 +652,19 @@ fn run(
     // Request intent is refused first: no path, source or output is touched for a bad budget.
     check_memory_budget(&request).map_err(|e| attempt.fail(e))?;
     let (output, placement) = preflight(&request).map_err(|e| attempt.fail(e))?;
-    run_report
+    // An unwritable report path refuses the run here; a report held open elsewhere that
+    // cannot be replaced yet is only stale, and the run goes on with a warning.
+    let stale = run_report
         .start(&request.input, &output)
         .map_err(|e| attempt.fail(e))?;
+    if let Some(message) = stale {
+        attempt
+            .emit(&RunEvent::Warning {
+                code: "run_report",
+                message: &message,
+            })
+            .map_err(|e| attempt.fail(e))?;
+    }
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs.into();
     config.source_crs = request.source_crs.clone();
@@ -962,10 +990,15 @@ fn run(
             phase_cpu_seconds: phases.cpu_seconds(),
             memory,
             hlod: leaf.hlod,
-            stage_timing: crate::stage_timing::since_with(
-                &timing_mark,
-                serde_json::json!({"lod": "hlod"}),
-            ),
+            stage_timing: request
+                .stage_timing
+                .then(|| {
+                    crate::stage_timing::since_with(
+                        &timing_mark,
+                        serde_json::json!({"lod": "hlod"}),
+                    )
+                })
+                .flatten(),
         };
         Ok::<_, JobError>((report, diagnostics))
     })();

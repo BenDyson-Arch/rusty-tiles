@@ -569,7 +569,12 @@ fn the_run_report_is_rewritten_per_stage_and_leaves_the_archive_unchanged() {
     let scratch = work.path().join("scratch");
     fs::create_dir(&scratch).unwrap();
     let plain = work.path().join("plain.3tz");
-    mesh_to_tileset(request(&input, &plain, &scratch), &RunControl::default()).unwrap();
+    let plain_result =
+        mesh_to_tileset(request(&input, &plain, &scratch), &RunControl::default()).unwrap();
+    // Stage timing is reported only when asked for.
+    assert!(json!(plain_result.diagnostics)
+        .get("stage_timing")
+        .is_none());
     let output = work.path().join("reported.3tz");
     let report_path = work.path().join("run.json");
     // Whenever the run reports progress, the report on disk is one complete document.
@@ -585,7 +590,9 @@ fn the_run_report_is_rewritten_per_stage_and_leaves_the_archive_unchanged() {
         Ok(())
     });
     let result = mesh_to_tileset(
-        request(&input, &output, &scratch).with_report_path(&report_path),
+        request(&input, &output, &scratch)
+            .with_report_path(&report_path)
+            .with_stage_timing(true),
         &run,
     )
     .unwrap();
@@ -664,8 +671,8 @@ fn the_run_report_is_rewritten_per_stage_and_leaves_the_archive_unchanged() {
         fs::metadata(&output).unwrap().len()
     );
     // The final document carries the run's report and diagnostics, as `--json` does.
-    assert_eq!(report["tiler_report"]["tiles"], result.report.tiles);
-    assert_eq!(report["tiler_report"]["triangles"], result.report.triangles);
+    assert_eq!(report["tilerReport"]["tiles"], result.report.tiles);
+    assert_eq!(report["tilerReport"]["triangles"], result.report.triangles);
     assert_eq!(
         report["diagnostics"]["archive_bytes"],
         result.diagnostics.archive_bytes
