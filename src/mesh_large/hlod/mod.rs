@@ -134,7 +134,8 @@ pub struct LastResortRecord {
     /// Why the primary build's tile is not published: `contractionStalled` (its border
     /// contraction could not reach the contract), `proposalsRefused` (assessment refused
     /// every proposal), `noProposal` (no proposal fit the cap or the guards) or
-    /// `rootCompetition` (it was built, and the root candidate measured a lower G).
+    /// `rootCompetition` (it was built, and the root candidate measured a lower G). When
+    /// the root candidate replaces a root a retry built, the primary build's reason stays.
     pub reason: &'static str,
     /// The primary build's proposals that assessment refused, by check: decoded positions
     /// (fold or interface guard), unlicensed topology change, S2 controls.
@@ -1695,6 +1696,20 @@ fn build_tile(
                 // try smaller prefixes after its fitting one. This proposal's own search
                 // statistics go with it, so a reused call can replay them (`Reused`);
                 // their accumulation is a sum and a max, so the split changes nothing.
+                #[cfg(test)]
+                if let Mutation::RefuseBuilds(k) = settings.mutation {
+                    let rank = match (built.primary, built.staged, built.last_resort_stage) {
+                        (true, ..) => 0,
+                        (false, false, 0) => 1,
+                        (false, true, 0) => 2,
+                        (_, _, stage) => 2 + stage,
+                    };
+                    if rank < k {
+                        built.rejection = Some(geometry::Rejection::Controls);
+                        refused[2] += u32::from(built.primary);
+                        return Ok(false);
+                    }
+                }
                 let before = std::mem::take(&mut nearest.stats);
                 let candidate = prepare(job, built, contract, &mut query, &mut nearest);
                 built.search = std::mem::replace(&mut nearest.stats, before);

@@ -6662,8 +6662,68 @@ fn root_competition_fills_a_forced_own_build_omission_and_is_job_invariant() {
     assert_eq!(root["rootCompetition"]["accepted"], true);
     assert!(root["rootCompetition"]["baselineG"].is_null());
     assert!(root["geometricError"].as_f64().unwrap() >= root["childrenError"].as_f64().unwrap());
+    // The candidate is recorded as the build that published the root.
+    let depth = root["depth"].as_u64().unwrap();
+    assert!(
+        last_resort_records(&dirs[0])
+            .iter()
+            .any(|r| (r.1, r.2, r.3.as_str()) == (depth, 3, "rootCandidate")),
+        "{:?}",
+        last_resort_records(&dirs[0])
+    );
     assert_eq!(published(&dirs[0]), published(&dirs[1]));
     published_and_valid("recovered root", &dirs[0], work.path());
+}
+
+/// Each build of the ladder publishes with its own record. Refusing every proposal of the
+/// first k builds (as S2's controls would) makes the next build publish: fix 2, staged
+/// reduction, N1, N2, N3. Its record names that build and stage, gives the primary
+/// build's refusal as the reason, and counts the refused primary proposals by check.
+#[test]
+fn every_ladder_build_publishes_with_its_record() {
+    let work = tempfile::tempdir().unwrap();
+    let source = grid((16, 16), (0., 100.), (0., 100.), &bump, [0.4, 0.5, 0.3, 1.]);
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    for (k, resorts, want) in [
+        (1u8, &["fix2"][..], 0u64),
+        (2, &["staged"][..], 0),
+        (3, &["n1"][..], 1),
+        (4, &["n2"][..], 2),
+        (5, &["n3", "n3Recovery"][..], 3),
+    ] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("refuse-{k}")),
+            &Run {
+                leaf_triangles: 64,
+                cap: 100,
+                mutation: Mutation::RefuseBuilds(k),
+                budget: Some(4 << 30),
+                ..s2_run()
+            },
+        )
+        .unwrap();
+        let census = census(&dir);
+        assert!(census.retried_tiles > 0, "k={k}: {census:?}");
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let records = manifest["hlod"]["lastResortRecords"].as_array().unwrap();
+        let forced: Vec<_> = records
+            .iter()
+            .filter(|r| resorts.contains(&r["resort"].as_str().unwrap()))
+            .collect();
+        assert!(!forced.is_empty(), "k={k}: {records:?}");
+        for r in &forced {
+            assert_eq!(r["stage"], want, "k={k}: {r}");
+            assert_eq!(r["reason"], "proposalsRefused", "k={k}: {r}");
+            assert!(r["refusedControls"].as_u64().unwrap() > 0, "k={k}: {r}");
+            assert_eq!(r["refusedDecode"], 0, "k={k}: {r}");
+            assert_eq!(r["refusedTopology"], 0, "k={k}: {r}");
+        }
+        if k == 5 {
+            published_and_valid("refused ladder", &dir, work.path());
+        }
+    }
 }
 
 /// Inject one depth-1 construction failure; recovery must use its complete leaves,
