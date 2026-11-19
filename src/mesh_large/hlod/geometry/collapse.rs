@@ -90,7 +90,13 @@ pub(crate) struct Problem<'a> {
     /// The pass gives up (no result) once it has spent this many work units: faces and
     /// neighbours visited by its adjacency scans and checks. Deterministic, unlike time.
     pub work_limit: u64,
+    /// Polled every `POLL_WORK` work units; `true` stops the pass (no result) as an
+    /// exhausted budget does (`Stats::cancelled`), for the job's cancellation check.
+    pub cancel: Option<&'a dyn Fn() -> bool>,
 }
+
+/// Work units between polls of `Problem::cancel`.
+const POLL_WORK: u64 = 1 << 16;
 
 #[derive(Default, Debug, Clone, Copy, serde::Serialize)]
 pub(crate) struct Stats {
@@ -108,10 +114,15 @@ pub(crate) struct Stats {
     /// Work units spent (`State::work`), and whether `Problem::work_limit` stopped the pass.
     pub work: u64,
     pub exhausted: bool,
+    /// Whether `Problem::cancel` stopped the pass.
+    pub cancelled: bool,
     /// Steiner rescues refused, by the furthest test any position reached: 0 link not one
     /// simple path, 1 an arc end off the vertex's contraction, 2 chord edge exists or has no
     /// licence, 3 no canonical private position, 4 orientation, 5 contact with another face.
     pub steiner_why: [u64; 6],
+    /// Of `work`: units spent in the rescue rounds, and of those in Steiner rescues.
+    pub rescue_work: u64,
+    pub steiner_work: u64,
 }
 
 #[derive(PartialEq)]
@@ -227,6 +238,9 @@ struct State<'a> {
     /// Per vertex: neighbourhood changes to skip before a stuck vertex is tried again
     /// (`retry_wait`).
     retry_after: Vec<u32>,
+    /// Whether `Problem::cancel` returned true, and the work count of its next poll.
+    cancelled: Cell<bool>,
+    next_poll: Cell<u64>,
 }
 
 /// Targets a vertex tries per pop (its cheapest), and the candidate count above which a
@@ -316,8 +330,26 @@ impl<'a> State<'a> {
         self.work.set(self.work.get().saturating_add(scanned));
     }
 
+    /// Whether the pass must stop: its work budget is spent or the job was cancelled (polled
+    /// every `POLL_WORK` units).
     fn exhausted(&self) -> bool {
-        self.work.get() > self.p.work_limit
+        if self.cancelled.get() {
+            return true;
+        }
+        let work = self.work.get();
+        if work > self.p.work_limit {
+            return true;
+        }
+        if let Some(cancel) = self.p.cancel {
+            if work >= self.next_poll.get() {
+                self.next_poll.set(work.saturating_add(POLL_WORK));
+                if cancel() {
+                    self.cancelled.set(true);
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     fn undirected(&self, a: u32, b: u32) -> u32 {
@@ -470,7 +502,8 @@ impl<'a> State<'a> {
         }
         // Local directed-edge accounting.
         let mut delta: HashMap<(u32, u32), i32> = HashMap::default();
-        let mut new_faces: Vec<[u32; 3]> = Vec::with_capacity(moved.len());
+        // The moved faces' sorted triples so far (coincidence among them in O(1) each).
+        let mut new_faces: HashSet<[u32; 3]> = HashSet::default();
         for &f in &shared {
             let t = self.faces[f as usize];
             for j in 0..3 {
@@ -501,7 +534,7 @@ impl<'a> State<'a> {
             {
                 return 7; // new face on three shared points
             }
-            if self.face_set.contains_key(&s) || new_faces.iter().any(|h| sorted(*h) == s) {
+            if self.face_set.contains_key(&s) || new_faces.contains(&s) {
                 return 8; // coincident
             }
             for j in 0..3 {
@@ -519,7 +552,7 @@ impl<'a> State<'a> {
                     return 9;
                 }
             }
-            new_faces.push(g);
+            new_faces.insert(s);
         }
         let mut deltas: Vec<((u32, u32), i32)> = delta.iter().map(|(&e, &d)| (e, d)).collect();
         deltas.sort_unstable();
@@ -648,8 +681,14 @@ impl<'a> State<'a> {
             }
             *self.face_set.entry(sorted(g)).or_default() += 1;
         }
-        self.vf[p as usize].push(f2);
-        self.vf[q as usize].push(f1);
+        // A vertex can re-enter a face it held before (two flips through the same slots):
+        // its stale entry would make `live_faces` yield the face twice.
+        if !self.vf[p as usize].contains(&f2) {
+            self.vf[p as usize].push(f2);
+        }
+        if !self.vf[q as usize].contains(&f1) {
+            self.vf[q as usize].push(f1);
+        }
         self.stats.flips += 1;
         true
     }
@@ -829,6 +868,7 @@ impl<'a> State<'a> {
         }
         let sid = id(self.pos.len());
         let bridge = [sid, x, y];
+        let in_star: HashSet<u32> = star.iter().copied().collect();
         let mut nearby: Option<Vec<u32>> = None;
         let mut stage = 3;
         let mut chosen = None;
@@ -889,7 +929,7 @@ impl<'a> State<'a> {
                 (0..id(self.faces.len()))
                     .filter(|&f| {
                         self.alive[f as usize]
-                            && !star.contains(&f)
+                            && !in_star.contains(&f)
                             && embedding::overlap(
                                 all,
                                 embedding::bounds(
@@ -899,6 +939,15 @@ impl<'a> State<'a> {
                     })
                     .collect()
             });
+            // Each changed face is tested against the others and the nearby faces.
+            let tests = changed
+                .len()
+                .saturating_mul(changed.len().saturating_add(near.len()));
+            self.work.set(
+                self.work
+                    .get()
+                    .saturating_add(u64::try_from(tests).unwrap_or(u64::MAX)),
+            );
             let apart = changed.iter().enumerate().all(|(i, &t)| {
                 changed[i + 1..]
                     .iter()
@@ -1008,6 +1057,87 @@ impl<'a> State<'a> {
     }
 }
 
+impl<'a> State<'a> {
+    /// The pass's state over the problem's input: adjacency, directed edge and face counts,
+    /// the source's counts and the quadrics.
+    fn new(p: &'a Problem<'a>) -> Self {
+        let n = p.positions.len();
+        let pos: Vec<[f64; 3]> = p.positions.iter().map(|q| q.map(f64::from)).collect();
+        let mut st = Self {
+            p,
+            class: p.class.clone(),
+            iface: p.interface.clone(),
+            added: Vec::new(),
+            pos,
+            faces: p.triangles.to_vec(),
+            alive: vec![true; p.triangles.len()],
+            vf: vec![Vec::new(); n],
+            dir: HashMap::default(),
+            src_dir: HashMap::default(),
+            src_face: HashMap::default(),
+            face_set: HashMap::default(),
+            q: vec![[0.; 11]; n],
+            stamp: vec![0; n],
+            dead: vec![false; n],
+            alive_faces: p.triangles.len(),
+            removes_left: p
+                .class
+                .iter()
+                .filter(|c| matches!(c, Class::Remove(_)))
+                .count(),
+            stats: Stats::default(),
+            mark: RefCell::new(vec![0; n]),
+            epoch: Cell::new(0),
+            work: Cell::new(0),
+            taken: None,
+            retry_after: vec![0; n],
+            cancelled: Cell::new(false),
+            next_poll: Cell::new(0),
+        };
+        for (i, &t) in p.triangles.iter().enumerate() {
+            for j in 0..3 {
+                *st.dir.entry((t[j], t[(j + 1) % 3])).or_default() += 1;
+                st.vf[t[j] as usize].push(id(i));
+            }
+            *st.face_set.entry(sorted(t)).or_default() += 1;
+            st.src_face.entry(sorted(t)).or_default()[parity(t)] += 1;
+            let nrm = st.normal(t);
+            let l = dot(nrm, nrm).sqrt();
+            if l > 0. {
+                let n1 = nrm.map(|x| x / l);
+                let d = -dot(n1, st.pos[t[0] as usize]);
+                let q = plane_quadric(n1, d, l * 0.5);
+                for &v in &t {
+                    add(&mut st.q[v as usize], &q);
+                }
+            }
+        }
+        st.src_dir = st.dir.clone();
+        // Boundary edges: perpendicular planes, heavily weighted.
+        for (i, &t) in p.triangles.iter().enumerate() {
+            let _ = i;
+            for j in 0..3 {
+                let (a, b) = (t[j], t[(j + 1) % 3]);
+                if st.undirected(a, b) == 1 {
+                    let e = sub(st.pos[b as usize], st.pos[a as usize]);
+                    let nrm = st.normal(t);
+                    let pn = cross(e, nrm);
+                    let l = dot(pn, pn).sqrt();
+                    if l > 0. {
+                        let n1 = pn.map(|x| x / l);
+                        let d = -dot(n1, st.pos[a as usize]);
+                        let w = dot(e, e) * BOUNDARY_WEIGHT;
+                        let q = plane_quadric(n1, d, w);
+                        add(&mut st.q[a as usize], &q);
+                        add(&mut st.q[b as usize], &q);
+                    }
+                }
+            }
+        }
+        st
+    }
+}
+
 /// Runs the pass. Returns the surviving faces (merged vertex ids) and stats; `None` when
 /// a removal vertex is left or the target is not reached.
 pub(crate) fn simplify(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats) {
@@ -1019,76 +1149,7 @@ pub(crate) fn simplify(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats) {
 /// removed vertex each replaced.
 pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, Added) {
     let n = p.positions.len();
-    let pos: Vec<[f64; 3]> = p.positions.iter().map(|q| q.map(f64::from)).collect();
-    let mut st = State {
-        p,
-        class: p.class.clone(),
-        iface: p.interface.clone(),
-        added: Vec::new(),
-        pos,
-        faces: p.triangles.to_vec(),
-        alive: vec![true; p.triangles.len()],
-        vf: vec![Vec::new(); n],
-        dir: HashMap::default(),
-        src_dir: HashMap::default(),
-        src_face: HashMap::default(),
-        face_set: HashMap::default(),
-        q: vec![[0.; 11]; n],
-        stamp: vec![0; n],
-        dead: vec![false; n],
-        alive_faces: p.triangles.len(),
-        removes_left: p
-            .class
-            .iter()
-            .filter(|c| matches!(c, Class::Remove(_)))
-            .count(),
-        stats: Stats::default(),
-        mark: RefCell::new(vec![0; n]),
-        epoch: Cell::new(0),
-        work: Cell::new(0),
-        taken: None,
-        retry_after: vec![0; n],
-    };
-    for (i, &t) in p.triangles.iter().enumerate() {
-        for j in 0..3 {
-            *st.dir.entry((t[j], t[(j + 1) % 3])).or_default() += 1;
-            st.vf[t[j] as usize].push(id(i));
-        }
-        *st.face_set.entry(sorted(t)).or_default() += 1;
-        st.src_face.entry(sorted(t)).or_default()[parity(t)] += 1;
-        let nrm = st.normal(t);
-        let l = dot(nrm, nrm).sqrt();
-        if l > 0. {
-            let n1 = nrm.map(|x| x / l);
-            let d = -dot(n1, st.pos[t[0] as usize]);
-            let q = plane_quadric(n1, d, l * 0.5);
-            for &v in &t {
-                add(&mut st.q[v as usize], &q);
-            }
-        }
-    }
-    st.src_dir = st.dir.clone();
-    // Boundary edges: perpendicular planes, heavily weighted.
-    for (i, &t) in p.triangles.iter().enumerate() {
-        let _ = i;
-        for j in 0..3 {
-            let (a, b) = (t[j], t[(j + 1) % 3]);
-            if st.undirected(a, b) == 1 {
-                let e = sub(st.pos[b as usize], st.pos[a as usize]);
-                let nrm = st.normal(t);
-                let pn = cross(e, nrm);
-                let l = dot(pn, pn).sqrt();
-                if l > 0. {
-                    let n1 = pn.map(|x| x / l);
-                    let d = -dot(n1, st.pos[a as usize]);
-                    let w = dot(e, e) * BOUNDARY_WEIGHT;
-                    let q = plane_quadric(n1, d, w);
-                    add(&mut st.q[a as usize], &q);
-                    add(&mut st.q[b as usize], &q);
-                }
-            }
-        }
-    }
+    let mut st = State::new(p);
     let mut nb = Vec::new();
     for _outer in 0..4 {
         if st.exhausted() {
@@ -1156,6 +1217,7 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
         // Rescue: a border vertex left on its arc. Simplify the free vertices around it
         // (cheapest valid collapse first), then retry it; a bounded number of rounds.
         let mut rounds = 0;
+        let rescue_start = st.work.get();
         while st.removes_left > 0 && rounds < 64 && !st.exhausted() {
             rounds += 1;
             let left: Vec<u32> = (0..id(n))
@@ -1165,12 +1227,16 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
                 .collect();
             let mut progress = false;
             for r in left {
+                if st.exhausted() {
+                    break;
+                }
                 if st.dead[r as usize] {
                     continue;
                 }
                 if let Some(v) = st
                     .candidates(r)
                     .into_iter()
+                    .take(RETRY_VALENCE)
                     .map(|(_, v)| v)
                     .find(|&v| st.valid(r, v))
                 {
@@ -1192,26 +1258,39 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
                     progress = true;
                     continue;
                 }
-                if p.steiner && st.steiner(r) {
+                let steiner_start = st.work.get();
+                let rescued = p.steiner && st.steiner(r);
+                st.stats.steiner_work += st.work.get().saturating_sub(steiner_start);
+                if rescued {
                     progress = true;
                     continue;
                 }
-                // free vertices in r's 2-ring
+                // Free vertices in r's 2-ring, in first-seen order. Not through a
+                // high-valence neighbour: the apex of a large fan (a triangulated base cap,
+                // say) would bring its whole rim, which is not local to r, into every
+                // round's candidate search for every stuck removal.
+                let mut seen: HashSet<u32> = ring.iter().copied().collect();
                 let mut ring2 = ring.clone();
                 for &w in &ring {
                     st.neighbours(w, &mut nb);
+                    if nb.len() > RETRY_VALENCE {
+                        continue;
+                    }
                     for &x in &nb {
-                        if x != r && !ring2.contains(&x) {
+                        if x != r && seen.insert(x) {
                             ring2.push(x);
                         }
                     }
                 }
                 let mut best: Option<(f64, u32, u32)> = None;
                 for &w in &ring2 {
+                    if st.exhausted() {
+                        break;
+                    }
                     if st.dead[w as usize] || st.class[w as usize] != Class::Free {
                         continue;
                     }
-                    for (c, v) in st.candidates(w) {
+                    for (c, v) in st.candidates(w).into_iter().take(RETRY_VALENCE) {
                         if best.is_some_and(|b| b.0 <= c) {
                             break;
                         }
@@ -1231,6 +1310,7 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
                 break;
             }
         }
+        st.stats.rescue_work += st.work.get().saturating_sub(rescue_start);
         let after = (
             st.stats.collapses,
             st.stats.steiner,
@@ -1255,6 +1335,7 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
         .collect();
     st.stats.work = st.work.get();
     st.stats.exhausted = st.exhausted();
+    st.stats.cancelled = st.cancelled.get();
     let ok = !st.stats.exhausted && st.removes_left == 0 && out.len() <= p.target.max(p.limit);
     (ok.then_some(out), st.stats, st.added)
 }
@@ -1295,10 +1376,15 @@ pub(crate) fn problem<'a>(
             let mm = mapping(*k)?;
             mapped[v] = mm;
             if let Some((a, b, _, _)) = mm {
-                if let (Some(&a), Some(&b)) = (ids.get(&a), ids.get(&b)) {
-                    if a != id(v) && b != id(v) {
-                        class[v] = Class::Remove([a, b]);
-                    }
+                // As the contraction (`topology::contract_from`): a chord endpoint missing
+                // from the merged children is an error, not a free vertex.
+                let (Some(&a), Some(&b)) = (ids.get(&a), ids.get(&b)) else {
+                    return Err(super::state(
+                        "a nested border chord endpoint is absent from its merged children",
+                    ));
+                };
+                if a != id(v) && b != id(v) {
+                    class[v] = Class::Remove([a, b]);
                 }
             }
         }
@@ -1376,6 +1462,7 @@ pub(crate) fn problem<'a>(
             protected: None,
             shared: None,
             work_limit: u64::MAX,
+            cancel: None,
             min_cos,
             owns_segment: None,
             owns_face: None,
@@ -1442,6 +1529,7 @@ mod tests {
             protected: None,
             shared: None,
             work_limit: u64::MAX,
+            cancel: None,
         }
     }
 
@@ -1535,6 +1623,7 @@ mod tests {
             protected: None,
             shared: None,
             work_limit: u64::MAX,
+            cancel: None,
         };
         simplify_added(&p)
     }
@@ -1682,6 +1771,102 @@ mod tests {
         );
     }
 
+    /// Two flips through the same face slots bring vertices back into faces they held. Their
+    /// stale face-list entries must not make `live_faces` yield a face twice: `apply` would
+    /// then move a face and kill it again, leaving a hole.
+    #[test]
+    fn flips_through_the_same_slots_keep_face_lists_distinct() {
+        let positions = vec![[0., 0., 0.], [1., 0., 0.], [1., 1., 0.], [0., 1., 0.]];
+        let triangles = vec![[0, 1, 2], [0, 2, 3]];
+        let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        let mut p = problem(&positions, &triangles, &keys, false);
+        p.class = vec![Class::Free; 4];
+        p.interface = vec![false; 4];
+        p.segments = HashSet::default();
+        let mut st = State::new(&p);
+        assert!(st.flip(0, 2), "diagonal 0-2 flips to 1-3");
+        assert!(st.flip(1, 3), "and back to 0-2");
+        for v in 0..4 {
+            let faces: Vec<u32> = st.live_faces(v).collect();
+            let mut distinct = faces.clone();
+            distinct.sort_unstable();
+            distinct.dedup();
+            assert_eq!(faces.len(), distinct.len(), "vertex {v}: {faces:?}");
+        }
+        // collapsing 0 onto 1 removes the face on edge 0-1 and keeps the other
+        st.apply(0, 1);
+        let alive: Vec<[u32; 3]> = (0..st.faces.len())
+            .filter(|&f| st.alive[f])
+            .map(|f| st.faces[f])
+            .collect();
+        assert_eq!(alive.len(), 1, "{alive:?}");
+        assert_eq!(st.alive_faces, 1);
+        assert!(alive[0].contains(&1) && !alive[0].contains(&0), "{alive:?}");
+    }
+
+    /// The job's cancellation is polled inside the pass: a cancelled pass stops at its first
+    /// poll with no result, and records it.
+    #[test]
+    fn cancellation_stops_the_pass_without_a_result() {
+        let (positions, triangles, class) = grid(32);
+        let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        let n = positions.len();
+        let polls = Cell::new(0u32);
+        let cancel = || {
+            polls.set(polls.get() + 1);
+            true
+        };
+        let p = Problem {
+            positions: &positions,
+            triangles: &triangles,
+            class,
+            interface: vec![false; n],
+            segments: HashSet::default(),
+            target: triangles.len() / 8,
+            limit: triangles.len() / 8,
+            min_cos: 0.,
+            owns_segment: None,
+            owns_face: None,
+            keys: &keys,
+            steiner: false,
+            snap: None,
+            protected: None,
+            shared: None,
+            work_limit: u64::MAX,
+            cancel: Some(&cancel),
+        };
+        let (out, stats) = simplify(&p);
+        assert!(out.is_none());
+        assert!(stats.cancelled && stats.collapses == 0, "{stats:?}");
+        assert_eq!(polls.get(), 1);
+    }
+
+    /// A stuck removal r whose shared apex x is also the apex of a large open fan: the
+    /// rescue rounds search r's 2-ring for free collapses, which used to take in the fan's
+    /// whole rim (k vertices) every round. The rim is not local to r and is now skipped:
+    /// no rescue collapse, and rescue work independent of k.
+    #[test]
+    fn rescue_does_not_search_through_a_high_valence_neighbour() {
+        let k = 1000u32;
+        let (mut positions, mut triangles) = fan_of_shared_points();
+        for i in 0..=k {
+            let t = std::f32::consts::PI * i as f32 / k as f32;
+            positions.push([1. + t.cos(), 1. + t.sin(), 0.]);
+        }
+        triangles.extend((0..k).map(|i| [3, 4 + i, 5 + i]));
+        let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        let n = positions.len();
+        let mut p = problem(&positions, &triangles, &keys, false);
+        p.class.resize(n, Class::Free);
+        p.interface.resize(n, false);
+        p.target = triangles.len();
+        p.limit = triangles.len();
+        let (out, stats) = simplify(&p);
+        assert!(out.is_none(), "r stays stuck without a Steiner rescue");
+        assert_eq!(stats.rescues, 0, "{stats:?}");
+        assert!(stats.rescue_work < 16 * u64::from(k), "{stats:?}");
+    }
+
     /// A planar grid of `n`×`n` cells, its outer ring locked, no interface.
     fn grid(n: u32) -> (Vec<[f32; 3]>, Vec<[u32; 3]>, Vec<Class>) {
         let w = n + 1;
@@ -1746,6 +1931,7 @@ mod tests {
             protected: None,
             shared: None,
             work_limit,
+            cancel: None,
         };
         let (out, stats) = simplify(&p);
         assert!(

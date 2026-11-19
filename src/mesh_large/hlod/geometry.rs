@@ -1061,7 +1061,8 @@ pub(crate) fn build_parent(
     // P1: one guard-by-construction contraction before the retry ladder. It is outside
     // `build`, so the ladder's exact-repeat reuse is unchanged.
     let (proposal, mut report) = if p1 {
-        let (proposal, report) = p1::attempt(tile, children, caps, contract, mapping, lattice)?;
+        let (proposal, report) =
+            p1::attempt(tile, children, caps, contract, mapping, lattice, check)?;
         (proposal, Some(report))
     } else {
         (None, None)
@@ -1070,6 +1071,8 @@ pub(crate) fn build_parent(
         b.last_resort_stage = stage;
         b.staged = stage > 0;
         let accepted = assess(&mut b)?;
+        // P1's proposal is measured like any other: its topology joins the attempted set.
+        first.attempted_topology.add(b.topology);
         if let Some(r) = &mut report {
             r.outcome = if accepted { "built" } else { "refused" };
         }

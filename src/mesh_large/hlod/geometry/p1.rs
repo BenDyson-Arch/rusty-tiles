@@ -22,11 +22,13 @@ use rustc_hash::FxHashSet as HashSet;
 use std::{borrow::Cow, cell::RefCell};
 
 /// Work units (`collapse::Problem::work_limit`) one P1 pass may spend per merged face before
-/// it gives up and the ladder continues. Ordinary meshes need far less: a planar grid
-/// spends under 64 per face, and the busiest cells of the #344 rock, a 10M-triangle city
-/// and a 10M-triangle photogrammetry site at most 187. A pathological star exceeds it: a
-/// high-valence apex rescanned after every change around it costs O(k²) or worse.
-const WORK_PER_FACE: u64 = 1 << 12;
+/// it gives up and the ladder continues. A planar grid spends under 64 per face, the busiest
+/// cells of the #344 rock, a 10M-triangle city and a 10M-triangle photogrammetry site at most
+/// 187, and built cells of a 5.7M-triangle terrain crop with a base cap up to about 2,200.
+/// The limit leaves several times that while still stopping a pathological cell after a
+/// bounded multiple of its size: high-valence vertices are requeued amortised
+/// (`collapse::retry_wait`), but other quadratic patterns may remain.
+const WORK_PER_FACE: u64 = 1 << 14;
 
 fn work_limit(faces: usize) -> u64 {
     u64::try_from(faces)
@@ -82,6 +84,9 @@ pub(crate) struct Report {
     pub removals_left: [u64; 2],
     pub steiner: [u64; 2],
     pub steiner_refused: [[u64; 6]; 2],
+    /// Of `work`: units spent rescuing stuck removals, and of those in Steiner rescues.
+    pub rescue_work: [u64; 2],
+    pub steiner_work: [u64; 2],
 }
 
 impl Report {
@@ -95,6 +100,8 @@ impl Report {
             removals_left: [0; 2],
             steiner: [0; 2],
             steiner_refused: [[0; 6]; 2],
+            rescue_work: [0; 2],
+            steiner_work: [0; 2],
         }
     }
 
@@ -105,6 +112,8 @@ impl Report {
         self.removals_left[i] = stats.removed_left;
         self.steiner[i] = stats.steiner;
         self.steiner_refused[i] = stats.steiner_why;
+        self.rescue_work[i] = stats.rescue_work;
+        self.steiner_work[i] = stats.steiner_work;
     }
 }
 
@@ -117,6 +126,7 @@ pub(super) fn attempt(
     contract: &Contract,
     mapping: &BorderMap<'_>,
     lattice: &LatticePlan,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<(Option<(u8, Built)>, Report), JobError> {
     let rows: usize = children.iter().map(|c| c.interface.len()).sum();
     let vertices: usize = children.iter().map(|c| c.positions.len()).sum();
@@ -182,6 +192,15 @@ pub(super) fn attempt(
         }
     };
     prob.protected = Some(&protected);
+    // The job's cancellation, polled inside the pass; its error is returned after the pass.
+    let cancel = || match check() {
+        Ok(()) => false,
+        Err(e) => {
+            failure.borrow_mut().get_or_insert(e);
+            true
+        }
+    };
+    prob.cancel = Some(&cancel);
     let policy = folds::Policy::last_resort(1, tile.leaf_begin, tile.leaf_end, &contract.holders);
     let owns_segment = |a: u32, b: u32| match (m.keys.get(a as usize), m.keys.get(b as usize)) {
         (Some(&a), Some(&b)) => policy.owns_segment(a, b),
