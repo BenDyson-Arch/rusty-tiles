@@ -3725,7 +3725,10 @@ fn with_source_index<R>(
     let lease = ledger
         .admit(source_index::SourceIndex::COMPONENT, need)
         .unwrap();
+    let before = captured.scratch.live_bytes();
     let index = source_index::SourceIndex::build(captured, &lease, &|| Ok(())).unwrap();
+    assert_eq!(index.stored_bytes(), captured.scratch.live_bytes() - before);
+    assert!(index.stored_bytes() <= need);
     ledger.check().unwrap();
     f(&index)
 }
@@ -3770,7 +3773,7 @@ fn measured_positions_must_match_decoded_glb_bits() {
 fn source_index_matches_exhaustive_with_range_clipping_and_ties() {
     use super::{
         error::Nearest,
-        source_index::{bary, closest, distance2, Hit, Triangle},
+        source_index::{bary, closest, distance2, mark_controls, Hit, Surface, Triangle, BLOCK},
     };
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &thin_islands());
@@ -3781,10 +3784,29 @@ fn source_index_matches_exhaustive_with_range_clipping_and_ties() {
         .unwrap()
         .map(Result::unwrap)
         .collect();
+    let mut ordered = Vec::new();
+    for (block, rows) in source.chunks(BLOCK).enumerate() {
+        let mut triangles: Vec<_> = rows
+            .iter()
+            .enumerate()
+            .map(|(i, row)| {
+                let mut t = Triangle::new(row.triangle.positions, (block * BLOCK + i) as u64);
+                t.order = (row.triangle.source, row.expanded_ordinal);
+                t.material = row.material;
+                t
+            })
+            .collect();
+        mark_controls(&mut triangles);
+        ordered.extend(Surface::new(triangles).unwrap().triangles);
+    }
     with_source_index(&captured, |index| {
+        // This repetitive source also exercises actual compressed storage.
+        let n = captured.triangles.len();
+        assert!(index.stored_bytes() < (88 * n) / 2);
         let mut random = 0x7159ac23u32;
         for (first, end) in [
             (0, source.len()),
+            (0, BLOCK),
             (17, 300),
             (250, 520),
             (source.len() - 13, source.len()),
@@ -3800,13 +3822,27 @@ fn source_index_matches_exhaustive_with_range_clipping_and_ties() {
             let mut paged = index.paged_query(&captured, key).unwrap();
             let mut budgeted = index.query(&captured, key).unwrap();
             let mut nearest = Nearest::new();
-            let streamed: Vec<_> = query.surface().unwrap().map(|t| t.unwrap().rank).collect();
-            let mut streamed_sorted = streamed.clone();
-            streamed_sorted.sort_unstable();
-            assert_eq!(
-                streamed_sorted,
-                (first as u64..end as u64).collect::<Vec<_>>()
-            );
+            let streamed: Vec<_> = query.surface().unwrap().map(Result::unwrap).collect();
+            let expected: Vec<_> = ordered
+                .iter()
+                .copied()
+                .filter(|t| (first as u64..end as u64).contains(&t.rank))
+                .map(|mut t| {
+                    let block = t.rank / BLOCK as u64 * BLOCK as u64;
+                    if key.first > block || key.end < block + BLOCK as u64 {
+                        t.controls = 7;
+                    }
+                    t
+                })
+                .collect();
+            assert_eq!(streamed, expected);
+            if first == 0 && end == BLOCK {
+                let area = source[..BLOCK]
+                    .iter()
+                    .map(|row| Triangle::new(row.triangle.positions, 0).area())
+                    .sum::<f64>();
+                assert_eq!(query.area().unwrap().to_bits(), area.to_bits());
+            }
             for _ in 0..40 {
                 let mut unit = || {
                     random ^= random << 13;
