@@ -429,9 +429,10 @@ fn capture_reports_every_step_with_its_total_and_honours_a_cancel_inside_capture
     );
     assert_eq!(incidence[0].total, triangles);
     // The reduce sees the sorted items only: those another leaf may hold, and edges with
-    // one face in their leaf. The grid's leaves share their borders.
+    // one face in their leaf (the grid's perimeter). Every item would be about two per
+    // triangle; the grid's leaves share only their borders.
     assert!(
-        incidence[1].total > 0 && incidence[1].total < 6 * triangles,
+        incidence[1].total > 0 && incidence[1].total < triangles / 4,
         "{incidence:?}"
     );
     for step in &incidence {

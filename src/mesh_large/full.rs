@@ -143,12 +143,27 @@ pub(crate) struct FullMemoryBound {
     /// (`weld::MeshWeld::memory_bytes`); absent without a weld.
     #[serde(skip_serializing_if = "is_zero")]
     pub weld_bytes: u64,
+    /// The leaves' occupancy masks and least depths, kept from the corner-depth join to the
+    /// incidence pass (`corners::LeafIndex`); zero until the tree's leaves are known.
+    pub leaf_index_bytes: u64,
     pub bound_bytes: u64,
 }
 fn is_zero(n: &u64) -> bool {
     *n == 0
 }
 impl FullMemoryBound {
+    /// The bound with the leaf masks charged, once the leaves are known. The masks are made by
+    /// the corner-depth join, after the assembly has released its working set, so they share
+    /// the bound's slot that charges the larger of the assembly and the sorts' allowance:
+    /// `max(assembly, sorts + masks)` in place of `max(assembly, sorts)`.
+    fn with_leaf_index(mut self, bytes: u64) -> Result<Self, JobError> {
+        let sorts = self.geometry.sort_bytes;
+        let before = self.assembly_bytes.max(sorts);
+        let after = before.max(add(sorts, bytes)?);
+        self.leaf_index_bytes = bytes;
+        self.bound_bytes = add(self.bound_bytes, after - before)?;
+        Ok(self)
+    }
     fn base_bytes(&self) -> u64 {
         self.bound_bytes - self.geometry.jobs * self.geometry.per_job_bytes
     }
@@ -209,6 +224,16 @@ pub(crate) struct FullCaptured {
     pub scratch: Scratch,
 }
 impl FullCaptured {
+    /// Captured data the later stages hold resident: the owned metadata, the source document
+    /// and the leaves' occupancy masks.
+    pub(crate) fn resident_bytes(&self) -> u64 {
+        self.report
+            .memory
+            .owned_metadata_bytes
+            .saturating_add(self.report.memory.geometry.document_bytes)
+            .saturating_add(self.leaf_index.bytes())
+    }
+
     pub(crate) fn close(self) -> Result<(), JobError> {
         let Self {
             tree,
@@ -749,6 +774,7 @@ fn memory_bound(
         assembly_bytes,
         subset_bytes,
         weld_bytes,
+        leaf_index_bytes: 0,
         decoder_allowance_bytes: DECODER_ALLOWANCE,
         planning_allowance_bytes: PLANNING_ALLOWANCE,
         bound_bytes,
@@ -1327,6 +1353,24 @@ pub(crate) fn capture_admitted(
             workers,
             progress,
         )?;
+        // The masks stay resident until the incidence pass: charged from here on (beside the
+        // sorts, not the released assembly), and the bound checked again with them.
+        let before = memory.bound_bytes;
+        let memory = memory.with_leaf_index(leaf_index.bytes())?;
+        // Capture's admission already fitted the bound without them (the assembly plan's
+        // allowance included); only a rise is checked again.
+        if memory.bound_bytes > before
+            && jobs.available_memory_bytes.is_some_and(|available| {
+                memory
+                    .bound_bytes
+                    .saturating_add(jobs.memory_backed_scratch_bytes)
+                    > available
+            })
+        {
+            return Err(exhausted(
+                "full capture resident bound with the leaf masks does not fit available memory",
+            ));
+        }
         peaks.corner_depths = end_stage(&scratch, stages.corner_depths, "corner depth join")?;
         let height = usize::try_from(tree.stats.height)
             .map_err(|_| invariant("tree height conversion failed"))?;
@@ -1607,6 +1651,65 @@ pub(super) mod tests {
     };
     use super::*;
     use std::{fs, num::NonZeroUsize, path::PathBuf};
+    /// The leaf masks share the slot of the assembly and the sorts' allowance: they add only
+    /// what the sorts plus the masks exceed the larger of the two by.
+    #[test]
+    fn leaf_masks_are_charged_beside_the_sorts_not_the_assembly() {
+        let config = TreeConfig::new(Profile::Balanced);
+        let base = memory_bound(&config, 1 << 20, 0, 2, 1 << 30, (0, 0, 0), 0).unwrap();
+        let sorts = base.geometry.sort_bytes;
+        // An assembly larger than the sorts plus the masks: nothing more to charge.
+        let large = memory_bound(
+            &config,
+            1 << 20,
+            0,
+            2,
+            1 << 30,
+            (0, 0, 0),
+            sorts + (8 << 20),
+        )
+        .unwrap();
+        let charged = large.clone().with_leaf_index(1 << 20).unwrap();
+        assert_eq!(charged.bound_bytes, large.bound_bytes);
+        assert_eq!(charged.leaf_index_bytes, 1 << 20);
+        // No assembly beyond the sorts: the masks are charged in full.
+        let charged = base.clone().with_leaf_index(1 << 20).unwrap();
+        assert_eq!(charged.bound_bytes, base.bound_bytes + (1 << 20));
+        // In between: only the excess.
+        let some = memory_bound(
+            &config,
+            1 << 20,
+            0,
+            2,
+            1 << 30,
+            (0, 0, 0),
+            sorts + (1 << 19),
+        )
+        .unwrap();
+        let charged = some.clone().with_leaf_index(1 << 20).unwrap();
+        assert_eq!(charged.bound_bytes, some.bound_bytes + (1 << 19));
+    }
+
+    /// Each leaf's least welded depth as the join keeps it for the incidence pass equals the
+    /// least depth it wrote over the leaf's corners.
+    fn assert_least_depths(
+        retained: &RetainedTree,
+        depths: &Sequence<CornerDepth>,
+        index: &super::super::corners::LeafIndex,
+    ) {
+        let mut written = depths.reader().unwrap().map(Result::unwrap);
+        let mut least = Vec::new();
+        for node in retained.nodes.reader().unwrap().map(Result::unwrap) {
+            if node.kind == super::super::records::NodeKind::Leaf {
+                let mut l = u8::MAX;
+                for _ in node.first..node.end {
+                    l = l.min(*written.next().unwrap().depths.iter().min().unwrap());
+                }
+                least.push(l);
+            }
+        }
+        assert_eq!(index.least_depths(), &least[..]);
+    }
     pub(crate) fn fixture(parent: &Path, count: usize) -> PathBuf {
         fs::create_dir_all(parent).unwrap();
         let mut bytes = Vec::new();
@@ -2284,7 +2387,7 @@ pub(super) mod tests {
             nodes,
             stats: stats.clone(),
         };
-        let (depths, _) = join_corner_depths(
+        let (depths, index) = join_corner_depths(
             &scratch,
             &retained,
             &triangles,
@@ -2293,6 +2396,7 @@ pub(super) mod tests {
             StepProgress::silent(),
         )
         .unwrap();
+        assert_least_depths(&retained, &depths, &index);
         for (t, d) in triangles.reader().unwrap().zip(depths.reader().unwrap()) {
             let (t, d) = (t.unwrap(), d.unwrap());
             for corner in 0..3 {
@@ -2442,7 +2546,7 @@ pub(super) mod tests {
             }
             assert_eq!(weld, oracle);
             let retained = RetainedTree { nodes, stats };
-            let (depths, _) = join_corner_depths(
+            let (depths, index) = join_corner_depths(
                 &scratch,
                 &retained,
                 &triangles,
@@ -2451,6 +2555,7 @@ pub(super) mod tests {
                 StepProgress::silent(),
             )
             .unwrap();
+            assert_least_depths(&retained, &depths, &index);
             assert_eq!(depths.len(), triangles.len());
             let mut patched = 0;
             for (t, d) in ranked.iter().zip(depths.reader().unwrap()) {

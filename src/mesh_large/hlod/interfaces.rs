@@ -474,14 +474,16 @@ const CHUNK_TRIANGLES: u64 = 1 << 14;
 const WAVE_CHUNKS: usize = 2;
 
 /// The most the item tasks hold at once for `workers` workers and leaves of at most
-/// `leaf_triangles`: a wave's chunks, each with one leaf's work (its faces, segments and
-/// items) and its kept items (six per triangle at worst), and two stream buffers per worker.
+/// `leaf_triangles`: a wave's chunks, each with its kept items (six per triangle at worst),
+/// and per worker one leaf's work (its faces, segments, items and point answers, at most
+/// three per triangle) and two stream buffers. Growing vectors may hold twice their length.
 pub(crate) fn wave_bytes(workers: u64, leaf_triangles: u64, buffer_bytes: u64) -> u64 {
     let item = std::mem::size_of::<Item>() as u64;
-    let leaf = leaf_triangles.saturating_mul(12 * item);
+    let point = std::mem::size_of::<(Key, bool)>() as u64;
+    let leaf = leaf_triangles.saturating_mul(2 * (12 * item + 3 * point));
     let kept = CHUNK_TRIANGLES
         .saturating_add(leaf_triangles)
-        .saturating_mul(6 * item);
+        .saturating_mul(2 * 6 * item);
     let chunks = workers.saturating_mul(WAVE_CHUNKS as u64);
     chunks
         .saturating_mul(kept)
@@ -495,6 +497,9 @@ thread_local! {
     pub(crate) static SORT_EVERY_ITEM: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// Test seam: how many items the last pass on this thread sorted.
     pub(crate) static SORTED_ITEMS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Test seam: leaves whose items fail, each after the given delay.
+    pub(crate) static FAIL_LEAVES: std::cell::RefCell<Vec<(u32, std::time::Duration)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 }
 
 /// One leaf of the pass: its triangle ranks.
@@ -558,7 +563,10 @@ pub(crate) fn build<'s>(
     let mut spans = Vec::new();
     let mut boxes = Vec::new();
     let mut rank = 0u64;
-    for node in nodes.reader()? {
+    for (i, node) in nodes.reader()?.enumerate() {
+        if i % 4096 == 0 {
+            progress.check()?;
+        }
         let node = node?;
         if node.kind != NodeKind::Leaf {
             continue;
@@ -582,7 +590,12 @@ pub(crate) fn build<'s>(
     stats.leaves = u32::try_from(spans.len())
         .map_err(|_| state("leaf index overflow"))?
         .into();
-    let holders = Holders::new(index, &boxes, lattice.snapped().then(|| lattice.steps()))?;
+    let holders = Holders::new(
+        index,
+        &boxes,
+        lattice.snapped().then(|| lattice.steps()),
+        &mut || progress.check(),
+    )?;
     drop(boxes);
     progress.begin(Step::IncidenceItems, triangles.len())?;
     let mut items = ExternalSorter::<Item>::new(scratch, sorters.items)?.observed(progress);
@@ -595,13 +608,14 @@ pub(crate) fn build<'s>(
     let mut admitted_items = item_run;
     let mut sorted = 0u64;
     let workers = workers.max(1);
-    let size = (triangles.len() / (workers as u64 * 8)).clamp(1, CHUNK_TRIANGLES);
-    let chunks = chunks(&spans, size);
+    let chunks = chunks(&spans, chunk_size(triangles.len(), workers));
     let read_buffer = sorters.rows.buffer_bytes;
     #[cfg(test)]
     let every = SORT_EVERY_ITEM.with(std::cell::Cell::get);
     #[cfg(not(test))]
     let every = false;
+    #[cfg(test)]
+    let fail = FAIL_LEAVES.with(|f| f.borrow().clone());
     let done = AtomicU64::new(0);
     // One chunk's items, checking `stop` and the run's stop before each leaf.
     let chunk_items =
@@ -618,6 +632,11 @@ pub(crate) fn build<'s>(
                     return Err(JobError::new(JobErrorKind::Cancelled, "incidence stopped"));
                 }
                 scratch.check_stop()?;
+                #[cfg(test)]
+                if let Some(&(_, delay)) = fail.iter().find(|f| f.0 as usize == leaf) {
+                    std::thread::sleep(delay);
+                    return Err(state(&format!("injected failure at leaf {leaf}")));
+                }
                 let span = &spans[leaf];
                 faces.clear();
                 for _ in span.first..span.end {
@@ -650,7 +669,8 @@ pub(crate) fn build<'s>(
                 let other = |k: Key| {
                     points
                         .binary_search_by_key(&k, |p| p.0)
-                        .map_or(true, |i| points[i].1)
+                        .ok()
+                        .is_none_or(|i| points[i].1)
                 };
                 for item in &buffer {
                     let segment = item.a != item.b;
@@ -724,6 +744,31 @@ pub(crate) fn build<'s>(
         progress,
     )?;
     Ok((rows, stats, open_ends))
+}
+
+/// Triangles per chunk: at least eight chunks per worker when the triangles allow.
+fn chunk_size(triangles: u64, workers: usize) -> u64 {
+    (triangles / (workers.max(1) as u64 * 8)).clamp(1, CHUNK_TRIANGLES)
+}
+
+/// Test seam: the first leaf of each wave of the pass over leaves of these triangle counts.
+#[cfg(test)]
+pub(crate) fn wave_starts(leaf_triangles: &[u64], workers: usize) -> Vec<usize> {
+    let mut first = 0;
+    let spans: Vec<Span> = leaf_triangles
+        .iter()
+        .map(|&n| {
+            first += n;
+            Span {
+                first: first - n,
+                end: first,
+            }
+        })
+        .collect();
+    chunks(&spans, chunk_size(first, workers))
+        .chunks(WAVE_CHUNKS * workers.max(1))
+        .map(|wave| wave[0].start)
+        .collect()
 }
 
 /// Leaf chunks of about `size` triangles each (at least one leaf).

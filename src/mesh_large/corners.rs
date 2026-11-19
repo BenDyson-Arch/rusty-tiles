@@ -60,7 +60,7 @@ pub(crate) fn grid_levels(nodes: &Sequence<NodeRecord>) -> (Vec<usize>, usize) {
             bounds: n.bounds,
         })
         .collect();
-    let grid = Grid::new(&leaves);
+    let grid = Grid::new(&leaves, &mut || Ok(())).unwrap();
     let mut listed = vec![0; grid.levels.len()];
     for (i, level) in grid.levels.iter().enumerate() {
         let mut ids = level.ids.clone();
@@ -150,7 +150,10 @@ struct Level {
 const COARSER_LEVELS: usize = 2;
 
 impl Grid {
-    fn new(leaves: &[Leaf]) -> Self {
+    fn new(
+        leaves: &[Leaf],
+        check: &mut dyn FnMut() -> Result<(), JobError>,
+    ) -> Result<Self, JobError> {
         let mut all = Bounds::EMPTY;
         for leaf in leaves {
             all.union(&leaf.bounds);
@@ -183,15 +186,17 @@ impl Grid {
             if members.is_empty() {
                 break;
             }
+            check()?;
             let (level, larger) = Level::new(leaves, &members, origin, side, dims_at(side));
             levels.push(level);
             members = larger;
             side *= 8.;
         }
-        Self {
+        check()?;
+        Ok(Self {
             levels,
             huge: members,
-        }
+        })
     }
 
     /// The leaves whose box may hold `p`.
@@ -491,7 +496,7 @@ pub(super) fn corner_depths<T: Corners>(
         },
     )?;
     let index = Index {
-        grid: Grid::new(&leaves),
+        grid: Grid::new(&leaves, &mut || progress.check())?,
         leaves: &leaves,
         masks,
     };
@@ -627,6 +632,12 @@ impl LeafIndex {
     pub(crate) fn bytes(&self) -> u64 {
         self.len() as u64 * Self::LEAF_BYTES
     }
+
+    /// Test seam: each leaf's least welded depth.
+    #[cfg(test)]
+    pub(crate) fn least_depths(&self) -> &[u8] {
+        &self.least_depths
+    }
 }
 
 /// Bytes per leaf of [`Holders`] beside the [`LeafIndex`] it borrows: the leaf's box, its
@@ -666,6 +677,7 @@ impl<'a> Holders<'a> {
         index: &'a LeafIndex,
         boxes: &[Bounds],
         steps: Option<&[f32]>,
+        check: &mut dyn FnMut() -> Result<(), JobError>,
     ) -> Result<Self, JobError> {
         if boxes.len() != index.len() || index.least_depths.len() != index.len() {
             return Err(invariant("leaf masks do not match the leaves"));
@@ -674,6 +686,9 @@ impl<'a> Holders<'a> {
         let mut half_steps = Vec::with_capacity(boxes.len());
         let mut grown = Vec::with_capacity(boxes.len());
         for (i, bounds) in boxes.iter().enumerate() {
+            if i % 4096 == 0 {
+                check()?;
+            }
             // Half a power-of-two step: exact in f32.
             let half = match steps {
                 Some(steps) => {
@@ -706,7 +721,7 @@ impl<'a> Holders<'a> {
             half_steps.push(f64::from(half));
         }
         Ok(Self {
-            grid: Grid::new(&grown),
+            grid: Grid::new(&grown, check)?,
             leaves,
             half_steps,
             index,
@@ -837,7 +852,7 @@ mod tests {
             bounds: point,
             ..leaves[0]
         });
-        let grid = Grid::new(&leaves);
+        let grid = Grid::new(&leaves, &mut || Ok(())).unwrap();
         // The finest level has about four cells per leaf; coarser ones fewer.
         assert!(grid.levels[0].offsets.len() <= leaves.len() * 8 + 2);
         assert!(grid
@@ -964,7 +979,7 @@ mod tests {
                     least_depths,
                 };
                 let snapped = lattice.snapped().then_some(&steps[..]);
-                let holders = Holders::new(&index, &boxes, snapped).unwrap();
+                let holders = Holders::new(&index, &boxes, snapped, &mut || Ok(())).unwrap();
                 let held: Vec<Vec<[u32; 3]>> = corners
                     .iter()
                     .map(|list| {

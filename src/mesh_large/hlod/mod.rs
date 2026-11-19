@@ -434,13 +434,9 @@ pub(crate) fn plan(
     let streams = buffer
         .saturating_mul(5)
         .saturating_add((config.sort.fan_in as u64 + 1).saturating_mul(buffer));
+    // Captured metadata, the source document and the leaves' occupancy masks.
     let fixed = captured
-        .report
-        .memory
-        .owned_metadata_bytes
-        .saturating_add(captured.report.memory.geometry.document_bytes)
-        // The leaves' occupancy masks, held from capture for the incidence pass.
-        .saturating_add(captured.leaf_index.bytes())
+        .resident_bytes()
         .saturating_add(STAGE_RESERVE)
         .saturating_add(captured.images.len() as u64 * super::image_tiles::IMAGE_METADATA_BYTES)
         .saturating_add(source_index::BUILD_BYTES)
@@ -574,7 +570,9 @@ pub(crate) fn plan(
             fixed_bytes: fixed,
             incidence_bytes,
             incidence_sort,
-            incidence_jobs: usize::try_from(incidence_jobs).unwrap_or(1),
+            // At most `workers`, itself at most the platform's core count.
+            incidence_jobs: usize::try_from(incidence_jobs)
+                .map_err(|_| resource("incidence worker count overflow"))?,
             window_bytes: window,
             job_bytes: job,
             minimum_bytes: minimum.saturating_add(tmpfs),

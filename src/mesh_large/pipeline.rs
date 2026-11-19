@@ -887,10 +887,8 @@ fn run(
         } else {
             0
         };
-        let archive_minimum = c
-            .memory
-            .owned_metadata_bytes
-            .saturating_add(c.memory.geometry.document_bytes)
+        let archive_minimum = captured
+            .resident_bytes()
             .saturating_add(256 << 20)
             .saturating_add(tmpfs)
             .saturating_add(delivery::resident_bound(

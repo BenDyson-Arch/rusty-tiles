@@ -370,12 +370,8 @@ pub(crate) fn stage_plan(
 ) -> Result<StagePlan, JobError> {
     let requested = config.jobs;
     let total_source = source_bytes(captured)?;
-    let global_bytes = captured
-        .report
-        .memory
-        .owned_metadata_bytes
-        .checked_add(captured.report.memory.geometry.document_bytes)
-        .ok_or_else(|| resource("leaf global ownership overflow"))?;
+    // Captured metadata, the source document and the leaves' occupancy masks.
+    let global_bytes = captured.resident_bytes();
     // The largest page lease any leaf's delivery takes, from the same physical
     // crop/packing projection final preparation uses (page assembly, codec, sampler
     // chain and source decode at its actual dimensions), not a profile-wide maximum
