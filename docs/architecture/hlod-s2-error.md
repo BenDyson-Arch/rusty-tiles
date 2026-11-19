@@ -96,8 +96,9 @@ reach. Its job-wide additive charge is zero.
 
 ### Numerical enclosure
 
-Pricing assumes finite IEEE binary32 coordinates, binary64 round-to-nearest
-and disabled contraction. The kernel checks the formats and rounding mode.
+Pricing assumes finite IEEE binary32 coordinates, native binary64 evaluation
+with round-to-nearest and disabled contraction. The build checks the formats
+and evaluation precision. Each native entry checks the rounding mode.
 Projected side tests first use a conservative determinant filter. An ambiguous
 sign uses an error-free expansion of six binary32 products, each exactly
 representable in binary64. A nonzero product cannot underflow binary64.

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cfenv>
+#include <cfloat>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -786,6 +787,7 @@ extern "C" int rt_cert_range(const void *ptr, const Raw *domain, const U *hints,
     });
 }
 // The residual allowance and the Rust ABI require these arithmetic formats.
+static_assert(FLT_EVAL_METHOD == 0, "surface certificates require native binary64 evaluation");
 static_assert(std::numeric_limits<float>::is_iec559 && std::numeric_limits<float>::digits == 24);
 static_assert(std::numeric_limits<double>::is_iec559 && std::numeric_limits<double>::digits == 53);
 static_assert(sizeof(Raw) == 9 * sizeof(float));
