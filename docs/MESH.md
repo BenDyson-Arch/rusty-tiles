@@ -1213,6 +1213,10 @@ them.
 Source textures are decoded once per stage for each image and sampling class
 (HLOD: colour or data chain; leaves: the source image and, when a density step
 needs one, a reduced chain per class), never again under cache pressure.
+The coarse stage decodes one source image at a time. Its decode working set (about
+16 bytes per texel of the largest image, its encoded bytes and the chain built from
+it) is reserved once for the stage as `diagnostics.memory.hlod.decode_bytes`, not in
+every parent job, so coarse jobs run side by side within smaller budgets.
 Decoded images stay resident while they fit the stage's image cache. The rest
 spill to scratch as 128×128 texel tiles, one file per chain, read through a
 bounded tile cache with a bounded set of open files. The spill is admitted

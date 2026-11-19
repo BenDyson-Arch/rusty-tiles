@@ -813,6 +813,85 @@ fn charting_keeps_geometry_and_ids_and_image_free_input_bypasses_appearance() {
     assert_eq!(plan["image_cache_bytes"], 0, "{plan}");
 }
 
+/// A real coarse plan for 8192² sources at a 4 GiB budget (the measured 8192-texture scene's
+/// image sizes, production settings, `--jobs 2`) admits two jobs now that the source decode
+/// is the stage's one slot. Sensitive control: the same plan's ledger, with the decode
+/// charged in every job as before, admits one.
+#[test]
+fn a_4_gib_plan_for_8192_sources_admits_two_coarse_jobs() {
+    use crate::mesh_large::{
+        config::{Jobs, Profile, TreeConfig},
+        full,
+        resources::MemoryBudget,
+    };
+    let work = tempfile::tempdir().unwrap();
+    let f = Fixture {
+        images: vec![ramp, bumpy],
+        material: json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicRoughnessTexture":{"index":1},"metallicFactor":0.0}}),
+        ..base_fixture()
+    };
+    let input = write_fixture(&work.path().join("in"), &f);
+    let mut config = TreeConfig::new(Profile::Balanced);
+    config.jobs = Jobs::Fixed(NonZeroUsize::new(2).unwrap());
+    let mut captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+    // The plan reads only the images' metadata: give them the scene's 8192² JPEG sizes.
+    for info in &mut captured.image_info {
+        (info.width, info.height, info.encoded_bytes) = (8192, 8192, 24_000_000);
+    }
+    let budget = MemoryBudget::resolve(Some(4 << 30)).unwrap();
+    let plan = super::plan(&captured, &config, &budget, &super::Settings::default()).unwrap();
+    assert_eq!(
+        plan.ceiling_bytes,
+        4 << 30,
+        "needs 4 GiB of available memory"
+    );
+    let (decode, chain) = super::source_decode_bytes(&captured.image_info);
+    assert_eq!(plan.decode_bytes, decode);
+    assert!(decode > 1 << 30, "{decode}");
+    assert_eq!(plan.jobs, 2, "{plan:?}");
+    assert_ne!(plan.jobs_limited_by, "memory");
+    // The old layout: one decode per job, and the cache floor beside them.
+    let shared = plan.ledger_bytes - plan.window_bytes;
+    assert_eq!((shared - chain) / (plan.job_bytes + decode), 1, "{plan:?}");
+}
+
+/// A textured run plans the decode slot once: `decode_bytes` is the largest image's decode
+/// working set, the stage minimum counts it once beside one job, and the walk's leases stay
+/// below the ledger less the slot (chain loads hold the slot, not a lease).
+#[test]
+fn source_decode_is_reserved_once_for_the_stage() {
+    let work = tempfile::tempdir().unwrap();
+    let f = Fixture {
+        edge: 256,
+        images: vec![ramp, bumpy],
+        material: json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicRoughnessTexture":{"index":1},"metallicFactor":0.0}}),
+        ..base_fixture()
+    };
+    let dir = stage(
+        &write_fixture(&work.path().join("in"), &f),
+        &work.path().join("out"),
+    );
+    let resources: Value =
+        serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+    let plan = &resources["hlod"]["plan"];
+    let n = |k: &str| plan[k].as_u64().unwrap_or_else(|| panic!("{k}: {plan}"));
+    let decode = n("decode_bytes");
+    // 16 B per texel, the encoded PNG (at most what it decodes to) and the chain.
+    let floor = 256 * 256 * 16 + super::bake::chain_bytes(256, 256);
+    assert!(decode > floor && decode <= floor + 256 * 256 * 4, "{plan}");
+    assert!(n("texture_workspace_bytes") < n("job_bytes"), "{plan}");
+    let minimum = n("fixed_bytes")
+        + n("incidence_bytes")
+            .max(n("window_bytes") + n("job_bytes") + super::bake::chain_bytes(256, 256) + decode);
+    assert!(n("minimum_bytes") >= minimum, "{plan}");
+    let d = &resources["hlod"]["diagnostics"];
+    assert!(
+        d["lease_peak_bytes"].as_u64().unwrap() <= n("ledger_bytes") - decode,
+        "{d}"
+    );
+    assert!(d["image_cache"]["misses"].as_u64().unwrap() > 0, "{d}");
+}
+
 #[test]
 fn vertex_colours_follow_the_source_without_images() {
     let work = tempfile::tempdir().unwrap();

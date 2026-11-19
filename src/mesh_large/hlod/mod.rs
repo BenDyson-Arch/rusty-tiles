@@ -250,6 +250,10 @@ pub struct HlodMemoryPlan {
     pub color_workspace_bytes: u64,
     /// Shared decoded source-chain cache (zero without images).
     pub image_cache_bytes: u64,
+    /// The stage's one source-image decode slot: the largest image's decode transient and
+    /// the chain built from it. Chain loads take turns in it, so it is reserved once for the
+    /// stage instead of in every job (zero without images).
+    pub decode_bytes: u64,
     /// Encoder workspace ceiling of one coarse page.
     pub page_bytes: u64,
     /// Encoded page bytes one coarse tile may publish (admitted twice: pages and GLB).
@@ -261,6 +265,8 @@ pub struct HlodMemoryPlan {
 /// The appearance part of one parent job and the image cache bounds.
 struct AppearancePlan {
     texture: u64,
+    /// The stage's decode slot ([`HlodMemoryPlan::decode_bytes`]).
+    decode: u64,
     color: u64,
     page: u64,
     tile_pages: u64,
@@ -304,10 +310,10 @@ fn chart_workspace(edge: u32, cap: usize) -> u64 {
     )
 }
 
-/// One worker's source-image decode transient and the chain it holds while sampling,
-/// besides the shared cache, with the largest chain alone: 16 bytes per texel of the
-/// largest image (decoder output, RGBA and chain build copy), the largest encoded image
-/// at its actual length (a different image when that is larger), and the largest chain.
+/// The stage's decode slot ([`HlodMemoryPlan::decode_bytes`]), with the largest chain alone
+/// (the image cache's floor): 16 bytes per texel of the largest image (decoder output, RGBA
+/// and chain build copy), the largest encoded image at its actual length (a different image
+/// when that is larger), and the largest chain.
 fn source_decode_bytes(images: &[crate::gltf_source::source::ImageInfo]) -> (u64, u64) {
     let largest = images
         .iter()
@@ -316,11 +322,10 @@ fn source_decode_bytes(images: &[crate::gltf_source::source::ImageInfo]) -> (u64
         .unwrap_or((0, 0));
     let largest_chain = bake::chain_bytes(largest.0 as u32, largest.1 as u32);
     let largest_encoded = images.iter().map(|i| i.encoded_bytes).max().unwrap_or(0);
-    let decode = bake::CHAIN_READER_BYTES
-        + (largest.0 * largest.1)
-            .saturating_mul(16)
-            .saturating_add(largest_encoded)
-            .saturating_add(largest_chain);
+    let decode = (largest.0 * largest.1)
+        .saturating_mul(16)
+        .saturating_add(largest_encoded)
+        .saturating_add(largest_chain);
     (decode, largest_chain)
 }
 
@@ -341,6 +346,7 @@ fn appearance_plan(
     if captured.image_info.is_empty() {
         return Ok(AppearancePlan {
             texture: 0,
+            decode: 0,
             color,
             page: 0,
             tile_pages: 0,
@@ -369,10 +375,13 @@ fn appearance_plan(
         .saturating_add(chart_workspace(edge, cap))
         .saturating_add(tile_pages.saturating_mul(2))
         .saturating_add(page)
-        .saturating_add(decode);
+        // The chain reader a worker holds while sampling; the decode itself is the stage's
+        // one slot, not every job's.
+        .saturating_add(bake::CHAIN_READER_BYTES);
     let cache_total = super::image_tiles::bound(captured, false);
     Ok(AppearancePlan {
         texture,
+        decode,
         color,
         page,
         tile_pages,
@@ -439,7 +448,8 @@ pub(crate) fn plan(
         incidence.max(
             window
                 .saturating_add(job)
-                .saturating_add(appearance.cache_floor),
+                .saturating_add(appearance.cache_floor)
+                .saturating_add(appearance.decode),
         ),
     );
     // Memory-backed scratch charges the image tiles only when the plan's cache cannot
@@ -523,8 +533,10 @@ pub(crate) fn plan(
             items: incidence_sort.sorter(1),
             rows: sorter,
         });
+        // The decode slot is carved out of the ledger once; jobs share what remains.
+        let shared = (ledger - window).saturating_sub(appearance.decode);
         let (jobs, limited_by) = worker_admission(
-            (ledger - window).saturating_sub(appearance.cache_floor),
+            shared.saturating_sub(appearance.cache_floor),
             job,
             config.jobs,
             cores,
@@ -534,7 +546,7 @@ pub(crate) fn plan(
             0
         } else {
             appearance.cache_total.min(
-                (ledger - window)
+                shared
                     .saturating_sub(jobs.saturating_mul(job))
                     .max(appearance.cache_floor),
             )
@@ -552,6 +564,7 @@ pub(crate) fn plan(
             texture_workspace_bytes: appearance.texture,
             color_workspace_bytes: appearance.color,
             image_cache_bytes: image_cache,
+            decode_bytes: appearance.decode,
             page_bytes: appearance.page,
             tile_page_bytes: appearance.tile_pages,
             jobs,
@@ -2299,7 +2312,8 @@ fn walk(
     let captured = input.captured;
     let plan = input.plan;
     let settings = input.settings;
-    let ledger = Ledger::new(plan.ledger_bytes);
+    // The decode slot stays outside the walk's leases: chain loads hold it in turn.
+    let ledger = Ledger::new(plan.ledger_bytes.saturating_sub(plan.decode_bytes));
     let job_bytes = plan.job_bytes;
     // The most a job merges: eight capped built inputs, including a recovery frontier.
     let job_inputs = input
