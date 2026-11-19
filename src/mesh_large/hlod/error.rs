@@ -631,15 +631,27 @@ where
     })
 }
 
-pub(crate) fn measure(
+pub(super) struct Centroid {
+    pub(super) rank: u64,
+    pub(super) distance: f64,
+}
+
+pub(super) struct Measured {
+    pub(super) error: TileError,
+    pub(super) summary: Summary,
+    pub(super) cpu: CpuReport,
+    pub(super) original: Option<super::certify::Comparison>,
+}
+
+pub(super) fn measure(
     tile: &CoarseTile<'_>,
     query: &mut SourceQuery<'_>,
     nearest: &mut Nearest,
     count: Count,
-    centroid_checks: &[f64],
+    centroid_checks: &[Centroid],
     topology: &mut super::geometry::measurement::Controls,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<(TileError, Summary, CpuReport), JobError> {
+) -> Result<Measured, JobError> {
     let mut cpu = CpuReport::default();
     let started = thread_cpu();
     let seed = seed(tile.key);
@@ -658,8 +670,17 @@ pub(crate) fn measure(
     let started = thread_cpu();
     let mut hint = None;
     let topology_source = std::mem::take(&mut topology.source);
+    let mut original = super::certify::SourceRows::new(tile.key, tile.source_is_original)?;
+    let mut seeds = original.as_ref().map(super::certify::SourceRows::seeds);
+    let rows = query.surface()?.map(|row| {
+        let triangle = row?;
+        if let Some(capture) = &mut original {
+            capture.record(&triangle)?;
+        }
+        Ok(triangle)
+    });
     let source_to_proxy = directed(
-        query.surface()?,
+        rows,
         source_area,
         count.samples,
         seed,
@@ -667,8 +688,18 @@ pub(crate) fn measure(
             proxy: false,
             initial: &topology_source,
         },
-        |p, _| {
-            let d = nearest.surface(&proxy, p, &mut hint).distance2.sqrt();
+        |p, rank| {
+            let hit = nearest.surface(&proxy, p, &mut hint);
+            if let Some(seeds) = &mut seeds {
+                if let Some(seed) = rank
+                    .checked_sub(tile.key.first)
+                    .and_then(|r| usize::try_from(r).ok())
+                    .and_then(|r| seeds.get_mut(r))
+                {
+                    *seed = u32::try_from(hit.rank).unwrap_or(u32::MAX);
+                }
+            }
+            let d = hit.distance2.sqrt();
             topology.source_sample(p, d);
             Ok(d)
         },
@@ -676,10 +707,10 @@ pub(crate) fn measure(
     )?;
     cpu.source_to_proxy = elapsed(started);
     let started = thread_cpu();
-    let mut proxy_controls = centroid_checks.to_vec();
+    let mut proxy_controls: Vec<_> = centroid_checks.iter().map(|c| c.distance).collect();
     proxy_controls.extend(&topology.proxy);
-    for (i, &d) in centroid_checks.iter().enumerate() {
-        topology.proxy_sample(i, d);
+    for (i, c) in centroid_checks.iter().enumerate() {
+        topology.proxy_sample(i, c.distance);
     }
     let proxy_to_source = directed(
         proxy.triangles.iter().copied().map(Ok),
@@ -705,7 +736,18 @@ pub(crate) fn measure(
         source_to_proxy,
         proxy_to_source,
     )
-    .map(|(g, s)| (g, s, cpu))
+    .and_then(|(error, summary)| {
+        let original = original
+            .zip(seeds)
+            .map(|(capture, seeds)| capture.finish(seeds, centroid_checks))
+            .transpose()?;
+        Ok(Measured {
+            error,
+            summary,
+            cpu,
+            original,
+        })
+    })
 }
 fn publish(
     children_error: f64,

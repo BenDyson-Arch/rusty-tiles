@@ -168,6 +168,8 @@ pub(crate) const LEAF_READ_FIXED_BYTES: u64 = HELD_FIXED_BYTES + 4096;
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct CoarseTile<'a> {
     pub key: TileKey,
+    /// S2 can retain an original rank stream only before a weld changes its positions.
+    pub source_is_original: bool,
     /// Indexed, final decoded (published) positions.
     pub decoded: &'a [[f32; 3]],
     pub triangles: &'a [[u32; 3]],

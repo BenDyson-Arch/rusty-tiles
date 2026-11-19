@@ -22,17 +22,41 @@ corners. A held coarse tile keeps the read-back coordinates when they differ
 from its construction positions. A held leaf uses the canonical coordinates
 checked by its frozen lattice encoder, including aligned primitive rebasing.
 
-For each directed comparison, cover each domain triangle by closed panels.
-Each accepted panel chooses one actual target triangle and a target point for
-each of its three corners. The three points have integer barycentric weights
-summing to 2²². Interpolating them with a panel point's barycentric coordinates
-keeps the witness in that target triangle. The norm of the residual is at most
-the largest of the three corner residuals. This argument includes segments and
-points. Four midpoint subtriangles cover a split panel. A bounded nearest
-search (768 BVH node visits per query), depth limit seven and a per-direction
-split allowance of `max(65536, 256 × max(domain faces, target faces))` guide
-the price. At a work limit the current panel receives its complete corner
-price. Run this comparison in each direction.
+### Complete directional covers
+
+Each source point needs one target witness. The worker tries two geometrically
+sufficient tests on each closed domain triangle or midpoint panel.
+
+1. Choose one actual target triangle. Snap a target point for each panel corner
+   to nonnegative barycentric coordinates summing to 2²² integer units. Affine
+   interpolation stays on that triangle. The largest corner residual bounds the
+   Euclidean residual on the entire panel, including a segment or a point.
+2. Project along a coordinate axis and start in an actual target face whose
+   footprint has positive-area overlap with the panel. Traverse equal 3D edges.
+   Every edge crossing the open query must have a visited face on its opposite
+   projected side. The visited footprints form a finite closed union. Away
+   from projected vertices, a covered point in the open query has a neighborhood
+   covered by a face interior or by two faces across an edge. The open triangle
+   minus finitely many vertices is path-connected, so one overlap covers this
+   whole set. Closure adds its edges and vertices. Within each overlapping
+   face, bound the separation along the dropped axis at common projection.
+   Subtracting the same affine function of the two retained coordinates leaves
+   this separation unchanged. Extrema of each affine residual occur at corners.
+   Intersecting projected bounding boxes can tighten the bound. Each height
+   difference prices an actual **3D** witness. A fold, a hole, a degenerate
+   projection, or the 1,024-face limit can prevent this test from certifying a
+   panel. A split panel rounded to binary32 for projection also pays its
+   largest actual corner displacement.
+
+The construction floor is a search target. Its budgeted point searches can
+overestimate nearest distance. A separate lower-bound observation excludes
+*every* target leaf with an enclosing box or supporting half-space before it
+can raise the target to 1.01 times that lower bound. A paid upper from an
+already accepted panel can also guide the remaining work. A panel stops when
+it has a complete upper under the target. Otherwise it can split four ways.
+At seven levels or exhaustion of its assigned split credits, it publishes the
+complete simplex upper. A work cap can widen the result beyond 1%. Every
+emitted value comes from actual witnesses across the whole domain.
 
 For an original-source comparison, take the larger directional upper bound.
 For a child comparison let L bound both directions between P and C, and E be
@@ -69,38 +93,74 @@ reach. Its job-wide additive charge is zero.
 
 ### Numerical enclosure
 
-The pricing operations use finite IEEE binary32 coordinates, IEEE binary64
-round-to-nearest, and disabled contraction. The kernel checks the arithmetic
-mode and format. Write M for the largest absolute input coordinate and
-u = 2⁻⁵³. Seven rounded midpoint levels cost at most 8uM per coordinate.
-The three dyadic weights are exact. The target interpolation costs at most
-6uM per coordinate, the subtraction 3uM, and norm evaluation adds less than
-12uM. The total norm error is below 50uM. All nonzero pricing coordinates
-are on a grid at least as coarse as 2⁻¹⁷¹, and squared norms of nonzero
-residuals are within binary64's normal range. The terminal directional price
-adds 512uM and rounds up. The BVH and approximate projection only select a
-target face and propose weights. Clamping and integer snapping establish
-simplex membership before pricing. A nonfinite bound, invalid ownership,
-allocation failure or cancellation stops publication.
+Pricing assumes finite IEEE binary32 coordinates, binary64 round-to-nearest
+and disabled contraction. The kernel checks the formats and rounding mode.
+Projected side tests first use a conservative determinant filter. An ambiguous
+sign uses an error-free expansion of six binary32 products, each exactly
+representable in binary64. A nonzero product cannot underflow binary64.
+
+Let M be the maximum absolute coordinate of the target and the entire domain
+range, and u = 2⁻⁵³. Seven midpoint levels introduce at most 8uM per
+coordinate. Simplex interpolation and evaluation of its norm cost less than
+50uM. For projection, all selected affine slopes have magnitude at most eight.
+A difference of two coordinates costs up to 2uM. Multiplying it by one slope
+adds at most another 16uM of rounding. The two products and two sums put a
+single affine residual within 128uM. Differencing two residual intervals and
+adding both coordinate-box slope corrections stays below 768uM. These are
+absolute bounds and also cover cancellation. The returned directional price
+adds 2,048uM and rounds upward, including norm evaluation and the optional
+panel displacement. Lower-bound exclusions receive the scale of both surfaces
+and downward padding. Invalid ownership, arithmetic or allocation, cancellation
+and observer failure stop publication.
 
 ### Admission and progress
 
-One admitted worker reserves 512 bytes per possible reference or target face
-plus 8 MiB. The target count uses the proxy cap. When the complete input fits
-the direct cutoff, its face count bounds every reference. For larger inputs
-the reference count is the greater of 131,072 and the maximum bounded child
-frontier. The cutoff limits the original-source contribution to 64 MiB per
-worker and gives the same choice across worker counts and memory budgets. The two directional BVHs run sequentially.
-`certificate_workspace_bytes` identifies that term in the HLOD memory plan.
-Held tiles account for up to 12 extra bytes per vertex (36 per triangle)
-when readback differs from construction. Such overrides and their scalar
-error use the existing held-tile spill lease, including a 9-byte header
-extension. The certifier creates no separate scratch sequence. Progress
-reports completed domain faces across workers and a 250 ms heartbeat where
-the worker polls. Source iteration, BVH construction and panel descent check
-the same cancellation and observer errors. Where a per-thread CPU clock is
-available, `certification_cpu_by_depth` sums preparation and both cover passes
-by encoded depth, separately from S2 construction and texture baking.
+Each admitted tile reserves 512 bytes per possible reference or target face,
+plus 8 MiB. The native layout check includes the two index lifetimes, triangle
+arrays, BVH nodes, sorted keys, edge table and up to four visit maps per
+direction. The scratch edge hash and radix buffers have disjoint lifetimes. Construction can
+retain two candidate face streams before either native index is allocated.
+The target uses the proxy cap. For larger inputs the reference charge uses
+the greater of 131,072 faces and the maximum bounded child frontier. This rule
+is independent of memory budget and worker count. Held tiles charge up to 36
+additional bytes per triangle if readback differs from construction, inside
+the existing held-tile spill lease. Certification adds no scratch file.
+
+For a direct unwelded comparison, construction's mandatory S2 scan supplies
+every original face. A rank map checks completeness and uniqueness. Existing
+S2 hits can seed a search, and the certifier checks that witness anew on the
+delivered coordinates. An active weld uses the original-position mapping
+described above. The two directional indexes are immutable and run concurrently
+on the operation's pool. Each direction uses up to four fixed contiguous
+ranges, one per 8,192 faces rounded up; their split credits partition
+`max(65536, 256 × max(domain faces, target faces))`. One worker uses the same
+ranges and ordered maximum. Source reads, index construction and panel descent
+poll cancellation. `hlod_certify` reports completed faces across both directions
+and a 250 ms heartbeat where the worker polls; `certification_cpu_by_depth`
+sums preparation, index and range thread times by encoded depth. The S2 timer
+includes capturing original faces during its traversal.
+
+### Checked mathematics
+
+The Lean development in
+[`bench/architecture_audit/mesh_hlod/s5/proof`](../../bench/architecture_audit/mesh_hlod/s5/proof)
+proves the closed-panel and four-way cover, directed composition, the
+two-sided depth induction and Hausdorff bound. It also proves the projected
+seam and connected-cover arguments, the equality of axial separation and 3D
+distance at common projection, affine corner and slope bounds, and the
+conditional relative stopping bound. Its hypotheses include face identity
+and range partition, genuine simplex witnesses or projected neighborhoods,
+and numeric enclosures. The Lean theorems work in real arithmetic. The
+decoder, floating-point implementation and its error budget are checked
+separately. With Lean 4.36.0 and Mathlib at
+`fc4f59e577feb1a4956671bc04ac18aaaf8cd842`, use a Mathlib checkout with its
+dependencies built and set `proof` to the absolute repository proof directory.
+
+```sh
+out=$(mktemp -d)
+lake env lean --root="$proof" -j 1 -DwarningAsError=true -o "$out/HonestG.olean" "$proof/HonestG.lean"
+lake env sh -c 'LEAN_PATH="$1:$LEAN_PATH" lean --root="$2" -j 1 -DwarningAsError=true "$2/FastCover.lean"' sh "$out" "$proof"
+```
 
 Border relief and chord changes precede measurement of the delivered geometry.
 The geometric certificate therefore prices their surface displacement. The
@@ -109,8 +169,7 @@ seam contract still checks common interface identity and mixed-depth gaps.
 ## S2 construction measurement
 
 - Measure captured source triangles in `[TileKey.first, TileKey.end)`, in the local
-  metre frame of the final decoded proxy. Child G and leaf encoding errors are floors,
-  not recursively accumulated source estimates.
+  metre frame of the final decoded proxy. Child G and leaf encoding errors are floors in the construction calculation.
 - Each direction takes `max(2048, ceil(200000 * tile_source / depth_source))` area
   samples, where `depth_source` sums the source ranges of every encoded tile at that
   depth. A depth whose tiles are all published therefore has at least 200,000 samples

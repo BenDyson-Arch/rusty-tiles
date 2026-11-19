@@ -699,8 +699,11 @@ surface directly against the original range. Above that count it checks the
 complete decoded child frontier against the final tile and adds the largest
 child surface certificate. The cutoff bounds the size of the original-source
 search index per worker. Child accumulation can make a coarse level refine
-earlier. The certificate includes border chord movement, relief, simplification
-and position encoding. Same-depth seam identity and the mixed-depth seam-gap
+earlier. Each direction stops a search once actual target-face witnesses
+cover the entire panel within the current target. Connected projected faces
+can certify a retessellated planar wall without subdividing it. Folds and holes
+still require complete coverage. Certification includes border chord movement,
+relief, simplification and position encoding. Same-depth seam identity and the mixed-depth seam-gap
 rule are checked separately.
 
 S2 still guides simplification, root selection and texture spacing. Its sampled

@@ -1536,6 +1536,7 @@ pub struct RepeatReuse {
 }
 
 struct Prepared {
+    retained: Option<certify::Comparison>,
     positions: super::leaves::geometry::CoarsePositions,
     error: store::TileError,
     measurement: error::Summary,
@@ -1654,7 +1655,10 @@ fn prepare(
         });
         let hit = nearest.source(query, p)?;
         representatives.push(query.primitive(hit));
-        centroid_checks.push(hit.distance2.sqrt());
+        centroid_checks.push(error::Centroid {
+            rank: hit.rank,
+            distance: hit.distance2.sqrt(),
+        });
     }
     let mut table = representatives.clone();
     table.sort_unstable();
@@ -1672,9 +1676,15 @@ fn prepare(
     // measurement of the published tile.
     let count = job.sampling.count(tile.key)?;
     let cpu_start = error::thread_cpu();
-    let (mut error, measurement, mut error_cpu) = error::measure(
+    let error::Measured {
+        mut error,
+        summary: measurement,
+        cpu: mut error_cpu,
+        original: retained,
+    } = error::measure(
         &CoarseTile {
             key: tile.key,
+            source_is_original: captured.original_positions.is_none(),
             decoded: &positions.decoded,
             triangles: &tile.triangles,
             locked: &built.locked,
@@ -1730,6 +1740,7 @@ fn prepare(
         .zip(identity_cpu)
         .map_or(0., |((b, a), i)| b - a + i);
     Ok(Some(Prepared {
+        retained,
         positions,
         error,
         measurement,
@@ -1978,13 +1989,8 @@ fn build_tile(
         .iter()
         .map(|c| (c.published_error, c.texture))
         .collect();
-    let reference_start = error::thread_cpu();
-    let comparison = certify::Comparison::new(closed.key, captured, &query, &children, job.check)?;
-    let reference_cpu = error::elapsed(reference_start);
-    drop(children);
-    built.change = Default::default();
-    built.controls = Default::default();
     let Prepared {
+        retained,
         positions,
         error,
         measurement,
@@ -1992,6 +1998,13 @@ fn build_tile(
         error_cpu_seconds,
     } = prepared.ok_or_else(|| state("accepted geometry has no final decoded measurement"))?;
 
+    let reference_start = error::thread_cpu();
+    let comparison =
+        certify::Comparison::new(closed.key, captured, retained, &children, job.check)?;
+    let reference_cpu = error::elapsed(reference_start);
+    drop(children);
+    built.change = Default::default();
+    built.controls = Default::default();
     let tile = &built.geometry;
     let contract = contract.as_ref().expect("built tile has contract");
     // S3: fresh charts and a cheap source bake on the final decoded positions, through
@@ -2068,14 +2081,13 @@ fn build_tile(
     #[cfg(test)]
     let px_per_texel =
         px_per_texel.filter(|_| settings.mutation != Mutation::UnderstateTextureError);
-    let cover_start = error::thread_cpu();
-    let certificate = comparison.certify(
+    let (certificate, cover_cpu) = comparison.certify(
         &delivered,
         &tile.triangles,
         error.geometric_error,
         &|done| job.certification.tick(done),
     )?;
-    let certification_cpu_seconds = reference_cpu + error::elapsed(cover_start);
+    let certification_cpu_seconds = reference_cpu + cover_cpu;
     let texture = texture_error::publish(
         texture_error::Rule::new(px_per_texel),
         error.geometric_error.max(certificate.bound()),
