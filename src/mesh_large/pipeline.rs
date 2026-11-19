@@ -874,7 +874,8 @@ fn run(
         let crop_check = || attempt.check();
         let crop_progress = super::phases::StepProgress::new(&crop_check, phases.emitter());
         let crops = producer::crop_plan(config, &captured, &crop_progress)?;
-        let plan = producer::stage_plan(config, &captured, crops.as_ref())?;
+        // The stage's plan with the store where it fits; reported as the plan it runs.
+        let (plan, crops) = producer::settle(config, &captured, crops)?;
         // HLOD admits its own stage against the declared budget before any leaf is built.
         #[cfg(test)]
         let settings = &request.hlod;

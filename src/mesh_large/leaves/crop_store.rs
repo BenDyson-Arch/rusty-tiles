@@ -179,11 +179,12 @@ impl CropStore {
             self.misses.fetch_add(1, Ordering::Relaxed);
             return Ok(None);
         };
+        let len = usize::try_from(entry.len).map_err(|_| state("crop block size"))?;
         let mut block = Vec::new();
         block
-            .try_reserve_exact(entry.len as usize)
+            .try_reserve_exact(len)
             .map_err(|_| resource("stored crop read"))?;
-        block.resize(entry.len as usize, 0);
+        block.resize(len, 0);
         self.log.read_at(entry.offset, &mut block)?;
         decode_block(&block, entry.stored, key).map(Some)
     }
@@ -285,10 +286,7 @@ pub(crate) struct CropPlan {
 }
 
 /// One image's crops (sorted, deduplicated) and its cut's memory.
-fn image_groups(
-    captured: &FullCaptured,
-    requests: &[CropRequest],
-) -> Result<Vec<(usize, u64, std::ops::Range<usize>)>, JobError> {
+fn image_groups(captured: &FullCaptured, requests: &[CropRequest]) -> Result<Vec<Group>, JobError> {
     let mut groups = Vec::new();
     let mut start = 0;
     while start < requests.len() {
@@ -300,7 +298,7 @@ fn image_groups(
                 .count();
         let info = captured
             .image_info
-            .get(image as usize)
+            .get(usize::try_from(image).map_err(|_| state("crop image index"))?)
             .ok_or_else(|| state("crop image missing"))?;
         let mut chains: Vec<u8> = Vec::new();
         let (mut largest, mut total) = (0u64, 0u64);
@@ -312,8 +310,8 @@ fn image_groups(
             }
         }
         groups.push((
-            image as usize,
-            image_charge(info, chains.len() as u64, total, largest),
+            usize::try_from(image).map_err(|_| state("crop image index"))?,
+            image_charge(info, count(chains.len()), total, largest),
             start..end,
         ));
         start = end;
@@ -322,16 +320,21 @@ fn image_groups(
 }
 
 /// Re-projects every leaf at its planned density (the layout final preparation builds) and
-/// collects its store crops. `None` when the request list (counted before deduplication,
-/// as it is held) would exceed `memory` bytes
-/// (the stage then reads crops from the decoded sources, as without the store).
+/// collects its store crops. `memory` bounds what the pass holds: the request list (counted
+/// before deduplication, as it is held) beside one leaf's working set, `leaf_bytes` (its
+/// triangles and their layout). `None` when that would exceed `memory` (the stage then reads
+/// crops from the decoded sources, as without the store).
 pub(crate) fn plan(
     captured: &FullCaptured,
     profile: crate::mesh_large::config::Profile,
     memory: u64,
+    leaf_bytes: u64,
     progress: &crate::mesh_large::phases::StepProgress<'_>,
 ) -> Result<Option<CropPlan>, JobError> {
     let started = std::time::Instant::now();
+    if leaf_bytes > memory {
+        return Ok(None);
+    }
     let resources = super::atlas::AtlasResources {
         materials: &captured.materials,
         classes: &captured.material_classes,
@@ -347,12 +350,13 @@ pub(crate) fn plan(
     )?;
     for (done, plan) in captured.leaf_plans.reader()?.enumerate() {
         let plan = plan?;
-        progress.advance(done as u64)?;
-        let count = usize::try_from(plan.end - plan.first).map_err(|_| state("leaf size"))?;
+        progress.advance(count(done))?;
+        let triangle_count =
+            usize::try_from(plan.end - plan.first).map_err(|_| state("leaf size"))?;
         let mut leaf = Vec::new();
-        leaf.try_reserve_exact(count)
+        leaf.try_reserve_exact(triangle_count)
             .map_err(|_| resource("leaf triangles"))?;
-        for i in 0..count {
+        for i in 0..triangle_count {
             if i.is_multiple_of(4096) {
                 progress.check()?;
             }
@@ -364,14 +368,14 @@ pub(crate) fn plan(
             );
         }
         let keys = super::atlas::crop_requests(
-            &leaf,
+            leaf,
             resources,
             profile,
             u32::from(plan.density_drop),
             &mut || progress.check(),
         )?;
-        let total = (requests.len() + keys.len()) as u64;
-        if total.saturating_mul(INDEX_BYTES_PER_CROP) > memory {
+        let held = count(requests.len() + keys.len()).saturating_mul(INDEX_BYTES_PER_CROP);
+        if held.saturating_add(leaf_bytes) > memory {
             progress.end()?;
             return Ok(None);
         }
@@ -387,40 +391,73 @@ pub(crate) fn plan(
         .ok_or_else(|| state("crop scratch overflow"))?;
     Ok(Some(CropPlan {
         scratch_bytes,
-        index_bytes: (requests.len() as u64).saturating_mul(INDEX_BYTES_PER_CROP),
-        largest_image_bytes: groups.iter().map(|g| g.1).max().unwrap_or(0),
+        index_bytes: count(requests.len()).saturating_mul(INDEX_BYTES_PER_CROP),
+        largest_image_bytes: groups
+            .iter()
+            .map(|g| g.1)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(LOG_BUFFER_BYTES),
         seconds: started.elapsed().as_secs_f64(),
         requests,
     }))
 }
 
+/// A count as `u64` (saturating; counts here never approach it).
+fn count(n: usize) -> u64 {
+    u64::try_from(n).unwrap_or(u64::MAX)
+}
+
+/// The leaf log's write buffer, held through the build beside the image cuts.
+pub(crate) const LOG_BUFFER_BYTES: u64 = 1 << 20;
+/// How long the build's caller waits for a finished image before its next heartbeat; well
+/// under [`crate::mesh_large::phases::STEP_HEARTBEAT`].
+const HEARTBEAT_WAIT: std::time::Duration = std::time::Duration::from_millis(100);
+
+fn lock<T>(m: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// The error a cut returns when another image of its batch failed first.
+fn stopped_by_sibling() -> JobError {
+    JobError::new(
+        JobErrorKind::Cancelled,
+        "leaf crop store: stopped after another image failed",
+    )
+}
+
 /// Cuts every crop of `plan` image by image on the caller's thread pool. Images go in
-/// fixed batches whose cuts together lease at most `memory` bytes (each at least one
-/// image, which the caller has checked fits), so output order and peak memory do not
-/// depend on the worker count. The log never grows past the plan's raw bytes.
+/// fixed batches whose cuts together lease at most `memory` bytes less the log buffer (each
+/// at least one image, which the caller has checked fits), so output order and peak memory
+/// do not depend on the worker count. While a batch runs, the caller reports progress and
+/// keeps the step's heartbeat; the first image that fails stops the rest of its batch. Cuts
+/// take `page_memory`, the leaf stage's page workspace, as their memory limit, as pages
+/// cutting from decoded sources do. The log never grows past the plan's raw bytes.
 pub(crate) fn build(
     captured: &FullCaptured,
     plan: CropPlan,
     memory: u64,
+    page_memory: u64,
     pool: &rayon::ThreadPool,
     progress: &crate::mesh_large::phases::StepProgress<'_>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<CropStore, JobError> {
-    use rayon::prelude::*;
     let started = std::time::Instant::now();
     let groups = image_groups(captured, &plan.requests)?;
+    let memory = memory.saturating_sub(LOG_BUFFER_BYTES);
     if groups.iter().any(|g| g.1 > memory) {
         return Err(JobError::new(
             JobErrorKind::ResourceLimit,
             "leaf crop store: one source image's cut exceeds its memory",
         ));
     }
-    let mut writer = crate::spill::ByteWriter::new(&captured.scratch, "leaf-crops", 1 << 20)?;
+    let buffer = usize::try_from(LOG_BUFFER_BYTES).map_err(|_| state("log buffer"))?;
+    let mut writer = crate::spill::ByteWriter::new(&captured.scratch, "leaf-crops", buffer)?;
     let mut index = BTreeMap::new();
     let mut peak = 0u64;
     progress.begin(
         crate::mesh_large::phases::Step::LeafCropStore,
-        groups.len() as u64,
+        count(groups.len()),
     )?;
     let mut done = 0usize;
     while done < groups.len() {
@@ -432,19 +469,18 @@ pub(crate) fn build(
             end += 1;
         }
         peak = peak.max(leased);
-        let requests = &plan.requests;
-        let cut: Vec<Result<Vec<(CropRequest, codec::Encoded)>, JobError>> = pool.install(|| {
-            groups[done..end]
-                .par_iter()
-                .map(|(image, charge, range)| {
-                    cut_image(captured, *image, *charge, &requests[range.clone()], check)
-                })
-                .collect()
-        });
-        for blocks in cut {
-            for (key, block) in blocks? {
+        let cuts = cut_batch(
+            captured,
+            &groups[done..end],
+            &plan.requests,
+            page_memory,
+            (pool, progress, done),
+            check,
+        )?;
+        for blocks in cuts {
+            for (key, block) in blocks {
                 let offset = writer.len();
-                if offset.saturating_add(block.bytes.len() as u64) > plan.scratch_bytes {
+                if offset.saturating_add(count(block.bytes.len())) > plan.scratch_bytes {
                     return Err(JobError::new(
                         JobErrorKind::ResourceLimit,
                         "leaf crop store exceeded its admitted scratch",
@@ -463,15 +499,15 @@ pub(crate) fn build(
             }
         }
         done = end;
-        progress.advance(done as u64)?;
+        progress.advance(count(done))?;
     }
     progress.end()?;
     let written = writer.len();
     let log = writer.finish()?;
     Ok(CropStore {
         stats: CropStoreStats {
-            crops: index.len() as u64,
-            images: groups.len() as u64,
+            crops: count(index.len()),
+            images: count(groups.len()),
             raw_bytes: plan.scratch_bytes,
             written_bytes: written,
             memory_bytes: memory,
@@ -487,15 +523,102 @@ pub(crate) fn build(
     })
 }
 
+type Group = (usize, u64, std::ops::Range<usize>);
+type Blocks = Vec<(CropRequest, codec::Encoded)>;
+
+/// One batch's cuts, in image order, run on `pool` while the caller (`progress`, at step
+/// count `done` before the batch) reports each finished image and keeps the heartbeat.
+/// The first failing image (or the caller's own check) stops the batch's other cuts; the
+/// error returned is the caller's, else the first real failure in image order.
+fn cut_batch(
+    captured: &FullCaptured,
+    batch: &[Group],
+    requests: &[CropRequest],
+    page_memory: u64,
+    (pool, progress, done): (
+        &rayon::ThreadPool,
+        &crate::mesh_large::phases::StepProgress<'_>,
+        usize,
+    ),
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+) -> Result<Vec<Blocks>, JobError> {
+    use std::sync::atomic::AtomicBool;
+    let results: Vec<std::sync::Mutex<Option<Result<Blocks, JobError>>>> =
+        batch.iter().map(|_| std::sync::Mutex::new(None)).collect();
+    let stop = AtomicBool::new(false);
+    let finished = (std::sync::Mutex::new(0usize), std::sync::Condvar::new());
+    let cut_check = || {
+        if stop.load(Ordering::Relaxed) {
+            Err(stopped_by_sibling())
+        } else {
+            check()
+        }
+    };
+    let mut caller_error = None;
+    pool.in_place_scope(|scope| {
+        for ((image, _, range), slot) in batch.iter().zip(&results) {
+            let (cut_check, stop, finished) = (&cut_check, &stop, &finished);
+            scope.spawn(move |_| {
+                let result = cut_image(
+                    captured,
+                    *image,
+                    page_memory,
+                    &requests[range.clone()],
+                    cut_check,
+                );
+                if result.is_err() {
+                    stop.store(true, Ordering::Relaxed);
+                }
+                *lock(slot) = Some(result);
+                *lock(&finished.0) += 1;
+                finished.1.notify_one();
+            });
+        }
+        let mut finished_count = lock(&finished.0);
+        while *finished_count < batch.len() {
+            if caller_error.is_none() {
+                if let Err(error) = progress.advance(count(done + *finished_count)) {
+                    stop.store(true, Ordering::Relaxed);
+                    caller_error = Some(error);
+                }
+            }
+            finished_count = finished
+                .1
+                .wait_timeout(finished_count, HEARTBEAT_WAIT)
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .0;
+        }
+    });
+    if let Some(error) = caller_error {
+        return Err(error);
+    }
+    let results: Vec<Result<Blocks, JobError>> = results
+        .into_iter()
+        .map(|slot| {
+            slot.into_inner()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .unwrap_or_else(|| Err(state("an image cut did not finish")))
+        })
+        .collect();
+    let sibling = stopped_by_sibling().to_string();
+    if let Some(error) = results
+        .iter()
+        .find_map(|r| r.as_ref().err().filter(|e| e.to_string() != sibling))
+    {
+        return Err(error.clone());
+    }
+    results.into_iter().collect()
+}
+
 /// Decodes one source image once and cuts each of its crops (at its density level, with
 /// its wrap) exactly as [`crops::copy_crop_tiled`] would from the decoded source.
 fn cut_image(
     captured: &FullCaptured,
     image: usize,
-    charge: u64,
+    page_memory: u64,
     requests: &[CropRequest],
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<Vec<(CropRequest, codec::Encoded)>, JobError> {
+) -> Result<Blocks, JobError> {
     check()?;
     let info = captured
         .image_info
@@ -516,7 +639,9 @@ fn cut_image(
     if decoded.width != info.width || decoded.height != info.height {
         return Err(state("decoded image size differs from its capture"));
     }
-    let limit = usize::try_from(charge).unwrap_or(usize::MAX);
+    // The page workspace bounds chain builds and cuts, as for pages cutting from decoded
+    // sources, so the store refuses exactly what they would.
+    let limit = usize::try_from(page_memory).unwrap_or(usize::MAX);
     let mut levels: BTreeMap<u8, Vec<mips::Level>> = BTreeMap::new();
     let mut scratch = Vec::new();
     let mut out = Vec::with_capacity(requests.len());
@@ -539,19 +664,29 @@ fn cut_image(
             }
             let level = levels
                 .get(&r.class)
-                .and_then(|l| l.get(drop as usize))
+                .and_then(|l| l.get(usize::try_from(drop).ok()?))
                 .ok_or_else(|| state("density level outside its chain"))?;
             (level.width, level.height, &level.rgba)
         };
-        let stride = w as usize;
-        let cut = crops::copy_crop_pixels(w, h, &r.crop(), r.sampler(), charge, |x, y| {
+        // The level cut from has the size the leaf's layout planned at this density, as a
+        // page cutting from the decoded density level checks.
+        let planned = [
+            (info.width >> u32::from(r.drop)).max(1),
+            (info.height >> u32::from(r.drop)).max(1),
+        ];
+        if [w, h] != planned {
+            return Err(state("density level differs from the planned source size"));
+        }
+        let stride = usize::try_from(w).map_err(|_| state("level width"))?;
+        let cut = crops::copy_crop_pixels(w, h, &r.crop(), r.sampler(), page_memory, |x, y| {
             let i = (y * stride + x) * 4;
             Ok([texels[i], texels[i + 1], texels[i + 2], texels[i + 3]])
         })?;
-        let block = codec::encode(
-            &predict(&cut, r.width as usize, r.height as usize),
-            &mut scratch,
+        let (cw, ch) = (
+            usize::try_from(r.width).map_err(|_| state("crop width"))?,
+            usize::try_from(r.height).map_err(|_| state("crop height"))?,
         );
+        let block = codec::encode(&predict(&cut, cw, ch), &mut scratch);
         out.push((*r, block));
     }
     Ok(out)

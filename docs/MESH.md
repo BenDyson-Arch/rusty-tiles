@@ -1238,8 +1238,11 @@ worker count. The store's index (160 bytes per crop) is held through delivery
 and its raw crop bytes are admitted as scratch beside the image store's bound. A
 page the store covers takes no source decode in its memory lease. The store is
 optional: when its index does not fit beside one leaf job, its largest image cut
-does not fit the page gate, scratch is memory-backed, or its raw crops do not fit
-the scratch volume, the stage runs without it and pages decode their sources.
+does not fit the page gate, scratch is memory-backed, its raw crops do not fit
+the scratch volume, or the run has no memory figure (no budget and no detected
+headroom), the stage runs without it and pages decode their sources. While a
+batch of images is cut, `leaf_crop_store` keeps its 250 ms heartbeat, and an
+image that fails stops the rest of its batch.
 MASK base colour pages and pages that repeat whole source periods always read
 decoded sources. Archives are byte-identical with and without the store.
 `leaf_delivery.crop_store` reports `crops`, `images`, `raw_bytes`,

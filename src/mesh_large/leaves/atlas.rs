@@ -886,22 +886,17 @@ fn store_crops(
     Ok(Some(keys))
 }
 /// Every crop a leaf's delivery at density `drop` can read from the crop store, from the
-/// same layout final preparation builds (the corner depths do not enter crops).
+/// same layout final preparation builds (the corner depths do not enter crops). Takes the
+/// leaf's triangles by value: the layout keeps them, so the pass holds one copy.
 pub(super) fn crop_requests(
-    triangles: &[FullTriangle],
+    triangles: Vec<FullTriangle>,
     resources: AtlasResources<'_>,
     profile: Profile,
     drop: u32,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Vec<super::crop_store::CropRequest>, JobError> {
-    let layout = layout(
-        (triangles.to_vec(), vec![[0; 3]; triangles.len()]),
-        resources,
-        profile,
-        drop,
-        None,
-        check,
-    )?;
+    let depths = vec![[0; 3]; triangles.len()];
+    let layout = layout((triangles, depths), resources, profile, drop, None, check)?;
     let mut keys = Vec::new();
     for page in &layout.pages {
         if let Some(page_keys) = store_crops(&layout, page, drop)? {
@@ -1329,7 +1324,16 @@ fn encode_page(
                 (Some(_), Some(_)) => None,
                 _ => Some(density_image(services, b.image, b.slot, drop, check)?),
             };
-            let size = source.as_ref().map_or(b.source_size, |s| s.size);
+            // A page cut from a decoded source checks that source's size; one cut from the
+            // store checks the captured image's size at this density (the store's cut checked
+            // the level it cut from against the same size).
+            let size = match &source {
+                Some(source) => source.size,
+                None => {
+                    let info = captured.image_info.get(b.image).ok_or_else(invariant)?;
+                    [(info.width >> drop).max(1), (info.height >> drop).max(1)]
+                }
+            };
             if size != b.source_size {
                 return Err(invariant());
             }

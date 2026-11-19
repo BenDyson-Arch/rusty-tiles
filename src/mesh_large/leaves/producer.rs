@@ -371,8 +371,11 @@ fn source_bytes(captured: &full::FullCaptured) -> Result<u64, JobError> {
         .ok_or_else(|| resource("leaf source byte overflow"))
 }
 /// Plans every leaf's store crops ([`super::crop_store::plan`]) unless the stage cannot use
-/// the store: no source images, or memory-backed scratch (positioned spill writes stay off
-/// memory-backed storage). Bounded by the memory the leaf stage could ever give the index.
+/// the store: no source images, memory-backed scratch (positioned spill writes stay off
+/// memory-backed storage), or no memory figure to admit it against (without a budget or a
+/// detected headroom the store is never used). The pass and the index it produces are
+/// bounded by the memory the leaf stage could ever give the index; the pass also holds one
+/// leaf's working set, its closure twice, as a leaf job does.
 pub(crate) fn crop_plan(
     config: &TreeConfig,
     captured: &full::FullCaptured,
@@ -385,12 +388,53 @@ pub(crate) fn crop_plan(
     if super::crop_store::DISABLED.with(std::cell::Cell::get) {
         return Ok(None);
     }
-    let index_memory = config
-        .available_memory()
-        .unwrap_or(0)
+    let Some(available) = config.available_memory() else {
+        return Ok(None);
+    };
+    let index_memory = available
         .saturating_sub(STAGE_RESERVE)
         .saturating_sub(cache_floor(&captured.image_info));
-    super::crop_store::plan(captured, config.profile, index_memory, progress)
+    let mut leaf_owned = 0u64;
+    for plan in captured.leaf_plans.reader()? {
+        leaf_owned = leaf_owned.max(plan?.owned_bytes);
+    }
+    super::crop_store::plan(
+        captured,
+        config.profile,
+        index_memory,
+        leaf_owned.saturating_mul(2),
+        progress,
+    )
+}
+/// Settles the leaf stage's plan and whether it cuts the crop store. The store is dropped
+/// where it does not fit: its memory ([`stage_plan`] then plans without it), or its raw
+/// crops beside the image store's spill on the scratch volume (a space refusal only; other
+/// errors propagate). The plan returned is the one the stage runs and reports.
+pub(crate) fn settle(
+    config: &TreeConfig,
+    captured: &full::FullCaptured,
+    crops: Option<super::crop_store::CropPlan>,
+) -> Result<(StagePlan, Option<super::crop_store::CropPlan>), JobError> {
+    let stage = stage_plan(config, captured, crops.as_ref())?;
+    let crops = crops.filter(|_| stage.crop_store);
+    let Some(plan) = crops else {
+        return Ok((stage, None));
+    };
+    let bound = image_scratch_bound(captured, &stage, Some(&plan))?;
+    #[cfg(test)]
+    if super::crop_store::STORE_SCRATCH_FREE
+        .with(std::cell::Cell::get)
+        .is_some_and(|free| crop_scratch(captured, Some(&plan)) > free)
+    {
+        return Ok((stage_plan(config, captured, None)?, None));
+    }
+    match preflight_image_scratch(captured, bound) {
+        Ok(()) => Ok((stage, Some(plan))),
+        Err(crate::spill::SpillError::InsufficientSpace(_)) => {
+            Ok((stage_plan(config, captured, None)?, None))
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 pub(crate) fn stage_plan(
     config: &TreeConfig,
@@ -604,35 +648,36 @@ fn source_cache(captured: &full::FullCaptured, stage: &StagePlan) -> Result<Sour
         !captured.scratch.memory_backed(),
     ))
 }
-/// Preflights the stage's image scratch (the cache's spill, file rounding and the crop
-/// store's raw crops) and returns that bound.
-fn image_scratch_preflight(
+/// The store's raw crops on scratch, each log rounded to an allocation unit.
+fn crop_scratch(captured: &full::FullCaptured, crops: Option<&super::crop_store::CropPlan>) -> u64 {
+    crops.map_or(0, |c| {
+        c.scratch_bytes
+            .saturating_add(captured.scratch.allocation_unit_bytes())
+    })
+}
+/// The stage's image scratch bound: the cache's spill, file rounding and the crop store's
+/// raw crops.
+fn image_scratch_bound(
     captured: &full::FullCaptured,
     stage: &StagePlan,
     crops: Option<&super::crop_store::CropPlan>,
 ) -> Result<u64, JobError> {
-    let crop_scratch = crops.map_or(0, |c| {
-        c.scratch_bytes
-            .saturating_add(captured.scratch.allocation_unit_bytes())
-    });
-    let bound = source_cache(captured, stage)?
+    Ok(source_cache(captured, stage)?
         .spill_bound()
         .saturating_add(super::super::image_tiles::file_rounding(captured))
-        .saturating_add(crop_scratch);
-    #[cfg(test)]
-    if super::crop_store::STORE_SCRATCH_FREE
-        .with(std::cell::Cell::get)
-        .is_some_and(|free| crop_scratch > free)
-    {
-        return Err(resource("test scratch volume is full"));
-    }
+        .saturating_add(crop_scratch(captured, crops)))
+}
+fn preflight_image_scratch(
+    captured: &full::FullCaptured,
+    bound: u64,
+) -> Result<(), crate::spill::SpillError> {
     crate::spill::preflight(
         captured.scratch.path(),
         bound,
         crate::spill::SpaceRole::Scratch,
         crate::spill::PreflightStage::Texture,
-    )?;
-    Ok(bound)
+    )
+    .map(drop)
 }
 /// Memory the leaf image store keeps outside its cached texels: image records and
 /// each worker's two tile readers. Carved out of the cache budget; an image-free
@@ -916,16 +961,10 @@ pub(crate) fn produce(
         escalation_diagnostics_omitted: 0,
         texel_ownership: TexelOwnership::default(),
     };
-    // The store is optional on scratch as on memory: when its crops do not fit the
-    // scratch volume beside the cache's spill, the stage runs as planned without it.
-    let replanned;
-    let (stage, crops) = match crops.filter(|_| stage.crop_store) {
-        Some(plan) if image_scratch_preflight(captured, stage, Some(&plan)).is_err() => {
-            replanned = stage_plan(config, captured, None)?;
-            (&replanned, None)
-        }
-        crops => (stage, crops),
-    };
+    // [`settle`] planned the stage with the store exactly when `crops` is given.
+    if crops.is_some() != stage.crop_store {
+        return Err(invariant("leaf stage plan and crop store disagree"));
+    }
     let jobs = usize::try_from(stage.jobs).map_err(|_| resource("delivery jobs overflow"))?;
     let window = usize::try_from(stage.window).map_err(|_| resource("delivery window overflow"))?;
     let pool = rayon::ThreadPoolBuilder::new()
@@ -934,7 +973,8 @@ pub(crate) fn produce(
         .build()
         .map_err(|e| resource(&format!("delivery worker pool: {e}")))?;
     let cache = source_cache(captured, stage)?;
-    let image_scratch_bound = image_scratch_preflight(captured, stage, crops.as_ref())?;
+    let image_scratch_bound = image_scratch_bound(captured, stage, crops.as_ref())?;
+    preflight_image_scratch(captured, image_scratch_bound)?;
     let image_scratch_base = captured.scratch.live_bytes();
     captured.scratch.begin_stage();
     let gate = MemoryGate::new(stage.gate_bytes);
@@ -947,6 +987,7 @@ pub(crate) fn produce(
                 captured,
                 plan,
                 stage.gate_bytes,
+                stage.page_bytes,
                 &pool,
                 &crop_progress,
                 check,
@@ -1360,8 +1401,8 @@ pub fn mesh_to_leaf_payloads(
             return Err(failed);
         }
     };
-    let stage_plan = match stage_plan(&config, &captured, crops.as_ref()) {
-        Ok(plan) => plan,
+    let (stage_plan, crops) = match settle(&config, &captured, crops) {
+        Ok(plans) => plans,
         Err(error) => {
             let mut failed = attempt.fail(error);
             close_failed_capture(captured, &mut failed);
@@ -2830,19 +2871,27 @@ mod tests {
             .num_threads(2)
             .build()
             .unwrap();
-        let plan = |memory| crop_store::plan(&captured, Profile::Balanced, memory, silent).unwrap();
+        let plan =
+            |memory| crop_store::plan(&captured, Profile::Balanced, memory, 0, silent).unwrap();
         let full_plan = plan(u64::MAX).unwrap();
         assert!(full_plan.requests.len() > 1);
         assert!(full_plan.requests.windows(2).all(|w| w[0] < w[1]));
         // The bound counts crops before deduplication: never more than it admits.
         assert!(plan(full_plan.index_bytes - 1).is_none());
         assert!(plan(0).is_none());
+        // The pass's own leaf working set is admitted beside the index: with the whole
+        // memory taken by it there is no room for the index, nor for more than the memory.
+        let pass = |leaf| crop_store::plan(&captured, Profile::Balanced, 1 << 30, leaf, silent);
+        assert!(pass(1 << 29).unwrap().is_some());
+        assert!(pass(1 << 30).unwrap().is_none());
+        assert!(pass((1 << 30) + 1).unwrap().is_none());
+        // The largest cut includes the log's write buffer.
         let largest = full_plan.largest_image_bytes;
         let ok = || Ok(());
         let build = |plan: crop_store::CropPlan,
                      memory,
                      check: &(dyn Fn() -> Result<(), JobError> + Sync)| {
-            crop_store::build(&captured, plan, memory, &pool, silent, check)
+            crop_store::build(&captured, plan, memory, u64::MAX, &pool, silent, check)
         };
         let error = build(plan(u64::MAX).unwrap(), largest - 1, &ok)
             .err()
@@ -2851,7 +2900,10 @@ mod tests {
         let store = build(plan(u64::MAX).unwrap(), largest, &ok).unwrap();
         let stats = store.stats();
         assert_eq!(stats.crops, full_plan.requests.len() as u64);
-        assert_eq!(stats.memory_peak_bytes, largest);
+        assert_eq!(
+            stats.memory_peak_bytes,
+            largest - crop_store::LOG_BUFFER_BYTES
+        );
         assert!(stats.written_bytes <= full_plan.scratch_bytes);
         for key in &full_plan.requests {
             assert_eq!(
@@ -2874,7 +2926,7 @@ mod tests {
             ))
         };
         let progress = StepProgress::new(&cancelled, None);
-        let error = crop_store::plan(&captured, Profile::Balanced, u64::MAX, &progress)
+        let error = crop_store::plan(&captured, Profile::Balanced, u64::MAX, 0, &progress)
             .err()
             .unwrap();
         assert_eq!(error.kind(), JobErrorKind::Cancelled);
@@ -2890,5 +2942,101 @@ mod tests {
             .err()
             .unwrap();
         assert_eq!(error.kind(), JobErrorKind::Cancelled);
+    }
+
+    /// While a batch's images are cut, the caller keeps the `leaf_crop_store` step's
+    /// heartbeat (events at most ~250 ms apart, here bounded by 600 ms on a loaded host),
+    /// not only at batch boundaries. A check that sleeps makes the one-image batch last well
+    /// over a second, so a heartbeat only at the end would leave a gap of that length.
+    #[test]
+    fn crop_store_build_keeps_its_step_heartbeat_inside_a_batch() {
+        use super::super::crop_store;
+        use crate::mesh_large::{
+            config::{Jobs, TreeConfig},
+            phases::StepProgress,
+        };
+        use std::time::{Duration, Instant};
+        let work = tempfile::tempdir().unwrap();
+        let input = scattered_fixture(&work.path().join("source"), 2_000, 9729);
+        let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(500);
+        config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+        let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+        let plan = crop_store::plan(
+            &captured,
+            Profile::Balanced,
+            u64::MAX,
+            0,
+            StepProgress::silent(),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(plan.requests.len() > 30);
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(2)
+            .build()
+            .unwrap();
+        let events = std::sync::Mutex::new(Vec::new());
+        let emit = |event: &crate::RunEvent<'_>| {
+            if let crate::RunEvent::Progress { phase, .. } = event {
+                if *phase == "leaf_crop_store" {
+                    events.lock().unwrap().push(Instant::now());
+                }
+            }
+            Ok(())
+        };
+        let ok = || Ok(());
+        let progress = StepProgress::new(&ok, Some(&emit));
+        let slow = || {
+            std::thread::sleep(Duration::from_millis(30));
+            Ok(())
+        };
+        let started = Instant::now();
+        crop_store::build(&captured, plan, u64::MAX, u64::MAX, &pool, &progress, &slow).unwrap();
+        let took = started.elapsed();
+        assert!(took > Duration::from_secs(1), "{took:?}");
+        let events = events.into_inner().unwrap();
+        let mut times = vec![started];
+        times.extend(events);
+        let gap = times.windows(2).map(|w| w[1] - w[0]).max().unwrap();
+        assert!(gap < Duration::from_millis(600), "gap {gap:?} in {took:?}");
+    }
+
+    /// An image whose cut fails stops its batch, and the failure reported is that image's
+    /// own error, never the stop the other images of the batch saw.
+    #[test]
+    fn a_failing_image_stops_its_batch_with_its_own_error() {
+        use super::super::crop_store;
+        use crate::mesh_large::{
+            config::{Jobs, TreeConfig},
+            phases::StepProgress,
+        };
+        let work = tempfile::tempdir().unwrap();
+        let (input, _) =
+            repeat_fixture(&work.path().join("source"), [33071; 2], [0.5; 2], 64, true);
+        let mut config = TreeConfig::new(Profile::Balanced);
+        config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+        let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+        let silent = StepProgress::silent();
+        let mut plan = crop_store::plan(&captured, Profile::Balanced, u64::MAX, 0, silent)
+            .unwrap()
+            .unwrap();
+        let images: std::collections::BTreeSet<u32> =
+            plan.requests.iter().map(|r| r.image).collect();
+        assert!(images.len() > 1, "{images:?}");
+        // The last image's first crop becomes inconsistent (no interior).
+        let last = *images.iter().last().unwrap();
+        let bad = plan.requests.iter_mut().find(|r| r.image == last).unwrap();
+        bad.interior = [0, 0];
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(2)
+            .build()
+            .unwrap();
+        let error = crop_store::build(&captured, plan, u64::MAX, u64::MAX, &pool, silent, &|| {
+            Ok(())
+        })
+        .err()
+        .unwrap();
+        assert_ne!(error.kind(), JobErrorKind::Cancelled, "{error}");
+        assert!(error.to_string().contains("inconsistent crop"), "{error}");
     }
 }
