@@ -66,8 +66,13 @@ exceeds 1 MB or the tree, `bench/` or `vendor/` exceeds its total budget; raise 
 budget only with a stated reason. On 2026-10-14, after
 trimming generated result files (listed in `bench/MOVED_EVIDENCE.md`), the tree
 budget went from 21.6 to 24.0 MB and `bench/` from 11.8 to 12.5 MB, because real
-code grew with the large-mesh tiler and validator-scale work. Trim before raising
-again. `vendor/` holds only third-party source vendored
+code grew with the large-mesh tiler and validator-scale work. On 2026-11-13, once
+the validator corpora were generated at test time, they were lowered to 21.0 MB
+and 8.5 MB. On 2026-11-20 the tree budget was re-based to 23.1 MB, about 1.1x the
+tree, after about 1.4 MB of real code (the capture rework, mesh-inspect, the
+source weld, subset bakes, the run report and the texture crop store and sparse
+chains); a `bench/` trim of generated results follows separately. Trim before
+raising again. `vendor/` holds only third-party source vendored
 for a shipped feature, one pinned version per component, replaced rather than
 accumulated, with its own budget and an exact-path list of upstream files allowed
 over 1 MB. The guard sees only the final tree, so a PR that adds
