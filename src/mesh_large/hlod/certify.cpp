@@ -46,7 +46,8 @@ struct Progress {
             flush();
     }
 };
-constexpr int MaxDepth = 7;
+constexpr int MaxDepth = 8;
+constexpr uint64_t FullFaceSplits = ((uint64_t{1} << (2 * MaxDepth)) - 1) / 3;
 constexpr U Denominator = 1u << 22;
 
 V sub(V a, V b) {
@@ -681,7 +682,7 @@ class Cover {
         }
         if (depth == 0)
             last = p.id;
-        if (depth < 6 && p.price > guide) {
+        if (depth + 1 < MaxDepth && p.price > guide) {
             Face raw = f;
             double displacement = 0.;
             if (depth) {
@@ -728,13 +729,11 @@ class Cover {
                     magnitude = std::max(magnitude, std::abs(double(value)));
                 }
         }
-        // A complete depth-seven split fits 5,461 splits per face. Usually the
-        // parent-face test stops most branches much earlier. Bound exceptional
-        // directions globally; when credits run short, retain a valid coarse cover.
-
+        // A full four-way tree has (4^depth - 1)/3 internal panels. The range's
+        // separate credit cap bounds work across all its original faces.
         for (U i = 0; i < n; ++i) {
             uint64_t before = splits;
-            int budget = static_cast<int>(std::min<uint64_t>(5461, credits));
+            int budget = static_cast<int>(std::min(FullFaceSplits, credits));
             const bool seeded = hints && hints[i] < index.planes.size();
             cover(lift(domain[i]), seeded ? hints[i] : last, 0, budget, seeded);
             credits -= splits - before;

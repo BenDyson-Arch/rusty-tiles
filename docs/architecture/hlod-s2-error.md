@@ -54,9 +54,12 @@ overestimate nearest distance. A separate lower-bound observation excludes
 can raise the target to 1.01 times that lower bound. A paid upper from an
 already accepted panel can also guide the remaining work. A panel stops when
 it has a complete upper under the target. Otherwise it can split four ways.
-At seven levels or exhaustion of its assigned split credits, it publishes the
-complete simplex upper. A work cap can widen the result beyond 1%. Every
-emitted value comes from actual witnesses across the whole domain.
+At eight levels or exhaustion of its assigned split credits, it publishes the
+complete simplex upper. The extra level resolves narrow edge incursions on
+long retessellated faces. The total credits for the range stay fixed. A work
+cap can widen the result beyond 1%. The formal relative gap applies when
+the outward-rounded upper meets the relative target. Every emitted value
+comes from actual witnesses across the whole domain.
 
 For an original-source comparison, take the larger directional upper bound.
 For a child comparison let L bound both directions between P and C, and E be
@@ -100,7 +103,7 @@ sign uses an error-free expansion of six binary32 products, each exactly
 representable in binary64. A nonzero product cannot underflow binary64.
 
 Let M be the maximum absolute coordinate of the target and the entire domain
-range, and u = 2⁻⁵³. Seven midpoint levels introduce at most 8uM per
+range, and u = 2⁻⁵³. Eight midpoint levels introduce at most 9uM per
 coordinate. Simplex interpolation and evaluation of its norm cost less than
 50uM. For projection, all selected affine slopes have magnitude at most eight.
 A difference of two coordinates costs up to 2uM. Multiplying it by one slope
