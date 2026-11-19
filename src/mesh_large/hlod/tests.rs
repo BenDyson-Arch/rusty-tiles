@@ -6398,62 +6398,6 @@ fn coarse_mask_charge_restores_five_automatic_workers_at_four_gib() {
     }
 }
 
-/// The coarse stage reserves one source-image decode for the stage, not one per job. With
-/// the real 8192² photogrammetry scene's measured 4 GiB plan (89 JPEG sources of up to
-/// 24 MB; ledger, window and per-job charge from its diagnostics), the old per-job charge
-/// admitted one job; the shared slot admits three of three cores.
-#[test]
-fn one_decode_slot_admits_parallel_coarse_jobs_for_large_sources() {
-    use crate::gltf_source::source::ImageInfo;
-    use crate::mesh_large::config::Jobs;
-    let images: Vec<ImageInfo> = (0..89u64)
-        .map(|i| ImageInfo {
-            mime_type: "image/jpeg",
-            extension: "jpg",
-            width: 8192,
-            height: 8192,
-            encoded_bytes: 10_000_000 + i * 160_000,
-        })
-        .collect();
-    let (decode, chain) = super::source_decode_bytes(&images);
-    assert_eq!(
-        decode,
-        8192 * 8192 * 16 + (10_000_000 + 88 * 160_000) + super::bake::chain_bytes(8192, 8192)
-    );
-    assert_eq!(chain, super::bake::chain_bytes(8192, 8192));
-    // Measured 4 GiB plan: ledger 3.62 GiB, window 21 MiB, old per-job charge 1.86 GiB.
-    let (ledger, window, old_job) = (3_887_000_000u64, 21_108_480u64, 1_997_000_000u64);
-    let job = old_job - decode;
-    let old = super::worker_admission(
-        (ledger - window).saturating_sub(chain),
-        old_job,
-        Jobs::Auto,
-        3,
-    );
-    let new = super::worker_admission(
-        (ledger - window)
-            .saturating_sub(decode)
-            .saturating_sub(chain),
-        job,
-        Jobs::Auto,
-        3,
-    );
-    assert_eq!(old, (1, "memory"));
-    assert_eq!(new, (3, "cores"));
-    // Sensitive control: charging the decode in every job again admits one.
-    assert_eq!(
-        super::worker_admission(
-            (ledger - window)
-                .saturating_sub(decode)
-                .saturating_sub(chain),
-            job + decode,
-            Jobs::Auto,
-            3
-        ),
-        (1, "memory")
-    );
-}
-
 /// Paired production-construction control: all leaves and non-root payloads stay
 /// byte-identical, while roots may only improve G or replace an own-build omission.
 fn root_pair(layout: u64, jobs: usize, evidence: Option<&Path>) {

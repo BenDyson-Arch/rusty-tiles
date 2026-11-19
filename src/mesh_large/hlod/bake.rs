@@ -6,7 +6,9 @@
 //!
 //! Hits record the donor's interpolants; images are then sampled grouped by image through
 //! immutable colour-correct mip chains ([`ImageCache`]). Each source/class is decoded
-//! once per stage; large working sets spill to a bounded cache of texel tiles.
+//! once per stage, one at a time in the stage's decode slot
+//! ([`super::HlodMemoryPlan::decode_bytes`]); large working sets spill to a bounded cache
+//! of texel tiles.
 use super::source_index::{Budget, Frontier, Hit as SourceHit, SourceQuery, Surface};
 use crate::{
     gltf_source::source::{self as gsource, TextureSlot},
@@ -17,7 +19,7 @@ use crate::{
     },
     JobError, JobErrorKind,
 };
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 
 fn state(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message.into())
@@ -392,7 +394,40 @@ pub(crate) struct ImageCache {
     /// The stage's one decode slot ([`super::HlodMemoryPlan::decode_bytes`]): a chain load
     /// holds it from the source decode until its chain is stored, so at most one decode
     /// transient is live however many jobs run.
-    decode_slot: Mutex<()>,
+    decode_slot: DecodeSlot,
+}
+
+/// How often a chain load waiting for the decode slot checks for cancellation.
+const SLOT_CHECK: std::time::Duration = std::time::Duration::from_millis(50);
+
+/// A held/free flag and its release signal: waiters check for cancellation between
+/// waits, so a stopped job does not wait out another job's whole decode.
+#[derive(Default)]
+struct DecodeSlot {
+    held: Mutex<bool>,
+    freed: Condvar,
+}
+struct SlotGuard<'a>(&'a DecodeSlot);
+impl DecodeSlot {
+    fn acquire(&self, check: &dyn Fn() -> Result<(), JobError>) -> Result<SlotGuard<'_>, JobError> {
+        let mut held = lock(&self.held);
+        while *held {
+            check()?;
+            held = self
+                .freed
+                .wait_timeout(held, SLOT_CHECK)
+                .unwrap_or_else(|p| p.into_inner())
+                .0;
+        }
+        *held = true;
+        Ok(SlotGuard(self))
+    }
+}
+impl Drop for SlotGuard<'_> {
+    fn drop(&mut self) {
+        *lock(&self.0.held) = false;
+        self.0.freed.notify_one();
+    }
 }
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -416,7 +451,7 @@ impl ImageCache {
             budget,
             store: crate::mesh_large::image_tiles::Store::new(budget, bound),
             state: Mutex::new(CacheState::default()),
-            decode_slot: Mutex::new(()),
+            decode_slot: DecodeSlot::default(),
         }
     }
     /// Bytes the chain store may spill to scratch (zero when every chain fits).
@@ -441,15 +476,19 @@ impl ImageCache {
         class: mips::Class,
         check: &dyn Fn() -> Result<(), JobError>,
     ) -> Result<Arc<StoredChain>, JobError> {
-        self.get_with(&captured.scratch, (image, class_rank(class)), &|| {
-            load(captured, image, class, check)
-        })
+        self.get_with(
+            &captured.scratch,
+            (image, class_rank(class)),
+            &|| load(captured, image, class, check),
+            check,
+        )
     }
     fn get_with(
         &self,
         scratch: &crate::spill::Scratch,
         key: (usize, u8),
         load: &dyn Fn() -> Result<Chain, JobError>,
+        check: &dyn Fn() -> Result<(), JobError>,
     ) -> Result<Arc<StoredChain>, JobError> {
         let cell = {
             let mut s = lock(&self.state);
@@ -466,7 +505,7 @@ impl ImageCache {
         cell.get_or_init(|| {
             let started = super::error::thread_cpu();
             let result = (|| {
-                let _slot = lock(&self.decode_slot);
+                let _slot = self.decode_slot.acquire(check)?;
                 let chain = load()?;
                 let levels = self.store.put(scratch, chain.levels)?;
                 Ok(Arc::new(Chain {
@@ -838,10 +877,15 @@ mod tests {
                         scope.spawn(move || {
                             for &image in order.iter().skip(worker) {
                                 let chain = cache
-                                    .get_with(scratch, (image, 2), &|| {
-                                        loads.fetch_add(1, Ordering::SeqCst);
-                                        Ok(build(image))
-                                    })
+                                    .get_with(
+                                        scratch,
+                                        (image, 2),
+                                        &|| {
+                                            loads.fetch_add(1, Ordering::SeqCst);
+                                            Ok(build(image))
+                                        },
+                                        &|| Ok(()),
+                                    )
                                     .unwrap();
                                 for (level, expected) in
                                     chain.levels.iter().zip(build(image).levels)
@@ -859,6 +903,124 @@ mod tests {
                 assert_eq!(stats.scratch_bytes == 0, budget >= bound);
             }
         }
+    }
+
+    /// Chain loads from concurrent workers on distinct images never overlap: the stage's
+    /// one decode slot admits one load at a time (high-water mark of live loads is 1, every
+    /// image loaded once). Sensitive control: the same loads run directly from the same
+    /// workers do overlap, so the mark can see it.
+    #[test]
+    fn concurrent_chain_loads_take_turns_in_the_decode_slot() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::time::Duration;
+        let build = |image: usize| -> Chain {
+            let level = mips::Level {
+                width: 4,
+                height: 4,
+                rgba: vec![image as u8; 64],
+            };
+            Chain {
+                bytes: chain_bytes(4, 4),
+                levels: vec![level],
+            }
+        };
+        let (live, peak, loads) = (
+            AtomicUsize::new(0),
+            AtomicUsize::new(0),
+            AtomicUsize::new(0),
+        );
+        // A load: enter, hold long enough for the other workers to arrive, leave.
+        let load = |image: usize| -> Result<Chain, JobError> {
+            let now = live.fetch_add(1, Ordering::SeqCst) + 1;
+            peak.fetch_max(now, Ordering::SeqCst);
+            loads.fetch_add(1, Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(20));
+            live.fetch_sub(1, Ordering::SeqCst);
+            Ok(build(image))
+        };
+        let scratch = crate::spill::Scratch::create(None, 0).unwrap();
+        let cache = ImageCache::new(u64::MAX, u64::MAX);
+        let start = std::sync::Barrier::new(4);
+        std::thread::scope(|scope| {
+            for worker in 0..4 {
+                let (cache, scratch, load, start) = (&cache, &scratch, &load, &start);
+                scope.spawn(move || {
+                    start.wait();
+                    for image in (0..12).map(|k| (k + worker * 3) % 12) {
+                        let chain = cache
+                            .get_with(scratch, (image, 0), &|| load(image), &|| Ok(()))
+                            .unwrap();
+                        assert_eq!(chain.levels[0].materialize().unwrap()[0], image as u8);
+                    }
+                });
+            }
+        });
+        assert_eq!(peak.load(Ordering::SeqCst), 1);
+        assert_eq!(loads.load(Ordering::SeqCst), 12);
+        // Control: the same loads outside the cache overlap.
+        peak.store(0, Ordering::SeqCst);
+        std::thread::scope(|scope| {
+            for worker in 0..4 {
+                let (load, start) = (&load, &start);
+                scope.spawn(move || {
+                    start.wait();
+                    load(worker).unwrap();
+                });
+            }
+        });
+        assert!(peak.load(Ordering::SeqCst) > 1);
+    }
+
+    /// A load waiting for the decode slot stops with the run's cancellation instead of
+    /// waiting out another job's decode, and leaves the slot to that job.
+    #[test]
+    fn a_load_waiting_for_the_decode_slot_stops_when_cancelled() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::{Duration, Instant};
+        let scratch = crate::spill::Scratch::create(None, 0).unwrap();
+        let cache = ImageCache::new(u64::MAX, u64::MAX);
+        let (holding, cancelled) = (AtomicBool::new(false), AtomicBool::new(false));
+        let chain = || Chain {
+            bytes: chain_bytes(1, 1),
+            levels: vec![mips::Level {
+                width: 1,
+                height: 1,
+                rgba: vec![0; 4],
+            }],
+        };
+        let slow = || -> Result<Chain, JobError> {
+            holding.store(true, Ordering::SeqCst);
+            std::thread::sleep(Duration::from_secs(2));
+            Ok(chain())
+        };
+        let check = || {
+            if cancelled.load(Ordering::SeqCst) {
+                Err(JobError::new(
+                    JobErrorKind::Cancelled,
+                    "operation cancelled",
+                ))
+            } else {
+                Ok(())
+            }
+        };
+        std::thread::scope(|scope| {
+            let holder =
+                scope.spawn(|| cache.get_with(&scratch, (0, 0), &slow, &|| Ok(())).is_ok());
+            while !holding.load(Ordering::SeqCst) {
+                std::thread::yield_now();
+            }
+            let waiter = scope.spawn(|| {
+                let started = Instant::now();
+                let result = cache.get_with(&scratch, (1, 0), &|| Ok(chain()), &check);
+                (result.err().map(|e| e.kind()), started.elapsed())
+            });
+            std::thread::sleep(Duration::from_millis(100));
+            cancelled.store(true, Ordering::SeqCst);
+            let (error, waited) = waiter.join().unwrap();
+            assert_eq!(error, Some(JobErrorKind::Cancelled));
+            assert!(waited < Duration::from_millis(1500), "{waited:?}");
+            assert!(holder.join().unwrap());
+        });
     }
 
     /// A non-finite footprint samples the group's finest requested level `need`
@@ -949,8 +1111,12 @@ mod tests {
             let bound = chain_bytes(257, 129);
             let resident = ImageCache::new(bound, bound);
             let tiled = ImageCache::new(66048, bound);
-            let a = resident.get_with(&scratch, (0, 0), &build).unwrap();
-            let b = tiled.get_with(&scratch, (0, 0), &build).unwrap();
+            let a = resident
+                .get_with(&scratch, (0, 0), &build, &|| Ok(()))
+                .unwrap();
+            let b = tiled
+                .get_with(&scratch, (0, 0), &build, &|| Ok(()))
+                .unwrap();
             for wrap in [10497, 33648, 33071] {
                 for filter in [9728, 9729] {
                     let sampler = crops::SourceSampler {

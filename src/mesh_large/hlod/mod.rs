@@ -270,10 +270,10 @@ fn chart_workspace(edge: u32, cap: usize) -> u64 {
     )
 }
 
-/// One worker's source-image decode transient and the chain it holds while sampling,
-/// besides the shared cache, with the largest chain alone: 16 bytes per texel of the
-/// largest image (decoder output, RGBA and chain build copy), the largest encoded image
-/// at its actual length (a different image when that is larger), and the largest chain.
+/// The stage's decode slot ([`HlodMemoryPlan::decode_bytes`]), with the largest chain alone
+/// (the image cache's floor): 16 bytes per texel of the largest image (decoder output, RGBA
+/// and chain build copy), the largest encoded image at its actual length (a different image
+/// when that is larger), and the largest chain.
 fn source_decode_bytes(images: &[crate::gltf_source::source::ImageInfo]) -> (u64, u64) {
     let largest = images
         .iter()
