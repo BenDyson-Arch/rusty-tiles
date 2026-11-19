@@ -447,7 +447,8 @@ pub(crate) fn settle(
             .map(|c| c.index_bytes);
         match hlod(coarse) {
             Ok(hlod) => return Ok((stage, crops, hlod)),
-            Err(_) if coarse.is_some() => {
+            // Only a memory refusal drops the sparse chains; any other error is the run's own.
+            Err(error) if coarse.is_some() && error.kind() == JobErrorKind::ResourceLimit => {
                 crops = crops.map(super::crop_store::CropPlan::without_coarse);
             }
             Err(error) => return Err(error),
