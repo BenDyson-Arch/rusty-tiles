@@ -148,6 +148,19 @@ pub struct LastResortRecord {
     pub refused_controls: u32,
 }
 
+/// What P1 did in one cell where it ran, built or omitted (`geometry::p1::Report`): its
+/// outcome, work units per pass against the limit, and Steiner rescues made and refused.
+/// Deterministic, so runs compare exactly.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct P1Record {
+    /// The cell's first node and cell depth.
+    pub first: u64,
+    pub depth: u32,
+    #[serde(flatten)]
+    pub(crate) report: geometry::p1::Report,
+}
+
 /// A tile declaring `asset.extras.rustyTiles.lastResort` (D1/D11 amendment A2).
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct DeclaredTile {
@@ -642,6 +655,9 @@ pub(crate) struct HlodReport {
     /// Every tile only a retry published, in walk order (`LastResortRecord`).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub last_resort_records: Vec<LastResortRecord>,
+    /// Every cell where P1 ran, in walk order (`P1Record`); reported in the diagnostics.
+    #[serde(skip)]
+    pub p1_records: Vec<P1Record>,
     /// Content-less cells (omitted coarse tiles), by cell depth, and of them the sources:
     /// cells whose exact interface (or topology plain simplification cannot reduce) needs
     /// more triangles than the cap. Includes propagation and pass-through cells. A declared
@@ -757,6 +773,8 @@ pub struct HlodDiagnostics {
     pub declared_tiles: Vec<DeclaredTile>,
     /// Every tile only a retry published, declared or not (`last_resort_tiles` of them).
     pub last_resort_records: Vec<LastResortRecord>,
+    /// Every cell where P1 ran, built or omitted (`P1Record`).
+    pub p1_records: Vec<P1Record>,
     pub jobs: u64,
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
     pub cpu_seconds: Option<f64>,
@@ -920,6 +938,7 @@ enum Finished {
         topology_attempts: u32,
         construction_topology: Option<audit::Index>,
         root_search: Option<(error::SearchStats, f64, root_competition::Timing)>,
+        p1: Option<Box<geometry::p1::Report>>,
     },
 }
 
@@ -1222,6 +1241,7 @@ pub(crate) fn produce(
     diagnostics.fold_faces = report.fold_faces;
     diagnostics.declared_tiles = report.declared_tiles.clone();
     diagnostics.last_resort_records = report.last_resort_records.clone();
+    diagnostics.p1_records = report.p1_records.clone();
     diagnostics.omitted_proxies = report.omitted_proxies;
     diagnostics.omission_sources = report.omission_sources;
     diagnostics.omitted_by_depth = report.omitted_by_depth.clone();
@@ -1244,6 +1264,7 @@ pub(crate) fn produce(
             "last_resort_tiles": diagnostics.last_resort_tiles,
             "last_resort_stages": diagnostics.last_resort_stages,
             "last_resort_records": diagnostics.last_resort_records,
+            "p1_records": diagnostics.p1_records,
             "fold_faces": diagnostics.fold_faces,
             "scratch_peak_bytes": diagnostics.stage_scratch_peak_bytes,
             "scratch_bound_bytes": diagnostics.stage_scratch_bound_bytes,
@@ -1925,6 +1946,7 @@ fn build_tile(
         outcome
     } else {
         geometry::Outcome {
+            p1: None,
             built: None,
             contraction_failed: false,
             attempted_topology: Default::default(),
@@ -2012,6 +2034,7 @@ fn build_tile(
                 })
                 .collect::<Result<_, JobError>>()?,
             topology: Box::new(outcome.attempted_topology),
+            p1: outcome.p1.map(Box::new),
             topology_attempts,
             root_search: root_competition
                 .as_ref()
@@ -2213,6 +2236,7 @@ fn build_tile(
             .retry
             .filter(|_| built.last_resort)
             .map(|r| (r, refused)),
+        p1: outcome.p1,
         fold_faces: if last_resort.is_some() { fold_faces } else { 0 },
         declared_folds: last_resort.is_some(),
         carries_folds,
@@ -2292,6 +2316,13 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     report.protected_faces += u64::from(row.protected_faces);
     report.retries += u64::from(row.retries);
     report.last_resort_tiles += u64::from(row.last_resort);
+    if let Some(p1) = row.p1 {
+        report.p1_records.push(P1Record {
+            first: row.first,
+            depth: row.encoded_depth,
+            report: p1,
+        });
+    }
     if let Some((retry, refused)) = row.retry {
         report.last_resort_records.push(LastResortRecord {
             first: row.first,
@@ -2568,6 +2599,7 @@ fn walk(
                         topology_attempts: 0,
                         construction_topology: None,
                         root_search: None,
+                        p1: None,
                     };
                     let _ = sender.send((
                         closed.id,
@@ -2721,7 +2753,15 @@ fn walk(
                         topology_attempts,
                         construction_topology,
                         root_search,
+                        p1,
                     } => {
+                        if let Some(report_p1) = p1 {
+                            report.p1_records.push(P1Record {
+                                first: key.first,
+                                depth: key.depth,
+                                report: *report_p1,
+                            });
+                        }
                         if let Some((search, cpu, timing)) = root_search {
                             report.root_competition_timing.add(timing);
                             report.error_measurement.nearest.add(search);

@@ -250,6 +250,9 @@ pub(crate) struct HlodRow {
     /// How a retry published it, and its refused proposals by check (`LastResortRecord`).
     #[serde(skip)]
     pub retry: Option<(super::geometry::Retry, [u32; 3])>,
+    /// What P1 did for this cell, if it ran (`P1Record`).
+    #[serde(skip)]
+    pub p1: Option<super::geometry::p1::Report>,
     /// The last-resort stage that built it (1-3) and its declared fold faces.
     #[serde(skip_serializing_if = "is_zero")]
     pub last_resort_stage: u8,

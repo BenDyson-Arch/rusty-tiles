@@ -64,6 +64,50 @@ fn fits(vertices: usize, faces: usize, rows: usize) -> bool {
             .saturating_add(super::super::JOB_ENCODE_BYTES)
 }
 
+/// What P1 did in one cell (`p1Records` in the stage report). `outcome`: `built`,
+/// `refused` (assessment refused its proposal), `noProposal` (a pass finished but its
+/// result failed the cap, a contract segment or point, the fold guard or the topology
+/// floor), `exhausted` (a pass spent its work budget), `stalled` (border removals left
+/// in both passes) or `skipped` (the contract alone exceeds the cap, or the workspace
+/// estimate exceeds the job's charge). Per pass (stage 0, 1): work units spent, removals
+/// left and Steiner rescues made and refused (`collapse::Stats::steiner_why`).
+#[derive(Clone, Copy, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct Report {
+    pub outcome: &'static str,
+    pub faces: u64,
+    pub work_limit: u64,
+    pub passes: u8,
+    pub work: [u64; 2],
+    pub removals_left: [u64; 2],
+    pub steiner: [u64; 2],
+    pub steiner_refused: [[u64; 6]; 2],
+}
+
+impl Report {
+    fn new(outcome: &'static str, faces: usize) -> Self {
+        Self {
+            outcome,
+            faces: u64::try_from(faces).unwrap_or(u64::MAX),
+            work_limit: work_limit(faces),
+            passes: 0,
+            work: [0; 2],
+            removals_left: [0; 2],
+            steiner: [0; 2],
+            steiner_refused: [[0; 6]; 2],
+        }
+    }
+
+    fn pass(&mut self, stage: u8, stats: &collapse::Stats) {
+        let i = usize::from(stage.min(1));
+        self.passes = self.passes.max(stage + 1);
+        self.work[i] = stats.work;
+        self.removals_left[i] = stats.removed_left;
+        self.steiner[i] = stats.steiner;
+        self.steiner_refused[i] = stats.steiner_why;
+    }
+}
+
 /// The P1 proposal for `tile`, with the last-resort stage that licensed it (0 or 1), or
 /// none. `caps` are the build's caps (target first, hard cap last).
 pub(super) fn attempt(
@@ -73,20 +117,21 @@ pub(super) fn attempt(
     contract: &Contract,
     mapping: &BorderMap<'_>,
     lattice: &LatticePlan,
-) -> Result<Option<(u8, Built)>, JobError> {
+) -> Result<(Option<(u8, Built)>, Report), JobError> {
+    let rows: usize = children.iter().map(|c| c.interface.len()).sum();
+    let vertices: usize = children.iter().map(|c| c.positions.len()).sum();
+    let faces: usize = children.iter().map(|c| c.triangles.len()).sum();
+    let mut report = Report::new("skipped", faces);
     let (Some(&target), Some(&cap)) = (caps.first(), caps.last()) else {
-        return Ok(None);
+        return Ok((None, report));
     };
     // A contract that alone needs more than the cap cannot be kept (production never
     // builds one; `build_tile` filters it out).
     if contract.minimum_triangles() > cap {
-        return Ok(None);
+        return Ok((None, report));
     }
-    let rows: usize = children.iter().map(|c| c.interface.len()).sum();
-    let vertices: usize = children.iter().map(|c| c.positions.len()).sum();
-    let faces: usize = children.iter().map(|c| c.triangles.len()).sum();
     if !fits(vertices, faces, rows) {
-        return Ok(None);
+        return Ok((None, report));
     }
     let m = merge(children);
     let interface = &contract.interface;
@@ -242,13 +287,21 @@ pub(super) fn attempt(
         if let Some(e) = failure.borrow_mut().take() {
             return Err(e);
         }
+        report.pass(stage, &stats);
         if stats.exhausted {
             // Its work bound is spent: the second pass would meet the same mesh.
-            return Ok(None);
+            report.outcome = "exhausted";
+            return Ok((None, report));
         }
         let Some(faces) = out else {
+            report.outcome = if stats.removed_left > 0 {
+                "stalled"
+            } else {
+                "noProposal"
+            };
             continue;
         };
+        report.outcome = "noProposal";
         if faces.len() > cap || faces.is_empty() {
             continue;
         }
@@ -266,8 +319,8 @@ pub(super) fn attempt(
             folds::Policy::default()
         };
         if let Some(built) = publishable(&with_added, &faces, &mapped, stage_policy) {
-            return Ok(Some((stage, built)));
+            return Ok((Some((stage, built)), report));
         }
     }
-    Ok(None)
+    Ok((None, report))
 }

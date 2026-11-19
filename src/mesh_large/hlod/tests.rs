@@ -6819,6 +6819,21 @@ fn every_ladder_build_publishes_with_its_record() {
             assert_eq!(r["refusedDecode"], 0, "k={k}: {r}");
             assert_eq!(r["refusedTopology"], 0, "k={k}: {r}");
         }
+        // P1's own record: its proposal built the cell (k = 1) or assessment refused it,
+        // within its work limit.
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        let p1 = resources["hlod"]["diagnostics"]["p1_records"]
+            .as_array()
+            .unwrap();
+        let outcome = if k == 1 { "built" } else { "refused" };
+        assert!(p1.iter().any(|r| r["outcome"] == outcome), "k={k}: {p1:?}");
+        for r in p1 {
+            let limit = r["workLimit"].as_u64().unwrap();
+            assert_ne!(r["outcome"], "exhausted", "k={k}: {r}");
+            assert!(r["work"][0].as_u64().unwrap() <= limit, "k={k}: {r}");
+            assert!(r["passes"].as_u64().unwrap() <= 2, "k={k}: {r}");
+        }
         if k == 6 {
             published_and_valid("refused ladder", &dir, work.path());
         }

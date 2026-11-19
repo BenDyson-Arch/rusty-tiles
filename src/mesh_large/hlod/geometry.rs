@@ -13,7 +13,7 @@ pub(crate) mod embedding;
 pub(crate) mod folds;
 pub(crate) mod locations;
 pub(crate) mod measurement;
-mod p1;
+pub(crate) mod p1;
 mod relief;
 mod sheets;
 mod topology;
@@ -279,6 +279,8 @@ pub(crate) struct Outcome {
     pub relief: Option<Contracted>,
     /// Exact repeats skipped (`Repeats`); set by `build_parent`.
     pub reused: Reused,
+    /// What P1 did, when `build_parent` ran it (`p1::Report`).
+    pub p1: Option<p1::Report>,
 }
 
 /// A border contraction handed to the last resort's N3 (A1 border relief): the merged
@@ -1058,16 +1060,22 @@ pub(crate) fn build_parent(
     let primary_contraction_failed = first.contraction_failed;
     // P1: one guard-by-construction contraction before the retry ladder. It is outside
     // `build`, so the ladder's exact-repeat reuse is unchanged.
-    let proposal = if p1 {
-        p1::attempt(tile, children, caps, contract, mapping, lattice)?
+    let (proposal, mut report) = if p1 {
+        let (proposal, report) = p1::attempt(tile, children, caps, contract, mapping, lattice)?;
+        (proposal, Some(report))
     } else {
-        None
+        (None, None)
     };
     if let Some((stage, mut b)) = proposal {
         b.last_resort_stage = stage;
         b.staged = stage > 0;
-        if assess(&mut b)? {
+        let accepted = assess(&mut b)?;
+        if let Some(r) = &mut report {
+            r.outcome = if accepted { "built" } else { "refused" };
+        }
+        if accepted {
             first.built = Some(b);
+            first.p1 = report;
             first.reused = repeats.reused;
             first.retry = Some(Retry {
                 resort: "p1",
@@ -1138,6 +1146,7 @@ pub(crate) fn build_parent(
         root_competition: false,
     });
     last.reused = repeats.reused;
+    last.p1 = report;
     Ok(last)
 }
 
@@ -1267,6 +1276,7 @@ fn build(
         if let Some(receipt) = repeats.failed_contraction(&class) {
             repeats.reused.contractions += 1;
             return Ok(Outcome {
+                p1: None,
                 built: None,
                 contraction_failed: true,
                 attempted_topology: receipt,
@@ -1341,6 +1351,7 @@ fn build(
                 repeats.failed.push((class, attempted));
             }
             return Ok(Outcome {
+                p1: None,
                 built: None,
                 contraction_failed: true,
                 attempted_topology: attempted,
@@ -1394,6 +1405,7 @@ fn build(
                     repeats.failed.push((class, attempted));
                 }
                 return Ok(Outcome {
+                    p1: None,
                     built: None,
                     contraction_failed: true,
                     attempted_topology: attempted,
@@ -1457,6 +1469,7 @@ fn build(
                 attempted.add(topology);
                 b.topology.add(topology);
                 return Ok(Outcome {
+                    p1: None,
                     built: Some(b),
                     contraction_failed: false,
                     attempted_topology: attempted,
@@ -1480,6 +1493,7 @@ fn build(
     if resort.stage() > 0 {
         attempted.add(topology);
         return Ok(Outcome {
+            p1: None,
             built: None,
             contraction_failed: false,
             attempted_topology: attempted,
@@ -1538,6 +1552,7 @@ fn build(
                 attempted.add(topology);
                 b.topology.add(topology);
                 return Ok(Outcome {
+                    p1: None,
                     built: Some(b),
                     contraction_failed: false,
                     attempted_topology: attempted,
@@ -1723,6 +1738,7 @@ fn build(
         topology.opened_holes = 0;
         b.topology.add(topology);
         return Ok(Outcome {
+            p1: None,
             built: Some(b),
             contraction_failed: false,
             attempted_topology: attempted,
@@ -1734,6 +1750,7 @@ fn build(
     }
     attempted.add(topology);
     Ok(Outcome {
+        p1: None,
         built: None,
         contraction_failed: false,
         attempted_topology: attempted,

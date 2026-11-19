@@ -224,6 +224,27 @@ struct State<'a> {
     work: Cell<u64>,
     /// Keys a Steiner vertex may not take (`State::taken`).
     taken: Option<HashSet<Key>>,
+    /// Per vertex: neighbourhood changes to skip before a stuck vertex is tried again
+    /// (`retry_wait`).
+    retry_after: Vec<u32>,
+}
+
+/// Targets a vertex tries per pop (its cheapest), and the candidate count above which a
+/// vertex is not requeued after every change around it.
+const RETRY_VALENCE: usize = 64;
+
+/// Changes around a vertex with `candidates` targets before it is requeued or, when stuck,
+/// tried again. A fan apex of valence k was requeued after each of its k neighbours'
+/// collapses, each requeue scanning all k targets (O(k²) work), and when stuck it also
+/// checked every target at O(k) each (O(k³)). With at most `RETRY_VALENCE` targets per
+/// pop and a wait of k/16 changes, both cost a bounded amount of work per change.
+/// Ordinary vertices (at most `RETRY_VALENCE` candidates) behave as before.
+fn retry_wait(tried: usize) -> u32 {
+    if tried > RETRY_VALENCE {
+        u32::try_from(tried / 16).unwrap_or(u32::MAX)
+    } else {
+        0
+    }
 }
 
 /// Orientation bit of a face relative to its sorted triple (0: even permutation).
@@ -376,15 +397,18 @@ impl<'a> State<'a> {
         out
     }
 
-    fn push(&mut self, heap: &mut BinaryHeap<Entry>, u: u32) {
+    /// Queues `u` at its cheapest target's cost; returns its candidate count.
+    fn push(&mut self, heap: &mut BinaryHeap<Entry>, u: u32) -> usize {
         self.stamp[u as usize] += 1;
-        if let Some(&(cost, _)) = self.candidates(u).first() {
+        let candidates = self.candidates(u);
+        if let Some(&(cost, _)) = candidates.first() {
             heap.push(Entry {
                 cost,
                 u,
                 stamp: self.stamp[u as usize],
             });
         }
+        candidates.len()
     }
 
     /// Whether `u -> v` keeps every guard property.
@@ -428,8 +452,15 @@ impl<'a> State<'a> {
                     .unwrap_or(u32::MAX)
             })
             .collect();
-        for &w in &nu {
-            if w != v && nv.contains(&w) && !expected.contains(&w) {
+        // `nv` is the latest scan: its vertices carry the current epoch (linear test).
+        let in_nv = {
+            let (mark, epoch) = (self.mark.borrow(), self.epoch.get());
+            nu.iter()
+                .map(|&w| mark.get(w as usize) == Some(&epoch))
+                .collect::<Vec<bool>>()
+        };
+        for (&w, &shared) in nu.iter().zip(&in_nv) {
+            if w != v && shared && !expected.contains(&w) {
                 return 2;
             }
         }
@@ -895,6 +926,7 @@ impl<'a> State<'a> {
         self.pos.push(psd);
         self.added.push((ps32, r));
         self.class.push(Class::Free);
+        self.retry_after.push(0);
         self.iface.push(false);
         self.vf.push(Vec::new());
         let qr = self.q[r as usize];
@@ -1015,6 +1047,7 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
         epoch: Cell::new(0),
         work: Cell::new(0),
         taken: None,
+        retry_after: vec![0; n],
     };
     for (i, &t) in p.triangles.iter().enumerate() {
         for j in 0..3 {
@@ -1085,14 +1118,29 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
                 continue;
             }
             let mut done = false;
-            for (_, v) in st.candidates(u) {
+            let candidates = st.candidates(u);
+            let tried = candidates.len();
+            // A high-valence vertex tries its cheapest `RETRY_VALENCE` targets: each check
+            // moves all its faces, so trying every target would cost its valence squared.
+            for (_, v) in candidates.into_iter().take(RETRY_VALENCE) {
                 if st.valid(u, v) {
                     st.apply(u, v);
                     st.neighbours(v, &mut nb);
                     let list = nb.clone();
-                    st.push(&mut heap, v);
+                    let n = st.push(&mut heap, v);
+                    st.retry_after[v as usize] = retry_wait(n);
                     for w in list {
-                        st.push(&mut heap, w);
+                        // A high-valence neighbour is queued again only after a share of its
+                        // neighbourhood has changed, not after every change: each requeue
+                        // scans all its targets (`retry_wait`). Its queued entry stays valid
+                        // meanwhile, and a pop recomputes its targets.
+                        let wait = &mut st.retry_after[w as usize];
+                        if *wait > 0 {
+                            *wait -= 1;
+                            continue;
+                        }
+                        let n = st.push(&mut heap, w);
+                        st.retry_after[w as usize] = retry_wait(n);
                     }
                     done = true;
                     break;
@@ -1102,6 +1150,7 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
             if !done {
                 // stuck until a neighbour changes (it is pushed again then)
                 st.stamp[u as usize] += 1;
+                st.retry_after[u as usize] = retry_wait(tried);
             }
         }
         // Rescue: a border vertex left on its arc. Simplify the free vertices around it
@@ -1706,9 +1755,9 @@ mod tests {
         stats
     }
 
-    /// The work count grows linearly on an ordinary mesh, and the limit stops a pass on a
-    /// high-valence fan (whose apex is re-scanned after every collapse around it) with no
-    /// result, so the ladder continues instead.
+    /// The work count grows linearly on an ordinary mesh and on a high-valence fan whose
+    /// apex has no valid collapse, and the limit stops a pass with no result, so the ladder
+    /// continues instead.
     #[test]
     fn work_is_linear_on_a_grid_and_bounded_on_a_fan() {
         let (positions, triangles, class) = grid(128);
@@ -1727,10 +1776,14 @@ mod tests {
         let (positions, triangles, class) = fan(4000);
         let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
         let faces = triangles.len() as u64;
+        // The stuck apex is retried only after a share of its rim changed, and tries its
+        // cheapest targets: work stays linear (it exceeded 1,000 units per face before).
         let unbounded = free(&positions, &triangles, class.clone(), &keys, 16, u64::MAX);
-        assert!(unbounded.work > 1000 * faces, "{unbounded:?}");
-        let bounded = free(&positions, &triangles, class, &keys, 16, 64 * faces);
+        assert!(!unbounded.exhausted, "{unbounded:?}");
+        assert!(unbounded.work < 256 * faces, "{unbounded:?}");
+        // A smaller budget still stops the pass, with no result.
+        let bounded = free(&positions, &triangles, class, &keys, 16, faces);
         assert!(bounded.exhausted, "{bounded:?}");
-        assert!(bounded.work <= 64 * faces + 4 * 4001, "{bounded:?}");
+        assert!(bounded.work <= faces + 4 * 4001, "{bounded:?}");
     }
 }
