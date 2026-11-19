@@ -626,7 +626,7 @@ pub(crate) fn copy_crop_tiled(
         |x, y| reader.pixel(x, y),
     )
 }
-fn copy_crop_pixels(
+pub(crate) fn copy_crop_pixels(
     source_width: u32,
     source_height: u32,
     crop: &Crop,

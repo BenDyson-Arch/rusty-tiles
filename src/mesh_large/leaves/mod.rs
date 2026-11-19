@@ -1,5 +1,6 @@
 //! Leaf encoding foundations. The producer owns their frozen plans and budgets.
 pub(super) mod atlas;
+pub(in crate::mesh_large) mod crop_store;
 pub(in crate::mesh_large) mod crops;
 pub(in crate::mesh_large) mod delivery;
 pub(in crate::mesh_large) mod geometry;

@@ -1228,6 +1228,28 @@ memory only when the planned cache cannot hold every source image. Leaf density
 chains never spill there; they are rebuilt from the decoded source when they do
 not fit.
 
+Leaf pages read their texels from a crop store cut before any leaf is built.
+The leaf stage plans every leaf's crops at its planned density, then decodes
+each source image once and cuts all of its crops (from a reduced chain for
+density-stepped leaves) into one scratch file, each crop a vertical-predictor
+residual in an LZ4 block. Images are cut in parallel in fixed batches within the
+page gate's memory, so neither the output nor the memory peak depends on the
+worker count. The store's index (160 bytes per crop) is held through delivery
+and its raw crop bytes are admitted as scratch beside the image store's bound. A
+page the store covers takes no source decode in its memory lease. The store is
+optional: when its index does not fit beside one leaf job, its largest image cut
+does not fit the page gate, scratch is memory-backed, its raw crops do not fit
+the scratch volume, or the run has no memory figure (no budget and no detected
+headroom), the stage runs without it and pages decode their sources. While a
+batch of images is cut, `leaf_crop_store` keeps its 250 ms heartbeat, and an
+image that fails stops the rest of its batch.
+MASK base colour pages and pages that repeat whole source periods always read
+decoded sources. Archives are byte-identical with and without the store.
+`leaf_delivery.crop_store` reports `crops`, `images`, `raw_bytes`,
+`written_bytes`, `memory_bytes`, `memory_peak_bytes`, `index_bytes`,
+`plan_seconds`, `build_seconds` and `misses` (pages the store could not serve,
+which then decode their sources); it is `null` when the stage ran without it.
+
 A free-space check is not a reservation against other writers. Working files
 are removed on success and failure. A cleanup failure reports the paths
 involved and does not replace the original error.
@@ -1594,7 +1616,10 @@ stage's `hlod_incidence` phase reports its steps the same way:
 `hlod_incidence_items` (triangles read into their leaves' interface items),
 `hlod_incidence_reduce` (items merged into shared rows) and `hlod_incidence_ends`
 (two units per open-edge endpoint), with `hlod_incidence_merge` for an
-intermediate merge pass. Required
+intermediate merge pass. Before `leaf_build`, a run with source images on
+disk-backed scratch reports `leaf_crop_plan` (leaves re-projected for their
+crops) and, when it builds the crop store, `leaf_crop_store` (source images
+cut), the same way. Required
 events finish before publication; a successful result means the archive is
 installed. A cleanup problem after installation is still success, with cleanup
 diagnostics.
