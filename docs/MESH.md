@@ -610,7 +610,10 @@ no selector.
   meets another face outside their common vertices (exact predicates). The Steiner vertex keeps its canonical decode,
   and its faces are checked again on the delivered positions. Its proposal is
   assessed like any other; a second pass adds the stage-1 seam-owner licence and
-  is declared as stage 1. Tiles the ordinary build publishes are unchanged.
+  is declared as stage 1. P1 runs only where the ordinary build publishes
+  nothing; the ordinary build's tiles change only where the corrected chord
+  licence (exterior child segments only, which every build's contraction guard
+  uses) changes what the guard accepts.
 - **Last resorts.** When ordinary simplification and P1 cannot meet the cap,
   the [last-resort stages](#last-resort-declarations) run.
 - **Residual omission.** A coarse tile is omitted only if the shared border

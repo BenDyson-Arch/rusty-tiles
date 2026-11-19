@@ -142,17 +142,26 @@ pub(super) fn attempt(
     let floor = contract.scale.max(children_error);
     let (mut prob, mapped0, previous) =
         collapse::problem(&m, children, interface, mapping, target, 0.)?;
+    // The guard counts only exterior child rows as path witnesses.
+    let leaves = [tile.leaf_begin, tile.leaf_end];
     prob.limit = cap;
     prob.steiner = true;
     // The guard's own directed licences between shared points: P1 and the contraction
     // fold guard below count one source (literal edges and the contract's chord paths).
     let shared = {
         let ids = collapse::key_index(&m.keys);
-        folds::Source::for_contraction(&m.positions, &m.triangles, interface, &previous, &mapped0)
-            .boundary_edges()
-            .into_iter()
-            .filter_map(|(a, b, n)| Some(((*ids.get(&a)?, *ids.get(&b)?), n)))
-            .collect()
+        folds::Source::for_contraction(
+            &m.positions,
+            &m.triangles,
+            interface,
+            &previous,
+            leaves,
+            &mapped0,
+        )
+        .boundary_edges()
+        .into_iter()
+        .filter_map(|(a, b, n)| Some(((*ids.get(&a)?, *ids.get(&b)?), n)))
+        .collect()
     };
     prob.shared = Some(shared);
     prob.work_limit = work_limit(m.triangles.len());
@@ -210,6 +219,7 @@ pub(super) fn attempt(
             &m.triangles,
             interface,
             &previous,
+            leaves,
             mapped,
         )
         .with_policy(policy);

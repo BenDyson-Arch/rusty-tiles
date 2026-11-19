@@ -677,10 +677,16 @@ failure moves to the next one. The Steiner vertex is kept at its canonical decod
 final decode is accepted only if its faces still meet that condition on the delivered
 positions. P1's own directed licences between shared points are the contraction fold
 guard's (its contracted source, chord paths included), so P1 no longer proposes an edge the
-guard then refuses. The proposal goes through the
+guard then refuses. The guard builds a required chord's directed licence from the children's
+interface segments along its source path. Only segments a holder outside the parent shares
+count (`InterfaceRow::outer` over the parent's leaf interval); a segment held only inside the
+parent is an internal seam after the merge and broke the exterior path (independent review,
+19 November 2026). The proposal goes through the
 same assessment as every other (decode validity, the contraction fold guard, topology
-change within the floor, S2), so P1 only adds a way to build a cell: tiles the first
-strategies publish are unchanged, and their ancestors change only through their inputs. A
+change within the floor, S2). P1 runs only where the first strategies publish nothing. The
+chord licence correction is in the contraction guard every build uses, so a tile any build
+publishes can change where it changes what the guard accepts; on the measured inputs every
+changed payload the diff could attribute was a P1 cell or an ancestor of one. A
 second pass adds N1's seam-owner licence and publishes as declared stage 1. The stage report
 names it `p1`.
 

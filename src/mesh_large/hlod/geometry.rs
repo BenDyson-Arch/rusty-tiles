@@ -1321,6 +1321,8 @@ fn build(
     super::interfaces::merge_rows(&mut previous_interface);
     previous_interface.shrink_to_fit();
     let child_border = interface_points(&previous_interface);
+    // The contraction guards count only exterior child rows as path witnesses.
+    let leaves = [tile.leaf_begin, tile.leaf_end];
     let lookup = |k| {
         if child_border.contains(&k) {
             mapping(k)
@@ -1343,6 +1345,7 @@ fn build(
             &reference.triangles,
             interface,
             &previous_interface,
+            leaves,
             &mapped,
         )
         .with_policy(policy.clone());
@@ -1376,6 +1379,7 @@ fn build(
             &mut merged,
             interface,
             &previous_interface,
+            leaves,
             &lookup,
             &mut topology,
             fix2,
@@ -1392,6 +1396,7 @@ fn build(
                 &reference,
                 interface,
                 &previous_interface,
+                leaves,
                 &lookup,
                 caps,
                 &mut topology,
@@ -1835,6 +1840,7 @@ fn recover_contraction(
     reference: &Merged,
     interface: &[InterfaceRow],
     previous: &[InterfaceRow],
+    leaves: [u32; 2],
     mapping: &BorderMap<'_>,
     caps: &[usize],
     receipt: &mut TopologyReceipt,
@@ -1881,6 +1887,7 @@ fn recover_contraction(
             merged,
             interface,
             previous,
+            leaves,
             mapping,
             &mut attempt,
             Some(&reference.triangles),
@@ -2698,6 +2705,7 @@ mod tests {
                 &reference.triangles,
                 &interface,
                 &previous,
+                [0, 0],
                 &mapped,
             )
             .with_policy(folds::Policy::last_resort(
