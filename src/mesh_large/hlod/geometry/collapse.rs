@@ -110,6 +110,10 @@ pub(crate) struct Stats {
     pub steiner: u64,
     /// Refusals by reason: 1 vanish, 2 link, 3 pinch, 4 zero area, 5 flip, 6 reversed,
     /// 7 shared face, 8 coincident, 9 shared edge, 10 book, 11 segment, 12 not an edge.
+    /// Each refused check counts once, under the first test that refused it; that test
+    /// depends on the order they run in. A vertex above `RETRY_VALENCE` tests a sample of
+    /// its moved faces first, so it may report a different reason than testing every face
+    /// in turn would (its accept or refuse decision is the same).
     pub why: [u64; 13],
     /// Work units spent (`State::work`), and whether `Problem::work_limit` stopped the pass.
     pub work: u64,
@@ -2151,6 +2155,309 @@ mod tests {
             triangles.push([b(i), t(i + 1), t(i)]);
         }
         (positions, triangles)
+    }
+
+    impl State<'_> {
+        /// The check as it was before the star cache, the probe and the target-side
+        /// shortcuts: u's and v's stars and neighbours collected afresh, every moved face
+        /// tested in turn. Pure (no work charged, no cache), for the differential test.
+        fn reference_check(&self, u: u32, v: u32) -> u8 {
+            let star_u: Vec<u32> = self.live_faces(u).collect();
+            let (shared, moved): (Vec<u32>, Vec<u32>) = star_u
+                .iter()
+                .partition(|&&f| self.faces[f as usize].contains(&v));
+            if shared.is_empty() {
+                return 12;
+            }
+            let star_v = self.live_faces(v).count();
+            if moved.is_empty() && star_v == shared.len() {
+                return 1;
+            }
+            let (mut nu, mut nv) = (Vec::new(), Vec::new());
+            self.neighbours(u, &mut nu);
+            self.neighbours(v, &mut nv);
+            let expected: Vec<u32> = shared
+                .iter()
+                .map(|&f| {
+                    self.faces[f as usize]
+                        .iter()
+                        .copied()
+                        .find(|&w| w != u && w != v)
+                        .unwrap_or(u32::MAX)
+                })
+                .collect();
+            let of_v: HashSet<u32> = nv.iter().copied().collect();
+            if nu
+                .iter()
+                .any(|&w| w != v && of_v.contains(&w) && !expected.contains(&w))
+            {
+                return 2;
+            }
+            if !self.is_boundary_edge(u, v) && self.on_boundary(u, &nu) && self.on_boundary(v, &nv)
+            {
+                return 3;
+            }
+            let mut delta: HashMap<(u32, u32), i32> = HashMap::default();
+            let mut new_faces: HashSet<[u32; 3]> = HashSet::default();
+            for &f in &shared {
+                let t = self.faces[f as usize];
+                for j in 0..3 {
+                    *delta.entry((t[j], t[(j + 1) % 3])).or_default() -= 1;
+                }
+            }
+            let iface = &self.iface;
+            for &f in &moved {
+                let t = self.faces[f as usize];
+                let g = t.map(|w| if w == u { v } else { w });
+                let (n0, n1) = (self.normal(t), self.normal(g));
+                let (l0, l1) = (dot(n0, n0).sqrt(), dot(n1, n1).sqrt());
+                if l1 <= 1e-12 * l0.max(1e-30) || l1 == 0. {
+                    return 4;
+                }
+                if l0 > 0. && dot(n0, n1) < self.p.min_cos * l0 * l1 {
+                    return 5;
+                }
+                let s = sorted(g);
+                let src = self.src_face.get(&s).copied().unwrap_or([0, 0]);
+                let d = parity(g);
+                if src[d] == 0 && src[1 - d] != 0 {
+                    return 6;
+                }
+                if src == [0, 0]
+                    && g.iter().all(|&w| iface[w as usize])
+                    && !self.p.owns_face.is_some_and(|own| own(g))
+                {
+                    return 7;
+                }
+                if self.face_set.contains_key(&s) || new_faces.contains(&s) {
+                    return 8;
+                }
+                for j in 0..3 {
+                    *delta.entry((t[j], t[(j + 1) % 3])).or_default() -= 1;
+                    *delta.entry((g[j], g[(j + 1) % 3])).or_default() += 1;
+                }
+                for &w in &g {
+                    if w != v
+                        && iface[v as usize]
+                        && iface[w as usize]
+                        && self.shared_licence(v, w) == Some(0)
+                        && self.shared_licence(w, v) == Some(0)
+                    {
+                        return 9;
+                    }
+                }
+                new_faces.insert(s);
+            }
+            for (&(a, b), &d) in &delta {
+                if d > 0 {
+                    let now = i64::from(self.dir.get(&(a, b)).copied().unwrap_or(0)) + i64::from(d);
+                    let src = self.src_dir.get(&(a, b)).copied().unwrap_or(0);
+                    let shared = if iface[a as usize] && iface[b as usize] {
+                        self.shared_licence(a, b)
+                    } else {
+                        None
+                    };
+                    if now > i64::from(shared.unwrap_or(src.max(1))) {
+                        return 10;
+                    }
+                }
+            }
+            for &(a, b) in delta.keys() {
+                let e = (a.min(b), a.max(b));
+                if self.p.segments.contains(&e) {
+                    let after = i64::from(self.undirected(e.0, e.1))
+                        + i64::from(delta.get(&e).copied().unwrap_or(0))
+                        + i64::from(delta.get(&(e.1, e.0)).copied().unwrap_or(0));
+                    if after <= 0 {
+                        return 11;
+                    }
+                }
+            }
+            0
+        }
+    }
+
+    /// A random mesh for the differential test: a jittered grid (boundary on its rim) with
+    /// random diagonals and heights, fins on some interior edges (three faces on an edge),
+    /// and an open or closed fan whose apex has valence 65 to 120.
+    fn rough_mesh(next: &mut impl FnMut() -> f32) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
+        let n = 6 + (next() * 7.) as u32;
+        let mut positions = Vec::new();
+        for i in 0..=n {
+            for j in 0..=n {
+                let (x, y) = (
+                    i as f32 + 0.4 * (next() - 0.5),
+                    j as f32 + 0.4 * (next() - 0.5),
+                );
+                positions.push([x, y, 2. * next()]);
+            }
+        }
+        let at = |i: u32, j: u32| i * (n + 1) + j;
+        let mut triangles = Vec::new();
+        for i in 0..n {
+            for j in 0..n {
+                let (a, b, c, d) = (at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1));
+                if next() < 0.5 {
+                    triangles.extend([[a, b, c], [a, c, d]]);
+                } else {
+                    triangles.extend([[a, b, d], [b, c, d]]);
+                }
+            }
+        }
+        // Holes: open boundaries inside the grid, so a common neighbour often holds a
+        // single face on its edge to the target.
+        triangles.retain(|_| next() >= 0.12);
+        let grid_faces = triangles.len();
+        for _ in 0..1 + (next() * 4.) as usize {
+            let t = triangles[(next() * grid_faces as f32) as usize % grid_faces];
+            let (a, b) = (t[0], t[1]);
+            let c = positions.len() as u32;
+            let (pa, pb) = (positions[a as usize], positions[b as usize]);
+            positions.push([(pa[0] + pb[0]) / 2., (pa[1] + pb[1]) / 2., 3. + next()]);
+            triangles.push(if next() < 0.5 { [a, b, c] } else { [b, a, c] });
+        }
+        let k = 65 + (next() * 56.) as u32;
+        let apex = positions.len() as u32;
+        let (ox, oy) = (n as f32 + 10., n as f32 / 2.);
+        positions.push([ox, oy, 1. + next()]);
+        for i in 0..k {
+            let a = std::f32::consts::TAU * i as f32 / k as f32;
+            let r = 4. + next();
+            positions.push([ox + r * a.cos(), oy + r * a.sin(), next()]);
+        }
+        let closed = next() < 0.5;
+        for i in 0..k {
+            if i + 1 == k && !closed {
+                break;
+            }
+            triangles.push([apex, apex + 1 + i, apex + 1 + (i + 1) % k]);
+        }
+        (positions, triangles)
+    }
+
+    /// The star cache, the high-valence probe and the target-side shortcuts change only
+    /// what a check costs: on random meshes with boundaries, nonmanifold edges and stars
+    /// of valence above `RETRY_VALENCE`, every check accepts exactly when the reference
+    /// (the check as it was) accepts, with collapses and flips interleaved so cached stars
+    /// go stale. Refusal reasons may differ (a probe refusal reports the sampled face's).
+    #[test]
+    fn checks_decide_as_the_reference_check() {
+        let mut compared = [0u64; 3];
+        for seed in 0..48u64 {
+            let mut state = seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
+            let mut next = move || {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                (state >> 40) as f32 / (1u64 << 24) as f32
+            };
+            let (positions, triangles) = rough_mesh(&mut next);
+            let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+            let n = positions.len();
+            let mut und: HashMap<(u32, u32), u32> = HashMap::default();
+            for t in &triangles {
+                for j in 0..3 {
+                    let (a, b) = (t[j], t[(j + 1) % 3]);
+                    *und.entry((a.min(b), a.max(b))).or_default() += 1;
+                }
+            }
+            let mut boundary = vec![false; n];
+            for (&(a, b), &c) in &und {
+                if c == 1 {
+                    boundary[a as usize] = true;
+                    boundary[b as usize] = true;
+                }
+            }
+            let interface: Vec<bool> = (0..n)
+                .map(|v| next() < if boundary[v] { 0.5 } else { 0.05 })
+                .collect();
+            let mut edges: Vec<(u32, u32)> = und.keys().copied().collect();
+            edges.sort_unstable();
+            let segments: HashSet<(u32, u32)> = edges
+                .into_iter()
+                .filter(|&(a, b)| interface[a as usize] && interface[b as usize] && next() < 0.5)
+                .collect();
+            let owns_segment = |a: u32, b: u32| (a ^ b) & 1 == 0;
+            let owns_face = |f: [u32; 3]| (f[0] ^ f[1] ^ f[2]) & 1 == 0;
+            let seam_owner = (seed / 3) % 2 == 0;
+            let p = Problem {
+                positions: &positions,
+                triangles: &triangles,
+                class: vec![Class::Free; n],
+                interface,
+                segments,
+                target: 0,
+                limit: 0,
+                min_cos: [0., 0.3, 0.9][(seed % 3) as usize],
+                owns_segment: seam_owner.then_some(&owns_segment as &dyn Fn(u32, u32) -> bool),
+                owns_face: seam_owner.then_some(&owns_face as &dyn Fn([u32; 3]) -> bool),
+                keys: &keys,
+                steiner: false,
+                snap: None,
+                protected: None,
+                shared: None,
+                work_limit: u64::MAX,
+                cancel: None,
+            };
+            let mut st = State::new(&p);
+            let mut nb = Vec::new();
+            for _ in 0..3 * n {
+                let u = (next() * n as f32) as u32 % n as u32;
+                if st.dead[u as usize] || st.vf[u as usize].is_empty() {
+                    continue;
+                }
+                st.neighbours(u, &mut nb);
+                let targets = nb.clone();
+                let mut accepted = Vec::new();
+                for &v in &targets {
+                    let want = st.reference_check(u, v) == 0;
+                    let got = st.check(u, v) == 0;
+                    assert_eq!(got, want, "seed {seed}: check({u}, {v})");
+                    let probed = st.live_faces(u).count() > RETRY_VALENCE;
+                    compared[usize::from(got)] += 1;
+                    compared[2] += u64::from(probed);
+                    if got {
+                        accepted.push(v);
+                    }
+                }
+                // Change the mesh while u's star is cached: a collapse of a neighbour of u
+                // (its target chosen by the reference, so the cache still holds u) or a
+                // flip of an edge at u, then check u again; or a collapse of u itself.
+                let roll = next();
+                let x = targets
+                    .get((next() * targets.len() as f32) as usize % targets.len().max(1))
+                    .copied();
+                if roll < 0.3 {
+                    if let Some(x) = x {
+                        let mut nx = Vec::new();
+                        st.neighbours(x, &mut nx);
+                        if let Some(&y) = nx.iter().find(|&&y| st.reference_check(x, y) == 0) {
+                            st.apply(x, y);
+                        }
+                    }
+                } else if roll < 0.6 {
+                    if let Some(x) = x {
+                        st.flip(u, x);
+                    }
+                } else if roll < 0.8 && !accepted.is_empty() {
+                    let v = accepted[(next() * accepted.len() as f32) as usize % accepted.len()];
+                    st.apply(u, v);
+                    continue;
+                }
+                if st.dead[u as usize] {
+                    continue;
+                }
+                st.neighbours(u, &mut nb);
+                for &v in &nb.clone() {
+                    let want = st.reference_check(u, v) == 0;
+                    let got = st.check(u, v) == 0;
+                    assert_eq!(got, want, "seed {seed}: check({u}, {v}) after a change");
+                    compared[usize::from(got)] += 1;
+                }
+            }
+        }
+        // Both outcomes, and the probe's path, are exercised.
+        assert!(compared.iter().all(|&c| c > 1000), "{compared:?}");
     }
 
     /// The cap apexes themselves (valence k) are popped and refused against most of their

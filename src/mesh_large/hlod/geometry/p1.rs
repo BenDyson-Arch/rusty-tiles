@@ -91,7 +91,9 @@ pub(crate) struct Report {
     pub steiner_work: [u64; 2],
     /// The main loop's work by site (`collapse::SiteWork`).
     pub site_work: [collapse::SiteWork; 2],
-    /// Collapse checks refused, by reason (`collapse::Stats::why`).
+    /// Collapse checks refused, by reason (`collapse::Stats::why`). The reason is the first
+    /// test that refused, so a high-valence vertex's sampled faces can shift a refusal to
+    /// another reason than a full scan would report; the totals are those of the decisions.
     pub refused_by: [[u64; 13]; 2],
 }
 
