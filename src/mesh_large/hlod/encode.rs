@@ -55,12 +55,19 @@ pub(crate) enum Mutation {
     /// Keep production construction but disable only root competition (control).
     #[cfg(test)]
     NoRootCompetition,
-    /// Skip P1 (`geometry::p1`): the ladder of builds alone, as before it.
+    /// Skip P1 (`geometry::p1`): the ladder of builds alone, as before it (N1 included).
     #[cfg(test)]
     NoP1,
     /// `NoP1` and `NoRootCompetition` together.
     #[cfg(test)]
     NoP1NoRootCompetition,
+    /// P1 records a cell its workspace estimate refuses, and the primary build, fix 2 and
+    /// the staged reduction are refused: the next build is N1.
+    #[cfg(test)]
+    P1Unfit,
+    /// As `P1Unfit`, with P1 recording a first pass that spends its work budget.
+    #[cfg(test)]
+    P1Exhausted,
     /// Weld corners on POSITION and feature ID only (the weld's own check must refuse).
     #[cfg(test)]
     WeldPositionsOnly,
@@ -138,12 +145,20 @@ impl Mutation {
     }
 
     /// Whether P1 runs after a failed first build (`geometry::p1`).
-    pub(crate) fn p1(self) -> bool {
+    pub(crate) fn p1(self) -> super::geometry::p1::Run {
+        use super::geometry::p1::Run;
         #[cfg(test)]
-        if matches!(self, Self::NoP1 | Self::NoP1NoRootCompetition) {
-            return false;
+        match self {
+            Self::NoP1 | Self::NoP1NoRootCompetition => return Run::Off,
+            Self::P1Unfit => return Run::Unfit,
+            Self::P1Exhausted => return Run::Exhausted,
+            _ => {}
         }
-        self.last_resorts()
+        if self.last_resorts() {
+            Run::On
+        } else {
+            Run::Off
+        }
     }
 
     /// Whether the coarse ladder reuses exact repeats (`geometry::build_parent`).

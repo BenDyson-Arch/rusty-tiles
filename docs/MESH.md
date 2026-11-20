@@ -615,7 +615,11 @@ no selector.
   licence (exterior child segments only, which every build's contraction guard
   uses) changes what the guard accepts.
 - **Last resorts.** When ordinary simplification and P1 cannot meet the cap,
-  the [last-resort stages](#last-resort-declarations) run.
+  the [last-resort stages](#last-resort-declarations) run. N1, the stage-1
+  seam-owner licence on the ordinary strategies, runs only where P1 did not
+  finish its own second pass: P1 skipped the cell (its workspace estimate
+  exceeds the job's charge), spent its work budget, or stopped at a first-pass
+  proposal that assessment refused.
 - **Residual omission.** A coarse tile is omitted only if the shared border
   geometry it must keep exceeds the 8,192-triangle cap on its own, or if the
   last resort cannot keep the open boundaries that touch its border. The run
@@ -1728,8 +1732,9 @@ Each stage's `facts`:
 - `hlod_incidence`: `triangles`, `items`, `rows`, `scratch_peak_bytes`,
   `scratch_bound_bytes` and `scratch` (its declared phases);
 - `hlod_geometry`: `tiles`, `jobs`, `omitted_proxies`, `omitted_by_depth`,
-  `last_resort_tiles`, `last_resort_stages` (N1-N3), `last_resort_records`
-  (as in the diagnostics: every tile a retry published), `fold_faces`,
+  `last_resort_tiles`, `last_resort_stages` (stage 1: P1's second pass or N1;
+  2: N2; 3: N3), `last_resort_records` (as in the diagnostics: every tile a
+  retry published), `fold_faces`,
   `scratch_peak_bytes` and `scratch_bound_bytes` (the coarse stage's),
   `lease_peak_bytes` and `walk_utilisation` (as in the diagnostics);
 - `archive`: `tiles`, `archive_bytes`, `peak_held_records`,

@@ -132,8 +132,8 @@ pub struct LastResortRecord {
     pub depth: u32,
     /// The last-resort stage that built it (1-3), 0 for fix 2 and staged reduction.
     pub stage: u8,
-    /// The build that published it: `fix2`, `staged`, `n1`, `n2`, `n3`, `n3Recovery`, or
-    /// `rootCandidate` (the root competition's full-cap N3 candidate).
+    /// The build that published it: `p1`, `fix2`, `staged`, `n1`, `n2`, `n3`, `n3Recovery`,
+    /// or `rootCandidate` (the root competition's full-cap N3 candidate).
     pub resort: &'static str,
     /// Why the primary build's tile is not published: `contractionStalled` (its border
     /// contraction could not reach the contract), `proposalsRefused` (assessment refused
@@ -1908,7 +1908,13 @@ fn build_tile(
                 // statistics go with it, so a reused call can replay them (`Reused`);
                 // their accumulation is a sum and a max, so the split changes nothing.
                 #[cfg(test)]
-                if let Mutation::RefuseBuilds(k) = settings.mutation {
+                let refuse_below = match settings.mutation {
+                    Mutation::RefuseBuilds(k) => Some(k),
+                    Mutation::P1Unfit | Mutation::P1Exhausted => Some(4),
+                    _ => None,
+                };
+                #[cfg(test)]
+                if let Some(k) = refuse_below {
                     let rank = match (
                         built.primary,
                         built.p1,

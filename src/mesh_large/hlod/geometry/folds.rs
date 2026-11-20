@@ -31,8 +31,8 @@ pub(crate) struct Source {
 /// The last resort's relaxations (D1/D11 amendment A2); the default relaxes nothing.
 /// `least`, `greatest`: the shared points whose least, respectively greatest, holding DFS
 /// leaf anywhere in the source (`borders::Holders`, not the cell's own arc intervals) lies in
-/// this cell. A new edge between two shared points, or a new face on three, is
-/// admitted only in its seam owner (N1, `owns_segment`, `owns_face`): every same-depth
+/// this cell. A new edge between two shared points, or a new face on three, is admitted only
+/// in its seam owner (P1's second pass and N1, `owns_segment`, `owns_face`): every same-depth
 /// cell derives the same single owner from the canonical keys. `folds`: reversed faces,
 /// coincident groups and same-direction books are admitted (N2, N3), declared and
 /// recounted by the validators. Degenerate faces and every other shared-point rule stay.

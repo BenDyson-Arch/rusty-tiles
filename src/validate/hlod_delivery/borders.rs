@@ -428,9 +428,9 @@ impl Store {
         Ok((contracted, shared))
     }
 
-    /// D1/D11 amendment A2 (N1): a coarse face on three shared points that no leaf below
-    /// holds, or a coarse edge between two shared points that is neither a leaf edge nor
-    /// a delivered chord, is new on the seam. Each has one seam owner per depth: for a
+    /// D1/D11 amendment A2 (P1's second pass, N1): a coarse face on three shared points that
+    /// no leaf below holds, or a coarse edge between two shared points that is neither a leaf
+    /// edge nor a delivered chord, is new on the seam. Each has one seam owner per depth: for a
     /// segment `a < b`, the tile holding `a`'s least holding leaf, or its greatest when
     /// the top bit of FNV-1a 64 over the little-endian words of `a` then `b` is set; a
     /// face belongs to the owner of its least-to-greatest corner segment. Two same-depth

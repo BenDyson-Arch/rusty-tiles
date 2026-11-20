@@ -6840,6 +6840,70 @@ fn every_ladder_build_publishes_with_its_record() {
     }
 }
 
+/// N1 runs where P1 could not try its seam-owner licence to the end: P1's workspace estimate
+/// refuses the cell, or its first pass spends the work budget. With the primary build, fix 2
+/// and the staged reduction refused, N1 publishes the same cells as when P1's proposal is
+/// refused after its first pass (`RefuseBuilds(4)`), not N2.
+#[test]
+fn n1_builds_where_p1_does_not_complete() {
+    let work = tempfile::tempdir().unwrap();
+    let source = grid((16, 16), (0., 100.), (0., 100.), &bump, [0.4, 0.5, 0.3, 1.]);
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    let run = |mutation: Mutation, name: &str| {
+        let dir = stage(
+            &input,
+            &work.path().join(name),
+            &Run {
+                leaf_triangles: 64,
+                cap: 100,
+                mutation,
+                budget: Some(4 << 30),
+                ..s2_run()
+            },
+        )
+        .unwrap();
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        let mut resorts: Vec<(String, u64)> = manifest["hlod"]["lastResortRecords"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                (
+                    r["resort"].as_str().unwrap().to_owned(),
+                    r["stage"].as_u64().unwrap(),
+                )
+            })
+            .collect();
+        resorts.sort();
+        let p1: Vec<String> = resources["hlod"]["diagnostics"]["p1_records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["outcome"].as_str().unwrap().to_owned())
+            .collect();
+        (resorts, p1)
+    };
+    let (reference, _) = run(Mutation::RefuseBuilds(4), "refuse-4");
+    assert!(
+        reference.iter().any(|(r, s)| r == "n1" && *s == 1),
+        "{reference:?}"
+    );
+    for (mutation, outcome, name) in [
+        (Mutation::P1Unfit, "skipped", "unfit"),
+        (Mutation::P1Exhausted, "exhausted", "exhausted"),
+    ] {
+        let (resorts, p1) = run(mutation, name);
+        assert_eq!(resorts, reference, "{name}");
+        assert!(
+            !p1.is_empty() && p1.iter().all(|o| o == outcome),
+            "{name}: {p1:?}"
+        );
+    }
+}
+
 /// Inject one depth-1 construction failure; recovery must use its complete leaves,
 /// preserve all other payloads, measure the root normally and validate final delivery.
 #[test]
