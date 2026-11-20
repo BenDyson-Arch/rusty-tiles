@@ -123,6 +123,33 @@ pub(crate) struct Stats {
     /// Of `work`: units spent in the rescue rounds, and of those in Steiner rescues.
     pub rescue_work: u64,
     pub steiner_work: u64,
+    /// Of `work`: the main loop's units by site (`SiteWork`). With `rescue_work` they sum
+    /// to `work`.
+    pub site: SiteWork,
+}
+
+/// Where the main loop spends its work units, to find a superlinear site in a cell that
+/// uses much of its budget. `queue`: the initial queueing of every vertex, once per outer
+/// pass; `candidates`: the target scan of each pop; `checks`: the guard checks of each
+/// tried target, of which `refused_checks` failed; `apply`: applying a collapse and
+/// rescanning the target's neighbours; `requeue`: queueing the target again; `neighbours`:
+/// queueing its neighbours again. Counts: `pops` (entries acted on), `checks_run`, and the
+/// largest single check and candidate scan, which name a high-valence vertex when one
+/// dominates.
+#[derive(Default, Debug, Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SiteWork {
+    pub queue: u64,
+    pub candidates: u64,
+    pub checks: u64,
+    pub refused_checks: u64,
+    pub apply: u64,
+    pub requeue: u64,
+    pub neighbours: u64,
+    pub pops: u64,
+    pub checks_run: u64,
+    pub max_check: u64,
+    pub max_candidates: u64,
 }
 
 #[derive(PartialEq)]
@@ -1162,11 +1189,13 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
             st.stats.rescues,
         );
         let mut heap = BinaryHeap::new();
+        let w0 = st.work.get();
         for u in 0..id(st.pos.len()) {
             if !st.dead[u as usize] && !st.vf[u as usize].is_empty() {
                 st.push(&mut heap, u);
             }
         }
+        st.stats.site.queue += st.work.get() - w0;
         while let Some(e) = heap.pop() {
             if (st.alive_faces <= p.target && st.removes_left == 0) || st.exhausted() {
                 break;
@@ -1179,17 +1208,37 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
                 continue;
             }
             let mut done = false;
+            st.stats.site.pops += 1;
+            let w0 = st.work.get();
             let candidates = st.candidates(u);
+            let spent = st.work.get() - w0;
+            st.stats.site.candidates += spent;
+            st.stats.site.max_candidates = st.stats.site.max_candidates.max(spent);
             let tried = candidates.len();
             // A high-valence vertex tries its cheapest `RETRY_VALENCE` targets: each check
             // moves all its faces, so trying every target would cost its valence squared.
             for (_, v) in candidates.into_iter().take(RETRY_VALENCE) {
-                if st.valid(u, v) {
+                let w0 = st.work.get();
+                let valid = st.valid(u, v);
+                let spent = st.work.get() - w0;
+                let site = &mut st.stats.site;
+                site.checks_run += 1;
+                site.checks += spent;
+                site.max_check = site.max_check.max(spent);
+                if !valid {
+                    site.refused_checks += spent;
+                }
+                if valid {
+                    let w0 = st.work.get();
                     st.apply(u, v);
                     st.neighbours(v, &mut nb);
                     let list = nb.clone();
+                    let w1 = st.work.get();
                     let n = st.push(&mut heap, v);
                     st.retry_after[v as usize] = retry_wait(n);
+                    let w2 = st.work.get();
+                    st.stats.site.apply += w1 - w0;
+                    st.stats.site.requeue += w2 - w1;
                     for w in list {
                         // A high-valence neighbour is queued again only after a share of its
                         // neighbourhood has changed, not after every change: each requeue
@@ -1203,6 +1252,7 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
                         let n = st.push(&mut heap, w);
                         st.retry_after[w as usize] = retry_wait(n);
                     }
+                    st.stats.site.neighbours += st.work.get() - w2;
                     done = true;
                     break;
                 }
@@ -1939,6 +1989,36 @@ mod tests {
             "an exhausted pass has no result"
         );
         stats
+    }
+
+    /// The main loop's work by site and the rescue rounds account for all the pass's work.
+    #[test]
+    fn site_work_accounts_for_the_pass() {
+        for (positions, triangles, class, target) in [
+            {
+                let (p, t, c) = grid(64);
+                let n = t.len() / 8;
+                (p, t, c, n)
+            },
+            {
+                let (p, t, c) = fan(4000);
+                (p, t, c, 16)
+            },
+        ] {
+            let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+            let stats = free(&positions, &triangles, class, &keys, target, u64::MAX);
+            let s = stats.site;
+            let main = s.queue + s.candidates + s.checks + s.apply + s.requeue + s.neighbours;
+            assert_eq!(main + stats.rescue_work, stats.work, "{stats:?}");
+            assert!(
+                s.refused_checks <= s.checks && s.pops > 0 && s.checks_run > 0,
+                "{s:?}"
+            );
+            assert!(
+                s.max_check <= s.checks && s.max_candidates <= s.candidates,
+                "{s:?}"
+            );
+        }
     }
 
     /// The work count grows linearly on an ordinary mesh and on a high-valence fan whose
