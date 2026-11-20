@@ -57,7 +57,7 @@ fn workspace_bytes(vertices: usize, faces: usize, rows: usize) -> u64 {
 /// P1 runs within its job's charge: the per-triangle geometry workspace plus the encode
 /// allowance, which nothing uses until the published tile is encoded, after P1 has
 /// released its state. Beyond it (vertex-dense inputs at full size) the ladder runs as
-/// before without P1.
+/// before without P1, N1 included (`Report::stage_one_finished`).
 fn fits(vertices: usize, faces: usize, rows: usize) -> bool {
     let faces64 = u64::try_from(faces).unwrap_or(u64::MAX);
     workspace_bytes(vertices, faces, rows)
@@ -90,6 +90,29 @@ pub(crate) struct Report {
 }
 
 impl Report {
+    /// Whether P1's second pass, with N1's seam-owner licence, ran to its end: N1 then has
+    /// nothing to add (`build_parent` skips it). Not when P1 was skipped (the contract alone
+    /// exceeds the cap, or its workspace estimate exceeds the job's charge), spent its work
+    /// budget, or stopped at a first-pass proposal, published or refused.
+    pub(crate) fn stage_one_finished(&self) -> bool {
+        self.passes >= 2 && self.outcome != "exhausted"
+    }
+
+    /// What `attempt` reports when its workspace estimate refuses the cell.
+    #[cfg(test)]
+    pub(crate) fn unfit(faces: usize) -> Self {
+        Self::new("skipped", faces)
+    }
+
+    /// What `attempt` reports when its first pass spends the work budget (it returns
+    /// before the second pass).
+    #[cfg(test)]
+    pub(crate) fn exhausted_first_pass(faces: usize) -> Self {
+        let mut report = Self::new("exhausted", faces);
+        report.passes = 1;
+        report
+    }
+
     fn new(outcome: &'static str, faces: usize) -> Self {
         Self {
             outcome,
@@ -114,6 +137,31 @@ impl Report {
         self.steiner_refused[i] = stats.steiner_why;
         self.rescue_work[i] = stats.rescue_work;
         self.steiner_work[i] = stats.steiner_work;
+    }
+}
+
+/// Whether P1 runs (`build_parent`); in tests also the two ways it does not complete.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Run {
+    Off,
+    On,
+    /// Test: the record of a cell whose workspace estimate refuses P1, as for a vertex-dense
+    /// cell at full size (`Report::unfit`).
+    #[cfg(test)]
+    Unfit,
+    /// Test: the record of a cell whose first pass spends its work budget
+    /// (`Report::exhausted_first_pass`).
+    #[cfg(test)]
+    Exhausted,
+}
+
+impl From<bool> for Run {
+    fn from(on: bool) -> Self {
+        if on {
+            Self::On
+        } else {
+            Self::Off
+        }
     }
 }
 
@@ -352,4 +400,28 @@ pub(super) fn attempt(
         }
     }
     Ok((None, report))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// N1 is skipped only where P1's second pass ran to its end without spending its budget.
+    #[test]
+    fn stage_one_finishes_only_when_the_second_pass_ran_to_its_end() {
+        let finished = |outcome: &'static str, passes: u8| {
+            let mut report = Report::new(outcome, 10);
+            report.passes = passes;
+            report.stage_one_finished()
+        };
+        for outcome in ["noProposal", "stalled", "refused", "built"] {
+            assert!(finished(outcome, 2), "{outcome}");
+        }
+        assert!(!finished("exhausted", 2));
+        assert!(!finished("exhausted", 1));
+        assert!(!finished("refused", 1));
+        assert!(!finished("skipped", 0));
+        assert!(!Report::unfit(10).stage_one_finished());
+        assert!(!Report::exhausted_first_pass(10).stage_one_finished());
+    }
 }

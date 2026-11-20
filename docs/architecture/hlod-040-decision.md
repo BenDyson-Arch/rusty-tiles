@@ -690,6 +690,15 @@ changed payload the diff could attribute was a P1 cell or an ancestor of one. A
 second pass adds N1's seam-owner licence and publishes as declared stage 1. The stage report
 names it `p1`.
 
+N1 after P1 (2026-11-20). Where P1's second pass ran to its end, N1 built no cell on the #344
+rock, the 10M-triangle city or the photogrammetry fixture, while spending 471 CPU-s on the
+photogrammetry site. N1 now runs only where P1 did not finish that pass: P1 is off, skipped
+the cell (the contract alone exceeds the cap, or its workspace estimate exceeds the job's
+charge), spent its work budget, or stopped at a first-pass proposal that assessment refused.
+These are the cells where the seam-owner licence was never tried; without N1 they would go
+from the fold-free builds straight to N2, which admits folds. On the three inputs the output
+is byte-identical either way.
+
 **Owner amendment, 2026-10-30 — constructive last resort (A2).** Replaces omission for
 every cell whose contract fits the cap (`minimum_triangles` within it). When develop's
 strategies, fix 2 and the staged reduction all publish nothing, the cell is rebuilt in three
@@ -891,7 +900,7 @@ of the cell, far below the surface's own border noise at coarse depths.
   - Interior vertices never move. Interior relief was removed on 2026-11-02: nothing bounded
     its moves, and it omitted cells.
   - A new face or edge on border points across chords is taken only where the build's
-    `folds::Policy` admits it: never in develop's builds, and in N1–N3 only in its seam owner
+    `folds::Policy` admits it: never in develop's builds, and in P1's second pass and N1–N3 only in its seam owner
     (A2's hash split over `Contract::holders`). Relief has no owner rule of its own.
   - Each vertex collapses onto its surviving chord neighbour toward its nearer endpoint,
     each half of a chord taken from its endpoint inward, or else onto its other neighbour.

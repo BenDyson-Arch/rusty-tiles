@@ -76,7 +76,8 @@ pub(crate) struct Built {
     /// its rejected proposals revisit the earlier builds' strategies
     /// (`audit::topology_attempt`).
     pub staged: bool,
-    /// The last-resort stage (1-3) that proposed it, 0 otherwise (`Resort::N1`..`N3`).
+    /// The last-resort stage (1-3) that proposed it, 0 otherwise: 1 for P1's second pass or
+    /// `Resort::N1`, 2 and 3 for `N2` and `N3`.
     pub last_resort_stage: u8,
     /// Why the caller's assessment refused this proposal (set by the caller, if it did).
     pub rejection: Option<Rejection>,
@@ -1015,6 +1016,12 @@ fn finite_extent(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> bool {
     (0..3).all(|i| (hi[i] - lo[i]).is_finite())
 }
 
+/// Faces of the merged children (the size P1 reports for a cell).
+#[cfg(test)]
+fn merged_faces(children: &[TileGeometry]) -> usize {
+    children.iter().map(|c| c.triangles.len()).sum()
+}
+
 /// A triangle rotated to start at its least vertex: equal for the same oriented face.
 fn oriented(t: &[u32; 3]) -> [u32; 3] {
     let k = (0..3).min_by_key(|&k| t[k]).unwrap();
@@ -1041,7 +1048,7 @@ pub(crate) fn build_parent(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
     last_resorts: bool,
     reuse: bool,
-    p1: bool,
+    p1: impl Into<p1::Run>,
 ) -> Result<Outcome, JobError> {
     let mut repeats = Repeats::new(reuse);
     let run = |r,
@@ -1060,12 +1067,20 @@ pub(crate) fn build_parent(
     let primary_contraction_failed = first.contraction_failed;
     // P1: one guard-by-construction contraction before the retry ladder. It is outside
     // `build`, so the ladder's exact-repeat reuse is unchanged.
-    let (proposal, mut report) = if p1 {
-        let (proposal, report) =
-            p1::attempt(tile, children, caps, contract, mapping, lattice, check)?;
-        (proposal, Some(report))
-    } else {
-        (None, None)
+    let (proposal, mut report) = match p1.into() {
+        p1::Run::Off => (None, None),
+        p1::Run::On => {
+            let (proposal, report) =
+                p1::attempt(tile, children, caps, contract, mapping, lattice, check)?;
+            (proposal, Some(report))
+        }
+        #[cfg(test)]
+        p1::Run::Unfit => (None, Some(p1::Report::unfit(merged_faces(children)))),
+        #[cfg(test)]
+        p1::Run::Exhausted => (
+            None,
+            Some(p1::Report::exhausted_first_pass(merged_faces(children))),
+        ),
     };
     if let Some((stage, mut b)) = proposal {
         b.last_resort_stage = stage;
@@ -1103,9 +1118,16 @@ pub(crate) fn build_parent(
     let mut last = run(Resort::Fix2, None, assess, &mut repeats)?;
     last.attempted_topology.add(first.attempted_topology);
     let mut published = Resort::Fix2;
+    // N1 (the seam-owner licence on develop's strategies) only where P1 did not try that
+    // licence to its end: P1 off, skipped, out of budget, or stopped at a first-pass
+    // proposal. Where P1's second pass ran, N1 built no cell on the test inputs.
+    let n1 = !report.as_ref().is_some_and(p1::Report::stage_one_finished);
     for resort in [Resort::Staged, Resort::N1, Resort::N2, Resort::N3] {
         if last.built.is_some() {
             break;
+        }
+        if resort == Resort::N1 && !n1 {
+            continue;
         }
         published = resort;
         let mut next = run(resort, relief.as_ref(), assess, &mut repeats)?;
