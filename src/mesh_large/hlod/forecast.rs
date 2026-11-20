@@ -168,8 +168,9 @@ struct Frame {
     children: Vec<Handed>,
     /// Its children's points were dropped (`drop_unbounded`).
     unbounded: bool,
-    /// Its own contract, read when it opens (`None` past the limit).
-    contract: Option<borders::ContractCounts>,
+    /// Its own contract's linked items, taken when it opens (`None` past the limit). They
+    /// are counted when it closes, unless it passes its child through.
+    items: Option<Vec<[u64; 3]>>,
     area: f64,
     open: [u64; DEPTHS],
     length: [f64; DEPTHS],
@@ -198,7 +199,10 @@ pub(crate) fn memory_need(captured: &FullCaptured, config: &TreeConfig, cap: usi
         1,
     )
     .max(borders::memory_need(sorter))
-    .max(borders::listed_items_memory(sorter))
+    .max(borders::listed_items_memory(
+        sorter,
+        captured.tree.stats.nodes,
+    ))
     .saturating_add(borders::WALK_CACHE_BYTES)
     .saturating_add(
         borders::contract_workspace_bytes((cap as u64).saturating_mul(6)).saturating_mul(2),
@@ -211,13 +215,14 @@ pub(crate) fn memory_need(captured: &FullCaptured, config: &TreeConfig, cap: usi
             .internal
             .saturating_mul(std::mem::size_of::<CellForecast>() as u64),
     )
-    // An open frame holds its own contract's points and at most `2 × INPUTS` tiles'
-    // points: keys are dropped once its children's frontier passes `INPUTS` tiles beside an
-    // omission (`drop_unbounded`).
+    // An open frame holds its own contract's linked items (at most `6 × cap`) and at most
+    // `2 × INPUTS` tiles' points: keys are dropped once its children's frontier passes
+    // `INPUTS` tiles beside an omission (`drop_unbounded`).
     .saturating_add(u64::from(captured.tree.stats.height).saturating_mul(
         std::mem::size_of::<Frame>() as u64
             + 8 * std::mem::size_of::<Handed>() as u64
-            + (2 * recovery::INPUTS as u64 + 1) * child_key_bytes(cap),
+            + (cap as u64).saturating_mul(6 * std::mem::size_of::<[u64; 3]>() as u64)
+            + 2 * recovery::INPUTS as u64 * child_key_bytes(cap),
     ))
     // One parent's union of its children's points.
     .saturating_add(2 * recovery::INPUTS as u64 * child_key_bytes(cap))
@@ -436,7 +441,7 @@ fn drop_unbounded(frame: &mut Frame) {
 fn walk(
     captured: &FullCaptured,
     borders: &Borders,
-    listed: &mut borders::ListedItems<'_>,
+    listed: &mut borders::ListedItems<'_, '_>,
     settings: &Settings,
     leaves: &[LeafFacts],
     progress: &StepProgress<'_>,
@@ -514,7 +519,11 @@ fn walk(
                 ..only
             }
         } else {
-            let contract = frame.contract.take();
+            let contract = frame
+                .items
+                .take()
+                .map(|items| borders.contract_counts(depth, &items))
+                .transpose()?;
             let items = borders.contract_items(key)?;
             let (points, segments, minimum, locks) = match &contract {
                 Some(c) => (
@@ -642,22 +651,20 @@ fn walk(
             leaf_begin: leaf,
             leaf_end: leaf + 1,
         };
-        // Contract items are taken in node order, so a cell reads its own as it opens.
+        // Contract items are taken in node order, so a cell takes its own as it opens (and
+        // counts them as it closes).
         let items = match borders.contract_items(key)? {
             n if n > (6 * cap) as u64 => None,
             _ => Some(listed.take(borders.node_id(key)?)?),
         };
         if node.kind == NodeKind::Internal {
-            let contract = items
-                .map(|items| borders.contract_counts(node.depth(), &items))
-                .transpose()?;
             stack.push(Frame {
                 node,
                 leaf_begin: leaf,
                 started: 0,
                 children: Vec::with_capacity(8),
                 unbounded: false,
-                contract,
+                items,
                 area: 0.,
                 open: [0; DEPTHS],
                 length: [0.; DEPTHS],
@@ -859,7 +866,7 @@ mod tests {
             started: children.len(),
             children,
             unbounded: false,
-            contract: None,
+            items: None,
             area: 0.,
             open: [0; DEPTHS],
             length: [0.; DEPTHS],

@@ -16,9 +16,15 @@ pub(super) fn memory_need(sorter: SortConfig) -> u64 {
         + 2 * contract_workspace_bytes(6 * super::TRIANGLE_CAP as u64)
 }
 
-/// Resident bound of [`Borders::listed_items`]' sort and its stream.
-pub(super) fn listed_items_memory(sorter: SortConfig) -> u64 {
-    sorter.memory_bound::<disk::Words<4>>()
+/// One list head of [`Borders::listed_items`]: next unread reference, node, items left.
+type ListHead = (u64, u64, u64);
+
+/// Resident bound of [`Borders::listed_items`] over a tree of `nodes` nodes: its sort and
+/// stream, and one list head per node (reserved exactly, held until the lists drain).
+pub(super) fn listed_items_memory(sorter: SortConfig, nodes: u64) -> u64 {
+    sorter
+        .memory_bound::<disk::Words<4>>()
+        .saturating_add(nodes.saturating_mul(std::mem::size_of::<ListHead>() as u64))
 }
 
 /// Scratch bound of [`Borders::listed_items`] for `items` linked items.
@@ -272,19 +278,26 @@ impl ContractCounts {
 }
 
 /// [`Borders::listed_items`]: listed nodes' items, taken in ascending node order.
-pub(super) struct ListedItems<'s> {
+pub(super) struct ListedItems<'s, 'p> {
     stream: std::iter::Peekable<SortedStream<'s, disk::Words<4>>>,
+    /// Cancellation, checked as items are taken.
+    progress: &'s StepProgress<'p>,
 }
-impl ListedItems<'_> {
+impl ListedItems<'_, '_> {
     /// The linked items of `node`'s own contract (empty for an empty list). Nodes must be
     /// taken in ascending order; the items of nodes skipped over are dropped.
     pub(super) fn take(&mut self, node: u64) -> Result<Vec<[u64; 3]>, JobError> {
-        let mut items = Vec::new();
+        let mut items: Vec<[u64; 3]> = Vec::new();
+        let mut read = 0u64;
         // Errors are taken too, and returned.
         while let Some(item) = self
             .stream
             .next_if(|r| r.as_ref().map_or(true, |w| w.0[0] <= node))
         {
+            if read.is_multiple_of(4096) {
+                self.progress.check()?;
+            }
+            read += 1;
             let [at, a, b, edge] = item?.0;
             if at == node {
                 items.push([a, b, edge]);
@@ -1239,22 +1252,35 @@ impl Borders {
     /// read in nearly the same order. Following one list at a time instead reads a page
     /// per item, each page about once per list that crosses it. `progress` advances by
     /// item; the caller begins its step with [`Self::listed_item_count`].
-    pub(super) fn listed_items<'s>(
+    pub(super) fn listed_items<'s, 'p>(
         &self,
         scratch: &'s Scratch,
         sorter: SortConfig,
         limit: usize,
-        progress: &'s StepProgress<'_>,
-    ) -> Result<ListedItems<'s>, JobError> {
+        progress: &'s StepProgress<'p>,
+    ) -> Result<ListedItems<'s, 'p>, JobError> {
         let mut sorted = ExternalSorter::<disk::Words<4>>::new(scratch, sorter)?.observed(progress);
-        // (next unread reference, node, items left in its list).
-        let mut heads = std::collections::BinaryHeap::new();
+        // At most one head per node, as `listed_items_memory` charges; a head is popped
+        // before its successor is pushed, so the heap never grows past it.
+        let mut heads: Vec<ListHead> = Vec::new();
+        heads
+            .try_reserve_exact(usize::try_from(self.source.nodes.len).unwrap_or(usize::MAX))
+            .map_err(|_| {
+                JobError::new(
+                    crate::JobErrorKind::ResourceLimit,
+                    "contract list heads allocation failed",
+                )
+            })?;
         for id in 0..self.source.nodes.len {
+            if id.is_multiple_of(4096) {
+                progress.check()?;
+            }
             let n = self.source.nodes.get(id)?;
             if n[7] <= limit as u64 && n[6] != NONE {
                 heads.push((n[6], id, n[7]));
             }
         }
+        let mut heads = std::collections::BinaryHeap::from(heads);
         let mut done = 0u64;
         while let Some((at, node, left)) = heads.pop() {
             if done.is_multiple_of(4096) {
@@ -1274,6 +1300,7 @@ impl Borders {
         }
         Ok(ListedItems {
             stream: sorted.finish()?.peekable(),
+            progress,
         })
     }
 
@@ -1937,6 +1964,18 @@ mod tests {
         let mut sorted = lengths.clone();
         sorted.sort_unstable();
         let median = sorted[sorted.len() / 2] as usize;
+        // A cancelled run stops before it reads a list.
+        let stop = || Err(JobError::new(crate::JobErrorKind::Cancelled, "stopped"));
+        let cancelled = crate::mesh_large::phases::StepProgress::new(&stop, None);
+        let refs = borders.refs.read_count();
+        assert!(borders
+            .listed_items(scratch, sorter, 6 * super::super::TRIANGLE_CAP, &cancelled)
+            .is_err());
+        assert_eq!(
+            borders.refs.read_count(),
+            refs,
+            "no list read once cancelled"
+        );
         for limit in [6 * super::super::TRIANGLE_CAP, median] {
             let listed: u64 = lengths.iter().filter(|&&n| n <= limit as u64).sum();
             assert_eq!(borders.listed_item_count(limit).unwrap(), listed);
